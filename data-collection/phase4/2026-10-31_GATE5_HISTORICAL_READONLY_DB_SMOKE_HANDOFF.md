@@ -17,6 +17,24 @@
 
 The new generic SQL inventories retained raw FIDS original receipts, provisional population and tags, PRE rows linked to retained source, provisional identity-resolved callbacks, and stored wheels-off label statuses. If originals are expired, it must return **NULL source-dependent denominators**, not a measured zero. The selected T, full physical operator denominator, actual-only target, callback coverage outside the complete provider universe and certified PRE all remain unproven. A green SQL job is NOT Gate5 PASS.
 
+## VERIFIED: initial historical real PostgreSQL execution after merge
+
+[PR #295](https://github.com/HKcode22/ReplitTranvr/pull/295) merged main commit **777983700ec931b93e343e413dfef153ebc3ee14** after all four mandatory CI checks succeeded. The NEW main-only protected GitHub run [#41265529465](https://github.com/HKcode22/ReplitTranvr/actions/runs/41265529465), job **124727440059**, actually executed against retained production PostgreSQL in a repeatable-read read-only transaction at **2026-11-01T02:31:29.318Z**, first attempt, SUCCESS. Exact SHA-pinned historical manifest verified.
+
+The measured **historical** WSSS Oct31 17–18Z scoped query reported:
+- Retained original FIDS receipts **2**; source-normalized primary observations **110**, provisional distinct analytic IDs **110**.
+- Independently certified operating physical flight denominator **UNKNOWN/null**; DB-tagged core canonical IDs **0** in this join. Do not reclassify those 110 as physical flights.
+- Source hash/parent-to-member clock violations **0 within this scoped query**; does not negate the earlier broader 31 one-millisecond precision findings in another inventory.
+- Truly stored PRE rows: T−24h **0**, T−6h **0**, T−90m **0**; PRE previews do not count as persisted.
+- Original-identity-resolved webhook candidate count **0** in this narrow join; source-scoped wheels-off outcome rows **0**, all status counts **0**. This is NOT a measured zero true callback rate, provider flight population, runway departure population, or actual-only target availability.
+- Provider/API calls **0**, DB writes **0**, no Alert, no credits consumed by this check, no historical backfill. Selected native T, actual-only wheels-off, science Gate5, Phase5/6 remain HOLD.
+
+The earlier Oct31 read-only postflight audit reported one retained receipt and 86 observations because it used a **different 24-hour raw-source lookback**. This generic new audit counts two currently retained original receipts at its timestamp. These are separate query definitions and clocks, not conflicting data or retroactive justification of the missed T−6h.
+
+## New native source field presence step (this PR — pending verified live execution)
+
+A pure aggregate SQL module now counts provider-native original **field presence**, not physical flights: IsOperator / IsCodeshared / unknown, explicit departure origin, generic scheduled/revised/runway timestamps, and quality markers. It runs against these legally retained original historical sources inside the same read-only transaction; the merged runner will include a bounded native source receipt-parity check. **No real counts for these newly added fields should be claimed until the next actual Actions job finishes.** Even a Live quality with runwayTime does NOT certify actual-only wheels-off under the official AeroDataBox contract.
+
 ## Follow-on
 
 1. Read actual historical SQL smoke run and job logs. If SQL fails, repair it with nonpaid code and regression CI; do not mutate source originals or waive read-only.

@@ -12,6 +12,8 @@ import {
  auditP4FreshCohortV39,
  type P4FreshCohortScopeV39
 } from "../server/lib/disruption/phase4Gate5FreshCohortReadOnly_v39";
+import {auditP4OriginalNativeFieldPresenceV39}
+ from "../server/lib/disruption/phase4Gate5NativeFidsFieldPresence_v39";
 
 export const P4_G5_HISTORICAL_MANIFEST_PATH_V39=
  "data-collection/phase4/2026-10-31_GATE5_HISTORICAL_SCHEMA_SMOKE_MANIFEST.json";
@@ -97,7 +99,11 @@ export async function mainP4HistoricalSmokeV39(){
   // This is the only scope used: a fixed completed historical cohort,
   // NEVER a replacement for original T-24h/T-6h missing observations.
   const report=await auditP4FreshCohortV39(client,scope);
+  const native=await auditP4OriginalNativeFieldPresenceV39(client,scope);
+  if(native.eligibleOriginalReceipts!==report.retainedOriginalQueryReceiptsMeasured)
+   throw Error("P4_HIST_NATIVE_FIELD_SOURCE_RECEIPT_PARITY_HOLD");
   console.log(JSON.stringify({
+   providerNativeOriginalFieldPresence:native,
    auditType:"HISTORICAL_REAL_DB_SCHEMA_SMOKE_ONLY",
    serviceCohort:"WSSS_20261031_1700_1800Z",
    history:"T24_UNOBSERVED;T6_UNOBSERVED;T90_SOURCE_ONLY",
