@@ -1,0 +1,52 @@
+name: Phase4 Gate5 Offline Three Horizon GitHub Prearm Planner
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-offline-three-horizon-owner-prearm.yml"
+      - "server/lib/disruption/phase4Gate5OfflineThreeOwnerPrearm_v39.ts"
+      - "server/lib/disruption/phase4Gate5FrozenGridDraft_v39.ts"
+      - "scripts/v39_phase4_gate5_prearm_offline_actions.ts"
+      - "data-collection/phase4/GATE5_NEXT_COHORT_PREARM_SYNTHETIC_HOLD.json"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-offline-three-owner-compiler-no-provider
+  cancel-in-progress: false
+jobs:
+  compile-offline-three-owners:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without DB or provider secrets
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Compile three synthetic horizon owners - zero provider
+        env:
+          P4_G5_PREARM_INTENT: SYNTHETIC_THREE_HORIZONS_ZERO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_prearm_offline_actions.ts
+      - name: No paid run or actual prearm started
+        if: always()
+        run: |
+          {
+            echo 'New prospective three-horizon schedule engineering only, using synthetic 2027 HOLD fixture.'
+            echo 'No provider, DB, Alert, secret or live timed waiting.'
+            echo 'No independently verified provider selected T, actual-only target, raw-content rights or authorized paid cohort.'
+            echo 'Not scientific Gate5 PASS; no Phase5/6 activation.'
+          } >> "$GITHUB_STEP_SUMMARY"
