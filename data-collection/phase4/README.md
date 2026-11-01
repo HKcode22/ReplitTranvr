@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — bind actual GitHub API running-job identity/time to V0076 disposable PostgreSQL PREPARED→ACTIVE**](2026-11-01_GATE5_GITHUB_API_TO_V0076_DB_DISPOSABLE_BINDING.md) — real run ID and start are persisted/read back; still a synthetic future source plan, zero provider, live release NULL and scientific Gate5 HOLD.
+
 - [**Nov 1 — fix dispatch budget double-counting after real earlier horizon spending**](2026-11-01_GATE5_PHYSICAL_DISPATCH_BUDGET_CONTINUATION_FIX.md) — follow-up to PREPARED-stage #317: do not add prior reservations to the entire already-frozen worst-case grid; test T−6h and T−90m continuation, retain V0076 locked authoritative cap. No paid request or scientific promotion.
 
 - [**Nov 1 — actual GitHub Actions running-job attestations for three owner rehearsals**](2026-11-01_GATE5_REAL_GITHUB_RUNNING_JOB_ATTESTATION.md) — checks real Actions API active job/start/identity against checked-out SHA, no provider. Rehearsal remains **synthetic cutoff** and no real future prearm, source rights, active DB owner or scientific PASS.
