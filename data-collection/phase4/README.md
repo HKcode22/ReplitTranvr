@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — fix dispatch budget double-counting after real earlier horizon spending**](2026-11-01_GATE5_PHYSICAL_DISPATCH_BUDGET_CONTINUATION_FIX.md) — follow-up to PREPARED-stage #317: do not add prior reservations to the entire already-frozen worst-case grid; test T−6h and T−90m continuation, retain V0076 locked authoritative cap. No paid request or scientific promotion.
+
 - [**Nov 1 — actual GitHub Actions running-job attestations for three owner rehearsals**](2026-11-01_GATE5_REAL_GITHUB_RUNNING_JOB_ATTESTATION.md) — checks real Actions API active job/start/identity against checked-out SHA, no provider. Rehearsal remains **synthetic cutoff** and no real future prearm, source rights, active DB owner or scientific PASS.
 
 - [**Nov 1 — Gate5 post-PR318 verified checkpoint and exact-query V0076 activation regression**](2026-11-01_GATE5_POST_PR318_CHECKPOINT_AND_EXACT_QUERY_REVIEW.md) — actual merged SHA, successful disposable main-push workflow, provider/email/quota evidence boundaries, remaining BLOCK/HOLD, and new exact-query-row verification. **No paid activation or new cohort.**
