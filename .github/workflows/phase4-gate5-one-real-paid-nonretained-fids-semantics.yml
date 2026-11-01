@@ -7,11 +7,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: phase4-gate5-one-nonretained-paid-source-feasibility-pr324
+  group: phase4-gate5-one-nonretained-paid-source-feasibility-pr325
   cancel-in-progress: false
 jobs:
   one-real-paid-nonretained-fids:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && contains(github.event.head_commit.message, 'Merge pull request #324') }}
+    if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && contains(github.event.head_commit.message, 'Merge pull request #325') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 9
     environment: phase2g-paid
