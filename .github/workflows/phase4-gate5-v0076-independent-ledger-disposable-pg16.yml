@@ -1,0 +1,82 @@
+name: Phase4 Gate5 V0076 Independent Ledger Disposable PG16
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-independent-ledger-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5V0076IndependentLedgerReadOnly_v39.ts"
+      - "scripts/v39_phase4_gate5_v0076_independent_ledger_disposable_pg16_actions.ts"
+      - "tests/phase4_gate5_v0076_independent_ledger_readonly_v39.test.ts"
+      - "data-collection/phase4/2026-11-01_GATE5_V0076_INDEPENDENT_THREE_HORIZON_LEDGER_AUDIT.md"
+permissions:
+  contents: read
+jobs:
+  v0076-independent-ledger-disposable:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gate5_ledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gate5_ledger"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install disposable V0076 schema only, with no production credentials
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          psql -h localhost -U postgres -d gate5_ledger -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.fids_query_response(id integer);
+          CREATE TABLE clean.flight_population(id integer);
+          CREATE TABLE clean.provider_content_blob_ref(id integer);
+          CREATE TABLE clean.phase3_gate05_science_owner_v39(id integer);
+          SQL
+          psql -h localhost -U postgres -d gate5_ledger -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+      - name: Independent full-grid READ ONLY ledger audit, tamper rejection, no paid requests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gate5_ledger
+          P4_G5_LEDGER_DISPOSABLE_INTENT: SYNTHETIC_ONLY_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0076_independent_ledger_disposable_pg16_actions.ts
+      - name: Assert no science or live data collection
+        if: always()
+        run: |
+          {
+            echo 'Only synthetic disposable PG16 ledger rows and independent READ ONLY SQL.'
+            echo 'No AeroDataBox request, source original, certified persisted PRE, account-rights approval, real selected T or actual-only wheels off.'
+            echo 'No production migration/role grant, Phase5 FREEZE or Phase6 activation. Scientific Gate5 HOLD.'
+          } >> "$GITHUB_STEP_SUMMARY"
