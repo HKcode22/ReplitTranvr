@@ -52,7 +52,7 @@ function db(opts:{insertRowCount?:number;failInsertAt?:number;conflict?:boolean;
  const calls:{sql:string;args:unknown[]}[]=[];let insertCalls=0;
  return {calls,query:async(sql:string,args:unknown[]=[])=>{
   calls.push({sql,args});
-  if(sql.includes("FROM firsts f CROSS JOIN h"))
+  if(sql.includes("FROM firsts f JOIN source_integrity si"))
    return {rows:rows(),rowCount:3};
   if(sql.startsWith("INSERT INTO clean.flight_snapshots")){
    insertCalls++;
