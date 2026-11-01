@@ -24,3 +24,12 @@ The original public AeroDataBox terms announcement (September 7; November 7 60-d
 ## Verification to complete before closeout of this engineering slice
 
 Require all four standard PR CI checks PASS, merge with exact reviewed head SHA, inspect actual independent main-push PG16 job log, and append run ID, verified counters, drift injection results, and current main SHA here. A green synthetic test is not a scientific PASS or actual paid collection. No Replit shell or extra paid approval is needed for this slice.
+
+
+## Verified postmerge GitHub evidence — 2026-11-01 11:56:48Z
+
+- [PR #323](https://github.com/HKcode22/ReplitTranvr/pull/323) passed all four required PR checks (V3.9 Offline Safety, YSSY P25 Public Receiver Identity, YSSY P25 Focused Release, YSSY P25 Real PG Receiver Faults), then **merged** as `74f0a35d1c42ec63217a418a62246ab56eadb432`.
+- Independently checked the main-push [GitHub Actions run #41304087870](https://github.com/HKcode22/ReplitTranvr/actions/runs/41304087870), job `124840817175`, **completed SUCCESS**. Inspected raw job log: `V0076_INDEPENDENT_READONLY_THREE_HORIZON_LEDGER_PG16_PASS_NO_PROVIDER`.
+- The actual disposable PG16 result measured `frozenOwnersVerified=3`, `queriesVerified=9`, **one synthetically inserted attempt** and **two synthetically reserved units** (not a real billed request). `rejectedBudgetDrift=true`, `rejectedQuerySpendDrift=true`, `immutableAttemptDeletionRejected=true`; restored ledger audited successfully after each injected corruption. In the initial zero-attempt state it expressly classified source as **UNOBSERVED**, not zero flights.
+- Every actual receipt reported `realGitHubPhysicalPrearmVerified=false`, `actualHttpReceiptsProven=false`, `certifiedPrePersisted=false`, `sourceSemanticsVerified=false`, `retentionRightsVerified=false`, `productionWrites=0`, `providerCalls=0`, `strictGate5Passed=false`, Phase5/6 false.
+- This proves consistency of an **isolated synthetic V0076 ledger**, not a live source transport, cutoff-timed three-horizon cohort or legal rights. Never upgrade Gate5 to scientific PASS from a green test, a fabricated synthetic ledger row, a SHA-shaped source attestation or a stale account quota. No paid calls were made.
