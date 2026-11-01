@@ -18,6 +18,8 @@ export interface P4G5CertifiedPrePermit {
  independentPhysicalOperatingIdentityEvidenceSha256:string;
  independentlyReviewedSourceRetentionEvidenceSha256:string;
  reviewedRunAuthorizationSha256:string;
+ frozenBuilderSourceSha256:string;
+ builderFrozenAtUtc:string;
  selectedTConfig:SelectedTMilestoneConfig;
  verifiedExternalSourceAndRightsReview:true;
 }
@@ -29,6 +31,11 @@ function requireProof(permit:P4G5CertifiedPrePermit,
   !SHA.test(permit.independentPhysicalOperatingIdentityEvidenceSha256)||
   !SHA.test(permit.independentlyReviewedSourceRetentionEvidenceSha256)||
   !SHA.test(permit.reviewedRunAuthorizationSha256)||
+  !SHA.test(permit.frozenBuilderSourceSha256)||
+  typeof permit.builderFrozenAtUtc!=="string"||
+  !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(permit.builderFrozenAtUtc)||
+  !Number.isFinite(Date.parse(permit.builderFrozenAtUtc))||
+  new Date(permit.builderFrozenAtUtc).toISOString()!==permit.builderFrozenAtUtc||
   permit.verifiedExternalSourceAndRightsReview!==true||
   !permit.selectedTConfig||
   permit.selectedTConfig.verifiedProviderNativeSchedule!==true||
@@ -68,6 +75,10 @@ export async function persistP4G5ReviewedPreForCohortV39(
   expected=staged.staged.length;
   if(expected===0)throw Error("P4_G5_PRE_NO_VERIFIED_CORE_ROWS_TO_PERSIST");
   for(const {snapshot:unreviewed} of staged.staged){
+   // A newly written transform cannot reconstruct features that were not
+   // deployable at the historical decision time (Plan f.8 §6.1).
+   if(Date.parse(permit.builderFrozenAtUtc)>unreviewed.predictionCutoffUtc.getTime())
+    throw Error("P4_G5_PRE_TRANSFORM_NOT_FROZEN_BY_CUTOFF");
    const k=unreviewed.flightInstanceId+"|"+unreviewed.horizon+"|"+
     unreviewed.predictionCutoffUtc.toISOString();
    if(unique.has(k))throw Error("P4_G5_PRE_DUPLICATE_CANONICAL_IDENTITY_HOLD");
@@ -114,6 +125,8 @@ export async function persistP4G5ReviewedPreForCohortV39(
    status:"REVIEWED_SOURCE_PRE_ROWS_MATERIALIZED_NOT_GATE5_PASS" as const,
    manifestSha256:scope.reviewedFrozenManifestSha256,
    sourceEvidenceSha256:permit.independentSelectedTSourceEvidenceSha256,
+   frozenBuilderSha256:permit.frozenBuilderSourceSha256,
+   builderFrozenAtUtc:permit.builderFrozenAtUtc,
    expectedSourceQualifiedRows:expected,
    newlyPersistedRows:inserted,previousVerifiedIdempotentRows:existing,
    sourceAsOfMissingByHorizon:staged.counts.map(x=>({
