@@ -53,7 +53,7 @@ describe("Phase4 retained provider-native field presence is NOT actual-only proo
   })),scope());
   expect(r.status).toBe("NO_RETAINED_ORIGINAL_FIELDS_UNKNOWN");
   expect(r.departureSourceObservations).toBeNull();
-  expect(r.operatorTaggedSourceObservations).toBeNull();
+  expect(r.operatorTaggedObservations).toBeNull();
   expect(r.runwayTimePresent).toBeNull();
   expect(r.verifiedActualWheelsOff).toBeNull();
  });
