@@ -9,7 +9,7 @@ on:
     # Nov2 T-6h physical slots 10:30/11:00/11:30 UTC. Prearm by 09:30.
     - cron: "15 8 2 11 *"
     # Nov2 T-90m physical slots 15:00/15:30/16:00 UTC. Prearm by 14:00.
-    - cron: "0 12 2 11 *"
+    - cron: "17 12 2 11 *"
 permissions:
   contents: read
   actions: read
@@ -77,7 +77,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
   owner-t90:
-    if: "${{ github.event_name == 'schedule' && github.event.schedule == '0 12 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    if: "${{ github.event_name == 'schedule' && github.event.schedule == '17 12 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
     runs-on: ubuntu-latest
     timeout-minutes: 345
     environment: phase2g-paid
