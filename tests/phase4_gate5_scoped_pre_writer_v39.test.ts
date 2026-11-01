@@ -40,6 +40,7 @@ function rows(){
   effective_available:new Date("2027-01-14T16:00:00Z"),
   member_available:new Date("2027-01-14T16:00:00Z"),
   source_available:new Date("2027-01-14T15:59:00Z"),
+ all_parent_member_provenance_valid:true,
   population_role:"requested_airport_primary",
   scope_classification:"confirmed_core",
   codeshare_resolution_status:"confirmed_operating_leg"
