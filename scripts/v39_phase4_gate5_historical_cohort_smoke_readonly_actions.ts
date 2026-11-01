@@ -112,10 +112,17 @@ export async function mainP4HistoricalSmokeV39(){
   await client.end().catch(()=>undefined);
  }
 }
+export function p4HistoricalSafeFailureCodeV39(error:unknown):string{
+ const e=(error&&typeof error==="object")?error as Record<string,unknown>:{};
+ const code=e.code;
+ // SQLSTATE only; NEVER print raw DB error, connection URI, query or source IDs.
+ return typeof code==="string"&&/^[A-Z0-9]{5}$/.test(code)
+   ?"P4_HIST_READONLY_HOLD_SQLSTATE_"+code
+   :"P4_HIST_READONLY_HOLD_NO_PROVIDER";
+}
 if(process.argv[1]?.endsWith("v39_phase4_gate5_historical_cohort_smoke_readonly_actions.ts")){
- void mainP4HistoricalSmokeV39().catch(()=>{
-   // No DB error details/secrets, source identifiers or per-flight data.
-   console.error("P4_HIST_READONLY_SCHEMA_SMOKE_HOLD_NO_PROVIDER");
+ void mainP4HistoricalSmokeV39().catch(error=>{
+   console.error(p4HistoricalSafeFailureCodeV39(error));
    process.exitCode=2;
  });
 }
