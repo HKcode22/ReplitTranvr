@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — guarded V0076 PREPARED→ACTIVE transaction tested on disposable PostgreSQL only**](2026-11-01_GATE5_V0076_ACTIVE_DISPOSABLE_ONLY.md) — DB-clock prearm check, exact owner/run/cutoff, idempotence and early-request refusal; **live activation SHA NULL, no production role grants, provider requests or scientific approval**.
+
 - [**Nov 1 — fix for real T−24h budget reservation blocking subsequent T−6h/T−90m PREPARED owners**](2026-11-01_GATE5_V0076_CROSS_HORIZON_RESERVATION_CONTINUATION_FIX.md) — require consistent manifest/ceiling and bounded cumulative reserved units, not an incorrect zero balance; disposable PG16 exercises later horizons after simulated prior paid units. No actual provider dispatch, real prearm or scientific PASS.
 
 - [**NEW — V0076 durable future GitHub horizon owner PREPARED-only integration**](2026-11-01_GATE5_V0076_DURABLE_PREPARED_OWNER_ENGINEERING.md) — exact 3-horizon source query ledger staged under SERIALIZABLE with idempotent owner/run/digest matching, rollback on drift, and disposable PG16 cross-horizon rehearsal. **No ACTIVE owner, provider GET, actual prearm, paid permission, scientific Gate5 PASS or Phase5/6 release.**
