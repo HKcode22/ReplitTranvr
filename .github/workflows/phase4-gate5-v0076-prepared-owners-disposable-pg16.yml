@@ -65,7 +65,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_EVENT_NAME" = push
-          test "$GITHUB_RUN_ATTEM" != "2"
+          test "$GITHUB_RUN_ATTEMPT" = 1
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "${AERODATABOX_API_KEY:-}"
           test -z "${RAPIDAPI_KEY:-}"
