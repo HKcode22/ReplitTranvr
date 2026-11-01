@@ -1,0 +1,110 @@
+name: Phase4 Gate5 V0076 Installer Disposable Two-Role PG16
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-installer-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_v0076_metadata_only_installer.ts"
+      - "migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql"
+      - "tests/phase4_gate5_v0076_metadata_installer_v39.test.ts"
+permissions:
+  contents: read
+jobs:
+  disposable-v0076-installer:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gate5_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gate5_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Setup isolated placeholder historical schema and restricted runtime user
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          set +x
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.fids_query_response(id serial PRIMARY KEY);
+          CREATE TABLE clean.flight_population(id serial PRIMARY KEY);
+          CREATE TABLE clean.provider_content_blob_ref(id serial PRIMARY KEY);
+          CREATE TABLE clean.phase3_gate05_science_owner_v39(id serial PRIMARY KEY);
+          CREATE ROLE gate5_worker LOGIN PASSWORD 'worker';
+          GRANT CONNECT ON DATABASE gate5_disposable TO gate5_worker;
+          GRANT USAGE ON SCHEMA clean TO gate5_worker;
+          SQL
+      - name: Execute exact source pinned metadata-only installer against two roles
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gate5_disposable"
+          V39_DATABASE_RUNTIME_URL: "postgresql://gate5_worker:worker@localhost:5432/gate5_disposable"
+          V39_GATE5_V0076_INSTALL_INTENT: AUTHORIZE_METADATA_ONLY_V0076_NO_PROVIDER_NO_ROLE_GRANTS
+          V39_GATE5_V0076_EXPECTED_BLOB: c74b3d9d2cc635e8fa604f81f6c91595ea558f2f
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_v0076_metadata_only_installer.ts
+      - name: Confirm all new tables empty, function private, and baseline preserved
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          set +x
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 <<'SQL'
+          DO $verify$
+          DECLARE n integer; p boolean;
+          BEGIN
+            SELECT
+              (SELECT count(*) FROM clean.phase4_g5_fids_cohort_budget_v39)+
+              (SELECT count(*) FROM clean.phase4_g5_fids_physical_owner_v39)+
+              (SELECT count(*) FROM clean.phase4_g5_fids_allowed_query_v39)+
+              (SELECT count(*) FROM clean.phase4_g5_fids_physical_attempt_v39)
+            INTO n;
+            SELECT EXISTS(
+              SELECT 1 FROM pg_proc pro
+              CROSS JOIN LATERAL aclexplode(
+                coalesce(pro.proacl,acldefault('f',pro.proowner))) a
+              WHERE pro.oid='clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)'::regprocedure
+                AND a.grantee=0 AND a.privilege_type='EXECUTE'
+            ) INTO p;
+            IF n<>0 OR p OR
+              to_regclass('clean.fids_query_response') IS NULL OR
+              to_regclass('clean.flight_population') IS NULL OR
+              to_regclass('clean.provider_content_blob_ref') IS NULL OR
+              to_regclass('clean.phase3_gate05_science_owner_v39') IS NULL
+            THEN RAISE EXCEPTION 'P4_V0076_INSTALLER_DISPOSABLE_POSTCONDITION_FAILED'; END IF;
+            RAISE NOTICE 'P4_V0076_PRIVILEGED_TWO_ROLE_INSTALLER_DISPOSABLE_PG16_PASS';
+          END $verify$;
+          SQL
+      - name: No real provider or live production access
+        if: always()
+        run: |
+          {
+            echo 'Disposable PG16, two fake roles, placeholder existing schema, metadata-only installation.'
+            echo 'No production database secret, no AeroDataBox API key, no REST/Alert, no flight data.'
+            echo 'No real role grant; separate real installed version and budget owner still required.'
+          } >> "$GITHUB_STEP_SUMMARY"
