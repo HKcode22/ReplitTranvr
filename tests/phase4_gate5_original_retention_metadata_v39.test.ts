@@ -81,7 +81,9 @@ describe("Phase4 Gate5 original source retention METADATA ONLY",()=>{
   for(const sql of [P4_RETENTION_ORIGINAL_META_SQL_V39,
    P4_RETENTION_POPULATION_META_SQL_V39]){
    expect(sql).toContain("source_airport_icao=$1");
-   expect(sql).toContain("service_window_start_utc=$2::timestamptz".replace("service_window_start_utc","service_window_start_utc")===sql.includes("service_window_start_utc")?"service_window_start_utc=$2::timestamptz":"window_start_utc=$2::timestamptz");
+   expect(sql).toContain(sql.includes("service_window_start_utc")
+    ?"service_window_start_utc=$2::timestamptz"
+    :"window_start_utc=$2::timestamptz");
    expect(sql).toContain("$4::timestamptz");
    expect(sql).not.toMatch(/\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bTRUNCATE\b/i);
    expect(sql).not.toMatch(/SELECT\s+(?:q\.)?raw_payload\b/i);
