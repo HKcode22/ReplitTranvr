@@ -21,3 +21,14 @@ Prior three-owner `.github/workflows/phase4-gate5-three-physical-owner-rehearsal
 3. Vendor [#200](https://github.com/HKcode22/ReplitTranvr/issues/200) source-native selected T, actual-only runway labels and physical operator identity; [#300](https://github.com/HKcode22/ReplitTranvr/issues/300) lawful source-content retention through and after Nov7 remain external blockers. Prior full Gate5 PASS is not claimed; Oct31 T−6h remains UNOBSERVED. Avoid repeating original account-identification questions; the free balance measurement is not a license.
 
 No Replit shell is required. The owner's bounded paid-work authorization is acknowledged; this remains independently no-spend/no-provider work.
+
+
+## Verified post-merge evidence (2026-11-01 10:41Z)
+
+- [PR #320](https://github.com/HKcode22/ReplitTranvr/pull/320) passed all four mandatory PR checks and merged into `main` at **`f94065fd719dd08f9b3ba46fba54ee4e3673e138`**.
+- The actual main-push [GitHub Actions run #41298537801](https://github.com/HKcode22/ReplitTranvr/actions/runs/41298537801) has **three distinct jobs all completed SUCCESS**, including separate API attestation and synthetic cutoff steps. Their logged API evidence was inspected (not inferred from workflow success).
+- T−24h job `124824468515`: real GitHub API job started **10:40:47Z**, process observed **10:41:10.286Z**, API verified **10:41:10.924Z**, `independentlyVerifiedRunningJobMetadata=true`.
+- T−6h job `124824468574`: job started **10:40:47Z**, process observed **10:41:01.921Z**, API verified **10:41:02.411Z**, true.
+- T−90m job `124824468638`: job started **10:40:47Z**, process observed **10:41:05.262Z**, API verified **10:41:05.930Z**, true.
+- Every job independently logged `realFutureHorizonPrearmed=false`, `productionV0076OwnerActivated=false`, `paidProviderDispatchAuthorized=false`, `providerCalls=0`, `databaseWrites=0`, `strictGate5Passed=false`, Phase5/6 false. This is proof that **a GH-only real self-attesting running job mechanism works**, not evidence of a future actual early-timed cohort.
+- This documentation-only update advances repository HEAD beyond the merged source SHA. The exact PR and run identifiers above are evidence anchors; verify fresh HEAD before modifying any code.
