@@ -1,0 +1,53 @@
+name: Phase4 Gate5 V0076 Production Postinstall READ ONLY
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-postinstall-readonly.yml"
+      - "scripts/v39_phase4_gate5_v0076_postinstall_readonly_actions.ts"
+      - "tests/phase4_gate5_v0076_postinstall_readonly_v39.test.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-v0076-postinstall-protected-readonly
+  cancel-in-progress: false
+jobs:
+  v0076-postinstall-readonly:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independent live restricted-role catalog check, zero provider
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          P4_G5_V0076_POSTINSTALL_INTENT: CATALOG_ONLY_READONLY
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${DATABASE_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0076_postinstall_readonly_actions.ts
+      - name: Explicit scientific and paid hold
+        if: always()
+        run: |
+          {
+            echo 'Production PG catalog only; ROLLBACK; no grant, owner, flight data, or AeroDataBox call.'
+            echo 'V0076 installation does not pass Gate5 or unlock Phase5/6.'
+          } >> "$GITHUB_STEP_SUMMARY"
