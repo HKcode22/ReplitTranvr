@@ -64,7 +64,7 @@ const KEYS=[
 function count(r:Record<string,unknown>,key:string):number{
  const x=r[key];
  const v=typeof x==="number"?x:
-  typeof x==="string"&&/^\\d+$/.test(x)?Number(x):NaN;
+  typeof x==="string"&&/^\d+$/.test(x)?Number(x):NaN;
  if(!Number.isSafeInteger(v)||v<0||v>30000)
   throw Error("P4_RECEIPT_PARITY_BAD_COUNT:"+key);
  return v;
