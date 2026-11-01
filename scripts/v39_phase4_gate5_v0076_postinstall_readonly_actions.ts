@@ -36,6 +36,36 @@ export const POSTINSTALL_SQL=[
  "AND t.tgname='phase4_g5_fids_attempt_immutable_v39' AND NOT t.tgisinternal",
  "AND t.tgenabled<>'D') AS triggers"
 ].join(" ");
+export const RIGHTS_PROVENANCE_SQL=[
+ "SELECT c.relname AS table_name,",
+ "has_table_privilege(current_user,c.oid,'SELECT') AS can_select,",
+ "has_table_privilege(current_user,c.oid,'INSERT') AS can_insert,",
+ "has_table_privilege(current_user,c.oid,'UPDATE') AS can_update,",
+ "has_table_privilege(current_user,c.oid,'DELETE') AS can_delete,",
+ "has_table_privilege(current_user,c.oid,'TRUNCATE') AS can_truncate,",
+ "has_table_privilege(current_user,c.oid,'REFERENCES') AS can_references,",
+ "has_table_privilege(current_user,c.oid,'TRIGGER') AS can_trigger,",
+ "pg_has_role(c.relowner,'USAGE') AS inherits_owner_role,",
+ "pg_has_role('pg_read_all_data','USAGE') AS inherits_pg_read_all_data,",
+ "pg_has_role('pg_write_all_data','USAGE') AS inherits_pg_write_all_data,",
+ "EXISTS(SELECT 1 FROM pg_catalog.aclexplode(",
+ "coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a",
+ "WHERE a.grantee=current_user::regrole::oid",
+ "AND a.privilege_type=ANY($2::text[])) AS explicit_current_role_acl,",
+ "EXISTS(SELECT 1 FROM pg_catalog.aclexplode(",
+ "coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a",
+ "WHERE a.grantee=0 AND a.privilege_type=ANY($2::text[])) AS public_acl,",
+ "EXISTS(SELECT 1 FROM pg_catalog.aclexplode(",
+ "coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a",
+ "WHERE a.grantee<>0 AND a.grantee<>current_user::regrole::oid",
+ "AND pg_has_role(a.grantee,'USAGE')",
+ "AND a.privilege_type=ANY($2::text[])) AS inherited_group_acl",
+ "FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n",
+ "ON n.oid=c.relnamespace",
+ "WHERE n.nspname='clean' AND c.relname=ANY($1::text[]) AND c.relkind='r'",
+ "ORDER BY c.relname"
+].join(" ");
+const TABLE_PRIVILEGES=["SELECT","INSERT","UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"];
 export interface PostInstallFacts{
  ro:boolean;usage:boolean;schema_create:boolean;tables:number;logged:number;
  tables_granted:number;funcs:number;security_definer:boolean;safe_path:boolean;
@@ -93,7 +123,18 @@ export async function main(){
   await c.query("SET LOCAL lock_timeout='1000ms'");
   const res=await c.query(POSTINSTALL_SQL,[TABLES,PROC]);
   if(res.rows.length!==1)throw Error("P4_G5_V0076_RESULT_SHAPE_HOLD");
-  console.log(JSON.stringify(assessPostInstall(res.rows[0] as PostInstallFacts)));
+  const facts=res.rows[0] as PostInstallFacts;
+  if(Number.isSafeInteger(facts.tables_granted)&&facts.tables_granted>0){
+   // Metadata only. No table SELECT/DML is performed or provider called.
+   const rights=await c.query(RIGHTS_PROVENANCE_SQL,[TABLES,TABLE_PRIVILEGES]);
+   if(rights.rows.length!==4)
+    throw Error("P4_G5_V0076_RIGHTS_PROVENANCE_SHAPE_HOLD");
+   console.log(JSON.stringify({
+    status:"P4_G5_V0076_EFFECTIVE_GRANT_ORIGIN_READONLY",
+    tableRights:rights.rows,providerCalls:0,productionWrites:0
+   }));
+  }
+  console.log(JSON.stringify(assessPostInstall(facts)));
  }finally{
   if(tx)await c.query("ROLLBACK").catch(()=>{});
   if(connected)await c.end().catch(()=>{});

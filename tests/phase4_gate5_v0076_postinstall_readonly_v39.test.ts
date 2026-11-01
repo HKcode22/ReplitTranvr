@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
-import {assessPostInstall,assertGitHub,POSTINSTALL_SQL,type PostInstallFacts}
+import {assessPostInstall,assertGitHub,POSTINSTALL_SQL,RIGHTS_PROVENANCE_SQL,type PostInstallFacts}
  from "../scripts/v39_phase4_gate5_v0076_postinstall_readonly_actions";
 const good=():PostInstallFacts=>({
  ro:true,usage:true,schema_create:false,tables:4,logged:4,tables_granted:0,
@@ -50,6 +50,9 @@ describe("protected V0076 production post-install no-paid catalog audit",()=>{
   const s=readFileSync("scripts/v39_phase4_gate5_v0076_postinstall_readonly_actions.ts","utf8");
   expect(POSTINSTALL_SQL).toContain("pg_catalog.pg_trigger");
   expect(POSTINSTALL_SQL).toContain("pg_catalog.pg_proc");
+  expect(RIGHTS_PROVENANCE_SQL).toContain("pg_catalog.aclexplode");
+  expect(RIGHTS_PROVENANCE_SQL).toContain("pg_has_role");
+  expect(RIGHTS_PROVENANCE_SQL).not.toMatch(/\bINSERT INTO\b|\bDELETE FROM\b|\bGRANT\s+\w+\s+ON\b/);
   expect(POSTINSTALL_SQL).not.toMatch(/\bINSERT INTO\b|\bDELETE FROM\b|\bCREATE TABLE\b/);
   expect(w).toContain("environment: phase2g-paid");
   expect(w).not.toContain("secrets.DATABASE_URL");
