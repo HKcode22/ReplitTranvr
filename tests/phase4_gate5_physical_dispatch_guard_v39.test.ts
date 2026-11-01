@@ -135,6 +135,35 @@ describe("Gate5 real physical attempt guard / simulated three-job GitHub owners"
     .toThrow();
   }
  });
+ it("T-6h and T-90m remain eligible after legitimate earlier horizon reservations",()=>{
+  // Synthetic full-grid bound: 9 queries * 3 physical attempts * 2 = 54.
+  // Earlier T-24h can legitimately consume 18. T-6h can then spend 18;
+  // neither prior reservation sum is an additional full future grid.
+  const t6=assessP4G5PhysicalAttemptV39(attempt(owned("T-6h"),0,1,{
+   projectUnitsAlreadyReservedForOtherSourceQueries:18,
+   accountedThisOwnerPhysicalAttemptUnits:0,
+   currentProjectApiUnitsRemaining:36
+  }));
+  const t90=assessP4G5PhysicalAttemptV39(attempt(owned("T-90m"),0,1,{
+   projectUnitsAlreadyReservedForOtherSourceQueries:36,
+   accountedThisOwnerPhysicalAttemptUnits:0,
+   currentProjectApiUnitsRemaining:18
+  }));
+  expect(t6.authorizedProviderDispatch).toBe(false);
+  expect(t90.authorizedProviderDispatch).toBe(false);
+  expect(t6.durableDbUniqueAttemptReservationProven).toBe(false);
+  for(const patch of [
+   {projectUnitsAlreadyReservedForOtherSourceQueries:53},
+   {projectUnitsAlreadyReservedForOtherSourceQueries:36,
+    accountedThisOwnerPhysicalAttemptUnits:18},
+   {projectUnitsAlreadyReservedForOtherSourceQueries:18,
+    accountedThisOwnerPhysicalAttemptUnits:18,
+    currentProjectApiUnitsRemaining:1}
+  ]){
+   expect(()=>assessP4G5PhysicalAttemptV39(attempt(owned("T-90m"),0,1,patch)))
+    .toThrow("P4_PHYSICAL_CYCLE_OR_PROJECT_BUDGET_HOLD");
+  }
+ });
  it("repeated attempt yields identical ticket, different retry distinct; DB uniqueness STILL required",()=>{
   const o=owned(),a=assessP4G5PhysicalAttemptV39(attempt(o));
   const b=assessP4G5PhysicalAttemptV39(attempt(o));
