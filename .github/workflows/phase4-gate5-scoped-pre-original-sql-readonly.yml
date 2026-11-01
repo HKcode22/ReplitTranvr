@@ -1,0 +1,54 @@
+name: Phase4 Gate5 Original-as-of PRE Source SQL Read-Only Smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-scoped-pre-original-sql-readonly.yml"
+      - "scripts/v39_phase4_gate5_scoped_pre_historical_smoke_actions.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreStaging_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreWriter_v39.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-scoped-pre-historical-readonly-no-provider
+  cancel-in-progress: false
+jobs:
+  historical-pre-source-sql-smoke:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked Node modules without credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Original FIDS cohort as-of PRE candidates real PostgreSQL READ ONLY
+        env:
+          P4_PRE_HIST_SMOKE_INTENT: OCT31_SOURCE_ASOF_ONLY_NO_PROVIDER
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_scoped_pre_historical_smoke_actions.ts
+      - name: Strictly historical original-as-of SQL smoke, no certified PRE
+        if: always()
+        run: |
+          {
+            echo 'This checks the original Oct31 WSSS 17:00–18:00Z service window only.'
+            echo 'Original missed T−6h and unverified T−24h remain UNOBSERVED, not backfilled.'
+            echo 'READ ONLY transaction and ROLLBACK; zero AeroDataBox, subscriptions or SQL writes.'
+            echo 'Preview rows are NOT certified persisted PRE nor proof of actual departure or operating-leg denominator.'
+            echo 'Scientific Gate5/Phase5/Phase6 remain HOLD.'
+          } >> "$GITHUB_STEP_SUMMARY"
