@@ -137,7 +137,7 @@ export function auditP4ProviderNativeLineageV39(
      !["IsOperator","IsCodeshared","Unknown"].includes(r.codeshareStatus)||
      !["confirmed_core","unknown","auxiliary"].includes(r.scopeClassification)||
      !Array.isArray(r.departureQuality)||
-     r.departureQuality.some(q=>!["Basic","Live","Approximate"].includes(q))||
+     r.departureQuality.some((q:unknown)=>typeof q!=="string"||!["Basic","Live","Approximate"].includes(q))||
      !(r.explicitDepartureAirportIcao===null||ICAO.test(r.explicitDepartureAirportIcao))||
      !(r.providerFlightId===null||safeId(r.providerFlightId)))
     throw Error("P4_NATIVE_INVALID_SOURCE_RECORD");
