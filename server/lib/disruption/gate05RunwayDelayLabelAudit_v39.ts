@@ -12,6 +12,8 @@ export interface VerifiedRunwayMilestoneV39 {
     "VERIFIED_SCHEDULED_WHEELS_OFF" |
     "GENERAL_SCHEDULED_DEPARTURE" |
     "ESTIMATED_RUNWAY" |
+    /** ADSB.lol trajectory-derived estimate, not independently actual-only. */
+    "ADSB_INFERRED_TAKEOFF_PROXY" |
     "UNKNOWN";
   /** Independently reviewed evidence reference, not an arbitrary hash alone. */
   externallyAuthenticatedSemantics: boolean;

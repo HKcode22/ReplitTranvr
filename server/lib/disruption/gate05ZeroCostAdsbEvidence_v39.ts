@@ -122,7 +122,11 @@ export function normalizeGate05AdsbLolOfflineV39(
 }
 export function gate05AdsbAsOfEligibleV39(
  p:Gate05AdsbCandidateV39,cutoffUtc:string):boolean{
- return utc(p.receivedAtUtc)<=utc(cutoffUtc);
+ // Both source observation and system receipt must precede the decision.
+  // No post-cutoff position can leak into PRE, even if a caller supplies
+  // an impossible earlier receipt timestamp.
+  const cutoff=utc(cutoffUtc);
+  return utc(p.receivedAtUtc)<=cutoff && utc(p.approximatePositionUtc)<=cutoff;
 }
 /** Audit output without callsigns, aircraft IDs, lat/lon or timestamps. */
 export function gate05AdsbAggregateOnlyV39(x:Gate05AdsbResultV39){
