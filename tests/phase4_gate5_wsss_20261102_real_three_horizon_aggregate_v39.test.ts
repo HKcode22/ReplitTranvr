@@ -82,6 +82,16 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   expect(()=>validatedContext({...env("T-90m"),
    GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
    P4_G5_T6_PUSH_RESCUE:"NOV2_T6_GH_PUSH_ONCE"},SHA,now)).toThrow();
+  // Standby T-90m push is accepted ONLY with exact dedicated token.
+  expect(validatedContext({...env("T-90m"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},SHA,now)).toBe("T-90m");
+  expect(()=>validatedContext({...env("T-90m"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T90_PUSH_RESCUE:"wrong"},SHA,now)).toThrow();
+  expect(()=>validatedContext({...env("T-6h"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},SHA,now)).toThrow();
   for(const patch of [
    {GITHUB_EVENT_NAME:"schedule"},{GITHUB_JOB:"owner-t6"},
    {GITHUB_RUN_ATTEMPT:"2"},{GITHUB_RUN_ID:"invalid"},
@@ -124,13 +134,17 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   for(const required of ["Merge pull request #326",
    "P4_G5_NOV2_T6_ONE_SHOT_PUSH_RECOVERY",
    "P4_G5_T6_PUSH_RESCUE: NOV2_T6_GH_PUSH_ONCE",
-   "cron: \"17 11 2 11 *\"",
+   "P4_G5_NOV2_T90_ONE_SHOT_PUSH_RECOVERY",
+   "P4_G5_T90_PUSH_RESCUE: NOV2_T90_GH_PUSH_ONCE",
    "  owner-t24:","  owner-t6:","  owner-t90:",
    "actions: read","phase2g-paid","timeout-minutes: 345",
    "secrets.AERODATABOX_API_KEY"])
    expect(w).toContain(required);
   expect(w).toContain('if: "${{');
   expect(w).not.toContain('- cron: "37 6 2 11 *"');
+  expect(w).not.toContain('- cron: "17 11 2 11 *"');
+  expect(w).not.toContain("  schedule:");
+  expect(w).toContain("phase4-gate5-wsss-nov2-2026-real-aggregate-18unit-global");
   expect(w).toContain("cancel-in-progress: false");
   expect(w).not.toContain("workflow_dispatch:");
   expect(w).not.toContain("secrets.GATE05_AUTOMATION_DATABASE_URL");
