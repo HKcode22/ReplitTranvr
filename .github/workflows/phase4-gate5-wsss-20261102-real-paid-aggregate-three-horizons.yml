@@ -6,8 +6,10 @@ on:
       - ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml"
   schedule:
     # GitHub cron is an opportunity only; late jobs fail CLOSED.
-    # Nov2 T-6h physical slots 10:30/11:00/11:30 UTC. Prearm by 09:30. Cron 06:37Z = Nov1 22:37 PST, AFTER earliest allowed 06:30Z and within 330-minute step limit.
-    - cron: "37 6 2 11 *"
+    # T-6h 06:37Z schedule did not create a real run by Nov1 22:41 PST.
+    # Replace ONLY this cron with a single exact reviewed main-push recovery.
+    # Existing schedule events already in flight can still verify themselves,
+    # but the shared concurrency group prevents overlapping physical owners.
     # Nov2 T-90m physical slots 15:00/15:30/16:00 UTC. Prearm by 14:00. Cron 11:17Z is AFTER earliest allowed 11:00Z and within 330-minute step limit.
     - cron: "17 11 2 11 *"
 permissions:
@@ -47,7 +49,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
   owner-t6:
-    if: "${{ github.event_name == 'schedule' && github.event.schedule == '37 6 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    if: "${{ github.ref == 'refs/heads/main' && github.run_attempt == 1 && ((github.event_name == 'schedule' && github.event.schedule == '37 6 2 11 *') || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'P4_G5_NOV2_T6_ONE_SHOT_PUSH_RECOVERY'))) }}"
     runs-on: ubuntu-latest
     timeout-minutes: 345
     environment: phase2g-paid
@@ -68,6 +70,7 @@ jobs:
           P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
           P4_G5_NOV2_HORIZON: T-6h
           P4_G5_CRON: ${{ github.event.schedule }}
+          P4_G5_T6_PUSH_RESCUE: NOV2_T6_GH_PUSH_ONCE
           P4_G5_NOV2_INTENT: WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT
         run: |
           set -Eeuo pipefail
