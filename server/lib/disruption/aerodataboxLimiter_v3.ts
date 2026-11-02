@@ -188,9 +188,17 @@ function requiredHeaderInteger(resp: Response, name: string, positive = false): 
 export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence> {
   if (!apiKey()) throw new Error("BALANCE_UNAVAILABLE: API key is not set");
   let resp: Response;
+  const strictBalanceSignal=AbortSignal.timeout(ADB_HTTP_ATTEMPT_TIMEOUT_MS);
   const balanceReadStartedAt = Date.now();
   try {
-    resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, { headers: headers() });
+    // Bound the ENTIRE free quota evidence operation, including response-body
+    // consumption. The generic gateway's default 15s timer ends when HTTP
+    // headers arrive; an unending body could otherwise block future FIDS
+    // observation slots without an error. Pass a caller-owned signal through
+    // fetch so it remains active while readJsonOrNull() consumes the body.
+    resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, {
+      headers: headers(), signal: strictBalanceSignal,
+    });
   } catch (error) {
     // SAFE diagnostic: classify a FREE account transport failure without
     // printing API keys, headers, URL parameters, responses or stack traces.
@@ -217,6 +225,19 @@ export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence>
   }
   if (!resp.ok) throw new Error(`BALANCE_UNAVAILABLE: HTTP ${resp.status}`);
   const raw: any = await readJsonOrNull(resp);
+  // readJsonOrNull intentionally converts a rejected body read to null.
+  // Preserve a distinct, bounded FREE transport failure on deadline expiry
+  // instead of incorrectly labelling an aborted response as malformed JSON.
+  if (strictBalanceSignal.aborted) {
+    console.warn(JSON.stringify({
+      status: "ADB_FREE_BALANCE_BODY_DEADLINE_EXCEEDED",
+      elapsedMs: Math.max(0, Date.now() - balanceReadStartedAt),
+      providerMutation: false,
+      providerPaidFidsGets: 0,
+      sourceContentLogged: false,
+    }));
+    throw new Error("BALANCE_UNAVAILABLE: transport failure");
+  }
   const balance = normalizeBalance(raw?.balance ?? raw);
   if (!balance) throw new Error("BALANCE_UNAVAILABLE: invalid response");
 
