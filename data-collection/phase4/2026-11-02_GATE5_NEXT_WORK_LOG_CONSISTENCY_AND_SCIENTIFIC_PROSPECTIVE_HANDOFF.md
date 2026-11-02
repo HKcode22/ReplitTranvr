@@ -28,3 +28,11 @@ Proposed isolated PR code:
 5. Gate 5 **scientific HOLD**, Phase5 **FREEZE HOLD**, Phase6 **NO-GO** until the binding Plan f.8 criteria are proven. Zero source retention in Nov2 pilot means this pilot cannot be retroactively converted to a persisted PRE flight cohort.
 
 The GitHub source pilot's existing 6+6 webhook-retry standard, Plan, Implementation Log, Phase3 history, production DB permissions, live source scripts and frozen paid workflow are **unchanged** by this preparation.
+
+## Additive verified deployment checkpoint — November 2, 2026, ~06:10 PST
+
+- [PR #333](https://github.com/HKcode22/ReplitTranvr/pull/333) **MERGED** at main commit `adcc7492565520cc1eb2fcbfcb97e9bb45d37fdc`. The reviewed final PR HEAD was `9dc8d13f0f67b7d55b62094912856e7dfd67676a`.
+- Final exact PR HEAD required CI: `focused-guard`, `actual-postgres`, `hosted-public-get`, and `offline-safety` **ALL COMPLETED SUCCESS**. The offline-safety run also individually passed TypeScript, offline tests, full suite, lint, registry, traceability, contradiction scanner, preflight, production build and disposable PG16 final gate.
+- Independent source-only postrun workflow `.github/workflows/phase4-gate5-nov2-source-only-independent-closeout.yml` is **verified present on main** with exact matching reviewed contents.
+- Immediately after merge, original T−90m source [run #41437078179](https://github.com/HKcode22/ReplitTranvr/actions/runs/41437078179) was still `in_progress`; neither its final source receipt nor the new postrun audit result had yet been observed. The new workflow is event-triggered only for THAT completed run ID/commit. No claims of execution, new API units or scientific acceptance until separately observed.
+- Existing paid collector source and .yml path not changed by PR #333; new run's original pinned source SHA remains `1c7740dac119b54996b250be8de233ad04c79577`. No Replit shell, no new paid authorization, no retained provider originals, no new scheduled paid cohort, no scientific Gate5 PASS.
