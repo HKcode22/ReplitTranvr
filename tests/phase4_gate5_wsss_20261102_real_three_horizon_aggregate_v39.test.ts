@@ -72,6 +72,16 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   const now=Date.parse("2026-11-01T14:00:00.000Z");
   for(const h of ["T-24h","T-6h","T-90m"] as const)
    expect(validatedContext(env(h),SHA,now)).toBe(h);
+  // Only the exact one-shot push rescue token can activate T-6h from push.
+  expect(validatedContext({...env("T-6h"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T6_PUSH_RESCUE:"NOV2_T6_GH_PUSH_ONCE"},SHA,now)).toBe("T-6h");
+  expect(()=>validatedContext({...env("T-6h"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T6_PUSH_RESCUE:"wrong"},SHA,now)).toThrow();
+  expect(()=>validatedContext({...env("T-90m"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T6_PUSH_RESCUE:"NOV2_T6_GH_PUSH_ONCE"},SHA,now)).toThrow();
   for(const patch of [
    {GITHUB_EVENT_NAME:"schedule"},{GITHUB_JOB:"owner-t6"},
    {GITHUB_RUN_ATTEMPT:"2"},{GITHUB_RUN_ID:"invalid"},
@@ -90,7 +100,7 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
  it("earliest scheduled job on Nov1 evening is within actual GitHub lifetime and before cutoff",()=>{
   const g=draftP4Gate5ThreeHorizonGridV39(m.grid);
   const scheduled=[
-   {horizon:"T-6h", cronUtc:"2026-11-02T06:37:00.000Z"},
+   {horizon:"T-6h", cronUtc:"2026-11-02T06:37:00.000Z"}, // replaced by GH push once, retains original timing prearm proof
    {horizon:"T-90m",cronUtc:"2026-11-02T11:17:00.000Z"}
   ];
   for(const {horizon,cronUtc} of scheduled){
@@ -112,12 +122,16 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   const w=readFileSync(
    ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml","utf8");
   for(const required of ["Merge pull request #326",
-   "cron: \"37 6 2 11 *\"","cron: \"17 11 2 11 *\"",
+   "P4_G5_NOV2_T6_ONE_SHOT_PUSH_RECOVERY",
+   "P4_G5_T6_PUSH_RESCUE: NOV2_T6_GH_PUSH_ONCE",
+   "cron: \"17 11 2 11 *\"",
    "  owner-t24:","  owner-t6:","  owner-t90:",
    "actions: read","phase2g-paid","timeout-minutes: 345",
    "secrets.AERODATABOX_API_KEY"])
    expect(w).toContain(required);
   expect(w).toContain('if: "${{');
+  expect(w).not.toContain('- cron: "37 6 2 11 *"');
+  expect(w).toContain("cancel-in-progress: false");
   expect(w).not.toContain("workflow_dispatch:");
   expect(w).not.toContain("secrets.GATE05_AUTOMATION_DATABASE_URL");
   expect(w).not.toContain("secrets.V39_DATABASE_RUNTIME_URL");
