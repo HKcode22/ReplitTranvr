@@ -82,7 +82,12 @@ BEGIN
     OR v_source.available_at<v_source.fids_retrieval_utc
     OR v_source.available_at>v_attempt.prediction_cutoff_utc
     OR v_source.available_at>clock_timestamp()
+    -- Bound clock is DB controlled by default; reject caller backdating to
+    -- smuggle already expired source into a later audit.
+    OR NEW.bound_at_utc<clock_timestamp()-INTERVAL '15 seconds'
+    OR NEW.bound_at_utc>clock_timestamp()+INTERVAL '2 seconds'
     OR NEW.bound_at_utc<v_source.available_at
+    OR NEW.source_use_expires_at_utc<=clock_timestamp()
     OR NEW.source_use_expires_at_utc>v_source.available_at+INTERVAL '7 days'
     OR NEW.source_use_expires_at_utc>v_attempt.prediction_cutoff_utc+INTERVAL '7 days'
  THEN
