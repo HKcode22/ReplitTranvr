@@ -188,9 +188,17 @@ function requiredHeaderInteger(resp: Response, name: string, positive = false): 
 export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence> {
   if (!apiKey()) throw new Error("BALANCE_UNAVAILABLE: API key is not set");
   let resp: Response;
+  const strictBalanceSignal=AbortSignal.timeout(ADB_HTTP_ATTEMPT_TIMEOUT_MS);
   const balanceReadStartedAt = Date.now();
   try {
-    resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, { headers: headers() });
+    // Bound the ENTIRE free quota evidence operation, including response-body
+    // consumption. The generic gateway's default 15s timer ends when HTTP
+    // headers arrive; an unending body could otherwise block future FIDS
+    // observation slots without an error. Pass a caller-owned signal through
+    // fetch so it remains active while readJsonOrNull() consumes the body.
+    resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, {
+      headers: headers(), signal: strictBalanceSignal,
+    });
   } catch (error) {
     // SAFE diagnostic: classify a FREE account transport failure without
     // printing API keys, headers, URL parameters, responses or stack traces.
