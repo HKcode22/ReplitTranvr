@@ -45,9 +45,15 @@ export function validatedContext(env:NodeJS.ProcessEnv,sha:string,now:number){
     !/^[1-9][0-9]{4,24}$/.test(env.GITHUB_RUN_ID??"")||
     env.GITHUB_WORKFLOW!==WORKFLOW||env.GITHUB_WORKFLOW_REF!==REF||
     env.GITHUB_JOB!==job||env.P4_G5_NOV2_INTENT!==INTENT||
-    (horizon==="T-24h"?env.GITHUB_EVENT_NAME!=="push":
-     env.GITHUB_EVENT_NAME!=="schedule"||
-      env.P4_G5_CRON!==CRON[horizon])||
+    (horizon==="T-24h" ? env.GITHUB_EVENT_NAME!=="push" :
+     horizon==="T-6h" ?
+      !((env.GITHUB_EVENT_NAME==="schedule" &&
+          env.P4_G5_CRON===CRON["T-6h"]) ||
+        (env.GITHUB_EVENT_NAME==="push" &&
+          env.P4_G5_T6_PUSH_RESCUE==="NOV2_T6_GH_PUSH_ONCE" &&
+          (env.P4_G5_CRON??"")==="")) :
+      env.GITHUB_EVENT_NAME!=="schedule"||
+       env.P4_G5_CRON!==CRON["T-90m"])||
     !Number.isFinite(now)||now>=Date.parse("2026-11-02T18:00:00.000Z")||
     !!env.DATABASE_URL||!!env.V39_DATABASE_RUNTIME_URL||
     !!env.GATE05_AUTOMATION_DATABASE_URL||!!env.RAPIDAPI_KEY||
@@ -87,6 +93,16 @@ async function verifyRealRunningGitHubJob(env:NodeJS.ProcessEnv,sha:string,
    const job=rec(matches[0]);
    const created=ms(run.created_at),runStart=ms(run.run_started_at);
    const jobStart=ms(job.started_at),verified=Date.now();
+   // One-time T-6h push recovery must be the exact reviewed GitHub merge,
+   // not a generic push, a replay, or a run of a different workflow path.
+   if(env.P4_G5_NOV2_HORIZON==="T-6h" && env.GITHUB_EVENT_NAME==="push"){
+     const commit=rec(run.head_commit);
+     if(run.path!==".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml"||
+        commit.id!==sha||
+        typeof commit.message!=="string"||
+        !commit.message.startsWith("P4_G5_NOV2_T6_ONE_SHOT_PUSH_RECOVERY"))
+       throw Error("P4_G5_NOV2_T6_PUSH_RESCUE_MERGE_PROOF_HOLD");
+   }
    if(run.id!==Number(id)||run.run_attempt!==1||run.head_sha!==sha||
       run.head_branch!=="main"||run.name!==WORKFLOW||
       rec(run.repository).full_name!==REPO||
