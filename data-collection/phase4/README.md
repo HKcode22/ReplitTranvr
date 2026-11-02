@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Nov 2 staged V0077 original source-to-irreversible physical attempt binding and isolated PG16 verification**](2026-11-02_GATE5_STAGED_V0077_ORIGINAL_SOURCE_ATTEMPT_BINDING.md) — forward-only metadata-only prospective science infrastructure; does not install in production, bind a full source request frame or authorize any provider Content. Gate5/Phase5/6 HOLD remains.
+
+
 - [**Nov 2 next-cohort audit integrity: same-original FIDS hash/as-of PRE association and unproven manifest custody marked explicitly**](2026-11-02_GATE5_FUTURE_AUDIT_ASOF_PRE_AND_MANIFEST_CUSTODY_GAP.md) — strengthens the read-only future-cohort PRE count to reject cross-source, postcutoff and nonoperating linkages; explicit false manifest-to-original certification until a reviewed immutable producer/ledger binding exists. NO change to active Nov2 nonretained paid job or scientific HOLD.
 
 

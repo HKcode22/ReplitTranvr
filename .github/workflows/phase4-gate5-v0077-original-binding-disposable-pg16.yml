@@ -1,0 +1,67 @@
+name: Phase4 Gate5 V0077 Original Custody Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0077-original-binding-disposable-pg16.yml"
+      - "migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql"
+      - "tests/fixtures/phase4_gate5_v0077_original_binding_disposable_pg16.sql"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0077-original-binding-disposable-pg16.yml"
+      - "migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql"
+      - "tests/fixtures/phase4_gate5_v0077_original_binding_disposable_pg16.sql"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  v0077-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Apply current baseline to isolated CI database
+        run: node --import tsx scripts/apply_boot_migrations_v39.ts
+      - name: Install V0076 + V0077 only inside disposable PG16 and fault-test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}"
+          test ! -e migrations/current/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f tests/fixtures/phase4_gate5_v0077_original_binding_disposable_pg16.sql
+          test "$(psql "${DATABASE_URL}" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM clean.phase4_g5_fids_original_binding_v39")" = "0"
+          echo "V0077_DISPOSABLE_DB_ROLLBACK_CLEAN=PASS"
+          echo "PROVIDER_CALLS=0"
+          echo "PRODUCTION_DB_WRITES=0"
