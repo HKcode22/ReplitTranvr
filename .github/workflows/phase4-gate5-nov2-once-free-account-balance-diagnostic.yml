@@ -1,0 +1,86 @@
+name: Phase4 Gate5 Nov2 One FREE Balance Diagnostic (No FIDS)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-nov2-once-free-account-balance-diagnostic.yml"
+permissions:
+  contents: read
+jobs:
+  free-balance-only:
+    if: "${{ github.event_name == 'push' && github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'P4_G5_NOV2_FREE_BALANCE_DIAGNOSTIC_ONCE') }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    environment: phase2g-paid
+    steps:
+      - name: Strict FREE only account health check, no FIDS, no DB, no provider mutation
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_EVENT_NAME" = "push"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --input-type=module <<'NODE'
+          const fail=(code)=>{console.log(JSON.stringify({
+            schema:"p4.g5.20261102.free-account-health-only.v1",
+            status:code,providerPaidFidsGets:0,
+            providerMutations:0,databaseWrites:0,
+            noCausalInferenceAboutT6Attempt:true
+          }));process.exitCode=2;};
+          if(!process.env.GITHUB_SHA?.match(/^[a-f0-9]{40}$/) ||
+             Date.now()>=Date.parse("2026-11-02T11:25:00Z")){
+            fail("OUTSIDE_APPROVED_READONLY_DIAGNOSTIC_WINDOW"); 
+          }else{
+            const started=Date.now();
+            try{
+              const r=await fetch(
+                "https://aerodatabox.p.rapidapi.com/subscriptions/balance",{
+                method:"GET",redirect:"error",
+                signal:AbortSignal.timeout(12000),
+                headers:{
+                  "X-RapidAPI-Host":"aerodatabox.p.rapidapi.com",
+                  "X-RapidAPI-Key":process.env.AERODATABOX_API_KEY,
+                  "Accept":"application/json"}
+              });
+              const headers={
+                apiUnitsRemaining:r.headers.get("x-ratelimit-api-units-remaining"),
+                apiUnitsLimit:r.headers.get("x-ratelimit-api-units-limit"),
+                requestsRemaining:r.headers.get("x-ratelimit-requests-remaining"),
+                providerDate:r.headers.get("date")
+              };
+              // We deliberately do NOT read, print or save the response body.
+              // No token, account identifier, balances, API key, request body
+              // or live aircraft records may appear in console output.
+              const quotaSyntaxOk=Object.values(headers).every(v=>v!==null)&&
+                /^\d+$/.test(headers.apiUnitsRemaining??"")&&
+                /^\d+$/.test(headers.apiUnitsLimit??"")&&
+                /^\d+$/.test(headers.requestsRemaining??"")&&
+                Number.isFinite(Date.parse(headers.providerDate??""));
+              const valid= r.status===200&&quotaSyntaxOk&&
+                Number(headers.apiUnitsRemaining)<=Number(headers.apiUnitsLimit);
+              console.log(JSON.stringify({
+                schema:"p4.g5.20261102.free-account-health-only.v1",
+                status:valid?"FREE_BALANCE_HTTP_AND_QUOTA_HEADERS_OK":"FREE_BALANCE_SOURCE_UNVERIFIED",
+                observedAtUtc:new Date().toISOString(),
+                elapsedMs:Date.now()-started,
+                httpStatus:r.status,
+                quotaHeadersWellFormed:quotaSyntaxOk,
+                apiUnitsAtLeast100:quotaSyntaxOk?
+                  Number(headers.apiUnitsRemaining)>=100:null,
+                providerClockPresent:Number.isFinite(Date.parse(headers.providerDate??"")),
+                providerPaidFidsGets:0,
+                providerMutations:0,databaseWrites:0,
+                noCausalInferenceAboutT6Attempt:true
+              }));
+              if(!valid)process.exitCode=2;
+            }catch(e){
+              fail(e?.name==="TimeoutError"||e?.name==="AbortError"?
+                "FREE_BALANCE_TIMEOUT":"FREE_BALANCE_READ_FAILURE");
+            }
+          }
+          NODE
