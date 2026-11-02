@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Nov 2 next-cohort audit integrity: same-original FIDS hash/as-of PRE association and unproven manifest custody marked explicitly**](2026-11-02_GATE5_FUTURE_AUDIT_ASOF_PRE_AND_MANIFEST_CUSTODY_GAP.md) — strengthens the read-only future-cohort PRE count to reject cross-source, postcutoff and nonoperating linkages; explicit false manifest-to-original certification until a reviewed immutable producer/ledger binding exists. NO change to active Nov2 nonretained paid job or scientific HOLD.
+
+
 - [**Nov 2 forward preparation — automatic independent source-only 3×3 closeout after real T−90m, then lawful prospective cohort gate**](2026-11-02_GATE5_NEXT_WORK_LOG_CONSISTENCY_AND_SCIENTIFIC_PROSPECTIVE_HANDOFF.md) — new isolated read-only GitHub completion workflow and tamper/missingness regressions; no source/DB credentials or alteration to the running paid source. Current T−90m result still unproven until actual paid slots and final GitHub closeout; a source-only success never grants scientific Gate5 PASS.
 
 
