@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 evening — complete technical Gate 5 explanation and exact GitHub SKIPPED diagnosis**](2026-11-01_GATE5_TECHNICAL_EXPLANATION_AND_GITHUB_SKIPS.md) — independently verified T−24h SUCCESS (3 paid GET, 6 REST units), 23 repeated FIDS records per retrieval, wrong-event intentional skips in PR327 push, upcoming T−6h/T−90m owners, code map and exact human operator steps; scientific Gate5 remains HOLD.
+
 - [**Nov 1 — real Nov 2 WSSS GitHub-only three-horizon PAID source coverage, nine strictly timed opportunities max 18 REST units**](2026-11-01_GATE5_REAL_NOV2_THREE_HORIZON_PAID_SOURCE_EXECUTION.md) — first T−24h push prearm; two separate early crons T−6h/T−90m; **aggregate-only no raw/identity retention, NOT original scientific Gate5 PASS**. No Replit timed action.
 
 - [**Nov 1 — execute exactly one real paid AeroDataBox FIDS source-semantics check without storing provider Contents**](2026-11-01_GATE5_REAL_PAID_FIDS_ONE_NONRETAINED_SEMANTIC_CHECK.md) — expected 2 REST units; no retries, database, source-body retention or scientific Gate5 promotion; original three-horizon campaign remains distinct.
