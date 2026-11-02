@@ -83,12 +83,18 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
    GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
    P4_G5_T6_PUSH_RESCUE:"NOV2_T6_GH_PUSH_ONCE"},SHA,now)).toThrow();
   // Standby T-90m push is accepted ONLY with exact dedicated token.
+  const rescueAfterScheduleGrace=Date.parse("2026-11-02T11:30:00.000Z");
   expect(validatedContext({...env("T-90m"),
    GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
-   P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},SHA,now)).toBe("T-90m");
+   P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},
+   SHA,rescueAfterScheduleGrace)).toBe("T-90m");
   expect(()=>validatedContext({...env("T-90m"),
    GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
-   P4_G5_T90_PUSH_RESCUE:"wrong"},SHA,now)).toThrow();
+   P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},
+   SHA,Date.parse("2026-11-02T11:26:59.000Z"))).toThrow();
+  expect(()=>validatedContext({...env("T-90m"),
+   GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
+   P4_G5_T90_PUSH_RESCUE:"wrong"},SHA,rescueAfterScheduleGrace)).toThrow();
   expect(()=>validatedContext({...env("T-6h"),
    GITHUB_EVENT_NAME:"push",P4_G5_CRON:"",
    P4_G5_T90_PUSH_RESCUE:"NOV2_T90_GH_PUSH_ONCE"},SHA,now)).toThrow();
