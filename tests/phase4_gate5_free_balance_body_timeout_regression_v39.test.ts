@@ -12,6 +12,10 @@ describe("Gate5 strict FREE balance body deadline (postpilot hardening)",()=>{
   expect(s).toContain("AbortSignal.timeout(ADB_HTTP_ATTEMPT_TIMEOUT_MS)");
   expect(s).toContain("headers: headers(), signal: strictBalanceSignal");
   expect(s).toContain("await readJsonOrNull(resp)");
+  expect(s).toContain("if (strictBalanceSignal.aborted)");
+  expect(s).toContain("ADB_FREE_BALANCE_BODY_DEADLINE_EXCEEDED");
+  expect(s).toContain('throw new Error("BALANCE_UNAVAILABLE: transport failure")');
+  expect(s).toContain("providerPaidFidsGets: 0");
   expect(s.indexOf("await readJsonOrNull(resp)")).toBeGreaterThan(s.indexOf("signal: strictBalanceSignal"));
   expect(s).not.toContain("clearTimeout");
   expect(s).not.toContain("setTimeout(");
