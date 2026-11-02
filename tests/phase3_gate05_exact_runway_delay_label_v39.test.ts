@@ -42,6 +42,7 @@ describe("Gate05 exact runway estimand — fail semantic shortcuts, not valid mi
  it("estimated runway and generic scheduled departure are both unproven",()=>{
    for(const x of [
      {...base,actual:{...base.actual,semanticClass:"ESTIMATED_RUNWAY" as const}},
+     {...base,actual:{...base.actual,semanticClass:"ADSB_INFERRED_TAKEOFF_PROXY" as const}},
      {...base,scheduled:{...base.scheduled,semanticClass:"GENERAL_SCHEDULED_DEPARTURE" as const}},
      {...base,actual:{...base.actual,externallyAuthenticatedSemantics:false}},
      {...base,canonicalOperatingLegVerified:false},
