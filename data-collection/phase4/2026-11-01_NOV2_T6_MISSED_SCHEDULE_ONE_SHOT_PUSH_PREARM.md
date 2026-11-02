@@ -20,3 +20,16 @@ On Sun Nov 1 at 22:41 PST = Nov 2 06:41 UTC, independently queried GitHub Action
 5. Add exact outcome links to this checkpoint and issue #293, no overwrite of Plan f.8 or immutable Implementation Log.
 
 This checkpoint documents technical source-control recovery; it is not a provider-native semantic or retention clearance. Issues #200/#293/#300 remain open.
+
+
+## Actual verified recovery outcome — Nov1 22:53 PST / Nov2 06:53Z
+
+- [PR #329](https://github.com/HKcode22/ReplitTranvr/pull/329) **MERGED** after FOUR required checks SUCCESS: offline-safety, focused-guard, actual-postgres, hosted-public-get.
+- One-time merge commit `eea16c78209ce10e09467ac7e2d54e2b0f84bd31` on main with **EXACT** expected head message `P4_G5_NOV2_T6_ONE_SHOT_PUSH_RECOVERY`.
+- GitHub API verified a NEW genuine [workflow run #41402736335](https://github.com/HKcode22/ReplitTranvr/actions/runs/41402736335), `event=push`, `status=in_progress`, head_sha matching merge commit.
+- Real `owner-t6` **job #125137897353** started at `2026-11-02T06:53:06Z` = **Nov1 22:53:06 PST**, with `REAL T-6h WSSS source field availability, 3 fixed zero-retention calls max` paid-step **in progress** in GitHub jobs API. This is ahead of deadline `2026-11-02T09:30:00Z` and within allowable GitHub job lifetime for final paid 11:30Z slot.
+- In this recovery PUSH run, `owner-t24` and `owner-t90` jobs **correctly SKIPPED**; this is not a failure. T−24h historical SUCCESS remains untouched, T−90m still independent future `schedule` event at `2026-11-02T11:17:00Z` (Nov2 03:17 PST).
+- Main GitHub workflow inspected after merge: **T−6h cron removed**, **T−90m cron retained**, global concurrency group retained. No extra slot, provider args or budget changes.
+- **Important evidence boundary:** GitHub confirms paid-step *running*, not that the script has yet emitted its own `P4_G5_REAL_NOV2_HORIZON_GITHUB_PREARM_VERIFIED` line; logs for a running job returned 404 BlobNotFound. No source GET until planned Nov2 10:30Z, and no paid response or units attributed to recovery yet. Next evidence is completed job log or actual observable GitHub step transition; do not claim external paid success prematurely.
+- Existing hourly user launch-watch automation updated to recognize this **one-time push** as legitimate T−6h recovery, rather than incorrectly demanding the now-removed T−6h cron. It continues to watch independent T−90m schedule and actual source slots.
+- Strict scientific Gate5 = HOLD; Phase5 FREEZE = HOLD; Phase6 = NO-GO.
