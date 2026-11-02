@@ -34,6 +34,9 @@ describe("Gate05 zero-cost ADS-B source agreement offline only",()=>{
   expect(gate05AdsbAsOfEligibleV39(p,"2026-10-29T07:00:00.000Z")).toBe(true);
   expect(out.distinctPhysicalOperatingFlightsCertified).toBe(false);
   expect(out.actualWheelsOffLabelCertified).toBe(false);
+  // A forged or malformed observed-at clock must not admit future position data.
+  expect(gate05AdsbAsOfEligibleV39({...p,receivedAtUtc:"2026-10-29T06:59:55.000Z"},
+    "2026-10-29T06:59:55.000Z")).toBe(false);
  });
  it("reports stale, absent coordinates, transient hex and invalid JSON separately",()=>{
   const x=normalizeGate05AdsbLolOfflineV39({now,ac:[
