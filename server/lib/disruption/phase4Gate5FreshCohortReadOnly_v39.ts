@@ -78,19 +78,47 @@ export const P4_FRESH_COHORT_SOURCE_SQL_V39=[
  "AS provisional_distinct_analytic_identities,",
  "(SELECT count(*)::int FROM operating) AS tagged_core_canonical_identities",
 ].join(" ");
+// This is a strict as-of *candidate* inventory, NOT certified PRE.
+// Earlier code counted ANY PRE row with a matching population_query_id,
+// allowing mismatched source hashes, other physical legs, and post-cutoff
+// FIDS receipts to be mislabeled "linked". Require query hash parity and
+// exactly the SAME original source, canonical operating leg, and availability
+// <= each persisted snapshot's historical prediction cutoff. Still cannot
+// certify native selected T, licensed retention, manifest-to-source lineage,
+// or a builder already frozen at the original time.
 export const P4_FRESH_COHORT_PRE_SQL_V39=[
- "WITH q AS (SELECT population_query_id FROM clean.fids_query_response",
+ "WITH q AS (SELECT population_query_id,response_hash,available_at",
+ "FROM clean.fids_query_response",
  "WHERE source_airport_icao=$1",
  "AND service_window_start_utc=$2::timestamptz",
  "AND service_window_end_utc=$3::timestamptz",
+ "AND response_hash IS NOT NULL",
  "AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL",
  "AND available_at<=$4::timestamptz)",
  "SELECT s.horizon,count(*)::int AS persisted_pre_rows",
- "FROM clean.flight_snapshots s",
+ "FROM clean.flight_snapshots s JOIN q",
+ "ON s.population_query_id=q.population_query_id::text",
+ "AND s.fids_response_hash=q.response_hash",
+ "AND q.available_at<=s.prediction_cutoff_utc",
  "WHERE s.prediction_state='PRE_DEPARTURE'",
  "AND s.created_at<=$4::timestamptz",
- "AND s.population_query_id IN (SELECT population_query_id::text FROM q)",
+ "AND s.prediction_cutoff_utc<=$4::timestamptz",
  "AND s.horizon IN ('T-24h','T-6h','T-90m')",
+ "AND EXISTS (SELECT 1 FROM clean.flight_population m",
+ "WHERE m.population_query_id=q.population_query_id",
+ "AND m.canonical_flight_instance_id=s.flight_instance_id",
+ "AND m.response_hash=q.response_hash",
+ "AND m.source_type='fids'",
+ "AND m.source_airport_icao=$1",
+ "AND m.window_start_utc=$2::timestamptz",
+ "AND m.window_end_utc=$3::timestamptz",
+ "AND m.population_role='requested_airport_primary'",
+ "AND m.scope_classification='confirmed_core'",
+ "AND m.codeshare_resolution_status='confirmed_operating_leg'",
+ "AND m.provider_content_expired_at_utc IS NULL",
+ "AND m.available_at>=q.available_at",
+ "AND m.available_at<=s.prediction_cutoff_utc",
+ "AND m.available_at<=$4::timestamptz)",
  "GROUP BY s.horizon"
 ].join(" ");
 export const P4_FRESH_COHORT_OUTCOME_SQL_V39=[
@@ -219,6 +247,14 @@ export async function auditP4FreshCohortV39(
   serviceWindowEndUtc:scope.serviceWindowEndUtc,
   readAsOfUtc:scope.readAsOfUtc,
   reviewedFrozenManifestSha256:scope.reviewedFrozenManifestSha256,
+  // This digest is the reviewed REQUESTED scope, not independently checked
+  // against an original FIDS receipt or durable query->manifest membership.
+  // DB's present FIDS schema has no manifest linkage; V0076 alone records
+  // reservations, not a provider-body-to-cohort source attestation.
+  frozenManifestToOriginalSourceMembershipVerified:false,
+  persistedPreNativeSelectedTAndBuilderCertified:false,
+  retainedSourceRightsIndependentlyVerified:false,
+  sourceInventoryIsScopedByAirportAndWindowOnly:true,
   historicalQueryReceiptsMeasured:ever,
   retainedOriginalQueryReceiptsMeasured:retained,
   invalidHashOrClockRowsMeasured:hasRetained?invalid:null,
