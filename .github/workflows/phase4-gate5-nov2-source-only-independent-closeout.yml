@@ -1,0 +1,36 @@
+name: Phase4 Gate5 Nov2 Source-only Independent Closeout
+on:
+  workflow_run:
+    workflows:
+      - "Phase4 Gate5 WSSS Nov2 Three Horizon Real Paid Aggregate"
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-gate5-nov2-source-only-independent-closeout
+  cancel-in-progress: false
+jobs:
+  source-only-independent-closeout:
+    if: "${{ github.event.workflow_run.id == 41437078179 && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_sha == '1c7740dac119b54996b250be8de233ad04c79577' && github.run_attempt == 1 }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independently reconcile all nine log receipts; source-only and no provider credentials
+        timeout-minutes: 3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          P4_G5_NOV2_TRIGGER_RUN: "${{ github.event.workflow_run.id }}"
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${DATABASE_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_nov2_source_only_closeout_actions.ts
