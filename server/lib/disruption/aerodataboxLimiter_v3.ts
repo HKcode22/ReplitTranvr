@@ -225,6 +225,19 @@ export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence>
   }
   if (!resp.ok) throw new Error(`BALANCE_UNAVAILABLE: HTTP ${resp.status}`);
   const raw: any = await readJsonOrNull(resp);
+  // readJsonOrNull intentionally converts a rejected body read to null.
+  // Preserve a distinct, bounded FREE transport failure on deadline expiry
+  // instead of incorrectly labelling an aborted response as malformed JSON.
+  if (strictBalanceSignal.aborted) {
+    console.warn(JSON.stringify({
+      status: "ADB_FREE_BALANCE_BODY_DEADLINE_EXCEEDED",
+      elapsedMs: Math.max(0, Date.now() - balanceReadStartedAt),
+      providerMutation: false,
+      providerPaidFidsGets: 0,
+      sourceContentLogged: false,
+    }));
+    throw new Error("BALANCE_UNAVAILABLE: transport failure");
+  }
   const balance = normalizeBalance(raw?.balance ?? raw);
   if (!balance) throw new Error("BALANCE_UNAVAILABLE: invalid response");
 
