@@ -55,6 +55,7 @@ export function validatedContext(env:NodeJS.ProcessEnv,sha:string,now:number){
       !((env.GITHUB_EVENT_NAME==="schedule" &&
           env.P4_G5_CRON===CRON["T-90m"]) ||
         (env.GITHUB_EVENT_NAME==="push" &&
+          now>=Date.parse("2026-11-02T11:27:00.000Z") &&
           env.P4_G5_T90_PUSH_RESCUE==="NOV2_T90_GH_PUSH_ONCE" &&
           (env.P4_G5_CRON??"")==="")))||
     !Number.isFinite(now)||now>=Date.parse("2026-11-02T18:00:00.000Z")||
@@ -113,6 +114,7 @@ async function verifyRealRunningGitHubJob(env:NodeJS.ProcessEnv,sha:string,
      const commit=rec(run.head_commit);
      if(run.path!==".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml"||
         commit.id!==sha||
+        ms(run.created_at)<Date.parse("2026-11-02T11:27:00.000Z")||
         typeof commit.message!=="string"||
         !commit.message.startsWith("P4_G5_NOV2_T90_ONE_SHOT_PUSH_RECOVERY"))
        throw Error("P4_G5_NOV2_T90_PUSH_RESCUE_MERGE_PROOF_HOLD");
