@@ -63,6 +63,34 @@ BEGIN
   IF err<>'P4_G5_V0077_ORIGINAL_SOURCE_HASH_CLOCK_OR_EXPIRY_HOLD'
    THEN RAISE EXCEPTION 'V0077_TEST_WRONG_SHA_NOT_ENFORCED: %',err; END IF;
  END;
+ -- Reject caller-controlled backdated binding timestamp.
+ BEGIN
+  INSERT INTO clean.phase4_g5_fids_original_binding_v39
+   (population_query_id,expected_reservation_sha256,
+    query_digest,manifest_sha256,original_response_sha256,
+    rights_review_artifact_sha256,source_use_expires_at_utc,bound_at_utc)
+  VALUES(src,a,q,m,repeat('f',64),repeat('2',64),expiry,
+   clock_timestamp()-INTERVAL '1 day');
+  RAISE EXCEPTION 'TEST_SHOULD_HAVE_REJECTED_BACKDATE';
+ EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS err=MESSAGE_TEXT;
+  IF err<>'P4_G5_V0077_ORIGINAL_SOURCE_HASH_CLOCK_OR_EXPIRY_HOLD'
+   THEN RAISE EXCEPTION 'V0077_TEST_BACKDATE_NOT_ENFORCED: %',err; END IF;
+ END;
+ -- Reject an apparent >7-day retention assertion.
+ BEGIN
+  INSERT INTO clean.phase4_g5_fids_original_binding_v39
+   (population_query_id,expected_reservation_sha256,
+    query_digest,manifest_sha256,original_response_sha256,
+    rights_review_artifact_sha256,source_use_expires_at_utc)
+  VALUES(src,a,q,m,repeat('f',64),repeat('2',64),
+   avail+INTERVAL '8 days');
+  RAISE EXCEPTION 'TEST_SHOULD_HAVE_REJECTED_EXTENDED_EXPIRY';
+ EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS err=MESSAGE_TEXT;
+  IF err<>'P4_G5_V0077_ORIGINAL_SOURCE_HASH_CLOCK_OR_EXPIRY_HOLD'
+   THEN RAISE EXCEPTION 'V0077_TEST_EXPIRY_NOT_ENFORCED: %',err; END IF;
+ END;
  -- Correct reference to real retained synthetic original/committed reservation.
  INSERT INTO clean.phase4_g5_fids_original_binding_v39
   (population_query_id,expected_reservation_sha256,
