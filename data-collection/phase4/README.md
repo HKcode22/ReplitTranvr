@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Nov 2 forward preparation — automatic independent source-only 3×3 closeout after real T−90m, then lawful prospective cohort gate**](2026-11-02_GATE5_NEXT_WORK_LOG_CONSISTENCY_AND_SCIENTIFIC_PROSPECTIVE_HANDOFF.md) — new isolated read-only GitHub completion workflow and tamper/missingness regressions; no source/DB credentials or alteration to the running paid source. Current T−90m result still unproven until actual paid slots and final GitHub closeout; a source-only success never grants scientific Gate5 PASS.
+
+
 - [**Nov 2 live Gate5 update: T−6h 3/3 real GETs SUCCESS, six measured units; T−90m GitHub push rescue physically RUNNING; PR #332 merged**](2026-11-02_GATE5_T90_REAL_PUSH_RECOVERY_LIVE_PENDING_AND_T6_TIMEOUT_REVIEW.md) — first read this append-only checkpoint rather than the superseded Nov1 future-tense launch notes. Original #41402736335 T−6h complete, 79 observations per snapshot (not 79 distinct certified legs). Independent T90 #41437078179 job #125250256608 started at Nov2 11:30:08Z; GETs due 15:00/15:30/16:00Z and not yet proven. Five CI checks passed for source-body-timeout hardening PR332; live paid job SHA unchanged. Structured-log event-status key collision and live GH log 404 diagnosed. Strict science Gate5/Phase5/Phase6 remain HOLD until actual-only wheels-off, selected T, lawful source retention, certified per-flight PRE and independent audit.
 
 - [**Nov 1 22:53 PST — T−6h missing GitHub cron recovered by exact one-shot push**](2026-11-01_NOV2_T6_MISSED_SCHEDULE_ONE_SHOT_PUSH_PREARM.md) — PR329 four checks PASS, real new run #41402736335 job owner-t6 started, actual source slots not yet reached, T−90m schedule still installed. No Phase5/6 authorization.
