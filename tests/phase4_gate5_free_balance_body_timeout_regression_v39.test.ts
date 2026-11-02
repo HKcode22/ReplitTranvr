@@ -28,6 +28,10 @@ describe("Gate5 strict FREE balance body deadline (postpilot hardening)",()=>{
   expect(paid).toContain("getBalanceEvidenceStrict()");
   expect(paid).toContain("sourceMissingNotZeroPopulation:true");
   expect(paid).toContain("started>=3");
-  expect(workflow).toContain('cron: "17 11 2 11 *"');
+  // Historical T90 cron was safely replaced with the reviewed one-shot
+  // push recovery in PR #330. This unrelated FREE-body fix must work with
+  // either already-pinned source owner and must never change the workflow.
+  expect(workflow).toContain("  owner-t90:");
+  expect(workflow).toContain("phase4-gate5-wsss-nov2-2026-real-aggregate-18unit-global");
  });
 });
