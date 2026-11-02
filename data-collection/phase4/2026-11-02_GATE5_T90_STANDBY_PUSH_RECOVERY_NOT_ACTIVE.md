@@ -1,0 +1,23 @@
+# Phase 4 Gate 5 — T−90m GitHub-only standby recovery (NOT ACTIVATED)
+
+Created Nov 2, 2026 ~00:55 PST, while [Nov2 T−6h recovered GitHub Actions run #41402736335](https://github.com/HKcode22/ReplitTranvr/actions/runs/41402736335) was **in_progress** and its own log showed `P4_G5_REAL_NOV2_HORIZON_GITHUB_PREARM_VERIFIED` at 06:53:26Z. This document is in an **UNMERGED REVIEW BRANCH** so it does **not** affect the currently running or scheduled paid jobs.
+
+## Current authoritative live campaign
+
+- Historical T−24h: Nov1 08:30/09:00/09:30 PST, all 3 provider GETs success, 6 REST API units from headers. No runway-time label expected before actual departure, no original flight-level content retained.
+- Recovered T−6h: run #41402736335, job #125137897353 genuinely started Nov1 22:53 PST, self-verified GitHub prearm; actual provider GETs remain **Nov2 02:30/03:00/03:30 PST**, at most 3 physical attempts and 6 API units, no retries.
+- T−90m currently installed in `main`: `cron: "17 11 2 11 *"` = **Nov2 03:17 PST**. GitHub must create a *separate* `event=schedule` run, and true `owner-t90` physical job started **Nov2 03:00–06:00 PST**, checked independent of merely seeing YAML. Physical GET targets **Nov2 07:00,07:30,08:00 PST**; 3 single-attempt GET max, 6 API units expected maximum. GitHub concurrency may queue it behind the active T−6h run until ~03:30 PST. A `pending` run requires verification of its true physical start before deadline.
+- GitHub has dropped/delayed earlier schedules (notably Oct31 T−6h and Nov1 T−6h), so a source-only backup design is prepared in advance, not fired speculatively.
+
+## Standby recovery algorithm (only if scheduled T−90m is proven missing or unable to prearm)
+
+1. Independently inspect live Actions API at/after 03:17 PST for a new T90 `event=schedule` run and true `owner-t90` job. **Do not merge backup** if original has created a qualifying run/has a viable runner; avoid a second physical owner.
+2. If the real T90 scheduled run is absent, the existing one-shot fallback branch changes **only** the same named workflow, its event validation, tests and this checkpoint. It **removes the old cron in a reviewed merge** and installs an exact one-time GitHub `push` owner conditional on head commit title `P4_G5_NOV2_T90_ONE_SHOT_PUSH_RECOVERY`; existing T24 and T6 event guards stay intact. Other ordinary pushes are skipped. Unlike an unconditional T90 push, this requires a new explicitly reviewed merge after evidence of missing schedule.
+3. Four required PR checks must be SUCCESS before merge. Merge must preserve exact head SHA with check; use **merge method merge** and commit title EXACTLY `P4_G5_NOV2_T90_ONE_SHOT_PUSH_RECOVERY`. Existing T90 current workflow on `main` is unchanged before such a merge.
+4. The paid script independently fetches the new live running GH run/job, verifies run head SHA, exact one-shot commit message prefix, file path, first attempt, actual job `started_at` in **Nov2 03:00–06:00 PST** and 15m max job-start staleness, no database URLs/secret misuse, true source grid and quota before any paid GET. If started outside window or past cutoff, **UNOBSERVED** not backfilled.
+5. Both historical scheduled and fallback jobs use the existing `phase4-gate5-wsss-nov2-2026-real-aggregate-18unit-global` `cancel-in-progress:false` Actions concurrency. A delayed original scheduled job could still be generated from older default-branch scheduling state; no two paid runners are allowed to be active simultaneously. If an old schedule job did run first, a queued backup later must fail closed if it misses its hard prearm deadline. **Before activating standby, check live concurrency/queued owner state**; even GitHub serialized pending runs can be replaced, so do not trigger more workflow edits after rescue.
+6. Postmerge must see a new *real* `event=push` run under the exact merged commit, `owner-t90` in progress, correct own-job prearm log, then receipts from all three future planned GETs. Never infer provider credit spend merely from job launch.
+
+## Constraints and scientific meaning
+
+**DO NOT MERGE THIS STANDBY PR WHILE THE ORIGINAL T90 SCHEDULE IS STILL VIABLE.** No full Gate5 scientific acceptance, native selected T or actual-only wheels-off proven; frozen Nov2 source feasibility remains aggregate/zero retention. Phase5 and Phase6 remain HOLD. Do not rerun successful T24/T6 or send manual Replit/shell GETs. This backup is an engineering preparation and requires review of genuine missing scheduled launch before deployment.
