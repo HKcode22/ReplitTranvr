@@ -135,7 +135,7 @@ describe("Phase4 Gate5 fresh cohort independent read-only candidate census",()=>
   expect(sql).not.toContain("IN (SELECT population_query_id::text FROM q)");
   expect(sql).toContain("raw_payload IS NOT NULL");
   expect(sql).toContain("raw_expired_at_utc IS NULL");
-  expect(sql).not.toMatch(/\\bINSERT\\b|\\bUPDATE\\b|\\bDELETE\\b/i);
+  expect(sql).not.toMatch(/\bINSERT\b|\bUPDATE\b|\bDELETE\b/i);
  });
  it("SQL is bounded to the reviewed cohort with no writes, no HTTP and no old Oct31 literal",()=>{
   for(const sql of [P4_FRESH_COHORT_SOURCE_SQL_V39,
