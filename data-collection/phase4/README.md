@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 22:53 PST — T−6h missing GitHub cron recovered by exact one-shot push**](2026-11-01_NOV2_T6_MISSED_SCHEDULE_ONE_SHOT_PUSH_PREARM.md) — PR329 four checks PASS, real new run #41402736335 job owner-t6 started, actual source slots not yet reached, T−90m schedule still installed. No Phase5/6 authorization.
+
 - [**Nov 1 — AeroDataBox + ADSB.lol dual-source Phase4/Phase7 plan-and-implementation supplement**](2026-11-01_GATE5_ADSB_LOL_DUAL_PROVIDER_PLAN_AND_IMPLEMENTATION_SUPPLEMENT.md) — preserves hash-locked binding plan/log, makes ADSB.lol airborne adjunct explicit, source/receipt leakage and flight-link guards, no actual-only label promotion, offline bias diagnostics, and future licensing/production work; does not alter Nov2 paid workflow.
 
 - [**Nov 1 evening — complete technical Gate 5 explanation and exact GitHub SKIPPED diagnosis**](2026-11-01_GATE5_TECHNICAL_EXPLANATION_AND_GITHUB_SKIPS.md) — independently verified T−24h SUCCESS (3 paid GET, 6 REST units), 23 repeated FIDS records per retrieval, wrong-event intentional skips in PR327 push, upcoming T−6h/T−90m owners, code map and exact human operator steps; scientific Gate5 remains HOLD.
