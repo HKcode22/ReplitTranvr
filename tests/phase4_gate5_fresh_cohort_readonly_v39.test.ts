@@ -50,6 +50,12 @@ describe("Phase4 Gate5 fresh cohort independent read-only candidate census",()=>
   expect(r.persistedPreRowsLinkedToRetainedSource).toEqual({
    "T-24h":0,"T-6h":0,"T-90m":2
   });
+  // Source-window scope and same-original PRE parity are NOT the same as
+  // an independent pinned-manifest / lawful-retention / native-T attestation.
+  expect(r.frozenManifestToOriginalSourceMembershipVerified).toBe(false);
+  expect(r.persistedPreNativeSelectedTAndBuilderCertified).toBe(false);
+  expect(r.retainedSourceRightsIndependentlyVerified).toBe(false);
+  expect(r.sourceInventoryIsScopedByAirportAndWindowOnly).toBe(true);
   expect(r.sourceScopedOutcomeStatusCounts).toEqual({
    observed:0,pending:2,censored:1,missing:0,not_applicable:0
   });
@@ -105,6 +111,31 @@ describe("Phase4 Gate5 fresh cohort independent read-only candidate census",()=>
   const missing={query:async()=>({rows:[]})};
   await expect(auditP4FreshCohortV39(missing,scope()))
     .rejects.toThrow("P4_FRESH_READONLY_RESULT_SHAPE_HOLD");
+ });
+ it("PRE inventory only includes original retained response and matching historical as-of physical leg",()=>{
+  const sql=P4_FRESH_COHORT_PRE_SQL_V39;
+  for(const must of [
+   "s.population_query_id=q.population_query_id::text",
+   "s.fids_response_hash=q.response_hash",
+   "q.available_at<=s.prediction_cutoff_utc",
+   "m.population_query_id=q.population_query_id",
+   "m.canonical_flight_instance_id=s.flight_instance_id",
+   "m.response_hash=q.response_hash",
+   "m.source_type='fids'",
+   "m.population_role='requested_airport_primary'",
+   "m.scope_classification='confirmed_core'",
+   "m.codeshare_resolution_status='confirmed_operating_leg'",
+   "m.available_at>=q.available_at",
+   "m.available_at<=s.prediction_cutoff_utc",
+   "m.provider_content_expired_at_utc IS NULL",
+   "s.created_at<=$4::timestamptz",
+   "s.prediction_cutoff_utc<=$4::timestamptz",
+   "EXISTS (SELECT 1 FROM clean.flight_population"
+  ])expect(sql).toContain(must);
+  expect(sql).not.toContain("IN (SELECT population_query_id::text FROM q)");
+  expect(sql).toContain("raw_payload IS NOT NULL");
+  expect(sql).toContain("raw_expired_at_utc IS NULL");
+  expect(sql).not.toMatch(/\\bINSERT\\b|\\bUPDATE\\b|\\bDELETE\\b/i);
  });
  it("SQL is bounded to the reviewed cohort with no writes, no HTTP and no old Oct31 literal",()=>{
   for(const sql of [P4_FRESH_COHORT_SOURCE_SQL_V39,
