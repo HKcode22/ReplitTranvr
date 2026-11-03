@@ -116,7 +116,7 @@ describe("G5A prospective flight-schedule revision classifier",()=>{
  it("negative 15-minute and exactly +/- 15 minute revisions are deterministic",()=>{
   for(const [final,expected] of [
    ["2026-11-05T01:45:00.000Z",-15],
-   ["2026-11-05T02:15:00.000Z,15]
+   ["2026-11-05T02:15:00.000Z",15]
   ] as const){
    const x=measureP4G5G5AScheduleRevisionV39(input([
     obs(Q1,ORIGINAL,T),obs(Q2,POST,final)
