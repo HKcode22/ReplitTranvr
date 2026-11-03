@@ -75,7 +75,7 @@ export const G5A_SOURCE_AUDIT_SQL_V39=[
  "AND b.manifest_sha256=o.manifest_sha256",
  "LEFT JOIN clean.fids_query_response s",
  "ON s.population_query_id=b.population_query_id",
- "WHERE o.manifest_sha256=$1 AND o.cohort_id IS NULL",
+ "WHERE o.manifest_sha256=$1",
  "GROUP BY o.horizon ORDER BY o.horizon"
 ].join(" ");
 export const G5A_PRE_AUDIT_SQL_V39=[
