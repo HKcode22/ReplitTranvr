@@ -13,6 +13,8 @@ import {P4_FRESH_COHORT_SOURCE_SQL_V39,
  from "../server/lib/disruption/phase4Gate5FreshCohortReadOnly_v39";
 import {auditP4G5NineOriginalBoundCohortV39,
  auditP4G5OneHorizonOriginalBeforeExpiryV39,
+ auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39,
+ P4_G5_HORIZON_BOUND_SOURCE_DISCOVERY_SQL_V39,
  reconcileP4G5ThreeHorizonNoncontentReceiptsV39}
  from "../server/lib/disruption/phase4Gate5NineOriginalBoundCohort_v39";
 
@@ -113,9 +115,19 @@ function fixture(extendedRights=false){
  return {full,rows,g};
 }
 function stub(rows:Map<string,D>,options:{
- extra?:boolean;missing?:string;noBody?:string
+ extra?:boolean;missing?:string;noBody?:string;
+ ledgerMissing?:boolean;ledgerDuplicate?:boolean
 }={}){
  const query=vi.fn(async(sql:string,params:unknown[])=>{
+  if(sql===P4_G5_HORIZON_BOUND_SOURCE_DISCOVERY_SQL_V39){
+   const matches=[...rows.values()]
+    .filter(r=>r.manifest_sha256===params[0]&&r.horizon===params[1])
+    .map(r=>({horizon:r.horizon,query_index:r.query_index,
+      population_query_id:r.population_query_id}));
+   if(options.ledgerMissing)matches.pop();
+   if(options.ledgerDuplicate)matches.push({...matches[0]});
+   return {rows:matches};
+  }
   if(sql===P4_G5_ORIGINAL_FRAME_READONLY_SQL_V39){
    const row=rows.get(String(params[1]));
    if(!row||row.population_query_id!==params[2]||
@@ -159,6 +171,48 @@ describe("Phase4 future exact nine source slots and pre-expiry horizon handoff",
   expect(db.query).toHaveBeenCalledTimes(9);
   expect(db.query.mock.calls.every(([s])=>
    s===P4_G5_ORIGINAL_FRAME_READONLY_SQL_V39)).toBe(true);
+ });
+ it("discovers three original IDs automatically from V0077, then checks exact source request/body",async()=>{
+  const {full,rows}=fixture(),db=stub(rows);
+  const {originalSourceSlots,...withoutIds}=full;
+  expect(originalSourceSlots).toHaveLength(9);
+  const result=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   db,{...withoutIds,horizon:"T-24h",
+    readAsOfUtc:"2026-11-05T19:00:00.000Z"});
+  expect(result.status).toBe("THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED");
+  expect(result.matchedOriginalSlots).toBe(3);
+  expect(result.scientificGate5Passed).toBe(false);
+  expect(db.query).toHaveBeenCalledTimes(4);
+  expect(db.query.mock.calls[0][0]).toBe(P4_G5_HORIZON_BOUND_SOURCE_DISCOVERY_SQL_V39);
+  expect(db.query.mock.calls.slice(1).every(([sql])=>
+   sql===P4_G5_ORIGINAL_FRAME_READONLY_SQL_V39)).toBe(true);
+  const printed=JSON.stringify(result);
+  expect(printed).not.toContain("population_query_id");
+  expect(printed).not.toContain("bodyBase64");
+  expect(printed).not.toContain(originalSourceSlots[0].populationQueryId);
+ });
+ it("incomplete or duplicated discovered ledger cannot look like complete source evidence",async()=>{
+  const {full,rows}=fixture();
+  const {originalSourceSlots,...withoutIds}=full;
+  const scope={...withoutIds,horizon:"T-24h" as const,
+   readAsOfUtc:"2026-11-05T19:00:00.000Z"};
+  const incomplete=stub(rows,{ledgerMissing:true});
+  const missing=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   incomplete,scope);
+  expect(missing.status).toBe("HOLD_INCOMPLETE_V0077_HORIZON_ORIGINAL_LINKS");
+  expect(missing.discoveredOriginalSourceLinks).toBe(2);
+  expect(missing.matchedOriginalSlots).toBeNull();
+  expect(incomplete.query).toHaveBeenCalledTimes(1);
+  const tooMany=stub(rows,{ledgerDuplicate:true});
+  await expect(auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   tooMany,scope)).rejects.toThrow("HOLD");
+  expect(tooMany.query).toHaveBeenCalledTimes(1);
+  const digest=rows.values().next().value.query_digest as string;
+  const absentBody=stub(rows,{missing:digest});
+  const r=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   absentBody,scope);
+  expect(r.status).toBe("HOLD_MISSING_OR_EXPIRED_ONE_HORIZON_ORIGINAL");
+  expect(r.matchedOriginalSlots).toBe(2);
  });
  it("three pre-expiry read-only horizon proofs can be reconciled without retaining FIDS flight bytes",async()=>{
   const {full,rows}=fixture(),db=stub(rows);
