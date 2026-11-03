@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Alternative scientific study draft (NOT original selected T/runway and not live-authorized)**](2026-11-02_GATE5_RESEARCH_FALLBACK_TARGET_PROTOCOL_DRAFT.md) — potential separate future target based on explicitly named provider generic schedule S and properly verified terminal canceled/diverted status, or provider schedule-change *forecast* outcome; ADSB.lol takeoff remains inferred interval, never exact runway truth. Requires newly reviewed Plan version and a real source-retained PRE/postflight experiment before any science GO.
+
 - [**Gate 5 bounded operational source-only closeout / tracks 1–3 decision, Nov 2 evening**](2026-11-02_GATE5_EVIDENCE_BOUNDED_OPERATIONS_CLOSEOUT_AND_TRACK123.md) — independent Nov2 9/9 physical GET and 18 measured units accepted as a **finished operational diagnostic**; original flight-level selected T/actual-only wheels-off, retention rights, source-to-PRE/POST still scientifically **HOLD**. Offline CI/report code distinguishes unmeasurable (NULL) from zero, ADSB.lol takeoff proxy from actual, and nonauthorizing 7-day/24h/purpose/cache expiry ceilings. No paid repeat, no Phase5/6 release.
 
 
