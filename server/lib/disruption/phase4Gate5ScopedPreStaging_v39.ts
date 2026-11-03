@@ -47,8 +47,8 @@ export function assertP4G5ScopedPreScope(s:P4G5ScopedPreScope){
 // All FIDS originals are time-bounded; a future raw source can never be used
 // as an earlier cutoff. No source roles are silently reclassified.
 export const P4_G5_SCOPED_PRE_SOURCE_SQL=[
- "WITH q AS (SELECT population_query_id,response_hash,available_at",
- "FROM clean.fids_query_response WHERE source_airport_icao=$1",
+ "WITH q AS (SELECT f.population_query_id,f.response_hash,f.available_at",
+ "FROM clean.fids_query_response f WHERE f.source_airport_icao=$1",
  "AND service_window_start_utc=$2::timestamptz",
  "AND service_window_end_utc=$3::timestamptz",
  "AND available_at<=$4::timestamptz",
@@ -99,6 +99,77 @@ export const P4_G5_SCOPED_PRE_SOURCE_SQL=[
  "LIMIT 1) obs ON TRUE",
  "ORDER BY f.analytic_identity_id,h.horizon"
 ].join(" ");
+/**
+ * Optional *source-owner-bound* staging for the reviewed PRE writer only.
+ * Unbound staging remains an INERT candidate preview. A proof SHA is not an
+ * authorization: the writer also needs independently authenticated rights,
+ * native selected T and an operating-leg identity outside this library.
+ */
+export interface P4G5BoundPreSourceOwnerV39 {
+ horizon:PreHorizon;
+ expectedOwnerGithubRunId:string;
+ reviewedRunAuthorizationSha256:string;
+}
+const GH_RUN=/^\\d{5,25}$/;
+export const P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39=
+ P4_G5_SCOPED_PRE_SOURCE_SQL.replace(
+  "FROM clean.fids_query_response f WHERE f.source_airport_icao=$1",
+  [
+   "FROM clean.fids_query_response f",
+   "JOIN clean.phase4_g5_fids_original_binding_v39 b",
+   "ON b.population_query_id=f.population_query_id",
+   "AND b.original_response_sha256=f.response_hash",
+   "JOIN clean.phase4_g5_fids_allowed_query_v39 aq",
+   "ON aq.query_digest=b.query_digest",
+   "JOIN clean.phase4_g5_fids_physical_owner_v39 ow",
+   "ON ow.owner_digest=aq.owner_digest",
+   "AND ow.manifest_sha256=b.manifest_sha256",
+   "JOIN clean.phase4_g5_fids_physical_attempt_v39 att",
+   "ON att.expected_reservation_sha256=b.expected_reservation_sha256",
+   "AND att.query_digest=aq.query_digest",
+   "AND att.owner_digest=ow.owner_digest",
+   "AND att.github_run_id=ow.github_run_id",
+   "WHERE f.source_airport_icao=$1 AND f.query_direction='Departure'",
+   "AND b.manifest_sha256=$5 AND ow.horizon=$6",
+   "AND ow.github_run_id=$7",
+   "AND ow.reviewed_authorization_sha256=$8",
+   "AND b.source_use_expires_at_utc>clock_timestamp()"
+  ].join(" ")
+ );
+/**
+ * Count the *planned* slots independently of retained original observations.
+ * Zero rows, source expiry or a missing original is HOLD/unknown, never
+ * interpreted as an empty, fully-observed flight population.
+ */
+export const P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39=[
+ "SELECT count(DISTINCT aq.query_index)::int AS expected_slots,",
+ "count(DISTINCT b.population_query_id)::int AS bound_originals,",
+ "count(DISTINCT CASE WHEN f.source_airport_icao=$1",
+ "AND f.query_direction='Departure'",
+ "AND f.service_window_start_utc=$2::timestamptz",
+ "AND f.service_window_end_utc=$3::timestamptz",
+ "AND f.available_at<=$4::timestamptz",
+ "AND f.raw_payload IS NOT NULL AND f.raw_expired_at_utc IS NULL",
+ "AND b.original_response_sha256=f.response_hash",
+ "AND b.source_use_expires_at_utc>clock_timestamp()",
+ "THEN b.population_query_id END)::int AS valid_originals",
+ "FROM clean.phase4_g5_fids_physical_owner_v39 ow",
+ "JOIN clean.phase4_g5_fids_allowed_query_v39 aq",
+ "ON aq.owner_digest=ow.owner_digest",
+ "LEFT JOIN clean.phase4_g5_fids_original_binding_v39 b",
+ "ON b.query_digest=aq.query_digest AND b.manifest_sha256=ow.manifest_sha256",
+ "LEFT JOIN clean.phase4_g5_fids_physical_attempt_v39 att",
+ "ON att.expected_reservation_sha256=b.expected_reservation_sha256",
+ "AND att.query_digest=aq.query_digest",
+ "AND att.owner_digest=ow.owner_digest",
+ "AND att.github_run_id=ow.github_run_id",
+ "LEFT JOIN clean.fids_query_response f",
+ "ON f.population_query_id=b.population_query_id",
+ "WHERE ow.manifest_sha256=$5 AND ow.horizon=$6",
+ "AND ow.github_run_id=$7 AND ow.reviewed_authorization_sha256=$8",
+ "AND (b.population_query_id IS NULL OR att.expected_reservation_sha256 IS NOT NULL)"
+].join(" ");
+
 type Counts={horizon:PreHorizon;sourceObserved:number;sourceUnobserved:number;
  provisionalCore:number;unverifiedScopeOrIdentity:number;built:number};
 function t(value:unknown):Date|null {
@@ -108,12 +179,32 @@ function t(value:unknown):Date|null {
  if(!d||!Number.isFinite(d.getTime()))throw Error("P4_G5_PRE_MALFORMED_SOURCE_CLOCK");
  return d;
 }
-export async function stageP4G5ScopedPreV39(db:P4G5PreDb,scope:P4G5ScopedPreScope){
+export async function stageP4G5ScopedPreV39(
+ db:P4G5PreDb,scope:P4G5ScopedPreScope,
+ boundOwner?:P4G5BoundPreSourceOwnerV39
+){
  assertP4G5ScopedPreScope(scope);
- const q=await db.query(P4_G5_SCOPED_PRE_SOURCE_SQL,[
+ if(boundOwner&&(!H.includes(boundOwner.horizon)||
+    !GH_RUN.test(boundOwner.expectedOwnerGithubRunId)||
+    !SHA.test(boundOwner.reviewedRunAuthorizationSha256)))
+  throw Error("P4_G5_PRE_V0077_SOURCE_OWNER_SCOPE_HOLD");
+ const args:unknown[]=[
   scope.airportIcao,scope.serviceStartUtc,scope.serviceEndUtc,
   scope.observedAtUtc
- ]);
+ ];
+ if(boundOwner){
+  args.push(scope.reviewedFrozenManifestSha256,boundOwner.horizon,
+   boundOwner.expectedOwnerGithubRunId,
+   boundOwner.reviewedRunAuthorizationSha256);
+  const frame=await db.query(P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,args);
+  if(frame.rows.length!==1||Number(frame.rows[0]?.expected_slots)!==3||
+     Number(frame.rows[0]?.bound_originals)!==3||
+     Number(frame.rows[0]?.valid_originals)!==3)
+   throw Error("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+ }
+ const q=await db.query(boundOwner?
+  P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39:
+  P4_G5_SCOPED_PRE_SOURCE_SQL,args);
  if(!q||!Array.isArray(q.rows)||q.rows.length>30000||q.rows.length%3!==0)
   throw Error("P4_G5_PRE_SOURCE_RESULT_SHAPE_HOLD");
  const counts:Record<PreHorizon,Counts>={
