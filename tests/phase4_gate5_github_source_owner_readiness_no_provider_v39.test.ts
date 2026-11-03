@@ -80,13 +80,18 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
  it("reader and owner roles must be distinct and on one exact database",()=>{
   for(const mutate of [
    (x:ReturnType<typeof evidence>)=>{x.owner!.roleName=x.reader!.roleName},
-   (x:ReturnType<typeof evidence>)=>{x.owner!.dbName="different-synthetic-db"},
-   (x:ReturnType<typeof evidence>)=>{x.reader!.isSuperuser=true}
+   (x:ReturnType<typeof evidence>)=>{x.owner!.dbName="different-synthetic-db"}
   ]){
    const x=evidence();mutate(x);
    expect(classifyP4G5GithubOwnerReadinessV39(x).status)
     .toBe("HOLD_GITHUB_DB_ROLE_SEPARATION");
   }
+ });
+ it("a superuser reader cannot be approved for independent least-privilege audit",()=>{
+  const x=evidence();
+  x.reader!.isSuperuser=true;
+  expect(classifyP4G5GithubOwnerReadinessV39(x).status)
+   .toBe("HOLD_GITHUB_READER_V0077_SOURCE_PRE_ACL");
  });
  it("zero credential flags are always a diagnostic HOLD",()=>{
   const x=classifyP4G5GithubOwnerReadinessV39({
