@@ -142,8 +142,9 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
  const {reader,owner}=input;
  const evidenceReader=reader!==null&&
   reader.pg16&&reader.txReadOnly&&!reader.isSuperuser&&
-  reader.tables.original.exists&&reader.tables.binding.exists&&
-  reader.tables.binding.select&&reader.tables.allowedQuery.select&&
+  reader.tables.original.exists&&reader.tables.original.select&&
+  reader.tables.binding.exists&&reader.tables.binding.select&&
+  reader.tables.allowedQuery.select&&
   reader.tables.physicalOwner.select&&reader.tables.physicalAttempt.select&&
   reader.tables.preSnapshots.select;
  const sourceWriter=owner!==null&&
