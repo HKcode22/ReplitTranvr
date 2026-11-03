@@ -9,7 +9,7 @@
  *
  * Exact pinned Replit shell invocation only after PR has passed CI.
  */
-import {createHash,randomBytes} from "node:crypto";
+import {randomBytes} from "node:crypto";
 import {execFileSync,spawnSync} from "node:child_process";
 import pg from "pg";
 const REPO="HKcode22/ReplitTranvr";
@@ -27,10 +27,6 @@ export const P4_G5_SOURCE_OWNER_RELATION_GRANTS_V39:readonly Priv[]=[
  {relation:"clean.phase4_g5_fids_allowed_query_v39",privileges:["SELECT","INSERT","UPDATE"]},
  {relation:"clean.phase4_g5_fids_physical_attempt_v39",privileges:["SELECT","INSERT"]},
  {relation:"clean.flight_snapshots",privileges:["SELECT","INSERT"]}
-];
-const MUST_NOT=[
- "SUPERUSER","CREATEDB","CREATEROLE","BYPASSRLS","REPLICATION",
- "DELETE","TRUNCATE","REFERENCES","TRIGGER"
 ];
 const reserveFunction="clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)";
 const sha=/^[a-f0-9]{40}$/;
@@ -54,7 +50,6 @@ function quoteId(id:string){
 function quoteLiteral(value:string){
  return "'"+value.replace(/'/g,"''")+"'";
 }
-function digest(src:string){return createHash("sha256").update(src).digest("hex")}
 function ownerUri(src:string,password:string){
  const u=new URL(src);
  u.username=encodeURIComponent(ROLE);
@@ -221,7 +216,7 @@ export async function main(){
   const specific=conn(scopedUri,"NEW_SOURCE_OWNER");
   await verifyNewRole(specific,String(a.db));
   if(!run("gh",["secret","set",SECRET,"--repo",REPO,
-       "--env",ENV,"--body",scopedUri]))
+       "--env",ENV],scopedUri))
    hold("ROLE_CREATED_BUT_GITHUB_SECRET_UPLOAD_FAILED_CONTACT_OPERATOR");
   const workflowQueued=run("gh",["workflow","run",
    "phase4-gate5-future-owner-credentials-readiness-no-provider.yml",
