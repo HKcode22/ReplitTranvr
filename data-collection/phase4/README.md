@@ -4,6 +4,11 @@
 
 ## Start here — live source of truth
 
+**START WITH OWNER DIRECTION (2026-11-03): deadline November 4 evening PT; STOP repeated vendor/runway emails and perfection loops. The owner explicitly permits a prospective scientifically valid protocol amendment and requires progress toward actual data, with measured limitations rather than indefinite external-source waits.**
+
+- [**READ FIRST — Binding owner directive: stop perfection loop; complete meaningful Gate5 by November 4**](2026-11-03_OWNER_DIRECTIVE_NO_PERFECTION_LOOP_FAST_SCIENTIFIC_GATE5_CLOSURE.md) — carry forward across all chats/PRs; keep cutoff/data/budget rigor, no repetition of old provider limitations.
+- [**Proposed Gate5 G5A prospective scientifically valid alternative protocol (review before real data)**](2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md) — Track A native scheduled-departure-reference schedule revision, independently measured PRE/POST and missingness; Track B free data optional enrichment, not critical path.
+
 - [**V0078 actually INSTALLED production; GitHub future owner/DB credentials readiness (no provider)**](2026-11-03_GATE5_V0078_LIVE_INSTALL_SUCCESS_GITHUB_SOURCE_OWNER_READINESS.md) — real owner postcommit success and reviewed source owner/auditor secret + least-privilege READ ONLY capability checks; provider/native T/rights/three-horizon scientific Gate5 still HOLD.
 
 - [**V0078 actual production catalog READY → reviewed one-time transactional installer (no paid/provider yet)**](2026-11-03_GATE5_V0078_PRODUCTION_READONLY_READY_ONE_TIME_INSTALLER_CHECKPOINT.md) — owner read-only flags all green; guarded production DDL path requires independent CI/owner run; scientific Gate5 remains HOLD.
