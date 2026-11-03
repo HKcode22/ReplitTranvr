@@ -39,8 +39,11 @@ function context(){
 let lastSyntheticStage="START";
 export async function main(){
  context();
- const base=Math.floor(Date.now()/60000)*60000;
- const serviceStart=base+24*3600000+2*60000;
+ // Pick a future UTC minute boundary with enough real lead for source and
+ // PRE commits. The independent audit must run AFTER cutoff, never pretending
+ // a before-cutoff read has already observed a due flight.
+ const base=Math.ceil(Date.now()/60000)*60000+60000;
+ const serviceStart=base+24*3600000-60000;
  const serviceEnd=serviceStart+3600000;
  const firstScheduledT=serviceStart+60000;
  const cutoff=firstScheduledT-24*3600000;
@@ -187,6 +190,13 @@ export async function main(){
      wrote.otherHorizonsUntouched!==true||
      wrote.strictGate5Passed!==false)
    throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_WRITER_DID_NOT_INSERT_ON_TIME");
+  lastSyntheticStage="ACTUAL_CUTOFF_WAIT";
+  // The PRE was genuinely committed while C was still in the future.
+  // Wait for wall-clock C before measuring it in the independent auditor.
+  // Never submit a future claimed read timestamp or retrospectively backfill.
+  const remaining=cutoff-Date.now()+1500;
+  if(remaining>0)await new Promise<void>(resolve=>setTimeout(resolve,remaining));
+  if(Date.now()<cutoff)throw Error("P4_G5_SOURCE_PRE_AUDIT_BEFORE_ACTUAL_CUTOFF_HOLD");
   lastSyntheticStage="READONLY_AUDIT";
   const review=new pg.Client({connectionString:URL,
    application_name:"p4_gate5_source_pre_independent_readonly",
