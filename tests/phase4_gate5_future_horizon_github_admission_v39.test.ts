@@ -120,7 +120,7 @@ describe("future pre-expiry GitHub original-source audit is inert unless reviewe
    ".github/workflows/phase4-gate5-future-preexpiry-original-audit.yml","utf8");
   expect(yaml).toContain("workflow_run:");
   expect(yaml).toContain('Phase4 Gate5 Future Reviewed Source Owner');
-  expect(yaml).not.toMatch(/(^|\n)  push:/);
+  expect(yaml).not.toContain("\n  push:");
   expect(yaml).not.toContain("workflow_dispatch:");
   expect(yaml).not.toContain("AERODATABOX_API_KEY: ${{ secrets.");
   expect(yaml).toContain("GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.");
