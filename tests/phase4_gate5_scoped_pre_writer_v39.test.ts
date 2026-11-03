@@ -59,7 +59,7 @@ function rows(){
 }
 function db(opts:{
  insertRowCount?:number;failInsertAt?:number;conflict?:boolean;
- missingBoundOriginal?:boolean;
+ missingBoundOriginal?:boolean;duplicateSlot?:boolean;
  featureDrift?:boolean;horizon?:typeof H[number];now?:string;
  clockSequence?:string[];malformedClock?:boolean
 }={}){
@@ -73,7 +73,8 @@ function db(opts:{
   }
   if(sql.includes("AS valid_originals"))
    return {rows:[{expected_slots:3,bound_originals:3,
-    valid_originals:opts.missingBoundOriginal?2:3}],rowCount:1};
+    valid_originals:opts.missingBoundOriginal?2:3,
+    valid_slots:opts.duplicateSlot?2:3}],rowCount:1};
   if(sql.includes("FROM firsts f JOIN source_integrity si"))
    return {rows:rows(),rowCount:3};
   if(sql.startsWith("INSERT INTO clean.flight_snapshots")){
@@ -144,6 +145,11 @@ describe("Scoped Gate5 PRE writer requires independently reviewed native T and r
   expect(c.calls.at(-1)?.sql).toBe("ROLLBACK");
   expect(c.calls.some(x=>x.sql.startsWith("INSERT INTO clean.flight_snapshots")))
    .toBe(false);
+  const duplicate=db({duplicateSlot:true});
+  await expect(persistP4G5ReviewedPreForCohortV39(
+   duplicate,scope(),permit()))
+   .rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  expect(duplicate.calls.at(-1)?.sql).toBe("ROLLBACK");
   const absent=db();
   await expect(persistP4G5ReviewedPreForCohortV39(
    absent,{...scope(),expectedOwnerGithubRunId:"not-attested"},permit()))
