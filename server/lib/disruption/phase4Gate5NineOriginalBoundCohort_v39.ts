@@ -43,8 +43,8 @@ export interface P4G5NineOriginalReviewScopeV39{
  originalSourceSlots:readonly Slot[];
  readAsOfUtc:string;
 }
-export interface P4G5NineOriginalReadOnlyDbV39
- extends P4G5OriginalFrameDbV39,P4FreshReadOnlyDbV39 {}
+export type P4G5NineOriginalReadOnlyDbV39 =
+ P4G5OriginalFrameDbV39 & P4FreshReadOnlyDbV39;
 function reject(why:string):never{
  throw Error("P4_G5_NINE_ORIGINAL_"+why+"_HOLD");
 }
@@ -308,7 +308,9 @@ export function reconcileP4G5ThreeHorizonNoncontentReceiptsV39(
      r.status!=="THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED"||
      !Array.isArray(r.sourceStatusBySlot)||
      r.sourceStatusBySlot.length!==3||
-     r.sourceStatusBySlot.some((x,i)=>
+     r.sourceStatusBySlot.some((
+      x:{horizon:Horizon;queryIndex:number;status:"MATCHED"|"MISSING_OR_EXPIRED"},
+      i:number)=>
       x.horizon!==r.horizon||x.queryIndex!==i||x.status!=="MATCHED")||
      r.providerCalls!==0||r.databaseWrites!==0||
      r.scientificGate5Passed!==false)
