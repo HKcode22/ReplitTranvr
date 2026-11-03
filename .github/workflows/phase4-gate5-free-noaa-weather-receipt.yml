@@ -1,0 +1,102 @@
+name: Phase4 Gate5 Free NOAA Weather Receipt (No Paid Provider)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-free-noaa-weather-receipt.yml"
+      - "server/lib/disruption/phase4Gate5NoaaMetarReceipt_v39.ts"
+      - "scripts/v39_phase4_gate5_free_noaa_metar_actions.ts"
+      - "tests/phase4_gate5_free_noaa_metrar_receipt_v39.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v39-gate5-once-free-noaa-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  capture-free-noaa:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Checkout exact reviewed main commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Offline source-clock/hold regressions
+        run: npx vitest run tests/phase4_gate5_free_noaa_metrar_receipt_v39.test.ts
+      - name: ONE FREE NOAA worldwide METAR HTTPS retrieval — not Flight Alert
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = "0"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$GATE05_AUTOMATION_DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          npx tsx scripts/v39_phase4_gate5_free_noaa_metar_actions.ts capture-free-noaa
+      - name: Preserve public weather source and receipt as short-lived artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-gate5-noaa-metar-public-source
+          path: /tmp/v39_gate5_free_noaa_meteorology/
+          retention-days: 3
+          if-no-files-found: error
+
+  verify-free-noaa-artifact:
+    needs: [capture-free-noaa]
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Checkout exact reviewed main commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download durable artifact from separate completed job
+        uses: actions/download-artifact@v4
+        with:
+          name: v39-gate5-noaa-metar-public-source
+          path: /tmp/v39_gate5_free_noaa_meteorology/
+      - name: Verify original digest and as-of feature availability with existing PRE selector
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$GATE05_AUTOMATION_DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          npx tsx scripts/v39_phase4_gate5_free_noaa_metar_actions.ts verify-free-noaa-artifact
+      - name: Scope of completed free weather proof
+        if: always()
+        run: |
+          echo 'NOAA METAR free source provenance + artifact readback, not AeroDataBox flight FIDS or actual runway.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No physical flight denominator, no persisted PRE, no Gate5 scientific PASS and no Phase5/Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"
