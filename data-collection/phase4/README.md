@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Nov 2 next-cohort exact frozen original FIDS request-frame audit (read-only, no provider; native-T/retention still HOLD)**](2026-11-02_GATE5_FUTURE_ORIGINAL_SOURCE_REQUEST_FRAME_READONLY_AUDIT.md) — independently recomputes reviewed manifest/grid query and physical-reservation digests, cross-checks V0076/V0077 retained source against exact FIDS airport/local range/flags, decoded body and canonical envelope. This is application-intent consistency only, NOT GitHub signature, legal retention or scientific Gate5 PASS.
+
+
 - [**CURRENT: Nov 2 final independent 9/9 WSSS source-only pilot closeout (18 measured units, zero missed slots; scientific Gate 5 HOLD)**](2026-11-02_GATE5_NOV2_NINE_OF_NINE_INDEPENDENT_SOURCE_ONLY_CLOSEOUT.md) — actual original T−24h / T−6h / T−90m completed job receipts and separate 16:00Z independent audit run #41477141869. This **supersedes all “T−90m still running”, “T−6h maybe failed” and future-tense Nov2 launch descriptions below**, preserved only as historical checkpoints. No source retention or certified actual labels; next project step is rights/native T/actual-only evidence, not another duplicate paid run.
 
 
