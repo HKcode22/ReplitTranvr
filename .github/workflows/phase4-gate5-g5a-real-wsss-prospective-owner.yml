@@ -21,9 +21,9 @@ on:
   schedule:
     # GitHub-only real prearm. All 3 dates are 2026, UTC, with in-code absolute
     # date/provenance checks. No manual Replit clock/Cloudflare timer.
-    - cron: "40 23 3 11 *"  # Nov 3 23:40Z => T−24h prearm
-    - cron: "40 17 4 11 *"  # Nov 4 17:40Z => T−6h prearm
-    - cron: "10 22 4 11 *"  # Nov 4 22:10Z => T−90m prearm
+    - cron: "40 22 3 11 *"  # Nov 3 22:40Z => T−24h prearm
+    - cron: "40 16 4 11 *"  # Nov 4 16:40Z => T−6h prearm
+    - cron: "10 21 4 11 *"  # Nov 4 21:10Z => T−90m prearm
 permissions:
   contents: read
   actions: read
@@ -60,11 +60,11 @@ jobs:
     name: owner-t24
     if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 23 3 11 *' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 340
     environment: phase2g-paid
     env:
       P4_G5_G5A_HORIZON: T-24h
-      P4_G5_G5A_CRON: "40 23 3 11 *"
+      P4_G5_G5A_CRON: "40 22 3 11 *"
       P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
@@ -92,11 +92,11 @@ jobs:
     name: owner-t6
     if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 17 4 11 *' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 340
     environment: phase2g-paid
     env:
       P4_G5_G5A_HORIZON: T-6h
-      P4_G5_G5A_CRON: "40 17 4 11 *"
+      P4_G5_G5A_CRON: "40 16 4 11 *"
       P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
@@ -124,11 +124,11 @@ jobs:
     name: owner-t90
     if: ${{ github.event_name == 'schedule' && github.event.schedule == '10 22 4 11 *' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 340
     environment: phase2g-paid
     env:
       P4_G5_G5A_HORIZON: T-90m
-      P4_G5_G5A_CRON: "10 22 4 11 *"
+      P4_G5_G5A_CRON: "10 21 4 11 *"
       P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
