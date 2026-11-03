@@ -17,7 +17,8 @@ const scope=(h:typeof H[number]="T-24h",at=nowByHorizon[h])=>({
  airportIcao:"WSSS",serviceStartUtc:"2027-01-15T17:00:00.000Z",
  serviceEndUtc:"2027-01-15T18:00:00.000Z",
  observedAtUtc:at,horizon:h,
- reviewedFrozenManifestSha256:sha("a")
+ reviewedFrozenManifestSha256:sha("a"),
+ expectedOwnerGithubRunId:"123456789012"
 });
 const permit=()=>({
  exactCohortManifestSha256:sha("a"),
@@ -58,6 +59,7 @@ function rows(){
 }
 function db(opts:{
  insertRowCount?:number;failInsertAt?:number;conflict?:boolean;
+ missingBoundOriginal?:boolean;duplicateSlot?:boolean;
  featureDrift?:boolean;horizon?:typeof H[number];now?:string;
  clockSequence?:string[];malformedClock?:boolean
 }={}){
@@ -69,6 +71,10 @@ function db(opts:{
    const value=opts.clockSequence?.[clockCalls++]??initial;
    return {rows:[{db_now_utc:opts.malformedClock?null:new Date(value)}],rowCount:1};
   }
+  if(sql.includes("AS valid_originals"))
+   return {rows:[{expected_slots:3,bound_originals:3,
+    valid_originals:opts.missingBoundOriginal?2:3,
+    valid_slots:opts.duplicateSlot?2:3}],rowCount:1};
   if(sql.includes("FROM firsts f JOIN source_integrity si"))
    return {rows:rows(),rowCount:3};
   if(sql.startsWith("INSERT INTO clean.flight_snapshots")){
@@ -121,9 +127,34 @@ describe("Scoped Gate5 PRE writer requires independently reviewed native T and r
    expect(out.notYetDueCandidates).toBe(0);
    expect(out.lateCutoffCandidatesNotBackfilled).toBe(0);
    expect(out.otherHorizonsUntouched).toBe(true);
+   expect(out.allThreeOriginalReceiptsV0077BoundAndUnexpired).toBe(true);
+   const bound=c.calls.find(x=>x.sql.includes("AS valid_originals"));
+   expect(bound?.args).toEqual(["WSSS",scope(horizon).serviceStartUtc,
+    scope(horizon).serviceEndUtc,scope(horizon).observedAtUtc,
+    sha("a"),horizon,"123456789012",sha("e")]);
+   expect(c.calls.some(x=>x.sql.includes(
+    "JOIN clean.phase4_g5_fids_original_binding_v39 b"))).toBe(true);
    expect(out.sourceAsOfMissingByHorizon.map(x=>x.horizon)).toEqual([horizon]);
    expect(out.optionalFeatureMissingNeverSuppressesEligibleSnapshot).toBe(true);
   }
+ });
+ it("unbound or expired original frame cannot be converted into PRE zeros or writes",async()=>{
+  const c=db({missingBoundOriginal:true});
+  await expect(persistP4G5ReviewedPreForCohortV39(c,scope(),permit()))
+   .rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  expect(c.calls.at(-1)?.sql).toBe("ROLLBACK");
+  expect(c.calls.some(x=>x.sql.startsWith("INSERT INTO clean.flight_snapshots")))
+   .toBe(false);
+  const duplicate=db({duplicateSlot:true});
+  await expect(persistP4G5ReviewedPreForCohortV39(
+   duplicate,scope(),permit()))
+   .rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  expect(duplicate.calls.at(-1)?.sql).toBe("ROLLBACK");
+  const absent=db();
+  await expect(persistP4G5ReviewedPreForCohortV39(
+   absent,{...scope(),expectedOwnerGithubRunId:"not-attested"},permit()))
+   .rejects.toThrow("P4_G5_PRE_SINGLE_HORIZON_SCOPE_REQUIRED");
+  expect(absent.calls).toHaveLength(0);
  });
  it("validates idempotent conflict against exact frozen T version, FIDS hash, builder version",async()=>{
   const c=db({insertRowCount:0});

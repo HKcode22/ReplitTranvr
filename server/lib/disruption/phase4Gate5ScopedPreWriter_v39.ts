@@ -12,12 +12,15 @@ import {stageP4G5ScopedPreV39,type P4G5PreDb,
  from "./phase4Gate5ScopedPreStaging_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
+const GH_RUN=/^\d{5,25}$/;
 const HORIZONS=["T-24h","T-6h","T-90m"] as const;
 const MAX_PRE_EARLY_MS=180000;
 const PRE_COMMIT_MARGIN_MS=2000;
 export interface P4G5ReviewedPreWriteScopeV39 extends P4G5ScopedPreScope{
  /** A production owner may write only its own due horizon, never all three. */
  horizon:PreHorizon;
+ /** Exact, independently GitHub-attested owner of this source horizon. */
+ expectedOwnerGithubRunId:string;
 }
 export type P4G5PreTemporalDecisionV39="DUE"|"NOT_YET_DUE"|"LATE_NO_BACKFILL";
 export function classifyP4G5PreCutoffAgainstDbClockV39(
@@ -57,7 +60,8 @@ export interface P4G5CertifiedPrePermit {
 }
 function requireProof(permit:P4G5CertifiedPrePermit,
  scope:P4G5ReviewedPreWriteScopeV39){
- if(!HORIZONS.includes(scope?.horizon))
+ if(!HORIZONS.includes(scope?.horizon)||
+  !GH_RUN.test(scope.expectedOwnerGithubRunId))
   throw Error("P4_G5_PRE_SINGLE_HORIZON_SCOPE_REQUIRED");
  if(!permit||!SHA.test(permit.exactCohortManifestSha256)||
   permit.exactCohortManifestSha256!==scope.reviewedFrozenManifestSha256||
@@ -119,7 +123,14 @@ export async function persistP4G5ReviewedPreForCohortV39(
   if(!Number.isFinite(observedAt)||observedAt>initialClock.getTime()||
      initialClock.getTime()-observedAt>MAX_PRE_EARLY_MS)
    throw Error("P4_G5_PRE_CLAIMED_OBSERVATION_CLOCK_NOT_CURRENT_HOLD");
-  const staged=await stageP4G5ScopedPreV39(client,scope);
+  // Confirm all three *real, unexpired* original FIDS bodies are bound to
+  // this exact V0076/V0077 manifest, owner, horizon and reviewed run SHA.
+  // No original receipt/role check is bypassed by a caller-provided permit.
+  const staged=await stageP4G5ScopedPreV39(client,scope,{
+   horizon:scope.horizon,
+   expectedOwnerGithubRunId:scope.expectedOwnerGithubRunId,
+   reviewedRunAuthorizationSha256:permit.reviewedRunAuthorizationSha256
+  });
   const unique=new Set<string>();
   const horizonRows=staged.staged.filter(x=>x.horizon===scope.horizon);
   // Only this specific horizon may be considered for writing. Other
@@ -216,6 +227,7 @@ export async function persistP4G5ReviewedPreForCohortV39(
      ambiguousScopeOrOperatingIdentity:x.unverifiedScopeOrIdentity
     })),
    otherHorizonsUntouched:true as const,
+   allThreeOriginalReceiptsV0077BoundAndUnexpired:true as const,
    databaseClockBackfillBlocked:true as const,
    optionalFeatureMissingNeverSuppressesEligibleSnapshot:true as const,
    actualOnlyDepartureOutcomeProvenByThisFunction:false as const,

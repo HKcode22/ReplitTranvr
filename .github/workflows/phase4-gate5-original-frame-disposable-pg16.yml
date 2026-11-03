@@ -9,6 +9,10 @@ on:
       - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
       - "server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39.ts"
       - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreStaging_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreWriter_v39.ts"
+      - "tests/phase4_gate5_scoped_pre_staging_v39.test.ts"
+      - "tests/phase4_gate5_scoped_pre_writer_v39.test.ts"
       - "tests/phase4_gate5_bound_source_capture_readonly_v39.test.ts"
       - "tests/phase4_gate5_horizon_preexpiry_readonly_v39.test.ts"
   push:
@@ -20,6 +24,10 @@ on:
       - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
       - "server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39.ts"
       - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreStaging_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreWriter_v39.ts"
+      - "tests/phase4_gate5_scoped_pre_staging_v39.test.ts"
+      - "tests/phase4_gate5_scoped_pre_writer_v39.test.ts"
       - "tests/phase4_gate5_bound_source_capture_readonly_v39.test.ts"
       - "tests/phase4_gate5_horizon_preexpiry_readonly_v39.test.ts"
 permissions:
