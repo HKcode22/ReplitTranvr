@@ -143,7 +143,7 @@ export function auditP4G5LabelObservabilityV39(
     comparedStratumCount:rates.length,
     totalCapturedOutsideFidsPopulation:buckets.reduce(
      (n,b)=>n+b.capturedOutsideFidsPopulation,0),
-    outsideFidsPopulationCaptureRate:null as const,
+    outsideFidsPopulationCaptureRate:null,
     maxMinusMinReportedLabelCoverage:rates.length>=2?
       Math.max(...rates)-Math.min(...rates):null,
     labelSelectionBiasAbsentProven:false,missingNotZeroDelay:true,
