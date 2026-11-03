@@ -54,7 +54,7 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Independent GitHub-run attestation and V0076/V0077 3-original pre-expiry read
+      - name: Attested horizon V0077 three originals plus real persisted PRE as-of read (READ ONLY)
         env:
           GH_READONLY_TOKEN: ${{ github.token }}
           GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
@@ -68,5 +68,5 @@ jobs:
       - name: No scientific approval from source readback
         if: always()
         run: |
-          echo 'This is one horizon source original readback, not actual wheels-off, PRE, POST or scientific Gate5 PASS.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This checks a single GitHub-authenticated horizon with 3 original source receipts AND candidate persisted PRE-as-of source lineage in one read-only DB transaction. It is not certified selected T, actual runway, full PRE, POST, or Gate5 PASS.' >> "$GITHUB_STEP_SUMMARY"
           echo 'No paid provider calls, DB writes, Phase5 or Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"
