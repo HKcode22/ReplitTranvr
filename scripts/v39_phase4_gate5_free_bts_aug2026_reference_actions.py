@@ -22,6 +22,7 @@ import re
 import sys
 import zipfile
 import urllib.request
+import urllib.error
 
 SOURCE = ("https://transtats.bts.gov/PREZIP/"
           "On_Time_Reporting_Carrier_On_Time_Performance_1987_present_2026_8.zip")
@@ -261,11 +262,22 @@ if __name__=="__main__":
         elif action=="--self-test":self_test()
         else:raise ValueError("P4_G5_BTS_UNKNOWN_ACTION")
     except Exception as e:
-        # No flight-level values, archive contents or network credentials in
-        # public logs. Bounded codes only, no provider charge or DB mutation.
-        label=str(e)
-        if not re.fullmatch(r"P4_G5_BTS_[A-Z_]+",label):
-            label="P4_G5_BTS_SOURCE_NETWORK_OR_FORMAT_HOLD"
+        # Classify ONLY finite error types; never echo any external response,
+        # headers, raw flight rows, URL query values or secrets.
+        if isinstance(e, urllib.error.HTTPError):
+            code=int(e.code)
+            label=("P4_G5_BTS_HTTP_STATUS_"+str(code) if 100<=code<=599
+                   else "P4_G5_BTS_HTTP_UNKNOWN")
+        elif isinstance(e, urllib.error.URLError):
+            label="P4_G5_BTS_NETWORK_UNAVAILABLE"
+        elif isinstance(e, (TimeoutError, ConnectionError)):
+            label="P4_G5_BTS_NETWORK_TIMEOUT_OR_CONNECT"
+        elif isinstance(e, zipfile.BadZipFile):
+            label="P4_G5_BTS_ARCHIVE_NOT_ZIP"
+        else:
+            label=str(e)
+            if not re.fullmatch(r"P4_G5_BTS_[A-Z_]+",label):
+                label="P4_G5_BTS_SOURCE_FORMAT_OR_RUNTIME_HOLD"
         print(json.dumps({"status":label,"noPaidProviderCalls":True,
                           "noDbWrites":True,"gate5ScientificPass":False}),
               file=sys.stderr)
