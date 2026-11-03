@@ -19,6 +19,20 @@ const RUN=/^[0-9]{5,25}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const H=["T-24h","T-6h","T-90m"] as const;
 const DAY=86400000;
+const CUTOFF_COMMIT_SAFETY_MARGIN_MS=2000;
+export const P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39=
+ "SELECT clock_timestamp() AS db_now_utc";
+function exactDatabaseClockV39(rows:unknown[]):number{
+ if(!Array.isArray(rows)||rows.length!==1||
+    !rows[0]||typeof rows[0]!=="object")
+  throw Error("P4_G5_V0077_UNVERIFIED_SOURCE_DB_CLOCK_HOLD");
+ const value=(rows[0] as Record<string,unknown>).db_now_utc;
+ const n=value instanceof Date?value.getTime():
+  typeof value==="string"?Date.parse(value):NaN;
+ if(!Number.isFinite(n))
+  throw Error("P4_G5_V0077_UNVERIFIED_SOURCE_DB_CLOCK_HOLD");
+ return n;
+}
 /** Hard no-live-release until independent evidence and least-privilege review. */
 export const P4_G5_ATOMIC_FIDS_PRODUCER_RELEASE_SHA_V39:string|null=null;
 export interface P4G5OriginalBindingScopeV39 {
@@ -176,6 +190,12 @@ export async function persistP4G5BoundFidsDbOnlyV39(
     !Number.isFinite(durable)||committed>query.fidsRetrievalUtc.getTime()||
     durable>cutoff||expire<=durable||expire>durable+DAY)
    throw Error("P4_G5_V0077_ORIGINAL_RETENTION_OR_CUTOFF_HOLD");
+  // The original's earlier transaction timestamp must NEVER be treated as
+  // evidence that an after-cutoff source was durably committed on time.
+  const beforeBindingClock=exactDatabaseClockV39(
+   (await db.query(P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39)).rows);
+  if(beforeBindingClock+CUTOFF_COMMIT_SAFETY_MARGIN_MS>cutoff)
+   throw Error("P4_G5_V0077_ORIGINAL_DB_CLOCK_CUTOFF_HOLD");
   const bound=await db.query(P4_G5_V0077_INSERT_ORIGINAL_BINDING_SQL_V39,[
    query.populationQueryId,b.expectedReservationSha256,b.queryDigest,
    b.manifestSha256,query.responseHash,b.rightsReviewArtifactSha256,
@@ -195,6 +215,13 @@ export async function persistP4G5BoundFidsDbOnlyV39(
     new Date(r.available_at).getTime()>cutoff||
     new Date(r.source_use_expires_at_utc).getTime()!==expire)
    throw Error("P4_G5_V0077_ORIGINAL_ATOMIC_READBACK_HOLD");
+  // A late COMMIT is still a possible edge case; conservatively require
+  // source transaction to reach final precommit verification ahead of C.
+  // The future independent audit must check observed actual commit time.
+  const finalClock=exactDatabaseClockV39(
+   (await db.query(P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39)).rows);
+  if(finalClock+CUTOFF_COMMIT_SAFETY_MARGIN_MS>cutoff)
+   throw Error("P4_G5_V0077_ORIGINAL_COMMIT_TOO_LATE_ROLLBACK");
   verifiedBound=true;
  });
  if(!verifiedBound)throw Error("P4_G5_V0077_ORIGINAL_TRANSACTION_NOT_VERIFIED_HOLD");
