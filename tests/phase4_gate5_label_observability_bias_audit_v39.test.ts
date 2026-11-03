@@ -41,6 +41,35 @@ describe("Gate5/Phase7 label-coverage and selection-bias diagnostic",()=>{
   ]);
   expect(r.buckets[0].populationMembers).toBe(1);
   expect(r.buckets[0].webhookCaptured).toBe(0);
+  expect(r.buckets[0].capturedOutsideFidsPopulation).toBe(1);
+  expect(r.totalCapturedOutsideFidsPopulation).toBe(1);
+  expect(r.outsideFidsPopulationCaptureRate).toBeNull();
+ });
+ it("reports outside-source webhook captures across buckets, never in PRE denominators",()=>{
+  const r=auditP4G5LabelObservabilityV39([
+   mk(1),mk(2,{webhookCaptured:true}),
+   mk(3,{providerPopulationMemberAsOfCutoff:false,
+     horizonEligible:false,persistedPreSnapshot:false,webhookCaptured:true}),
+   mk(4,{airportIcao:"YSSY",providerPopulationMemberAsOfCutoff:false,
+     horizonEligible:false,persistedPreSnapshot:false,webhookCaptured:true}),
+   mk(5,{airportIcao:"YSSY",providerPopulationMemberAsOfCutoff:false,
+     horizonEligible:false,persistedPreSnapshot:false,webhookCaptured:false})
+  ]);
+  const a=r.buckets.find(x=>x.airportIcao==="WSSS")!;
+  const b=r.buckets.find(x=>x.airportIcao==="YSSY")!;
+  expect(a.populationMembers).toBe(2);
+  expect(a.horizonEligible).toBe(2);
+  expect(a.webhookCaptured).toBe(1);
+  expect(a.capturedOutsideFidsPopulation).toBe(1);
+  expect(a.prePersisted).toBe(2);
+  expect(b.populationMembers).toBe(0);
+  expect(b.horizonEligible).toBe(0);
+  expect(b.capturedOutsideFidsPopulation).toBe(1);
+  expect(b.webhookCoverageRate).toBeNull();
+  expect(r.totalCapturedOutsideFidsPopulation).toBe(2);
+  expect(r.outsideFidsPopulationCaptureRate).toBeNull();
+  expect(r.gate5ScientificPass).toBe(false);
+  expect(r.phase7ModelEvaluationApproved).toBe(false);
  });
  it("returns NULL rather than a fabricated zero rate for zero eligible flights",()=>{
   const r=auditP4G5LabelObservabilityV39([
