@@ -1,0 +1,75 @@
+name: Phase4 Gate5 G5A Independent Cohort Audit (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-independent-final-audit.yml"
+      - "scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit.ts"
+      - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-independent-final-audit.yml"
+      - "scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit.ts"
+      - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
+  workflow_dispatch:
+  schedule:
+    # Exact Nov 5, 2026 only (code also hard-fences this date range)
+    - cron: "12 5 5 11 *"
+permissions:
+  contents: read
+concurrency:
+  group: gate5-g5a-wsss-20261105-independent-readonly-audit
+  cancel-in-progress: false
+jobs:
+  offline-audit-unit:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      AERODATABOX_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Offline 3-horizon, no-provider, no-write independent audit tests
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0'
+  audit-independent:
+    name: audit-independent
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
+      GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independent original and PRE and post labels only (read-only)
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit.ts
