@@ -48,6 +48,9 @@ jobs:
           echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0'
   audit-independent:
     name: audit-independent
+    permissions:
+      contents: read
+      issues: write
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 9
@@ -67,9 +70,37 @@ jobs:
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
       - name: Independent original and PRE and post labels only (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           set +x
           test -z "${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-          node --import tsx scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit.ts
+          node --import tsx scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit.ts > "$RUNNER_TEMP/g5a-audit-stdout.json"
+          jq -ce '
+            if .schema == "v39.phase4.g5a-independent-real-source-pre-post-counts.v1"
+              and .providerCalls == 0 and .databaseWrites == 0
+              and .scientificGate5Passed == false
+              and (.sourceHorizonCounts | type == "array")
+              and (.independentlyVerifiedPRE | type == "array")
+              and (.prospectiveScheduleRevisionOutcomes | type == "array")
+            then {schema,status,sourceCohortManifestSha256,sourceHorizonCounts,
+              originalPopulationCounts,independentlyVerifiedPRE,
+              prospectiveScheduleRevisionOutcomes,reservedProjectRestUnits,
+              projectRestUnitCeiling,actualProviderBillingIndependentReconciliationRequired,
+              webhookInOutUnresolvedIndependentReconciliationRequired,
+              scientificGate5Passed,providerCalls,databaseWrites}
+            else error("G5A_UNREVIEWED_AUDIT_OUTPUT_HOLD") end
+          ' "$RUNNER_TEMP/g5a-audit-stdout.json" > "$RUNNER_TEMP/g5a-audit-safe.json"
+          {
+            printf '### Gate5 independent G5A real cohort counts (no provider)\n'
+            printf 'GitHub run: https://github.com/HKcode22/ReplitTranvr/actions/runs/%s\n' "$GITHUB_RUN_ID"
+            printf 'Reviewed main SHA: %s\n\n' "$GITHUB_SHA"
+            printf '~~~json\n'
+            cat "$RUNNER_TEMP/g5a-audit-safe.json"
+            printf '\n~~~\n'
+            printf '\nCounts are measurements, NOT an automatic scientific PASS.\n'
+          } > "$RUNNER_TEMP/g5a-safe-checkpoint.md"
+          cat "$RUNNER_TEMP/g5a-safe-checkpoint.md" >> "$GITHUB_STEP_SUMMARY"
+          gh issue comment 293 --repo HKcode22/ReplitTranvr --body-file "$RUNNER_TEMP/g5a-safe-checkpoint.md"
