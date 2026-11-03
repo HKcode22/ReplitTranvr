@@ -40,9 +40,9 @@ const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURC
 const PROTOCOL_PATH="data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md";
 const AUTH_INTENT="WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
 const H={
- "T-24h":{job:"owner-t24",cron:"40 23 3 11 *"},
- "T-6h":{job:"owner-t6",cron:"40 17 4 11 *"},
- "T-90m":{job:"owner-t90",cron:"10 22 4 11 *"}
+ "T-24h":{job:"owner-t24",cron:"40 22 3 11 *"},
+ "T-6h":{job:"owner-t6",cron:"40 16 4 11 *"},
+ "T-90m":{job:"owner-t90",cron:"10 21 4 11 *"}
 } as const;
 type Horizon=keyof typeof H;
 const HEAD=/^[a-f0-9]{40}$/;
