@@ -234,19 +234,17 @@ def self_test() -> None:
             out=io.StringIO()
             writer=csv.writer(out)
             writer.writerow(cols)
-            for r in rows:writer.writerow(r)
-            # pad within an actual test fixture, so the live min-1000 check
-            # is exercised without bypassing the algorithm.
-            z.writestr("source.csv",out.getvalue()*400)
-        # CSV string x400 repeats the header; source should therefore
-        # deterministically refuse malformed dates/headers rather than accept.
-        try:
-            summarize(p)
-        except ValueError as exc:
-            if str(exc)!="P4_G5_BTS_INSUFFICIENT_MONTHLY_SOURCE":
-                raise
-        else:
-            raise AssertionError("expected small fixture to fail min-row condition")
+            for _ in range(400):
+                for r in rows:
+                    writer.writerow(r)
+            z.writestr("source.csv",out.getvalue())
+        result=summarize(p)
+        assert result["reportingCarrierRows"]==1200
+        assert result["actualWheelsOffRows"]==800
+        assert result["missingWheelsOffRows"]==400
+        assert result["canceledRows"]==400
+        assert result["divertedRows"]==400
+        assert result["unclassifiedOrInvalidRows"]==0
     assert parse_hhmm("930.00")=="0930"
     assert parse_hhmm("2460") is None
     assert parse_hhmm("") is None
