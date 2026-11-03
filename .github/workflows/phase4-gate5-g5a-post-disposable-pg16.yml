@@ -67,6 +67,9 @@ jobs:
           GRANT USAGE ON SCHEMA clean TO p4_g5_g5a_owner_20261103;
           GRANT SELECT,UPDATE ON TABLE clean.phase4_g5_fids_cohort_budget_v39
             TO p4_g5_g5a_owner_20261103;
+          GRANT SELECT ON TABLE clean.fids_query_response,
+            clean.flight_population,clean.flight_snapshots
+            TO p4_g5_g5a_owner_20261103;
           INSERT INTO clean.phase4_g5_fids_cohort_budget_v39
             (manifest_sha256,cohort_id,project_unit_ceiling,reserved_units)
           VALUES
