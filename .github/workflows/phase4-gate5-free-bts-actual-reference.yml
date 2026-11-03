@@ -1,0 +1,90 @@
+name: Phase4 Gate5 Free BTS Actual Reference (No Paid Provider)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-free-bts-actual-reference.yml"
+      - "scripts/v39_phase4_gate5_free_bts_aug2026_reference_actions.py"
+      - "tests/phase4_gate5_free_bts_monthly_source_v39.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-gate5-free-bts-reference-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  capture-free-bts:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Offline local BTS source ZIP/cancelled/wheels-off tests
+        run: python3 scripts/v39_phase4_gate5_free_bts_aug2026_reference_actions.py --self-test
+      - name: One no-key official BTS August 2026 published reporting-carrier source ZIP
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = "0"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$GATE05_AUTOMATION_DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          python3 scripts/v39_phase4_gate5_free_bts_aug2026_reference_actions.py capture
+      - name: Preserve short-lived official public historical source for independent readback
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-gate5-bts-aug2026-official-public-source
+          path: /tmp/v39_gate5_free_bts_aug2026/
+          retention-days: 2
+          if-no-files-found: error
+
+  verify-free-bts:
+    needs: [capture-free-bts]
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: v39-gate5-bts-aug2026-official-public-source
+          path: /tmp/v39_gate5_free_bts_aug2026/
+      - name: Independently re-parse official local archive + SHA without outbound requests
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$GATE05_AUTOMATION_DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          python3 scripts/v39_phase4_gate5_free_bts_aug2026_reference_actions.py verify
+      - name: No scientific promotion of unlinked U.S. monthly source
+        if: always()
+        run: |
+          echo 'Free BTS reported WheelsOff is a historical U.S. reporting-carrier ACTUAL source, not a global AeroDataBox FIDS population or verified S/T planned runway.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No first-day PRE, same-flight matching, original Gate5 PASS, provider payment, database writes or Phase5/6 activation.' >> "$GITHUB_STEP_SUMMARY"
