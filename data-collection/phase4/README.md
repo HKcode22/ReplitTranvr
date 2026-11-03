@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Actual V0077 two-role Replit catalog READY, original installer refusal needs transaction-stage identification**](2026-11-03_V0077_PRODUCTION_READY_CATALOG_BUT_INSTALL_REFUSAL.md) — November 3 user diagnostic confirmed same PG16+ DB, V0076 present, distinct safe roles, V0077 absent; next change labels only fixed/secret-free installer transaction stages, no more source-only paid experiment.
+
 - [**Real V0077 Replit installation refusal, safe read-only root-cause diagnostic, and three-day science checklist**](2026-11-03_V0077_ACTUAL_REPLIT_INSTALL_REFUSAL_AND_THREE_DAY_CRITICAL_PATH.md) — the owner's actual command returned a generic HOLD, NOT a successful V0077 production install; the Nov2 3×3 provider source requests remain complete. Read-only diagnosis must precede any new migration attempt; science Gate5 still needs real prospective PRE→callback→POST evidence.
 
 - [**V0077 exactly pinned private metadata-only production installer / real disposable PG16 ACL test**](2026-11-03_GATE5_V0077_EMPTY_PRIVATE_PRODUCTION_INSTALLER_CHECKPOINT.md) — enables a future separately approved original↔paid-attempt binding schema, with zero new grants, provider calls, Contents storage or automatic Phase5/6 authority. Original Plan f.8 and Log §1.9 scientific checks retained.
