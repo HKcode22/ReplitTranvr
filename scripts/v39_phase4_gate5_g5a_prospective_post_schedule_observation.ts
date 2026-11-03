@@ -152,12 +152,24 @@ async function reserveOne(db:pg.Client,manifestSha:string,cohortId:string,slot:n
   const prior=await db.query(
    "SELECT reservation_id FROM clean.adb_rest_attempt_ledger "+
    "WHERE cycle_id=$1 AND category=$2",[cycle,category]);
-  if(prior.rows.length!==slot||prior.rows.some(x=>x.reservation_id===id))
-   hold("POST_RESERVATION_REPLAY_OR_GAP");
-  await db.query(
+  // Earlier POST slots may be genuinely UNOBSERVED (missed physical
+  // deadline or missing balance). Accept only previously reserved *earlier*
+  // fixed slots, never a duplicate, future or foreign reservation.
+  const validPrior=POSTS.slice(0,slot).map((_,n)=>
+   postReservationUuidV39(manifestSha,n));
+  if(prior.rows.length>slot||prior.rows.some(x=>
+     !validPrior.includes(String(x.reservation_id)))||
+     new Set(prior.rows.map(x=>String(x.reservation_id))).size!==prior.rows.length)
+   hold("POST_RESERVATION_REPLAY_OR_FOREIGN_SLOT");
+  const changed=await db.query(
    "UPDATE clean.phase4_g5_fids_cohort_budget_v39 "+
-   "SET reserved_units=reserved_units+2 WHERE manifest_sha256=$1",
+   "SET reserved_units=reserved_units+2 "+
+   "WHERE manifest_sha256=$1 AND reserved_units+2<=project_unit_ceiling "+
+   "RETURNING reserved_units",
    [manifestSha]);
+  if(changed.rows.length!==1||
+     !Number.isSafeInteger(Number(changed.rows[0].reserved_units)))
+   hold("POST_BUDGET_RACE_OR_UPDATE_DRIFT");
   const result=await db.query(
    "INSERT INTO clean.adb_rest_attempt_ledger "+
    "(reservation_id,cycle_id,category,units,attempt_number,reserved_at) "+
