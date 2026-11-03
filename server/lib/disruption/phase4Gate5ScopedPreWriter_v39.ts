@@ -5,13 +5,45 @@
  * independent evidence; the caller MUST authenticate those artifacts.
  */
 import {persistPreSnapshot,type PreSnapshot,
- type SelectedTMilestoneConfig}
+ type PreHorizon,type SelectedTMilestoneConfig}
  from "./preSnapshotBuilder_v3";
 import {stageP4G5ScopedPreV39,type P4G5PreDb,
  type P4G5ScopedPreScope}
  from "./phase4Gate5ScopedPreStaging_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
+const HORIZONS=["T-24h","T-6h","T-90m"] as const;
+const MAX_PRE_EARLY_MS=180000;
+const PRE_COMMIT_MARGIN_MS=2000;
+export interface P4G5ReviewedPreWriteScopeV39 extends P4G5ScopedPreScope{
+ /** A production owner may write only its own due horizon, never all three. */
+ horizon:PreHorizon;
+}
+export type P4G5PreTemporalDecisionV39="DUE"|"NOT_YET_DUE"|"LATE_NO_BACKFILL";
+export function classifyP4G5PreCutoffAgainstDbClockV39(
+ cutoff:Date,clock:Date
+):P4G5PreTemporalDecisionV39{
+ const t=cutoff?.getTime(),n=clock?.getTime();
+ if(!Number.isFinite(t)||!Number.isFinite(n))
+  throw Error("P4_G5_PRE_INVALID_DB_CLOCK_OR_CUTOFF_HOLD");
+ if(n>t)return "LATE_NO_BACKFILL";
+ if(t-n>MAX_PRE_EARLY_MS)return "NOT_YET_DUE";
+ return "DUE";
+}
+function dbClockV39(q:{rows:unknown[]}):Date{
+ if(!q||!Array.isArray(q.rows)||q.rows.length!==1)
+  throw Error("P4_G5_PRE_UNVERIFIED_DATABASE_CLOCK_HOLD");
+ const record=q.rows[0];
+ if(!record||typeof record!=="object"||Array.isArray(record))
+  throw Error("P4_G5_PRE_UNVERIFIED_DATABASE_CLOCK_HOLD");
+ const raw=(record as Record<string,unknown>).db_now_utc;
+ const d=raw instanceof Date?raw:typeof raw==="string"?new Date(raw):null;
+ if(!d||!Number.isFinite(d.getTime()))
+  throw Error("P4_G5_PRE_UNVERIFIED_DATABASE_CLOCK_HOLD");
+ return d;
+}
+export const P4_G5_PRE_DB_CLOCK_SQL_V39=
+ "SELECT clock_timestamp() AS db_now_utc";
 export interface P4G5CertifiedPrePermit {
  exactCohortManifestSha256:string;
  independentSelectedTSourceEvidenceSha256:string;
@@ -24,7 +56,9 @@ export interface P4G5CertifiedPrePermit {
  verifiedExternalSourceAndRightsReview:true;
 }
 function requireProof(permit:P4G5CertifiedPrePermit,
- scope:P4G5ScopedPreScope){
+ scope:P4G5ReviewedPreWriteScopeV39){
+ if(!HORIZONS.includes(scope?.horizon))
+  throw Error("P4_G5_PRE_SINGLE_HORIZON_SCOPE_REQUIRED");
  if(!permit||!SHA.test(permit.exactCohortManifestSha256)||
   permit.exactCohortManifestSha256!==scope.reviewedFrozenManifestSha256||
   !SHA.test(permit.independentSelectedTSourceEvidenceSha256)||
@@ -63,7 +97,7 @@ export const P4_G5_PRE_CONFLICT_READ_SQL=[
  "AND prediction_state='PRE_DEPARTURE'"
 ].join(" ");
 export async function persistP4G5ReviewedPreForCohortV39(
- client:P4G5PreDb,scope:P4G5ScopedPreScope,permit:P4G5CertifiedPrePermit
+ client:P4G5PreDb,scope:P4G5ReviewedPreWriteScopeV39,permit:P4G5CertifiedPrePermit
 ){
  // This exported function is deliberately NOT reachable from an Actions
  // workflow. A future reviewed production operator must authenticate
@@ -71,16 +105,36 @@ export async function persistP4G5ReviewedPreForCohortV39(
  // next-cohort prearm before granting this DB writer.
  requireProof(permit,scope);
  let tx=false,inserted=0,existing=0,expected=0;
+ let notYetDue=0,lateNoBackfill=0;
+ const insertedCutoffs:Date[]=[];
  try{
   await client.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   tx=true;
   await client.query("SET LOCAL statement_timeout = '12000ms'");
   await client.query("SET LOCAL lock_timeout = '2000ms'");
+  // The independently committed database clock, not caller-provided CLI
+  // time, decides whether a predicted flight is currently due.
+  const initialClock=dbClockV39(await client.query(P4_G5_PRE_DB_CLOCK_SQL_V39));
+  const observedAt=Date.parse(scope.observedAtUtc);
+  if(!Number.isFinite(observedAt)||observedAt>initialClock.getTime()||
+     initialClock.getTime()-observedAt>MAX_PRE_EARLY_MS)
+   throw Error("P4_G5_PRE_CLAIMED_OBSERVATION_CLOCK_NOT_CURRENT_HOLD");
   const staged=await stageP4G5ScopedPreV39(client,scope);
   const unique=new Set<string>();
-  expected=staged.staged.length;
-  if(expected===0)throw Error("P4_G5_PRE_NO_VERIFIED_CORE_ROWS_TO_PERSIST");
-  for(const {snapshot:unreviewed} of staged.staged){
+  const horizonRows=staged.staged.filter(x=>x.horizon===scope.horizon);
+  // Only this specific horizon may be considered for writing. Other
+  // horizon candidates are NOT missing and must remain untouched.
+  for(const {snapshot:unreviewed} of horizonRows){
+   const decision=classifyP4G5PreCutoffAgainstDbClockV39(
+    unreviewed.predictionCutoffUtc,initialClock);
+   if(decision==="NOT_YET_DUE"){notYetDue++;continue;}
+   if(decision==="LATE_NO_BACKFILL"){lateNoBackfill++;continue;}
+   const clockNow=dbClockV39(await client.query(P4_G5_PRE_DB_CLOCK_SQL_V39));
+   const current=classifyP4G5PreCutoffAgainstDbClockV39(
+    unreviewed.predictionCutoffUtc,clockNow);
+   if(current==="LATE_NO_BACKFILL"){lateNoBackfill++;continue;}
+   if(current==="NOT_YET_DUE"){notYetDue++;continue;}
+   expected++;
    // A newly written transform cannot reconstruct features that were not
    // deployable at the historical decision time (Plan f.8 §6.1).
    if(Date.parse(permit.builderFrozenAtUtc)>unreviewed.predictionCutoffUtc.getTime())
@@ -103,7 +157,7 @@ export async function persistP4G5ReviewedPreForCohortV39(
     }
    };
    const n=await persistPreSnapshot(client,snap);
-   if(n===1){inserted++;continue;}
+   if(n===1){inserted++;insertedCutoffs.push(snap.predictionCutoffUtc);continue;}
    if(n!==0)throw Error("P4_G5_PRE_INSERT_RESULT_HOLD");
    const prior=await client.query(P4_G5_PRE_CONFLICT_READ_SQL,[
     snap.flightInstanceId,snap.horizon,snap.predictionCutoffUtc,
@@ -131,21 +185,38 @@ export async function persistP4G5ReviewedPreForCohortV39(
   }
   if(inserted+existing!==expected)
    throw Error("P4_G5_PRE_SNAPSHOT_MATERIALIZATION_COUNT_HOLD");
+  // A write durable only after the cutoff is retrospectively backfilled,
+  // even if the INSERT itself began earlier. Recheck the actual database
+  // clock before COMMIT; roll back all newly-created PREs if too late.
+  if(insertedCutoffs.length){
+   const commitClock=dbClockV39(await client.query(P4_G5_PRE_DB_CLOCK_SQL_V39));
+   if(insertedCutoffs.some(cutoff=>
+     commitClock.getTime()+PRE_COMMIT_MARGIN_MS>cutoff.getTime()))
+    throw Error("P4_G5_PRE_COMMIT_TOO_LATE_ROLLBACK");
+  }
   await client.query("COMMIT");
   tx=false;
   return {
-   schema:"v39.phase4.gate5-scoped-transactional-pre-writer.v1" as const,
-   status:"REVIEWED_SOURCE_PRE_ROWS_MATERIALIZED_NOT_GATE5_PASS" as const,
+   schema:"v39.phase4.gate5-scoped-transactional-pre-writer.v2" as const,
+   status:expected===0?
+    "NO_CURRENTLY_DUE_PRE_ROWS_NO_BACKFILL" as const:
+    "REVIEWED_SOURCE_HORIZON_PRE_ROWS_MATERIALIZED_NOT_GATE5_PASS" as const,
    manifestSha256:scope.reviewedFrozenManifestSha256,
    sourceEvidenceSha256:permit.independentSelectedTSourceEvidenceSha256,
    frozenBuilderSha256:permit.frozenBuilderSourceSha256,
    builderFrozenAtUtc:permit.builderFrozenAtUtc,
+   horizon:scope.horizon,
    expectedSourceQualifiedRows:expected,
+   notYetDueCandidates:notYetDue,
+   lateCutoffCandidatesNotBackfilled:lateNoBackfill,
    newlyPersistedRows:inserted,previousVerifiedIdempotentRows:existing,
-   sourceAsOfMissingByHorizon:staged.counts.map(x=>({
-    horizon:x.horizon,unobserved:x.sourceUnobserved,
-    ambiguousScopeOrOperatingIdentity:x.unverifiedScopeOrIdentity
-   })),
+   sourceAsOfMissingByHorizon:staged.counts
+    .filter(x=>x.horizon===scope.horizon).map(x=>({
+     horizon:x.horizon,unobserved:x.sourceUnobserved,
+     ambiguousScopeOrOperatingIdentity:x.unverifiedScopeOrIdentity
+    })),
+   otherHorizonsUntouched:true as const,
+   databaseClockBackfillBlocked:true as const,
    optionalFeatureMissingNeverSuppressesEligibleSnapshot:true as const,
    actualOnlyDepartureOutcomeProvenByThisFunction:false as const,
    strictGate5Passed:false as const,
