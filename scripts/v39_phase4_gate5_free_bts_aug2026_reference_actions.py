@@ -167,7 +167,7 @@ def capture() -> None:
     request=urllib.request.Request(
         SOURCE,headers={
          "User-Agent":"ReplitTranvr-Gate5-University-Research/1.0",
-         "Accept":"application/zip"})
+         "Accept":"*/*"})
     ROOT.mkdir(mode=0o700,parents=True,exist_ok=True)
     total=0
     with urllib.request.urlopen(request,timeout=35) as response,\
