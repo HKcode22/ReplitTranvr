@@ -22,9 +22,9 @@ Exact GH UTC schedule (all in year 2026, protected environment `phase2g-paid`):
 
 | Horizon | GH schedule (UTC) | First physical FIDS start (UTC) | Prearm deadline (UTC) |
 | --- | --- | --- | --- |
-| T−24h | Nov3 **23:40** | Nov4 **01:30** | Nov4 **00:30** |
-| T−6h | Nov4 **17:40** | Nov4 **19:30** | Nov4 **18:30** |
-| T−90m | Nov4 **22:10** | Nov5 **00:00** | Nov4 **23:00** |
+| T−24h | Nov3 **22:40** | Nov4 **01:30** | Nov4 **00:30** |
+| T−6h | Nov4 **16:40** | Nov4 **19:30** | Nov4 **18:30** |
+| T−90m | Nov4 **21:10** | Nov5 **00:00** | Nov4 **23:00** |
 
 GitHub Actions schedule delivery is best effort, NOT certified punctual. The job must actually start in GitHub **before** the documented prearm deadline, as validated independently from GitHub API run/job metadata. If the scheduled run fails to appear or starts late, record that opportunity **UNOBSERVED**, not a fake success or backfilled PRE.
 
