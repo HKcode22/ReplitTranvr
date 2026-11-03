@@ -447,9 +447,11 @@ function normalizeFidsRecord(input: {
       const stable=createHash("sha256").update(JSON.stringify({
         protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
         providerId:sourceId,carrier:parsed.carrier,flightNumber:parsed.number,
-        origin:depIcao,destination:arrIcao,
-        frozenServiceStartUtc:params.serviceWindowStartUtc.toISOString(),
-        frozenServiceEndUtc:params.serviceWindowEndUtc.toISOString()
+        // A postflight FIDS query may cover a wider source window because
+        // the operating flight was retimed out of the original hour. Source
+        // window is query metadata, NOT physical identity. Positive provider
+        // flight ID plus carrier/route is the stable cross-window link.
+        origin:depIcao,destination:arrIcao
       })).digest("hex");
       canonical="leg:g5a:"+stable;
       analyticIdentityId=canonical;
