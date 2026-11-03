@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**CURRENT owner direction — expedited Gate5-R, one-month dataset, not perfect runway labels**](2026-11-02_GATE5_EXPEDITED_OWNER_DIRECTION_AND_G5R_DECISION.md) and [**prospective binding f.8 Amendment A**](../plans/V3.9_f.8_Gate5_Expedited_Collection_Amendment_A_20261102.md). Versioned move to measured provider-reported status/schedule revision, free ADSB.lol/NOAA/BTS adjuncts, source-only 9/9 operational readiness gate, 24h first-day real population audit, no additional source-only pilots or support-email wait. Old original scientific runway gate historical HOLD. Source-use/budget/retention and Phase5/6 independent authorization still apply. GitHub only; no Replit timed tasks.
+
 - [**Gate 5 finite critical path and mathematically bounded tolerance of missing labels (not an automatic PASS)**](2026-11-02_GATE5_CRITICAL_PATH_STATISTICAL_ACCEPTANCE_AND_DECISION.md) — distinguishes operational Nov2 9/9 source coverage from real flight denominators, ≤3-minute transient gaps, structurally unverified T/actual runway and non-ignorable missingness. New pure worst-case binary outcome bounds and tests give valid [x/A, (x+A−k)/A] sensitivity, not pretend confidence or authorization; original scientific gate still HOLD.
 
 - [**Future GH run-attested original pre-expiry reader (NOT ARMED)**](2026-11-02_GATE5_FUTURE_GITHUB_RUN_BOUND_PREEXPIRY_READONLY_WORKFLOW.md) — future workflow_run checks GitHub provenance and the exact V0076/V0077 owner run ID before three retained original readbacks under READ ONLY. Future source owner is not installed, approval SHA NULL, no paid run, scientific HOLD.
