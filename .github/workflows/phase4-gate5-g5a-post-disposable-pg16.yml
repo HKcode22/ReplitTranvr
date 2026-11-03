@@ -74,8 +74,8 @@ jobs:
             (manifest_sha256,cohort_id,project_unit_ceiling,reserved_units)
           VALUES
             (repeat('a',64),'WSSS_G5A_20261105_0200Z',24,18),
-            (repeat('b',64),'WSSS_G5A_20261105_0200Z',24,18),
-            (repeat('c',64),'WSSS_G5A_20261105_0200Z',24,24);
+            (repeat('b',64),'WSSS_G5A_20261105_0200Z_N',24,18),
+            (repeat('c',64),'WSSS_G5A_20261105_0200Z_K',24,24);
           SQL
       - name: Test actual one-time baseline attempt ledger GRANT (no other tables)
         run: |
