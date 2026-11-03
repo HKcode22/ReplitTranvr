@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**V0078 repeated-original FIDS append-only uniqueness repair (STAGED / no provider)**](2026-11-03_GATE5_V0078_REPEAT_ORIGINAL_FIDS_SOURCE_APPEND_ONLY_FIX_OFFLINE.md) — replaces cross-source legacy uniqueness with non-FIDS-only partial uniqueness in disposable PostgreSQL 16, preserves original-query source uniqueness and tests 3 same-flight receipts → one PRE; production DDL and science release HOLD.
+
 - [**3 V0077 synthetic FIDS source receipts → real cutoff PRE → independent PG16 readback (not live)**](2026-11-03_GATE5_THREE_ORIGINALS_TO_PRE_INDEPENDENT_SYNTHETIC_PG16.md) — next no-provider integration rehearsal to validate source→PRE→auditor; still no real approved provider selected T, Content rights or actual POST. No role grants or Phase5/6 authority.
 
 - [**Atomic raw-first source + population + V0077 physical original binding (synthetic PG16; NOT live)**](2026-11-03_GATE5_ATOMIC_RAWFIRST_V0077_SOURCE_PRODUCER_OFFLINE.md) — adds a one-transaction precommit binding hook and strict V0077 owner/original readback for a future lawful GitHub source producer; no paid GET, role GRANT, verified selected T or science release. 
