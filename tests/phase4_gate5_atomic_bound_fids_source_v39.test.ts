@@ -71,7 +71,7 @@ function member(){
 }
 function fakeDb(overrides:{
  status?:string;retrievalCommitted?:string;cutoff?:string;
- clockSequence?:string[];
+ clockSequence?:readonly string[];
  insertCount?:number;boundHash?:string;readbackCount?:number;
 }={}){
  const calls:Array<{sql:string;args:unknown[]}>=[];let clockCalls=0;
