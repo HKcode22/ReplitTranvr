@@ -63,6 +63,22 @@ describe("Gate5 V0077 safe production read-only failure classifier",()=>{
   expect(()=>parseP4G5V0077CatalogRowV39(null))
    .toThrow("P4_G5_V0077_BAD_DIAGNOSTIC_ROWS_HOLD");
  });
+ it("GitHub runtime probe uses only restricted DB URL and no paid provider secrets",()=>{
+  const w=readFileSync(
+   ".github/workflows/phase4-gate5-v0077-production-runtime-readonly.yml",
+   "utf8");
+  expect(w).toContain("secrets.V39_DATABASE_RUNTIME_URL");
+  expect(w).toContain('P4_G5_V0077_RUNTIME_PROBE_ONLY: "1"');
+  expect(w).toContain("contents: read");
+  expect(w).toContain("persist-credentials: false");
+  expect(w).not.toContain("secrets.DATABASE_URL");
+  expect(w).not.toContain("secrets.AERODATABOX_API_KEY");
+  const src=readFileSync(
+   "scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts",
+   "utf8");
+  expect(src).toContain("runP4G5V0077RuntimeOnlyReadOnlyDiagnosisV39");
+  expect(src).toContain("independentPrivilegedDatabaseScopeVerified:false");
+ });
  it("diagnostic never executes DDL, provider API, or retains flight contents",()=>{
   const s=readFileSync(
    "scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts","utf8");
