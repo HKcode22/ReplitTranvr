@@ -141,14 +141,14 @@ describe("Scoped Gate5 PRE writer requires independently reviewed native T and r
  it("unbound or expired original frame cannot be converted into PRE zeros or writes",async()=>{
   const c=db({missingBoundOriginal:true});
   await expect(persistP4G5ReviewedPreForCohortV39(c,scope(),permit()))
-   .rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+   .rejects.toThrow("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
   expect(c.calls.at(-1)?.sql).toBe("ROLLBACK");
   expect(c.calls.some(x=>x.sql.startsWith("INSERT INTO clean.flight_snapshots")))
    .toBe(false);
   const duplicate=db({duplicateSlot:true});
   await expect(persistP4G5ReviewedPreForCohortV39(
    duplicate,scope(),permit()))
-   .rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+   .rejects.toThrow("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
   expect(duplicate.calls.at(-1)?.sql).toBe("ROLLBACK");
   const absent=db();
   await expect(persistP4G5ReviewedPreForCohortV39(
