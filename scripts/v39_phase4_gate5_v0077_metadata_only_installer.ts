@@ -168,11 +168,19 @@ export async function installP4G5V0077PrivateMetadataV39(){
   if(workerReady)await worker.end().catch(()=>undefined);
  }
 }
+export function safeP4G5V0077InstallFailureReasonV39(e:unknown){
+ const message=e instanceof Error?e.message:"";
+ const code=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
+ // Only fixed, internal refusal labels; never echo a PostgreSQL DETAIL,
+ // connection URL, role name, thrown error message or provider body.
+ if(/^P4_G5_V0077_[A-Z0-9_]{1,110}_HOLD$/.test(message))
+  return message;
+ if(typeof code==="string"&&/^[A-Z0-9]{5}$/.test(code))
+  return "P4_G5_V0077_INSTALL_HOLD_SQLSTATE_"+code;
+ return "P4_G5_V0077_INSTALL_UNCLASSIFIED_HOLD";
+}
 if(process.argv[1]?.endsWith("v39_phase4_gate5_v0077_metadata_only_installer.ts"))
  void installP4G5V0077PrivateMetadataV39().catch(e=>{
-  const code=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
-  console.error(typeof code==="string"&&/^[A-Z0-9]{5}$/.test(code)?
-   "P4_G5_V0077_INSTALL_HOLD_SQLSTATE_"+code:
-   "P4_G5_V0077_INSTALL_HOLD_NO_PROVIDER");
+  console.error(safeP4G5V0077InstallFailureReasonV39(e));
   process.exitCode=2;
  });
