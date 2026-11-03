@@ -67,7 +67,7 @@ const SQL_ROLE=[
  "has_schema_privilege(current_user,'clean','CREATE') AS can_create_schema,",
  "has_database_privilege(current_user,current_database(),'CREATE') AS can_create_database"
 ].join(" ");
-const privilegeSql=(table:string)=>[
+const PRIVILEGE_SQL=[
  "SELECT to_regclass($1) IS NOT NULL AS exists,",
  "CASE WHEN to_regclass($1) IS NULL THEN false",
  "ELSE has_table_privilege(current_user,$1,'SELECT') END AS can_select,",
@@ -78,7 +78,7 @@ const privilegeSql=(table:string)=>[
  "CASE WHEN to_regclass($1) IS NULL THEN false",
  "ELSE has_table_privilege(current_user,$1,'DELETE') END AS can_delete"
 ].join(" ");
-const PRIVILEGE_SQL=privilegeSql("");
+
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
  const suffix=typeof c==="string"&&/^[A-Z0-9]{5}$/.test(c)?"_SQLSTATE_"+c:"";
