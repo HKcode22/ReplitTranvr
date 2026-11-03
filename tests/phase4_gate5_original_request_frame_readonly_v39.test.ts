@@ -163,7 +163,7 @@ describe("Phase4 future frozen grid ↔ V0076/V0077 ↔ retained original FIDS r
    {...scope,queryIndex:2},
    {...scope,horizon:"T-6h" as const},
    {...scope,reviewedManifestBytes:scope.reviewedManifestBytes.trim()},
-   {...scope,readAsOfUtc:"2026-11-06T10:00:00.000Z"},
+   {...scope,readAsOfUtc:"2026-11-08T10:00:00.000Z"},
    {...scope,populationQueryId:"invalid"}
   ])expect(()=>assessP4Gate5OriginalRequestFrameV39(changed,row)).toThrow();
  });
@@ -216,7 +216,8 @@ describe("Phase4 future frozen grid ↔ V0076/V0077 ↔ retained original FIDS r
  });
  it("rejects expired/backdated and post-cutoff originals, unavailable/forged bytes",()=>{
   const changes=[
-   (r:Row)=>{r.source_use_expires_at_utc="2026-11-05T16:45:30.000Z";},
+   (r:Row)=>{r.source_use_expires_at_utc=new Date(
+    Date.parse(r.planned_dispatch_utc)+30000).toISOString();},
    (r:Row)=>{r.available_at="2026-11-05T17:01:00.000Z";},
    (r:Row)=>{r.fids_retrieval_utc="2026-11-05T16:44:00.000Z";},
    (r:Row)=>{r.bound_at_utc="2026-11-05T16:45:10.000Z";},
