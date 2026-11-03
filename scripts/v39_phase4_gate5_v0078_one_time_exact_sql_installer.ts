@@ -153,7 +153,11 @@ export async function installP4G5V0078OnceV39(){
   await db.query("SET LOCAL lock_timeout='2000ms'");
   await db.query("SET LOCAL idle_in_transaction_session_timeout='65000ms'");
   stage="TAKE_OWNER_MIGRATION_ADVISORY_LOCK";
-  await db.query("SELECT pg_try_advisory_xact_lock(78,39) AS owner_lock");
+  const ownerLock=single((await db.query(
+   "SELECT pg_try_advisory_xact_lock(78,39) AS owner_lock"
+  )).rows);
+  if(ownerLock.owner_lock!==true)
+   throw Error("P4_G5_V0078_MIGRATION_OWNER_ADVISORY_LOCK_BUSY_HOLD");
   // A failed try-lock is a hard refusal, not a spin-wait.
   // The next LOCK TABLE serializes DDL and original source writes.
   stage="LOCK_POPULATION_EXCLUSIVELY_BOUNDED";
