@@ -5,8 +5,14 @@
  *
  * This is the missing connection between the merged V0076/V0077 original
  * request-frame readback and the cohort-wide generic read-only funnel.
- * One caller-owned REPEATABLE READ READ ONLY snapshot; no network, production
- * writes, source logging, activation or automatic scientific GO.
+ * The nine-original path is an OPTIONAL same-snapshot diagnostic when
+ * licensed source lifetime actually permits it. A 24-hour FIDS cache often
+ * expires T-24h original *before* the postflight audit. Normal pipeline must
+ * audit each horizon while lawful originals exist, create independent
+ * non-Contents GitHub-proved receipts (rights-reviewed), and later combine
+ * them with PRE/POST without re-retaining original provider Contents.
+ * One caller-owned REPEATABLE READ READ ONLY snapshot PER audit; no network,
+ * production writes, source logging, activation or automatic scientific GO.
  *
  * A caller-supplied reviewed hash is NOT an independently signed GitHub pin.
  * Passing nine application-level integrity checks does NOT verify lawful
@@ -182,5 +188,146 @@ export async function auditP4G5NineOriginalBoundCohortV39(
   // These matches prove an application-level query/window connection only;
   // the provider's HTTP identity and right to keep the original are external.
   allNineApplicationSourceBindingsConsistent:true as const
+ };
+}
+
+
+export interface P4G5SingleHorizonOriginalReviewScopeV39
+ extends Omit<P4G5NineOriginalReviewScopeV39,"originalSourceSlots">{
+ horizon:Horizon;
+ originalSourceSlots:readonly Slot[];
+}
+/**
+ * The practical per-horizon BEFORE-EXPIRY audit. T-24h source originals may
+ * be deleted before a lawful postflight audit is possible. Caller separately
+ * authenticates the GitHub manifest SHA + job logs; this function verifies
+ * only the DB V0076/V0077 source/request/body while still legally retained.
+ */
+export async function auditP4G5OneHorizonOriginalBeforeExpiryV39(
+ db:P4G5NineOriginalReadOnlyDbV39,
+ scope:P4G5SingleHorizonOriginalReviewScopeV39
+){
+ if(!scope||!H.includes(scope.horizon)||
+    !Array.isArray(scope.originalSourceSlots)||
+    scope.originalSourceSlots.length!==3)
+  reject("SINGLE_HORIZON_SCOPE");
+ // Validate the exact grid and the independently pinned SHA, rejecting
+ // malformed/late/changed freeze before an original response is even read.
+ const {horizon,originalSourceSlots,...base}=scope;
+ const p=base.reviewedFrozenManifestBytes;
+ if(typeof p!=="string"||p.length>20000||
+    !SHA.test(base.independentlyReviewedManifestSha256)||
+    createHash("sha256").update(p,"utf8").digest("hex")!==
+     base.independentlyReviewedManifestSha256||
+    !/^[A-Z][A-Z0-9_-]{7,79}$/.test(base.expectedCohortId))
+  reject("SINGLE_HORIZON_FROZEN_BYTES");
+ let parsed:unknown;
+ try{parsed=JSON.parse(p)}catch{reject("SINGLE_HORIZON_MANIFEST_JSON")}
+ if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||
+    p!==JSON.stringify(parsed,null,2)+"\n"||
+    (parsed as Record<string,unknown>).cohortId!==base.expectedCohortId)
+  reject("SINGLE_HORIZON_MANIFEST_CANONICAL");
+ const grid=(parsed as {grid:Parameters<typeof draftP4Gate5ThreeHorizonGridV39>[0]}).grid;
+ if(!grid||typeof grid!=="object"||Array.isArray(grid))
+  reject("SINGLE_HORIZON_MANIFEST_GRID");
+ const drafted=draftP4Gate5ThreeHorizonGridV39(grid);
+ if(drafted.queries.filter(x=>x.horizon===horizon).length!==3)
+  reject("SINGLE_HORIZON_NOT_THREE_QUERIES");
+ at(scope.readAsOfUtc,"HORIZON_READ_ASOF");
+ const seen=new Set<number>(),sourceIds=new Set<string>();
+ let matched=0;
+ const slots:Array<{horizon:Horizon;queryIndex:number;status:
+  "MATCHED"|"MISSING_OR_EXPIRED"}>=[];
+ for(const slot of [...originalSourceSlots].sort(
+  (a,b)=>a.queryIndex-b.queryIndex)){
+  if(!slot||slot.horizon!==horizon||
+     ![0,1,2].includes(slot.queryIndex)||
+     seen.has(slot.queryIndex)||!UUID.test(slot.populationQueryId)||
+     sourceIds.has(slot.populationQueryId))
+   reject("SINGLE_HORIZON_SLOT_IDENTITY");
+  seen.add(slot.queryIndex);sourceIds.add(slot.populationQueryId);
+  const result=await readP4Gate5OriginalRequestFrameV39(db,{
+   reviewedManifestBytes:p,
+   independentlyReviewedManifestSha256:base.independentlyReviewedManifestSha256,
+   expectedCohortId:base.expectedCohortId,
+   horizon,queryIndex:slot.queryIndex,
+   populationQueryId:slot.populationQueryId,
+   readAsOfUtc:scope.readAsOfUtc
+  });
+  if(result.status==="ORIGINAL_AND_FROZEN_REQUEST_APPLICATION_INTENT_MATCH_NOT_HTTP_CERTIFIED"){
+   matched++;
+   slots.push({horizon,queryIndex:slot.queryIndex,status:"MATCHED"});
+  }else if(result.status==="ORIGINAL_SOURCE_BINDING_MISSING_EXPIRED_OR_UNMEASURABLE"){
+   slots.push({horizon,queryIndex:slot.queryIndex,status:"MISSING_OR_EXPIRED"});
+  }else reject("SINGLE_HORIZON_UNEXPECTED_SOURCE_VERDICT");
+ }
+ if(seen.size!==3)reject("SINGLE_HORIZON_INCOMPLETE_SLOT_SET");
+ return {
+  schema:"v39.phase4.gate5-one-horizon-before-expiry-original-readonly.v1" as const,
+  status:matched===3?
+   "THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED" as const:
+   "HOLD_MISSING_OR_EXPIRED_ONE_HORIZON_ORIGINAL" as const,
+  manifestSha256:base.independentlyReviewedManifestSha256,
+  horizon,checkedAtUtc:scope.readAsOfUtc,
+  originalSourceSlotsExpected:3 as const,
+  matchedOriginalSlots:matched,
+  sourceStatusBySlot:slots,
+  independentGitHubJobAttestationVerified:false as const,
+  authenticatedProviderSourceOrigin:false as const,
+  licensedNoncontentReceiptRetentionVerified:false as const,
+  originalContentMustBeExpiredUnderActualLawfulDeadline:true as const,
+  scientificallyCertifiedFirstT:false as const,
+  scientificallyCertifiedPRE:false as const,
+  actualOnlyTerminalTargetCertified:false as const,
+  scientificGate5Passed:false as const,
+  phase5FreezeAuthorized:false as const,phase6Authorized:false as const,
+  providerCalls:0 as const,databaseWrites:0 as const
+ };
+}
+
+export type P4G5HorizonReceiptV39 =
+ Awaited<ReturnType<typeof auditP4G5OneHorizonOriginalBeforeExpiryV39>>;
+/**
+ * Syntactic handoff of three independently pre-expiry audited horizons.
+ * NEVER claim authentication from passed-in objects. A future GH workflow
+ * must fetch, validate and pin source job/log receipts independently.
+ */
+export function reconcileP4G5ThreeHorizonNoncontentReceiptsV39(
+ reports:readonly P4G5HorizonReceiptV39[],
+ independentlyReviewedManifestSha256:string
+){
+ if(!SHA.test(independentlyReviewedManifestSha256)||
+    !Array.isArray(reports)||reports.length!==3)
+  reject("NONCONTENT_RECEIPTS_SCOPE");
+ const seen=new Set<Horizon>();
+ for(const r of reports){
+  if(!r||!H.includes(r.horizon)||seen.has(r.horizon)||
+     r.manifestSha256!==independentlyReviewedManifestSha256||
+     r.originalSourceSlotsExpected!==3||
+     r.matchedOriginalSlots!==3||
+     r.status!=="THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED"||
+     !Array.isArray(r.sourceStatusBySlot)||
+     r.sourceStatusBySlot.length!==3||
+     r.sourceStatusBySlot.some((x,i)=>
+      x.horizon!==r.horizon||x.queryIndex!==i||x.status!=="MATCHED")||
+     r.providerCalls!==0||r.databaseWrites!==0||
+     r.scientificGate5Passed!==false)
+   reject("NONCONTENT_HORIZON_PROOF_MISMATCH");
+  at(r.checkedAtUtc,"HORIZON_PROOF_TIME");
+  seen.add(r.horizon);
+ }
+ return {
+  schema:"v39.phase4.gate5-three-horizon-noncontent-receipt-handoff.v1" as const,
+  status:"THREE_HORIZON_REPORTS_SELF_CONSISTENT_EXTERNAL_AUTHENTICATION_PENDING" as const,
+  perHorizonSourceApplicationReadbacks:3 as const,
+  totalOriginalSlotsApplicationMatched:9 as const,
+  independentlyVerifiedGitHubJobLogs:false as const,
+  independentlyVerifiedLawfulMetadataRetention:false as const,
+  independentlyVerifiedActualOnlyOutcome:false as const,
+  genuinelyPersistedPreSnapshotsCount:null,
+  physicalOperatingLegDenominator:null,
+  scientificGate5Passed:false as const,
+  phase5FreezeAuthorized:false as const,phase6Authorized:false as const,
+  providerCalls:0 as const,databaseWrites:0 as const
  };
 }
