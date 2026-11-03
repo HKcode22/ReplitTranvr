@@ -12,7 +12,6 @@
  */
 import {
  P4_G5_BOUND_SOURCE_ROWS_SQL_V39,
- P4_G5_BOUND_PRE_ROWS_SQL_V39,
  type P4G5BoundReadDbV39
 } from "./phase4Gate5BoundSourceCaptureReadonly_v39";
 import {
