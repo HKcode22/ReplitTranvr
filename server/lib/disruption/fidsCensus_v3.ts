@@ -436,7 +436,8 @@ function normalizeFidsRecord(input: {
     // context supplies that airport when other identity fields are positive.
     const g5a=params.g5aObservedScheduleProtocol===true;
     const sourceId=typeof f?.id==="string"&&f.id.trim().length>=3&&
-      f.id.length<=180&&!/[\\x00-\\x1f]/.test(f.id)?f.id.trim():null;
+      f.id.length<=180&&![...f.id].some((c:string)=>
+       c.charCodeAt(0)<32)?f.id.trim():null;
     const requestedOrigin=(explicitDepIcao===normalizeIcao(params.airportIcao))||
       (departureAirportFromContext&&movement==="departure"&&
        params.direction==="Departure");
