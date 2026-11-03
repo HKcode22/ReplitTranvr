@@ -61,6 +61,7 @@ jobs:
           set -Eeuo pipefail
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE g5_ci_runtime LOGIN PASSWORD 'g5_disposable_only';
+          GRANT USAGE ON SCHEMA clean TO g5_ci_runtime;
           CREATE ROLE p4_g5_g5a_owner_20261103 LOGIN
             NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
             PASSWORD 'g5_post_disposable_only';
