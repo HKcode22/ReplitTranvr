@@ -178,8 +178,47 @@ export async function runP4G5V0077ReadOnlyDiagnosisV39(){
  return result.status==="READY_FOR_ONE_TIME_V0077_PRIVATE_SCHEMA_INSTALL"||
   result.status==="ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED"?0:2;
 }
+/** Independent GitHub runtime-only source presence probe (no privileged URL).
+ * A runtime-only result cannot independently attest the privileged DB/role.
+ */
+export async function runP4G5V0077RuntimeOnlyReadOnlyDiagnosisV39(){
+ const url=process.env.V39_DATABASE_RUNTIME_URL;
+ if(!url)throw Error("P4_G5_V0077_DIAG_RUNTIME_CONNECTION_UNSET_HOLD");
+ const f=await readRole(url,"RUNTIME");
+ const parentComplete=f.parent.every(Boolean);
+ const anyV77=f.v77.some(Boolean);
+ const allV77=f.v77.every(Boolean);
+ const workerAccess=f.hasRuntimeV77Privileges.some(Boolean);
+ const status=!parentComplete||!f.source?"V0076_OR_SOURCE_NOT_VISIBLE_TO_RUNTIME":
+   !anyV77?"V0077_NOT_INSTALLED_IN_RUNTIME_DATABASE":
+   !allV77?"PARTIAL_V0077_IN_RUNTIME_DATABASE":
+   workerAccess?"V0077_INSTALLED_RUNTIME_ROLE_CAN_ACCESS":
+   "V0077_INSTALLED_PRIVATE_TO_RUNTIME";
+ console.log(JSON.stringify({
+  schema:"v39.phase4.gate5-v0077-runtime-only-production-readonly.v1",
+  status,
+  serverPg16OrLater:f.serverVersion>=160000,
+  parentV0076Complete:parentComplete,
+  originalFidsTablePresent:f.source,
+  v0077TablePresent:f.v77[0],
+  v0077TriggerFunctionsPresent:f.v77[1]&&f.v77[2],
+  runtimeCanCreateInClean:f.canCreate,
+  runtimeCanReadV0077:f.hasRuntimeV77Privileges[0],
+  runtimeCanInsertV0077:f.hasRuntimeV77Privileges[1],
+  runtimeCanUpdateV0077:f.hasRuntimeV77Privileges[2],
+  runtimeCanDeleteV0077:f.hasRuntimeV77Privileges[3],
+  independentPrivilegedDatabaseScopeVerified:false,
+  authorizedSourceRetentionVerified:false,
+  providerCalls:0,databaseWrites:0,
+  scientificGate5Passed:false,phase5FreezeAuthorized:false,
+  phase6Authorized:false
+ }));
+ return 0;
+}
 if(process.argv[1]?.endsWith("v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts")){
- void runP4G5V0077ReadOnlyDiagnosisV39().then(x=>{
+ void (process.env.P4_G5_V0077_RUNTIME_PROBE_ONLY==="1"?
+  runP4G5V0077RuntimeOnlyReadOnlyDiagnosisV39():
+  runP4G5V0077ReadOnlyDiagnosisV39()).then(x=>{
   process.exitCode=x;
  }).catch(e=>{
   const message=e instanceof Error?e.message:"";
