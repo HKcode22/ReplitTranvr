@@ -60,7 +60,7 @@ describe("Gate5 original Plan f.8 + hash-locked Log §1.9 scientific scope prese
     "PRE",
     "POST",
     "AIRBORNE",
-    "captured outside",
+    "in-frame/outside/unresolved",
     "provider-native",
     "retention",
     "zero"
