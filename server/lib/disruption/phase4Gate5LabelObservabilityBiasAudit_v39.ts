@@ -31,8 +31,8 @@ export interface P4G5LabelObservationV39 {
 export interface P4G5LabelCoverageBucketV39 {
   airportIcao:string;tier:P4G5TierV39;horizon:P4G5HorizonV39;
   populationMembers:number;horizonEligible:number;prePersisted:number;
-  webhookCaptured:number;exactActualLabelReported:number;
-  inferredProxyOnly:number;estimatedOrUnverified:number;
+  webhookCaptured:number;capturedOutsideFidsPopulation:number;
+  exactActualLabelReported:number;inferredProxyOnly:number;estimatedOrUnverified:number;
   pending:number;missing:number;unverifiedOperatingLeg:number;
   preCoverageRate:number|null;exactLabelCoverageRate:number|null;
   webhookCoverageRate:number|null;
@@ -43,6 +43,8 @@ export interface P4G5LabelCoverageAuditV39 {
   minCountForDescriptiveStratum:number;
   maxMinusMinReportedLabelCoverage:number|null;
   comparedStratumCount:number;
+  totalCapturedOutsideFidsPopulation:number;
+  outsideFidsPopulationCaptureRate:null;
   labelSelectionBiasAbsentProven:false;
   missingNotZeroDelay:true;
   auditedEvidenceDoesNotCertifySemantics:true;
@@ -93,14 +95,22 @@ export function auditP4G5LabelObservabilityV39(
     let b=byKey.get(key);
     if(!b){b={airportIcao:r.airportIcao,tier:r.tier,horizon:r.horizon,
       populationMembers:0,horizonEligible:0,prePersisted:0,
-      webhookCaptured:0,exactActualLabelReported:0,
+      webhookCaptured:0,capturedOutsideFidsPopulation:0,
+      exactActualLabelReported:0,
       inferredProxyOnly:0,estimatedOrUnverified:0,
       pending:0,missing:0,unverifiedOperatingLeg:0,
       preCoverageRate:null,exactLabelCoverageRate:null,
       webhookCoverageRate:null};
       byKey.set(key,b);
     }
-    if(!r.providerPopulationMemberAsOfCutoff)continue;
+    if(!r.providerPopulationMemberAsOfCutoff){
+      // Capture outside the provider-observable FIDS denominator is an
+      // independent dimension. Count it without promoting that identity
+      // to population/PRE. The total universe outside FIDS is unknown,
+      // so an outside-population capture *rate* must be NULL, not zero.
+      if(r.webhookCaptured)b.capturedOutsideFidsPopulation++;
+      continue;
+    }
     b.populationMembers++;
     if(!r.operatingLegIdentityVerified)b.unverifiedOperatingLeg++;
     if(!r.horizonEligible)continue;
@@ -131,6 +141,9 @@ export function auditP4G5LabelObservabilityV39(
   return {schema:"v39.phase4.gate5-label-observability-bias-offline.v1",
     buckets,minCountForDescriptiveStratum:minStratumN,
     comparedStratumCount:rates.length,
+    totalCapturedOutsideFidsPopulation:buckets.reduce(
+     (n,b)=>n+b.capturedOutsideFidsPopulation,0),
+    outsideFidsPopulationCaptureRate:null,
     maxMinusMinReportedLabelCoverage:rates.length>=2?
       Math.max(...rates)-Math.min(...rates):null,
     labelSelectionBiasAbsentProven:false,missingNotZeroDelay:true,

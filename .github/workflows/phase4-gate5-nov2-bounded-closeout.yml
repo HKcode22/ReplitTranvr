@@ -1,0 +1,51 @@
+name: Phase4 Gate5 Finite Bounded Evidence Closeout (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-nov2-bounded-closeout.yml"
+      - "server/lib/disruption/phase4Gate5BoundedEvidenceCloseout_v39.ts"
+      - "tests/phase4_gate5_bounded_evidence_closeout_v39.test.ts"
+      - "scripts/v39_phase4_gate5_nov2_bounded_closeout_actions.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-nov2-bounded-closeout.yml"
+      - "server/lib/disruption/phase4Gate5BoundedEvidenceCloseout_v39.ts"
+      - "tests/phase4_gate5_bounded_evidence_closeout_v39.test.ts"
+      - "scripts/v39_phase4_gate5_nov2_bounded_closeout_actions.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  DATABASE_URL: ""
+  V39_DATABASE_RUNTIME_URL: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  ADB_AUTO_COLLECT: "0"
+  V39_PHASE6_PROCESS_ARMED: "0"
+  NODE_ENV: test
+jobs:
+  finite-bounded-closeout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Reconcile immutable Nov2 aggregate without any provider or DB
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = true
+          test "${GITHUB_REPOSITORY}" = HKcode22/ReplitTranvr
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          npx --no-install vitest run tests/phase4_gate5_bounded_evidence_closeout_v39.test.ts
+          node --import tsx scripts/v39_phase4_gate5_nov2_bounded_closeout_actions.ts
+          echo "GATE5_OPERATIONAL_DIAGNOSTIC_COMPLETE_SCIENTIFIC_HOLD"
+          echo "PAID_SOURCE_GETS_BY_THIS_WORKFLOW=0"
+          echo "PRODUCTION_DB_WRITES=0"
