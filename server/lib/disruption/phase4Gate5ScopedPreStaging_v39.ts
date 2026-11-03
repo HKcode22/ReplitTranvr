@@ -201,16 +201,26 @@ export async function stageP4G5ScopedPreV39(
   scope.airportIcao,scope.serviceStartUtc,scope.serviceEndUtc,
   scope.observedAtUtc
  ];
+ let frameProgress:{expectedSlots:3;validBoundOriginals:number}|null=null;
  if(boundOwner){
   args.push(scope.reviewedFrozenManifestSha256,boundOwner.horizon,
    boundOwner.expectedOwnerGithubRunId,
    boundOwner.reviewedRunAuthorizationSha256);
   const frame=await db.query(P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,args);
-  if(frame.rows.length!==1||Number(frame.rows[0]?.expected_slots)!==3||
-     Number(frame.rows[0]?.bound_originals)!==3||
-     Number(frame.rows[0]?.valid_originals)!==3||
-     Number(frame.rows[0]?.valid_slots)!==3)
-   throw Error("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  const f=frame.rows[0];
+  const originals=Number(f?.bound_originals);
+  const valid=Number(f?.valid_originals);
+  const slots=Number(f?.valid_slots);
+  // PRE must be committed near each flight cutoff, BEFORE later query slots
+  // have been observed. Requiring a future third receipt for the first
+  // cutoff mathematically forbids on-time PRE. Require every already-bound
+  // original to be an authenticated, unexpired distinct V0076/V0077 source;
+  // keep unobserved planned slots for the later independent 3/3 audit.
+  if(frame.rows.length!==1||Number(f?.expected_slots)!==3||
+     !Number.isSafeInteger(originals)||originals<1||originals>3||
+     valid!==originals||slots!==originals)
+   throw Error("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
+  frameProgress={expectedSlots:3,validBoundOriginals:originals};
  }
  const q=await db.query(boundOwner?
   P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39:
@@ -296,6 +306,10 @@ export async function stageP4G5ScopedPreV39(
   schema:"v39.phase4.gate5-cohort-scoped-pre-staging.v1" as const,
   status:"REAL_SOURCE_CANDIDATES_ONLY_NATIVE_T_UNVERIFIED" as const,
   counts:H.map(h=>counts[h]),
+  // A time-consistent 1/3 or 2/3 prefix is not a full collection success;
+  // missing future slots remain unknown and independently auditable.
+  sourceBoundPrefixAtRead:frameProgress,
+  sourceFullThreeOriginalFrameAsOfRead:frameProgress?.validBoundOriginals===3,
   candidateInMemoryRows:staged.length,
   staged,
   scopedProviderOriginalAsOf:true as const,

@@ -35,6 +35,8 @@ export interface FidsCensusParams {
   providerApiVersion: string;
   fidsProtocolVersion: string;
   openapiSha256: string;
+  /** Only prospective G5A: stable provider operating identity under retimes. */
+  g5aObservedScheduleProtocol?: boolean;
 }
 
 /**
@@ -426,11 +428,37 @@ function normalizeFidsRecord(input: {
     // encodes the status as integer 1/2 rather than a string.
     const isOperator = f?.codeshareStatus === "IsOperator" || f?.codeshareStatus === 1;
     const isMarketing = f?.codeshareStatus === "IsCodeshared" || f?.codeshareStatus === 2;
-    if (isOperator && !departureAirportFromContext &&
-        !(movement === "departure" && explicitDepIcao !== normalizeIcao(params.airportIcao))) {
-      canonical = canonicalFlightInstanceId(identityInput).flight_instance_id;
-      analyticIdentityId = canonical;
-      identityStatus = "confirmed_operating_leg";
+    // G5A's provider-schedule outcome must not treat a retime as a new
+    // physical flight. Use the exact frozen service frame and the provider's
+    // positive operating flight ID; never infer a stable ID from the schedule.
+    // FIDS may omit the source airport on a requested Departure movement.
+    // Under the G5A protocol only, the authenticated request's Departure
+    // context supplies that airport when other identity fields are positive.
+    const g5a=params.g5aObservedScheduleProtocol===true;
+    const sourceId=typeof f?.id==="string"&&f.id.trim().length>=3&&
+      f.id.length<=180&&![...f.id].some((c:string)=>
+       c.charCodeAt(0)<32)?f.id.trim():null;
+    const requestedOrigin=(explicitDepIcao===normalizeIcao(params.airportIcao))||
+      (departureAirportFromContext&&movement==="departure"&&
+       params.direction==="Departure");
+    const foreignOrigin=movement==="departure"&&!!explicitDepIcao&&
+      explicitDepIcao!==normalizeIcao(params.airportIcao);
+    if(g5a&&isOperator&&sourceId&&requestedOrigin&&!foreignOrigin){
+      const stable=createHash("sha256").update(JSON.stringify({
+        protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
+        providerId:sourceId,carrier:parsed.carrier,flightNumber:parsed.number,
+        origin:depIcao,destination:arrIcao,
+        frozenServiceStartUtc:params.serviceWindowStartUtc.toISOString(),
+        frozenServiceEndUtc:params.serviceWindowEndUtc.toISOString()
+      })).digest("hex");
+      canonical="leg:g5a:"+stable;
+      analyticIdentityId=canonical;
+      identityStatus="confirmed_operating_leg";
+    }else if(!g5a&&isOperator&&!departureAirportFromContext&&
+        !foreignOrigin){
+      canonical=canonicalFlightInstanceId(identityInput).flight_instance_id;
+      analyticIdentityId=canonical;
+      identityStatus="confirmed_operating_leg";
     } else {
       analyticIdentityId = `provisional:${sha256(JSON.stringify({
         providerRecordKey, number: f?.number ?? null,
@@ -438,6 +466,7 @@ function normalizeFidsRecord(input: {
       })).slice(0, 24)}`;
       identityStatus = isMarketing ? "resolved_marketing" :
         !isOperator ? "ambiguous_codeshare" :
+        g5a&&!sourceId ? "g5a_stable_provider_id_missing" :
         departureAirportFromContext ? "context_departure_origin_unverified" :
         "foreign_departure_origin_unverified";
     }
@@ -562,6 +591,8 @@ export async function fetchFidsPopulation(
     ianaTimezone: params.ianaTimezone,
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
+    g5aProtocol:params.g5aObservedScheduleProtocol===true?
+      "G5A_FIRST_PROVIDER_REPORTED_SCHEDULE_REVISION":null,
     payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",
     originalDecodedEntityBodyPreserved: originalBodyEvidence !== null,
     originalHttpWireBytesPreserved: false,

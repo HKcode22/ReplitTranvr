@@ -227,7 +227,11 @@ export async function persistP4G5ReviewedPreForCohortV39(
      ambiguousScopeOrOperatingIdentity:x.unverifiedScopeOrIdentity
     })),
    otherHorizonsUntouched:true as const,
-   allThreeOriginalReceiptsV0077BoundAndUnexpired:true as const,
+   // Actual source completeness is a measured fact, never hard-coded.
+   originalReceiptsBoundAtPreWrite:staged.sourceBoundPrefixAtRead?.validBoundOriginals??0,
+   originalSlotsPlanned:staged.sourceBoundPrefixAtRead?.expectedSlots??0,
+   allThreeOriginalReceiptsV0077BoundAndUnexpired:
+    staged.sourceFullThreeOriginalFrameAsOfRead,
    databaseClockBackfillBlocked:true as const,
    optionalFeatureMissingNeverSuppressesEligibleSnapshot:true as const,
    actualOnlyDepartureOutcomeProvenByThisFunction:false as const,
