@@ -193,12 +193,17 @@ async function readRole(url:string,which:"ADMIN"|"RUNTIME"):Promise<Facts>{
   if(connected)await db.end().catch(()=>undefined);
  }
 }
-export async function runP4G5V0078ReadOnlyPreflightV39(){
+/** Underlying two-role inspection shared with the reviewed, one-time installer.
+ * This function is read-only and never emits DB role names or flight rows. */
+export async function inspectP4G5V0078TwoRoleV39(){
  const a=process.env.DATABASE_URL,b=process.env.V39_DATABASE_RUNTIME_URL;
  if(!a||!b||a===b)throw Error("P4_G5_V0078_DISTINCT_OWNER_RUNTIME_URL_REQUIRED_HOLD");
  const admin=await readRole(a,"ADMIN");
  const worker=await readRole(b,"RUNTIME");
- const result=classifyP4G5V0078ReadOnlyV39(admin,worker);
+ return classifyP4G5V0078ReadOnlyV39(admin,worker);
+}
+export async function runP4G5V0078ReadOnlyPreflightV39(){
+ const result=await inspectP4G5V0078TwoRoleV39();
  console.log(JSON.stringify(result));
  return result.status==="V0078_PREINSTALL_CATALOG_CANDIDATE_ONLY_NEEDS_OWNER_REVIEW"?0:2;
 }
