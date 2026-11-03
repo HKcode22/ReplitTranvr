@@ -19,6 +19,9 @@ New `scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts` reads only Po
 
 There is no production DDL/writes, paid GETs, account quota consumption, or original Content read. New offline tests and real disposable PG16 workflow exercise before and after the exact V0077 installer. The original installer now displays only **whitelisted internal HOLD codes** or safe SQLSTATE; arbitrary exception messages remain hidden.
 
+**Automated minimum-human path:** added `.github/workflows/phase4-gate5-v0077-production-runtime-readonly.yml`, which runs once on a new `main` push after merge and reads **only** the existing protected GitHub secret `V39_DATABASE_RUNTIME_URL`. It shows whether the live runtime DB sees V0076, V0077, trigger functions and unexpected ACL grants, and explicitly says the independent privileged role/database connection has **not** been verified. This avoids requiring an immediate second manual Replit command merely to learn whether V0077 is installed. It cannot determine a privileged-role mismatch without the second URL, which may still require one safe shell diagnostic.
+
+
 **Operator action:** after exact-head checks green and merge, use **one** short pinned diagnostic command in the Replit shell and paste only the JSON output. Do **not** rerun the same installer blindly. Depending on the result, fix only the actual issue, independently verify successful/partial installation, and authorize exactly one reviewed non-time-sensitive migration if still missing and appropriate. No secrets, manual clock triggers, Cloudflare, Replit AI Agent, or unnecessary provider queries.
 
 ## Why T−24h/T−6h/T−90m were already done
