@@ -8,6 +8,7 @@
  * analytic record with canonical_flight_instance_id=NULL.
  */
 import { createHash, randomUUID } from "crypto";
+import type { PoolClient } from "pg";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
@@ -696,10 +697,25 @@ export const FIDS_ATOMIC_POPULATION_VALUES_V39 = Array.from(
     : `$${i+1}`
 ).join(",");
 
+/**
+ * Optional reviewer-only hook for exact source-owner custody: runs inside
+ * the SAME transaction after the original and its normalized members,
+ * BEFORE commit. It must not issue provider requests or independently commit.
+ * Default callers retain the historical atomic source+population behavior.
+ */
+export type FidsBeforeRawFirstCommitV39 = (
+ client:PoolClient,
+ facts:{
+  query:FidsQueryObservation;
+  durableAvailableAt:Date;
+  normalizedInsertedRows:number;
+ }
+)=>Promise<void>;
 /** Raw FIDS response and normalized membership persist atomically. */
 export async function persistFidsObservation(
   query: FidsQueryObservation,
   rows: PopulationRow[],
+  beforeCommit?:FidsBeforeRawFirstCommitV39,
 ): Promise<number> {
   const client = await pool.connect();
   try {
@@ -717,7 +733,9 @@ export async function persistFidsObservation(
        query.airportIanaTimezone, query.fidsRetrievalUtc, query.availableAtUtc, query.responseHash,
        query.rawPayload, query.providerApiVersion, query.fidsProtocolVersion, query.openapiSha256],
     );
-    const durableAvailableAt = rawInsert.rows[0].available_at;
+    if(rawInsert.rows.length!==1||!rawInsert.rows[0]?.available_at)
+      throw new Error("FIDS_ATOMIC_ORIGINAL_NOT_INSERTED_HOLD");
+    const durableAvailableAt = rawInsert.rows[0].available_at as Date;
     let inserted = 0;
     for (const r of rows) {
       const result = await client.query(
@@ -741,6 +759,14 @@ export async function persistFidsObservation(
          r.providerApiVersion,r.fidsProtocolVersion,r.openapiSha256],
       );
       inserted += result.rowCount ?? 0;
+    }
+    // Never claim complete source custody for a partially inserted census.
+    if(beforeCommit){
+      if(inserted!==rows.length)
+        throw new Error("FIDS_BOUND_NORMALIZATION_INCOMPLETE_ROLLBACK");
+      await beforeCommit(client,{
+        query,durableAvailableAt,normalizedInsertedRows:inserted
+      });
     }
     await client.query("COMMIT");
     return inserted;
