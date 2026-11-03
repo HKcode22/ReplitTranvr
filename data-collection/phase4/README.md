@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**3 V0077 synthetic FIDS source receipts → real cutoff PRE → independent PG16 readback (not live)**](2026-11-03_GATE5_THREE_ORIGINALS_TO_PRE_INDEPENDENT_SYNTHETIC_PG16.md) — next no-provider integration rehearsal to validate source→PRE→auditor; still no real approved provider selected T, Content rights or actual POST. No role grants or Phase5/6 authority.
+
 - [**Atomic raw-first source + population + V0077 physical original binding (synthetic PG16; NOT live)**](2026-11-03_GATE5_ATOMIC_RAWFIRST_V0077_SOURCE_PRODUCER_OFFLINE.md) — adds a one-transaction precommit binding hook and strict V0077 owner/original readback for a future lawful GitHub source producer; no paid GET, role GRANT, verified selected T or science release. 
 
 - [**Next PRE source integrity — V0077 original GitHub owner-bound guard (offline PR)**](2026-11-03_GATE5_PRE_WRITER_V0077_EXACT_SOURCE_OWNER_GUARD.md) — ensures no same-window foreign FIDS can be passed to the actual PRE writer; requires one frozen owner/horizon and three eligible retained originals, refuses incomplete/expired source without backfill. Does **not** wire a live provider owner, certify native selected T or rights, or pass Gate5.
