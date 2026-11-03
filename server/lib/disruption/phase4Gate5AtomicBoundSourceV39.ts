@@ -167,13 +167,11 @@ export const P4_G5_V0077_VERIFY_ATOMIC_SOURCE_SQL_V39=[
  */
 export async function persistP4G5BoundFidsDbOnlyV39(
  query:FidsQueryObservation,rows:PopulationRow[],
- b:P4G5OriginalBindingScopeV39,
- /** Only for disposable/unit injection; not a provider release permit. */
- persistence:typeof persistFidsObservation=persistFidsObservation
+ b:P4G5OriginalBindingScopeV39
 ){
  assertP4G5AtomicOriginalBindingScopeV39(query,rows,b);
  let verifiedBound=false;
- const inserted=await persistence(query,rows,async (db,facts)=>{
+ const inserted=await persistFidsObservation(query,rows,async (db,facts)=>{
   // Runs after raw + all normalized rows, BEFORE source transaction COMMIT.
   const reservations=await db.query(P4_G5_V0077_COMMITTED_ATTEMPT_READ_SQL_V39,[
    b.expectedReservationSha256,b.queryDigest,b.manifestSha256,
