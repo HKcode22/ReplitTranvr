@@ -147,6 +147,24 @@ function parseFrozenManifest(bytes:string){
   hold("GRID_COUNT_OR_ACCOUNT_CAP");
  return {manifest:v,grid,manifestSha:sha(bytes)};
 }
+/**
+ * V0076 SECURITY DEFINER signature, exactly:
+ * (manifest, ownerDigest, githubRunId, queryDigest, attemptNumber, SHA).
+ * Previously a transposition of GitHub run/query digest would have made
+ * every real physical reservation fail before making a paid request.
+ */
+export function p4G5G5AReservationSqlArgsV39(
+ manifestSha256:string,ownerDigest:string,githubRunId:string,
+ queryDigest:string,attemptNumber:number,reservationSha256:string
+):[string,string,string,string,number,string]{
+ if(!SHA.test(manifestSha256)||!SHA.test(ownerDigest)||
+    !/^\d{5,25}$/.test(githubRunId)||!SHA.test(queryDigest)||
+    !Number.isInteger(attemptNumber)||attemptNumber!==1||
+    !SHA.test(reservationSha256))
+  hold("RESERVATION_SQL_ARGUMENTS");
+ return [manifestSha256,ownerDigest,githubRunId,
+         queryDigest,attemptNumber,reservationSha256];
+}
 const errorSafe=(e:unknown)=>{
  const message=e instanceof Error?e.message:"";
  return /^P4_G5_[A-Z0-9_]+(?:_HOLD)?$/.test(message)?
@@ -319,8 +337,9 @@ export async function main(){
     const res=await db.query(
      "SELECT clean.reserve_phase4_g5_fids_physical_attempt_v39"+
      "($1,$2,$3,$4,$5,$6) AS committed_at_utc",
-     [manifestSha,owner.ownerDigest,proof.githubRunId,
-      entry.queryDigest,1,expectedReservationSha256]);
+     p4G5G5AReservationSqlArgsV39(
+      manifestSha,owner.ownerDigest,proof.githubRunId,
+      entry.queryDigest,1,expectedReservationSha256));
     if(res.rows.length!==1||!res.rows[0]?.committed_at_utc)
      hold("DURABLE_PAID_RESERVATION");
     await db.query("COMMIT");reserved=true;
