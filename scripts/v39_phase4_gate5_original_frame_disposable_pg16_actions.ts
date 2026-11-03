@@ -193,9 +193,7 @@ export async function main(){
    // Every new v39 source, PRE and webhook SQL must parse & type-resolve
    // against B0062 + staged V0076/V0077 in a second READ-ONLY connection.
    const auditedAt=new Date().toISOString();
-   const sqlCases:[
-    [string,unknown[]]
-   ]=[
+   const sqlCases:Array<[string,unknown[]]>=[
     [P4_G5_BOUND_SOURCE_ROWS_SQL_V39,
      [manifestSha,"WSSS",time(start),time(end),auditedAt]],
     [P4_G5_BOUND_PRE_ROWS_SQL_V39,[manifestSha,auditedAt]],
