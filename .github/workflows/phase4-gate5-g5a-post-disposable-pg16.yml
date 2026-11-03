@@ -1,0 +1,94 @@
+name: Phase4 Gate5 G5A POST Ledger Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-post-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation.ts"
+      - "scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts"
+      - "tests/phase4_gate5_g5a_post_ledger_pg16.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-post-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation.ts"
+      - "scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts"
+      - "tests/phase4_gate5_g5a_post_ledger_pg16.test.ts"
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: "0"
+  V39_PHASE6_PROCESS_ARMED: "0"
+  AERODATABOX_API_KEY: ""
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://g5_ci_runtime:g5_disposable_only@localhost:5432/v39_ci?sslmode=disable"
+  G5A_POST_TEST_WRITER_URL: "postgresql://p4_g5_g5a_owner_20261103:g5_post_disposable_only@localhost:5432/v39_ci?sslmode=disable"
+  G5A_POST_TEST_PG16: "1"
+jobs:
+  post-ledger-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Boot only disposable PG16 baseline and staged V0076
+        run: |
+          set -Eeuo pipefail
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql >/dev/null
+      - name: Prepare only disposable non-admin source writer and restricted app role
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE g5_ci_runtime LOGIN PASSWORD 'g5_disposable_only';
+          GRANT USAGE ON SCHEMA clean TO g5_ci_runtime;
+          CREATE ROLE p4_g5_g5a_owner_20261103 LOGIN
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+            PASSWORD 'g5_post_disposable_only';
+          GRANT USAGE ON SCHEMA clean TO p4_g5_g5a_owner_20261103;
+          GRANT SELECT,UPDATE ON TABLE clean.phase4_g5_fids_cohort_budget_v39
+            TO p4_g5_g5a_owner_20261103;
+          GRANT SELECT ON TABLE clean.fids_query_response,
+            clean.flight_population,clean.flight_snapshots
+            TO p4_g5_g5a_owner_20261103;
+          INSERT INTO clean.phase4_g5_fids_cohort_budget_v39
+            (manifest_sha256,cohort_id,project_unit_ceiling,reserved_units)
+          VALUES
+            (repeat('a',64),'WSSS_G5A_20261105_0200Z',24,18),
+            (repeat('b',64),'WSSS_G5A_20261105_0200Z_N',24,18),
+            (repeat('c',64),'WSSS_G5A_20261105_0200Z_K',24,24);
+          SQL
+      - name: Test actual one-time baseline attempt ledger GRANT (no other tables)
+        run: |
+          set -Eeuo pipefail
+          set +x
+          GITHUB_ACTIONS=false \
+          P4_G5_G5A_POST_GRANT_INTENT=EXACT_G5A_POST_IMMUTABLE_LEDGER_INSERT_SELECT_NO_OTHER_PRIVILEGES \
+          node --import tsx scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts
+      - name: Verify real immutable POST reservation, 24-unit cap and replay failure
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_post_ledger_pg16.test.ts
+          echo 'POST_PROVIDER_CALLS=0'
+          echo 'PRODUCTION_DATABASE_WRITES=0'
+          echo 'GITHUB_PROVIDER_SECRETS_AVAILABLE=FALSE'

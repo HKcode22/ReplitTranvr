@@ -37,6 +37,8 @@ export interface FidsCensusParams {
   openapiSha256: string;
   /** Only prospective G5A: stable provider operating identity under retimes. */
   g5aObservedScheduleProtocol?: boolean;
+  /** Separately ledger-reserved G5A POST source; never a PRE identifier. */
+  g5aPostReservationId?:string;
 }
 
 /**
@@ -447,9 +449,11 @@ function normalizeFidsRecord(input: {
       const stable=createHash("sha256").update(JSON.stringify({
         protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
         providerId:sourceId,carrier:parsed.carrier,flightNumber:parsed.number,
-        origin:depIcao,destination:arrIcao,
-        frozenServiceStartUtc:params.serviceWindowStartUtc.toISOString(),
-        frozenServiceEndUtc:params.serviceWindowEndUtc.toISOString()
+        // A postflight FIDS query may cover a wider source window because
+        // the operating flight was retimed out of the original hour. Source
+        // window is query metadata, NOT physical identity. Positive provider
+        // flight ID plus carrier/route is the stable cross-window link.
+        origin:depIcao,destination:arrIcao
       })).digest("hex");
       canonical="leg:g5a:"+stable;
       analyticIdentityId=canonical;
@@ -583,6 +587,11 @@ export async function fetchFidsPopulation(
       bodyBase64: original.base64,
     };
   }
+  if(params.g5aPostReservationId!==undefined&&
+     (params.g5aObservedScheduleProtocol!==true||
+      params.fidsProtocolVersion!=="G5A-POST-20261103-v1"||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(params.g5aPostReservationId)))
+    throw Error("G5A_POST_RESERVATION_SCOPE_INVALID_HOLD");
   const retrievalUtc = (deps.now ?? (() => new Date()))();
   const rawPayload = addCanonicalFidsEnvelopeHashV39({
     airport: params.airportIcao,
@@ -591,6 +600,10 @@ export async function fetchFidsPopulation(
     ianaTimezone: params.ianaTimezone,
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
+    ...(params.g5aPostReservationId?{
+      g5aPostReservationId:params.g5aPostReservationId,
+      g5aPostPurpose:"PROVIDER_REPORTED_SCHEDULE_REVISION_NOT_ACTUAL_DELAY"
+    }:{}),
     g5aProtocol:params.g5aObservedScheduleProtocol===true?
       "G5A_FIRST_PROVIDER_REPORTED_SCHEDULE_REVISION":null,
     payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",

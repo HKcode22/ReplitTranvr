@@ -49,6 +49,22 @@ describe("G5A provider FIDS native identity, prospectively enabled only",()=>{
   expect(first.query.rawPayload).toHaveProperty("g5aProtocol",
    "G5A_FIRST_PROVIDER_REPORTED_SCHEDULE_REVISION");
  });
+ it("a real late retime into a wider postflight source window retains one physical leg",async()=>{
+  const original=await one(base(),leg("2026-11-05T02:20:00.000Z",
+   "G5A-OPERATING-LEG-121"));
+  const widened=base();
+  widened.fromLocal="2026-11-05T09:00";
+  widened.toLocal="2026-11-05T13:00";
+  widened.serviceWindowStartUtc=new Date("2026-11-05T01:00:00.000Z");
+  widened.serviceWindowEndUtc=new Date("2026-11-05T05:00:00.000Z");
+  const after=await one(widened,leg("2026-11-05T03:40:00.000Z",
+   "G5A-OPERATING-LEG-121"));
+  expect(after.row.canonicalFlightInstanceId)
+   .toBe(original.row.canonicalFlightInstanceId);
+  expect(after.row.analyticIdentityId).toBe(original.row.analyticIdentityId);
+  expect(after.row.depScheduledUtc!.toISOString())
+   .not.toBe(original.row.depScheduledUtc!.toISOString());
+ });
  it("different provider flight ID and destination must never silently merge",async()=>{
   const a=await one(base(),leg("2026-11-05T02:20:00.000Z","P-1"));
   const b=await one(base(),leg("2026-11-05T02:20:00.000Z","P-2"));
