@@ -127,6 +127,37 @@ describe("Phase4 Gate5 bounded real Nov2 closure, NOT science GO",()=>{
    {...base,purposeEndsAtUtc:"2026-11-04T09:00:00.000Z"}
   ])expect(()=>planP4G5ConservativeRetentionDeadlineV39(v)).toThrow();
  });
+ it("machine-readable frozen status cannot turn missing flight-level denominators into zero",()=>{
+  const report=evaluateP4G5FiniteSourceCloseoutV39(input());
+  const status=JSON.parse(readFileSync(
+   "data-collection/phase4/GATE5_20261102_BOUNDED_CLOSEOUT_HOLD_STATUS.json","utf8"));
+  expect(status.sourceOnlyOperationalStatus).toBe("COMPLETE_NINE_OF_NINE");
+  expect(status.scientificGate5Status).toMatch(/^HOLD_/);
+  expect(status.originalCohortFrozenManifestSha256).toBe(report.manifestSha256);
+  expect(status.originalGitHubRuns).toEqual(report.originalGithubRunIds);
+  expect(status.independentAuditRunId).toBe(report.independentAuditGithubRunId);
+  expect(status.successfulPhysicalFidsGets).toBe(report.successfulPhysicalFidsGets);
+  expect(status.measuredRestApiUnits).toBe(report.headerMeasuredApiUnits);
+  expect(status.repeatedSourceObservationRows).toBe(report.byHorizon
+   .reduce((n,r)=>n+r.repeatedSnapshotObservationRows,0));
+  expect(status.sourceTaggedOperatorObservationRows).toBe(report.byHorizon
+   .reduce((n,r)=>n+r.sourceOperatorTaggedRows,0));
+  expect(status.sourceTaggedMarketingObservationRows).toBe(report.byHorizon
+   .reduce((n,r)=>n+r.sourceMarketingTaggedRows,0));
+  expect(status.unknownCodeshareObservationRows).toBe(report.byHorizon
+   .reduce((n,r)=>n+r.unresolvedCodeshareRoleRows,0));
+  for(const k of ["uniquePhysicalOperatingFlightDenominator",
+   "verifiedFirstProviderNativeT","persistedFlightSpecificPRE",
+   "independentlyMatchedInsideWebhooks","independentlyMatchedOutsideWebhooks",
+   "certifiedActualOnlyWheelsOff","lawfulSourceRetention"])
+    expect(status[k]).toBeNull();
+  for(const k of ["scientificGate5Passed","phase5FreezeAuthorized",
+   "phase6Authorized","nextCohortActivationAuthorized",
+   "prospectiveThreeHorizonScientificCohortCompleted",
+   "retainedOriginalSourceBodies"])
+    expect(status[k]).toBe(false);
+  expect(status.noFurtherNovember2PaidRerunRequired).toBe(true);
+ });
  it("all code remains offline and future production gates stay null",()=>{
   const src=readFileSync(
    "server/lib/disruption/phase4Gate5BoundedEvidenceCloseout_v39.ts","utf8");
