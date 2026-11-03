@@ -1,5 +1,7 @@
 import {describe,it,expect} from "vitest";
-import {stageP4G5ScopedPreV39,P4_G5_SCOPED_PRE_SOURCE_SQL}
+import {stageP4G5ScopedPreV39,P4_G5_SCOPED_PRE_SOURCE_SQL,
+ P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39,
+ P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39}
  from "../server/lib/disruption/phase4Gate5ScopedPreStaging_v39";
 
 const scope=()=>({
@@ -53,6 +55,52 @@ describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence"
   expect(r.certifiedSnapshotRowsPersisted).toBe(0);
   expect(r.strictGate5Passed).toBe(false);
   expect(r.databaseWrites).toBe(0);
+ });
+ it("only binds source in the exact manifest/horizon/GitHub run and valid 3-slot V0077 frame",async()=>{
+  const calls:{sql:string;args?:unknown[]}[]=[];
+  const c={query:async(sql:string,args?:unknown[])=>{
+   calls.push({sql,args});
+   return sql===P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39?
+    {rows:[{expected_slots:3,bound_originals:3,valid_originals:3}],rowCount:1}:
+    {rows:rows(),rowCount:3};
+  }};
+  const bound={horizon:"T-6h" as const,
+   expectedOwnerGithubRunId:"123456789012",
+   reviewedRunAuthorizationSha256:"b".repeat(64)};
+  const out=await stageP4G5ScopedPreV39(c,scope(),bound);
+  expect(out.candidateInMemoryRows).toBe(3);
+  expect(calls).toHaveLength(2);
+  expect(calls[0].sql).toBe(P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39);
+  expect(calls[1].sql).toBe(P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39);
+  expect(calls[0].args).toEqual(["WSSS",scope().serviceStartUtc,
+    scope().serviceEndUtc,scope().observedAtUtc,
+    "a".repeat(64),"T-6h","123456789012","b".repeat(64)]);
+  for(const required of ["clean.phase4_g5_fids_original_binding_v39",
+   "clean.phase4_g5_fids_physical_attempt_v39",
+   "ow.horizon=$6","ow.github_run_id=$7",
+   "ow.reviewed_authorization_sha256=$8",
+   "b.source_use_expires_at_utc>clock_timestamp()"])
+   expect(P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39).toContain(required);
+  expect(out.strictGate5Passed).toBe(false);
+ });
+ it("incomplete or expired three-source binding holds rather than zero PRE",async()=>{
+  const calls:string[]=[];
+  const db={query:async(sql:string)=>{
+   calls.push(sql);
+   return {rows:[{expected_slots:3,bound_originals:3,valid_originals:2}],
+    rowCount:1};
+  }};
+  await expect(stageP4G5ScopedPreV39(db,scope(),{
+   horizon:"T-24h",expectedOwnerGithubRunId:"123456789012",
+   reviewedRunAuthorizationSha256:"b".repeat(64)
+  })).rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  expect(calls).toEqual([P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39]);
+  const noDb=db;calls.length=0;
+  await expect(stageP4G5ScopedPreV39(noDb,scope(),{
+   horizon:"T-6h",expectedOwnerGithubRunId:"FAKE",
+   reviewedRunAuthorizationSha256:"b".repeat(64)
+  })).rejects.toThrow("P4_G5_PRE_V0077_SOURCE_OWNER_SCOPE_HOLD");
+  expect(calls).toHaveLength(0);
  });
  it("missing candidate at first horizon remains explicit, not zero-flight denominator",async()=>{
   const vals=rows();
