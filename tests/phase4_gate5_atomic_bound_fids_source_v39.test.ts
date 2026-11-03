@@ -1,9 +1,6 @@
 import {beforeEach,describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
-const mock=vi.hoisted(()=>({persist:vi.fn()}));
-vi.mock("../server/lib/disruption/fidsCensus_v3",()=>({
- persistFidsObservation:mock.persist
-}));
+const mock={persist:vi.fn()};
 import {
  assertP4G5AtomicOriginalBindingScopeV39,
  persistP4G5BoundFidsDbOnlyV39,
@@ -115,7 +112,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
     normalizedInsertedRows:1});
    return 1;
   });
-  const output=await persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding());
+  const output=await persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding(),mock.persist);
   expect(output.status).toBe(
    "ORIGINAL_NORMALIZED_AND_V0077_BOUND_SAME_DB_COMMIT_NOT_LIVE_AUTHORIZED");
   expect(output.originalBound).toBe(true);
@@ -149,7 +146,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
      "2027-01-17T12:00:00.000Z"}]
   ] as const){
    await expect(persistP4G5BoundFidsDbOnlyV39(query as any,
-    [...rows] as any,b as any)).rejects.toThrow();
+    [...rows] as any,b as any,mock.persist)).rejects.toThrow();
    expect(mock.persist).not.toHaveBeenCalled();
   }
  });
@@ -159,7 +156,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
    await callback(c.db,{query:q,durableAvailableAt:new Date(received),
     normalizedInsertedRows:1});return 1;
   });
-  await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
+  await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding(),mock.persist))
    .rejects.toThrow("P4_G5_V0077_ORIGINAL_OWNER_NOT_ACTIVE_OR_COMMITTED_HOLD");
   expect(c.calls).toHaveLength(1);
  });
@@ -173,7 +170,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
     await callback(c.db,{query:q,durableAvailableAt:new Date(received),
      normalizedInsertedRows:1});return 1;
    });
-   await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
+   await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding(),mock.persist))
     .rejects.toThrow("P4_G5_V0077_ORIGINAL_RETENTION_OR_CUTOFF_HOLD");
    expect(c.calls).toHaveLength(1);
   }
@@ -191,7 +188,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
      normalizedInsertedRows:1});return 1;
    });
    await expect(persistP4G5BoundFidsDbOnlyV39(
-    original(),[member()],binding())).rejects.toThrow(needle);
+    original(),[member()],binding(),mock.persist)).rejects.toThrow(needle);
   }
  });
  it("a refusal or incomplete binding readback cannot be reported as a successful source",async()=>{
@@ -203,13 +200,13 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
     await callback(c.db,{query:q,durableAvailableAt:new Date(received),
      normalizedInsertedRows:1});return 1;
    });
-   await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
+   await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding(),mock.persist))
     .rejects.toThrow(/P4_G5_V0077_ORIGINAL_(?:BINDING_NOT_INSERTED|ATOMIC_READBACK)_HOLD/);
   }
  });
  it("cannot claim commit if the existing persistence callback does not complete",async()=>{
   mock.persist.mockResolvedValue(1);
-  await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
+  await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding(),mock.persist))
    .rejects.toThrow("P4_G5_V0077_ORIGINAL_TRANSACTION_NOT_VERIFIED_HOLD");
  });
  it("preflight explicitly verifies body integrity and does not pretend rights authorization",()=>{
