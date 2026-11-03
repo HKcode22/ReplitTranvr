@@ -11,7 +11,7 @@ const base=()=>({
  GITHUB_RUN_ID:"41600000123",GITHUB_JOB:"owner-t24",
  GITHUB_WORKFLOW:"Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner",
  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml@refs/heads/main",
- P4_G5_G5A_HORIZON:"T-24h",P4_G5_G5A_CRON:"40 23 3 11 *",
+ P4_G5_G5A_HORIZON:"T-24h",P4_G5_G5A_CRON:"40 22 3 11 *",
  P4_G5_G5A_PAID_INTENT:"WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX",
  ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
  GITHUB_TOKEN:"fake-action-read-token-only",
@@ -24,11 +24,11 @@ describe("G5A true future GitHub-only physical source owner admission",()=>{
    Date.parse("2026-11-03T23:40:00.000Z"))).not.toThrow();
   expect(()=>assertG5AOwnerRunContextV39({...base(),
    GITHUB_JOB:"owner-t6",P4_G5_G5A_HORIZON:"T-6h",
-   P4_G5_G5A_CRON:"40 17 4 11 *"},GH,"T-6h",
+   P4_G5_G5A_CRON:"40 16 4 11 *"},GH,"T-6h",
    Date.parse("2026-11-04T17:40:00.000Z"))).not.toThrow();
   expect(()=>assertG5AOwnerRunContextV39({...base(),
    GITHUB_JOB:"owner-t90",P4_G5_G5A_HORIZON:"T-90m",
-   P4_G5_G5A_CRON:"10 22 4 11 *"},GH,"T-90m",
+   P4_G5_G5A_CRON:"10 21 4 11 *"},GH,"T-90m",
    Date.parse("2026-11-04T22:10:00.000Z"))).not.toThrow();
  });
  it("refuses all untrusted or misdirected job event/sha/role contexts",()=>{
