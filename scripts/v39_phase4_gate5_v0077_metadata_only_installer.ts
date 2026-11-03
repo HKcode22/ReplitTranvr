@@ -108,6 +108,44 @@ const POST_INSTALL_SQL=[
  "has_function_privilege($1::name,'clean.phase4_g5_check_original_binding_v39()','EXECUTE') AS worker_check_execute,",
  "has_function_privilege($1::name,'clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE') AS worker_update_execute"
 ].join(" ");
+/**
+ * A privileged DB owner may have configured schema-local default privileges
+ * before V0077 existed. New objects inherit those permissions at CREATE,
+ * despite a migration's REVOKE FROM PUBLIC. Only REVOKE the identified
+ * restricted role from these exact newly-created V0077 objects, within
+ * the same uncommitted serializable transaction. Never touch defaults or
+ * grants on existing tables/functions. Re-check effective privileges after.
+ * Inherited privileges via another role still HOLD and roll back.
+ */
+export function quoteP4G5V0077CatalogRoleV39(role:string):string{
+ if(typeof role!=="string"||role.length<1||role.length>63||
+    [...role].some(ch=>ch.charCodeAt(0)===0))
+  throw Error("P4_G5_V0077_BAD_CATALOG_ROLE_HOLD");
+ return '"'+role.replaceAll('"','""')+'"';
+}
+export function v0077ScopedRevokeSqlV39(workerRole:string):readonly string[]{
+ const q=quoteP4G5V0077CatalogRoleV39(workerRole);
+ return [
+  "REVOKE ALL PRIVILEGES ON TABLE clean.phase4_g5_fids_original_binding_v39 FROM "+q,
+  "REVOKE ALL PRIVILEGES ON FUNCTION clean.phase4_g5_check_original_binding_v39() FROM "+q,
+  "REVOKE ALL PRIVILEGES ON FUNCTION clean.phase4_g5_original_binding_immutable_update_v39() FROM "+q
+ ] as const;
+}
+const ACL_FIELDS=[
+ "worker_insert","worker_update","worker_delete","worker_select",
+ "worker_check_execute","worker_update_execute"
+] as const;
+export function verifyP4G5V0077NoRuntimePrivilegesV39(
+ row:Record<string,unknown>
+):void{
+ if(!row||row.row_count!==0)
+  throw Error("P4_G5_V0077_NONEMPTY_METADATA_BINDING_HOLD");
+ for(const key of ACL_FIELDS){
+  if(row[key]!==false)
+   throw Error("P4_G5_V0077_RUNTIME_ACL_"+key.toUpperCase()+"_HOLD");
+ }
+}
+
 export async function installP4G5V0077PrivateMetadataV39(){
  assertP4G5V0077InstallerIntentV39(process.env);
  const blob=execFileSync("git",["rev-parse","HEAD:"+P4_G5_V0077_FILE_V39],
@@ -154,14 +192,16 @@ export async function installP4G5V0077PrivateMetadataV39(){
    throw Error("P4_G5_V0077_CONCURRENT_SCHEMA_CHANGE_HOLD");
   stage="APPLY_EXACT_PINNED_V0077_METADATA_DDL";
   await admin.query(bytes);
+  // The exact staged SQL revokes PUBLIC, but production default ACLs can
+  // assign SELECT/EXECUTE/etc directly to the restricted runtime role.
+  // Narrowly revoke only from this new V0077 table and two new functions.
+  stage="REVOKE_V0077_ONLY_INHERITED_DEFAULT_GRANTS";
+  for(const sql of v0077ScopedRevokeSqlV39(cw.db_role))
+   await admin.query(sql);
   stage="VERIFY_NO_RUNTIME_V0077_GRANTS";
   const after=await admin.query(POST_INSTALL_SQL,[cw.db_role]);
   if(after.rows.length!==1)throw Error("P4_G5_V0077_NEW_SCHEMA_QUERY_SHAPE_HOLD");
-  const r=after.rows[0] as Record<string,unknown>;
-  if(r.row_count!==0||r.worker_insert!==false||r.worker_update!==false||
-     r.worker_delete!==false||r.worker_select!==false||
-     r.worker_check_execute!==false||r.worker_update_execute!==false)
-   throw Error("P4_G5_V0077_RUNTIME_DEFAULT_PRIVILEGE_LEAK_HOLD");
+  verifyP4G5V0077NoRuntimePrivilegesV39(after.rows[0] as Record<string,unknown>);
   stage="COMMIT_PRIVATE_METADATA_DDL";
   await admin.query("COMMIT");tx=false;
   console.log(JSON.stringify({
