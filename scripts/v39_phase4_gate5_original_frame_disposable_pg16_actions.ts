@@ -19,6 +19,10 @@ import {
  P4_G5_BOUND_WEBHOOK_ROWS_SQL_V39
 } from "../server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39";
 import {
+ P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39,
+ P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39
+} from "../server/lib/disruption/phase4Gate5ScopedPreStaging_v39";
+import {
  auditP4G5HorizonPreexpiryV39,
  P4_G5_HORIZON_PREEXPIRY_SOURCE_SQL_V39,
  P4_G5_HORIZON_PREEXPIRY_PRE_SQL_V39
@@ -201,13 +205,32 @@ export async function main(){
     [P4_G5_HORIZON_PREEXPIRY_SOURCE_SQL_V39,
      [manifestSha,"WSSS",time(start),time(end),auditedAt,"T-24h"]],
     [P4_G5_HORIZON_PREEXPIRY_PRE_SQL_V39,
-     [manifestSha,"T-24h",githubRunId,auditedAt]]
+     [manifestSha,"T-24h",githubRunId,auditedAt]],
+    [P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,
+     ["WSSS",time(start),time(end),auditedAt,manifestSha,
+      "T-24h",githubRunId,"c".repeat(64)]],
+    [P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39,
+     ["WSSS",time(start),time(end),auditedAt,manifestSha,
+      "T-24h",githubRunId,"c".repeat(64)]]
    ];
    for(const [sql,args] of sqlCases){
     const plan=await reader.query("EXPLAIN (FORMAT JSON) "+sql,args);
     if(plan.rows.length!==1||!plan.rows[0]?.["QUERY PLAN"])
      throw Error("P4_G5_FRAME_NEW_SOURCE_PRE_CAPTURE_SQL_NOT_REAL");
    }
+   // The real plan resolves against V0076/V0077, and exactly one
+   // fixture query is present. A future actual writer requires 3/3;
+   // one cannot be misrepresented as a complete frozen source frame.
+   const scoped=await reader.query(
+    P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,
+    ["WSSS",time(start),time(end),auditedAt,manifestSha,
+     "T-24h",githubRunId,"c".repeat(64)]);
+   if(scoped.rows.length!==1||
+      Number(scoped.rows[0].expected_slots)!==1||
+      Number(scoped.rows[0].bound_originals)!==1||
+      Number(scoped.rows[0].valid_originals)!==1||
+      Number(scoped.rows[0].valid_slots)!==1)
+    throw Error("P4_G5_FRAME_DISPOSABLE_V0077_PRE_OWNER_SQL_PARITY_HOLD");
    const three=await auditP4G5HorizonPreexpiryV39(reader,{
     airportIcao:"WSSS",serviceStartUtc:time(start),
     serviceEndUtc:time(end),reviewedManifestSha256:manifestSha,
@@ -225,7 +248,8 @@ export async function main(){
    console.log(JSON.stringify({
     event:"P4_G5_FRAME_REAL_DISPOSABLE_PG16_PASS",
     matchedOriginalRequestFrame:true,wrongSourceRejected:true,
-    fiveNewBoundAuditQueriesActuallyExplainedInDisposablePg16:true,
+    sevenBoundSourcePreAndCaptureSqlActuallyExplainedInDisposablePg16:true,
+    v0077ScopedPreWriterQuerySlotSqlActuallyExecuted:true,
     missingTwoOfThreeOriginalsCorrectlyHolds:true,
     transactionReadOnly:true,syntheticOnly:true,providerCalls:0,
     productionDbWrites:0,strictGate5Passed:false,
