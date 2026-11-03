@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**V0077 LIVE PRODUCTION INSTALLED + independent private ACL verified; one-horizon actual PRE DB-clock/nonbackfill guard**](2026-11-03_V0077_PROD_SUCCESS_AND_PER_HORIZON_PRE_TEMPORAL_GUARD.md) — actual owner's Replit output confirms table and triggers installed (0 source GETs/Contents), read-only separate roles verified. The next critical-path code prevents creating T−24h/T−6h/T−90m PRE records retroactively or in one impossible simultaneous run; science Gate5 still needs prospective source and downstream audit.
+
 - [**Actual production V0077 after-DDL ACL refusal and targeted new-object-only runtime revoke**](2026-11-03_V0077_EFFECTIVE_RUNTIME_ACL_ROLLBACK_AND_TARGETED_FIX.md) — user logs confirm V0077 SQL reached precommit ACL verification, then rolled back. Adds scoped new V0077 object privilege removal without changing default ACLs or weakening effective role checks; tests replicate preexisting admin default table/function grants. Gate5 science still requires real prospective PRE/POST.
 
 - [**Actual V0077 two-role Replit catalog READY, original installer refusal needs transaction-stage identification**](2026-11-03_V0077_PRODUCTION_READY_CATALOG_BUT_INSTALL_REFUSAL.md) — November 3 user diagnostic confirmed same PG16+ DB, V0076 present, distinct safe roles, V0077 absent; next change labels only fixed/secret-free installer transaction stages, no more source-only paid experiment.
