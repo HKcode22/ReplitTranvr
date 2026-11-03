@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {assertG5AOwnerRunContextV39}
+import {assertG5AOwnerRunContextV39,p4G5G5AReservationSqlArgsV39}
  from "../scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner";
 
 const GH="a".repeat(40);
@@ -63,6 +63,15 @@ describe("G5A true future GitHub-only physical source owner admission",()=>{
   expect(()=>assertG5AOwnerRunContextV39(base(),GH,"T-24h",
    Date.parse("2027-11-03T23:40:00.000Z")))
    .toThrow("P4_G5_G5A_GITHUB_CONTEXT_OR_SECRET_HOLD");
+ });
+ it("uses exact V0076 SQL SECURITY DEFINER argument order, GH run before query",()=>{
+  const a="a".repeat(64),b="b".repeat(64),c="c".repeat(64),d="d".repeat(64);
+  expect(p4G5G5AReservationSqlArgsV39(a,b,"41600000123",c,1,d))
+   .toEqual([a,b,"41600000123",c,1,d]);
+  expect(()=>p4G5G5AReservationSqlArgsV39(a,b,c,"41600000123",1,d))
+   .toThrow("P4_G5_G5A_RESERVATION_SQL_ARGUMENTS_HOLD");
+  expect(()=>p4G5G5AReservationSqlArgsV39(a,b,"41600000123",c,2,d))
+   .toThrow("P4_G5_G5A_RESERVATION_SQL_ARGUMENTS_HOLD");
  });
  it("source-owner module cannot launch paid collection from an offline unit test",()=>{
   expect(typeof assertG5AOwnerRunContextV39).toBe("function");
