@@ -194,12 +194,15 @@ describe("Phase4 future exact nine source slots and pre-expiry horizon handoff",
  it("incomplete or duplicated discovered ledger cannot look like complete source evidence",async()=>{
   const {full,rows}=fixture();
   const {originalSourceSlots,...withoutIds}=full;
+  expect(originalSourceSlots).toHaveLength(9);
   const scope={...withoutIds,horizon:"T-24h" as const,
    readAsOfUtc:"2026-11-05T19:00:00.000Z"};
   const incomplete=stub(rows,{ledgerMissing:true});
   const missing=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
    incomplete,scope);
   expect(missing.status).toBe("HOLD_INCOMPLETE_V0077_HORIZON_ORIGINAL_LINKS");
+  if(missing.status!=="HOLD_INCOMPLETE_V0077_HORIZON_ORIGINAL_LINKS")
+   throw Error("TEST_EXPECTED_INCOMPLETE_LEDGER");
   expect(missing.discoveredOriginalSourceLinks).toBe(2);
   expect(missing.matchedOriginalSlots).toBeNull();
   expect(incomplete.query).toHaveBeenCalledTimes(1);
@@ -207,7 +210,7 @@ describe("Phase4 future exact nine source slots and pre-expiry horizon handoff",
   await expect(auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
    tooMany,scope)).rejects.toThrow("HOLD");
   expect(tooMany.query).toHaveBeenCalledTimes(1);
-  const digest=rows.values().next().value.query_digest as string;
+  const digest=[...rows.values()][0]!.query_digest as string;
   const absentBody=stub(rows,{missing:digest});
   const r=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
    absentBody,scope);
