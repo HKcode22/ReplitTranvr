@@ -35,3 +35,9 @@ All five yield `exactRunwayDelayMinutes=NULL`, `scientificTargetEligible=false` 
 **Avoid unnecessary repeat:** Do not re-run Nov2 or spend more to reproduce the same 9-of-9 source shape. Continue coding the prospective source/expiry/identity pipeline offline and run a single new *future* cohort only once reviewable contractual, clock and deployment safeguards exist. Absent actual-only runway, independently evaluate another labeled target in a **newly versioned protocol** without calling it exact wheels-off. Keep ADSB.lol historical ODbL source as a separate future retrospective **proxy** validation study, never PRE backfill.
 
 **Owner action currently:** no Replit shell command; no Cloudflare, Replit Agent, new provider API GET/Alert, live migration, credentials, or timetable enabled.
+
+## Engineering improvement to track 3 — outside-population captures are no longer dropped
+
+The existing pure `phase4Gate5LabelObservabilityBiasAudit_v39.ts` previously had an early `continue` for any webhook observed outside FIDS, so those observations correctly did not contaminate the PRE denominator, **but also disappeared from the outside-capture diagnostic**. This is a material gap against Plan f.8 §5 and Gate5's `captured_in_population / captured_outside_population` split.
+
+This patch adds `capturedOutsideFidsPopulation` per airport/tier/horizon, plus `totalCapturedOutsideFidsPopulation` and explicitly `outsideFidsPopulationCaptureRate=NULL`: there is no valid known denominator of all outside-FIDS flights. Regressions cover outside captures across multiple airports, uncaptured outside candidates and separate in-frame PRE/webhook denominators. The logic is pure and does not retroactively estimate Nov2's missing flight-level outside captures from aggregate-only receipts. This closes the software counter-drop defect, not the still-missing real future cohort.
