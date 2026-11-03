@@ -122,6 +122,11 @@ async function grantAndCommit(admin:pg.Client,password:string,dbName:string){
   // source/PRE tables that actually have serial-id defaults.
   for(const g of P4_G5_SOURCE_OWNER_RELATION_GRANTS_V39){
    for(const column of ["id","population_member_id"]){
+    const exists=await admin.query(
+     "SELECT EXISTS(SELECT 1 FROM information_schema.columns "+
+     "WHERE table_schema='clean' AND table_name=$1 AND column_name=$2) ok",
+     [g.relation.slice(6),column]);
+    if(exists.rows[0]?.ok!==true)continue;
     const r=await admin.query("SELECT pg_get_serial_sequence($1,$2) seq",[g.relation,column]);
     const sequence=r.rows[0]?.seq;
     if(typeof sequence==="string"&&/^clean\.[a-z0-9_]+$/.test(sequence))
