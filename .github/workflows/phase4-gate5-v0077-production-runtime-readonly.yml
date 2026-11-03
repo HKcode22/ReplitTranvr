@@ -1,0 +1,52 @@
+name: Phase4 Gate5 V0077 Production Runtime Catalog READ ONLY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0077-production-runtime-readonly.yml"
+      - "scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-gate5-v0077-production-runtime-only-schema-audit
+  cancel-in-progress: false
+
+jobs:
+  runtime-catalog-only:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Read production runtime V0076 and V0077 catalogs, never mutate
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          P4_G5_V0077_RUNTIME_PROBE_ONLY: "1"
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${DATABASE_URL:-}${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts
+      - name: No installation, provider request, privilege change, or science PASS
+        if: always()
+        run: |
+          echo "READ ONLY runtime DB catalog inspection, no privileged DB URL, provider keys, writes, or migrations." >> "$GITHUB_STEP_SUMMARY"
+          echo "This does not prove the privileged DB role or independent source-use rights." >> "$GITHUB_STEP_SUMMARY"
+          echo "Nov2 T-24h/T-6h/T-90m source acquisition complete; scientific Gate5 and Phase5/6 still require full real cohort evidence." >> "$GITHUB_STEP_SUMMARY"
