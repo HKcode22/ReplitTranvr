@@ -20,8 +20,12 @@ function context(){
     e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     !["pull_request","push"].includes(e.GITHUB_EVENT_NAME??"")||
     e.GITHUB_RUN_ATTEMPT!=="1"||
-    e.GITHUB_JOB!=="v0078-installer-disposable-pg16"||
-    e.GITHUB_WORKFLOW!=="Phase4 Gate5 V0078 One-Time Installer Disposable PG16"||
+    !(
+      (e.GITHUB_JOB==="v0078-installer-disposable-pg16"&&
+       e.GITHUB_WORKFLOW==="Phase4 Gate5 V0078 One-Time Installer Disposable PG16")||
+      (e.GITHUB_JOB==="readonly-v0078-preflight-disposable-pg16"&&
+       e.GITHUB_WORKFLOW==="Phase4 Gate5 V0078 Production Readonly Preflight Disposable PG16")
+    )||
     e.DATABASE_URL!==OWNER||e.V39_DATABASE_RUNTIME_URL!==RUNTIME||
     !!e.AERODATABOX_API_KEY||!!e.RAPIDAPI_KEY||
     !!e.GATE05_AUTOMATION_DATABASE_URL)
