@@ -28,7 +28,9 @@ const H=["T-24h","T-6h","T-90m"] as const;
 const MS:Record<P4G5CaptureHorizonV39,number>={
  "T-24h":86400000,"T-6h":21600000,"T-90m":5400000
 };
-const STR=/^[^\x00-\x1f]{1,200}$/;
+const safeText=(x:unknown):x is string=>
+ typeof x==="string"&&x.length>0&&x.length<=200&&
+ ![...x].some(c=>c.charCodeAt(0)<32);
 export interface P4G5BoundReadScopeV39 {
  airportIcao:string;
  reviewedManifestSha256:string;
@@ -62,7 +64,7 @@ function record(x:unknown,label:string):Record<string,unknown>{
  return x as Record<string,unknown>;
 }
 function str(x:unknown,label:string):string{
- if(typeof x!=="string"||!STR.test(x))reject("FIELD_"+label);
+ if(!safeText(x))reject("FIELD_"+label);
  return x;
 }
 function hash(x:string):string{
@@ -77,7 +79,7 @@ function validate(s:P4G5BoundReadScopeV39){
     !Array.isArray(s.reviewedCandidateSubscriptionIds)||
     s.reviewedCandidateSubscriptionIds.length>8||
     new Set(s.reviewedCandidateSubscriptionIds).size!==s.reviewedCandidateSubscriptionIds.length||
-    s.reviewedCandidateSubscriptionIds.some(x=>typeof x!=="string"||!STR.test(x)))
+    s.reviewedCandidateSubscriptionIds.some(x=>!safeText(x)))
   reject("REVIEW_SCOPE");
  const a=stamp(s.serviceStartUtc,"SERVICE_START");
  const b=stamp(s.serviceEndUtc,"SERVICE_END");
@@ -395,7 +397,7 @@ export async function auditP4G5BoundSourceCaptureReadOnlyV39(
   if(received<stamp(scope.captureStartUtc,"CAPTURE_START")||
      received>=stamp(scope.captureEndUtc,"CAPTURE_END"))
    reject("CALLBACK_TIME_SCOPE");
-  const stable=typeof r.notification_id==="string"&&STR.test(r.notification_id)?
+  const stable=safeText(r.notification_id)?
      r.notification_id:null;
   if(stable===null)missingStableNotificationId++;
   const itemIndex=r.item_index;
