@@ -24,7 +24,10 @@ export interface P4G5ActiveTransitionInputV39{
  // References for independent external verification in a FUTURE live
  // entrypoint. Their presence here does not authenticate their meaning.
  providerNativeSelectedTEvidenceSha256:string;
- perRecordActualOnlyRunwayEvidenceSha256:string;
+ perRecordActualOnlyRunwayEvidenceSha256:string|null;
+ /** Honest G5A source outcome is a schedule revision, NOT actual wheels-off. */
+ scientificMode?:"ORIGINAL_WHEELS_OFF"|"G5A_REPORTED_SCHEDULE_REVISION";
+ g5aProtocolEvidenceSha256?:string|null;
  operatingPhysicalLegEvidenceSha256:string;
  lawfulContentRetentionEvidenceSha256:string;
  independentlyAuthenticatedGitHubRunnerEvidenceSha256:string;
@@ -44,7 +47,16 @@ export function assertP4G5ActiveTransitionInputV39(x:P4G5ActiveTransitionInputV3
     o.entries.length===0||o.entries.length!==o.expectedQueries||
     !SHA.test(x.reviewedRunAuthorizationSha256)||
     !SHA.test(x.providerNativeSelectedTEvidenceSha256)||
-    !SHA.test(x.perRecordActualOnlyRunwayEvidenceSha256)||
+    !(
+      (x.scientificMode===undefined||
+       x.scientificMode==="ORIGINAL_WHEELS_OFF")&&
+       SHA.test(x.perRecordActualOnlyRunwayEvidenceSha256??"")&&
+       (x.g5aProtocolEvidenceSha256===undefined||
+        x.g5aProtocolEvidenceSha256===null) ||
+      x.scientificMode==="G5A_REPORTED_SCHEDULE_REVISION"&&
+       x.perRecordActualOnlyRunwayEvidenceSha256===null&&
+       SHA.test(x.g5aProtocolEvidenceSha256??"")
+    )||
     !SHA.test(x.operatingPhysicalLegEvidenceSha256)||
     !SHA.test(x.lawfulContentRetentionEvidenceSha256)||
     !SHA.test(x.independentlyAuthenticatedGitHubRunnerEvidenceSha256))
@@ -171,6 +183,8 @@ export async function activateP4G5PreparedOwnerDbOnlyV39(
    ownerDigest:x.owner.ownerDigest,
    ownerHorizon:x.owner.horizon,
    ownerRowActivated:1 as const,
+   scientificMode:x.scientificMode??"ORIGINAL_WHEELS_OFF",
+   actualOnlyWheelsOffProvenByThisMethod:false as const,
    providerCalls:0 as const,physicalAttemptReservations:0 as const,
    certifiedSourceRightsByThisMethod:false as const,
    independentGitHubRunnerProofByThisMethod:false as const,
