@@ -106,8 +106,7 @@ const POST_INSTALL_SQL=[
  "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','DELETE') AS worker_delete,",
  "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','SELECT') AS worker_select,",
  "has_function_privilege($1::text,'clean.phase4_g5_check_original_binding_v39()','EXECUTE') AS worker_check_execute,",
- "has_function_privilege($1::text,'clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE') AS worker_update_execute,",
- "has_table_privilege('public','clean.phase4_g5_fids_original_binding_v39','INSERT') AS public_insert"
+ "has_function_privilege($1::text,'clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE') AS worker_update_execute"
 ].join(" ");
 export async function installP4G5V0077PrivateMetadataV39(){
  assertP4G5V0077InstallerIntentV39(process.env);
