@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**V0077 exactly pinned private metadata-only production installer / real disposable PG16 ACL test**](2026-11-03_GATE5_V0077_EMPTY_PRIVATE_PRODUCTION_INSTALLER_CHECKPOINT.md) — prepares the necessary source→V0076 original binding schema with one-time safe review, no grants, Content storage, paid provider requests, PRE writes, or live activation. Full Gate5 science requirements unchanged; schema installation alone does not PASS anything.
+
 - [**Future V0077 provider-bound source→PRE pre-expiry three-slot readback + independent source/PRE/callback candidate adapter (NO LIVE PERMIT)**](2026-11-02_GATE5_V0077_REAL_PREEXPIRY_SOURCE_TO_PRE_AND_CAPTURE_ADAPTER.md) — adds separate per-horizon as-of receipt/PRE readback so 24-hour FIDS original expiration does not force a scientifically invalid all-nine POST original requirement. Optional all-nine retained source/read-only capture audit when rights and source TTL permit. Original f.8 and Log §1.9 population/target/AIRBORNE/stratification requirements are unchanged. **No V0077 production install, paid source, rights grant, true native T or full scientific PASS.**
 
 - [**Independent inside/outside/unresolved webhook vs as-of operating-flight capture partition (OFFLINE only)**](2026-11-03_GATE5_INDEPENDENT_CAPTURE_PARTITION_PURE_OWNER.md) — new core f.8 Gate5 module/test counts one physical leg per horizon, cutoff-specific PRE, separate captured inside / known too late / outside observed frame / unresolved / conflicting, duplicate delivery attempts versus distinct flights, NULL denominator and no fake negative label. **Needs actual lawfully retained source→PRE→receiver adapter before science PASS**, no paid or database changes.
