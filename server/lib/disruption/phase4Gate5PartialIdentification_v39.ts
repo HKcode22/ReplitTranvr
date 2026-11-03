@@ -126,6 +126,9 @@ function checkCell(c:P4G5BoundedCellV39){
  if(label.every(x=>x!==null)&&c.targetKnownApplicable!==null&&
     label.reduce<number>((a,b)=>a+(b??0),0)!==c.targetKnownApplicable)
   reject("LABEL_CLASS_NOT_PARTITION");
+ if(c.reportedVerifiedObserved!==null&&c.targetKnownApplicable!==null&&
+    c.reportedVerifiedObserved>c.targetKnownApplicable)
+  reject("VERIFIED_EXCEEDS_KNOWN_APPLICABLE");
  if(c.reportedVerifiedObserved!==null&&c.reportedVerifiedPositive!==null&&
     c.reportedVerifiedPositive>c.reportedVerifiedObserved)
   reject("POSITIVE_EXCEEDS_VERIFIED");
