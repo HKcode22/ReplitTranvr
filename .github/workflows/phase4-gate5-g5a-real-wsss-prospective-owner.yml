@@ -1,0 +1,154 @@
+name: Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
+      - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
+      - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURCE_GRID.json"
+      - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
+      - "tests/phase4_gate5_g5a_active_science_mode_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
+      - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
+      - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURCE_GRID.json"
+      - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
+      - "tests/phase4_gate5_g5a_active_science_mode_v39.test.ts"
+  schedule:
+    # GitHub-only real prearm. All 3 dates are 2026, UTC, with in-code absolute
+    # date/provenance checks. No manual Replit clock/Cloudflare timer.
+    - cron: "40 23 3 11 *"  # Nov 3 23:40Z => T−24h prearm
+    - cron: "40 17 4 11 *"  # Nov 4 17:40Z => T−6h prearm
+    - cron: "10 22 4 11 *"  # Nov 4 22:10Z => T−90m prearm
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-g5-g5a-wsss-20261105-prospective-real-owner
+  cancel-in-progress: false
+jobs:
+  offline-integrity:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      AERODATABOX_API_KEY: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove GH source owner job admission is impossible offline
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts tests/phase4_gate5_g5a_active_science_mode_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
+  owner-t24:
+    name: owner-t24
+    if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 23 3 11 *' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    environment: phase2g-paid
+    env:
+      P4_G5_G5A_HORIZON: T-24h
+      P4_G5_G5A_CRON: "40 23 3 11 *"
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prospective WSSS T−24h 3× unique source + bound operating PRE
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
+  owner-t6:
+    name: owner-t6
+    if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 17 4 11 *' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    environment: phase2g-paid
+    env:
+      P4_G5_G5A_HORIZON: T-6h
+      P4_G5_G5A_CRON: "40 17 4 11 *"
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prospective WSSS T−6h 3× unique source + bound operating PRE
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
+  owner-t90:
+    name: owner-t90
+    if: ${{ github.event_name == 'schedule' && github.event.schedule == '10 22 4 11 *' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    environment: phase2g-paid
+    env:
+      P4_G5_G5A_HORIZON: T-90m
+      P4_G5_G5A_CRON: "10 22 4 11 *"
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prospective WSSS T−90m 3× unique source + bound operating PRE
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
