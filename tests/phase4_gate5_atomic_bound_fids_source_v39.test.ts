@@ -10,6 +10,7 @@ import {
  requireP4G5AtomicFidsLiveReleaseV39,
  P4_G5_ATOMIC_FIDS_PRODUCER_RELEASE_SHA_V39,
  P4_G5_V0077_COMMITTED_ATTEMPT_READ_SQL_V39,
+ P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39,
  P4_G5_V0077_INSERT_ORIGINAL_BINDING_SQL_V39,
  P4_G5_V0077_VERIFY_ATOMIC_SOURCE_SQL_V39
 } from "../server/lib/disruption/phase4Gate5AtomicBoundSourceV39";
@@ -70,10 +71,11 @@ function member(){
 }
 function fakeDb(overrides:{
  status?:string;retrievalCommitted?:string;cutoff?:string;
+ clockSequence?:string[];
  insertCount?:number;boundHash?:string;readbackCount?:number;
 }={}){
- const calls:Array<{sql:string;args:unknown[]}>=[],
- db={query:async(sql:string,args:unknown[]=[])=>{
+ const calls:Array<{sql:string;args:unknown[]}>=[];let clockCalls=0;
+ const db={query:async(sql:string,args:unknown[]=[])=>{
   calls.push({sql,args});
   if(sql===P4_G5_V0077_COMMITTED_ATTEMPT_READ_SQL_V39)return {
    rows:[{state:overrides.status??"ACTIVE",
@@ -81,6 +83,10 @@ function fakeDb(overrides:{
     committed_at_utc:overrides.retrievalCommitted??"2027-01-15T09:59:30.000Z",
     prediction_cutoff_utc:overrides.cutoff??cutoff}],rowCount:1
   };
+  if(sql===P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39){
+   const observed=overrides.clockSequence?.[clockCalls++]??received;
+   return {rows:[{db_now_utc:observed}],rowCount:1};
+  }
   if(sql===P4_G5_V0077_INSERT_ORIGINAL_BINDING_SQL_V39)return {
    rows:overrides.insertCount===0?[]:[{population_query_id:qid}],
    rowCount:overrides.insertCount??1
@@ -118,10 +124,12 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
   expect(output.scientificGate5Passed).toBe(false);
   expect(c.calls.map(x=>x.sql)).toEqual([
    P4_G5_V0077_COMMITTED_ATTEMPT_READ_SQL_V39,
+   P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39,
    P4_G5_V0077_INSERT_ORIGINAL_BINDING_SQL_V39,
-   P4_G5_V0077_VERIFY_ATOMIC_SOURCE_SQL_V39
+   P4_G5_V0077_VERIFY_ATOMIC_SOURCE_SQL_V39,
+   P4_G5_V0077_SOURCE_DB_CLOCK_SQL_V39
   ]);
-  expect(c.calls[1].args).toEqual([
+  expect(c.calls[2].args).toEqual([
    qid,sha("e"),sha("d"),sha("b"),sha("a"),sha("1"),expiry
   ]);
  });
@@ -168,6 +176,22 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
    await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
     .rejects.toThrow("P4_G5_V0077_ORIGINAL_RETENTION_OR_CUTOFF_HOLD");
    expect(c.calls).toHaveLength(1);
+  }
+ });
+ it("DB clock forbids after-cutoff original binding and late commit",async()=>{
+  for(const [overrides,needle] of [
+   [{clockSequence:["2027-01-15T11:00:00.000Z"]},
+    "P4_G5_V0077_ORIGINAL_DB_CLOCK_CUTOFF_HOLD"],
+   [{clockSequence:[received,"2027-01-15T11:00:00.000Z"]},
+    "P4_G5_V0077_ORIGINAL_COMMIT_TOO_LATE_ROLLBACK"]
+  ] as const){
+   const c=fakeDb(overrides);
+   mock.persist.mockImplementation(async(q,r,callback)=>{
+    await callback(c.db,{query:q,durableAvailableAt:new Date(received),
+     normalizedInsertedRows:r.length});return r.length;
+   });
+   await expect(persistP4G5BoundFidsDbOnlyV39(
+    original(),[member()],binding())).rejects.toThrow(needle);
   }
  });
  it("a refusal or incomplete binding readback cannot be reported as a successful source",async()=>{
