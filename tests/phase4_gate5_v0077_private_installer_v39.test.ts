@@ -7,7 +7,8 @@ import {
  P4_G5_V0077_OPERATOR_INTENT_V39,
  assertP4G5V0077ReviewedSqlV39,
  assertP4G5V0077InstallerIntentV39,
- assessP4G5V0077CatalogV39
+ assessP4G5V0077CatalogV39,
+ safeP4G5V0077InstallFailureReasonV39
 } from "../scripts/v39_phase4_gate5_v0077_metadata_only_installer";
 
 const parent={
@@ -75,4 +76,16 @@ describe("Gate5 V0077 empty metadata production installation, no provider",()=>{
   expect(s).toContain("worker_insert!==false");
   expect(s).toContain("worker_select!==false");
  });
+ it("exposes only fixed internal refusal category, no connection strings or raw messages",()=>{
+  expect(safeP4G5V0077InstallFailureReasonV39(
+   Error("P4_G5_V0077_PG16_PARENT_V0076_SCHEMA_HOLD")))
+   .toBe("P4_G5_V0077_PG16_PARENT_V0076_SCHEMA_HOLD");
+  expect(safeP4G5V0077InstallFailureReasonV39(
+   Object.assign(Error("secret password exposed"),{code:"42501"})))
+   .toBe("P4_G5_V0077_INSTALL_HOLD_SQLSTATE_42501");
+  expect(safeP4G5V0077InstallFailureReasonV39(
+   Error("postgresql://user:password@hostname")))
+   .toBe("P4_G5_V0077_INSTALL_UNCLASSIFIED_HOLD");
+ });
+
 });

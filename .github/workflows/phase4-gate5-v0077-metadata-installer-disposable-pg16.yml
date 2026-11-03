@@ -7,6 +7,8 @@ on:
       - ".github/workflows/phase4-gate5-v0077-metadata-installer-disposable-pg16.yml"
       - "scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts"
       - "tests/phase4_gate5_v0077_private_installer_v39.test.ts"
+      - "scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts"
+      - "tests/phase4_gate5_v0077_readonly_failure_diagnosis_v39.test.ts"
       - "migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql"
   push:
     branches: [main]
@@ -14,6 +16,8 @@ on:
       - ".github/workflows/phase4-gate5-v0077-metadata-installer-disposable-pg16.yml"
       - "scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts"
       - "tests/phase4_gate5_v0077_private_installer_v39.test.ts"
+      - "scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts"
+      - "tests/phase4_gate5_v0077_readonly_failure_diagnosis_v39.test.ts"
 
 permissions:
   contents: read
@@ -58,7 +62,7 @@ jobs:
       - name: Locked dependencies
         run: npm ci --include=dev --no-audit --no-fund
       - name: Offline exact-binary and role controls
-        run: npx vitest run tests/phase4_gate5_v0077_private_installer_v39.test.ts
+        run: npx vitest run tests/phase4_gate5_v0077_private_installer_v39.test.ts tests/phase4_gate5_v0077_readonly_failure_diagnosis_v39.test.ts
       - name: Build disposable original B0062 and staged physical V0076, no production
         run: |
           set -Eeuo pipefail
@@ -71,6 +75,13 @@ jobs:
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE gate5_reader LOGIN PASSWORD 'local_test_only'"
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA clean TO gate5_reader"
+      - name: Read-only production-like diagnostic BEFORE V0077 installation
+        run: |
+          set -Eeuo pipefail
+          set +x
+          OUTPUT="$(node --import tsx scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts)"
+          echo "$OUTPUT" | grep -q '"status":"READY_FOR_ONE_TIME_V0077_PRIVATE_SCHEMA_INSTALL"'
+          echo "V0077_DISPOSABLE_BEFORE_DIAGNOSTIC_PASS"
       - name: Actual transactional V0077 private metadata installer against separate restricted role
         run: |
           set -Eeuo pipefail
@@ -80,6 +91,15 @@ jobs:
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','INSERT')" | grep -qx 'f'
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','SELECT')" | grep -qx 'f'
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM clean.phase4_g5_fids_physical_attempt_v39" | grep -qx '0'
+      - name: Read-only diagnostic AFTER V0077 install verifies private ACL
+        run: |
+          set -Eeuo pipefail
+          set +x
+          OUTPUT="$(node --import tsx scripts/v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts)"
+          echo "$OUTPUT" | grep -q '"status":"ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED"'
+          echo "$OUTPUT" | grep -q '"runtimeCanInsertV0077":false'
+          echo "$OUTPUT" | grep -q '"runtimeCanSelectV0077":false'
+          echo "V0077_DISPOSABLE_PRIVATE_READONLY_DIAGNOSTIC_PASS"
       - name: Attempted second/duplicate V0077 installation MUST reject
         run: |
           set -Eeuo pipefail
