@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**V0078 actually INSTALLED production; GitHub future owner/DB credentials readiness (no provider)**](2026-11-03_GATE5_V0078_LIVE_INSTALL_SUCCESS_GITHUB_SOURCE_OWNER_READINESS.md) — real owner postcommit success and reviewed source owner/auditor secret + least-privilege READ ONLY capability checks; provider/native T/rights/three-horizon scientific Gate5 still HOLD.
+
 - [**V0078 actual production catalog READY → reviewed one-time transactional installer (no paid/provider yet)**](2026-11-03_GATE5_V0078_PRODUCTION_READONLY_READY_ONE_TIME_INSTALLER_CHECKPOINT.md) — owner read-only flags all green; guarded production DDL path requires independent CI/owner run; scientific Gate5 remains HOLD.
 
 - [**V0078 pre-install two-role production catalog probe (read-only only)**](2026-11-03_GATE5_V0078_PREINSTALL_TWO_ROLE_READONLY_CATALOG_GUARD.md) — diagnostic of owner/runtime separation, legacy uniqueness dependencies, V0077 privacy and active FIDS integrity; no production DDL or science release.
