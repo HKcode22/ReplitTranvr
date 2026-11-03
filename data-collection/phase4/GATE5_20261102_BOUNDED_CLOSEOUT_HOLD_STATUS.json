@@ -1,0 +1,40 @@
+{
+  "schema": "v39.phase4.gate5-20261102-bounded-evidence-closeout.v1",
+  "evidenceClassification": "REVIEWED_GITHUB_LOG_SUMMARY_NOT_RAW_PROVIDER_CERTIFICATION",
+  "sourceOnlyOperationalStatus": "COMPLETE_NINE_OF_NINE",
+  "scientificGate5Status": "HOLD_UNMEASURABLE_PHYSICAL_T_PRE_POST_AND_RIGHTS",
+  "originalCohortFrozenManifestSha256": "aa9a9be29cf9778d3fcaef7b7f08a482d6a5307623453515d7022c62da723136",
+  "originalGitHubRuns": {
+    "T-24h": 41309044744,
+    "T-6h": 41402736335,
+    "T-90m": 41437078179
+  },
+  "independentAuditRunId": 41477141869,
+  "successfulPhysicalFidsGets": 9,
+  "measuredRestApiUnits": 18,
+  "repeatedSourceObservationRows": 542,
+  "sourceTaggedOperatorObservationRows": 158,
+  "sourceTaggedMarketingObservationRows": 336,
+  "unknownCodeshareObservationRows": 48,
+  "uniquePhysicalOperatingFlightDenominator": null,
+  "verifiedFirstProviderNativeT": null,
+  "persistedFlightSpecificPRE": null,
+  "independentlyMatchedInsideWebhooks": null,
+  "independentlyMatchedOutsideWebhooks": null,
+  "certifiedActualOnlyWheelsOff": null,
+  "lawfulSourceRetention": null,
+  "retainedOriginalSourceBodies": false,
+  "prospectiveThreeHorizonScientificCohortCompleted": false,
+  "noFurtherNovember2PaidRerunRequired": true,
+  "scientificGate5Passed": false,
+  "phase5FreezeAuthorized": false,
+  "phase6Authorized": false,
+  "nextCohortActivationAuthorized": false,
+  "onHoldReasons": [
+    "NATIVE_SELECTED_T_UNVERIFIED",
+    "PER_RECORD_ACTUAL_ONLY_WHEELS_OFF_UNVERIFIED",
+    "ACCOUNT_AND_SOURCE_SPECIFIC_RETENTION_UNVERIFIED",
+    "NO_LAWFULLY_RETAINED_PROSPECTIVE_FLIGHT_LEVEL_COHORT",
+    "NO_INDEPENDENT_FUTURE_FLIGHT_PRE_WEBHOOK_POST_RECONCILIATION"
+  ]
+}
