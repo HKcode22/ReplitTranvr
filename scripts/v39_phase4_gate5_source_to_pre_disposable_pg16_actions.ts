@@ -36,6 +36,7 @@ function context(){
    !!e.GATE05_AUTOMATION_DATABASE_URL)
   throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_CONTEXT_HOLD");
 }
+let lastSyntheticStage="START";
 export async function main(){
  context();
  const base=Math.floor(Date.now()/60000)*60000;
@@ -55,6 +56,7 @@ export async function main(){
   connectionTimeoutMillis:8000,query_timeout:15000});
  await sql.connect();
  try{
+  lastSyntheticStage="SEED_V0076_OWNER";
   await sql.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   await sql.query(
    "INSERT INTO clean.phase4_g5_fids_cohort_budget_v39("+
@@ -117,6 +119,7 @@ export async function main(){
   };
   const sourceUseExpiresAtUtc=iso(base+20*3600000);
   for(let i=0;i<3;i++){
+   lastSyntheticStage="ORIGINAL_FIDS_SLOT_"+i;
    const record={
     departures:[{...fids.departures[0],
      id:"synthetic-distinct-physical-leg-"+String(i),
@@ -177,12 +180,14 @@ export async function main(){
     verifiedProviderNativeSchedule:true as const
    }
   };
+  lastSyntheticStage="PRE_WRITER";
   const wrote=await persistP4G5ReviewedPreForCohortV39(sql,scope,permit);
   if(wrote.horizon!=="T-24h"||
      wrote.newlyPersistedRows!==3||wrote.expectedSourceQualifiedRows!==3||
      wrote.otherHorizonsUntouched!==true||
      wrote.strictGate5Passed!==false)
    throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_WRITER_DID_NOT_INSERT_ON_TIME");
+  lastSyntheticStage="READONLY_AUDIT";
   const review=new pg.Client({connectionString:URL,
    application_name:"p4_gate5_source_pre_independent_readonly",
    connectionTimeoutMillis:8000,query_timeout:15000,
@@ -224,7 +229,17 @@ export async function main(){
  }
 }
 if(process.argv[1]?.endsWith("v39_phase4_gate5_source_to_pre_disposable_pg16_actions.ts"))
- void main().catch(()=>{
-  console.error("P4_G5_THREE_SOURCE_TO_PRE_REAL_DISPOSABLE_PG16_HOLD");
+ void main().catch((error:unknown)=>{
+  const e=error as {message?:unknown;code?:unknown;constraint?:unknown};
+  const reason=typeof e?.message==="string"?e.message:"UNCLASSIFIED_ERROR";
+  const safe=/^(?:P4_G5_|FIDS_|PRE_|invalid FIDS|duplicate key|Cannot |relation |column |operator )/.test(reason)?
+   reason.slice(0,180):"UNCLASSIFIED_REFUSAL";
+  console.error(JSON.stringify({
+   status:"P4_G5_THREE_SOURCE_TO_PRE_REAL_DISPOSABLE_PG16_HOLD",
+   stage:lastSyntheticStage,reason:safe,
+   pgCode:typeof e?.code==="string"?e.code:null,
+   constraint:typeof e?.constraint==="string"?e.constraint:null,
+   realProviderCalls:0
+  }));
   process.exitCode=2;
  });
