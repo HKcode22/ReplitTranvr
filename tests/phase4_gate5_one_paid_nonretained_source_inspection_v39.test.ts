@@ -59,7 +59,10 @@ describe("One actual paid FIDS probe, zero retention, no false science",()=>{
     departure:{quality:["Basic"],scheduledTime:{utc:"2026-11-03T01:00:00Z"}},
     arrival:{airport:{icao:"YSSY"},quality:["Basic"]}},
    {codeshareStatus:"IsCodeshared",
-    movement:{airport:{icao:"YSSY"},quality:["Basic"]}},
+    movement:{airport:{icao:"YSSY"},quality:["Basic"],
+      scheduledTime:{utc:"2026-11-03T01:10:00Z"},
+      revisedTime:{utc:"2026-11-03T01:12:00Z"},
+      runwayTime:{utc:"2026-11-03T01:18:00Z"}}},
    {codeshareStatus:"IsOperator",
     departure:{airport:{icao:"WSSS"},quality:["Live"]}}
   ]});
@@ -69,6 +72,10 @@ describe("One actual paid FIDS probe, zero retention, no false science",()=>{
   expect(report.withLegExpandedMovementPairPresent).toBe(1);
   expect(report.movementOnlyFidsShapePresent).toBe(1);
   expect(report.oppositeArrivalAirportIcaoFieldPresent).toBe(1);
+  expect(report.scheduledTimeFieldPresent).toBe(2);
+  expect(report.revisedTimeFieldPresent).toBe(1);
+  expect(report.runwayTimeFieldPresent).toBe(1);
+  expect(report.runwayActualOnlyPerRecordCertified).toBe(false);
   expect(report.requestedAirportDepartureObjectWithAirportOmitted).toBe(1);
   expect(report.departureAirportIcaoFieldPresent).toBe(1);
   // An omitted departure.airport is valid when it equals the requested
