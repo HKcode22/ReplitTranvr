@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Real V0077 Replit installation refusal, safe read-only root-cause diagnostic, and three-day science checklist**](2026-11-03_V0077_ACTUAL_REPLIT_INSTALL_REFUSAL_AND_THREE_DAY_CRITICAL_PATH.md) — the owner's actual command returned a generic HOLD, NOT a successful V0077 production install; the Nov2 3×3 provider source requests remain complete. Read-only diagnosis must precede any new migration attempt; science Gate5 still needs real prospective PRE→callback→POST evidence.
+
 - [**V0077 exactly pinned private metadata-only production installer / real disposable PG16 ACL test**](2026-11-03_GATE5_V0077_EMPTY_PRIVATE_PRODUCTION_INSTALLER_CHECKPOINT.md) — enables a future separately approved original↔paid-attempt binding schema, with zero new grants, provider calls, Contents storage or automatic Phase5/6 authority. Original Plan f.8 and Log §1.9 scientific checks retained.
 
 - [**Owner's three-day Gate5 critical science closure checklist and future GitHub source→PRE same-transaction wiring**](2026-11-03_GATE5_72_HOUR_ORIGINAL_SCIENTIFIC_CLOSURE_CRITICAL_PATH.md) — keeps full f.8/log acceptance, deadlines, source/native-T and rights limits explicit. Inert GH pre-expiry reader now joins exact authenticated source horizon with candidate persisted PRE in the SAME read-only transaction, without source/data-rights activation or Phase5/6 approval.
