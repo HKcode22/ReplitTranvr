@@ -36,7 +36,6 @@ const END="2026-11-05T06:00:00.000Z";
 const SHA=/^[a-f0-9]{64}$/;
 const GH=/^[a-f0-9]{40}$/;
 const ms=(s:string)=>Date.parse(s);
-const now=()=>new Date().toISOString();
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const sleep=(m:number)=>new Promise<void>(r=>setTimeout(r,m));
 function hold(code:string):never{throw Error("P4_G5_G5A_POST_"+code+"_HOLD")}
@@ -292,10 +291,12 @@ export async function main(){
     serviceWindowEndUtc:new Date(TO),cutoffUtc:new Date(planned),
     withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,
     direction:"Departure",restCategory:"outcome",
-    providerApiVersion:"RapidAPI-v1.15.4",
+    // The Plan f.8 §5.1 verified OpenAPI DOC BYTES pin is v1.15.3.0.
+    // A G5A protocol text SHA is NOT an AeroDataBox OpenAPI document SHA.
+    // Do not conflate frozen docs or live server schema version.
+    providerApiVersion:"RapidAPI-doc-pin-1.15.3.0-not-live-schema-certified",
     fidsProtocolVersion:"G5A-POST-20261103-v1",
-    openapiSha256:hash(readFileSync(
-     "data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md","utf8")),
+    openapiSha256:"735620f2d2132c5bf51768f50caa767b7f0b25be8b128679641402666696890a",
     g5aObservedScheduleProtocol:true,g5aPostReservationId:id,batchId:id
    };
    try{
