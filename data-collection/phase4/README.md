@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Atomic raw-first source + population + V0077 physical original binding (synthetic PG16; NOT live)**](2026-11-03_GATE5_ATOMIC_RAWFIRST_V0077_SOURCE_PRODUCER_OFFLINE.md) — adds a one-transaction precommit binding hook and strict V0077 owner/original readback for a future lawful GitHub source producer; no paid GET, role GRANT, verified selected T or science release. 
+
 - [**Next PRE source integrity — V0077 original GitHub owner-bound guard (offline PR)**](2026-11-03_GATE5_PRE_WRITER_V0077_EXACT_SOURCE_OWNER_GUARD.md) — ensures no same-window foreign FIDS can be passed to the actual PRE writer; requires one frozen owner/horizon and three eligible retained originals, refuses incomplete/expired source without backfill. Does **not** wire a live provider owner, certify native selected T or rights, or pass Gate5.
 
 - [**V0077 LIVE PRODUCTION INSTALLED + independent private ACL verified; one-horizon actual PRE DB-clock/nonbackfill guard**](2026-11-03_V0077_PROD_SUCCESS_AND_PER_HORIZON_PRE_TEMPORAL_GUARD.md) — actual owner's Replit output confirms table and triggers installed (0 source GETs/Contents), read-only separate roles verified. The next critical-path code prevents creating T−24h/T−6h/T−90m PRE records retroactively or in one impossible simultaneous run; science Gate5 still needs prospective source and downstream audit.
