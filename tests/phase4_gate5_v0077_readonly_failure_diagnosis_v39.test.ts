@@ -47,7 +47,11 @@ describe("Gate5 V0077 safe production read-only failure classifier",()=>{
   const {admin,worker}=roles();
   admin.v77=[true,true,true];worker.v77=[true,true,true];
   expect(classifyP4G5V0077ProductionCatalogV39(admin,worker).status)
-   .toBe("ALREADY_INSTALLED_VERIFY_GRANTS");
+   .toBe("ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED");
+  worker.hasRuntimeV77Privileges=[true,false,false,false];
+  expect(classifyP4G5V0077ProductionCatalogV39(admin,worker).status)
+   .toBe("ALREADY_INSTALLED_RUNTIME_PRIVILEGES_REQUIRE_REVIEW");
+  worker.hasRuntimeV77Privileges=[false,false,false,false];
   admin.v77=[true,false,false];worker.v77=[true,false,false];
   expect(classifyP4G5V0077ProductionCatalogV39(admin,worker).status)
    .toBe("PARTIAL_V0077_SCHEMA_NEEDS_REVIEW");
