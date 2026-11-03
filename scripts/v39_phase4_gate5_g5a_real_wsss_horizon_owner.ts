@@ -198,12 +198,16 @@ export async function main(){
  });
  let successful=0,attempted=0,unknown=0,preCreated=0,preExisting=0;
  await db.connect();
+ // Adapt pg's mutable parameter array to the reviewed DB-only interfaces
+ // without broadening source-owner SQL permissions or importing Replit DBs.
+ const dbw={query:(sql:string,args?:readonly unknown[])=>
+  db.query(sql,args as unknown[]|undefined)};
  try{
-  const prepared=await stageP4G5PreparedOwnerDbOnlyV39(db,{
+  const prepared=await stageP4G5PreparedOwnerDbOnlyV39(dbw,{
    owner,githubRunId:proof.githubRunId,
    reviewedRunAuthorizationSha256:authSha
   });
-  const activated=await activateP4G5PreparedOwnerDbOnlyV39(db,{
+  const activated=await activateP4G5PreparedOwnerDbOnlyV39(dbw,{
    owner,githubRunId:proof.githubRunId,
    reviewedRunAuthorizationSha256:authSha,
    scientificMode:"G5A_REPORTED_SCHEDULE_REVISION",
@@ -250,7 +254,7 @@ export async function main(){
    if(successful===0||Date.now()-lastPre<16000)return;
    lastPre=Date.now();
    try{
-    const out=await persistP4G5ReviewedPreForCohortV39(db,{
+    const out=await persistP4G5ReviewedPreForCohortV39(dbw,{
      airportIcao:"WSSS",
      serviceStartUtc:stamp,serviceEndUtc:stop,
      observedAtUtc:iso(Date.now()),horizon:h,
