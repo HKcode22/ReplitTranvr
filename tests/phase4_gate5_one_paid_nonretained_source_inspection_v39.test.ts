@@ -27,7 +27,8 @@ describe("One actual paid FIDS probe, zero retention, no false science",()=>{
     scheduledTime:{utc:"2026-11-01T12:00:00Z"},
     revisedTime:{utc:"2026-11-01T12:05:00Z"},
     runwayTime:{utc:"2026-11-01T12:09:00Z"},
-    quality:["Live"],airport:{icao:"WSSS"}},leg:{}},
+    quality:["Live"],airport:{icao:"WSSS"}},
+    arrival:{airport:{icao:"YSSY"}}},
    {codeshareStatus:"IsCodeshared",departure:{
     scheduledTime:{utc:"2026-11-01T12:00:00Z"}}},
    {departure:{runwayTime:{utc:"2026-11-01T12:16:00Z"}}}
@@ -39,10 +40,56 @@ describe("One actual paid FIDS probe, zero retention, no false science",()=>{
   expect(a.scheduledTimeFieldPresent).toBe(2);
   expect(a.runwayTimeFieldPresent).toBe(2);
   expect(a.runwayTimeWithLiveQuality).toBe(1);
+  expect(a.departureMovementObjectPresent).toBe(3);
+  expect(a.arrivalMovementObjectPresent).toBe(1);
+  expect(a.withLegExpandedMovementPairPresent).toBe(1);
+  expect(a.movementOnlyFidsShapePresent).toBe(0);
+  expect(a.departureAirportIcaoFieldPresent).toBe(1);
+  expect(a.oppositeArrivalAirportIcaoFieldPresent).toBe(1);
+  expect(a.requestedAirportOmissionAllowedByOpenApi).toBe(true);
+  expect(a.withLegIsDepartureArrivalNotTopLevelLeg).toBe(true);
   expect(a.firstProviderNativeSelectedTCertified).toBe(false);
   expect(a.runwayActualOnlyPerRecordCertified).toBe(false);
   expect(a.retainedSourceForFutureCohort).toBe(false);
   expect(a.strictGate5Passed).toBe(false);
+ });
+ it("withLeg expands to departure/arrival while requested origin airport may be omitted",()=>{
+  const report=inspectP4OnePaidNonretainedFidsV39({departures:[
+   {codeshareStatus:"IsOperator",
+    departure:{quality:["Basic"],scheduledTime:{utc:"2026-11-03T01:00:00Z"}},
+    arrival:{airport:{icao:"YSSY"},quality:["Basic"]}},
+   {codeshareStatus:"IsCodeshared",
+    movement:{airport:{icao:"YSSY"},quality:["Basic"]}},
+   {codeshareStatus:"IsOperator",
+    departure:{airport:{icao:"WSSS"},quality:["Live"]}}
+  ]});
+  expect(report.observedDepartureRecords).toBe(3);
+  expect(report.departureMovementObjectPresent).toBe(2);
+  expect(report.arrivalMovementObjectPresent).toBe(1);
+  expect(report.withLegExpandedMovementPairPresent).toBe(1);
+  expect(report.movementOnlyFidsShapePresent).toBe(1);
+  expect(report.oppositeArrivalAirportIcaoFieldPresent).toBe(1);
+  expect(report.requestedAirportDepartureObjectWithAirportOmitted).toBe(1);
+  expect(report.departureAirportIcaoFieldPresent).toBe(1);
+  // An omitted departure.airport is valid when it equals the requested
+  // airport; an irrelevant absent top-level leg object has no meaning.
+  expect(report).not.toHaveProperty("flightLegObjectPresent");
+  expect(report).not.toHaveProperty("originIcaoFieldPresent");
+  expect(report.confirmedOperatingLegPopulation).toBe(false);
+  expect(report.runwayActualOnlyPerRecordCertified).toBe(false);
+  expect(report.strictGate5Passed).toBe(false);
+ });
+ it("preserves historical pinned producer without editing its code",()=>{
+  const historical=readFileSync(
+   "scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts","utf8");
+  expect(historical).toContain("inspectP4OnePaidNonretainedFidsV39");
+  const inspector=readFileSync(
+   "server/lib/disruption/phase4Gate5OnePaidNonretainedSourceInspection_v39.ts","utf8");
+  expect(inspector).not.toContain("obj(f.leg)");
+  expect(inspector).not.toContain("originIcaoFieldPresent:");
+  expect(inspector).toContain("withLegExpandedMovementPairPresent");
+  expect(inspector).not.toContain("fetch(");
+  expect(inspector).not.toContain("INSERT INTO");
  });
  it("no invented runway actuals when no departure observations exist",()=>{
   const a=inspectP4OnePaidNonretainedFidsV39({departures:[]});
