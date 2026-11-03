@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Gate 5 bounded operational source-only closeout / tracks 1–3 decision, Nov 2 evening**](2026-11-02_GATE5_EVIDENCE_BOUNDED_OPERATIONS_CLOSEOUT_AND_TRACK123.md) — independent Nov2 9/9 physical GET and 18 measured units accepted as a **finished operational diagnostic**; original flight-level selected T/actual-only wheels-off, retention rights, source-to-PRE/POST still scientifically **HOLD**. Offline CI/report code distinguishes unmeasurable (NULL) from zero, ADSB.lol takeoff proxy from actual, and nonauthorizing 7-day/24h/purpose/cache expiry ceilings. No paid repeat, no Phase5/6 release.
+
+
 - [**Nov 2 next-cohort exact frozen original FIDS request-frame audit (read-only, no provider; native-T/retention still HOLD)**](2026-11-02_GATE5_FUTURE_ORIGINAL_SOURCE_REQUEST_FRAME_READONLY_AUDIT.md) — independently recomputes reviewed manifest/grid query and physical-reservation digests, cross-checks V0076/V0077 retained source against exact FIDS airport/local range/flags, decoded body and canonical envelope. This is application-intent consistency only, NOT GitHub signature, legal retention or scientific Gate5 PASS.
 
 
