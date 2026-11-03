@@ -91,7 +91,7 @@ describe("Gate5 official NOAA worldwide METAR source and actual durable PRE cuto
   expect(a.acceptedAirportCount).toBe(0);
   const b=decode([sample({obsTime:obs("2026-11-03T20:00:00.000Z")})]);
   expect(b.acceptedAirportCount).toBe(0);
-  const c=decode([sample({temp:"??",dewp:"X",wspd:null,altim:"Q"})]);
+  const c=decode([sample({temp:"??",dewp:"X",wspd:null,wgst:null,wdir:null,altim:"Q",visib:"?"})]);
   expect(c.acceptedAirportCount).toBe(0);
  });
  it("deduplicates same-station refreshes, chooses latest physical weather observation",()=>{
