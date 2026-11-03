@@ -345,3 +345,21 @@ describe("Phase4 future exact nine source slots and pre-expiry horizon handoff",
   expect(hold.databaseWritesAuthorized).toBe(false);
  });
 });
+
+describe("future source reader binds DB physical owner to independently checked GitHub run",()=>{
+ it("same original row with an unexpected GitHub owner is not certified",async()=>{
+  const {full,rows}=fixture(),db=stub(rows);
+  const {originalSourceSlots,...withoutIds}=full;
+  const scope={...withoutIds,horizon:"T-24h" as const,
+   expectedOwnerGithubRunId:"87654321",
+   readAsOfUtc:"2026-11-05T19:00:00.000Z"};
+  await expect(auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   db,scope)).rejects.toThrow("V0076_V0077_OWNER_QUERY_OR_MANIFEST_MISMATCH");
+  const matching=await auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+   db,{...scope,expectedOwnerGithubRunId:"12345678"});
+  expect(matching.status).toBe(
+   "THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED");
+  expect(matching.scientificGate5Passed).toBe(false);
+  expect(originalSourceSlots).toHaveLength(9);
+ });
+});

@@ -40,6 +40,7 @@ export interface P4G5NineOriginalReviewScopeV39{
  reviewedFrozenManifestBytes:string;
  independentlyReviewedManifestSha256:string;
  expectedCohortId:string;
+ expectedOwnerGithubRunId?:string;
  originalSourceSlots:readonly Slot[];
  readAsOfUtc:string;
 }
@@ -122,6 +123,7 @@ export async function auditP4G5NineOriginalBoundCohortV39(
    expectedCohortId:scope.expectedCohortId,
    horizon:slot.horizon,queryIndex:slot.queryIndex,
    populationQueryId:slot.populationQueryId,
+   expectedOwnerGithubRunId:scope.expectedOwnerGithubRunId,
    readAsOfUtc:scope.readAsOfUtc
   });
   if(report.status===
@@ -252,6 +254,7 @@ export async function auditP4G5OneHorizonOriginalBeforeExpiryV39(
    expectedCohortId:base.expectedCohortId,
    horizon,queryIndex:slot.queryIndex,
    populationQueryId:slot.populationQueryId,
+   expectedOwnerGithubRunId:scope.expectedOwnerGithubRunId,
    readAsOfUtc:scope.readAsOfUtc
   });
   if(result.status==="ORIGINAL_AND_FROZEN_REQUEST_APPLICATION_INTENT_MATCH_NOT_HTTP_CERTIFIED"){

@@ -1,0 +1,72 @@
+name: Phase4 Gate5 Future Pre-expiry Independent Original Audit
+on:
+  workflow_run:
+    workflows:
+      - "Phase4 Gate5 Future Reviewed Source Owner"
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-gate5-future-originals-review-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  admit-future-horizon:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    outputs:
+      ready: ${{ steps.admit.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Authenticate source GH run and review pin without database or provider secrets
+        id: admit
+        env:
+          GH_READONLY_TOKEN: ${{ github.token }}
+          P4_G5_HORIZON_READONLY_INTENT: VERIFY_FUTURE_ORIGINALS_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_future_horizon_originals_readonly_actions.ts
+  read-future-horizon:
+    needs: [admit-future-horizon]
+    if: ${{ needs.admit-future-horizon.outputs.ready == 'true' && github.event_name == 'workflow_run' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independent GitHub-run attestation and V0076/V0077 3-original pre-expiry read
+        env:
+          GH_READONLY_TOKEN: ${{ github.token }}
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_G5_HORIZON_READONLY_INTENT: VERIFY_FUTURE_ORIGINALS_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_future_horizon_originals_readonly_actions.ts
+      - name: No scientific approval from source readback
+        if: always()
+        run: |
+          echo 'This is one horizon source original readback, not actual wheels-off, PRE, POST or scientific Gate5 PASS.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No paid provider calls, DB writes, Phase5 or Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"

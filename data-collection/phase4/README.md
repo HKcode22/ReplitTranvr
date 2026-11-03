@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Future GH run-attested original pre-expiry reader (NOT ARMED)**](2026-11-02_GATE5_FUTURE_GITHUB_RUN_BOUND_PREEXPIRY_READONLY_WORKFLOW.md) — future workflow_run checks GitHub provenance and the exact V0076/V0077 owner run ID before three retained original readbacks under READ ONLY. Future source owner is not installed, approval SHA NULL, no paid run, scientific HOLD.
+
 - [**Nov 2 T−24h retention conflict: per-horizon PRE-EXPIRY original-source readback and optional complete nine-slot audit**](2026-11-02_GATE5_NINE_ORIGINALS_EXPIRY_SAFE_HORIZON_AUDIT.md) — full postservice raw readback would exceed the repo's strict 24-hour FIDS cache for all early T24 sources. New source-bound auditor checks each exact 3-slot horizon under lawful expiry and returns noncontent status for independently authenticated cross-horizon reconciliation; optional all-nine-same-snapshot audit refuses missing/extra source receipts. Neither admits science GO or extends provider rights.
 
 
