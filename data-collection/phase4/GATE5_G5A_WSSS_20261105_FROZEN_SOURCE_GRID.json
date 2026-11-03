@@ -1,0 +1,18 @@
+{
+  "cohortId": "WSSS_G5A_20261105_0200Z",
+  "grid": {
+    "airportIcao": "WSSS",
+    "airportIanaTimezone": "Asia/Singapore",
+    "serviceWindowStartUtc": "2026-11-05T02:00:00.000Z",
+    "serviceWindowEndUtc": "2026-11-05T03:00:00.000Z",
+    "assignmentFrozenAtUtc": "2026-11-03T13:00:00.000Z",
+    "acquisitionGuardMinutes": 30,
+    "refreshCadenceMinutes": 30,
+    "maxStalenessMinutes": 45,
+    "githubPrearmLeadMinutes": 60,
+    "apiUnitsPerPhysicalAttempt": 2,
+    "maxAttemptsPerQuery": 1,
+    "projectRestApiUnitsBudget": 24,
+    "maxSourceQueries": 9
+  }
+}
