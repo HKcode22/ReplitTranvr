@@ -1,0 +1,96 @@
+name: Phase4 Gate5 V0077 Metadata Installer Disposable PG16
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0077-metadata-installer-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts"
+      - "tests/phase4_gate5_v0077_private_installer_v39.test.ts"
+      - "migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0077-metadata-installer-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts"
+      - "tests/phase4_gate5_v0077_private_installer_v39.test.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  v0077-private-schema-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+      V39_DATABASE_RUNTIME_URL: "postgresql://gate5_reader:local_test_only@localhost:5432/v39_ci?sslmode=disable"
+      V39_GATE5_V0077_INSTALL_INTENT: V0077_ONE_TIME_EMPTY_METADATA_SCHEMA_NO_GRANTS_OR_PROVIDER
+      V39_GATE5_V0077_EXPECTED_BLOB: 6783468fccf32de571e7ea77671db7370d9d87a4
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Offline exact-binary and role controls
+        run: npx vitest run tests/phase4_gate5_v0077_private_installer_v39.test.ts
+      - name: Build disposable original B0062 and staged physical V0076, no production
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REPOSITORY}" = "HKcode22/ReplitTranvr"
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${GATE05_AUTOMATION_DATABASE_URL}"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE gate5_reader LOGIN PASSWORD 'local_test_only'"
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA clean TO gate5_reader"
+      - name: Actual transactional V0077 private metadata installer against separate restricted role
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --import tsx scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM clean.phase4_g5_fids_original_binding_v39" | grep -qx '0'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','INSERT')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','SELECT')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM clean.phase4_g5_fids_physical_attempt_v39" | grep -qx '0'
+      - name: Attempted second/duplicate V0077 installation MUST reject
+        run: |
+          set -Eeuo pipefail
+          set +x
+          if node --import tsx scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts; then
+            echo "HOLD_UNEXPECTED_V0077_INSTALLER_REPLAY_SUCCEEDED"
+            exit 2
+          fi
+          echo "V0077_DISPOSABLE_METADATA_INSTALL_ONCE_AND_REPLAY_HOLD_PASS"
+      - name: No real project authorization
+        if: always()
+        run: |
+          echo 'Disposable PG16 V0077 DDL with synthetic role only; no production schema changes, paid provider, source retention expansion or live owner.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Scientific Gate5, Phase5 and Phase6 remain explicitly held.' >> "$GITHUB_STEP_SUMMARY"
