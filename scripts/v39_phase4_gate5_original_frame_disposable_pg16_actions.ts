@@ -13,6 +13,16 @@ import {addCanonicalFidsEnvelopeHashV39}
  from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP4Gate5OriginalRequestFrameV39}
  from "../server/lib/disruption/phase4Gate5OriginalRequestFrameReadOnly_v39";
+import {
+ P4_G5_BOUND_SOURCE_ROWS_SQL_V39,
+ P4_G5_BOUND_PRE_ROWS_SQL_V39,
+ P4_G5_BOUND_WEBHOOK_ROWS_SQL_V39
+} from "../server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39";
+import {
+ auditP4G5HorizonPreexpiryV39,
+ P4_G5_HORIZON_PREEXPIRY_SOURCE_SQL_V39,
+ P4_G5_HORIZON_PREEXPIRY_PRE_SQL_V39
+} from "../server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39";
 
 const REPO="HKcode22/ReplitTranvr";
 const URL="postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable";
@@ -179,10 +189,46 @@ export async function main(){
    });
    if(wrong.status!=="ORIGINAL_SOURCE_BINDING_MISSING_EXPIRED_OR_UNMEASURABLE")
     throw Error("P4_G5_FRAME_PG16_WRONG_SOURCE_NOT_HOLD");
+   // Real PostgreSQL 16 schema planning, not a mocked SQL string check.
+   // Every new v39 source, PRE and webhook SQL must parse & type-resolve
+   // against B0062 + staged V0076/V0077 in a second READ-ONLY connection.
+   const auditedAt=new Date().toISOString();
+   const sqlCases:[
+    [string,unknown[]]
+   ]=[
+    [P4_G5_BOUND_SOURCE_ROWS_SQL_V39,
+     [manifestSha,"WSSS",time(start),time(end),auditedAt]],
+    [P4_G5_BOUND_PRE_ROWS_SQL_V39,[manifestSha,auditedAt]],
+    [P4_G5_BOUND_WEBHOOK_ROWS_SQL_V39,[["SYNTHETIC_NO_EXTERNAL_SUBSCRIPTION"],time(now-12*3600000),time(end),auditedAt]],
+    [P4_G5_HORIZON_PREEXPIRY_SOURCE_SQL_V39,
+     [manifestSha,"WSSS",time(start),time(end),auditedAt,"T-24h"]],
+    [P4_G5_HORIZON_PREEXPIRY_PRE_SQL_V39,
+     [manifestSha,"T-24h",githubRunId,auditedAt]]
+   ];
+   for(const [sql,args] of sqlCases){
+    const plan=await reader.query("EXPLAIN (FORMAT JSON) "+sql,args);
+    if(plan.rows.length!==1||!plan.rows[0]?.["QUERY PLAN"])
+     throw Error("P4_G5_FRAME_NEW_SOURCE_PRE_CAPTURE_SQL_NOT_REAL");
+   }
+   const three=await auditP4G5HorizonPreexpiryV39(reader,{
+    airportIcao:"WSSS",serviceStartUtc:time(start),
+    serviceEndUtc:time(end),reviewedManifestSha256:manifestSha,
+    horizon:"T-24h",expectedOwnerGithubRunId:githubRunId,
+    readAtUtc:auditedAt
+   });
+   // Deliberately only ONE original: the typed read must HOLD instead of
+   // inventing a 3-query denominator or writing a PRE.
+   if(three.status!=="HOLD_FROZEN_HORIZON_SOURCE_NOT_ALL_THREE_RETAINED"||
+      three.observedBoundOriginals!==1||
+      three.expectedPreCandidates!==null||
+      three.providerCalls!==0||three.databaseWrites!==0)
+    throw Error("P4_G5_FRAME_PREEXPIRY_SOURCE_MISSING_NOT_HOLD");
    await reader.query("ROLLBACK");
    console.log(JSON.stringify({
     event:"P4_G5_FRAME_REAL_DISPOSABLE_PG16_PASS",
     matchedOriginalRequestFrame:true,wrongSourceRejected:true,
+    fiveNewBoundAuditQueriesActuallyExplainedInDisposablePg16:true,
+    missingTwoOfThreeOriginalsCorrectlyHolds:true,
     transactionReadOnly:true,syntheticOnly:true,providerCalls:0,
     productionDbWrites:0,strictGate5Passed:false,
     phase5FreezeAuthorized:false,phase6Authorized:false
