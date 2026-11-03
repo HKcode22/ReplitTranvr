@@ -110,7 +110,7 @@ export interface P4G5BoundPreSourceOwnerV39 {
  expectedOwnerGithubRunId:string;
  reviewedRunAuthorizationSha256:string;
 }
-const GH_RUN=/^\\d{5,25}$/;
+const GH_RUN=/^\d{5,25}$/;
 export const P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39=
  P4_G5_SCOPED_PRE_SOURCE_SQL.replace(
   "FROM clean.fids_query_response f WHERE f.source_airport_icao=$1",
