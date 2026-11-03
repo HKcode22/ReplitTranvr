@@ -83,6 +83,52 @@ describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence"
    expect(P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39).toContain(required);
   expect(out.strictGate5Passed).toBe(false);
  });
+ it("admits the actual 1/3 source-bound prefix before the first flight cutoff",async()=>{
+  const calls:string[]=[];
+  const reader={query:async(sql:string)=>{
+   calls.push(sql);
+   if(sql===P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39)
+    return {rows:[{expected_slots:3,bound_originals:1,
+     valid_originals:1,valid_slots:1}],rowCount:1};
+   return {rows:rows(),rowCount:3};
+  }};
+  const out=await stageP4G5ScopedPreV39(reader,scope(),{
+   horizon:"T-24h",expectedOwnerGithubRunId:"123456789012",
+   reviewedRunAuthorizationSha256:"b".repeat(64)
+  });
+  expect(calls).toEqual([P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,
+   P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39]);
+  expect(out.sourceBoundPrefixAtRead).toEqual({
+   expectedSlots:3,validBoundOriginals:1
+  });
+  expect(out.sourceFullThreeOriginalFrameAsOfRead).toBe(false);
+  expect(out.strictGate5Passed).toBe(false);
+ });
+ it("accepts a distinct valid 2/3 prefix without misreporting 3/3 completion",async()=>{
+  const reader={query:async(sql:string)=>sql===P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39?
+   {rows:[{expected_slots:3,bound_originals:2,valid_originals:2,
+    valid_slots:2}],rowCount:1}:{rows:rows(),rowCount:3}};
+  const r=await stageP4G5ScopedPreV39(reader,scope(),{
+   horizon:"T-6h",expectedOwnerGithubRunId:"123456789012",
+   reviewedRunAuthorizationSha256:"b".repeat(64)
+  });
+  expect(r.sourceBoundPrefixAtRead?.validBoundOriginals).toBe(2);
+  expect(r.sourceFullThreeOriginalFrameAsOfRead).toBe(false);
+ });
+ it("refuses zero source, invalid/expired prefix, or duplicated query slots",async()=>{
+  for(const sample of [
+   {expected_slots:3,bound_originals:0,valid_originals:0,valid_slots:0},
+   {expected_slots:3,bound_originals:1,valid_originals:0,valid_slots:0},
+   {expected_slots:3,bound_originals:2,valid_originals:2,valid_slots:1},
+   {expected_slots:2,bound_originals:1,valid_originals:1,valid_slots:1},
+  ]){
+   const reader={query:async()=>({rows:[sample],rowCount:1})};
+   await expect(stageP4G5ScopedPreV39(reader,scope(),{
+    horizon:"T-90m",expectedOwnerGithubRunId:"123456789012",
+    reviewedRunAuthorizationSha256:"b".repeat(64)
+   })).rejects.toThrow("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
+  }
+ });
  it("incomplete or expired three-source binding holds rather than zero PRE",async()=>{
   const calls:string[]=[];
   const db={query:async(sql:string)=>{
@@ -93,7 +139,7 @@ describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence"
   await expect(stageP4G5ScopedPreV39(db,scope(),{
    horizon:"T-24h",expectedOwnerGithubRunId:"123456789012",
    reviewedRunAuthorizationSha256:"b".repeat(64)
-  })).rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  })).rejects.toThrow("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
   expect(calls).toEqual([P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39]);
   const duplicateSlots={query:async(sql:string)=>{
    calls.push(sql);
@@ -104,7 +150,7 @@ describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence"
   await expect(stageP4G5ScopedPreV39(duplicateSlots,scope(),{
    horizon:"T-24h",expectedOwnerGithubRunId:"123456789012",
    reviewedRunAuthorizationSha256:"b".repeat(64)
-  })).rejects.toThrow("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
+  })).rejects.toThrow("P4_G5_PRE_V0077_BOUND_PREFIX_INVALID_OR_UNOBSERVED_HOLD");
   expect(calls).toEqual([P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39]);
   const noDb=db;calls.length=0;
   await expect(stageP4G5ScopedPreV39(noDb,scope(),{
