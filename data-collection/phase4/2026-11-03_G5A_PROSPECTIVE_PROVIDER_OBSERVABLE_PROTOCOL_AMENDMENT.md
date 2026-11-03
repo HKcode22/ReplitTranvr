@@ -1,0 +1,53 @@
+# V3.9-f.8 / Gate 5 amendment G5A — minimal honest provider-observable operational frame
+
+**Status:** PROPOSED FOR PRE-COLLECTION REVIEW. Adopt only through an explicit reviewed GitHub PR **before** the prospective frozen cohort's earliest T−24h. This is a dated versioned protocol amendment, NOT a claim that any new FIDS data were collected or Gate5 passed.
+
+**Purpose:** preserve the study's central one-month traveler-disruption ML experiment while removing the self-imposed indefinite blocker of unverifiable provider-specific runway/gate semantics. The original f.8 design was deliberately conservative; its high-integrity leakage/budget/denominator rules are retained. We are authorized to revise the *scientific question* prospectively rather than pretend a field means something its source did not establish.
+
+## 1. Explicit replacement of impossible/unsupported semantic requirement
+
+For the prospective G5A provider-observable cohort, define `T_native_schedule` as the **first prospectively recorded provider-native `departure.scheduledTime.utc` value**, with the exact FIDS source/availability clock, request frame, first observed version and separate correction history retained. Scientific label: **"first provider-reported scheduled departure reference"**. **Do not alias it to scheduled gate-out or scheduled wheels-off.** If a flight's initial provider-native schedule was not observed early enough for a given horizon, that horizon is `UNOBSERVED_LATE_ENROLLMENT`, never backfilled. Where scheduledTime is missing/conflicting/non-monotonic identity, T is UNKNOWN and the flight is excluded from fixed-T cutoffs but included in the missingness denominator.
+
+Horizon timestamps `T_native_schedule−24h`, `−6h`, `−90m` are valid and scientifically useful **relative to this explicit provider-reporting reference only**. Do not claim gate/runway specificity. This updates f.8 §6.0 *for the new G5A protocol only*; all historical pre-G5A claims retain the older frozen target and their status.
+
+## 2. Redefined verifiable prediction outcomes, never estimates relabeled as actual
+
+The previous primary target was actual wheels-off / gate-out delay in minutes, which cannot currently be observed with per-record actual-only certification at the selected provider. **Do not silently compute it from `runwayTime` or `revisedTime`.** Instead preregister a narrower provider-observable prediction task, useful to travelers but substantively different:
+
+**G5A primary target — future provider-reported schedule instability:** for an operating leg with a verified first native scheduled departure, at a frozen prediction cutoff `C`, predict whether the **latest provider-reported scheduled departure** prospectively available at the fixed assessment watermark `W` differs from the *as-of cutoff scheduled departure* by **at least 15 minutes in absolute value**, using **two actual source observations** with durable availability `A(C)≤C` and `A(W)≤W`, and `W>C`. Version, ordering, service-date retimes, and issuer/provider classes preserved. If no valid post-cutoff schedule observation exists, label `UNKNOWN_POST_SCHEDULE`, not a negative. The outcome must be reproducible from original source hashes and licensed normalized records, with no future information in PRE. It is explicitly **a schedule-revision target**, not actual departure delay, not traveler arrival delay, and not an observed late flight. The primary label selection is set before the frozen cohort and measured against independent FIDS observation availability (report attrition bias).
+
+**Secondary outcomes** (not substitutions): independently verified actual departure/arrival time or observed cancellation/diversion when source class/actuality allows; otherwise `PENDING`, `ESTIMATED_ONLY`, `PROXY_ONLY`, `MISSING`, or `NOT_APPLICABLE`. Report exact eligibility, source class, actual-only subset coverage and denominators. A future separate target can be frozen using validated independent sources before training; no posthoc relabeling of this G5A primary. **Do not claim the original wheels-off MAE test is evaluable or passed.** Its original null/limitation remains documented and the model comparison must be preregistered again for the schedule-revision classification task.
+
+**Watermark W:** exact hours after `T_native_schedule` are frozen in the cohort manifest before any live GET; default candidate `T+2h`, but require feasibility and lawful ephemeral receipt lifetime. The same W rule must apply to every eligible leg, and must not be moved just because the observed answer is inconvenient. Drop or censor individual flights not yet observed at W.
+
+## 3. Provider frame and source admission — unchanged quality safeguards
+
+- Planned service cohort is FIDS departure queries for one fixed airport/one lawful interval, 3 distinct original receipts per horizon (3×3), with **actual Github owner run provenance** and V0076 durable reservation before every physical paid GET; bind original decoded HTTP entity body SHA, retention lifetime, normalized source rows and V0077 in one transaction. Existing actual V0078 production migration permits repeat observations of one physical leg without global old uniqueness collision.
+- One physical confirmed operating leg contributes at most one eligible unit per horizon. Marketing codeshares, requested-airport opposite-direction contextual legs and ambiguous/unknown identities are measured separately, not counted as primary denominator or silently made zero.
+- Source eligibility: actual durable `available_at≤C` for each PRE feature, native-T first-observation evidence, valid original SHA/identity, licensing, no scheduled revision/POST leakage. True snapshots committed before cutoff and independently read back; missing PRE counts are real failures, not zeros.
+- Webhook is measured independently of the FIDS denominator: matching inside, known-outside-as-of, observed-frame outside, unresolved/replayed and delivery gaps. Label coverage, postflight STATUS, AIRBORNE eligibility and source selection bias reported by tier/route/time/identity where supported. Missingness and source absence remain explicit **unknown/censored**.
+- Temporary original and per-flight Content may be retained only for the independently permissible purpose/duration, with strict 24h technical expiry and per-horizon pre-expiry audit where appropriate. This protocol does **not** invent an AeroDataBox license, blanket derived-work exception, 7-day account entitlement or permission to keep record-level Contents after expiry. Require a documented *conservative scope-of-use decision* on actual terms, not indefinite vendor email waiting.
+- Use the existing 50,000-unit project cycle ceiling, provider real quota and per-attempt 2-unit estimate with hard no-overspend, reservation/receipt audit and no unapproved provider requests. A user-approved budget does not override an actual cap.
+
+## 4. Honest G5A success classification
+
+A measured **G5A Gate 5 PASS_WITH_MEASURED_LIMITATIONS** may be emitted only when all of these are genuinely observed and independently reconciled:
+
+1. A prospectively frozen pre-collection G5A manifest, native T reference, time-versioning rule, 15-minute threshold and assessment W, roles/rights and bounded budget.
+2. GitHub-only on-time 3×3 FIDS original receipts for a usable sampled cohort, each with parent SHA, unique frame, preserved physical operating-leg denominator and query identity, and properly measured late/empty/failed query slots.
+3. True persisted PRE source-hash/feature availability at T−24h/−6h/−90m where source was eligible, independent cutoff-safe audit, and **counts** of expected/created/not due/late/missing. A late or absent earlier horizon is **not** a PASS.
+4. Prospectively obtained post-cutoff source revision or explicitly UNKNOWN/CENSORED if no lawful observation, independently verified inside/outside/unresolved webhook capture (or unknown with documented no eligible subscription), and honest actual-vs-estimated/proxy status.
+5. True source/capture/label denominators, reproducible recorded missingness/selection limitations, provider charge/paid request ledger and retention-expiry control. A small technical loss may be acceptable **only when reported, bounded, and not selectively erased**; it cannot silently turn missing postflight targets into observed negatives.
+6. Independent exact source-owner/run SHA and DB read-only review, with explicit `G5A` classification, no backward-claimed original wheels-off semantics, and a separate prospective model-evaluation freeze before Phase6.
+
+A workflow green or source-only FIDS pilot ≠ PASS. For zero actual usable eligible cohort, all missed PRE, no legal source-use basis, or fabricated/estimated-as-actual values → **G5A FAIL/HOLD**. Otherwise a narrow pipeline PASS with measured limitations **does not** imply original wheels-off target validity or full global population coverage.
+
+## 5. Track choice and decision budget
+
+**Choose Track A NOW**: provider-native schedule-revision classification, existing AeroDataBox FIDS/Alert pipeline, real GitHub owner/source+PRE+POST and measured missingness. Do not stall for unprovided runway semantics. **Track B** is an **optional enrichment**: free FAA/BTS (lagged, US-only) or lawful free ADS-B location data (coverage-limited). Admit only verified compatible time/identity/retention, and only if implementing it will not jeopardize the Nov4/Nov5 Gate5 priority. A free source is never a new prerequisite for live FIDS collection.
+
+**Scientific note:** schedule-revision prediction is not identical to actual-flight-delay regression; downstream model/metric/hypothesis specifications must change accordingly (e.g., Brier/log-loss for binary revision event, groupwise calibration, temporal holdout, decision-threshold uncertainty). Do not calculate the original `delta_MAE≥2 min` for a classification label or report a nominally better number. Preserve original protocol as historical control and record G5A as a prospective fork, avoiding p-hacking.
+
+**Owner authorization:** Nov 3 explicit direction to amend protocol as required for validity and accelerate a one-month ML study while preserving rigorous cutoff, source, denominator, rights, reproducibility, and missingness controls. **Not an owner signature that actual data/source rights exist.**
+
+**GitHub checkpoint precedence:** [Owner directive](2026-11-03_OWNER_DIRECTIVE_NO_PERFECTION_LOOP_FAST_SCIENTIFIC_GATE5_CLOSURE.md) → this G5A prospective amendment → original f.8 §§5–7,10,16–17 wherever not explicitly changed → hash-locked status implementation log. All pre-G5A collected evidence stays classified under its original protocol; no re-analysis or retroactive rewriting.
