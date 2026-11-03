@@ -1,0 +1,67 @@
+name: Phase4 Gate5 Revised Collection Readiness (No Provider)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-expedited-readiness.yml"
+      - "data-collection/phase4/GATE5_20261102_BOUNDED_CLOSEOUT_HOLD_STATUS.json"
+      - "data-collection/plans/V3.9_f.8_Gate5_Expedited_Collection_Amendment_A_20261102.md"
+      - "server/lib/disruption/phase4Gate5ExpeditedReadinessV39.ts"
+      - "scripts/v39_phase4_gate5_expedited_readiness_actions.ts"
+      - "tests/phase4_gate5_expedited_readiness_v39.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p4-gate5r-expedited-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  revised-gate5-readiness:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      DATABASE_URL: ""
+    steps:
+      - name: Checkout exact main commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci
+      - name: Bounded revised Gate5-R decision from pre-verified real source receipts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${DATABASE_URL}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL}"
+          npx tsx scripts/v39_phase4_gate5_expedited_readiness_actions.ts
+      - name: Offline scoped regression tests
+        run: npx vitest run tests/phase4_gate5_expedited_readiness_v39.test.ts
+      - name: Negative provider/production release guards
+        run: |
+          set -Eeuo pipefail
+          test "${ADB_AUTO_COLLECT}" = "0"
+          test "${V39_PHASE6_PROCESS_ARMED}" = "0"
+          echo "GATE5R_PROVIDER_CALLS=0"
+          echo "GATE5R_DATABASE_WRITES=0"
+          echo "GATE5R_PHASE5_FREEZE=NOT_AUTHORIZED"
+          echo "GATE5R_PHASE6_LIVE=NOT_AUTHORIZED"
