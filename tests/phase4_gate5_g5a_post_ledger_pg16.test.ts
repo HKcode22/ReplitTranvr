@@ -32,15 +32,15 @@ suite("actual isolated PG16 immutable G5A POST budget, rights, replay",()=>{
     .rejects.toThrow("P4_G5_G5A_POST_PROJECT_24_UNIT_BUDGET_HOLD");
    // Missing earlier POST attempts are genuinely unknown, not a reason to
    // prohibit the later independent source observation opportunity.
-   const last=await reserveG5APostSlotDbV39(db,N,qid,2);
+   const last=await reserveG5APostSlotDbV39(db,N,qid+'_N',2);
    expect(last).toBe(postReservationUuidV39(N,2));
    const gap=await db.query(
     "SELECT reserved_units FROM clean.phase4_g5_fids_cohort_budget_v39 "+
     "WHERE manifest_sha256=$1",[N]);
    expect(Number(gap.rows[0].reserved_units)).toBe(20);
-   await expect(reserveG5APostSlotDbV39(db,N,qid,1))
+   await expect(reserveG5APostSlotDbV39(db,N,qid+'_N',1))
     .rejects.toThrow("P4_G5_G5A_POST_POST_RESERVATION_REPLAY_OR_FOREIGN_SLOT_HOLD");
-   await expect(reserveG5APostSlotDbV39(db,K,qid,0))
+   await expect(reserveG5APostSlotDbV39(db,K,qid+'_K',0))
     .rejects.toThrow("P4_G5_G5A_POST_PROJECT_24_UNIT_BUDGET_HOLD");
    const all=await db.query(
     "SELECT count(*)::int n FROM clean.adb_rest_attempt_ledger "+
