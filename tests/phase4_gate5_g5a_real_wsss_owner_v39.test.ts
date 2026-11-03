@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
-import {assertG5AOwnerRunContextV39,p4G5G5AReservationSqlArgsV39}
+import {assertG5AOwnerRunContextV39,p4G5G5AReservationSqlArgsV39,
+ P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39}
  from "../scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner";
 
 const GH="a".repeat(40);
@@ -72,6 +73,10 @@ describe("G5A true future GitHub-only physical source owner admission",()=>{
    .toThrow("P4_G5_G5A_RESERVATION_SQL_ARGUMENTS_HOLD");
   expect(()=>p4G5G5AReservationSqlArgsV39(a,b,"41600000123",c,2,d))
    .toThrow("P4_G5_G5A_RESERVATION_SQL_ARGUMENTS_HOLD");
+ });
+ it("frozen AeroDataBox OpenAPI document SHA comes from Plan f.8, not G5A protocol markdown",()=>{
+  expect(P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39)
+   .toBe("735620f2d2132c5bf51768f50caa767b7f0b25be8b128679641402666696890a");
  });
  it("source-owner module cannot launch paid collection from an offline unit test",()=>{
   expect(typeof assertG5AOwnerRunContextV39).toBe("function");
