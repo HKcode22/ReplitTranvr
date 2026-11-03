@@ -12,13 +12,9 @@ suite("actual isolated PG16 immutable G5A POST budget, rights, replay",()=>{
   const db=new pg.Client({connectionString:url});
   await db.connect();
   try{
-   for(const source of [M,N,K]){
-    await db.query(
-     "INSERT INTO clean.phase4_g5_fids_cohort_budget_v39 "+
-     "(manifest_sha256,cohort_id,project_unit_ceiling,reserved_units) "+
-     "VALUES($1,$2,24,$3)",
-     [source,qid,source===K?24:18]);
-   }
+   // The disposable test setup pre-inserts three cohort budgets as
+   // privileged schema bootstrap; this writer must NOT have INSERT on
+   // the budget table merely to run a postflight observation.
    const id0=await reserveG5APostSlotDbV39(db,M,qid,0);
    const id1=await reserveG5APostSlotDbV39(db,M,qid,1);
    const id2=await reserveG5APostSlotDbV39(db,M,qid,2);
