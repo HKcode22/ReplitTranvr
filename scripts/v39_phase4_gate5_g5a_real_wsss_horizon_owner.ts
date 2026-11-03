@@ -272,10 +272,18 @@ export async function main(){
    if(successful===0||Date.now()-lastPre<16000)return;
    lastPre=Date.now();
    try{
+    // PRE's trusted read watermark is the live PostgreSQL clock, not a
+    // potentially skewed GitHub runner wall clock. The downstream writer
+    // independently checks this same DB-clock against every real cutoff.
+    const preClock=await db.query("SELECT clock_timestamp() AS db_now_utc");
+    const dbNow=preClock.rows[0]?.db_now_utc;
+    if(preClock.rows.length!==1||!(dbNow instanceof Date)||
+       !Number.isFinite(dbNow.getTime()))
+     hold("PRE_DB_CLOCK_UNAVAILABLE");
     const out=await persistP4G5ReviewedPreForCohortV39(dbw,{
      airportIcao:"WSSS",
      serviceStartUtc:stamp,serviceEndUtc:stop,
-     observedAtUtc:iso(Date.now()),horizon:h,
+     observedAtUtc:dbNow.toISOString(),horizon:h,
      reviewedFrozenManifestSha256:manifestSha,
      expectedOwnerGithubRunId:proof.githubRunId
     },permit);
