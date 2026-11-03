@@ -76,6 +76,27 @@ describe("Gate5 V0077 empty metadata production installation, no provider",()=>{
   expect(s).toContain("worker_insert!==false");
   expect(s).toContain("worker_select!==false");
  });
+ it("a production refusal records a fixed lifecycle stage, not raw database details",()=>{
+  const source=readFileSync(
+   "scripts/v39_phase4_gate5_v0077_metadata_only_installer.ts","utf8");
+  for(const label of [
+   "CONNECT_RESTRICTED_RUNTIME",
+   "CONNECT_PRIVILEGED",
+   "READ_RUNTIME_PARENT_CATALOG",
+   "READ_PRIVILEGED_PARENT_CATALOG",
+   "REVIEW_PRIVILEGED_RESTRICTED_ROLES",
+   "BEGIN_SERIALIZABLE_PRIVATE_DDL",
+   "LOCK_METADATA_SCHEMA",
+   "RECHECK_V0077_NOT_PRESENT",
+   "APPLY_EXACT_PINNED_V0077_METADATA_DDL",
+   "VERIFY_NO_RUNTIME_V0077_GRANTS",
+   "COMMIT_PRIVATE_METADATA_DDL"
+  ])expect(source).toContain('stage="'+label+'"');
+  expect(source).toContain(
+   'console.error("P4_G5_V0077_INSTALL_STAGE_"+stage+"_HOLD")');
+  expect(source).not.toContain("console.error(e.message)");
+  expect(source).not.toContain("console.error(adminUrl)");
+ });
  it("exposes only fixed internal refusal category, no connection strings or raw messages",()=>{
   expect(safeP4G5V0077InstallFailureReasonV39(
    Error("P4_G5_V0077_PG16_PARENT_V0076_SCHEMA_HOLD")))
