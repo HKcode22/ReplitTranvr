@@ -254,6 +254,7 @@ export async function auditP4G5OneHorizonOriginalBeforeExpiryV39(
    expectedCohortId:base.expectedCohortId,
    horizon,queryIndex:slot.queryIndex,
    populationQueryId:slot.populationQueryId,
+   expectedOwnerGithubRunId:scope.expectedOwnerGithubRunId,
    readAsOfUtc:scope.readAsOfUtc
   });
   if(result.status==="ORIGINAL_AND_FROZEN_REQUEST_APPLICATION_INTENT_MATCH_NOT_HTTP_CERTIFIED"){
