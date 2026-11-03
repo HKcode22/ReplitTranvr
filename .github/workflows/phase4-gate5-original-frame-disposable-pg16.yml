@@ -1,0 +1,75 @@
+name: Phase4 Gate5 Original FIDS Frame Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-original-frame-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5OriginalRequestFrameReadOnly_v39.ts"
+      - "scripts/v39_phase4_gate5_original_frame_disposable_pg16_actions.ts"
+      - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-original-frame-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5OriginalRequestFrameReadOnly_v39.ts"
+      - "scripts/v39_phase4_gate5_original_frame_disposable_pg16_actions.ts"
+      - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  frame-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bootstrap disposable B0062/current only
+        timeout-minutes: 3
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test "${V39_DATABASE_RUNTIME_URL}" = "${DATABASE_URL}"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+      - name: Apply staged V0076/77 only inside disposable local PostgreSQL
+        timeout-minutes: 2
+        run: |
+          set -Eeuo pipefail
+          test ! -e migrations/current/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+      - name: Verify true joined original request read in separate READ ONLY transaction
+        timeout-minutes: 3
+        run: |
+          set -Eeuo pipefail
+          node --import tsx scripts/v39_phase4_gate5_original_frame_disposable_pg16_actions.ts
+          echo "PROVIDER_CALLS=0"
+          echo "PRODUCTION_DB_WRITES=0"
