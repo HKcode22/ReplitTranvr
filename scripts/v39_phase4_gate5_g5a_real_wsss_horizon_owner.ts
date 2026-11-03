@@ -39,6 +39,11 @@ const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-ow
 const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURCE_GRID.json";
 const PROTOCOL_PATH="data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md";
 const AUTH_INTENT="WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
+/** Actual Plan f.8 §5.1 OpenAPI v1.15.3.0 documentary bytes pin (Sep1).
+ * G5A protocol.md SHA is a different artifact; do not misname it OpenAPI.
+ * This pin is historical document provenance, not live response version. */
+export const P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39=
+ "735620f2d2132c5bf51768f50caa767b7f0b25be8b128679641402666696890a" as const;
 const H={
  "T-24h":{job:"owner-t24",cron:"40 22 3 11 *"},
  "T-6h":{job:"owner-t6",cron:"40 16 4 11 *"},
@@ -367,8 +372,10 @@ export async function main(){
     serviceWindowStartUtc:new Date(start),
     serviceWindowEndUtc:new Date(end),
     cutoffUtc:new Date(entry.cutoffUtc),
-    restCategory:"fids_base",providerApiVersion:"RapidAPI-v1.15.4",
-    fidsProtocolVersion:"G5A-20261103-v1",openapiSha256:protocolSha,
+    restCategory:"fids_base",
+    providerApiVersion:"RapidAPI-doc-pin-1.15.3.0-not-live-schema-certified",
+    fidsProtocolVersion:"G5A-20261103-v1",
+    openapiSha256:P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39,
     g5aObservedScheduleProtocol:true
    };
    const fetchOne:NonNullable<Parameters<typeof fetchFidsPopulation>[1]>["fetchAirport"]=
