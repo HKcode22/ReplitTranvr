@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Nov 2 T−24h retention conflict: per-horizon PRE-EXPIRY original-source readback and optional complete nine-slot audit**](2026-11-02_GATE5_NINE_ORIGINALS_EXPIRY_SAFE_HORIZON_AUDIT.md) — full postservice raw readback would exceed the repo's strict 24-hour FIDS cache for all early T24 sources. New source-bound auditor checks each exact 3-slot horizon under lawful expiry and returns noncontent status for independently authenticated cross-horizon reconciliation; optional all-nine-same-snapshot audit refuses missing/extra source receipts. Neither admits science GO or extends provider rights.
+
+
 - [**Alternative scientific study draft (NOT original selected T/runway and not live-authorized)**](2026-11-02_GATE5_RESEARCH_FALLBACK_TARGET_PROTOCOL_DRAFT.md) — potential separate future target based on explicitly named provider generic schedule S and properly verified terminal canceled/diverted status, or provider schedule-change *forecast* outcome; ADSB.lol takeoff remains inferred interval, never exact runway truth. Requires newly reviewed Plan version and a real source-retained PRE/postflight experiment before any science GO.
 
 - [**Gate 5 bounded operational source-only closeout / tracks 1–3 decision, Nov 2 evening**](2026-11-02_GATE5_EVIDENCE_BOUNDED_OPERATIONS_CLOSEOUT_AND_TRACK123.md) — independent Nov2 9/9 physical GET and 18 measured units accepted as a **finished operational diagnostic**; original flight-level selected T/actual-only wheels-off, retention rights, source-to-PRE/POST still scientifically **HOLD**. Offline CI/report code distinguishes unmeasurable (NULL) from zero, ADSB.lol takeoff proxy from actual, and nonauthorizing 7-day/24h/purpose/cache expiry ceilings. No paid repeat, no Phase5/6 release.
