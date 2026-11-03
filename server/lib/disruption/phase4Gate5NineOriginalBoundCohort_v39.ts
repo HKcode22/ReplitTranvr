@@ -333,3 +333,70 @@ export function reconcileP4G5ThreeHorizonNoncontentReceiptsV39(
   providerCalls:0 as const,databaseWrites:0 as const
  };
 }
+
+
+/**
+ * Automation-ready read-only discovery for a future NEW cohort.
+ * No human must copy internal FIDS source UUIDs from Replit shell. The
+ * existing V0076/V0077 durable ledger supplies exactly three expected
+ * original source links per frozen horizon. The audit function below then
+ * validates their actual request/source-body integrity independently.
+ */
+export const P4_G5_HORIZON_BOUND_SOURCE_DISCOVERY_SQL_V39=[
+ "SELECT o.horizon,q.query_index,",
+ "b.population_query_id::text AS population_query_id",
+ "FROM clean.phase4_g5_fids_original_binding_v39 b",
+ "JOIN clean.phase4_g5_fids_physical_attempt_v39 a",
+ "ON a.expected_reservation_sha256=b.expected_reservation_sha256",
+ "AND a.query_digest=b.query_digest",
+ "JOIN clean.phase4_g5_fids_allowed_query_v39 q",
+ "ON q.query_digest=b.query_digest",
+ "AND q.query_digest=a.query_digest",
+ "AND q.owner_digest=a.owner_digest",
+ "JOIN clean.phase4_g5_fids_physical_owner_v39 o",
+ "ON o.owner_digest=q.owner_digest",
+ "AND o.owner_digest=a.owner_digest",
+ "AND o.manifest_sha256=b.manifest_sha256",
+ "WHERE b.manifest_sha256=$1 AND o.horizon=$2",
+ "ORDER BY q.query_index,b.population_query_id",
+ "LIMIT 4"
+].join(" ");
+
+export async function auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39(
+ db:P4G5NineOriginalReadOnlyDbV39,
+ scope:Omit<P4G5SingleHorizonOriginalReviewScopeV39,"originalSourceSlots">
+){
+ if(!scope||!SHA.test(scope.independentlyReviewedManifestSha256)||
+    !H.includes(scope.horizon))reject("DISCOVERY_SCOPE");
+ const rows=await db.query(P4_G5_HORIZON_BOUND_SOURCE_DISCOVERY_SQL_V39,[
+  scope.independentlyReviewedManifestSha256,scope.horizon
+ ]);
+ if(!rows||!Array.isArray(rows.rows)||rows.rows.length>3)
+  reject("DISCOVERY_DUPLICATE_OR_MALFORMED_LEDGER");
+ // No source-bound rows is UNKNOWN/NOT YET RECONCILED, never zero flights.
+ if(rows.rows.length!==3)return {
+  schema:"v39.phase4.gate5-automatic-horizon-ledger-discovery.v1" as const,
+  status:"HOLD_INCOMPLETE_V0077_HORIZON_ORIGINAL_LINKS" as const,
+  discoveredOriginalSourceLinks:rows.rows.length,
+  matchedOriginalSlots:null,sourceStatusBySlot:null,
+  scientificGate5Passed:false as const,phase5FreezeAuthorized:false as const,
+  phase6Authorized:false as const,providerCalls:0 as const,
+  databaseWrites:0 as const
+ };
+ const slots:Slot[]=rows.rows.map(x=>{
+  if(!x||typeof x!=="object"||Array.isArray(x))
+   reject("DISCOVERY_INVALID_LEDGER_ROW");
+  const r=x as Record<string,unknown>;
+  if(r.horizon!==scope.horizon||
+     !Number.isInteger(r.query_index)||
+     !UUID.test(String(r.population_query_id)))
+   reject("DISCOVERY_UNEXPECTED_HORIZON_QUERY_OR_SOURCE");
+  return {horizon:scope.horizon,queryIndex:r.query_index as number,
+   populationQueryId:String(r.population_query_id)};
+ });
+ // The single-horizon verifier independently rejects altered manifest,
+ // wrong query index, duplicate source ID, expired original and body tamper.
+ return auditP4G5OneHorizonOriginalBeforeExpiryV39(db,{
+  ...scope,originalSourceSlots:slots
+ });
+}
