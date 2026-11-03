@@ -76,8 +76,9 @@ describe("Gate5 V0077 empty metadata production installation, no provider",()=>{
   expect(s).not.toContain("persistPreSnapshot(");
   expect(s).toContain("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   expect(s).toContain("V0077_PRIVATE_EMPTY_METADATA_ONLY_INSTALLED");
-  expect(s).toContain("worker_insert!==false");
-  expect(s).toContain("worker_select!==false");
+  expect(s).toContain('verifyP4G5V0077NoRuntimePrivilegesV39(');
+  expect(s).toContain('"worker_insert","worker_update","worker_delete","worker_select"');
+  expect(s).toContain('if(row[key]!==false)');
  });
  it("revokes only new V0077 objects, safely quotes untrusted PG role identifiers",()=>{
   expect(v0077ScopedRevokeSqlV39("gate5_reader")).toEqual([
