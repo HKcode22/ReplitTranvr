@@ -6,12 +6,20 @@ on:
       - ".github/workflows/phase4-gate5-v0078-production-readonly-preflight-disposable-pg16.yml"
       - "scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts"
       - "tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts"
+      - "scripts/v39_phase4_gate5_v0078_one_time_exact_sql_installer.ts"
+      - "scripts/v39_phase4_gate5_v0078_installer_disposable_pg16_actions.ts"
+      - "migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql"
+      - "tests/phase4_gate5_v0078_one_time_installer_v39.test.ts"
   push:
     branches: [main]
     paths:
       - ".github/workflows/phase4-gate5-v0078-production-readonly-preflight-disposable-pg16.yml"
       - "scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts"
       - "tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts"
+      - "scripts/v39_phase4_gate5_v0078_one_time_exact_sql_installer.ts"
+      - "scripts/v39_phase4_gate5_v0078_installer_disposable_pg16_actions.ts"
+      - "migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql"
+      - "tests/phase4_gate5_v0078_one_time_installer_v39.test.ts"
 permissions:
   contents: read
 env:
@@ -75,10 +83,10 @@ jobs:
           printf '%s\n' "$OUTPUT" | grep -Fq '"databaseWrites":0'
           printf '%s\n' "$OUTPUT" | grep -Fq '"providerCalls":0'
           printf '%s\n' "$OUTPUT" | grep -Fq '"v0077PrivateToRuntime":true'
-      - name: Check stage-only V0078 in disposable PostgreSQL (not production)
+      - name: Prove exact one-time installer lock refusal, safe commit and duplicate refusal on disposable PG16
         run: |
           set -Eeuo pipefail
-          psql "${DATABASE_URL}" -X -1 -v ON_ERROR_STOP=1 -f migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+          node --import tsx scripts/v39_phase4_gate5_v0078_installer_disposable_pg16_actions.ts
       - name: Require post-install preflight to HOLD on already-installed V0078
         run: |
           set -Eeuo pipefail
@@ -94,7 +102,7 @@ jobs:
       - name: Pure parser and refusal policy unit tests
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts
+          npx vitest run tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts tests/phase4_gate5_v0078_one_time_installer_v39.test.ts
           echo 'PRODUCTION_DATABASE_WRITES=0'
           echo 'PROVIDER_CALLS=0'
           echo 'V0078_PRODUCTION_INSTALL=false'
