@@ -101,13 +101,10 @@ export async function main(){
      scheduledTime:{utc:iso(firstScheduledT+8*3600000)}}
    }],arrivals:[]
   };
-  const bytes=Buffer.from(JSON.stringify(fids));
-  const original={
-   representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE" as const,
-   sha256:sha(bytes.toString("utf8")),byteLength:bytes.length,
-   base64:bytes.toString("base64")
-  };
-  const fakeFetch=async()=>({...fids,originalDecodedBody:original}) as any;
+  // Each source slot observes one DIFFERENT physical operating flight.
+  // Repeated provider-id/same-cutoff observations hit a pre-existing
+  // flight_population_key conflict: tracked as a separate schema blocker,
+  // never represented as PASS by this distinct-leg fixture.
   const params={
    airportIcao:"WSSS",fromLocal:local.fromLocal,toLocal:local.toLocal,
    ianaTimezone:"Asia/Singapore",withCancelled:true,withCodeshared:true,
@@ -120,6 +117,18 @@ export async function main(){
   };
   const sourceUseExpiresAtUtc=iso(base+20*3600000);
   for(let i=0;i<3;i++){
+   const record={
+    departures:[{...fids.departures[0],
+     id:"synthetic-distinct-physical-leg-"+String(i),
+     number:"SQ "+String(123+i)}],arrivals:[]
+   };
+   const bytes=Buffer.from(JSON.stringify(record));
+   const original={
+    representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE" as const,
+    sha256:sha(bytes.toString("utf8")),byteLength:bytes.length,
+    base64:bytes.toString("base64")
+   };
+   const fakeFetch=async()=>({...record,originalDecodedBody:original}) as any;
    const binding={
     manifestSha256:manifest,horizon:"T-24h" as const,
     expectedOwnerGithubRunId:runId,
@@ -170,7 +179,7 @@ export async function main(){
   };
   const wrote=await persistP4G5ReviewedPreForCohortV39(sql,scope,permit);
   if(wrote.horizon!=="T-24h"||
-     wrote.newlyPersistedRows!==1||wrote.expectedSourceQualifiedRows!==1||
+     wrote.newlyPersistedRows!==3||wrote.expectedSourceQualifiedRows!==3||
      wrote.otherHorizonsUntouched!==true||
      wrote.strictGate5Passed!==false)
    throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_WRITER_DID_NOT_INSERT_ON_TIME");
@@ -189,8 +198,8 @@ export async function main(){
    });
    if(result.status!=="V0077_BOUND_THREE_ORIGINALS_PREEXPIRY_CANDIDATE_ONLY"||
       result.observedBoundOriginals!==3||
-      result.eligibleCutoffCandidates!==1||
-      result.prePresent!==1||
+      result.eligibleCutoffCandidates!==3||
+      result.prePresent!==3||
       result.missingPreCandidateCount!==0||
       result.candidatePreCompleteness!==1||
       result.scientificGate5Passed!==false)
@@ -199,7 +208,9 @@ export async function main(){
   }finally{await review.end().catch(()=>undefined);}
   console.log(JSON.stringify({
    status:"P4_G5_THREE_V0077_SYNTHETIC_ORIGINALS_TO_REAL_PRE_PG16_PASS",
-   originalReceipts:3,sourceHorizon:"T-24h",timelyPreRows:1,
+   originalReceipts:3,sourceHorizon:"T-24h",timelyPreRows:3,
+   distinctPhysicalLegFixtureOnly:true,
+   repeatedProviderIdAtSameCutoffSchemaSupportProven:false,
    sourceAndPreDifferentCommittedTransactions:true,
    independentlyReadback:true,providerCalls:0,productionDatabaseWrites:0,
    realSourceLicenseVerified:false,realFirstNativeTVerified:false,
