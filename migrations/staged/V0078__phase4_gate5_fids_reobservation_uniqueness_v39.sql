@@ -1,8 +1,10 @@
 -- V0078 — Phase4 Gate5 original FIDS re-observation uniqueness correction
 --
--- STAGED ONLY. DO NOT move into migrations/current, run in production, or
--- reinstall V0077 without an independent schema/ACL/retention assessment.
--- Run only with a disposable PostgreSQL16 DB as one psql -1 transaction.
+-- STAGED ONLY. Do NOT move into migrations/current or reinstall V0077.
+-- Production execution is permitted ONLY through the separately reviewed,
+-- SHA-pinned, single-use V0078 installer, after both-role read-only catalog
+-- verification and explicit owner release. Otherwise run ONLY on disposable
+-- PostgreSQL16 with a single transaction and test-only source receipts.
 -- Target: preserve all repeat original FIDS source members while continuing
 -- to reject duplicate legacy non-FIDS flight records.
 --
