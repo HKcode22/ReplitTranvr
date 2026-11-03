@@ -100,13 +100,13 @@ async function catalog(client:pg.Client):Promise<Catalog>{
 }
 const POST_INSTALL_SQL=[
  "SELECT",
- "(SELECT count(*)::int FROM clean.phase4_g5_fids_original_binding_v39) AS rows,",
- "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','INSERT') AS worker_insert,",
- "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','UPDATE') AS worker_update,",
- "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','DELETE') AS worker_delete,",
- "has_table_privilege($1::text,'clean.phase4_g5_fids_original_binding_v39','SELECT') AS worker_select,",
- "has_function_privilege($1::text,'clean.phase4_g5_check_original_binding_v39()','EXECUTE') AS worker_check_execute,",
- "has_function_privilege($1::text,'clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE') AS worker_update_execute"
+ "(SELECT count(*)::int FROM clean.phase4_g5_fids_original_binding_v39) AS row_count,",
+ "has_table_privilege($1::name,'clean.phase4_g5_fids_original_binding_v39','INSERT') AS worker_insert,",
+ "has_table_privilege($1::name,'clean.phase4_g5_fids_original_binding_v39','UPDATE') AS worker_update,",
+ "has_table_privilege($1::name,'clean.phase4_g5_fids_original_binding_v39','DELETE') AS worker_delete,",
+ "has_table_privilege($1::name,'clean.phase4_g5_fids_original_binding_v39','SELECT') AS worker_select,",
+ "has_function_privilege($1::name,'clean.phase4_g5_check_original_binding_v39()','EXECUTE') AS worker_check_execute,",
+ "has_function_privilege($1::name,'clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE') AS worker_update_execute"
 ].join(" ");
 export async function installP4G5V0077PrivateMetadataV39(){
  assertP4G5V0077InstallerIntentV39(process.env);
@@ -144,7 +144,7 @@ export async function installP4G5V0077PrivateMetadataV39(){
   const after=await admin.query(POST_INSTALL_SQL,[cw.db_role]);
   if(after.rows.length!==1)throw Error("P4_G5_V0077_NEW_SCHEMA_QUERY_SHAPE_HOLD");
   const r=after.rows[0] as Record<string,unknown>;
-  if(r.rows!==0||r.worker_insert!==false||r.worker_update!==false||
+  if(r.row_count!==0||r.worker_insert!==false||r.worker_update!==false||
      r.worker_delete!==false||r.worker_select!==false||
      r.worker_check_execute!==false||r.worker_update_execute!==false)
    throw Error("P4_G5_V0077_RUNTIME_DEFAULT_PRIVILEGE_LEAK_HOLD");
