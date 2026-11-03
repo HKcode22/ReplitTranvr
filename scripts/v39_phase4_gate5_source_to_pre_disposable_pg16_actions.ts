@@ -207,8 +207,23 @@ export async function main(){
       result.prePresent!==3||
       result.missingPreCandidateCount!==0||
       result.candidatePreCompleteness!==1||
-      result.scientificGate5Passed!==false)
+      result.scientificGate5Passed!==false){
+    console.error(JSON.stringify({
+     schema:"synthetic-disposable-only-anonymous-audit-counters",
+     status:result.status,
+     observedBoundOriginals:result.observedBoundOriginals,
+     distinctQuerySlots:result.distinctQuerySlots,
+     eligibleCutoffCandidates:result.eligibleCutoffCandidates,
+     prePresent:result.prePresent,
+     missingPreCandidateCount:result.missingPreCandidateCount,
+     candidatePreCompleteness:result.candidatePreCompleteness,
+     invalidOrPosthocPRE:result.invalidOrPosthocPRE,
+     extraOrWrongPre:result.extraOrWrongPre,
+     notYetDue:result.notYetDue,
+     lateOriginalForCutoff:result.lateOriginalForCutoff
+    }));
     throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_AUDIT_NOT_INDEPENDENTLY_RECONCILED");
+   }
    await review.query("ROLLBACK");
   }finally{await review.end().catch(()=>undefined);}
   console.log(JSON.stringify({
