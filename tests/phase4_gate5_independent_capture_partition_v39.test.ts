@@ -87,7 +87,7 @@ describe("Gate5 independent webhook/flight capture partition, no source certific
   }
  });
  it("repeated FIDS refreshes/codeshare must not duplicate same leg/horizon",()=>{
-  const x=frame();x.population.push(x.population[0]);
+  const x=frame();x.population=[...x.population,x.population[0]];
   expect(()=>partitionP4G5IndependentCaptureV39(x))
    .toThrow("P4_G5_CAPTURE_DUPLICATE_FLIGHT_HORIZON");
  });
@@ -128,7 +128,7 @@ describe("Gate5 independent webhook/flight capture partition, no source certific
   expect(r.horizonReports[2].distinctResolvedMatchedInside).toBe(1);
  });
  it("rejects conflicting duplicate notification, malformed scope and future receipts",()=>{
-  const a=frame();a.deliveries.push(a.deliveries[0]);
+  const a=frame();a.deliveries=[...a.deliveries,a.deliveries[0]];
   expect(()=>partitionP4G5IndependentCaptureV39(a))
    .toThrow("P4_G5_CAPTURE_DUPLICATE_NOTIFICATION_DIGEST_ROW");
   const b=frame();b.reviewedFrozenManifestSha256="unreviewed";
