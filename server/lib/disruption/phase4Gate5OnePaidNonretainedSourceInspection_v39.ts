@@ -44,10 +44,13 @@ export function inspectP4OnePaidNonretainedFidsV39(body:unknown){
   if(dep&&!departureAirport)requestedAirportDepartureOmitted++;
   if(text(departureAirport?.icao).length===4)departureAirportIcao++;
   if(text(obj(arr?.airport)?.icao).length===4)oppositeArrivalAirportIcao++;
-  const times=dep&&obj(dep.scheduledTime);
-  const revisedTime=dep&&obj(dep.revisedTime);
-  const runwayTime=dep&&obj(dep.runwayTime);
-  const qualityValue=dep?.quality;
+  // withLeg=false uses movement; withLeg=true uses departure + arrival.
+  // Source-time presence must handle either documented FIDS presentation.
+  const requestedMovement=dep??movement;
+  const times=requestedMovement&&obj(requestedMovement.scheduledTime);
+  const revisedTime=requestedMovement&&obj(requestedMovement.revisedTime);
+  const runwayTime=requestedMovement&&obj(requestedMovement.runwayTime);
+  const qualityValue=requestedMovement?.quality;
   const validTime=(v:Record<string,unknown>|null|undefined)=>
     v&&typeof v.utc==="string"&&Number.isFinite(Date.parse(v.utc));
   if(validTime(times))scheduled++;
