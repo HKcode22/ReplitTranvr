@@ -319,8 +319,8 @@ export async function main(){
     const res=await db.query(
      "SELECT clean.reserve_phase4_g5_fids_physical_attempt_v39"+
      "($1,$2,$3,$4,$5,$6) AS committed_at_utc",
-     [manifestSha,owner.ownerDigest,entry.queryDigest,
-      proof.githubRunId,1,expectedReservationSha256]);
+     [manifestSha,owner.ownerDigest,proof.githubRunId,
+      entry.queryDigest,1,expectedReservationSha256]);
     if(res.rows.length!==1||!res.rows[0]?.committed_at_utc)
      hold("DURABLE_PAID_RESERVATION");
     await db.query("COMMIT");reserved=true;
