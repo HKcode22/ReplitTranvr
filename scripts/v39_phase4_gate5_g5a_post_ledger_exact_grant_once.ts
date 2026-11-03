@@ -83,8 +83,14 @@ export async function main(){
   const x=post.rows[0];
   if(post.rows.length!==1||!x.s||!x.i||x.u||x.d||x.t||x.r||x.g)
    hold("POSTCOMMIT_TABLE_ACL");
-  const pub=await admin.query(`SELECT
-   has_table_privilege('public',$1,'INSERT') AS public_insert`,[TABLE]);
+  const pub=await admin.query(`SELECT EXISTS(
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(c.relacl,acldefault('r',c.relowner))) p
+    WHERE n.nspname='clean' AND c.relname='adb_rest_attempt_ledger'
+      AND p.grantee=0 AND p.privilege_type='INSERT'
+  ) AS public_insert`);
   if(pub.rows[0]?.public_insert===true)hold("PUBLIC_INSERT_ALREADY_ALLOWED");
   console.log(JSON.stringify({
    status:changed?
