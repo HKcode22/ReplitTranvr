@@ -126,21 +126,35 @@ export async function installP4G5V0077PrivateMetadataV39(){
  const worker=new pg.Client({...config,connectionString:workerUrl,
   options:"-c default_transaction_read_only=on"});
  let adminReady=false,workerReady=false,tx=false;
+ // Fixed stage labels carry no user info, DB details or SQL query text.
+ // Needed because the prior entrypoint suppressed every non-SQLSTATE error.
+ let stage="CONNECT_RESTRICTED_RUNTIME";
  try{
   await worker.connect();workerReady=true;
+  stage="CONNECT_PRIVILEGED";
   await admin.connect();adminReady=true;
-  const cw=await catalog(worker),ca=await catalog(admin);
+  stage="READ_RUNTIME_PARENT_CATALOG";
+  const cw=await catalog(worker);
+  stage="READ_PRIVILEGED_PARENT_CATALOG";
+  const ca=await catalog(admin);
+  stage="REVIEW_PRIVILEGED_RESTRICTED_ROLES";
   assessP4G5V0077CatalogV39(ca,cw);
+  stage="BEGIN_SERIALIZABLE_PRIVATE_DDL";
   await admin.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   tx=true;
+  stage="SET_DDL_TIMEOUTS";
   await admin.query("SET LOCAL statement_timeout='15000ms'");
   await admin.query("SET LOCAL lock_timeout='2000ms'");
+  stage="LOCK_METADATA_SCHEMA";
   await admin.query("SELECT pg_advisory_xact_lock(77,39)");
+  stage="RECHECK_V0077_NOT_PRESENT";
   const before=await admin.query(CATALOG_SQL);
   const c=before.rows[0] as Catalog;
   if(!c||c.v0077_table||c.v0077_trigger_check||c.v0077_immutable)
    throw Error("P4_G5_V0077_CONCURRENT_SCHEMA_CHANGE_HOLD");
+  stage="APPLY_EXACT_PINNED_V0077_METADATA_DDL";
   await admin.query(bytes);
+  stage="VERIFY_NO_RUNTIME_V0077_GRANTS";
   const after=await admin.query(POST_INSTALL_SQL,[cw.db_role]);
   if(after.rows.length!==1)throw Error("P4_G5_V0077_NEW_SCHEMA_QUERY_SHAPE_HOLD");
   const r=after.rows[0] as Record<string,unknown>;
@@ -148,6 +162,7 @@ export async function installP4G5V0077PrivateMetadataV39(){
      r.worker_delete!==false||r.worker_select!==false||
      r.worker_check_execute!==false||r.worker_update_execute!==false)
    throw Error("P4_G5_V0077_RUNTIME_DEFAULT_PRIVILEGE_LEAK_HOLD");
+  stage="COMMIT_PRIVATE_METADATA_DDL";
   await admin.query("COMMIT");tx=false;
   console.log(JSON.stringify({
    status:"V0077_PRIVATE_EMPTY_METADATA_ONLY_INSTALLED",
@@ -161,6 +176,11 @@ export async function installP4G5V0077PrivateMetadataV39(){
    phase6Authorized:false
   }));
  }catch(e){
+  // Never expose raw Error.message, database identifiers, URLs or SQL detail.
+  // This stage is a fixed source-code label, not external input. COMMIT
+  // exceptions require an independent read-only catalog check; do NOT
+  // assume a rollback undid a transaction that may already have committed.
+  console.error("P4_G5_V0077_INSTALL_STAGE_"+stage+"_HOLD");
   if(tx)await admin.query("ROLLBACK").catch(()=>undefined);
   throw e;
  }finally{
