@@ -152,7 +152,16 @@ export const P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39=[
  "AND f.raw_payload IS NOT NULL AND f.raw_expired_at_utc IS NULL",
  "AND b.original_response_sha256=f.response_hash",
  "AND b.source_use_expires_at_utc>clock_timestamp()",
- "THEN b.population_query_id END)::int AS valid_originals",
+ "THEN b.population_query_id END)::int AS valid_originals,",
+ "count(DISTINCT CASE WHEN f.source_airport_icao=$1",
+ "AND f.query_direction='Departure'",
+ "AND f.service_window_start_utc=$2::timestamptz",
+ "AND f.service_window_end_utc=$3::timestamptz",
+ "AND f.available_at<=$4::timestamptz",
+ "AND f.raw_payload IS NOT NULL AND f.raw_expired_at_utc IS NULL",
+ "AND b.original_response_sha256=f.response_hash",
+ "AND b.source_use_expires_at_utc>clock_timestamp()",
+ "THEN aq.query_index END)::int AS valid_slots",
  "FROM clean.phase4_g5_fids_physical_owner_v39 ow",
  "JOIN clean.phase4_g5_fids_allowed_query_v39 aq",
  "ON aq.owner_digest=ow.owner_digest",
@@ -199,7 +208,8 @@ export async function stageP4G5ScopedPreV39(
   const frame=await db.query(P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,args);
   if(frame.rows.length!==1||Number(frame.rows[0]?.expected_slots)!==3||
      Number(frame.rows[0]?.bound_originals)!==3||
-     Number(frame.rows[0]?.valid_originals)!==3)
+     Number(frame.rows[0]?.valid_originals)!==3||
+     Number(frame.rows[0]?.valid_slots)!==3)
    throw Error("P4_G5_PRE_V0077_THREE_BOUND_ORIGINALS_UNVERIFIED_HOLD");
  }
  const q=await db.query(boundOwner?
