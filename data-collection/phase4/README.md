@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Actual production V0077 after-DDL ACL refusal and targeted new-object-only runtime revoke**](2026-11-03_V0077_EFFECTIVE_RUNTIME_ACL_ROLLBACK_AND_TARGETED_FIX.md) — user logs confirm V0077 SQL reached precommit ACL verification, then rolled back. Adds scoped new V0077 object privilege removal without changing default ACLs or weakening effective role checks; tests replicate preexisting admin default table/function grants. Gate5 science still requires real prospective PRE/POST.
+
 - [**Actual V0077 two-role Replit catalog READY, original installer refusal needs transaction-stage identification**](2026-11-03_V0077_PRODUCTION_READY_CATALOG_BUT_INSTALL_REFUSAL.md) — November 3 user diagnostic confirmed same PG16+ DB, V0076 present, distinct safe roles, V0077 absent; next change labels only fixed/secret-free installer transaction stages, no more source-only paid experiment.
 
 - [**Real V0077 Replit installation refusal, safe read-only root-cause diagnostic, and three-day science checklist**](2026-11-03_V0077_ACTUAL_REPLIT_INSTALL_REFUSAL_AND_THREE_DAY_CRITICAL_PATH.md) — the owner's actual command returned a generic HOLD, NOT a successful V0077 production install; the Nov2 3×3 provider source requests remain complete. Read-only diagnosis must precede any new migration attempt; science Gate5 still needs real prospective PRE→callback→POST evidence.

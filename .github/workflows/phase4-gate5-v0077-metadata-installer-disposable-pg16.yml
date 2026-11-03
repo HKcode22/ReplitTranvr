@@ -75,6 +75,14 @@ jobs:
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE gate5_reader LOGIN PASSWORD 'local_test_only'"
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA clean TO gate5_reader"
+          # Reproduce a real production scenario absent from the first
+          # disposable PG test: admin's default object ACLs grant the
+          # restricted role access to FUTURE clean tables/functions.
+          # Our V0077 installer must revoke ONLY newly created V0077 ACLs
+          # and leave older tables/default privileges untouched.
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA clean GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO gate5_reader"
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA clean GRANT EXECUTE ON FUNCTIONS TO gate5_reader"
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM pg_default_acl WHERE defaclrole='postgres'::regrole AND defaclnamespace='clean'::regnamespace AND defaclobjtype IN ('r','f')" | grep -qx '2'
       - name: Read-only production-like diagnostic BEFORE V0077 installation
         run: |
           set -Eeuo pipefail
@@ -90,6 +98,12 @@ jobs:
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM clean.phase4_g5_fids_original_binding_v39" | grep -qx '0'
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','INSERT')" | grep -qx 'f'
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','SELECT')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','UPDATE')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_table_privilege('gate5_reader','clean.phase4_g5_fids_original_binding_v39','DELETE')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_function_privilege('gate5_reader','clean.phase4_g5_check_original_binding_v39()','EXECUTE')" | grep -qx 'f'
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT has_function_privilege('gate5_reader','clean.phase4_g5_original_binding_immutable_update_v39()','EXECUTE')" | grep -qx 'f'
+          # Default ACL settings must NOT be modified by the V0077 installer.
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM pg_default_acl WHERE defaclrole='postgres'::regrole AND defaclnamespace='clean'::regnamespace AND defaclobjtype IN ('r','f')" | grep -qx '2'
           psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM clean.phase4_g5_fids_physical_attempt_v39" | grep -qx '0'
       - name: Read-only diagnostic AFTER V0077 install verifies private ACL
         run: |
