@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Next PRE source integrity — V0077 original GitHub owner-bound guard (offline PR)**](2026-11-03_GATE5_PRE_WRITER_V0077_EXACT_SOURCE_OWNER_GUARD.md) — ensures no same-window foreign FIDS can be passed to the actual PRE writer; requires one frozen owner/horizon and three eligible retained originals, refuses incomplete/expired source without backfill. Does **not** wire a live provider owner, certify native selected T or rights, or pass Gate5.
+
 - [**V0077 LIVE PRODUCTION INSTALLED + independent private ACL verified; one-horizon actual PRE DB-clock/nonbackfill guard**](2026-11-03_V0077_PROD_SUCCESS_AND_PER_HORIZON_PRE_TEMPORAL_GUARD.md) — actual owner's Replit output confirms table and triggers installed (0 source GETs/Contents), read-only separate roles verified. The next critical-path code prevents creating T−24h/T−6h/T−90m PRE records retroactively or in one impossible simultaneous run; science Gate5 still needs prospective source and downstream audit.
 
 - [**Actual production V0077 after-DDL ACL refusal and targeted new-object-only runtime revoke**](2026-11-03_V0077_EFFECTIVE_RUNTIME_ACL_ROLLBACK_AND_TARGETED_FIX.md) — user logs confirm V0077 SQL reached precommit ACL verification, then rolled back. Adds scoped new V0077 object privilege removal without changing default ACLs or weakening effective role checks; tests replicate preexisting admin default table/function grants. Gate5 science still requires real prospective PRE/POST.
