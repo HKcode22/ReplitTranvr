@@ -17,7 +17,13 @@ export function inspectP4OnePaidNonretainedFidsV39(body:unknown){
  let explicitOperator=0,explicitMarketing=0,unknownCodeshare=0;
  let scheduled=0,revised=0,runway=0,quality=0;
  let runwayQualityPresent=0,runwayWithLiveQuality=0;
- let explicitDepartureAirport=0,flightLegPresent=0;
+ // OpenAPI AirportFlightContract: withLeg=true expands to departure/arrival,
+ // NOT a top-level "leg" object. For requested-airport departures, the
+ // departure.airport property may be omitted *by design*. Count the real
+ // contract paths separately; missing fields are never proof of nonoperation.
+ let departureObject=0,arrivalObject=0,expandedPair=0,movementOnly=0;
+ let departureAirportIcao=0,oppositeArrivalAirportIcao=0;
+ let requestedAirportDepartureOmitted=0;
  let malformed=0;
  for(const raw of flights){
   const f=obj(raw);
@@ -27,10 +33,24 @@ export function inspectP4OnePaidNonretainedFidsV39(body:unknown){
   else if(code==="IsCodeshared"||code===2||code==="2")explicitMarketing++;
   else unknownCodeshare++;
   const dep=obj(f.departure);
-  const times=dep&&obj(dep.scheduledTime);
-  const revisedTime=dep&&obj(dep.revisedTime);
-  const runwayTime=dep&&obj(dep.runwayTime);
-  const qualityValue=dep?.quality;
+  const arr=obj(f.arrival);
+  const movement=obj(f.movement);
+  if(dep)departureObject++;
+  if(arr)arrivalObject++;
+  if(dep&&arr&&!movement)expandedPair++;
+  if(movement&&!dep&&!arr)movementOnly++;
+  // departure.airport is optional/omitted when equal to requested airport.
+  const departureAirport=obj(dep?.airport);
+  if(dep&&!departureAirport)requestedAirportDepartureOmitted++;
+  if(text(departureAirport?.icao).length===4)departureAirportIcao++;
+  if(text(obj(arr?.airport)?.icao).length===4)oppositeArrivalAirportIcao++;
+  // withLeg=false uses movement; withLeg=true uses departure + arrival.
+  // Source-time presence must handle either documented FIDS presentation.
+  const requestedMovement=dep??movement;
+  const times=requestedMovement&&obj(requestedMovement.scheduledTime);
+  const revisedTime=requestedMovement&&obj(requestedMovement.revisedTime);
+  const runwayTime=requestedMovement&&obj(requestedMovement.runwayTime);
+  const qualityValue=requestedMovement?.quality;
   const validTime=(v:Record<string,unknown>|null|undefined)=>
     v&&typeof v.utc==="string"&&Number.isFinite(Date.parse(v.utc));
   if(validTime(times))scheduled++;
@@ -44,13 +64,14 @@ export function inspectP4OnePaidNonretainedFidsV39(body:unknown){
       (Array.isArray(qualityValue)&&qualityValue.includes("Live")))
     runwayWithLiveQuality++;
   }
-  if(text(obj(dep?.airport)?.icao).length===4)explicitDepartureAirport++;
-  if(obj(f.leg))flightLegPresent++;
  }
  const n=flights.length;
  if(malformed!==0||explicitOperator+explicitMarketing+unknownCodeshare!==n||
     scheduled>n||revised>n||runway>n||quality>n||
-    runwayQualityPresent>runway||runwayWithLiveQuality>runwayQualityPresent)
+    runwayQualityPresent>runway||runwayWithLiveQuality>runwayQualityPresent||
+    expandedPair>departureObject||expandedPair>arrivalObject||
+    requestedAirportDepartureOmitted>departureObject||
+    movementOnly+expandedPair>n)
   throw Error("P4_G5_NONRETAINED_FIDS_COUNTER_INTEGRITY_HOLD");
  return {
   schema:"v39.phase4.gate5-single-paid-fids-ephemeral-source-shape.v1" as const,
@@ -65,8 +86,17 @@ export function inspectP4OnePaidNonretainedFidsV39(body:unknown){
   qualityFieldPresent:quality,
   runwayTimeWithAnyQuality:runwayQualityPresent,
   runwayTimeWithLiveQuality:runwayWithLiveQuality,
-  originIcaoFieldPresent:explicitDepartureAirport,
-  flightLegObjectPresent:flightLegPresent,
+  // Contract-correct source-shape diagnostics. None prove operating identity.
+  departureMovementObjectPresent:departureObject,
+  arrivalMovementObjectPresent:arrivalObject,
+  withLegExpandedMovementPairPresent:expandedPair,
+  movementOnlyFidsShapePresent:movementOnly,
+  departureAirportIcaoFieldPresent:departureAirportIcao,
+  oppositeArrivalAirportIcaoFieldPresent:oppositeArrivalAirportIcao,
+  requestedAirportDepartureObjectWithAirportOmitted:
+    requestedAirportDepartureOmitted,
+  requestedAirportOmissionAllowedByOpenApi:true as const,
+  withLegIsDepartureArrivalNotTopLevelLeg:true as const,
   firstProviderNativeSelectedTCertified:false as const,
   runwayActualOnlyPerRecordCertified:false as const,
   confirmedOperatingLegPopulation:false as const,
