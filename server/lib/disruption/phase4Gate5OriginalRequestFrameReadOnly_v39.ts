@@ -32,6 +32,7 @@ export interface P4G5OriginalFrameReviewScopeV39 {
  horizon:P4Gate5GridHorizonV39;
  queryIndex:number;
  populationQueryId:string;
+ expectedOwnerGithubRunId?:string;
  readAsOfUtc:string;
 }
 
@@ -113,7 +114,9 @@ function parseReviewedManifest(scope:P4G5OriginalFrameReviewScopeV39){
   !H.includes(scope.horizon)||
   !Number.isSafeInteger(scope.queryIndex)||scope.queryIndex<0||
   !UUID.test(scope.populationQueryId)||
-  typeof scope.readAsOfUtc!=="string")
+  typeof scope.readAsOfUtc!=="string"||
+ (scope.expectedOwnerGithubRunId!==undefined&&
+  !/^[0-9]{5,25}$/.test(scope.expectedOwnerGithubRunId)))
   fail("INVALID_REVIEW_SCOPE");
  asUtc(scope.readAsOfUtc,"readAsOfUtc");
  if(createHash("sha256").update(scope.reviewedManifestBytes,"utf8")
@@ -163,6 +166,8 @@ export function assessP4Gate5OriginalRequestFrameV39(
     r.horizon!==scope.horizon||
     r.query_index!==scope.queryIndex||
     r.github_run_id!==r.owner_github_run_id||
+    (scope.expectedOwnerGithubRunId!==undefined&&
+     r.github_run_id!==scope.expectedOwnerGithubRunId)||
     !/^[0-9]{5,25}$/.test(value(r,"github_run_id")))
   fail("V0076_V0077_OWNER_QUERY_OR_MANIFEST_MISMATCH");
  const attempt=r.physical_attempt_number;
