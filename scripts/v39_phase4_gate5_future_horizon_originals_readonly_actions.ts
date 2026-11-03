@@ -17,6 +17,10 @@ import {
 import {
  auditP4G5DiscoveredHorizonOriginalBeforeExpiryV39
 } from "../server/lib/disruption/phase4Gate5NineOriginalBoundCohort_v39";
+import {deriveP4G5FutureHorizonPreScopeV39}
+ from "../server/lib/disruption/phase4Gate5FutureHorizonPreScope_v39";
+import {auditP4G5HorizonPreexpiryV39}
+ from "../server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39";
 
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 type Job="admit-future-horizon"|"read-future-horizon";
@@ -114,6 +118,48 @@ export async function mainP4G5FutureHorizonReaderV39(){
     horizon:source.horizon,expectedOwnerGithubRunId:source.runId,
     readAsOfUtc
    });
+  // Before the short-lived source expires, inspect actual PRE rows in the
+  // SAME read-only database snapshot, never a retrospective POST backfill.
+  // This remains candidate-only until native T/actuality, rights and identity.
+  let preCandidate:Record<string,unknown>|null=null;
+  if(result.status==="THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED"){
+   const preScope=deriveP4G5FutureHorizonPreScopeV39({
+    reviewedFrozenGridBytes:gridBytes,
+    independentlyReviewedFrozenGridSha256:reviewed.frozenGridSha256,
+    expectedCohortId:reviewed.cohortId,
+    githubAttestedSourceRunId:source.runId,
+    githubAttestedHorizon:source.horizon,
+    actualReadAtUtc:readAsOfUtc
+   });
+   const preResult=await auditP4G5HorizonPreexpiryV39(reader,preScope);
+   if(preResult.status==="V0077_BOUND_THREE_ORIGINALS_PREEXPIRY_CANDIDATE_ONLY"){
+    preCandidate={
+     status:preResult.status,
+     observedBoundOriginals:preResult.observedBoundOriginals,
+     distinctQuerySlots:preResult.distinctQuerySlots,
+     sourceScopedPhysicalCandidates:preResult.sourceScopedPhysicalCandidates,
+     operatingCandidates:preResult.operatingCandidates,
+     eligibleCutoffCandidates:preResult.eligibleCutoffCandidates,
+     prePersistedCandidateCount:preResult.prePresent,
+     missingPreCandidateCount:preResult.missingPreCandidateCount,
+     preCandidateCompleteness:preResult.candidatePreCompleteness,
+     notYetDue:preResult.notYetDue,
+     lateOriginalForCutoff:preResult.lateOriginalForCutoff,
+     missingGenericT:preResult.missingGenericT,
+     identityScopeAmbiguous:preResult.identityScopeAmbiguous,
+     invalidOrPosthocPreExcluded:preResult.invalidOrPosthocPRE,
+     actualSelectedTVerified:false,certifiedPre:false
+    };
+   }else{
+    preCandidate={
+     status:preResult.status,
+     observedBoundOriginals:preResult.observedBoundOriginals,
+     preCandidateCompleteness:null,
+     sourceOrExpectedPreUnknown:true
+    };
+    process.exitCode=2;
+   }
+  }
   console.log(JSON.stringify({
    status:result.status,horizon:source.horizon,
    matchedOriginalSlots:result.matchedOriginalSlots,
@@ -121,6 +167,7 @@ export async function mainP4G5FutureHorizonReaderV39(){
    independentGitHubSourceRunMetadataVerified:true,
    applicationSourceFrameReadback:result.status===
      "THREE_APPLICATION_SOURCE_FRAMES_MATCHED_NOT_PROVIDER_CERTIFIED",
+   actualPersistedPreCandidateReview:preCandidate,
    originalProviderWireAuthenticated:false,
    legallyPermittedMetadataProofRetentionCertified:false,
    providerNativeFirstTVerified:false,actualOnlyWheelsOffVerified:false,
