@@ -8,6 +8,7 @@
 
 - [**READ FIRST — Binding owner directive: stop perfection loop; complete meaningful Gate5 by November 4**](2026-11-03_OWNER_DIRECTIVE_NO_PERFECTION_LOOP_FAST_SCIENTIFIC_GATE5_CLOSURE.md) — carry forward across all chats/PRs; keep cutoff/data/budget rigor, no repetition of old provider limitations.
 - [**Proposed Gate5 G5A prospective scientifically valid alternative protocol (review before real data)**](2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md) — Track A native scheduled-departure-reference schedule revision, independently measured PRE/POST and missingness; Track B free data optional enrichment, not critical path.
+- [**REAL G5A WSSS GitHub-only source→V0076→V0077→clock-safe PRE owner candidate, exact 2026-11-03/04 prearms**](2026-11-03_G5A_WSSS_REAL_SCHEDULED_SOURCE_PRE_ACTIVATION_CHECKPOINT.md) — bounded 3×3 Tier-2 GETs, honest missingness, one restricted GH writer; NOT a paid launch or completed POST until actually evidenced.
 
 - [**V0078 actually INSTALLED production; GitHub future owner/DB credentials readiness (no provider)**](2026-11-03_GATE5_V0078_LIVE_INSTALL_SUCCESS_GITHUB_SOURCE_OWNER_READINESS.md) — real owner postcommit success and reviewed source owner/auditor secret + least-privilege READ ONLY capability checks; provider/native T/rights/three-horizon scientific Gate5 still HOLD.
 
