@@ -53,7 +53,8 @@ export function classifyP4G5V0077ProductionCatalogV39(admin:DbFacts,worker:DbFac
  const v77Count=[d.v0077Table,d.v0077CheckFunction,
    d.v0077ImmutableFunction].filter(Boolean).length;
  let status:
-  "ALREADY_INSTALLED_VERIFY_GRANTS"|
+  "ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED"|
+  "ALREADY_INSTALLED_RUNTIME_PRIVILEGES_REQUIRE_REVIEW"|
   "PARTIAL_V0077_SCHEMA_NEEDS_REVIEW"|
   "PARENT_V0076_OR_SOURCE_NOT_PRESENT"|
   "ROLE_OR_DATABASE_NOT_SAFE_FOR_PRIVATE_DDL"|
@@ -65,7 +66,11 @@ export function classifyP4G5V0077ProductionCatalogV39(admin:DbFacts,worker:DbFac
  else if(!d.parentV0076Complete||!d.sourceTablePresent)
   status="PARENT_V0076_OR_SOURCE_NOT_PRESENT";
  else if(v77Count===3)
-  status="ALREADY_INSTALLED_VERIFY_GRANTS";
+  status=[
+   d.runtimeCanSelectV0077,d.runtimeCanInsertV0077,
+   d.runtimeCanUpdateV0077,d.runtimeCanDeleteV0077
+  ].some(Boolean)?"ALREADY_INSTALLED_RUNTIME_PRIVILEGES_REQUIRE_REVIEW":
+   "ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED";
  else if(v77Count!==0)
   status="PARTIAL_V0077_SCHEMA_NEEDS_REVIEW";
  else status="READY_FOR_ONE_TIME_V0077_PRIVATE_SCHEMA_INSTALL";
@@ -171,7 +176,7 @@ export async function runP4G5V0077ReadOnlyDiagnosisV39(){
  const result=classifyP4G5V0077ProductionCatalogV39(admin,runtime);
  console.log(JSON.stringify(result));
  return result.status==="READY_FOR_ONE_TIME_V0077_PRIVATE_SCHEMA_INSTALL"||
-  result.status==="ALREADY_INSTALLED_VERIFY_GRANTS"?0:2;
+  result.status==="ALREADY_INSTALLED_PRIVATE_READONLY_VERIFIED"?0:2;
 }
 if(process.argv[1]?.endsWith("v39_phase4_gate5_v0077_readonly_failure_diagnosis.ts")){
  void runP4G5V0077ReadOnlyDiagnosisV39().then(x=>{
