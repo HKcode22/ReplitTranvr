@@ -20,7 +20,7 @@ export type G5ARevisionOutcomeV39=
  "UNKNOWN_IDENTITY_UNVERIFIED"|"UNKNOWN_NATIVE_T_UNAVAILABLE"|
  "UNKNOWN_SOURCE_INVALID_OR_EXPIRED";
 const SHA=/^[a-f0-9]{64}$/;
-const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d\.\d{3}Z$/;
+const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const LAG:Record<G5AHorizonV39,number>={
  "T-24h":24*3600000,"T-6h":6*3600000,"T-90m":90*60000
 };
