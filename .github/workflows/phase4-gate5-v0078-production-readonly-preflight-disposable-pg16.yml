@@ -1,0 +1,100 @@
+name: Phase4 Gate5 V0078 Production Readonly Preflight Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0078-production-readonly-preflight-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts"
+      - "tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0078-production-readonly-preflight-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts"
+      - "tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://v0078_runtime_fixture:v0078_disposable_only@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  readonly-v0078-preflight-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify isolated test-only credentials and source
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REPOSITORY}" = "HKcode22/ReplitTranvr"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test "${V39_DATABASE_RUNTIME_URL}" = "postgresql://v0078_runtime_fixture:v0078_disposable_only@localhost:5432/v39_ci?sslmode=disable"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+      - name: Stage V0076 and V0077 in disposable PG16, and create separate unprivileged role
+        run: |
+          set -Eeuo pipefail
+          test ! -e migrations/current/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          test ! -e migrations/current/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE v0078_runtime_fixture LOGIN PASSWORD 'v0078_disposable_only'"
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA clean TO v0078_runtime_fixture"
+      - name: Require pre-install candidate metadata with zero original Content reads and writes
+        run: |
+          set -Eeuo pipefail
+          OUTPUT="$(node --import tsx scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts)"
+          printf '%s\n' "$OUTPUT"
+          printf '%s\n' "$OUTPUT" | grep -Fq '"status":"V0078_PREINSTALL_CATALOG_CANDIDATE_ONLY_NEEDS_OWNER_REVIEW"'
+          printf '%s\n' "$OUTPUT" | grep -Fq '"databaseWrites":0'
+          printf '%s\n' "$OUTPUT" | grep -Fq '"providerCalls":0'
+          printf '%s\n' "$OUTPUT" | grep -Fq '"v0077PrivateToRuntime":true'
+      - name: Check stage-only V0078 in disposable PostgreSQL (not production)
+        run: |
+          set -Eeuo pipefail
+          psql "${DATABASE_URL}" -X -1 -v ON_ERROR_STOP=1 -f migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+      - name: Require post-install preflight to HOLD on already-installed V0078
+        run: |
+          set -Eeuo pipefail
+          set +e
+          OUTPUT="$(node --import tsx scripts/v39_phase4_gate5_v0078_production_readonly_preflight.ts)"
+          CODE=$?
+          set -e
+          printf '%s\n' "$OUTPUT"
+          test "$CODE" -eq 2
+          printf '%s\n' "$OUTPUT" | grep -Fq '"status":"V0078_ALREADY_PRESENT_DO_NOT_REINSTALL_HOLD"'
+          printf '%s\n' "$OUTPUT" | grep -Fq '"databaseWrites":0'
+          printf '%s\n' "$OUTPUT" | grep -Fq '"providerCalls":0'
+      - name: Pure parser and refusal policy unit tests
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_v0078_readonly_production_preflight_v39.test.ts
+          echo 'PRODUCTION_DATABASE_WRITES=0'
+          echo 'PROVIDER_CALLS=0'
+          echo 'V0078_PRODUCTION_INSTALL=false'
