@@ -19,7 +19,7 @@ const grid=():P4Gate5GridDraftInputV39=>({
  serviceWindowStartUtc:"2026-11-06T17:00:00.000Z",
  serviceWindowEndUtc:"2026-11-06T18:00:00.000Z",
  assignmentFrozenAtUtc:"2026-11-05T10:00:00.000Z",
- acquisitionGuardMinutes:15,refreshCadenceMinutes:30,
+ acquisitionGuardMinutes:20,refreshCadenceMinutes:30,
  maxStalenessMinutes:45,githubPrearmLeadMinutes:60,
  apiUnitsPerPhysicalAttempt:2,maxAttemptsPerQuery:1,
  projectRestApiUnitsBudget:18,maxSourceQueries:9
