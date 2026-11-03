@@ -7,6 +7,10 @@ on:
       - "server/lib/disruption/phase4Gate5OriginalRequestFrameReadOnly_v39.ts"
       - "scripts/v39_phase4_gate5_original_frame_disposable_pg16_actions.ts"
       - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
+      - "server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39.ts"
+      - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+      - "tests/phase4_gate5_bound_source_capture_readonly_v39.test.ts"
+      - "tests/phase4_gate5_horizon_preexpiry_readonly_v39.test.ts"
   push:
     branches: [main]
     paths:
@@ -14,6 +18,10 @@ on:
       - "server/lib/disruption/phase4Gate5OriginalRequestFrameReadOnly_v39.ts"
       - "scripts/v39_phase4_gate5_original_frame_disposable_pg16_actions.ts"
       - "tests/phase4_gate5_original_request_frame_readonly_v39.test.ts"
+      - "server/lib/disruption/phase4Gate5BoundSourceCaptureReadonly_v39.ts"
+      - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+      - "tests/phase4_gate5_bound_source_capture_readonly_v39.test.ts"
+      - "tests/phase4_gate5_horizon_preexpiry_readonly_v39.test.ts"
 permissions:
   contents: read
 env:
