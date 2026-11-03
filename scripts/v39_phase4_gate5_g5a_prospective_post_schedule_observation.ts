@@ -128,7 +128,7 @@ async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
 async function waitUntil(at:number){
  while(Date.now()<at)await sleep(Math.min(15000,Math.max(1,at-Date.now())));
 }
-async function reserveOne(db:pg.Client,manifestSha:string,cohortId:string,slot:number){
+export async function reserveG5APostSlotDbV39(db:pg.Client,manifestSha:string,cohortId:string,slot:number){
  const id=postReservationUuidV39(manifestSha,slot);
  const cycle="G5A_NOV05_"+manifestSha.slice(0,32);
  const category="g5a_post_schedule_fids";
@@ -282,7 +282,7 @@ export async function main(){
       quota.apiUnitsRemaining<2||quota.requestsRemaining<2){
     unknown++;continue;
    }
-   const id=await reserveOne(db,manifestSha,cohortId,i);
+   const id=await reserveG5APostSlotDbV39(db,manifestSha,cohortId,i);
    charged++;
    let callback=0;
    const q:FidsCensusParams={
