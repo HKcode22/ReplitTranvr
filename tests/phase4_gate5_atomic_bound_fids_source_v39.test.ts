@@ -112,8 +112,8 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
   const c=fakeDb();
   mock.persist.mockImplementation(async(q,r,callback)=>{
    await callback(c.db,{query:q,durableAvailableAt:new Date(received),
-    normalizedInsertedRows:r.length});
-   return r.length;
+    normalizedInsertedRows:1});
+   return 1;
   });
   const output=await persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding());
   expect(output.status).toBe(
@@ -157,7 +157,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
   const c=fakeDb({status:"PREPARED"});
   mock.persist.mockImplementation(async(q,r,callback)=>{
    await callback(c.db,{query:q,durableAvailableAt:new Date(received),
-    normalizedInsertedRows:r.length});return r.length;
+    normalizedInsertedRows:1});return 1;
   });
   await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
    .rejects.toThrow("P4_G5_V0077_ORIGINAL_OWNER_NOT_ACTIVE_OR_COMMITTED_HOLD");
@@ -171,7 +171,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
    const c=fakeDb(overrides);
    mock.persist.mockImplementation(async(q,r,callback)=>{
     await callback(c.db,{query:q,durableAvailableAt:new Date(received),
-     normalizedInsertedRows:r.length});return r.length;
+     normalizedInsertedRows:1});return 1;
    });
    await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
     .rejects.toThrow("P4_G5_V0077_ORIGINAL_RETENTION_OR_CUTOFF_HOLD");
@@ -188,7 +188,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
    const c=fakeDb(overrides);
    mock.persist.mockImplementation(async(q,r,callback)=>{
     await callback(c.db,{query:q,durableAvailableAt:new Date(received),
-     normalizedInsertedRows:r.length});return r.length;
+     normalizedInsertedRows:1});return 1;
    });
    await expect(persistP4G5BoundFidsDbOnlyV39(
     original(),[member()],binding())).rejects.toThrow(needle);
@@ -201,7 +201,7 @@ describe("Gate5 V0077 raw-first FIDS + normalized + binding atomic DB-only adapt
    const c=fakeDb(overrides);
    mock.persist.mockImplementation(async(q,r,callback)=>{
     await callback(c.db,{query:q,durableAvailableAt:new Date(received),
-     normalizedInsertedRows:r.length});return r.length;
+     normalizedInsertedRows:1});return 1;
    });
    await expect(persistP4G5BoundFidsDbOnlyV39(original(),[member()],binding()))
     .rejects.toThrow(/P4_G5_V0077_ORIGINAL_(?:BINDING_NOT_INSERTED|ATOMIC_READBACK)_HOLD/);
