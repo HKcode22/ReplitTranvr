@@ -10,8 +10,9 @@
  * WSSS 01:00-05:00Z local source range (09:00-13:00 Singapore time).
  * A missing/lost identity/schedule is UNKNOWN, not a negative/actual.
  *
- * This module does not run for PR, push, workflow_dispatch or in Replit.
- * It requires verified real GitHub schedule metadata and preexisting role
+ * This module never runs paid for PR, push or in Replit. Only verified GitHub
+ * scheduled events or the existing reviewed manual fallback may collect.
+ * It requires verified real GitHub provenance and preexisting role
  * with SELECT/INSERT on clean.adb_rest_attempt_ledger.
  */
 import {createHash} from "node:crypto";
@@ -28,7 +29,9 @@ import {fetchFidsAirport,getBalanceEvidenceStrict}
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A WSSS Real Prospective POST";
 const PATH=".github/workflows/phase4-gate5-g5a-wsss-real-post.yml";
-const CRON="10 2 7 11 *";
+export const G5A_POST_CRONS_V39=["10 2 7 11 *","22 2 7 11 *",
+ "37 2 7 11 *","52 2 7 11 *"] as const;
+const PROOF_DEADLINE="2026-11-07T03:25:00.000Z";
 const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json";
 const FROM="2026-11-07T01:00:00.000Z",TO="2026-11-07T05:00:00.000Z";
 const POSTS=["2026-11-07T03:40:00.000Z","2026-11-07T04:10:00.000Z",
@@ -73,18 +76,40 @@ function manifest(){
   hold("FROZEN_GRID_CHANGED");
  return {sha:hash(bytes),cohortId:String(d.cohortId)};
 }
+export function isG5APostReviewedEventV39(e:NodeJS.ProcessEnv):boolean {
+ return (e.GITHUB_EVENT_NAME==="schedule"&&
+   !e.G5A_POST_MANUAL_INTENT&&
+   G5A_POST_CRONS_V39.some(x=>x===e.G5A_POST_SCHEDULE))||
+  (e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+   e.G5A_POST_MANUAL_INTENT==="REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"&&
+   e.G5A_POST_SCHEDULE==="manual-reviewed");
+}
+/**
+ * GH queues backup scheduled runs behind one physical owner. A duplicate
+ * whose actual job does not start until after admission is forever UNKNOWN;
+ * exit without DB, reservation or paid request, never infer a negative POST.
+ * Manual fallback is not silently excused when late.
+ */
+export function isG5APostExpiredScheduledBackupV39(
+ e:NodeJS.ProcessEnv,commit:string,at:number
+):boolean {
+ return Number.isFinite(at)&&at>=ms(PROOF_DEADLINE)&&at<ms(END)&&
+  GH.test(commit)&&e.GITHUB_EVENT_NAME==="schedule"&&
+  !e.G5A_POST_MANUAL_INTENT&&
+  G5A_POST_CRONS_V39.some(x=>x===e.G5A_POST_SCHEDULE)&&
+  e.GITHUB_ACTIONS==="true"&&e.GITHUB_REPOSITORY===REPO&&
+  e.GITHUB_REF==="refs/heads/main"&&e.GITHUB_SHA===commit&&
+  e.GITHUB_RUN_ATTEMPT==="1"&&
+  e.GITHUB_JOB==="post-source"&&e.GITHUB_WORKFLOW===WF&&
+  e.GITHUB_WORKFLOW_REF===REPO+"/"+PATH+"@refs/heads/main"&&
+  e.G5A_POST_PAID_INTENT==="G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX"&&
+  e.ADB_AUTO_COLLECT==="0"&&e.V39_PHASE6_PROCESS_ARMED==="0";
+}
 export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,at:number){
  if(!GH.test(commit)||!Number.isFinite(at)||
     e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||
     e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_SHA!==commit||
-    !(
-      (e.GITHUB_EVENT_NAME==="schedule"&&
-       !e.G5A_POST_MANUAL_INTENT&&
-       e.G5A_POST_SCHEDULE===CRON) ||
-      (e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
-       e.G5A_POST_MANUAL_INTENT==="REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"&&
-       e.G5A_POST_SCHEDULE==="manual-reviewed")
-    )||e.GITHUB_RUN_ATTEMPT!=="1"||
+    !isG5APostReviewedEventV39(e)||e.GITHUB_RUN_ATTEMPT!=="1"||
     e.GITHUB_JOB!=="post-source"||e.GITHUB_WORKFLOW!==WF||
     e.GITHUB_WORKFLOW_REF!==REPO+"/"+PATH+"@refs/heads/main"||
      e.G5A_POST_PAID_INTENT!=="G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX"||
@@ -126,8 +151,8 @@ async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
     job.run_id!==Number(id)||job.status!=="in_progress"||
     job.conclusion!==null||
     !Number.isFinite(start)||start>current||
-    start>ms("2026-11-07T03:25:00.000Z")||
-    current>ms("2026-11-07T03:25:00.000Z")||
+    start>ms(PROOF_DEADLINE)||
+    current>ms(PROOF_DEADLINE)||
     current-start>90*60000)
   hold("GH_POST_NOT_ACTUALLY_PREARMED");
  return {githubRunId:id,realStartedAt: new Date(start).toISOString()};
@@ -268,7 +293,18 @@ async function readAgg(db:pg.Client,manifestSha:string,ids:string[]){
 export async function main(){
  const e=process.env,head=execFileSync("git",["rev-parse","HEAD"],
   {encoding:"utf8",timeout:4000}).trim();
- assertG5APostRunnerContextV39(e,head,Date.now());
+ const started=Date.now();
+ if(isG5APostExpiredScheduledBackupV39(e,head,started)){
+  console.log(JSON.stringify({
+   status:"G5A_POST_GITHUB_SCHEDULE_BACKUP_TOO_LATE_UNOBSERVED",
+   githubRunId:e.GITHUB_RUN_ID,sourceContentRead:false,
+   providerCalls:0,databaseWrites:0,
+   missingPostNotClassifiedNegative:true,
+   scientificGate5Passed:false,phase5FreezeAuthorized:false
+  }));
+  return;
+ }
+ assertG5APostRunnerContextV39(e,head,started);
  const {sha:manifestSha,cohortId}=manifest();
  const proof=await independentlyVerifyGithubRun(e,head);
  const db=new pg.Client({connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
@@ -286,7 +322,7 @@ export async function main(){
    try{quota=(await getBalanceEvidenceStrict()).quota}
    catch{unknown++;continue}
    if(Date.now()-ms(quota.observedAtUtc)>30000||
-      quota.apiUnitsRemaining<2||quota.requestsRemaining<2){
+      quota.apiUnitsRemaining<2||quota.requestsRemaining<1){
     unknown++;continue;
    }
    const id=await reserveG5APostSlotDbV39(db,manifestSha,cohortId,i);
