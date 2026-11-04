@@ -232,10 +232,12 @@ export async function main(){
   verifiedGitHubRunSha256:proof.githubRunProofSha256,
   rightsScopeSha256:rightsSha,g5aProtocolSha256:protocolSha
  }));
- // pg.Client emits an asynchronous 'error' for Neon 57P01 while idle.
- // Never allow an unhandled event to kill the already PREARMED runner.
- // Reconnect ONLY at an idle boundary; do not replay uncertain SQL writes.
- let dbBroken=false;
+ // Neon scale-to-zero closes the idle PostgreSQL backend; keep this
+ // exact owner session healthy with bounded READ-ONLY heartbeat queries.
+ // 57P01 may also reflect compute administration: verify health again at
+ // source boundary. Never retry an uncertain paid GET, SQL transaction,
+ // original persistence or POST outcome.
+ let dbBroken=false,lastIdleProbeAt=0,asynchronousPgLosses=0;
  const makeClient=()=>{
   const client=new pg.Client({
    connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
@@ -243,8 +245,8 @@ export async function main(){
    application_name:"g5a_real_github_prospective_pre_source"
   });
   client.on("error",(err:Error&{code?:string})=>{
-   if(client===db){
-    dbBroken=true;
+   if(client===db&&!dbBroken){
+    dbBroken=true;asynchronousPgLosses++;
     console.error(JSON.stringify({
      status:"G5A_PG_ASYNC_DISCONNECT_RECONNECT_WHEN_IDLE",
      code:/^[A-Z0-9]{5}$/.test(err.code??"")?err.code:"UNKNOWN",
@@ -252,19 +254,49 @@ export async function main(){
     }));
    }
   });
+  client.on("end",()=>{if(client===db)dbBroken=true;});
   return client;
  };
  let db=makeClient();
  const repairIdle=async()=>{
   if(!dbBroken)return;
-  const old=db,next=makeClient();
-  await next.connect();
-  db=next;dbBroken=false;
-  await old.end().catch(()=>undefined);
-  console.log(JSON.stringify({
-   status:"G5A_PG_IDLE_RECONNECTED_WITHOUT_PAID_OR_SQL_REPLAY",
-   providerCallsFromReconnect:0
-  }));
+  const old=db;
+  // Reconnect under original scoped credentials only, NEVER on behalf of
+  // an ambiguous database write or a physical provider request.
+  for(let attempt=1;attempt<=3;attempt++){
+   const next=makeClient();
+   try{
+    await next.connect();db=next;dbBroken=false;lastIdleProbeAt=0;
+    await old.end().catch(()=>undefined);
+    console.log(JSON.stringify({
+     status:"G5A_PG_IDLE_RECONNECTED_WITHOUT_PAID_OR_SQL_REPLAY",
+     observedDisconnects:asynchronousPgLosses,reconnectAttempt:attempt,
+     providerCallsFromReconnect:0
+    }));
+    return;
+   }catch{
+    await next.end().catch(()=>undefined);
+    if(attempt<3)await sleep(attempt*900);
+   }
+  }
+  hold("PG_IDLE_RECONNECT_UNAVAILABLE");
+ };
+ const readOnlyHealthProbe=async()=>{
+  await repairIdle();
+  if(Date.now()-lastIdleProbeAt<25000)return;
+  const ping=async()=>{
+   const res=await db.query("SELECT clock_timestamp() AS db_now_utc");
+   if(res.rows.length!==1||!(res.rows[0]?.db_now_utc instanceof Date)||
+      !Number.isFinite(res.rows[0].db_now_utc.getTime()))
+    hold("PG_READ_ONLY_HEARTBEAT_INVALID");
+  };
+  try{await ping();}
+  catch{
+   // The ONLY query repeated here is a read-only clock/health SELECT.
+   // Never use this path to retry an uncertain reservation/paid GET.
+   dbBroken=true;await repairIdle();await ping();
+  }
+  lastIdleProbeAt=Date.now();
  };
  let successful=0,attempted=0,unknown=0,preCreated=0,preExisting=0;
  await db.connect();
@@ -408,7 +440,7 @@ export async function main(){
   };
   const wait=async(until:number)=>{
    while(Date.now()<until){
-    await repairIdle();
+    await readOnlyHealthProbe();
     await tryPre();
     await sleep(Math.min(16000,Math.max(1,until-Date.now())));
    }
@@ -417,7 +449,7 @@ export async function main(){
    const planned=ms(entry.plannedPhysicalStartUtc);
    const latest=ms(entry.hardLatestPhysicalStartUtc);
    await wait(planned);
-   await repairIdle();
+   await readOnlyHealthProbe();
    const now=Date.now();
    if(now>latest||now<planned){unknown++;continue;}
    // Live account quota is mandatory; if missing, mark UNOBSERVED and
@@ -433,6 +465,9 @@ export async function main(){
    if(apiRemaining<owner.perAttemptApiUnits||Date.now()>latest){
     unknown++;continue;
    }
+   // Real database health immediately before irreversible V0076 reservation.
+   await readOnlyHealthProbe();
+   if(Date.now()>latest){unknown++;continue;}
    const expectedReservationSha256=sha([
     manifestSha,owner.ownerDigest,entry.queryDigest,"1"
    ].join("|"));
@@ -529,11 +564,11 @@ export async function main(){
      error:errorSafe(err),noRetry:true
     }));
    }
-   await repairIdle();
+   await readOnlyHealthProbe();
    await tryPre();
   }
   await wait(ms(owner.entries[owner.entries.length-1].cutoffUtc)+1500);
-  await repairIdle();
+  await readOnlyHealthProbe();
   await tryPre();
   console.log(JSON.stringify({
    status:"G5A_PROSPECTIVE_HORIZON_SOURCE_PRE_OBSERVATION_CLOSED",
