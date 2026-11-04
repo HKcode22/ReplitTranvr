@@ -12,7 +12,9 @@ const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner";
 const PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml";
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
-const iso=(x:unknown)=>x instanceof Date?x.toISOString():String(x);
+const iso=(x:unknown)=>{const d=x instanceof Date?x:new Date(String(x));
+ if(!Number.isFinite(d.getTime()))throw Error("G5A_BAD_OLD_TIMESTAMP_HOLD");
+ return d.toISOString();};
 const fail=():never=>{throw Error("P4_G5_G5A_57P01_ORIGINAL_OWNER_RECOVERY_HOLD");};
 type Db={query:(q:string,p?:unknown[])=>Promise<{rows:any[]}>};
 export type RecoveryProof={
