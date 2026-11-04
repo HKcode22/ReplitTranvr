@@ -35,6 +35,8 @@ import {persistP4G5BoundFidsDbOnlyV39}
  from "../server/lib/disruption/phase4Gate5AtomicBoundSourceV39";
 import {persistP4G5ReviewedPreForCohortV39}
  from "../server/lib/disruption/phase4Gate5ScopedPreWriter_v39";
+import {proveAndBindFailedG5AT24OwnerV39}
+ from "../server/lib/disruption/phase4Gate5G5AT24FailedOwnerRecovery_v39";
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml";
@@ -230,15 +232,42 @@ export async function main(){
   verifiedGitHubRunSha256:proof.githubRunProofSha256,
   rightsScopeSha256:rightsSha,g5aProtocolSha256:protocolSha
  }));
- const db=new pg.Client({
-  connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
-  connectionTimeoutMillis:9500,query_timeout:14000,
-  application_name:"g5a_real_github_prospective_pre_source"
- });
+ // pg.Client emits an asynchronous 'error' for Neon 57P01 while idle.
+ // Never allow an unhandled event to kill the already PREARMED runner.
+ // Reconnect ONLY at an idle boundary; do not replay uncertain SQL writes.
+ let dbBroken=false;
+ const makeClient=()=>{
+  const client=new pg.Client({
+   connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
+   connectionTimeoutMillis:9500,query_timeout:14000,
+   application_name:"g5a_real_github_prospective_pre_source"
+  });
+  client.on("error",(err:Error&{code?:string})=>{
+   if(client===db){
+    dbBroken=true;
+    console.error(JSON.stringify({
+     status:"G5A_PG_ASYNC_DISCONNECT_RECONNECT_WHEN_IDLE",
+     code:/^[A-Z0-9]{5}$/.test(err.code??"")?err.code:"UNKNOWN",
+     providerCallsFromDisconnect:0
+    }));
+   }
+  });
+  return client;
+ };
+ let db=makeClient();
+ const repairIdle=async()=>{
+  if(!dbBroken)return;
+  const old=db,next=makeClient();
+  await next.connect();
+  db=next;dbBroken=false;
+  await old.end().catch(()=>undefined);
+  console.log(JSON.stringify({
+   status:"G5A_PG_IDLE_RECONNECTED_WITHOUT_PAID_OR_SQL_REPLAY",
+   providerCallsFromReconnect:0
+  }));
+ };
  let successful=0,attempted=0,unknown=0,preCreated=0,preExisting=0;
  await db.connect();
- // Adapt pg's mutable parameter array to the reviewed DB-only interfaces
- // without broadening source-owner SQL permissions or importing Replit DBs.
  const dbw={query:(sql:string,args?:readonly unknown[])=>
   db.query(sql,args as unknown[]|undefined)};
  try{
@@ -247,21 +276,45 @@ export async function main(){
   // Every later runner must exit before V0076 staging or provider GET. The
   // old owner may have zero receipts; that is UNOBSERVED, not permission to
   // create a second owner that could duplicate source charges.
+  let boundRunId=proof.githubRunId,boundAuthSha=authSha;
   const incumbent=await db.query(
    "SELECT state,github_run_id FROM clean.phase4_g5_fids_physical_owner_v39 "+
    "WHERE owner_digest=$1 AND manifest_sha256=$2",
    [owner.ownerDigest,manifestSha]);
   if(incumbent.rows.length>1)hold("DUPLICATE_OWNER_CATALOG_DRIFT");
   if(incumbent.rows.length===1){
-   console.log(JSON.stringify({
-    status:"G5A_BACKUP_OWNER_DUPLICATE_SUPPRESSED_NO_PROVIDER",
-    horizon:h,originalOwnerState:String(incumbent.rows[0].state),
-    originalRunId:String(incumbent.rows[0].github_run_id),
-    thisRunId:proof.githubRunId,originalPrearmNotBackfilled:true,
-    providerCalls:0,databaseWrites:0,scientificGate5Passed:false
-   }));
-   return;
-  }
+   const priorRunId=String(incumbent.rows[0].github_run_id);
+   if(h==="T-24h"&&priorRunId==="41810504164"&&
+      proof.githubRunId!==priorRunId){
+    // True original GitHub owner already prearmed and was ACTIVE at 09:53Z.
+    // Prove original GH terminal failure + zero DB reservations and exact
+    // immutable authorization; no second owner or retrospective startup.
+    const handoff=await proveAndBindFailedG5AT24OwnerV39({
+     db:dbw,token:e.GITHUB_TOKEN!,owner,horizon:h,
+     newRunId:proof.githubRunId,
+     newJobStartedAtUtc:proof.actualJobStartedAtUtc,
+     manifestSha,rightsSha,protocolSha
+    });
+    boundRunId=handoff.originalRunId;
+    boundAuthSha=handoff.originalAuthorizationSha256;
+    console.log(JSON.stringify({
+     status:handoff.status,horizon:h,
+     originalGenuineOwnerGitHubRunId:boundRunId,
+     newVerifiedGitHubPhysicalRunnerId:proof.githubRunId,
+     originalPaidReservationsVerifiedZero:true,
+     noNewOwnerCreated:true,postFreezeInfrastructureCorrection:true,
+     noPaidProviderRequestYet:true,scientificGate5Passed:false
+    }));
+   }else{
+    console.log(JSON.stringify({
+     status:"G5A_BACKUP_OWNER_DUPLICATE_SUPPRESSED_NO_PROVIDER",
+     horizon:h,originalOwnerState:String(incumbent.rows[0].state),
+     originalRunId:priorRunId,thisRunId:proof.githubRunId,
+     providerCalls:0,databaseWrites:0,scientificGate5Passed:false
+    }));
+    return;
+   }
+  }else{
   const prepared=await stageP4G5PreparedOwnerDbOnlyV39(dbw,{
    owner,githubRunId:proof.githubRunId,
    reviewedRunAuthorizationSha256:authSha
@@ -288,6 +341,7 @@ export async function main(){
    sourceSlots:3,attemptedPaidSourceGets:0,phase5FreezeAuthorized:false,
    actualWheelsOffClaim:false
   }));
+  }
   const stamp=grid.serviceWindowStartUtc,stop=grid.serviceWindowEndUtc;
   const start=ms(stamp),end=ms(stop);
   let lastPre=0;
@@ -297,7 +351,7 @@ export async function main(){
    independentPhysicalOperatingIdentityEvidenceSha256:sha(readFileSync(
     "server/lib/disruption/fidsCensus_v3.ts","utf8")),
    independentlyReviewedSourceRetentionEvidenceSha256:rightsSha,
-   reviewedRunAuthorizationSha256:authSha,
+   reviewedRunAuthorizationSha256:boundAuthSha,
    frozenBuilderSourceSha256:sha(readFileSync(
     "server/lib/disruption/preSnapshotBuilder_v3.ts","utf8")),
    builderFrozenAtUtc:String((manifest.grid as Record<string,unknown>)
@@ -326,7 +380,7 @@ export async function main(){
      serviceStartUtc:stamp,serviceEndUtc:stop,
      observedAtUtc:dbNow.toISOString(),horizon:h,
      reviewedFrozenManifestSha256:manifestSha,
-     expectedOwnerGithubRunId:proof.githubRunId
+     expectedOwnerGithubRunId:boundRunId
     },permit);
     preCreated+=out.newlyPersistedRows;
     preExisting+=out.previousVerifiedIdempotentRows;
@@ -354,6 +408,7 @@ export async function main(){
   };
   const wait=async(until:number)=>{
    while(Date.now()<until){
+    await repairIdle();
     await tryPre();
     await sleep(Math.min(16000,Math.max(1,until-Date.now())));
    }
@@ -362,6 +417,7 @@ export async function main(){
    const planned=ms(entry.plannedPhysicalStartUtc);
    const latest=ms(entry.hardLatestPhysicalStartUtc);
    await wait(planned);
+   await repairIdle();
    const now=Date.now();
    if(now>latest||now<planned){unknown++;continue;}
    // Live account quota is mandatory; if missing, mark UNOBSERVED and
@@ -387,7 +443,7 @@ export async function main(){
      "SELECT clean.reserve_phase4_g5_fids_physical_attempt_v39"+
      "($1,$2,$3,$4,$5,$6) AS committed_at_utc",
      p4G5G5AReservationSqlArgsV39(
-      manifestSha,owner.ownerDigest,proof.githubRunId,
+      manifestSha,owner.ownerDigest,boundRunId,
       entry.queryDigest,1,expectedReservationSha256));
     if(res.rows.length!==1||!res.rows[0]?.committed_at_utc)
      hold("DURABLE_PAID_RESERVATION");
@@ -436,8 +492,8 @@ export async function main(){
       const expires=iso(query.availableAtUtc.getTime()+23*3600000);
       const r=await persistP4G5BoundFidsDbOnlyV39(query,rows,{
        manifestSha256:manifestSha,horizon:h,
-       expectedOwnerGithubRunId:proof.githubRunId,
-       reviewedRunAuthorizationSha256:authSha,
+       expectedOwnerGithubRunId:boundRunId,
+       reviewedRunAuthorizationSha256:boundAuthSha,
        queryDigest:entry.queryDigest,
        expectedReservationSha256,rightsReviewArtifactSha256:rightsSha,
        sourceUseExpiresAtUtc:expires,
@@ -473,9 +529,11 @@ export async function main(){
      error:errorSafe(err),noRetry:true
     }));
    }
+   await repairIdle();
    await tryPre();
   }
   await wait(ms(owner.entries[owner.entries.length-1].cutoffUtc)+1500);
+  await repairIdle();
   await tryPre();
   console.log(JSON.stringify({
    status:"G5A_PROSPECTIVE_HORIZON_SOURCE_PRE_OBSERVATION_CLOSED",

@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
       - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
+      - "server/lib/disruption/phase4Gate5G5AT24FailedOwnerRecovery_v39.ts"
+      - "tests/phase4_gate5_g5a_57p01_recovery_v39.test.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
       - "data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
@@ -14,6 +16,8 @@ on:
     paths:
       - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
       - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
+      - "server/lib/disruption/phase4Gate5G5AT24FailedOwnerRecovery_v39.ts"
+      - "tests/phase4_gate5_g5a_57p01_recovery_v39.test.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
       - "data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
@@ -78,7 +82,7 @@ jobs:
       - name: Prove GH source owner job admission is impossible offline
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts tests/phase4_gate5_g5a_active_science_mode_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts tests/phase4_gate5_g5a_active_science_mode_v39.test.ts tests/phase4_gate5_g5a_57p01_recovery_v39.test.ts
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
