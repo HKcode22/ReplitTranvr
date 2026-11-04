@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {
- requireG5AIndependentAuditContextV39,
+ requireG5AIndependentAuditContextV39,G5A_INDEPENDENT_AUDIT_CRONS_V39,
  G5A_SOURCE_AUDIT_SQL_V39,G5A_PRE_AUDIT_SQL_V39,
  G5A_POPULATION_AUDIT_SQL_V39,G5A_INDEPENDENT_AUDIT_SCHEMA_V39
 } from "../scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit";
@@ -25,6 +26,25 @@ describe("G5A real independent no-provider cohort read-only auditor",()=>{
   expect(()=>requireG5AIndependentAuditContextV39({
     ...env(),GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_EVENT_SCHEDULE:""
    },main,Date.parse(event))).not.toThrow();
+ });
+ it("matches all four real GitHub read-only backup crons and the noon primary",()=>{
+  const wf=readFileSync(
+   ".github/workflows/phase4-gate5-g5a-independent-final-audit.yml","utf8");
+  const registered=[...wf.matchAll(/^ {4}- cron: "([^"]+)"$/gm)].map(x=>x[1]);
+  expect(registered).toEqual([...G5A_INDEPENDENT_AUDIT_CRONS_V39]);
+  expect(registered).toContain("0 20 5 11 *");
+  const times=[
+   "2026-11-05T19:47:30.000Z","2026-11-05T19:53:30.000Z",
+   "2026-11-05T20:00:30.000Z","2026-11-05T20:07:30.000Z"
+  ];
+  for(const [i,cron] of G5A_INDEPENDENT_AUDIT_CRONS_V39.entries())
+   expect(()=>requireG5AIndependentAuditContextV39(
+    {...env(),GITHUB_EVENT_SCHEDULE:cron},main,Date.parse(times[i])))
+    .not.toThrow();
+  expect(()=>requireG5AIndependentAuditContextV39({
+   ...env(),GITHUB_EVENT_SCHEDULE:"12 5 7 11 *"
+  },main,Date.parse("2026-11-05T20:00:30.000Z")))
+   .toThrow("P4_G5_G5A_INDEPENDENT_GITHUB_READER_DATE_OR_ISOLATION_HOLD");
  });
  it("refuses source writer/paid key/admin URL and any fork/push/PR/replay",()=>{
   const errors=[
