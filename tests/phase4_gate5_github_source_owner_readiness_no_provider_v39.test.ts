@@ -87,6 +87,24 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
     .toBe("HOLD_GITHUB_DB_ROLE_SEPARATION");
   }
  });
+ it("pinpoints excessive independent reader privileges without inventing an owner problem",()=>{
+  for(const key of ["isSuperuser","canCreateSchema","canCreateDatabase"] as const){
+   const x=evidence();
+   x.reader![key]=true;
+   const r=classifyP4G5GithubOwnerReadinessV39(x);
+   expect(r.status).toBe("HOLD_GITHUB_DB_ROLE_SEPARATION");
+   expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
+   expect(r.flags.separateSameDatabaseReaderAndOwnerRoles).toBe(true);
+   expect(r.flags.neitherRoleHasSchemaOrDbAdminPrivilege).toBe(false);
+   expect(r.flags.readerNotSuperuser).toBe(key!=="isSuperuser");
+   expect(r.flags.readerCannotCreateSchema).toBe(key!=="canCreateSchema");
+   expect(r.flags.readerCannotCreateDatabase).toBe(key!=="canCreateDatabase");
+   expect(r.flags.sourceOwnerNotSuperuser).toBe(true);
+   expect(r.flags.sourceOwnerCannotCreateSchema).toBe(true);
+   expect(r.flags.sourceOwnerCannotCreateDatabase).toBe(true);
+   expect(r.providerCalls).toBe(0);expect(r.databaseWrites).toBe(0);
+  }
+ });
  it("a superuser reader cannot be approved for independent least-privilege audit",()=>{
   const x=evidence();
   x.reader!.isSuperuser=true;
