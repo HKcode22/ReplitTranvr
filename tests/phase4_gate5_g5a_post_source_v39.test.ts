@@ -1,10 +1,12 @@
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {fetchFidsPopulation,type FidsCensusParams,
  type PopulationRow,type FidsQueryObservation}
  from "../server/lib/disruption/fidsCensus_v3";
 import {
  postReservationUuidV39,assertG5APostRunnerContextV39,
- G5A_POST_AGGREGATE_AUDIT_SQL_V39
+ G5A_POST_CRONS_V39,isG5APostReviewedEventV39,
+ canG5APostSkipExpiredBackupV39,G5A_POST_AGGREGATE_AUDIT_SQL_V39
 } from "../scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation";
 
 const sha="a".repeat(64);
@@ -114,6 +116,43 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
   expect(()=>assertG5APostRunnerContextV39(env(),git,
    Date.parse("2027-11-05T02:12:00.000Z")))
    .toThrow("P4_G5_G5A_POST_GITHUB_CONTEXT_OR_SECRETS_HOLD");
+ });
+ it("keeps every production POST cron aligned with the TypeScript admission",()=>{
+  const wf=readFileSync(
+   ".github/workflows/phase4-gate5-g5a-wsss-real-post.yml","utf8");
+  const actual=[...wf.matchAll(/^\s*- cron: "([^"]+)"$/gm)]
+   .map(x=>x[1]);
+  expect(actual).toEqual([...G5A_POST_CRONS_V39]);
+  expect(wf).toContain("workflow_dispatch:");
+  expect(wf).toContain("github.event_name == 'workflow_dispatch'");
+  expect(wf).toContain("G5A_POST_SCHEDULE: ${{ github.event.schedule || 'manual-reviewed' }}");
+  for(const cron of G5A_POST_CRONS_V39){
+   const e={...env(),G5A_POST_SCHEDULE:cron};
+   expect(isG5APostReviewedEventV39(e)).toBe(true);
+   expect(()=>assertG5APostRunnerContextV39(e,git,
+    Date.parse("2026-11-05T02:55:00.000Z"))).not.toThrow();
+  }
+  const fallback={...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
+   G5A_POST_SCHEDULE:"manual-reviewed"};
+  expect(isG5APostReviewedEventV39(fallback)).toBe(true);
+  expect(()=>assertG5APostRunnerContextV39(fallback,git,
+   Date.parse("2026-11-05T02:55:00.000Z"))).not.toThrow();
+  for(const bad of ["40 2 5 11 *","10 2 6 11 *","manual-reviewed"]){
+   expect(isG5APostReviewedEventV39({...env(),G5A_POST_SCHEDULE:bad}))
+    .toBe(false);
+  }
+ });
+ it("safely skips expired queued backups without pretending to observe POST",()=>{
+  const after=Date.parse("2026-11-05T05:04:00.000Z");
+  expect(canG5APostSkipExpiredBackupV39(env(),git,after)).toBe(true);
+  expect(canG5APostSkipExpiredBackupV39(env(),git,
+   Date.parse("2026-11-05T02:15:00.000Z"))).toBe(false);
+  expect(canG5APostSkipExpiredBackupV39({...env(),GITHUB_REF:"refs/heads/other"},
+   git,after)).toBe(false);
+  expect(canG5APostSkipExpiredBackupV39({...env(),GITHUB_EVENT_NAME:"push"},
+   git,after)).toBe(false);
+  expect(canG5APostSkipExpiredBackupV39(env(),git,
+   Date.parse("2027-11-05T05:04:00.000Z"))).toBe(false);
  });
  it("calculates observed only with source before W=T+2h and true PRE baseline",()=>{
   const q=G5A_POST_AGGREGATE_AUDIT_SQL_V39;
