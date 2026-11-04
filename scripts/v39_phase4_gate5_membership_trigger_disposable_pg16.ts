@@ -106,6 +106,30 @@ export async function main(){
   if(allowed.rows[0]?.allowed!==true||allowed.rows[0]?.update_allowed!==false||
     allowed.rows[0]?.delete_allowed!==false)
    throw Error("G5A_DISPOSABLE_MEMBERSHIP_GRANT_SCOPE_INVALID_HOLD");
+  // The B0062 trigger uses ON CONFLICT(population_member_id) DO NOTHING.
+  // Check whether resolving its arbiter also needs SELECT rights.
+  await db.query("BEGIN");
+  let insertOnlyDenied=false;
+  try{
+   await db.query("SET LOCAL ROLE "+ROLE);
+   await db.query(flightInsert,[qid,HASH,DOC]);
+   await db.query("ROLLBACK");
+  }catch(e){
+   const c=e&&typeof e==="object"&&(e as {code?:unknown}).code;
+   insertOnlyDenied=c==="42501";
+   await db.query("ROLLBACK").catch(()=>undefined);
+  }
+  if(!insertOnlyDenied)
+   throw Error("G5A_DISPOSABLE_TRIGGER_INSERT_ONLY_SCOPE_UNEXPECTED_HOLD");
+  await db.query("GRANT SELECT ON clean.population_research_membership TO "+ROLE);
+  const finalGrant=await db.query(
+   "SELECT has_table_privilege($1,'clean.population_research_membership','INSERT') AS ins,"+
+   "has_table_privilege($1,'clean.population_research_membership','SELECT') AS sel,"+
+   "has_table_privilege($1,'clean.population_research_membership','UPDATE') AS upd,"+
+   "has_table_privilege($1,'clean.population_research_membership','DELETE') AS del",[ROLE]);
+  if(finalGrant.rows[0]?.ins!==true||finalGrant.rows[0]?.sel!==true||
+     finalGrant.rows[0]?.upd!==false||finalGrant.rows[0]?.del!==false)
+   throw Error("G5A_DISPOSABLE_TRIGGER_SELECTED_GRANTS_BAD_HOLD");
   await db.query("BEGIN");
   try{
    await db.query("SET LOCAL ROLE "+ROLE);
@@ -128,6 +152,7 @@ export async function main(){
     sourceWriterMembershipInsert:false,sqlstate42501:true,
     normalizedRowsPersisted:0},
    afterDisposableOnly:{additionalMembershipInsert:true,
+    membershipSelect:true,insertOnlyStillInsufficient:true,
     membershipUpdate:false,membershipDelete:false,
     normalizedRowsPersisted:1,membershipRowsPersisted:1},
    noProductionSchemaOrRolesChanged:true,providerCalls:0,
