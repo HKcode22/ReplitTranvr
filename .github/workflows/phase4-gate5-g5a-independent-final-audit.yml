@@ -14,12 +14,13 @@ on:
       - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
   workflow_dispatch:
   schedule:
-    # Exact Nov 7, 2026 only; final Friday Nov 6 9:12pm Pacific.
-    - cron: "12 5 7 11 *"
+    # Exact Thu Nov 5 2026 at 12:00 PM Pacific (20:00 UTC).
+    # Post observations end by 09:01 AM Pacific, T+2h is earlier.
+    - cron: "0 20 5 11 *"
 permissions:
   contents: read
 concurrency:
-  group: gate5-g5a-wsss-20261107-independent-readonly-audit
+  group: gate5-g5a-wsss-20261105-1400z-independent-readonly-audit
   cancel-in-progress: false
 jobs:
   offline-audit-unit:
