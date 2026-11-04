@@ -169,6 +169,14 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog:sourceWriter,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
+  // Disaggregated, non-identifying flags: distinguishes an elevated audit
+  // reader from a safely scoped paid owner without printing roles or URLs.
+  readerNotSuperuser:reader!==null&&!reader.isSuperuser,
+  readerCannotCreateSchema:reader!==null&&!reader.canCreateSchema,
+  readerCannotCreateDatabase:reader!==null&&!reader.canCreateDatabase,
+  sourceOwnerNotSuperuser:owner!==null&&!owner.isSuperuser,
+  sourceOwnerCannotCreateSchema:owner!==null&&!owner.canCreateSchema,
+  sourceOwnerCannotCreateDatabase:owner!==null&&!owner.canCreateDatabase,
   noLiveRequestAuthorized:true
  };
  const status=!input.readerCredentialPresent?
