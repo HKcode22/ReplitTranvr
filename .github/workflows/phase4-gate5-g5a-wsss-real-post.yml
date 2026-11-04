@@ -18,8 +18,12 @@ on:
       - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
   workflow_dispatch:
   schedule:
-    # Full prospective Nov7 2026 POST; never reproduce the missed Nov5 source.
+    # Full prospective Nov7 UTC POST. Redundant GH prearm slots mitigate lost schedules.
+    # Same frozen three POST GET times and 24-unit aggregate ceiling.
     - cron: "10 2 7 11 *"
+    - cron: "22 2 7 11 *"
+    - cron: "37 2 7 11 *"
+    - cron: "52 2 7 11 *"
 permissions:
   contents: read
   actions: read
@@ -53,7 +57,7 @@ jobs:
           echo 'PROVIDER_CALLS=0 DATABASE_CONTENT_WRITES=0 PAID_DISPATCH_DISABLED_ON_PR_PUSH'
   post-source:
     name: post-source
-    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '10 2 7 11 *') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["10 2 7 11 *","22 2 7 11 *","37 2 7 11 *","52 2 7 11 *"]'), github.event.schedule)) || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     environment: phase2g-paid

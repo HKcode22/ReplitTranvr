@@ -1,10 +1,12 @@
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {fetchFidsPopulation,type FidsCensusParams,
  type PopulationRow,type FidsQueryObservation}
  from "../server/lib/disruption/fidsCensus_v3";
 import {
  postReservationUuidV39,assertG5APostRunnerContextV39,
- G5A_POST_AGGREGATE_AUDIT_SQL_V39
+ G5A_POST_CRONS_V39,isG5APostReviewedEventV39,
+ isG5APostExpiredScheduledBackupV39,G5A_POST_AGGREGATE_AUDIT_SQL_V39
 } from "../scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation";
 
 const sha="a".repeat(64);
@@ -126,6 +128,45 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
   expect(()=>assertG5APostRunnerContextV39(env(),git,
    Date.parse("2027-11-07T02:12:00.000Z")))
    .toThrow("P4_G5_G5A_POST_GITHUB_CONTEXT_OR_SECRETS_HOLD");
+ });
+ it("keeps every Nov7 POST GitHub cron matched by job if and TypeScript guard",()=>{
+  const wf=readFileSync(
+   ".github/workflows/phase4-gate5-g5a-wsss-real-post.yml","utf8");
+  const actual=[...wf.matchAll(/^\s*- cron: "([^"]+)"$/gm)].map(x=>x[1]);
+  expect(actual).toEqual([...G5A_POST_CRONS_V39]);
+  expect(wf).toContain("github.event_name == 'workflow_dispatch'");
+  expect(wf).toContain("G5A_POST_SCHEDULE: ${{ github.event.schedule || 'manual-reviewed' }}");
+  for(const cron of G5A_POST_CRONS_V39){
+   expect(wf).toContain(cron);
+   const e={...env(),G5A_POST_SCHEDULE:cron};
+   expect(isG5APostReviewedEventV39(e)).toBe(true);
+   expect(()=>assertG5APostRunnerContextV39(e,git,
+    Date.parse("2026-11-07T02:55:00.000Z"))).not.toThrow();
+  }
+  const validManual={...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
+   G5A_POST_SCHEDULE:"manual-reviewed",
+   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"};
+  expect(isG5APostReviewedEventV39(validManual)).toBe(true);
+  for(const bad of ["10 2 5 11 *","22 2 6 11 *","bad","manual-reviewed"]){
+   expect(isG5APostReviewedEventV39({...env(),G5A_POST_SCHEDULE:bad}))
+    .toBe(false);
+  }
+ });
+ it("marks only authentic expired GitHub schedule backups as unknown without provider",()=>{
+  const after=Date.parse("2026-11-07T03:30:00.000Z");
+  expect(isG5APostExpiredScheduledBackupV39(env(),git,after)).toBe(true);
+  expect(isG5APostExpiredScheduledBackupV39(env(),git,
+   Date.parse("2026-11-07T02:15:00.000Z"))).toBe(false);
+  expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_REF:"refs/heads/other"},
+   git,after)).toBe(false);
+  expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_EVENT_NAME:"push"},
+   git,after)).toBe(false);
+  expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
+   G5A_POST_SCHEDULE:"manual-reviewed",
+   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"},
+   git,after)).toBe(false);
+  expect(isG5APostExpiredScheduledBackupV39(env(),git,
+   Date.parse("2027-11-07T03:30:00.000Z"))).toBe(false);
  });
  it("calculates observed only with source before W=T+2h and true PRE baseline",()=>{
   const q=G5A_POST_AGGREGATE_AUDIT_SQL_V39;
