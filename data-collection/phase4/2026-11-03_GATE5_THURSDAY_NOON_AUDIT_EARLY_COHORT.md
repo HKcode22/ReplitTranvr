@@ -25,3 +25,7 @@ POST source query is a fixed WSSS 13:00–17:00 UTC window (21:00–01:00 Singap
 - A green PR or GitHub cron alone is *not* an observed source, full science PASS or Phase5/Phase6 authorization. Report genuine INSUFFICIENT/HOLD if critical measurements missing. Preserve original Plan f.8 and implementation log; amended G5A scientific outcome remains distinct from original wheels-off MAE.
 
 **Implementation trace:** this document and new manifest + code/cron/regression PR, referenced from Phase4 README. Actual log and final verdict belong in [issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293).
+
+### GitHub audit schedule reliability (Nov3 after owner correction)
+
+A single 12:00 PST GitHub cron is a single point of failure, especially after the documented missed T−24h schedule. Register **11:47 AM, 11:53 AM, 12:00 PM (primary), and 12:07 PM PST** independent no-provider, read-only audit opportunities, all after the frozen T+2h window and POST aggregate completion, and all constrained to the exact Nov5 UTC date. GitHub best-effort triggering cannot guarantee wall-clock delivery. The existing concurrency group serializes reads; each independent checkpoint is time-stamped and may post an updated count to issue #293. Multiple actual audit receipts are safer than treating a missing noon run as evidence. The designated noon trigger is preserved. No provider credits, source rights change, DB writes or additional collected cohort.

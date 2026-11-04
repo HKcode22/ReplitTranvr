@@ -1,8 +1,8 @@
 /**
  * Independent G5A Gate5 real cohort audit — READ ONLY, no provider request.
  *
- * Github 2026-11-07 05:12Z, after frozen W=T_native+2h for the
- * 2026-11-07 02:00–03:00Z WSSS population.
+ * GitHub Thu Nov5 19:47/19:53/20:00/20:07Z (11:47/11:53/12:00/12:07 PST),
+ * all after frozen W=T_native+2h for Nov5 14:00–15:00Z WSSS departures.
  *
  * Factual, privacy-preserving counts only. Does not read or emit raw FIDS
  * Content, flight IDs, credentials, or user data. Does NOT declare science PASS.
@@ -22,7 +22,9 @@ export const G5A_INDEPENDENT_AUDIT_SCHEMA_V39=
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A Independent Cohort Audit (No Provider)";
 const PATH=".github/workflows/phase4-gate5-g5a-independent-final-audit.yml";
-const CRON="0 20 5 11 *";
+export const G5A_INDEPENDENT_AUDIT_CRONS_V39=[
+ "47 19 5 11 *","53 19 5 11 *","0 20 5 11 *","7 20 5 11 *"
+] as const;
 const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json";
 const START=Date.parse("2026-11-05T19:45:00.000Z");
 const END=Date.parse("2026-11-06T00:00:00.000Z");
@@ -45,7 +47,8 @@ export function requireG5AIndependentAuditContextV39(
   e.GITHUB_WORKFLOW!==WF||
   e.GITHUB_WORKFLOW_REF!==REPO+"/"+PATH+"@refs/heads/main"||
   e.GITHUB_JOB!=="audit-independent"||
-  (e.GITHUB_EVENT_NAME==="schedule"&&e.GITHUB_EVENT_SCHEDULE!==CRON)||
+  (e.GITHUB_EVENT_NAME==="schedule"&&
+   !G5A_INDEPENDENT_AUDIT_CRONS_V39.some(x=>x===e.GITHUB_EVENT_SCHEDULE))||
   !e.GATE05_AUTOMATION_DATABASE_URL||
   !!e.DATABASE_URL||!!e.V39_DATABASE_RUNTIME_URL||
   !!e.P4_G5_SOURCE_OWNER_DATABASE_URL||

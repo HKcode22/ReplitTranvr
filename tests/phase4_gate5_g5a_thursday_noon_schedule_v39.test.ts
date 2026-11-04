@@ -55,7 +55,8 @@ describe("G5A Wed T-24h through Thursday November 5 noon PST audit",()=>{
  it("independent audit GitHub cron is Thursday November 5 exactly noon PST",()=>{
   expect(read(audit)).toContain('cron: "0 20 5 11 *"');
   const s=read(auditor);
-  expect(s).toContain('const CRON="0 20 5 11 *"');
+  expect(s).toContain("G5A_INDEPENDENT_AUDIT_CRONS_V39");
+  expect(s).toContain('"0 20 5 11 *"');
   expect(s).toContain("2026-11-05T19:45:00.000Z");
   expect(s).toContain("GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json");
   expect(s).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
