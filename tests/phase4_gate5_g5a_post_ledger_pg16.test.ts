@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import pg from "pg";
-import {postReservationUuidV39,reserveG5APostSlotDbV39}
+import {postReservationUuidV39,reserveG5APostSlotDbV39,
+ G5A_POST_AGGREGATE_AUDIT_SQL_V39}
  from "../scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation";
 
 const suite=process.env.G5A_POST_TEST_PG16==="1"?describe:describe.skip;
@@ -8,6 +9,25 @@ const M="a".repeat(64), N="b".repeat(64), K="c".repeat(64);
 const url=process.env.G5A_POST_TEST_WRITER_URL??"";
 const qid="WSSS_G5A_20261105_1400Z";
 suite("actual isolated PG16 immutable G5A POST budget, rights, replay",()=>{
+ it("runs the actual schedule-revision SQL under the restricted POST writer on PG16",async()=>{
+  const db=new pg.Client({connectionString:url});
+  await db.connect();
+  let tx=false;
+  try{
+   await db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   tx=true;
+   const fixedIds=[0,1,2].map(n=>postReservationUuidV39(M,n));
+   const result=await db.query(G5A_POST_AGGREGATE_AUDIT_SQL_V39,[M,fixedIds]);
+   // No real flight records exist in the disposable fixture. A zero-row
+   // result is correct, but the actual SQL must parse, typecheck and execute
+   // with the exact restricted reader grants used by the live POST job.
+   expect(result.rows).toEqual([]);
+   await db.query("ROLLBACK");tx=false;
+  }finally{
+   if(tx)await db.query("ROLLBACK").catch(()=>undefined);
+   await db.end().catch(()=>undefined);
+  }
+ });
  it("reserves only 3 unique 2-unit POST attempts after 18 source units",async()=>{
   const db=new pg.Client({connectionString:url});
   await db.connect();
