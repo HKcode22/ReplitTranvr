@@ -92,7 +92,9 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
    const x=evidence();
    x.reader![key]=true;
    const r=classifyP4G5GithubOwnerReadinessV39(x);
-   expect(r.status).toBe("HOLD_GITHUB_DB_ROLE_SEPARATION");
+   expect(r.status).toBe(key==="isSuperuser" ?
+    "HOLD_GITHUB_READER_V0077_SOURCE_PRE_ACL":
+    "HOLD_GITHUB_DB_ROLE_SEPARATION");
    expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
    expect(r.flags.separateSameDatabaseReaderAndOwnerRoles).toBe(true);
    expect(r.flags.neitherRoleHasSchemaOrDbAdminPrivilege).toBe(false);
