@@ -19,6 +19,8 @@ import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {readFileSync} from "node:fs";
 import pg from "pg";
+import {G5A_PRIOR_T24_PROVENANCE_SQL_V39,assessG5AT24PreconditionV39}
+ from "../server/lib/disruption/phase4Gate5PriorSourceStop_v39";
 import {isP4G5ReviewedMainWorkflowRestPathV39}
  from "../server/lib/disruption/phase4Gate5GithubRestPathGuard_v39";
 import {fetchFidsPopulation,type FidsCensusParams,type FidsQueryObservation,
@@ -364,6 +366,19 @@ export async function main(){
  const ids=POSTS.map((_,i)=>postReservationUuidV39(manifestSha,i));
  let charged=0,originals=0,unknown=0,normalized=0;
  try{
+  // No new paid POST on an entire missing T24 original+PRE precursor.
+  const prior=await db.query(G5A_PRIOR_T24_PROVENANCE_SQL_V39,[manifestSha]);
+  const priorEvidence=assessG5AT24PreconditionV39(prior.rows);
+  if(!priorEvidence.allowPaidContinuation){
+   console.log(JSON.stringify({
+    status:"G5A_POST_SKIPPED_MISSING_T24_SOURCE_OR_PRE_NO_PROVIDER",
+    verifiedT24OriginalBindings:priorEvidence.originals,
+    verifiedT24OnTimePRE:priorEvidence.pre,
+    postPaidReservationsCreated:0,providerCalls:0,
+    completeThreeHorizonScience:false,scientificGate5Passed:false
+   }));
+   return;
+  }
   for(const [i,planned] of POSTS.entries()){
    await waitUntil(ms(planned));
    if(Date.now()>ms(planned)+10*60000){unknown++;continue}
