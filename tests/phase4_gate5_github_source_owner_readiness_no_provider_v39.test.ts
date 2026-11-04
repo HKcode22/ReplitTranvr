@@ -15,7 +15,8 @@ function role(n:"audit"|"owner"):Facts{
  return {
   dbName:"same-synthetic-db",roleName:n,
   pg16:true,txReadOnly:true,isSuperuser:false,
-  canCreateSchema:false,canCreateDatabase:false,tables:t
+  canCreateSchema:false,canCreateDatabase:false,tables:t,
+  serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"}
  };
 }
 function evidence(){
@@ -75,6 +76,17 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
    const x=evidence();mutate(x);
    expect(classifyP4G5GithubOwnerReadinessV39(x).status)
     .toBe("HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL");
+  }
+ });
+ it("separately verifies sequence USAGE for the restricted source writer",()=>{
+  for(const key of ["populationId","preSnapshotId"] as const){
+   const x=evidence();x.owner!.serialUsage[key]=false;
+   const r=classifyP4G5GithubOwnerReadinessV39(x);
+   expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE");
+   expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
+   expect(r.flags[key==="populationId"?"sourceOwnerCanUsePopulationIdSequence":
+    "sourceOwnerCanUsePreSnapshotIdSequence"]).toBe(false);
+   expect(r.databaseWrites).toBe(0);expect(r.providerCalls).toBe(0);
   }
  });
  it("reader and owner roles must be distinct and on one exact database",()=>{
