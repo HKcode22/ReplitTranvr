@@ -1,0 +1,73 @@
+# One-time, no-provider GH-only operational relay after two terminated T24 runs.
+# Created to issue a genuine workflow_dispatch without asking the operator
+# to remain awake or paste any secret. Never changes the frozen science cohort.
+name: Phase4 Gate5 Nov4 One-Shot T24 Dispatch Relay (No Provider)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-t24-one-shot-reviewed-relay-20261104.yml"
+permissions:
+  actions: write
+concurrency:
+  group: phase4-g5-g5a-t24-20261104-one-shot-relay
+  cancel-in-progress: false
+jobs:
+  dispatch-once:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify exact cancelled owner, no new runner, and prospective clock; dispatch once
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          REPO="HKcode22/ReplitTranvr"
+          OWNER="phase4-gate5-g5a-real-wsss-prospective-owner.yml"
+          test "${GITHUB_REPOSITORY}" = "${REPO}"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_EVENT_NAME}" = "push"
+          test "${GITHUB_RUN_ATTEMPT}" = "1"
+          test "${GITHUB_SHA}" = "$(gh api "repos/$REPO/branches/main" --jq '.commit.sha')" || {
+            echo "HOLD_MAIN_MOVED_NO_DISPATCH"; exit 2;
+          }
+          NOW="$(date -u +%s)"
+          LO="$(date -u -d '2026-11-04T10:40:53Z' +%s)"
+          HI="$(date -u -d '2026-11-04T12:20:00Z' +%s)"
+          if (( NOW <= LO || NOW >= HI )); then
+            echo "HOLD_PREARM_DEADLINE_NO_DISPATCH"; exit 2
+          fi
+          WORKFLOW_STATE="$(gh api "repos/$REPO/actions/workflows/$OWNER" --jq '.state')"
+          test "$WORKFLOW_STATE" = "active" || {
+            echo "HOLD_TARGET_WORKFLOW_DISABLED"; exit 2;
+          }
+          A="$(gh api "repos/$REPO/actions/runs/41810504164")"
+          B="$(gh api "repos/$REPO/actions/runs/41813236781")"
+          test "$(jq -r '.status + ":" + .conclusion' <<< "$A")" = "completed:failure" || {
+            echo "HOLD_ORIGINAL_NOT_FAILED"; exit 2;
+          }
+          test "$(jq -r '.status + ":" + .conclusion' <<< "$B")" = "completed:cancelled" || {
+            echo "HOLD_SECOND_OWNER_NOT_CANCELLED"; exit 2;
+          }
+          test "$(jq -r '.head_sha' <<< "$B")" = "aba2ece12522728ad4775d1b2ab91959be3f1e05" || {
+            echo "HOLD_CANCELLED_OWNER_SHA"; exit 2;
+          }
+          JOBS="$(gh api -X GET "repos/$REPO/actions/runs/41813236781/jobs" -f per_page=100)"
+          test "$(jq -r '[.jobs[]|select(.name=="owner-t24" and .status=="completed" and .conclusion=="cancelled")]|length' <<< "$JOBS")" = "1" || {
+            echo "HOLD_SECOND_OWNER_JOB_NOT_TERMINAL"; exit 2;
+          }
+          OWNERS="$(gh api -X GET "repos/$REPO/actions/workflows/$OWNER/runs" -f per_page=100)"
+          PRIOR="$(jq -r '[.workflow_runs[] | select((.event=="workflow_dispatch" or .event=="schedule") and (.id > 41813236781 or .status != "completed"))] | length' <<< "$OWNERS")"
+          if (( PRIOR > 0 )); then
+            echo "G5A_T24_DISPATCH_SKIPPED_EXISTING_REAL_OWNER_RUN=$PRIOR"
+            exit 0
+          fi
+          # GitHub explicitly permits workflow_dispatch from GITHUB_TOKEN.
+          # The target, NOT this relay, owns DB, provider, all prearm proofs,
+          # at-most-once V0076 reservations, cutoff and scientific outcomes.
+          printf '%s' '{"ref":"main","inputs":{"horizon":"T-24h"}}' |
+            gh api --method POST "repos/$REPO/actions/workflows/$OWNER/dispatches" --input - >/dev/null
+          echo "G5A_T24_ONE_SHOT_GITHUB_DISPATCH_ACCEPTED_NO_PROVIDER_BY_RELAY"
