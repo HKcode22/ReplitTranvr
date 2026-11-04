@@ -44,7 +44,7 @@ const env=()=>({
  GITHUB_WORKFLOW:"Phase4 Gate5 G5A WSSS Real Prospective POST",
  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-g5a-wsss-real-post.yml@refs/heads/main",
  G5A_POST_SCHEDULE:"10 2 7 11 *",
- G5A_POST_PAID_INTENT:"G5A_NOV05_POST_THREE_2_UNIT_REQUESTS_MAX",
+ G5A_POST_PAID_INTENT:"G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX",
  GITHUB_TOKEN:"test-not-real-github-token",
  AERODATABOX_API_KEY:"test-not-real-provider-key",
  P4_G5_SOURCE_OWNER_DATABASE_URL:"postgresql://writer:fake@localhost/test",
