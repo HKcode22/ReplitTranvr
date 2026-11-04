@@ -105,6 +105,11 @@ export const G5A_POPULATION_AUDIT_SQL_V39=[
  "AND p.population_role='requested_airport_primary'",
  "AND p.scope_classification='confirmed_core')::int",
  "distinct_source_confirmed_operating_leg_ids,",
+ "count(DISTINCT p.analytic_identity_id) FILTER (WHERE",
+ "p.codeshare_resolution_status='confirmed_operating_leg'",
+ "AND p.population_role='requested_airport_primary'",
+ "AND p.scope_classification='unknown')::int",
+ "conditional_query_filtered_scope_unknown_ids,",
  "count(*) FILTER(WHERE p.codeshare_resolution_status<>",
  "'confirmed_operating_leg')::int ambiguous_or_codeshared_rows",
  "FROM clean.flight_population p",
@@ -201,7 +206,10 @@ export async function main(){
     persistedNormalizedRows:count(pop.rows[0]?.population_rows??0),
     distinctConfirmedOperatingLegIds:
       count(pop.rows[0]?.distinct_source_confirmed_operating_leg_ids??0),
-    ambiguousOrMarketingRows:count(pop.rows[0]?.ambiguous_or_codeshared_rows??0)
+    ambiguousOrMarketingRows:count(pop.rows[0]?.ambiguous_or_codeshared_rows??0),
+    conditionalQueryFilteredScopeUnknownOperatingIds:
+      count(pop.rows[0]?.conditional_query_filtered_scope_unknown_ids??0),
+    conditionalScopeNotCertifiedCommercial:true
    },
    independentlyVerifiedPRE:pre,
    prospectiveScheduleRevisionOutcomes:outcome,
