@@ -6,7 +6,7 @@ import {postReservationUuidV39,reserveG5APostSlotDbV39}
 const suite=process.env.G5A_POST_TEST_PG16==="1"?describe:describe.skip;
 const M="a".repeat(64), N="b".repeat(64), K="c".repeat(64);
 const url=process.env.G5A_POST_TEST_WRITER_URL??"";
-const qid="WSSS_G5A_20261105_0200Z";
+const qid="WSSS_G5A_20261107_0200Z";
 suite("actual isolated PG16 immutable G5A POST budget, rights, replay",()=>{
  it("reserves only 3 unique 2-unit POST attempts after 18 source units",async()=>{
   const db=new pg.Client({connectionString:url});
