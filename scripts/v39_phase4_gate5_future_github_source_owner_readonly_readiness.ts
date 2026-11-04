@@ -104,8 +104,8 @@ export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
  "AS security_invoker,",
  "has_table_privilege(current_user,",
  "'clean.population_research_membership','INSERT') AS owner_can_insert,",
- "has_table_privilege(current_user,",
- "'clean.population_research_membership','SELECT') AS owner_can_select"
+ "has_column_privilege(current_user,",
+ "'clean.population_research_membership','population_member_id','SELECT') AS owner_can_select"
 ].join(" ");
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
