@@ -24,7 +24,7 @@ type DbFacts={
   // not grant nextval() on serial-backed id columns.
   serialUsage:{populationId:boolean;preSnapshotId:boolean}
   membershipTrigger:{
-   enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean
+   enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean;ownerCanSelect:boolean
   }
 };
 const OBJECTS={
@@ -103,7 +103,9 @@ export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
  "'ensure_population_research_membership' AND NOT p.prosecdef)=1",
  "AS security_invoker,",
  "has_table_privilege(current_user,",
- "'clean.population_research_membership','INSERT') AS owner_can_insert"
+ "'clean.population_research_membership','INSERT') AS owner_can_insert,",
+ "has_table_privilege(current_user,",
+ "'clean.population_research_membership','SELECT') AS owner_can_select"
 ].join(" ");
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
@@ -133,7 +135,7 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     canCreateDatabase:needed(r.can_create_database),
     tables:{} as DbFacts["tables"],
     serialUsage:{populationId:false,preSnapshotId:false},
-    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false}
+    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false}
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
@@ -168,13 +170,15 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
   const membership=await db.query(G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39);
   if(membership.rows.length!==1||[
    membership.rows[0]?.enabled,membership.rows[0]?.security_invoker,
-   membership.rows[0]?.owner_can_insert
+   membership.rows[0]?.owner_can_insert,
+   membership.rows[0]?.owner_can_select
   ].some(x=>typeof x!=="boolean"))
    throw Error("P4_G5_SOURCE_OWNER_MEMBERSHIP_CATALOG_BAD_HOLD");
   facts.membershipTrigger={
    enabled:membership.rows[0].enabled,
    securityInvoker:membership.rows[0].security_invoker,
-   ownerCanInsert:membership.rows[0].owner_can_insert
+   ownerCanInsert:membership.rows[0].owner_can_insert,
+   ownerCanSelect:membership.rows[0].owner_can_select
   };
   await db.query("ROLLBACK");tx=false;
   return facts;
@@ -213,7 +217,7 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   owner.serialUsage.preSnapshotId;
  const ownerMembershipPath=owner!==null&&owner.membershipTrigger.enabled&&
   (!owner.membershipTrigger.securityInvoker||
-    owner.membershipTrigger.ownerCanInsert);
+    (owner.membershipTrigger.ownerCanInsert&&owner.membershipTrigger.ownerCanSelect));
  const ownerDistinct=reader!==null&&owner!==null&&
   owner.dbName===reader.dbName&&owner.roleName!==reader.roleName;
  const rolesSafe=reader!==null&&owner!==null&&
@@ -233,6 +237,8 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
    owner?.membershipTrigger.securityInvoker===true,
   sourceOwnerCanInsertMembership:
    owner?.membershipTrigger.ownerCanInsert===true,
+  sourceOwnerCanSelectMembership:
+   owner?.membershipTrigger.ownerCanSelect===true,
   sourceOwnerMembershipTriggerHasEffectiveWritePath:ownerMembershipPath,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
