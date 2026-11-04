@@ -34,7 +34,7 @@ describe("G5A Wed T-24h through Thursday November 5 noon PST audit",()=>{
   const expected=["47 9 4 11 *","17 10 4 11 *","47 10 4 11 *","17 11 4 11 *",
    "47 3 5 11 *","17 4 5 11 *","47 4 5 11 *","17 5 5 11 *",
    "17 8 5 11 *","47 8 5 11 *","17 9 5 11 *","47 9 5 11 *"];
-  expect([...wf.matchAll(/^    - cron: "([^"]+)"$/gm)].map(m=>m[1])).toEqual(expected);
+  expect([...wf.matchAll(/^ {4}- cron: "([^"]+)"$/gm)].map(m=>m[1])).toEqual(expected);
   for(const cron of expected){expect(wf).toContain(cron);expect(s).toContain(cron);}
   expect(wf).toContain("WSSS_NOV05_1400Z_G5A_ONE_PROSPECTIVE");
   expect(s).toContain("WSSS_G5A_20261105_1400Z");
@@ -43,7 +43,7 @@ describe("G5A Wed T-24h through Thursday November 5 noon PST audit",()=>{
  it("POST four backups and true 3 observations finish before audit",()=>{
   const wf=read(post),s=read(postScript);
   const expected=["10 14 5 11 *","22 14 5 11 *","37 14 5 11 *","52 14 5 11 *"];
-  expect([...wf.matchAll(/^    - cron: "([^"]+)"$/gm)].map(m=>m[1])).toEqual(expected);
+  expect([...wf.matchAll(/^ {4}- cron: "([^"]+)"$/gm)].map(m=>m[1])).toEqual(expected);
   for(const cron of expected)expect(s).toContain(cron);
   for(const t of ["2026-11-05T15:40:00.000Z",
    "2026-11-05T16:10:00.000Z","2026-11-05T16:40:00.000Z",
