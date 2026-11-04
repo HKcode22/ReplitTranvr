@@ -615,6 +615,10 @@ export async function main(){
    scientificGate5Passed:false,phase5FreezeAuthorized:false,
    phase6Authorized:false
   }));
+  // An all-zero source/PRE horizon is an operational HOLD, never a green
+  // science collection result. Keep reservations immutable; no retries.
+  if(successful===0||preCreated+preExisting===0)
+   hold("PROSPECTIVE_HORIZON_ZERO_DURABLE_SOURCE_OR_PRE");
  }finally{await db.end().catch(()=>undefined)}
 }
 if(process.argv[1]?.endsWith("v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"))
