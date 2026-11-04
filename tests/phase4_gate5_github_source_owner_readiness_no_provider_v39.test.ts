@@ -18,7 +18,7 @@ function role(n:"audit"|"owner"):Facts{
   canCreateSchema:false,canCreateDatabase:false,tables:t,
   serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"},
   membershipTrigger:{
-   enabled:true,securityInvoker:true,ownerCanInsert:n==="owner"
+   enabled:true,securityInvoker:true,ownerCanInsert:n==="owner",ownerCanSelect:n==="owner"
   }
  };
 }
@@ -103,6 +103,15 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
   expect(r.flags.sourceOwnerMembershipTriggerHasEffectiveWritePath).toBe(false);
   expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
   expect(r.providerCalls).toBe(0);expect(r.databaseWrites).toBe(0);
+ });
+ it("rejects INSERT-only membership grant because ON CONFLICT also needs SELECT",()=>{
+  const x=evidence();
+  x.owner!.membershipTrigger.ownerCanSelect=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
+  expect(r.flags.sourceOwnerCanInsertMembership).toBe(true);
+  expect(r.flags.sourceOwnerCanSelectMembership).toBe(false);
+  expect(r.flags.sourceOwnerMembershipTriggerHasEffectiveWritePath).toBe(false);
  });
  it("detects missing population-membership trigger or unsafe missing route",()=>{
   const x=evidence();x.owner!.membershipTrigger.enabled=false;
