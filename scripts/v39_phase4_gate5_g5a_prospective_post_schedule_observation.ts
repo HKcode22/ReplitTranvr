@@ -216,6 +216,56 @@ export async function reserveG5APostSlotDbV39(db:pg.Client,manifestSha:string,co
   throw e;
  }
 }
+/**
+ * Verify the physical POST reservation inside the SAME transaction that
+ * commits its original FIDS decoded body and normalized members.
+ * Reserving before HTTP is necessary, but not sufficient: a standalone
+ * source writer must not be able to attach an unledgered/foreign POST ID.
+ * This code never issues a second provider request or reserves more units.
+ */
+export const G5A_POST_DB_CUSTODY_SQL_V39=
+ "SELECT reservation_id::text AS reservation_id,cycle_id,category,"+
+ "units,attempt_number,reserved_at FROM clean.adb_rest_attempt_ledger "+
+ "WHERE reservation_id=$1::uuid";
+export async function verifyG5APostSourceLedgerAtCommitV39(
+ client:pg.PoolClient,manifestSha:string,slot:number,
+ query:FidsQueryObservation,rows:PopulationRow[],
+ facts:{durableAvailableAt:Date;normalizedInsertedRows:number}
+):Promise<void>{
+ const expected=postReservationUuidV39(manifestSha,slot);
+ const cycle="G5A_NOV05_1400Z_"+manifestSha.slice(0,32);
+ const raw=query.rawPayload as Record<string,unknown>|null;
+ const stored=facts.durableAvailableAt instanceof Date?
+  facts.durableAvailableAt.getTime():NaN;
+ const retrieved=query.fidsRetrievalUtc?.getTime();
+ if(!query||!raw||Array.isArray(raw)||
+    raw.g5aPostReservationId!==expected||
+    raw.originalDecodedEntityBodyPreserved!==true||
+    query.queryDirection!=="Departure"||
+    query.sourceAirportIcao!=="WSSS"||
+    query.serviceWindowStartUtc?.toISOString()!==FROM||
+    query.serviceWindowEndUtc?.toISOString()!==TO||
+    query.fromLocal!=="2026-11-05T21:00"||
+    query.toLocal!=="2026-11-06T01:00"||
+    query.fidsProtocolVersion!=="G5A-POST-20261103-v1"||
+    !Array.isArray(rows)||!Number.isSafeInteger(facts.normalizedInsertedRows)||
+    facts.normalizedInsertedRows!==rows.length||
+    rows.some(x=>x.batchId!==expected||
+      x.populationQueryId!==query.populationQueryId||
+      x.responseHash!==query.responseHash)||
+    !Number.isFinite(retrieved)||!Number.isFinite(stored)||
+    stored<retrieved)
+  hold("POST_BOUND_SOURCE_FRAME_OR_ORIGINAL");
+ const prior=await client.query(G5A_POST_DB_CUSTODY_SQL_V39,[expected]);
+ const r=prior.rows[0];
+ const reserved=r?.reserved_at instanceof Date?r.reserved_at.getTime():
+  typeof r?.reserved_at==="string"?Date.parse(r.reserved_at):NaN;
+ if(prior.rows.length!==1||String(r.reservation_id)!==expected||
+    r.cycle_id!==cycle||r.category!=="g5a_post_schedule_fids"||
+    Number(r.units)!==2||Number(r.attempt_number)!==1||
+    !Number.isFinite(reserved)||reserved>retrieved||reserved>stored)
+   hold("POST_LEDGER_NOT_COMMITTED_BEFORE_SOURCE");
+}
 export const G5A_POST_AGGREGATE_AUDIT_SQL_V39=`
 SELECT pre.horizon,
  count(*)::int AS expected_pre,
@@ -357,7 +407,10 @@ export async function main(){
       if(raw?.g5aPostReservationId!==id||
          raw?.originalDecodedEntityBodyPreserved!==true)
        hold("POST_SOURCE_ORIGINAL_NOT_AUTHENTICATED");
-      return persistFidsObservation(query,rows);
+      return persistFidsObservation(query,rows,async(client,facts)=>{
+       await verifyG5APostSourceLedgerAtCommitV39(
+        client,manifestSha,i,query,rows,facts);
+      });
      }
     });
     if(!res||callback!==1){unknown++;continue}
