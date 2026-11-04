@@ -25,7 +25,7 @@ suite("actual isolated PG16 immutable G5A POST budget, rights, replay",()=>{
    expect(Number(result.rows[0].reserved_units)).toBe(24);
    const ledger=await db.query(
     "SELECT count(*)::int n,sum(units)::int spent FROM clean.adb_rest_attempt_ledger "+
-    "WHERE cycle_id=$1",["G5A_NOV05_"+M.slice(0,32)]);
+    "WHERE cycle_id=$1",["G5A_NOV07_"+M.slice(0,32)]);
    expect(ledger.rows[0].n).toBe(3);
    expect(ledger.rows[0].spent).toBe(6);
    await expect(reserveG5APostSlotDbV39(db,M,qid,0))
