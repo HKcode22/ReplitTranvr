@@ -13,11 +13,11 @@ const sha="a".repeat(64);
 const git="b".repeat(40);
 const id=postReservationUuidV39(sha,0);
 const base=():FidsCensusParams=>({
- airportIcao:"WSSS",fromLocal:"2026-11-07T10:00",
- toLocal:"2026-11-07T11:00",ianaTimezone:"Asia/Singapore",
- serviceWindowStartUtc:new Date("2026-11-07T02:00:00.000Z"),
- serviceWindowEndUtc:new Date("2026-11-07T03:00:00.000Z"),
- cutoffUtc:new Date("2026-11-06T02:00:00.000Z"),
+ airportIcao:"WSSS",fromLocal:"2026-11-05T22:00",
+ toLocal:"2026-11-05T23:00",ianaTimezone:"Asia/Singapore",
+ serviceWindowStartUtc:new Date("2026-11-05T14:00:00.000Z"),
+ serviceWindowEndUtc:new Date("2026-11-05T15:00:00.000Z"),
+ cutoffUtc:new Date("2026-11-04T14:00:00.000Z"),
  withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,
  direction:"Departure",restCategory:"fids_base",
  providerApiVersion:"RapidAPI-v1.15.4",fidsProtocolVersion:"G5A-20261103-v1",
@@ -26,14 +26,14 @@ const base=():FidsCensusParams=>({
 const flight=(time:string)=>({
  id:"G5A-OPERATING-9381",number:"SQ 115",codeshareStatus:"IsOperator",
  departure:{scheduledTime:{utc:time}},
- arrival:{airport:{icao:"YSSY"},scheduledTime:{utc:"2026-11-07T08:00:00.000Z"}}
+ arrival:{airport:{icao:"YSSY"},scheduledTime:{utc:"2026-11-05T20:00:00.000Z"}}
 });
 async function readOne(p:FidsCensusParams,utc:string){
  let rows:PopulationRow[]=[];let query:FidsQueryObservation|null=null;
  const result=await fetchFidsPopulation(p,{
   fetchAirport:async()=>({departures:[flight(utc)],arrivals:[]}),
   persist:async(q,rr)=>{query=q;rows=rr;return rr.length},
-  now:()=>new Date("2026-11-06T01:30:00.000Z")
+  now:()=>new Date("2026-11-04T13:30:00.000Z")
  });
  expect(result?.persistedPopulationRows).toBe(1);
  return {result:result!,query:query!,row:rows[0]};
@@ -45,8 +45,8 @@ const env=()=>({
  GITHUB_RUN_ID:"41600012345",GITHUB_JOB:"post-source",
  GITHUB_WORKFLOW:"Phase4 Gate5 G5A WSSS Real Prospective POST",
  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-g5a-wsss-real-post.yml@refs/heads/main",
- G5A_POST_SCHEDULE:"10 2 7 11 *",
- G5A_POST_PAID_INTENT:"G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX",
+ G5A_POST_SCHEDULE:"10 14 5 11 *",
+ G5A_POST_PAID_INTENT:"G5A_NOV05_1400Z_POST_THREE_2_UNIT_REQUESTS_MAX",
  GITHUB_TOKEN:"test-not-real-github-token",
  AERODATABOX_API_KEY:"test-not-real-provider-key",
  P4_G5_SOURCE_OWNER_DATABASE_URL:"postgresql://writer:fake@localhost/test",
@@ -62,16 +62,16 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
   expect(()=>postReservationUuidV39(sha,3)).toThrow("P4_G5_G5A_POST_RESERVATION_DIGEST_HOLD");
  });
  it("retimed physical flight has same positive identity across PRE/POST query windows",async()=>{
-  const before=await readOne(base(),"2026-11-07T02:20:00.000Z");
+  const before=await readOne(base(),"2026-11-05T14:20:00.000Z");
   const later=base();
-  later.serviceWindowStartUtc=new Date("2026-11-07T01:00:00.000Z");
-  later.serviceWindowEndUtc=new Date("2026-11-07T05:00:00.000Z");
-  later.fromLocal="2026-11-07T09:00";
-  later.toLocal="2026-11-07T13:00";
+  later.serviceWindowStartUtc=new Date("2026-11-05T13:00:00.000Z");
+  later.serviceWindowEndUtc=new Date("2026-11-05T17:00:00.000Z");
+  later.fromLocal="2026-11-05T21:00";
+  later.toLocal="2026-11-06T01:00";
   later.fidsProtocolVersion="G5A-POST-20261103-v1";
   later.g5aPostReservationId=id;
   later.batchId=id;
-  const post=await readOne(later,"2026-11-07T02:40:00.000Z");
+  const post=await readOne(later,"2026-11-05T14:40:00.000Z");
   expect(before.row.analyticIdentityId).toBe(post.row.analyticIdentityId);
   expect(before.row.canonicalFlightInstanceId).toBe(post.row.canonicalFlightInstanceId);
   expect(before.row.analyticIdentityId).toMatch(/^leg:g5a:[a-f0-9]{64}$/);
@@ -85,27 +85,27 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
  });
  it("does not permit treating an arbitrary source or PRE observation as POST",async()=>{
   const p=base();p.g5aPostReservationId=id;
-  await expect(readOne(p,"2026-11-07T02:20:00.000Z"))
+  await expect(readOne(p,"2026-11-05T14:20:00.000Z"))
    .rejects.toThrow("G5A_POST_RESERVATION_SCOPE_INVALID_HOLD");
   p.fidsProtocolVersion="G5A-POST-20261103-v1";
   p.g5aObservedScheduleProtocol=false;
-  await expect(readOne(p,"2026-11-07T02:20:00.000Z"))
+  await expect(readOne(p,"2026-11-05T14:20:00.000Z"))
    .rejects.toThrow("G5A_POST_RESERVATION_SCOPE_INVALID_HOLD");
  });
  it("permits only an authentic prospective GitHub POST manual fallback",()=>{
   expect(()=>assertG5APostRunnerContextV39({
    ...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
    G5A_POST_SCHEDULE:"manual-reviewed",
-   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"
-  },git,Date.parse("2026-11-07T02:50:00.000Z"))).not.toThrow();
+   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV05_1400Z_POST_ONLY_WITHIN_PREARM"
+  },git,Date.parse("2026-11-05T14:50:00.000Z"))).not.toThrow();
   expect(()=>assertG5APostRunnerContextV39({
    ...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
    G5A_POST_SCHEDULE:"manual-reviewed"
-  },git,Date.parse("2026-11-07T02:50:00.000Z")))
+  },git,Date.parse("2026-11-05T14:50:00.000Z")))
    .toThrow("P4_G5_G5A_POST_GITHUB_CONTEXT_OR_SECRETS_HOLD");
  });
  it("refuses PR/push/fork/retry, unknown owner role, date replay",()=>{
-  const at=Date.parse("2026-11-07T02:12:00.000Z");
+  const at=Date.parse("2026-11-05T14:12:00.000Z");
   expect(()=>assertG5APostRunnerContextV39(env(),git,at)).not.toThrow();
   for(const edit of [
    {GITHUB_EVENT_NAME:"workflow_dispatch"},
@@ -126,10 +126,10 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
     .toThrow("P4_G5_G5A_POST_GITHUB_CONTEXT_OR_SECRETS_HOLD");
   }
   expect(()=>assertG5APostRunnerContextV39(env(),git,
-   Date.parse("2027-11-07T02:12:00.000Z")))
+   Date.parse("2027-11-05T14:12:00.000Z")))
    .toThrow("P4_G5_G5A_POST_GITHUB_CONTEXT_OR_SECRETS_HOLD");
  });
- it("keeps every Nov7 POST GitHub cron matched by job if and TypeScript guard",()=>{
+ it("keeps every Thursday Nov5 POST GitHub cron matched by job if and TypeScript guard",()=>{
   const wf=readFileSync(
    ".github/workflows/phase4-gate5-g5a-wsss-real-post.yml","utf8");
   const actual=[...wf.matchAll(/^\s*- cron: "([^"]+)"$/gm)].map(x=>x[1]);
@@ -141,11 +141,11 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
    const e={...env(),G5A_POST_SCHEDULE:cron};
    expect(isG5APostReviewedEventV39(e)).toBe(true);
    expect(()=>assertG5APostRunnerContextV39(e,git,
-    Date.parse("2026-11-07T02:55:00.000Z"))).not.toThrow();
+    Date.parse("2026-11-05T14:55:00.000Z"))).not.toThrow();
   }
   const validManual={...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
    G5A_POST_SCHEDULE:"manual-reviewed",
-   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"};
+   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV05_1400Z_POST_ONLY_WITHIN_PREARM"};
   expect(isG5APostReviewedEventV39(validManual)).toBe(true);
   for(const bad of ["10 2 5 11 *","22 2 6 11 *","bad","manual-reviewed"]){
    expect(isG5APostReviewedEventV39({...env(),G5A_POST_SCHEDULE:bad}))
@@ -153,20 +153,20 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
   }
  });
  it("marks only authentic expired GitHub schedule backups as unknown without provider",()=>{
-  const after=Date.parse("2026-11-07T03:30:00.000Z");
+  const after=Date.parse("2026-11-05T15:30:00.000Z");
   expect(isG5APostExpiredScheduledBackupV39(env(),git,after)).toBe(true);
   expect(isG5APostExpiredScheduledBackupV39(env(),git,
-   Date.parse("2026-11-07T02:15:00.000Z"))).toBe(false);
+   Date.parse("2026-11-05T14:15:00.000Z"))).toBe(false);
   expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_REF:"refs/heads/other"},
    git,after)).toBe(false);
   expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_EVENT_NAME:"push"},
    git,after)).toBe(false);
   expect(isG5APostExpiredScheduledBackupV39({...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
    G5A_POST_SCHEDULE:"manual-reviewed",
-   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"},
+   G5A_POST_MANUAL_INTENT:"REVIEWED_NOV05_1400Z_POST_ONLY_WITHIN_PREARM"},
    git,after)).toBe(false);
   expect(isG5APostExpiredScheduledBackupV39(env(),git,
-   Date.parse("2027-11-07T03:30:00.000Z"))).toBe(false);
+   Date.parse("2027-11-05T15:30:00.000Z"))).toBe(false);
  });
  it("calculates observed only with source before W=T+2h and true PRE baseline",()=>{
   const q=G5A_POST_AGGREGATE_AUDIT_SQL_V39;
