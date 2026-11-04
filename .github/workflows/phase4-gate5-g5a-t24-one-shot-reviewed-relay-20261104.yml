@@ -9,6 +9,7 @@ on:
       - ".github/workflows/phase4-gate5-g5a-t24-one-shot-reviewed-relay-20261104.yml"
 permissions:
   actions: write
+  contents: read
 concurrency:
   group: phase4-g5-g5a-t24-20261104-one-shot-relay
   cancel-in-progress: false
