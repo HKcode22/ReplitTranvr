@@ -92,7 +92,7 @@ describe("G5A true future GitHub-only physical source owner admission",()=>{
   const wf=readFileSync(
    ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml",
    "utf8");
-  const registered=[...wf.matchAll(/^    - cron: "([^"]+)"$/gm)]
+  const registered=[...wf.matchAll(/^ {4}- cron: "([^"]+)"$/gm)]
    .map(m=>m[1]);
   expect(registered).toEqual([...C6,...C90]);
   const c6=JSON.stringify(C6),c90=JSON.stringify(C90);
