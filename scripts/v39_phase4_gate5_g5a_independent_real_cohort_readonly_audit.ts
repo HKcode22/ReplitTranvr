@@ -1,8 +1,8 @@
 /**
  * Independent G5A Gate5 real cohort audit — READ ONLY, no provider request.
  *
- * Github 2026-11-05 05:12Z, after frozen W=T_native+2h for the
- * 2026-11-05 02:00–03:00Z WSSS population.
+ * Github 2026-11-07 05:12Z, after frozen W=T_native+2h for the
+ * 2026-11-07 02:00–03:00Z WSSS population.
  *
  * Factual, privacy-preserving counts only. Does not read or emit raw FIDS
  * Content, flight IDs, credentials, or user data. Does NOT declare science PASS.
