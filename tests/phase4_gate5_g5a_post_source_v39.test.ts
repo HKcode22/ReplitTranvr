@@ -238,6 +238,7 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
    "p.batch_id=ANY($2::text[])",
    "p.available_at<=pre.selected_t_milestone_utc+INTERVAL '2 hours'",
    "p.available_at>pre.prediction_cutoff_utc",
+   "p.scope_classification IN ('confirmed_core','unknown')",
    "GROUP BY pre.horizon",">=15","<15"
   ])expect(q).toContain(must);
   expect(q).not.toContain("actual_wheels_off");
