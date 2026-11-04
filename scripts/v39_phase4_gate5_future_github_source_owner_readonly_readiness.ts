@@ -23,6 +23,9 @@ type DbFacts={
   // PostgreSQL sequences need their own USAGE privilege: INSERT alone does
   // not grant nextval() on serial-backed id columns.
   serialUsage:{populationId:boolean;preSnapshotId:boolean}
+  membershipTrigger:{
+   enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean
+  }
 };
 const OBJECTS={
  original:"clean.fids_query_response",
@@ -88,6 +91,20 @@ export const G5A_OWNER_SERIAL_CATALOG_SQL_V39=[
 ].join(" ");
 export const G5A_OWNER_SERIAL_USAGE_SQL_V39=
  "SELECT has_sequence_privilege(current_user,$1,'USAGE') AS usable";
+export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
+ "SELECT",
+ "(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=",
+ "'clean.flight_population'::regclass AND",
+ "tgname='trg_flight_population_research_membership'",
+ "AND tgenabled IN ('O','A'))=1 AS enabled,",
+ "(SELECT count(*)::int FROM pg_proc p",
+ "JOIN pg_namespace n ON n.oid=p.pronamespace",
+ "WHERE n.nspname='clean' AND p.proname=",
+ "'ensure_population_research_membership' AND NOT p.prosecdef)=1",
+ "AS security_invoker,",
+ "has_table_privilege(current_user,",
+ "'clean.population_research_membership','INSERT') AS owner_can_insert"
+].join(" ");
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
  const suffix=typeof c==="string"&&/^[A-Z0-9]{5}$/.test(c)?"_SQLSTATE_"+c:"";
@@ -115,7 +132,8 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     canCreateSchema:needed(r.can_create_schema),
     canCreateDatabase:needed(r.can_create_database),
     tables:{} as DbFacts["tables"],
-    serialUsage:{populationId:false,preSnapshotId:false}
+    serialUsage:{populationId:false,preSnapshotId:false},
+    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false}
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
@@ -146,6 +164,17 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
    throw Error("P4_G5_SOURCE_WRITER_SERIAL_CATALOG_BAD_HOLD");
   facts.serialUsage={
    populationId:a.rows[0].usable,preSnapshotId:b.rows[0].usable
+  };
+  const membership=await db.query(G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39);
+  if(membership.rows.length!==1||[
+   membership.rows[0]?.enabled,membership.rows[0]?.security_invoker,
+   membership.rows[0]?.owner_can_insert
+  ].some(x=>typeof x!=="boolean"))
+   throw Error("P4_G5_SOURCE_OWNER_MEMBERSHIP_CATALOG_BAD_HOLD");
+  facts.membershipTrigger={
+   enabled:membership.rows[0].enabled,
+   securityInvoker:membership.rows[0].security_invoker,
+   ownerCanInsert:membership.rows[0].owner_can_insert
   };
   await db.query("ROLLBACK");tx=false;
   return facts;
@@ -182,6 +211,9 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   });
  const ownerSequences=owner!==null&&owner.serialUsage.populationId&&
   owner.serialUsage.preSnapshotId;
+ const ownerMembershipPath=owner!==null&&owner.membershipTrigger.enabled&&
+  (!owner.membershipTrigger.securityInvoker||
+    owner.membershipTrigger.ownerCanInsert);
  const ownerDistinct=reader!==null&&owner!==null&&
   owner.dbName===reader.dbName&&owner.roleName!==reader.roleName;
  const rolesSafe=reader!==null&&owner!==null&&
@@ -195,6 +227,13 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog:sourceWriter,
   sourceOwnerCanUsePopulationIdSequence:owner?.serialUsage.populationId===true,
   sourceOwnerCanUsePreSnapshotIdSequence:owner?.serialUsage.preSnapshotId===true,
+  sourceOwnerPopulationMembershipTriggerEnabled:
+   owner?.membershipTrigger.enabled===true,
+  sourceOwnerMembershipTriggerRunsAsInvoker:
+   owner?.membershipTrigger.securityInvoker===true,
+  sourceOwnerCanInsertMembership:
+   owner?.membershipTrigger.ownerCanInsert===true,
+  sourceOwnerMembershipTriggerHasEffectiveWritePath:ownerMembershipPath,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
   // Disaggregated, non-identifying flags: distinguishes an elevated audit
@@ -216,6 +255,7 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   !evidenceReader?"HOLD_GITHUB_READER_V0077_SOURCE_PRE_ACL":
   !sourceWriter?"HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL":
   !ownerSequences?"HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE":
+  !ownerMembershipPath?"HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE":
   !ownerDistinct||!rolesSafe?"HOLD_GITHUB_DB_ROLE_SEPARATION":
    "TECHNICAL_CREDENTIALS_CANDIDATE_ONLY_SCIENCE_RELEASE_HOLD";
  return{
