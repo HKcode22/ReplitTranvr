@@ -121,13 +121,15 @@ export async function main(){
   }
   if(!insertOnlyDenied)
    throw Error("G5A_DISPOSABLE_TRIGGER_INSERT_ONLY_SCOPE_UNEXPECTED_HOLD");
-  await db.query("GRANT SELECT ON clean.population_research_membership TO "+ROLE);
+  await db.query("GRANT SELECT (population_member_id) ON clean.population_research_membership TO "+ROLE);
   const finalGrant=await db.query(
    "SELECT has_table_privilege($1,'clean.population_research_membership','INSERT') AS ins,"+
    "has_table_privilege($1,'clean.population_research_membership','SELECT') AS sel,"+
+   "has_column_privilege($1,'clean.population_research_membership','population_member_id','SELECT') AS key_sel,"+
    "has_table_privilege($1,'clean.population_research_membership','UPDATE') AS upd,"+
    "has_table_privilege($1,'clean.population_research_membership','DELETE') AS del",[ROLE]);
-  if(finalGrant.rows[0]?.ins!==true||finalGrant.rows[0]?.sel!==true||
+  if(finalGrant.rows[0]?.ins!==true||finalGrant.rows[0]?.sel!==false||
+     finalGrant.rows[0]?.key_sel!==true||
      finalGrant.rows[0]?.upd!==false||finalGrant.rows[0]?.del!==false)
    throw Error("G5A_DISPOSABLE_TRIGGER_SELECTED_GRANTS_BAD_HOLD");
   await db.query("BEGIN");
@@ -152,7 +154,8 @@ export async function main(){
     sourceWriterMembershipInsert:false,sqlstate42501:true,
     normalizedRowsPersisted:0},
    afterDisposableOnly:{additionalMembershipInsert:true,
-    membershipSelect:true,insertOnlyStillInsufficient:true,
+    membershipConflictKeyColumnSelect:true,membershipFullTableSelect:false,
+    insertOnlyStillInsufficient:true,
     membershipUpdate:false,membershipDelete:false,
     normalizedRowsPersisted:1,membershipRowsPersisted:1},
    noProductionSchemaOrRolesChanged:true,providerCalls:0,
