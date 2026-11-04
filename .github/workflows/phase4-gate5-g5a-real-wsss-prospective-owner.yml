@@ -18,17 +18,37 @@ on:
       - "data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
       - "tests/phase4_gate5_g5a_active_science_mode_v39.test.ts"
+  workflow_dispatch:
+    inputs:
+      horizon:
+        description: "One missed GitHub schedule fallback, inside true prospective prearm window only"
+        required: true
+        type: choice
+        options:
+          - T-6h
+          - T-90m
   schedule:
-    # GitHub-only real prearm. All 3 dates are 2026, UTC, with in-code absolute
-    # date/provenance checks. No manual Replit clock/Cloudflare timer.
-    - cron: "40 22 3 11 *"  # Nov 3 22:40Z => T−24h prearm
-    - cron: "40 16 4 11 *"  # Nov 4 16:40Z => T−6h prearm
-    - cron: "10 21 4 11 *"  # Nov 4 21:10Z => T−90m prearm
+    # T-24h on Nov3 was MISSED; never backfill it as an observed PRE.
+    # Multiple future non-hour-boundary CRON slots mitigate GH schedule drops.
+    # The same fixed cohort, one owner/horizon and 24-unit V0076 cap apply.
+    # T-6h prearm: Nov4 UTC 15:47,16:17,16:47,17:17.
+    - cron: "47 15 4 11 *"
+    - cron: "17 16 4 11 *"
+    - cron: "47 16 4 11 *"
+    - cron: "17 17 4 11 *"
+    # T-90m prearm: Nov4 UTC 20:17,20:47,21:17,21:47.
+    - cron: "17 20 4 11 *"
+    - cron: "47 20 4 11 *"
+    - cron: "17 21 4 11 *"
+    - cron: "47 21 4 11 *"
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: phase4-g5-g5a-wsss-20261105-prospective-real-owner
+  # A delayed backup must not sit behind a successful owner until its PRE
+  # deadline expires. Distinct GitHub invocations race safely under V0076
+  # SERIALIZABLE DB locks and one-owner/horizon uniqueness.
+  group: phase4-g5-g5a-wsss-20261105-${{ github.event.schedule || inputs.horizon || github.run_id }}
   cancel-in-progress: false
 jobs:
   offline-integrity:
@@ -58,7 +78,8 @@ jobs:
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
-    if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 23 3 11 *' }}
+    # That honest T-24h prearm deadline has elapsed. Never revive/backfill.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -90,13 +111,14 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
   owner-t6:
     name: owner-t6
-    if: ${{ github.event_name == 'schedule' && github.event.schedule == '40 17 4 11 *' }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 15 4 11 *","17 16 4 11 *","47 16 4 11 *","17 17 4 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-6h') }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
     env:
       P4_G5_G5A_HORIZON: T-6h
-      P4_G5_G5A_CRON: "40 16 4 11 *"
+      P4_G5_G5A_CRON: ${{ github.event.schedule || 'manual-reviewed' }}
+      P4_G5_G5A_MANUAL_HORIZON: ${{ inputs.horizon || '' }}
       P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
@@ -122,13 +144,14 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
   owner-t90:
     name: owner-t90
-    if: ${{ github.event_name == 'schedule' && github.event.schedule == '10 22 4 11 *' }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["17 20 4 11 *","47 20 4 11 *","17 21 4 11 *","47 21 4 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-90m') }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
     env:
       P4_G5_G5A_HORIZON: T-90m
-      P4_G5_G5A_CRON: "10 21 4 11 *"
+      P4_G5_G5A_CRON: ${{ github.event.schedule || 'manual-reviewed' }}
+      P4_G5_G5A_MANUAL_HORIZON: ${{ inputs.horizon || '' }}
       P4_G5_G5A_PAID_INTENT: WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
