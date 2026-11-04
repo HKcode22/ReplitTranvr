@@ -20,6 +20,12 @@ type DbFacts={
   dbName:string;roleName:string;pg16:boolean;txReadOnly:boolean;
   isSuperuser:boolean;canCreateSchema:boolean;canCreateDatabase:boolean;
   tables:Record<keyof typeof OBJECTS,Seen>
+  // PostgreSQL sequences need their own USAGE privilege: INSERT alone does
+  // not grant nextval() on serial-backed id columns.
+  serialUsage:{populationId:boolean;preSnapshotId:boolean}
+  membershipTrigger:{
+   enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean;ownerCanSelect:boolean
+  }
 };
 const OBJECTS={
  original:"clean.fids_query_response",
@@ -79,6 +85,28 @@ const PRIVILEGE_SQL=[
  "ELSE has_table_privilege(current_user,$1,'DELETE') END AS can_delete"
 ].join(" ");
 
+export const G5A_OWNER_SERIAL_CATALOG_SQL_V39=[
+ "SELECT pg_get_serial_sequence('clean.flight_population','id') AS population_seq,",
+ "pg_get_serial_sequence('clean.flight_snapshots','id') AS pre_snapshot_seq"
+].join(" ");
+export const G5A_OWNER_SERIAL_USAGE_SQL_V39=
+ "SELECT has_sequence_privilege(current_user,$1,'USAGE') AS usable";
+export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
+ "SELECT",
+ "(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=",
+ "'clean.flight_population'::regclass AND",
+ "tgname='trg_flight_population_research_membership'",
+ "AND tgenabled IN ('O','A'))=1 AS enabled,",
+ "(SELECT count(*)::int FROM pg_proc p",
+ "JOIN pg_namespace n ON n.oid=p.pronamespace",
+ "WHERE n.nspname='clean' AND p.proname=",
+ "'ensure_population_research_membership' AND NOT p.prosecdef)=1",
+ "AS security_invoker,",
+ "has_table_privilege(current_user,",
+ "'clean.population_research_membership','INSERT') AS owner_can_insert,",
+ "has_column_privilege(current_user,",
+ "'clean.population_research_membership','population_member_id','SELECT') AS owner_can_select"
+].join(" ");
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
  const suffix=typeof c==="string"&&/^[A-Z0-9]{5}$/.test(c)?"_SQLSTATE_"+c:"";
@@ -105,7 +133,9 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     isSuperuser:needed(r.is_superuser),
     canCreateSchema:needed(r.can_create_schema),
     canCreateDatabase:needed(r.can_create_database),
-    tables:{} as DbFacts["tables"]
+    tables:{} as DbFacts["tables"],
+    serialUsage:{populationId:false,preSnapshotId:false},
+    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false}
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
@@ -123,6 +153,33 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     delete:q.can_delete===true
    };
   }
+  const seqCatalog=await db.query(G5A_OWNER_SERIAL_CATALOG_SQL_V39);
+  const names=seqCatalog.rows[0];
+  if(seqCatalog.rows.length!==1||typeof names?.population_seq!=="string"||
+     typeof names?.pre_snapshot_seq!=="string")
+   throw Error("P4_G5_SOURCE_WRITER_SERIAL_DEFAULTS_MISSING_HOLD");
+  const a=await db.query(G5A_OWNER_SERIAL_USAGE_SQL_V39,[names.population_seq]);
+  const b=await db.query(G5A_OWNER_SERIAL_USAGE_SQL_V39,[names.pre_snapshot_seq]);
+  if(a.rows.length!==1||b.rows.length!==1||
+     typeof a.rows[0]?.usable!=="boolean"||
+     typeof b.rows[0]?.usable!=="boolean")
+   throw Error("P4_G5_SOURCE_WRITER_SERIAL_CATALOG_BAD_HOLD");
+  facts.serialUsage={
+   populationId:a.rows[0].usable,preSnapshotId:b.rows[0].usable
+  };
+  const membership=await db.query(G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39);
+  if(membership.rows.length!==1||[
+   membership.rows[0]?.enabled,membership.rows[0]?.security_invoker,
+   membership.rows[0]?.owner_can_insert,
+   membership.rows[0]?.owner_can_select
+  ].some(x=>typeof x!=="boolean"))
+   throw Error("P4_G5_SOURCE_OWNER_MEMBERSHIP_CATALOG_BAD_HOLD");
+  facts.membershipTrigger={
+   enabled:membership.rows[0].enabled,
+   securityInvoker:membership.rows[0].security_invoker,
+   ownerCanInsert:membership.rows[0].owner_can_insert,
+   ownerCanSelect:membership.rows[0].owner_can_select
+  };
   await db.query("ROLLBACK");tx=false;
   return facts;
  }catch(e){failure(side,e)}
@@ -156,6 +213,11 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
     "physicalOwner","allowedQuery","physicalAttempt","preSnapshots"].includes(k);
    return !writer||v.insert;
   });
+ const ownerSequences=owner!==null&&owner.serialUsage.populationId&&
+  owner.serialUsage.preSnapshotId;
+ const ownerMembershipPath=owner!==null&&owner.membershipTrigger.enabled&&
+  (!owner.membershipTrigger.securityInvoker||
+    (owner.membershipTrigger.ownerCanInsert&&owner.membershipTrigger.ownerCanSelect));
  const ownerDistinct=reader!==null&&owner!==null&&
   owner.dbName===reader.dbName&&owner.roleName!==reader.roleName;
  const rolesSafe=reader!==null&&owner!==null&&
@@ -167,6 +229,17 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   futureDedicatedDbOwnerSecretPresent:input.ownerCredentialPresent,
   independentReadOnlySourceAndPREMetadataVisible:evidenceReader,
   prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog:sourceWriter,
+  sourceOwnerCanUsePopulationIdSequence:owner?.serialUsage.populationId===true,
+  sourceOwnerCanUsePreSnapshotIdSequence:owner?.serialUsage.preSnapshotId===true,
+  sourceOwnerPopulationMembershipTriggerEnabled:
+   owner?.membershipTrigger.enabled===true,
+  sourceOwnerMembershipTriggerRunsAsInvoker:
+   owner?.membershipTrigger.securityInvoker===true,
+  sourceOwnerCanInsertMembership:
+   owner?.membershipTrigger.ownerCanInsert===true,
+  sourceOwnerCanSelectMembership:
+   owner?.membershipTrigger.ownerCanSelect===true,
+  sourceOwnerMembershipTriggerHasEffectiveWritePath:ownerMembershipPath,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
   // Disaggregated, non-identifying flags: distinguishes an elevated audit
@@ -187,6 +260,8 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
    "HOLD_GITHUB_PROVIDER_KEY_ABSENT":
   !evidenceReader?"HOLD_GITHUB_READER_V0077_SOURCE_PRE_ACL":
   !sourceWriter?"HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL":
+  !ownerSequences?"HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE":
+  !ownerMembershipPath?"HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE":
   !ownerDistinct||!rolesSafe?"HOLD_GITHUB_DB_ROLE_SEPARATION":
    "TECHNICAL_CREDENTIALS_CANDIDATE_ONLY_SCIENCE_RELEASE_HOLD";
  return{

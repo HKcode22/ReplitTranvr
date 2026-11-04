@@ -15,7 +15,11 @@ function role(n:"audit"|"owner"):Facts{
  return {
   dbName:"same-synthetic-db",roleName:n,
   pg16:true,txReadOnly:true,isSuperuser:false,
-  canCreateSchema:false,canCreateDatabase:false,tables:t
+  canCreateSchema:false,canCreateDatabase:false,tables:t,
+  serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"},
+  membershipTrigger:{
+   enabled:true,securityInvoker:true,ownerCanInsert:n==="owner",ownerCanSelect:n==="owner"
+  }
  };
 }
 function evidence(){
@@ -76,6 +80,43 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
    expect(classifyP4G5GithubOwnerReadinessV39(x).status)
     .toBe("HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL");
   }
+ });
+ it("separately verifies sequence USAGE for the restricted source writer",()=>{
+  for(const key of ["populationId","preSnapshotId"] as const){
+   const x=evidence();x.owner!.serialUsage[key]=false;
+   const r=classifyP4G5GithubOwnerReadinessV39(x);
+   expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE");
+   expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
+   expect(r.flags[key==="populationId"?"sourceOwnerCanUsePopulationIdSequence":
+    "sourceOwnerCanUsePreSnapshotIdSequence"]).toBe(false);
+   expect(r.databaseWrites).toBe(0);expect(r.providerCalls).toBe(0);
+  }
+ });
+ it("detects FIDS AFTER INSERT invoker trigger without membership write permission",()=>{
+  const x=evidence();
+  x.owner!.membershipTrigger.ownerCanInsert=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
+  expect(r.flags.sourceOwnerPopulationMembershipTriggerEnabled).toBe(true);
+  expect(r.flags.sourceOwnerMembershipTriggerRunsAsInvoker).toBe(true);
+  expect(r.flags.sourceOwnerCanInsertMembership).toBe(false);
+  expect(r.flags.sourceOwnerMembershipTriggerHasEffectiveWritePath).toBe(false);
+  expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
+  expect(r.providerCalls).toBe(0);expect(r.databaseWrites).toBe(0);
+ });
+ it("rejects INSERT-only membership grant because ON CONFLICT also needs SELECT",()=>{
+  const x=evidence();
+  x.owner!.membershipTrigger.ownerCanSelect=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
+  expect(r.flags.sourceOwnerCanInsertMembership).toBe(true);
+  expect(r.flags.sourceOwnerCanSelectMembership).toBe(false);
+  expect(r.flags.sourceOwnerMembershipTriggerHasEffectiveWritePath).toBe(false);
+ });
+ it("detects missing population-membership trigger or unsafe missing route",()=>{
+  const x=evidence();x.owner!.membershipTrigger.enabled=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
  });
  it("reader and owner roles must be distinct and on one exact database",()=>{
   for(const mutate of [
