@@ -18,6 +18,8 @@ import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {readFileSync} from "node:fs";
 import pg from "pg";
+import {isP4G5ReviewedMainWorkflowRestPathV39}
+ from "../server/lib/disruption/phase4Gate5GithubRestPathGuard_v39";
 import {fetchFidsPopulation,type FidsCensusParams,type FidsQueryObservation,
  type PopulationRow,persistFidsObservation}
  from "../server/lib/disruption/fidsCensus_v3";
@@ -111,7 +113,7 @@ async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
  if(found.length!==1)hold("GH_POST_JOB_MISSING");
  const job=found[0],start=ms(String(job.started_at)),current=Date.now();
  if(run.id!==Number(id)||run.head_sha!==commit||
-    run.event!=="schedule"||run.name!==WF||run.path!==PATH||
+    run.event!=="schedule"||run.name!==WF||!isP4G5ReviewedMainWorkflowRestPathV39(run.path,PATH)||
     run.head_branch!=="main"||run.run_attempt!==1||
     run.status!=="in_progress"||run.conclusion!==null||
     object(run.repository).full_name!==REPO||

@@ -17,6 +17,8 @@ import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import pg from "pg";
+import {isP4G5ReviewedMainWorkflowRestPathV39}
+ from "../server/lib/disruption/phase4Gate5GithubRestPathGuard_v39";
 import {fetchFidsPopulation,type FidsCensusParams}
  from "../server/lib/disruption/fidsCensus_v3";
 import {fetchFidsAirport,getBalanceEvidenceStrict}
@@ -123,7 +125,7 @@ async function proveRealGithubOwnerJob(e:NodeJS.ProcessEnv,sha40:string,
  const jobStarted=Date.parse(String(job.started_at));
  if(run.id!==Number(id)||run.head_sha!==sha40||
   run.head_branch!=="main"||run.name!==NAME||
-  run.path!==WORKFLOW_PATH||run.run_attempt!==1||
+  !isP4G5ReviewedMainWorkflowRestPathV39(run.path,WORKFLOW_PATH)||run.run_attempt!==1||
   run.event!==e.GITHUB_EVENT_NAME||run.status!=="in_progress"||
   run.conclusion!==null||rec(run.repository).full_name!==REPO||
   job.run_id!==Number(id)||job.status!=="in_progress"||
