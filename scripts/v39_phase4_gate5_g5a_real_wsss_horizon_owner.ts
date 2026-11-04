@@ -37,6 +37,8 @@ import {persistP4G5ReviewedPreForCohortV39}
  from "../server/lib/disruption/phase4Gate5ScopedPreWriter_v39";
 import {proveAndBindFailedG5AT24OwnerV39}
  from "../server/lib/disruption/phase4Gate5G5AT24FailedOwnerRecovery_v39";
+import {G5A_PRIOR_T24_PROVENANCE_SQL_V39,assessG5AT24PreconditionV39}
+ from "../server/lib/disruption/phase4Gate5PriorSourceStop_v39";
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml";
@@ -193,6 +195,19 @@ const errorSafe=(e:unknown)=>{
  return /^P4_G5_[A-Z0-9_]+(?:_HOLD)?$/.test(message)?
   message:"P4_G5_G5A_UNKNOWN_NO_CONTENT_LOGGED_HOLD";
 };
+/** Safe attribution only: never print SQL text, exception messages,
+ * provider payload, flight identity, tokens, passwords or connection data. */
+export function sourceErrorSafeG5AV39(err:unknown){
+ const message=err instanceof Error?err.message:"";
+ if(/^P4_G5_[A-Z0-9_]+(?:_HOLD)?$/.test(message)||
+    /^FIDS_[A-Z0-9_]{3,120}$/.test(message))
+  return message;
+ const code=err!==null&&typeof err==="object"&&"code" in err?
+  (err as {code?:unknown}).code:null;
+ if(typeof code==="string"&&/^[A-Z0-9]{5}$/.test(code))
+  return "P4_G5_G5A_SOURCE_SQLSTATE_"+code+"_HOLD";
+ return "P4_G5_G5A_UNKNOWN_NO_CONTENT_LOGGED_HOLD";
+}
 export async function main(){
  const e=process.env,checkout=execFileSync("git",["rev-parse","HEAD"],
   {encoding:"utf8",timeout:4000}).trim();
@@ -303,6 +318,23 @@ export async function main(){
  const dbw={query:(sql:string,args?:readonly unknown[])=>
   db.query(sql,args as unknown[]|undefined)};
  try{
+  // Full three-horizon science cannot be repaired by later source requests
+  // when T24 has NO original-bound responses or on-time PRE. Check before
+  // staging a successor owner, quota query or irreversible paid reservation.
+  if(h!=="T-24h"){
+   const early=await db.query(G5A_PRIOR_T24_PROVENANCE_SQL_V39,[manifestSha]);
+   const evidence=assessG5AT24PreconditionV39(early.rows);
+   if(!evidence.allowPaidContinuation){
+    console.log(JSON.stringify({
+     status:"G5A_T24_SOURCE_OR_PRE_MISSING_NO_SUCCESSOR_PAID",
+     horizon:h,verifiedT24OriginalBindings:evidence.originals,
+     verifiedT24OnTimePRE:evidence.pre,
+     futurePaidReservationsCreated:0,providerCalls:0,
+     completeThreeHorizonScience:false,scientificGate5Passed:false
+    }));
+    return;
+   }
+  }
   // GitHub schedule redundancy and a reviewed manual workflow_dispatch may
   // overlap. One actual physical horizon owner is immutable, not replayable.
   // Every later runner must exit before V0076 staging or provider GET. The
@@ -561,7 +593,7 @@ export async function main(){
     console.error(JSON.stringify({
      status:"G5A_SOURCE_NOT_PERSISTED_AFTER_RESERVED_PAID_ATTEMPT",
      horizon:h,queryIndex:entry.queryIndex,
-     error:errorSafe(err),noRetry:true
+     error:sourceErrorSafeG5AV39(err),noRetry:true
     }));
    }
    await readOnlyHealthProbe();
