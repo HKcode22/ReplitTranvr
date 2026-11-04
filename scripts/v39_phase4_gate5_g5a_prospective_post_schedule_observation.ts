@@ -79,7 +79,7 @@ export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,
     e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_SHA!==commit||
     !(
       (e.GITHUB_EVENT_NAME==="schedule"&&
-       e.G5A_POST_MANUAL_INTENT===undefined&&
+       !e.G5A_POST_MANUAL_INTENT&&
        e.G5A_POST_SCHEDULE===CRON) ||
       (e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
        e.G5A_POST_MANUAL_INTENT==="REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"&&
