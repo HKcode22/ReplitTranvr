@@ -1,0 +1,61 @@
+name: Phase4 Gate5 FIDS Membership Trigger Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-membership-trigger-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_membership_trigger_disposable_pg16.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-membership-trigger-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_membership_trigger_disposable_pg16.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  membership-trigger-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bootstrap actual B0062 schema on disposable PG16 ONLY
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+      - name: Reproduce source-writer trigger permission failure, then prove minimal disposable fix
+        run: |
+          set -Eeuo pipefail
+          node --import tsx scripts/v39_phase4_gate5_membership_trigger_disposable_pg16.ts
+          echo 'PROVIDER_CALLS=0 PRODUCTION_DATABASE_WRITES=0'
+          echo 'SCIENCE_PASS=NO'
