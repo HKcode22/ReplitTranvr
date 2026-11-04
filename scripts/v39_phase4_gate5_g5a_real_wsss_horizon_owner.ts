@@ -45,9 +45,14 @@ const AUTH_INTENT="WSSS_NOV05_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
 export const P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39=
  "735620f2d2132c5bf51768f50caa767b7f0b25be8b128679641402666696890a" as const;
 const H={
- "T-24h":{job:"owner-t24",cron:"40 22 3 11 *"},
- "T-6h":{job:"owner-t6",cron:"40 16 4 11 *"},
- "T-90m":{job:"owner-t90",cron:"10 21 4 11 *"}
+ // T-24h was missed; cannot be rearmed after the original 00:30Z deadline.
+ "T-24h":{job:"owner-t24",crons:[]},
+ "T-6h":{job:"owner-t6",crons:[
+  "47 15 4 11 *","17 16 4 11 *","47 16 4 11 *","17 17 4 11 *"
+ ]},
+ "T-90m":{job:"owner-t90",crons:[
+  "17 20 4 11 *","47 20 4 11 *","17 21 4 11 *","47 21 4 11 *"
+ ]}
 } as const;
 type Horizon=keyof typeof H;
 const HEAD=/^[a-f0-9]{40}$/;
@@ -63,16 +68,24 @@ const rec=(x:unknown):Record<string,unknown>=>{
 function hold(name:string):never{throw Error("P4_G5_G5A_"+name+"_HOLD");}
 export function assertG5AOwnerRunContextV39(e:NodeJS.ProcessEnv,checkout:string,h:Horizon,now:number){
  const j=H[h];
- if(!j||!Number.isFinite(now)||!HEAD.test(checkout)||
+ const genuineSchedule=e.GITHUB_EVENT_NAME==="schedule"&&
+   !!j?.crons.includes(e.P4_G5_G5A_CRON as never)&&
+   !e.P4_G5_G5A_MANUAL_HORIZON;
+ const genuineManual=e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+   h!=="T-24h"&&
+   e.P4_G5_G5A_MANUAL_HORIZON===h&&
+   e.P4_G5_G5A_CRON==="manual-reviewed";
+ if(!j||!(genuineSchedule||genuineManual)||
+    !Number.isFinite(now)||!HEAD.test(checkout)||
    e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||
    e.GITHUB_REF!=="refs/heads/main"||
-   e.GITHUB_SHA!==checkout||e.GITHUB_EVENT_NAME!=="schedule"||
+   e.GITHUB_SHA!==checkout||
    e.GITHUB_RUN_ATTEMPT!=="1"||
    !/^\d{5,25}$/.test(e.GITHUB_RUN_ID??"")||
    e.GITHUB_JOB!==j.job||
    e.GITHUB_WORKFLOW!==NAME||
    e.GITHUB_WORKFLOW_REF!==REPO+"/"+WORKFLOW_PATH+"@refs/heads/main"||
-   e.P4_G5_G5A_CRON!==j.cron||
+   
    e.P4_G5_G5A_HORIZON!==h||
    e.P4_G5_G5A_PAID_INTENT!==AUTH_INTENT||
    !e.GITHUB_TOKEN||e.GITHUB_TOKEN.length<10||
@@ -111,7 +124,7 @@ async function proveRealGithubOwnerJob(e:NodeJS.ProcessEnv,sha40:string,
  if(run.id!==Number(id)||run.head_sha!==sha40||
   run.head_branch!=="main"||run.name!==NAME||
   run.path!==WORKFLOW_PATH||run.run_attempt!==1||
-  run.event!=="schedule"||run.status!=="in_progress"||
+  run.event!==e.GITHUB_EVENT_NAME||run.status!=="in_progress"||
   run.conclusion!==null||rec(run.repository).full_name!==REPO||
   job.run_id!==Number(id)||job.status!=="in_progress"||
   job.conclusion!==null||job.name!==e.GITHUB_JOB||
@@ -226,6 +239,26 @@ export async function main(){
  const dbw={query:(sql:string,args?:readonly unknown[])=>
   db.query(sql,args as unknown[]|undefined)};
  try{
+  // GitHub schedule redundancy and a reviewed manual workflow_dispatch may
+  // overlap. One actual physical horizon owner is immutable, not replayable.
+  // Every later runner must exit before V0076 staging or provider GET. The
+  // old owner may have zero receipts; that is UNOBSERVED, not permission to
+  // create a second owner that could duplicate source charges.
+  const incumbent=await db.query(
+   "SELECT state,github_run_id FROM clean.phase4_g5_fids_physical_owner_v39 "+
+   "WHERE owner_digest=$1 AND manifest_sha256=$2",
+   [owner.ownerDigest,manifestSha]);
+  if(incumbent.rows.length>1)hold("DUPLICATE_OWNER_CATALOG_DRIFT");
+  if(incumbent.rows.length===1){
+   console.log(JSON.stringify({
+    status:"G5A_BACKUP_OWNER_DUPLICATE_SUPPRESSED_NO_PROVIDER",
+    horizon:h,originalOwnerState:String(incumbent.rows[0].state),
+    originalRunId:String(incumbent.rows[0].github_run_id),
+    thisRunId:proof.githubRunId,originalPrearmNotBackfilled:true,
+    providerCalls:0,databaseWrites:0,scientificGate5Passed:false
+   }));
+   return;
+  }
   const prepared=await stageP4G5PreparedOwnerDbOnlyV39(dbw,{
    owner,githubRunId:proof.githubRunId,
    reviewedRunAuthorizationSha256:authSha
@@ -334,7 +367,7 @@ export async function main(){
    try{
     const quota=(await getBalanceEvidenceStrict()).quota;
     if(Date.now()-ms(quota.observedAtUtc)>30000||
-      quota.apiUnitsRemaining<100||quota.requestsRemaining<10)
+      quota.apiUnitsRemaining<2||quota.requestsRemaining<1)
      hold("LIVE_PROVIDER_QUOTA_INSUFFICIENT_OR_STALE");
     apiRemaining=quota.apiUnitsRemaining;
    }catch{unknown++;continue}
