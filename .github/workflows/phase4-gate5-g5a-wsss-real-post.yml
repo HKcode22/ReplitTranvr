@@ -16,14 +16,15 @@ on:
       - "scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts"
       - "server/lib/disruption/fidsCensus_v3.ts"
       - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
+  workflow_dispatch:
   schedule:
-    # Actual UTC date must be 2026-11-05; code refuses replay in future years
-    - cron: "10 2 5 11 *"
+    # Full prospective Nov7 2026 POST; never reproduce the missed Nov5 source.
+    - cron: "10 2 7 11 *"
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: gate5-g5a-wsss-20261105-post-real
+  group: gate5-g5a-wsss-20261107-post-real
   cancel-in-progress: false
 jobs:
   offline-post:
@@ -52,14 +53,15 @@ jobs:
           echo 'PROVIDER_CALLS=0 DATABASE_CONTENT_WRITES=0 PAID_DISPATCH_DISABLED_ON_PR_PUSH'
   post-source:
     name: post-source
-    if: ${{ github.event_name == 'schedule' && github.event.schedule == '10 2 5 11 *' }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '10 2 7 11 *') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     environment: phase2g-paid
     env:
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
-      G5A_POST_SCHEDULE: "10 2 5 11 *"
+      G5A_POST_SCHEDULE: ${{ github.event.schedule || 'manual-reviewed' }}
+      G5A_POST_MANUAL_INTENT: ${{ github.event_name == 'workflow_dispatch' && 'REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM' || '' }}
       G5A_POST_PAID_INTENT: G5A_NOV05_POST_THREE_2_UNIT_REQUESTS_MAX
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       P4_G5_SOURCE_OWNER_DATABASE_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
