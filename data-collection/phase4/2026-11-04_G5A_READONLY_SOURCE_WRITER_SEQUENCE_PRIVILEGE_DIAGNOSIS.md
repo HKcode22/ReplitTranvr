@@ -1,0 +1,11 @@
+# November 4 — read-only restricted-writer sequence diagnostic after zero-original T24
+
+**Incident context:** Real T24 WSSS collector `41818835151` committed 3 immutable paid-attempt reservations, saved 0 V0077 originals / 0 normalized population / 0 cutoff-safe PRE. All three requests logged a redacted error within approximately a second after reservation. No reliable provider HTTP/billing attribution. A green GitHub run was an operational false green. PR #388 repaired the fail-closed successor-spend guard; it did NOT fix source persistence. All source cutoffs for this cohort have elapsed.
+
+## Audit of a missing coverage class, no provider request
+
+The currently installed `phase4-gate5-future-owner-credentials-readiness-no-provider.yml` verifies table-level INSERT/SELECT and separation but did not check PostgreSQL sequences. On this project's B0062 schema, `clean.flight_population.id` and `clean.flight_snapshots.id` are backed by separately owned sequences. PostgreSQL INSERT privilege on a table does not imply `USAGE` on its sequence. Missing sequence USAGE can cause a fast failure on the first row insert despite a successful V0076 reservation and apparently valid table ACLs.
+
+Extend the existing restricted GitHub source-owner **READ ONLY** workflow to derive the exact serial sequence names from `pg_get_serial_sequence`, check `has_sequence_privilege(current_user,sequence,'USAGE')` under the *actual protected GitHub role*, and publish boolean flags without names, secrets or row content. Preserve existing separate reader/owner checks and paid/source constraints. A negative source-owner sequence result is a specific **HOLD**. All catalog reads remain inside `REPEATABLE READ READ ONLY`; provider calls and database writes are zero.
+
+A positive sequence report rules out only this *one* common failure mode. It does NOT establish the November 4 root cause or certify actual provider content. No new paid workflow, branch scheduling, retention change, permission grant, ledger reset, or scientific PASS. Follow with no-provider exact constrained PostgreSQL regression and a carefully reviewed future prospective cohort once actual persistence is demonstrated. See issue #293.
