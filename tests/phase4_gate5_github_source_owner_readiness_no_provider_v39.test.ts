@@ -16,7 +16,10 @@ function role(n:"audit"|"owner"):Facts{
   dbName:"same-synthetic-db",roleName:n,
   pg16:true,txReadOnly:true,isSuperuser:false,
   canCreateSchema:false,canCreateDatabase:false,tables:t,
-  serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"}
+  serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"},
+  membershipTrigger:{
+   enabled:true,securityInvoker:true,ownerCanInsert:n==="owner"
+  }
  };
 }
 function evidence(){
@@ -88,6 +91,23 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
     "sourceOwnerCanUsePreSnapshotIdSequence"]).toBe(false);
    expect(r.databaseWrites).toBe(0);expect(r.providerCalls).toBe(0);
   }
+ });
+ it("detects FIDS AFTER INSERT invoker trigger without membership write permission",()=>{
+  const x=evidence();
+  x.owner!.membershipTrigger.ownerCanInsert=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
+  expect(r.flags.sourceOwnerPopulationMembershipTriggerEnabled).toBe(true);
+  expect(r.flags.sourceOwnerMembershipTriggerRunsAsInvoker).toBe(true);
+  expect(r.flags.sourceOwnerCanInsertMembership).toBe(false);
+  expect(r.flags.sourceOwnerMembershipTriggerHasEffectiveWritePath).toBe(false);
+  expect(r.flags.prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog).toBe(true);
+  expect(r.providerCalls).toBe(0);expect(r.databaseWrites).toBe(0);
+ });
+ it("detects missing population-membership trigger or unsafe missing route",()=>{
+  const x=evidence();x.owner!.membershipTrigger.enabled=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
  });
  it("reader and owner roles must be distinct and on one exact database",()=>{
   for(const mutate of [
