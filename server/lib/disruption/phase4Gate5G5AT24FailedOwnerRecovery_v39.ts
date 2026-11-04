@@ -8,6 +8,9 @@ import type {P4G5PhysicalOwnerV39}
  from "./phase4Gate5PhysicalOwnerDispatchGuard_v39";
 const ORIGINAL_RUN="41810504164";
 const ORIGINAL_SHA="266ec47814bfb5482902eeb94dd83e4bc0975e3e";
+const CANCELLED_SUCCESSOR_RUN="41813236781";
+const CANCELLED_SUCCESSOR_SHA="aba2ece12522728ad4775d1b2ab91959be3f1e05";
+const FIRST_PAID_SLOT_UTC=Date.parse("2026-11-04T13:30:00.000Z");
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner";
 const PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml";
@@ -47,6 +50,35 @@ export function verifyG5AT24RecoveryEvidenceV39(a:{
   oldEnd>newStart||newStart>deadline)fail();
  return true as const;
 }
+/** A 2nd operational recovery is allowed only after the actual previously
+ * recovered runner has COMPLETED GitHub's CANCELLED state. A cancellation
+ * request banner or stale UI is insufficient. No transaction or provider
+ * call occurs when this verification fails. */
+export function verifyG5AT24CancelledSuccessorV39(v:{
+ runId:string;headSha:string;repo:string;branch:string;name:string;
+ path:string;event:string;attempt:number;status:string;conclusion:string;
+ runStarted:string;jobRunId:number;jobName:string;jobStatus:string;
+ jobConclusion:string;jobStarted:string;jobCompleted:string;
+ currentRunId:string;currentJobStarted:string;prearmDeadline:string;
+}){
+ const vals=[v.runStarted,v.jobStarted,v.jobCompleted,v.currentJobStarted,
+  v.prearmDeadline].map(x=>Date.parse(x));
+ const [runStarted,jobStarted,jobDone,newStarted,deadline]=vals;
+ if(v.runId!==CANCELLED_SUCCESSOR_RUN||
+    v.headSha!==CANCELLED_SUCCESSOR_SHA||
+    v.repo!==REPO||v.branch!=="main"||v.name!==NAME||
+    v.path!==PATH||v.event!=="workflow_dispatch"||
+    v.attempt!==1||v.status!=="completed"||v.conclusion!=="cancelled"||
+    v.jobRunId!==Number(CANCELLED_SUCCESSOR_RUN)||
+    v.jobName!=="owner-t24"||v.jobStatus!=="completed"||
+    v.jobConclusion!=="cancelled"||
+    v.currentRunId===v.runId||!vals.every(Number.isFinite)||
+    runStarted>jobStarted||jobStarted>=jobDone||
+    jobDone>newStarted||jobDone>=FIRST_PAID_SLOT_UTC||
+    newStarted>deadline)
+  fail();
+ return true as const;
+}
 export async function proveAndBindFailedG5AT24OwnerV39(input:{
  db:Db;token:string;owner:P4G5PhysicalOwnerV39;
  horizon:string;newRunId:string;newJobStartedAtUtc:string;
@@ -69,9 +101,11 @@ export async function proveAndBindFailedG5AT24OwnerV39(input:{
   if(!response.ok)fail();
   return response.json();
  });
- const [run,jobs,owner,allowed,attempts,budget]=await Promise.all([
+ const [run,jobs,successor,successorJobs,owner,allowed,attempts,budget]=await Promise.all([
   fetchJson("/actions/runs/"+ORIGINAL_RUN),
   fetchJson("/actions/runs/"+ORIGINAL_RUN+"/jobs?per_page=100"),
+  fetchJson("/actions/runs/"+CANCELLED_SUCCESSOR_RUN),
+  fetchJson("/actions/runs/"+CANCELLED_SUCCESSOR_RUN+"/jobs?per_page=100"),
   input.db.query("SELECT state,github_run_id,reviewed_authorization_sha256,"+
    "actual_github_runner_started_at_utc FROM clean.phase4_g5_fids_physical_owner_v39 "+
    "WHERE owner_digest=$1 AND manifest_sha256=$2",
@@ -87,6 +121,7 @@ export async function proveAndBindFailedG5AT24OwnerV39(input:{
    "WHERE manifest_sha256=$1",[input.manifestSha])
  ]);
  if(!run||!jobs||!Array.isArray(jobs.jobs)||
+  !successor||!successorJobs||!Array.isArray(successorJobs.jobs)||
   run.repository?.full_name!==REPO||run.head_branch!=="main"||
   run.id!==Number(ORIGINAL_RUN)||owner.rows.length!==1||
   attempts.rows.length!==1||budget.rows.length!==1||
@@ -94,6 +129,23 @@ export async function proveAndBindFailedG5AT24OwnerV39(input:{
  const matched=jobs.jobs.filter((j:any)=>j?.name==="owner-t24");
  if(matched.length!==1||matched[0].run_id!==Number(ORIGINAL_RUN))fail();
  const job=matched[0],o=owner.rows[0];
+ const cancelledJobs=successorJobs.jobs.filter((j:any)=>j?.name==="owner-t24");
+ if(cancelledJobs.length!==1)fail();
+ const cancelled=cancelledJobs[0];
+ verifyG5AT24CancelledSuccessorV39({
+  runId:String(successor.id),headSha:String(successor.head_sha),
+  repo:String(successor.repository?.full_name),
+  branch:String(successor.head_branch),name:String(successor.name),
+  path:String(successor.path),event:String(successor.event),
+  attempt:Number(successor.run_attempt),status:String(successor.status),
+  conclusion:String(successor.conclusion),runStarted:iso(successor.run_started_at),
+  jobRunId:Number(cancelled.run_id),jobName:String(cancelled.name),
+  jobStatus:String(cancelled.status),
+  jobConclusion:String(cancelled.conclusion),
+  jobStarted:iso(cancelled.started_at),jobCompleted:iso(cancelled.completed_at),
+  currentRunId:input.newRunId,currentJobStarted:input.newJobStartedAtUtc,
+  prearmDeadline:input.owner.ownerDeadlineUtc
+ });
  const originalProofSha=sha(JSON.stringify({
   githubRunId:ORIGINAL_RUN,gitSha:ORIGINAL_SHA,
   runStartedAtUtc:iso(run.run_started_at),
