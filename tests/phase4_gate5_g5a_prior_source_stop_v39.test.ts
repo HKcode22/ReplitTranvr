@@ -41,6 +41,7 @@ describe("G5A zero-source successor paid horizon refusal",()=>{
   expect(post.indexOf("G5A_PRIOR_T24_PROVENANCE_SQL_V39"))
    .toBeLessThan(post.indexOf("reserveG5APostSlotDbV39(db,manifestSha,cohortId,i)"));
   expect(source).toContain("G5A_T24_SOURCE_OR_PRE_MISSING_NO_SUCCESSOR_PAID");
+  expect(source).toContain('hold("PROSPECTIVE_HORIZON_ZERO_DURABLE_SOURCE_OR_PRE")');
   expect(post).toContain("G5A_POST_SKIPPED_MISSING_T24_SOURCE_OR_PRE_NO_PROVIDER");
  });
  it("source failure reports safe SQLSTATE or known closed taxonomy, not messages",()=>{
