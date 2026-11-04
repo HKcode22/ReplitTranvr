@@ -310,7 +310,7 @@ LEFT JOIN LATERAL(
   AND p.available_at<=pre.selected_t_milestone_utc+INTERVAL '2 hours'
   AND p.dep_scheduled_utc IS NOT NULL
   AND p.population_role='requested_airport_primary'
-  AND p.scope_classification='confirmed_core'
+  AND p.scope_classification IN ('confirmed_core','unknown')
   AND p.codeshare_resolution_status='confirmed_operating_leg'
  ORDER BY p.available_at DESC,p.id DESC LIMIT 1
 ) post ON TRUE

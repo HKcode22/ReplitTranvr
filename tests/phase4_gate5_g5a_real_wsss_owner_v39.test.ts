@@ -1,5 +1,9 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
+import {assessG5AConditionalOperatingPREV39,stageP4G5ScopedPreV39}
+ from "../server/lib/disruption/phase4Gate5ScopedPreStaging_v39";
+import {classifyScope,fetchFidsPopulation,type FidsCensusParams}
+ from "../server/lib/disruption/fidsCensus_v3";
 import {assertG5AOwnerRunContextV39,p4G5G5AReservationSqlArgsV39,
  P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39}
  from "../scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner";
@@ -21,6 +25,119 @@ const base=()=>({
  V39_DATABASE_RUNTIME_URL:FULL,P4_G5_SOURCE_OWNER_DATABASE_URL:FULL
 });
 describe("G5A true Thursday GitHub-only physical source owner admission",()=>{
+ it("never silently upgrades provider filtered UNKNOWN private/charter scope to confirmed commercial",()=>{
+  const stable="leg:g5a:"+"a".repeat(64);
+  expect(classifyScope({isCargo:false})).toBe("unknown");
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","confirmed_operating_leg",stable,true))
+   .toEqual({eligible:true,scopeUnverified:true});
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","confirmed_operating_leg",stable,false))
+   .toEqual({eligible:false,scopeUnverified:false});
+  expect(assessG5AConditionalOperatingPREV39(
+   "confirmed_core","confirmed_operating_leg",stable,true))
+   .toEqual({eligible:true,scopeUnverified:false});
+  // Existing non-G5A confirmed physical legs keep their former eligibility.
+  expect(assessG5AConditionalOperatingPREV39(
+   "confirmed_core","confirmed_operating_leg","legacy:leg",false).eligible)
+   .toBe(true);
+  for(const [scope,identity] of [
+   ["auxiliary","confirmed_operating_leg"],
+   ["unknown","ambiguous_codeshare"],
+   ["unknown","resolved_marketing"]
+  ] as const)
+   expect(assessG5AConditionalOperatingPREV39(
+    scope,identity,stable,true).eligible).toBe(false);
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","confirmed_operating_leg","provisional:abc",true).eligible)
+   .toBe(false);
+ });
+ it("known charter stays auxiliary; ordinary FIDS field absence stays unknown and operating identity positive",async()=>{
+  const p:FidsCensusParams={
+   airportIcao:"WSSS",fromLocal:"2026-11-05T22:00",
+   toLocal:"2026-11-05T23:00",ianaTimezone:"Asia/Singapore",
+   serviceWindowStartUtc:new Date("2026-11-05T14:00:00.000Z"),
+   serviceWindowEndUtc:new Date("2026-11-05T15:00:00.000Z"),
+   cutoffUtc:new Date("2026-11-04T14:20:00.000Z"),
+   withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,
+   direction:"Departure",providerApiVersion:"doc",
+   fidsProtocolVersion:"G5A-20261103-v1",openapiSha256:"a".repeat(64),
+   g5aObservedScheduleProtocol:true
+  };
+  const first={id:"FIDS-9381",number:"SQ 115",codeshareStatus:"IsOperator",
+   isCargo:false,
+   departure:{scheduledTime:{utc:"2026-11-05T14:20:00.000Z"}},
+   arrival:{airport:{icao:"YSSY"},scheduledTime:{utc:"2026-11-05T20:30:00.000Z"}}
+  };
+  const rows:any[]=[];
+  const result=await fetchFidsPopulation(p,{
+   now:()=>new Date("2026-11-04T13:30:00.000Z"),
+   fetchAirport:async()=>({departures:[
+    first,{...first,id:"FIDS-9382",number:"SQ 116",isCharter:true}
+   ],arrivals:[]}),
+   persist:async(_q,r)=>{rows.push(...r);return r.length}
+  });
+  expect(result?.persistedPopulationRows).toBe(2);
+  const ordinary=rows.find(x=>x.providerRecordKey==="FIDS-9381");
+  const charter=rows.find(x=>x.providerRecordKey==="FIDS-9382");
+  expect(ordinary.scopeClassification).toBe("unknown");
+  expect(charter.scopeClassification).toBe("auxiliary");
+  expect(ordinary.canonicalFlightInstanceId).toMatch(/^leg:g5a:/);
+  expect(charter.canonicalFlightInstanceId).toMatch(/^leg:g5a:/);
+  expect(assessG5AConditionalOperatingPREV39(
+   charter.scopeClassification,charter.codeshareResolutionStatus,
+   charter.canonicalFlightInstanceId,true).eligible).toBe(false);
+ });
+ it("V0077-bound true source with unknown noncommercial scope still builds explicit conditional PRE, not false core",async()=>{
+  const id="leg:g5a:"+"f".repeat(64);
+  const first=new Date("2026-11-05T14:20:00.000Z");
+  const available=new Date("2026-11-04T13:35:00.000Z");
+  const h=["T-24h","T-6h","T-90m"] as const;
+  const lag=[24*3600000,6*3600000,90*60000] as const;
+  const rows=h.map((horizon,i)=>({
+   analytic_identity_id:id,first_schedule:first,horizon,
+   all_parent_member_provenance_valid:true,
+   prediction_cutoff_utc:new Date(first.getTime()-lag[i]),
+   canonical_flight_instance_id:id,population_member_id:"test-member",
+   population_query_id:"00000000-0000-4000-8000-000000000101",
+   response_hash:"b".repeat(64),dep_scheduled_utc:first,
+   effective_available:available,member_available:available,
+   source_available:available,original_hash:"b".repeat(64),
+   population_role:"requested_airport_primary",
+   scope_classification:"unknown",
+   codeshare_resolution_status:"confirmed_operating_leg"
+  }));
+  const db={
+   query:async(sql:string)=>{
+    if(sql.includes("expected_slots"))
+     return {rows:[{expected_slots:3,bound_originals:1,
+      valid_originals:1,valid_slots:1}],rowCount:1};
+    return {rows,rowCount:rows.length};
+   }
+  };
+  const out=await stageP4G5ScopedPreV39(db as any,{
+   airportIcao:"WSSS",
+   serviceStartUtc:"2026-11-05T14:00:00.000Z",
+   serviceEndUtc:"2026-11-05T15:00:00.000Z",
+   observedAtUtc:"2026-11-04T13:40:00.000Z",
+   reviewedFrozenManifestSha256:"c".repeat(64)
+  },{
+   horizon:"T-24h",expectedOwnerGithubRunId:"41790000001",
+   reviewedRunAuthorizationSha256:"d".repeat(64)
+  });
+  expect(out.candidateInMemoryRows).toBe(3);
+  for(const x of out.staged){
+   expect(x.snapshot.features.find(y=>y.featureName===
+    "g5a_population_scope_evidence")?.value)
+    .toBe("QUERY_FILTERED_SCOPE_UNVERIFIED");
+  }
+  expect(out.counts.map(c=>c.queryFilteredUnknownScopeOperating))
+   .toEqual([1,1,1]);
+  expect(out.counts.map(c=>c.provisionalCore)).toEqual([0,0,0]);
+  expect(out.status).toBe("REAL_SOURCE_CANDIDATES_ONLY_NATIVE_T_UNVERIFIED");
+  expect(out.certifiedSnapshotRowsPersisted).toBe(0);
+  expect(out.trueScheduledTIndependentlyVerified).toBe(false);
+ });
  const C24=["47 9 4 11 *","17 10 4 11 *","47 10 4 11 *","17 11 4 11 *"];
  const C6=["47 3 5 11 *","17 4 5 11 *","47 4 5 11 *","17 5 5 11 *"];
  const C90=["17 8 5 11 *","47 8 5 11 *","17 9 5 11 *","47 9 5 11 *"];

@@ -4,7 +4,7 @@
 
 ## Start here — live source of truth
 
-- [**CURRENT NOV 5 THURSDAY 12:00 NOON PST INDEPENDENT AUDIT — NEW WSSS 14:00–15:00Z service, Wednesday T−24h**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
+- [**CURRENT NOV 5 THURSDAY 12:00 NOON PST INDEPENDENT AUDIT — Wednesday T−24h; prefreeze conditional G5A operating scope marked UNKNOWN**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
 
 **START WITH OWNER DIRECTION (2026-11-03): deadline November 4 evening PT; STOP repeated vendor/runway emails and perfection loops. The owner explicitly permits a prospective scientifically valid protocol amendment and requires progress toward actual data, with measured limitations rather than indefinite external-source waits.**
 

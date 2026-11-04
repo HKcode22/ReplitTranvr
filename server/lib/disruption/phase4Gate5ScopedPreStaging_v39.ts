@@ -180,7 +180,23 @@ export const P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39=[
 ].join(" ");
 
 type Counts={horizon:PreHorizon;sourceObserved:number;sourceUnobserved:number;
- provisionalCore:number;unverifiedScopeOrIdentity:number;built:number};
+ provisionalCore:number;queryFilteredUnknownScopeOperating:number;
+ unverifiedScopeOrIdentity:number;built:number};
+/** Only authenticated V0077-bound G5A owner observations, not legacy PRE:
+ * an operating leg with UNKNOWN commercial scope can enter a separately
+ * flagged conditional stratum. It must NEVER become confirmed_core.
+ */
+export function assessG5AConditionalOperatingPREV39(
+ scope:unknown,identity:unknown,canonical:unknown,boundOwner:boolean
+):{eligible:boolean;scopeUnverified:boolean}{
+ const physical=identity==="confirmed_operating_leg"&&
+   typeof canonical==="string"&&canonical.length>0;
+ const g5a=physical&&/^leg:g5a:[a-f0-9]{64}$/.test(canonical);
+ // Preserve legacy confirmed_core PRE; only UNKNOWN scope is G5A-bound.
+ const core=physical&&scope==="confirmed_core";
+ const conditional=g5a&&scope==="unknown"&&boundOwner;
+ return {eligible:core||conditional,scopeUnverified:conditional};
+}
 function t(value:unknown):Date|null {
  if(value===null||value===undefined)return null;
  const d=value instanceof Date?value:
@@ -228,9 +244,9 @@ export async function stageP4G5ScopedPreV39(
  if(!q||!Array.isArray(q.rows)||q.rows.length>30000||q.rows.length%3!==0)
   throw Error("P4_G5_PRE_SOURCE_RESULT_SHAPE_HOLD");
  const counts:Record<PreHorizon,Counts>={
-  "T-24h":{horizon:"T-24h",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,unverifiedScopeOrIdentity:0,built:0},
-  "T-6h":{horizon:"T-6h",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,unverifiedScopeOrIdentity:0,built:0},
-  "T-90m":{horizon:"T-90m",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,unverifiedScopeOrIdentity:0,built:0}
+  "T-24h":{horizon:"T-24h",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,queryFilteredUnknownScopeOperating:0,unverifiedScopeOrIdentity:0,built:0},
+  "T-6h":{horizon:"T-6h",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,queryFilteredUnknownScopeOperating:0,unverifiedScopeOrIdentity:0,built:0},
+  "T-90m":{horizon:"T-90m",sourceObserved:0,sourceUnobserved:0,provisionalCore:0,queryFilteredUnknownScopeOperating:0,unverifiedScopeOrIdentity:0,built:0}
  };
  const staged:Array<{horizon:PreHorizon;snapshot:PreSnapshot}>=[];
  const seen=new Set<string>();
@@ -265,13 +281,14 @@ export async function stageP4G5ScopedPreV39(
     r.response_hash!==r.original_hash)
    throw Error("P4_G5_PRE_ORIGINAL_ASOF_OR_HASH_HOLD");
   counts[h].sourceObserved++;
-  if(r.scope_classification!=="confirmed_core"||
-     r.codeshare_resolution_status!=="confirmed_operating_leg"||
-     typeof r.canonical_flight_instance_id!=="string"||
-     r.canonical_flight_instance_id.length<1){
+  const eligibility=assessG5AConditionalOperatingPREV39(
+   r.scope_classification,r.codeshare_resolution_status,
+   r.canonical_flight_instance_id,!!boundOwner);
+  if(!eligibility.eligible){
    counts[h].unverifiedScopeOrIdentity++;continue;
   }
-  counts[h].provisionalCore++;
+  if(eligibility.scopeUnverified)counts[h].queryFilteredUnknownScopeOperating++;
+  else counts[h].provisionalCore++;
   const scheduled=t(r.dep_scheduled_utc);
   if(!scheduled||typeof r.population_query_id!=="string")
    throw Error("P4_G5_PRE_VERIFIED_SOURCE_REQUIRED");
@@ -291,7 +308,15 @@ export async function stageP4G5ScopedPreV39(
     {featureName:"webhook_optional",value:null,informationAvailableAt:null,
      source:null,sourceVersion:null},
     {featureName:"weather_optional",value:null,informationAvailableAt:null,
-     source:null,sourceVersion:null}
+     source:null,sourceVersion:null},
+    // Keep historical generic PRE feature order and shape unchanged.
+    // The extra scope feature is admissible only for a V0077-bound G5A owner.
+    ...(boundOwner?[{featureName:"g5a_population_scope_evidence",
+     value:eligibility.scopeUnverified?
+       "QUERY_FILTERED_SCOPE_UNVERIFIED":"ROW_CONFIRMED_CORE",
+     informationAvailableAt:available,
+     source:"G5A recorded FIDS scope classification",
+     sourceVersion:r.response_hash}]:[])
    ],
    frameHash:null,configHash:null,
    fidsResponseHash:r.response_hash,scheduleVersion:null
