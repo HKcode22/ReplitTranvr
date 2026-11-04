@@ -13,7 +13,7 @@ describe("Nov4 single GitHub-only non-provider recovery relay",()=>{
   expect(s).not.toContain("pull_request:");
  });
  it("uses only scoped GitHub Actions write with no provider/db secret",()=>{
-  expect(s).toContain("permissions:\n  actions: write");
+  expect(s).toContain("permissions:\n  actions: write\n  contents: read");
   expect(s).toContain("GH_TOKEN: ${{ github.token }}");
   for(const name of ["AERODATABOX_API_KEY","RAPIDAPI_KEY",
    "P4_G5_SOURCE_OWNER_DATABASE_URL","V39_DATABASE_RUNTIME_URL",
