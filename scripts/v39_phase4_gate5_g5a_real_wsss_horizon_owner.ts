@@ -38,24 +38,24 @@ import {persistP4G5ReviewedPreForCohortV39}
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml";
-const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json";
+const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json";
 const PROTOCOL_PATH="data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md";
-const AUTH_INTENT="WSSS_NOV07_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
+const AUTH_INTENT="WSSS_NOV05_1400Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
 /** Actual Plan f.8 §5.1 OpenAPI v1.15.3.0 documentary bytes pin (Sep1).
  * G5A protocol.md SHA is a different artifact; do not misname it OpenAPI.
  * This pin is historical document provenance, not live response version. */
 export const P4_G5_G5A_PUBLIC_OPENAPI_DOCUMENT_SHA_V39=
  "735620f2d2132c5bf51768f50caa767b7f0b25be8b128679641402666696890a" as const;
 const H={
- // New prospective Nov7 cohort; original Nov5 missed T24 remains UNOBSERVED.
+ // New Nov5 14:00Z service; original Nov5 02:00Z missed T24 UNOBSERVED.
  "T-24h":{job:"owner-t24",crons:[
-  "47 21 5 11 *","17 22 5 11 *","47 22 5 11 *","17 23 5 11 *"
+  "47 9 4 11 *","17 10 4 11 *","47 10 4 11 *","17 11 4 11 *"
  ]},
  "T-6h":{job:"owner-t6",crons:[
-  "47 15 6 11 *","17 16 6 11 *","47 16 6 11 *","17 17 6 11 *"
+  "47 3 5 11 *","17 4 5 11 *","47 4 5 11 *","17 5 5 11 *"
  ]},
  "T-90m":{job:"owner-t90",crons:[
-  "17 20 6 11 *","47 20 6 11 *","17 21 6 11 *","47 21 6 11 *"
+  "17 8 5 11 *","47 8 5 11 *","17 9 5 11 *","47 9 5 11 *"
  ]}
 } as const;
 type Horizon=keyof typeof H;
@@ -99,7 +99,7 @@ export function assertG5AOwnerRunContextV39(e:NodeJS.ProcessEnv,checkout:string,
    !!e.DATABASE_URL||!!e.GATE05_AUTOMATION_DATABASE_URL||
    e.ADB_AUTO_COLLECT!=="0"||
    e.V39_PHASE6_PROCESS_ARMED!=="0"||
-   now>=Date.parse("2026-11-07T05:30:00.000Z"))
+   now>=Date.parse("2026-11-05T17:30:00.000Z"))
   hold("GITHUB_CONTEXT_OR_SECRET");
 }
 async function proveRealGithubOwnerJob(e:NodeJS.ProcessEnv,sha40:string,
@@ -151,11 +151,11 @@ function parseFrozenManifest(bytes:string){
  let m:unknown;try{m=JSON.parse(bytes)}catch{hold("MANIFEST_JSON")}
  const v=rec(m),g=rec(v.grid);
  if(bytes!==JSON.stringify(m,null,2)+"\n"||
-  v.cohortId!=="WSSS_G5A_20261107_0200Z"||
+  v.cohortId!=="WSSS_G5A_20261105_1400Z"||
   g.airportIcao!=="WSSS"||
   g.airportIanaTimezone!=="Asia/Singapore"||
-  g.serviceWindowStartUtc!=="2026-11-07T02:00:00.000Z"||
-  g.serviceWindowEndUtc!=="2026-11-07T03:00:00.000Z"||
+  g.serviceWindowStartUtc!=="2026-11-05T14:00:00.000Z"||
+  g.serviceWindowEndUtc!=="2026-11-05T15:00:00.000Z"||
   g.apiUnitsPerPhysicalAttempt!==2||
   g.maxAttemptsPerQuery!==1||
   g.maxSourceQueries!==9||

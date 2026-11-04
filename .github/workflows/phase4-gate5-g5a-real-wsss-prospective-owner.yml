@@ -6,7 +6,7 @@ on:
       - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
       - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
-      - "data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
       - "tests/phase4_gate5_g5a_active_science_mode_v39.test.ts"
   push:
@@ -15,7 +15,7 @@ on:
       - ".github/workflows/phase4-gate5-g5a-real-wsss-prospective-owner.yml"
       - "scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
-      - "data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
       - "tests/phase4_gate5_g5a_active_science_mode_v39.test.ts"
   workflow_dispatch:
@@ -29,22 +29,22 @@ on:
           - T-6h
           - T-90m
   schedule:
-    # Full NEW Nov7 2026 prospective cohort. The missed Nov5 cohort is
-    # archived UNOBSERVED; do not backfill, and never run two cohort budgets.
-    # T−24h backup prearms Nov5 UTC, T−6h/T−90m Nov6 UTC.
+    # New Nov5 14:00Z cohort: first T-24h starts WED Nov4 05:30 PST.
+    # Old Nov5 02:00Z missed cohort stays UNOBSERVED, never backfill.
+    # All schedule dates are UTC; 12 backups mirror owner code/test.
     # GitHub may deliver late: DB+verified GitHub job-start gates still apply.
-    - cron: "47 21 5 11 *"
-    - cron: "17 22 5 11 *"
-    - cron: "47 22 5 11 *"
-    - cron: "17 23 5 11 *"
-    - cron: "47 15 6 11 *"
-    - cron: "17 16 6 11 *"
-    - cron: "47 16 6 11 *"
-    - cron: "17 17 6 11 *"
-    - cron: "17 20 6 11 *"
-    - cron: "47 20 6 11 *"
-    - cron: "17 21 6 11 *"
-    - cron: "47 21 6 11 *"
+    - cron: "47 9 4 11 *"
+    - cron: "17 10 4 11 *"
+    - cron: "47 10 4 11 *"
+    - cron: "17 11 4 11 *"
+    - cron: "47 3 5 11 *"
+    - cron: "17 4 5 11 *"
+    - cron: "47 4 5 11 *"
+    - cron: "17 5 5 11 *"
+    - cron: "17 8 5 11 *"
+    - cron: "47 8 5 11 *"
+    - cron: "17 9 5 11 *"
+    - cron: "47 9 5 11 *"
 permissions:
   contents: read
   actions: read
@@ -52,7 +52,7 @@ concurrency:
   # A delayed backup must not sit behind a successful owner until its PRE
   # deadline expires. Distinct GitHub invocations race safely under V0076
   # SERIALIZABLE DB locks and one-owner/horizon uniqueness.
-  group: phase4-g5-g5a-wsss-20261107-${{ github.event.schedule || inputs.horizon || github.run_id }}
+  group: phase4-g5-g5a-wsss-20261105-1400z-${{ github.event.schedule || inputs.horizon || github.run_id }}
   cancel-in-progress: false
 jobs:
   offline-integrity:
@@ -82,7 +82,7 @@ jobs:
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 21 5 11 *","17 22 5 11 *","47 22 5 11 *","17 23 5 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-24h') }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 9 4 11 *","17 10 4 11 *","47 10 4 11 *","17 11 4 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-24h') }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -90,7 +90,7 @@ jobs:
       P4_G5_G5A_HORIZON: T-24h
       P4_G5_G5A_CRON: ${{ github.event.schedule || 'manual-reviewed' }}
       P4_G5_G5A_MANUAL_HORIZON: ${{ inputs.horizon || '' }}
-      P4_G5_G5A_PAID_INTENT: WSSS_NOV07_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_1400Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
@@ -115,7 +115,7 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
   owner-t6:
     name: owner-t6
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 15 6 11 *","17 16 6 11 *","47 16 6 11 *","17 17 6 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-6h') }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 3 5 11 *","17 4 5 11 *","47 4 5 11 *","17 5 5 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-6h') }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -123,7 +123,7 @@ jobs:
       P4_G5_G5A_HORIZON: T-6h
       P4_G5_G5A_CRON: ${{ github.event.schedule || 'manual-reviewed' }}
       P4_G5_G5A_MANUAL_HORIZON: ${{ inputs.horizon || '' }}
-      P4_G5_G5A_PAID_INTENT: WSSS_NOV07_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_1400Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
@@ -148,7 +148,7 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts
   owner-t90:
     name: owner-t90
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["17 20 6 11 *","47 20 6 11 *","17 21 6 11 *","47 21 6 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-90m') }}
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["17 8 5 11 *","47 8 5 11 *","17 9 5 11 *","47 9 5 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-90m') }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -156,7 +156,7 @@ jobs:
       P4_G5_G5A_HORIZON: T-90m
       P4_G5_G5A_CRON: ${{ github.event.schedule || 'manual-reviewed' }}
       P4_G5_G5A_MANUAL_HORIZON: ${{ inputs.horizon || '' }}
-      P4_G5_G5A_PAID_INTENT: WSSS_NOV07_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
+      P4_G5_G5A_PAID_INTENT: WSSS_NOV05_1400Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}

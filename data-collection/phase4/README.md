@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**CURRENT NOV 5 THURSDAY 12:00 NOON PST INDEPENDENT AUDIT — NEW WSSS 14:00–15:00Z service, Wednesday T−24h**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
+
 **START WITH OWNER DIRECTION (2026-11-03): deadline November 4 evening PT; STOP repeated vendor/runway emails and perfection loops. The owner explicitly permits a prospective scientifically valid protocol amendment and requires progress toward actual data, with measured limitations rather than indefinite external-source waits.**
 
 - [**READ FIRST — Binding owner directive: stop perfection loop; complete meaningful Gate5 by November 4**](2026-11-03_OWNER_DIRECTIVE_NO_PERFECTION_LOOP_FAST_SCIENTIFIC_GATE5_CLOSURE.md) — carry forward across all chats/PRs; keep cutoff/data/budget rigor, no repetition of old provider limitations.

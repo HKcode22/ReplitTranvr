@@ -6,8 +6,8 @@
  * Prediction label: schedule revision vs actual as-of PRE by W=T+2h;
  * NOT actual wheels-off. No downstream models are trained here.
  *
- * 3 fixed POST GETs at 03:40, 04:10, 04:40Z 2026-11-07, within a fixed
- * WSSS 01:00-05:00Z local source range (09:00-13:00 Singapore time).
+ * 3 fixed POST GETs at 15:40, 16:10, 16:40Z 2026-11-05, within a fixed
+ * WSSS 13:00-17:00Z source range (21:00-01:00 next day Singapore).
  * A missing/lost identity/schedule is UNKNOWN, not a negative/actual.
  *
  * This module never runs paid for PR, push or in Replit. Only verified GitHub
@@ -29,15 +29,15 @@ import {fetchFidsAirport,getBalanceEvidenceStrict}
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A WSSS Real Prospective POST";
 const PATH=".github/workflows/phase4-gate5-g5a-wsss-real-post.yml";
-export const G5A_POST_CRONS_V39=["10 2 7 11 *","22 2 7 11 *",
- "37 2 7 11 *","52 2 7 11 *"] as const;
-const PROOF_DEADLINE="2026-11-07T03:25:00.000Z";
-const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json";
-const FROM="2026-11-07T01:00:00.000Z",TO="2026-11-07T05:00:00.000Z";
-const POSTS=["2026-11-07T03:40:00.000Z","2026-11-07T04:10:00.000Z",
- "2026-11-07T04:40:00.000Z"] as const;
-const FINAL="2026-11-07T05:01:00.000Z";
-const END="2026-11-07T06:00:00.000Z";
+export const G5A_POST_CRONS_V39=["10 14 5 11 *","22 14 5 11 *",
+ "37 14 5 11 *","52 14 5 11 *"] as const;
+const PROOF_DEADLINE="2026-11-05T15:25:00.000Z";
+const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json";
+const FROM="2026-11-05T13:00:00.000Z",TO="2026-11-05T17:00:00.000Z";
+const POSTS=["2026-11-05T15:40:00.000Z","2026-11-05T16:10:00.000Z",
+ "2026-11-05T16:40:00.000Z"] as const;
+const FINAL="2026-11-05T17:01:00.000Z";
+const END="2026-11-05T18:00:00.000Z";
 const SHA=/^[a-f0-9]{64}$/;
 const GH=/^[a-f0-9]{40}$/;
 const ms=(s:string)=>Date.parse(s);
@@ -67,10 +67,10 @@ function manifest(){
  let doc:unknown;try{doc=JSON.parse(bytes)}catch{hold("FROZEN_JSON")}
  const d=object(doc),g=object(d.grid);
  if(bytes!==JSON.stringify(doc,null,2)+"\n"||
-    d.cohortId!=="WSSS_G5A_20261107_0200Z"||
+    d.cohortId!=="WSSS_G5A_20261105_1400Z"||
     g.airportIcao!=="WSSS"||
-    g.serviceWindowStartUtc!=="2026-11-07T02:00:00.000Z"||
-    g.serviceWindowEndUtc!=="2026-11-07T03:00:00.000Z"||
+    g.serviceWindowStartUtc!=="2026-11-05T14:00:00.000Z"||
+    g.serviceWindowEndUtc!=="2026-11-05T15:00:00.000Z"||
     g.projectRestApiUnitsBudget!==24||
     g.maxSourceQueries!==9||g.maxAttemptsPerQuery!==1)
   hold("FROZEN_GRID_CHANGED");
@@ -81,7 +81,7 @@ export function isG5APostReviewedEventV39(e:NodeJS.ProcessEnv):boolean {
    !e.G5A_POST_MANUAL_INTENT&&
    G5A_POST_CRONS_V39.some(x=>x===e.G5A_POST_SCHEDULE))||
   (e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
-   e.G5A_POST_MANUAL_INTENT==="REVIEWED_NOV07_POST_ONLY_WITHIN_PREARM"&&
+   e.G5A_POST_MANUAL_INTENT==="REVIEWED_NOV05_1400Z_POST_ONLY_WITHIN_PREARM"&&
    e.G5A_POST_SCHEDULE==="manual-reviewed");
 }
 /**
@@ -102,7 +102,7 @@ export function isG5APostExpiredScheduledBackupV39(
   e.GITHUB_RUN_ATTEMPT==="1"&&
   e.GITHUB_JOB==="post-source"&&e.GITHUB_WORKFLOW===WF&&
   e.GITHUB_WORKFLOW_REF===REPO+"/"+PATH+"@refs/heads/main"&&
-  e.G5A_POST_PAID_INTENT==="G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX"&&
+  e.G5A_POST_PAID_INTENT==="G5A_NOV05_1400Z_POST_THREE_2_UNIT_REQUESTS_MAX"&&
   e.ADB_AUTO_COLLECT==="0"&&e.V39_PHASE6_PROCESS_ARMED==="0";
 }
 export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,at:number){
@@ -112,7 +112,7 @@ export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,
     !isG5APostReviewedEventV39(e)||e.GITHUB_RUN_ATTEMPT!=="1"||
     e.GITHUB_JOB!=="post-source"||e.GITHUB_WORKFLOW!==WF||
     e.GITHUB_WORKFLOW_REF!==REPO+"/"+PATH+"@refs/heads/main"||
-     e.G5A_POST_PAID_INTENT!=="G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX"||
+     e.G5A_POST_PAID_INTENT!=="G5A_NOV05_1400Z_POST_THREE_2_UNIT_REQUESTS_MAX"||
     !/^\d{5,25}$/.test(e.GITHUB_RUN_ID??"")||
     !e.GITHUB_TOKEN||e.GITHUB_TOKEN.length<10||
     !e.AERODATABOX_API_KEY||e.AERODATABOX_API_KEY.length<10||
@@ -120,7 +120,7 @@ export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,
     e.V39_DATABASE_RUNTIME_URL!==e.P4_G5_SOURCE_OWNER_DATABASE_URL||
     !!e.DATABASE_URL||!!e.GATE05_AUTOMATION_DATABASE_URL||
     e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||
-    at<ms("2026-11-07T01:30:00.000Z")||at>=ms(END))
+    at<ms("2026-11-05T13:30:00.000Z")||at>=ms(END))
   hold("GITHUB_CONTEXT_OR_SECRETS");
 }
 async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
@@ -162,7 +162,7 @@ async function waitUntil(at:number){
 }
 export async function reserveG5APostSlotDbV39(db:pg.Client,manifestSha:string,cohortId:string,slot:number){
  const id=postReservationUuidV39(manifestSha,slot);
- const cycle="G5A_NOV07_"+manifestSha.slice(0,32);
+ const cycle="G5A_NOV05_1400Z_"+manifestSha.slice(0,32);
  const category="g5a_post_schedule_fids";
  let tx=false;
  try{
@@ -329,8 +329,8 @@ export async function main(){
    charged++;
    let callback=0;
    const q:FidsCensusParams={
-    airportIcao:"WSSS",fromLocal:"2026-11-07T09:00",
-    toLocal:"2026-11-07T13:00",ianaTimezone:"Asia/Singapore",
+    airportIcao:"WSSS",fromLocal:"2026-11-05T21:00",
+    toLocal:"2026-11-06T01:00",ianaTimezone:"Asia/Singapore",
     serviceWindowStartUtc:new Date(FROM),
     serviceWindowEndUtc:new Date(TO),cutoffUtc:new Date(planned),
     withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,

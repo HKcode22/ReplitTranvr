@@ -22,10 +22,10 @@ export const G5A_INDEPENDENT_AUDIT_SCHEMA_V39=
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A Independent Cohort Audit (No Provider)";
 const PATH=".github/workflows/phase4-gate5-g5a-independent-final-audit.yml";
-const CRON="12 5 7 11 *";
-const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json";
-const START=Date.parse("2026-11-07T05:10:00.000Z");
-const END=Date.parse("2026-11-08T00:00:00.000Z");
+const CRON="0 20 5 11 *";
+const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261105_1400Z_FROZEN_SOURCE_GRID.json";
+const START=Date.parse("2026-11-05T19:45:00.000Z");
+const END=Date.parse("2026-11-06T00:00:00.000Z");
 const SHA=/^[a-f0-9]{40}$/;
 function hold(code:string):never{throw Error("P4_G5_G5A_INDEPENDENT_"+code+"_HOLD")}
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -115,7 +115,7 @@ export async function main(){
   encoding:"utf8",timeout:4000}).trim();
  requireG5AIndependentAuditContextV39(e,head,Date.now());
  const bytes=readFileSync(GRID,"utf8"),manifest=JSON.parse(bytes) as Record<string,unknown>;
- if(manifest.cohortId!=="WSSS_G5A_20261107_0200Z"||
+ if(manifest.cohortId!=="WSSS_G5A_20261105_1400Z"||
     bytes!==JSON.stringify(manifest,null,2)+"\n")
   hold("MANIFEST_CHANGED_OR_UNREVIEWED");
  const hash=sha(bytes);
