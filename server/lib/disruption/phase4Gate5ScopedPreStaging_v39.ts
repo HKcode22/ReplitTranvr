@@ -190,9 +190,11 @@ export function assessG5AConditionalOperatingPREV39(
  scope:unknown,identity:unknown,canonical:unknown,boundOwner:boolean
 ):{eligible:boolean;scopeUnverified:boolean}{
  const physical=identity==="confirmed_operating_leg"&&
-   typeof canonical==="string"&&/^leg:g5a:[a-f0-9]{64}$/.test(canonical);
+   typeof canonical==="string"&&canonical.length>0;
+ const g5a=physical&&/^leg:g5a:[a-f0-9]{64}$/.test(canonical);
+ // Preserve legacy confirmed_core PRE; only UNKNOWN scope is G5A-bound.
  const core=physical&&scope==="confirmed_core";
- const conditional=physical&&scope==="unknown"&&boundOwner;
+ const conditional=g5a&&scope==="unknown"&&boundOwner;
  return {eligible:core||conditional,scopeUnverified:conditional};
 }
 function t(value:unknown):Date|null {
