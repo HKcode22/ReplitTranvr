@@ -506,7 +506,11 @@ function normalizeFidsRecord(input: {
     populationQueryId: input.populationQueryId,
     providerRecordKey,
     rawPayloadSha256: input.responseHash,
-    scopeClassification: classifyScope(f ?? {}),
+    // Known G5A charter-positive flights cannot qualify through the
+    // conditional unknown-scope operating stratum. Missing private/charter
+    // flags remain UNKNOWN, not fabricated false.
+    scopeClassification: params.g5aObservedScheduleProtocol===true&&
+      f?.isCharter===true?"auxiliary":classifyScope(f ?? {}),
     codeshareResolutionStatus: identityStatus,
     fidsRetrievalUtc: input.retrievalUtc,
     responseHash: input.responseHash,
