@@ -4,14 +4,14 @@ import {
  G5A_SOURCE_AUDIT_SQL_V39,G5A_PRE_AUDIT_SQL_V39,
  G5A_POPULATION_AUDIT_SQL_V39,G5A_INDEPENDENT_AUDIT_SCHEMA_V39
 } from "../scripts/v39_phase4_gate5_g5a_independent_real_cohort_readonly_audit";
-const main="a".repeat(40),event="2026-11-07T05:12:30.000Z";
+const main="a".repeat(40),event="2026-11-05T20:00:30.000Z";
 const env=()=>({
  GITHUB_ACTIONS:"true",
  GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
  GITHUB_REF:"refs/heads/main",
  GITHUB_SHA:main,GITHUB_RUN_ATTEMPT:"1",
  GITHUB_EVENT_NAME:"schedule",
- GITHUB_EVENT_SCHEDULE:"12 5 7 11 *",
+ GITHUB_EVENT_SCHEDULE:"0 20 5 11 *",
  GITHUB_JOB:"audit-independent",
  GITHUB_WORKFLOW:"Phase4 Gate5 G5A Independent Cohort Audit (No Provider)",
  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-g5a-independent-final-audit.yml@refs/heads/main",
@@ -50,9 +50,9 @@ describe("G5A real independent no-provider cohort read-only auditor",()=>{
    .toThrow("P4_G5_G5A_INDEPENDENT_GITHUB_READER_DATE_OR_ISOLATION_HOLD");
  });
  it("refuses before physical T+2h and in another calendar year",()=>{
-  for(const date of ["2026-11-06T23:50:00.000Z",
-    "2026-11-07T05:09:59.999Z",
-    "2027-11-07T05:12:00.000Z"])
+  for(const date of ["2026-11-05T11:50:00.000Z",
+    "2026-11-05T19:44:59.999Z",
+    "2027-11-05T17:12:00.000Z"])
    expect(()=>requireG5AIndependentAuditContextV39(
     env(),main,Date.parse(date)))
     .toThrow("P4_G5_G5A_INDEPENDENT_GITHUB_READER_DATE_OR_ISOLATION_HOLD");
