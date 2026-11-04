@@ -6,7 +6,8 @@ import {fetchFidsPopulation,type FidsCensusParams,
 import {
  postReservationUuidV39,assertG5APostRunnerContextV39,
  G5A_POST_CRONS_V39,isG5APostReviewedEventV39,
- isG5APostExpiredScheduledBackupV39,G5A_POST_AGGREGATE_AUDIT_SQL_V39
+ isG5APostExpiredScheduledBackupV39,G5A_POST_AGGREGATE_AUDIT_SQL_V39,
+ verifyG5APostSourceLedgerAtCommitV39,G5A_POST_DB_CUSTODY_SQL_V39
 } from "../scripts/v39_phase4_gate5_g5a_prospective_post_schedule_observation";
 
 const sha="a".repeat(64);
@@ -167,6 +168,65 @@ describe("G5A prospective POST provider source, time and budget admission",()=>{
    git,after)).toBe(false);
   expect(isG5APostExpiredScheduledBackupV39(env(),git,
    Date.parse("2027-11-05T15:30:00.000Z"))).toBe(false);
+ });
+ it("binds each POST original to the committed exact two-unit ledger row in its source transaction",async()=>{
+  const m="a".repeat(64),reservation=postReservationUuidV39(m,1);
+  const q:FidsQueryObservation={
+   populationQueryId:"10000000-0000-4000-8000-000000000001",
+   sourceAirportIcao:"WSSS",queryDirection:"Departure",
+   serviceWindowStartUtc:new Date("2026-11-05T13:00:00.000Z"),
+   serviceWindowEndUtc:new Date("2026-11-05T17:00:00.000Z"),
+   fromLocal:"2026-11-05T21:00",toLocal:"2026-11-06T01:00",
+   airportIanaTimezone:"Asia/Singapore",
+   fidsRetrievalUtc:new Date("2026-11-05T16:10:01.000Z"),
+   availableAtUtc:new Date("2026-11-05T16:10:02.000Z"),
+   responseHash:"b".repeat(64),rawPayload:{
+    g5aPostReservationId:reservation,
+    originalDecodedEntityBodyPreserved:true
+   },
+   providerApiVersion:"G5A",fidsProtocolVersion:"G5A-POST-20261103-v1",
+   openapiSha256:sha
+  };
+  const facts={durableAvailableAt:new Date("2026-11-05T16:10:03.000Z"),
+   normalizedInsertedRows:0};
+  const ledger={
+   reservation_id:reservation,cycle_id:"G5A_NOV05_1400Z_"+m.slice(0,32),
+   category:"g5a_post_schedule_fids",units:2,attempt_number:1,
+   reserved_at:new Date("2026-11-05T16:10:00.000Z")
+  };
+  const results:unknown[]=[];
+  const fake=(row:typeof ledger|null)=>({
+   query:async(sql:string,parameters:unknown[])=>{
+    results.push({sql,parameters});
+    return {rows:row?[row]:[]};
+   }
+  });
+  const invoke=(row:typeof ledger|null,query=q)=>
+    verifyG5APostSourceLedgerAtCommitV39(
+     fake(row) as any,m,1,query,[],facts);
+  expect(G5A_POST_DB_CUSTODY_SQL_V39).toContain("adb_rest_attempt_ledger");
+  await expect(invoke(ledger)).resolves.toBeUndefined();
+  expect(results).toHaveLength(1);
+  expect((results[0] as {parameters:unknown[]}).parameters).toEqual([reservation]);
+  await expect(invoke(null)).rejects.toThrow(
+   "P4_G5_G5A_POST_POST_LEDGER_NOT_COMMITTED_BEFORE_SOURCE_HOLD");
+  for(const bad of [
+   {...ledger,reservation_id:postReservationUuidV39(m,0)},
+   {...ledger,cycle_id:"foreign-cycle"},
+   {...ledger,category:"unreviewed"},
+   {...ledger,units:4},
+   {...ledger,attempt_number:2},
+   {...ledger,reserved_at:new Date("2026-11-05T16:11:00.000Z")}
+  ])await expect(invoke(bad)).rejects.toThrow(
+   "P4_G5_G5A_POST_POST_LEDGER_NOT_COMMITTED_BEFORE_SOURCE_HOLD");
+  await expect(invoke(ledger,{...q,rawPayload:{
+   g5aPostReservationId:postReservationUuidV39(m,0),
+   originalDecodedEntityBodyPreserved:true
+  }})).rejects.toThrow(
+   "P4_G5_G5A_POST_POST_BOUND_SOURCE_FRAME_OR_ORIGINAL_HOLD");
+  await expect(invoke(ledger,{...q,fromLocal:"2026-11-05T20:00"}))
+   .rejects.toThrow(
+    "P4_G5_G5A_POST_POST_BOUND_SOURCE_FRAME_OR_ORIGINAL_HOLD");
  });
  it("calculates observed only with source before W=T+2h and true PRE baseline",()=>{
   const q=G5A_POST_AGGREGATE_AUDIT_SQL_V39;
