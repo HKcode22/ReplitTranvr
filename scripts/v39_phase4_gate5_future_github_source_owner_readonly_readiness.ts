@@ -20,6 +20,9 @@ type DbFacts={
   dbName:string;roleName:string;pg16:boolean;txReadOnly:boolean;
   isSuperuser:boolean;canCreateSchema:boolean;canCreateDatabase:boolean;
   tables:Record<keyof typeof OBJECTS,Seen>
+  // PostgreSQL sequences need their own USAGE privilege: INSERT alone does
+  // not grant nextval() on serial-backed id columns.
+  serialUsage:{populationId:boolean;preSnapshotId:boolean}
 };
 const OBJECTS={
  original:"clean.fids_query_response",
@@ -79,6 +82,12 @@ const PRIVILEGE_SQL=[
  "ELSE has_table_privilege(current_user,$1,'DELETE') END AS can_delete"
 ].join(" ");
 
+export const G5A_OWNER_SERIAL_CATALOG_SQL_V39=[
+ "SELECT pg_get_serial_sequence('clean.flight_population','id') AS population_seq,",
+ "pg_get_serial_sequence('clean.flight_snapshots','id') AS pre_snapshot_seq"
+].join(" ");
+export const G5A_OWNER_SERIAL_USAGE_SQL_V39=
+ "SELECT has_sequence_privilege(current_user,$1,'USAGE') AS usable";
 const failure=(side:"READER"|"OWNER",e:unknown):never=>{
  const c=e&&typeof e==="object"?(e as {code?:unknown}).code:null;
  const suffix=typeof c==="string"&&/^[A-Z0-9]{5}$/.test(c)?"_SQLSTATE_"+c:"";
@@ -105,7 +114,8 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     isSuperuser:needed(r.is_superuser),
     canCreateSchema:needed(r.can_create_schema),
     canCreateDatabase:needed(r.can_create_database),
-    tables:{} as DbFacts["tables"]
+    tables:{} as DbFacts["tables"],
+    serialUsage:{populationId:false,preSnapshotId:false}
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
@@ -123,6 +133,20 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     delete:q.can_delete===true
    };
   }
+  const seqCatalog=await db.query(G5A_OWNER_SERIAL_CATALOG_SQL_V39);
+  const names=seqCatalog.rows[0];
+  if(seqCatalog.rows.length!==1||typeof names?.population_seq!=="string"||
+     typeof names?.pre_snapshot_seq!=="string")
+   throw Error("P4_G5_SOURCE_WRITER_SERIAL_DEFAULTS_MISSING_HOLD");
+  const a=await db.query(G5A_OWNER_SERIAL_USAGE_SQL_V39,[names.population_seq]);
+  const b=await db.query(G5A_OWNER_SERIAL_USAGE_SQL_V39,[names.pre_snapshot_seq]);
+  if(a.rows.length!==1||b.rows.length!==1||
+     typeof a.rows[0]?.usable!=="boolean"||
+     typeof b.rows[0]?.usable!=="boolean")
+   throw Error("P4_G5_SOURCE_WRITER_SERIAL_CATALOG_BAD_HOLD");
+  facts.serialUsage={
+   populationId:a.rows[0].usable,preSnapshotId:b.rows[0].usable
+  };
   await db.query("ROLLBACK");tx=false;
   return facts;
  }catch(e){failure(side,e)}
@@ -156,6 +180,8 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
     "physicalOwner","allowedQuery","physicalAttempt","preSnapshots"].includes(k);
    return !writer||v.insert;
   });
+ const ownerSequences=owner!==null&&owner.serialUsage.populationId&&
+  owner.serialUsage.preSnapshotId;
  const ownerDistinct=reader!==null&&owner!==null&&
   owner.dbName===reader.dbName&&owner.roleName!==reader.roleName;
  const rolesSafe=reader!==null&&owner!==null&&
@@ -167,6 +193,8 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   futureDedicatedDbOwnerSecretPresent:input.ownerCredentialPresent,
   independentReadOnlySourceAndPREMetadataVisible:evidenceReader,
   prospectiveOwnerInsertRightsAvailableInReadOnlyCatalog:sourceWriter,
+  sourceOwnerCanUsePopulationIdSequence:owner?.serialUsage.populationId===true,
+  sourceOwnerCanUsePreSnapshotIdSequence:owner?.serialUsage.preSnapshotId===true,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
   // Disaggregated, non-identifying flags: distinguishes an elevated audit
@@ -187,6 +215,7 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
    "HOLD_GITHUB_PROVIDER_KEY_ABSENT":
   !evidenceReader?"HOLD_GITHUB_READER_V0077_SOURCE_PRE_ACL":
   !sourceWriter?"HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL":
+  !ownerSequences?"HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE":
   !ownerDistinct||!rolesSafe?"HOLD_GITHUB_DB_ROLE_SEPARATION":
    "TECHNICAL_CREDENTIALS_CANDIDATE_ONLY_SCIENCE_RELEASE_HOLD";
  return{
