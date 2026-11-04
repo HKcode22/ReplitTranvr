@@ -10,8 +10,9 @@
  * WSSS 01:00-05:00Z local source range (09:00-13:00 Singapore time).
  * A missing/lost identity/schedule is UNKNOWN, not a negative/actual.
  *
- * This module does not run for PR, push, workflow_dispatch or in Replit.
- * It requires verified real GitHub schedule metadata and preexisting role
+ * This module does not run for PR, push or in Replit. GitHub schedule or
+ * GitHub manual failover is allowed before the immutable 03:25Z admission.
+ * It requires verified real GitHub-run metadata and preexisting role
  * with SELECT/INSERT on clean.adb_rest_attempt_ledger.
  */
 import {createHash} from "node:crypto";
@@ -28,7 +29,9 @@ import {fetchFidsAirport,getBalanceEvidenceStrict}
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A WSSS Real Prospective POST";
 const PATH=".github/workflows/phase4-gate5-g5a-wsss-real-post.yml";
-const CRON="10 2 5 11 *";
+export const G5A_POST_CRONS_V39=["10 2 5 11 *","22 2 5 11 *",
+ "37 2 5 11 *","52 2 5 11 *"] as const;
+const PROOF_DEADLINE="2026-11-05T03:25:00.000Z";
 const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261105_FROZEN_SOURCE_GRID.json";
 const FROM="2026-11-05T01:00:00.000Z",TO="2026-11-05T05:00:00.000Z";
 const POSTS=["2026-11-05T03:40:00.000Z","2026-11-05T04:10:00.000Z",
@@ -73,14 +76,37 @@ function manifest(){
   hold("FROZEN_GRID_CHANGED");
  return {sha:hash(bytes),cohortId:String(d.cohortId)};
 }
+export function isG5APostReviewedEventV39(e:NodeJS.ProcessEnv):boolean {
+ const a=e.GITHUB_EVENT_NAME,cron=e.G5A_POST_SCHEDULE;
+ return (a==="schedule"&&
+  G5A_POST_CRONS_V39.some(x=>x===cron))||
+  (a==="workflow_dispatch"&&cron==="manual-reviewed");
+}
+/**
+ * GitHub serializes the POST runs. A redundant run queued behind the first
+ * owner may start after its POST proof deadline. Exit without DB or provider
+ * contact; the independent audit alone decides observation completeness.
+ */
+export function canG5APostSkipExpiredBackupV39(
+ e:NodeJS.ProcessEnv,commit:string,at:number
+):boolean {
+ return Number.isFinite(at)&&at>=ms(PROOF_DEADLINE)&&at<ms(END)&&
+  GH.test(commit)&&isG5APostReviewedEventV39(e)&&
+  e.GITHUB_ACTIONS==="true"&&e.GITHUB_REPOSITORY===REPO&&
+  e.GITHUB_REF==="refs/heads/main"&&e.GITHUB_SHA===commit&&
+  e.GITHUB_RUN_ATTEMPT==="1"&&
+  e.GITHUB_JOB==="post-source"&&e.GITHUB_WORKFLOW===WF&&
+  e.GITHUB_WORKFLOW_REF===REPO+"/"+PATH+"@refs/heads/main"&&
+  e.G5A_POST_PAID_INTENT==="G5A_NOV05_POST_THREE_2_UNIT_REQUESTS_MAX"&&
+  e.ADB_AUTO_COLLECT==="0"&&e.V39_PHASE6_PROCESS_ARMED==="0";
+}
 export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,at:number){
  if(!GH.test(commit)||!Number.isFinite(at)||
     e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||
     e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_SHA!==commit||
-    e.GITHUB_EVENT_NAME!=="schedule"||e.GITHUB_RUN_ATTEMPT!=="1"||
+    !isG5APostReviewedEventV39(e)||e.GITHUB_RUN_ATTEMPT!=="1"||
     e.GITHUB_JOB!=="post-source"||e.GITHUB_WORKFLOW!==WF||
     e.GITHUB_WORKFLOW_REF!==REPO+"/"+PATH+"@refs/heads/main"||
-    e.G5A_POST_SCHEDULE!==CRON||
     e.G5A_POST_PAID_INTENT!=="G5A_NOV05_POST_THREE_2_UNIT_REQUESTS_MAX"||
     !/^\d{5,25}$/.test(e.GITHUB_RUN_ID??"")||
     !e.GITHUB_TOKEN||e.GITHUB_TOKEN.length<10||
@@ -113,15 +139,15 @@ async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
  if(found.length!==1)hold("GH_POST_JOB_MISSING");
  const job=found[0],start=ms(String(job.started_at)),current=Date.now();
  if(run.id!==Number(id)||run.head_sha!==commit||
-    run.event!=="schedule"||run.name!==WF||!isP4G5ReviewedMainWorkflowRestPathV39(run.path,PATH)||
+    run.event!==e.GITHUB_EVENT_NAME||run.name!==WF||!isP4G5ReviewedMainWorkflowRestPathV39(run.path,PATH)||
     run.head_branch!=="main"||run.run_attempt!==1||
     run.status!=="in_progress"||run.conclusion!==null||
     object(run.repository).full_name!==REPO||
     job.run_id!==Number(id)||job.status!=="in_progress"||
     job.conclusion!==null||
     !Number.isFinite(start)||start>current||
-    start>ms("2026-11-05T03:25:00.000Z")||
-    current>ms("2026-11-05T03:25:00.000Z")||
+    start>ms(PROOF_DEADLINE)||
+    current>ms(PROOF_DEADLINE)||
     current-start>90*60000)
   hold("GH_POST_NOT_ACTUALLY_PREARMED");
  return {githubRunId:id,realStartedAt: new Date(start).toISOString()};
@@ -262,7 +288,18 @@ async function readAgg(db:pg.Client,manifestSha:string,ids:string[]){
 export async function main(){
  const e=process.env,head=execFileSync("git",["rev-parse","HEAD"],
   {encoding:"utf8",timeout:4000}).trim();
- assertG5APostRunnerContextV39(e,head,Date.now());
+ const startedAt=Date.now();
+ if(canG5APostSkipExpiredBackupV39(e,head,startedAt)){
+  console.log(JSON.stringify({
+   status:"G5A_POST_BACKUP_TOO_LATE_UNOBSERVED_NO_PROVIDER",
+   event:e.GITHUB_EVENT_NAME,githubRunId:e.GITHUB_RUN_ID,
+   providerCalls:0,databaseWrites:0,
+   latePOSTNotReclassifiedAsObserved:true,
+   scientificGate5Passed:false,phase5FreezeAuthorized:false
+  }));
+  return;
+ }
+ assertG5APostRunnerContextV39(e,head,startedAt);
  const {sha:manifestSha,cohortId}=manifest();
  const proof=await independentlyVerifyGithubRun(e,head);
  const db=new pg.Client({connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
@@ -280,7 +317,7 @@ export async function main(){
    try{quota=(await getBalanceEvidenceStrict()).quota}
    catch{unknown++;continue}
    if(Date.now()-ms(quota.observedAtUtc)>30000||
-      quota.apiUnitsRemaining<2||quota.requestsRemaining<2){
+      quota.apiUnitsRemaining<2||quota.requestsRemaining<1){
     unknown++;continue;
    }
    const id=await reserveG5APostSlotDbV39(db,manifestSha,cohortId,i);
