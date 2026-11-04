@@ -305,17 +305,18 @@ export async function stageP4G5ScopedPreV39(
     {featureName:"fids_departure_schedule_asof",
      value:scheduled.toISOString(),informationAvailableAt:available,
      source:"AeroDataBox FIDS original",sourceVersion:r.response_hash},
-    // PRE-time recorded limitation, not a fabricated confirmed commercial.
-    {featureName:"g5a_population_scope_evidence",
+    {featureName:"webhook_optional",value:null,informationAvailableAt:null,
+     source:null,sourceVersion:null},
+    {featureName:"weather_optional",value:null,informationAvailableAt:null,
+     source:null,sourceVersion:null},
+    // Keep historical generic PRE feature order and shape unchanged.
+    // The extra scope feature is admissible only for a V0077-bound G5A owner.
+    ...(boundOwner?[{featureName:"g5a_population_scope_evidence",
      value:eligibility.scopeUnverified?
        "QUERY_FILTERED_SCOPE_UNVERIFIED":"ROW_CONFIRMED_CORE",
      informationAvailableAt:available,
      source:"G5A recorded FIDS scope classification",
-     sourceVersion:r.response_hash},
-    {featureName:"webhook_optional",value:null,informationAvailableAt:null,
-     source:null,sourceVersion:null},
-    {featureName:"weather_optional",value:null,informationAvailableAt:null,
-     source:null,sourceVersion:null}
+     sourceVersion:r.response_hash}]:[])
    ],
    frameHash:null,configHash:null,
    fidsResponseHash:r.response_hash,scheduleVersion:null
