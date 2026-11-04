@@ -6,7 +6,7 @@
  * Prediction label: schedule revision vs actual as-of PRE by W=T+2h;
  * NOT actual wheels-off. No downstream models are trained here.
  *
- * 3 fixed POST GETs at 03:40, 04:10, 04:40Z 2026-11-05, within a fixed
+ * 3 fixed POST GETs at 03:40, 04:10, 04:40Z 2026-11-07, within a fixed
  * WSSS 01:00-05:00Z local source range (09:00-13:00 Singapore time).
  * A missing/lost identity/schedule is UNKNOWN, not a negative/actual.
  *
@@ -87,7 +87,7 @@ export function assertG5APostRunnerContextV39(e:NodeJS.ProcessEnv,commit:string,
     )||e.GITHUB_RUN_ATTEMPT!=="1"||
     e.GITHUB_JOB!=="post-source"||e.GITHUB_WORKFLOW!==WF||
     e.GITHUB_WORKFLOW_REF!==REPO+"/"+PATH+"@refs/heads/main"||
-     e.G5A_POST_PAID_INTENT!=="G5A_NOV05_POST_THREE_2_UNIT_REQUESTS_MAX"||
+     e.G5A_POST_PAID_INTENT!=="G5A_NOV07_POST_THREE_2_UNIT_REQUESTS_MAX"||
     !/^\d{5,25}$/.test(e.GITHUB_RUN_ID??"")||
     !e.GITHUB_TOKEN||e.GITHUB_TOKEN.length<10||
     !e.AERODATABOX_API_KEY||e.AERODATABOX_API_KEY.length<10||
