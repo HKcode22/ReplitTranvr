@@ -19,7 +19,9 @@ function role(n:"audit"|"owner"):Facts{
   serialUsage:{populationId:n==="owner",preSnapshotId:n==="owner"},
   membershipTrigger:{
    enabled:true,securityInvoker:true,ownerCanInsert:n==="owner",ownerCanSelect:n==="owner"
-  }
+  },
+  postLedger:{exists:true,select:true,insert:n==="owner",update:false,delete:false},
+  canExecutePhysicalReserve:n==="owner"
  };
 }
 function evidence(){
@@ -117,6 +119,26 @@ describe("prospective Gate5 GitHub-only source owner readiness",()=>{
   const x=evidence();x.owner!.membershipTrigger.enabled=false;
   const r=classifyP4G5GithubOwnerReadinessV39(x);
   expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE");
+ });
+ it("verifies exact protected GitHub reservation-function EXECUTE before paid PRE",()=>{
+  const x=evidence();x.owner!.canExecutePhysicalReserve=false;
+  const r=classifyP4G5GithubOwnerReadinessV39(x);
+  expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_RESERVATION_FUNCTION_EXECUTE");
+  expect(r.flags.sourceOwnerCanExecuteCommittedReservation).toBe(false);
+  expect(r.providerCalls).toBe(0);expect(r.databaseWrites).toBe(0);
+ });
+ it("verifies restricted POST ledger SELECT plus INSERT, never UPDATE or DELETE",()=>{
+  for(const key of ["exists","select","insert"] as const){
+   const x=evidence();x.owner!.postLedger[key]=false;
+   const r=classifyP4G5GithubOwnerReadinessV39(x);
+   expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_POST_LEDGER_ACL");
+   expect(r.flags.sourceOwnerPostLedgerMinimalACL).toBe(false);
+  }
+  for(const key of ["update","delete"] as const){
+   const x=evidence();x.owner!.postLedger[key]=true;
+   const r=classifyP4G5GithubOwnerReadinessV39(x);
+   expect(r.status).toBe("HOLD_GITHUB_SOURCE_OWNER_POST_LEDGER_ACL");
+  }
  });
  it("reader and owner roles must be distinct and on one exact database",()=>{
   for(const mutate of [
