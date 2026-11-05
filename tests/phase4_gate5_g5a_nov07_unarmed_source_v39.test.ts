@@ -44,6 +44,9 @@ describe("G5A Nov7 future distinct prospective source (REVIEW_PENDING)",()=>{
   expect(existsSync(workflow)).toBe(true);
   expect(audit).toContain(workflow);
   expect(audit).toContain("GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json");
+  expect(audit).toContain("P4_G5_G5A_NOV07_AUDIT_DATABASE_URL");
+  expect(audit).toContain("INDEPENDENT_READER_NOT_LEAST_PRIVILEGED");
+  expect(audit).not.toContain("connectionString:e.GATE05_AUTOMATION_DATABASE_URL");
   expect(audit).toContain('WSSS_G5A_20261107_0200Z');
   expect(audit).toContain("2026-11-07T05:10:00.000Z");
   expect(audit).toContain("2026-11-07T09:00:00.000Z");
@@ -78,6 +81,7 @@ describe("G5A Nov7 future distinct prospective source (REVIEW_PENDING)",()=>{
   expect(audit.match(/- cron:/g)?.length).toBe(4);
   expect(audit).toContain("scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts");
   expect(audit).toContain("GATE05_AUTOMATION_DATABASE_URL");
+  expect(audit).toContain("P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ${{ secrets.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL }}");
   expect(audit).toContain("AERODATABOX_API_KEY: \"\"");
   for(const c of ["12 5 7 11 *","18 5 7 11 *","24 5 7 11 *","30 5 7 11 *"])expect(audit).toContain(c);
   for(const w of [src,post,audit])for(const bad of ["20261105_1400Z","NOV05_1400Z","2026-11-05T14"])
