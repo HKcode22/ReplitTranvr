@@ -22,6 +22,14 @@ on:
       - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
   workflow_dispatch:
   # Nov7 02Z cohort retired, replaced by Nov6 09Z 17h-earlier cohort.
+  schedule:
+    # Nov7 02:00Z cohort POST: Fri Nov6 7:40,8:10,8:40 PM PST.
+    # Redundant GH prearms mitigate lost schedules.
+    # Same frozen three POST GET times and 24-unit aggregate ceiling.
+    - cron: "10 2 7 11 *"
+    - cron: "22 2 7 11 *"
+    - cron: "37 2 7 11 *"
+    - cron: "52 2 7 11 *"
 permissions:
   contents: read
   actions: read
