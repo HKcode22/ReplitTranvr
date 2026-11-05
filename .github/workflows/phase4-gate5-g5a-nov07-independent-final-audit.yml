@@ -15,15 +15,7 @@ on:
       - "scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts"
       - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
   workflow_dispatch:
-  schedule:
-    # Four independent no-provider audit opportunities. Two early backups
-    # Fri 21:12/21:18/21:24/21:30 PST, after final POST aggregate.
-    # Each verified reading is timestamped; no provider calls or DB writes.
-    # GitHub cron is best-effort and previously missed an owner slot.
-    - cron: "12 5 7 11 *"
-    - cron: "18 5 7 11 *"
-    - cron: "24 5 7 11 *"
-    - cron: "30 5 7 11 *"
+  # Retired audit schedule: superseded by Nov6 09Z early cohort.
 permissions:
   contents: read
 concurrency:
@@ -59,7 +51,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ false }} # RETIRED audit runner; new Nov6 cohort has independent audit
     runs-on: ubuntu-latest
     timeout-minutes: 9
     environment: phase2g-paid
