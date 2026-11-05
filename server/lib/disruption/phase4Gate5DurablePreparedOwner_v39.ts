@@ -106,12 +106,21 @@ export async function stageP4G5PreparedOwnerDbOnlyV39(
   await db.query("SET LOCAL statement_timeout='12000ms'");
   await db.query("SET LOCAL lock_timeout='2000ms'");
   await db.query("SELECT pg_advisory_xact_lock(76,40)");
-  // Conservative: never stage another manifest into this project cap.
-  const foreign=await db.query(
-   "SELECT count(*)::int AS n FROM clean.phase4_g5_fids_cohort_budget_v39 "+
-    "WHERE manifest_sha256<>$1",[o.manifestSha256]);
-  if(foreign.rows.length!==1||Number(foreign.rows[0].n)!==0)
-   throw Error("P4_G5_PREPARED_OWNER_FOREIGN_COHORT_HOLD");
+  // Historical immutable cohort budgets and paid-attempt ledgers must remain.
+  // Their mere presence does not mean another live owner exists. Disallow
+  // overlapping *real owner lifetimes*, including PREPARED/ACTIVE/STOPPED,
+  // with the database clock inside this SERIALIZABLE/advisory-locked transaction.
+  // Old expired Nov5 owner/attempt records are NEVER deleted or replayed.
+  const competing=await db.query(
+   "SELECT count(*)::int AS n "+
+   "FROM clean.phase4_g5_fids_physical_owner_v39 AS prior "+
+   "WHERE prior.manifest_sha256<>$1 "+
+   "AND prior.hard_owner_expires_at_utc>clock_timestamp()",
+   [o.manifestSha256]);
+  if(competing.rows.length!==1||
+     !Number.isSafeInteger(Number(competing.rows[0]?.n))||
+     Number(competing.rows[0].n)!==0)
+   throw Error("P4_G5_PREPARED_OWNER_FOREIGN_UNEXPIRED_OWNER_HOLD");
 
   await db.query(
    "INSERT INTO clean.phase4_g5_fids_cohort_budget_v39"+
