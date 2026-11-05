@@ -4,7 +4,7 @@
 
 ## Start here — live source of truth
 
-- [**CURRENT Nov4 21:39 PST incident — Nov6 09Z T24 ACTIVE owner manually canceled, exact zero-spend delegated recovery PR #404 (UNMERGED; production readback required)**](2026-11-04_NOV06_G5A_CANCELLED_T24_EXACT_ZERO_SPEND_HANDOFF.md). Do not rerun canceled GH action, reset V0076, start an unverified replacement, or backfill. Nov6 T24 first paid request remains planned for Thu Nov5 00:30 PST; scientific Gate5 HOLD.
+- [**CURRENT Nov4 21:39 PST incident — Nov6 09Z T24 ACTIVE owner manually canceled, exact zero-spend delegated recovery PR #404 MERGED (production ledger readback and authentic new runner still required)**](2026-11-04_NOV06_G5A_CANCELLED_T24_EXACT_ZERO_SPEND_HANDOFF.md). Do not rerun canceled GH action, reset V0076, start an unverified replacement, or backfill. Nov6 T24 first paid request remains planned for Thu Nov5 00:30 PST; scientific Gate5 HOLD.
 
 - [**HISTORICAL/SUPERSEDED NOV 5 THURSDAY NOON AUDIT — original earlier candidate**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
 
