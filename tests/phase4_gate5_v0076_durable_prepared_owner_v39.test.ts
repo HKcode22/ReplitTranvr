@@ -25,7 +25,7 @@ function fixture(){
  return {owner,githubRunId:"90000000",reviewedRunAuthorizationSha256:"a".repeat(64)};
 }
 function fakeDb(overrides?:{
- foreign?:boolean;budgetReserved?:number;ownerNew?:boolean;
+ foreignUnexpired?:boolean;budgetReserved?:number;ownerNew?:boolean;
  queryMismatch?:boolean
 }){
  const calls:Array<{sql:string;values?:readonly unknown[]}>= [];
@@ -33,8 +33,9 @@ function fakeDb(overrides?:{
   calls,
   async query(sql:string,values?:readonly unknown[]){
    calls.push({sql,values});
-   if(sql.includes("WHERE manifest_sha256<>$1"))
-    return {rows:[{n:overrides?.foreign?1:0}]};
+   if(sql.includes("prior.manifest_sha256<>$1")&&
+      sql.includes("prior.hard_owner_expires_at_utc>clock_timestamp()"))
+    return {rows:[{n:overrides?.foreignUnexpired?1:0}]};
    if(sql.includes("SELECT reserved_units"))
     return {rows:[{reserved_units:overrides?.budgetReserved??0,
       project_unit_ceiling:54}]};
@@ -111,9 +112,20 @@ describe("Gate5 V0076 exact future horizon PREPARED owner database staging",()=>
   expect(x.ownerRowsNewlyInserted).toBe(0);
   expect(x.paidAttemptsCreated).toBe(0);
  });
- it("foreign cohort, paid activity, query mutation and preflight refusal all fail closed",async()=>{
+ it("expired foreign cohort budget is allowed but unexpired foreign owner is refused",async()=>{
+  const expired=fakeDb();
+  const ok=await stageP4G5PreparedOwnerDbOnlyV39(expired,fixture());
+  expect(ok.ownerRowsNewlyInserted).toBe(1);
+  expect(expired.calls.at(-1)?.sql).toBe("COMMIT");
+  expect(expired.calls.some(c=>c.sql.includes("hard_owner_expires_at_utc>clock_timestamp()"))).toBe(true);
+  const overlapping=fakeDb({foreignUnexpired:true});
+  await expect(stageP4G5PreparedOwnerDbOnlyV39(overlapping,fixture()))
+   .rejects.toThrow("P4_G5_PREPARED_OWNER_FOREIGN_UNEXPIRED_OWNER_HOLD");
+  expect(overlapping.calls.at(-1)?.sql).toBe("ROLLBACK");
+ });
+ it("active foreign owner, over-budget and query mutation all fail closed",async()=>{
   for(const o of [
-   {foreign:true},{budgetReserved:55},{queryMismatch:true}
+   {foreignUnexpired:true},{budgetReserved:55},{queryMismatch:true}
   ]){
    const db=fakeDb(o);
    await expect(stageP4G5PreparedOwnerDbOnlyV39(db,fixture())).rejects.toThrow(/P4_G5_PREPARED_OWNER_/);
