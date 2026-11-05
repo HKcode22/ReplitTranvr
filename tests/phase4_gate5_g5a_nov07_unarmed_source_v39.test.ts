@@ -24,6 +24,7 @@ describe("G5A Nov7 future distinct prospective source (UNARMED)",()=>{
   const workflow=".github/workflows/phase4-gate5-g5a-nov07-wsss-real-post.yml";
   expect(existsSync(workflow)).toBe(false);
   expect(post).toContain(workflow);
+  expect(post).toContain('endsWith("v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation.ts")');
   expect(post).toContain("GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json");
   expect(post).toContain('WSSS_G5A_20261107_0200Z');
   for(const t of [
@@ -40,6 +41,7 @@ describe("G5A Nov7 future distinct prospective source (UNARMED)",()=>{
  it("source is not authorized by old T24/Nov5 GH events or old failed-owner handoff",()=>{
   const s=read(sourcePath);
   expect(s).toContain(workflowPath);
+  expect(s).toContain('endsWith("v39_phase4_gate5_g5a_nov07_real_wsss_horizon_owner.ts")');
   expect(s).toContain(manifestPath);
   expect(s).toContain('WSSS_NOV07_0200Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX');
   expect(s).toContain('WSSS_G5A_20261107_0200Z');
