@@ -189,7 +189,8 @@ type Counts={horizon:PreHorizon;sourceObserved:number;sourceUnobserved:number;
 export function assessG5AConditionalOperatingPREV39(
  scope:unknown,identity:unknown,canonical:unknown,boundOwner:boolean
 ):{eligible:boolean;scopeUnverified:boolean}{
- const physical=identity==="confirmed_operating_leg"&&
+ const physical=(identity==="confirmed_operating_leg"||
+   identity==="g5a_conditional_operator_composite_no_native_id")&&
    typeof canonical==="string"&&canonical.length>0;
  const g5a=physical&&/^leg:g5a:[a-f0-9]{64}$/.test(canonical);
  // Preserve legacy confirmed_core PRE; only UNKNOWN scope is G5A-bound.
@@ -316,7 +317,16 @@ export async function stageP4G5ScopedPreV39(
        "QUERY_FILTERED_SCOPE_UNVERIFIED":"ROW_CONFIRMED_CORE",
      informationAvailableAt:available,
      source:"G5A recorded FIDS scope classification",
-     sourceVersion:r.response_hash}]:[])
+     sourceVersion:r.response_hash},{
+     featureName:"g5a_operating_identity_evidence",
+     value:r.codeshare_resolution_status===
+      "g5a_conditional_operator_composite_no_native_id"?
+      "CONDITIONAL_UNIQUE_COMPOSITE_NO_NATIVE_ID":
+      "NATIVE_PROVIDER_ID_OPERATING",
+     informationAvailableAt:available,
+     source:"G5A positive operator designation plus identity rule",
+     sourceVersion:r.response_hash
+    }]:[])
    ],
    frameHash:null,configHash:null,
    fidsResponseHash:r.response_hash,scheduleVersion:null
