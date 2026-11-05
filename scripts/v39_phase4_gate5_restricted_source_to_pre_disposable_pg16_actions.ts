@@ -99,6 +99,65 @@ export async function main(){
   }
   await sql.query("COMMIT");
 
+  lastSyntheticStage="CREATE_DISPOSABLE_RESTRICTED_SOURCE_WRITER";
+  await sql.query("CREATE ROLE "+WRITER+
+   " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"+
+   " PASSWORD 'synthetic_pg16_test_only'");
+  await sql.query("GRANT CONNECT ON DATABASE v39_ci TO "+WRITER);
+  await sql.query("GRANT USAGE ON SCHEMA clean TO "+WRITER);
+  // Match the exact eight source-owner table grant entries in production.
+  const tableGrants:[string,string][]=[
+   ["clean.fids_query_response","SELECT,INSERT"],
+   ["clean.flight_population","SELECT,INSERT"],
+   ["clean.phase4_g5_fids_original_binding_v39","SELECT,INSERT"],
+   ["clean.phase4_g5_fids_cohort_budget_v39","SELECT,INSERT,UPDATE"],
+   ["clean.phase4_g5_fids_physical_owner_v39","SELECT,INSERT,UPDATE"],
+   ["clean.phase4_g5_fids_allowed_query_v39","SELECT,INSERT,UPDATE"],
+   ["clean.phase4_g5_fids_physical_attempt_v39","SELECT,INSERT"],
+   ["clean.flight_snapshots","SELECT,INSERT"]
+  ];
+  for(const [table,grants] of tableGrants)
+   await sql.query("GRANT "+grants+" ON TABLE "+table+" TO "+WRITER);
+  for(const t of ["clean.flight_population","clean.flight_snapshots"]){
+   const q=await sql.query("SELECT pg_get_serial_sequence($1,'id') AS seq",[t]);
+   if(q.rows.length!==1||typeof q.rows[0]?.seq!=="string"||
+      !/^clean\.[a-z0-9_]+$/.test(q.rows[0].seq))
+    throw Error("G5A_RESTRICTED_DISPOSABLE_SEQUENCE_CATALOG_HOLD");
+   await sql.query("GRANT USAGE ON SEQUENCE "+q.rows[0].seq+" TO "+WRITER);
+  }
+  await sql.query("GRANT EXECUTE ON FUNCTION "+
+   "clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text) TO "+WRITER);
+  // Missing original production permissions, now narrowly corrected.
+  await sql.query("GRANT INSERT ON TABLE clean.population_research_membership TO "+WRITER);
+  await sql.query("GRANT SELECT(population_member_id) ON TABLE "+
+   "clean.population_research_membership TO "+WRITER);
+  const grants=await sql.query(
+   "SELECT has_table_privilege($1,'clean.flight_population','INSERT') population,"+
+   "has_table_privilege($1,'clean.population_research_membership','INSERT') member_insert,"+
+   "has_column_privilege($1,'clean.population_research_membership',"+
+   "'population_member_id','SELECT') member_key_select,"+
+   "has_table_privilege($1,'clean.population_research_membership','SELECT') broad_select,"+
+   "has_table_privilege($1,'clean.population_research_membership','UPDATE') broad_update,"+
+   "has_table_privilege($1,'clean.population_research_membership','DELETE') broad_delete,"+
+   "has_schema_privilege($1,'clean','CREATE') create_schema",[WRITER]);
+  const a=grants.rows[0];
+  if(grants.rows.length!==1||a.population!==true||a.member_insert!==true||
+     a.member_key_select!==true||a.broad_select!==false||
+     a.broad_update!==false||a.broad_delete!==false||
+     a.create_schema!==false)
+   throw Error("G5A_RESTRICTED_DISPOSABLE_GRANT_MISMATCH_HOLD");
+  // v39Pool is lazy; point it to the restricted login BEFORE any source GET.
+  process.env.V39_DATABASE_RUNTIME_URL=WRITER_URI;
+  restrictedClient=new pg.Client({
+   connectionString:WRITER_URI,connectionTimeoutMillis:8000,query_timeout:15000,
+   application_name:"g5a_restricted_disposable_pre_writer"
+  });
+  await restrictedClient.connect();
+  const scopeRole=await restrictedClient.query(
+   "SELECT current_user AS role, has_schema_privilege(current_user,'clean','CREATE') AS ddl");
+  if(scopeRole.rows.length!==1||scopeRole.rows[0].role!==WRITER||
+     scopeRole.rows[0].ddl!==false)
+   throw Error("G5A_RESTRICTED_DISPOSABLE_LOGIN_NOT_RESTRICTED_HOLD");
   const fids={
    departures:[{
     id:"synthetic-same-physical-flight",
