@@ -253,6 +253,7 @@ export async function main(){
  // source boundary. Never retry an uncertain paid GET, SQL transaction,
  // original persistence or POST outcome.
  let dbBroken=false,lastIdleProbeAt=0,asynchronousPgLosses=0;
+ let delegatedRecoverySessionLock=false;
  const makeClient=()=>{
   const client=new pg.Client({
    connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
@@ -281,8 +282,19 @@ export async function main(){
   for(let attempt=1;attempt<=3;attempt++){
    const next=makeClient();
    try{
-    await next.connect();db=next;dbBroken=false;lastIdleProbeAt=0;
-    await old.end().catch(()=>undefined);
+    await next.connect();
+    if(delegatedRecoverySessionLock){
+     // The recovery lock is session-scoped: reacquire before ANY source action.
+     // If another delegate already holds it, halt without provider attempts.
+     await old.end().catch(()=>undefined);
+     const reLock=await next.query(
+      "SELECT pg_try_advisory_lock(76,60906) AS held");
+     if(reLock.rows.length!==1||reLock.rows[0].held!==true)
+      hold("CANCELLED_T24_RECOVERY_SESSION_LOCK_LOST");
+    }
+    db=next;dbBroken=false;lastIdleProbeAt=0;
+    if(!delegatedRecoverySessionLock)
+     await old.end().catch(()=>undefined);
     console.log(JSON.stringify({
      status:"G5A_PG_IDLE_RECONNECTED_WITHOUT_PAID_OR_SQL_REPLAY",
      observedDisconnects:asynchronousPgLosses,reconnectAttempt:attempt,
@@ -370,6 +382,7 @@ export async function main(){
     });
     boundRunId=delegated.boundRunId;
     boundAuthSha=delegated.boundAuthorizationSha;
+    delegatedRecoverySessionLock=true;
     console.log(JSON.stringify({
      status:delegated.status,
      originalImmutableOwnerRunId:delegated.originalRunId,
