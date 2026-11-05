@@ -466,7 +466,7 @@ export async function main(){
   }));
  }finally{await db.end().catch(()=>undefined)}
 }
-if(process.argv[1]?.endsWith("v39_phase4_gate5_g5a_prospective_post_schedule_observation.ts"))
+if(process.argv[1]?.endsWith("v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation.ts"))
  void main().catch(e=>{
   console.error(JSON.stringify({status:"G5A_GITHUB_POST_OWNER_HOLD",
    reason:safe(e),providerContentPrinted:false,
