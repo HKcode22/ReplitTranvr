@@ -1,0 +1,115 @@
+name: Phase4 Gate5 G5A Nov7 Independent Cohort Audit (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-independent-final-audit.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts"
+      - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-independent-final-audit.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts"
+      - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
+  workflow_dispatch:
+  schedule:
+    # Four independent no-provider audit opportunities. Two early backups
+    # Fri 21:12/21:18/21:24/21:30 PST, after final POST aggregate.
+    # Each verified reading is timestamped; no provider calls or DB writes.
+    # GitHub cron is best-effort and previously missed an owner slot.
+    - cron: "12 5 7 11 *"
+    - cron: "18 5 7 11 *"
+    - cron: "24 5 7 11 *"
+    - cron: "30 5 7 11 *"
+permissions:
+  contents: read
+concurrency:
+  group: gate5-g5a-wsss-20261107-0200z-independent-readonly-audit
+  cancel-in-progress: false
+jobs:
+  offline-audit-unit:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      AERODATABOX_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Offline 3-horizon, no-provider, no-write independent audit tests
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0'
+  audit-independent:
+    name: audit-independent
+    permissions:
+      contents: read
+      issues: write
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ${{ secrets.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independent original and PRE and post labels only (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts > "$RUNNER_TEMP/g5a-audit-stdout.json"
+          jq -ce '
+            if .schema == "v39.phase4.g5a-independent-real-source-pre-post-counts.v1"
+              and .providerCalls == 0 and .databaseWrites == 0
+              and .scientificGate5Passed == false
+              and (.sourceHorizonCounts | type == "array")
+              and (.independentlyVerifiedPRE | type == "array")
+              and (.prospectiveScheduleRevisionOutcomes | type == "array")
+            then {schema,status,sourceCohortManifestSha256,sourceHorizonCounts,
+              originalPopulationCounts,independentlyVerifiedPRE,
+              prospectiveScheduleRevisionOutcomes,reservedProjectRestUnits,
+              projectRestUnitCeiling,actualProviderBillingIndependentReconciliationRequired,
+              webhookInOutUnresolvedIndependentReconciliationRequired,
+              scientificGate5Passed,providerCalls,databaseWrites}
+            else error("G5A_UNREVIEWED_AUDIT_OUTPUT_HOLD") end
+          ' "$RUNNER_TEMP/g5a-audit-stdout.json" > "$RUNNER_TEMP/g5a-audit-safe.json"
+          {
+            printf '### Gate5 independent G5A real cohort counts (no provider)\n'
+            printf 'GitHub run: https://github.com/HKcode22/ReplitTranvr/actions/runs/%s\n' "$GITHUB_RUN_ID"
+            printf 'Reviewed main SHA: %s\n\n' "$GITHUB_SHA"
+            printf '~~~json\n'
+            cat "$RUNNER_TEMP/g5a-audit-safe.json"
+            printf '\n~~~\n'
+            printf '\nCounts are measurements, NOT an automatic scientific PASS.\n'
+          } > "$RUNNER_TEMP/g5a-safe-checkpoint.md"
+          cat "$RUNNER_TEMP/g5a-safe-checkpoint.md" >> "$GITHUB_STEP_SUMMARY"
+          gh issue comment 293 --repo HKcode22/ReplitTranvr --body-file "$RUNNER_TEMP/g5a-safe-checkpoint.md"
