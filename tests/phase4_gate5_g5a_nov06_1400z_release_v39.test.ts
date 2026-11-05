@@ -55,7 +55,7 @@ describe("future Nov6 14Z G5A true 3-horizon paid cohort, GH-only",()=>{
     expect(read(source)).toContain('"'+c+'"');
    }
   });
-  expect((read(sw).match(/timeout-minutes: 340/g)||[]).toHaveLength(3);
+  expect((read(sw).match(/timeout-minutes: 340/g)||[])).toHaveLength(3);
  });
  it("POST slots and independent read-only audit follow flight service and fixed T+2h",()=>{
   expect(crons(read(pw))).toEqual([
