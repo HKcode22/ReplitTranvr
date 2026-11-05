@@ -40,7 +40,7 @@ import {G5A_PRIOR_T24_PROVENANCE_SQL_V39,assessG5AT24PreconditionV39}
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A Nov6 WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-nov06-real-wsss-prospective-owner.yml";
-const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261106_FROZEN_SOURCE_GRID.json";
+const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json";
 const PROTOCOL_PATH="data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md";
 const AUTH_INTENT="WSSS_NOV06_0900Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
 /** Actual Plan f.8 §5.1 OpenAPI v1.15.3.0 documentary bytes pin (Sep1).
