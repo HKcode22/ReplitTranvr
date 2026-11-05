@@ -4,10 +4,20 @@
  */
 import pg from "pg";
 import {execFileSync} from "node:child_process";
+import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {
+ G5A_SOURCE_AUDIT_SQL_V39,G5A_PRE_AUDIT_SQL_V39,
+ G5A_POPULATION_AUDIT_SQL_V39
+} from "./v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit";
+import {
+ G5A_POST_AGGREGATE_AUDIT_SQL_V39,postReservationUuidV39
+} from "./v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation";
 const ROLE="p4_g5_g5a_nov07_readonly_20261105";
 const REPO="HKcode22/ReplitTranvr";
 const WF="Phase4 Gate5 G5A Nov7 Audit Reader Readiness (No Provider)";
 const PATH=".github/workflows/phase4-gate5-g5a-nov07-audit-reader-readiness-no-provider.yml";
+const FROZEN_GRID="data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json";
 const TABLES=[
  "clean.phase4_g5_fids_physical_owner_v39",
  "clean.phase4_g5_fids_allowed_query_v39",
@@ -88,11 +98,34 @@ export async function main(){
   };
   if(!validateNov07ReadOnlyAuditorFlagsV39(flags))
    hold("EXCESS_PRIVILEGE_OR_MISSING_TABLE_SELECT");
+  // No provider, no flight content, and no claims of completeness. Prove
+  // every independent audit SQL template actually parses and is executable
+  // under the distinct, non-DDL live PostgreSQL login BEFORE a paid run.
+  // An empty future cohort is expected and is NOT misreported as failure.
+  const frozen=readFileSync(FROZEN_GRID,"utf8");
+  const grid=JSON.parse(frozen) as {cohortId?:unknown};
+  if(grid.cohortId!=="WSSS_G5A_20261107_0200Z"||
+     frozen!==JSON.stringify(grid,null,2)+"\n")
+   hold("UNREVIEWED_FROZEN_GRID");
+  const hash=createHash("sha256").update(frozen).digest("hex");
+  const postIds=[0,1,2].map(i=>postReservationUuidV39(hash,i));
+  await db.query("SET LOCAL statement_timeout='12000ms'");
+  const checks=await Promise.all([
+    db.query(G5A_SOURCE_AUDIT_SQL_V39,[hash]),
+    db.query(G5A_PRE_AUDIT_SQL_V39,[hash]),
+    db.query(G5A_POPULATION_AUDIT_SQL_V39,[hash]),
+    db.query(G5A_POST_AGGREGATE_AUDIT_SQL_V39,[hash,postIds]),
+    db.query("SELECT cohort_id,reserved_units,project_unit_ceiling "+
+      "FROM clean.phase4_g5_fids_cohort_budget_v39 WHERE manifest_sha256=$1",[hash])
+  ]);
+  if(checks.length!==5||checks.some(q=>!Array.isArray(q.rows)))
+   hold("REAL_AUDIT_QUERY_READABILITY");
   await db.query("ROLLBACK");tx=false;
   console.log(JSON.stringify({
    status:"G5A_NOV07_INDEPENDENT_AUDIT_READER_READY_NO_PROVIDER",
    flags,
-   tableReadCount:TABLES.length,actualProviderBillingVerified:false,
+   tableReadCount:TABLES.length,readOnlyAuditQueryTemplatesVerified:5,
+   actualProviderBillingVerified:false,
    scientificGate5Passed:false,phase5FreezeAuthorized:false
   }));
  }finally{if(tx)await db.query("ROLLBACK").catch(()=>undefined);
