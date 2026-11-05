@@ -22,7 +22,8 @@ function client(uri:string){return new pg.Client({connectionString:uri,
 function requireCI(){
  const e=process.env;
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
-    e.GITHUB_EVENT_NAME!=="pull_request"||
+    !((e.GITHUB_EVENT_NAME==="pull_request")||
+      (e.GITHUB_EVENT_NAME==="push"&&e.GITHUB_REF==="refs/heads/main"))||
     e.GITHUB_JOB!=="expired-foreign-pg16"||
     e.GITHUB_WORKFLOW!=="Phase4 Gate5 V0076 Expired Foreign Owner Disposable PG16"||
     e.DATABASE_URL!==URL||
