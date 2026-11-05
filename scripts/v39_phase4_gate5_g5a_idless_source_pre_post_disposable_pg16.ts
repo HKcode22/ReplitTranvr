@@ -13,6 +13,7 @@ import {
  fetchFidsPopulation,utcIntervalToLocal
 } from "../server/lib/disruption/fidsCensus_v3";
 import {getV39Pool} from "../server/lib/disruption/db_v39";
+import {G5A_POST_AGGREGATE_AUDIT_SQL_V39} from "./v39_phase4_gate5_g5a_nov06_1400z_prospective_post_schedule_observation";
 import {persistP4G5BoundFidsDbOnlyV39} from
  "../server/lib/disruption/phase4Gate5AtomicBoundSourceV39";
 import {persistP4G5ReviewedPreForCohortV39} from
@@ -290,6 +291,19 @@ export async function main(){
       snaps.rows.length!==1||typeof snaps.rows[0]?.flight_instance_id!=="string")
     throw Error("P4_G5_IDLESS_ORIGINAL_PRE_READONLY_MISMATCH");
    preIdentity=String(snaps.rows[0].flight_instance_id);
+   // Prove the production POST label SQL reads actual frozen PRE features
+   // even when no original FIDS population row is available for re-reading.
+   const baseline=await review.query(G5A_POST_AGGREGATE_AUDIT_SQL_V39,
+    [manifest,[]]);
+   const outcome=baseline.rows[0];
+   if(baseline.rows.length!==1||
+      outcome.horizon!=="T-24h"||
+      Number(outcome.expected_pre)!==1||
+      Number(outcome.baseline_sourced)!==1||
+      Number(outcome.post_observed)!==0||
+      Number(outcome.revision_ge15)!==0||
+      Number(outcome.revision_lt15)!==0)
+    throw Error("P4_G5_IDLESS_PRE_FEATURE_BASELINE_SQL_HOLD");
    await review.query("ROLLBACK");
   }finally{await review.end().catch(()=>undefined);}
   lastSyntheticStage="RETIMED_POST_IDENTITY_WITHOUT_PROVIDER";
@@ -356,6 +370,7 @@ export async function main(){
    explicitRequestedOriginCanBeOmitted:true,
    sourceScopeUnknownNotFalselyCertifiedCore:true,
    retimedPostRetainsSameConditionalIdentity:true,
+   actualPostBaselineSqlReadFromDurablePREFeature:true,
    sourceAndPreDifferentCommittedTransactions:true,
    independentlyReadback:true,providerCalls:0,productionDatabaseWrites:0,
    realSourceLicenseVerified:false,realFirstNativeTVerified:false,
