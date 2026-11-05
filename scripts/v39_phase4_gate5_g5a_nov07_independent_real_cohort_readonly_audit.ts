@@ -49,7 +49,8 @@ export function requireG5AIndependentAuditContextV39(
   e.GITHUB_JOB!=="audit-independent"||
   (e.GITHUB_EVENT_NAME==="schedule"&&
    !G5A_INDEPENDENT_AUDIT_CRONS_V39.some(x=>x===e.GITHUB_EVENT_SCHEDULE))||
-  !e.GATE05_AUTOMATION_DATABASE_URL||
+  !e.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL||
+  !!e.GATE05_AUTOMATION_DATABASE_URL||
   !!e.DATABASE_URL||!!e.V39_DATABASE_RUNTIME_URL||
   !!e.P4_G5_SOURCE_OWNER_DATABASE_URL||
   !!e.AERODATABOX_API_KEY||e.ADB_AUTO_COLLECT!=="0"||
@@ -128,7 +129,7 @@ export async function main(){
   hold("MANIFEST_CHANGED_OR_UNREVIEWED");
  const hash=sha(bytes);
  const ids=[0,1,2].map(i=>postReservationUuidV39(hash,i));
- const db=new pg.Client({connectionString:e.GATE05_AUTOMATION_DATABASE_URL,
+ const db=new pg.Client({connectionString:e.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL,
   connectionTimeoutMillis:9000,query_timeout:16000,
   application_name:"g5a_independent_readonly_counts"});
  await db.connect();
@@ -137,6 +138,19 @@ export async function main(){
   await db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   tx=true;
   await db.query("SET LOCAL statement_timeout='15000ms'");
+  const independent=await db.query(
+   "SELECT current_user AS role,"+
+   "current_setting('transaction_read_only')='on' AS readonly,"+
+   "(SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls "+
+   "FROM pg_roles WHERE rolname=current_user) AS elevated,"+
+   "has_schema_privilege(current_user,'clean','CREATE') AS schema_ddl,"+
+   "has_database_privilege(current_user,current_database(),'CREATE') AS db_ddl");
+  const r=independent.rows[0];
+  if(independent.rows.length!==1||
+     r.role!=="p4_g5_g5a_nov07_readonly_20261105"||
+     r.readonly!==true||r.elevated!==false||
+     r.schema_ddl!==false||r.db_ddl!==false)
+   hold("INDEPENDENT_READER_NOT_LEAST_PRIVILEGED");
   const tables=await db.query(G5A_SOURCE_AUDIT_SQL_V39,[hash]);
   const snapshots=await db.query(G5A_PRE_AUDIT_SQL_V39,[hash]);
   const pop=await db.query(G5A_POPULATION_AUDIT_SQL_V39,[hash]);
