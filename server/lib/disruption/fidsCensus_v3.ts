@@ -508,7 +508,10 @@ function normalizeFidsRecord(input: {
   }
 
   // Unknown codeshare never becomes a confirmed canonical operating leg.
-  const canonicalForPopulation = identityStatus === "confirmed_operating_leg" ? canonical : null;
+  const canonicalForPopulation =
+    (identityStatus==="confirmed_operating_leg"||
+     identityStatus==="g5a_conditional_operator_composite_no_native_id")
+      ?canonical:null;
   const flightNumber = parsed ? `${parsed.carrier}${parsed.number}` : String(f?.number ?? "UNKNOWN");
   const row = buildPopulationRow({
     sourceAirportIcao: params.airportIcao,
