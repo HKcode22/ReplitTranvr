@@ -37,6 +37,8 @@ import {persistP4G5ReviewedPreForCohortV39}
  from "../server/lib/disruption/phase4Gate5ScopedPreWriter_v39";
 import {G5A_PRIOR_T24_PROVENANCE_SQL_V39,assessG5AT24PreconditionV39}
  from "../server/lib/disruption/phase4Gate5PriorSourceStop_v39";
+import {proveCancelledNov06T24ZeroSpendV39}
+ from "../server/lib/disruption/phase4Gate5G5ANov06CancelledT24Handoff_v39";
 const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A Nov6 WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-nov06-real-wsss-prospective-owner.yml";
@@ -251,6 +253,7 @@ export async function main(){
  // source boundary. Never retry an uncertain paid GET, SQL transaction,
  // original persistence or POST outcome.
  let dbBroken=false,lastIdleProbeAt=0,asynchronousPgLosses=0;
+ let delegatedRecoverySessionLock=false;
  const makeClient=()=>{
   const client=new pg.Client({
    connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
@@ -279,8 +282,19 @@ export async function main(){
   for(let attempt=1;attempt<=3;attempt++){
    const next=makeClient();
    try{
-    await next.connect();db=next;dbBroken=false;lastIdleProbeAt=0;
-    await old.end().catch(()=>undefined);
+    await next.connect();
+    if(delegatedRecoverySessionLock){
+     // The recovery lock is session-scoped: reacquire before ANY source action.
+     // If another delegate already holds it, halt without provider attempts.
+     await old.end().catch(()=>undefined);
+     const reLock=await next.query(
+      "SELECT pg_try_advisory_lock(76,60906) AS held");
+     if(reLock.rows.length!==1||reLock.rows[0].held!==true)
+      hold("CANCELLED_T24_RECOVERY_SESSION_LOCK_LOST");
+    }
+    db=next;dbBroken=false;lastIdleProbeAt=0;
+    if(!delegatedRecoverySessionLock)
+     await old.end().catch(()=>undefined);
     console.log(JSON.stringify({
      status:"G5A_PG_IDLE_RECONNECTED_WITHOUT_PAID_OR_SQL_REPLAY",
      observedDisconnects:asynchronousPgLosses,reconnectAttempt:attempt,
@@ -345,14 +359,54 @@ export async function main(){
    [owner.ownerDigest,manifestSha]);
   if(incumbent.rows.length>1)hold("DUPLICATE_OWNER_CATALOG_DRIFT");
   if(incumbent.rows.length===1){
-   console.log(JSON.stringify({
-    status:"G5A_NOV06_BACKUP_OWNER_DUPLICATE_SUPPRESSED_NO_PROVIDER",
-    horizon:h,originalOwnerState:String(incumbent.rows[0].state),
-    originalRunId:String(incumbent.rows[0].github_run_id),
-    thisRunId:proof.githubRunId,
-    providerCalls:0,databaseWrites:0,scientificGate5Passed:false
-   }));
-   return;
+   // This is not a fresh owner: only one GitHub delegate may continue the
+   // canceled Nov6 T24 ACTIVE owner, and only with zero reserved attempts.
+   // The session advisory lock is held until db.end() in finally, preventing
+   // other scheduled/manual backups from competing as physical delegates.
+   if(h==="T-24h"&&
+      String(incumbent.rows[0].github_run_id)==="41972339194"){
+    // Session advisory locks are not safe with transaction-pooling proxies.
+    // Never log the protected database URL or hostname.
+    const writerHost=new URL(e.P4_G5_SOURCE_OWNER_DATABASE_URL!).hostname;
+    if(/-pooler(?:\.|$)|pgbouncer/i.test(writerHost))
+     hold("CANCELLED_T24_REQUIRES_DIRECT_POSTGRES_SESSION");
+    const lock=await db.query(
+     "SELECT pg_try_advisory_lock(76,60906) AS held");
+    if(lock.rows.length!==1||lock.rows[0].held!==true){
+     console.log(JSON.stringify({
+      status:"G5A_NOV06_CANCELLED_T24_DELEGATE_ALREADY_RUNNING_NO_PROVIDER",
+      originalRunId:"41972339194",thisRunId:proof.githubRunId,
+      providerCalls:0,scientificGate5Passed:false
+     }));
+     return;
+    }
+    const delegated=await proveCancelledNov06T24ZeroSpendV39({
+     db:dbw,token:e.GITHUB_TOKEN!,owner,manifestSha,
+     rightsSha,protocolSha,currentRunId:proof.githubRunId,
+     currentJobStarted:proof.actualJobStartedAtUtc
+    });
+    boundRunId=delegated.boundRunId;
+    boundAuthSha=delegated.boundAuthorizationSha;
+    delegatedRecoverySessionLock=true;
+    console.log(JSON.stringify({
+     status:delegated.status,
+     originalImmutableOwnerRunId:delegated.originalRunId,
+     actualPhysicalDelegateRunId:delegated.currentRunId,
+     delegateGitSha:checkout,
+     delegatedOwnerMetadataUnchanged:true,
+     originalProviderReservationsBeforeHandoff:0,
+     providerCallsFromHandoff:0,scientificGate5Passed:false
+    }));
+   }else{
+    console.log(JSON.stringify({
+     status:"G5A_NOV06_BACKUP_OWNER_DUPLICATE_SUPPRESSED_NO_PROVIDER",
+     horizon:h,originalOwnerState:String(incumbent.rows[0].state),
+     originalRunId:String(incumbent.rows[0].github_run_id),
+     thisRunId:proof.githubRunId,
+     providerCalls:0,databaseWrites:0,scientificGate5Passed:false
+    }));
+    return;
+   }
   }else{
   const prepared=await stageP4G5PreparedOwnerDbOnlyV39(dbw,{
    owner,githubRunId:proof.githubRunId,
