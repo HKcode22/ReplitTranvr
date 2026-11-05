@@ -68,7 +68,7 @@ describe("Nov7 WSSS genuine prospective GH windows and frozen timeline (NO PROVI
    }
    expect(ownerSource).toContain("GITHUB_RUN_NOT_EARLY_ENOUGH");
   });
-  expect((yaml.match(/timeout-minutes: 340/g)??[]).toHaveLength(3);
+  expect((yaml.match(/timeout-minutes: 340/g)??[])).toHaveLength(3);
   expect(yaml).toContain("cancel-in-progress: false");
   expect(yaml).toContain("environment: phase2g-paid");
   expect(ownerSource).toContain("PROSPECTIVE_HORIZON_ZERO_DURABLE_SOURCE_OR_PRE");
