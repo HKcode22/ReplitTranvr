@@ -21,14 +21,7 @@ on:
       - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
       - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
   workflow_dispatch:
-  schedule:
-    # Nov7 02:00Z cohort POST: Fri Nov6 7:40,8:10,8:40 PM PST.
-    # Redundant GH prearms mitigate lost schedules.
-    # Same frozen three POST GET times and 24-unit aggregate ceiling.
-    - cron: "10 2 7 11 *"
-    - cron: "22 2 7 11 *"
-    - cron: "37 2 7 11 *"
-    - cron: "52 2 7 11 *"
+  # Nov7 02Z cohort retired, replaced by Nov6 09Z 17h-earlier cohort.
 permissions:
   contents: read
   actions: read
@@ -62,7 +55,7 @@ jobs:
           echo 'PROVIDER_CALLS=0 DATABASE_CONTENT_WRITES=0 PAID_DISPATCH_DISABLED_ON_PR_PUSH'
   post-source:
     name: post-source
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["10 2 7 11 *","22 2 7 11 *","37 2 7 11 *","52 2 7 11 *"]'), github.event.schedule)) || github.event_name == 'workflow_dispatch' }}
+    if: ${{ false }} # RETIRED: Nov6 09Z successor; no paid jobs
     runs-on: ubuntu-latest
     timeout-minutes: 240
     environment: phase2g-paid
