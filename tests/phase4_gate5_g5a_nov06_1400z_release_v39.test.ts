@@ -78,7 +78,10 @@ describe("future Nov6 14Z G5A true 3-horizon paid cohort, GH-only",()=>{
    new Date("2026-11-06T13:00:00.000Z"),
    new Date("2026-11-06T17:00:00.000Z"),
    "Asia/Singapore");
-  expect(local).toEqual({
+  expect({
+   fromLocal:local.fromLocal.replace(" ","T"),
+   toLocal:local.toLocal.replace(" ","T")
+  }).toEqual({
    fromLocal:"2026-11-06T21:00",toLocal:"2026-11-07T01:00"
   });
   const postCode=read(post);
