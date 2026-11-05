@@ -111,8 +111,14 @@ export const G5A_POPULATION_AUDIT_SQL_V39=[
  "AND p.population_role='requested_airport_primary'",
  "AND p.scope_classification='unknown')::int",
  "conditional_query_filtered_scope_unknown_ids,",
- "count(*) FILTER(WHERE p.codeshare_resolution_status<>",
- "'confirmed_operating_leg')::int ambiguous_or_codeshared_rows",
+ "count(DISTINCT p.analytic_identity_id) FILTER (WHERE",
+ "p.codeshare_resolution_status='g5a_conditional_operator_composite_no_native_id'",
+ "AND p.population_role='requested_airport_primary')::int",
+ "distinct_conditional_composite_operator_keys,",
+ "count(*) FILTER(WHERE p.codeshare_resolution_status NOT IN",
+ "('confirmed_operating_leg',",
+ "'g5a_conditional_operator_composite_no_native_id'))::int",
+ "ambiguous_or_codeshared_rows",
  "FROM clean.flight_population p",
  "JOIN clean.phase4_g5_fids_original_binding_v39 b",
  "ON b.population_query_id=p.population_query_id",
@@ -220,6 +226,9 @@ export async function main(){
     persistedNormalizedRows:count(pop.rows[0]?.population_rows??0),
     distinctConfirmedOperatingLegIds:
       count(pop.rows[0]?.distinct_source_confirmed_operating_leg_ids??0),
+    distinctConditionalCompositeOperatorKeys:
+      count(pop.rows[0]?.distinct_conditional_composite_operator_keys??0),
+    conditionalIdentityNotCertifiedNativeProviderId:true,
     ambiguousOrMarketingRows:count(pop.rows[0]?.ambiguous_or_codeshared_rows??0),
     conditionalQueryFilteredScopeUnknownOperatingIds:
       count(pop.rows[0]?.conditional_query_filtered_scope_unknown_ids??0),

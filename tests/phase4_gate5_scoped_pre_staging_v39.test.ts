@@ -1,7 +1,8 @@
 import {describe,it,expect} from "vitest";
 import {stageP4G5ScopedPreV39,P4_G5_SCOPED_PRE_SOURCE_SQL,
  P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39,
- P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39}
+ P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,
+ assessG5AConditionalOperatingPREV39}
  from "../server/lib/disruption/phase4Gate5ScopedPreStaging_v39";
 
 const scope=()=>({
@@ -36,6 +37,31 @@ const db=(r:unknown[])=>{
  }};
 };
 describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence",()=>{
+ it("later-horizon source SQL always anchors cutoff to durable on-time T24 PRE, not a re-timed query",()=>{
+  const sql=P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39;
+  expect(sql).toContain("s.horizon='T-24h'");
+  expect(sql).toContain("s.frame_hash=$5");
+  expect(sql).toContain("s.created_at<=s.prediction_cutoff_utc");
+  expect(sql).toContain("s.flight_instance_id=f.analytic_identity_id");
+  expect(sql).toContain("anchor.frozen_t");
+  expect(sql).toContain("p.effective_available<=(CASE WHEN h.horizon='T-24h'");
+  // This guard intentionally does not change historical/unbound SQL.
+  expect(P4_G5_SCOPED_PRE_SOURCE_SQL).not.toContain("anchor.frozen_t");
+ });
+ it("conditional ID-less operator is eligible only with a real V0077 bound source, never a marketing alias",()=>{
+  const id="leg:g5a:"+"f".repeat(64);
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","g5a_conditional_operator_composite_no_native_id",id,true
+  )).toEqual({eligible:true,scopeUnverified:true});
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","g5a_conditional_operator_composite_no_native_id",id,false
+  ).eligible).toBe(false);
+  for(const kind of ["g5a_composite_duplicate_ambiguous",
+   "resolved_marketing","ambiguous_codeshare","g5a_stable_provider_id_missing"]){
+   expect(assessG5AConditionalOperatingPREV39("unknown",kind,id,true).eligible).toBe(false);
+  }
+ });
+
  it("builds 3 separate PRE cutoff previews from same immutable earliest T",async()=>{
   const c=db(rows()),r=await stageP4G5ScopedPreV39(c,scope());
   expect(c.calls).toHaveLength(1);

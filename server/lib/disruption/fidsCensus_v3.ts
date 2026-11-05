@@ -37,6 +37,12 @@ export interface FidsCensusParams {
   openapiSha256: string;
   /** Only prospective G5A: stable provider operating identity under retimes. */
   g5aObservedScheduleProtocol?: boolean;
+  /**
+   * Only an explicitly preregistered FUTURE cohort may use the conservative
+   * operator/flight-number/route + frozen study-frame composite when FIDS
+   * does not supply flight.id. It must NEVER be activated retroactively.
+   */
+  g5aCompositeIdentityStudyStartUtc?: Date;
   /** Separately ledger-reserved G5A POST source; never a PRE identifier. */
   g5aPostReservationId?:string;
 }
@@ -58,6 +64,12 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
     !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$/.test(params.fromLocal)||
     !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$/.test(params.toLocal))
   throw new Error("FIDS_REQUEST_AIRPORT_OR_LOCAL_RANGE_INVALID");
+ if(params.g5aCompositeIdentityStudyStartUtc!==undefined&&
+    (params.g5aObservedScheduleProtocol!==true||
+     !(params.g5aCompositeIdentityStudyStartUtc instanceof Date)||
+     !Number.isFinite(params.g5aCompositeIdentityStudyStartUtc.getTime())||
+     params.g5aCompositeIdentityStudyStartUtc.getTime()%60000!==0))
+   throw new Error("FIDS_G5A_UNREVIEWED_COMPOSITE_IDENTITY_FRAME_HOLD");
  return {
   schema:"v39.fids-request-frame.application-intent.v1" as const,
   originalHttpBytesPreserved:false as const,
@@ -73,7 +85,10 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
   withLocation:false as const,
   providerApiVersion:params.providerApiVersion,
   fidsProtocolVersion:params.fidsProtocolVersion,
-  openapiSha256:params.openapiSha256
+  openapiSha256:params.openapiSha256,
+  ...(params.g5aCompositeIdentityStudyStartUtc?
+   {g5aCompositeIdentityStudyStartUtc:
+    params.g5aCompositeIdentityStudyStartUtc.toISOString()}: {})
  };
 }
 
@@ -449,15 +464,28 @@ function normalizeFidsRecord(input: {
       const stable=createHash("sha256").update(JSON.stringify({
         protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
         providerId:sourceId,carrier:parsed.carrier,flightNumber:parsed.number,
-        // A postflight FIDS query may cover a wider source window because
-        // the operating flight was retimed out of the original hour. Source
-        // window is query metadata, NOT physical identity. Positive provider
-        // flight ID plus carrier/route is the stable cross-window link.
+        // Source request window is not part of physical identity.
         origin:depIcao,destination:arrIcao
       })).digest("hex");
       canonical="leg:g5a:"+stable;
       analyticIdentityId=canonical;
       identityStatus="confirmed_operating_leg";
+    }else if(g5a&&isOperator&&!sourceId&&requestedOrigin&&!foreignOrigin&&
+      params.g5aCompositeIdentityStudyStartUtc instanceof Date&&
+      Number.isFinite(params.g5aCompositeIdentityStudyStartUtc.getTime())){
+      // NO undocumented provider flight.id is inferred. This is a distinct,
+      // explicitly conditional identity class, never native-ID-certified.
+      // A duplicated composite in the SAME original is demoted below.
+      // The immutable study frame, not revised scheduledTime, anchors identity.
+      const stable=sha256(JSON.stringify({
+        protocol:"G5A_CONDITIONAL_IDLESS_OPERATOR_V2",
+        frozenStudyStartUtc:params.g5aCompositeIdentityStudyStartUtc.toISOString(),
+        carrier:parsed.carrier,flightNumber:parsed.number,
+        origin:depIcao,destination:arrIcao
+      }));
+      canonical="leg:g5a:"+stable;
+      analyticIdentityId=canonical;
+      identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&isOperator&&!departureAirportFromContext&&
         !foreignOrigin){
       canonical=canonicalFlightInstanceId(identityInput).flight_instance_id;
@@ -480,7 +508,10 @@ function normalizeFidsRecord(input: {
   }
 
   // Unknown codeshare never becomes a confirmed canonical operating leg.
-  const canonicalForPopulation = identityStatus === "confirmed_operating_leg" ? canonical : null;
+  const canonicalForPopulation =
+    (identityStatus==="confirmed_operating_leg"||
+     identityStatus==="g5a_conditional_operator_composite_no_native_id")
+      ?canonical:null;
   const flightNumber = parsed ? `${parsed.carrier}${parsed.number}` : String(f?.number ?? "UNKNOWN");
   const row = buildPopulationRow({
     sourceAirportIcao: params.airportIcao,
@@ -630,10 +661,31 @@ export async function fetchFidsPopulation(
     ...fids.departures.map((source: any, index: number) => ({ source, sourceIndex: index, movement: "departure" as const })),
     ...fids.arrivals.map((source: any, index: number) => ({ source, sourceIndex: index, movement: "arrival" as const })),
   ];
-  const normalized = sourceRecords
+  const preDedup = sourceRecords
     .map((r) => normalizeFidsRecord({ ...r, params, populationQueryId, retrievalUtc, availableAtUtc, responseHash }))
     .filter((r): r is NormalizedFidsRecord => r !== null);
-
+  // No-ID composites are eligible only when unique in THIS original.
+  // Repeated number+route rows and aliases are ambiguous, not new legs.
+  const compositeKey=(r:NormalizedFidsRecord)=>[
+    r.row.populationRole,r.row.flightNumber,r.row.depAirportIcao,
+    r.row.arrAirportIcao
+  ].join("|");
+  const counts=new Map<string,number>();
+  for(const r of preDedup){
+    const k=compositeKey(r);counts.set(k,(counts.get(k)??0)+1);
+  }
+  const normalized=preDedup.map((r,index):NormalizedFidsRecord=>{
+    if(r.row.codeshareResolutionStatus!=="g5a_conditional_operator_composite_no_native_id"||
+       (counts.get(compositeKey(r))??0)===1)return r;
+    return {resolvedCanonical:null,row:{
+      ...r.row,canonicalFlightInstanceId:null,
+      codeshareResolutionStatus:"g5a_composite_duplicate_ambiguous",
+      analyticIdentityId:"provisional:"+sha256(JSON.stringify({
+        originalResponseHash:responseHash,populationQueryId,
+        originalRecordKey:r.row.providerRecordKey,index
+      })).slice(0,24)
+    }};
+  });
   const rows = normalized.map((r) => r.row);
   const flightInstanceIds = Array.from(new Set(normalized.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
   const query: FidsQueryObservation = {

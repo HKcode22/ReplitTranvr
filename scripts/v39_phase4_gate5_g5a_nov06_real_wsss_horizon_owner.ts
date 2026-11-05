@@ -326,6 +326,7 @@ export async function main(){
   lastIdleProbeAt=Date.now();
  };
  let successful=0,attempted=0,unknown=0,preCreated=0,preExisting=0;
+ let firstSourceHasQualifiedOperatingIdentity=false;
  await db.connect();
  const dbw={query:(sql:string,args?:readonly unknown[])=>
   db.query(sql,args as unknown[]|undefined)};
@@ -506,7 +507,12 @@ export async function main(){
     await sleep(Math.min(16000,Math.max(1,until-Date.now())));
    }
   };
-  for(const entry of owner.entries){
+  for(const [sourceOrdinal,entry] of owner.entries.entries()){
+   // Stop after one useless physical GET (or skipped first slot), rather
+   // than spending the rest of this horizon on an all-provisional census.
+   // Subsequent cohorts require separate prepaid, provider-shaped proof.
+   if(sourceOrdinal>0&&!firstSourceHasQualifiedOperatingIdentity)
+    hold("FIRST_ORIGINAL_NO_QUALIFIED_OPERATING_IDENTITY_NO_MORE_PAID");
    const planned=ms(entry.plannedPhysicalStartUtc);
    const latest=ms(entry.hardLatestPhysicalStartUtc);
    await wait(planned);
@@ -609,10 +615,13 @@ export async function main(){
      }));
     }else{
      successful++;
+     if(sourceOrdinal===0)firstSourceHasQualifiedOperatingIdentity=
+      one.flightInstanceIds.length>0;
      console.log(JSON.stringify({
       status:"G5A_ORIGINAL_AND_OPERATING_POPULATION_V0077_COMMITTED",
       horizon:h,queryIndex:entry.queryIndex,
       normalizedRows:one.persistedPopulationRows,
+      sourceQualifiedIdentityKeys:one.flightInstanceIds.length,
       originalBound:true,providerPaidAttempts:1,
       rawOriginalContentPrinted:false,scientificGate5Passed:false
      }));

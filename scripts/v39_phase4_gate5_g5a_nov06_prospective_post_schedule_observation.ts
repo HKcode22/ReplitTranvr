@@ -313,7 +313,8 @@ LEFT JOIN LATERAL(
   AND p.dep_scheduled_utc IS NOT NULL
   AND p.population_role='requested_airport_primary'
   AND p.scope_classification IN ('confirmed_core','unknown')
-  AND p.codeshare_resolution_status='confirmed_operating_leg'
+  AND p.codeshare_resolution_status IN
+   ('confirmed_operating_leg','g5a_conditional_operator_composite_no_native_id')
  ORDER BY p.available_at DESC,p.id DESC LIMIT 1
 ) post ON TRUE
 GROUP BY pre.horizon ORDER BY pre.horizon`;
