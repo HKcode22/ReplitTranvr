@@ -30,6 +30,23 @@ on:
           - T-6h
           - T-90m
   # Nov7 02Z cohort retired, replaced by Nov6 09Z 17h-earlier cohort.
+  schedule:
+    # Nov7 UTC 02Z fresh cohort: first T24 physical source Thu Nov5 17:30 PST.
+    # Old Nov5 14Z failed originals remain UNOBSERVED, never backfill.
+    # All schedule dates are UTC; 12 backups mirror owner code/test.
+    # GitHub may deliver late: DB+verified GitHub job-start gates still apply.
+    - cron: "47 21 5 11 *"
+    - cron: "17 22 5 11 *"
+    - cron: "47 22 5 11 *"
+    - cron: "17 23 5 11 *"
+    - cron: "47 15 6 11 *"
+    - cron: "17 16 6 11 *"
+    - cron: "47 16 6 11 *"
+    - cron: "17 17 6 11 *"
+    - cron: "17 20 6 11 *"
+    - cron: "47 20 6 11 *"
+    - cron: "17 21 6 11 *"
+    - cron: "47 21 6 11 *"
 permissions:
   contents: read
   actions: read
