@@ -1,0 +1,87 @@
+name: Phase4 Gate5 G5A Nov7 Free Provider Balance Preflight (No Paid)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-free-balance-readiness-no-provider.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_free_balance_readiness_no_provider.ts"
+      - "tests/phase4_gate5_g5a_nov07_free_balance_readiness_no_provider_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-free-balance-readiness-no-provider.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_free_balance_readiness_no_provider.ts"
+      - "tests/phase4_gate5_g5a_nov07_free_balance_readiness_no_provider_v39.test.ts"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gate5-g5a-nov07-free-provider-balance-readiness
+  cancel-in-progress: false
+jobs:
+  offline-check:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test exact free quota freshness and 24-unit account limit without provider
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_nov07_free_balance_readiness_no_provider_v39.test.ts
+          echo "PROVIDER_CALLS=0 DB_WRITES=0 PAID_RELEASE=NO"
+  quota-readonly:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    env:
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ""
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One documented free provider balance GET (no FIDS, mutation, ledger)
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${P4_G5_G5A_NOV07_AUDIT_DATABASE_URL:-}${RAPIDAPI_KEY:-}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_nov07_free_balance_readiness_no_provider.ts > "${RUNNER_TEMP}/safe-free-quota.json"
+          jq -ce 'if .providerPaidFidsRequests == 0 and .productionDatabaseWrites == 0 and
+             .scientificGate5Passed == false and .internalProjectUnitCeiling == 24 and
+             .status == "G5A_NOV07_FREE_PROVIDER_QUOTA_CURRENTLY_SUFFICIENT"
+             then {status,internalProjectUnitCeiling,providerReportedApiUnitsRemaining,
+               providerReportedRequestsRemaining,providerReportedUnitsResetAtUtc,observedAtUtc,
+               providerPaidFidsRequests,productionDatabaseWrites,scientificGate5Passed}
+             else error("G5A_QUOTA_PROOF_NOT_SUFFICIENT") end' "${RUNNER_TEMP}/safe-free-quota.json" >> "${GITHUB_STEP_SUMMARY}"
