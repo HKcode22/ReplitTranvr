@@ -78,7 +78,7 @@ jobs:
       - name: Prove GH source owner job admission is impossible offline
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts tests/phase4_gate5_g5a_nov06_cancelled_t24_handoff_v39.test.ts
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
