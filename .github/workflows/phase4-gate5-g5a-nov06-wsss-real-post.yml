@@ -1,0 +1,91 @@
+name: Phase4 Gate5 G5A Nov6 WSSS Real Prospective POST
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov06-wsss-real-post.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov06_prospective_post_schedule_observation.ts"
+      - "scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts"
+      - "server/lib/disruption/fidsCensus_v3.ts"
+      - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov06-wsss-real-post.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov06_prospective_post_schedule_observation.ts"
+      - "scripts/v39_phase4_gate5_g5a_post_ledger_exact_grant_once.ts"
+      - "server/lib/disruption/fidsCensus_v3.ts"
+      - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
+  workflow_dispatch:
+  schedule:
+    # Nov6 02:00Z cohort POST: Fri Nov6 7:40,8:10,8:40 PM PST.
+    # Redundant GH prearms mitigate lost schedules.
+    # Same frozen three POST GET times and 24-unit aggregate ceiling.
+    - cron: "10 9 6 11 *"
+    - cron: "22 9 6 11 *"
+    - cron: "37 9 6 11 *"
+    - cron: "52 9 6 11 *"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: gate5-g5a-wsss-20261106-0900z-post-real
+  cancel-in-progress: false
+jobs:
+  offline-post:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      AERODATABOX_API_KEY: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Frozen G5A POST and source reservation guard tests, no provider
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase4_gate5_g5a_post_source_v39.test.ts tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DATABASE_CONTENT_WRITES=0 PAID_DISPATCH_DISABLED_ON_PR_PUSH'
+  post-source:
+    name: post-source
+    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["10 9 6 11 *","22 9 6 11 *","37 9 6 11 *","52 9 6 11 *"]'), github.event.schedule)) || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    environment: phase2g-paid
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      G5A_POST_SCHEDULE: ${{ github.event.schedule || 'manual-reviewed' }}
+      G5A_POST_MANUAL_INTENT: ${{ github.event_name == 'workflow_dispatch' && 'REVIEWED_NOV06_0900Z_POST_ONLY_WITHIN_PREARM' || '' }}
+      G5A_POST_PAID_INTENT: G5A_NOV06_0900Z_POST_THREE_2_UNIT_REQUESTS_MAX
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.P4_G5_SOURCE_OWNER_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Actual GitHub scheduled 3× bounded POST originals and T+2h label counts
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${DATABASE_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${RAPIDAPI_KEY:-}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --import tsx scripts/v39_phase4_gate5_g5a_nov06_prospective_post_schedule_observation.ts
