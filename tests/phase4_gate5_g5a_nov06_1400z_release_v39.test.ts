@@ -2,6 +2,7 @@ import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {draftP4Gate5ThreeHorizonGridV39} from "../server/lib/disruption/phase4Gate5FrozenGridDraft_v39";
+import {utcIntervalToLocal} from "../server/lib/disruption/fidsCensus_v3";
 const read=(s:string)=>readFileSync(s,"utf8");
 const root="data-collection/phase4/GATE5_G5A_WSSS_20261106_1400Z_FROZEN_SOURCE_GRID.json";
 const source="scripts/v39_phase4_gate5_g5a_nov06_1400z_real_wsss_horizon_owner.ts";
@@ -71,6 +72,19 @@ describe("future Nov6 14Z G5A true 3-horizon paid cohort, GH-only",()=>{
   expect(crons(read(aw)).every(x=>ctime(x)>time("2026-11-06T17:01:00.000Z"))).toBe(true);
   expect(read(audit)).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   expect(read(post)).toContain("G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39");
+ });
+ it("POST's cross-midnight Singapore local window exactly matches the frozen UTC interval",()=>{
+  const local=utcIntervalToLocal(
+   new Date("2026-11-06T13:00:00.000Z"),
+   new Date("2026-11-06T17:00:00.000Z"),
+   "Asia/Singapore");
+  expect(local).toEqual({
+   fromLocal:"2026-11-06T21:00",toLocal:"2026-11-07T01:00"
+  });
+  const postCode=read(post);
+  expect(postCode).toContain('fromLocal:"2026-11-06T21:00"');
+  expect(postCode).toContain('toLocal:"2026-11-07T01:00"');
+  expect(postCode).toContain('const FROM="2026-11-06T13:00:00.000Z",TO="2026-11-06T17:00:00.000Z"');
  });
  it("new future-only operating key is enabled in BOTH source and POST",()=>{
   expect(read(source)).toContain("g5aCompositeIdentityStudyStartUtc:new Date(start)");
