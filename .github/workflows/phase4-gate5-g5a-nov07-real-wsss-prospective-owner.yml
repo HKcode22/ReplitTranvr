@@ -29,23 +29,7 @@ on:
           - T-24h
           - T-6h
           - T-90m
-  schedule:
-    # Nov7 UTC 02Z fresh cohort: first T24 physical source Thu Nov5 17:30 PST.
-    # Old Nov5 14Z failed originals remain UNOBSERVED, never backfill.
-    # All schedule dates are UTC; 12 backups mirror owner code/test.
-    # GitHub may deliver late: DB+verified GitHub job-start gates still apply.
-    - cron: "47 21 5 11 *"
-    - cron: "17 22 5 11 *"
-    - cron: "47 22 5 11 *"
-    - cron: "17 23 5 11 *"
-    - cron: "47 15 6 11 *"
-    - cron: "17 16 6 11 *"
-    - cron: "47 16 6 11 *"
-    - cron: "17 17 6 11 *"
-    - cron: "17 20 6 11 *"
-    - cron: "47 20 6 11 *"
-    - cron: "17 21 6 11 *"
-    - cron: "47 21 6 11 *"
+  # Nov7 02Z cohort retired, replaced by Nov6 09Z 17h-earlier cohort.
 permissions:
   contents: read
   actions: read
@@ -83,7 +67,7 @@ jobs:
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 21 5 11 *","17 22 5 11 *","47 22 5 11 *","17 23 5 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-24h') }}
+    if: ${{ false }} # RETIRED: Nov6 09Z successor; no paid jobs
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -116,7 +100,7 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_nov07_real_wsss_horizon_owner.ts
   owner-t6:
     name: owner-t6
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["47 15 6 11 *","17 16 6 11 *","47 16 6 11 *","17 17 6 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-6h') }}
+    if: ${{ false }} # RETIRED: Nov6 09Z successor; no paid jobs
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
@@ -149,7 +133,7 @@ jobs:
           node --import tsx scripts/v39_phase4_gate5_g5a_nov07_real_wsss_horizon_owner.ts
   owner-t90:
     name: owner-t90
-    if: ${{ (github.event_name == 'schedule' && contains(fromJSON('["17 20 6 11 *","47 20 6 11 *","17 21 6 11 *","47 21 6 11 *"]'), github.event.schedule)) || (github.event_name == 'workflow_dispatch' && inputs.horizon == 'T-90m') }}
+    if: ${{ false }} # RETIRED: Nov6 09Z successor; no paid jobs
     runs-on: ubuntu-latest
     timeout-minutes: 340
     environment: phase2g-paid
