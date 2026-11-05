@@ -14,6 +14,7 @@ import {
 } from "../server/lib/disruption/fidsCensus_v3";
 import {getV39Pool} from "../server/lib/disruption/db_v39";
 import {G5A_POST_AGGREGATE_AUDIT_SQL_V39} from "./v39_phase4_gate5_g5a_nov06_1400z_prospective_post_schedule_observation";
+import {G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39} from "./v39_phase4_gate5_g5a_nov06_1400z_real_wsss_horizon_owner";
 import {persistP4G5BoundFidsDbOnlyV39} from
  "../server/lib/disruption/phase4Gate5AtomicBoundSourceV39";
 import {persistP4G5ReviewedPreForCohortV39} from
@@ -187,6 +188,7 @@ export async function main(){
    g5aCompositeIdentityStudyStartUtc:new Date(serviceStart)
   };
   const sourceUseExpiresAtUtc=iso(base+20*3600000);
+  let firstOriginalQueryId:string|null=null;
   for(let i=0;i<3;i++){
    lastSyntheticStage="ORIGINAL_FIDS_SLOT_"+i;
    // The SAME provider record is observed via three distinct, genuine
@@ -221,7 +223,16 @@ export async function main(){
    });
    if(!result||result.persistedPopulationRows!==1)
     throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_NORMALIZATION_HOLD");
+   if(i===0)firstOriginalQueryId=result.populationQueryId;
   }
+  lastSyntheticStage="FIRST_PAID_SOURCE_CUTOFF_SAFE_ELIGIBILITY_SQL";
+  if(!firstOriginalQueryId)throw Error("P4_G5_FIRST_ORIGINAL_QUERY_ID_MISSING");
+  const firstEligible=await restrictedClient!.query(
+   G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39,
+   [firstOriginalQueryId,manifest,"T-24h"]);
+  if(firstEligible.rows.length!==1||
+     Number(firstEligible.rows[0]?.eligible_asof)!==1)
+   throw Error("P4_G5_FIRST_SOURCE_PRE_BUDGET_GUARD_SQL_MISMATCH");
   const scope={
    airportIcao:"WSSS",serviceStartUtc:iso(serviceStart),
    serviceEndUtc:iso(serviceEnd),observedAtUtc:new Date().toISOString(),
@@ -371,6 +382,7 @@ export async function main(){
    sourceScopeUnknownNotFalselyCertifiedCore:true,
    retimedPostRetainsSameConditionalIdentity:true,
    actualPostBaselineSqlReadFromDurablePREFeature:true,
+   firstSourcePhysicalBudgetGuardSqlRealRestrictedRolePassed:true,
    sourceAndPreDifferentCommittedTransactions:true,
    independentlyReadback:true,providerCalls:0,productionDatabaseWrites:0,
    realSourceLicenseVerified:false,realFirstNativeTVerified:false,
