@@ -1,7 +1,8 @@
 import {describe,it,expect} from "vitest";
 import {stageP4G5ScopedPreV39,P4_G5_SCOPED_PRE_SOURCE_SQL,
  P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39,
- P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39}
+ P4_G5_SCOPED_PRE_V0077_FRAME_SQL_V39,
+ assessG5AConditionalOperatingPREV39}
  from "../server/lib/disruption/phase4Gate5ScopedPreStaging_v39";
 
 const scope=()=>({
@@ -36,6 +37,20 @@ const db=(r:unknown[])=>{
  }};
 };
 describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence",()=>{
+ it("conditional ID-less operator is eligible only with a real V0077 bound source, never a marketing alias",()=>{
+  const id="leg:g5a:"+"f".repeat(64);
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","g5a_conditional_operator_composite_no_native_id",id,true
+  )).toEqual({eligible:true,scopeUnverified:true});
+  expect(assessG5AConditionalOperatingPREV39(
+   "unknown","g5a_conditional_operator_composite_no_native_id",id,false
+  ).eligible).toBe(false);
+  for(const kind of ["g5a_composite_duplicate_ambiguous",
+   "resolved_marketing","ambiguous_codeshare","g5a_stable_provider_id_missing"]){
+   expect(assessG5AConditionalOperatingPREV39("unknown",kind,id,true).eligible).toBe(false);
+  }
+ });
+
  it("builds 3 separate PRE cutoff previews from same immutable earliest T",async()=>{
   const c=db(rows()),r=await stageP4G5ScopedPreV39(c,scope());
   expect(c.calls).toHaveLength(1);
