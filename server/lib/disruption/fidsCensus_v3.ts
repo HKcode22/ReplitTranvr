@@ -686,8 +686,37 @@ export async function fetchFidsPopulation(
       })).slice(0,24)
     }};
   });
-  const rows = normalized.map((r) => r.row);
-  const flightInstanceIds = Array.from(new Set(normalized.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
+  // G5A also must fail closed on duplicated native-provider IDs or
+  // provisional analytic IDs in ONE original response. Otherwise the
+  // (population_query_id,analytic_identity_id,population_role) unique key
+  // would discard a record and V0077's atomic source custody rolls back
+  // AFTER a physical paid GET. Preserve each row as an ambiguous provisional
+  // source member; never count either duplicate as a physical operating leg.
+  const identityKey=(r:NormalizedFidsRecord)=>
+    r.row.populationRole+"|"+r.row.analyticIdentityId;
+  const identityCounts=new Map<string,number>();
+  if(params.g5aObservedScheduleProtocol===true){
+    for(const r of normalized){
+      const k=identityKey(r);
+      identityCounts.set(k,(identityCounts.get(k)??0)+1);
+    }
+  }
+  const unambiguous=normalized.map((r,index):NormalizedFidsRecord=>{
+    if((identityCounts.get(identityKey(r))??0)<=1)return r;
+    const positiveNative=r.row.codeshareResolutionStatus==="confirmed_operating_leg";
+    return {resolvedCanonical:null,row:{
+      ...r.row,canonicalFlightInstanceId:null,
+      codeshareResolutionStatus:positiveNative?
+        "g5a_native_id_duplicate_ambiguous":
+        "g5a_duplicate_unresolved_identity_ambiguous",
+      analyticIdentityId:"provisional:"+sha256(JSON.stringify({
+        protocol:"G5A_ONE_ORIGINAL_DUPLICATE_IDENTITY_V1",
+        populationQueryId,responseHash,index,originalIdentity:r.row.analyticIdentityId
+      })).slice(0,24)
+    }};
+  });
+  const rows = unambiguous.map((r) => r.row);
+  const flightInstanceIds = Array.from(new Set(unambiguous.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
   const query: FidsQueryObservation = {
     populationQueryId,
     sourceAirportIcao: params.airportIcao,
