@@ -129,8 +129,8 @@ export async function main(){
   if(results.length!==5||results.some(x=>!Array.isArray(x.rows)))
    hold("FINAL_AUDIT_SQL_ERROR");
   const count=results.map(x=>x.rows.length);
-  if(count[0]!==0||count[1]!==1||count[2]!==1||
-     count[3]!==1||count[4]!==0)
+  if(count[0]!==0||count[1]!==0||count[2]!==1||
+     count[3]!==0||count[4]!==0)
    hold("FUTURE_EMPTY_COHORT_RESULT_SHAPE_CHANGED");
   await reader.query("ROLLBACK");tx=false;
   // Independent reader has no DML rights even OUTSIDE read-only mode.
