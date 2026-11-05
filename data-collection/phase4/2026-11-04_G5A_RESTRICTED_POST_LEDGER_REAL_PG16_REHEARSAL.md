@@ -1,0 +1,13 @@
+# Gate5 — realistic restricted GitHub POST reservation and source persistence rehearsal
+
+**Never use this for real provider calls or production database changes.** The future Nov7 WSSS POST recorder is a distinct paid source path from the earlier PRE FIDS source. It reserves up to three immutable POST ledger IDs, increases the cohort's aggregate unit budget, then commits original decoded FIDS responses and normalized rows with a same-transaction ledger custody proof.
+
+Earlier unit tests mocked a `pg.Client` and privileged fixture for those steps. This new offline PR tests the actual SQL, `fetchFidsPopulation` and `persistFidsObservation` against disposable PostgreSQL16 with a separate restricted login configured to match the production GitHub source-writer: eight direct source/owner/PRE tables, exact membership trigger INSERT and conflict-key SELECT, two sequences, V0076 function EXECUTE, and **SELECT/INSERT on `clean.adb_rest_attempt_ledger`, no UPDATE/DELETE/full membership SELECT or schema CREATE**.
+
+Under this restricted login, test:
+- One prospective POST reservation is committed before source and consumes exactly two of the distinct 24-unit project allowance.
+- An attempted duplicate is rejected without another budget increment or ledger row. No API GET is made.
+- One fake decoded FIDS departure body is authenticated from synthetic bytes and saved as an original in `clean.fids_query_response` and normalized member in `clean.flight_population`, passing the real `verifyG5APostSourceLedgerAtCommitV39` callback using the same restricted `v39Pool` transaction.
+- Exactly one original, normalized row, trigger membership and POST ledger receipt are durably read back by a separate privileged fixture auditor. This is a **synthetic structural test only**. It cannot verify live POST provider timing, actual wheels-off, provider billing, retention rights, or independent scientific PASS.
+
+This is a no-HTTP, no production credential, no live runner, no secrets, no actual bill test. Activation of the separate future paid PR #394 remains HOLD until real GitHub protected catalog checks (PR #396), full offline suite, and independent reader permission concerns are reconciled. The owner has explicitly requested no paid rearm until enough evidence is assembled. It is preferable to miss the proposed Friday cohort than fabricate on-time science or silently assume all real-provider possibilities are tested.
