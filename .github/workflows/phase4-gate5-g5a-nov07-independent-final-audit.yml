@@ -16,6 +16,15 @@ on:
       - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
   workflow_dispatch:
   # Retired audit schedule: superseded by Nov6 09Z early cohort.
+  schedule:
+    # Four independent no-provider audit opportunities. Two early backups
+    # Fri 21:12/21:18/21:24/21:30 PST, after final POST aggregate.
+    # Each verified reading is timestamped; no provider calls or DB writes.
+    # GitHub cron is best-effort and previously missed an owner slot.
+    - cron: "12 5 7 11 *"
+    - cron: "18 5 7 11 *"
+    - cron: "24 5 7 11 *"
+    - cron: "30 5 7 11 *"
 permissions:
   contents: read
 concurrency:
