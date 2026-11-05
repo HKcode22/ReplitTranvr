@@ -6,7 +6,7 @@ on:
       - ".github/workflows/phase4-gate5-g5a-nov06-real-wsss-prospective-owner.yml"
       - "scripts/v39_phase4_gate5_g5a_nov06_real_wsss_horizon_owner.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
-      - "data-collection/phase4/GATE5_G5A_WSSS_20261106_FROZEN_SOURCE_GRID.json"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts"
   push:
     branches: [main]
@@ -16,7 +16,7 @@ on:
       - "server/lib/disruption/phase4Gate5G5AT24FailedOwnerRecovery_v39.ts"
       - "tests/phase4_gate5_g5a_57p01_recovery_v39.test.ts"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
-      - "data-collection/phase4/GATE5_G5A_WSSS_20261106_FROZEN_SOURCE_GRID.json"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_real_wsss_owner_v39.test.ts"
   workflow_dispatch:
     inputs:
