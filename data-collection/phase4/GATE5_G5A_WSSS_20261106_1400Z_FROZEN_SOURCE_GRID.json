@@ -5,7 +5,7 @@
     "airportIanaTimezone": "Asia/Singapore",
     "serviceWindowStartUtc": "2026-11-06T14:00:00.000Z",
     "serviceWindowEndUtc": "2026-11-06T15:00:00.000Z",
-    "assignmentFrozenAtUtc": "2026-11-05T10:00:00.000Z",
+    "assignmentFrozenAtUtc": "2026-11-05T11:30:00.000Z",
     "acquisitionGuardMinutes": 30,
     "refreshCadenceMinutes": 30,
     "maxStalenessMinutes": 45,
