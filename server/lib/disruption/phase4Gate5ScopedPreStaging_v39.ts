@@ -135,6 +135,30 @@ export const P4_G5_SCOPED_PRE_V0077_BOUND_SOURCE_SQL_V39=
    "AND ow.reviewed_authorization_sha256=$8",
    "AND b.source_use_expires_at_utc>clock_timestamp()"
   ].join(" ")
+ )
+ // Prospective T6/T90 MUST use the same first schedule T frozen in on-time
+ // T24 PRE, not the possibly retimed later source schedule.
+ .replace(
+  "SELECT f.analytic_identity_id,f.first_schedule,h.horizon,",
+  "SELECT f.analytic_identity_id,(CASE WHEN h.horizon='T-24h' THEN f.first_schedule ELSE anchor.frozen_t END) AS first_schedule,h.horizon,"
+ ).replace(
+  "f.first_schedule-h.lag AS prediction_cutoff_utc,",
+  "(CASE WHEN h.horizon='T-24h' THEN f.first_schedule ELSE anchor.frozen_t END)-h.lag AS prediction_cutoff_utc,"
+ ).replace(
+  "CROSS JOIN h LEFT JOIN LATERAL",
+  ["CROSS JOIN h",
+   "LEFT JOIN LATERAL (SELECT s.selected_t_milestone_utc AS frozen_t",
+   "FROM clean.flight_snapshots s",
+   "WHERE s.frame_hash=$5 AND s.horizon='T-24h'",
+   "AND s.prediction_state='PRE_DEPARTURE'",
+   "AND s.flight_instance_id=f.analytic_identity_id",
+   "AND s.selected_t_milestone_utc IS NOT NULL",
+   "AND s.created_at<=s.prediction_cutoff_utc",
+   "ORDER BY s.created_at ASC LIMIT 1) anchor ON TRUE",
+   "LEFT JOIN LATERAL"].join(" ")
+ ).replace(
+  "p.effective_available<=f.first_schedule-h.lag",
+  "p.effective_available<=(CASE WHEN h.horizon='T-24h' THEN f.first_schedule ELSE anchor.frozen_t END)-h.lag"
  );
 /**
  * Count the *planned* slots independently of retained original observations.
