@@ -15,7 +15,7 @@ import pg from "pg";
 import {
  G5A_POST_AGGREGATE_AUDIT_SQL_V39,
  postReservationUuidV39
-} from "./v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation";
+} from "./v39_phase4_gate5_g5a_nov06_prospective_post_schedule_observation";
 
 export const G5A_INDEPENDENT_AUDIT_SCHEMA_V39=
  "v39.phase4.g5a-independent-real-source-pre-post-counts.v1" as const;
