@@ -25,7 +25,7 @@ const PATH=".github/workflows/phase4-gate5-g5a-nov06-independent-final-audit.yml
 export const G5A_INDEPENDENT_AUDIT_CRONS_V39=[
  "12 12 6 11 *","18 12 6 11 *","24 12 6 11 *","30 12 6 11 *"
 ] as const;
-const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261106_FROZEN_SOURCE_GRID.json";
+const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json";
 const START=Date.parse("2026-11-06T12:10:00.000Z");
 const END=Date.parse("2026-11-06T16:00:00.000Z");
 const SHA=/^[a-f0-9]{40}$/;
@@ -49,7 +49,7 @@ export function requireG5AIndependentAuditContextV39(
   e.GITHUB_JOB!=="audit-independent"||
   (e.GITHUB_EVENT_NAME==="schedule"&&
    !G5A_INDEPENDENT_AUDIT_CRONS_V39.some(x=>x===e.GITHUB_EVENT_SCHEDULE))||
-  !e.P4_G5_G5A_NOV06_AUDIT_DATABASE_URL||
+  !e.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL||
   !!e.GATE05_AUTOMATION_DATABASE_URL||
   !!e.DATABASE_URL||!!e.V39_DATABASE_RUNTIME_URL||
   !!e.P4_G5_SOURCE_OWNER_DATABASE_URL||
@@ -129,7 +129,7 @@ export async function main(){
   hold("MANIFEST_CHANGED_OR_UNREVIEWED");
  const hash=sha(bytes);
  const ids=[0,1,2].map(i=>postReservationUuidV39(hash,i));
- const db=new pg.Client({connectionString:e.P4_G5_G5A_NOV06_AUDIT_DATABASE_URL,
+ const db=new pg.Client({connectionString:e.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL,
   connectionTimeoutMillis:9000,query_timeout:16000,
   application_name:"g5a_independent_readonly_counts"});
  await db.connect();
