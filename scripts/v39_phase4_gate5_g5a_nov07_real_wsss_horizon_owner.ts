@@ -596,7 +596,7 @@ export async function main(){
    hold("PROSPECTIVE_HORIZON_ZERO_DURABLE_SOURCE_OR_PRE");
  }finally{await db.end().catch(()=>undefined)}
 }
-if(process.argv[1]?.endsWith("v39_phase4_gate5_g5a_real_wsss_horizon_owner.ts"))
+if(process.argv[1]?.endsWith("v39_phase4_gate5_g5a_nov07_real_wsss_horizon_owner.ts"))
  void main().catch(err=>{
   console.error(JSON.stringify({status:"G5A_REAL_GITHUB_HORIZON_HOLD",
    reason:errorSafe(err),noProviderContentPrinted:true,
