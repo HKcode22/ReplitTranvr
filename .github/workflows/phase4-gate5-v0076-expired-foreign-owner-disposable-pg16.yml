@@ -67,7 +67,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "${GITHUB_ACTIONS}" = true
-          test "${GITHUB_EVENT_NAME}" = pull_request
+          if [ "${GITHUB_EVENT_NAME}" = push ]; then
+            test "${GITHUB_REF}" = refs/heads/main
+          else
+            test "${GITHUB_EVENT_NAME}" = pull_request
+          fi
           test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
           node --import tsx scripts/v39_phase4_gate5_v0076_expired_foreign_cohort_pg16_actions.ts
           echo "REAL_PROVIDER_CALLS=0 PRODUCTION_DATABASE_WRITES=0 PAID_ACTIVATION=NO"
