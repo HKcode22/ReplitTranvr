@@ -13,9 +13,13 @@ WSSS departures `2026-11-07T02:00:00Z`–`03:00Z` = Fri Nov6 18:00–19:00 PST, 
 - No-provider independent audit Fri Nov6 **21:12/21:18/21:24/21:30 PST** (Nov7 05:12/05:18/05:24/05:30Z).
 - Source 9×2 = max 18 FIDS units and POST 3×2 = max 6: **24 units in this distinct cohort**, in addition to six reserved on prior failed cohort; actual provider billing must be measured independently. No paid retries within a slot.
 
-### MUST remain HOLD / unmerged unless
+### Auditor role correction required before activation
 
-1. Replit owner applies reviewed minimally scoped restricted GitHub source-writer membership trigger grant successfully; independent protected GitHub READ ONLY catalog recheck proves **INSERT on membership + SELECT(population_member_id) conflict key** and two required sequence USAGE rights, no schema/DB admin rights. Current protected receipt [#6646697665](https://github.com/HKcode22/ReplitTranvr/issues/293#issuecomment-6646697665) says missing both privileges, so **DO NOT MERGE NOW**.
+The latest protected GitHub read-only run #41950001280 confirms the source writer has membership, POST ledger SELECT/INSERT and reservation-function EXECUTE; that part is no longer a blocker. But the old independent `GATE05_AUTOMATION_DATABASE_URL` role can CREATE schemas/databases. That is excessive privilege for the final independent reviewer. The new Nov7 audit script/workflow **rejects the old secret entirely** and requires a separately reviewed, non-admin reader `p4_g5_g5a_nov07_readonly_20261105` through protected secret `P4_G5_G5A_NOV07_AUDIT_DATABASE_URL` (setup and manual-only no-provider verification in PR #398). This activation PR must remain UNMERGED until the owner installs the new reader and GitHub independent-readonly role audit proves no schema/DB creation and zero table mutation grants.
+
+## MUST remain HOLD / unmerged unless
+
+1. **Source writer completed:** the owner installed the narrow membership grant, and authenticated protected GitHub runs #41947550977 and #41950001280 verify both trigger permissions, ID sequences, POST ledger and immutable reserve function. Independently scope the new Nov7 **non-DDL auditor reader** as described above before this PR can merge. No inference of genuine provider HTTP success from role catalogs.
 2. All exact-head CI tests, including future cron/date/intent alignment and no-provider source/POST/audit offline checks, complete successfully. A new source error cannot be hidden by a generic green scientific conclusion.
 3. The owner explicitly retains bounded paid review authority, lawful provider data-use/retention limitations and no backfill/missingness standards. Provider original success and actual billing remain unverified for this future cohort.
 4. No other live same-cohort owner or conflicting new 24-unit budget is active; original Nov5 cohort T24 is scientifically missing, and its future T6/T90/POST must continue to skip paid spending.
