@@ -39,7 +39,7 @@ describe("Gate5 Nov7 independent auditor no-provider release discipline",()=>{
   expect(w).not.toContain("  schedule:");
   expect(w).toContain("environment: phase2g-paid");
   expect(w).toContain("P4_G5_G5A_NOV07_AUDIT_DATABASE_URL");
-  expect(w).toContain("V39_PHASE6_PROCESS_ARMED: \\"0\\"");
+  expect(w).toContain('V39_PHASE6_PROCESS_ARMED: "0"');
   expect(w).toContain("providerCalls");
  });
 });
