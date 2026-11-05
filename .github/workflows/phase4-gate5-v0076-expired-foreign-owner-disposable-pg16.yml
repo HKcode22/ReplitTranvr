@@ -1,0 +1,73 @@
+name: Phase4 Gate5 V0076 Expired Foreign Owner Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-expired-foreign-owner-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5DurablePreparedOwner_v39.ts"
+      - "scripts/v39_phase4_gate5_v0076_expired_foreign_cohort_pg16_actions.ts"
+      - "tests/phase4_gate5_v0076_durable_prepared_owner_v39.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-expired-foreign-owner-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5DurablePreparedOwner_v39.ts"
+      - "scripts/v39_phase4_gate5_v0076_expired_foreign_cohort_pg16_actions.ts"
+permissions:
+  contents: read
+jobs:
+  expired-foreign-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gate5_disposable?sslmode=disable"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gate5_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gate5_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install only disposable V0076 schema in isolated PG16
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          psql -h localhost -U postgres -d gate5_disposable -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.fids_query_response(id integer);
+          CREATE TABLE clean.flight_population(id integer);
+          CREATE TABLE clean.provider_content_blob_ref(id integer);
+          CREATE TABLE clean.phase3_gate05_science_owner_v39(id integer);
+          SQL
+          psql -h localhost -U postgres -d gate5_disposable -X -v ON_ERROR_STOP=1             -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+      - name: Prove expired historical reservations survive and active foreign owner blocks
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = true
+          test "${GITHUB_EVENT_NAME}" = pull_request
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0076_expired_foreign_cohort_pg16_actions.ts
+          echo "REAL_PROVIDER_CALLS=0 PRODUCTION_DATABASE_WRITES=0 PAID_ACTIVATION=NO"
