@@ -26,6 +26,8 @@ type DbFacts={
   membershipTrigger:{
    enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean;ownerCanSelect:boolean
   }
+  postLedger:{exists:boolean;select:boolean;insert:boolean;update:boolean;delete:boolean}
+  canExecutePhysicalReserve:boolean
 };
 const OBJECTS={
  original:"clean.fids_query_response",
@@ -91,6 +93,14 @@ export const G5A_OWNER_SERIAL_CATALOG_SQL_V39=[
 ].join(" ");
 export const G5A_OWNER_SERIAL_USAGE_SQL_V39=
  "SELECT has_sequence_privilege(current_user,$1,'USAGE') AS usable";
+export const G5A_PHYSICAL_RESERVE_EXECUTE_SQL_V39=[
+ "SELECT to_regprocedure(",
+ "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)')",
+ "IS NOT NULL AS exists,",
+ "has_function_privilege(current_user,",
+ "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)',",
+ "'EXECUTE') AS allowed"
+].join(" ");
 export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
  "SELECT",
  "(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=",
@@ -135,7 +145,9 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     canCreateDatabase:needed(r.can_create_database),
     tables:{} as DbFacts["tables"],
     serialUsage:{populationId:false,preSnapshotId:false},
-    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false}
+    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false},
+    postLedger:{exists:false,select:false,insert:false,update:false,delete:false},
+    canExecutePhysicalReserve:false
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
