@@ -6,8 +6,7 @@ on:
       - ".github/workflows/phase4-gate5-g5a-nov06-independent-final-audit.yml"
       - "scripts/v39_phase4_gate5_g5a_nov06_independent_real_cohort_readonly_audit.ts"
       - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
-      - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
-      - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts"
   push:
     branches: [main]
     paths:
@@ -52,7 +51,7 @@ jobs:
       - name: Offline 3-horizon, no-provider, no-write independent audit tests
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts tests/phase4_gate5_g5a_nov06_full_shift_no_paid_pr_v39.test.ts
           echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0'
   audit-independent:
     name: audit-independent
