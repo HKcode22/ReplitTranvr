@@ -1,0 +1,9 @@
+# Nov 4 — real PostgreSQL16 independent reader with five final audit SQL queries
+
+**No provider, no production writes, no paid release.** The source→PRE and POST pipelines have passing disposable restricted-writer rehearsals (PRs #395 and #397). The dedicated future Nov7 read-only auditor installer and manual protected real-role verifier merged as PR #398, but the owner has not supplied any resulting live credential installation/readback.
+
+This further no-provider test creates a distinct PostgreSQL16 disposable database with actual B0062 + staged V0076/V0077/V0078 schema and a real login named `p4_g5_g5a_nov07_readonly_20261105`. It grants only CONNECT, clean schema USAGE and SELECT on the nine necessary tables. It explicitly denies CREATE schema/DB and INSERT/UPDATE/DELETE/TRUNCATE on each table.
+
+Inside `REPEATABLE READ READ ONLY` as **that restricted login, not the superuser**, the test executes the **exact** final auditor queries from the existing Nov7 production modules: source V0076/V0077 custody, timely PRE, normalized population, POST aggregate and unit budget. Parameters derive from the exact already frozen Nov7 JSON SHA256 and three deterministic POST reservation IDs. No future cohort rows are inserted, so successful results are valid empty-cohort shapes `[0,0,1,0,0]`, not evidence of flight observations. This catches SQL syntax, table privilege, relation/schema drift and parameter type errors independently of unit mocks before any paid arming.
+
+The operator's separate protected environment secret has not been installed or confirmed from this test. The future Nov7 paid source/POST/audit activation PR #394 stays **unmerged** until actual owner setup and protected real-role SQL-readiness passes. No Cloudflare, Replit scheduled action, automatic paid dispatch, V0076 resets, late T24 backfill or scientific PASS.

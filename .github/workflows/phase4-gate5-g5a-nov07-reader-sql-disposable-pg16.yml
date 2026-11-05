@@ -1,0 +1,69 @@
+name: Phase4 Gate5 G5A Nov7 Audit Reader Real SQL Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-reader-sql-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_reader_sql_disposable_pg16.ts"
+      - "scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts"
+      - "scripts/v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation.ts"
+      - "data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-nov07-reader-sql-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_g5a_nov07_reader_sql_disposable_pg16.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  reader-sql-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bootstrap disposable B0062 and exact staged V0076/77/78
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test "${V39_DATABASE_RUNTIME_URL}" = "${DATABASE_URL}"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${P4_G5_SOURCE_OWNER_DATABASE_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${P4_G5_G5A_NOV07_AUDIT_DATABASE_URL:-}"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -1 -v ON_ERROR_STOP=1 -f migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+      - name: Check exact Nov7 5-query independent audit on real restricted PG16
+        run: |
+          set -Eeuo pipefail
+          node --import tsx scripts/v39_phase4_gate5_g5a_nov07_reader_sql_disposable_pg16.ts
+          echo "PROVIDER_CALLS=0 PRODUCTION_WRITES=0 SCIENCE_PASS=NO"
