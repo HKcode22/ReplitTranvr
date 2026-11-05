@@ -34,7 +34,7 @@ const PATH=".github/workflows/phase4-gate5-g5a-nov06-wsss-real-post.yml";
 export const G5A_POST_CRONS_V39=["10 9 6 11 *","22 9 6 11 *",
  "37 9 6 11 *","52 9 6 11 *"] as const;
 const PROOF_DEADLINE="2026-11-06T10:25:00.000Z";
-const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261106_FROZEN_SOURCE_GRID.json";
+const MANIFEST="data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json";
 const FROM="2026-11-06T08:00:00.000Z",TO="2026-11-06T12:00:00.000Z";
 const POSTS=["2026-11-06T10:40:00.000Z","2026-11-06T11:10:00.000Z",
  "2026-11-06T11:40:00.000Z"] as const;
