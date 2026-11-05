@@ -43,6 +43,36 @@ const REPO="HKcode22/ReplitTranvr";
 const NAME="Phase4 Gate5 G5A Nov6 WSSS Real Prospective GitHub Owner";
 const WORKFLOW_PATH=".github/workflows/phase4-gate5-g5a-nov06-real-wsss-prospective-owner.yml";
 const MANIFEST_PATH="data-collection/phase4/GATE5_G5A_WSSS_20261106_0900Z_FROZEN_SOURCE_GRID.json";
+/** Refuse a second paid GET unless the first V0077 original has an
+ * identity-qualified, truly before-cutoff PRE candidate. Read-only SQL. */
+export const G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39=[
+ "SELECT count(DISTINCT p.analytic_identity_id)::int AS eligible_asof",
+ "FROM clean.flight_population p",
+ "JOIN clean.fids_query_response f ON f.population_query_id=p.population_query_id",
+ "AND f.response_hash=p.response_hash",
+ "LEFT JOIN clean.flight_snapshots first_t ON",
+ "first_t.frame_hash=$2 AND first_t.horizon='T-24h'",
+ "AND first_t.prediction_state='PRE_DEPARTURE'",
+ "AND first_t.flight_instance_id=p.analytic_identity_id",
+ "AND first_t.created_at<=first_t.prediction_cutoff_utc",
+ "WHERE p.population_query_id=$1::uuid",
+ "AND p.population_role='requested_airport_primary'",
+ "AND p.scope_classification IN ('confirmed_core','unknown')",
+ "AND p.codeshare_resolution_status IN",
+ "('confirmed_operating_leg','g5a_conditional_operator_composite_no_native_id')",
+ "AND p.canonical_flight_instance_id ~ '^leg:g5a:[a-f0-9]{64}$'",
+ "AND p.dep_scheduled_utc IS NOT NULL",
+ "AND p.available_at<=CASE",
+ "WHEN $3='T-24h' THEN p.dep_scheduled_utc-interval '24 hours'",
+ "WHEN $3='T-6h' THEN first_t.selected_t_milestone_utc-interval '6 hours'",
+ "WHEN $3='T-90m' THEN first_t.selected_t_milestone_utc-interval '90 minutes'",
+ "ELSE NULL END",
+ "AND f.available_at<=CASE",
+ "WHEN $3='T-24h' THEN p.dep_scheduled_utc-interval '24 hours'",
+ "WHEN $3='T-6h' THEN first_t.selected_t_milestone_utc-interval '6 hours'",
+ "WHEN $3='T-90m' THEN first_t.selected_t_milestone_utc-interval '90 minutes'",
+ "ELSE NULL END"
+].join(" ");
 const PROTOCOL_PATH="data-collection/phase4/2026-11-03_G5A_PROSPECTIVE_PROVIDER_OBSERVABLE_PROTOCOL_AMENDMENT.md";
 const AUTH_INTENT="WSSS_NOV06_0900Z_G5A_ONE_PROSPECTIVE_THREE_HORIZON_18_UNIT_MAX";
 /** Actual Plan f.8 §5.1 OpenAPI v1.15.3.0 documentary bytes pin (Sep1).
@@ -327,6 +357,7 @@ export async function main(){
  };
  let successful=0,attempted=0,unknown=0,preCreated=0,preExisting=0;
  let firstSourceHasQualifiedOperatingIdentity=false;
+ let firstStoredSourceQueryId:string|null=null;
  await db.connect();
  const dbw={query:(sql:string,args?:readonly unknown[])=>
   db.query(sql,args as unknown[]|undefined)};
@@ -615,8 +646,7 @@ export async function main(){
      }));
     }else{
      successful++;
-     if(sourceOrdinal===0)firstSourceHasQualifiedOperatingIdentity=
-      one.flightInstanceIds.length>0;
+     if(sourceOrdinal===0)firstStoredSourceQueryId=one.populationQueryId;
      console.log(JSON.stringify({
       status:"G5A_ORIGINAL_AND_OPERATING_POPULATION_V0077_COMMITTED",
       horizon:h,queryIndex:entry.queryIndex,
@@ -636,6 +666,20 @@ export async function main(){
    }
    await readOnlyHealthProbe();
    await tryPre();
+   if(sourceOrdinal===0&&firstStoredSourceQueryId){
+    const check=await db.query(G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39,
+     [firstStoredSourceQueryId,manifestSha,h]);
+    const n=Number(check.rows[0]?.eligible_asof);
+    if(check.rows.length!==1||!Number.isSafeInteger(n)||n<0)
+     hold("FIRST_SOURCE_ASOF_IDENTITY_READBACK");
+    firstSourceHasQualifiedOperatingIdentity=n>0;
+    console.log(JSON.stringify({
+     status:"G5A_FIRST_SOURCE_ASOF_PRE_ELIGIBILITY_VERIFIED",
+     horizon:h,eligibleAsOfOperatingKeys:n,
+     additionalPaidSourceAllowed:n>0,providerCallsFromAudit:0,
+     databaseWritesFromAudit:0,scientificGate5Passed:false
+    }));
+   }
   }
   await wait(ms(owner.entries[owner.entries.length-1].cutoffUtc)+1500);
   await readOnlyHealthProbe();

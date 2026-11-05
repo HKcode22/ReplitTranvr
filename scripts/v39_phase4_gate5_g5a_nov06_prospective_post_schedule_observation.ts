@@ -268,6 +268,25 @@ export async function verifyG5APostSourceLedgerAtCommitV39(
     !Number.isFinite(reserved)||reserved>retrieved||reserved>stored)
    hold("POST_LEDGER_NOT_COMMITTED_BEFORE_SOURCE");
 }
+/** POST must not pay for a cohort with no SAME physical key across all
+ * three genuinely committed pre-cutoff horizons, on the SAME frozen T.
+ * Absence => fail closed/unknown; do not retrofit or pay for outcomes. */
+export const G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39=[
+ "SELECT count(*)::int AS three_horizon_linked_flights FROM (",
+ "SELECT s.flight_instance_id",
+ "FROM clean.flight_snapshots s",
+ "WHERE s.frame_hash=$1",
+ "AND s.prediction_state='PRE_DEPARTURE'",
+ "AND s.horizon IN ('T-24h','T-6h','T-90m')",
+ "AND s.flight_instance_id ~ '^leg:g5a:[a-f0-9]{64}$'",
+ "AND s.fids_response_hash IS NOT NULL",
+ "AND s.selected_t_milestone_utc IS NOT NULL",
+ "AND s.created_at<=s.prediction_cutoff_utc",
+ "GROUP BY s.flight_instance_id",
+ "HAVING count(DISTINCT s.horizon)=3",
+ "AND count(DISTINCT s.selected_t_milestone_utc)=1",
+ ") qualified"
+].join(" ");
 export const G5A_POST_AGGREGATE_AUDIT_SQL_V39=`
 SELECT pre.horizon,
  count(*)::int AS expected_pre,
@@ -377,6 +396,21 @@ export async function main(){
     verifiedT24OnTimePRE:priorEvidence.pre,
     postPaidReservationsCreated:0,providerCalls:0,
     completeThreeHorizonScience:false,scientificGate5Passed:false
+   }));
+   return;
+  }
+  // A T24-only source/PRE success is insufficient for meaningful
+  // three-horizon outcome spending if T6/T90 failed or identity drifted.
+  const complete=await db.query(G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39,
+   [manifestSha]);
+  const common=Number(complete.rows[0]?.three_horizon_linked_flights);
+  if(complete.rows.length!==1||!Number.isSafeInteger(common)||common<0)
+   hold("THREE_HORIZON_PRE_READBACK_INVALID");
+  if(common===0){
+   console.log(JSON.stringify({
+    status:"G5A_POST_SKIPPED_NO_COMMON_THREE_HORIZON_PRE_NO_PROVIDER",
+    matchedThreeHorizonOperatingKeys:0,postPaidReservationsCreated:0,
+    providerCalls:0,databaseWrites:0,scientificGate5Passed:false
    }));
    return;
   }

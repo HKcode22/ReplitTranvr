@@ -28,7 +28,24 @@ describe("Gate5 real ID-less incident: finite pre-spend safeguards",()=>{
   expect(stop).toBeGreaterThan(0);
   expect(reserve).toBeGreaterThan(stop);
   expect(owner).toContain("sourceOrdinal===0");
-  expect(owner).toContain("one.flightInstanceIds.length>0");
+  expect(owner).toContain("G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39");
+  expect(owner).toContain("firstStoredSourceQueryId=one.populationQueryId");
+  expect(owner).toContain("eligibleAsOfOperatingKeys:n");
+  expect(owner).not.toContain("one.flightInstanceIds.length>0");
+ });
+ it("POST refuses paid requests without one linked operating identity in ALL three on-time PRE",()=>{
+  const post=readFileSync(
+   "scripts/v39_phase4_gate5_g5a_nov06_prospective_post_schedule_observation.ts","utf8");
+  for(const required of [
+   "G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39",
+   "s.frame_hash=$1",
+   "s.created_at<=s.prediction_cutoff_utc",
+   "count(DISTINCT s.horizon)=3",
+   "count(DISTINCT s.selected_t_milestone_utc)=1",
+   "G5A_POST_SKIPPED_NO_COMMON_THREE_HORIZON_PRE_NO_PROVIDER"
+  ])expect(post).toContain(required);
+  expect(post.indexOf("G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39,"))
+   .toBeLessThan(post.indexOf("reserveG5APostSlotDbV39(db,manifestSha,cohortId,i)"));
  });
  it("identity matching is prospectively opt-in; retrospective Nov6 remains inert",()=>{
   const source=readFileSync(

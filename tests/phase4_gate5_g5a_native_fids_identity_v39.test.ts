@@ -172,4 +172,37 @@ describe("G5A provider FIDS native identity, prospectively enabled only",()=>{
    expect(paidFetches).toBe(0);
   }
  });
+ it("duplicate positive native provider IDs are not atomically lost after a paid original",async()=>{
+  const p=base(),rows:PopulationRow[]=[];
+  const data=[
+   leg("2026-11-05T02:20:00.000Z","NATIVE-SAME-ID"),
+   leg("2026-11-05T02:40:00.000Z","NATIVE-SAME-ID")
+  ];
+  const result=await fetchFidsPopulation(p,{
+   fetchAirport:async()=>({departures:data,arrivals:[]}),
+   persist:async(_q,r)=>{rows.push(...r);return r.length},
+   now:()=>new Date("2026-11-04T01:00:00.000Z")
+  });
+  expect(result?.persistedPopulationRows).toBe(2);
+  expect(result?.flightInstanceIds).toEqual([]);
+  expect(rows).toHaveLength(2);
+  expect(new Set(rows.map(x=>x.analyticIdentityId)).size).toBe(2);
+  expect(rows.every(x=>x.canonicalFlightInstanceId===null)).toBe(true);
+  expect(rows.every(x=>x.codeshareResolutionStatus===
+   "g5a_native_id_duplicate_ambiguous")).toBe(true);
+ });
+ it("duplicated unresolved provider-ID entries are retained individually but ineligible",async()=>{
+  const p=base(),rows:PopulationRow[]=[];
+  const unresolved={...leg("2026-11-05T02:20:00.000Z","MARKETING-ALIAS"),
+   codeshareStatus:"IsCodeshared"};
+  const result=await fetchFidsPopulation(p,{
+   fetchAirport:async()=>({departures:[unresolved,unresolved],arrivals:[]}),
+   persist:async(_q,r)=>{rows.push(...r);return r.length}
+  });
+  expect(result?.persistedPopulationRows).toBe(2);
+  expect(new Set(rows.map(x=>x.analyticIdentityId)).size).toBe(2);
+  expect(rows.every(x=>x.canonicalFlightInstanceId===null)).toBe(true);
+  expect(rows.every(x=>x.codeshareResolutionStatus===
+   "g5a_duplicate_unresolved_identity_ambiguous")).toBe(true);
+ });
 });
