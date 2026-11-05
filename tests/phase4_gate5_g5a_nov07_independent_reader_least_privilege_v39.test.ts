@@ -41,5 +41,14 @@ describe("Gate5 Nov7 independent auditor no-provider release discipline",()=>{
   expect(w).toContain("P4_G5_G5A_NOV07_AUDIT_DATABASE_URL");
   expect(w).toContain('V39_PHASE6_PROCESS_ARMED: "0"');
   expect(w).toContain("providerCalls");
+  const script=readFileSync("scripts/v39_phase4_gate5_g5a_nov07_audit_reader_readiness_no_provider.ts","utf8");
+  for(const req of [
+    "G5A_SOURCE_AUDIT_SQL_V39","G5A_PRE_AUDIT_SQL_V39",
+    "G5A_POPULATION_AUDIT_SQL_V39","G5A_POST_AGGREGATE_AUDIT_SQL_V39",
+    "postReservationUuidV39","UNREVIEWED_FROZEN_GRID",
+    "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+    "readOnlyAuditQueryTemplatesVerified:5"
+  ])expect(script).toContain(req);
+  expect(script).not.toContain("fetchFidsAirport(");
  });
 });
