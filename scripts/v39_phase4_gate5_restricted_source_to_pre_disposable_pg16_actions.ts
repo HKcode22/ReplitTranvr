@@ -21,6 +21,9 @@ import {auditP4G5HorizonPreexpiryV39} from
  "../server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39";
 
 const URL="postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable";
+const WRITER="g5a_disposable_exact_source_writer";
+const WRITER_URI="postgresql://"+WRITER+
+ ":synthetic_pg16_test_only@localhost:5432/v39_ci?sslmode=disable";
 const sha=(x:string)=>createHash("sha256").update(x).digest("hex");
 const hex=(x:string)=>x.repeat(64);
 const iso=(ms:number)=>new Date(ms).toISOString();
@@ -29,14 +32,15 @@ function context(){
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
    !["pull_request","push"].includes(e.GITHUB_EVENT_NAME??"")||
    e.GITHUB_RUN_ATTEMPT!=="1"||
-   e.GITHUB_WORKFLOW!=="Phase4 Gate5 V0078 Repeat FIDS Disposable PG16"||
-   e.GITHUB_JOB!=="v0078-repeat-disposable-pg16"||
+   e.GITHUB_WORKFLOW!=="Phase4 Gate5 Restricted Source PRE Disposable PG16"||
+   e.GITHUB_JOB!=="restricted-source-pre-disposable-pg16"||
    e.DATABASE_URL!==URL||e.V39_DATABASE_RUNTIME_URL!==URL||
    !!e.AERODATABOX_API_KEY||!!e.RAPIDAPI_KEY||
    !!e.GATE05_AUTOMATION_DATABASE_URL)
   throw Error("P4_G5_SOURCE_PRE_DISPOSABLE_CONTEXT_HOLD");
 }
 let lastSyntheticStage="START";
+let restrictedClient:pg.Client|null=null;
 export async function main(){
  context();
  // Pick a future UTC minute boundary with enough real lead for source and
@@ -182,7 +186,7 @@ export async function main(){
    }
   };
   lastSyntheticStage="PRE_WRITER";
-  const wrote=await persistP4G5ReviewedPreForCohortV39(sql,scope,permit);
+  const wrote=await persistP4G5ReviewedPreForCohortV39(restrictedClient!,scope,permit);
   if(wrote.horizon!=="T-24h"||
      wrote.newlyPersistedRows!==1||wrote.expectedSourceQualifiedRows!==1||
      wrote.otherHorizonsUntouched!==true||
@@ -263,7 +267,8 @@ export async function main(){
    await sql.query("ROLLBACK").catch(()=>undefined);
   }
   console.log(JSON.stringify({
-   status:"P4_G5_V0078_REPEAT_FIDS_ORIGINALS_TO_REAL_PRE_PG16_PASS",
+   status:"P4_G5_G5A_RESTRICTED_SOURCE_V0077_PRE_DISPOSABLE_PG16_PASS",
+    sourceAndPreWrittenByExactRestrictedRole:true,fullTableMembershipRead:false,
    originalReceipts:3,sourceHorizon:"T-24h",timelyPreRows:1,
    threeOriginalsSameProviderRecordAndCutoff:true,
    repeatedProviderIdAtSameCutoffSchemaSupportProven:true,
@@ -276,11 +281,12 @@ export async function main(){
    phase5FreezeAuthorized:false,phase6Authorized:false
   }));
  }finally{
+  if(restrictedClient)await restrictedClient.end().catch(()=>undefined);
   await sql.end().catch(()=>undefined);
   await getV39Pool().end().catch(()=>undefined);
  }
 }
-if(process.argv[1]?.endsWith("v39_phase4_gate5_v0078_repeat_source_to_pre_disposable_pg16_actions.ts"))
+if(process.argv[1]?.endsWith("v39_phase4_gate5_restricted_source_to_pre_disposable_pg16_actions.ts"))
  void main().catch((error:unknown)=>{
   const e=error as {message?:unknown;code?:unknown;constraint?:unknown};
   const reason=typeof e?.message==="string"?e.message:"UNCLASSIFIED_ERROR";
