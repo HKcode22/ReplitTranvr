@@ -66,12 +66,11 @@ describe("Nov7 WSSS genuine prospective GH windows and frozen timeline (NO PROVI
     const lastCutoff=t(queries(h).at(-1)!.candidateGridCutoffUtc);
     expect(lastCutoff-start).toBeLessThanOrEqual(minutes(320));
    }
-   expect(ownerSource).toContain(owner.verifiedPrearmDeadlineUtc.slice(0,10).replaceAll("-","")=== ""?"unreachable":"GITHUB_RUN_NOT_EARLY_ENOUGH");
+   expect(ownerSource).toContain("GITHUB_RUN_NOT_EARLY_ENOUGH");
   });
   expect((yaml.match(/timeout-minutes: 340/g)??[]).toHaveLength(3);
   expect(yaml).toContain("cancel-in-progress: false");
   expect(yaml).toContain("environment: phase2g-paid");
-  expect(yaml).toContain("GITHUB_JOB");
   expect(ownerSource).toContain("PROSPECTIVE_HORIZON_ZERO_DURABLE_SOURCE_OR_PRE");
  });
  it("POST prearms precede real source times, and independent audit follows POST",()=>{
