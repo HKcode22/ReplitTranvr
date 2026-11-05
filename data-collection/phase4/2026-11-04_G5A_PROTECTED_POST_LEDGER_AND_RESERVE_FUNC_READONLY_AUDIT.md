@@ -1,0 +1,11 @@
+# November 4 — protected GitHub source-writer POST-ledger and reservation-function readiness
+
+**Status: purely READ ONLY; no provider and no production permission mutation.**
+
+After the Nov4 T24 FIDS persistence failed due a missing AFTER INSERT membership trigger permission, the owner installed the narrow fix successfully. Real authenticated GitHub read-only run `41947550977` confirmed actual protected writer membership INSERT + conflict-key column SELECT plus both serial sequence USAGE flags. This resolved that specific blocker, not the entire future source/PRE/POST chain.
+
+A further **unverified code path** exists: `scripts/v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation.ts` reserves each separate immutable POST attempt in `clean.adb_rest_attempt_ledger` (`SELECT` prior + `INSERT ... RETURNING`); the initial source owner also executes `clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)`. Neither privilege was individually verified by the earlier eight-table protected catalog audit. The preexisting reviewed Post-ledger one-time grant script used SELECT+INSERT only, but historical attestation is **not** a current authenticated role readback.
+
+The enhanced protected GitHub **READ ONLY** role check now inspects the actual source-writer's POST ledger table existence, SELECT, INSERT, UPDATE/DELETE absence, and exact reservation-function EXECUTE. It emits **sanitized booleans only** and fails closed when either paid path is not authorized. The protected source writer and independent audit reader remain different roles; the previous independent reader's excessive CREATE privilege is a separate HOLD that should be disclosed, not hidden by a positive source-writer result. Unit tests exercise every negative privilege flag, source/POST denied paths and zero provider/database-write counters.
+
+**Release discipline:** no paid rearm, production DB GRANT, ledger reset, original source backfill, secret rotation, or claims of provider success from this catalog audit. Next is a separate already-running **restricted-login real PG16 synthetic source→V0077→PRE** rehearsal PR #395, then a reviewed distinct Nov7 GitHub source/POST/audit activation candidate PR #394 only if every required safety issue is resolved. The time plan is aspirational, not a reason to bypass science.

@@ -26,6 +26,8 @@ type DbFacts={
   membershipTrigger:{
    enabled:boolean;securityInvoker:boolean;ownerCanInsert:boolean;ownerCanSelect:boolean
   }
+  postLedger:{exists:boolean;select:boolean;insert:boolean;update:boolean;delete:boolean}
+  canExecutePhysicalReserve:boolean
 };
 const OBJECTS={
  original:"clean.fids_query_response",
@@ -91,6 +93,14 @@ export const G5A_OWNER_SERIAL_CATALOG_SQL_V39=[
 ].join(" ");
 export const G5A_OWNER_SERIAL_USAGE_SQL_V39=
  "SELECT has_sequence_privilege(current_user,$1,'USAGE') AS usable";
+export const G5A_PHYSICAL_RESERVE_EXECUTE_SQL_V39=[
+ "SELECT to_regprocedure(",
+ "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)')",
+ "IS NOT NULL AS exists,",
+ "has_function_privilege(current_user,",
+ "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)',",
+ "'EXECUTE') AS allowed"
+].join(" ");
 export const G5A_MEMBERSHIP_TRIGGER_CATALOG_SQL_V39=[
  "SELECT",
  "(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=",
@@ -135,7 +145,9 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
     canCreateDatabase:needed(r.can_create_database),
     tables:{} as DbFacts["tables"],
     serialUsage:{populationId:false,preSnapshotId:false},
-    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false}
+    membershipTrigger:{enabled:false,securityInvoker:true,ownerCanInsert:false,ownerCanSelect:false},
+    postLedger:{exists:false,select:false,insert:false,update:false,delete:false},
+    canExecutePhysicalReserve:false
   };
   for(const [key,table] of Object.entries(OBJECTS)){
    const result=await db.query(PRIVILEGE_SQL,[table]);
@@ -180,6 +192,21 @@ async function readOne(url:string,side:"READER"|"OWNER"):Promise<DbFacts>{
    ownerCanInsert:membership.rows[0].owner_can_insert,
    ownerCanSelect:membership.rows[0].owner_can_select
   };
+  const ledger=await db.query(PRIVILEGE_SQL,["clean.adb_rest_attempt_ledger"]);
+  const l=ledger.rows[0];
+  if(ledger.rows.length!==1||[
+   l?.exists,l?.can_select,l?.can_insert,l?.can_update,l?.can_delete
+  ].some(v=>typeof v!=="boolean"))
+   throw Error("P4_G5_POST_LEDGER_CATALOG_INVALID_HOLD");
+  facts.postLedger={
+   exists:l.exists,select:l.can_select,insert:l.can_insert,
+   update:l.can_update,delete:l.can_delete
+  };
+  const fn=await db.query(G5A_PHYSICAL_RESERVE_EXECUTE_SQL_V39);
+  if(fn.rows.length!==1||typeof fn.rows[0]?.exists!=="boolean"||
+     typeof fn.rows[0]?.allowed!=="boolean")
+   throw Error("P4_G5_RESERVE_FUNCTION_CATALOG_INVALID_HOLD");
+  facts.canExecutePhysicalReserve=fn.rows[0].exists&&fn.rows[0].allowed;
   await db.query("ROLLBACK");tx=false;
   return facts;
  }catch(e){failure(side,e)}
@@ -218,6 +245,10 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
  const ownerMembershipPath=owner!==null&&owner.membershipTrigger.enabled&&
   (!owner.membershipTrigger.securityInvoker||
     (owner.membershipTrigger.ownerCanInsert&&owner.membershipTrigger.ownerCanSelect));
+ const postLedger=owner!==null&&owner.postLedger.exists&&
+  owner.postLedger.select&&owner.postLedger.insert&&
+  !owner.postLedger.update&&!owner.postLedger.delete;
+ const reserveFunction=owner?.canExecutePhysicalReserve===true;
  const ownerDistinct=reader!==null&&owner!==null&&
   owner.dbName===reader.dbName&&owner.roleName!==reader.roleName;
  const rolesSafe=reader!==null&&owner!==null&&
@@ -240,6 +271,10 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   sourceOwnerCanSelectMembership:
    owner?.membershipTrigger.ownerCanSelect===true,
   sourceOwnerMembershipTriggerHasEffectiveWritePath:ownerMembershipPath,
+  sourceOwnerCanSelectPostLedger:owner?.postLedger.select===true,
+  sourceOwnerCanInsertPostLedger:owner?.postLedger.insert===true,
+  sourceOwnerPostLedgerMinimalACL:postLedger,
+  sourceOwnerCanExecuteCommittedReservation:reserveFunction,
   separateSameDatabaseReaderAndOwnerRoles:ownerDistinct,
   neitherRoleHasSchemaOrDbAdminPrivilege:rolesSafe,
   // Disaggregated, non-identifying flags: distinguishes an elevated audit
@@ -262,6 +297,8 @@ export function classifyP4G5GithubOwnerReadinessV39(input:SourceReadinessInputV3
   !sourceWriter?"HOLD_GITHUB_SOURCE_OWNER_LEAST_PRIVILEGE_ACL":
   !ownerSequences?"HOLD_GITHUB_SOURCE_OWNER_SEQUENCE_USAGE":
   !ownerMembershipPath?"HOLD_GITHUB_SOURCE_OWNER_MEMBERSHIP_TRIGGER_WRITE":
+  !reserveFunction?"HOLD_GITHUB_SOURCE_OWNER_RESERVATION_FUNCTION_EXECUTE":
+  !postLedger?"HOLD_GITHUB_SOURCE_OWNER_POST_LEDGER_ACL":
   !ownerDistinct||!rolesSafe?"HOLD_GITHUB_DB_ROLE_SEPARATION":
    "TECHNICAL_CREDENTIALS_CANDIDATE_ONLY_SCIENCE_RELEASE_HOLD";
  return{
