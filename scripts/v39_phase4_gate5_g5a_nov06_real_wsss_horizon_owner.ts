@@ -365,6 +365,11 @@ export async function main(){
    // other scheduled/manual backups from competing as physical delegates.
    if(h==="T-24h"&&
       String(incumbent.rows[0].github_run_id)==="41972339194"){
+    // Session advisory locks are not safe with transaction-pooling proxies.
+    // Never log the protected database URL or hostname.
+    const writerHost=new URL(e.P4_G5_SOURCE_OWNER_DATABASE_URL!).hostname;
+    if(/-pooler(?:\.|$)|pgbouncer/i.test(writerHost))
+     hold("CANCELLED_T24_REQUIRES_DIRECT_POSTGRES_SESSION");
     const lock=await db.query(
      "SELECT pg_try_advisory_lock(76,60906) AS held");
     if(lock.rows.length!==1||lock.rows[0].held!==true){
