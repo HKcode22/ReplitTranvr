@@ -21,7 +21,7 @@ describe("future Nov6 14Z G5A true 3-horizon paid cohort, GH-only",()=>{
   expect(read(root)).toBe(JSON.stringify(obj,null,2)+"\n");
   expect(obj.cohortId).toBe("WSSS_G5A_20261106_1400Z");
   expect(obj.grid.serviceWindowStartUtc).toBe("2026-11-06T14:00:00.000Z");
-  expect(obj.grid.assignmentFrozenAtUtc).toBe("2026-11-05T10:00:00.000Z");
+  expect(obj.grid.assignmentFrozenAtUtc).toBe("2026-11-05T11:30:00.000Z");
   expect(obj.grid.githubPrearmLeadMinutes).toBe(15);
   expect(grid.queries).toHaveLength(9);
   expect(grid.expectedMaxApiUnits).toBe(18);
