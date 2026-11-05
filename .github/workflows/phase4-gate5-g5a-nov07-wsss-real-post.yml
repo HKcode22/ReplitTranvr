@@ -9,6 +9,7 @@ on:
       - "server/lib/disruption/fidsCensus_v3.ts"
       - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
       - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - "server/lib/disruption/fidsCensus_v3.ts"
       - "tests/phase4_gate5_g5a_post_source_v39.test.ts"
       - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
   workflow_dispatch:
   schedule:
     # Nov7 02:00Z cohort POST: Fri Nov6 7:40,8:10,8:40 PM PST.
@@ -56,7 +58,7 @@ jobs:
       - name: Frozen G5A POST and source reservation guard tests, no provider
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_post_source_v39.test.ts tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_post_source_v39.test.ts tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts
           echo 'PROVIDER_CALLS=0 DATABASE_CONTENT_WRITES=0 PAID_DISPATCH_DISABLED_ON_PR_PUSH'
   post-source:
     name: post-source
