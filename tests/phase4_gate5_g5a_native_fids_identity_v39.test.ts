@@ -101,4 +101,75 @@ describe("G5A provider FIDS native identity, prospectively enabled only",()=>{
   expect(historical.row.codeshareResolutionStatus)
    .toBe("context_departure_origin_unverified");
  });
+ it("real FIDS-shaped IsOperator WITHOUT id can enter only explicit future composite frame",async()=>{
+  const p=base();
+  p.g5aCompositeIdentityStudyStartUtc=new Date("2026-11-05T02:00:00.000Z");
+  const original=await one(p,leg("2026-11-05T02:20:00.000Z",null));
+  const retime=await one(p,leg("2026-11-05T02:40:00.000Z",null));
+  expect(original.row.analyticIdentityId).toBe(retime.row.analyticIdentityId);
+  expect(original.row.analyticIdentityId).toMatch(/^leg:g5a:[a-f0-9]{64}$/);
+  expect(original.row.canonicalFlightInstanceId).toBe(original.row.analyticIdentityId);
+  expect(original.row.codeshareResolutionStatus)
+   .toBe("g5a_conditional_operator_composite_no_native_id");
+  expect(original.row.codeshareResolutionStatus).not.toBe("confirmed_operating_leg");
+  expect(original.query.rawPayload).toHaveProperty(
+   "fidsRequestContract.g5aCompositeIdentityStudyStartUtc",
+   "2026-11-05T02:00:00.000Z");
+  const widened=base();
+  widened.g5aCompositeIdentityStudyStartUtc=p.g5aCompositeIdentityStudyStartUtc;
+  widened.serviceWindowStartUtc=new Date("2026-11-05T01:00:00.000Z");
+  widened.serviceWindowEndUtc=new Date("2026-11-05T05:00:00.000Z");
+  const post=await one(widened,leg("2026-11-05T03:40:00.000Z",null));
+  expect(post.row.analyticIdentityId).toBe(original.row.analyticIdentityId);
+ });
+ it("no-ID duplicate operator composites are BOTH censored, not silently collapsed",async()=>{
+  const p=base();
+  p.g5aCompositeIdentityStudyStartUtc=new Date("2026-11-05T02:00:00.000Z");
+  const rows:PopulationRow[]=[];
+  const result=await fetchFidsPopulation(p,{
+   fetchAirport:async()=>({departures:[
+    leg("2026-11-05T02:20:00.000Z",null),
+    leg("2026-11-05T02:40:00.000Z",null)
+   ],arrivals:[]}),
+   persist:async(_q,r)=>{rows.push(...r);return r.length},
+   now:()=>new Date("2026-11-04T01:00:00.000Z")
+  });
+  expect(result?.persistedPopulationRows).toBe(2);
+  expect(result?.flightInstanceIds).toHaveLength(0);
+  expect(rows).toHaveLength(2);
+  expect(rows.every(r=>r.canonicalFlightInstanceId===null)).toBe(true);
+  expect(rows.every(r=>r.codeshareResolutionStatus===
+   "g5a_composite_duplicate_ambiguous")).toBe(true);
+  expect(new Set(rows.map(r=>r.analyticIdentityId)).size).toBe(2);
+ });
+ it("marketing, unknown codeshare, foreign origin and missing frame never become ID-less operators",async()=>{
+  const p=base();
+  p.g5aCompositeIdentityStudyStartUtc=new Date("2026-11-05T02:00:00.000Z");
+  for(const flight of [
+   {...leg("2026-11-05T02:20:00.000Z",null),codeshareStatus:"IsCodeshared"},
+   {...leg("2026-11-05T02:20:00.000Z",null),codeshareStatus:"Unknown"},
+   {...leg("2026-11-05T02:20:00.000Z",null),departure:{
+     airport:{icao:"OMAA"},scheduledTime:{utc:"2026-11-05T02:20:00.000Z"}
+   }}
+  ]){
+   const x=await one(p,flight);
+   expect(x.row.canonicalFlightInstanceId).toBeNull();
+  }
+  const unarmed=await one(base(),leg("2026-11-05T02:20:00.000Z",null));
+  expect(unarmed.row.canonicalFlightInstanceId).toBeNull();
+ });
+ it("rejects composite activation outside explicit G5A and with an invalid frozen anchor BEFORE GET",async()=>{
+  for(const wrong of [
+   {...base(),g5aObservedScheduleProtocol:false,
+    g5aCompositeIdentityStudyStartUtc:new Date("2026-11-05T02:00:00.000Z")},
+   {...base(),g5aCompositeIdentityStudyStartUtc:new Date("bad-date")}
+  ]){
+   let paidFetches=0;
+   await expect(fetchFidsPopulation(wrong,{
+    fetchAirport:async()=>{paidFetches++;return {departures:[],arrivals:[]}},
+    persist:async()=>0
+   })).rejects.toThrow("FIDS_G5A_UNREVIEWED_COMPOSITE_IDENTITY_FRAME_HOLD");
+   expect(paidFetches).toBe(0);
+  }
+ });
 });
