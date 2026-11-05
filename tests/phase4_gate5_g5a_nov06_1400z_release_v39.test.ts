@@ -72,6 +72,11 @@ describe("future Nov6 14Z G5A true 3-horizon paid cohort, GH-only",()=>{
   expect(crons(read(aw)).every(x=>ctime(x)>time("2026-11-06T17:01:00.000Z"))).toBe(true);
   expect(read(audit)).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   expect(read(post)).toContain("G5A_POST_COMPLETE_THREE_HORIZON_PRE_SQL_V39");
+  // Do not rehydrate T−24h source after its 23h source-use window.
+  // The actual on-time PRE feature is the only permitted frozen baseline.
+  expect(read(post)).toContain("jsonb_array_elements(COALESCE(pre.features_json");
+  expect(read(post)).toContain("fids_departure_schedule_asof");
+  expect(read(post)).not.toContain("p.population_query_id::text=pre.population_query_id");
  });
  it("POST's cross-midnight Singapore local window exactly matches the frozen UTC interval",()=>{
   const local=utcIntervalToLocal(
