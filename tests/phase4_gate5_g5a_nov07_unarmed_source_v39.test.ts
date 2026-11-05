@@ -19,6 +19,24 @@ describe("G5A Nov7 future distinct prospective source (UNARMED)",()=>{
    .not.toBe(createHash("sha256").update(old).digest("hex"));
   expect(existsSync(workflowPath)).toBe(false);
  });
+ it("POST is distinct, unarmed, bound to real future cohort and no old paid schedule",()=>{
+  const post=read("scripts/v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation.ts");
+  const workflow=".github/workflows/phase4-gate5-g5a-nov07-wsss-real-post.yml";
+  expect(existsSync(workflow)).toBe(false);
+  expect(post).toContain(workflow);
+  expect(post).toContain("GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json");
+  expect(post).toContain('WSSS_G5A_20261107_0200Z');
+  for(const t of [
+    "2026-11-07T03:40:00.000Z","2026-11-07T04:10:00.000Z",
+    "2026-11-07T04:40:00.000Z","2026-11-07T05:01:00.000Z"
+  ])expect(post).toContain(t);
+  expect(post).toContain("G5A_PRIOR_T24_PROVENANCE_SQL_V39");
+  expect(post).toContain("G5A_POST_SKIPPED_MISSING_T24_SOURCE_OR_PRE_NO_PROVIDER");
+  for(const old of ["2026-11-05","20261105","NOV05_1400Z","2026-11-06"])
+    expect(post).not.toContain(old);
+  for(const c of ["10 2 7 11 *","22 2 7 11 *",
+    "37 2 7 11 *","52 2 7 11 *"])expect(post).toContain(c);
+ });
  it("source is not authorized by old T24/Nov5 GH events or old failed-owner handoff",()=>{
   const s=read(sourcePath);
   expect(s).toContain(workflowPath);
