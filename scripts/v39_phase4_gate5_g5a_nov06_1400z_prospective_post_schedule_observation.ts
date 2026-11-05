@@ -302,21 +302,22 @@ SELECT pre.horizon,
       (post.dep_scheduled_utc-baseline.dep_scheduled_utc))/60)<15)::int AS revision_lt15
 FROM (
  SELECT flight_instance_id,horizon,prediction_cutoff_utc,
-  selected_t_milestone_utc,population_query_id
+  selected_t_milestone_utc,population_query_id,features_json
  FROM clean.flight_snapshots
  WHERE frame_hash=$1 AND prediction_state='PRE_DEPARTURE'
   AND selected_t_milestone_utc IS NOT NULL
   AND flight_instance_id LIKE 'leg:g5a:%'
 ) pre
 LEFT JOIN LATERAL(
- SELECT p.dep_scheduled_utc
- FROM clean.flight_population p
- WHERE p.analytic_identity_id=pre.flight_instance_id
-  AND p.population_query_id::text=pre.population_query_id
-  AND p.fids_protocol_version='G5A-20261103-v1'
-  AND p.available_at<=pre.prediction_cutoff_utc
-  AND p.dep_scheduled_utc IS NOT NULL
- ORDER BY p.available_at DESC,p.id DESC LIMIT 1
+ -- Read the frozen PRE feature, not an original FIDS member after its
+ -- short source-use retention expires. Missing/malformed feature is UNKNOWN.
+ SELECT CASE WHEN elem->>'value' ~
+  '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+  THEN (elem->>'value')::timestamptz
+  ELSE NULL END AS dep_scheduled_utc
+ FROM jsonb_array_elements(COALESCE(pre.features_json,'[]'::jsonb)) elem
+ WHERE elem->>'name'='fids_departure_schedule_asof'
+ LIMIT 1
 ) baseline ON TRUE
 LEFT JOIN LATERAL(
  SELECT p.dep_scheduled_utc
