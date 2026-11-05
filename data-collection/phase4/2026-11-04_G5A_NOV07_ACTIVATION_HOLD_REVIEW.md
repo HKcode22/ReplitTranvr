@@ -19,6 +19,6 @@ WSSS departures `2026-11-07T02:00:00Z`–`03:00Z` = Fri Nov6 18:00–19:00 PST, 
 2. All exact-head CI tests, including future cron/date/intent alignment and no-provider source/POST/audit offline checks, complete successfully. A new source error cannot be hidden by a generic green scientific conclusion.
 3. The owner explicitly retains bounded paid review authority, lawful provider data-use/retention limitations and no backfill/missingness standards. Provider original success and actual billing remain unverified for this future cohort.
 4. No other live same-cohort owner or conflicting new 24-unit budget is active; original Nov5 cohort T24 is scientifically missing, and its future T6/T90/POST must continue to skip paid spending.
-5. Activation happens before the **genuine prearm cutoff** Thu Nov5 16:30Z? No — exact T24 frozen owner prearm deadline is **Nov6 00:30Z = Thu Nov5 16:30 PST**, but scheduled GH backups begin Thu Nov5 **13:47 PST**. Merge before first backup where practical. Never falsify Github job start or backfill.
+5. Activation must precede the future **scheduled first T24 prearm Thu Nov5 13:47 PST** to avoid another missed GitHub window. The hard verified T24 owner prearm deadline is **Nov6 00:30Z = Thu Nov5 16:30 PST**. Never falsify GitHub job start or backfill.
 
 This is a **review-stage proposal**, not a successful paid booking, collection or scientific PASS. Retain Thu Nov5 noon PST original-cohort independent audit as an honest INSUFFICIENT/HOLD. No Cloudflare, Replit AI Agent or timed Replit source collection.
