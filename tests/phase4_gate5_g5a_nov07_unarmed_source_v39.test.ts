@@ -38,6 +38,23 @@ describe("G5A Nov7 future distinct prospective source (UNARMED)",()=>{
   for(const c of ["10 2 7 11 *","22 2 7 11 *",
     "37 2 7 11 *","52 2 7 11 *"])expect(post).toContain(c);
  });
+ it("audit is read-only, bound to distinct future window, unarmed",()=>{
+  const audit=read("scripts/v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts");
+  const workflow=".github/workflows/phase4-gate5-g5a-nov07-independent-final-audit.yml";
+  expect(existsSync(workflow)).toBe(false);
+  expect(audit).toContain(workflow);
+  expect(audit).toContain("GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json");
+  expect(audit).toContain('WSSS_G5A_20261107_0200Z');
+  expect(audit).toContain("2026-11-07T05:10:00.000Z");
+  expect(audit).toContain("2026-11-07T09:00:00.000Z");
+  expect(audit).toContain("v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation");
+  for(const cron of ["12 5 7 11 *","18 5 7 11 *",
+    "24 5 7 11 *","30 5 7 11 *"])expect(audit).toContain(cron);
+  for(const old of ["2026-11-05","2026-11-06","20261105"])expect(audit).not.toContain(old);
+  expect(audit).toContain('endsWith("v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts")');
+  expect(audit).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  expect(audit).toContain("providerCalls:0,databaseWrites:0");
+ });
  it("source is not authorized by old T24/Nov5 GH events or old failed-owner handoff",()=>{
   const s=read(sourcePath);
   expect(s).toContain(workflowPath);
