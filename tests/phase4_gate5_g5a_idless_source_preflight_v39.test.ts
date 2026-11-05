@@ -28,7 +28,10 @@ describe("Gate5 real ID-less incident: finite pre-spend safeguards",()=>{
   expect(stop).toBeGreaterThan(0);
   expect(reserve).toBeGreaterThan(stop);
   expect(owner).toContain("sourceOrdinal===0");
-  expect(owner).toContain("one.flightInstanceIds.length>0");
+  expect(owner).toContain("G5A_FIRST_SOURCE_ASOF_ELIGIBILITY_SQL_V39");
+  expect(owner).toContain("firstStoredSourceQueryId=one.populationQueryId");
+  expect(owner).toContain("eligibleAsOfOperatingKeys:n");
+  expect(owner).not.toContain("one.flightInstanceIds.length>0");
  });
  it("identity matching is prospectively opt-in; retrospective Nov6 remains inert",()=>{
   const source=readFileSync(
