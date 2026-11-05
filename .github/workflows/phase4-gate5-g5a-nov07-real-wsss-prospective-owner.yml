@@ -8,6 +8,7 @@ on:
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
       - "data-collection/phase4/GATE5_G5A_WSSS_20261107_FROZEN_SOURCE_GRID.json"
       - "tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts"
+      - "tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts"
   push:
     branches: [main]
     paths:
@@ -78,7 +79,7 @@ jobs:
       - name: Prove GH source owner job admission is impossible offline
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_nov07_unarmed_source_v39.test.ts tests/phase4_gate5_g5a_nov07_frozen_cron_runtime_v39.test.ts
           echo 'PROVIDER_CALLS=0 DB_MUTATIONS=0 LIVE_OWNER_RELEASE=NO'
   owner-t24:
     name: owner-t24
