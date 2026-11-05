@@ -18,7 +18,7 @@ Code on [PR #404](https://github.com/HKcode22/ReplitTranvr/pull/404) introduces 
 
 The original V0076 source owner ID is retained for existing immutable reservation/V0077 SQL custody, while both the **original canceled run and the actual new delegate run** are explicitly logged in the recovered execution. Independent scientific auditing must preserve and verify the two-run delegation chain; never misstate the original canceled GitHub runner as the one physically issuing future HTTP requests.
 
-**Recovery not yet proven:** PR CI passing is necessary, not sufficient. A read-only production ledger check must prove the exact zero-spend preconditions; if any evidence is missing, STOP and classify the earlier T−24h path incomplete, rather than weakening checks or dispatching repeatedly. Do not start the new job while PR remains open/unreviewed or another delegate is active. GitHub `workflow_dispatch` is available only to a merged reviewed main workflow, not as a way to bypass a failed check.
+**Recovery not yet proven:** PR CI passing is necessary, not sufficient. A read-only production ledger check must prove the exact zero-spend preconditions; if any evidence is missing, STOP and classify the earlier T−24h path incomplete, rather than weakening checks or dispatching repeatedly. PR #404 was merged to main as `77f7b6e28db1288f88bbc17cd1ded4ffdaadeb76` after **5/5 exact-head CI success** (including V3.9 full offline safety); no paid job was dispatched by the merge itself. Do not start a new job if the production readback is HOLD, an existing delegate is active, or any required GitHub proof is missing. GitHub `workflow_dispatch` is available only to a merged reviewed main workflow, not as a way to bypass a failed check.
 
 ## Current scientific verdict
 
