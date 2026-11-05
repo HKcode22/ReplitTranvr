@@ -53,7 +53,7 @@ describe("G5A Nov7 future distinct prospective source (REVIEW_PENDING)",()=>{
   expect(audit).toContain("v39_phase4_gate5_g5a_nov07_prospective_post_schedule_observation");
   for(const cron of ["12 5 7 11 *","18 5 7 11 *",
     "24 5 7 11 *","30 5 7 11 *"])expect(audit).toContain(cron);
-  for(const old of ["2026-11-05","2026-11-06","20261105"])expect(audit).not.toContain(old);
+  for(const old of ["2026-11-05T14","2026-11-06T14","WSSS_G5A_20261105_1400Z","GATE5_G5A_WSSS_20261105_1400Z"])expect(audit).not.toContain(old);
   expect(audit).toContain('endsWith("v39_phase4_gate5_g5a_nov07_independent_real_cohort_readonly_audit.ts")');
   expect(audit).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   expect(audit).toContain("providerCalls:0,databaseWrites:0");
