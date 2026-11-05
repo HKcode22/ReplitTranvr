@@ -86,8 +86,9 @@ jobs:
           jq -ce 'if .status == "G5A_NOV07_INDEPENDENT_AUDIT_READER_READY_NO_PROVIDER"
                and .providerCalls == null
                and .flags.providerCalls == 0 and .flags.databaseWrites == 0
+               and .readOnlyAuditQueryTemplatesVerified == 5
                and .scientificGate5Passed == false
-               then {status,flags,tableReadCount,scientificGate5Passed}
+               then {status,flags,tableReadCount,readOnlyAuditQueryTemplatesVerified,scientificGate5Passed}
                else error("G5A_INDEPENDENT_READER_UNVERIFIED_RECEIPT_HOLD") end'             "${RUNNER_TEMP}/g5a-auditor.json" > "${RUNNER_TEMP}/g5a-safe-auditor.json"
           {
             printf '### Gate5 Nov7 independent reader least privilege check (NO provider)\n'
