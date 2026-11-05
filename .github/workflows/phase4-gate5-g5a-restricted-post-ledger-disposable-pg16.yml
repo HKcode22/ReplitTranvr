@@ -1,0 +1,85 @@
+name: Phase4 Gate5 Restricted POST Ledger Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-restricted-post-ledger-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_restricted_post_ledger_disposable_pg16_actions.ts"
+      - "server/lib/disruption/phase4Gate5AtomicBoundSourceV39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreWriter_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreStaging_v39.ts"
+      - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+      - "scripts/v39_phase4_gate5_g5a_source_owner_credential_once.ts"
+      - "scripts/v39_phase4_gate5_membership_owner_narrow_grant_once.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-g5a-restricted-post-ledger-disposable-pg16.yml"
+      - "scripts/v39_phase4_gate5_restricted_post_ledger_disposable_pg16_actions.ts"
+      - "server/lib/disruption/phase4Gate5AtomicBoundSourceV39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreWriter_v39.ts"
+      - "server/lib/disruption/phase4Gate5ScopedPreStaging_v39.ts"
+      - "server/lib/disruption/phase4Gate5HorizonPreexpiryReadOnly_v39.ts"
+permissions:
+  contents: read
+env:
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  NODE_ENV: test
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  V39_DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+jobs:
+  restricted-post-ledger-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bootstrap B0062 in disposable PG16 only
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test "${V39_DATABASE_RUNTIME_URL}" = "${DATABASE_URL}"
+          test -z "${AERODATABOX_API_KEY:-}${RAPIDAPI_KEY:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/apply_boot_migrations_v39.ts
+      - name: Install V0076 and V0077 only in disposable PG16
+        run: |
+          set -Eeuo pipefail
+          test ! -e migrations/current/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0077__phase4_gate5_original_fids_reservation_binding_v39.sql
+      - name: Stage V0078 only in this disposable PG16 database
+        run: |
+          set -Eeuo pipefail
+          test ! -e migrations/current/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+          psql "${DATABASE_URL}" -X -1 -v ON_ERROR_STOP=1 -f migrations/staged/V0078__phase4_gate5_fids_reobservation_uniqueness_v39.sql
+      - name: Prove immutable POST ledger, decoded original and normalized flight under restricted writer, no provider
+        run: |
+          set -Eeuo pipefail
+          node --import tsx scripts/v39_phase4_gate5_restricted_post_ledger_disposable_pg16_actions.ts
+          echo "PROVIDER_CALLS=0"
+          echo "PRODUCTION_WRITES=0"
+          echo "LIVE_PROVIDER_RELEASE=false"
+          echo "SCIENTIFIC_GATE5_PASS=false"
