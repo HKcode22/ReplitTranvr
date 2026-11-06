@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**November 6 POST PostgreSQL 57P01 failure + narrow tested recovery + independent-science risk register**](2026-11-06_G5A_POST_57P01_FAILURE_AND_PRE_OUTCOME_RECOVERY.md) — original POST run #42227608751 failed before first paid source due to unhandled idle-session disconnect; targeted PR #410 merged on main *after* all three PRE owners closed, regression tests 18/18 and unchanged frozen source grid, guarded replacement GH prearm requires read-only ledger=0 and final 36 PRE before dispatch. **Not a Gate5 scientific PASS.**
+
+
 - [**Learn Gate 5 step by step — 11 detailed code-reading lessons (November 6)**](learning-gate5/README.md) — actual source→PRE→POST→independent audit, 3/48/12 counts, clocks, GitHub owner/prearm, FIDS normalization/identity, V0076/V0077 atomic source custody, frozen-T as-of SQL, transactional PRE writer, two-hour schedule-revision watermark, independent audit, annotated TypeScript/SQL and practice problems. **Learning documentation only, no change to frozen main or live paid experiment.**
 
 
