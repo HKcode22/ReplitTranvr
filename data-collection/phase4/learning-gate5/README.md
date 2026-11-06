@@ -60,6 +60,10 @@ PREPARED -> ACTIVE DB owner for horizon, immutable 3 query slots
 
 ## Facts vs examples: our contract
 
+**Latest verified owner closeout (05:35 PST Nov 6):** GitHub run [#42193627043](https://github.com/HKcode22/ReplitTranvr/actions/runs/42193627043) `completed/success`; final T−90m log reports `exactOriginalBoundResponses=3`, `newCutoffSafePRE=12`, `sourceUnknownSlots=0`. This remains owner-log evidence; the last independently read-back cutoff audit was at 04:44 PST (2/2 due at that time). A new post-closeout database readback and POST plus independent outcome audit remain separate scientific checks.
+
+
+
 - **Measured in the user's Nov 6 read-only database audits:** T−24h and T−6h had 12 on-time distinct PRE each; a 04:44 PST T−90m read showed 2 out of 2 *due* cutoffs valid. GH owner logs subsequently showed third T−90m original committed. Later final totals require an actual closeout and readback, not inference.
 - **Illustrations:** fictional "Flight A" in these lessons exists only to make the math and code understandable. It is not a real airline/flight ID extracted from private original bytes.
 - **Limitations:** these source counts do not certify native identity for every row, lawful extended retention, actual aircraft wheels-off, ADS-B coverage, unbiased world-wide population sampling or scientific Gate 5 PASS.
