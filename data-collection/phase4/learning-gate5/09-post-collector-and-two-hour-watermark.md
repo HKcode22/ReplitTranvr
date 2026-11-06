@@ -149,6 +149,14 @@ A flight with no POST observation is **not "on time"** and must not enter a clea
 
 The source script prints `G5A_POST_FROZEN_WATERMARK_AGGREGATE_OBSERVED_NOT_GATE5_VERDICT`. It records slots, paid reservations, receipts, normalized rows, missing slots, watermark label counts and `strictGate5Passed:false`. The independent auditor later checks these from a separate role. **A schedule-revision experiment can be operationally successful without proving the original broader runway/airborne research target.**
 
+## Real Nov 6 incident: the PostgreSQL connection died while waiting
+
+The original POST GitHub owner [run #42227608751](https://github.com/HKcode22/ReplitTranvr/actions/runs/42227608751) began at approximately 05:42 PST and crashed at 05:43 PST with PostgreSQL `57P01` and an unhandled Node `pg.Client` `'error'` event. This was **before** 07:40 PST, so its POST loop had not reserved any paid source slot. The core issue was *infrastructure availability during a long wait*, not invalid mathematics in the 12 predeparture snapshots.
+
+Read [the exact incident and scientific risk checklist](../2026-11-06_G5A_POST_57P01_FAILURE_AND_PRE_OUTCOME_RECOVERY.md). In [PR #410](https://github.com/HKcode22/ReplitTranvr/pull/410), the narrowly scoped fix added a PostgreSQL async error listener and **read-only clock heartbeat/reconnect while waiting**, without retrying an ambiguous source reservation or paid GET. The review ran 18 offline tests, including a test that emits a synthetic `57P01` event. Only the POST script and its offline test workflow changed, *after all PRE owners finished and before actual POST source observations*.
+
+**What engineering lesson does this teach?** `await sleep()` doesn't preserve the health of a network socket. Long-lived database connections need an explicit lifecycle, monitored error events, and a clear line between **safe read-only retries** and **dangerous paid or transactional replays**. A green test is still not a guarantee of zero outages. When designing the next cohort, test controlled backend loss during every safe/unsafe state, not only the happy path.
+
 ## Practice
 
 1. T=6:15 and POST 8:30. Is POST within W=T+2h?
