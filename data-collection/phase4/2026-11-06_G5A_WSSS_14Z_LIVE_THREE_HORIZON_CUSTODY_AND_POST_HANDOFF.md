@@ -1,12 +1,30 @@
 # G5A WSSS 14:00Z — live three-horizon evidence, source-use expiry and POST handoff
 
+## VERIFIED 09:01 PST POST CLOSEOUT — current state (independent audit pending)
+
+**November 6 2026, 09:01 PST. Repaired POST runner [#42230194925](https://github.com/HKcode22/ReplitTranvr/actions/runs/42230194925) completed successfully on main `b05cc2afb2f10eace38a0ce6576a44a6f7289a34`.** The GitHub job logs were independently fetched after completion; this is **not** just a green unit test or an estimated schedule. Earlier "POST has not dispatched" instructions below are **historical** and MUST NOT be executed.
+
+| Frozen POST slot (PST) | Completed GitHub original persisted | Normalized POST rows |
+|---|---|---:|
+| 07:40 | yes, log at 07:40:23 | 312 |
+| 08:10 | yes, log at 08:10:19 | 304 |
+| 08:40 | yes, log at 08:40:20 | 303 |
+
+**Final 09:01:00 PST aggregate:** `postSlotsPlanned=3`, `paidReservations=3`, `providerRestUnitsReserved=6`, `originalPostReceipts=3`, `normalizedPostRows=919`, `unknownSourceSlots=0`, frozen manifest SHA256 `02865331b9137c2ffb4d7e2b0a8c2a6016d0838051fd04f09a44c6f02e238667`. POST totals by horizon: T−24h, T−6h, T−90m each `persistedPRE=12`, `asofBaseline=12`, `observedPOST=12`, `observedRevisionGE15Minutes=0`, `observedRevisionLT15Minutes=12`, `unknownNoQualifiedPOSTOrPREBaseline=0`. **36 repeated horizon comparisons among only 12 flight identities**, not 36 distinct flights. Observed label is provider-reported **schedule revision**, NOT actual wheels-off or verified actual flight delay. There are no ≥15-minute positive schedule revisions in this cohort; it cannot independently validate sensitivity to disruption.
+
+Three PRE horizon owners were already independently read back by the operator at 06:01 PST: all 12 distinct on-time PRE at each of T−24h/T−6h/T−90m, no late writes, 3 bound source originals each, 12 common three-horizon keys. The completed POST log's later `G5A_POST_PG_ASYNC_DISCONNECT_IDLE_ONLY code=END` occurred after the successful aggregate during graceful database connection teardown; GitHub's actual POST job result is `completed/success`.
+
+**Decision:** Preserve all collected PRE/POST data. Do **not** rerun or pay again, backfill, overwrite, or reclassify missing as negative. Project cap expected to be exactly 24/24 reserved (18 PRE + 6 POST); verify independently from DB rather than assuming provider billing. Next: four best-effort **independent no-provider audits** are scheduled for **09:12, 09:18, 09:24 and 09:30 PST** on main, with a separate 09:45 PST follow-up check. Record actual independent GitHub run ID and audited source/denominator/PRE/POST/rights/unknown counts. Strict `scientificGate5Passed=false`, `phase5FreezeAuthorized=false`, `phase6Authorized=false` until explicit documented disposition of target validity, actual versus schedule, conditional operating identity/scope, limited one-class sample, rights retention, billing and webhook/airborne completeness.
+
+**The remaining sections are an archived live timeline written earlier during PRE and POST prearm. They are not current action instructions.**
+
 **Record created November 6, 2026 (Pacific). Status: LIVE OPERATIONAL CHECKPOINT, NOT A GATE 5 SCIENTIFIC PASS.**
 
 **05:35 PST LIVE CLOSEOUT UPDATE (verified by GitHub REST + completed owner-t90 job log):** [T−90m run #42193627043](https://github.com/HKcode22/ReplitTranvr/actions/runs/42193627043) is `completed/success` on frozen SHA `66ff4908...`. All three sources reported `G5A_ORIGINAL_AND_OPERATING_POPULATION_V0077_COMMITTED` at 04:00:05, 04:30:05, 05:00:05 PST, each 48 normalized rows and 12 source-qualified identity keys. Final 05:30:01 PST `G5A_PROSPECTIVE_HORIZON_SOURCE_PRE_OBSERVATION_CLOSED` reports `sourceSlotsPlanned=3, paidAttemptsReserved=3, exactOriginalBoundResponses=3, sourceUnknownSlots=0, newCutoffSafePRE=12, verifiedExistingPRE=118` (idempotent repeated verifications, **not** 118 new snapshots). The source owner is operationally complete; a *fresh independent production readback* of final 12/12 T90 PRE is still needed for audit-grade confirmation. POST has **not** been reported as dispatched in the last independent GitHub check. One reviewed guarded manual POST prearm is appropriate after 05:40 PST if no existing POST owner; physically timed POST slots 07:40/08:10/08:40 PST. Do not merge this PR or alter `main` during POST.
 
 This page is a source-of-truth handoff for `WSSS_G5A_20261106_1400Z`, anchored to immutable `main` commit `66ff4908cbd63a19668485c935da49fc18652654` and frozen grid content SHA256 `02865331b9137c2ffb4d7e2b0a8c2a6016d0838051fd04f09a44c6f02e238667`. This checkpoint branch is **documentation-only**; do not merge it into `main` while prospective GitHub owners, POST or audit are running. It does not change the source owner, jobs, secrets, budget, provider access, SQL, population, or timed schedules.
 
-## Evidence-based ledger (as observed; source counts != independent science verdict)
+## Historical PRE evidence ledger (as observed; source counts != independent science verdict)
 
 | Horizon | GitHub run | Verified status | Originals | Actual on-time PRE | Source |
 |---|---|---|---|---|---|
@@ -27,7 +45,7 @@ This page is a source-of-truth handoff for `WSSS_G5A_20261106_1400Z`, anchored t
 
 The original T−24h slot 0 was genuinely captured at **Thu Nov 5 05:30 PST**, the raw original was bound, and the 12 T−24h PRE records were **persisted on time before cutoff**. An owner production read-only audit on Friday **04:44 PST** returned for slot 0: `reserved=1, bound=1, raw_missing=0, raw_expired=0, rights_window_elapsed=1, normalized_members=48`, with `source_use_expires_at_utc=2026-11-06T12:30:00.714Z` (**Fri 04:30 PST**). It also returned `retained_usable_now=0`. In other words, the first original was **collected**, but source-use rights had passed their 23-hour limit by audit time. The saved PRE snapshots/hashes persist separately; they are not a license to reopen/rehydrate or use expired raw data. Other original slots have their own expiries. Final audit must respect each original's time-bounded use rights and explicitly document any inability to re-examine contents.
 
-### Next: POST needs one genuine GitHub prearm, not a new Replit source call
+### Historical POST prearm plan (already executed — DO NOT RERUN)
 
 1. Wait for the **T−90m** job to **complete successfully**, verify the actual closeout and the same frozen three-horizon PRE evidence in read-only PG. Preserve all observed partial records, no retrospective backfill.
 2. Post workflow: `.github/workflows/phase4-gate5-g5a-nov06-1400z-wsss-real-post.yml` (Git blob `c1ac33dac4af0c034de34144355c5d671922c683`), POST script `scripts/v39_phase4_gate5_g5a_nov06_1400z_prospective_post_schedule_observation.ts` (Git blob `46d7d48dae1a24c14ee28a08a4e73de1852f4ee6`), frozen grid blob `e08a1d19e684f58c63b654e72e6f4f5039832def`.
