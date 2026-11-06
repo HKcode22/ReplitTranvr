@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+[**CURRENT November 6 live WSSS 14Z three-horizon source→PRE custody, T−24h original expiry and guarded POST handoff (CHECKPOINT, not scientific PASS)**](2026-11-06_G5A_WSSS_14Z_LIVE_THREE_HORIZON_CUSTODY_AND_POST_HANDOFF.md) — anchored to the frozen 14Z cohort; T−24h and T−6h 3/3 originals + 12/12 on-time PRE, T−90m live third-source observation and pending final closeout, rights-limited 23-hour source-use expiry, next POST 07:40/08:10/08:40 PST and audit 09:12–09:30 PST. **Documentation PR only; do not merge into main during active experiment.**
+
+
 - [**CURRENT Nov4 21:39 PST incident — Nov6 09Z T24 ACTIVE owner manually canceled, exact zero-spend delegated recovery PR #404 MERGED (production ledger readback and authentic new runner still required)**](2026-11-04_NOV06_G5A_CANCELLED_T24_EXACT_ZERO_SPEND_HANDOFF.md). Do not rerun canceled GH action, reset V0076, start an unverified replacement, or backfill. Nov6 T24 first paid request remains planned for Thu Nov5 00:30 PST; scientific Gate5 HOLD.
 
 - [**HISTORICAL/SUPERSEDED NOV 5 THURSDAY NOON AUDIT — original earlier candidate**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
