@@ -159,8 +159,25 @@ async function independentlyVerifyGithubRun(e:NodeJS.ProcessEnv,commit:string){
   hold("GH_POST_NOT_ACTUALLY_PREARMED");
  return {githubRunId:id,realStartedAt: new Date(start).toISOString()};
 }
-async function waitUntil(at:number){
- while(Date.now()<at)await sleep(Math.min(15000,Math.max(1,at-Date.now())));
+/**
+ * Only handles asynchronous PostgreSQL client errors. It never replays a
+ * reservation, paid GET or content INSERT. A lost idle session is marked for
+ * repair before the next physical POST slot.
+ */
+export function attachG5APostIdlePgGuardsV39(
+ client:pg.Client,onLost:(code:string)=>void
+){
+ const code=(e:Error&{code?:string})=>
+  typeof e.code==="string"&&/^[A-Z0-9]{5}$/.test(e.code)?e.code:"UNKNOWN";
+ client.on("error",(e:Error&{code?:string})=>onLost(code(e)));
+ client.on("end",()=>onLost("END"));
+}
+async function waitUntil(at:number,readOnlyHealthProbe?:()=>Promise<void>){
+ while(Date.now()<at){
+  if(readOnlyHealthProbe)await readOnlyHealthProbe();
+  await sleep(Math.min(15000,Math.max(1,at-Date.now())));
+ }
+ if(readOnlyHealthProbe)await readOnlyHealthProbe();
 }
 export async function reserveG5APostSlotDbV39(db:pg.Client,manifestSha:string,cohortId:string,slot:number){
  const id=postReservationUuidV39(manifestSha,slot);
@@ -380,10 +397,79 @@ export async function main(){
  assertG5APostRunnerContextV39(e,head,started);
  const {sha:manifestSha,cohortId}=manifest();
  const proof=await independentlyVerifyGithubRun(e,head);
- const db=new pg.Client({connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
-  connectionTimeoutMillis:9000,query_timeout:15000,
-  application_name:"g5a_real_post_source_reservation"});
+ // A live PostgreSQL backend can be administratively restarted while this
+ // long-running GitHub owner is only WAITING (57P01). Never leave a pg.Client
+ // without an error listener: Node otherwise crashes on its 'error' event.
+ // Reconnection is allowed ONLY for a read-only health check between slots;
+ // never retry an uncertain reservation, provider GET or content commit.
+ let db:pg.Client;
+ let dbBroken=false;
+ let pgIdleDisconnects=0;
+ const makeClient=()=>{
+  const client=new pg.Client({
+   connectionString:e.P4_G5_SOURCE_OWNER_DATABASE_URL,
+   connectionTimeoutMillis:9000,query_timeout:15000,
+   application_name:"g5a_real_post_source_reservation"
+  });
+  attachG5APostIdlePgGuardsV39(client,(code)=>{
+   if(client!==db)return;
+   if(!dbBroken){
+    dbBroken=true;
+    pgIdleDisconnects++;
+    console.error(JSON.stringify({
+     status:"G5A_POST_PG_ASYNC_DISCONNECT_IDLE_ONLY",
+     code,providerCallsFromDisconnect:0,
+     databaseWritesFromDisconnect:0
+    }));
+   }
+  });
+  return client;
+ };
+ db=makeClient();
  await db.connect();
+ const readOnlyHealthProbe=async()=>{
+  const ping=async()=>{
+   const x=await db.query("SELECT clock_timestamp() AS db_now_utc");
+   if(x.rows.length!==1||
+      !(x.rows[0]?.db_now_utc instanceof Date)||
+      !Number.isFinite(x.rows[0].db_now_utc.getTime()))
+    hold("PG_READONLY_HEARTBEAT_INVALID");
+  };
+  if(!dbBroken){
+   try{await ping();return}
+   catch(e){
+    const code=(e as {code?:string})?.code??"";
+    if(!dbBroken&&!["57P01","57P02","57P03","08003","08006"].includes(code))
+     throw e;
+    dbBroken=true;
+   }
+  }
+  const old=db;
+  for(let attempt=1;attempt<=3;attempt++){
+   const next=makeClient();
+   try{
+    await next.connect();
+    const health=await next.query("SELECT clock_timestamp() AS db_now_utc");
+    if(health.rows.length!==1||
+       !(health.rows[0]?.db_now_utc instanceof Date))
+     hold("PG_READONLY_RECONNECT_CLOCK_INVALID");
+    db=next;
+    dbBroken=false;
+    await old.end().catch(()=>undefined);
+    console.log(JSON.stringify({
+     status:"G5A_POST_IDLE_DB_RECONNECTED_NO_SOURCE_REPLAY",
+     reconnectAttempt:attempt,
+     observedIdleDisconnects:pgIdleDisconnects,
+     providerCallsFromReconnect:0,databaseWritesFromReconnect:0
+    }));
+    return;
+   }catch{
+    await next.end().catch(()=>undefined);
+    if(attempt<3)await sleep(attempt*800);
+   }
+  }
+  hold("PG_IDLE_RECONNECT_UNAVAILABLE_NO_PAID_RETRY");
+ };
  const ids=POSTS.map((_,i)=>postReservationUuidV39(manifestSha,i));
  let charged=0,originals=0,unknown=0,normalized=0;
  try{
@@ -416,7 +502,7 @@ export async function main(){
    return;
   }
   for(const [i,planned] of POSTS.entries()){
-   await waitUntil(ms(planned));
+   await waitUntil(ms(planned),readOnlyHealthProbe);
    if(Date.now()>ms(planned)+10*60000){unknown++;continue}
    let quota:{apiUnitsRemaining:number;requestsRemaining:number;
      observedAtUtc:string};
@@ -484,7 +570,7 @@ export async function main(){
     }));
    }
   }
-  await waitUntil(ms(FINAL));
+  await waitUntil(ms(FINAL),readOnlyHealthProbe);
   const agg=await readAgg(db,manifestSha,ids);
   console.log(JSON.stringify({
    status:"G5A_POST_FROZEN_WATERMARK_AGGREGATE_OBSERVED_NOT_GATE5_VERDICT",
