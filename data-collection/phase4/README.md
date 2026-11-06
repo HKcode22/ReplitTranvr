@@ -4,6 +4,9 @@
 
 ## Start here — live source of truth
 
+- [**Learn Gate 5 step by step — 11 detailed code-reading lessons (November 6)**](learning-gate5/README.md) — actual source→PRE→POST→independent audit, 3/48/12 counts, clocks, GitHub owner/prearm, FIDS normalization/identity, V0076/V0077 atomic source custody, frozen-T as-of SQL, transactional PRE writer, two-hour schedule-revision watermark, independent audit, annotated TypeScript/SQL and practice problems. **Learning documentation only, no change to frozen main or live paid experiment.**
+
+
 [**CURRENT November 6 live WSSS 14Z three-horizon source→PRE custody, T−24h original expiry and guarded POST handoff (CHECKPOINT, not scientific PASS)**](2026-11-06_G5A_WSSS_14Z_LIVE_THREE_HORIZON_CUSTODY_AND_POST_HANDOFF.md) — anchored to the frozen 14Z cohort; T−24h and T−6h 3/3 originals + 12/12 on-time PRE, T−90m live third-source observation and pending final closeout, rights-limited 23-hour source-use expiry, next POST 07:40/08:10/08:40 PST and audit 09:12–09:30 PST. **Documentation PR only; do not merge into main during active experiment.**
 
 
