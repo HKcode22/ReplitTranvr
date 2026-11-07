@@ -16,6 +16,7 @@ import {
 } from "./aerodataboxLimiter_v3";
 
 import { requireP5P6WebhookDestinationV39 } from "./phase5Phase6WebhookDestinationGuard_v39";
+import { verifyPreparedDailyDraw, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
 
 export const PHASE6_PROVIDER_MUTATION_LOCK = "v39-phase6-provider-mutation";
 
@@ -52,29 +53,54 @@ async function assertR1Empty(): Promise<void> {
   }
 }
 
-async function loadSelections(runDayIndex: number): Promise<FrozenSelection[]> {
+async function loadSelections(batchId: string, runDayIndex: number): Promise<FrozenSelection[]> {
+  // A child activation is a SECOND paid CREATE boundary: do not trust a bare
+  // four-row query after the parent's early-draw/hash admission.
+  const meta = await pool.query(
+    `SELECT b.sampling_state_hash,b.calendar_hash AS batch_calendar_hash,
+            b.config_hash AS batch_config_hash,
+            c.scheduled_start_utc,c.frozen_draw_seed,c.draw_type,
+            c.anchor_icao,c.slot_regions,c.pair_airport_set,c.calendar_hash,
+            c.config_hash,c.frame_hash
+       FROM clean.adb_collection_batches b
+       JOIN clean.adb_phase6_calendar_day c ON c.run_day_index=b.run_day_index
+      WHERE b.batch_id=$1 AND b.run_day_index=$2`,
+    [batchId,runDayIndex],
+  );
+  if (meta.rowCount !== 1) throw new Error("REFUSED_EARLY_DRAW_CHILD_BATCH_CALENDAR_MISSING");
+  const day = meta.rows[0];
+  if (day.calendar_hash !== day.batch_calendar_hash ||
+      day.config_hash !== day.batch_config_hash ||
+      !day.sampling_state_hash) {
+    throw new Error("REFUSED_EARLY_DRAW_CHILD_HASH_MISMATCH");
+  }
   const r = await pool.query(
-    `SELECT slot_id,selected_icao,airport_layer_design_probability
+    `SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
+            selected_at_utc,adaptive_state_hash,probability_vector,
+            airport_layer_design_probability
        FROM clean.adb_sampling_draw
-      WHERE run_day_index=$1
-      ORDER BY CASE slot_id WHEN 'HUB' THEN 1 WHEN 'MID_A' THEN 2 WHEN 'MID_B' THEN 3 ELSE 4 END`,
+      WHERE run_day_index=$1`,
     [runDayIndex],
   );
-  if (r.rowCount !== 4) throw new Error(`REFUSED_SAMPLING_DRAW: run_day ${runDayIndex} has ${r.rowCount}/4 frozen slots`);
-  const rows = r.rows.map((x: any) => ({
-    slotId: String(x.slot_id) as FrozenSelection["slotId"],
-    icao: String(x.selected_icao).toUpperCase(),
-    probability: x.airport_layer_design_probability == null ? null : Number(x.airport_layer_design_probability),
+  const prepared = verifyPreparedDailyDraw({
+    runDayIndex,
+    scheduledStartUtc: new Date(day.scheduled_start_utc),
+    frozenDrawSeed: String(day.frozen_draw_seed),
+    drawType: day.draw_type,
+    anchorIcao: String(day.anchor_icao),
+    slotRegions: day.slot_regions,
+    pairAirportSet: day.pair_airport_set,
+    calendarHash: String(day.calendar_hash),
+    configHash: String(day.config_hash),
+    frameHash: String(day.frame_hash),
+  }, r.rows as PreparedDrawRow[]);
+  if (prepared.stateHash !== day.sampling_state_hash)
+    throw new Error("REFUSED_EARLY_DRAW_CHILD_READBACK_TAMPERED");
+  return prepared.selections.map(s=>({
+    slotId: s.slotId,
+    icao: s.icao,
+    probability: s.designProbability,
   }));
-  const expected = ["HUB", "MID_A", "MID_B", "REGIONAL"];
-  if (rows.some((x, i) => x.slotId !== expected[i]) || new Set(rows.map((x) => x.icao)).size !== 4) {
-    throw new Error("REFUSED_SAMPLING_DRAW: frozen child activation requires four distinct canonical slots");
-  }
-  const regional = rows.find((x) => x.slotId === "REGIONAL")!;
-  if (!(regional.probability !== null && regional.probability > 0 && regional.probability <= 1)) {
-    throw new Error("REFUSED_SAMPLING_DRAW: REGIONAL design probability is missing/invalid");
-  }
-  return rows;
 }
 
 async function cleanupCreated(created: string[]): Promise<string[]> {
@@ -130,7 +156,7 @@ export async function activateFrozenPlannedSegment(
 
   // R1 and free coverage are hard pre-mutation prerequisites.
   await assertR1Empty();
-  const selections = await loadSelections(input.runDayIndex);
+  const selections = await loadSelections(input.batchId,input.runDayIndex);
   for (const s of selections) {
     const coverage = await checkAirportFeeds(s.icao).catch(() => null);
     if (!coverage) throw new Error(`REFUSED_COVERAGE_UNKNOWN: frozen ${s.slotId} ${s.icao}`);
