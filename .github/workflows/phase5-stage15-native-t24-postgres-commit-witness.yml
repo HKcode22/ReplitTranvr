@@ -1,0 +1,73 @@
+name: Phase5 Stage15 native T24 PostgreSQL COMMIT witness (disposable PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5NativeT24CommitWitnessReadonly_v39.ts'
+      - 'tests/phase5_stage15_native_t24_actual_pg_commit_v39.test.ts'
+      - '.github/workflows/phase5-stage15-native-t24-postgres-commit-witness.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5NativeT24CommitWitnessReadonly_v39.ts'
+      - 'tests/phase5_stage15_native_t24_actual_pg_commit_v39.test.ts'
+      - '.github/workflows/phase5-stage15-native-t24-postgres-commit-witness.yml'
+permissions:
+  contents: read
+jobs:
+  native-pg16-commit-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_STAGE15_REAL_COMMIT_PG16: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Start isolated PG16 WITH native commit timestamp tracking
+        run: |
+          set -Eeuo pipefail
+          docker run -d --name p5_stage15_pg16 -p 127.0.0.1:5432:5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=neondb \
+            postgres:16 -c track_commit_timestamp=on
+          ready=0
+          for i in $(seq 1 60); do
+            if PGPASSWORD=postgres pg_isready -h 127.0.0.1 -p 5432 \
+              -U postgres -d neondb >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 \
+            -c "SHOW track_commit_timestamp")" = on
+      - name: Apply authentic B0062 baseline to isolated disposable PG16
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 \
+            -c "SELECT to_regclass('clean.flight_snapshots') IS NOT NULL")" = t
+      - name: Prove true native XID COMMIT vs misleading backdated created_at
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage15_native_t24_actual_pg_commit_v39.test.ts
+          echo 'P5_STAGE15_REAL_PG_XID_COMMIT=PASS REAL_SOURCE=0 PRODUCTION_DB_WRITES=0 PHASE6_GO=0'
+      - name: Remove disposable PostgreSQL container
+        if: always()
+        run: docker rm -f p5_stage15_pg16 >/dev/null 2>&1 || true
