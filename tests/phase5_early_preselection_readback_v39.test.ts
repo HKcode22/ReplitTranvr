@@ -150,6 +150,17 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(r.verifiedFlightLevelPre).toBe(false);
   });
 
+  it("Phase6 child segment also refuses tampered or missing early parent readback", () => {
+    const code=readFileSync("server/lib/disruption/phase6SegmentActivation_v39.ts","utf8");
+    const child=code.slice(code.indexOf("async function loadSelections("),code.indexOf("\nasync function cleanupCreated(",code.indexOf("async function loadSelections(")));
+    expect(child).toContain("verifyPreparedDailyDraw(");
+    expect(child).toContain("prepared.stateHash !== day.sampling_state_hash");
+    const active=code.slice(code.indexOf("export async function activateFrozenPlannedSegment("));
+    expect(active.indexOf("await loadSelections(input.batchId,input.runDayIndex)"))
+      .toBeLessThan(active.indexOf("await getBalance()"));
+    expect(active).not.toContain("chooseAirportsForRunDay(");
+  });
+
   it("source startBatch must consume persisted early draw, no late redraw or sampling mutation", () => {
     const code=readFileSync("server/lib/disruption/adbCollectionController_v3.ts","utf8");
     const start=code.slice(code.indexOf("export async function startBatch():"),code.indexOf("\ninterface SegmentSettlementResult",code.indexOf("export async function startBatch():")));
