@@ -190,10 +190,10 @@ export async function commitEarlyPhase5Draw(
       [pins.runDayIndex],
     );
     const auth=await client.query(
-      \`SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,
+      `SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,
               enabled,revoked_at_utc
          FROM clean.adb_phase6_authorization
-        WHERE singleton_key=true\`,
+        WHERE singleton_key=true`,
     );
     if (auth.rowCount!==1 || auth.rows[0].enabled!==true ||
         auth.rows[0].revoked_at_utc !== null ||
@@ -202,11 +202,11 @@ export async function commitEarlyPhase5Draw(
         auth.rows[0].config_hash!==pins.expectedConfigHash)
       refuse("NO_FROZEN_ENABLED_AUTHORIZATION");
     const cal=await client.query(
-      \`SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,
+      `SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,
               anchor_icao,slot_regions,pair_airport_set,calendar_hash,
               config_hash,frame_hash,date_utc
          FROM clean.adb_phase6_calendar_day
-        WHERE run_day_index=$1\`,
+        WHERE run_day_index=$1`,
       [pins.runDayIndex],
     );
     if(cal.rowCount!==1) refuse("CALENDAR_DAY_MISSING");
@@ -220,12 +220,12 @@ export async function commitEarlyPhase5Draw(
       refuse("CALENDAR_DAY_DATE_MISMATCH");
     const now=at((await client.query("SELECT clock_timestamp() AS at")).rows[0].at,"DB_NOW");
     const existing=await client.query(
-      \`SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
+      `SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
               selected_at_utc,adaptive_state_hash,probability_vector,
               airport_layer_design_probability
          FROM clean.adb_sampling_draw
         WHERE run_day_index=$1
-        ORDER BY slot_id FOR UPDATE\`,
+        ORDER BY slot_id FOR UPDATE`,
       [pins.runDayIndex],
     );
     if(existing.rowCount!==0) {
@@ -237,9 +237,9 @@ export async function commitEarlyPhase5Draw(
     }
     validateEarlyDrawWindow(now,day.scheduledStartUtc);
     const registry=await client.query(
-      \`SELECT active_frame_version,frame_hash
+      `SELECT active_frame_version,frame_hash
          FROM clean.adb_sampling_frame_registry
-        WHERE registry_key='ACTIVE'\`,
+        WHERE registry_key='ACTIVE'`,
     );
     if(registry.rowCount!==1 || registry.rows[0].frame_hash!==day.frameHash)
       refuse("ACTIVE_FRAME_HASH_MISMATCH");
@@ -249,7 +249,7 @@ export async function commitEarlyPhase5Draw(
       "SELECT icao FROM clean.adb_airport_sampling_state ORDER BY icao FOR UPDATE",
     );
     const candidates=await client.query(
-      \`SELECT f.icao,f.tier,f.region,f.traffic_prior,f.in_frame,
+      `SELECT f.icao,f.tier,f.region,f.traffic_prior,f.in_frame,
               f.pre_eligible,f.post_eligible,f.exclusion_reason,
               s.ema_yield,s.m_i,s.zero_yield_state,s.consecutive_zero_yield,
               s.first_zero_yield_date,s.last_successful_phase6_observation_at,
@@ -257,7 +257,7 @@ export async function commitEarlyPhase5Draw(
               s.provider_failure,s.coverage_failed,s.state_version
          FROM clean.adb_sampling_frame f
          LEFT JOIN clean.adb_airport_sampling_state s ON s.icao=f.icao
-        WHERE f.frame_version=$1 ORDER BY f.icao\`,
+        WHERE f.frame_version=$1 ORDER BY f.icao`,
       [registry.rows[0].active_frame_version],
     );
     const {frame,states}=mapSamplingRows(candidates.rows);
@@ -271,32 +271,32 @@ export async function commitEarlyPhase5Draw(
     // holding the transaction lease. All four rows + washout state commit atomically.
     for(const s of decision.selections){
       await client.query(
-        \`INSERT INTO clean.adb_sampling_draw
+        `INSERT INTO clean.adb_sampling_draw
             (run_day_index,slot_id,target_region,draw_type,selected_icao,
              frozen_draw_seed,adaptive_state_hash,probability_vector,
              airport_layer_design_probability,selected_at_utc)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::timestamptz)\`,
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::timestamptz)`,
         [day.runDayIndex,s.slotId,s.targetRegion,s.drawType,s.icao,
          day.frozenDrawSeed,s.adaptiveStateHash,
          s.probabilityVector?JSON.stringify(s.probabilityVector):null,
          s.designProbability,now],
       );
       await client.query(
-        \`INSERT INTO clean.adb_airport_sampling_state
+        `INSERT INTO clean.adb_airport_sampling_state
                (icao,last_selected_at,last_selected_run_day)
            VALUES ($1,$2,$3)
            ON CONFLICT(icao) DO UPDATE
               SET last_selected_at=EXCLUDED.last_selected_at,
                   last_selected_run_day=EXCLUDED.last_selected_run_day,
-                  updated_at_utc=clock_timestamp()\`,
+                  updated_at_utc=clock_timestamp()`,
         [s.icao,day.scheduledStartUtc,day.runDayIndex],
       );
     }
     const readback=await client.query(
-      \`SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
+      `SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
               selected_at_utc,adaptive_state_hash,probability_vector,
               airport_layer_design_probability
-         FROM clean.adb_sampling_draw WHERE run_day_index=$1\`,
+         FROM clean.adb_sampling_draw WHERE run_day_index=$1`,
       [day.runDayIndex],
     );
     const verifiedAgain=safeOutput(day,readback.rows as PreparedDrawRow[],
