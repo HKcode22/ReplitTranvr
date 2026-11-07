@@ -32,6 +32,12 @@ export interface P5FidsAcquisition {
   /** Window-specific earliest planned cutoff; NOT a verified provider-native T. */
   earliestPlannedCutoffUtc: string;
   scheduledRequestUtc: string;
+  /**
+   * PROPOSED per-day airport selection/precommit timestamp, common to all
+   * horizons of one airport slot. This is not evidence of a real DB commit.
+   * Must precede the first T-24h source request, not the Phase6 batch start.
+   */
+  plannedAirportSelectionUtc: string;
   /** Conservative upper bound on request response + durable commit latency. */
   maxResponseAndPersistSeconds: number;
   apiUnitsPerAttempt: number;
@@ -83,6 +89,7 @@ export interface P5FidsGridAdmission {
   confirmsLiveSource: false;
   confirmsSourceUseRights: false;
   confirmsFlightLevelPre: false;
+  confirmsActualEarlyAirportSelection: false;
   authorizesPaidCollection: false;
 }
 
@@ -134,6 +141,7 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
   const seenQueryKeys = new Set<string>();
   const groups = new Map<string, { icao: string; earliestCutoff: number }>();
   const slotAirport = new Map<string, string>();
+  const plannedSelectionBySlot = new Map<string, number>();
   let minMargin = Number.POSITIVE_INFINITY;
 
   for (const r of input.acquisitions) {
@@ -156,6 +164,9 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       refuse("SERVICE_WINDOW");
     const cutoff = utcMs(r.earliestPlannedCutoffUtc, "EARLIEST_CUTOFF");
     const request = utcMs(r.scheduledRequestUtc, "REQUEST_UTC");
+    const proposedSelection = utcMs(r.plannedAirportSelectionUtc, "AIRPORT_PRESELECTION_UTC");
+    if (proposedSelection > request)
+      refuse("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
     positiveInt(r.maxResponseAndPersistSeconds, "RESPONSE_PERSIST_SECONDS", 86_400);
     positiveInt(r.apiUnitsPerAttempt, "API_UNITS_PER_ATTEMPT", 50_000);
     positiveInt(r.maxAttempts, "MAX_ATTEMPTS", 3);
@@ -169,6 +180,10 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     const priorAirport = slotAirport.get(slotKey);
     if (priorAirport && priorAirport !== r.icao) refuse("SLOT_AIRPORT_CHANGED_WITHIN_DAY");
     slotAirport.set(slotKey, r.icao);
+    const earlierSelection = plannedSelectionBySlot.get(slotKey);
+    if (earlierSelection !== undefined && earlierSelection !== proposedSelection)
+      refuse("INCONSISTENT_EARLY_SELECTION_SCHEDULE");
+    plannedSelectionBySlot.set(slotKey, proposedSelection);
     const groupKey = slotKey + "|" + r.horizon;
     const prev = groups.get(groupKey);
     if (prev && prev.icao !== r.icao) refuse("HORIZON_AIRPORT_MISMATCH");
@@ -202,6 +217,12 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       const c = groups.get(d + "|" + slot + "|T-90m")?.earliestCutoff;
       if (a === undefined || b === undefined || c === undefined || !(a < b && b < c))
         refuse("INCONSISTENT_HORIZON_ORDER");
+      const selectedAt = plannedSelectionBySlot.get(d + "|" + slot);
+      if (selectedAt === undefined || selectedAt >= a)
+        refuse("NO_PROSPECTIVE_SELECTION_BEFORE_T24");
+      // At this stage selectedAt is only a proposed UTC: the actual source
+      // sampling decision must be committed by a separate early owner.
+      // Current Phase6 startBatch() draws at window start, which is too late.
     }
     if (!Object.prototype.hasOwnProperty.call(input.otherCategoryReservedPerDay, date))
       refuse("UNRESERVED_OTHER_DAILY_SPEND");
@@ -261,6 +282,7 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     confirmsLiveSource: false,
     confirmsSourceUseRights: false,
     confirmsFlightLevelPre: false,
+    confirmsActualEarlyAirportSelection: false,
     authorizesPaidCollection: false,
   };
 }
