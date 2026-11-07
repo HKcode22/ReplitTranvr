@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Stage27 live incident — Stage26 role installation refused safely
+
+**November 7, 2026 owner execution:** Exact-pinned Stage26 returned `REFUSED_P5_STAGE26_SCOPED_ROLE_ALREADY_HAS_RUNTIME_MEMBER`, **before COMMIT**, and never reported successful role commissioning. [Stage27 factual diagnosis / code lesson / rollback and repair](2026-11-07_STAGE27_PG16_AUTOMATIC_ADMIN_ROLE_MEMBERSHIP_REFUSAL_AND_RECOVERY.md) explains the official PostgreSQL16 behavior: non-superuser `CREATEROLE` automatically receives **ADMIN=true but SET=false/INHERIT=false** on a created role. Old code treated any membership as runtime access, so it failed under actual production but passed superuser-only disposable CI. New PG16 *non-superuser* CI proves the distinction, and a readonly catalog audit checks rollback. **Do not rerun the old Stage26 script or claim its four group roles are live installed.** Stage23 V0079/80/81 schema remains installed and is unrelated. New source/role/flight access remains unarmed; the account's already documented AeroDataBox tier/quotas need no repeat review.
+
 ## Current verified production status — Stage23 completed, Stage24 merged
 
 - **Owner-observed production SQL installation:** Stage23 `P5_EMPTY_V0079_80_81_SCHEMA_DURABLE_INERT` confirms 8 tables, 1 index, 9 helper functions and **0 PUBLIC privileges**, with 0 flight rows, 0 GET/Alert operations and 0 runtime role grants. See [owner's full sanitized output and hashes in issue #416](https://github.com/HKcode22/ReplitTranvr/issues/416). Historical 0/8 table findings belong strictly to *before* this installation; **DO NOT RE-RUN STAGE23**.

@@ -6,14 +6,18 @@
  * AFTER the owner's successful Stage23 eight-table schema commission.
  *
  * The two SECURITY DEFINER paid-intent functions are granted only to a
- * brand-new unassigned NOLOGIN source group. They cannot be invoked by any
- * new production source identity until a SEPARATE reviewed identity/membership
- * commissioning step. A CREATE ROLE preflight failure is an expected HOLD.
+ * brand-new NOLOGIN source group. They cannot be invoked by a runtime
+ * source login until a SEPARATE reviewed identity/membership release.
+ * PostgreSQL 16 auto-grants the non-superuser CREATEROLE creator ADMIN-only
+ * membership (SET FALSE, INHERIT FALSE). This is a trusted administrator,
+ * who CAN later self-grant runtime access: it is not security isolation
+ * from the database owner. No other membership or runtime access allowed.
  */
 import pg from "pg";
 const {Pool}=pg;
 const PERMIT="INSTALL_FOUR_NOLOGIN_P5_ROLES_WITH_NO_RUNTIME_MEMBERS";
 const TEST_URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
+const CI_CREATOR_URL="postgresql://phase5_stage27_ci_creator:ci-only@localhost:5432/neondb?sslmode=disable";
 const ROLES={
  plan:"phase5_fids_prepare_prod_20261107",
  source:"phase5_fids_source_prod_20261107",
@@ -38,8 +42,9 @@ function admitted(env){
     env.DATABASE_URL===env.V39_DATABASE_RUNTIME_URL)
    hold("NO_EXPLICIT_SCHEMA_ONLY_OWNER_APPROVAL_OR_DISTINCT_ROLE_URL");
  if(env.GITHUB_ACTIONS==="true"&&
-    (env.DATABASE_URL!==TEST_URL||
-     env.V39_DATABASE_RUNTIME_URL===TEST_URL))
+    (![TEST_URL,CI_CREATOR_URL].includes(env.DATABASE_URL)||
+     env.V39_DATABASE_RUNTIME_URL===TEST_URL||
+     env.V39_DATABASE_RUNTIME_URL===CI_CREATOR_URL))
    hold("CI_MUST_USE_ONLY_DISPOSABLE_LOCAL_DB");
 }
 async function structure(c){
@@ -92,12 +97,44 @@ async function inspectRoles(c,expected){
    r.rolcreaterole!==false||r.rolcreatedb!==false||
    r.rolreplication!==false||r.rolbypassrls!==false)
     hold("SCOPED_ROLE_LOGIN_ADMIN_OR_SUPERUSER_DETECTED");
+  // PostgreSQL 16 special case: a NON-superuser with CREATEROLE
+  // automatically receives ADMIN TRUE / SET FALSE / INHERIT FALSE on
+  // each role it creates. This is administrative membership, not current
+  // inherited/SET runtime access; it is NEVER an independent security
+  // boundary because that admin could grant future access to itself.
+  // A superuser creating roles receives no implicit membership rows.
   const members=await c.query(
-   "SELECT count(*)::int AS n FROM pg_catalog.pg_auth_members a "+
-   "JOIN pg_catalog.pg_roles r ON r.oid=a.roleid "+
-   "WHERE r.rolname=ANY($1::text[])",[NAMES]);
-  if(members.rows[0]?.n!==0)
-    hold("SCOPED_ROLE_ALREADY_HAS_RUNTIME_MEMBER");
+   "SELECT t.rolname AS target_role,m.rolname AS member_name,"+
+   "g.rolsuper AS grantor_is_superuser,"+
+   "a.admin_option,a.inherit_option,a.set_option "+
+   "FROM pg_catalog.pg_auth_members a "+
+   "JOIN pg_catalog.pg_roles t ON t.oid=a.roleid "+
+   "JOIN pg_catalog.pg_roles m ON m.oid=a.member "+
+   "JOIN pg_catalog.pg_roles g ON g.oid=a.grantor "+
+   "WHERE t.rolname=ANY($1::text[]) ORDER BY t.rolname",[NAMES]);
+  const who=await c.query(
+   "SELECT current_user AS actor,rolsuper,rolcreaterole "+
+   "FROM pg_catalog.pg_roles WHERE rolname=current_user");
+  if(who.rowCount!==1)hold("ROLE_CREATOR_IDENTITY_UNVERIFIED");
+  const actor=who.rows[0];
+  const expectedCount=actor.rolsuper===true?0:NAMES.length;
+  if(actor.rolsuper!==true&&actor.rolcreaterole!==true)
+   hold("ROLE_CREATOR_PRIVILEGE_CHANGED");
+  if(members.rows.length!==expectedCount)
+   hold("UNEXPECTED_ROLE_MEMBERSHIP_COUNT");
+  if(expectedCount>0){
+   const seen=new Set();
+   for(const m of members.rows){
+    if(!NAMES.includes(m.target_role)||seen.has(m.target_role)||
+       m.member_name!==actor.actor||
+       m.grantor_is_superuser!==true||
+       m.admin_option!==true||
+       m.inherit_option!==false||
+       m.set_option!==false)
+      hold("UNEXPECTED_ROLE_MEMBERSHIP_OPTIONS_OR_GRANTOR");
+    seen.add(m.target_role);
+   }
+  }
  }
 }
 async function scope(c){
@@ -233,6 +270,10 @@ export async function commissionP5Stage26FourNoLoginRoles(pool,env=process.env){
    roles:NAMES,rolesCreated:4,
    passwordOrRuntimeMembershipCreated:false,
    loginEnabled:false,
+   pg16CreatorAutomaticAdminMembershipMode:
+    "PG16_NON_SUPERUSER_CREATOR_ADMIN_ONLY_OR_SUPERUSER_NONE",
+   pg16AdminCreatorCanLaterGrantRuntimePrivileges:true,
+   runtimeSetOrInheritMembershipCreated:false,
    strictPreWriterWitnessSeparationChecked:true,
    noPublicRawWitnessAccess:true,
    liveProductionRoleChanges:env.GITHUB_ACTIONS!=="true",
