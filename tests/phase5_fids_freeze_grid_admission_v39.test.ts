@@ -40,6 +40,8 @@ function sampleGrid(): P5FidsGridInput {
           serviceWindowEndUtc: iso(serviceStart + 4 * 3_600_000),
           earliestPlannedCutoffUtc: iso(cutoff),
           scheduledRequestUtc: iso(cutoff - 600_000),
+          // Prospective selection occurs BEFORE T24 cutoff, not at batch start.
+          plannedAirportSelectionUtc: iso(serviceStart - 1460 * 60_000),
           maxResponseAndPersistSeconds: 300,
           apiUnitsPerAttempt: 2,
           maxAttempts: 3,
@@ -81,6 +83,7 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(out.confirmsFlightLevelPre).toBe(false);
     expect(out.confirmsLiveSource).toBe(false);
     expect(out.confirmsSourceUseRights).toBe(false);
+    expect(out.confirmsActualEarlyAirportSelection).toBe(false);
     expect(out.gridSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -187,5 +190,30 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     a.dailyProjectApiCeilingUnits = 1_900;
     a.protectedProjectApiUnits = 50_001;
     expect(() => evaluateP5FidsGrid(a)).toThrow("PROJECT_BUDGET");
+  });
+});
+
+
+describe("Phase5 early airport selection timing blocks late adaptive startBatch draws", () => {
+  it("refuses a proposed selection at the Phase6 parent start (after T24 source)", () => {
+    const a = sampleGrid();
+    const day1 = a.acquisitions.filter(r => r.runDayIndex === 1 && r.slot === "HUB");
+    for (const r of day1) {
+      r.plannedAirportSelectionUtc = "2027-01-01T14:00:00.000Z";
+    }
+    expect(() => evaluateP5FidsGrid(a)).toThrow("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
+  });
+
+  it("refuses an inconsistent selection timestamp across the three horizons", () => {
+    const a = sampleGrid();
+    a.acquisitions[1].plannedAirportSelectionUtc =
+      "2026-12-31T13:39:00.000Z";
+    expect(() => evaluateP5FidsGrid(a)).toThrow("INCONSISTENT_EARLY_SELECTION_SCHEDULE");
+  });
+
+  it("rejects missing selection time rather than treating an unpicked airport as frozen", () => {
+    const a = sampleGrid();
+    a.acquisitions[0].plannedAirportSelectionUtc = "";
+    expect(() => evaluateP5FidsGrid(a)).toThrow("AIRPORT_PRESELECTION_UTC_FORMAT");
   });
 });
