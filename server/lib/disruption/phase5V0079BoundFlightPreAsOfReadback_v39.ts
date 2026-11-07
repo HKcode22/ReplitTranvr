@@ -212,7 +212,9 @@ function auditMembers(
    const cutoff=t-OFFSET[scope.horizon];
    const member=p.member_available==null?NaN:date(p.member_available,
      "MEMBER_AVAILABLE").getTime();
-   if(!Number.isFinite(member)||member<source){
+   // A member clock later than this DB snapshot is not yet knowable,
+   // even if its claimed timestamp precedes a future flight cutoff.
+   if(!Number.isFinite(member)||member<source||member>now.getTime()){
      tally(reasons,"SOURCE_OR_MEMBER_CLOCK_INVALID");continue;
    }
    const effective=Math.max(source,member);
