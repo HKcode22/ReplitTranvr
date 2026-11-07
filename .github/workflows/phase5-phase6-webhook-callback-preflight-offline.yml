@@ -1,0 +1,45 @@
+name: Phase5 Phase6 Webhook Callback Preflight (Offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/lib/disruption/phase5Phase6WebhookDestinationGuard_v39.ts"
+      - "server/lib/disruption/adbCollectionController_v3.ts"
+      - "server/lib/disruption/phase6SegmentActivation_v39.ts"
+      - "tests/phase5_phase6_webhook_destination_guard_v39.test.ts"
+      - ".github/workflows/phase5-phase6-webhook-callback-preflight-offline.yml"
+  push:
+    branches: [main]
+    paths:
+      - "server/lib/disruption/phase5Phase6WebhookDestinationGuard_v39.ts"
+      - "server/lib/disruption/adbCollectionController_v3.ts"
+      - "server/lib/disruption/phase6SegmentActivation_v39.ts"
+      - "tests/phase5_phase6_webhook_destination_guard_v39.test.ts"
+permissions:
+  contents: read
+jobs:
+  offline-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      AERODATABOX_API_KEY: ""
+      AERODATABOX_WEBHOOK_SECRET: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      P4_G5_SOURCE_OWNER_DATABASE_URL: ""
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No-provider callback destination tests
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_phase6_webhook_destination_guard_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0 LIVE_ACTIVATION=0'
