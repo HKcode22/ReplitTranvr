@@ -14,18 +14,24 @@ const ID=/^[A-Za-z0-9_.:|-]{5,200}$/;
 const POS=/^[1-9][0-9]{0,17}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const deny=(why:string):never=>{throw Error("REFUSED_P5_STAGE24_"+why);};
-const at=(v:unknown,name:string)=>{
- const d:Date|null=v instanceof Date?v:
-  typeof v==="string"?new Date(v):null;
- if(d===null)deny(name);
- if(!Number.isFinite(d.getTime()))deny(name);
- return d.getTime();
+const at=(v:unknown,name:string):number=>{
+ if(v instanceof Date){
+  const n=v.getTime();
+  if(Number.isFinite(n))return n;
+ }
+ if(typeof v==="string"){
+  const n=Date.parse(v);
+  if(Number.isFinite(n))return n;
+ }
+ throw Error("REFUSED_P5_STAGE24_"+name);
 };
-const iso=(s:unknown,name:string)=>{
- if(typeof s!=="string")deny(name);
- if(!ISO.test(s)||!Number.isFinite(Date.parse(s))||
-   new Date(s).toISOString()!==s)deny(name);
- return Date.parse(s);
+const iso=(s:unknown,name:string):number=>{
+ if(typeof s!=="string")throw Error("REFUSED_P5_STAGE24_"+name);
+ const n=Date.parse(s);
+ if(!ISO.test(s)||!Number.isFinite(n)||
+   new Date(n).toISOString()!==s)
+  throw Error("REFUSED_P5_STAGE24_"+name);
+ return n;
 };
 export interface P5Stage24ReviewedT24Receipt {
  schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1";
