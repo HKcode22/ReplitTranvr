@@ -146,6 +146,17 @@ describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
   expect(o.calls.reserve).toBe(1);expect(o.calls.fetch).toBe(1);
   expect(o.calls.persist).toBe(0);
  });
+ it("propagates V0079 local DB refusal instead of calling it a provider coverage miss",async()=>{
+  const f=fixture(),o=ports();
+  o.p.reservePhysicalBeforeGet=async()=>{
+   throw Error("REFUSED_PHASE5_V0079_SCOPED_DB_FROZEN_QUERY_OR_SELECTION_CHANGED");
+  };
+  await expect(runP5ScopedFidsSource(f,o.p))
+   .rejects.toThrow("REFUSED_PHASE5_V0079_SCOPED_DB_FROZEN_QUERY_OR_SELECTION_CHANGED");
+  expect(o.calls.fetch).toBe(0);
+  expect(o.calls.persist).toBe(0);
+ });
+
  it("refuses forged V0077 commit receipt even after physical fetch",async()=>{
   const f=fixture(),o=ports({wrongReceipt:true});
   await expect(runP5ScopedFidsSource(f,o.p))
