@@ -183,6 +183,10 @@ export async function runP5ScopedFidsSource(
   // Mutable cell: persist callback is invoked inside an awaited dependency.
   // TS control flow cannot see assignments to a captured local in that call.
   const custody:{proof:P5OriginalCommit|null}={proof:null};
+  // fetchFidsAirport intentionally swallows transport failures to NULL. A
+  // trusted V0079 DB reservation refusal is NOT a provider source failure:
+  // hold it separately so the caller cannot report "source unavailable".
+  const admission:{failure:Error|null}={failure:null};
   const sourceParams:FidsCensusParams={
     airportIcao:first.selectedIcao,
     fromLocal:p.localFrom,toLocal:p.localTo,ianaTimezone:p.ianaTimezone,
@@ -213,21 +217,29 @@ export async function runP5ScopedFidsSource(
                units!==P5_UNIT_PRICE||category!=="fids_base")
               refuse("UNAUTHORIZED_RETRY_OR_UNFUNDED_SOURCE");
             providerReservationCalls++;
-            const clock=await ports.readDbClock();
-            admitP5ScopedFidsSource(p,clock);
-            const issued=await ports.reservePhysicalBeforeGet({
-              queryKey:q.queryKey,runDayIndex:q.runDayIndex,
-              slot:q.slot,horizon:q.horizon,icao:q.icao,
-              sourceReleaseSha256:p.reviewedReleaseSha256,
-              earlyDrawSha256:p.expectedEarlyDrawSha256,
-              attemptNumber:1,units:2,
-            });
-            if(!issued||!validHash(issued.reservationSha256)||
-               issued.queryKey!==q.queryKey||issued.runDayIndex!==q.runDayIndex||
-               issued.icao!==q.icao||issued.attemptNumber!==1||issued.maxUnits!==2)
-              refuse("PHYSICAL_RESERVATION_NOT_BOUND");
-            reserved=issued;
-            return issued.reservationSha256;
+            try{
+              const clock=await ports.readDbClock();
+              admitP5ScopedFidsSource(p,clock);
+              const issued=await ports.reservePhysicalBeforeGet({
+                queryKey:q.queryKey,runDayIndex:q.runDayIndex,
+                slot:q.slot,horizon:q.horizon,icao:q.icao,
+                sourceReleaseSha256:p.reviewedReleaseSha256,
+                earlyDrawSha256:p.expectedEarlyDrawSha256,
+                attemptNumber:1,units:2,
+              });
+              if(!issued||!validHash(issued.reservationSha256)||
+                 issued.queryKey!==q.queryKey||issued.runDayIndex!==q.runDayIndex||
+                 issued.icao!==q.icao||issued.attemptNumber!==1||issued.maxUnits!==2)
+                refuse("PHYSICAL_RESERVATION_NOT_BOUND");
+              reserved=issued;
+              return issued.reservationSha256;
+            }catch(error){
+              // Do not expose SQL texts, secrets or provider Content.
+              const m=error instanceof Error?error.message:"";
+              admission.failure=/^(REFUSED_PHASE5_[A-Z0-9_]+|P5_[A-Z0-9_]+)$/.test(m)
+                ?new Error(m):new Error("REFUSED_P5_FIDS_SOURCE_DB_ADMISSION_FAILED");
+              throw error;
+            }
           },
         },
       });
@@ -272,6 +284,9 @@ export async function runP5ScopedFidsSource(
       return ack.normalizedRowsPersisted;
     },
   });
+  // A database reservation rejection can be caught by the lower-level
+  // network helper. It must not masquerade as a provider coverage gap.
+  if(admission.failure)throw admission.failure;
   const proof=custody.proof;
   if(!result||!proof){
     return {status:"SOURCE_UNOBSERVED_OR_UNPERSISTED",
