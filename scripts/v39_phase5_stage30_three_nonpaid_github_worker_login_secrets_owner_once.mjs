@@ -143,8 +143,11 @@ export async function provisionP5Stage30NonpaidWorkerLogins(
   // Cross-service synchronization: write GitHub Actions secrets first,
   // while the DB login roles are still uncommitted/nonfunctional remotely.
   for(const c of credentials){
-   await gh.setSecret(c.secret,c.url);
+   // A remote set operation can succeed even if its response is lost.
+   // Record the attempted name BEFORE making the call, so precommit
+   // rollback tries to clean up that possibly-created secret too.
    newlyWritten.push(c.secret);
+   await gh.setSecret(c.secret,c.url);
   }
   const names=await gh.listSecretNames();
   if(P5_STAGE30_ENTRIES.some(e=>!names.includes(e.secret)))
