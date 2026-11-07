@@ -48,7 +48,7 @@ const fail=(s)=>{throw Error("REFUSED_P5_STAGE18_DEPENDENCY_"+s);};
 
 export const P5_STAGE18_CATALOG_SQL=[
  "SELECT c.relname AS table_name,",
- "array_agg(a.attname ORDER BY a.attname)",
+ "array_agg(a.attname::text ORDER BY a.attname::text)",
  "FILTER(WHERE a.attnum>0 AND NOT a.attisdropped) AS column_names",
  "FROM pg_catalog.pg_class c",
  "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace",
@@ -150,7 +150,20 @@ async function run(){
     connectionTimeoutMillis:8000,idleTimeoutMillis:3000});
   console.log(JSON.stringify(
     await auditPhase5InstallDependenciesReadonly(p),null,2));
- }catch{
+ }catch(e){
+  // Never print server error messages/roles/URLs. Only a controlled
+  // branch on an isolated CI database may expose an allowlisted code.
+  if(process.env.GITHUB_ACTIONS==="true"&&
+     process.env.DATABASE_URL===
+      "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"){
+    const reason=typeof e?.message==="string"&&
+      /^REFUSED_P5_STAGE18_DEPENDENCY_[A-Z0-9_]+$/.test(e.message)?
+        e.message:"UNCLASSIFIED_CI_EXCEPTION";
+    const sqlstate=/^[A-Z0-9]{5}$/.test(String(e?.code??""))?
+      e.code:"NONE";
+    console.error("STAGE18_CI_HOLD_REASON="+reason+
+      " SQLSTATE="+sqlstate);
+  }
   console.log("HOLD_P5_STAGE18_READONLY_DEPENDENCY_AUDIT_UNAVAILABLE");
   process.exitCode=2;
  }finally{await p?.end().catch(()=>{});}
