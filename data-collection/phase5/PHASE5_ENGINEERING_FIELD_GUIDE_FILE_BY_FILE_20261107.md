@@ -264,6 +264,12 @@ REAL source query (authorized) → PREPARED row → real GitHub RUN_ID
 
 **Stage14 currently handles one T24 flight only**; T6/T90 and the full production owner remain incomplete. One PRE writer's passing PG16 synthetic test does not imply the other two horizons are live. Stage17 strengthens T24 independent visibility with a second SQL transaction, but is still staged.
 
+### Stage24 advanced exercise — Why a T−6h snapshot needs an earlier committed T−24h witness
+
+The older single-flight PRE writer intentionally supported only T−24h because `created_at` is **not** proof that a previous transaction committed before the cutoff. The new [Stage24 witness guard](../../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts) compares three independent objects: the frozen original `T` and source identity from the committed T24 PRE, the PostgreSQL V0081 separate-transaction witness row, and the Stage17 **post-COMMIT** readback timestamp recorded before T24 cutoff. See the [dated Stage24 code study/checkpoint](2026-11-07_STAGE24_T24_WITNESS_GATED_T6_T90_PROSPECTIVE_PRE.md).
+
+Read the guard `verifyP5Stage24WitnessedFrozenT()` and the updated T6/T90 branch of `persistP5V0079SingleBoundFlightPre()`. As an exercise: change the original T24 `selected_t_version` while leaving later T6 FIDS response valid. Correct result: **HOLD**, because the same physical flight's original prediction anchor cannot be rewritten. Then change the Stage17 reviewed post-COMMIT readback to one second after T24 cutoff. Correct result: **HOLD**, even though a T24 witness row exists. Finally, explain why a matching SHA-256 receipt alone is **not an independently authenticated audit**: a hash binds provided text, but needs a trusted independent signature/source receipt to establish its origin. All Stage24 evidence is offline/staged until genuine live prospective readback and reviewed role release.
+
 ## Lesson 11 — POST, webhooks, AIRBORNE and honest denominators
 
 Provider callbacks, raw receiver envelopes and per-flight state observations are **different identities**. A single flight can produce multiple events, and a single update can be retried. Match on the frozen *physical flight-instance identity*, not just `flight_number`, `marketing_callsign`, callback count, or a mutable schedule date.
