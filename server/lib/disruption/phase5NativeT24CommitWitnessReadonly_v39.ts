@@ -134,15 +134,24 @@ export async function inspectP5T24NativeCommitWitness(
     [scope.flightInstanceId])).rows;
   if(rows.length!==1)HOLD("ABSENT_OR_MULTIPLE_FROZEN_T24");
   const r=rows[0];
-  if(r.flight_instance_id!==scope.flightInstanceId||
-    r.selected_t_version!==scope.expectedSelectedTVersion||
-    r.population_query_id!==scope.expectedPopulationQueryId||
-    r.fids_response_hash!==scope.expectedFidsResponseSha256||
-    r.frame_hash!==scope.reviewedFrameSha256||
-    r.config_hash!==scope.reviewedConfigSha256||
-    !/^[0-9]+$/.test(String(r.snapshot_id??""))||
-    !/^[0-9]+$/.test(String(r.native_xid??"")))
-    HOLD("T24_SNAPSHOT_PROVENANCE_OR_IDENTITY_CHANGED");
+  // Report only the rejected FIELD, never actual source identifiers or
+  // provider content. This matters when the baseline trigger changes a
+  // synthetic provenance fixture and when investigating a genuine HOLD.
+  if(r.flight_instance_id!==scope.flightInstanceId)
+    HOLD("T24_CANONICAL_FLIGHT_ID_CHANGED");
+  if(r.selected_t_version!==scope.expectedSelectedTVersion)
+    HOLD("T24_SELECTED_T_VERSION_CHANGED");
+  if(r.population_query_id!==scope.expectedPopulationQueryId)
+    HOLD("T24_SOURCE_QUERY_UUID_CHANGED");
+  if(r.fids_response_hash!==scope.expectedFidsResponseSha256)
+    HOLD("T24_SOURCE_RESPONSE_HASH_CHANGED");
+  if(r.frame_hash!==scope.reviewedFrameSha256)
+    HOLD("T24_FROZEN_FRAME_HASH_CHANGED");
+  if(r.config_hash!==scope.reviewedConfigSha256)
+    HOLD("T24_FROZEN_CONFIG_HASH_CHANGED");
+  if(!/^[0-9]+$/.test(String(r.snapshot_id??""))||
+     !/^[0-9]+$/.test(String(r.native_xid??"")))
+    HOLD("T24_NATIVE_ID_OR_XID_INVALID");
   const storedT=date(r.selected_t_milestone_utc,"STORED_T_INVALID"),
     storedC=date(r.prediction_cutoff_utc,"STORED_CUTOFF_INVALID");
   if(storedT.getTime()!==selectedT.getTime()||
