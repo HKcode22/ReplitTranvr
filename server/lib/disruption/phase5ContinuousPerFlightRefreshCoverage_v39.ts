@@ -229,7 +229,7 @@ export function assessP5Stage11ContinuousCutoffGrid(
  let spend=0;
  const byUtcChargeDay=[...chargeDates].sort().map(d=>{
    const b=budgets.get(d);
-   if(!b)refuse("MISSING_PHYSICAL_CHARGE_DAY_LEDGER");
+   if(!b)throw Error("REFUSED_P5_STAGE11_REFRESH_GRID_MISSING_PHYSICAL_CHARGE_DAY_LEDGER");
    const f=paid.get(d)??{queries:0,units:0};
    const combined=f.units+b.otherCategoryReservedUnits+b.alreadyReservedFidsUnits;
    if(combined>b.dailyApiCeiling)
