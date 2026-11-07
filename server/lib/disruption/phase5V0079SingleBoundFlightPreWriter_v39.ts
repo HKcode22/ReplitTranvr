@@ -346,7 +346,7 @@ export async function persistP5V0079SingleBoundFlightPre(
        native.getTime()||
     dbTime(checked?.prediction_cutoff_utc,"POST_COMMIT_CUTOFF").getTime()!==
        cutoff.getTime()||
-    post.getTime()>cutoff.getTime())
+    post.getTime()>=cutoff.getTime())
     hold("POST_COMMIT_LATE_OR_UNVERIFIED_QUARANTINE_NO_RETRY");
   return {
    schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1",
