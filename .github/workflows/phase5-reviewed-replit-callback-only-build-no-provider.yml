@@ -49,6 +49,7 @@ jobs:
             tests/phase5_reviewed_callback_only_build_v39.test.ts \
             tests/phase3_gate4_reviewed_source_build_v39.test.ts \
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
+            tests/phase2g_owned_callback_isolation_v39.test.ts \
             tests/phase3_gate05_v0075_published_release_v39.test.ts
           bash scripts/v39_phase5_reviewed_source_build_v39.sh --verify-only
       - name: Build reviewed callback-only binary without provider or production credentials
