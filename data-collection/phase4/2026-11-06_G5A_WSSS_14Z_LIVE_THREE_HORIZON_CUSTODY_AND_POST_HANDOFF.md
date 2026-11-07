@@ -1,5 +1,9 @@
 # G5A WSSS 14:00Z — live three-horizon evidence, source-use expiry and POST handoff
 
+## FINAL AUDIT HANDOFF — 18:48 PST, verified
+
+**This live PRE/POST handoff was superseded by the recovered [independent audit #42330969278](https://github.com/HKcode22/ReplitTranvr/actions/runs/42330969278), completed SUCCESS after original audit cron delivery failed late.** [Independent audit published result](https://github.com/HKcode22/ReplitTranvr/issues/293#issuecomment-6701236001) as of 18:48 PST: 9/9 source originals, 36/36 on-time PRE, 36/36 observed POST schedule-revision comparisons (all <15 minutes), 24/24 internal units reserved, 12 conditional composite identities and **zero provider-confirmed native operating leg IDs**. Later metadata verification is *not* original time-window audit; strict scientific Gate5 remains HOLD, Phase5 freeze and Phase6 still not authorized. Source-use expired for all T24 originals by audit, no right to reuse. **No further POST/audit dispatch or PRE backfill.** Read the [criteria-by-criteria scientific disposition and minimal remaining work](2026-11-06_G5A_INDEPENDENT_LATE_AUDIT_VERDICT_AND_MINIMAL_NEXT_WORK.md). All prior mentions of pending POST/audit below are historical, not current instructions.
+
 ## VERIFIED 09:01 PST POST CLOSEOUT — current state (independent audit pending)
 
 **November 6 2026, 09:01 PST. Repaired POST runner [#42230194925](https://github.com/HKcode22/ReplitTranvr/actions/runs/42230194925) completed successfully on main `b05cc2afb2f10eace38a0ce6576a44a6f7289a34`.** The GitHub job logs were independently fetched after completion; this is **not** just a green unit test or an estimated schedule. Earlier "POST has not dispatched" instructions below are **historical** and MUST NOT be executed.
