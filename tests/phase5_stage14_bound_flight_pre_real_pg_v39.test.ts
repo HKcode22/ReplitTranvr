@@ -163,6 +163,9 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   const result=await persistP5V0079SingleBoundFlightPre(writer,permit);
   expect(result.preSnapshotsInserted).toBe(1);
   expect(result.flightPreCommittedBeforeOwnCutoff).toBe(true);
+  expect(result.postCommitDatabaseReadbackVerified).toBe(true);
+  expect(Date.parse(result.postCommitDbClockAtUtc)).toBeLessThan(
+   Date.parse(result.cutoffUtc));
   expect(result.providerCalls).toBe(0);
   expect(result.alertCreates).toBe(0);
   expect(result.externalNativeTIndependentlyAuthenticatedByThisFunction).toBe(false);
