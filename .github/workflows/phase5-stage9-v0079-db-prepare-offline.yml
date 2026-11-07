@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0079CommittedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5DynamicDaySourceGrid_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'tests/phase5_dynamic_day_source_grid_v39.test.ts'
+      - 'tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts'
       - 'tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts'
       - 'tests/sql/phase5_stage9_insert_only_pg16_privileges.sql'
       - 'tests/phase5_stage9_v0079_authentic_pg16_integration_v39.test.ts'
@@ -12,8 +17,14 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0079CommittedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5DynamicDaySourceGrid_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'tests/phase5_dynamic_day_source_grid_v39.test.ts'
+      - 'tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts'
       - 'tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts'
       - 'tests/sql/phase5_stage9_insert_only_pg16_privileges.sql'
+      - 'tests/phase5_stage9_v0079_authentic_pg16_integration_v39.test.ts'
       - '.github/workflows/phase5-stage9-v0079-db-prepare-offline.yml'
 permissions:
   contents: read
@@ -37,7 +48,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Simulated DB-only 12-row prepare safety (no provider, no production)
+      - name: Simulated bounded legacy + variable-count prepared-day safety
         run: |
           set -Eeuo pipefail
           npx vitest run tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts
@@ -119,3 +130,53 @@ jobs:
           test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
           npx vitest run tests/phase5_stage9_v0079_authentic_pg16_integration_v39.test.ts
           echo 'STAGE9_REAL_SCHEMA_DISPOSABLE_PG16=PASS NO_PROVIDER_CALL=1 NO_PRODUCTION_DB_WRITE=1 PHASE6_GO=0'
+
+  authentic-v0079-multirefresh-60-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_STAGE9_REAL_PG16: '1'
+      V39_P5_STAGE9_MULTI_REFRESH: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bootstrap real B0062 and staged V0079 into disposable PG16 ONLY
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase5_fids_allowed_query_v39') IS NOT NULL")" = 't'
+      - name: Real 60 query full-horizon Stage7+8+9 DB commit under restricted INSERT-only role
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx vitest run tests/phase5_stage9_v0079_authentic_pg16_integration_v39.test.ts
+          echo 'STAGE9_MULTIREFFRESH_60_REAL_PG16=PASS NO_PROVIDER_CALL=1 NO_PRODUCTION_DB_WRITE=1 PHASE6_GO=0'
