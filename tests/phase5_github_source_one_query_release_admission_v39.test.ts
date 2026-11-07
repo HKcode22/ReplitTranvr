@@ -7,9 +7,8 @@ const H=(c:string)=>c.repeat(64);
 function fixture(){
  const code="a".repeat(40);
  const payload={
-  schema:"v39.phase5.github-source-one-query.v1",
+  schema:"v39.phase5.github-source-one-query-template.v2",
   manifestSha256:H("1"),queryDigestSha256:H("2"),
-  approvedCodeSha:code,githubRunId:"12345678912",
   plan:{
    reviewedReleaseSha256:H("3"),
    reviewedProviderRightsSha256:H("4"),
@@ -48,6 +47,8 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   const {env,payload,bytes}=fixture();
   const out=admitP5GitHubOneQueryRelease(env,bytes,payload);
   expect(out.approvedOnePhysicalAttempt).toBe(true);
+  expect(out.githubRunId).toBe(env.GITHUB_RUN_ID);
+  expect(out.codeSha).toBe(env.GITHUB_SHA);
   expect(out.actualFlightPreCertified).toBe(false);
   expect(out.phase6Go).toBe(false);
  });
@@ -71,10 +72,30 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
    .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
   f.env.GITHUB_RUN_ATTEMPT="1";
+  // GitHub assigns the ID AFTER template freeze. A valid new ID must
+  // pass this pure admission and be verified against real V0080 prearm later.
   f.env.GITHUB_RUN_ID="12345678999";
+  expect(admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload).githubRunId)
+   .toBe("12345678999");
+  f.env.GITHUB_RUN_ID="non-numeric";
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
-   .toThrow("SIGNED_RELEASE_QUERY_OR_RUN_MISMATCH");
+   .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
  });
+ it("refuses embedding future run ID or code SHA in a signed immutable template",()=>{
+  const f=fixture();
+  const expanded={...f.payload,githubRunId:"12345678999"} as any;
+  const bytes=Buffer.from(JSON.stringify(expanded));
+  f.env.V39_P5_SIGNED_QUERY_JSON_SHA256=createHash("sha256").update(bytes).digest("hex");
+  expect(()=>admitP5GitHubOneQueryRelease(f.env,bytes,expanded))
+   .toThrow("RUNTIME_GITHUB_ID_NOT_ALLOWED_IN_TEMPLATE");
+  const g=fixture();
+  const withCode={...g.payload,approvedCodeSha:g.env.GITHUB_SHA} as any;
+  const raw=Buffer.from(JSON.stringify(withCode));
+  g.env.V39_P5_SIGNED_QUERY_JSON_SHA256=createHash("sha256").update(raw).digest("hex");
+  expect(()=>admitP5GitHubOneQueryRelease(g.env,raw,withCode))
+   .toThrow("RUNTIME_GITHUB_ID_NOT_ALLOWED_IN_TEMPLATE");
+ });
+
  it("refuses changed source JSON or source code SHA even when flags are set",()=>{
   const f=fixture();
   f.bytes=Buffer.concat([f.bytes,Buffer.from("x")]);
