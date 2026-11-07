@@ -38,5 +38,5 @@ jobs:
       - name: Mock transaction / cutoff / freeze tests; no real database or provider
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_early_adaptive_draw_owner_v39.test.ts
+          npx vitest run tests/phase5_early_adaptive_draw_owner_v39.test.ts tests/phase5_early_preselection_readback_v39.test.ts
           echo 'NO_PAID_SOURCE=1 NO_REAL_DB_WRITE=1 NO_PHASE6_ACTIVATION=1'
