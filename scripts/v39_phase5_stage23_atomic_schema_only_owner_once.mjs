@@ -7,7 +7,8 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {createHash} from "node:crypto";
-import {Pool} from "pg";
+import pg from "pg";
+const {Pool}=pg;
 
 const PERMIT="INSTALL_EMPTY_V0079_V0080_V0081_NO_PROVIDER_CALLS";
 const LOCAL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
