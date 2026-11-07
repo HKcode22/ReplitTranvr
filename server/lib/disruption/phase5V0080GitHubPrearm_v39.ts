@@ -57,3 +57,42 @@ export async function prearmP5V0080ActualGitHubRun(
  const stamp=actual instanceof Date?actual.toISOString():new Date(String(actual)).toISOString();
  return {prearmSha256:sha,prearmedAtUtc:stamp,githubRunId:x.githubRunId};
 }
+
+
+/**
+ * A GitHub job may begin before its signed physical GET time. V0080 prearm is
+ * permitted earlier but V0079 MUST NOT reserve until planned_dispatch_utc.
+ * Never dispatch early, backdate a GET or silently lose the one-time prearm.
+ * Poll the actual database clock rather than assuming GH runner time.
+ */
+export async function waitForP5ScheduledPhysicalDispatch(
+ plannedUtc:string,
+ cutoffUtc:string,
+ maxResponseAndPersistSeconds:number,
+ readDbClock:()=>Promise<Date>,
+ sleep:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+):Promise<void>{
+ const stamp=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+ if(!stamp.test(plannedUtc)||!stamp.test(cutoffUtc)||
+    !Number.isInteger(maxResponseAndPersistSeconds)||
+    maxResponseAndPersistSeconds<1||maxResponseAndPersistSeconds>3600)
+  hold("UNSIGNED_SCHEDULE_OR_CUTOFF");
+ const planned=Date.parse(plannedUtc),cutoff=Date.parse(cutoffUtc);
+ if(!Number.isFinite(planned)||!Number.isFinite(cutoff)||cutoff<=planned)
+  hold("INVALID_PROSPECTIVE_REQUEST_TIME");
+ const maxWaitMs=2*60*60_000;
+ for(let poll=0;poll<=1500;poll++){
+  const clock=await readDbClock();
+  if(!(clock instanceof Date)||!Number.isFinite(clock.getTime()))
+   hold("UNTRUSTED_DATABASE_CLOCK");
+  const now=clock.getTime();
+  if(now>planned+15*60_000||
+     now+maxResponseAndPersistSeconds*1000>cutoff)
+   hold("MISSED_PROSPECTIVE_DISPATCH_OR_FLIGHT_CUTOFF");
+  if(now>=planned)return;
+  if(planned-now>maxWaitMs)
+   hold("GITHUB_JOB_STARTED_TOO_EARLY");
+  await sleep(Math.min(5_000,planned-now));
+ }
+ hold("SCHEDULE_POLL_LIMIT_HOLD");
+}
