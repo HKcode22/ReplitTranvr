@@ -16,12 +16,15 @@ const fail = (): never => {
 };
 
 export function requireP5P6WebhookDestinationV39(
-  env: Pick<NodeJS.ProcessEnv,
-    "AERODATABOX_WEBHOOK_SECRET" | "WEBHOOK_BASE_URL" | "REPLIT_DOMAINS">
+  env: {
+    AERODATABOX_WEBHOOK_SECRET?: string;
+    WEBHOOK_BASE_URL?: string;
+    REPLIT_DOMAINS?: string;
+  }
 ): string {
   const secret = env.AERODATABOX_WEBHOOK_SECRET;
-  if (typeof secret !== "string" ||
-      secret.length < 16 || secret.length > 512 ||
+  if (typeof secret !== "string") fail();
+  if (secret.length < 16 || secret.length > 512 ||
       secret.trim() !== secret || /[\u0000-\u001f\u007f]/.test(secret))
     fail();
 
