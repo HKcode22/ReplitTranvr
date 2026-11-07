@@ -161,6 +161,17 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(active).not.toContain("chooseAirportsForRunDay(");
   });
 
+  it("every parent/controller segment also refuses a mutated early batch draw", () => {
+    const code=readFileSync("server/lib/disruption/adbCollectionController_v3.ts","utf8");
+    const part=code.slice(code.indexOf("async function activateSegment("),code.indexOf("\nexport interface StartBatchResult",code.indexOf("async function activateSegment(")));
+    expect(part).toContain("await loadFrozenCalendarForBatchReadback(batch)");
+    expect(part).toContain("await loadPreparedDailyDraw(frozenDay)");
+    expect(part).toContain("early.stateHash !== batch.samplingStateHash");
+    expect(part.indexOf("await loadPreparedDailyDraw(frozenDay)"))
+      .toBeLessThan(part.indexOf("await assertBudgetHeadroom(auth)"));
+    expect(part).not.toContain("await loadSelections(");
+  });
+
   it("source startBatch must consume persisted early draw, no late redraw or sampling mutation", () => {
     const code=readFileSync("server/lib/disruption/adbCollectionController_v3.ts","utf8");
     const start=code.slice(code.indexOf("export async function startBatch():"),code.indexOf("\ninterface SegmentSettlementResult",code.indexOf("export async function startBatch():")));
