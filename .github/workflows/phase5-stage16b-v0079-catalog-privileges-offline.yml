@@ -1,0 +1,39 @@
+name: Phase5 Stage16b V0079 production catalog privilege audit (NO provider/DB)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0079_production_catalog_privileges_readonly_once.mjs'
+      - 'tests/phase5_stage16b_v0079_catalog_privileges_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage16b-v0079-catalog-privileges-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0079_production_catalog_privileges_readonly_once.mjs'
+      - 'tests/phase5_stage16b_v0079_catalog_privileges_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage16b-v0079-catalog-privileges-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-metadata-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P5_V0079_CATALOG_ONCE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify exact PostgreSQL catalog-only READ ONLY admission and no-GO
+        run: |
+          set -Eeuo pipefail
+          node --test tests/phase5_stage16b_v0079_catalog_privileges_readonly_v39.test.mjs
+          echo 'P5_V0079_ROLE_VS_SCHEMA_CAUSE_AUDIT=PASS PRODUCTION_DB_ACCESS=0 PROVIDER_CALLS=0 PHASE6_GO=0'

@@ -6,6 +6,12 @@
 
 **Start here after a lost chat:** [Live Replit production database findings, AeroDataBox legacy account evidence, Stages1–16 code map and technical study guide](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md). Observed: production PostgreSQL native COMMIT tracking **OFF**; V0079 source ledger tables **not installed or not visible**; core snapshot/FIDS/population tables exist; **0 provider/DB writes** by audit. Do not treat green PG16 CI or source query preparation as live production. **Owner's grandfathered Team Ultra account, Sept10 60k entitlement, Nov7 59,968 remaining and 1,830 Alert credits are already documented: do not repeatedly ask.** Phase5 final FREEZE HOLD / Phase6 NO-GO.
 
+## Current implementation recovery — production evidence and follow-ons
+
+- [Stage17 genuine PostgreSQL two-transaction T24 post-COMMIT witness (native tracking OFF)](2026-11-07_STAGE17_INDEPENDENT_T24_TWO_COMMIT_WITNESS_WITH_TRACKING_OFF.md) — **real disposable PG16 CI PASS**; V0081 staged, no live installation or T6/T90 activation.
+- [Stage16b read-only PostgreSQL catalog/role check](2026-11-07_STAGE16B_V0079_PRODUCTION_CATALOG_ROLE_VISIBILITY.md) — distinguishes physically absent V0079 ledger tables from tables invisible to the Replit role. No source rows, provider calls or DDL.
+- [Latest owner-audited account and engineering checkpoint](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md) — **do not re-ask historical Ultra identity, 60k original quota or Nov7 balance**.
+
 ## Phase 5 source of truth
 - [Stage 10 authentic V0079 bound-source → per-flight as-of PRE candidate readback (offline)](2026-11-07_STAGE10_V0079_BOUND_FLIGHT_PRE_ASOF_READBACK_OFFLINE.md) — source-to-member/cutoff/retime/staleness test coverage only; **no live PRE writer or source-use/Phase6 release**.
 - [Dated November 7 Phase5 engineering handoff](2026-11-07_IMPLEMENTATION_HANDOFF_SEPARATE_FROM_CATALOG_LOCKED_LOG.md) — mutable status and exact-code checkpoints. The original [Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md) remains source-catalog-locked research provenance.
