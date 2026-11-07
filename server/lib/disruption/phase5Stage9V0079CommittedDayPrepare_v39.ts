@@ -62,11 +62,12 @@ export interface P5Stage9PreparedDayReview {
 }
 export interface P5Stage9DayPrepared {
  schema:"v39.phase5.stage9.verified-day-prepared-db-commit.v1";
- status:"TWELVE_V0079_PREPARED_QUERY_ROWS_COMMITTED_NOT_SOURCE_GET";
+ status:"TWELVE_V0079_PREPARED_QUERY_ROWS_COMMITTED_NOT_SOURCE_GET"|
+  "REVIEWED_MULTI_REFRESH_V0079_PREPARED_ROWS_COMMITTED_NOT_SOURCE_GET";
  day:number;manifestSha256:string;
- queryRowCount:12;preparedDigestSha256:string;
+ queryRowCount:number;preparedDigestSha256:string;
  firstPhysicalGetAtUtc:string;
- databaseWrites:12;providerCalls:0;paidSourceAttempts:0;
+ databaseWrites:number;providerCalls:0;paidSourceAttempts:0;
  realGithubRunBound:false;flightLevelPreCertified:false;
  finalPhase5FreezePassed:false;phase6PaidGo:false;
 }
@@ -74,7 +75,9 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
  const x=p?.proposal;
  if(!x||x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
     x.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"||
-    x.sourceQueryCount!==12||x.maximumCandidateGetUnits!==24||
+    !Number.isSafeInteger(x.sourceQueryCount)||
+    x.sourceQueryCount<12||x.sourceQueryCount>384||
+    x.maximumCandidateGetUnits!==x.sourceQueryCount*2||
     x.databaseWrites!==0||x.providerCalls!==0||x.installedV0079!==false||
     x.actualGitHubPrearmVerified!==false||
     x.independentlyReviewedSourceRights!==false||
@@ -94,11 +97,13 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
     p.githubOnlyProspectiveOwnerApproved!==true)
     hold("NO_INDEPENDENT_RELEASE_OR_RESTRICTED_ROLE");
  if(!Number.isInteger(x.runDayIndex)||x.runDayIndex<1||x.runDayIndex>31||
-    !Array.isArray(x.queries)||x.queries.length!==12||
+    !Array.isArray(x.queries)||x.queries.length!==x.sourceQueryCount||
     !Array.isArray(x.actualUtcChargeBudgets)||
     sha(x.actualUtcChargeBudgets)!==p.expectedChargeDayBudgetHashSha256)
     hold("DAY_OR_FROZEN_UTC_CHARGE_BUDGET_INVALID");
- const cross=new Set<string>();
+ const cross=new Map<string,number>();
+ const uniqueQueryKeys=new Set<string>();
+ const uniqueDigests=new Set<string>();
  const derivedPhysicalChargeDayCounts=new Map<string,number>();
  for(const q of x.queries){
    if(q.manifest_sha256!==p.expectedManifestSha256||
@@ -117,8 +122,13 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
       schema:"v39.phase5.v0079.query-prepared-proposal.v1",...contents
    }))hold("QUERY_DIGEST_CHANGED_AFTER_REVIEW");
    const key=q.slot_id+"|"+q.horizon;
-   if(cross.has(key))hold("DUPLICATE_SLOT_HORIZON");
-   cross.add(key);
+   if(uniqueQueryKeys.has(q.query_key)||uniqueDigests.has(q.query_digest))
+     hold("DUPLICATE_SIGNED_QUERY_KEY_OR_DIGEST");
+   uniqueQueryKeys.add(q.query_key);
+   uniqueDigests.add(q.query_digest);
+   const count=(cross.get(key)??0)+1;
+   if(count>32)hold("UNBOUNDED_REFRESHES_PER_HORIZON");
+   cross.set(key,count);
    const chargeDay=new Date(q.planned_dispatch_utc);
    if(!Number.isFinite(chargeDay.getTime())||
       chargeDay.toISOString().slice(0,10)!==q.planned_charge_utc_date)
@@ -126,7 +136,9 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
    derivedPhysicalChargeDayCounts.set(q.planned_charge_utc_date,
       (derivedPhysicalChargeDayCounts.get(q.planned_charge_utc_date)??0)+1);
  }
- if(cross.size!==12)hold("INCOMPLETE_DAILY_SLOTS");
+ if(cross.size!==12||uniqueQueryKeys.size!==x.sourceQueryCount||
+    uniqueDigests.size!==x.sourceQueryCount)
+   hold("INCOMPLETE_DAILY_SLOTS");
  if(derivedPhysicalChargeDayCounts.size!==x.actualUtcChargeBudgets.length)
     hold("MISSING_OR_EXTRA_PHYSICAL_CHARGE_DAY");
  for(const budget of x.actualUtcChargeBudgets){
@@ -245,7 +257,8 @@ export async function commitStage9P5DayV0079PreparedRows(
     dayDate(budgets[0].budget_day_utc)!==
      day.scheduledStartUtc.toISOString().slice(0,10)||
     Number(budgets[0].daily_other_reserved_units)+
-     Number(budgets[0].daily_source_reserved_units)+24>
+     Number(budgets[0].daily_source_reserved_units)+
+     x.maximumCandidateGetUnits>
      Number(budgets[0].daily_api_ceiling))
    hold("DAY_BUDGET_NOT_FROZEN_OR_INSUFFICIENT");
   const cycle=(await client.query(
@@ -261,7 +274,8 @@ export async function commitStage9P5DayV0079PreparedRows(
                        Number(cycle[0][k])<0)||
     Number(cycle[0].other_category_reserved_units)+
     Number(cycle[0].protected_api_floor_units)+
-    Number(cycle[0].physically_reserved_units)+24>
+    Number(cycle[0].physically_reserved_units)+
+    x.maximumCandidateGetUnits>
     Number(cycle[0].cycle_api_ceiling))
    hold("CYCLE_BUDGET_NOT_FROZEN_OR_INSUFFICIENT");
   const charge=(await client.query(
@@ -300,11 +314,15 @@ export async function commitStage9P5DayV0079PreparedRows(
   await client.query("COMMIT");started=false;
   return {
    schema:"v39.phase5.stage9.verified-day-prepared-db-commit.v1",
-   status:"TWELVE_V0079_PREPARED_QUERY_ROWS_COMMITTED_NOT_SOURCE_GET",
+   status:x.sourceQueryCount===12?
+     "TWELVE_V0079_PREPARED_QUERY_ROWS_COMMITTED_NOT_SOURCE_GET":
+     "REVIEWED_MULTI_REFRESH_V0079_PREPARED_ROWS_COMMITTED_NOT_SOURCE_GET",
    day:x.runDayIndex,manifestSha256:p.expectedManifestSha256,
-   queryRowCount:12,preparedDigestSha256:x.dayProposalSha256,
+   queryRowCount:x.sourceQueryCount,
+   preparedDigestSha256:x.dayProposalSha256,
    firstPhysicalGetAtUtc:new Date(earliest).toISOString(),
-   databaseWrites:12,providerCalls:0,paidSourceAttempts:0,
+   databaseWrites:x.sourceQueryCount,
+   providerCalls:0,paidSourceAttempts:0,
    realGithubRunBound:false,flightLevelPreCertified:false,
    finalPhase5FreezePassed:false,phase6PaidGo:false
   };

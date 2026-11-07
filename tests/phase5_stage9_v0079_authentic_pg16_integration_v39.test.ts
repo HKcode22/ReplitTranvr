@@ -21,6 +21,8 @@ const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"
 const WRITER="phase5_fids_prepare_ci_writer01";
 const WURL="postgresql://"+WRITER+":ci-only@localhost:5432/neondb?sslmode=disable";
 const suite=process.env.V39_P5_STAGE9_REAL_PG16==="1"?describe:describe.skip;
+const MULTI=process.env.V39_P5_STAGE9_MULTI_REFRESH==="1";
+const QUERY_COUNT=MULTI?60:12;
 const sha=(c:string)=>c.repeat(64);
 const digest=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const iso=(n:number)=>new Date(n).toISOString();
@@ -108,25 +110,36 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
      apiUnitsPerAttempt:number;maxAttempts:number;queryKey:string
    }>;
    for(const slot of SLOTS) for(const [horizon,minutes,label] of HORIZONS){
-     const cutoff=start-minutes*60_000,req=cutoff-600_000;
-     templates.push({
-       runDayIndex:1,budgetDayUtc:serviceStart.slice(0,10),
-       physicalChargeDayUtc:iso(req).slice(0,10),
-       slot,horizon,providerQueryDirection:"Departure",
-       serviceWindowStartUtc:serviceStart,
-       serviceWindowEndUtc:iso(start+4*3_600_000),
-       earliestPlannedCutoffUtc:iso(cutoff),
-       scheduledRequestUtc:iso(req),maxResponseAndPersistSeconds:120,
-       apiUnitsPerAttempt:2,maxAttempts:1,
-       queryKey:"ci_stage9_d01_"+slot+"_"+label
-     });
+     const firstCutoff=start-minutes*60_000;
+     for(let j=0;j<(MULTI?5:1);j++){
+       const cutoff=firstCutoff+j*50*60_000,req=cutoff-600_000;
+       templates.push({
+         runDayIndex:1,budgetDayUtc:serviceStart.slice(0,10),
+         physicalChargeDayUtc:iso(req).slice(0,10),
+         slot,horizon,providerQueryDirection:"Departure",
+         serviceWindowStartUtc:serviceStart,
+         serviceWindowEndUtc:iso(start+4*3_600_000),
+         earliestPlannedCutoffUtc:iso(cutoff),
+         scheduledRequestUtc:iso(req),maxResponseAndPersistSeconds:120,
+         apiUnitsPerAttempt:2,maxAttempts:1,
+         queryKey:"ci_stage9_d01_"+slot+"_"+label+
+            (MULTI?"_refresh"+j:"")
+       });
+     }
    }
    const saved=await readCommittedP5DayCandidateGrid(admin,{
      expectedManifestSha256:manifest,expectedCalendarSha256:sha("a"),
      expectedConfigSha256:sha("b"),expectedFrameSha256:sha("c"),
      expectedProviderContractSha256:sha("f"),
      expectedEarlyDrawSha256:selected.drawSha256,
-     expectedRestrictedReaderRole:"postgres",runDayIndex:1,templates
+     expectedRestrictedReaderRole:"postgres",runDayIndex:1,templates,
+     ...(MULTI?{reviewedRefreshTiming:{
+       reviewed31DayCoverageGridSha256:sha("9"),
+       maxPopulationStalenessSeconds:3600,
+       maxSchedulerSlipSeconds:60,
+       minimumPreCommitMarginSeconds:120,
+       verifiedProviderMaxFidsWindowMinutes:240
+     }}:{})
    });
    expect(saved.databaseReadOnlySnapshot).toBe(true);
    const draw=(await admin.query(
@@ -159,7 +172,7 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
        otherCategoriesReserved:50,existingSourceReserved:0
      }))
    });
-   expect(proposal.queries).toHaveLength(12);
+   expect(proposal.queries).toHaveLength(QUERY_COUNT);
    await admin.query(
      "INSERT INTO clean.phase5_fids_cycle_budget_v39 "+
      "(manifest_sha256,cycle_api_ceiling,other_category_reserved_units,"+
@@ -216,7 +229,7 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
    if(writer)await writer.end();
    if(admin)await admin.end();
  });
- it("commits all 12 real staged V0079 query rows under INSERT-only role",async()=>{
+ it("commits the exact reviewed source-query count under INSERT-only role",async()=>{
    const access=(await writer.query(
      "SELECT current_user AS role,"+
      "has_table_privilege(current_user,"+
@@ -228,8 +241,8 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
    expect(access.upd).toBe(false);
    expect(access.del).toBe(false);
    const result=await commitStage9P5DayV0079PreparedRows(writer,pins);
-   expect(result.queryRowCount).toBe(12);
-   expect(result.databaseWrites).toBe(12);
+   expect(result.queryRowCount).toBe(QUERY_COUNT);
+   expect(result.databaseWrites).toBe(QUERY_COUNT);
    expect(result.providerCalls).toBe(0);
    expect(result.paidSourceAttempts).toBe(0);
    expect(result.phase6PaidGo).toBe(false);
@@ -238,9 +251,9 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
      "(SELECT count(*)::int FROM clean.phase5_fids_physical_attempt_v39) AS a,"+
      "(SELECT count(*)::int FROM clean.phase5_fids_original_binding_v39) AS o"
    );
-   expect(physical.rows[0]).toEqual({q:12,a:0,o:0});
+   expect(physical.rows[0]).toEqual({q:QUERY_COUNT,a:0,o:0});
  });
- it("refuses a blind replay and leaves the 12 original PREPARED rows unchanged",async()=>{
+ it("refuses blind replay and preserves all original PREPARED rows",async()=>{
    await expect(commitStage9P5DayV0079PreparedRows(writer,pins))
      .rejects.toThrow("EXISTING_QUERY_ROWS_NO_BLIND_DUPLICATE");
    const counts=await admin.query(
@@ -248,13 +261,13 @@ suite("Phase5 Stage9 with authentic B0062+V0079 schema / restricted PG16",()=>{
      "count(*) FILTER (WHERE state='PREPARED' AND github_run_id='00000')::int AS prepared "+
      "FROM clean.phase5_fids_allowed_query_v39"
    );
-   expect(counts.rows[0]).toEqual({total:12,prepared:12});
+   expect(counts.rows[0]).toEqual({total:QUERY_COUNT,prepared:QUERY_COUNT});
  });
  it("rejects ordinary production-owner DB credentials before any further write",async()=>{
    await expect(commitStage9P5DayV0079PreparedRows(admin,pins))
      .rejects.toThrow("NO_EXACT_INSERT_ONLY_PRODUCTION_ROLE");
    expect(Number((await admin.query(
      "SELECT count(*) AS n FROM clean.phase5_fids_allowed_query_v39"
-   )).rows[0].n)).toBe(12);
+   )).rows[0].n)).toBe(QUERY_COUNT);
  });
 });

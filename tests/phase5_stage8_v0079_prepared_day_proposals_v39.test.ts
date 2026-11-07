@@ -3,7 +3,8 @@ import {
  planStage8P5DayV0079Proposals,type Stage8DayProposalInput
 } from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {materializeP5DynamicDaySourceGrid,
- P5_DYNAMIC_DAY_GRID_SCHEMA,type P5DynamicDayGridInput}
+ P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+ type P5DynamicDayGridInput}
  from "../server/lib/disruption/phase5DynamicDaySourceGrid_v39";
 import {verifyPreparedDailyDraw} from
  "../server/lib/disruption/phase5EarlyPreselectionReadback_v39";
@@ -150,5 +151,117 @@ describe("Phase5 Stage8 one real-day V0079 query row proposals",()=>{
   const t=fixture();
   t.stage7.dbClockAtReadUtc="2026-11-09T20:00:00.000Z";
   expect(()=>planStage8P5DayV0079Proposals(t)).toThrow("SAVED_DAY_READBACK_AFTER_FIRST_GET");
+ });
+});
+
+
+function multiFixture():Stage8DayProposalInput{
+ const p=fixture();
+ const original=p.stage7.selectedDayCandidateGrid.acquisitions;
+ const templates:P5DynamicDayGridInput["templates"]=[];
+ for(const a of original){
+  const {icao,plannedAirportSelectionUtc,...t}=a;
+  void icao;void plannedAirportSelectionUtc;
+  for(let j=0;j<5;j++){
+   const cutoff=Date.parse(t.earliestPlannedCutoffUtc)+j*50*60_000;
+   const request=cutoff-10*60_000;
+   templates.push({...t,
+    earliestPlannedCutoffUtc:iso(cutoff),
+    scheduledRequestUtc:iso(request),
+    physicalChargeDayUtc:iso(request).slice(0,10),
+    queryKey:t.queryKey+"_refresh"+j});
+  }
+ }
+ const timing={
+  reviewed31DayCoverageGridSha256:sh("9"),
+  maxPopulationStalenessSeconds:3600,
+  maxSchedulerSlipSeconds:60,
+  minimumPreCommitMarginSeconds:120,
+  verifiedProviderMaxFidsWindowMinutes:240
+ };
+ p.stage7.selectedDayCandidateGrid=materializeP5DynamicDaySourceGrid({
+  schema:P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+  reviewedCalendarSha256:p.calendarSha256,
+  reviewedConfigSha256:p.configSha256,
+  reviewedFrameSha256:p.frameSha256,
+  providerContractSha256:p.providerContractSha256,
+  day:p.day,committedEarlyDrawRows:p.savedEarlyDrawRows,
+  expectedCommittedEarlyDrawSha256:
+   verifyPreparedDailyDraw(p.day,p.savedEarlyDrawRows).stateHash,
+  reviewedRefreshTiming:timing,templates
+ });
+ return p;
+}
+describe("Phase5 bounded multirefresh Stage6→7→8 V0079 proposed daily source",()=>{
+ it("proposes 60 future source GETs at 50min cadence with Day0 true billing",()=>{
+  const p=multiFixture();
+  const out=planStage8P5DayV0079Proposals(p);
+  expect(out.sourceQueryCount).toBe(60);
+  expect(out.maximumCandidateGetUnits).toBe(120);
+  expect(out.queries).toHaveLength(60);
+  expect(out.actualUtcChargeBudgets.map(x=>[x.day,x.queries,x.candidateUnits]))
+    .toEqual([["2026-11-08",20,40],["2026-11-09",40,80]]);
+  expect(out.queries.every(x=>x.github_run_id==="00000"&&
+    x.state==="PREPARED"&&x.max_physical_attempts===1)).toBe(true);
+  expect(out.phase6Go).toBe(false);
+  expect(out.providerCalls).toBe(0);
+  expect(out.databaseWrites).toBe(0);
+  expect(p.stage7.selectedDayCandidateGrid.reviewedRefreshTiming?.maxPopulationStalenessSeconds)
+    .toBe(3600);
+ });
+ it("refuses an incomplete source refresh group before Stage8",()=>{
+  const p=multiFixture();
+  const templates=p.stage7.selectedDayCandidateGrid.acquisitions.map(q=>{
+   const {icao,plannedAirportSelectionUtc,...rest}=q;
+   void icao;void plannedAirportSelectionUtc;
+   return rest;
+  });
+  templates.pop();
+  const v=p.stage7.selectedDayCandidateGrid.reviewedRefreshTiming!;
+  expect(()=>materializeP5DynamicDaySourceGrid({
+   schema:P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+   reviewedCalendarSha256:p.calendarSha256,
+   reviewedConfigSha256:p.configSha256,
+   reviewedFrameSha256:p.frameSha256,
+   providerContractSha256:p.providerContractSha256,
+   day:p.day,committedEarlyDrawRows:p.savedEarlyDrawRows,
+   expectedCommittedEarlyDrawSha256:
+    verifyPreparedDailyDraw(p.day,p.savedEarlyDrawRows).stateHash,
+   reviewedRefreshTiming:v,templates
+  })).toThrow("GAP_IN_ACTUAL_DYNAMIC_DAY_FLIGHT_CUTOFF_COVERAGE");
+ });
+ it("refuses in-memory timing changes even with intact early-draw SHA",()=>{
+  const p=multiFixture();
+  p.stage7.selectedDayCandidateGrid.acquisitions[0].scheduledRequestUtc=
+   "2026-11-08T13:45:00.000Z";
+  expect(()=>planStage8P5DayV0079Proposals(p)).toThrow("TAMPERED");
+ });
+ it("refuses insufficient UTC Day0 budget for 20 GETs",()=>{
+  const p=multiFixture();
+  p.chargeDayBudgets[0].otherCategoriesReserved=1865;
+  expect(()=>planStage8P5DayV0079Proposals(p)).toThrow(
+   "INSUFFICIENT_FROZEN_UTC_CHARGE_BUDGET");
+ });
+ it("rejects missing source-age contract or unsigned extreme refresh count",()=>{
+  const p=multiFixture();
+  const templates=p.stage7.selectedDayCandidateGrid.acquisitions.map(q=>{
+   const {icao,plannedAirportSelectionUtc,...rest}=q;
+   void icao;void plannedAirportSelectionUtc;
+   return rest;
+  });
+  expect(()=>materializeP5DynamicDaySourceGrid({
+   schema:P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+   reviewedCalendarSha256:p.calendarSha256,
+   reviewedConfigSha256:p.configSha256,
+   reviewedFrameSha256:p.frameSha256,
+   providerContractSha256:p.providerContractSha256,
+   day:p.day,committedEarlyDrawRows:p.savedEarlyDrawRows,
+   expectedCommittedEarlyDrawSha256:
+    verifyPreparedDailyDraw(p.day,p.savedEarlyDrawRows).stateHash,
+   templates
+  })).toThrow("UNVERIFIED_MULTI_REFRESH_TIMING_CONTRACT");
+  const q=multiFixture();
+  q.stage7.selectedDayCandidateGrid.reviewedRefreshTiming!.maxPopulationStalenessSeconds=100;
+  expect(()=>planStage8P5DayV0079Proposals(q)).toThrow();
  });
 });
