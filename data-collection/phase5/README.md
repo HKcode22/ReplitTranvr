@@ -9,6 +9,14 @@
 - **Next finite engineering step:** [Stage25 four separate least-privilege roles with disposable PG16 tests and technical study guide](2026-11-07_STAGE25_POSTCOMMISSIONED_SCHEMA_AND_FOUR_ROLE_MINIMUM_ACL.md). **Role grants to production are not yet made** and the paid owner is not activated. Do not confuse CI tests with a real provider-use license or signed scientific FREEZE.
 - **Current science status:** Phase5 final FREEZE **HOLD**; Phase6 paid GO **NO**. Provider normalized Contents ML/backup purpose/retention rights, native selected T & physical operating leg, actual signed 31-batch-day schedule and real GitHub-only full three-PRE-to-POST/AIRBORNE funnel still require genuine evidence.
 
+## Read this first if you are new to Phase 5 terminology or the code
+
+- **[Start Here — What “scientific FREEZE,” FIDS, a FIDS-only pilot, PRE/POST, T, sampling and HOLD actually mean](PHASE5_START_HERE_FREEZE_FIDS_PILOT_GLOSSARY_20261107.md)**. A freeze versions the approved protocol; it does not stop us from scientifically warranted prospective amendments.
+- **[Section B Deep Code Lab — learn the actual TypeScript/JavaScript blocks and SQL embedded in TS line by line](PHASE5_SECTION_B_DEEP_CODE_LAB_LINE_BY_LINE_20261107.md)**. Practical examples from `phase6SamplingDecision`, source-grid solver, PostgreSQL readback, Stage9 PREPARED INSERT, and V0079 paid-reservation function. Includes why `SELECT some_function()` can still mutate PostgreSQL and how `client.query(SQL, [params])` works.
+- **[Full 14-lesson Phase 5 Engineering Field Guide](PHASE5_ENGINEERING_FIELD_GUIDE_FILE_BY_FILE_20261107.md)**. Use the newer two companion lessons above when a shorter file table or unfamiliar code syntax is confusing.
+
+**Engineering does not stop while the owner studies these documents.** Production V0079/V0080/V0081 schema already installed by Stage23; Stage24 later PRE code merged, Stage25 four-role tests merged. Actual production role activation, source→full PRE→POST evidence, rights/native T and final scientific FREEZE remain pending. No repeat owner account inventory or successful Stage23 install.
+
 ## Learn Phase 5 file-by-file while we complete it
 
 **[Phase 5 Engineering Field Guide — 14 technical lessons, real code paths, annotated logic and exercises](PHASE5_ENGINEERING_FIELD_GUIDE_FILE_BY_FILE_20261107.md)** explains the purpose of Phase5, all primary implementation files, pure solver functions, PostgreSQL transactions, original FIDS SHA/source custody, GitHub FIDS owner, actual as-of PRE and independent witness, the seven REST categories, Alert billing and missingness. Read in the guide's prescribed file order with source open in your IDE. This is technical study material AND an engineering handoff; it distinguishes staged/offline code from real live flight evidence.

@@ -6,6 +6,12 @@ This guide is for learning the software engineering and the aviation research de
 
 **Start here when a chat is lost:** [Phase5 README](README.md) → [Phase5 current technical checkpoint](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md) → [f.8 base plan](../plans/V3.9_DataCollectPlan_f.8.md) and [Amendment C](../plans/V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md) → [current issues #413](https://github.com/HKcode22/ReplitTranvr/issues/413) and [#416](https://github.com/HKcode22/ReplitTranvr/issues/416). The **original catalog-locked** [implementation log](../implementation/V3.9_IMPLEMENTATION_LOG.md) is an accurate historical record, not a prohibition against new prospective versioned plan amendments.
 
+## New — The first two teaching documents to read
+
+If terms such as **FREEZE, FIDS, FIDS-only pilot, PRE, POST, T−24h, physical operating leg or HOLD** are unclear, read **[Start Here: Phase 5 vocabulary and scientific purpose](PHASE5_START_HERE_FREEZE_FIDS_PILOT_GLOSSARY_20261107.md)** first. It explains why a scientific freeze is a versioned agreement before data collection, not a rule that our own plan cannot be improved.
+
+If you want to **learn how to read the actual TypeScript lines and blocks**, including loops, objects, functions, `async/await`, SQL `SELECT`/`INSERT` statements *inside TypeScript strings*, `Pool.query(SQL, [parameters])`, DB transaction `BEGIN/COMMIT`, and how to trace a call across files, read **[Section B Deep Code Lab — real file excerpts, line-by-line explanations and exercises](PHASE5_SECTION_B_DEEP_CODE_LAB_LINE_BY_LINE_20261107.md)**. This is the expanded companion to the summary table below, not another source producer. You do **not** need to understand every implementation detail before engineering can proceed.
+
 ## Lesson 1 — What are we doing in Phase 5?
 
 Think of an ML dataset for traveler disruption. We want to predict **before a flight** using only information actually available then; later we compare predictions/features with independently observed outcomes. A model trained on the eventual final schedule as though it had been known yesterday suffers **data leakage**. A dataset that only captures disrupted flights has **selection bias**. A dataset that calls missing callbacks “no disruption” has **label error**.
@@ -32,7 +38,7 @@ Reviewed f.8 design + 31-day schedule + provider-use rights
                                           └─> lawful retained ML dataset
 ```
 
-The phases above do **not** all run today. Files can exist on `main` while the production tables, dedicated roles, scheduler and source rights remain **not installed / not certified**.
+The phases above do **not** all run today. As independently reported by the owner, Stage23 **installed** V0079/V0080/V0081 empty production schema tables; Stage24 **merged** the witness-gated later PRE code; Stage25 **merged disposable PostgreSQL role ACL tests**. Actual dedicated production role grants, real source/three-PRE scheduler, source rights and scientific FREEZE remain **not activated/certified**. Do not confuse “database schema installed” with “data collection live.”
 
 ## Lesson 2 — The primary source files, one by one
 
@@ -51,6 +57,8 @@ The table is ordered by the *data flow*, not filename. Every linked file below w
 | [Phase5 acceptance checklist](2026-11-06_PHASE5_FREEZE_CHECKLIST_AND_VERSIONED_COLLECTION_QA.md) | Remaining LIVE evidence needed to sign the release; do not convert a hypothetical PASS to a production PASS. |
 
 ### B. Calendar, mathematical selection and source timing — **offline controls**
+
+**Start the expanded teaching here:** [Section B Deep Code Lab](PHASE5_SECTION_B_DEEP_CODE_LAB_LINE_BY_LINE_20261107.md). Each file below is explained in actual source excerpts with line numbers, input/output/side effects, `{}` braces, `if`/`for` branches and exact SQL-via-TypeScript illustrations. **The table is a navigation index, not sufficient instruction by itself.**
 
 | File | Main function and why |
 | --- | --- |
@@ -288,7 +296,7 @@ A missing callback **must remain unknown**, never a negative outcome. An ADS-B i
 
 **Verified engineering:** early-selection guard, bounded source-request adapters, PostgreSQL16 synthetic/disposable tests for prepared rows, source as-of candidates, source-bound T24 PRE and independent T24 witness, source budgets in their limited hypothetical models, Stage18 actual production missing-migration diagnosis, Stage19 CI rollback, Stage21 pair calendar verifier and finite supplied-candidate solver, Stage22 segment-aware coverage model once its focused CI passes.
 
-**Still needed for final Phase5 FREEZE:** production-scoped inert V0079→81 installer/role grants and after-commit audit; actually generated full signed real calendar/region/anchor pool, measured provider range and source latency/cost, proper seven-category live limiter, GitHub-only multi-refresh owner with all three genuine per-flight PRE horizons and POST independent source check, deployed receiver verified exact SHA, provider-native selected T and physical leg, account-specific permitted normalized Contents ML/backup rights, and a signed independent GO/STOP with measured quality denominators.
+**Still needed for final Phase5 FREEZE:** production-scoped restricted role grants and independent readback (**the V0079→81 empty-schema installation and after-commit audit already succeeded**); actually generated full signed real calendar/region/anchor pool, measured provider range and source latency/cost, proper seven-category live limiter, GitHub-only multi-refresh owner with all three genuine per-flight PRE horizons and POST independent source check, deployed receiver verified exact SHA, provider-native selected T and physical leg, account-specific permitted normalized Contents ML/backup rights, and a signed independent GO/STOP with measured quality denominators.
 
 **No need to repeat:** the known RapidAPI original Team Ultra entitlement/history/November 7 quota snapshots, the two successful Stage16b/18 read-only DB catalog audits, or basic source-only probes for their own sake. Rights and science have their own outstanding evidence, not an excuse for endless account questions.
 
