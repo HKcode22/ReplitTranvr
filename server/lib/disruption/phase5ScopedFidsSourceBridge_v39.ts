@@ -180,7 +180,9 @@ export async function runP5ScopedFidsSource(
   let reserved:P5PhysicalReservation|null=null;
   let commits=0;
   let providerReservationCalls=0;
-  let proof:P5OriginalCommit|null=null;
+  // Mutable cell: persist callback is invoked inside an awaited dependency.
+  // TS control flow cannot see assignments to a captured local in that call.
+  const custody:{proof:P5OriginalCommit|null}={proof:null};
   const sourceParams:FidsCensusParams={
     airportIcao:first.selectedIcao,
     fromLocal:p.localFrom,toLocal:p.localTo,ianaTimezone:p.ianaTimezone,
@@ -266,10 +268,11 @@ export async function runP5ScopedFidsSource(
          Date.parse(ack.sourceAvailableAtUtc)<sourceQuery.availableAtUtc.getTime()||
          Date.parse(ack.retentionExpiryUtc)>Date.parse(expectedExpiresAtUtc))
         refuse("ATOMIC_ORIGINAL_DB_READBACK_MISMATCH");
-      proof=ack;
+      custody.proof=ack;
       return ack.normalizedRowsPersisted;
     },
   });
+  const proof=custody.proof;
   if(!result||!proof){
     return {status:"SOURCE_UNOBSERVED_OR_UNPERSISTED",
       plannedPhysicalMaximum:1,physicalAttemptsReserved:reserved?1:0,
