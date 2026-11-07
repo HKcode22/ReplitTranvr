@@ -1,0 +1,89 @@
+name: Phase5 Stage10 V0079 flight PRE as-of readback — offline only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0079BoundFlightPreAsOfReadback_v39.ts'
+      - 'tests/phase5_stage10_bound_flight_pre_asof_readonly_v39.test.ts'
+      - 'tests/phase5_stage10_bound_flight_pre_asof_real_pg_v39.test.ts'
+      - '.github/workflows/phase5-stage10-bound-flight-pre-asof-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0079BoundFlightPreAsOfReadback_v39.ts'
+      - 'tests/phase5_stage10_bound_flight_pre_asof_readonly_v39.test.ts'
+      - 'tests/phase5_stage10_bound_flight_pre_asof_real_pg_v39.test.ts'
+      - '.github/workflows/phase5-stage10-bound-flight-pre-asof-offline.yml'
+permissions:
+  contents: read
+jobs:
+  pure-bound-source-cutoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Source-bound per-flight availability, T24 anchoring and leakage exclusions
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage10_bound_flight_pre_asof_readonly_v39.test.ts
+          echo 'P5_STAGE10_PURE=PASS PAID_PROVIDER_CALLS=0 DB_WRITES=0 PRE_WRITTEN=0'
+  actual-v0079-pg16-no-content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_STAGE10_PG16: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install B0062 and staged V0079 in ephemeral PG16 only
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+      - name: Real SQL compilation and least-privilege empty-source refusal
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage10_bound_flight_pre_asof_real_pg_v39.test.ts
+          echo 'P5_STAGE10_REAL_PG16=PASS NO_PROVIDER=1 NO_PRODUCTION_DB=1 NO_PRE_WRITE=1'

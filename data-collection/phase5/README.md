@@ -3,6 +3,7 @@
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
 ## Phase 5 source of truth
+- [Stage 10 authentic V0079 bound-source → per-flight as-of PRE candidate readback (offline)](2026-11-07_STAGE10_V0079_BOUND_FLIGHT_PRE_ASOF_READBACK_OFFLINE.md) — source-to-member/cutoff/retime/staleness test coverage only; **no live PRE writer or source-use/Phase6 release**.
 - [Dated November 7 Phase5 engineering handoff](2026-11-07_IMPLEMENTATION_HANDOFF_SEPARATE_FROM_CATALOG_LOCKED_LOG.md) — mutable status and exact-code checkpoints. The original [Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md) remains source-catalog-locked research provenance.
 - [PR #428: offline Phase5 clock/grid alignment](https://github.com/HKcode22/ReplitTranvr/pull/428) — 5/5 reviewed CI PASS but **closed unmerged**; do not treat as deployed code.
 - [Phase5 freeze acceptance checklist and versioned 31-day QA plan](2026-11-06_PHASE5_FREEZE_CHECKLIST_AND_VERSIONED_COLLECTION_QA.md)
