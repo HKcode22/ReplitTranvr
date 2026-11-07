@@ -1,3 +1,6 @@
+import {
+ solveP5F8FrozenCandidatePool,digestP5F8FrozenCandidatePool
+} from "../server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs";
 import {describe,it} from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -157,5 +160,74 @@ describe("Stage21 binding f.8 31-batch-day paired crossover hard gates",()=>{
   assert.equal(r.status,"UNSAT_MISSING_OR_UNFROZEN_CALENDAR_INPUT");
   assert.throws(()=>deriveP5F8SeededPairRoles(seed,[]),
    /INVALID_SEEDED_PAIR_TEMPLATES/);
+ });
+});
+
+function makePool(opts={}){
+ const p=make();
+ const {days,...basePacket}=p;
+ const candidateDays=days.map(x=>[x]);
+ if(opts.alternativeForDay31){
+  const x=structuredClone(days[30]);
+  Object.assign(x,window(Date.parse(x.startUtc)+4*H,x.windowShape));
+  x.utcSlot=x.startUtc.slice(11,13);
+  candidateDays[30].push(x);
+ }
+ const timeWindowScheduleSeedSha256=h("f");
+ return {
+  schema:"v39.phase5.f8.finite-candidate-calendar-csp-input.v1",
+  basePacket,candidateDays,timeWindowScheduleSeedSha256,
+  expectedCandidateSetSha256:digestP5F8FrozenCandidatePool(
+    basePacket,candidateDays,timeWindowScheduleSeedSha256),
+  maxSearchNodes:10000
+ };
+}
+describe("Stage21b finite-candidate f.8 time-window SAT solver",()=>{
+ it("selects a complete valid 31-day assignment without certifying live science",()=>{
+  const result=solveP5F8FrozenCandidatePool(makePool());
+  assert.equal(result.status,
+   "SAT_FINITE_CANDIDATE_SCHEDULE_NOT_SCIENTIFIC_RELEASE");
+  assert.equal(result.days.length,31);
+  assert.equal(result.feasibleCandidates,1);
+  assert.equal(result.visitedNodes,31);
+  assert.equal(result.structuralAudit.errors.length,0);
+  assert.equal(result.providerCalls,0);
+  assert.equal(result.databaseWrites,0);
+  assert.equal(result.phase5FreezePassed,false);
+  assert.equal(result.phase6Go,false);
+ });
+ it("uses §8.8 lexical tie break after exact weekday×UTC soft-score equality",()=>{
+  const result=solveP5F8FrozenCandidatePool(
+   makePool({alternativeForDay31:true}));
+  assert.equal(result.status,
+   "SAT_FINITE_CANDIDATE_SCHEDULE_NOT_SCIENTIFIC_RELEASE");
+  assert.equal(result.feasibleCandidates,2);
+  assert.equal(result.days[30].utcSlot,"00");
+  assert.equal(result.tieBreak,
+   "LEXICALLY_SMALLEST_CANONICAL_SCHEDULE_AT_EQUAL_SCORE");
+ });
+ it("returns UNSAT only for fully searched provided finite choices",()=>{
+  const p=makePool();
+  p.candidateDays[0][0].pairRole="ordinary";
+  p.expectedCandidateSetSha256=digestP5F8FrozenCandidatePool(
+   p.basePacket,p.candidateDays,p.timeWindowScheduleSeedSha256);
+  const x=solveP5F8FrozenCandidatePool(p);
+  assert.equal(x.status,"UNSAT_SUPPLIED_FROZEN_CANDIDATE_POOL_ONLY");
+  assert.equal(x.feasibleCandidates,0);
+  assert.equal(x.phase6Go,false);
+ });
+ it("never mislabels a capped search as UNSAT or globally optimal",()=>{
+  const p=makePool({alternativeForDay31:true});
+  p.maxSearchNodes=1;
+  const x=solveP5F8FrozenCandidatePool(p);
+  assert.equal(x.status,"HOLD_BOUNDED_SEARCH_NOT_PROVEN_COMPLETE");
+  assert.equal(x.phase5FreezePassed,false);
+ });
+ it("rejects candidate pool mutation without matching frozen SHA",()=>{
+  const p=makePool();
+  p.candidateDays[0][0].utcSlot="20";
+  const x=solveP5F8FrozenCandidatePool(p);
+  assert.equal(x.status,"HOLD_INVALID_FROZEN_CANDIDATE_POOL");
+  assert.equal(x.reason,"CHANGED_FROZEN_CANDIDATE_POOL_HASH");
  });
 });
