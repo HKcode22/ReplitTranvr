@@ -113,11 +113,12 @@ export function verifyPreparedDailyDraw(
     // The chosen probabilistic draw must appear in its explicitly saved vector.
     if (isRegional) {
       const vec = x.probability_vector as Array<{
-        icao?: unknown; probability?: unknown;
+        icao?: unknown; probability?: unknown; drawScore?: unknown;
       }>;
       if (vec.length < 1 || vec.length > 1000 ||
           vec.some(v=>typeof v?.icao !== "string" ||
             !Number.isFinite(Number(v.probability)) ||
+            !Number.isFinite(Number(v.drawScore)) ||
             Number(v.probability) <= 0 || Number(v.probability) > 1))
         refuse("INVALID_REGIONAL_PROBABILITY_VECTOR");
       const total = vec.reduce((n, v)=>n+Number(v.probability),0);
@@ -134,8 +135,17 @@ export function verifyPreparedDailyDraw(
       designProbability: p,
       plannedShare: isRegional ? null : 1,
       adaptiveStateHash: x.adaptive_state_hash,
+      // PostgreSQL jsonb deliberately canonicalizes object key order.
+      // Never hash its raw key ordering; normalize explicit source-contract
+      // fields in one deterministic order for both fresh and readback rows.
       probabilityVector: isRegional
-        ? x.probability_vector as SamplingSelection["probabilityVector"]
+        ? (x.probability_vector as Array<{
+            icao: string; probability: number; drawScore: number;
+          }>).map(v=>({
+            icao:norm(v.icao),
+            probability:Number(v.probability),
+            drawScore:Number(v.drawScore),
+          }))
         : null,
     });
   }
