@@ -236,4 +236,14 @@ describe("Phase5 Stage9: exact day V0079 PREPARED DB writer ONLY",()=>{
   await expect(commitStage9P5DayV0079PreparedRows(wrong.pool as any,pins))
    .rejects.toThrow("ACTUAL_UTC_CHARGE_DAY_BUDGET_MISMATCH");
  });
+ it("rejects a reviewer-hashed but source-unrelated UTC Day0 request count",async()=>{
+  const {pins,day,draw}=context();
+  pins.proposal.actualUtcChargeBudgets[0].queries=5;
+  pins.proposal.actualUtcChargeBudgets[0].candidateUnits=10;
+  pins.expectedChargeDayBudgetHashSha256=hash(pins.proposal.actualUtcChargeBudgets);
+  const f=fake(pins,day,draw);
+  await expect(commitStage9P5DayV0079PreparedRows(f.pool as any,pins))
+   .rejects.toThrow("UNCORRELATED_UTC_CHARGE_DAY_ACCOUNTING");
+  expect(f.logs).toHaveLength(0);
+ });
 });
