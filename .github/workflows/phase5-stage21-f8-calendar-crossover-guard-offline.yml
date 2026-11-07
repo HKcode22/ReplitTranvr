@@ -1,0 +1,42 @@
+name: Phase5 Stage21 f.8 calendar hard constraints and finite SAT solver (offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5F8CrossoverCalendarFreezeGuard_v39.mjs'
+      - 'server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs'
+      - 'tests/phase5_stage21_f8_crossover_calendar_guard_v39.test.mjs'
+      - '.github/workflows/phase5-stage21-f8-calendar-crossover-guard-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5F8CrossoverCalendarFreezeGuard_v39.mjs'
+      - 'server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs'
+      - 'tests/phase5_stage21_f8_crossover_calendar_guard_v39.test.mjs'
+      - '.github/workflows/phase5-stage21-f8-calendar-crossover-guard-offline.yml'
+permissions:
+  contents: read
+jobs:
+  f8-31-batch-day-hard-constraints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate f.8 31-day crossover hard gates and deterministic SAT/UNSAT/bounded-search guard
+        run: |
+          set -Eeuo pipefail
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          node --test tests/phase5_stage21_f8_crossover_calendar_guard_v39.test.mjs
+          echo 'P5_F8_CROSSOVER_STRUCTURE=PASS REAL_CALENDAR=NOT_GENERATED PROVIDER_CALLS=0 LIVE_DB_WRITES=0 PHASE5_FREEZE=HOLD PHASE6_GO=0'
