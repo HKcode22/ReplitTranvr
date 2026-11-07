@@ -5,6 +5,7 @@
 ## Phase 5 source of truth
 - [Phase5 freeze acceptance checklist and versioned 31-day QA plan](2026-11-06_PHASE5_FREEZE_CHECKLIST_AND_VERSIONED_COLLECTION_QA.md)
 - [Original V3.9 f.8 collection plan](../plans/V3.9_DataCollectPlan_f.8.md), [binding scientific Amendment B](../plans/V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md)
+- [Safe read-only Phase5 table/column and recent row-presence audit](audits/phase5-phase6-column-observability-readonly.mjs) — schema metadata, not a deployed user dashboard and not permission to export expired provider Content.
 - [Phase5 readiness issue #413](https://github.com/HKcode22/ReplitTranvr/issues/413), earlier [freeze handoff issue #344](https://github.com/HKcode22/ReplitTranvr/issues/344), [source-use/retention #300](https://github.com/HKcode22/ReplitTranvr/issues/300)
 
 ## Clear phase boundaries
