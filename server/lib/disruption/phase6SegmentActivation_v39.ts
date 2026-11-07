@@ -15,6 +15,8 @@ import {
   listSubscriptionsStrict,
 } from "./aerodataboxLimiter_v3";
 
+import { requireP5P6WebhookDestinationV39 } from "./phase5Phase6WebhookDestinationGuard_v39";
+
 export const PHASE6_PROVIDER_MUTATION_LOCK = "v39-phase6-provider-mutation";
 
 interface FrozenSelection {
@@ -105,6 +107,8 @@ export interface ActivateFrozenSegmentResult {
 export async function activateFrozenPlannedSegment(
   input: ActivateFrozenSegmentInput,
 ): Promise<ActivateFrozenSegmentResult> {
+  // A subscription with no valid private HTTPS callback would be billable but unobservable.
+  const callbackUrl = requireP5P6WebhookDestinationV39(process.env);
   await assertNoIncident();
 
   const segment = await pool.query(
@@ -148,7 +152,7 @@ export async function activateFrozenPlannedSegment(
   const created: string[] = [];
   try {
     for (const s of selections) {
-      const sub = await createSubscription("FlightByAirportIcao", s.icao, { maxDeliveryRetries: 0 });
+      const sub = await createSubscription("FlightByAirportIcao", s.icao, { url: callbackUrl, maxDeliveryRetries: 0 });
       if (!sub?.id) {
         // Provider outcome is unknown; do not assume no subscription was made.
         throw new Error(`CREATE_OUTCOME_UNKNOWN:${s.slotId}:${s.icao}`);

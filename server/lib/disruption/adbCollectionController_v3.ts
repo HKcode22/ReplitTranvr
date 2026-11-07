@@ -20,6 +20,7 @@ import {
   type SubscriptionSubjectType,
 } from "./aerodataboxLimiter_v3";
 import { AIRPORT_TIERS, type AirportTier } from "./adbAirportCatalog_v3";
+import { requireP5P6WebhookDestinationV39 } from "./phase5Phase6WebhookDestinationGuard_v39";
 import {
   chooseAirportsForRunDay,
   type FrozenRunDaySamplingPlan,
@@ -473,10 +474,13 @@ async function createSubscriptionsForSegment(
   segmentId: string,
   selections: SamplingSelection[],
 ): Promise<CreatedSub[]> {
+  // The generic subscription transport allows a secretless fallback URL;
+  // never CREATE a Phase-6 alert pointing at a receiver that refuses it.
+  const callbackUrl = requireP5P6WebhookDestinationV39(process.env);
   const created: CreatedSub[] = [];
   try {
     for (const s of selections) {
-      const sub = await createSubscription("FlightByAirportIcao" as SubscriptionSubjectType, s.icao, { maxDeliveryRetries: 0 });
+      const sub = await createSubscription("FlightByAirportIcao" as SubscriptionSubjectType, s.icao, { url: callbackUrl, maxDeliveryRetries: 0 });
       if (!sub?.id) throw new Error(`CREATE_FAILED:${s.slotId}:${s.icao}`);
       const tier = tierForSlot(s.slotId);
       await pool.query(
@@ -558,6 +562,8 @@ export async function getActiveBatch(): Promise<CollectionBatch | null> {
 }
 
 export async function startBatch(): Promise<StartBatchResult> {
+  // Explicit pre-mutation receiver safety: no implicit fallback host or missing secret.
+  requireP5P6WebhookDestinationV39(process.env);
   let auth: Phase6Authorization | null = null;
   let day: FrozenCalendarRow | null = null;
   try {
