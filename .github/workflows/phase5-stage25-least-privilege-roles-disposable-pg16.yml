@@ -1,0 +1,80 @@
+name: Phase5 Stage25 least-privilege separated roles (disposable PG16 ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/sql/phase5_stage25_least_privilege_four_roles_disposable_pg16_v39.sql'
+      - '.github/workflows/phase5-stage25-least-privilege-roles-disposable-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/sql/phase5_stage25_least_privilege_four_roles_disposable_pg16_v39.sql'
+      - '.github/workflows/phase5-stage25-least-privilege-roles-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  four-frozen-no-login-role-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install Node modules locally; no app deploy
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Apply B0062 baseline only to isolated PostgreSQL 16
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+      - name: Add reviewed inert V0079 then V0080 then V0081 in CI only
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql >/tmp/v79-ci.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql >/tmp/v80-ci.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql >/tmp/v81-ci.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c             "REVOKE EXECUTE ON FUNCTION clean.phase5_t24_witness_before_insert_v39(), clean.phase5_t24_witness_immutable_v39() FROM PUBLIC" >/dev/null
+      - name: Create only NOLOGIN roles in disposable CI and prove every allow/deny ACL
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f tests/sql/phase5_stage25_least_privilege_four_roles_disposable_pg16_v39.sql
+          echo 'STAGE25_DISPOSABLE_ACL_MATRIX=PASS USER_DB_WRITES=0 PROVIDER_CALLS=0 PHASE5_FREEZE=HOLD'
+      - name: Revalidate full staged schema present and no scientific GO
+        run: |
+          set -Eeuo pipefail
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs >/tmp/p5-stage25-after.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const d=JSON.parse(fs.readFileSync("/tmp/p5-stage25-after.json","utf8"));
+            if(!d.stageTableSetAllPresent||d.productionInstallAuthorized||
+               d.phase5FreezePassed||d.phase6PaidGo)
+              throw Error("P5_STAGE25_NOT_SAFE");
+          '
