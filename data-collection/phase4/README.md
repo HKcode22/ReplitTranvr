@@ -4,6 +4,23 @@
 
 ## Start here — live source of truth
 
+**LATEST G5A FINAL EVIDENCE (Nov 6 evening)** — [Source-vs-software root cause and Phase6 data visibility](2026-11-06_G5A_FINAL_SOURCE_VS_SOFTWARE_ROOT_CAUSE_AND_PHASE6_DATA_VISIBILITY.md). User executed eight-of-eight read-only cohort-specific metadata checks at 19:13 PST: **12 frozen PRE keys but 0 named G5A alert subscriptions, 0 attributable webhook deliveries, 0 surrounding receiver deliveries, 0 airborne evidence, 0 actual wheels-off outcomes**. Code establishes G5A FIDS-only source owner; Phase6 alert subscription and raw-first receiver components exist, but Phase6 safety runtime does not collect FIDS—must wire separate cutoff-safe sampling and data observability before freezing month-long run. Source→PRE→POST G5A pilot **COMPLETE_WITH_LIMITATIONS**, original strict scientific Gate5 still HOLD, no Phase5 freeze/Phase6 release. [Read-only column/row-presence inventory](audits/phase5-phase6-column-observability-readonly.mjs) is ready for safe operator use (no provider call/DB write/raw content).
+
+
+
+**LATEST NOV 6 18:48 PST — independent late audit completed successfully.** [G5A independent audit verdict and minimal next work](2026-11-06_G5A_INDEPENDENT_LATE_AUDIT_VERDICT_AND_MINIMAL_NEXT_WORK.md) records 9/9 bound PRE originals, 36/36 cutoff-safe PRE, 36/36 observed provider *schedule-revision* comparisons, 24/24 units internally reserved, 12 conditional composite operating identities (0 native-confirmed), and limited late read-only attestation. **Data collection is operationally complete, strict scientific Gate 5 remains HOLD**, no re-collection or Phase 5/6 release. [GH independent audit #42330969278](https://github.com/HKcode22/ReplitTranvr/actions/runs/42330969278) / [issue #293 exact JSON](https://github.com/HKcode22/ReplitTranvr/issues/293#issuecomment-6701236001). Previous runbook's prearm steps are historical; do not repeat.
+
+
+
+- [**November 6 POST PostgreSQL 57P01 failure + narrow tested recovery + independent-science risk register**](2026-11-06_G5A_POST_57P01_FAILURE_AND_PRE_OUTCOME_RECOVERY.md) — original POST run #42227608751 failed before first paid source due to unhandled idle-session disconnect; targeted PR #410 merged on main *after* all three PRE owners closed, regression tests 18/18 and unchanged frozen source grid, guarded replacement GH prearm requires read-only ledger=0 and final 36 PRE before dispatch. **Not a Gate5 scientific PASS.**
+
+
+- [**Learn Gate 5 step by step — 11 detailed code-reading lessons (November 6)**](learning-gate5/README.md) — actual source→PRE→POST→independent audit, 3/48/12 counts, clocks, GitHub owner/prearm, FIDS normalization/identity, V0076/V0077 atomic source custody, frozen-T as-of SQL, transactional PRE writer, two-hour schedule-revision watermark, independent audit, annotated TypeScript/SQL and practice problems. **Learning documentation only, no change to frozen main or live paid experiment.**
+
+
+[**CURRENT November 6 live WSSS 14Z three-horizon source→PRE custody, T−24h original expiry and guarded POST handoff (CHECKPOINT, not scientific PASS)**](2026-11-06_G5A_WSSS_14Z_LIVE_THREE_HORIZON_CUSTODY_AND_POST_HANDOFF.md) — anchored to the frozen 14Z cohort; T−24h and T−6h 3/3 originals + 12/12 on-time PRE, T−90m live third-source observation and pending final closeout, rights-limited 23-hour source-use expiry, next POST 07:40/08:10/08:40 PST and audit 09:12–09:30 PST. **Documentation PR only; do not merge into main during active experiment.**
+
+
 - [**CURRENT Nov4 21:39 PST incident — Nov6 09Z T24 ACTIVE owner manually canceled, exact zero-spend delegated recovery PR #404 MERGED (production ledger readback and authentic new runner still required)**](2026-11-04_NOV06_G5A_CANCELLED_T24_EXACT_ZERO_SPEND_HANDOFF.md). Do not rerun canceled GH action, reset V0076, start an unverified replacement, or backfill. Nov6 T24 first paid request remains planned for Thu Nov5 00:30 PST; scientific Gate5 HOLD.
 
 - [**HISTORICAL/SUPERSEDED NOV 5 THURSDAY NOON AUDIT — original earlier candidate**](2026-11-03_GATE5_THURSDAY_NOON_AUDIT_EARLY_COHORT.md). Owner moved the audit back to Thursday noon; the Friday Nov7 activation plan is superseded, and the original missed Nov5 02Z source evidence remains unchanged.
