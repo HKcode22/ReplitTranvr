@@ -1,0 +1,42 @@
+name: Phase5 Atomic Early Adaptive Draw Owner (Offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
+      - 'tests/phase5_early_adaptive_draw_owner_v39.test.ts'
+      - '.github/workflows/phase5-early-adaptive-draw-owner-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
+      - 'tests/phase5_early_adaptive_draw_owner_v39.test.ts'
+      - '.github/workflows/phase5-early-adaptive-draw-owner-offline.yml'
+permissions:
+  contents: read
+jobs:
+  atomic-draw-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_P5_EARLY_DRAW_OWNER_APPROVED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Mock transaction / cutoff / freeze tests; no real database or provider
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_early_adaptive_draw_owner_v39.test.ts
+          echo 'NO_PAID_SOURCE=1 NO_REAL_DB_WRITE=1 NO_PHASE6_ACTIVATION=1'
