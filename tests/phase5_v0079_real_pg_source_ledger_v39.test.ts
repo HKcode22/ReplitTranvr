@@ -9,7 +9,7 @@ const m=H("a"),q=H("b"),cal=H("c"),cfg=H("d"),frm=H("e");
 const draw=H("f"),rights=H("2"),prov=H("3"),runId="12345678910";
 const expected=hash([m,q,runId,"1"].join("|"));
 const bytes=Buffer.from('{"departures":[],"arrivals":[]}'),sha=hash(bytes.toString());
-const response=H("4");let db:Pool,service:Date;
+const response=H("4");let db:Pool,service:Date,chargeDate:string;
 const reserve=(digest=expected,right=rights)=>db.query(
  `SELECT clean.reserve_phase5_fids_physical_get_v39($1,$2,$3,$4,$5,$6)`,
  [m,q,runId,draw,right,digest]);
@@ -52,6 +52,8 @@ suite("Phase5 V0079 real disposable PostgreSQL16; no live provider",()=>{
   db=new Pool({connectionString:URL,max:4});
   const now=new Date((await db.query("SELECT clock_timestamp() t")).rows[0].t);
   service=new Date(now.getTime()+29*3600000);
+  chargeDate=now.toISOString().slice(0,10);
+  expect(service.toISOString().slice(0,10)).not.toBe(chargeDate);
   await db.query(
    `INSERT INTO clean.adb_phase6_calendar_day(
     run_day_index,budget_day_id,calendar_hash,config_hash,date_utc,
@@ -90,22 +92,26 @@ suite("Phase5 V0079 real disposable PostgreSQL16; no live provider",()=>{
     VALUES($1,1,$2,$3,$4,$5,$6,8,4)`,
    [m,service.toISOString().slice(0,10),cal,cfg,frm,draw]);
   await db.query(
+   `INSERT INTO clean.phase5_fids_utc_charge_budget_v39(
+     manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units)
+     VALUES($1,$2,8,4)`,[m,chargeDate]);
+  await db.query(
    `INSERT INTO clean.phase5_fids_allowed_query_v39(
     query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,
     airport_icao,early_draw_sha256,reviewed_release_sha256,
     rights_review_sha256,provider_contract_sha256,github_run_id,
     service_window_start_utc,service_window_end_utc,
     from_local,to_local,airport_iana_timezone,provider_api_version,
-    fids_protocol_version,planned_dispatch_utc,hard_latest_dispatch_utc,
-    prediction_cutoff_utc,state)
+    fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
+    hard_latest_dispatch_utc,prediction_cutoff_utc,state)
     VALUES($1,$2,1,'CI-P5-SOURCE-T24','HUB','T-24h','WSSS',$3,$4,$5,$6,$7,
     $8,$9,'2026-11-09T22:00','2026-11-10T02:00','Asia/Singapore',
-    'CI-PROVIDER','CI-PROTOCOL',$10,$11,$12,'ACTIVE')`,
+    'CI-PROVIDER','CI-PROTOCOL',$10,$13::date,$11,$12,'ACTIVE')`,
    [q,m,draw,H("1"),rights,prov,runId,
     service.toISOString(),new Date(service.getTime()+4*3600000).toISOString(),
     new Date(now.getTime()-5000).toISOString(),
     new Date(now.getTime()+60000).toISOString(),
-    new Date(now.getTime()+900000).toISOString()]);
+    new Date(now.getTime()+900000).toISOString(),chargeDate]);
  });
  afterAll(async()=>{if(db)await db.end();});
  it("rejects bad digests and rights without spending project units",async()=>{
@@ -121,6 +127,15 @@ suite("Phase5 V0079 real disposable PostgreSQL16; no live provider",()=>{
     FROM clean.phase5_fids_cycle_budget_v39 c
     JOIN clean.phase5_fids_day_budget_v39 d USING(manifest_sha256)`)).rows[0];
   expect(row).toMatchObject({physically_reserved_units:2,daily_source_reserved_units:2});
+  const charged=(await db.query(
+   "SELECT charge_day_utc,physically_reserved_units FROM clean.phase5_fids_utc_charge_budget_v39"
+  )).rows[0];
+  expect(charged.physically_reserved_units).toBe(2);
+  expect(new Date(charged.charge_day_utc).toISOString().slice(0,10)).toBe(chargeDate);
+  const attempted=(await db.query(
+   "SELECT charged_utc_date FROM clean.phase5_fids_physical_attempt_v39"
+  )).rows[0];
+  expect(new Date(attempted.charged_utc_date).toISOString().slice(0,10)).toBe(chargeDate);
   await expect(reserve()).rejects.toThrow("P5_PHYSICAL_QUERY_NOT_ACTIVE_OR_ALREADY_RESERVED");
   await expect(db.query("DELETE FROM clean.phase5_fids_physical_attempt_v39"))
    .rejects.toThrow("P5_IRREVERSIBLE_PHYSICAL_RESERVATION");
