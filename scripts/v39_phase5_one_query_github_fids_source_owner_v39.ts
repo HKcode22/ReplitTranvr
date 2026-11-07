@@ -10,7 +10,7 @@ import {admitP5GitHubOneQueryRelease,
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
 import {createP5V0079ScopedDbPorts}
  from "../server/lib/disruption/phase5V0079ScopedDbPorts_v39";
-import {prearmP5V0080ActualGitHubRun}
+import {prearmP5V0080ActualGitHubRun,waitForP5ScheduledPhysicalDispatch}
  from "../server/lib/disruption/phase5V0080GitHubPrearm_v39";
 import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
@@ -56,6 +56,19 @@ async function main():Promise<void>{
    earlyDrawSha256:plan.expectedEarlyDrawSha256,
    rightsReviewSha256:plan.reviewedProviderRightsSha256,
   });
+  // GH may allocate this job before its exact approved paid GET slot.
+  // Prearm has been COMMITTED; do not consume the single physical attempt
+  // until the database clock reaches the signed dispatch UTC.
+  await waitForP5ScheduledPhysicalDispatch(
+   plan.acquisition.scheduledRequestUtc,
+   plan.acquisition.earliestPlannedCutoffUtc,
+   plan.acquisition.maxResponseAndPersistSeconds,
+   async()=>{
+    const r=await pool.query("SELECT clock_timestamp() AS t");
+    if(r.rowCount!==1)throw Error("REFUSED_P5_V0080_PREARM_DB_CLOCK_MISSING");
+    return new Date(r.rows[0].t);
+   },
+  );
   const ports=createP5V0079ScopedDbPorts({
    plan,
    manifestSha256:admitted.manifestSha256,
