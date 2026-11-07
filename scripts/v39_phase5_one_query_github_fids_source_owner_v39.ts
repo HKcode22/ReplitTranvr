@@ -10,6 +10,8 @@ import {admitP5GitHubOneQueryRelease,
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
 import {createP5V0079ScopedDbPorts}
  from "../server/lib/disruption/phase5V0079ScopedDbPorts_v39";
+import {prearmP5V0080ActualGitHubRun}
+ from "../server/lib/disruption/phase5V0080GitHubPrearm_v39";
 import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
  from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
@@ -43,11 +45,22 @@ async function main():Promise<void>{
   application_name:"v39_phase5_github_only_one_query_source",
  });
  try{
+  // A reviewed, immutable template cannot contain the future GitHub run ID.
+  // Bind the actual GITHUB_RUN_ID to PREPARED exact V0079 query in an
+  // independent durable V0080 DB transaction BEFORE source reservation.
+  // Failed/unknown prearm is never retried blindly in this same job.
+  await prearmP5V0080ActualGitHubRun({
+   pool,manifestSha256:admitted.manifestSha256,
+   queryDigestSha256:admitted.queryDigestSha256,
+   githubRunId:admitted.githubRunId,
+   earlyDrawSha256:plan.expectedEarlyDrawSha256,
+   rightsReviewSha256:plan.reviewedProviderRightsSha256,
+  });
   const ports=createP5V0079ScopedDbPorts({
    plan,
    manifestSha256:admitted.manifestSha256,
    exactQueryDigest:admitted.queryDigestSha256,
-   githubRunId:input.githubRunId,
+   githubRunId:admitted.githubRunId,
    scopedPool:pool,
    fetchImpl:fetch,
   });
