@@ -2,6 +2,12 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Stage29 integration — genuine PRE and independent witness code, restricted worker sessions (CI only)
+
+[Stage29 real PostgreSQL T24 PRE → separate T24 witness using the Stage28 worker session adapter](2026-11-07_STAGE29_REAL_T24_PRE_WITNESS_VIA_RESTRICTED_GROUPS.md) is the next functional integration test, rather than another account/schema audit. The **same actual Stage14 PRE writer and Stage17 independent postcommit witness writer** used by the intended scientific pipeline now run against B0062→V79/80/81 through the actual Stage27 NOLOGIN groups, but with **two distinct CI-only LOGIN roles** and Stage28's exact `SET ROLE` security checks. The FIDS original is deliberately **synthetic** in the disposable database. This establishes the timing and privilege handoff without claiming real provider/physical-leg/retention evidence. No production login/secrets, provider GET/Alerts, or production flight writes. Only merge once its dedicated PG16 and full V3.9 CI pass.
+
+**Stage28 source adapter already merged:** PR [#459](https://github.com/HKcode22/ReplitTranvr/pull/459), main SHA `bbf6650d063354f037a4c753a37a0efa3d5e8a6d` at Stage29 base, after all five exact-head checks. The operational next step after Stage29 is separately reviewed live GitHub-only worker login/membership/credential commissioning, not rerunning installed Stage23 or Stage27 schema/roles. Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.
+
 ## Current verified Stage27 production result and next Stage28 worker-session boundary
 
 **Owner's Nov 7 Replit Shell result** reported `STAGE27_PRIOR_REFUSAL_ROLLBACK_CONFIRMED_READONLY` (0 leftover roles), followed by **`P5_STAGE26_FOUR_NOLOGIN_ROLES_INSTALLED_NO_RUNTIME_ACTIVATION`** (4 durable production groups, strict PRE/source/T24 witness separation, zero PUBLIC original/witness privileges, 0 runtime memberships, 0 FIDS GET/Alert create/flight writes). Stage23's 8 tables and Stage27's four NOLOGIN groups are now actually installed. **Never rerun Stage23, Stage26 or Stage27.** The older refused Stage26 attempt is a historical incident, not current installation status.

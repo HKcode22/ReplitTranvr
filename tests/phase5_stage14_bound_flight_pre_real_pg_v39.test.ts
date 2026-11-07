@@ -2,11 +2,15 @@
  * True staged PRE writer integration on disposable PostgreSQL16:
  * B0062+staged V0079, one synthetic ORIGINAL, one primary operating member,
  * exact restricted SELECT+INSERT-only PRE writer with immutable deadline.
+ * Optional Stage29 tests execute the real T24 PRE + Stage17 witness
+ * through dedicated Stage28 SET-only logins and Stage27 NOLOGIN groups.
  * No real provider call or production migration/retention authority.
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {createHash} from "node:crypto";
+import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
+ from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
@@ -15,13 +19,16 @@ import {persistP5T24SeparateTransactionWitness,
  from "../server/lib/disruption/phase5T24IndependentPostCommitWitness_v39";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
-const ROLE="phase5_fids_pre_writer_ciuser01";
-const WITNESS_ROLE="phase5_fids_t24_witness_ciuser01";
-const WITNESS_URL="postgresql://"+WITNESS_ROLE+
+const STAGE29=process.env.V39_P5_STAGE29_RESTRICTED_GROUPS_REAL_PG16==="1";
+const ROLE=STAGE29?P5_STAGE28_GROUPS.pre:"phase5_fids_pre_writer_ciuser01";
+const WITNESS_ROLE=STAGE29?P5_STAGE28_GROUPS.witness:"phase5_fids_t24_witness_ciuser01";
+const PRE_LOGIN=STAGE29?"phase5_stage29_pre_ci":ROLE;
+const WITNESS_LOGIN=STAGE29?"phase5_stage29_witness_ci":WITNESS_ROLE;
+const WITNESS_URL="postgresql://"+WITNESS_LOGIN+
  ":ci-only@localhost:5432/neondb?sslmode=disable";
 const STAGE17=process.env.V39_P5_STAGE17_REAL_PG16==="1";
 const witnessIt=STAGE17?it:it.skip;
-const RW_URL="postgresql://"+ROLE+":ci-only@localhost:5432/neondb?sslmode=disable";
+const RW_URL="postgresql://"+PRE_LOGIN+":ci-only@localhost:5432/neondb?sslmode=disable";
 const active=process.env.V39_P5_STAGE14_REAL_PG16==="1"?describe:describe.skip;
 const h=(c:string)=>c.repeat(64);
 const manifest=h("a"),query=h("b"),reservation=h("c");
@@ -31,12 +38,15 @@ const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI100"}]}));
 const bodyHash=createHash("sha256").update(payload).digest("hex");
 const iso=(n:number)=>new Date(n).toISOString();
 active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",()=>{
- let admin:Pool,writer:Pool,witnessWriter:Pool;
+ let admin:Pool,rawWriter:Pool,rawWitness:Pool;
+ let writer:Pick<Pool,"connect">;
+ let witnessWriter:Pick<Pool,"connect">;
  let permit:P5Stage14SingleFlightPrePermit;
  let witnessPermit:P5Stage17T24WitnessPermit;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.V39_P5_STAGE14_REAL_PG16!=="1"||
+    (STAGE29&&process.env.V39_P5_STAGE17_REAL_PG16!=="1")||
     process.env.DATABASE_URL!==URL||
     process.env.AERODATABOX_API_KEY||
     process.env.V39_PHASE6_PROCESS_ARMED!=="0")
@@ -82,6 +92,21 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     [query,manifest,h("4"),h("5"),rights,contract,
      serviceStart,serviceEnd,dispatch,
      dispatch.toISOString().slice(0,10),hardLatest,cutoff]);
+  if(STAGE29){
+   // The real V0080 physical-attempt trigger refuses a source request
+   // unless a matching immutable GitHub-run prearm exists. This is a
+   // DISPOSABLE fixture only, inserted by test admin (not a real GitHub
+   // run or independent signed production release).
+   const prearmSha=createHash("sha256").update([
+    "phase5-v0080",manifest,query,"42363348762",h("4"),rights
+   ].join("|")).digest("hex");
+   await admin.query(
+    "INSERT INTO clean.phase5_fids_github_prearm_v39("+
+    "query_digest,manifest_sha256,github_run_id,early_draw_sha256,"+
+    "rights_review_sha256,prearm_sha256) "+
+    "VALUES($1,$2,'42363348762',$3,$4,$5)",
+    [query,manifest,h("4"),rights,prearmSha]);
+  }
   await admin.query(
     "INSERT INTO clean.phase5_fids_physical_attempt_v39"+
     "(reservation_sha256,query_digest,manifest_sha256,github_run_id,"+
@@ -133,30 +158,58 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     "normalized_members_count,source_expires_at_utc)"+
     "VALUES($1,$2,$3,$4,$5,$6,$7,1,clock_timestamp()+interval '1 hour')",
     [qid,reservation,query,manifest,response,bodyHash,rights]);
-  await admin.query("CREATE ROLE "+ROLE+
-    " LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE");
-  await admin.query("GRANT USAGE ON SCHEMA clean TO "+ROLE);
-  await admin.query("GRANT SELECT ON clean.phase5_fids_allowed_query_v39,"+
-    "clean.phase5_fids_physical_attempt_v39,"+
-    "clean.phase5_fids_original_binding_v39,"+
-    "clean.fids_query_response,clean.flight_population,"+
-    "clean.flight_snapshots TO "+ROLE);
-  await admin.query("GRANT INSERT ON clean.flight_snapshots TO "+ROLE);
-  await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+ROLE);
-  writer=new Pool({connectionString:RW_URL,max:2});
-  if(STAGE17){
-   await admin.query("CREATE ROLE "+WITNESS_ROLE+
+  if(STAGE29){
+   // This CI database already has the exact Stage27 NOLOGIN groups.
+   const found=(await admin.query(
+     "SELECT rolname,rolcanlogin FROM pg_catalog.pg_roles "+
+     "WHERE rolname=ANY($1::text[])",[[ROLE,WITNESS_ROLE]])).rows;
+   if(found.length!==2||found.some(v=>v.rolcanlogin!==false))
+     throw Error("REFUSED_STAGE29_EXACT_STAGE27_NOLOGIN_GROUPS_MISSING");
+   await admin.query("CREATE ROLE "+PRE_LOGIN+
+     " LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only'");
+   await admin.query("GRANT "+ROLE+" TO "+PRE_LOGIN+
+     " WITH SET TRUE, INHERIT FALSE, ADMIN FALSE");
+  }else{
+   await admin.query("CREATE ROLE "+ROLE+
      " LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE");
-   await admin.query("GRANT USAGE ON SCHEMA clean TO "+WITNESS_ROLE);
-   await admin.query("GRANT SELECT ON clean.flight_snapshots,"+
-     "clean.phase5_fids_allowed_query_v39,"+
+   await admin.query("GRANT USAGE ON SCHEMA clean TO "+ROLE);
+   await admin.query("GRANT SELECT ON clean.phase5_fids_allowed_query_v39,"+
      "clean.phase5_fids_physical_attempt_v39,"+
      "clean.phase5_fids_original_binding_v39,"+
      "clean.fids_query_response,clean.flight_population,"+
-     "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
-   await admin.query("GRANT INSERT ON "+
-     "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
-   witnessWriter=new Pool({connectionString:WITNESS_URL,max:2});
+     "clean.flight_snapshots TO "+ROLE);
+   await admin.query("GRANT INSERT ON clean.flight_snapshots TO "+ROLE);
+   await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+ROLE);
+  }
+  rawWriter=new Pool({connectionString:RW_URL,max:2});
+  writer=STAGE29?makeP5Stage28DedicatedRolePool(rawWriter,{
+    group:"pre",reviewedDedicatedLogin:PRE_LOGIN,
+    forbiddenApplicationLogin:"phase5_stage29_app_runtime_ci"
+   }):rawWriter;
+  if(STAGE17){
+   if(STAGE29){
+    await admin.query("CREATE ROLE "+WITNESS_LOGIN+
+      " LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only'");
+    await admin.query("GRANT "+WITNESS_ROLE+" TO "+WITNESS_LOGIN+
+      " WITH SET TRUE, INHERIT FALSE, ADMIN FALSE");
+   }else{
+    await admin.query("CREATE ROLE "+WITNESS_ROLE+
+      " LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE");
+    await admin.query("GRANT USAGE ON SCHEMA clean TO "+WITNESS_ROLE);
+    await admin.query("GRANT SELECT ON clean.flight_snapshots,"+
+      "clean.phase5_fids_allowed_query_v39,"+
+      "clean.phase5_fids_physical_attempt_v39,"+
+      "clean.phase5_fids_original_binding_v39,"+
+      "clean.fids_query_response,clean.flight_population,"+
+      "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
+    await admin.query("GRANT INSERT ON "+
+      "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
+   }
+   rawWitness=new Pool({connectionString:WITNESS_URL,max:2});
+   witnessWriter=STAGE29?makeP5Stage28DedicatedRolePool(rawWitness,{
+     group:"witness",reviewedDedicatedLogin:WITNESS_LOGIN,
+     forbiddenApplicationLogin:"phase5_stage29_app_runtime_ci"
+    }):rawWitness;
   }
   permit={
     manifestSha256:manifest,queryDigestSha256:query,
@@ -183,8 +236,8 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   };
  });
  afterAll(async()=>{
-  if(witnessWriter)await witnessWriter.end();
-  if(writer)await writer.end();
+  if(rawWitness)await rawWitness.end();
+  if(rawWriter)await rawWriter.end();
   if(admin)await admin.end();
  });
  it("commits one genuine synthetic source-bound PRE before its own T24 cutoff",async()=>{
