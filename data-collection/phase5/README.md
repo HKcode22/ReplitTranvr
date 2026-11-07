@@ -3,7 +3,7 @@
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
 ## Phase 5 source of truth
-- [Dated Nov 7 Phase5 merged-code and release-HOLD handoff in Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md#v39_phase5_nov07_handoff_status) — authoritative chronology and current exact-code checkpoint; check latest main/PR before acting.
+- [Dated Nov 7 Phase5 merged-code and release-HOLD handoff in Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md) — authoritative chronology and current exact-code checkpoint; check latest main/PR before acting.
 - [Phase5 Stage1/Stage2 source-grid executable-clock alignment proposal (PR #428)](https://github.com/HKcode22/ReplitTranvr/pull/428) — draft until all exact-head tests pass; no paid scheduling.
 - [Phase5 freeze acceptance checklist and versioned 31-day QA plan](2026-11-06_PHASE5_FREEZE_CHECKLIST_AND_VERSIONED_COLLECTION_QA.md)
 - [Original V3.9 f.8 collection plan](../plans/V3.9_DataCollectPlan_f.8.md), [binding scientific Amendment B](../plans/V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md)
