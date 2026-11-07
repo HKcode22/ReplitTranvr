@@ -5,6 +5,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5Stage9V0079CommittedDayPrepare_v39.ts'
       - 'tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts'
+      - 'tests/sql/phase5_stage9_insert_only_pg16_privileges.sql'
       - '.github/workflows/phase5-stage9-v0079-db-prepare-offline.yml'
   push:
     branches: [main]
@@ -39,3 +40,32 @@ jobs:
           set -Eeuo pipefail
           npx vitest run tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts
           echo 'OFFLINE_STAGE9_MOCK_ONLY: no actual V0079 install, no DB write, no provider'
+  pg16-insert-only-privileges:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: phase5_stage9_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d phase5_stage9_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify real PostgreSQL 16 least-privilege SELECT and INSERT
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          psql -h 127.0.0.1 -p 5432 -U postgres -d phase5_stage9_ci -X -v ON_ERROR_STOP=1 \\
+            -f tests/sql/phase5_stage9_insert_only_pg16_privileges.sql
+          echo 'REAL_PG16=PASS PROVIDER_GET=0 DB=DISPOSABLE_ONLY'
