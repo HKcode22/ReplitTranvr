@@ -10,7 +10,7 @@ const OWNER_DB_URL="postgresql://phase5_stage30_ci_owner:ci-only@localhost:5432/
 const CONFIG={
  GITHUB_ACTIONS:"true",
  P5_STAGE30_NONPAID_LOGINS_ONCE:"COMMISSION_THREE_NONPAID_GITHUB_WORKER_LOGINS_NO_SOURCE",
- DATABASE_URL:URL,
+ DATABASE_URL:OWNER_DB_URL,
  V39_DATABASE_RUNTIME_URL:"postgresql://phase5_stage30_app_ci:ci-only@localhost:5432/neondb?sslmode=disable",
  ADB_AUTO_COLLECT:"0",
  V39_PHASE6_PROCESS_ARMED:"0"
