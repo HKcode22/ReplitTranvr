@@ -68,6 +68,8 @@ export interface P5Stage14SingleFlightPreResult{
  cutoffUtc:string;boundPopulationQueryId:string;
  sourceOriginalCommittedBeforeFlightCutoff:true;
  flightPreCommittedBeforeOwnCutoff:true;
+ postCommitDatabaseReadbackVerified:true;
+ postCommitDbClockAtUtc:string;
  preSnapshotsInserted:1;providerCalls:0;alertCreates:0;
  externalNativeTIndependentlyAuthenticatedByThisFunction:false;
  externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false;
@@ -320,6 +322,32 @@ export async function persistP5V0079SingleBoundFlightPre(
    hold("PRE_COMMIT_MARGIN_NOT_PROTECTED");
   commitAttempted=true;
   await c.query("COMMIT");begun=false;
+  // Before-COMMIT clock is NOT durable-commit evidence. Confirm the
+  // persisted immutable row and DB clock after the COMMIT was acknowledged.
+  // If COMMIT succeeded but post-commit proof is unavailable or late,
+  // keep the durable row and HOLD scientific acceptance; never blindly retry.
+  const confirmed=await c.query(
+   "SELECT clock_timestamp() AS readback_at,id,"+
+   "population_member_id IS NOT NULL AS has_member,created_at,"+
+   "selected_t_milestone_utc,selected_t_version,"+
+   "population_query_id,fids_response_hash,prediction_cutoff_utc"+
+   " FROM clean.flight_snapshots WHERE flight_instance_id=$1"+
+   " AND horizon=$2 AND prediction_cutoff_utc=$3"+
+   " AND prediction_state='PRE_DEPARTURE' LIMIT 2",
+   [p.flightInstanceId,p.horizon,cutoff]
+  );
+  const checked=confirmed.rows[0];
+  const post=dbTime(checked?.readback_at,"POST_COMMIT_DB_CLOCK");
+  if(confirmed.rowCount!==1||checked?.has_member!==true||
+    checked?.population_query_id!==p.expectedSourcePopulationQueryId||
+    checked?.fids_response_hash!==p.expectedSourceResponseSha256||
+    checked?.selected_t_version!==version||
+    dbTime(checked?.selected_t_milestone_utc,"POST_COMMIT_T").getTime()!==
+       native.getTime()||
+    dbTime(checked?.prediction_cutoff_utc,"POST_COMMIT_CUTOFF").getTime()!==
+       cutoff.getTime()||
+    post.getTime()>cutoff.getTime())
+    hold("POST_COMMIT_LATE_OR_UNVERIFIED_QUARANTINE_NO_RETRY");
   return {
    schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1",
    status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE",
@@ -328,6 +356,8 @@ export async function persistP5V0079SingleBoundFlightPre(
    boundPopulationQueryId:p.expectedSourcePopulationQueryId,
    sourceOriginalCommittedBeforeFlightCutoff:true,
    flightPreCommittedBeforeOwnCutoff:true,
+   postCommitDatabaseReadbackVerified:true,
+   postCommitDbClockAtUtc:post.toISOString(),
    preSnapshotsInserted:1,providerCalls:0,alertCreates:0,
    externalNativeTIndependentlyAuthenticatedByThisFunction:false,
    externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false,
@@ -337,7 +367,8 @@ export async function persistP5V0079SingleBoundFlightPre(
   };
  }catch(e){
   if(begun&&!commitAttempted)await c.query("ROLLBACK").catch(()=>{});
-  if(commitAttempted)hold("AMBIGUOUS_PRE_COMMIT_READONLY_AUDIT_BEFORE_RETRY");
+  if(commitAttempted)
+   hold("POST_COMMIT_PROOF_MISSING_OR_AMBIGUOUS_QUARANTINE_NO_RETRY");
   throw e;
  }finally{c.release();}
 }
