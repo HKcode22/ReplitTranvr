@@ -171,6 +171,10 @@ export async function commitStage9P5DayV0079PreparedRows(
    "SELECT pg_advisory_xact_lock(hashtext('v39-phase5-prepare-day'),$1)",
    [x.runDayIndex]
   );
+  // Keep the writer's SELECT+INSERT-only ACL. PostgreSQL row-locking
+  // SELECTs (FOR SHARE/UPDATE) require UPDATE privilege even when no rows
+  // match. SERIALIZABLE + scoped advisory lock + unique ledger keys ensure
+  // ambiguous/concurrent writes fail closed without granting UPDATE.
   const auth=(await client.query(
    "SELECT manifest_sha256,calendar_hash,config_hash,enabled,revoked_at_utc "+
    "FROM clean.adb_phase6_authorization WHERE singleton_key=true"
@@ -184,7 +188,7 @@ export async function commitStage9P5DayV0079PreparedRows(
    "SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,"+
    "anchor_icao,slot_regions,pair_airport_set,calendar_hash,config_hash,"+
    "frame_hash,date_utc FROM clean.adb_phase6_calendar_day "+
-   "WHERE run_day_index=$1 FOR SHARE",[x.runDayIndex]
+   "WHERE run_day_index=$1",[x.runDayIndex]
   )).rows;
   if(cal.length!==1||cal[0].calendar_hash!==p.expectedCalendarSha256||
       cal[0].config_hash!==p.expectedConfigSha256||
@@ -205,7 +209,7 @@ export async function commitStage9P5DayV0079PreparedRows(
    "SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,"+
    "selected_at_utc,adaptive_state_hash,probability_vector,"+
    "airport_layer_design_probability FROM clean.adb_sampling_draw "+
-   "WHERE run_day_index=$1 ORDER BY slot_id FOR SHARE",
+   "WHERE run_day_index=$1 ORDER BY slot_id",
    [x.runDayIndex]
   )).rows as PreparedDrawRow[];
   if(saved.length!==4)hold("MISSING_FOUR_COMMITTED_DRAW_ROWS");
@@ -230,7 +234,7 @@ export async function commitStage9P5DayV0079PreparedRows(
    "config_hash,frame_hash,early_draw_sha256,daily_api_ceiling,"+
    "daily_other_reserved_units,daily_source_reserved_units "+
    "FROM clean.phase5_fids_day_budget_v39 "+
-   "WHERE manifest_sha256=$1 AND run_day_index=$2 FOR SHARE",
+   "WHERE manifest_sha256=$1 AND run_day_index=$2",
    [p.expectedManifestSha256,x.runDayIndex]
   )).rows;
   if(budgets.length!==1||
@@ -248,7 +252,7 @@ export async function commitStage9P5DayV0079PreparedRows(
    "SELECT cycle_api_ceiling,other_category_reserved_units,"+
    "protected_api_floor_units,physically_reserved_units "+
    "FROM clean.phase5_fids_cycle_budget_v39 "+
-   "WHERE manifest_sha256=$1 FOR SHARE",[p.expectedManifestSha256]
+   "WHERE manifest_sha256=$1",[p.expectedManifestSha256]
   )).rows;
   if(cycle.length!==1||[
       "cycle_api_ceiling","other_category_reserved_units",
@@ -263,7 +267,7 @@ export async function commitStage9P5DayV0079PreparedRows(
   const charge=(await client.query(
    "SELECT charge_day_utc,daily_api_ceiling,daily_other_reserved_units,"+
    "physically_reserved_units FROM clean.phase5_fids_utc_charge_budget_v39 "+
-   "WHERE manifest_sha256=$1 ORDER BY charge_day_utc FOR SHARE",
+   "WHERE manifest_sha256=$1 ORDER BY charge_day_utc",
    [p.expectedManifestSha256]
   )).rows;
   const byDay=new Map(charge.map(a=>[dayDate(a.charge_day_utc),a]));
@@ -278,7 +282,7 @@ export async function commitStage9P5DayV0079PreparedRows(
   }
   const existing=(await client.query(
    "SELECT query_digest FROM clean.phase5_fids_allowed_query_v39 "+
-   "WHERE manifest_sha256=$1 AND run_day_index=$2 FOR UPDATE",
+   "WHERE manifest_sha256=$1 AND run_day_index=$2",
    [p.expectedManifestSha256,x.runDayIndex]
   ));
   if(existing.rowCount!==0)hold("EXISTING_QUERY_ROWS_NO_BLIND_DUPLICATE");

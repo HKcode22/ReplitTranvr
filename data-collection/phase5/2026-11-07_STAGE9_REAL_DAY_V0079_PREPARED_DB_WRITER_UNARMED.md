@@ -9,3 +9,16 @@ The adapter uses one SERIALIZABLE transaction, exact frozen `clean.adb_phase6_au
 The test harness uses only a simulated PostgreSQL client and no secrets: asserts 12 inserts in one transaction, no provider GET, rejects unreviewed rights, hash tampering, ordinary owner DB role, changed saved REGIONAL airport, missed cutoff, already-present partial day rows and Day0 budget mismatch. The separate isolated CI workflow never executes a write.
 
 **Future release needs real work:** reviewed rights/retention and signed final freeze; V0079/V0080 installed through independently reviewed narrow-role migration and live ACL verification; first real prospective one-day four-airport saved draw; exact source GET/decoded original and true on-time flight-level PRE writer; real POST / AIRBORNE actual labels; independent QA and 31-day representativeness audit. Full Phase4 original Gate5 science HOLD, Phase5 final FREEZE HOLD, Phase6 paid NO-GO.
+
+## Stage9 least-privilege PostgreSQL 16 repair (Nov 7)
+The exact Stage9 source previously used `SELECT ... FOR SHARE` on the
+saved calendar/airport draw/budgets and `SELECT ... FOR UPDATE` on the query
+ledger. PostgreSQL 16 requires UPDATE privilege even for those read locks,
+contradicting the required restricted SELECT+INSERT-only writer role. The
+repaired reader queries use plain SELECT under the existing SERIALIZABLE
+transaction, transaction-scoped advisory day lock, unique query keys and
+no-blind-retry policy. No UPDATE/DELETE grant was added. Mock CI now rejects
+row-locking SELECTs; an isolated real PostgreSQL 16 workflow demonstrates
+that the role can select, insert and RETURNING while UPDATE/DELETE and
+row-locking SELECT are unavailable. This is not production installation,
+source rights, a real 12-row source commit, a GitHub timer or Phase6 GO.

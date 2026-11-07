@@ -135,6 +135,10 @@ function fake(pins:P5Stage9PreparedDayReview,day:any,draw:any[],extra:{
   release(){released=true;},
   async query(sql:string,params?:unknown[]){
    logs.push(sql);calls.push(params);
+   // Real PostgreSQL 16 rejects every SELECT row-locking clause for a
+   // SELECT+INSERT-only role. Simulate that privilege boundary in mocks.
+   if(/\bFOR\s+(?:SHARE|UPDATE|KEY SHARE|NO KEY UPDATE)\b/i.test(sql))
+    throw Error("POSTGRES_42501_INSERT_ONLY_ROLE_CANNOT_LOCK_ROWS");
    if(sql.includes("current_database()"))return {
     rowCount:1,rows:[{
      db:"neondb",actor:pins.expectedRestrictedWriterRole,read_only:"off",
