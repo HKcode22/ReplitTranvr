@@ -130,7 +130,9 @@ function mapSamplingRows(rows: any[]): {
       zeroYieldState:r.zero_yield_state ?? "normal",
       consecutiveZeroYield:Number(r.consecutive_zero_yield ?? 0),
       firstZeroYieldDate: r.first_zero_yield_date == null ? null :
-        String(r.first_zero_yield_date).slice(0,10),
+        (r.first_zero_yield_date instanceof Date
+          ? r.first_zero_yield_date.toISOString().slice(0,10)
+          : String(r.first_zero_yield_date).slice(0,10)),
       lastSuccessfulPhase6ObservationAt:iso(r.last_successful_phase6_observation_at),
       lastDirectObservationAt:iso(r.last_direct_observation_at),
       lastSelectedAt:iso(r.last_selected_at),
@@ -301,7 +303,14 @@ export async function commitEarlyPhase5Draw(
       "EARLY_DRAW_COMMITTED");
     if (verifiedAgain.drawSha256!==verified.drawSha256)
       refuse("POST_WRITE_READBACK_DIGEST_MISMATCH");
-    // No "COMMIT" before the 4-row readback is proven.
+    // PRE source owner must still have time to start and persist before
+    // the earliest T-24h cutoff. A delayed DB commit cannot fake selected_at.
+    const beforeCommit=at(
+      (await client.query("SELECT clock_timestamp() AS at")).rows[0].at,
+      "COMMIT_CLOCK",
+    );
+    validateEarlyDrawWindow(beforeCommit,day.scheduledStartUtc);
+    // No "COMMIT" before the 4-row readback AND DB clock are proven.
     await client.query("COMMIT");tx=false;
     return verifiedAgain;
   }catch(e){
