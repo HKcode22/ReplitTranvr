@@ -15,14 +15,16 @@ const POS=/^[1-9][0-9]{0,17}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const deny=(why:string):never=>{throw Error("REFUSED_P5_STAGE24_"+why);};
 const at=(v:unknown,name:string)=>{
- const d=v instanceof Date?v:typeof v==="string"?new Date(v):null;
- if(!d||!Number.isFinite(d.getTime()))deny(name);
+ const d:Date|null=v instanceof Date?v:
+  typeof v==="string"?new Date(v):null;
+ if(d===null)deny(name);
+ if(!Number.isFinite(d.getTime()))deny(name);
  return d.getTime();
 };
 const iso=(s:unknown,name:string)=>{
- if(typeof s!=="string"||!ISO.test(s)||
-   !Number.isFinite(Date.parse(s))||new Date(s).toISOString()!==s)
-  deny(name);
+ if(typeof s!=="string")deny(name);
+ if(!ISO.test(s)||!Number.isFinite(Date.parse(s))||
+   new Date(s).toISOString()!==s)deny(name);
  return Date.parse(s);
 };
 export interface P5Stage24ReviewedT24Receipt {
