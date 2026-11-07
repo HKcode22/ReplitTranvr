@@ -1,0 +1,38 @@
+name: Gate05 Oct29 exact owner closeout offline safety (NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_gate05_oct29_success_exact_owner_closeout_once_v39.ts'
+      - 'tests/phase3_gate05_oct29_success_owner_closeout_v39.test.ts'
+      - '.github/workflows/phase3-gate05-oct29-success-exact-owner-closeout.yml'
+      - '.github/workflows/phase3-gate05-oct29-exact-owner-closeout-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_gate05_oct29_success_exact_owner_closeout_once_v39.ts'
+      - 'tests/phase3_gate05_oct29_success_owner_closeout_v39.test.ts'
+      - '.github/workflows/phase3-gate05-oct29-success-exact-owner-closeout.yml'
+      - '.github/workflows/phase3-gate05-oct29-exact-owner-closeout-offline.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx vitest run tests/phase3_gate05_oct29_success_owner_closeout_v39.test.ts tests/phase3_gate05_retry5_exact_owned_db_closeout_v39.test.ts
+      - run: echo 'OFFLINE ONLY - no prod credentials, no provider mutation, no DB write'
