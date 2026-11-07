@@ -64,16 +64,50 @@ const DRAW_SQL=[
  "COUNT(DISTINCT selected_icao)::integer distinct_airports",
  "FROM clean.adb_sampling_draw WHERE run_day_index=$1",
 ].join(" ");
-const SNAPSHOT_SQL=[
- "SELECT s.horizon,COUNT(*)::integer snapshots_seen,",
- "COUNT(*) FILTER(WHERE s.created_at<=s.prediction_cutoff_utc",
- " AND s.prediction_state='PRE')::integer clock_order_candidate_pre",
+/**
+ * Candidate PRE denominator from the exact bound source-original lineage.
+ * persistPreSnapshot() writes population_query_id as text but does not
+ * supply the optional population_member_id UUID; a B0062 BEFORE INSERT
+ * trigger fills the UUID only when it can positively match a primary member.
+ * An inner join through that optional ID silently excludes unmatched PRE
+ * observations from the audit and cannot expose their missing lineage.
+ * Join the committed V0079 original binding by explicit query UUID::text,
+ * filter the canonical PRE_DEPARTURE state, and never count a clock-order
+ * candidate whose source arrived after its own per-flight cutoff.
+ * A clock-order candidate is NOT an independently verified physical leg/T or
+ * permission to retain source Content; final scientific PRE remains HOLD.
+ */
+export const P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL=[
+ "SELECT s.horizon,COUNT(DISTINCT s.id)::integer snapshots_seen,",
+ "COUNT(DISTINCT s.id) FILTER (WHERE",
+ " s.created_at<=s.prediction_cutoff_utc",
+ " AND s.selected_t_milestone_utc IS NOT NULL",
+ " AND s.selected_t_version IS NOT NULL",
+ " AND s.fids_response_hash=r.response_hash",
+ " AND s.fids_response_hash=b.response_hash",
+ " AND r.available_at<=s.prediction_cutoff_utc",
+ " AND s.created_at<b.source_expires_at_utc",
+ " AND EXISTS (SELECT 1 FROM clean.flight_population fp",
+ " WHERE fp.population_query_id=b.population_query_id",
+ " AND fp.canonical_flight_instance_id=s.flight_instance_id",
+ " AND fp.source_type='fids'",
+ " AND fp.population_role='requested_airport_primary'",
+ " AND fp.source_airport_icao=q.airport_icao",
+ " AND fp.response_hash=r.response_hash",
+ " AND fp.available_at<=s.prediction_cutoff_utc)",
+ ")::integer clock_order_candidate_pre",
  "FROM clean.flight_snapshots s",
- "JOIN clean.flight_population f ON f.population_member_id=s.population_member_id",
  "JOIN clean.phase5_fids_original_binding_v39 b",
- " ON b.population_query_id=f.population_query_id",
- "JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=b.query_digest",
- "WHERE q.manifest_sha256=$1 AND q.run_day_index=$2",
+ " ON b.population_query_id::text=s.population_query_id",
+ "JOIN clean.phase5_fids_allowed_query_v39 q",
+ " ON q.query_digest=b.query_digest",
+ " AND q.manifest_sha256=b.manifest_sha256",
+ " AND q.horizon=s.horizon",
+ "JOIN clean.fids_query_response r",
+ " ON r.population_query_id=b.population_query_id",
+ " AND r.source_airport_icao=q.airport_icao",
+ "WHERE s.prediction_state='PRE_DEPARTURE'",
+ " AND q.manifest_sha256=$1 AND q.run_day_index=$2",
  "GROUP BY s.horizon",
 ].join(" ");
 
@@ -129,7 +163,7 @@ export async function auditPhase5SourceDay(
    client.query(BUDGET_SQL,[manifestSha256,day]),
    client.query(P5_DAILY_SOURCE_METRICS_SQL,[manifestSha256,day,asOfUtc]),
    client.query(DRAW_SQL,[day]),
-   client.query(SNAPSHOT_SQL,[manifestSha256,day]),
+   client.query(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,[manifestSha256,day]),
   ]);
   if(budget.rowCount!==1)refuse("DAY_BUDGET_NOT_INSTALLED_OR_FROZEN");
   if(rows.rows.length===0)refuse("NO_SIGNED_SOURCE_QUERY_DENOMINATOR");
