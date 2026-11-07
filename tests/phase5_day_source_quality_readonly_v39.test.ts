@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {
  auditPhase5SourceDay,P5_DAILY_SOURCE_METRICS_SQL,
+ P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,
 } from "../server/lib/disruption/phase5DaySourceQualityReadonly_v39";
 const manifest="a".repeat(64);
 function fake(mode:"ok"|"no-budget"|"no-denominator"="ok"){
@@ -78,6 +79,32 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("raw_body");
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("SELECT *");
   expect(P5_DAILY_SOURCE_METRICS_SQL).toContain("prediction_cutoff_utc");
+ });
+ it("queries canonical PRE_DEPARTURE rows, NOT the invalid PRE alias",()=>{
+  expect(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL).toContain("s.prediction_state='PRE_DEPARTURE'");
+  expect(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL).not.toContain("s.prediction_state='PRE'");
+ });
+ it("does not depend on nullable population_member_id for actual PRE coverage",()=>{
+  const sql=P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL;
+  expect(sql).toContain("b.population_query_id::text=s.population_query_id");
+  expect(sql).not.toContain("population_member_id");
+  expect(sql).toContain("s.fids_response_hash=r.response_hash");
+  expect(sql).toContain("s.fids_response_hash=b.response_hash");
+  expect(sql).toContain("r.available_at<=s.prediction_cutoff_utc");
+  expect(sql).toContain("s.created_at<=s.prediction_cutoff_utc");
+  expect(sql).toContain("s.created_at<b.source_expires_at_utc");
+  expect(sql).toContain("q.horizon=s.horizon");
+  expect(sql).toContain("COUNT(DISTINCT s.id)");
+  expect(sql).not.toContain("raw_payload");
+  expect(sql).not.toContain("flight_number");
+ });
+ it("only uses a read-only snapshot for both source and PRE denominators",async()=>{
+  const m=fake();
+  const r=await auditPhase5SourceDay(m.pool,manifest,1);
+  expect(r.actualFlightLevelPreCertified).toBe(false);
+  expect(r.preCandidateSnapshots[0].clockOrderCandidates).toBe(1);
+  expect(m.calls).toContain(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL);
+  expect(m.calls.filter(x=>/^INSERT|^UPDATE|^DELETE/.test(x))).toHaveLength(0);
  });
  it("refuses invalid manifest and day BEFORE connecting",async()=>{
   const m=fake();
