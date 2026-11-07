@@ -1,19 +1,26 @@
-# Phase 5 — scientific freeze readiness and month-long collection integration
+# Phase 5 — Final freeze, collection readiness and data visibility
 
-**Phase5 engineering is underway. This folder is not an authorization to launch Phase6 or to call a paid provider.** Source of truth remains [Original V3.9-f.8 plan](../plans/V3.9_DataCollectPlan_f.8.md), [corrective Amendment B](../plans/V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md), [Gate5 science issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293), [Phase5 readiness issue #413](https://github.com/HKcode22/ReplitTranvr/issues/413), [retention/rights #300](https://github.com/HKcode22/ReplitTranvr/issues/300) and [YSSY published receiver issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28).
+**Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
-## Current factual milestones — Friday Nov 6 2026 Pacific
-- Phase4 Gate5-R readiness **PASSED**, original strict full scientific Gate5 **HOLD**, and a different smaller Nov6 prospective FIDS T24/T6/T90→POST schedule-revision pilot **COMPLETE WITH LIMITATIONS**. Do not conflate these three results.
-- Live existing DB user audit as-of `2026-11-07T03:39:59Z` measured 1,574 `clean.flight_population` rows and **0 all-time** in generic webhook, airborne and outcome tables. This DOES NOT interrogate the historically separate legacy YSSY prepaid UNLOGGED runtime tables or Replit App Storage blob-reference metadata.
-- [PR #412](https://github.com/HKcode22/ReplitTranvr/pull/412) **MERGED** as `068051026be6c1d4877142d757a0f9a27464ee89` after 5/5 exact-head CI PASS; repository-level callback-secret URL guard now prevents unsafe Phase6 Alert CREATE. Hosted published receiver **has not been proven deployed with this revision**.
-- [Public YSSY diagnostic](https://github.com/HKcode22/ReplitTranvr/actions/runs/42334527900) returned HTTP 200 but **HOLD_PUBLISHED_SOURCE_DIFFERS_FROM_TESTED_RELEASE**, published SHA `84b7f1565d0402facc8c3b9aacedc599eb6e2af1`. Green CI is a successful *check execution*, NOT a paid receiver release GO. No new Alert should be created on this evidence alone.
-- [Real Oct29 ADSB.lol single public GET](https://github.com/HKcode22/ReplitTranvr/actions/runs/40856550765): 12 aircraft rows, 11 recent positions, 0 database writes, no exact selected flight match. Earlier Oct28–29 Alert 28 original notifications / 151 items had 0 original locations. Separate NOAA receipts 4/4 proved supporting weather only.
+## Phase 5 source of truth
+- [Phase5 freeze acceptance checklist and versioned 31-day QA plan](2026-11-06_PHASE5_FREEZE_CHECKLIST_AND_VERSIONED_COLLECTION_QA.md)
+- [Original V3.9 f.8 collection plan](../plans/V3.9_DataCollectPlan_f.8.md), [binding scientific Amendment B](../plans/V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md)
+- [Phase5 readiness issue #413](https://github.com/HKcode22/ReplitTranvr/issues/413), earlier [freeze handoff issue #344](https://github.com/HKcode22/ReplitTranvr/issues/344), [source-use/retention #300](https://github.com/HKcode22/ReplitTranvr/issues/300)
 
-## Start here
-1. [Risk-based pre-freeze assessment and **single integrated bounded future-flight micropilot**](2026-11-06_PHASE5_BOUNDED_VALIDATION_AND_PHASE6_ADAPTIVE_COLLECTION_PROTOCOL.md): external rights, HTTPS published receiver, YSSY original custody, new FIDS cutoff, one flight Alert SEND/ACK, budget/STOP, true non-match statuses; Phase6 daily versioned observability.
-2. [Read-only YSSY legacy raw-custody and storage-path diagnostic](audits/yssy-legacy-prepaid-storage-readonly.mjs). It is **prepared, not yet run**. Reads only table counts, logged vs UNLOGGED and original blob-ref expiry/deletion aggregates, no provider raw bytes, no flight IDs, no provider requests/DB writes.
-3. [Phase4 exact 8-metric audit and software/source findings](../phase4/2026-11-06_G5A_FINAL_SOURCE_VS_SOFTWARE_ROOT_CAUSE_AND_PHASE6_DATA_VISIBILITY.md) currently on draft [PR #409](https://github.com/HKcode22/ReplitTranvr/pull/409). Preserve historical source and genuine PRE/POST; do not rerun the same WSSS FIDS pilot.
+## Clear phase boundaries
 
-**Next release action is Stage A no-provider reconciliation only.** If Stage A does not pass, do not dispatch a paid microprobe. Once rights + actual deployed exact release + protected writable custody + no orphan subscriptions + owner budget are independently verified, a separately reviewed GitHub-only *one-flight*, *one-horizon* YSSY+FIDS microprobe can be released. Such a tiny test diagnoses a code path and does **not** estimate worldwide flight-missingness rates or prove full Gate5 science. Phase5 full freeze/Phase6 active spending are still separate gates.
+| Phase | Owner and decision |
+| --- | --- |
+| **Phase 2G — YSSY** | [YSSY delivery-gap and possible tiny paid recheck](../phase2g/2026-11-06_YSSY_DELIVERY_GAP_RECHECK_MICROPROBE_DECISION.md), [issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28). No old incident is auto-closed or paid test auto-started. |
+| **Phase 4 — Gate5** | [Original scientific validation and smallest useful residual test](../phase4/2026-11-06_GATE5_RESIDUAL_SCIENCE_ONE_HORIZON_TEST_DECISION.md), [issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293). Historical G5-R readiness PASS, Nov6 FIDS schedule-revision pilot COMPLETE WITH LIMITATIONS, original full scientific Gate5 **HOLD**. |
+| **Phase 5 — HERE** | Freeze lawful sources/31-day design, cutoff-safe FIDS owner and provider Alert connection, source limits, protected real-data view, budget/STOP/governance. **Nonpaid implementation GO**, **final FREEZE not yet passed**. |
+| **Phase 6** | **Not yet started/authorized.** Daily monitored versioned collection once independently released. Each day can repair non-scientific reliability defects prospectively without changing original cutoffs, meaning of labels, or eligibility silently. |
+| **Phase 7** | Training and evaluation using as-of, legally retained, target-specific labeled data, disjoint physical operating legs/time holdouts and measured missingness. |
 
-**No Cloudflare, Replit AI Agent, unattended paid shell timers, content-retention extension, backward PRE, false actual wheels-off labels, or training on unauthorized old provider Contents.**
+## Facts fixed by the November 6–7 audits
+- Verified G5A source: 9 PRE originals, 36 on-time PRE, 3 POST originals and 36 repeated schedule-revision comparisons over 12 conditional identity keys. **Not** actual-only runway delay, certified operating legs or a valid complete source/Alert/AIRBORNE funnel.
+- Owner's all-time read-only SQL inventory: 1,574 clean.flight_population observation rows; 0 generic webhook/airborne/outcome rows on this DB. That inventory did **not** inspect the separate historical Phase2G UNLOGGED prepaid tables or Replit App Storage custody references.
+- [PR #412](https://github.com/HKcode22/ReplitTranvr/pull/412) **merged after five exact-head CI checks**, protects future Phase6 subscription CREATE from secretless callback URLs. This is a source-code improvement; a live published Replit receiver matching that release is not yet independently verified.
+- No new paid provider calls, database writes, expiry extension, deployment, or Phase6 authorization were made by this Phase5 documentation work.
+
+**Phase5 next implementation:** build the actual 31-day GitHub-only FIDS→PRE→POST schedule and its independent audit, source/operating-leg crosswalk, per-provider rights classification, receiver deployment verification, a secure real-column/row-quality explorer and first-day bounded STOP logic. Avoid repetition of one-hour G5A source-only experiments.
