@@ -4,6 +4,10 @@
 
 ## Start here — live source of truth
 
+**LATEST NOV 6 18:48 PST — independent late audit completed successfully.** [G5A independent audit verdict and minimal next work](2026-11-06_G5A_INDEPENDENT_LATE_AUDIT_VERDICT_AND_MINIMAL_NEXT_WORK.md) records 9/9 bound PRE originals, 36/36 cutoff-safe PRE, 36/36 observed provider *schedule-revision* comparisons, 24/24 units internally reserved, 12 conditional composite operating identities (0 native-confirmed), and limited late read-only attestation. **Data collection is operationally complete, strict scientific Gate 5 remains HOLD**, no re-collection or Phase 5/6 release. [GH independent audit #42330969278](https://github.com/HKcode22/ReplitTranvr/actions/runs/42330969278) / [issue #293 exact JSON](https://github.com/HKcode22/ReplitTranvr/issues/293#issuecomment-6701236001). Previous runbook's prearm steps are historical; do not repeat.
+
+
+
 - [**November 6 POST PostgreSQL 57P01 failure + narrow tested recovery + independent-science risk register**](2026-11-06_G5A_POST_57P01_FAILURE_AND_PRE_OUTCOME_RECOVERY.md) — original POST run #42227608751 failed before first paid source due to unhandled idle-session disconnect; targeted PR #410 merged on main *after* all three PRE owners closed, regression tests 18/18 and unchanged frozen source grid, guarded replacement GH prearm requires read-only ledger=0 and final 36 PRE before dispatch. **Not a Gate5 scientific PASS.**
 
 
