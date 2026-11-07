@@ -13,16 +13,18 @@ function hold(message:string):never{
  throw Error("REFUSED_P5_GITHUB_SOURCE_RELEASE_"+message);
 }
 export interface P5GitHubOneQueryReleaseEnvelope {
- schema:"v39.phase5.github-source-one-query.v1";
+ schema:"v39.phase5.github-source-one-query-template.v2";
  manifestSha256:string;
  queryDigestSha256:string;
- approvedCodeSha:string;
- githubRunId:string;
+ /** Future GH commit SHA and run ID cannot be committed into their own
+  * source file. Bind actual GITHUB_SHA and GITHUB_RUN_ID at runtime.
+  */
  plan:P5SourceSingleQueryPlan;
 }
 export interface P5GitHubSourceAdmitted {
- schema:"v39.phase5.github-source-admitted.v1";
+ schema:"v39.phase5.github-source-admitted.v2";
  codeSha:string;
+ githubRunId:string;
  manifestSha256:string;
  queryDigestSha256:string;
  runDayIndex:number;
@@ -56,11 +58,13 @@ export function admitP5GitHubOneQueryRelease(
  const approved=env.V39_P5_APPROVED_CODE_SHA;
  if(!CODE.test(approved??"")||approved!==env.GITHUB_SHA)
   hold("CODE_COMMIT_NOT_APPROVED");
- if(!payload||payload.schema!=="v39.phase5.github-source-one-query.v1"||
-    ![payload.manifestSha256,payload.queryDigestSha256].every(x=>SHA.test(x))||
-    payload.approvedCodeSha!==approved||
-    payload.githubRunId!==env.GITHUB_RUN_ID)
-  hold("SIGNED_RELEASE_QUERY_OR_RUN_MISMATCH");
+ if(!payload||payload.schema!=="v39.phase5.github-source-one-query-template.v2"||
+    ![payload.manifestSha256,payload.queryDigestSha256].every(x=>SHA.test(x)))
+  hold("SIGNED_RELEASE_QUERY_TEMPLATE_MISMATCH");
+ // Never allow an operator to smuggle mutable run IDs, credentials or an
+ // impossible self-referential Git SHA through the reviewed template.
+ if(Object.hasOwn(payload,"githubRunId")||Object.hasOwn(payload,"approvedCodeSha"))
+  hold("RUNTIME_GITHUB_ID_NOT_ALLOWED_IN_TEMPLATE");
  if(!Buffer.isBuffer(rawJsonBytes)||rawJsonBytes.length<100||
     rawJsonBytes.length>200000||
     !SHA.test(env.V39_P5_SIGNED_QUERY_JSON_SHA256??"")||
@@ -106,8 +110,9 @@ export function admitP5GitHubOneQueryRelease(
   }
  }
  return {
-  schema:"v39.phase5.github-source-admitted.v1",
-  codeSha:approved!,manifestSha256:payload.manifestSha256,
+  schema:"v39.phase5.github-source-admitted.v2",
+  codeSha:approved!,githubRunId:env.GITHUB_RUN_ID!,
+  manifestSha256:payload.manifestSha256,
   queryDigestSha256:payload.queryDigestSha256,
   runDayIndex:q.runDayIndex,slot:q.slot,horizon:q.horizon,
   approvedOnePhysicalAttempt:true,paidSourceReleaseOnly:true,

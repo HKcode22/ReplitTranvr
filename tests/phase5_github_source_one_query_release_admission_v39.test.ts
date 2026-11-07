@@ -3,13 +3,14 @@ import {describe,it,expect} from "vitest";
 import {admitP5GitHubOneQueryRelease,
  type P5GitHubOneQueryReleaseEnvelope}
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
+import {waitForP5ScheduledPhysicalDispatch}
+ from "../server/lib/disruption/phase5V0080GitHubPrearm_v39";
 const H=(c:string)=>c.repeat(64);
 function fixture(){
  const code="a".repeat(40);
  const payload={
-  schema:"v39.phase5.github-source-one-query.v1",
+  schema:"v39.phase5.github-source-one-query-template.v2",
   manifestSha256:H("1"),queryDigestSha256:H("2"),
-  approvedCodeSha:code,githubRunId:"12345678912",
   plan:{
    reviewedReleaseSha256:H("3"),
    reviewedProviderRightsSha256:H("4"),
@@ -48,6 +49,8 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   const {env,payload,bytes}=fixture();
   const out=admitP5GitHubOneQueryRelease(env,bytes,payload);
   expect(out.approvedOnePhysicalAttempt).toBe(true);
+  expect(out.githubRunId).toBe(env.GITHUB_RUN_ID);
+  expect(out.codeSha).toBe(env.GITHUB_SHA);
   expect(out.actualFlightPreCertified).toBe(false);
   expect(out.phase6Go).toBe(false);
  });
@@ -71,10 +74,30 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
    .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
   f.env.GITHUB_RUN_ATTEMPT="1";
+  // GitHub assigns the ID AFTER template freeze. A valid new ID must
+  // pass this pure admission and be verified against real V0080 prearm later.
   f.env.GITHUB_RUN_ID="12345678999";
+  expect(admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload).githubRunId)
+   .toBe("12345678999");
+  f.env.GITHUB_RUN_ID="non-numeric";
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
-   .toThrow("SIGNED_RELEASE_QUERY_OR_RUN_MISMATCH");
+   .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
  });
+ it("refuses embedding future run ID or code SHA in a signed immutable template",()=>{
+  const f=fixture();
+  const expanded={...f.payload,githubRunId:"12345678999"} as any;
+  const bytes=Buffer.from(JSON.stringify(expanded));
+  f.env.V39_P5_SIGNED_QUERY_JSON_SHA256=createHash("sha256").update(bytes).digest("hex");
+  expect(()=>admitP5GitHubOneQueryRelease(f.env,bytes,expanded))
+   .toThrow("RUNTIME_GITHUB_ID_NOT_ALLOWED_IN_TEMPLATE");
+  const g=fixture();
+  const withCode={...g.payload,approvedCodeSha:g.env.GITHUB_SHA} as any;
+  const raw=Buffer.from(JSON.stringify(withCode));
+  g.env.V39_P5_SIGNED_QUERY_JSON_SHA256=createHash("sha256").update(raw).digest("hex");
+  expect(()=>admitP5GitHubOneQueryRelease(g.env,raw,withCode))
+   .toThrow("RUNTIME_GITHUB_ID_NOT_ALLOWED_IN_TEMPLATE");
+ });
+
  it("refuses changed source JSON or source code SHA even when flags are set",()=>{
   const f=fixture();
   f.bytes=Buffer.concat([f.bytes,Buffer.from("x")]);
@@ -109,5 +132,34 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
     createHash("sha256").update(newBytes).digest("hex");
   expect(()=>admitP5GitHubOneQueryRelease(f.env,newBytes,f.payload))
    .toThrow("UNREVIEWED_SOURCE_ROLE_PRICE_OR_ATTEMPTS");
+ });
+});
+
+
+describe("V0080 signed DB-clock prospectivity after prearm, no real timers",()=>{
+ const planned="2026-11-10T15:00:00.000Z";
+ const cutoff="2026-11-10T15:10:00.000Z";
+ it("waits before the physical GET and crosses planned timestamp only on DB clock",async()=>{
+  let clock=Date.parse(planned)-12_000,delays=0;
+  await waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(clock),
+   async ms=>{delays++;clock+=ms;});
+  expect(delays).toBeGreaterThan(0);
+  expect(clock).toBe(Date.parse(planned));
+ });
+ it("refuses late GitHub run without any paid attempt",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(planned)+16*60_000),
+   async()=>{})).rejects.toThrow("MISSED_PROSPECTIVE_DISPATCH");
+ });
+ it("refuses flight cutoff too close for conservative response+commit bound",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(cutoff)-10_000),
+   async()=>{})).rejects.toThrow("MISSED_PROSPECTIVE_DISPATCH");
+ });
+ it("does not run a two-plus-hour background hold for an incorrectly scheduled owner",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(planned)-2*3600_000-1000),
+   async()=>{throw Error("SHOULD_NOT_SLEEP");})).rejects.toThrow("GITHUB_JOB_STARTED_TOO_EARLY");
  });
 });
