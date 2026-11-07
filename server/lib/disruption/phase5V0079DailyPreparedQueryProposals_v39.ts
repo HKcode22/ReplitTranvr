@@ -7,7 +7,8 @@
  */
 import {createHash} from "node:crypto";
 import {
-  materializeP5DynamicDaySourceGrid,P5_DYNAMIC_DAY_GRID_SCHEMA,
+  materializeP5DynamicDaySourceGrid,
+  P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
   type P5DynamicDayGridInput
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {P5CommittedDayReadonlyResult}
@@ -89,7 +90,8 @@ export interface Stage8DayProposalResult {
  schema:"v39.phase5.stage8.v0079-day-prepared-proposals.v1";
  status:"EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED";
  manifestSha256:string;runDayIndex:number;earlyDrawSha256:string;
- dayProposalSha256:string;sourceQueryCount:12;maximumCandidateGetUnits:24;
+ dayProposalSha256:string;
+ sourceQueryCount:number;maximumCandidateGetUnits:number;
  actualUtcChargeBudgets:{day:string;queries:number;candidateUnits:number;
      otherReserved:number;alreadyReserved:number;remainingAfterProposal:number}[];
  queries:Stage8V0079PreparedProposal[];
@@ -113,12 +115,22 @@ export function planStage8P5DayV0079Proposals(
     .every(x=>typeof x==="string"&&HASH.test(x)))
    refuse("MISSING_FROZEN_SHA_CHAIN");
  const candidate=p.stage7.selectedDayCandidateGrid;
- if(candidate?.schema!=="v39.phase5.early-draw-to-12-source-candidates-result.v1"||
-    candidate.status!=="DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED"||
-    candidate.acquisitionCount!==12||candidate.plannedPhysicalGetCount!==12||
-    candidate.candidateFidsApiUnits!==24||
+ const multi=candidate?.schema===
+   "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
+ const candidateCount=candidate?.acquisitionCount;
+ if(!(multi?candidate?.status===
+     "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
+     candidate?.schema==="v39.phase5.early-draw-to-12-source-candidates-result.v1"&&
+     candidate.status==="DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED")||
+    !Number.isSafeInteger(candidateCount)||
+    (multi?candidateCount<=12||candidateCount>384:candidateCount!==12)||
+    candidate.plannedPhysicalGetCount!==candidateCount||
+    candidate.candidateFidsApiUnits!==candidateCount*2||
+    (multi?!candidate.reviewedRefreshTiming:
+      candidate.reviewedRefreshTiming!==undefined)||
     candidate.authorizesPaidGet!==false||candidate.phase6Go!==false||
-    !Array.isArray(candidate.acquisitions)||candidate.acquisitions.length!==12||
+    !Array.isArray(candidate.acquisitions)||
+    candidate.acquisitions.length!==candidateCount||
     candidate.runDayIndex!==p.day?.runDayIndex)
     refuse("UNTRUSTWORTHY_SOURCE_CANDIDATES");
  if(stamp(p.stage7.dbClockAtReadUtc)>=Math.min(
@@ -131,7 +143,8 @@ export function planStage8P5DayV0079Proposals(
      return rest;
    });
  const verified=materializeP5DynamicDaySourceGrid({
-   schema:P5_DYNAMIC_DAY_GRID_SCHEMA,
+   schema:multi?P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
+   ...(multi?{reviewedRefreshTiming:candidate.reviewedRefreshTiming}:{}),
    reviewedCalendarSha256:p.calendarSha256,
    reviewedConfigSha256:p.configSha256,
    reviewedFrameSha256:p.frameSha256,
@@ -148,11 +161,12 @@ export function planStage8P5DayV0079Proposals(
  // acquisition in-memory. Compare *every actual candidate field* against
  // independently reconstructed immutable draw and source template values.
  const observedByKey=new Map(candidate.acquisitions.map(q=>[q.queryKey,q]));
- if(observedByKey.size!==12||verified.acquisitions.some(q=>
+ if(observedByKey.size!==candidateCount||verified.acquisitions.some(q=>
    !observedByKey.has(q.queryKey)||
    JSON.stringify(observedByKey.get(q.queryKey))!==JSON.stringify(q)))
    refuse("TAMPERED_IN_MEMORY_SOURCE_QUERY");
- if(!Number.isInteger(p.cycleUnitsAvailable)||p.cycleUnitsAvailable<24||
+ if(!Number.isInteger(p.cycleUnitsAvailable)||
+    p.cycleUnitsAvailable<candidateCount*2||
     p.cycleUnitsAvailable>50000)refuse("CYCLE_BUDGET_NOT_AVAILABLE");
  if(!Array.isArray(p.localFrames)||p.localFrames.length!==4||
     !Array.isArray(p.chargeDayBudgets))refuse("FOUR_LOCAL_FRAMES_AND_CHARGE_DAY");
@@ -199,8 +213,8 @@ export function planStage8P5DayV0079Proposals(
      schema:"v39.phase5.v0079.query-prepared-proposal.v1",...rowWithoutDigest
    }),...rowWithoutDigest});
  }
- if(new Set(proposals.map(q=>q.query_digest)).size!==12||
-    new Set(proposals.map(q=>q.query_key)).size!==12)
+ if(new Set(proposals.map(q=>q.query_digest)).size!==candidateCount||
+    new Set(proposals.map(q=>q.query_key)).size!==candidateCount)
    refuse("DUPLICATE_V0079_QUERY_PROPOSAL");
  const actual=verified.actualChargeDayUtcCounts;
  const budgets=new Map(p.chargeDayBudgets.map(x=>[x.chargeDayUtc,x]));
@@ -230,7 +244,8 @@ export function planStage8P5DayV0079Proposals(
    earlyDrawSha256:verified.committedDrawSha256,
    dayProposalSha256:sha({manifest:p.manifestSha256,
      source:verified.sourceCandidateDigestSha256,proposals,checked}),
-   sourceQueryCount:12,maximumCandidateGetUnits:24,
+   sourceQueryCount:candidateCount,
+   maximumCandidateGetUnits:candidateCount*2,
    actualUtcChargeBudgets:checked,queries:proposals,
    databaseReadbackClaimOnly:true,databaseWrites:0,providerCalls:0,
    installedV0079:false,actualGitHubPrearmVerified:false,
