@@ -14,6 +14,12 @@ on:
       - "scripts/v39_phase4_gate5_g5a_nov06_1400z_independent_real_cohort_readonly_audit.ts"
       - "tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts"
   workflow_dispatch:
+    inputs:
+      late_readonly_recovery:
+        description: "Explicit late read-only metadata attestation; NOT original on-time audit"
+        required: true
+        type: boolean
+        default: false
   schedule:
     # Four independent no-provider audit opportunities. Two early backups
     # Fri 21:12/21:18/21:24/21:30 PST, after final POST aggregate.
@@ -51,7 +57,7 @@ jobs:
       - name: Offline 3-horizon, no-provider, no-write independent audit tests
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts tests/phase4_gate5_g5a_nov06_1400z_release_v39.test.ts
+          npx vitest run tests/phase4_gate5_g5a_independent_real_audit_v39.test.ts tests/phase4_gate5_g5a_nov06_1400z_release_v39.test.ts tests/phase4_gate5_g5a_nov06_late_readonly_recovery_v39.test.ts
           echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0'
   audit-independent:
     name: audit-independent
@@ -65,6 +71,7 @@ jobs:
     env:
       ADB_AUTO_COLLECT: "0"
       V39_PHASE6_PROCESS_ARMED: "0"
+      G5A_INDEPENDENT_LATE_READONLY_RECOVERY: ${{ github.event_name == 'workflow_dispatch' && inputs.late_readonly_recovery == true && '1' || '0' }}
       GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
       GATE05_AUTOMATION_DATABASE_URL: ""
       P4_G5_G5A_NOV07_AUDIT_DATABASE_URL: ${{ secrets.P4_G5_G5A_NOV07_AUDIT_DATABASE_URL }}
@@ -93,7 +100,9 @@ jobs:
               and (.sourceHorizonCounts | type == "array")
               and (.independentlyVerifiedPRE | type == "array")
               and (.prospectiveScheduleRevisionOutcomes | type == "array")
-            then {schema,status,sourceCohortManifestSha256,sourceHorizonCounts,
+            and (.auditAsOfUtc | type == "string")
+            and (.auditTimingClassification | type == "string")
+            then {schema,status,auditAsOfUtc,auditTimingClassification,sourceCohortManifestSha256,sourceHorizonCounts,
               originalPopulationCounts,independentlyVerifiedPRE,
               prospectiveScheduleRevisionOutcomes,reservedProjectRestUnits,
               projectRestUnitCeiling,actualProviderBillingIndependentReconciliationRequired,

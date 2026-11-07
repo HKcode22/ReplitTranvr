@@ -28,6 +28,10 @@ export const G5A_INDEPENDENT_AUDIT_CRONS_V39=[
 const GRID="data-collection/phase4/GATE5_G5A_WSSS_20261106_1400Z_FROZEN_SOURCE_GRID.json";
 const START=Date.parse("2026-11-06T17:10:00.000Z");
 const END=Date.parse("2026-11-06T18:00:00.000Z");
+// Separate, tightly bounded late audit admission. It does not recover missed
+// time-of-observation and cannot extend provider raw-content use rights.
+const LATE_START=Date.parse("2026-11-06T22:00:00.000Z");
+const LATE_END=Date.parse("2026-11-09T08:00:00.000Z");
 const SHA=/^[a-f0-9]{40}$/;
 function hold(code:string):never{throw Error("P4_G5_G5A_INDEPENDENT_"+code+"_HOLD")}
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -38,8 +42,14 @@ function count(v:unknown){
 }
 export function requireG5AIndependentAuditContextV39(
  e:NodeJS.ProcessEnv,head:string,at:number
-){
- if(!SHA.test(head)||!Number.isFinite(at)||at<START||at>=END||
+ ){
+ const originallyOnTime=at>=START&&at<END;
+ const expresslyReviewedLateReadOnly=
+  e.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+  e.G5A_INDEPENDENT_LATE_READONLY_RECOVERY==="1"&&
+  at>=LATE_START&&at<LATE_END;
+ if(!SHA.test(head)||!Number.isFinite(at)||
+  !(originallyOnTime||expresslyReviewedLateReadOnly)||
   e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||
   e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_SHA!==head||
   e.GITHUB_RUN_ATTEMPT!=="1"||
@@ -217,6 +227,10 @@ export async function main(){
    hold("PROJECT_UNIT_CEILING_DRIFT");
   const payload={
    schema:G5A_INDEPENDENT_AUDIT_SCHEMA_V39,
+   auditAsOfUtc:new Date().toISOString(),
+   auditTimingClassification:Date.now()>=END?
+    "LATE_READONLY_METADATA_ATTESTATION_NOT_ORIGINAL_ON_TIME_AUDIT":
+    "ORIGINAL_ADMISSION_WINDOW_READONLY_AUDIT",
    status:source.length===3&&budget.rows.length===1?
     "INDEPENDENT_COUNTS_COMPLETE_NOT_SCIENCE_VERDICT":
     "HOLD_NO_COMPLETE_PROSPECTIVE_THREE_HORIZON_EVIDENCE",
