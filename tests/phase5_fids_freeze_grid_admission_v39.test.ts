@@ -47,7 +47,7 @@ function sampleGrid(): P5FidsGridInput {
           plannedAirportSelectionUtc: iso(serviceStart - 1460 * 60_000),
           maxResponseAndPersistSeconds: 300,
           apiUnitsPerAttempt: 2,
-          maxAttempts: 3,
+          maxAttempts: 1,
           queryKey: "day" + day + "_" + slot + "_" + h.label,
         });
       }
@@ -77,16 +77,16 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(out.days).toBe(31);
     expect(out.distinctSlotHorizonGroups).toBe(31 * 4 * 3);
     expect(out.plannedFidsRequests).toBe(372);
-    expect(out.worstCaseFidsApiUnits).toBe(372 * 2 * 3);
-    expect(out.worstCaseProjectReservedApiUnits).toBe(2232 + 500 + 100);
+    expect(out.worstCaseFidsApiUnits).toBe(372 * 2);
+    expect(out.worstCaseProjectReservedApiUnits).toBe(744 + 500 + 100);
     expect(out.minAdvanceMarginSeconds).toBe(300);
     expect(out.chargeDays).toBe(32);
     expect(out.byDay).toHaveLength(32);
     expect(out.byServiceDay).toHaveLength(31);
     expect(out.byDay[0].budgetDayUtc).toBe("2026-12-31");
-    expect(out.byDay[0].combinedReservedUnits).toBe(4 * 2 * 3 + 10);
+    expect(out.byDay[0].combinedReservedUnits).toBe(4 * 2 + 10);
     expect(out.byDay[1].budgetDayUtc).toBe("2027-01-01");
-    expect(out.byDay[1].combinedReservedUnits).toBe(4 * 3 * 2 * 3 + 10);
+    expect(out.byDay[1].combinedReservedUnits).toBe(4 * 3 * 2 + 10);
     expect(out.authorizesPaidCollection).toBe(false);
     expect(out.confirmsFlightLevelPre).toBe(false);
     expect(out.confirmsLiveSource).toBe(false);
@@ -122,13 +122,13 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
 
   it("refuses a daily combined reservation above the frozen cap", () => {
     const a = copy();
-    a.dailyProjectApiCeilingUnits = 75; // 72 FIDS max + 10 other = 82
+    a.dailyProjectApiCeilingUnits = 33; // 24 FIDS max + 10 other = 34
     expect(() => evaluateP5FidsGrid(a)).toThrow("DAILY_BUDGET_EXCEEDED");
   });
 
   it("refuses total FIDS + non-FIDS reserves + protected floor above project envelope", () => {
     const a = copy();
-    a.protectedProjectApiUnits = 2_800; // calculated total 2832
+    a.protectedProjectApiUnits = 1_300; // calculated total 1344
     expect(() => evaluateP5FidsGrid(a)).toThrow("PROJECT_CEILING_EXCEEDED");
   });
 
@@ -173,7 +173,7 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
 
   it("enforces the actual UTC day cap even when every service-day line seems under limit", () => {
     const a=copy();
-    a.otherCategoryReservedPerDay["2027-01-01"]=1830; // actual 72 + 1830 = 1902
+    a.otherCategoryReservedPerDay["2027-01-01"]=1880; // actual 24 + 1880 = 1904
     a.otherCategoryReservedUnits=3000; // avoid cycle underreservation as blocker
     a.protectedProjectApiUnits=7000;
     expect(()=>evaluateP5FidsGrid(a)).toThrow("DAILY_BUDGET_EXCEEDED");
@@ -198,14 +198,23 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(() => evaluateP5FidsGrid(a)).toThrow("INCONSISTENT_HORIZON_ORDER");
   });
 
+  it("refuses any multi-GET or unreviewed price plan despite a larger reserved budget", () => {
+    const a=copy();
+    a.acquisitions[0].maxAttempts=2;
+    expect(()=>evaluateP5FidsGrid(a)).toThrow("MAX_ATTEMPTS");
+    const b=copy();
+    b.acquisitions[0].apiUnitsPerAttempt=3;
+    expect(()=>evaluateP5FidsGrid(b)).toThrow("V0079_TWO_UNIT_PRICE_REQUIRED");
+  });
+
   it("refuses unspecified 0-second end-to-end latency, price or too many attempts", () => {
     const a = copy();
     a.acquisitions[0].maxResponseAndPersistSeconds = 0;
     expect(() => evaluateP5FidsGrid(a)).toThrow("UNKNOWN_LATENCY_COST_OR_RETRIES");
     a.acquisitions[0].maxResponseAndPersistSeconds = 300;
-    a.acquisitions[0].maxAttempts = 4;
+    a.acquisitions[0].maxAttempts = 2;
     expect(() => evaluateP5FidsGrid(a)).toThrow("MAX_ATTEMPTS");
-    a.acquisitions[0].maxAttempts = 3;
+    a.acquisitions[0].maxAttempts = 1;
     a.acquisitions[0].apiUnitsPerAttempt = 0;
     expect(() => evaluateP5FidsGrid(a)).toThrow("UNKNOWN_LATENCY_COST_OR_RETRIES");
   });
