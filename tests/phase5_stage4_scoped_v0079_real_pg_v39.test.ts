@@ -34,6 +34,8 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   pool=new Pool({connectionString:URL,max:5});
   const now=new Date((await pool.query("SELECT clock_timestamp() AS t")).rows[0].t);
   const start=new Date(now.getTime()+29*3600000);
+  const utcChargeDay=now.toISOString().slice(0,10);
+  expect(start.toISOString().slice(0,10)).not.toBe(utcChargeDay);
   const selected=new Date(now.getTime()-2*3600000).toISOString();
   const day:PreparedDayForReadback={
    runDayIndex:1,scheduledStartUtc:start,frozenDrawSeed:"stage4-ci-seed",
@@ -106,23 +108,27 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     VALUES($1,1,$2,$3,$4,$5,$6,50,10)`,
    [manifest,start.toISOString().slice(0,10),calendar,config,frame,drawSha]);
   await pool.query(
+   `INSERT INTO clean.phase5_fids_utc_charge_budget_v39(
+    manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units)
+    VALUES($1,$2,50,10)`,[manifest,utcChargeDay]);
+  await pool.query(
    `INSERT INTO clean.phase5_fids_allowed_query_v39(
     query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,
     airport_icao,early_draw_sha256,reviewed_release_sha256,
     rights_review_sha256,provider_contract_sha256,github_run_id,
     service_window_start_utc,service_window_end_utc,
     from_local,to_local,airport_iana_timezone,provider_api_version,
-    fids_protocol_version,planned_dispatch_utc,hard_latest_dispatch_utc,
-    prediction_cutoff_utc,state)
+    fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
+    hard_latest_dispatch_utc,prediction_cutoff_utc,state)
     VALUES($1,$2,1,$3,'HUB','T-24h','WSSS',$4,$5,$6,$7,$8,
     $9,$10,'2026-11-09T22:00','2026-11-10T02:00','Asia/Singapore',
-    'CI-PROVIDER','CI-PROTOCOL',$11,$12,$13,'ACTIVE')`,
+    'CI-PROVIDER','CI-PROTOCOL',$11,$14::date,$12,$13,'ACTIVE')`,
    [query,manifest,plan.acquisition.queryKey,drawSha,release,rights,
     contract,gitRun,plan.acquisition.serviceWindowStartUtc,
     plan.acquisition.serviceWindowEndUtc,
     plan.acquisition.scheduledRequestUtc,
     new Date(now.getTime()+60000).toISOString(),
-    plan.acquisition.earliestPlannedCutoffUtc]);
+    plan.acquisition.earliestPlannedCutoffUtc,utcChargeDay]);
  });
  afterAll(async()=>{if(pool)await pool.end();});
  const make=(p:P5SourceSingleQueryPlan=plan)=>createP5V0079ScopedDbPorts({
@@ -149,6 +155,12 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     FROM clean.phase5_fids_cycle_budget_v39 c
     JOIN clean.phase5_fids_day_budget_v39 d USING(manifest_sha256)`)).rows[0];
   expect(c).toMatchObject({physically_reserved_units:2,daily_source_reserved_units:2});
+  const utcCharge=(await pool.query(
+    "SELECT charge_day_utc,physically_reserved_units FROM clean.phase5_fids_utc_charge_budget_v39"
+  )).rows[0];
+  expect(utcCharge.physically_reserved_units).toBe(2);
+  expect(new Date(utcCharge.charge_day_utc).toISOString().slice(0,10))
+    .toBe(new Date(plan.acquisition.scheduledRequestUtc).toISOString().slice(0,10));
   const b=(await pool.query(
    `SELECT b.response_hash,b.decoded_original_body_sha256,r.response_hash AS original_hash
     FROM clean.phase5_fids_original_binding_v39 b
