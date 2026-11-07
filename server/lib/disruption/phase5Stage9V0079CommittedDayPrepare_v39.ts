@@ -198,7 +198,7 @@ export async function commitStage9P5DayV0079PreparedRows(
    hold("SAVED_EARLY_DRAW_CHANGED_OR_FUTURE");
   const selected=new Map(proof.selections.map(z=>[z.slotId,z.icao]));
   for(const q of x.queries){
-   if(selected.get(q.slot_id)!==q.airport_icao||
+   if(selected.get(q.slot_id as keyof PreparedDayForReadback["slotRegions"])!==q.airport_icao||
       time(q.service_window_start_utc).getTime()!==
        day.scheduledStartUtc.getTime()||
       time(q.planned_dispatch_utc).getTime()>=
