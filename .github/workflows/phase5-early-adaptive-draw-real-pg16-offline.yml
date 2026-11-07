@@ -1,0 +1,63 @@
+name: Phase5 Early Adaptive Draw — Disposable PG16 (NO Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
+      - 'tests/phase5_early_adaptive_draw_real_pg_v39.test.ts'
+      - '.github/workflows/phase5-early-adaptive-draw-real-pg16-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
+      - 'tests/phase5_early_adaptive_draw_real_pg_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_P5_EARLY_DRAW_OWNER_APPROVED: '0'
+  V39_P5_PG16_INTEGRATION: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+jobs:
+  ephemeral-postgres-real-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Create actual B0062 baseline in disposable CI PostgreSQL16
+        run: |
+          set -Eeuo pipefail
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          test "$(psql "${DATABASE_URL}" -XAt -v ON_ERROR_STOP=1 -c             "SELECT to_regclass('clean.adb_sampling_draw') IS NOT NULL")" = 't'
+      - name: Real PostgreSQL serializable four-airport commit, idempotence and pinned refusal
+        run: |
+          set -Eeuo pipefail
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          npx vitest run tests/phase5_early_adaptive_draw_real_pg_v39.test.ts
+          echo 'ONLY_EPHEMERAL_PG16_WRITTEN=1 SOURCE_PROVIDER_CALLS=0 PHASE6_ACTIVE=0'
