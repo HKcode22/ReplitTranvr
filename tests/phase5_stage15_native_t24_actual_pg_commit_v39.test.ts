@@ -33,9 +33,9 @@ ACTIVE("Phase5 Stage15 native PG16 transaction COMMIT time vs misleading created
      process.env.V39_PHASE6_PROCESS_ARMED!=="0")
     throw Error("REFUSED_STAGE15_NOT_DISPOSABLE_PG16");
   admin=new Pool({connectionString:URL,max:3});
-  const config=await admin.query(
+  const trackingReadback=await admin.query(
    "SELECT current_setting('track_commit_timestamp') AS tracked");
-  expect(config.rows[0].tracked).toBe("on");
+  expect(trackingReadback.rows[0].tracked).toBe("on");
   await admin.query("CREATE ROLE "+ROLE+" LOGIN PASSWORD 'ci-only'"+
     " NOSUPERUSER NOCREATEDB NOCREATEROLE");
   await admin.query("GRANT USAGE ON SCHEMA clean TO "+ROLE);
