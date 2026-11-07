@@ -120,6 +120,13 @@ describe("Phase5 Stage10 bound source -> per-flight as-of readback (NO PRE)",()=
   expect(o.sourceAsOfCandidates).toBe(0);
   expect(o.reasons.OBSERVATION_AFTER_FLIGHT_CUTOFF).toBe(1);
  });
+ it("refuses a normalized member whose availability is in the DB future",async()=>{
+  const f=fake({clock:"2026-11-08T13:54:00.000Z",
+   members:[member({member_available:"2026-11-08T13:55:00.000Z"})]});
+  const o=await readP5OneBoundSourceFlightPreCandidates(f.pool as any,baselineScope);
+  expect(o.sourceAsOfCandidates).toBe(0);
+  expect(o.reasons.SOURCE_OR_MEMBER_CLOCK_INVALID).toBe(1);
+ });
  it("enforces the explicitly frozen maximum population staleness",async()=>{
   const s={...baselineScope,maxPopulationStalenessSeconds:300};
   const f=fake({scope:s});
