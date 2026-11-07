@@ -8,7 +8,7 @@
  * analytic record with canonical_flight_instance_id=NULL.
  */
 import { createHash, randomUUID } from "crypto";
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
@@ -845,8 +845,10 @@ export async function persistFidsObservation(
   query: FidsQueryObservation,
   rows: PopulationRow[],
   beforeCommit?:FidsBeforeRawFirstCommitV39,
+  /** Phase5 GitHub-only source owner passes restricted V39-scoped pool. */
+  scopedPool: Pick<Pool, "connect"> = pool,
 ): Promise<number> {
-  const client = await pool.connect();
+  const client = await scopedPool.connect();
   try {
     await client.query("BEGIN");
     const rawInsert = await client.query(
