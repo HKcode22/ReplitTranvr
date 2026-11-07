@@ -1,0 +1,42 @@
+name: Phase5 Early Airport Draw No-Redraw (Offline Only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyPreselectionReadback_v39.ts'
+      - 'server/lib/disruption/adbCollectionController_v3.ts'
+      - 'tests/phase5_early_preselection_readback_v39.test.ts'
+      - '.github/workflows/phase5-early-preselection-no-redraw-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5EarlyPreselectionReadback_v39.ts'
+      - 'server/lib/disruption/adbCollectionController_v3.ts'
+      - 'tests/phase5_early_preselection_readback_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  offline-no-provider-no-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No-provider early-draw safety guards
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_early_preselection_readback_v39.test.ts
+          echo 'PROVIDER_CALLS=0 DATABASE_WRITES=0 PHASE6_ACTIVE=0'

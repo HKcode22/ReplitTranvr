@@ -21,6 +21,7 @@ import {
 } from "./aerodataboxLimiter_v3";
 import { AIRPORT_TIERS, type AirportTier } from "./adbAirportCatalog_v3";
 import { requireP5P6WebhookDestinationV39 } from "./phase5Phase6WebhookDestinationGuard_v39";
+import { verifyPreparedDailyDraw, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
 import {
   chooseAirportsForRunDay,
   type FrozenRunDaySamplingPlan,
@@ -508,37 +509,19 @@ async function createSubscriptionsForSegment(
   }
 }
 
-async function loadSelections(runDayIndex: number): Promise<SamplingSelection[]> {
-  const r = await pool.query(
-    `SELECT slot_id,target_region,draw_type,selected_icao,adaptive_state_hash,
-            probability_vector,airport_layer_design_probability
-       FROM clean.adb_sampling_draw WHERE run_day_index=$1 ORDER BY
-       CASE slot_id WHEN 'HUB' THEN 1 WHEN 'MID_A' THEN 2 WHEN 'MID_B' THEN 3 ELSE 4 END`,
-    [runDayIndex],
-  );
-  if (r.rowCount !== 4) throw new Error(`REFUSED_SAMPLING_DRAW: run_day ${runDayIndex} must have exactly four frozen selections`);
-  return r.rows.map((x: any) => ({
-    slotId: x.slot_id,
-    icao: x.selected_icao,
-    targetRegion: x.target_region,
-    isRandomized: x.slot_id === "REGIONAL",
-    designProbability: x.slot_id === "REGIONAL" ? Number(x.airport_layer_design_probability) : null,
-    plannedShare: x.slot_id === "REGIONAL" ? null : 1,
-    adaptiveStateHash: x.adaptive_state_hash ?? null,
-    probabilityVector: x.probability_vector ?? null,
-    drawType: x.draw_type,
-  }));
-}
-
 async function activateSegment(batch: CollectionBatch, segmentId: string): Promise<CreatedSub[]> {
   await assertIncidentClear();
   const auth = await loadPhase6Authorization();
   if (auth.authorizationId !== batch.phase6AuthorizationId || auth.calendarHash !== batch.calendarHash || auth.configHash !== batch.configHash) {
     throw new Error("REFUSED_AUTH_CHANGED: active parent no longer matches Phase-6 authorization");
   }
-  await assertBudgetHeadroom(auth);
-  const selections = await loadSelections(batch.runDayIndex!);
+  const frozenDay = await loadFrozenCalendarForBatchReadback(batch);
+  const early = await loadPreparedDailyDraw(frozenDay);
+  if (early.stateHash !== batch.samplingStateHash)
+    throw new Error("REFUSED_EARLY_DRAW_INITIAL_OR_NEXT_SEGMENT_HASH_MISMATCH");
+  const selections = early.selections;
   await verifyAllSelectedCoverage(selections);
+  await assertBudgetHeadroom(auth);
   const created = await createSubscriptionsForSegment(batch.batchId, segmentId, selections);
   await pool.query(
     `UPDATE clean.adb_collection_segments SET status='ACTIVE',started_at_utc=now() WHERE segment_id=$1 AND segment_kind='ACTIVE'`,
@@ -561,6 +544,79 @@ export async function getActiveBatch(): Promise<CollectionBatch | null> {
   return r.rowCount ? mapBatch(r.rows[0]) : null;
 }
 
+/**
+ * Read-only early sampling admission: source and verified PRE provenance are
+ * separate Phase5 release conditions. Never regenerate a sampling draw here.
+ */
+type EarlyDrawCalendar = Pick<FrozenCalendarRow,
+  "runDayIndex"|"scheduledStartUtc"|"frozenDrawSeed"|"drawType"|
+  "anchorIcao"|"slotRegions"|"pairAirportSet"|"calendarHash"|
+  "configHash"|"frameHash">;
+
+async function loadFrozenCalendarForBatchReadback(
+  batch: CollectionBatch,
+): Promise<EarlyDrawCalendar> {
+  if (!batch.runDayIndex || !batch.calendarHash || !batch.configHash ||
+      !batch.samplingStateHash)
+    throw new Error("REFUSED_EARLY_DRAW_BATCH_UNPINNED");
+  const q = await pool.query(
+    `SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,
+            anchor_icao,slot_regions,pair_airport_set,calendar_hash,
+            config_hash,frame_hash
+       FROM clean.adb_phase6_calendar_day
+      WHERE run_day_index=$1`,
+    [batch.runDayIndex],
+  );
+  if (q.rowCount !== 1) throw new Error("REFUSED_EARLY_DRAW_CALENDAR_NOT_FOUND");
+  const x=q.rows[0];
+  if (x.calendar_hash !== batch.calendarHash ||
+      x.config_hash !== batch.configHash)
+    throw new Error("REFUSED_EARLY_DRAW_BATCH_CALENDAR_CHANGED");
+  return {
+    runDayIndex: Number(x.run_day_index),
+    scheduledStartUtc: asDate(x.scheduled_start_utc),
+    frozenDrawSeed: String(x.frozen_draw_seed),
+    drawType: x.draw_type,
+    anchorIcao: String(x.anchor_icao),
+    slotRegions: x.slot_regions,
+    pairAirportSet: x.pair_airport_set,
+    calendarHash: String(x.calendar_hash),
+    configHash: String(x.config_hash),
+    frameHash: String(x.frame_hash),
+  };
+}
+
+async function loadPreparedDailyDraw(day: EarlyDrawCalendar): Promise<{
+  selections: SamplingSelection[];
+  stateHash: string;
+}> {
+  const rows = await pool.query(
+    `SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
+            selected_at_utc,adaptive_state_hash,probability_vector,
+            airport_layer_design_probability
+       FROM clean.adb_sampling_draw
+      WHERE run_day_index=$1
+      ORDER BY slot_id`,
+    [day.runDayIndex],
+  );
+  const prepared = verifyPreparedDailyDraw({
+    runDayIndex: day.runDayIndex,
+    scheduledStartUtc: day.scheduledStartUtc,
+    frozenDrawSeed: day.frozenDrawSeed,
+    drawType: day.drawType,
+    anchorIcao: day.anchorIcao,
+    slotRegions: day.slotRegions,
+    pairAirportSet: day.pairAirportSet,
+    calendarHash: day.calendarHash,
+    configHash: day.configHash,
+    frameHash: day.frameHash,
+  }, rows.rows as PreparedDrawRow[]);
+  // This NECESSARY early-timing guard does not itself prove a real FIDS source
+  // was saved before any flight-specific cutoff. Phase5 must separately wire
+  // committed V0076/V0077 PRE readback before paid Phase6 launch.
+  return { selections: prepared.selections, stateHash: prepared.stateHash };
+}
+
 export async function startBatch(): Promise<StartBatchResult> {
   // Explicit pre-mutation receiver safety: no implicit fallback host or missing secret.
   requireP5P6WebhookDestinationV39(process.env);
@@ -577,16 +633,21 @@ export async function startBatch(): Promise<StartBatchResult> {
     if (prior.status === "active" || prior.status === "closed_unsettled") {
       throw new Error(`REFUSED_PRIOR_BUDGET_DAY: ${prior.budgetDayId} is ${prior.status}`);
     }
-    const openingBalance = await assertBudgetHeadroom(auth);
-    const { frame, states } = await loadFrameAndAdaptiveState(day.frameHash);
-    const decision = chooseAirportsForRunDay(toSamplingPlan(day), frame, states);
-    if (decision.selections.length !== 4 || new Set(decision.selections.map((s) => s.icao)).size !== 4) {
-      throw new Error("REFUSED_SAMPLING_DECISION: exactly four distinct frozen slots are required");
-    }
+    // IMPORTANT: the four airports MUST have been selected and durably
+    // committed BEFORE T-24h source acquisition. Choosing them here at parent
+    // start would leak future data and leave prospective PRE impossible.
+    // If no early owner has written the four verified rows, REFUSE; do not
+    // fallback to chooseAirportsForRunDay() or write sampling decisions.
+    const decision = await loadPreparedDailyDraw(day);
+    if (decision.selections.length !== 4 ||
+        new Set(decision.selections.map(s => s.icao)).size !== 4)
+      throw new Error("REFUSED_PHASE6_EARLY_DRAW_INCOMPLETE");
 
-    // Validate all free coverage before the first paid/provider mutation.
+    // Only after a validated early DB readback can further no-charge coverage
+    // and balance checks run. Source-specific PRE availability remains a
+    // separate hard Phase5 GO condition, not proven by the early draw alone.
     await verifyAllSelectedCoverage(decision.selections);
-    await persistSamplingDecision(day, decision);
+    const openingBalance = await assertBudgetHeadroom(auth);
 
     const segments = segmentTemplates(day);
     const parentEnd = segments[segments.length - 1].end;
