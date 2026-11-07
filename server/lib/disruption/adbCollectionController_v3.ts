@@ -21,6 +21,7 @@ import {
 } from "./aerodataboxLimiter_v3";
 import { AIRPORT_TIERS, type AirportTier } from "./adbAirportCatalog_v3";
 import { requireP5P6WebhookDestinationV39 } from "./phase5Phase6WebhookDestinationGuard_v39";
+import { verifyPreparedDailyDraw, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
 import {
   chooseAirportsForRunDay,
   type FrozenRunDaySamplingPlan,
@@ -561,6 +562,41 @@ export async function getActiveBatch(): Promise<CollectionBatch | null> {
   return r.rowCount ? mapBatch(r.rows[0]) : null;
 }
 
+/**
+ * Read-only early sampling admission: source and verified PRE provenance are
+ * separate Phase5 release conditions. Never regenerate a sampling draw here.
+ */
+async function loadPreparedDailyDraw(day: FrozenCalendarRow): Promise<{
+  selections: SamplingSelection[];
+  stateHash: string;
+}> {
+  const rows = await pool.query(
+    `SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,
+            selected_at_utc,adaptive_state_hash,probability_vector,
+            airport_layer_design_probability
+       FROM clean.adb_sampling_draw
+      WHERE run_day_index=$1
+      ORDER BY slot_id`,
+    [day.runDayIndex],
+  );
+  const prepared = verifyPreparedDailyDraw({
+    runDayIndex: day.runDayIndex,
+    scheduledStartUtc: day.scheduledStartUtc,
+    frozenDrawSeed: day.frozenDrawSeed,
+    drawType: day.drawType,
+    anchorIcao: day.anchorIcao,
+    slotRegions: day.slotRegions,
+    pairAirportSet: day.pairAirportSet,
+    calendarHash: day.calendarHash,
+    configHash: day.configHash,
+    frameHash: day.frameHash,
+  }, rows.rows as PreparedDrawRow[]);
+  // This NECESSARY early-timing guard does not itself prove a real FIDS source
+  // was saved before any flight-specific cutoff. Phase5 must separately wire
+  // committed V0076/V0077 PRE readback before paid Phase6 launch.
+  return { selections: prepared.selections, stateHash: prepared.stateHash };
+}
+
 export async function startBatch(): Promise<StartBatchResult> {
   // Explicit pre-mutation receiver safety: no implicit fallback host or missing secret.
   requireP5P6WebhookDestinationV39(process.env);
@@ -577,16 +613,21 @@ export async function startBatch(): Promise<StartBatchResult> {
     if (prior.status === "active" || prior.status === "closed_unsettled") {
       throw new Error(`REFUSED_PRIOR_BUDGET_DAY: ${prior.budgetDayId} is ${prior.status}`);
     }
-    const openingBalance = await assertBudgetHeadroom(auth);
-    const { frame, states } = await loadFrameAndAdaptiveState(day.frameHash);
-    const decision = chooseAirportsForRunDay(toSamplingPlan(day), frame, states);
-    if (decision.selections.length !== 4 || new Set(decision.selections.map((s) => s.icao)).size !== 4) {
-      throw new Error("REFUSED_SAMPLING_DECISION: exactly four distinct frozen slots are required");
-    }
+    // IMPORTANT: the four airports MUST have been selected and durably
+    // committed BEFORE T-24h source acquisition. Choosing them here at parent
+    // start would leak future data and leave prospective PRE impossible.
+    // If no early owner has written the four verified rows, REFUSE; do not
+    // fallback to chooseAirportsForRunDay() or write sampling decisions.
+    const decision = await loadPreparedDailyDraw(day);
+    if (decision.selections.length !== 4 ||
+        new Set(decision.selections.map(s => s.icao)).size !== 4)
+      throw new Error("REFUSED_PHASE6_EARLY_DRAW_INCOMPLETE");
 
-    // Validate all free coverage before the first paid/provider mutation.
+    // Only after a validated early DB readback can further no-charge coverage
+    // and balance checks run. Source-specific PRE availability remains a
+    // separate hard Phase5 GO condition, not proven by the early draw alone.
     await verifyAllSelectedCoverage(decision.selections);
-    await persistSamplingDecision(day, decision);
+    const openingBalance = await assertBudgetHeadroom(auth);
 
     const segments = segmentTemplates(day);
     const parentEnd = segments[segments.length - 1].end;
