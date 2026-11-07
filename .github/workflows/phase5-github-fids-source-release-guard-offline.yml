@@ -1,0 +1,46 @@
+name: Phase5 GitHub FIDS Source Release Guard (OFFLINE ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39.ts'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
+      - 'tests/phase5_github_source_one_query_release_admission_v39.test.ts'
+      - '.github/workflows/phase5-github-fids-source-release-guard-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39.ts'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
+      - 'tests/phase5_github_source_one_query_release_admission_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  no-paid-source-release-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_P5_SOURCE_OWNER_APPROVED: '0'
+      V39_PHASE5_FREEZE_SIGNED: '0'
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Pure synthetic release admission only — never invoke paid CLI
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_github_source_one_query_release_admission_v39.test.ts
+          echo 'PAID_SOURCE_RUNNER_NOT_INVOKED=1 REAL_DB=0 PHASE6_GO=0'
