@@ -1,0 +1,40 @@
+name: Phase5 Stage16 production DB metadata probe safety (NO provider/DB)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_native_commit_production_environment_readonly_once.mjs'
+      - 'tests/phase5_native_commit_production_environment_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage16-prod-db-metadata-readonly-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_native_commit_production_environment_readonly_once.mjs'
+      - 'tests/phase5_native_commit_production_environment_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage16-prod-db-metadata-readonly-offline.yml'
+permissions:
+  contents: read
+jobs:
+  no-provider-no-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_DB_ENV_PROBE_ONCE: '0'
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify zero-write production metadata audit and fail-closed flags
+        run: |
+          set -Eeuo pipefail
+          node --test tests/phase5_native_commit_production_environment_readonly_v39.test.mjs
+          echo 'STAGE16_READONLY_METADATA_AUDIT=PASS PRODUCTION_DB_ACCESS=0 FIDS_PROVIDER_CALLS=0 PHASE6_GO=0'
