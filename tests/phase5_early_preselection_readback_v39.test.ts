@@ -60,6 +60,26 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(result.stateHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("produces same digest after PostgreSQL jsonb reorders nested object fields", () => {
+    const a = fixture();
+    const b = fixture();
+    // Simulate jsonb canonical object-key ordering on a nested probability
+    // vector. This actually changed the digest in real B0062 PostgreSQL16.
+    b.rows[3].probability_vector = [{
+      drawScore: 1, probability: 1, icao: "KGPT",
+    }];
+    const before=verifyPreparedDailyDraw(a.day,a.rows).stateHash;
+    const persisted=verifyPreparedDailyDraw(b.day,b.rows).stateHash;
+    expect(persisted).toBe(before);
+  });
+
+  it("refuses incomplete probabilistic vector rather than hashing null-like scores", () => {
+    const a = fixture();
+    a.rows[3].probability_vector=[{icao:"KGPT",probability:1}];
+    expect(()=>verifyPreparedDailyDraw(a.day,a.rows))
+      .toThrow("INVALID_REGIONAL_PROBABILITY_VECTOR");
+  });
+
   it("generates order-independent digest, not relative to PostgreSQL result order", () => {
     const a = fixture();
     const b = fixture();
