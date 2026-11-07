@@ -6,7 +6,7 @@ import {
 import {makeP5Stage28DedicatedRolePool}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 const {Pool}=pg;
-const URL="postgresql://phase5_stage30_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
+const OWNER_DB_URL="postgresql://phase5_stage30_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
 const CONFIG={
  GITHUB_ACTIONS:"true",
  P5_STAGE30_NONPAID_LOGINS_ONCE:"COMMISSION_THREE_NONPAID_GITHUB_WORKER_LOGINS_NO_SOURCE",
@@ -31,7 +31,7 @@ active("Stage30 three real PG16 role logins, GitHub secret API MOCK ONLY",()=>{
     process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
     process.env.P5_STAGE30_DISPOSABLE_GH_SECRET_PG16_TEST!=="1")
     throw Error("REFUSED_STAGE30_NOT_DISPOSABLE_GITHUB_MOCK");
-  owner=new Pool({connectionString:URL,max:2});
+  owner=new Pool({connectionString:OWNER_DB_URL,max:2});
  });
  afterAll(async()=>await owner?.end());
  it("rollback transaction and delete the first created remote secret on second mock failure",async()=>{
