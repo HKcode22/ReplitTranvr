@@ -1,15 +1,17 @@
-name: Phase5 Stage21 f.8 31-batch-day crossover hard constraints (offline)
+name: Phase5 Stage21 f.8 calendar hard constraints and finite SAT solver (offline)
 on:
   pull_request:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5F8CrossoverCalendarFreezeGuard_v39.mjs'
+      - 'server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs'
       - 'tests/phase5_stage21_f8_crossover_calendar_guard_v39.test.mjs'
       - '.github/workflows/phase5-stage21-f8-calendar-crossover-guard-offline.yml'
   push:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5F8CrossoverCalendarFreezeGuard_v39.mjs'
+      - 'server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs'
       - 'tests/phase5_stage21_f8_crossover_calendar_guard_v39.test.mjs'
       - '.github/workflows/phase5-stage21-f8-calendar-crossover-guard-offline.yml'
 permissions:
@@ -31,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Validate f.8 26/3/2 five-pair crossover, 24h washout, seeded order and separate Alert/REST caps
+      - name: Validate f.8 31-day crossover hard gates and deterministic SAT/UNSAT/bounded-search guard
         run: |
           set -Eeuo pipefail
           test -z "$DATABASE_URL"
