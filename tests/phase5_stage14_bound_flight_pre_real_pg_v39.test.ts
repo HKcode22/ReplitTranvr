@@ -92,6 +92,21 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     [query,manifest,h("4"),h("5"),rights,contract,
      serviceStart,serviceEnd,dispatch,
      dispatch.toISOString().slice(0,10),hardLatest,cutoff]);
+  if(STAGE29){
+   // The real V0080 physical-attempt trigger refuses a source request
+   // unless a matching immutable GitHub-run prearm exists. This is a
+   // DISPOSABLE fixture only, inserted by test admin (not a real GitHub
+   // run or independent signed production release).
+   const prearmSha=createHash("sha256").update([
+    "phase5-v0080",manifest,query,"42363348762",h("4"),rights
+   ].join("|")).digest("hex");
+   await admin.query(
+    "INSERT INTO clean.phase5_fids_github_prearm_v39("+
+    "query_digest,manifest_sha256,github_run_id,early_draw_sha256,"+
+    "rights_review_sha256,prearm_sha256) "+
+    "VALUES($1,$2,'42363348762',$3,$4,$5)",
+    [query,manifest,h("4"),rights,prearmSha]);
+  }
   await admin.query(
     "INSERT INTO clean.phase5_fids_physical_attempt_v39"+
     "(reservation_sha256,query_digest,manifest_sha256,github_run_id,"+
