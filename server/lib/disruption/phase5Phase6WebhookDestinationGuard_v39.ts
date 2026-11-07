@@ -16,14 +16,12 @@ const fail = (): never => {
 };
 
 export function requireP5P6WebhookDestinationV39(
-  env: {
-    AERODATABOX_WEBHOOK_SECRET?: string;
-    WEBHOOK_BASE_URL?: string;
-    REPLIT_DOMAINS?: string;
-  }
+  env: Record<string, string | undefined>
 ): string {
   const secret = env.AERODATABOX_WEBHOOK_SECRET;
-  if (typeof secret !== "string") fail();
+  if (typeof secret !== "string") {
+    throw new Error("REFUSED_PHASE6_WEBHOOK_CALLBACK_UNVERIFIED");
+  }
   if (secret.length < 16 || secret.length > 512 ||
       secret.trim() !== secret || /[\u0000-\u001f\u007f]/.test(secret))
     fail();
