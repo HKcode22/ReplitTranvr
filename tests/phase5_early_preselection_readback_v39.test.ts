@@ -145,7 +145,8 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
   });
 
   it("never treats a readback as validated PRE feature capture", () => {
-    const r=verifyPreparedDailyDraw(...Object.values(fixture()) as [PreparedDayForReadback,PreparedDrawRow[]]);
+    const { day, rows } = fixture();
+    const r=verifyPreparedDailyDraw(day, rows);
     expect(r.verifiedFlightLevelPre).toBe(false);
   });
 
