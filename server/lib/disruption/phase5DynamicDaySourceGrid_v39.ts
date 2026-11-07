@@ -225,7 +225,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      const one=byGroup.get(slot+"|"+horizon);
      if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON");
      let covered=start-T_OFFSET[horizon];
-     const endOfHorizon=end-T_OFFSET[horizon];
+     const endOfHorizon=start+4*3_600_000-T_OFFSET[horizon];
      for(const x of one.map(x=>({
        begins:x.request+latencyMs+x.persistentSeconds*1000,
        ends:x.request+stalenessMs
@@ -264,12 +264,12 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     schema:input.schema,day:day.runDayIndex,calendar:day.calendarHash,
     config:day.configHash,frame:day.frameHash,
     contract:input.providerContractSha256,
-    reviewedRefreshTiming:timing??null,
+    ...(timing?{reviewedRefreshTiming:timing}:{}),
     templates:requests.map(r=>({...r,icao:undefined,plannedAirportSelectionUtc:undefined}))
   }),
   sourceCandidateDigestSha256:digest({
     day:day.runDayIndex,earlyDraw:draw.stateHash,
-    reviewedRefreshTiming:timing??null,requests
+    ...(timing?{reviewedRefreshTiming:timing}:{}),requests
   }),
   acquisitionCount:requests.length,
   plannedPhysicalGetCount:requests.length,
