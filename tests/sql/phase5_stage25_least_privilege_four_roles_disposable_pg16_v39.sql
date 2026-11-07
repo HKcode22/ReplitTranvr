@@ -106,7 +106,8 @@ BEGIN
  THEN RAISE EXCEPTION 'P5_STAGE25_SOURCE_ROLE_SCOPE_BAD';END IF;
 
  IF NOT
-   has_table_privilege(r,'clean.flight_snapshots','SELECT,INSERT')
+   has_table_privilege(r,'clean.flight_snapshots','SELECT')
+   OR NOT has_table_privilege(r,'clean.flight_snapshots','INSERT')
    OR NOT has_table_privilege(r,'clean.phase5_t24_postcommit_witness_v39','SELECT')
    OR NOT has_sequence_privilege(r,'clean.flight_snapshots_id_seq','USAGE')
    OR has_table_privilege(r,'clean.flight_snapshots','UPDATE')
@@ -117,16 +118,25 @@ BEGIN
 
  IF NOT
    has_table_privilege(w,'clean.flight_snapshots','SELECT')
-   OR NOT has_table_privilege(w,'clean.phase5_t24_postcommit_witness_v39','SELECT,INSERT')
+   OR NOT has_table_privilege(w,'clean.phase5_t24_postcommit_witness_v39','SELECT')
+   OR NOT has_table_privilege(w,'clean.phase5_t24_postcommit_witness_v39','INSERT')
    OR has_table_privilege(w,'clean.flight_snapshots','INSERT')
    OR has_table_privilege(w,'clean.phase5_t24_postcommit_witness_v39','UPDATE')
    OR has_table_privilege(w,'clean.phase5_t24_postcommit_witness_v39','DELETE')
    OR has_table_privilege(w,'clean.phase5_fids_allowed_query_v39','INSERT')
  THEN RAISE EXCEPTION 'P5_STAGE25_WITNESS_ROLE_SCOPE_BAD';END IF;
 
- IF has_table_privilege('PUBLIC','clean.phase5_fids_original_binding_v39','SELECT') THEN
-   RAISE EXCEPTION 'P5_STAGE25_PUBLIC_SOURCE_PRIVILEGES';END IF;
+ IF EXISTS(
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(c.relacl,pg_catalog.acldefault('r',c.relowner))) a
+    WHERE n.nspname='clean'
+      AND c.relname IN ('phase5_fids_original_binding_v39',
+        'phase5_t24_postcommit_witness_v39')
+      AND a.grantee=0
+  ) THEN RAISE EXCEPTION 'P5_STAGE25_PUBLIC_SOURCE_PRIVILEGES';END IF;
 
- RAISE NOTICE 'STAGE25_FOUR_N OLOGIN_SCOPED_ROLES_ACL_TEST_PASSED';
+ RAISE NOTICE 'STAGE25_FOUR_NOLOGIN_SCOPED_ROLES_ACL_TEST_PASSED';
 END $$;
 COMMIT;
