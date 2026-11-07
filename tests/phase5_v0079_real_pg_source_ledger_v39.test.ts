@@ -120,6 +120,20 @@ suite("Phase5 V0079 real disposable PostgreSQL16; no live provider",()=>{
   expect((await db.query("SELECT physically_reserved_units n FROM clean.phase5_fids_cycle_budget_v39"))
    .rows[0].n).toBe(0);
  });
+ it("blocks a charge date without a frozen UTC budget and enforces UTC-day cap",async()=>{
+  // Day0 on the UTC request clock is required even though runDayIndex=1 is
+  // recorded against tomorrow's flight-service date.
+  await db.query("DELETE FROM clean.phase5_fids_utc_charge_budget_v39");
+  await expect(reserve()).rejects.toThrow("P5_UTC_CHARGE_DAY_NOT_FROZEN");
+  await db.query(
+   "INSERT INTO clean.phase5_fids_utc_charge_budget_v39(manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units) VALUES($1,$2,8,8)",
+   [m,chargeDate]);
+  await expect(reserve()).rejects.toThrow("P5_UTC_CHARGE_DAY_API_UNITS_EXHAUSTED");
+  await db.query(
+   "UPDATE clean.phase5_fids_utc_charge_budget_v39 SET daily_other_reserved_units=4");
+  expect((await db.query("SELECT physically_reserved_units n FROM clean.phase5_fids_cycle_budget_v39")).rows[0].n)
+   .toBe(0);
+ });
  it("reserves one physical GET, never duplicates or refunds it",async()=>{
   await reserve();
   const row=(await db.query(
