@@ -195,6 +195,15 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await expect(persistP5V0079SingleBoundFlightPre(writer,{
     ...permit,externalNativeTPhysicalLegAndSourceUseReviewed:false as any
   })).rejects.toThrow("INDEPENDENT_PERMIT");
+  // A previous T24 snapshot created_at=now() is not evidence of its
+  // durable transaction commit time. Lower horizons must HOLD until a
+  // separately authenticated T24 post-COMMIT witness is in a real ledger.
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+    ...permit,horizon:"T-6h"
+  })).rejects.toThrow("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+    ...permit,horizon:"T-90m"
+  })).rejects.toThrow("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
   const now=Date.now();
   await expect(persistP5V0079SingleBoundFlightPre(writer,{
     ...permit,selectedTNativeUtc:iso(now-15*60_000)
