@@ -1,0 +1,114 @@
+name: Phase5 Stage19 inert three-migration atomic transaction (disposable PG16 ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage19_atomic_inert_schema_ci_once.mjs'
+      - '.github/workflows/phase5-stage19-atomic-inert-schema-real-pg16.yml'
+      - 'data-collection/phase5/2026-11-07_STAGE19_ATOMIC_INERT_V0079_V0081_SCHEMA_COMMISSIONING_CI.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage19_atomic_inert_schema_ci_once.mjs'
+      - '.github/workflows/phase5-stage19-atomic-inert-schema-real-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  atomic-and-rollback-real-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_P5_STAGE19_ATOMIC_INSTALL_CI: '1'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Deploy only B0062 baseline into disposable isolated PostgreSQL
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+      - name: Require preexisting B0062 and absent staged V0079-81
+        run: |
+          set -Eeuo pipefail
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/stage19-before.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const x=JSON.parse(fs.readFileSync("/tmp/stage19-before.json","utf8"));
+            if(!x.baselineRequiredColumnsPresent||!x.stageTableSetAllAbsent)
+              throw Error("STAGE19_CI_INITIAL_SCHEMA_NOT_CLEAN");
+          '
+      - name: Inject failure after V0079 and prove entire transaction rolled back
+        run: |
+          set -Eeuo pipefail
+          if V39_P5_STAGE19_TEST_ABORT_AFTER_V0079=1 node scripts/v39_phase5_stage19_atomic_inert_schema_ci_once.mjs > /tmp/stage19-injected.json 2>/tmp/stage19-injected.err; then
+            echo 'FAILED_CI_INJECTED_FAILURE_DID_NOT_ABORT'
+            exit 1
+          fi
+          grep -F 'REFUSED_P5_STAGE19_TEST_INJECTED_FAILURE_AFTER_V0079_ROLLBACK' /tmp/stage19-injected.err > /dev/null
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/stage19-after-rollback.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const x=JSON.parse(fs.readFileSync("/tmp/stage19-after-rollback.json","utf8"));
+            if(!x.stageTableSetAllAbsent||x.stagedSchemaPartialOrOutOfOrder)
+              throw Error("STAGE19_TRANSACTION_ROLLBACK_NOT_ATOMIC");
+          '
+      - name: Commit all V0079 V0080 V0081 once with exact Git blob pins
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_stage19_atomic_inert_schema_ci_once.mjs > /tmp/stage19-success.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const x=JSON.parse(fs.readFileSync("/tmp/stage19-success.json","utf8"));
+            if(x.status!=="DISPOSABLE_PG16_ALL_THREE_STAGED_MIGRATIONS_ATOMICALLY_COMMITTED"||
+               x.stagedTables!==8||x.stagedIndexRelations!==1||
+               x.stagedHelperFunctions!==9||x.productionDatabaseWrites!==0||
+               x.productionInstallAuthorized!==false||x.phase6PaidGo!==false)
+              throw Error("STAGE19_CI_ATOMIC_COMMIT_RESULT_NOT_VALID");
+          '
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/stage19-after-commit.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const x=JSON.parse(fs.readFileSync("/tmp/stage19-after-commit.json","utf8"));
+            if(!x.stageTableSetAllPresent||x.v0079.presentRelations!==6||
+               x.v0080.presentRelations!==1||x.v0081.presentRelations!==1)
+              throw Error("STAGE19_POST_COMMIT_SCHEMA_MISSING");
+          '
+      - name: Refuse replay rather than duplicate or corrupt inert schema
+        run: |
+          set -Eeuo pipefail
+          if node scripts/v39_phase5_stage19_atomic_inert_schema_ci_once.mjs > /tmp/stage19-replay.json 2>/tmp/stage19-replay.err; then
+            echo 'FAILED_CI_ATOMIC_SCHEMA_REPLAY_SHOULD_HOLD'
+            exit 1
+          fi
+          grep -F 'REFUSED_P5_STAGE19_STAGED_RELATION_TYPE_OR_FUNCTION_ALREADY_EXISTS' /tmp/stage19-replay.err > /dev/null
+          echo 'P5_STAGE19_ATOMIC_INERT_SCHEMA_TEST=PASS DISPOSABLE_DB_ONLY=1 PRODUCTION_WRITES=0 PROVIDER_CALLS=0 PHASE6_GO=0'
