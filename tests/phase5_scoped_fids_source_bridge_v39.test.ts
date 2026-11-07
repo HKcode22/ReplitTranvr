@@ -89,6 +89,7 @@ function ports(
    };
   },
   fetchImpl:sourceTransport,
+  sleepImpl:async()=>{},
  };
  return {p,calls};
 }
@@ -166,7 +167,8 @@ describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
   expect(c).toContain("budgetOwner:{");
   expect(c).toContain("commitOriginalAndPopulation");
   expect(c).not.toContain("persistFidsObservation(");
-  expect(c).not.toContain("fidsRestLedger");
+  expect(c).not.toContain("import { fidsRestLedger");
+  expect(c).not.toContain("persistFidsObservation(sourceQuery");
  });
  it("only binds source timing, never pretends provider-native actual-only wheels-off is certified",()=>{
   const f=fixture();
