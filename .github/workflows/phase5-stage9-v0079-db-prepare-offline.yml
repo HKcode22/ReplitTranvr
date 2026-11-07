@@ -1,0 +1,41 @@
+name: Phase5 Stage9 exact prepared-day DB writer offline (NO production)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage9V0079CommittedDayPrepare_v39.ts'
+      - 'tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts'
+      - '.github/workflows/phase5-stage9-v0079-db-prepare-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage9V0079CommittedDayPrepare_v39.ts'
+      - 'tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts'
+      - '.github/workflows/phase5-stage9-v0079-db-prepare-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-stage9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Simulated DB-only 12-row prepare safety (no provider, no production)
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage9_v0079_committed_day_prepare_v39.test.ts tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts
+          echo 'OFFLINE_STAGE9_MOCK_ONLY: no actual V0079 install, no DB write, no provider'
