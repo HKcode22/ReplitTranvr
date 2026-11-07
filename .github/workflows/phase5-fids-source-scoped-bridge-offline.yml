@@ -1,0 +1,40 @@
+name: Phase5 FIDS Source Scoped Custody Bridge (Offline Only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
+      - 'tests/phase5_scoped_fids_source_bridge_v39.test.ts'
+      - '.github/workflows/phase5-fids-source-scoped-bridge-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
+      - 'tests/phase5_scoped_fids_source_bridge_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  no-provider-no-db-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove source and original must use explicit scoped ports
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_scoped_fids_source_bridge_v39.test.ts
+          echo 'PAID_PROVIDER_CALLS=0 PRODUCTION_DB_WRITES=0 PHASE6_ACTIVE=0'
