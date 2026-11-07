@@ -31,20 +31,20 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     serviceStart=new Date(new Date(today.rows[0].now).getTime()+28*3_600_000)
       .toISOString();
     await db.query(
-      \`INSERT INTO clean.adb_phase6_authorization
+      `INSERT INTO clean.adb_phase6_authorization
         (authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,
          schema_version,phase6_start_date,alert_cap_per_parent_day,
          unsettled_burst_margin_credits,protected_alert_floor,enabled,
          predecessor_evidence_ids)
         VALUES ('CI-P5-EARLY', $1,$2,$3,$4,'v39',
-                $5::date,120,10,1000,true,'["ci-only"]'::jsonb)\`,
+                $5::date,120,10,1000,true,'["ci-only"]'::jsonb)`,
       [pins.expectedManifestSha256,pins.expectedCalendarHash,pins.expectedConfigHash,
        "e".repeat(40),serviceStart.slice(0,10)],
     );
     await db.query(
-      \`INSERT INTO clean.adb_sampling_frame_registry
+      `INSERT INTO clean.adb_sampling_frame_registry
           (registry_key,active_frame_version,frame_hash)
-        VALUES ('ACTIVE','ci-phase5', $1)\`,
+        VALUES ('ACTIVE','ci-phase5', $1)`,
       [pins.expectedFrameHash],
     );
     const frame:[
@@ -57,23 +57,23 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     ];
     for(const [icao,tier,region] of frame){
       await db.query(
-        \`INSERT INTO clean.adb_sampling_frame
+        `INSERT INTO clean.adb_sampling_frame
           (icao,tier,tier_source,traffic_prior,region,feed_schedule,
            feed_live,feed_adsb,pre_eligible,post_eligible,in_frame,
            frame_version,frame_hash)
          VALUES ($1,$2,'curated',10,$3,true,true,false,true,true,true,
-                 'ci-phase5',$4)\`,
+                 'ci-phase5',$4)`,
         [icao,tier,region,pins.expectedFrameHash],
       );
     }
     await db.query(
-      \`INSERT INTO clean.adb_phase6_calendar_day
+      `INSERT INTO clean.adb_phase6_calendar_day
           (run_day_index,budget_day_id,calendar_hash,config_hash,date_utc,
            utc_slot,time_class,window_shape,evaluation_partition,draw_type,
            slot_regions,anchor_icao,pair_airport_set,frozen_draw_seed,
            scheduled_start_utc,active_duration_minutes,frame_hash)
         VALUES (1,'P6D01',$1,$2,$3::date,'CI','CI','4h','CI','NEW_TEMPLATE',
-         $4::jsonb,'WSSS',NULL,'ci-phase5-seed',$5::timestamptz,240,$6)\`,
+         $4::jsonb,'WSSS',NULL,'ci-phase5-seed',$5::timestamptz,240,$6)`,
       [pins.expectedCalendarHash,pins.expectedConfigHash,serviceStart.slice(0,10),
        JSON.stringify({HUB:"ASIA",MID_A:"MIDDLE_EAST",
          MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"}),
