@@ -4,7 +4,7 @@
 
 ## Root cause: existing QA could falsely report zero PRE candidates
 
-The previous [Phase 5 daily QA](../../server/lib/disruption/phase5DaySourceQualityReadonly_v39.ts) used `s.prediction_state='PRE'` even though the actual [PRE materializer](../../server/lib/disruption/preSnapshotBuilder_v3.ts) writes `PRE_DEPARTURE`, and joined via `clean.flight_snapshots.population_member_id` even though the existing `persistPreSnapshot()` does **not** populate that optional UUID. Consequently, valid source-backed PRE rows could be invisible to the daily quality audit, misleading missingness denominators and the scientific dashboard.
+The previous [Phase 5 daily QA](../../server/lib/disruption/phase5DaySourceQualityReadonly_v39.ts) used `s.prediction_state='PRE'` even though the actual [PRE materializer](../../server/lib/disruption/preSnapshotBuilder_v3.ts) writes `PRE_DEPARTURE`, and joined via `clean.flight_snapshots.population_member_id` although the existing `persistPreSnapshot()` does **not supply** that optional UUID; B0062's `attach_population_member_to_snapshot` trigger fills it **only when** a matching primary member can be found. Consequently, valid source-backed PRE rows could be invisible to the daily quality audit, misleading missingness denominators and the scientific dashboard.
 
 ## Repaired audit semantics
 
@@ -16,7 +16,7 @@ The repaired SQL reads only authorized aggregate fields and follows:
 ## Tests and safety
 
 - Pure regression tests ensure SQL uses `PRE_DEPARTURE` and V0079 `uuid::text` lineage rather than `population_member_id`, verifies exact source+flight/hash/clock filters and enforces read-only aggregate output.
-- Disposable PostgreSQL 16 CI applies authentic B0062 and staged V0079; constructs entirely synthetic current-source original metadata, one normalized primary member, and four synthetic PRE/AIRBORNE snapshots **all with null population_member_id**. It must report three source-linked PRE rows (one valid identity, one unknown identity, one intentionally altered response hash) and **only one** clock/source/identity-valid PRE candidate. An AIRBORNE row must never enter PRE counts. This is a test of SQL and denominator behavior, not a genuine AeroDataBox flight or rights.
+- Disposable PostgreSQL 16 CI applies authentic B0062 and staged V0079; constructs entirely synthetic current-source original metadata, one normalized primary member, and four synthetic PRE/AIRBORNE snapshots: B0062 automatically fills the UUID for the **one positively linked primary member**, while the remaining **three UUIDs stay NULL**. It must report three source-linked PRE rows (one valid identity, one unknown identity, one intentionally altered response hash) and **only one** clock/source/identity-valid PRE candidate. An AIRBORNE row must never enter PRE counts. This is a test of SQL and denominator behavior, not a genuine AeroDataBox flight or rights.
 - Zero provider calls/Alert credits, production DB writes, actual workflow dispatch, receiver publish or authorized new collection. Final release decisions remain HOLD.
 
 See [Phase 5 FREEZE tracker #413](https://github.com/HKcode22/ReplitTranvr/issues/413), [P0 producer/PRE work #416](https://github.com/HKcode22/ReplitTranvr/issues/416), and [rights #300](https://github.com/HKcode22/ReplitTranvr/issues/300).
