@@ -103,6 +103,19 @@ async function checkedOut(
      a[0].inherit_option!==false||
      a[0].admin_option!==false)
    deny("CROSS_GROUP_OR_ADMIN_RUNTIME_MEMBERSHIP");
+  // Direct pg_auth_members rows are not sufficient. PostgreSQL16 SET or
+  // INHERIT permissions can be transitive through an intermediate role.
+  // Require exactly one reachable group via SET, and no inherited group.
+  const reachable=await client.query(
+   "SELECT r.rolname,pg_has_role(session_user,r.oid,'SET') AS can_set,"+
+   "pg_has_role(session_user,r.oid,'USAGE') AS inherits "+
+   "FROM pg_catalog.pg_roles r WHERE r.rolname=ANY($1::text[])",
+   [Object.values(P5_STAGE28_GROUPS)]
+  );
+  if(reachable.rows.length!==4||reachable.rows.some((r:Record<string,unknown>)=>
+      r.inherits!==false||
+      r.can_set!==(r.rolname===expected)))
+   deny("INDIRECT_CROSS_GROUP_OR_INHERITED_RUNTIME_ACCESS");
 
   // This SQL interpolation is safe ONLY because expected comes from the
   // above immutable four-name source whitelist; never interpolate inputs.
