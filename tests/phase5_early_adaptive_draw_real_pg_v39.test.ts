@@ -37,7 +37,7 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
          unsettled_burst_margin_credits,protected_alert_floor,enabled,
          predecessor_evidence_ids)
         VALUES ('CI-P5-EARLY', $1,$2,$3,$4,'v39',
-                $5::date,120,10,1000,true,'["ci-only"]'::jsonb)`,
+                $5::date,1900,10,1000,true,'["ci-only"]'::jsonb)`,
       [pins.expectedManifestSha256,pins.expectedCalendarHash,pins.expectedConfigHash,
        "e".repeat(40),serviceStart.slice(0,10)],
     );
