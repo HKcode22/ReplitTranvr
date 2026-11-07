@@ -1,0 +1,66 @@
+name: Phase5 V0079 Source Ledger Real PG16 (NO Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql'
+      - 'tests/phase5_v0079_real_pg_source_ledger_v39.test.ts'
+      - '.github/workflows/phase5-v0079-source-ledger-real-pg16-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql'
+      - 'tests/phase5_v0079_real_pg_source_ledger_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_P5_SOURCE_OWNER_APPROVED: '0'
+  V39_P5_V0079_PG16: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+jobs:
+  disposable-pg16-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Boot authentic B0062 schema and staged V0079 in disposable CI only
+        run: |
+          set -Eeuo pipefail
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          test "$(psql "${DATABASE_URL}" -XAt -v ON_ERROR_STOP=1 -c \
+            "SELECT to_regclass('clean.phase5_fids_physical_attempt_v39') IS NOT NULL")" = 't'
+      - name: Irreversible real-PG16 physical attempt, decoded-original and rights ACL tests
+        run: |
+          set -Eeuo pipefail
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          npx vitest run tests/phase5_v0079_real_pg_source_ledger_v39.test.ts
+          echo 'DISPOSABLE_PG16_ONLY=1 PAID_PROVIDER_CALLS=0 LIVE_DB_WRITES=0 PHASE6_GO=0'
