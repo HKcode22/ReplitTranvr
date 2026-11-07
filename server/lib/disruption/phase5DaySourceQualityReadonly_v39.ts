@@ -132,8 +132,8 @@ export async function auditPhase5SourceDay(
    client.query(SNAPSHOT_SQL,[manifestSha256,day]),
   ]);
   if(budget.rowCount!==1)refuse("DAY_BUDGET_NOT_INSTALLED_OR_FROZEN");
-  if(rows.rowCount===0)refuse("NO_SIGNED_SOURCE_QUERY_DENOMINATOR");
-  if(rows.rowCount>12)refuse("UNEXPECTED_DAY_SLOT_HORIZON_GROUPS");
+  if(rows.rows.length===0)refuse("NO_SIGNED_SOURCE_QUERY_DENOMINATOR");
+  if(rows.rows.length>12)refuse("UNEXPECTED_DAY_SLOT_HORIZON_GROUPS");
   if(draw.rowCount!==1)refuse("EARLY_SELECTION_NOT_READABLE");
   const groups:Phase5DayQualityRow[]=rows.rows.map((r:any)=>({
    slot:String(r.slot_id),horizon:String(r.horizon),
