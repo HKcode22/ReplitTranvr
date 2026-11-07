@@ -1,0 +1,41 @@
+name: Phase5 Stage11 31-day continuous PRE source refresh coverage (NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5ContinuousPerFlightRefreshCoverage_v39.ts'
+      - 'tests/phase5_stage11_continuous_source_refresh_coverage_v39.test.ts'
+      - '.github/workflows/phase5-stage11-31day-refresh-coverage-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5ContinuousPerFlightRefreshCoverage_v39.ts'
+      - 'tests/phase5_stage11_continuous_source_refresh_coverage_v39.test.ts'
+      - '.github/workflows/phase5-stage11-31day-refresh-coverage-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-continuous-cutoffs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove real 4-hour cutoff coverage and separate Day0 billing
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage11_continuous_source_refresh_coverage_v39.test.ts
+          echo 'STAGE11_OFFLINE_TEMPORAL_COVERAGE=PASS EXTERNAL_RIGHTS=UNKNOWN NO_PROVIDER_GET=1 DB_WRITES=0 PHASE6_GO=0'
