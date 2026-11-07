@@ -26,13 +26,17 @@ const MAX_EARLY_MS=180_000;
 const COMMIT_MARGIN_MS=2000;
 const hold=(s:string):never=>{throw Error("REFUSED_P5_STAGE14_PRE_"+s);};
 const instant=(s:unknown,label:string):Date=>{
- if(typeof s!=="string"||!ISO.test(s)||!Number.isFinite(Date.parse(s))||
-  new Date(s).toISOString()!==s)hold(label);
+ if(typeof s!=="string")
+  throw Error("REFUSED_P5_STAGE14_PRE_"+label);
+ if(!ISO.test(s)||!Number.isFinite(Date.parse(s))||
+   new Date(s).toISOString()!==s)
+  throw Error("REFUSED_P5_STAGE14_PRE_"+label);
  return new Date(s);
 };
 const dbTime=(v:unknown,label:string):Date=>{
  const d=v instanceof Date?v:typeof v==="string"?new Date(v):null;
- if(!d||!Number.isFinite(d.getTime()))hold(label);
+ if(!d||!Number.isFinite(d.getTime()))
+  throw Error("REFUSED_P5_STAGE14_PRE_"+label);
  return d;
 };
 export interface P5Stage14SingleFlightPrePermit{
@@ -297,7 +301,8 @@ export async function persistP5V0079SingleBoundFlightPre(
    fidsResponseHash:p.expectedSourceResponseSha256,
    scheduleVersion:null
   });
-  if(built.status!=="snapshot")hold("PRE_BUILDER_SOURCE_ELIGIBILITY_BLOCKED");
+  if(built.status!=="snapshot")
+    throw Error("REFUSED_P5_STAGE14_PRE_PRE_BUILDER_SOURCE_ELIGIBILITY_BLOCKED");
   const already=(await c.query(
     "SELECT id FROM clean.flight_snapshots WHERE flight_instance_id=$1"+
     " AND horizon=$2 AND prediction_cutoff_utc=$3"+
