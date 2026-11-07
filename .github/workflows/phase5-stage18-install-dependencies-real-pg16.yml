@@ -1,0 +1,108 @@
+name: Phase5 Stage18 installation dependency audit (READ ONLY / disposable PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs'
+      - 'tests/phase5_stage18_install_dependencies_catalog_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage18-install-dependencies-real-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs'
+      - 'tests/phase5_stage18_install_dependencies_catalog_readonly_v39.test.mjs'
+      - '.github/workflows/phase5-stage18-install-dependencies-real-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  mock-fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P5_STAGE18_DEPENDENCY_ONCE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: node --test tests/phase5_stage18_install_dependencies_catalog_readonly_v39.test.mjs
+  disposable-b0062-v0079-v0080-v0081:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_STAGE18_DEPENDENCY_ONCE: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Apply B0062 only to isolated CI PostgreSQL
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = true
+          test "${V39_PHASE6_PROCESS_ARMED}" = 0
+          test -z "${AERODATABOX_API_KEY}"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+      - name: Catalog proves baseline and all staged relations absent before migrations
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/p5-before.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const a=JSON.parse(fs.readFileSync("/tmp/p5-before.json","utf8"));
+            if (!a.baselineRequiredColumnsPresent||!a.stageTableSetAllAbsent||
+                a.productionInstallAuthorized||a.databaseWrites!==0)
+              throw Error("STAGE18_BASELINE_OR_ABSENT_STAGED_MISMATCH");
+          '
+      - name: Apply exact staged migrations only to disposable PostgreSQL
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql
+      - name: Recheck all eight staged relations from catalog with NO release
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/p5-after.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const a=JSON.parse(fs.readFileSync("/tmp/p5-after.json","utf8"));
+            if (!a.baselineRequiredColumnsPresent||!a.stageTableSetAllPresent||
+                a.v0079.presentRelations!==6||a.v0080.presentRelations!==1||
+                a.v0081.presentRelations!==1||a.productionInstallAuthorized||
+                a.phase6PaidGo||a.databaseWrites!==0)
+              throw Error("STAGE18_POST_INSTALL_CATALOG_MISMATCH");
+          '
+          echo 'STAGE18_REAL_DISPOSABLE_PG16=PASS PRODUCTION_DB_WRITES=0 PROVIDER_CALLS=0 PHASE6_GO=0'
