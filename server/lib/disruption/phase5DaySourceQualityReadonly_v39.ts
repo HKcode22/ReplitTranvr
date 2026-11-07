@@ -66,9 +66,11 @@ const DRAW_SQL=[
 ].join(" ");
 /**
  * Candidate PRE denominator from the exact bound source-original lineage.
- * Historical persistPreSnapshot() writes population_query_id as text but does
- * not populate the optional flight_snapshots.population_member_id UUID.
- * Joining through that nullable member ID silently reports zero PREs.
+ * persistPreSnapshot() writes population_query_id as text but does not
+ * supply the optional population_member_id UUID; a B0062 BEFORE INSERT
+ * trigger fills the UUID only when it can positively match a primary member.
+ * An inner join through that optional ID silently excludes unmatched PRE
+ * observations from the audit and cannot expose their missing lineage.
  * Join the committed V0079 original binding by explicit query UUID::text,
  * filter the canonical PRE_DEPARTURE state, and never count a clock-order
  * candidate whose source arrived after its own per-flight cutoff.
