@@ -1,0 +1,60 @@
+# Phase 4 Gate 5: measured G5A closeout, source-vs-software root cause and Phase-6 visibility
+
+**Owner-requested investigation, November 6 2026 PST.** This is a retrospective *bounded pilot disposition* plus prospective integration review, **not** another paid attempt, Phase 6 start authorization, scientific original f.8 PASS, or retroactive change to the frozen cohort.
+
+## 1. New production evidence, no more guesses about all-eight-zero metadata audit
+
+The owner ran the pinned single-transaction metadata audit on the **existing research database** at `2026-11-07T03:13:13.355Z` (Fri Nov6 **19:13 PST**). It completed eight of eight aggregate measurements under read-only transaction, zero provider requests and zero DB writes:
+
+| Checked metric | Measured | Interpretation |
+|---|---:|---|
+| Frozen T−24h PRE identities | **12** | The correct historical G5A cohort is present in this database; not an empty/wrong DB |
+| `adb_collection_subs` with exact `batch_id=WSSS_G5A_20261106_1400Z` and `icao=WSSS` | **0** | **No alert subscriptions explicitly registered under the named G5A batch**; not a proof there were no unrelated subscriptions |
+| `webhook_identity_resolution` resolved delivery IDs with *exact* selected `flight_instance_id` | **0** | No join under the exact FIDS composite key; alternate identifier spaces not reconciled |
+| WSSS webhook `webhook_flight_identity` with initial gate-time 13:00–16:00Z | **0** | No rows in that separate gate reference window; not global provider coverage |
+| **All-airport** `raw_delivery` receipts from Nov5 11:30Z to Nov6 17:01Z | **0** envelopes, **0** notification items | No raw webhook receipts stored in **that time window on this database**; not proof an alert was subscribed or sent or received at a different store |
+| Exact selected PRE identity in `airborne_eligibility_evidence` | **0** matched, **0** verified | No materialized eligibility for this G5A cohort; not negative proof about aircraft takeoff |
+| Exact selected PRE identity in `flight_airborne_snapshots` | **0** matched | No associated AIRBORNE snapshots |
+| Exact selected PRE identity in `flight_outcomes` target `wheels_off` | **0** matched | Actual-only runway target was never established for these identities |
+
+Production source→PRE→POST evidence remains intact and *independently measured* by [GitHub audit #42330969278](https://github.com/HKcode22/ReplitTranvr/actions/runs/42330969278): **9/9** PRE original sources, **36/36** cutoff-safe PRE (12 selected composite candidate identities × three horizons), **3/3** POST sources, **36/36** schedule-revision comparisons, **0** observed ≥15-minute changes, **24/24** internally reserved REST units. **Not** 36 independent flights, **not** actual delay, and **not** a provider bill. Audit classification: `LATE_READONLY_METADATA_ATTESTATION_NOT_ORIGINAL_ON_TIME_AUDIT`.
+
+## 2. Root cause ledger: our protocol/code vs external source
+
+| Layer | Code/evidence inspected | Fault class / evidence | Action |
+|---|---|---|---|
+| G5A FIDS source/persistence | `scripts/v39_phase4_gate5_g5a_nov06_1400z_real_wsss_horizon_owner.ts`, POST owner, original-binding audit | **Works for its intended task**: completed source→PRE→POST. No reason to replay. | Keep frozen evidence unchanged |
+| G5A webhook subscriptions | Same owner scripts and frozen manifest, no `createSubscription` or named alert budget in G5A plan; exact DB batch subscription rows = 0 | **Scope / integration gap on our side**: G5A was FIDS-only. Cannot blame AeroDataBox for failure to deliver an *uncreated* selected-cohort alert. | For a new study protocol, arrange alerts prospectively and attest actual provider CREATE; cannot backdate G5A |
+| G5A receiver | `server/routes_v3.ts` registers `/api/v1/webhooks/aerodatabox/:secret`, raw-first `persistRawDeliveryTransaction`, identity resolution. Window raw deliveries=0 | **Not tested by this cohort.** A working route in source is not proof provider ever called published endpoint, or that current secrets/routing/ACLs work. | Phase5 authenticated no-paid ingress/routing review + genuine alert receipt pilot with explicit future funding authorization |
+| Operating flight key join | FIDS provider-native IDs in audit = 0; 12 G5A conditional composites, old webhook `flightInstanceCanonical_v3` uses a different canonical scheme | **Both upstream coverage and software schema compatibility risk**. Cannot take a G5A composite key and assume it equals a webhook canonical ID. | Prospective versioned positive cross-source identity link, one-to-one ambiguity rejection, missingness strata |
+| AIRBORNE | `airborneMaterializer_v39.ts` requires verified eligibility + raw position sources; no G5A rows | **Upstream optional input not supplied / unmaterialized**; a webhook or a POST FIDS schedule observation is not automatically a trajectory | Capture legally available state/ADS-B with live clock and independent identity; report eligibility→usable funnel |
+| Actual wheels-off | Current provider OpenAPI documents `runwayTime` as actual **or estimated**; 0 G5A `flight_outcomes:wheels_off` | **Provider semantic/actuality limitation**, not a crashed PRE or POST writer. | Maintain `ACTUAL_ONLY_NOT_ESTIMABLE`, never turn estimates into actuals; independent verified subcohort optional |
+| Phase6 operational control | `adbCollectionController_v3.ts` and `phase6SegmentActivation_v39.ts` **do create** FlightByAirportIcao alert subscriptions; `routes_v3.ts` stores webhook data | Real production components **exist**; unstarted in G5A does not imply they are missing from Phase6 | Check real linked subscription→delivery→raw-first→identity flow *before* month-long activation |
+| **Phase6 FIDS and snapshot scheduling** | `phase6SafetyWatchdog_v39.ts` explicitly says it **never performs FIDS**; the 107 workflows checked include G5A and historical Gate5 jobs but no dedicated Phase6 timed FIDS workflow | **Concrete integration readiness gap**: Phase6 alert runtime alone does **not** establish continuous FIDS PRE-population or cutoff-safe three-horizon source-owner runs. | Phase5 must wire/freeze a distinct GitHub-only, cutoff-safe, budgeted FIDS observer; don't assume alert subscription creates PRE rows |
+| Research content retention | [AeroDataBox Sept 7 announcement](https://aerodatabox.com/2026-09-terms-update) and [#300](https://github.com/HKcode22/ReplitTranvr/issues/300) | **Real contract-specific external dependency**; RapidAPI Ultra quota doesn't independently grant month-long record-level Contents retention / ML use; revised terms generally start Nov7 for existing subscribers, with exceptions. | Pre-FREEZE legal classification/TTL and data-use decision; retain only what is permitted and avoid rehydrating expired originals |
+
+**Important non-findings:** This review has **not** proved that AeroDataBox failed to send a subscribed notification, that an actively registered Phase6 alert delivery would be lost, or that Phase6 production FIDS scheduling has been deployed in some external workflow not in this GitHub repository. Code inspection is not a successful full Phase6 deployed receiver test. It has confirmed why G5A cannot be used to prove these other channels.
+
+## 3. How month-long Phase 6 data should appear and what Phase 7 can use
+
+The database schema **already has** these distinct storage surfaces; *schema columns existing are not evidence that the corresponding data arrives*. A read-only [Phase5/6 column-visibility inventory](audits/phase5-phase6-column-observability-readonly.mjs) is included on this draft PR: it emits existing column names, types, NULLability and bounded recent row-presence **without** raw bodies/flight IDs/data values or provider calls. It is not a production dashboard or a right to retain expired Contents.
+
+| Source / stage | Existing tables | What can be observed if integrated | Phase7 scientific use, conditional on provenance and lawful retention |
+|---|---|---|---|
+| REST FIDS original | `clean.fids_query_response`, `clean.flight_population` | Provider source-clock/version/flight, coverage, scope, operator-vs-marketing | As-of population frame, denominator, source bias/selection |
+| Flight-level PRE | `clean.flight_snapshots` | One eligible cutoff-safe feature snapshot per horizon | Leakage-safe training features; *not* label definition |
+| Airport Flight Alert | `clean.adb_collection_subs`, `clean.raw_delivery`, `clean.raw_delivery_item`, `clean.webhook_identity_resolution`, `clean.flight_events`, `clean.flight_data_pre_post` | Subscription coverage, received notifications, unresolvables, per-event status, time availability | Observability and updates, states/possible status labels; not necessarily actual takeoff |
+| Airborne location | `clean.raw_airborne_events`, `clean.clean_airborne_points`, `clean.airborne_eligibility_evidence`, `clean.flight_airborne_snapshots` | Location/tail/callsign and as-of flight state if genuine evidence exists | Conditional post-flight proxy / trajectory model; not exact certified wheels-off |
+| Outcome labels | `clean.flight_outcomes` + G5A POST aggregate | `observed`/`pending`/`missing`/`censored`/`not_applicable` and legitimate status-revision outcomes | Honest target-specific coverage/calibration on cohorts with both positive and negative events |
+
+**Do not promise every field will be populated.** Exact `actual_wheels_off`, `scheduled_wheels_off`, live position, tail, gate, weather, and per-flight native IDs may be null or legally unavailable. Plan training per target; zero positives in 12 selected identities is insufficient to evaluate a delay event classifier. A 31-day set with airports/times/regions should be evaluated by its achieved independent flight count, events and missingness—not assumed to provide guaranteed labels.
+
+## 4. Bounded disposition and stage transition (no perfection loop)
+
+- **Close G5A as `MEASURED_END_TO_END_FIDS_SCHEDULE_REVISION_PILOT_COMPLETE_WITH_LIMITATIONS`** on this fixed sample. The on-time PRE and POST pipeline is validated operationally and by a late independent read-only metadata audit.
+- **Mark webhook/airborne/actual-only validation for this particular G5A cohort `NOT_OBSERVED_OR_NOT_ESTIMABLE`, not a false zero-delay rate or a repaired retrospective sample.** This is an empirical result about the study configuration.
+- **Original strict f.8 full Gate5 remains `SCIENTIFIC_HOLD`**, especially physical operating-leg identity, webhook partition, actual-only wheels-off and legal rights. This document doesn't change the original plan or authorize Phase5 FREEZE/Phase6 live.
+- **Proceed to Phase5 nonpaid implementation/planning NOW.** Its integrated pre-FREEZE acceptance is four evidence classes: (1) verified account rights for legal record-level features and ML purpose; (2) truly deployed authenticated receiver and bounded alert activation/settlement (not a G5A replay); (3) independent future GitHub FIDS-to-PRE/POST scheduler using a jointly frozen identity mapping and observability denominators; (4) protected data-visibility/quality view and Phase7 target-specific eligibility checks.
+- **One release checkpoint, no more isolated source-only micro-pilots**: use the existing receivers, ledgers, schedules and bounded real pilot features and implement only the exact gaps. Do not activate Phase6 or auto-collect merely because this document or a CI workflow passed.
+
+**Working code review path:** draft [PR #409](https://github.com/HKcode22/ReplitTranvr/pull/409), [issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293), [rights #300](https://github.com/HKcode22/ReplitTranvr/issues/300), [native actuality #200](https://github.com/HKcode22/ReplitTranvr/issues/200).
