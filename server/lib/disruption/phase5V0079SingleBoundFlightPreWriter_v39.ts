@@ -14,6 +14,8 @@ import {
  buildPreSnapshot,persistPreSnapshot,PRE_HORIZON_OFFSET_MIN,
  type SelectedTMilestoneConfig,type PreHorizon
 } from "./preSnapshotBuilder_v3";
+import {verifyP5Stage24WitnessedFrozenT,
+ type P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
 const SHA=/^[0-9a-f]{64}$/;
 const ID=/^[a-zA-Z0-9_.:|-]{5,200}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -58,6 +60,8 @@ export interface P5Stage14SingleFlightPrePermit{
  selectedTNativeUtc:string;
  maxPopulationStalenessSeconds:number;
  expectedRestrictedPreWriterRole:string;
+ /** Required for T6/T90 only: reviewed real Stage17 readback and V0081 witness. */
+ reviewedT24WitnessReceipt?:P5Stage24ReviewedT24Receipt;
  /** Caller review attestations are metadata, NOT self-authenticating proof. */
  externalNativeTPhysicalLegAndSourceUseReviewed:true;
 }
@@ -71,6 +75,7 @@ export interface P5Stage14SingleFlightPreResult{
  postCommitDatabaseReadbackVerified:true;
  postCommitDbClockAtUtc:string;
  preSnapshotsInserted:1;providerCalls:0;alertCreates:0;
+ authenticPersistedT24WitnessAnchoredForLaterHorizon:boolean;
  externalNativeTIndependentlyAuthenticatedByThisFunction:false;
  externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false;
  providerRightsIndependentlyCertifiedByThisFunction:false;
@@ -120,6 +125,19 @@ export const P5_STAGE14_PREVIOUS_T24_SQL=[
  "AND frame_hash=$2 AND config_hash=$3",
  "ORDER BY created_at ASC"
 ].join(" ");
+export const P5_STAGE24_REVIEWED_WITNESSED_T24_SQL=[
+ "SELECT w.snapshot_id::text AS snapshot_id,",
+ "s.id::text AS joined_snapshot_id,w.flight_instance_id,",
+ "w.selected_t_version,w.fids_response_hash,w.source_query_digest,",
+ "w.frame_hash,w.config_hash,w.selected_t_native_utc,",
+ "w.t24_cutoff_utc,w.post_pre_commit_db_observed_at_utc,",
+ "s.population_query_id AS source_t24_population_query_id,",
+ "s.prediction_state AS snapshot_prediction_state,",
+ "s.horizon AS snapshot_horizon",
+ " FROM clean.phase5_t24_postcommit_witness_v39 w",
+ " JOIN clean.flight_snapshots s ON s.id=w.snapshot_id",
+ " WHERE w.flight_instance_id=$1 LIMIT 2"
+].join(" ");
 function assertPermit(p:P5Stage14SingleFlightPrePermit):Date{
  if(!p||![p.manifestSha256,p.queryDigestSha256,
   p.expectedSourceResponseSha256,p.expectedReviewedReleaseSha256,
@@ -141,6 +159,8 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit):Date{
   p.maxPopulationStalenessSeconds>86_400||
   p.externalNativeTPhysicalLegAndSourceUseReviewed!==true)
   hold("INDEPENDENT_PERMIT_IDENTITY_SCOPE_OR_SOURCE_RIGHTS_MISSING");
+ if(p.horizon!=="T-24h"&&!p.reviewedT24WitnessReceipt)
+   hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
  const frozen=instant(p.builderFrozenAtUtc,"FROZEN_BUILDER_UTC_INVALID");
  const native=instant(p.selectedTNativeUtc,"NATIVE_T_UTC_INVALID");
  if(!p.selectedTConfig||
@@ -228,12 +248,10 @@ export async function persistP5V0079SingleBoundFlightPre(
  pool:Pick<Pool,"connect">,p:P5Stage14SingleFlightPrePermit
 ):Promise<P5Stage14SingleFlightPreResult>{
  const native=assertPermit(p);
- // A T24 row's created_at=now() is a TX-start timestamp and cannot prove
- // actual durable COMMIT preceded C_T24. Until a protected post-commit T24
- // witness is persisted and independently authenticated, T6/T90 MUST HOLD.
- // The standalone Stage14 writer supports T24 only, not a forged anchor.
- if(p.horizon!=="T-24h")
-   hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
+ // For T6/T90 Stage24 requires a *persisted* T24 V0081 witness in
+ // the same serializable database view AND an externally reviewed Stage17
+ // post-COMMIT readback receipt. Without both, no later-horizon PRE.
+ // This is not an independent legal/native-T reviewer by itself.
  const cutoff=new Date(native.getTime()-PRE_HORIZON_OFFSET_MIN[p.horizon]*60_000);
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_PRE_WRITER");
  const c:PoolClient=await pool.connect();
@@ -250,12 +268,16 @@ export async function persistP5V0079SingleBoundFlightPre(
    "has_table_privilege(current_user,'clean.flight_snapshots','INSERT') AS can_pre,"+
    "has_table_privilege(current_user,'clean.flight_snapshots','UPDATE') AS can_update,"+
    "has_table_privilege(current_user,'clean.flight_snapshots','DELETE') AS can_delete,"+
-   "has_table_privilege(current_user,'clean.phase5_fids_allowed_query_v39','INSERT') AS can_source"
+   "has_table_privilege(current_user,'clean.phase5_fids_allowed_query_v39','INSERT') AS can_source,"+
+   "COALESCE(has_table_privilege(current_user,"+
+   "to_regclass('clean.phase5_t24_postcommit_witness_v39'),"+
+   "'SELECT'),false) AS can_t24_witness"
   )).rows[0];
   if(who?.db!=="neondb"||who.actor!==p.expectedRestrictedPreWriterRole||
     who.ro!=="off"||who.replica!==false||
     who.can_pre!==true||who.can_update!==false||who.can_delete!==false||
-    who.can_source!==false)
+    who.can_source!==false||
+    (p.horizon!=="T-24h"&&who.can_t24_witness!==true))
    hold("WRONG_RESTRICTED_PRE_ONLY_DB_ROLE");
   const first=dbTime(who.at,"DB_NOW_INITIAL");
   due(cutoff,first);
@@ -274,16 +296,21 @@ export async function persistP5V0079SingleBoundFlightPre(
   const version=p.selectedTConfig.milestone+":"+
     p.selectedTConfig.version+":"+p.selectedTConfig.artifactHash;
   if(p.horizon!=="T-24h"){
-   const t24=(await c.query(P5_STAGE14_PREVIOUS_T24_SQL,
-     [p.flightInstanceId,p.reviewedFrameSha256,p.reviewedConfigSha256])).rows;
-   if(t24.length!==1||t24[0].selected_t_version!==version||
-      dbTime(t24[0].selected_t_milestone_utc,"PRIOR_T24_T").getTime()!==
-       native.getTime()||
-      dbTime(t24[0].prediction_cutoff_utc,"PRIOR_T24_CUTOFF").getTime()!==
-       native.getTime()-24*3600_000||
-      dbTime(t24[0].created_at,"PRIOR_T24_COMMITTED_AT").getTime()>
-       native.getTime()-24*3600_000)
-     hold("ABSENT_OR_RETCONNED_FROZEN_T24_PROSPECTIVE_PRE");
+   const row=(await c.query(P5_STAGE24_REVIEWED_WITNESSED_T24_SQL,
+     [p.flightInstanceId])).rows;
+   if(row.length!==1)
+     hold("NO_UNIQUE_PERSISTED_T24_WITNESS_AND_SNAPSHOT");
+   // Stage17 output receipt must have been separately archived/reviewed.
+   // A caller-supplied hash or timestamp does not authenticate itself.
+   verifyP5Stage24WitnessedFrozenT(
+     row[0],p.reviewedT24WitnessReceipt!,{
+       flightInstanceId:p.flightInstanceId,
+       selectedTNativeUtc:p.selectedTNativeUtc,
+       expectedSelectedTVersion:version,
+       expectedFrameSha256:p.reviewedFrameSha256,
+       expectedConfigSha256:p.reviewedConfigSha256,
+       cutoffUtc:cutoff.toISOString(),horizon:p.horizon
+     });
   }else{
    // The source's provider-native first T is independently authenticated,
    // not an inferred actual runway event or later schedule revision.
@@ -365,6 +392,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    postCommitDatabaseReadbackVerified:true,
    postCommitDbClockAtUtc:post.toISOString(),
    preSnapshotsInserted:1,providerCalls:0,alertCreates:0,
+   authenticPersistedT24WitnessAnchoredForLaterHorizon:p.horizon!=="T-24h",
    externalNativeTIndependentlyAuthenticatedByThisFunction:false,
    externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false,
    providerRightsIndependentlyCertifiedByThisFunction:false,
