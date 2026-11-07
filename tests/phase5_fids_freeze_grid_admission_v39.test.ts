@@ -23,6 +23,8 @@ const iso = (x: number) => new Date(x).toISOString();
 function sampleGrid(): P5FidsGridInput {
   const acquisitions: P5FidsAcquisition[] = [];
   const otherCategoryReservedPerDay: Record<string, number> = {};
+  // T24 source for service day1 is physically charged on Day0.
+  otherCategoryReservedPerDay[iso(start - 86_400_000).slice(0,10)] = 10;
   for (let day = 1; day <= 31; day++) {
     const dayStart = start + (day - 1) * 86_400_000;
     const date = iso(dayStart).slice(0, 10);
@@ -34,6 +36,7 @@ function sampleGrid(): P5FidsGridInput {
         acquisitions.push({
           runDayIndex: day,
           budgetDayUtc: date,
+          physicalChargeDayUtc: iso(cutoff - 600_000).slice(0, 10),
           slot, icao, horizon: h.horizon,
           providerQueryDirection: "Departure",
           serviceWindowStartUtc: iso(serviceStart),
@@ -77,8 +80,13 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(out.worstCaseFidsApiUnits).toBe(372 * 2 * 3);
     expect(out.worstCaseProjectReservedApiUnits).toBe(2232 + 500 + 100);
     expect(out.minAdvanceMarginSeconds).toBe(300);
-    expect(out.byDay).toHaveLength(31);
-    expect(out.byDay[0].combinedReservedUnits).toBe(4 * 3 * 2 * 3 + 10);
+    expect(out.chargeDays).toBe(32);
+    expect(out.byDay).toHaveLength(32);
+    expect(out.byServiceDay).toHaveLength(31);
+    expect(out.byDay[0].budgetDayUtc).toBe("2026-12-31");
+    expect(out.byDay[0].combinedReservedUnits).toBe(4 * 2 * 3 + 10);
+    expect(out.byDay[1].budgetDayUtc).toBe("2027-01-01");
+    expect(out.byDay[1].combinedReservedUnits).toBe(4 * 3 * 2 * 3 + 10);
     expect(out.authorizesPaidCollection).toBe(false);
     expect(out.confirmsFlightLevelPre).toBe(false);
     expect(out.confirmsLiveSource).toBe(false);
@@ -126,7 +134,7 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
 
   it("refuses non-FIDS monthly underreservation even when daily allocations fit", () => {
     const a = copy();
-    a.otherCategoryReservedUnits = 250; // daily 10×31=310
+    a.otherCategoryReservedUnits = 250; // 32 physical UTC dates ×10=320
     expect(() => evaluateP5FidsGrid(a)).toThrow("OTHER_CATEGORIES_UNDERRESERVED");
   });
 
@@ -148,6 +156,29 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(() => evaluateP5FidsGrid(a)).toThrow("SAME_AIRPORT_MULTIPLE_DAY_SLOTS");
   });
 
+  it("never permits charging a T24 request to the future flight-service day", () => {
+    const a=copy();
+    const first=a.acquisitions.find(r=>r.runDayIndex===1&&r.horizon==="T-24h")!;
+    expect(first.budgetDayUtc).toBe("2027-01-01");
+    expect(first.physicalChargeDayUtc).toBe("2026-12-31");
+    first.physicalChargeDayUtc=first.budgetDayUtc;
+    expect(()=>evaluateP5FidsGrid(a)).toThrow("PHYSICAL_GET_UTC_DAY_MISMATCH");
+  });
+
+  it("requires explicit Day0 non-FIDS reserves even when service days 1–31 are funded", () => {
+    const a=copy();
+    delete a.otherCategoryReservedPerDay["2026-12-31"];
+    expect(()=>evaluateP5FidsGrid(a)).toThrow("UNRESERVED_OTHER_DAILY_SPEND");
+  });
+
+  it("enforces the actual UTC day cap even when every service-day line seems under limit", () => {
+    const a=copy();
+    a.otherCategoryReservedPerDay["2027-01-01"]=1830; // actual 72 + 1830 = 1902
+    a.otherCategoryReservedUnits=3000; // avoid cycle underreservation as blocker
+    a.protectedProjectApiUnits=7000;
+    expect(()=>evaluateP5FidsGrid(a)).toThrow("DAILY_BUDGET_EXCEEDED");
+  });
+
   it("refuses a swapped budget-day without changing run-day index", () => {
     const a = copy();
     a.acquisitions[0].budgetDayUtc = "2027-01-02";
@@ -162,6 +193,8 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     second.earliestPlannedCutoffUtc = cut;
     first.scheduledRequestUtc = iso(Date.parse(first.earliestPlannedCutoffUtc) - 600_000);
     second.scheduledRequestUtc = iso(Date.parse(second.earliestPlannedCutoffUtc) - 600_000);
+    first.physicalChargeDayUtc = first.scheduledRequestUtc.slice(0, 10);
+    second.physicalChargeDayUtc = second.scheduledRequestUtc.slice(0, 10);
     expect(() => evaluateP5FidsGrid(a)).toThrow("INCONSISTENT_HORIZON_ORDER");
   });
 
