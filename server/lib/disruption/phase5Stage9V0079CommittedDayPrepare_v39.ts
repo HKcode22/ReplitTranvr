@@ -99,6 +99,7 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
     sha(x.actualUtcChargeBudgets)!==p.expectedChargeDayBudgetHashSha256)
     hold("DAY_OR_FROZEN_UTC_CHARGE_BUDGET_INVALID");
  const cross=new Set<string>();
+ const derivedPhysicalChargeDayCounts=new Map<string,number>();
  for(const q of x.queries){
    if(q.manifest_sha256!==p.expectedManifestSha256||
       q.run_day_index!==x.runDayIndex||
@@ -118,8 +119,23 @@ function verifyScope(p:P5Stage9PreparedDayReview):void{
    const key=q.slot_id+"|"+q.horizon;
    if(cross.has(key))hold("DUPLICATE_SLOT_HORIZON");
    cross.add(key);
+   const chargeDay=new Date(q.planned_dispatch_utc);
+   if(!Number.isFinite(chargeDay.getTime())||
+      chargeDay.toISOString().slice(0,10)!==q.planned_charge_utc_date)
+     hold("UNVERIFIED_PHYSICAL_UTC_CHARGE_DAY");
+   derivedPhysicalChargeDayCounts.set(q.planned_charge_utc_date,
+      (derivedPhysicalChargeDayCounts.get(q.planned_charge_utc_date)??0)+1);
  }
  if(cross.size!==12)hold("INCOMPLETE_DAILY_SLOTS");
+ if(derivedPhysicalChargeDayCounts.size!==x.actualUtcChargeBudgets.length)
+    hold("MISSING_OR_EXTRA_PHYSICAL_CHARGE_DAY");
+ for(const budget of x.actualUtcChargeBudgets){
+   if(derivedPhysicalChargeDayCounts.get(budget.day)!==budget.queries||
+      budget.candidateUnits!==budget.queries*2||
+      !Number.isSafeInteger(budget.remainingAfterProposal)||
+      budget.remainingAfterProposal<0)
+      hold("UNCORRELATED_UTC_CHARGE_DAY_ACCOUNTING");
+ }
 }
 export async function commitStage9P5DayV0079PreparedRows(
  pool:Pick<Pool,"connect">,p:P5Stage9PreparedDayReview
