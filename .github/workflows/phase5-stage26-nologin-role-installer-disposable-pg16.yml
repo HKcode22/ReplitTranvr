@@ -87,6 +87,15 @@ jobs:
           fi
           grep -F 'REFUSED_P5_STAGE26_CI_INJECTED_BEFORE_COMMIT_ROLLBACK' /tmp/role-rollback.err >/dev/null
           test "$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c             "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname IN ('phase5_fids_prepare_prod_20261107','phase5_fids_source_prod_20261107','phase5_fids_pre_writer_prod_20261107','phase5_fids_t24_witness_prod_20261107')")" = 0
+          P5_STAGE27_ROLE_RECONCILIATION_READONLY=1 node scripts/v39_phase5_stage27_role_creator_refusal_readonly_once.mjs >/tmp/stage27-catalog-after-rollback.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage27-catalog-after-rollback.json","utf8"));
+            if(p.status!=="STAGE27_PRIOR_REFUSAL_ROLLBACK_CONFIRMED_READONLY"||
+               p.matchedStage26Roles!==0||p.databaseWrites!==0||p.providerFidsGets!==0)
+              throw Error("STAGE27_PRECOMMIT_ROLLBACK_NOT_INDEPENDENTLY_CONFIRMED");
+          '
+
       - name: Commit scoped NOLOGIN roles and test zero runtime members or paid dispatch
         run: |
           set -Eeuo pipefail
@@ -116,6 +125,17 @@ jobs:
           test "$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c             "SELECT count(*) FROM pg_catalog.pg_auth_members a
              JOIN pg_catalog.pg_roles r ON r.oid=a.roleid
              WHERE r.rolname LIKE 'phase5_fids_%_prod_20261107'")" = 4
+          P5_STAGE27_ROLE_RECONCILIATION_READONLY=1 node scripts/v39_phase5_stage27_role_creator_refusal_readonly_once.mjs >/tmp/stage27-catalog-after-install.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage27-catalog-after-install.json","utf8"));
+            if(p.status!=="HOLD_STAGE27_FOUR_EXISTING_ROLES_NO_BLIND_RETRY"||
+               p.matchedStage26Roles!==4||p.matchingRoleMembershipRecords!==4||
+               p.unexpectedMemberOrRuntimeAccessRecords!==0||
+               p.databaseWrites!==0||p.providerFidsGets!==0)
+              throw Error("STAGE27_POSTINSTALL_READONLY_CATALOG_NOT_VERIFIED");
+          '
+
       - name: Second installation must refuse replay and leave four roles intact
         run: |
           set -Eeuo pipefail
