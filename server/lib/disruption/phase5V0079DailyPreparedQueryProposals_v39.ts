@@ -144,6 +144,14 @@ export function planStage8P5DayV0079Proposals(
    verified.dynamicTemplateSha256!==candidate.dynamicTemplateSha256||
    verified.committedDrawSha256!==candidate.committedDrawSha256)
    refuse("TAMPERED_COMMITTED_DAY_OR_PROVIDER_CONTRACT");
+ // Stage7's digest can remain unchanged if a caller mutates just one
+ // acquisition in-memory. Compare *every actual candidate field* against
+ // independently reconstructed immutable draw and source template values.
+ const observedByKey=new Map(candidate.acquisitions.map(q=>[q.queryKey,q]));
+ if(observedByKey.size!==12||verified.acquisitions.some(q=>
+   !observedByKey.has(q.queryKey)||
+   JSON.stringify(observedByKey.get(q.queryKey))!==JSON.stringify(q)))
+   refuse("TAMPERED_IN_MEMORY_SOURCE_QUERY");
  if(!Number.isInteger(p.cycleUnitsAvailable)||p.cycleUnitsAvailable<24||
     p.cycleUnitsAvailable>50000)refuse("CYCLE_BUDGET_NOT_AVAILABLE");
  if(!Array.isArray(p.localFrames)||p.localFrames.length!==4||
