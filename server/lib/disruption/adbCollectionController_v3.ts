@@ -509,37 +509,19 @@ async function createSubscriptionsForSegment(
   }
 }
 
-async function loadSelections(runDayIndex: number): Promise<SamplingSelection[]> {
-  const r = await pool.query(
-    `SELECT slot_id,target_region,draw_type,selected_icao,adaptive_state_hash,
-            probability_vector,airport_layer_design_probability
-       FROM clean.adb_sampling_draw WHERE run_day_index=$1 ORDER BY
-       CASE slot_id WHEN 'HUB' THEN 1 WHEN 'MID_A' THEN 2 WHEN 'MID_B' THEN 3 ELSE 4 END`,
-    [runDayIndex],
-  );
-  if (r.rowCount !== 4) throw new Error(`REFUSED_SAMPLING_DRAW: run_day ${runDayIndex} must have exactly four frozen selections`);
-  return r.rows.map((x: any) => ({
-    slotId: x.slot_id,
-    icao: x.selected_icao,
-    targetRegion: x.target_region,
-    isRandomized: x.slot_id === "REGIONAL",
-    designProbability: x.slot_id === "REGIONAL" ? Number(x.airport_layer_design_probability) : null,
-    plannedShare: x.slot_id === "REGIONAL" ? null : 1,
-    adaptiveStateHash: x.adaptive_state_hash ?? null,
-    probabilityVector: x.probability_vector ?? null,
-    drawType: x.draw_type,
-  }));
-}
-
 async function activateSegment(batch: CollectionBatch, segmentId: string): Promise<CreatedSub[]> {
   await assertIncidentClear();
   const auth = await loadPhase6Authorization();
   if (auth.authorizationId !== batch.phase6AuthorizationId || auth.calendarHash !== batch.calendarHash || auth.configHash !== batch.configHash) {
     throw new Error("REFUSED_AUTH_CHANGED: active parent no longer matches Phase-6 authorization");
   }
-  await assertBudgetHeadroom(auth);
-  const selections = await loadSelections(batch.runDayIndex!);
+  const frozenDay = await loadFrozenCalendarForBatchReadback(batch);
+  const early = await loadPreparedDailyDraw(frozenDay);
+  if (early.stateHash !== batch.samplingStateHash)
+    throw new Error("REFUSED_EARLY_DRAW_INITIAL_OR_NEXT_SEGMENT_HASH_MISMATCH");
+  const selections = early.selections;
   await verifyAllSelectedCoverage(selections);
+  await assertBudgetHeadroom(auth);
   const created = await createSubscriptionsForSegment(batch.batchId, segmentId, selections);
   await pool.query(
     `UPDATE clean.adb_collection_segments SET status='ACTIVE',started_at_utc=now() WHERE segment_id=$1 AND segment_kind='ACTIVE'`,
@@ -566,7 +548,45 @@ export async function getActiveBatch(): Promise<CollectionBatch | null> {
  * Read-only early sampling admission: source and verified PRE provenance are
  * separate Phase5 release conditions. Never regenerate a sampling draw here.
  */
-async function loadPreparedDailyDraw(day: FrozenCalendarRow): Promise<{
+type EarlyDrawCalendar = Pick<FrozenCalendarRow,
+  "runDayIndex"|"scheduledStartUtc"|"frozenDrawSeed"|"drawType"|
+  "anchorIcao"|"slotRegions"|"pairAirportSet"|"calendarHash"|
+  "configHash"|"frameHash">;
+
+async function loadFrozenCalendarForBatchReadback(
+  batch: CollectionBatch,
+): Promise<EarlyDrawCalendar> {
+  if (!batch.runDayIndex || !batch.calendarHash || !batch.configHash ||
+      !batch.samplingStateHash)
+    throw new Error("REFUSED_EARLY_DRAW_BATCH_UNPINNED");
+  const q = await pool.query(
+    `SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,
+            anchor_icao,slot_regions,pair_airport_set,calendar_hash,
+            config_hash,frame_hash
+       FROM clean.adb_phase6_calendar_day
+      WHERE run_day_index=$1`,
+    [batch.runDayIndex],
+  );
+  if (q.rowCount !== 1) throw new Error("REFUSED_EARLY_DRAW_CALENDAR_NOT_FOUND");
+  const x=q.rows[0];
+  if (x.calendar_hash !== batch.calendarHash ||
+      x.config_hash !== batch.configHash)
+    throw new Error("REFUSED_EARLY_DRAW_BATCH_CALENDAR_CHANGED");
+  return {
+    runDayIndex: Number(x.run_day_index),
+    scheduledStartUtc: asDate(x.scheduled_start_utc),
+    frozenDrawSeed: String(x.frozen_draw_seed),
+    drawType: x.draw_type,
+    anchorIcao: String(x.anchor_icao),
+    slotRegions: x.slot_regions,
+    pairAirportSet: x.pair_airport_set,
+    calendarHash: String(x.calendar_hash),
+    configHash: String(x.config_hash),
+    frameHash: String(x.frame_hash),
+  };
+}
+
+async function loadPreparedDailyDraw(day: EarlyDrawCalendar): Promise<{
   selections: SamplingSelection[];
   stateHash: string;
 }> {
