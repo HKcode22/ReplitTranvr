@@ -11,7 +11,7 @@
 import type {Pool} from "pg";
 import {
  materializeP5DynamicDaySourceGrid,
- P5_DYNAMIC_DAY_GRID_SCHEMA,
+ P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
  type P5DynamicDayGridInput,type P5DynamicDayGridResult,
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {PreparedDayForReadback,PreparedDrawRow}
@@ -57,8 +57,10 @@ export interface P5CommittedDayReadonlyScope {
   expectedEarlyDrawSha256:string;
   expectedRestrictedReaderRole:string;
   runDayIndex:number;
-  /** Fixed 12 slot/horizon source templates, no airport names. */
+  /** Frozen per-day source templates, with no selected ICAOs. */
   templates:P5DynamicDayGridInput["templates"];
+  /** Optional independently reviewed timing contract for multi-refresh. */
+  reviewedRefreshTiming?:P5DynamicDayGridInput["reviewedRefreshTiming"];
 }
 export interface P5CommittedDayReadonlyResult {
   schema:"v39.phase5.db-readback-day-grid.v1";
@@ -141,7 +143,10 @@ export async function readCommittedP5DayCandidateGrid(
   if(draws.rowCount!==4||draws.rows.length!==4)
     hold("FOUR_COMMITTED_DRAW_ROWS_NOT_FOUND");
   const candidates=materializeP5DynamicDaySourceGrid({
-    schema:P5_DYNAMIC_DAY_GRID_SCHEMA,
+    schema:scope.reviewedRefreshTiming?
+      P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
+    ...(scope.reviewedRefreshTiming?
+      {reviewedRefreshTiming:scope.reviewedRefreshTiming}:{}),
     reviewedCalendarSha256:scope.expectedCalendarSha256,
     reviewedConfigSha256:scope.expectedConfigSha256,
     reviewedFrameSha256:scope.expectedFrameSha256,
