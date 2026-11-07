@@ -15,6 +15,10 @@ export type P5Slot = "HUB" | "MID_A" | "MID_B" | "REGIONAL";
 const SLOTS: P5Slot[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
 const HORIZONS: P5FidsHorizon[] = ["T-24h", "T-6h", "T-90m"];
 const DAY_MS = 86_400_000;
+// Match the actual committed early adaptive draw owner, not a synthetic
+// timestamp that the live writer could never persist.
+const EARLY_DRAW_MIN_LEAD_MS = 24 * 3_600_000 + 45 * 60_000;
+const EARLY_DRAW_MAX_LEAD_MS = 72 * 3_600_000;
 const HASH = /^[a-f0-9]{64}$/;
 const ICAO = /^[A-Z]{4}$/;
 const YYYY_MM_DD = /^\d{4}-\d\d-\d\d$/;
@@ -158,6 +162,8 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
   const groups = new Map<string, { icao: string; earliestCutoff: number }>();
   const slotAirport = new Map<string, string>();
   const plannedSelectionBySlot = new Map<string, number>();
+  const atomicSelectionByDay = new Map<number, number>();
+  const serviceWindowStartByDay = new Map<number, number>();
   let minMargin = Number.POSITIVE_INFINITY;
 
   for (const r of input.acquisitions) {
@@ -185,9 +191,17 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
         dayMs(chargeDate, "REQUEST_CHARGE_DAY"))
       refuse("PHYSICAL_GET_UTC_DAY_MISMATCH");
     const proposedSelection = utcMs(r.plannedAirportSelectionUtc, "AIRPORT_PRESELECTION_UTC");
-    if (proposedSelection > request)
+    if (proposedSelection >= request)
       refuse("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
-    positiveInt(r.maxResponseAndPersistSeconds, "RESPONSE_PERSIST_SECONDS", 86_400);
+    // The real Stage1 owner can commit only 72h to strictly >24h45m
+    // before its single frozen day-window start. A merely pre-T24 proposed
+    // timestamp must not be approved as a runnable release grid.
+    const earlyLead = serviceStart - proposedSelection;
+    if (earlyLead <= EARLY_DRAW_MIN_LEAD_MS ||
+        earlyLead > EARLY_DRAW_MAX_LEAD_MS)
+      refuse("EARLY_OWNER_WINDOW_MISMATCH");
+    // The real Stage2 bridge refuses any response+durable-commit bound >1h.
+    positiveInt(r.maxResponseAndPersistSeconds, "RESPONSE_PERSIST_SECONDS", 3600);
     positiveInt(r.apiUnitsPerAttempt, "API_UNITS_PER_ATTEMPT", 50_000);
     positiveInt(r.maxAttempts, "MAX_ATTEMPTS", 1);
     // V0079 physical query immutable max_physical_attempts=1, API cost=2.
@@ -207,6 +221,18 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     if (earlierSelection !== undefined && earlierSelection !== proposedSelection)
       refuse("INCONSISTENT_EARLY_SELECTION_SCHEDULE");
     plannedSelectionBySlot.set(slotKey, proposedSelection);
+    // Stage1 writes all FOUR slots with one DB-selected timestamp in one
+    // SERIALIZABLE transaction; Stage2 checks the same frozen day start.
+    // Refuse synthetic independently timed airport picks or per-slot
+    // service starts that cannot be replayed from that immutable day.
+    const priorDaySelection = atomicSelectionByDay.get(r.runDayIndex);
+    if (priorDaySelection !== undefined && priorDaySelection !== proposedSelection)
+      refuse("NONATOMIC_DAY_AIRPORT_SELECTION");
+    atomicSelectionByDay.set(r.runDayIndex, proposedSelection);
+    const priorDayStart = serviceWindowStartByDay.get(r.runDayIndex);
+    if (priorDayStart !== undefined && priorDayStart !== serviceStart)
+      refuse("DAY_SERVICE_START_MISMATCH");
+    serviceWindowStartByDay.set(r.runDayIndex, serviceStart);
     const groupKey = slotKey + "|" + r.horizon;
     const prev = groups.get(groupKey);
     if (prev && prev.icao !== r.icao) refuse("HORIZON_AIRPORT_MISMATCH");

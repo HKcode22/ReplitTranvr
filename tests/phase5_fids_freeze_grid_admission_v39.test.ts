@@ -44,7 +44,7 @@ function sampleGrid(): P5FidsGridInput {
           earliestPlannedCutoffUtc: iso(cutoff),
           scheduledRequestUtc: iso(cutoff - 600_000),
           // Prospective selection occurs BEFORE T24 cutoff, not at batch start.
-          plannedAirportSelectionUtc: iso(serviceStart - 1460 * 60_000),
+          plannedAirportSelectionUtc: iso(serviceStart - 1500 * 60_000),
           maxResponseAndPersistSeconds: 300,
           apiUnitsPerAttempt: 2,
           maxAttempts: 1,
@@ -249,8 +249,58 @@ describe("Phase5 early airport selection timing blocks late adaptive startBatch 
   it("refuses an inconsistent selection timestamp across the three horizons", () => {
     const a = sampleGrid();
     a.acquisitions[1].plannedAirportSelectionUtc =
-      "2026-12-31T13:39:00.000Z";
+      "2026-12-31T12:59:00.000Z";
     expect(() => evaluateP5FidsGrid(a)).toThrow("INCONSISTENT_EARLY_SELECTION_SCHEDULE");
+  });
+
+
+  it("rejects a source latency bound the real scoped bridge refuses (>3600s)", () => {
+    const a = sampleGrid();
+    a.acquisitions[0].maxResponseAndPersistSeconds = 3601;
+    expect(() => evaluateP5FidsGrid(a)).toThrow("RESPONSE_PERSIST_SECONDS");
+  });
+
+  it("rejects an airport draw at the exact first signed source request time", () => {
+    const a = sampleGrid();
+    a.acquisitions[0].plannedAirportSelectionUtc =
+      a.acquisitions[0].scheduledRequestUtc;
+    expect(() => evaluateP5FidsGrid(a)).toThrow("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
+  });
+
+  it("rejects 24h40m early airport selection: owner requires strictly >24h45m", () => {
+    const a = sampleGrid();
+    const q = a.acquisitions[0];
+    q.plannedAirportSelectionUtc =
+      iso(Date.parse(q.serviceWindowStartUtc) - (24 * 60 + 40) * 60_000);
+    expect(() => evaluateP5FidsGrid(a)).toThrow("EARLY_OWNER_WINDOW_MISMATCH");
+  });
+
+  it("rejects an over-72h selection proposal the actual early owner cannot commit", () => {
+    const a = sampleGrid();
+    const q = a.acquisitions[0];
+    q.plannedAirportSelectionUtc =
+      iso(Date.parse(q.serviceWindowStartUtc) - 73 * 3_600_000);
+    expect(() => evaluateP5FidsGrid(a)).toThrow("EARLY_OWNER_WINDOW_MISMATCH");
+  });
+
+  it("rejects four airport slots with different daily selection timestamps", () => {
+    const a = sampleGrid();
+    const mid = a.acquisitions.filter(r=>r.runDayIndex===1&&r.slot==="MID_A");
+    for (const r of mid) {
+      r.plannedAirportSelectionUtc =
+        iso(Date.parse(r.plannedAirportSelectionUtc) - 60_000);
+    }
+    expect(() => evaluateP5FidsGrid(a)).toThrow("NONATOMIC_DAY_AIRPORT_SELECTION");
+  });
+
+  it("rejects different source service starts for slots on one committed day", () => {
+    const a = sampleGrid();
+    const mid = a.acquisitions.filter(r=>r.runDayIndex===1&&r.slot==="MID_A");
+    for (const r of mid) {
+      r.serviceWindowStartUtc = iso(Date.parse(r.serviceWindowStartUtc)+3_600_000);
+      r.serviceWindowEndUtc = iso(Date.parse(r.serviceWindowEndUtc)+3_600_000);
+    }
+    expect(() => evaluateP5FidsGrid(a)).toThrow("DAY_SERVICE_START_MISMATCH");
   });
 
   it("rejects missing selection time rather than treating an unpicked airport as frozen", () => {
