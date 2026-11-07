@@ -1,0 +1,42 @@
+name: Phase5 Source Day Quality Metadata Audit (Offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5DaySourceQualityReadonly_v39.ts'
+      - 'scripts/v39_phase5_day_source_quality_readonly_v39.ts'
+      - 'tests/phase5_day_source_quality_readonly_v39.test.ts'
+      - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5DaySourceQualityReadonly_v39.ts'
+      - 'scripts/v39_phase5_day_source_quality_readonly_v39.ts'
+      - 'tests/phase5_day_source_quality_readonly_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  source-quality-query-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_AUDITOR_DATABASE_URL: ''
+      V39_P5_SOURCE_AUDITOR_ROLE_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Check planned/attempted/bound/late denominators, zero provider and DB
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_day_source_quality_readonly_v39.test.ts
+          echo 'SOURCE_METADATA_ONLY=1 READONLY_TX=1 PAID_CALLS=0 PHASE6_GO=0'
