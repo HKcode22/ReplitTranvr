@@ -1,0 +1,106 @@
+name: Phase5 Stage23 inert owner-schema commission rollback / ACL (disposable PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage23_atomic_schema_only_owner_once.mjs'
+      - '.github/workflows/phase5-stage23-inert-owner-schema-real-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage23_atomic_schema_only_owner_once.mjs'
+      - '.github/workflows/phase5-stage23-inert-owner-schema-real-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  stage23-disposable-atomic-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      P5_STAGE23_MIGRATION_DIR: '/tmp/p5-stage23-AbC123'
+      P5_STAGE23_SCHEMA_ONLY_ONCE: 'INSTALL_EMPTY_V0079_V0080_V0081_NO_PROVIDER_CALLS'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Baseline only on disposable CI service PostgreSQL16
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          mkdir -p "$P5_STAGE23_MIGRATION_DIR"
+          cp migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql "$P5_STAGE23_MIGRATION_DIR/"
+          cp migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql "$P5_STAGE23_MIGRATION_DIR/"
+          cp migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql "$P5_STAGE23_MIGRATION_DIR/"
+      - name: Forced rollback after V0079 leaves ALL eight tables absent
+        run: |
+          set -Eeuo pipefail
+          if P5_STAGE23_INJECT_ROLLBACK_AFTER_V0079=1 node scripts/v39_phase5_stage23_atomic_schema_only_owner_once.mjs > /tmp/rollback.out 2>/tmp/rollback.err; then
+            echo 'FAILED_CI_FORCED_ABORT_NOT_REFUSED'; exit 1
+          fi
+          grep -F 'REFUSED_P5_STAGE23_CI_INJECTED_ROLLBACK_AFTER_FIRST_MIGRATION' /tmp/rollback.err >/dev/null
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/stage23-rollback-audit.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage23-rollback-audit.json","utf8"));
+            if(!p.baselineRequiredColumnsPresent||!p.stageTableSetAllAbsent)
+              throw Error("STAGE23_NOT_FULLY_ROLLED_BACK");
+          '
+      - name: Exact migration files create empty schema atomically with no PUBLIC grants
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_stage23_atomic_schema_only_owner_once.mjs > /tmp/stage23-commissioned.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage23-commissioned.json","utf8"));
+            if(p.status!=="P5_EMPTY_V0079_80_81_SCHEMA_DURABLE_INERT"||
+               p.expectedTables!==8||p.expectedFunctions!==9||
+               p.productionSchemaChanged!==false||
+               p.publicTableAndHelperPrivileges!==0||
+               p.providerFidsGets!==0||p.providerAlertCreates!==0||
+               p.phase5FreezePassed!==false||p.phase6PaidGo!==false)
+              throw Error("STAGE23_NOT_INERT_OR_ACL_UNVERIFIED");
+          '
+          P5_STAGE18_DEPENDENCY_ONCE=1 node scripts/v39_phase5_v0079_v0081_install_dependencies_readonly_once.mjs > /tmp/stage23-after.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage23-after.json","utf8"));
+            if(!p.stageTableSetAllPresent||p.v0079.presentRelations!==6||
+               p.v0080.presentRelations!==1||p.v0081.presentRelations!==1)
+              throw Error("STAGE23_EIGHT_TABLES_NOT_DURABLE");
+          '
+      - name: Re-run must refuse duplicate or partial migration
+        run: |
+          set -Eeuo pipefail
+          if node scripts/v39_phase5_stage23_atomic_schema_only_owner_once.mjs >/tmp/replay.out 2>/tmp/replay.err; then
+            echo 'FAILED_CI_REPLAY_REQUIRES_HOLD';exit 1
+          fi
+          grep -F 'REFUSED_P5_STAGE23_PARTIAL_DUPLICATE_OR_UNKNOWN_STAGED_OBJECTS' /tmp/replay.err >/dev/null
+          echo 'STAGE23_INERT_SCHEMA_REAL_PG16=PASS PRODUCTION_WRITES=0 PROVIDER_CALLS=0 PHASE6_GO=0'
