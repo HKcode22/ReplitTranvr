@@ -136,8 +136,10 @@ describe("Phase5 Stage22 no-paid f.8 segment FIDS coverage + seven-category ledg
   assert.equal(r.batchDays,31);
   assert.equal(r.expectedAirportHorizonPartitionGroups,432);
   assert.equal(r.plannedPhysicalGets,1968);
-  assert.equal(r.projectedFidsBaseUnits,2*(
-   26*5+3*6+2*(5+3))*12-2*(3*3+2*3)*12);
+  // Each 2x2 child is its own BASE service segment. SPLIT is exclusively
+  // a second range partition *within* a single six-hour segment.
+  assert.equal(r.projectedFidsBaseUnits,3792);
+  assert.equal(r.projectedFidsSplitUnits,144);
   assert.equal(r.projectedFidsBaseUnits+r.projectedFidsSplitUnits,3936);
   assert.equal(r.excludedGapWindows.length,3);
   assert.equal(r.temporalCoverageGaps.length,0);
@@ -238,7 +240,7 @@ describe("Phase5 Stage22 no-paid f.8 segment FIDS coverage + seven-category ledg
  });
  it("rejects structurally invalid 31-day calendar without guessing new dates",()=>{
   const p=fixture();
-  p.calendar.days[2].windowShape="4h";
+  p.calendar.days.find(x=>x.windowShape==="2x2h").windowShape="4h";
   assert.throws(()=>auditP5F8SegmentedSourceCoverage(p),
    /BINDING_F8_CALENDAR_UNSAT/);
  });
