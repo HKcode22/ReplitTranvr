@@ -35,4 +35,6 @@ jobs:
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx vitest run tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts tests/phase5_dynamic_day_source_grid_v39.test.ts tests/phase5_committed_day_grid_readonly_v39.test.ts
-      - run: echo 'STAGE8 PROPOSALS ONLY: zero provider calls / zero DB writes / no Phase6 GO'
+      - name: Confirm no live operations
+        run: |
+          echo 'STAGE8 PROPOSALS ONLY: zero provider calls / zero DB writes / no Phase6 GO'
