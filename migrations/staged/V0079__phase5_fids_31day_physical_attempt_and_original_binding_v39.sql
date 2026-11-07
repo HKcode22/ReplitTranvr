@@ -9,6 +9,9 @@
 -- A rights SHA or PASSING DB constraints is not legal source permission.
 -- This ledger DOES NOT create PRE, POST, native operating-leg labels, or GO.
 -- Unlike Gate5 V0076, NO UNIQUE(manifest,horizon): 31 days/4 airports.
+-- IMPORTANT: service/run-day and physical paid UTC charge-day may differ.
+-- A T-24h GET often precedes its flight-service date by one UTC day.
+-- BOTH ledgers are required; never use run_day_index alone for billing.
 CREATE TABLE clean.phase5_fids_cycle_budget_v39 (
  manifest_sha256 text PRIMARY KEY CHECK(manifest_sha256 ~ '^[0-9a-f]{64}$'),
  cycle_api_ceiling integer NOT NULL CHECK(cycle_api_ceiling BETWEEN 2 AND 50000),
@@ -39,6 +42,21 @@ CREATE TABLE clean.phase5_fids_day_budget_v39 (
  CONSTRAINT p5_daily_combined_reserved_v39 CHECK(
    daily_other_reserved_units+daily_source_reserved_units<=daily_api_ceiling)
 );
+-- A *separate* UTC charge-day ledger follows actual paid dispatch, NOT
+-- flight service/run day. Day 0 (the day before service Day1) is mandatory
+-- whenever it contains T-24h GETs. Each date requires frozen other-category
+-- reservations; no implicit zero for unknown billed API categories.
+CREATE TABLE clean.phase5_fids_utc_charge_budget_v39 (
+ manifest_sha256 text NOT NULL
+   REFERENCES clean.phase5_fids_cycle_budget_v39(manifest_sha256),
+ charge_day_utc date NOT NULL,
+ daily_api_ceiling integer NOT NULL CHECK(daily_api_ceiling BETWEEN 2 AND 1900),
+ daily_other_reserved_units integer NOT NULL CHECK(daily_other_reserved_units>=0),
+ physically_reserved_units integer NOT NULL DEFAULT 0 CHECK(physically_reserved_units>=0),
+ PRIMARY KEY(manifest_sha256,charge_day_utc),
+ CONSTRAINT p5_utc_charge_budget_total_v39 CHECK(
+   physically_reserved_units+daily_other_reserved_units<=daily_api_ceiling)
+);
 -- A signed query exists once per actual day/slot/horizon/subwindow; it must
 -- be entered by an independently reviewed pre-arm writer, not a paid GET job.
 CREATE TABLE clean.phase5_fids_allowed_query_v39 (
@@ -62,6 +80,9 @@ CREATE TABLE clean.phase5_fids_allowed_query_v39 (
  provider_api_version text NOT NULL,
  fids_protocol_version text NOT NULL,
  planned_dispatch_utc timestamptz NOT NULL,
+ -- A real physical GET MUST be charged on this independently frozen
+ -- UTC calendar day. No late source reroute across midnight.
+ planned_charge_utc_date date NOT NULL,
  hard_latest_dispatch_utc timestamptz NOT NULL,
  prediction_cutoff_utc timestamptz NOT NULL,
  api_units_per_attempt integer NOT NULL DEFAULT 2 CHECK(api_units_per_attempt=2),
@@ -77,6 +98,7 @@ CREATE TABLE clean.phase5_fids_allowed_query_v39 (
  CONSTRAINT p5_fids_query_clock_v39 CHECK(
    service_window_start_utc<service_window_end_utc
    AND planned_dispatch_utc<=hard_latest_dispatch_utc
+   AND (planned_dispatch_utc AT TIME ZONE 'UTC')::date=planned_charge_utc_date
    AND hard_latest_dispatch_utc<=prediction_cutoff_utc-INTERVAL '2 minutes'
    AND prediction_cutoff_utc<service_window_end_utc)
 );
@@ -94,7 +116,10 @@ CREATE TABLE clean.phase5_fids_physical_attempt_v39 (
  charged_reserved_units integer NOT NULL DEFAULT 2
    CHECK(charged_reserved_units=2),
  committed_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
- observed_selected_at_utc timestamptz NOT NULL
+ observed_selected_at_utc timestamptz NOT NULL,
+ charged_utc_date date NOT NULL,
+ FOREIGN KEY(manifest_sha256,charged_utc_date)
+  REFERENCES clean.phase5_fids_utc_charge_budget_v39(manifest_sha256,charge_day_utc)
 );
 CREATE FUNCTION clean.phase5_fids_attempt_immutable_v39()
 RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,clean
@@ -120,6 +145,8 @@ AS $p5reserve$
 DECLARE
  v_cycle clean.phase5_fids_cycle_budget_v39%ROWTYPE;
  v_day clean.phase5_fids_day_budget_v39%ROWTYPE;
+ v_charge clean.phase5_fids_utc_charge_budget_v39%ROWTYPE;
+ v_charge_date date;
  v_query clean.phase5_fids_allowed_query_v39%ROWTYPE;
  v_selected timestamptz;
  v_n integer;
@@ -172,6 +199,22 @@ BEGIN
         AND d.slot_id=v_query.slot_id AND d.selected_icao=v_query.airport_icao)
  THEN RAISE EXCEPTION 'P5_EARLY_FOUR_SLOT_SELECTION_MISSING_OR_CHANGED'; END IF;
  v_now=clock_timestamp();
+ v_charge_date=(v_now AT TIME ZONE 'UTC')::date;
+ -- Charging the actual physical request date is mandatory, even when
+ -- the selected service day occurs tomorrow (T-24h) or after UTC midnight.
+ -- One signed planned charge day only: a delayed request crossing UTC day
+ -- is a missed prospective source, not permission to charge another day.
+ IF v_charge_date IS DISTINCT FROM v_query.planned_charge_utc_date
+ THEN RAISE EXCEPTION 'P5_ACTUAL_UTC_CHARGE_DAY_MISMATCH_HOLD'; END IF;
+ -- Avoid sending a GET through UTC midnight after the transaction commits.
+ -- A narrow late-day blackout is classified as missed rather than risk
+ -- unrecorded day+1 billing; an individual source can remain NULL.
+ IF EXTRACT(HOUR FROM (v_now AT TIME ZONE 'UTC'))=23 AND
+    EXTRACT(MINUTE FROM (v_now AT TIME ZONE 'UTC'))>=50
+ THEN RAISE EXCEPTION 'P5_UTC_MIDNIGHT_PAID_DISPATCH_BLACKOUT'; END IF;
+ SELECT * INTO v_charge FROM clean.phase5_fids_utc_charge_budget_v39
+ WHERE manifest_sha256=p_manifest AND charge_day_utc=v_charge_date FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'P5_UTC_CHARGE_DAY_NOT_FROZEN'; END IF;
  IF v_selected>=v_query.planned_dispatch_utc OR
     v_selected>=(SELECT c.scheduled_start_utc - INTERVAL '24 hours 30 minutes'
       FROM clean.adb_phase6_calendar_day c
@@ -190,6 +233,12 @@ BEGIN
  IF v_day.daily_source_reserved_units+2+v_day.daily_other_reserved_units>
     v_day.daily_api_ceiling
  THEN RAISE EXCEPTION 'P5_DAY_API_UNITS_EXHAUSTED'; END IF;
+ IF v_charge.physically_reserved_units+2+v_charge.daily_other_reserved_units>
+    v_charge.daily_api_ceiling
+ THEN RAISE EXCEPTION 'P5_UTC_CHARGE_DAY_API_UNITS_EXHAUSTED'; END IF;
+ UPDATE clean.phase5_fids_utc_charge_budget_v39
+ SET physically_reserved_units=physically_reserved_units+2
+ WHERE manifest_sha256=p_manifest AND charge_day_utc=v_charge_date;
  UPDATE clean.phase5_fids_cycle_budget_v39
  SET physically_reserved_units=physically_reserved_units+2 WHERE manifest_sha256=p_manifest;
  UPDATE clean.phase5_fids_day_budget_v39
@@ -200,9 +249,9 @@ BEGIN
  INSERT INTO clean.phase5_fids_physical_attempt_v39(
  reservation_sha256,query_digest,manifest_sha256,github_run_id,
  physical_attempt_number,charged_reserved_units,
- committed_at_utc,observed_selected_at_utc)
+ committed_at_utc,observed_selected_at_utc,charged_utc_date)
  VALUES(p_expected_reservation_sha256,p_query,p_manifest,p_github_run_id,
-   1,2,v_now,v_selected);
+   1,2,v_now,v_selected,v_charge_date);
  RETURN v_now;
 END $p5reserve$;
 
@@ -316,6 +365,7 @@ CREATE TRIGGER phase5_fids_original_immutable_v39
 -- scientific database installer and independent rights/ACL verification.
 REVOKE ALL ON clean.phase5_fids_cycle_budget_v39 FROM PUBLIC;
 REVOKE ALL ON clean.phase5_fids_day_budget_v39 FROM PUBLIC;
+REVOKE ALL ON clean.phase5_fids_utc_charge_budget_v39 FROM PUBLIC;
 REVOKE ALL ON clean.phase5_fids_allowed_query_v39 FROM PUBLIC;
 REVOKE ALL ON clean.phase5_fids_physical_attempt_v39 FROM PUBLIC;
 REVOKE ALL ON clean.phase5_fids_original_binding_v39 FROM PUBLIC;
