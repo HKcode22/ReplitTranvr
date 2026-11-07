@@ -1,0 +1,46 @@
+name: Phase5 Stage24 witnessed T6 and T90 admission (no paid data)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+      - 'tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts'
+      - '.github/workflows/phase5-stage24-witnessed-t6-t90-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+      - 'tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts'
+      - '.github/workflows/phase5-stage24-witnessed-t6-t90-offline.yml'
+permissions:
+  contents: read
+jobs:
+  stage24-no-provider-pre-horizon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Type-check Stage24 witnessed T6/T90 source
+        run: npm run check
+      - name: T6/T90 requires real V0081 witness and independently reviewed pre-cutoff T24 receipt
+        run: |
+          set -Eeuo pipefail
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          npx vitest run tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts
+          echo 'STAGE24_WITNESSED_LATER_HORIZONS=OFFLINE_TESTED LIVE_PRE=NOT_RELEASED SOURCE_RIGHTS=UNVERIFIED PHASE5_FREEZE=HOLD'
