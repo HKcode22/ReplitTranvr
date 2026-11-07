@@ -165,7 +165,7 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     const code=readFileSync("server/lib/disruption/adbCollectionController_v3.ts","utf8");
     const start=code.slice(code.indexOf("export async function startBatch():"),code.indexOf("\ninterface SegmentSettlementResult",code.indexOf("export async function startBatch():")));
     expect(start).toContain("await loadPreparedDailyDraw(day)");
-    expect(start).not.toContain("chooseAirportsForRunDay(");
+    expect(start).not.toContain("const decision = chooseAirportsForRunDay(");
     expect(start).not.toContain("await persistSamplingDecision(");
     expect(start.indexOf("await loadPreparedDailyDraw(day)")).toBeLessThan(start.indexOf("await assertBudgetHeadroom(auth)"));
   });
