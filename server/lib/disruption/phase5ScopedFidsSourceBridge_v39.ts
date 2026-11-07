@@ -100,6 +100,8 @@ export interface P5SourcePorts {
   }):Promise<P5OriginalCommit>;
   /** Actual transport is EXPLICIT; testing injects a local fake fetch only. */
   fetchImpl:typeof fetch;
+  /** Test-only injects immediate delays; real GitHub owner uses standard pacing. */
+  sleepImpl?: (ms:number)=>Promise<void>;
 }
 export type P5ScopedSourceResult =
   | {status:"SOURCE_UNOBSERVED_OR_UNPERSISTED";plannedPhysicalMaximum:1;
@@ -200,6 +202,7 @@ export async function runP5ScopedFidsSource(
         refuse("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
       return fetchFidsAirport(airport,from,to,{
         ...opts,fetchImpl:ports.fetchImpl,
+        ...(ports.sleepImpl?{sleepImpl:ports.sleepImpl}:{}),
         budgetOwner:{
           reserve:async(category,units,attemptNumber)=>{
             // Even if the existing provider fetch helper proposes retries,
@@ -260,6 +263,7 @@ export async function runP5ScopedFidsSource(
          ack.normalizedRowsPersisted!==normalizedRows.length||
          !ISO.test(ack.sourceAvailableAtUtc)||
          !ISO.test(ack.retentionExpiryUtc)||
+         Date.parse(ack.sourceAvailableAtUtc)<sourceQuery.availableAtUtc.getTime()||
          Date.parse(ack.retentionExpiryUtc)>Date.parse(expectedExpiresAtUtc))
         refuse("ATOMIC_ORIGINAL_DB_READBACK_MISMATCH");
       proof=ack;
@@ -268,7 +272,7 @@ export async function runP5ScopedFidsSource(
   });
   if(!result||!proof){
     return {status:"SOURCE_UNOBSERVED_OR_UNPERSISTED",
-      plannedPhysicalMaximum:1,physicalAttemptsReserved:providerReservationCalls,
+      plannedPhysicalMaximum:1,physicalAttemptsReserved:reserved?1:0,
       actualPreCertified:false,providerOriginalBound:false};
   }
   if(providerReservationCalls!==1||commits!==1||!reserved)
