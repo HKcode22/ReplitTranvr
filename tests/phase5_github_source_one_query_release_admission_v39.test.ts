@@ -3,6 +3,8 @@ import {describe,it,expect} from "vitest";
 import {admitP5GitHubOneQueryRelease,
  type P5GitHubOneQueryReleaseEnvelope}
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
+import {waitForP5ScheduledPhysicalDispatch}
+ from "../server/lib/disruption/phase5V0080GitHubPrearm_v39";
 const H=(c:string)=>c.repeat(64);
 function fixture(){
  const code="a".repeat(40);
@@ -130,5 +132,34 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
     createHash("sha256").update(newBytes).digest("hex");
   expect(()=>admitP5GitHubOneQueryRelease(f.env,newBytes,f.payload))
    .toThrow("UNREVIEWED_SOURCE_ROLE_PRICE_OR_ATTEMPTS");
+ });
+});
+
+
+describe("V0080 signed DB-clock prospectivity after prearm, no real timers",()=>{
+ const planned="2026-11-10T15:00:00.000Z";
+ const cutoff="2026-11-10T15:10:00.000Z";
+ it("waits before the physical GET and crosses planned timestamp only on DB clock",async()=>{
+  let clock=Date.parse(planned)-12_000,delays=0;
+  await waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(clock),
+   async ms=>{delays++;clock+=ms;});
+  expect(delays).toBeGreaterThan(0);
+  expect(clock).toBe(Date.parse(planned));
+ });
+ it("refuses late GitHub run without any paid attempt",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(planned)+16*60_000),
+   async()=>{})).rejects.toThrow("MISSED_PROSPECTIVE_DISPATCH");
+ });
+ it("refuses flight cutoff too close for conservative response+commit bound",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(cutoff)-10_000),
+   async()=>{})).rejects.toThrow("MISSED_PROSPECTIVE_DISPATCH");
+ });
+ it("does not run a two-plus-hour background hold for an incorrectly scheduled owner",async()=>{
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(Date.parse(planned)-2*3600_000-1000),
+   async()=>{throw Error("SHOULD_NOT_SLEEP");})).rejects.toThrow("GITHUB_JOB_STARTED_TOO_EARLY");
  });
 });
