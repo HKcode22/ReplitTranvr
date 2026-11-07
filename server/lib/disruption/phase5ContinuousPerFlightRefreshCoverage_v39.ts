@@ -159,7 +159,8 @@ export function assessP5Stage11ContinuousCutoffGrid(
      keys.has(q.queryKey))refuse("DUPLICATE_OR_UNREVIEWED_QUERY");
    keys.add(q.queryKey);
    const g=grouped.get(q.runDayIndex+"|"+q.slot+"|"+q.horizon);
-   if(!g||q.airportIcao!==g.ica||
+   if(!g)throw Error("REFUSED_P5_STAGE11_REFRESH_GRID_GET_NOT_IN_FROZEN_DAY");
+   if(q.airportIcao!==g.ica||
       stamp(q.serviceWindowStartUtc,"QUERY_WINDOW_START")!==
         g.start+H.find(x=>x[0]===q.horizon)![1]||
       stamp(q.serviceWindowEndUtc,"QUERY_WINDOW_END")!==
