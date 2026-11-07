@@ -1,0 +1,40 @@
+name: Phase5 Stage22 segmented f.8 FIDS source cutoff and REST billing (offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5F8SegmentedSourceCoverage_v39.mjs'
+      - 'tests/phase5_stage22_f8_segmented_source_coverage_v39.test.mjs'
+      - '.github/workflows/phase5-stage22-f8-segmented-source-coverage-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5F8SegmentedSourceCoverage_v39.mjs'
+      - 'tests/phase5_stage22_f8_segmented_source_coverage_v39.test.mjs'
+      - '.github/workflows/phase5-stage22-f8-segmented-source-coverage-offline.yml'
+permissions:
+  contents: read
+jobs:
+  f8-split-gap-source-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Prove actual 26/3/2 candidate segmentation and seven-category UTC billing logic without provider
+        run: |
+          set -Eeuo pipefail
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          node --test tests/phase5_stage22_f8_segmented_source_coverage_v39.test.mjs
+          echo 'STAGE22_SEGMENT_GRID=TEST_PASS LIVE_PROVIDER_RANGE=NOT_CERTIFIED REAL_PRE=NOT_COLLECTED PHASE5_FREEZE=HOLD PHASE6_GO=0'
