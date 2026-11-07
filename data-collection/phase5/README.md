@@ -12,6 +12,10 @@
 - [Stage16b read-only PostgreSQL catalog/role check](2026-11-07_STAGE16B_V0079_PRODUCTION_CATALOG_ROLE_VISIBILITY.md) — distinguishes physically absent V0079 ledger tables from tables invisible to the Replit role. No source rows, provider calls or DDL.
 - [Latest owner-audited account and engineering checkpoint](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md) — **do not re-ask historical Ultra identity, 60k original quota or Nov7 balance**.
 
+## November 7 live V0079 installation cause (Stage16b → Stage18)
+
+Owner's **2026-11-07T12:18:48.521Z** source-pinned Stage16b PostgreSQL `pg_catalog` audit demonstrated **0/6 V0079 tables physically present in `neondb.clean`**, with correct DB, `READ ONLY` and schema USAGE verified. This is a missing migration, **not** a mere ACL invisibility issue. [Stage18 read-only baseline + V0079→V0080→V0081 dependency audit](2026-11-07_STAGE18_PRODUCTION_B0062_AND_V0079_V0081_INSTALL_DEPENDENCY_AUDIT.md) provides the next owner-check and disposable PG16 migration-order CI; it is **not an approved production installer**, an account-specific retention grant or Phase6 GO. Exact user evidence is also preserved in [#416](https://github.com/HKcode22/ReplitTranvr/issues/416). Keep f.8, Amendment B and catalog-locked implementation log unchanged. Phase5 FREEZE HOLD.
+
 ## Phase 5 source of truth
 - [Stage 10 authentic V0079 bound-source → per-flight as-of PRE candidate readback (offline)](2026-11-07_STAGE10_V0079_BOUND_FLIGHT_PRE_ASOF_READBACK_OFFLINE.md) — source-to-member/cutoff/retime/staleness test coverage only; **no live PRE writer or source-use/Phase6 release**.
 - [Dated November 7 Phase5 engineering handoff](2026-11-07_IMPLEMENTATION_HANDOFF_SEPARATE_FROM_CATALOG_LOCKED_LOG.md) — mutable status and exact-code checkpoints. The original [Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md) remains source-catalog-locked research provenance.
