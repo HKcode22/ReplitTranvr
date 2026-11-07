@@ -22,7 +22,7 @@ const TABLES=[
   ['airborne_eligibility_evidence','created_at','AIRBORNE_ELIGIBILITY'],
   ['flight_airborne_snapshots','created_at','AIRBORNE_SNAPSHOTS'],
   ['flight_outcomes','updated_at','OUTCOME_STATUS'],
-  ['flight_data_pre_post','created_at','FLIGHT_RECORD_VIEW']
+  ['flight_data_pre_post','received_at','FLIGHT_RECORD_VIEW']
 ];
 const onlySafe=/^[a-z][a-z0-9_]*$/;
 const out=(kind,obj)=>console.log(kind+' '+JSON.stringify(obj));
