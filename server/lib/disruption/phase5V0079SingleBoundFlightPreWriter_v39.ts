@@ -228,6 +228,12 @@ export async function persistP5V0079SingleBoundFlightPre(
  pool:Pick<Pool,"connect">,p:P5Stage14SingleFlightPrePermit
 ):Promise<P5Stage14SingleFlightPreResult>{
  const native=assertPermit(p);
+ // A T24 row's created_at=now() is a TX-start timestamp and cannot prove
+ // actual durable COMMIT preceded C_T24. Until a protected post-commit T24
+ // witness is persisted and independently authenticated, T6/T90 MUST HOLD.
+ // The standalone Stage14 writer supports T24 only, not a forged anchor.
+ if(p.horizon!=="T-24h")
+   hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
  const cutoff=new Date(native.getTime()-PRE_HORIZON_OFFSET_MIN[p.horizon]*60_000);
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_PRE_WRITER");
  const c:PoolClient=await pool.connect();
