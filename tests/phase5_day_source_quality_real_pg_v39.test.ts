@@ -94,12 +94,17 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
     "(source_airport_icao,window_start_utc,window_end_utc,cutoff_utc,"+
     "source_type,population_query_id,analytic_identity_id,"+
     "canonical_flight_instance_id,population_role,scope_classification,"+
-    "available_at,response_hash,flight_number)"+
+    "available_at,response_hash,flight_number,"+
+    "query_direction,from_local,to_local,airport_iana_timezone,"+
+    "codeshare_resolution_status,fids_retrieval_utc,"+
+    "provider_api_version,fids_protocol_version,openapi_sha256)"+
     "VALUES('WSSS',$1,$2,$3,'fids',$4,'leg:ci:one',"+
     "'leg:ci:one','requested_airport_primary','confirmed_core',"+
-    "clock_timestamp(),$5,'AB123')",
+    "clock_timestamp(),$5,'AB123','Departure',"+
+    "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+    "'confirmed_operating_leg',clock_timestamp(),'1.15.4','v39',$6)",
     [serviceStart,new Date(serviceStart.getTime()+4*3600_000),
-     cutoff,pid,fidsHash]);
+     cutoff,pid,fidsHash,contract]);
   await db.query("INSERT INTO clean.phase5_fids_original_binding_v39"+
     "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
     "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
