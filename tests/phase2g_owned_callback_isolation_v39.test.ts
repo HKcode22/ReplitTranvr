@@ -115,6 +115,8 @@ describe("Owned Phase2G callback-only isolation", () => {
       "V39_CALLBACK_ONLY_BUILD=1"
     ) || config.includes(
       'build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
+    ) || config.includes(
+      'build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]'
     );
 
     if (owned) {
