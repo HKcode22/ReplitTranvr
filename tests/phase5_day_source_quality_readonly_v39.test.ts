@@ -95,6 +95,10 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(sql).toContain("s.created_at<b.source_expires_at_utc");
   expect(sql).toContain("q.horizon=s.horizon");
   expect(sql).toContain("COUNT(DISTINCT s.id)");
+  expect(sql).toContain("EXISTS (SELECT 1 FROM clean.flight_population fp");
+  expect(sql).toContain("fp.canonical_flight_instance_id=s.flight_instance_id");
+  expect(sql).toContain("fp.population_role='requested_airport_primary'");
+  expect(sql).toContain("fp.available_at<=s.prediction_cutoff_utc");
   expect(sql).not.toContain("raw_payload");
   expect(sql).not.toContain("flight_number");
  });
