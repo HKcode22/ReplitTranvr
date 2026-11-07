@@ -8,6 +8,10 @@ import { Pool } from "pg";
 import {
   commitEarlyPhase5Draw, type EarlyDrawOwnerPins,
 } from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
+import { readCommittedP5DayCandidateGrid } from
+ "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
+import type { P5CommittedDayReadonlyScope } from
+ "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
 
 const URL="postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable";
 const enabled=process.env.V39_P5_PG16_INTEGRATION==="1";
@@ -116,5 +120,59 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
       ...pins,expectedCalendarHash:hex("f"),
     })).rejects.toThrow("NO_FROZEN_ENABLED_AUTHORIZATION");
     expect(Number((await db.query("SELECT count(*) AS n FROM clean.adb_sampling_draw")).rows[0].n)).toBe(4);
+  });
+
+  it("reads real committed four-airport draw with consistent read-only PG snapshot",async()=>{
+    const saved=await commitEarlyPhase5Draw(db,pins);
+    const start=Date.parse(serviceStart);
+    const slo=["HUB","MID_A","MID_B","REGIONAL"] as const;
+    const ho=[["T-24h",1440,"T24"],["T-6h",360,"T6"],
+      ["T-90m",90,"T90"]] as const;
+    const iso=(t:number)=>new Date(t).toISOString();
+    const templates:P5CommittedDayReadonlyScope["templates"]=[];
+    for(const slot of slo)for(const [horizon,lead,label] of ho){
+      const cutoff=start-lead*60_000,request=cutoff-600_000;
+      templates.push({
+        runDayIndex:1,budgetDayUtc:serviceStart.slice(0,10),
+        physicalChargeDayUtc:iso(request).slice(0,10),
+        slot,horizon,providerQueryDirection:"Departure",
+        serviceWindowStartUtc:serviceStart,
+        serviceWindowEndUtc:iso(start+4*3_600_000),
+        earliestPlannedCutoffUtc:iso(cutoff),
+        scheduledRequestUtc:iso(request),
+        maxResponseAndPersistSeconds:120,
+        apiUnitsPerAttempt:2,maxAttempts:1,
+        queryKey:"ci_pg16_day1_"+slot+"_"+label,
+      });
+    }
+    const scope:P5CommittedDayReadonlyScope={
+      expectedManifestSha256:pins.expectedManifestSha256,
+      expectedCalendarSha256:pins.expectedCalendarHash,
+      expectedConfigSha256:pins.expectedConfigHash,
+      expectedFrameSha256:pins.expectedFrameHash,
+      expectedProviderContractSha256:hex("f"),
+      expectedEarlyDrawSha256:saved.drawSha256,
+      expectedRestrictedReaderRole:"postgres",
+      runDayIndex:1,templates,
+    };
+    const actual=await readCommittedP5DayCandidateGrid(db,scope);
+    expect(actual.databaseReadOnlySnapshot).toBe(true);
+    expect(actual.restrictedReaderRoleVerified).toBe(true);
+    expect(actual.selectedDayCandidateGrid.acquisitions).toHaveLength(12);
+    expect(actual.selectedDayCandidateGrid.acquisitions.map(x=>x.icao)
+      .filter(x=>x==="WSSS")).toHaveLength(3);
+    expect(actual.selectedDayCandidateGrid.committedDrawSha256)
+      .toBe(saved.drawSha256);
+    expect(actual.databaseWrites).toBe(0);
+    expect(actual.providerCalls).toBe(0);
+    expect(actual.phase6Go).toBe(false);
+
+    await expect(readCommittedP5DayCandidateGrid(db,{
+      ...scope,expectedEarlyDrawSha256:hex("0"),
+    })).rejects.toThrow("UNVERIFIED_EARLY_DRAW_READBACK");
+    const preserved=await db.query(
+      "SELECT COUNT(*)::integer AS n FROM clean.adb_sampling_draw"
+    );
+    expect(Number(preserved.rows[0].n)).toBe(4);
   });
 });
