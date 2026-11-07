@@ -31,6 +31,7 @@ jobs:
       P5_STAGE28_PRE_URL: 'postgresql://phase5_stage28_pre_ci:ci-only@localhost:5432/neondb?sslmode=disable'
       P5_STAGE28_SOURCE_URL: 'postgresql://phase5_stage28_source_ci:ci-only@localhost:5432/neondb?sslmode=disable'
       P5_STAGE28_OTHER_URL: 'postgresql://phase5_stage28_other_ci:ci-only@localhost:5432/neondb?sslmode=disable'
+      P5_STAGE28_INDIRECT_URL: 'postgresql://phase5_stage28_indirect_ci:ci-only@localhost:5432/neondb?sslmode=disable'
     services:
       postgres:
         image: postgres:16
@@ -80,9 +81,14 @@ jobs:
           CREATE ROLE phase5_stage28_pre_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
           CREATE ROLE phase5_stage28_source_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
           CREATE ROLE phase5_stage28_other_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_indirect_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_bridge_ci NOLOGIN NOINHERIT NOSUPERUSER NOCREATEROLE;
           CREATE ROLE phase5_runtime_app_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
           GRANT phase5_fids_pre_writer_prod_20261107 TO phase5_stage28_pre_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
           GRANT phase5_fids_source_prod_20261107 TO phase5_stage28_source_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_source_prod_20261107 TO phase5_stage28_indirect_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_pre_writer_prod_20261107 TO phase5_stage28_bridge_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_stage28_bridge_ci TO phase5_stage28_indirect_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
           SQL
       - name: Prove dedicated identity and SQL ACL enforced on real PG16
         run: |
