@@ -9,7 +9,7 @@
  */
 import { createHash } from "node:crypto";
 
-export const P5_FIDS_GRID_SCHEMA = "v39.phase5.fids-freeze-grid.utc-charge-day.v2" as const;
+export const P5_FIDS_GRID_SCHEMA = "v39.phase5.fids-freeze-grid.utc-charge-day-one-get.v3" as const;
 export type P5FidsHorizon = "T-24h" | "T-6h" | "T-90m";
 export type P5Slot = "HUB" | "MID_A" | "MID_B" | "REGIONAL";
 const SLOTS: P5Slot[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
@@ -189,7 +189,10 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       refuse("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
     positiveInt(r.maxResponseAndPersistSeconds, "RESPONSE_PERSIST_SECONDS", 86_400);
     positiveInt(r.apiUnitsPerAttempt, "API_UNITS_PER_ATTEMPT", 50_000);
-    positiveInt(r.maxAttempts, "MAX_ATTEMPTS", 3);
+    positiveInt(r.maxAttempts, "MAX_ATTEMPTS", 1);
+    // V0079 physical query immutable max_physical_attempts=1, API cost=2.
+    // Do not sign a synthetic 3-retry plan which cannot execute safely.
+    if (r.apiUnitsPerAttempt !== 2) refuse("V0079_TWO_UNIT_PRICE_REQUIRED");
     if (r.maxResponseAndPersistSeconds < 1 || r.apiUnitsPerAttempt < 1 ||
         r.maxAttempts < 1) refuse("UNKNOWN_LATENCY_COST_OR_RETRIES");
     const margin = cutoff - request - r.maxResponseAndPersistSeconds * 1000;
