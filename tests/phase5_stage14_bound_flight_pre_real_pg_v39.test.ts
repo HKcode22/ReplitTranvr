@@ -194,7 +194,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   })).rejects.toThrow("INDEPENDENT_PERMIT");
   const now=Date.now();
   await expect(persistP5V0079SingleBoundFlightPre(writer,{
-    ...permit,selectedTNativeUtc:iso(now-24*3600_000-5000)
+    ...permit,selectedTNativeUtc:iso(now-15*60_000)
   })).rejects.toThrow("MISSED_OWN_FLIGHT_PRE_CUTOFF_NO_BACKFILL");
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
