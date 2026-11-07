@@ -1,0 +1,97 @@
+name: Phase5 Stage28 dedicated PG16 SET-role sessions (disposable only; no provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts'
+      - 'tests/phase5_stage28_dedicated_role_session_real_pg16_v39.test.ts'
+      - '.github/workflows/phase5-stage28-dedicated-pg16-role-session.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts'
+      - 'tests/phase5_stage28_dedicated_role_session_real_pg16_v39.test.ts'
+      - '.github/workflows/phase5-stage28-dedicated-pg16-role-session.yml'
+permissions:
+  contents: read
+jobs:
+  stage28-dedicated-isolated-group-sessions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/runtime-not-used?sslmode=disable'
+      P5_STAGE26_FOUR_NOLOGIN_ROLES_ONCE: 'INSTALL_FOUR_NOLOGIN_P5_ROLES_WITH_NO_RUNTIME_MEMBERS'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_STAGE28_DISPOSABLE_PG16_TEST: '1'
+      P5_STAGE28_PRE_URL: 'postgresql://phase5_stage28_pre_ci:ci-only@localhost:5432/neondb?sslmode=disable'
+      P5_STAGE28_SOURCE_URL: 'postgresql://phase5_stage28_source_ci:ci-only@localhost:5432/neondb?sslmode=disable'
+      P5_STAGE28_OTHER_URL: 'postgresql://phase5_stage28_other_ci:ci-only@localhost:5432/neondb?sslmode=disable'
+      P5_STAGE28_INDIRECT_URL: 'postgresql://phase5_stage28_indirect_ci:ci-only@localhost:5432/neondb?sslmode=disable'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: TypeScript check for Stage28 adapter
+        run: npm run check
+      - name: Create disposable B0062 plus reviewed V0079/80/81 and Stage27 role groups
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql >/tmp/phase5-v79.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql >/tmp/phase5-v80.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql >/tmp/phase5-v81.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "REVOKE EXECUTE ON FUNCTION clean.phase5_t24_witness_before_insert_v39(), clean.phase5_t24_witness_immutable_v39() FROM PUBLIC" >/dev/null
+          node scripts/v39_phase5_stage26_four_nologin_roles_owner_once.mjs >/tmp/stage28-four-groups.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/stage28-four-groups.json","utf8"));
+            if(p.rolesCreated!==4||p.phase6PaidGo!==false||p.providerCalls!==0)
+              throw Error("STAGE28_FOUR_GROUPS_NOT_INERT");
+          '
+      - name: Create CI-only distinct LOGIN identities; one SET-only group membership each
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_stage28_pre_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_source_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_other_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_indirect_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_stage28_bridge_ci NOLOGIN NOINHERIT NOSUPERUSER NOCREATEROLE;
+          CREATE ROLE phase5_runtime_app_ci LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          GRANT phase5_fids_pre_writer_prod_20261107 TO phase5_stage28_pre_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_source_prod_20261107 TO phase5_stage28_source_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_source_prod_20261107 TO phase5_stage28_indirect_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_pre_writer_prod_20261107 TO phase5_stage28_bridge_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_stage28_bridge_ci TO phase5_stage28_indirect_ci WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          SQL
+      - name: Prove dedicated identity and SQL ACL enforced on real PG16
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage28_dedicated_role_session_real_pg16_v39.test.ts
+          echo 'STAGE28_DEDICATED_LOGIN_SET_ROLE=DISPOSABLE_PASS PRODUCTION_MEMBERSHIPS=0 PROVIDER_CALLS=0 PHASE5_FREEZE=HOLD'
