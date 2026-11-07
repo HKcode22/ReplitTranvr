@@ -256,8 +256,12 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     });
   }
   const keys = Object.keys(input.otherCategoryReservedPerDay).sort();
-  if (keys.length < physicalChargeSpend.size || keys.length > 40)
+  if (keys.length > 40)
     refuse("OTHER_RESERVE_EXTRA_OR_MISSING_DAY");
+  for (const k of physicalChargeSpend.keys()) {
+    if (!Object.prototype.hasOwnProperty.call(input.otherCategoryReservedPerDay, k))
+      refuse("UNRESERVED_OTHER_DAILY_SPEND");
+  }
   // Require an explicit signed reservation on every physical charge day.
   // Additional non-FIDS-only dates are permitted but capped to the adjacent
   // 3-day collection perimeter, not invented far-future budget buckets.
@@ -279,10 +283,6 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       otherCategoryReservedUnits: other,
       combinedReservedUnits: combined,
     });
-  }
-  for (const k of physicalChargeSpend.keys()) {
-    if (!Object.prototype.hasOwnProperty.call(input.otherCategoryReservedPerDay, k))
-      refuse("UNRESERVED_OTHER_DAILY_SPEND");
   }
   if (dailyOtherTotal > input.otherCategoryReservedUnits)
     refuse("OTHER_CATEGORIES_UNDERRESERVED");
