@@ -1,0 +1,43 @@
+name: Phase5 Frozen 31-Day FIDS Grid Arithmetic (NO Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5FidsFreezeGridAdmission_v39.ts'
+      - 'tests/phase5_fids_freeze_grid_admission_v39.test.ts'
+      - 'scripts/v39_phase5_fids_freeze_grid_check_v39.ts'
+      - '.github/workflows/phase5-fids-freeze-grid-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5FidsFreezeGridAdmission_v39.ts'
+      - 'tests/phase5_fids_freeze_grid_admission_v39.test.ts'
+      - 'scripts/v39_phase5_fids_freeze_grid_check_v39.ts'
+      - '.github/workflows/phase5-fids-freeze-grid-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-fids-freeze-grid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify synthetic calendar grid only
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_fids_freeze_grid_admission_v39.test.ts
+          echo 'SCHEDULE_ARITHMETIC_ONLY PROVIDER_CALLS=0 DB_WRITES=0 PAID_DISPATCH=0'
