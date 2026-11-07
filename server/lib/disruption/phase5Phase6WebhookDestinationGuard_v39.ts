@@ -23,7 +23,8 @@ export function requireP5P6WebhookDestinationV39(
     throw new Error("REFUSED_PHASE6_WEBHOOK_CALLBACK_UNVERIFIED");
   }
   if (secret.length < 16 || secret.length > 512 ||
-      secret.trim() !== secret || /[\u0000-\u001f\u007f]/.test(secret))
+      secret.trim() !== secret ||
+      [...secret].some(ch => { const cp = ch.codePointAt(0) ?? 0; return cp < 32 || cp === 127; }))
     fail();
 
   const configured = env.WEBHOOK_BASE_URL?.trim();
