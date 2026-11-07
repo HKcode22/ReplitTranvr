@@ -2,6 +2,12 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Learn Phase 5 file-by-file while we complete it
+
+**[Phase 5 Engineering Field Guide — 14 technical lessons, real code paths, annotated logic and exercises](PHASE5_ENGINEERING_FIELD_GUIDE_FILE_BY_FILE_20261107.md)** explains the purpose of Phase5, all primary implementation files, pure solver functions, PostgreSQL transactions, original FIDS SHA/source custody, GitHub FIDS owner, actual as-of PRE and independent witness, the seven REST categories, Alert billing and missingness. Read in the guide's prescribed file order with source open in your IDE. This is technical study material AND an engineering handoff; it distinguishes staged/offline code from real live flight evidence.
+
+**Plan change policy:** we wrote f.8; it **can and should be improved prospectively** for scientific, mathematical or observed reasons. Version every correction and its effective date/tests (e.g. [Amendment C](../plans/V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md)) rather than treating the plan as untouchable. Only the old catalog-locked historical implementation log must remain an accurate record of past observations; append dated checkpoints for new work. Original Gate5 evidence cannot be retrospectively relabeled.
+
 ## Latest operational checkpoint — November 7, 2026
 
 **Start here after a lost chat:** [Live Replit production database findings, AeroDataBox legacy account evidence, Stages1–16 code map and technical study guide](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md). Observed: production PostgreSQL native COMMIT tracking **OFF**; V0079 source ledger tables **not installed or not visible**; core snapshot/FIDS/population tables exist; **0 provider/DB writes** by audit. Do not treat green PG16 CI or source query preparation as live production. **Owner's grandfathered Team Ultra account, Sept10 60k entitlement, Nov7 59,968 remaining and 1,830 Alert credits are already documented: do not repeatedly ask.** Phase5 final FREEZE HOLD / Phase6 NO-GO.
