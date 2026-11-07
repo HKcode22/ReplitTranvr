@@ -11,10 +11,10 @@ describe("P25 Replit published callback release configuration",()=>{
  it("preserves callback-only deployment flags with a verified-source build",()=>{
   const section=deployment.match(/\[deployment\]\n([\s\S]*?)(?=\n\[|$)/)?.[1]??"";
   expect(section).toContain('deploymentTarget = "autoscale"');
-  // Reviewer-pinned NEXT2 build wrapper performs the same callback-only build
-  // only after verifying runtime content and preserving snapshot provenance.
-  expect(section).toContain('build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]');
-  const wrapper=readFileSync("scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
+  // Explicit Phase5 reviewed build still compiles callback-only binary only
+  // after exact source/config equivalence; Gate4 historical builder retained.
+  expect(section).toContain('build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]');
+  const wrapper=readFileSync("scripts/v39_phase5_reviewed_source_build_v39.sh","utf8");
   expect(wrapper).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(wrapper).toContain('git diff --quiet "$PIN" HEAD');
   expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "V39_GATE05_DURABLE_CUSTODY_REQUIRED=1", "node", "dist/index.mjs"]');
