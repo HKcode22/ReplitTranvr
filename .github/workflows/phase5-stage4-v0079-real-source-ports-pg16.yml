@@ -5,6 +5,8 @@ on:
     paths:
       - 'server/lib/disruption/fidsCensus_v3.ts'
       - 'server/lib/disruption/phase5V0079ScopedDbPorts_v39.ts'
+      - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
+      - 'tests/phase5_scoped_fids_source_bridge_v39.test.ts'
       - 'tests/phase5_stage4_scoped_v0079_real_pg_v39.test.ts'
       - '.github/workflows/phase5-stage4-v0079-real-source-ports-pg16.yml'
   push:
@@ -62,5 +64,5 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
-          npx vitest run tests/phase5_stage4_scoped_v0079_real_pg_v39.test.ts
+          npx vitest run tests/phase5_scoped_fids_source_bridge_v39.test.ts tests/phase5_stage4_scoped_v0079_real_pg_v39.test.ts
           echo 'FAKE_HTTP_ONLY=1 REAL_PG_DISPOSABLE=1 LIVE_PROVIDER_CALLS=0 LIVE_DB_WRITES=0'
