@@ -9,7 +9,7 @@
  */
 import { createHash } from "node:crypto";
 
-export const P5_FIDS_GRID_SCHEMA = "v39.phase5.fids-freeze-grid.v1" as const;
+export const P5_FIDS_GRID_SCHEMA = "v39.phase5.fids-freeze-grid.utc-charge-day.v2" as const;
 export type P5FidsHorizon = "T-24h" | "T-6h" | "T-90m";
 export type P5Slot = "HUB" | "MID_A" | "MID_B" | "REGIONAL";
 const SLOTS: P5Slot[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
@@ -22,7 +22,10 @@ const UTC_INSTANT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 
 export interface P5FidsAcquisition {
   runDayIndex: number;
+  /** Service date for study run-day attribution, NOT provider billing date. */
   budgetDayUtc: string;
+  /** Actual planned physical REST GET charge date in UTC; may be Day0. */
+  physicalChargeDayUtc: string;
   slot: P5Slot;
   icao: string;
   horizon: P5FidsHorizon;
@@ -61,30 +64,42 @@ export interface P5FidsGridInput {
   protectedApiFloorUnits: number;
   /** Daily includes FIDS + all other categories, not a FIDS-only limit. */
   dailyProjectApiCeilingUnits: number;
-  /** Exact frozen daily other-category allocations. Missing days are not zero. */
+  /** Actual UTC paid charge dates, INCLUDING Day0 for T24. Never service dates.
+   * Include other categories on days with no FIDS GET too.
+   */
   otherCategoryReservedPerDay: Record<string, number>;
   acquisitions: P5FidsAcquisition[];
 }
 
 export interface P5FidsDayArithmetic {
-  runDayIndex: number;
+  /** Actual UTC GET billing date, NOT the flight service day. */
   budgetDayUtc: string;
   fidsPlannedRequests: number;
   fidsWorstCaseApiUnits: number;
   otherCategoryReservedUnits: number;
   combinedReservedUnits: number;
 }
+export interface P5FidsServiceDayArithmetic {
+  runDayIndex: number;
+  serviceDayUtc: string;
+  fidsPlannedRequests: number;
+  fidsWorstCaseApiUnits: number;
+}
 
 export interface P5FidsGridAdmission {
   status: "SCHEDULE_BUDGET_ARITHMETIC_VERIFIED_NOT_PHASE6_AUTHORIZED";
   gridSha256: string;
   days: number;
+  /** May include Day0 before the first service date. */
+  chargeDays: number;
   distinctSlotHorizonGroups: number;
   plannedFidsRequests: number;
   worstCaseFidsApiUnits: number;
   worstCaseProjectReservedApiUnits: number;
   minAdvanceMarginSeconds: number;
+  /** Actual UTC billing-day units, not scientific service-day units. */
   byDay: P5FidsDayArithmetic[];
+  byServiceDay: P5FidsServiceDayArithmetic[];
   /** Always false: this result never proves external rights/deployment/cutoffs. */
   confirmsLiveSource: false;
   confirmsSourceUseRights: false;
@@ -137,7 +152,8 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
   if (input.acquisitions.length < 31 * 4 * 3 || input.acquisitions.length > 100_000)
     refuse("INCOMPLETE_OR_UNBOUNDED_GRID");
 
-  const daySpend = new Map<number, { date: string; requests: number; fids: number }>();
+  const serviceDaySpend = new Map<number, { date: string; requests: number; fids: number }>();
+  const physicalChargeSpend = new Map<string, { requests: number; fids: number }>();
   const seenQueryKeys = new Set<string>();
   const groups = new Map<string, { icao: string; earliestCutoff: number }>();
   const slotAirport = new Map<string, string>();
@@ -164,6 +180,10 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       refuse("SERVICE_WINDOW");
     const cutoff = utcMs(r.earliestPlannedCutoffUtc, "EARLIEST_CUTOFF");
     const request = utcMs(r.scheduledRequestUtc, "REQUEST_UTC");
+    const chargeDate = new Date(request).toISOString().slice(0, 10);
+    if (dayMs(r.physicalChargeDayUtc, "PHYSICAL_CHARGE_DAY") !==
+        dayMs(chargeDate, "REQUEST_CHARGE_DAY"))
+      refuse("PHYSICAL_GET_UTC_DAY_MISMATCH");
     const proposedSelection = utcMs(r.plannedAirportSelectionUtc, "AIRPORT_PRESELECTION_UTC");
     if (proposedSelection > request)
       refuse("AIRPORT_SELECTED_AFTER_SOURCE_ACQUISITION");
@@ -192,10 +212,15 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     });
     const charge = r.apiUnitsPerAttempt * r.maxAttempts;
     if (!Number.isSafeInteger(charge)) refuse("ATTEMPT_BUDGET_OVERFLOW");
-    const row = daySpend.get(r.runDayIndex) ?? { date: r.budgetDayUtc, requests: 0, fids: 0 };
-    row.requests = safeAdd(row.requests, 1, "QUERY_COUNT");
-    row.fids = safeAdd(row.fids, charge, "FIDS_COST");
-    daySpend.set(r.runDayIndex, row);
+    const service = serviceDaySpend.get(r.runDayIndex) ??
+      { date: r.budgetDayUtc, requests: 0, fids: 0 };
+    service.requests = safeAdd(service.requests, 1, "QUERY_COUNT");
+    service.fids = safeAdd(service.fids, charge, "SERVICE_FIDS_ATTRIBUTION");
+    serviceDaySpend.set(r.runDayIndex, service);
+    const daily = physicalChargeSpend.get(chargeDate) ?? { requests: 0, fids: 0 };
+    daily.requests = safeAdd(daily.requests, 1, "UTC_CHARGE_QUERY_COUNT");
+    daily.fids = safeAdd(daily.fids, charge, "UTC_CHARGE_FIDS_COST");
+    physicalChargeSpend.set(chargeDate, daily);
   }
 
   const expected = 31 * SLOTS.length * HORIZONS.length;
@@ -204,12 +229,11 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
   let worstFids = 0;
   let dailyOtherTotal = 0;
   const byDay: P5FidsDayArithmetic[] = [];
-  const expectedDates = new Set<string>();
+  const byServiceDay: P5FidsServiceDayArithmetic[] = [];
 
   for (let d = 1; d <= 31; d++) {
     const date = new Date(start + (d - 1) * DAY_MS).toISOString().slice(0, 10);
-    expectedDates.add(date);
-    const row = daySpend.get(d);
+    const row = serviceDaySpend.get(d);
     if (!row || row.date !== date) refuse("MISSING_FROZEN_DAY");
     for (const slot of SLOTS) {
       const a = groups.get(d + "|" + slot + "|T-24h")?.earliestCutoff;
@@ -224,24 +248,42 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       // sampling decision must be committed by a separate early owner.
       // Current Phase6 startBatch() draws at window start, which is too late.
     }
-    if (!Object.prototype.hasOwnProperty.call(input.otherCategoryReservedPerDay, date))
-      refuse("UNRESERVED_OTHER_DAILY_SPEND");
-    const other = input.otherCategoryReservedPerDay[date];
-    positiveInt(other, "OTHER_DAILY_COST");
-    const combined = safeAdd(row.fids, other, "DAILY_COST");
-    if (combined > input.dailyProjectApiCeilingUnits)
-      refuse("DAILY_BUDGET_EXCEEDED");
-    worstFids = safeAdd(worstFids, row.fids, "MONTH_FIDS_COST");
-    dailyOtherTotal = safeAdd(dailyOtherTotal, other, "MONTH_OTHER_COST");
-    byDay.push({
-      runDayIndex: d, budgetDayUtc: date,
+    // Service-day counts are ANALYTICAL ATTRIBUTION ONLY. The physical
+    // REST charge may occur yesterday, tomorrow or even outside 31 days.
+    byServiceDay.push({
+      runDayIndex: d, serviceDayUtc: date,
       fidsPlannedRequests: row.requests, fidsWorstCaseApiUnits: row.fids,
-      otherCategoryReservedUnits: other, combinedReservedUnits: combined,
     });
   }
-  const keys = Object.keys(input.otherCategoryReservedPerDay);
-  if (keys.length !== 31 || keys.some(k => !expectedDates.has(k)))
+  const keys = Object.keys(input.otherCategoryReservedPerDay).sort();
+  if (keys.length < physicalChargeSpend.size || keys.length > 40)
     refuse("OTHER_RESERVE_EXTRA_OR_MISSING_DAY");
+  // Require an explicit signed reservation on every physical charge day.
+  // Additional non-FIDS-only dates are permitted but capped to the adjacent
+  // 3-day collection perimeter, not invented far-future budget buckets.
+  for (const k of keys) {
+    const n = dayMs(k, "OTHER_CHARGE_DAY");
+    if (n < start - 3 * DAY_MS || n > start + 33 * DAY_MS)
+      refuse("OTHER_RESERVE_DAY_OUTSIDE_RELEASE_WINDOW");
+    const other = input.otherCategoryReservedPerDay[k];
+    positiveInt(other, "OTHER_DAILY_COST");
+    const physical = physicalChargeSpend.get(k) ?? {requests:0,fids:0};
+    const combined = safeAdd(physical.fids, other, "UTC_DAILY_COST");
+    if (combined > input.dailyProjectApiCeilingUnits)
+      refuse("DAILY_BUDGET_EXCEEDED");
+    worstFids = safeAdd(worstFids, physical.fids, "MONTH_FIDS_COST");
+    dailyOtherTotal = safeAdd(dailyOtherTotal, other, "MONTH_OTHER_COST");
+    byDay.push({
+      budgetDayUtc: k, fidsPlannedRequests: physical.requests,
+      fidsWorstCaseApiUnits: physical.fids,
+      otherCategoryReservedUnits: other,
+      combinedReservedUnits: combined,
+    });
+  }
+  for (const k of physicalChargeSpend.keys()) {
+    if (!Object.prototype.hasOwnProperty.call(input.otherCategoryReservedPerDay, k))
+      refuse("UNRESERVED_OTHER_DAILY_SPEND");
+  }
   if (dailyOtherTotal > input.otherCategoryReservedUnits)
     refuse("OTHER_CATEGORIES_UNDERRESERVED");
   const total = safeAdd(
@@ -268,17 +310,18 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
       otherCategoryReservedUnits: input.otherCategoryReservedUnits,
       protectedApiFloorUnits: input.protectedApiFloorUnits,
       dailyProjectApiCeilingUnits: input.dailyProjectApiCeilingUnits,
-      byDay, acquisitions: normalized,
+      byDay, byServiceDay, acquisitions: normalized,
     })).digest("hex");
 
   return {
     status: "SCHEDULE_BUDGET_ARITHMETIC_VERIFIED_NOT_PHASE6_AUTHORIZED",
-    gridSha256, days: 31, distinctSlotHorizonGroups: groups.size,
+    gridSha256, days: 31, chargeDays: byDay.length,
+    distinctSlotHorizonGroups: groups.size,
     plannedFidsRequests: input.acquisitions.length,
     worstCaseFidsApiUnits: worstFids,
     worstCaseProjectReservedApiUnits: total,
     minAdvanceMarginSeconds: minMargin,
-    byDay,
+    byDay, byServiceDay,
     confirmsLiveSource: false,
     confirmsSourceUseRights: false,
     confirmsFlightLevelPre: false,
