@@ -23,6 +23,21 @@ import type {
 
 export const P5_DYNAMIC_DAY_GRID_SCHEMA =
   "v39.phase5.early-draw-to-12-source-candidates.v1" as const;
+export const P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA =
+  "v39.phase5.early-draw-to-multirefresh-source-candidates.v2" as const;
+const MAX_QUERIES_PER_GROUP=32;
+const MAX_QUERIES_PER_DAY=12*MAX_QUERIES_PER_GROUP;
+const T_OFFSET:Record<P5FidsHorizon,number>={
+ "T-24h":86_400_000,"T-6h":21_600_000,"T-90m":5_400_000
+};
+/** Pure timing assumptions; the SHA is a cross-reference, not legal clearance. */
+export interface P5DayReviewedRefreshTiming {
+ reviewed31DayCoverageGridSha256:string;
+ maxPopulationStalenessSeconds:number;
+ maxSchedulerSlipSeconds:number;
+ minimumPreCommitMarginSeconds:number;
+ verifiedProviderMaxFidsWindowMinutes:number;
+}
 const HASH=/^[a-f0-9]{64}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS:P5Slot[]=["HUB","MID_A","MID_B","REGIONAL"];
@@ -33,7 +48,9 @@ const MAX_LATENCY=3_600;
 type WithoutUnknownIcao=Omit<P5FidsAcquisition,"icao"|"plannedAirportSelectionUtc">;
 
 export interface P5DynamicDayGridInput {
-  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA;
+  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA|typeof P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+  /** Required only for multi-refresh; must come from independently reviewed grid. */
+  reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
   /** Same frozen protocol scope as the eventual V0079 signed query set. */
   reviewedCalendarSha256:string;
   reviewedConfigSha256:string;
@@ -48,16 +65,19 @@ export interface P5DynamicDayGridInput {
   templates:WithoutUnknownIcao[];
 }
 export interface P5DynamicDayGridResult {
-  schema:"v39.phase5.early-draw-to-12-source-candidates-result.v1";
-  status:"DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED";
+  schema:"v39.phase5.early-draw-to-12-source-candidates-result.v1"|
+    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
+  status:"DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED"|
+    "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED";
   runDayIndex:number;
   selectedAtUtc:string;
   committedDrawSha256:string;
   dynamicTemplateSha256:string;
   sourceCandidateDigestSha256:string;
-  acquisitionCount:12;
-  plannedPhysicalGetCount:12;
-  candidateFidsApiUnits:24;
+  acquisitionCount:number;
+  plannedPhysicalGetCount:number;
+  candidateFidsApiUnits:number;
+  reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
   actualChargeDayUtcCounts:{day:string;physicalRequests:number;candidateApiUnits:number}[];
   acquisitions:P5FidsAcquisition[];
   actualGithubRunPrearmVerified:false;
@@ -84,7 +104,26 @@ function digest(o:unknown):string{
  * four rows actually came from the frozen committed DB draw, not a fixture.
  */
 export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P5DynamicDayGridResult {
- if(!input||input.schema!==P5_DYNAMIC_DAY_GRID_SCHEMA)hold("SCHEMA");
+ if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA]
+   .includes(input.schema))hold("SCHEMA");
+ const multi=input.schema===P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+ const timing=input.reviewedRefreshTiming;
+ if(multi){
+   if(!timing||!HASH.test(timing.reviewed31DayCoverageGridSha256)||
+     !Number.isSafeInteger(timing.maxPopulationStalenessSeconds)||
+     timing.maxPopulationStalenessSeconds<1||
+     timing.maxPopulationStalenessSeconds>86_400||
+     !Number.isSafeInteger(timing.maxSchedulerSlipSeconds)||
+     timing.maxSchedulerSlipSeconds<0||
+     timing.maxSchedulerSlipSeconds>3600||
+     !Number.isSafeInteger(timing.minimumPreCommitMarginSeconds)||
+     timing.minimumPreCommitMarginSeconds<120||
+     timing.minimumPreCommitMarginSeconds>900||
+     !Number.isSafeInteger(timing.verifiedProviderMaxFidsWindowMinutes)||
+     timing.verifiedProviderMaxFidsWindowMinutes<240||
+     timing.verifiedProviderMaxFidsWindowMinutes>1440)
+     hold("UNVERIFIED_MULTI_REFRESH_TIMING_CONTRACT");
+ }else if(timing)hold("LEGACY_GRID_CANNOT_SMUGGLE_MULTI_REFRESH_CONTRACT");
  const day=input.day;
  if(!day||!Number.isInteger(day.runDayIndex)||
    day.runDayIndex<1||day.runDayIndex>31)hold("RUN_DAY");
@@ -105,13 +144,16 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  const advance=start-selected;
  if(advance<=MIN_EARLY||advance>MAX_EARLY)
    hold("REAL_EARLY_OWNER_WINDOW");
- if(!Array.isArray(input.templates)||input.templates.length!==12)
+ if(!Array.isArray(input.templates)||
+   (multi ? input.templates.length<=12||input.templates.length>MAX_QUERIES_PER_DAY :
+     input.templates.length!==12))
    hold("MISSING_OR_EXTRA_SLOT_HORIZON_TEMPLATE");
  const seen=new Set<string>();
  const keys=new Set<string>();
  const requests:P5FidsAcquisition[]=[];
  const byCharge=new Map<string,number>();
  const earliestBySlot=new Map<P5Slot,Record<P5FidsHorizon,number>>();
+ const byGroup=new Map<string,{request:number;persistentSeconds:number}[]>();
  for(const candidate of input.templates){
   if(!candidate || Object.hasOwn(candidate,"icao") ||
       Object.hasOwn(candidate,"plannedAirportSelectionUtc"))
@@ -126,8 +168,11 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   const one=draw.selections.find(v=>v.slotId===slot);
   if(!one)hold("MISSING_COMMITTED_SLOT");
   const group=slot+"|"+horizon;
-  if(seen.has(group))hold("DUPLICATE_SLOT_HORIZON");
+  if(!multi&&seen.has(group))hold("DUPLICATE_SLOT_HORIZON");
   seen.add(group);
+  const groupRequests=byGroup.get(group)??[];
+  if(groupRequests.length>=MAX_QUERIES_PER_GROUP)
+    hold("TOO_MANY_REFRESHES_IN_GROUP");
   if(typeof candidate.queryKey!=="string"||
      !/^[a-zA-Z0-9_.:-]{8,150}$/.test(candidate.queryKey)||
      keys.has(candidate.queryKey))
@@ -141,6 +186,11 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     hold("UNFROZEN_SERVICE_WINDOW");
   if(selected>=request||request>=cutoff)
     hold("EARLY_DRAW_OR_QUERY_AFTER_CUTOFF");
+  // A source refresh is always tied to a real candidate flight-cutoff
+  // instant inside its horizon's complete four-hour service population.
+  if(multi && (cutoff<start-T_OFFSET[horizon]||
+    cutoff>=end-T_OFFSET[horizon]))
+    hold("REFRESH_CUTOFF_OUTSIDE_FROZEN_SERVICE_INTERVAL");
   if(!Number.isSafeInteger(candidate.maxResponseAndPersistSeconds)||
      candidate.maxResponseAndPersistSeconds<1||
      candidate.maxResponseAndPersistSeconds>MAX_LATENCY||
@@ -154,37 +204,77 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   const row=earliestBySlot.get(slot)??{
    "T-24h":Number.NaN,"T-6h":Number.NaN,"T-90m":Number.NaN
   };
-  row[horizon]=cutoff;
+  row[horizon]=Number.isFinite(row[horizon])?
+    Math.min(row[horizon],cutoff):cutoff;
   earliestBySlot.set(slot,row);
   byCharge.set(chargeDate,(byCharge.get(chargeDate)??0)+1);
+  groupRequests.push({
+    request,persistentSeconds:candidate.maxResponseAndPersistSeconds
+  });
+  byGroup.set(group,groupRequests);
   requests.push({...candidate,icao:one.icao,
     plannedAirportSelectionUtc:draw.selectedAtUtc});
  }
- if(seen.size!==12||keys.size!==12)hold("INCOMPLETE_SIGNED_QUERY_SLOTS");
+ if(seen.size!==12||keys.size!==input.templates.length)
+   hold("INCOMPLETE_SIGNED_QUERY_SLOTS");
+ if(multi&&timing){
+   const stalenessMs=timing.maxPopulationStalenessSeconds*1000;
+   const latencyMs=timing.maxSchedulerSlipSeconds*1000+
+     timing.minimumPreCommitMarginSeconds*1000;
+   for(const slot of SLOTS)for(const horizon of HORIZONS){
+     const one=byGroup.get(slot+"|"+horizon);
+     if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON");
+     let covered=start-T_OFFSET[horizon];
+     const endOfHorizon=end-T_OFFSET[horizon];
+     for(const x of one.map(x=>({
+       begins:x.request+latencyMs+x.persistentSeconds*1000,
+       ends:x.request+stalenessMs
+     })).sort((a,b)=>a.begins-b.begins)){
+       if(x.ends<=covered)continue;
+       if(x.begins>covered)
+         hold("GAP_IN_ACTUAL_DYNAMIC_DAY_FLIGHT_CUTOFF_COVERAGE");
+       covered=Math.max(covered,Math.min(endOfHorizon,x.ends));
+       if(covered>=endOfHorizon)break;
+     }
+     if(covered<endOfHorizon)
+       hold("GAP_IN_ACTUAL_DYNAMIC_DAY_FLIGHT_CUTOFF_COVERAGE");
+   }
+ }
  for(const slot of SLOTS){
   const v=earliestBySlot.get(slot);
   if(!v||!(v["T-24h"]<v["T-6h"]&&v["T-6h"]<v["T-90m"]))
     hold("INCONSISTENT_T24_T6_T90_HORIZONS");
  }
  requests.sort((a,b)=>SLOTS.indexOf(a.slot)-SLOTS.indexOf(b.slot)||
-   HORIZONS.indexOf(a.horizon)-HORIZONS.indexOf(b.horizon));
+   HORIZONS.indexOf(a.horizon)-HORIZONS.indexOf(b.horizon)||
+   a.scheduledRequestUtc.localeCompare(b.scheduledRequestUtc)||
+   a.queryKey.localeCompare(b.queryKey));
  const charges=[...byCharge.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
   .map(([day,physicalRequests])=>({day,physicalRequests,candidateApiUnits:physicalRequests*2}));
  return {
-  schema:"v39.phase5.early-draw-to-12-source-candidates-result.v1",
-  status:"DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED",
+  schema:multi?
+   "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
+   "v39.phase5.early-draw-to-12-source-candidates-result.v1",
+  status:multi?
+   "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
+   "DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED",
   runDayIndex:day.runDayIndex,selectedAtUtc:draw.selectedAtUtc,
   committedDrawSha256:draw.stateHash,
   dynamicTemplateSha256:digest({
     schema:input.schema,day:day.runDayIndex,calendar:day.calendarHash,
     config:day.configHash,frame:day.frameHash,
     contract:input.providerContractSha256,
+    reviewedRefreshTiming:timing??null,
     templates:requests.map(r=>({...r,icao:undefined,plannedAirportSelectionUtc:undefined}))
   }),
   sourceCandidateDigestSha256:digest({
-    day:day.runDayIndex,earlyDraw:draw.stateHash,requests
+    day:day.runDayIndex,earlyDraw:draw.stateHash,
+    reviewedRefreshTiming:timing??null,requests
   }),
-  acquisitionCount:12,plannedPhysicalGetCount:12,candidateFidsApiUnits:24,
+  acquisitionCount:requests.length,
+  plannedPhysicalGetCount:requests.length,
+  candidateFidsApiUnits:requests.length*2,
+  ...(timing?{reviewedRefreshTiming:timing}:{}),
   actualChargeDayUtcCounts:charges,acquisitions:requests,
   actualGithubRunPrearmVerified:false,actualSourceOriginalCommitted:false,
   actualFlightLevelPreCertified:false,authorizedSourceRights:false,
