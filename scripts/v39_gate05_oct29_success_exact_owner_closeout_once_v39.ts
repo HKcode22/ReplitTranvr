@@ -119,7 +119,7 @@ async function main(){
     process.env.GITHUB_RUN_ATTEMPT==="1"&&
     process.env.GATE05_OCT29_EXACT_CONFIRMATION===CONFIRM,
     "NOT_ONE_USE_PROTECTED_MAIN_DISPATCH");
-  const checkout=gh(["rev-parse","HEAD"]).trim();
+  const checkout=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim();
   required(/^[a-f0-9]{40}$/.test(checkout)&&
     checkout===process.env.GITHUB_SHA,"CHECKOUT_HEAD_NOT_FROZEN");
   required(Boolean(process.env.DATABASE_URL&&process.env.AERODATABOX_API_KEY),
