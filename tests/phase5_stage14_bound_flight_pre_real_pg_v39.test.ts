@@ -10,9 +10,17 @@ import {createHash} from "node:crypto";
 import {persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
+import {persistP5T24SeparateTransactionWitness,
+ type P5Stage17T24WitnessPermit}
+ from "../server/lib/disruption/phase5T24IndependentPostCommitWitness_v39";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const ROLE="phase5_fids_pre_writer_ciuser01";
+const WITNESS_ROLE="phase5_fids_t24_witness_ciuser01";
+const WITNESS_URL="postgresql://"+WITNESS_ROLE+
+ ":ci-only@localhost:5432/neondb?sslmode=disable";
+const STAGE17=process.env.V39_P5_STAGE17_REAL_PG16==="1";
+const witnessIt=STAGE17?it:it.skip;
 const RW_URL="postgresql://"+ROLE+":ci-only@localhost:5432/neondb?sslmode=disable";
 const active=process.env.V39_P5_STAGE14_REAL_PG16==="1"?describe:describe.skip;
 const h=(c:string)=>c.repeat(64);
@@ -23,7 +31,9 @@ const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI100"}]}));
 const bodyHash=createHash("sha256").update(payload).digest("hex");
 const iso=(n:number)=>new Date(n).toISOString();
 active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",()=>{
- let admin:Pool,writer:Pool,permit:P5Stage14SingleFlightPrePermit;
+ let admin:Pool,writer:Pool,witnessWriter:Pool;
+ let permit:P5Stage14SingleFlightPrePermit;
+ let witnessPermit:P5Stage17T24WitnessPermit;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.V39_P5_STAGE14_REAL_PG16!=="1"||
@@ -134,6 +144,20 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await admin.query("GRANT INSERT ON clean.flight_snapshots TO "+ROLE);
   await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+ROLE);
   writer=new Pool({connectionString:RW_URL,max:2});
+  if(STAGE17){
+   await admin.query("CREATE ROLE "+WITNESS_ROLE+
+     " LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE");
+   await admin.query("GRANT USAGE ON SCHEMA clean TO "+WITNESS_ROLE);
+   await admin.query("GRANT SELECT ON clean.flight_snapshots,"+
+     "clean.phase5_fids_allowed_query_v39,"+
+     "clean.phase5_fids_physical_attempt_v39,"+
+     "clean.phase5_fids_original_binding_v39,"+
+     "clean.fids_query_response,clean.flight_population,"+
+     "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
+   await admin.query("GRANT INSERT ON "+
+     "clean.phase5_t24_postcommit_witness_v39 TO "+WITNESS_ROLE);
+   witnessWriter=new Pool({connectionString:WITNESS_URL,max:2});
+  }
   permit={
     manifestSha256:manifest,queryDigestSha256:query,
     expectedSourcePopulationQueryId:qid,expectedSourceResponseSha256:response,
@@ -158,7 +182,11 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     externalNativeTPhysicalLegAndSourceUseReviewed:true
   };
  });
- afterAll(async()=>{if(writer)await writer.end();if(admin)await admin.end();});
+ afterAll(async()=>{
+  if(witnessWriter)await witnessWriter.end();
+  if(writer)await writer.end();
+  if(admin)await admin.end();
+ });
  it("commits one genuine synthetic source-bound PRE before its own T24 cutoff",async()=>{
   const result=await persistP5V0079SingleBoundFlightPre(writer,permit);
   expect(result.preSnapshotsInserted).toBe(1);
@@ -183,6 +211,83 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     member_linked:true,timely:true
   });
  });
+
+ witnessIt("commits a second independent witness transaction before cutoff with native commit tracking OFF",async()=>{
+  const snap=(await admin.query(
+   "SELECT id::text AS id FROM clean.flight_snapshots"+
+   " WHERE flight_instance_id='leg:ci:100' AND horizon='T-24h'"
+  )).rows;
+  expect(snap).toHaveLength(1);
+  witnessPermit={
+   expectedSnapshotId:snap[0].id,
+   flightInstanceId:permit.flightInstanceId,
+   sourcePopulationQueryId:qid,
+   expectedSourceResponseSha256:response,
+   expectedSourceQueryDigestSha256:query,
+   expectedFrameSha256:permit.reviewedFrameSha256,
+   expectedConfigSha256:permit.reviewedConfigSha256,
+   expectedSelectedTVersion:permit.selectedTConfig.milestone+":"+
+     permit.selectedTConfig.version+":"+permit.selectedTConfig.artifactHash,
+   selectedTNativeUtc:permit.selectedTNativeUtc,
+   expectedT24CutoffUtc:iso(
+     Date.parse(permit.selectedTNativeUtc)-24*3600_000),
+   expectedWitnessOnlyRole:WITNESS_ROLE
+  };
+  const tracking=(await admin.query(
+   "SELECT current_setting('track_commit_timestamp') AS tracking")).rows[0];
+  expect(tracking.tracking).toBe("off");
+  const out=await persistP5T24SeparateTransactionWitness(
+   witnessWriter,witnessPermit);
+  expect(out.originalT24SnapshotVisibleInSeparateTransaction).toBe(true);
+  expect(out.witnessCommittedAndReadBackBeforeOwnCutoff).toBe(true);
+  expect(out.nativeCommitTimestampTrackingRequired).toBe(false);
+  expect(out.paidPhase6Authorized).toBe(false);
+  expect(out.flightSourceAndNativeTIndependentlyCertifiedByThisModule).toBe(false);
+  expect(Date.parse(out.postPreCommitDbObservedAtUtc)).toBeLessThan(
+   Date.parse(out.postWitnessCommitReadbackAtUtc)+5);
+  expect(Date.parse(out.postWitnessCommitReadbackAtUtc)).toBeLessThan(
+   Date.parse(out.frozenT24CutoffUtc));
+  const saved=(await admin.query(
+   "SELECT w.flight_instance_id,w.population_query_id,"+
+   "w.source_query_digest,w.post_pre_commit_db_observed_at_utc,"+
+   "w.t24_cutoff_utc FROM clean.phase5_t24_postcommit_witness_v39 w"
+  )).rows;
+  expect(saved).toHaveLength(1);
+  expect(saved[0].source_query_digest).toBe(query);
+  expect(saved[0].population_query_id).toBe(qid);
+ });
+ witnessIt("refuses replay or wrong database role and cannot rewrite witness",async()=>{
+  await expect(persistP5T24SeparateTransactionWitness(
+   witnessWriter,witnessPermit))
+   .rejects.toThrow("EXISTING_IMMUTABLE_T24_WITNESS_NO_RETRY");
+  await expect(persistP5T24SeparateTransactionWitness(
+   admin,witnessPermit))
+   .rejects.toThrow("NOT_STRICTLY_INDEPENDENT_WITNESS_ONLY_ROLE");
+  await expect(admin.query(
+   "UPDATE clean.phase5_t24_postcommit_witness_v39"+
+   " SET source_query_digest=source_query_digest"+
+   " WHERE snapshot_id=$1",
+   [witnessPermit.expectedSnapshotId]))
+   .rejects.toThrow("P5_T24_WITNESS_IMMUTABLE_NEVER_UPDATE_OR_DELETE");
+  const total=(await admin.query(
+   "SELECT count(*)::integer AS n"+
+   " FROM clean.phase5_t24_postcommit_witness_v39")).rows[0].n;
+  expect(total).toBe(1);
+ });
+ witnessIt("fails closed on changed T24 anchor and wrong source digest without a new witness",async()=>{
+  await expect(persistP5T24SeparateTransactionWitness(
+   witnessWriter,{...witnessPermit,selectedTNativeUtc:
+    iso(Date.parse(witnessPermit.selectedTNativeUtc)+60_000)}))
+   .rejects.toThrow("FROZEN_T24_ANCHOR_SHIFTED");
+  await expect(persistP5T24SeparateTransactionWitness(
+   witnessWriter,{...witnessPermit,
+    expectedSourceResponseSha256:h("0")}))
+   .rejects.toThrow("PRE_SNAPSHOT_PROVENANCE_OR_T_CHANGED");
+  expect((await admin.query(
+    "SELECT count(*)::integer n FROM clean.phase5_t24_postcommit_witness_v39"
+  )).rows[0].n).toBe(1);
+ });
+
  it("refuses to relabel or duplicate an existing PRE",async()=>{
   await expect(persistP5V0079SingleBoundFlightPre(writer,permit))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
