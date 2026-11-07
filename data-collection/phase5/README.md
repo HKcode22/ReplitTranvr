@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Latest operational checkpoint — November 7, 2026
+
+**Start here after a lost chat:** [Live Replit production database findings, AeroDataBox legacy account evidence, Stages1–16 code map and technical study guide](2026-11-07_LIVE_PRODUCTION_DB_AUDIT_AERODATABOX_ACCOUNT_AND_TECHNICAL_STUDY_CHECKPOINT.md). Observed: production PostgreSQL native COMMIT tracking **OFF**; V0079 source ledger tables **not installed or not visible**; core snapshot/FIDS/population tables exist; **0 provider/DB writes** by audit. Do not treat green PG16 CI or source query preparation as live production. **Owner's grandfathered Team Ultra account, Sept10 60k entitlement, Nov7 59,968 remaining and 1,830 Alert credits are already documented: do not repeatedly ask.** Phase5 final FREEZE HOLD / Phase6 NO-GO.
+
 ## Phase 5 source of truth
 - [Stage 10 authentic V0079 bound-source → per-flight as-of PRE candidate readback (offline)](2026-11-07_STAGE10_V0079_BOUND_FLIGHT_PRE_ASOF_READBACK_OFFLINE.md) — source-to-member/cutoff/retime/staleness test coverage only; **no live PRE writer or source-use/Phase6 release**.
 - [Dated November 7 Phase5 engineering handoff](2026-11-07_IMPLEMENTATION_HANDOFF_SEPARATE_FROM_CATALOG_LOCKED_LOG.md) — mutable status and exact-code checkpoints. The original [Implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md) remains source-catalog-locked research provenance.
