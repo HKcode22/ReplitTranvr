@@ -1,0 +1,63 @@
+name: Gate05 Oct29 exact-success STOP owner administrative closeout (FREE GET, ONE DB row)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Exact old WSSS owner only; no provider mutations or Phase5 paid GO
+        required: true
+        type: choice
+        options:
+          - CLOSE_ONLY_OCT29_WSSS_EXACT_INACTIVE_OWNER_NO_PROVIDER_WRITES
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: gate05-one-wsss-scientific-alert-stop
+  cancel-in-progress: false
+jobs:
+  exact-oct29-owner-closeout:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'CLOSE_ONLY_OCT29_WSSS_EXACT_INACTIVE_OWNER_NO_PROVIDER_WRITES' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: phase2g-paid
+    env:
+      GITHUB_ACTIONS: 'true'
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_REF: ${{ github.ref }}
+      GITHUB_SHA: ${{ github.sha }}
+      GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+      GATE05_OCT29_EXACT_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify historic STOP and two current provider reads then one exact owner CAS
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -n "${GH_TOKEN:-}"
+          node --import tsx scripts/v39_gate05_oct29_success_exact_owner_closeout_once_v39.ts
+      - name: Scientific and legal release boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### October29 exact-owner closeout'
+            echo 'Only original Oct29 03:45–04:45Z WSSS owner may transition ACTIVE to STOPPED.'
+            echo 'Preserve 28 immutable envelopes/151 original notification items.'
+            echo 'No provider CREATE/DELETE/refill/FIDS; only balance/LIST GET.'
+            echo 'Ambiguous COMMIT: independent read-only inspection before any retry.'
+            echo '**Original scientific Gate5, Phase5 FREEZE and Phase6 paid GO remain HOLD.**'
+          } >> "$GITHUB_STEP_SUMMARY"
