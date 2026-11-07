@@ -1,6 +1,6 @@
 # Phase 5 Stage 21 — Enforce registered f.8 calendar structure before any scientific FREEZE
 
-**Date:** 2026-11-07 UTC. **Status:** purely offline structural candidate acceptance, not the global calendar solver, actual 31-day schedule, paid source/Alert commissioning, or scientific Phase5 FREEZE. **Phase6 remains NO-GO.**
+**Date:** 2026-11-07 UTC. **Status:** purely offline structural candidate acceptance and bounded finite-candidate solver, not the complete globally generated/verified study calendar, paid source/Alert commissioning, or scientific Phase5 FREEZE. **Phase6 remains NO-GO.**
 
 ## Specific defect discovered against binding [Plan f.8 §8.7](../plans/V3.9_DataCollectPlan_f.8.md)
 
@@ -20,9 +20,20 @@ Current enforced structural constraints:
 - Each parent Alert candidate reserve plus unsettled margin must fit its own cap ≤1900. Separate provisional monthly REST FIDS, other REST and protected floor must fit ≤50,000. These are structural *candidate* reservations only, not live balances/charge-day proof.
 - Negative regression tests for the old all-4h error, split-gap corruption, pair-member redraw, incorrect replay, 24h washout, mismatched split, reused UTC slot, Alert and REST over-budget, changed seeded order and incomplete days.
 
+## Stage21b finite-candidate SAT solver added in the same PR
+
+[Deterministic finite-candidate calendar solver](../../server/lib/disruption/phase5F8FiniteCandidateSolver_v39.mjs) searches only complete supplied choices for each of the 31 indexed parent batch days. It does **not invent** future airport selections, provider range, proposed dates or source-use rights. It checks a frozen SHA of the candidate pool; prunes overlapping windows, six-slot block violations, early repeated-airport washout and impossible 26/3/2 shape totals; uses the structural guard above to test all hard rules at every complete leaf. Among valid candidates, it minimizes the exact weekday-class × UTC-slot imbalance Σ(n_c−31/12)², then chooses the lexicographically smallest canonical schedule on ties (§8.8). Frozen time-seed deterministically orders bounded exploration, but **never overrides the lexical tie-break**.
+
+Results are carefully distinguished:
+- `SAT_FINITE_CANDIDATE_SCHEDULE_NOT_SCIENTIFIC_RELEASE`: selected one complete candidate from the frozen supplied pool, but not proven globally optimal over every possible real date/airport schedule.
+- `UNSAT_SUPPLIED_FROZEN_CANDIDATE_POOL_ONLY`: exhausted this finite supplied pool without a valid member; **not** a claim that every possible real schedule is impossible.
+- `HOLD_BOUNDED_SEARCH_NOT_PROVEN_COMPLETE`: search exceeded the explicit 200,000-node ceiling; does not call an incomplete search either SAT-optimal or UNSAT.
+
+Focused tests cover one valid frozen pool, multiple equivalent choices with §8.8 lexical tie-break, intentionally impossible pair assignment, bounded-search failure, and tampered source-pool SHA. All evidence remains offline synthetic only.
+
 ## Explicitly NOT solved by this module
 
-The **global constraint solver** that generates the actual best feasible 31-batch-day calendar, ties seeds to real signed manifests, selects weekday×UTC soft-imbalance winner and applies §8.8 lexical tie-break is *still needed*. This guard only verifies a candidate and cannot falsely turn it into a generated final artifact.
+The **complete production constraint solver** that first generates the frozen real-world date/airport/region candidate universe and then selects the globally optimal feasible 31-batch-day calendar, ties seeds to real signed manifests, selects weekday×UTC soft-imbalance winner and applies §8.8 lexical tie-break is *still needed*. This guard only verifies a candidate and cannot falsely turn it into a generated final artifact.
 
 The HUB 5-airport anchor rotation, MID 7-day freshest-first and region-permutation sequences, actual adaptive selected-at/DB commitment before each T24, eligibility/source range, real source staleness, actual per-UTC-charge-day seven-category REST budgets, crossovers' real provider endpoint split-range behavior, published receiver/source rights, accurate operating-leg native selected T and POST/Alert/AIRBORNE science are **explicitly NOT certified**; result fields are false. Final release requires another independent audit and genuine future data, not optional fixture IDs.
 
