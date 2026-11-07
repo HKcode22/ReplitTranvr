@@ -216,7 +216,7 @@ describe("Phase5 frozen 31-day FIDS source-grid arithmetic (NO provider)", () =>
     expect(() => evaluateP5FidsGrid(a)).toThrow("MAX_ATTEMPTS");
     a.acquisitions[0].maxAttempts = 1;
     a.acquisitions[0].apiUnitsPerAttempt = 0;
-    expect(() => evaluateP5FidsGrid(a)).toThrow("UNKNOWN_LATENCY_COST_OR_RETRIES");
+    expect(() => evaluateP5FidsGrid(a)).toThrow("V0079_TWO_UNIT_PRICE_REQUIRED");
   });
 
   it("rejects missing verified external contract pin rather than guessing provider rights", () => {
