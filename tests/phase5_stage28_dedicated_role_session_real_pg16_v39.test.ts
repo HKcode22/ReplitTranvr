@@ -7,7 +7,8 @@ const enabled=process.env.P5_STAGE28_DISPOSABLE_PG16_TEST==="1";
 const urls={
  pre:process.env.P5_STAGE28_PRE_URL||"",
  source:process.env.P5_STAGE28_SOURCE_URL||"",
- other:process.env.P5_STAGE28_OTHER_URL||""
+ other:process.env.P5_STAGE28_OTHER_URL||"",
+ indirect:process.env.P5_STAGE28_INDIRECT_URL||""
 };
 const pools:InstanceType<typeof Pool>[]=[];
 const pool=(k:keyof typeof urls)=>{
@@ -59,6 +60,17 @@ describe.skipIf(!enabled)("Stage28 exact PG16 NOLOGIN role and SET privilege ses
   });
   await expect(adapter.query("SELECT 1")).rejects.toThrow(
    /REFUSED_P5_STAGE28_UNREVIEWED_ROLE_LOGIN_OR_SET_PRIVILEGE/);
+ });
+ it("indirect transitive SET access to another group is rejected",async()=>{
+  // Direct pg_auth_members shows only SOURCE; the PRE group is reachable
+  // through an intermediate CI role. Stage28 must NOT miss that path.
+  const p=pool("indirect");
+  const adapter=makeP5Stage28DedicatedRolePool(p,{
+   group:"source",reviewedDedicatedLogin:"phase5_stage28_indirect_ci",
+   forbiddenApplicationLogin:"phase5_runtime_app_ci"
+  });
+  await expect(adapter.query("SELECT 1")).rejects.toThrow(
+    /REFUSED_P5_STAGE28_INDIRECT_CROSS_GROUP_OR_INHERITED_RUNTIME_ACCESS/);
  });
  it("forbidden shared application login always fails before DB use",async()=>{
   const p=pool("pre");
