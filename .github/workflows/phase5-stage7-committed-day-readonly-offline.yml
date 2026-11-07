@@ -1,0 +1,43 @@
+name: Phase5 Stage7 Committed Day Read-Only Source Grid (NO Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
+      - '.github/workflows/phase5-stage7-committed-day-readonly-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
+      - '.github/workflows/phase5-stage7-committed-day-readonly-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      V39_P5_EARLY_DRAW_DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify read-only query role and prospective candidate guard offline
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_committed_day_grid_readonly_v39.test.ts tests/phase5_dynamic_day_source_grid_v39.test.ts
+          echo 'READ_ONLY_MOCK_PROOF_ONLY PROVIDER_CALLS=0 DB_WRITES=0 LIVE_GO=NO'
