@@ -145,6 +145,13 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   expect(r.databaseWrites).toBe(0);
   const nullIds=(await db.query("SELECT COUNT(*)::int n FROM clean.flight_snapshots"+
     " WHERE population_member_id IS NULL")).rows[0].n;
-  expect(nullIds).toBe(4);
+  // The B0062 BEFORE INSERT trigger positively attaches the one matching
+  // primary member, but cannot attach the other three synthetic identities.
+  // The audit must count by exact source/query identity and never rely on
+  // the optional population-member UUID for all historical PRE observations.
+  expect(nullIds).toBe(3);
+  const linked=(await db.query("SELECT population_member_id IS NOT NULL AS linked"+
+    " FROM clean.flight_snapshots WHERE flight_instance_id='leg:ci:one'")).rows[0];
+  expect(linked.linked).toBe(true);
  });
 });
