@@ -228,10 +228,6 @@ export function evaluateP5FidsGrid(input: P5FidsGridInput): P5FidsGridAdmission 
     input.protectedApiFloorUnits, "PROJECT_AND_FLOOR",
   );
   if (total > input.protectedProjectApiUnits) refuse("PROJECT_CEILING_EXCEEDED");
-  if (new Set([...slotAirport.values()]).size < 4) {
-    // This is not a fatal test: real travel sampling may legitimately repeat
-    // airports across days. Uniqueness is checked WITHIN each day instead.
-  }
   for (let d = 1; d <= 31; d++) {
     const airports = SLOTS.map(s => slotAirport.get(d + "|" + s));
     if (new Set(airports).size !== 4) refuse("SAME_AIRPORT_MULTIPLE_DAY_SLOTS");
