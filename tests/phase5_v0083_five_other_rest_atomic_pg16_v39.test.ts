@@ -4,7 +4,7 @@
  * Zero provider HTTP; a reservation consumes a conservative credit envelope,
  * NOT a received provider response or scientific Phase5/Phase6 GO.
  */
-import {Pool} from "pg";
+import {Pool,type PoolClient} from "pg";
 import {createHash} from "node:crypto";
 import {afterAll,beforeAll,describe,it,expect} from "vitest";
 
@@ -33,7 +33,8 @@ const token=(req:string,units:number)=>sha(
  manifest+"|"+req+"|"+run+"|"+units+"|"+rights+"|"+price
 );
 suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
- let admin:Pool,worker:Pool,dayUtc:string,dispatch:string,latest:string;
+ let admin:Pool,worker:Pool,runner:PoolClient|null=null;
+ let dayUtc:string,dispatch:string,latest:string;
  const planned=new Map<string,number>(specs.map(([cat,n])=>[cat,n]));
  const reqs=new Map<string,string>();
  beforeAll(async()=>{
@@ -170,6 +171,7 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
   worker=new Pool({connectionString:guestURL,max:1});
  });
  afterAll(async()=>{
+  if(runner)runner.release();
   if(worker)await worker.end();
   if(admin)await admin.end();
  });
@@ -189,15 +191,18 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
  }
  async function reserve(cat:string,units:number){
   const q=reqs.get(cat)!;
-  return worker.query(
+  if(!runner)throw Error("CI_SET_ROLE_DEDICATED_SESSION_MISSING");
+  return runner.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6) result",
    [manifest,q,run,rights,price,token(q,units)]
   );
  }
  it("default LOGIN cannot call SECURITY DEFINER, no table raw access",async()=>{
   const q=reqs.get("VALIDATION_UNIT_BUDGET")!;
-  await expect(reserve("VALIDATION_UNIT_BUDGET",4))
-   .rejects.toThrow(/permission denied|reserve_phase5_other_rest_once/);
+  await expect(runner!.query(
+   "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6)",
+   [manifest,q,run,rights,price,token(q,4)]
+  )).rejects.toThrow(/permission denied|reserve_phase5_other_rest_once/);
   const acl=(await worker.query(
    "SELECT has_function_privilege(current_user,"+
    "'clean.reserve_phase5_other_rest_once_v39(text,text,text,text,text,text)',"+
@@ -207,8 +212,10 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
   )).rows[0];
   expect(acl.x).toBe(false);expect(acl.y).toBe(false);
   expect(q).toHaveLength(64);
-  await worker.query("SET ROLE "+group);
-  const role=(await worker.query(
+  // SET ROLE is session-scoped, not a persistent Pool setting.
+  runner=await worker.connect();
+  await runner.query("SET ROLE "+group);
+  const role=(await runner.query(
    "SELECT current_user current_role,session_user login"
   )).rows[0];
   expect(role.current_role).toBe(group);expect(role.login).toBe(login);
@@ -216,17 +223,17 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
  });
  it("rejects changed price, rights, signed reservation or synthetic unknown GET",async()=>{
   const q=reqs.get("VALIDATION_UNIT_BUDGET")!;
-  await expect(worker.query(
+  await expect(runner!.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6)",
    [manifest,q,run,rights,SHA("0"),token(q,4)]
   )).rejects.toThrow("REVIEWED_GITHUB_RIGHTS_OR_PRICE_MISMATCH");
-  await expect(worker.query(
+  await expect(runner!.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6)",
    [manifest,q,run,SHA("0"),price,token(q,4)]
   )).rejects.toThrow("REVIEWED_GITHUB_RIGHTS_OR_PRICE_MISMATCH");
   await expect(reserve("VALIDATION_UNIT_BUDGET",2))
    .rejects.toThrow("RESERVATION_DIGEST_NOT_REVIEWED");
-  await expect(worker.query(
+  await expect(runner!.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6)",
    [manifest,SHA("0"),run,rights,price,SHA("0")]
   )).rejects.toThrow("REVIEWED_OTHER_REST_GET_MISSING");
@@ -284,7 +291,7 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
   await expect(reserve("OVERFUNDED_VALIDATION",4))
    .rejects.toThrow("OTHER_CATEGORY_CAP_EXHAUSTED");
   const s=await read();expect(s.attempts).toBe(4);
-  const privilege=(await worker.query(
+  const privilege=(await runner!.query(
    "SELECT has_table_privilege(current_user,"+
    "'clean.phase5_fids_utc_rest_category_budget_v39','UPDATE') u,"+
    "has_table_privilege(current_user,"+
