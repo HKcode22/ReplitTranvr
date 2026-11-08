@@ -1,0 +1,65 @@
+name: Phase5 V2 Published Receiver Source Observation (FREE public GET only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5-v2-published-receiver-readonly.yml"
+      - "scripts/v39_phase5_published_v2_identity_readonly.mjs"
+      - "tests/phase5_published_v2_identity_readonly_v39.test.mjs"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5-v2-published-receiver-readonly.yml"
+      - "scripts/v39_phase5_published_v2_identity_readonly.mjs"
+      - "tests/phase5_published_v2_identity_readonly_v39.test.mjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  DATABASE_URL: ''
+jobs:
+  v2-public-only-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Independent no-provider identity/refusal regression tests
+        run: |
+          set -Eeuo pipefail
+          node --check scripts/v39_phase5_published_v2_identity_readonly.mjs
+          node --test tests/phase5_published_v2_identity_readonly_v39.test.mjs
+      - name: Actual public HTTPS GET of published callback metadata (NO POST)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          BODY="$RUNNER_TEMP/p5-v2-public-response.json"
+          OUT="$RUNNER_TEMP/p5-v2-public-sanitized-evidence.json"
+          EXIT=0
+          WIRE="$(curl --silent --show-error --location --connect-timeout 5 --max-time 20 \
+            --header 'accept: application/json' \
+            --output "$BODY" \
+            --write-out '%{http_code}|%{time_total}' \
+            'https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime')" || EXIT=$?
+          IFS='|' read -r CODE SECONDS <<< "$WIRE"
+          [[ "$CODE" =~ ^[0-9]{3}$ ]] || CODE=000
+          [[ "$SECONDS" =~ ^[0-9]+(\.[0-9]+)?$ ]] || SECONDS=0
+          P5_V2_PUBLIC_READONLY_CLI=1 node scripts/v39_phase5_published_v2_identity_readonly.mjs \
+            "$BODY" "$OUT" "$CODE" "$EXIT" "$SECONDS"
+          echo 'PHASE5_V2_PUBLIC_SOURCE_EVIDENCE_ONLY_NO_SIGNED_POST_NO_PROVIDER'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase5-v2-public-receiver-readonly-evidence
+          path: ${{ runner.temp }}/p5-v2-public-sanitized-evidence.json
+          retention-days: 7
+          if-no-files-found: error
