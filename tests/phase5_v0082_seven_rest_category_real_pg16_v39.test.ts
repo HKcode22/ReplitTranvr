@@ -1,9 +1,9 @@
 /**
- * No provider, no production SQL. Real disposable B0062+V0079+V0082 PostgreSQL16.
+ * No provider, no production SQL. Real disposable B0062+V0079+V0080+V0082 PG16.
  * Shows atomic rejection BEFORE paid dispatch for incomplete 7-category plans,
  * changed source range, missing cycle cap, and irreversible BASE/SPLIT spends.
- * V0080 real-GitHub prearm has a distinct existing PG16 integration suite;
- * do not confuse this isolated additive-accounting proof with live GO.
+ * This also exercises V0080 real-GitHub-run prearm in the same source
+ * transaction path. A synthetic CI GH run ID is NOT a production authorization.
  */
 import {Pool} from "pg";
 import {createHash} from "node:crypto";
@@ -114,10 +114,10 @@ suite("V0082 seven-category REST enforcement / actual disposable PostgreSQL16 on
      from_local,to_local,airport_iana_timezone,provider_api_version,
      fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
      hard_latest_dispatch_utc,prediction_cutoff_utc,state)
-    VALUES($1,$2,1,$3,'HUB','T-24h','WSSS',$4,$5,$6,$7,$8,
-     $9,$10,'2026-11-09T22:00','2026-11-10T02:00','Asia/Singapore',
-     'CI-PROVIDER','CI-PROTOCOL',$11,$12::date,$13,$14,'ACTIVE')`,
-    [digest,manifest,key,draw,release,rights,provider,runId,s,e,
+    VALUES($1,$2,1,$3,'HUB','T-24h','WSSS',$4,$5,$6,$7,'00000',
+     $8,$9,'2026-11-09T22:00','2026-11-10T02:00','Asia/Singapore',
+     'CI-PROVIDER','CI-PROTOCOL',$10,$11::date,$12,$13,'PREPARED')`,
+    [digest,manifest,key,draw,release,rights,provider,s,e,
      planned,chargeDate,latest,cutoff]
    );
   }
@@ -151,6 +151,21 @@ suite("V0082 seven-category REST enforcement / actual disposable PostgreSQL16 on
      (manifest_sha256,category,ceiling_units) VALUES($1,$2,$3)`,
      [manifest,c,initial[c]]);
   }
+  // Reproduce the actual V0080 separately COMMITTED GitHub prearm before
+  // any V0079 attempt. No paid provider or production database is accessible.
+  for(const q of [baseDigest,splitDigest]){
+   const prearmSha=hash([
+    "phase5-v0080",manifest,q,runId,draw,rights
+   ].join("|"));
+   await db.query(
+    "SELECT clean.prearm_phase5_fids_github_query_v39($1,$2,$3,$4,$5,$6)",
+    [manifest,q,runId,draw,rights,prearmSha]
+   );
+  }
+  const p=(await db.query(
+   "SELECT COUNT(*)::int n FROM clean.phase5_fids_github_prearm_v39"
+  )).rows[0].n;
+  expect(p).toBe(2);
  });
  afterAll(async()=>{if(db)await db.end();});
  it("rejects the absent seventh UTC charge category without any charged reservation",async()=>{
