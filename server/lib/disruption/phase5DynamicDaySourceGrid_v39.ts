@@ -220,7 +220,9 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     hold("SERVICE_DAY_OR_DIRECTION_CHANGED");
   const one=draw.selections.find(v=>v.slotId===slot);
   if(!one)hold("MISSING_COMMITTED_SLOT");
-  const group=slot+"|"+horizon;
+  const group=segmented?
+    slot+"|"+horizon+"|"+candidate.serviceWindowStartUtc+"|"+
+      candidate.serviceWindowEndUtc:slot+"|"+horizon;
   if(!multi&&seen.has(group))hold("DUPLICATE_SLOT_HORIZON");
   seen.add(group);
   const groupRequests=byGroup.get(group)??[];
@@ -235,13 +237,25 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   const end=time(candidate.serviceWindowEndUtc,"WINDOW_END");
   const request=time(candidate.scheduledRequestUtc,"REQUEST");
   const cutoff=time(candidate.earliestPlannedCutoffUtc,"CUTOFF");
-  if(dayWindow!==start||end<=dayWindow||end>dayWindow+4*3_600_000)
+  if(segmented&&shape){
+    const part=partitions.find(p=>p.start===dayWindow&&p.end===end);
+    if(!part)hold("SOURCE_NOT_EXACT_AMENDMENT_C_PARTITION");
+    partitionByKey.set(candidate.queryKey,{
+      queryKey:candidate.queryKey,segmentIndex:part.segmentIndex,
+      partitionIndex:part.partitionIndex,windowShape:shape.windowShape,
+      serviceWindowStartUtc:candidate.serviceWindowStartUtc,
+      serviceWindowEndUtc:candidate.serviceWindowEndUtc,
+      reviewedProviderRangeEvidenceSha256:
+        shape.reviewedProviderRangeEvidenceSha256,
+    });
+  }else if(dayWindow!==start||end<=dayWindow||
+           end>dayWindow+4*HOUR)
     hold("UNFROZEN_SERVICE_WINDOW");
   if(selected>=request||request>=cutoff)
     hold("EARLY_DRAW_OR_QUERY_AFTER_CUTOFF");
   // A source refresh is always tied to a real candidate flight-cutoff
   // instant inside its horizon's complete four-hour service population.
-  if(multi && (cutoff<start-T_OFFSET[horizon]||
+  if(multi && (cutoff<(segmented?dayWindow:start)-T_OFFSET[horizon]||
     cutoff>=end-T_OFFSET[horizon]))
     hold("REFRESH_CUTOFF_OUTSIDE_FROZEN_SERVICE_INTERVAL");
   if(!Number.isSafeInteger(candidate.maxResponseAndPersistSeconds)||
@@ -275,10 +289,16 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
    const latencyMs=timing.maxSchedulerSlipSeconds*1000+
      timing.minimumPreCommitMarginSeconds*1000;
    for(const slot of SLOTS)for(const horizon of HORIZONS){
-     const one=byGroup.get(slot+"|"+horizon);
-     if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON");
-     let covered=start-T_OFFSET[horizon];
-     const endOfHorizon=start+4*3_600_000-T_OFFSET[horizon];
+     const required=segmented?partitions:[
+       {start,end:start+4*HOUR,segmentIndex:1,partitionIndex:1}];
+     for(const part of required){
+      const key=segmented?
+        slot+"|"+horizon+"|"+new Date(part.start).toISOString()+"|"+
+          new Date(part.end).toISOString():slot+"|"+horizon;
+      const one=byGroup.get(key);
+      if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON_PARTITION");
+      let covered=part.start-T_OFFSET[horizon];
+      const endOfHorizon=part.end-T_OFFSET[horizon];
      for(const x of one.map(x=>({
        begins:x.request+latencyMs+x.persistentSeconds*1000,
        ends:x.request+stalenessMs
@@ -291,6 +311,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      }
      if(covered<endOfHorizon)
        hold("GAP_IN_ACTUAL_DYNAMIC_DAY_FLIGHT_CUTOFF_COVERAGE");
+     }
    }
  }
  for(const slot of SLOTS){
