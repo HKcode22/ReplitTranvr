@@ -108,6 +108,15 @@ export function createP5V0082SevenRestFreezeCandidate(p){
   reviewedProviderRangeEvidenceSha256:p.reviewedProviderRangeEvidenceSha256,
   verifiedProviderMaxRangeMinutes:c.providerMaxRangeMinutes,
   timingContractSha256:c.reviewedTimingContractSha256,
+  // Real calendar geometry must match a separately stored B0062 31-day
+  // source, not merely a caller-provided calendar hash string.
+  calendarDays:c.calendar.days.map(d=>({
+   runDayIndex:d.runDayIndex,startUtc:d.startUtc,
+   windowShape:d.windowShape,
+   activeDurationMinutes:d.windowShape==="up-to-6h"?360:240,
+   utcSlot:d.utcSlot,
+   airportSlots:Object.keys(d.airports).sort()
+  })),
   cycleApiCeiling:c.projectCycleApiCeiling,
   protectedApiFloorUnits:c.protectedApiFloorUnits,
   cycleOtherReservedUnits:otherReserved,cycleSourceReservedUnits:sourceReserved,
