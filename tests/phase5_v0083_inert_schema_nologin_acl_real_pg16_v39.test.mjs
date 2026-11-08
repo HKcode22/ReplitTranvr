@@ -141,7 +141,7 @@ it("atomically installs only inert schema and two isolated groups with exact rea
 it("refuses replay with both groups and empty data intact",async()=>{
  await assert.rejects(
   installPhase5V0083EmptySchemaAndRestRolesOnce(pool,signed()),
-  /EXACT_FIVE_EXISTING_NOLOGIN_GROUPS_REQUIRED_NO_REPLAY/);
+  /PARTIAL_OR_ALREADY_INSTALLED_V0083_TABLES/);
  const s=await snapshot();
  assert.equal(s.rel.length,2);
  assert.equal(s.roles.length,2);
