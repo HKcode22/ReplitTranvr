@@ -35,3 +35,9 @@ The actual production 16-table Phase5 cold-start inventory last observed 0 calen
 - Issue exactly one independently evidenced **Phase5 FREEZE PASS/HOLD**. A separate **Phase6 paid launch GO** must not be inferred from these source-level tests or historical admin completion.
 
 **Current scientific status:** Phase5 FREEZE **HOLD**; paid Phase6 GO **NO**. AeroDataBox email replies are **not** a blocker for bounded nonpaid engineering.
+
+## D. Full-suite validation caught an expired mock clock — repaired in TEST ONLY
+
+The first PR #496 full offline V3.9 CI attempt `42487555840` returned failure although **all 12 strict-calendar tests passed**. The three failed tests in `tests/phase5_scoped_fids_source_bridge_v39.test.ts` intentionally used a synthetic DB receipt at `2026-11-08T13:42Z` but left the production source timestamp at **real GitHub-runner wall-clock time**. The PR-head full suite ran after `14:01Z`, making that *historical* mock receipt precede the new source's actual `availableAtUtc`. The production FIDS source correctly refused the forged ordering with `REFUSED_P5_FIDS_SOURCE_ATOMIC_ORIGINAL_DB_READBACK_MISMATCH`. This was a stale **test fixture clock**, not permission to weaken source custody or an observed provider failure.
+
+The repair adds `vi.useFakeTimers({toFake:["Date"]})` with a fixed `2026-11-08T13:41:00.000Z` in `beforeEach` and `vi.useRealTimers()` in `afterEach` for that one no-network, no-DB fixture suite. This keeps the synthetic source captured before its 13:42 receipt while preserving all real production checks on `Date`, durable source/readback order, T24 cutoff, strict original hash and actual provider original-before-ACK. It does not inject a fake clock into the production SOURCE port and cannot make a late real source count as PRE. The new PR-head CI must independently pass before merge.
