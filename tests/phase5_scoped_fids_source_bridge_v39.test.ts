@@ -29,6 +29,12 @@ function fixture():P5SourceSingleQueryPlan {
   airport_layer_design_probability:slot==="REGIONAL"?1:null,
  }));
  return {
+  sourcePartition:{
+   schema:"v39.phase5.amendment-c.source-segment-partition.v1",
+   windowShape:"4h",segmentIndex:1,partitionIndex:1,
+   verifiedProviderMaxRangeMinutes:240,
+   reviewedProviderRangeEvidenceSha256:"7".repeat(64)
+  },
   day,savedEarlyDrawRows:rows,
   expectedEarlyDrawSha256:verifyPreparedDailyDraw(day,rows).stateHash,
   reviewedReleaseSha256:"e".repeat(64),reviewedProviderRightsSha256:"f".repeat(64),
@@ -94,6 +100,56 @@ function ports(
  return {p,calls};
 }
 describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
+ it("accepts exactly the SECOND exposed 2x2 child but never its inactive one-hour gap",()=>{
+  const f=fixture();f.sourcePartition.windowShape="2x2h";
+  f.sourcePartition.segmentIndex=2;
+  f.acquisition.serviceWindowStartUtc="2026-11-09T17:00:00.000Z";
+  f.acquisition.serviceWindowEndUtc="2026-11-09T19:00:00.000Z";
+  expect(admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z"))
+   .restCategory).toBe("fids_base");
+  f.acquisition.serviceWindowStartUtc="2026-11-09T16:00:00.000Z";
+  f.acquisition.serviceWindowEndUtc="2026-11-09T17:00:00.000Z";
+  expect(()=>admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z")))
+   .toThrow("SOURCE_NOT_EXACT_FROZEN_EXPOSED_PARTITION");
+ });
+ it("classifies an up-to-6h last 2h provider-range partition as FIDS_SPLIT",async()=>{
+  const f=fixture(),o=ports();
+  f.sourcePartition.windowShape="up-to-6h";
+  f.sourcePartition.partitionIndex=2;
+  f.acquisition.serviceWindowStartUtc="2026-11-09T18:00:00.000Z";
+  f.acquisition.serviceWindowEndUtc="2026-11-09T20:00:00.000Z";
+  expect(admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z"))
+   .restCategory).toBe("fids_split");
+  const result=await runP5ScopedFidsSource(f,o.p);
+  expect(result.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
+  expect(o.calls).toMatchObject({reserve:1,fetch:1,persist:1});
+ });
+ it("never accepts partial or undocumented range overlaps, changed shape or guessed provider limit",async()=>{
+  const f=fixture();
+  f.sourcePartition.windowShape="up-to-6h";
+  f.sourcePartition.partitionIndex=2;
+  f.acquisition.serviceWindowStartUtc="2026-11-09T18:00:00.000Z";
+  f.acquisition.serviceWindowEndUtc="2026-11-09T20:00:00.000Z";
+  const bad={...f,sourcePartition:{...f.sourcePartition,verifiedProviderMaxRangeMinutes:300}};
+  expect(()=>admitP5ScopedFidsSource(bad,new Date("2026-11-08T13:41:00.000Z")))
+   .toThrow("SOURCE_NOT_EXACT_FROZEN_EXPOSED_PARTITION");
+  f.sourcePartition.reviewedProviderRangeEvidenceSha256="";
+  expect(()=>admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z")))
+   .toThrow("UNVERIFIED_AMENDMENT_C_SOURCE_PARTITION");
+ });
+ it("refuses overlong first partition, gap intersection and changed segment index before any HTTP",async()=>{
+  const f=fixture(),o=ports();
+  f.sourcePartition.windowShape="2x2h";f.sourcePartition.segmentIndex=1;
+  await expect(runP5ScopedFidsSource(f,o.p))
+   .rejects.toThrow("SOURCE_NOT_EXACT_FROZEN_EXPOSED_PARTITION");
+  expect(o.calls.reserve).toBe(0);expect(o.calls.fetch).toBe(0);
+  f.acquisition.serviceWindowEndUtc="2026-11-09T16:00:00.000Z";
+  expect(admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z"))
+   .restCategory).toBe("fids_base");
+  f.sourcePartition.segmentIndex=3;
+  expect(()=>admitP5ScopedFidsSource(f,new Date("2026-11-08T13:41:00.000Z")))
+   .toThrow("SOURCE_SEGMENT_NOT_IN_FROZEN_EXPOSURE");
+ });
  it("refuses missing scoped ports before source admission",async()=>{
   await expect(runP5ScopedFidsSource(fixture(),{} as any))
    .rejects.toThrow("NO_SCOPED_PORTS");
