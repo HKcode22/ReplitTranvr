@@ -5,12 +5,12 @@ import {commissionPhase5SourceCredential,SOURCE}
 import {makeP5Stage28DedicatedRolePool}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 const {Pool}=pg;
-const URL="postgresql://phase5_source_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
+const OWNER_URL="postgresql://phase5_source_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
 const active=process.env.P5_SOURCE_DISPOSABLE_PG16_TEST==="1"?describe:describe.skip;
 const ENV={
  GITHUB_ACTIONS:"true",
  P5_SOURCE_CREDENTIAL_ONCE:"COMMISSION_SOURCE_LOGIN_AND_SECRET_NO_PROVIDER_CALLS",
- DATABASE_URL:URL,
+ DATABASE_URL:OWNER_URL,
  V39_DATABASE_RUNTIME_URL:"postgresql://phase5_source_ci_app:ci-only@localhost:5432/neondb?sslmode=disable",
  ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
 };
@@ -29,7 +29,7 @@ active("Phase5 isolated SOURCE account: real disposable PG16 and GitHub secret M
        "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"||
      process.env.AERODATABOX_API_KEY||process.env.V39_PHASE6_PROCESS_ARMED!=="0")
     throw Error("REFUSED_NON_DISPOSABLE_SOURCE_CREDENTIAL_TEST");
-  owner=new Pool({connectionString:URL,max:2});
+  owner=new Pool({connectionString:OWNER_URL,max:2});
  });
  afterAll(async()=>await owner?.end());
  it("rolls back new LOGIN and GH secret if remote write reports an error",async()=>{
