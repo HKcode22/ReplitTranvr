@@ -38,8 +38,23 @@ function previewClock(x:Date,label:string):number{
  if(!(x instanceof Date)||!Number.isFinite(x.getTime()))refuse(label+"_DB_CLOCK");
  return x.getTime();
 }
+/**
+ * Amendment C source geometry. This must be pinned in the exact GitHub
+ * release JSON and against independently reviewed provider-range evidence.
+ * A caller-provided object alone is not provider entitlements proof.
+ */
+export interface P5F8SourcePartitionPin {
+  schema:"v39.phase5.amendment-c.source-segment-partition.v1";
+  windowShape:"4h"|"2x2h"|"up-to-6h";
+  segmentIndex:number;
+  partitionIndex:number;
+  verifiedProviderMaxRangeMinutes:number;
+  reviewedProviderRangeEvidenceSha256:string;
+}
+
 export interface P5SourceSingleQueryPlan {
   acquisition:P5FidsAcquisition;
+  sourcePartition:P5F8SourcePartitionPin;
   day:PreparedDayForReadback;
   savedEarlyDrawRows:PreparedDrawRow[];
   /** Independently read SHA on the actual committed four selected DB rows. */
@@ -114,10 +129,56 @@ export type P5ScopedSourceResult =
        originalAvailableAtUtc:string;sourcePopulationQueryId:string;
        normalizedRowsPersisted:number};
 
+/**
+ * Deterministic f.8 Amendment C exact exposed-segment/range-partition check.
+ * First child of a split has its own BASE; the second child also begins at
+ * partition 1. A later partition within one child is FIDS_SPLIT.
+ * No provider call, DB, inferred rights, or hidden split-gap exposure.
+ */
+export function verifyP5F8ExactSourcePartition(
+ p:P5SourceSingleQueryPlan,
+):{restCategory:"fids_base"|"fids_split";segmentIndex:number;partitionIndex:number}{
+ const pin=p.sourcePartition;
+ if(!pin||pin.schema!=="v39.phase5.amendment-c.source-segment-partition.v1"||
+   !["4h","2x2h","up-to-6h"].includes(pin.windowShape)||
+   !Number.isSafeInteger(pin.verifiedProviderMaxRangeMinutes)||
+   pin.verifiedProviderMaxRangeMinutes<1||
+   pin.verifiedProviderMaxRangeMinutes>360||
+   !validHash(pin.reviewedProviderRangeEvidenceSha256)||
+   !Number.isSafeInteger(pin.segmentIndex)||pin.segmentIndex<1||
+   !Number.isSafeInteger(pin.partitionIndex)||pin.partitionIndex<1)
+   refuse("UNVERIFIED_AMENDMENT_C_SOURCE_PARTITION");
+ const parent=p.day?.scheduledStartUtc?.getTime();
+ if(!Number.isFinite(parent))refuse("UNVERIFIED_PARENT_BATCH_START");
+ const hour=3_600_000,range=pin.verifiedProviderMaxRangeMinutes*60_000;
+ // 2×2h = 2h exposed + 60min inactive + 2h exposed.
+ // Up-to-6h is the planned maximum; an early STOP is censoring, not
+ // authority to query an extra time range or to alter a frozen partition.
+ const segments=pin.windowShape==="2x2h"
+   ?[[parent!,parent!+2*hour],[parent!+3*hour,parent!+5*hour]]
+   :[[parent!,parent!+(pin.windowShape==="4h"?4:6)*hour]];
+ const child=segments[pin.segmentIndex-1];
+ if(!child)refuse("SOURCE_SEGMENT_NOT_IN_FROZEN_EXPOSURE");
+ const [begin,finish]=child;
+ const partitions=Math.ceil((finish-begin)/range);
+ if(pin.partitionIndex>partitions)
+   refuse("SOURCE_RANGE_PARTITION_NOT_IN_EXPOSURE");
+ const expectedStart=begin+(pin.partitionIndex-1)*range;
+ const expectedEnd=Math.min(expectedStart+range,finish);
+ if(millis(p.acquisition.serviceWindowStartUtc,"SERVICE_START")!==expectedStart||
+    millis(p.acquisition.serviceWindowEndUtc,"SERVICE_END")!==expectedEnd)
+   refuse("SOURCE_NOT_EXACT_FROZEN_EXPOSED_PARTITION");
+ return {
+  restCategory:pin.partitionIndex===1?"fids_base":"fids_split",
+  segmentIndex:pin.segmentIndex,partitionIndex:pin.partitionIndex,
+ };
+}
+
 /** Stage2 preflight; source or reservation must not happen before it succeeds. */
 export function admitP5ScopedFidsSource(
   p:P5SourceSingleQueryPlan,dbNow:Date,
-): {selectedIcao:string;earliestPlannedCutoffMs:number;currentDbMs:number} {
+): {selectedIcao:string;earliestPlannedCutoffMs:number;currentDbMs:number;
+  restCategory:"fids_base"|"fids_split"} {
   const q=p.acquisition,day=p.day;
   if(p.independentlyApprovedSourceAndRetention!==true||
      p.githubOnlyOwnerApproved!==true||
@@ -145,11 +206,9 @@ export function admitP5ScopedFidsSource(
   const earlySelected=millis(proposed.selectedAtUtc,"EARLY_SELECTION");
   const planned=millis(q.scheduledRequestUtc,"REQUEST");
   const cutoff=millis(q.earliestPlannedCutoffUtc,"CUTOFF");
-  const start=millis(q.serviceWindowStartUtc,"SERVICE_START");
-  const end=millis(q.serviceWindowEndUtc,"SERVICE_END");
+  const partition=verifyP5F8ExactSourcePartition(p);
   const plannedSelected=millis(q.plannedAirportSelectionUtc,"PLANNED_SELECTION");
-  if(start!==day.scheduledStartUtc.getTime()||end<=start||
-     plannedSelected>=planned||earlySelected>=planned||
+  if(plannedSelected>=planned||earlySelected>=planned||
      cutoff<=planned)
     refuse("FROZEN_SOURCE_WINDOW_CONFLICT");
   if(!Number.isSafeInteger(q.maxResponseAndPersistSeconds)||
@@ -160,7 +219,8 @@ export function admitP5ScopedFidsSource(
      now>planned+15*60_000||
      now+q.maxResponseAndPersistSeconds*1000>cutoff)
     refuse("DB_CLOCK_OUTSIDE_PROSPECTIVE_WINDOW");
-  return {selectedIcao:selected.icao,earliestPlannedCutoffMs:cutoff,currentDbMs:now};
+  return {selectedIcao:selected.icao,earliestPlannedCutoffMs:cutoff,
+   currentDbMs:now,restCategory:partition.restCategory};
 }
 
 /**
@@ -194,7 +254,7 @@ export async function runP5ScopedFidsSource(
     direction:"Departure",serviceWindowStartUtc:new Date(q.serviceWindowStartUtc),
     serviceWindowEndUtc:new Date(q.serviceWindowEndUtc),
     cutoffUtc:new Date(q.earliestPlannedCutoffUtc),
-    restCategory:"fids_base",
+    restCategory:first.restCategory,
     providerApiVersion:p.providerApiVersion,
     fidsProtocolVersion:p.fidsProtocolVersion,
     openapiSha256:p.openapiSha256,
@@ -214,7 +274,7 @@ export async function runP5ScopedFidsSource(
             // Even if the existing provider fetch helper proposes retries,
             // the SECOND reservation is refused BEFORE another GET.
             if(providerReservationCalls!==0||attemptNumber!==1||
-               units!==P5_UNIT_PRICE||category!=="fids_base")
+               units!==P5_UNIT_PRICE||category!==first.restCategory)
               refuse("UNAUTHORIZED_RETRY_OR_UNFUNDED_SOURCE");
             providerReservationCalls++;
             try{
