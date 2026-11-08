@@ -20,7 +20,7 @@ export async function inspectActiveFrameForP5Calendar(pool) {
   const all=(await c.query('SELECT COUNT(*)::int n FROM clean.adb_sampling_frame')).rows[0]?.n;
   const state=(await c.query('SELECT COUNT(*)::int n FROM clean.adb_airport_sampling_state')).rows[0]?.n;
   if(!Number.isSafeInteger(all)||all<0||!Number.isSafeInteger(state)||state<0)fail('INVALID_BASELINE_COUNTS');
-  const reg=(await c.query("SELECT active_frame_version,frame_hash,activated_at,traffic_reference_hash,region_mapping_hash,tier_hash,reference_period_start,reference_period_end,traffic_retrieval_date,traffic_source_name FROM clean.adb_sampling_frame_registry WHERE registry_key='ACTIVE' LIMIT 2")).rows;
+  const reg=(await c.query("SELECT active_frame_version,frame_hash,activated_at,traffic_reference_hash,region_mapping_hash,tier_hash,reference_period_start::text AS reference_period_start,reference_period_end::text AS reference_period_end,traffic_retrieval_date::text AS traffic_retrieval_date,traffic_source_name FROM clean.adb_sampling_frame_registry WHERE registry_key='ACTIVE' LIMIT 2")).rows;
   const out={
    status:'HOLD_NO_VERIFIED_ACTIVE_SAMPLING_FRAME',
    snapshotAtUtc:new Date(db.snapshot).toISOString(),database:'neondb',
