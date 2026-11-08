@@ -72,6 +72,7 @@ jobs:
           set -Eeuo pipefail
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE phase5_source_ci_owner LOGIN CREATEROLE NOINHERIT NOSUPERUSER PASSWORD 'ci-only';
+          GRANT USAGE ON SCHEMA clean TO phase5_source_ci_owner;
           GRANT phase5_fids_source_prod_20261107 TO phase5_source_ci_owner WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
           SQL
       - name: Actual PG16 role/secret transaction tests, GitHub secret MOCK only
