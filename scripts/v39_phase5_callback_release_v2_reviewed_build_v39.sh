@@ -39,7 +39,7 @@ git diff --cached --quiet -- \
  client server shared package.json package-lock.json scripts/build.ts \
  vite.config.ts tsconfig.json postcss.config.js tailwind.config.ts \
  components.json drizzle.config.ts .replit \
- scripts/v39_phase5_reviewed_source_build_v39.sh || hold
+ scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh || hold
 test -z "$(git ls-files --others --exclude-standard -- \
  client server shared scripts/build.ts vite.config.ts tsconfig.json \
  postcss.config.js tailwind.config.js components.json drizzle.config.ts)" || hold
