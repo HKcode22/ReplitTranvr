@@ -324,8 +324,10 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
   ] as const;
   const clauses=forbidden.flatMap(([table,privs])=>
     privs.map((priv)=>"has_table_privilege(current_user,'"+
-      table+"','"+priv+"')"));
-  const scope=(await client.query("SELECT "+clauses.join(",")+"")).rows[0];
+      table+"','"+priv+"')")).map((expr,i)=>expr+" AS forbidden_"+i);
+  // Unique aliases are essential: node-postgres otherwise collapses all
+  // identically named has_table_privilege columns to one last field.
+  const scope=(await client.query("SELECT "+clauses.join(","))).rows[0];
   if(!scope||Object.values(scope).some(v=>v!==false))
    hold("EXTRA_FROZEN_LEDGER_OR_RAW_PROVIDER_PRIVILEGE");
   const now=dt(actor.at),x=review.proposal;
