@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Live source-worker integration — pending exact-head CI and restricted source commissioning
+
+**Next real engineering critical path:** [GitHub-only SOURCE login + exact one-query prospective FIDS owner](2026-11-08_GITHUB_EXACT_SOURCE_OWNER_AND_ROLE_BOUND_RELEASE.md). The old `v39_phase5_one_query_github_fids_source_owner_v39.ts` used a bare database pool. The reviewed branch now wraps every DB call with the Stage28 exact SOURCE LOGIN→SET-only NOLOGIN group, adds a one-shot **inert** SOURCE credential/Actions-secret commissioner (separate from three already commissioned nonpaid workers), and a **manual-main-only** one GET workflow requiring signed query JSON, exact HEAD, source use rights, and REST budget. **Not live:** no SOURCE login/secret installed from this branch, no paid GET, no actual PRE certified, and no Phase5/6 GO. It also documents the separate pilot authorization needed to avoid circular Phase6 gating before Phase5 evidence.
+
 ## Phase 5 release critical path — stop treating arbitrary Stage numbers as scientific gates
 
 **CURRENT AUTHENTIC LIVE EVIDENCE (Nov 8 2026 02:28Z):** GitHub Actions [run #42438676554](https://github.com/HKcode22/ReplitTranvr/actions/runs/42438676554) **COMPLETED SUCCESS**, output `P5_STAGE31_THREE_NONPAID_GITHUB_WORKERS_LIVE_READONLY_VERIFIED`, 3/3 PREPARE/PRE/T24-WITNESS production PostgreSQL identities passed independently verified READ ONLY sessions, **0 flight rows read/written**, 0 FIDS/Alert calls and source worker not activated. Stage23 schema, Stage27 groups, Stage30 nonpaid worker logins/secrets and Stage31 real GH connectivity are **DONE**, not pending. No more repeat of these installation/verification stages.
