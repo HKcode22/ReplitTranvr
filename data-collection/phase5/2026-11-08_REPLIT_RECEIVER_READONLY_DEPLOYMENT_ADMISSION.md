@@ -6,6 +6,18 @@ On 2026-11-08 08:45:50Z, an existing [GitHub Actions public GET](https://github.
 
 [Prior deployment-candidate analysis](2026-11-07_REPLIT_PUBLISHED_RECEIVER_REVIEWED_SOURCE_RELEASE_CANDIDATE.md) already established the workspace had a **local-only `b44b1e2813a6e1d9895b35ec806f1c7e60f9852a` commit**, while the GitHub repo had moved on; preserve this local work and any unknown untracked files rather than issuing `git reset --hard`, `git clean`, blindly pulling or republishing. A merged reviewed `.replit` and `scripts/v39_phase5_reviewed_source_build_v39.sh` build wrapper already exists. It pins the independently verified Phase5 callback-only executable to `1ca938...` and refuses changed app sources/config/dirty executables. It is not itself a published deployment.
 
+## Real owner readback 2026-11-08T09:56Z: safe source preparation, not another root-cause search
+
+The exact two-tool owner run on live Replit **completed** and identified `workspaceHead=7e34c6fdbec2e1fb488497e1bf47582755015206` on branch `phase5/reviewed-callback-20261107`, 0 tracked modifications and 1 untracked file. **Correction to earlier notes:** this local HEAD **does exist on GitHub** (independently verified); main `2b58e3d...` is **50 commits ahead, 0 behind**, so the local branch is an old known source, not a mystery unpushed commit. The current V2 reviewed source commit `6c187d58...` is naturally absent from that old checkout. Existing `.replit` is V1; we must not Publish as-is.
+
+The first owner probe separately proved the B0062 active frame is **present**, with 4,346 active rows, 1,125 dual-eligible records, 0 hash mismatches, source `MrAirspace aircraft-flight-schedules + OurAirports`. [Scientific conflict remains](../phase2/V3.9_PHASE2_REFERENCE_FREEZE.md): the original Phase2 reference file records MrAirspace's observational source as a *candidate* blocked by the unmodified f.8 source/freshness contract. A real DB row does not waive that.
+
+The direct public GET from Replit Shell returned HTTP **404**; independent GitHub-hosted public GET around 09:42Z returned HTTP **200** with still-stale `84b7f156...` published source. **Do not conclude the receiver is down solely from the outbound Replit 404**; verify source from a second independent public network and Replit deployment status.
+
+[Safe V2 local checkout owner procedure](../../scripts/phase5_replit_v2_local_preserve_fastforward_owner_once.sh) is separately CI-reviewed. It validates the exact observed local HEAD and branch; exact GitHub main + green safety, true 50-commit fast-forward ancestry, unchanged protected code from V2 source PIN and exact V2 `.replit` configuration. It saves the original Git history in a private local bundle and separately archives **all** untracked paths before attempting `git merge --ff-only FETCH_HEAD`. It never removes untracked files, resets, cleans, rebases, publishes, runs paid provider calls, writes the DB or activates Phase6. On success, it runs **V2 build `--verify-only`**; it is *source preparation*, not an actual live Replit deployment. If a collision/changed checkout is detected, it fails CLOSED for a targeted inspection—not a forced retry.
+
+**After successful V2 source preparation:** controlled standalone callback-only Replit Publish (not Agent), independently read the *published V2 source PIN*, then demonstrate signed nonempty external POST → original-before-2xx durable readback/STOP. An HTTP 200 or local `--verify-only` alone is not a scientific receiver PASS.
+
 ## What this new verified code does
 
 `scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs` is a **standard Node20 read-only metadata check**, not an app updater. It:
