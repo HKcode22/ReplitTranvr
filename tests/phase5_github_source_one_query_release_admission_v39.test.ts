@@ -85,6 +85,7 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
    .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
   f.env.GITHUB_RUN_ATTEMPT="1";
+  f.env.GITHUB_EVENT_NAME="workflow_dispatch";
   // GitHub assigns the ID AFTER template freeze. A valid new ID must
   // pass this pure admission and be verified against real V0080 prearm later.
   f.env.GITHUB_RUN_ID="12345678999";
