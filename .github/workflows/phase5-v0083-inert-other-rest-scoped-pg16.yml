@@ -55,10 +55,10 @@ jobs:
       - name: Install authentic older schemas only in disposable PG16
         run: |
           set -Eeuo pipefail
-          test "\${GITHUB_ACTIONS}" = 'true'
+          test "${GITHUB_ACTIONS}" = 'true'
           test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
-          test -z "\${AERODATABOX_API_KEY:-}"
-          test "\${V39_PHASE6_PROCESS_ARMED}" = '0'
+          test -z "${AERODATABOX_API_KEY:-}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
           npx tsx scripts/apply_boot_migrations_v39.ts
           for F in \
             V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql \
@@ -71,6 +71,6 @@ jobs:
       - name: Verify exact V0083 blob, transactional DDL rollback and two-role ACL
         run: |
           set -Eeuo pipefail
-          test -z "\${AERODATABOX_API_KEY:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
           node --test tests/phase5_v0083_inert_schema_nologin_acl_real_pg16_v39.test.mjs
           echo 'P5_V0083_INERT_INSTALL_DISPOSABLE_PG16=PASS REAL_PROVIDER_GET=0 PRODUCTION_SQL=0 PHASE6_GO=0'
