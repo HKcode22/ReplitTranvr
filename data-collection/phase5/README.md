@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8 original October 13 P25 incidents #31/#32 identified — no synthetic POST replay
+
+The owner’s verified Replit `BEGIN READ ONLY` output at 12:20:26Z identified precisely **#31** (`provider_subscription_isolation_lost`; historical provider delete true, runtime cleanup false) and **#32** (`prepaid_probe_failed`; exact linkage still pending), with zero active/settling probes. These match the timeline of the old YSSY P25 `231 vs 229` delivery-gap and shutdown investigation, but **do not prove current provider state or original TTL tombstones**. [Full incident31/32 historical forensic context and narrowed metadata-only no-provider audit](2026-11-08_P25_INCIDENT31_32_REAL_READBACK_AND_SCOPE.md). Preserve the PR #490 once marker, keep historic failure semantics, and do not clear/bypass incident rows to make a test green. Phase5 nonpaid engineering proceeds; final scientific FREEZE HOLD and Phase6 paid GO NO.
+
+
 ## Nov 8 signed synthetic webhook attempt — incident gate stopped BEFORE POST
 
 Owner executed the PR #490 reviewed one-shot synthetic-only launcher. Source and Replit setup were correct, but `clean.adb_incident_stop` had **two** unresolved incidents; the existing narrowly reviewed exception only admits one exact historical incident #30. The TypeScript script returned `REFUSED:OPEN_INCIDENTS:2:UNRELATED_OR_MULTIPLE_OPEN_INCIDENTS` **before any signed webhook POST, synthetic DB session or raw-original write**, and the local once marker is preserved. [Full incident refusal evidence and non-mutating next audit](2026-11-08_SYNTHETIC_SIGNED_WEBHOOK_INCIDENT_TWO_ROW_REFUSAL.md). **Do not rerun #490, erase the marker, auto-clear incidents or loosen paid safety.** The next readback only enumerates safe incident metadata. Phase5 FREEZE HOLD, Phase6 paid GO NO.
