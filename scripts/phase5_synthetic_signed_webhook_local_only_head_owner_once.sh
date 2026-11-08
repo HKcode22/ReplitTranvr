@@ -41,8 +41,9 @@ git diff --quiet HEAD -- "${protected[@]}" ||
   fail PROTECTED_TRACKED_WORKTREE_DIRTY
 
 # Unknown imported files are not trusted. Preserve them; never clean/reset.
-if git ls-files --others --exclude-standard |
-  grep -Eq '^(server/|shared/|scripts/v39_phase2g_verify_live_callback_v39\.ts$|scripts/v39_phase2g_p25_historical_incident_smoke_scope_v39\.ts$|\.replit$|package(-lock)?\.json$|tsconfig[^/]*\.json$)'; then
+untracked="$(git ls-files --others --exclude-standard)" ||
+  fail UNTRACKED_QUERY_FAILED
+if grep -Eq '^(server/|shared/|scripts/v39_phase2g_verify_live_callback_v39\.ts$|scripts/v39_phase2g_p25_historical_incident_smoke_scope_v39\.ts$|\.replit$|package(-lock)?\.json$|tsconfig[^/]*\.json$)' <<<"$untracked"; then
   fail UNTRACKED_PROTECTED_SOURCE_PRESENT
 fi
 [[ "$(git hash-object "$TEST_PATH" 2>/dev/null)" == "$TEST_BLOB" ]] ||
