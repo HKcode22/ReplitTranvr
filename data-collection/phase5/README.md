@@ -1,5 +1,12 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8 14:20 UTC — ACTUAL B0062 frozen airport sampling-frame structure verified
+
+**Production Replit owner READ ONLY snapshot succeeded:** 4,346 active-frame airport rows, zero frame-hash mismatches, 1,125 dual PRE+POST eligible (**111 HUB / 427 MID / 587 REGIONAL**) across six mapped macroregions. Exact active frame hash `02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94`; adaptive sampling-state table empty before Phase6 (not a defect). [Verified real frame, SQL explanation and exact four owner-selected anchors WSSS/OMAA/SKBO/YSSY read-only review](2026-11-08_LIVE_B0062_FRAME_AND_OWNER_FOUR_ANCHORS_EXACT_READONLY.md). **Do not confuse the traffic-ranked top 20 HUB list with a frozen chosen HUB pool**. Owner already selected a *prospective four-anchor* research direction in October; original strict **five**-anchor Gate2 remains historically not passed. The four exact ICAOs still need targeted frame eligibility readback; no paid run or synthetic substitute. Phase5 scientific FREEZE HOLD, paid Phase6 GO NO.
+
+**Historical-note navigation:** Sections below dated **earlier than 13:53 UTC** are preserved as the evidence chronology; statements inside those old sections that an admin closeout "has not occurred" or "needs approval" describe their earlier timestamp and have been superseded by the confirmed 13:53Z APPLY plus independent audit. **Do not reexecute those commands or return to an old closeout approval prompt.**
+
+
 ## Nov 8 13:53 UTC — historical P25 administrative closeout COMPLETED and independently audited
 
 **Do not rerun the P25 apply or delete its once marker.** Owner's genuine production apply + independent READ ONLY post-audit both exited **0**. Incidents **#31/#32 administratively resolved**, exact old P25 budget `P2G-S1-20261013-03` **CLOSED**, global open incident/budget counts **0/0**, 58/58 original-ref tombstones preserved, immutable YSSY probe19 still `failed / DELIVERY_GAP` with 231 billed / 229 received / gap2. [Permanent receipt and real results, and new five-anchor calendar budget/date admission defect](2026-11-08_P25_ADMIN_CLOSEOUT_VERIFIED_AND_F8_CALENDAR_BUDGET_HARDENING.md). The original P25 failure is **NOT** scientific PASS. The strict calendar patch rejects impossible UTC dates and overbudget original-five `31×1900=58900` Alerts over the 57,900 binding ceiling, rather than inventing a new sample schedule; Phase5 signed FREEZE HOLD and Phase6 paid GO NO.
