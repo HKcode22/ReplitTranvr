@@ -62,11 +62,14 @@ active("Phase5 isolated SOURCE account: real disposable PG16 and GitHub secret M
   expect(u.password.length).toBeGreaterThanOrEqual(64);
   const direct=new Pool({connectionString:u.toString(),max:1});
   try{
+   // A fresh NOINHERIT login has no USAGE on schema clean; its attempt
+   // to resolve a qualified table for has_table_privilege would correctly
+   // fail. Check schema isolation without granting it access just for CI.
    const before=await direct.query(
     "SELECT current_user AS who, "+
-    "has_table_privilege(current_user,'clean.phase5_fids_original_binding_v39','INSERT') AS can_insert");
+    "has_schema_privilege(current_user,'clean','USAGE') AS can_schema");
    expect(before.rows[0].who).toBe(SOURCE.login);
-   expect(before.rows[0].can_insert).toBe(false);
+   expect(before.rows[0].can_schema).toBe(false);
    const source=makeP5Stage28DedicatedRolePool(direct,{
     group:"source",reviewedDedicatedLogin:SOURCE.login,
     forbiddenApplicationLogin:"phase5_source_ci_app"
