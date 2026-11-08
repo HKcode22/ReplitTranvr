@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8 13:53 UTC — historical P25 administrative closeout COMPLETED and independently audited
+
+**Do not rerun the P25 apply or delete its once marker.** Owner's genuine production apply + independent READ ONLY post-audit both exited **0**. Incidents **#31/#32 administratively resolved**, exact old P25 budget `P2G-S1-20261013-03` **CLOSED**, global open incident/budget counts **0/0**, 58/58 original-ref tombstones preserved, immutable YSSY probe19 still `failed / DELIVERY_GAP` with 231 billed / 229 received / gap2. [Permanent receipt and real results, and new five-anchor calendar budget/date admission defect](2026-11-08_P25_ADMIN_CLOSEOUT_VERIFIED_AND_F8_CALENDAR_BUDGET_HARDENING.md). The original P25 failure is **NOT** scientific PASS. The strict calendar patch rejects impossible UTC dates and overbudget original-five `31×1900=58900` Alerts over the 57,900 binding ceiling, rather than inventing a new sample schedule; Phase5 signed FREEZE HOLD and Phase6 paid GO NO.
+
+
 ## Nov 8 13:20 UTC — actual P25 admin-only dry-run ELIGIBLE, **not executed**
 
 The owner’s corrected GitHub SHA-pinned Replit DRY_RUN returned `DRY_RUN_ELIGIBLE_OPERATOR_APPROVAL_REQUIRED` with **0 blockers**, native current AeroDataBox strict subscription LIST **0 active**, exact old YSSY probe19 231/229/2 `failed/DELIVERY_GAP`, incident31/32 matches, sole OPEN historical P25 budget cap500, 58/58 original-reference deletion tombstones, **0 SQL/provider/blob mutations**. [Actual recorded evidence and separate at-most-once admin-apply review / independent READ ONLY post-audit](2026-11-08_P25_ADMIN_ELIGIBLE_SEPARATELY_APPROVED_ONCE_APPLY_AND_POSTAUDIT.md). **No administrative closeout or synthetic signed POST has occurred yet**. The new apply wrapper is gated by *distinct exact owner approval* and an irreversible attempt marker; prior generic paid permission does not authorize this production database change. Even if approved/applied, historic P25 remains scientifically failed; Phase5 FREEZE HOLD and separate paid Phase6 GO NO.
