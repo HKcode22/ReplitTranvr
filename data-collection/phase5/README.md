@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Actual production Phase5 source/calendar state — Nov 8 08:18:35 UTC
+
+[Verified sixteen-table production zero-row cold start and the real scientific/engineering release order](2026-11-08_LIVE_EMPTY_PHASE5_COLD_START_AND_TRUE_RELEASE_ORDER.md). Exact owner `READ ONLY` output [issue #416](https://github.com/HKcode22/ReplitTranvr/issues/416#issuecomment-6719194093): **16/16 expected tables exist, seven of seven NOLOGIN roles exist, 0/16 table rows across calendar/draws/authorization/REST budgets/SOURCE original and T24 witness; Phase6 authorization disabled**. V0079–V0083 are installed; **do not reinstall**. Zero Phase5 collection rows mean an unstarted prospective study in *these* tables, not absence of old Phase4 evidence and not a reason to repeat the Nov6 narrow FIDS pilot. **Next work is the genuine approved future calendar and seven-category budget inputs, prospective GitHub SOURCE→PRE→POST integration and one independent FREEZE; Phase6 is a separate paid GO.** Account details and dated free balances are already in issue #300—do not ask again.
+
 ## Nov 8 verified production status and next live evidence readback
 
 **V0082 and V0083 owner production installers both returned their specific success markers; V0083 also returned a successful INDEPENDENT SECOND DATABASE CONNECTION READ ONLY CHECK.** Exact V0083 original SQL `a5e1e9df39ec9b436f0576245f375985a69a3b71`, reviewed main `31f0fc61c680aed31a7d2553266f85ec06d95e43`; **zero new paid REST/Alert calls**, no scientific FREEZE or Phase6 GO. Do **not** reinstall V0079–V0083 or the four commissioned GitHub worker logins/secrets.
