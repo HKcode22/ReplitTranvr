@@ -19,7 +19,7 @@ describe("Phase5 callback-only reviewed source Replit build (NO provider)",()=>{
   const replit=readFileSync(".replit","utf8");
   expect(source).toContain("PIN="+PIN);
   expect(replit).toContain(
-   'build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]');
+   'build = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]');
   expect(source).toContain("OLD_BUILD=");
   expect(source).toContain("NEW_BUILD=");
   expect(source).toContain('git merge-base --is-ancestor "$PIN" HEAD');
