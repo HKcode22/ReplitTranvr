@@ -1,0 +1,74 @@
+name: Phase5 V0082 Inert DDL and NOLOGIN Scoped ACL PG16 (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0082_inert_schema_and_nologin_roles_owner_once.mjs'
+      - 'tests/phase5_v0082_inert_schema_role_installer_real_pg16_v39.test.mjs'
+      - '.github/workflows/phase5-v0082-inert-schema-scoped-nologin-real-pg16.yml'
+      - 'data-collection/phase5/2026-11-08_V0082_INERT_SCHEMA_ROLE_INSTALLER_SECURITY_CHECKPOINT.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0082_inert_schema_and_nologin_roles_owner_once.mjs'
+      - 'tests/phase5_v0082_inert_schema_role_installer_real_pg16_v39.test.mjs'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  V39_P5_SOURCE_OWNER_APPROVED: '0'
+  V39_P5_V0082_INSTALL_PG16: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://ignored:ci@localhost:5432/neondb?sslmode=disable'
+jobs:
+  atomic-inert-v0082-no-login-real-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install baseline B0062, real staged V0079 + V0080 + V0081 ONLY in CI
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = 'true'
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test -z "${AERODATABOX_API_KEY:-}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          for F in \
+            V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql \
+            V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql \
+            V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql
+          do
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f "migrations/staged/$F"
+          done
+      - name: Exact staged migration blob + rollback + new NOLOGIN-only ACL tests
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          node --test tests/phase5_v0082_inert_schema_role_installer_real_pg16_v39.test.mjs
+          echo 'P5_V0082_INERT_INSTALL_DISPOSABLE_PG16=PASS REAL_PROVIDER_GET=0 PRODUCTION_DB=0 PHASE6_PAID_GO=0'
