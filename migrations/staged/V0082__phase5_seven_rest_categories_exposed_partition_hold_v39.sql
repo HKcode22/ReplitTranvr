@@ -220,13 +220,13 @@ BEGIN
  -- Every planned same-charge-date source query must already have one
  -- reviewed partition row. No arbitrary extra BASE/SPLIT allowance:
  -- planned physical units == exactly 2 * distinct signed source queries.
- SELECT COUNT(*),COUNT(part.query_digest),
-   2*COUNT(*) FILTER(WHERE part.rest_category='FIDS_BASE_UNITS'),
-   2*COUNT(*) FILTER(WHERE part.rest_category='FIDS_SPLIT_UNITS')
+ SELECT COUNT(*),COUNT(pmap.query_digest),
+   2*COUNT(*) FILTER(WHERE pmap.rest_category='FIDS_BASE_UNITS'),
+   2*COUNT(*) FILTER(WHERE pmap.rest_category='FIDS_SPLIT_UNITS')
  INTO query_total,query_mapped,query_base_units,query_split_units
  FROM clean.phase5_fids_allowed_query_v39 allowed
- LEFT JOIN clean.phase5_fids_exact_query_partition_v39 part
- ON part.query_digest=allowed.query_digest
+ LEFT JOIN clean.phase5_fids_exact_query_partition_v39 pmap
+ ON pmap.query_digest=allowed.query_digest
  WHERE allowed.manifest_sha256=NEW.manifest_sha256
  AND allowed.planned_charge_utc_date=NEW.charged_utc_date;
  IF query_total<>query_mapped OR
