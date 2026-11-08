@@ -2,6 +2,13 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Database and SQL reader refresh (start here if the tables look confusing)
+
+- [Complete PostgreSQL table atlas — 76 baseline tables, staged Phase4/5 tables, and the scientific data relationships](PHASE5_DATABASE_ATLAS_SQL_TABLES_AND_RELATIONSHIPS_20261108.md)
+- [SQL JOIN and relational database lab — short practical guide with readonly examples and synthetic rows](PHASE5_SQL_JOIN_DATABASE_LAB_FOR_READERS_20261108.md)
+
+These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
+
 ## Current SOURCE integration checkpoint (Amendment C, PR #468)
 
 [Amendment C exact exposed-segment SOURCE checkpoint](2026-11-08_AMENDMENT_C_REAL_SOURCE_SEGMENT_RELEASE_CHECKPOINT.md): runtime originally rejected split-window second child and 6h later provider-range partitions while hardcoding FIDS_BASE. The code now checks exact source partitions and stored calendar geometry, and distinguishes FIDS_BASE/FIDS_SPLIT in transport. This is **offline production-intended engineering only**, not measured provider-range entitlement, a category-complete live REST ledger, a legal Contents/ML-use license, first genuine Phase6 source observation or final Phase5 FREEZE. Reuse the prior Nov6 FIDS-only pilot instead of creating a redundant paid diagnostic. No repeated worker installers or Replit timed jobs.
