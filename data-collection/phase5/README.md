@@ -2,7 +2,13 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
-## Replit Shell one-line V0083 owner handoff (V0082 done; V0083 unverified)
+## Nov 8 verified production status and next live evidence readback
+
+**V0082 and V0083 owner production installers both returned their specific success markers; V0083 also returned a successful INDEPENDENT SECOND DATABASE CONNECTION READ ONLY CHECK.** Exact V0083 original SQL `a5e1e9df39ec9b436f0576245f375985a69a3b71`, reviewed main `31f0fc61c680aed31a7d2553266f85ec06d95e43`; **zero new paid REST/Alert calls**, no scientific FREEZE or Phase6 GO. Do **not** reinstall V0079–V0083 or the four commissioned GitHub worker logins/secrets.
+
+[Permanent V0083 production installation receipt, account recall and upcoming aggregate production FREEZE readback](2026-11-08_V0083_INSTALLED_AND_FINAL_FREEZE_READONLY_INVENTORY.md). A read-only, NO PROVIDER release inventory is being added to detect actual durable 31-day calendar, source, seven-category budgets, early draws and witness rows; its aggregate results are **not** provider source-rights clearance or scientific acceptance. The source plan, live quota and support history already reside in [issue #300](https://github.com/HKcode22/ReplitTranvr/issues/300), including the Nov7 actual free 59,968/60,000 REST and 1,830 Alert balance. **Do not ask the owner to reidentify Ultra, and do not send repeat emails.**
+
+## V0082 and V0083 installed in production — no repeat owner commands
 
 [Exact Git-blob single-line V0083 production owner command and previously reported account evidence](2026-11-08_V0083_SINGLE_LINE_OWNER_HANDOFF_AND_KNOWN_ACCOUNT.md). **Do not paste a large fragmented heredoc**; a previous Replit Shell fragment was truncated and produced interactive Bash `>` / JavaScript history-expansion errors, not valid SQL installation evidence. Use the reviewed SHA-pinned one-line launcher only after its exact main CI is successful; it verifies V0082 installed, V0083 absent, installed owner role, exact reviewed SQL/script Git blobs, and independent second-connection post-commit ACL. **Zero provider GET/Alert, no Phase6 authorization**. Known grandfathered RapidAPI Team Ultra account, historical/current dated balances and support correspondence are *already in issue #300*: do not ask owner again.
 
@@ -13,15 +19,15 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
-## V0083 independent REST approval/spend NOLOGIN schema installer (not deployed)
+## V0083 independent REST approval/spend NOLOGIN schema installer (installed inert; historical checkpoint)
 
 [Read the V0083 two-role production schema, atomic rollback and SQL JOIN checkpoint](2026-11-08_V0083_PRODUCTION_SCHEMA_ROLE_INSTALL_CHECKPOINT.md). The proposed owner-only installer requires authentic V0082 production prerequisites, a pinned staged V0083 migration and an empty producer; it gives separate **NOLOGIN-only** review-INSERT and physical-reservation-EXECUTE permissions. It cannot create logins, send provider requests, approve source rights, commit PRE, or authorize Phase6. CI PG16 proofs and independent deployment review are required.
 
-## V0083 prospective non-source REST reservation ledger (not deployed)
+## V0083 prospective non-source REST reservation ledger (installed empty; historical staged-code checkpoint)
 
 [V0083 immutable physical REST charge/checkpoint](2026-11-08_V0083_FIVE_OTHER_REST_RESERVATION_SAFETY_CHECKPOINT.md) adds a **separate, staged, non-provider-call** physical reservation contract for validation/outcome/history/diagnostic GETs and a **source-bound** FIDS retry. It preserves V0082 BASE/SPLIT +2 charging, requires a previously committed V0079 source attempt before reserving FIDS_RETRY, and proves rollback/UTC category-caps in real disposable PostgreSQL. **No schema installation, category review input, runtime credential, paid provider GET, license or Phase6 GO is conveyed.**
 
-## V0082 additive empty schema and NOLOGIN permission installer (not deployed)
+## V0082 additive empty schema and NOLOGIN permission installer (installed inert; historical checkpoint)
 
 [V0082 inert schema/NOLOGIN owner installer checkpoint](2026-11-08_V0082_INERT_SCHEMA_ROLE_INSTALLER_SECURITY_CHECKPOINT.md) explains why V0082 SQL existing in GitHub is **not** production installation. It describes exact pinned migration bytes, one-transaction PostgreSQL DDL and role grants, the new budget-freeze-only NOLOGIN group, and narrowly extended existing PREPARE query-partition INSERT permission. **No runtime LOGIN membership, provider rights, actual paid SOURCE, PRE/POST flight evidence or Phase6 GO is created by that code.**
 
