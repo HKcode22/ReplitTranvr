@@ -6,10 +6,10 @@
 import {execFileSync,spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 const REPO='HKcode22/ReplitTranvr';
-const PIN='1ca938bece03b90ab952f1bb762f25aedb5ede18';
+const PIN='6c187d58e2b1339aace71079e27767523d8ca3ce';
 const PUBLIC_URL='https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime';
 const SHA=/^[0-9a-f]{40}$/;
-const EXPECTED_BUILD='build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]';
+const EXPECTED_BUILD='build = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]';
 const PROTECTED=['client','server','shared','package.json','package-lock.json',
  'scripts/build.ts','vite.config.ts','tsconfig.json','postcss.config.js',
  'tailwind.config.ts','components.json','drizzle.config.ts'];
