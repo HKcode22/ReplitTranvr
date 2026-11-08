@@ -240,7 +240,10 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     [manifest,category,total]
    );
   }
+  // Intentionally leave the zero-funded seventh UTC category absent
+  // for the first real negative PG16 test. Restore only after it refuses.
   for(const day of days)for(const category of CATS){
+   if(category==="DIAGNOSTIC_UNIT_BUDGET")continue;
    const plan=perDay.get(day)?.get(category)??0;
    await admin.query(
     "INSERT INTO clean.phase5_fids_utc_rest_category_budget_v39 "+
@@ -290,11 +293,6 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
  it("refuses missing seventh category, with zero prepared query leakage",async()=>{
-  // Remove the zero-valued seventh category (not a protected row update).
-  await admin.query(
-   "DELETE FROM clean.phase5_fids_utc_rest_category_budget_v39 "+
-   "WHERE manifest_sha256=$1 AND category='DIAGNOSTIC_UNIT_BUDGET'",
-   [manifest]);
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
    .rejects.toThrow("CYCLE_SEVEN_REST_CATEGORY_CEILING_MISMATCH");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
