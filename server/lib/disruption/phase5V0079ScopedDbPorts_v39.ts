@@ -15,7 +15,7 @@ import {
 } from "./fidsCensus_v3";
 import type {
   P5SourcePorts, P5SourceSingleQueryPlan, P5PhysicalReservation,
-  P5OriginalCommit,
+  P5OriginalCommit, verifyP5F8ExactSourcePartition,
 } from "./phase5ScopedFidsSourceBridge_v39";
 
 const SHA=/^[0-9a-f]{64}$/;
@@ -152,6 +152,7 @@ export function createP5V0079ScopedDbPorts(ctx:P5V0079SourceDbContext):P5SourceP
       arg.icao!==plan.acquisition.icao||
       arg.sourceReleaseSha256!==plan.reviewedReleaseSha256||
       arg.earlyDrawSha256!==plan.expectedEarlyDrawSha256||
+      arg.restCategory!==verifyP5F8ExactSourcePartition(plan).restCategory||
       arg.attemptNumber!==1||arg.units!==2)
     refuse("WRONG_PHYSICAL_QUERY_INTENT");
    if(committed.size!==0)refuse("SAME_WORKER_DOUBLE_RESERVATION");
