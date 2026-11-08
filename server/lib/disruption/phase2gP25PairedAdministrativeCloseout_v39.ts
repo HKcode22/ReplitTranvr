@@ -4,6 +4,25 @@
  * A fresh strict provider LIST and transaction-scoped database witness are
  * mandatory before any exact budget+incident administrative disposition.
  */
+/**
+ * Preserve exact millisecond timestamps returned by node-postgres.
+ * Calling String(date) first discards .SSS (Date#toString is seconds-only),
+ * incorrectly refusing BOTH historic incident fingerprints. Treat unknown
+ * driver types, timezone-free and imprecise human strings as invalid.
+ */
+export function p25ExactPgTimestampMsV39(value:unknown):number {
+  if(value instanceof Date){
+    const ms=value.getTime();
+    return Number.isSafeInteger(ms)?ms:Number.NaN;
+  }
+  if(typeof value!=="string"||
+     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))
+    return Number.NaN;
+  const ms=Date.parse(value);
+  return Number.isSafeInteger(ms)&&new Date(ms).toISOString()===value?
+    ms:Number.NaN;
+}
+
 export type P25AdministrativeCloseoutWitnessV39 = Readonly<{
   observedAtMs:number;
   latestOriginalExpiryMs:number;
