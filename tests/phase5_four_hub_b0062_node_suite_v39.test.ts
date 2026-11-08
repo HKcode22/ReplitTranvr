@@ -3,7 +3,7 @@ import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 
 /**
- * vitest.config.ts selects ONLY tests/**/*.test.ts; the pure Node ESM
+ * Vitest is configured to discover .test.ts files, not pure Node .test.mjs;
  * evidence tests would otherwise be silently skipped by v39:test:full.
  * Run exact source tests as a subprocess in a discovered Vitest test.
  */
