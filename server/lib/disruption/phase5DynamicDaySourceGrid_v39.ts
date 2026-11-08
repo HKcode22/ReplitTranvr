@@ -282,8 +282,12 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   requests.push({...candidate,icao:one.icao,
     plannedAirportSelectionUtc:draw.selectedAtUtc});
  }
- if(seen.size!==12||keys.size!==input.templates.length)
+ const requiredGroupCount=segmented?12*partitions.length:12;
+ if(seen.size!==requiredGroupCount||keys.size!==input.templates.length){
+   if(segmented&&seen.size<requiredGroupCount)
+     hold("MISSING_MULTI_REFRESH_HORIZON_PARTITION");
    hold("INCOMPLETE_SIGNED_QUERY_SLOTS");
+ }
  if(multi&&timing){
    const stalenessMs=timing.maxPopulationStalenessSeconds*1000;
    const latencyMs=timing.maxSchedulerSlipSeconds*1000+
