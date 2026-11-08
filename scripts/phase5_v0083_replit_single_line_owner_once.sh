@@ -20,7 +20,10 @@ STATUS="$(gh api "repos/$R/compare/$REVIEWED...$LIVE" --jq '.status')" || hold M
 [[ "$STATUS" == ahead || "$STATUS" == identical ]] || hold MAIN_ANCESTRY_UNEXPECTED
 CHECKS="$(gh api "repos/$R/commits/$LIVE/check-runs?per_page=100" --jq '[.check_runs[] | select(.status=="completed" and .conclusion=="success") | .name] | join("\n")')" || hold MAIN_CHECKS_UNAVAILABLE
 printf '%s\n' "$CHECKS" | grep -Fxq offline-safety || hold OFFLINE_SAFETY_NOT_GREEN
-printf '%s\n' "$CHECKS" | grep -Fxq atomic-other-rest-ddl-and-role-acl || hold POSTGRES_TEST_NOT_GREEN
+# The atomic PG16 workflow is path-filtered: it ran on REVIEWED, not on this launcher commit.
+# Exact installer + SQL blob verification below guarantees the earlier PG16 proof still applies.
+REVIEWED_CHECKS="$(gh api "repos/$R/commits/$REVIEWED/check-runs?per_page=100" --jq '[.check_runs[] | select(.status=="completed" and .conclusion=="success") | .name] | join("\\n")')" || hold REVIEWED_POSTGRES_CHECKS_UNAVAILABLE
+printf '%s\n' "$REVIEWED_CHECKS" | grep -Fxq atomic-other-rest-ddl-and-role-acl || hold REVIEWED_PG16_PROOF_NOT_GREEN
 verify(){
   local got
   got="$(gh api "repos/$R/contents/$1?ref=$LIVE" --jq '.sha')" || hold FILE_MISSING
