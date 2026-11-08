@@ -81,6 +81,20 @@ export function admitP5GitHubOneQueryRelease(
     payload.plan?.independentlyApprovedSourceAndRetention!==true||
     payload.plan?.githubOnlyOwnerApproved!==true)
   hold("PHASE5_SOURCE_RIGHTS_OR_SELECTED_DRAW_NOT_SIGNED");
+ const range=payload.plan?.sourcePartition;
+ // A signed JSON SHA is only integrity. Range permission has separate
+ // independently reviewed evidence, carried as restricted GH secrets.
+ if(!range||
+    range.schema!=="v39.phase5.amendment-c.source-segment-partition.v1"||
+    !SHA.test(range.reviewedProviderRangeEvidenceSha256??"")||
+    range.reviewedProviderRangeEvidenceSha256!==
+      env.V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256||
+    !Number.isSafeInteger(range.verifiedProviderMaxRangeMinutes)||
+    range.verifiedProviderMaxRangeMinutes<1||
+    range.verifiedProviderMaxRangeMinutes>360||
+    env.V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES!==
+      String(range.verifiedProviderMaxRangeMinutes))
+   hold("UNVERIFIED_AMENDMENT_C_PROVIDER_RANGE");
  const q=payload.plan?.acquisition;
  if(!q||!Number.isInteger(q.runDayIndex)||
     q.runDayIndex<1||q.runDayIndex>31||
