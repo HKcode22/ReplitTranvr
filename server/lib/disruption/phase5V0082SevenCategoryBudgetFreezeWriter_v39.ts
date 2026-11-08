@@ -48,6 +48,8 @@ export interface P5V0082FrozenSevenRestCandidate {
  reviewedCategoryBudgetSha256NotYetExternallySigned:true;
  mathematicalStatus:"STAGE22_EXPOSURE_COVERAGE_CANDIDATE_NOT_RELEASE";
  databaseWrites:0;providerGets:0;
+ providerRightsCertified:false;providerRangeMeasuredByThisCode:false;
+ real31DayEarlyAirportsBound:false;realSourceOriginals:0;
  phase5ScientificFreeze:false;phase6PaidGo:false;
 }
 export interface P5V0082FreezeOwnerReview {
@@ -111,6 +113,9 @@ function checked(review:P5V0082FreezeOwnerReview){
     review.githubOnlyRestrictedOwnerApproved!==true||
     c.mathematicalStatus!=="STAGE22_EXPOSURE_COVERAGE_CANDIDATE_NOT_RELEASE"||
     c.databaseWrites!==0||c.providerGets!==0||
+    c.providerRightsCertified!==false||
+    c.providerRangeMeasuredByThisCode!==false||
+    c.real31DayEarlyAirportsBound!==false||c.realSourceOriginals!==0||
     c.phase5ScientificFreeze!==false||c.phase6PaidGo!==false||
     c.manifestSha256!==review.expectedManifestSha256||
     c.calendarSha256!==review.expectedCalendarSha256||
@@ -130,7 +135,9 @@ function checked(review:P5V0082FreezeOwnerReview){
    hold("MISSING_INDEPENDENTLY_REVIEWED_THIRTY_ONE_DAY_PLAN");
  const {reviewedCategoryBudgetSha256,
   reviewedCategoryBudgetSha256NotYetExternallySigned,mathematicalStatus,
-  databaseWrites,providerGets,phase5ScientificFreeze,phase6PaidGo,...canonical}=c;
+  databaseWrites,providerGets,phase5ScientificFreeze,phase6PaidGo,
+  providerRightsCertified,providerRangeMeasuredByThisCode,
+  real31DayEarlyAirportsBound,realSourceOriginals,...canonical}=c;
  if(reviewedCategoryBudgetSha256NotYetExternallySigned!==true||
     reviewedCategoryBudgetSha256!==review.expectedSignedCategoryBudgetSha256||
     hash(canonical)!==review.expectedSignedCategoryBudgetSha256)
