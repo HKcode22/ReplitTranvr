@@ -9,7 +9,7 @@
  * Production path: exact main-only workflow_dispatch.
  * CI path: disposable localhost PG16, PR-only, synthetic credentials.
  */
-import {Pool} from "pg";
+import {Pool,type PoolClient} from "pg";
 import {
  makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS,
  type P5Stage28Group
@@ -72,8 +72,7 @@ export async function verifyP5Stage31WorkerReadOnlyConnections(env:Env){
   const pool=new Pool({connectionString:item.url,max:1,
      connectionTimeoutMillis:7500,idleTimeoutMillis:2000,
      statement_timeout:9000});
-  let client:Awaited<ReturnType<ReturnType<
-    typeof makeP5Stage28DedicatedRolePool>["connect"]>>|undefined;
+  let client:PoolClient|undefined;
   let tx=false;
   try{
    const strict=makeP5Stage28DedicatedRolePool(pool,{
