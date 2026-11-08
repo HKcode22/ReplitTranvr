@@ -209,8 +209,8 @@ async function postChecks(c){
     "JOIN pg_catalog.pg_namespace ns ON ns.oid=p.pronamespace "+
     "CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl "+
     "WHERE ns.nspname='clean' AND p.proname=ANY($1::text[]) AND acl.grantee=0",
-    ["phase5_other_rest_immutable_v39","reserve_phase5_other_rest_once_v39",
-      "phase5_fids_v0082_category_immutable_v39"]
+    [["phase5_other_rest_immutable_v39","reserve_phase5_other_rest_once_v39",
+      "phase5_fids_v0082_category_immutable_v39"]]
   )).rows[0]?.n;
   if(publicTables!==0||publicFunctions!==0)
     hold("PUBLIC_TABLE_OR_FUNCTION_PRIVILEGE_EXPOSED");
