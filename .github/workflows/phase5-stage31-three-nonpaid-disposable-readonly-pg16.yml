@@ -1,0 +1,83 @@
+name: Phase5 Stage31 DISPOSABLE PG16 read-only three-worker credential smoke
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage31_three_nonpaid_live_readonly_github_workers_once.ts'
+      - 'tests/phase5_stage31_three_worker_readonly_pg16_v39.test.ts'
+      - '.github/workflows/phase5-stage31-three-nonpaid-disposable-readonly-pg16.yml'
+      - '.github/workflows/phase5-stage31-three-nonpaid-production-readonly.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_stage31_three_nonpaid_live_readonly_github_workers_once.ts'
+      - 'tests/phase5_stage31_three_worker_readonly_pg16_v39.test.ts'
+      - '.github/workflows/phase5-stage31-three-nonpaid-disposable-readonly-pg16.yml'
+      - '.github/workflows/phase5-stage31-three-nonpaid-production-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  three-live-shaped-roles-disposable-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/runtime-not-used?sslmode=disable'
+      P5_STAGE26_FOUR_NOLOGIN_ROLES_ONCE: 'INSTALL_FOUR_NOLOGIN_P5_ROLES_WITH_NO_RUNTIME_MEMBERS'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_STAGE31_DISPOSABLE_PG16_TEST: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: [ '5432:5432' ]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: TypeScript check
+        run: npm run check
+      - name: Install only true Stage23 schema and Stage27 groups in disposable PG16
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql >/tmp/st31-v79.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql >/tmp/st31-v80.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql >/tmp/st31-v81.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "REVOKE EXECUTE ON FUNCTION clean.phase5_t24_witness_before_insert_v39(), clean.phase5_t24_witness_immutable_v39() FROM PUBLIC" >/dev/null
+          node scripts/v39_phase5_stage26_four_nologin_roles_owner_once.mjs >/tmp/st31-four-groups.json
+      - name: Create only CI test logins (zero repository secrets)
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_p30_prepare_login_20261107 LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_p30_pre_login_20261107 LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          CREATE ROLE phase5_p30_witness_login_20261107 LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE PASSWORD 'ci-only';
+          GRANT phase5_fids_prepare_prod_20261107 TO phase5_p30_prepare_login_20261107 WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_pre_writer_prod_20261107 TO phase5_p30_pre_login_20261107 WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          GRANT phase5_fids_t24_witness_prod_20261107 TO phase5_p30_witness_login_20261107 WITH SET TRUE, INHERIT FALSE, ADMIN FALSE;
+          SQL
+      - name: Test strict READ ONLY sessions; no production secrets
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage31_three_worker_readonly_pg16_v39.test.ts
+          echo 'STAGE31_DISPOSABLE_THREE_NONPAID_ROLE_READONLY=PASS PRODUCTION_SECRET_ACCESS=0 PROD_FLIGHT_READS=0 PROVIDER_CALLS=0'
