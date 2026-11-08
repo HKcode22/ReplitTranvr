@@ -41,7 +41,7 @@ function preflight(env:Env){
     url.pathname!=="/neondb"||url.hash)
   hold("UNREVIEWED_SOURCE_LOGIN_OR_DATABASE");
  if(ci&&(url.hostname!=="localhost"||url.port!=="5432"||
-    url.password!=="ci-only"))
+    !/^[a-f0-9]{72}$/.test(url.password)))
   hold("CI_ONLY_DISPOSABLE_LOCALHOST");
  return {url:str,mode:live?"PRODUCTION_MANUAL_MAIN":"DISPOSABLE_PR_TEST"};
 }
