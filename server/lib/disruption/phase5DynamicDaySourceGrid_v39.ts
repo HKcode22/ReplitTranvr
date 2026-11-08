@@ -326,11 +326,13 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  const charges=[...byCharge.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
   .map(([day,physicalRequests])=>({day,physicalRequests,candidateApiUnits:physicalRequests*2}));
  return {
-  schema:multi?
-   "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
+  schema:segmented?
+   "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3":
+   multi?"v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
    "v39.phase5.early-draw-to-12-source-candidates-result.v1",
-  status:multi?
-   "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
+  status:segmented?
+   "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED":
+   multi?"DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
    "DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED",
   runDayIndex:day.runDayIndex,selectedAtUtc:draw.selectedAtUtc,
   committedDrawSha256:draw.stateHash,
@@ -339,16 +341,23 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     config:day.configHash,frame:day.frameHash,
     contract:input.providerContractSha256,
     ...(timing?{reviewedRefreshTiming:timing}:{}),
+    ...(segmented?{reviewedSegmentedSource:shape,
+      sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
     templates:requests.map(r=>({...r,icao:undefined,plannedAirportSelectionUtc:undefined}))
   }),
   sourceCandidateDigestSha256:digest({
     day:day.runDayIndex,earlyDraw:draw.stateHash,
-    ...(timing?{reviewedRefreshTiming:timing}:{}),requests
+    ...(timing?{reviewedRefreshTiming:timing}:{}),
+    ...(segmented?{reviewedSegmentedSource:shape,
+      sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
+    requests
   }),
   acquisitionCount:requests.length,
   plannedPhysicalGetCount:requests.length,
   candidateFidsApiUnits:requests.length*2,
   ...(timing?{reviewedRefreshTiming:timing}:{}),
+  ...(segmented?{reviewedSegmentedSource:shape,
+    sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey)!)}:{}),
   actualChargeDayUtcCounts:charges,acquisitions:requests,
   actualGithubRunPrearmVerified:false,actualSourceOriginalCommitted:false,
   actualFlightLevelPreCertified:false,authorizedSourceRights:false,
