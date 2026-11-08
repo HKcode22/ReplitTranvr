@@ -15,6 +15,12 @@ function fixture(){
    reviewedReleaseSha256:H("3"),
    reviewedProviderRightsSha256:H("4"),
    expectedEarlyDrawSha256:H("5"),
+   sourcePartition:{
+    schema:"v39.phase5.amendment-c.source-segment-partition.v1",
+    windowShape:"4h",segmentIndex:1,partitionIndex:1,
+    verifiedProviderMaxRangeMinutes:240,
+    reviewedProviderRangeEvidenceSha256:H("6")
+   },
    independentlyApprovedSourceAndRetention:true,
    githubOnlyOwnerApproved:true,
    acquisition:{
@@ -38,6 +44,8 @@ function fixture(){
   V39_P5_QUERY_DIGEST:payload.queryDigestSha256,
   V39_P5_RELEASE_SHA256:payload.plan.reviewedReleaseSha256,
   V39_P5_RIGHTS_SHA256:payload.plan.reviewedProviderRightsSha256,
+  V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES:"240",
+  V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256:H("6"),
   V39_P5_SOURCE_DATABASE_URL:"postgresql://p5_scoped:p4ss@localhost:5432/v39_ci",
   V39_DATABASE_RUNTIME_URL:"postgresql://app_role:another@localhost:5432/v39_ci",
   AERODATABOX_API_KEY:"ci-placeholder-never-used",
@@ -119,6 +127,16 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   g.env.GITHUB_SHA="b".repeat(40);
   expect(()=>admitP5GitHubOneQueryRelease(g.env,g.bytes,g.payload))
    .toThrow("CODE_COMMIT_NOT_APPROVED");
+ });
+ it("refuses undocumented provider max source range despite otherwise signed query",()=>{
+  const f=fixture();
+  delete f.env.V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES;
+  expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
+   .toThrow("UNVERIFIED_AMENDMENT_C_PROVIDER_RANGE");
+  const g=fixture();
+  g.env.V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256=H("a");
+  expect(()=>admitP5GitHubOneQueryRelease(g.env,g.bytes,g.payload))
+   .toThrow("UNVERIFIED_AMENDMENT_C_PROVIDER_RANGE");
  });
  it("refuses absence of actual signed rights or unapproved REST price",()=>{
   const f=fixture();
