@@ -9,12 +9,16 @@ on:
       - '.github/workflows/phase5-autonomous-clock-canary-no-provider.yml'
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
+      - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
+      - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/phase5-autonomous-clock-canary-no-provider.yml'
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
+      - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
+      - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
 permissions:
   contents: read
 env:
@@ -41,6 +45,8 @@ jobs:
           set -Eeuo pipefail
           node --check scripts/v39_phase5_github_autonomous_clock_canary.mjs
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
+          bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
+          node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
       - name: Record scheduled dispatch drift; not authority to collect
         shell: bash
         run: |
