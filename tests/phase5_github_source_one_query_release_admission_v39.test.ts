@@ -64,6 +64,17 @@ describe("Phase5 GitHub one-query strict source-admission, zero provider",()=>{
   expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
    .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
  });
+ it("refuses a scheduled physical source GET even if all paid flags and hashes are valid",()=>{
+  const f=fixture();
+  f.env.GITHUB_EVENT_NAME="schedule";
+  f.env.GITHUB_RUN_ATTEMPT="1";
+  expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
+   .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
+  // A push event also must never inherit a manual paid release.
+  f.env.GITHUB_EVENT_NAME="push";
+  expect(()=>admitP5GitHubOneQueryRelease(f.env,f.bytes,f.payload))
+   .toThrow("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
+ });
  it("refuses PR CI, re-runs and mismatched GitHub job IDs",()=>{
   const f=fixture();
   f.env.GITHUB_EVENT_NAME="pull_request";
