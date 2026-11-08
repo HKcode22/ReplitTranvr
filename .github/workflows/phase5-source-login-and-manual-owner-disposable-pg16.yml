@@ -1,0 +1,81 @@
+name: Phase5 SOURCE Login + GitHub Manual Paid Owner — Disposable PG16 only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_source_worker_credential_owner_once.mjs'
+      - 'tests/phase5_source_worker_credential_mock_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
+      - '.github/workflows/phase5-one-reviewed-prospective-fids-get-main-manual.yml'
+      - '.github/workflows/phase5-source-login-and-manual-owner-disposable-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_source_worker_credential_owner_once.mjs'
+      - 'tests/phase5_source_worker_credential_mock_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
+      - '.github/workflows/phase5-one-reviewed-prospective-fids-get-main-manual.yml'
+      - '.github/workflows/phase5-source-login-and-manual-owner-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  source-isolation-and-atomic-secret-mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://phase5_source_ci_app:ci-only@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_STAGE26_FOUR_NOLOGIN_ROLES_ONCE: 'INSTALL_FOUR_NOLOGIN_P5_ROLES_WITH_NO_RUNTIME_MEMBERS'
+      P5_SOURCE_DISPOSABLE_PG16_TEST: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Static TypeScript
+        run: npm run check
+      - name: Disposable B0062 PG16 + Stage23 V0079/80/81 + Stage27 four groups
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql >/tmp/p5-source-v79.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql >/tmp/p5-source-v80.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql >/tmp/p5-source-v81.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "REVOKE EXECUTE ON FUNCTION clean.phase5_t24_witness_before_insert_v39(), clean.phase5_t24_witness_immutable_v39() FROM PUBLIC" >/dev/null
+          node scripts/v39_phase5_stage26_four_nologin_roles_owner_once.mjs >/tmp/p5-source-groups.json
+      - name: Make disposable non-superuser CREATEROLE test owner, never GitHub secret
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_source_ci_owner LOGIN CREATEROLE NOINHERIT NOSUPERUSER PASSWORD 'ci-only';
+          GRANT phase5_fids_source_prod_20261107 TO phase5_source_ci_owner WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
+          SQL
+      - name: Actual PG16 role/secret transaction tests, GitHub secret MOCK only
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_source_worker_credential_mock_pg16_v39.test.ts
+          echo 'SOURCE_CREDENTIAL_DISPOSABLE_PG16=PASS PROD_GITHUB_SECRETS=0 PROD_DB_WRITES=0 PAID_GETS=0'
