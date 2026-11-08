@@ -295,6 +295,20 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    .rejects.toThrow("ALTERED_V3_PROPOSAL_OR_SOURCE_DIGEST");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
+ it("rejects budget UPDATE escalation on an otherwise scoped two-table writer",async()=>{
+  await admin.query(
+   "GRANT UPDATE ON clean.phase5_fids_cycle_budget_v39 TO "+USER
+  );
+  try{
+   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
+    .rejects.toThrow("EXTRA_FROZEN_LEDGER_OR_RAW_PROVIDER_PRIVILEGE");
+   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  }finally{
+   await admin.query(
+    "REVOKE UPDATE ON clean.phase5_fids_cycle_budget_v39 FROM "+USER
+   );
+  }
+ });
  it("refuses missing seventh category, with zero prepared query leakage",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
    .rejects.toThrow("CYCLE_SEVEN_REST_CATEGORY_CEILING_MISMATCH");
