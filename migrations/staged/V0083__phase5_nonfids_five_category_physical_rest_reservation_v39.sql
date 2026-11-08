@@ -14,6 +14,10 @@ CREATE TABLE clean.phase5_other_rest_reviewed_call_v39 (
   'FIDS_RETRY_UNIT_BUDGET','VALIDATION_UNIT_BUDGET',
   'OUTCOME_REST_UNIT_BUDGET','HISTORY_BOOTSTRAP_UNIT_BUDGET',
   'DIAGNOSTIC_UNIT_BUDGET')),
+ -- FIDS retry is never a generic paid GET; it requires the prior V0079
+ -- source attempt, the same frozen query/time bounds, active real GH run
+ -- and no previously completed source original. Others require NULL.
+ source_query_digest text REFERENCES clean.phase5_fids_allowed_query_v39(query_digest),
  planned_charge_day_utc date NOT NULL,
  earliest_dispatch_utc timestamptz NOT NULL,
  hard_latest_dispatch_utc timestamptz NOT NULL,
@@ -26,6 +30,11 @@ CREATE TABLE clean.phase5_other_rest_reviewed_call_v39 (
   CHECK(reviewed_category_budget_sha256~'^[0-9a-f]{64}$'),
  api_units_per_get integer NOT NULL CHECK(api_units_per_get BETWEEN 1 AND 100),
  created_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
+ CONSTRAINT p5_retry_must_reference_frozen_source_v39 CHECK (
+  (rest_category='FIDS_RETRY_UNIT_BUDGET')=
+  (source_query_digest IS NOT NULL)),
+ CONSTRAINT p5_retry_pinned_fids_price_v39 CHECK (
+  rest_category<>'FIDS_RETRY_UNIT_BUDGET' OR api_units_per_get=2),
  CONSTRAINT p5_other_reviewed_future_window_v39 CHECK (
   earliest_dispatch_utc<=hard_latest_dispatch_utc
   AND (earliest_dispatch_utc AT TIME ZONE 'UTC')::date=planned_charge_day_utc
@@ -131,6 +140,7 @@ DECLARE
  v_cat clean.phase5_fids_utc_rest_category_budget_v39%ROWTYPE;
  v_release clean.phase5_fids_seven_rest_release_v39%ROWTYPE;
  v_auth clean.adb_phase6_authorization%ROWTYPE;
+ v_source clean.phase5_fids_allowed_query_v39%ROWTYPE;
  v_now timestamptz;v_date date;
  n integer;other_day integer;other_cycle integer;
  cap integer;plan_cycle integer;modified integer;ref timestamptz;
@@ -173,6 +183,37 @@ BEGIN
  IF EXTRACT(HOUR FROM (v_now AT TIME ZONE 'UTC'))=23 AND
     EXTRACT(MINUTE FROM (v_now AT TIME ZONE 'UTC'))>=50
  THEN RAISE EXCEPTION 'P5_V0083_NO_LATE_UTC_MIDNIGHT_BILLING'; END IF;
+ -- A FIDS retry is the SAME approved physical query, not a new query.
+ -- Link to the irreversible first V0079 physical reservation and deny
+ -- retries after an original is already bound. The original source hard
+ -- deadline and 2-minute PRE margin still apply. Retrying costs new units.
+ IF v_call.rest_category='FIDS_RETRY_UNIT_BUDGET' THEN
+  IF v_call.source_query_digest IS NULL OR
+     v_call.api_units_per_get<>2
+  THEN RAISE EXCEPTION 'P5_V0083_FIDS_RETRY_NOT_SOURCE_BOUND'; END IF;
+  SELECT * INTO v_source FROM clean.phase5_fids_allowed_query_v39
+   WHERE query_digest=v_call.source_query_digest
+   AND manifest_sha256=p_manifest FOR SHARE;
+  IF NOT FOUND OR v_source.github_run_id IS DISTINCT FROM p_github_run_id
+    OR v_source.rights_review_sha256 IS DISTINCT FROM p_rights_sha256
+    OR v_source.state IS DISTINCT FROM 'ACTIVE'
+    OR v_source.planned_charge_utc_date IS DISTINCT FROM v_date
+    OR v_now>v_source.hard_latest_dispatch_utc OR
+    v_now>=v_source.prediction_cutoff_utc-INTERVAL '2 minutes'
+    OR NOT EXISTS(SELECT 1
+      FROM clean.phase5_fids_physical_attempt_v39 a
+      WHERE a.query_digest=v_call.source_query_digest
+        AND a.manifest_sha256=p_manifest
+        AND a.github_run_id=p_github_run_id)
+    OR EXISTS(SELECT 1
+      FROM clean.phase5_fids_original_binding_v39 ob
+      WHERE ob.query_digest=v_call.source_query_digest)
+    OR NOT EXISTS(SELECT 1
+      FROM clean.phase5_fids_exact_query_partition_v39 pin
+      WHERE pin.query_digest=v_call.source_query_digest
+       AND pin.manifest_sha256=p_manifest)
+  THEN RAISE EXCEPTION 'P5_V0083_FIDS_RETRY_WITHOUT_UNRESOLVED_ORIGINAL_SOURCE_ATTEMPT'; END IF;
+ END IF;
  IF EXISTS(SELECT 1 FROM clean.phase5_other_rest_physical_reservation_v39
    WHERE request_sha256=p_request_sha256)
  THEN RAISE EXCEPTION 'P5_V0083_DUPLICATE_PHYSICAL_GET_NEVER_RETRY'; END IF;
