@@ -1,0 +1,77 @@
+name: Phase5 one reviewed prospective FIDS GET (PAID, manual, main only)
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_release_file:
+        description: "Previously reviewed data-collection/phase5/frozen/*.json (one exact source GET)"
+        required: true
+        type: string
+      confirm:
+        description: "Type ONE_PAID_FIDS_GET_MAX_2_API_UNITS_NO_PHASE6"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: phase5-one-reviewed-source-${{ inputs.frozen_release_file }}
+  cancel-in-progress: false
+jobs:
+  exact-source-release:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_PAID_FIDS_GET_MAX_2_API_UNITS_NO_PHASE6' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      # All switches must come from separately configured reviewed
+      # repository secrets: a green PR must NEVER auto-approve provider rights.
+      V39_P5_SOURCE_OWNER_APPROVED: ${{ secrets.V39_P5_SOURCE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_P5_SOURCE_DB_ROLE_REVIEWED: ${{ secrets.V39_P5_SOURCE_DB_ROLE_REVIEWED }}
+      V39_P5_REST_UNIT_PRICE_APPROVED: ${{ secrets.V39_P5_REST_UNIT_PRICE_APPROVED }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_P5_SIGNED_QUERY_JSON_SHA256: ${{ secrets.V39_P5_SIGNED_QUERY_JSON_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_QUERY_DIGEST: ${{ secrets.V39_P5_QUERY_DIGEST }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      AERODATABOX_WEBHOOK_SECRET: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install pinned runtime; never access provider in dependency phase
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Ensure manual one-shot scope before any DB/provider operation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$CONFIRM" = ONE_PAID_FIDS_GET_MAX_2_API_UNITS_NO_PHASE6
+          [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          test -f "$RELEASE_FILE"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+      - name: Exactly one physical provider GET only after signed source-rights + DB admission
+        env:
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$AERODATABOX_API_KEY"
+          npx tsx scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts "$RELEASE_FILE"
+          echo 'PHASE5_ONE_SOURCE_QUERY_JOB_FINISHED_NOT_FLIGHT_PRE_NOT_PHASE6_GO'
