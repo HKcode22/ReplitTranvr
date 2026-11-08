@@ -9,6 +9,10 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
+## 31-day Stage22 → V0082 frozen seven-REST-category inputs (inert)
+
+[Scientifically audited 31-batch-day Stage22 to V0082 budget input-frozen checkpoint](2026-11-08_STAGE22_TO_V0082_SIGNED_SEVEN_REST_INPUT_FREEZE_CHECKPOINT.md) documents the complete f.8 source-range and actual UTC REST-charge-budget derivation, seven category caps, separate restricted `SERIALIZABLE` V0082 release/caps/day-budget writer, and authentic disposable PostgreSQL16 rollback/ACL tests. This *prepares reviewed future budget inputs*, not spent requests, licensed normalized Contents, selected airport observations, production migration installation, witnessed PRE or Phase6 paid GO.
+
 ## Restricted V0079 + V0082 atomic query/partition preparation (unarmed)
 
 [Same-transaction segmented source preparation checkpoint](2026-11-08_V0082_ATOMIC_SEGMENTED_DAY_PREPARE_CHECKPOINT.md) describes the additive Stage9 v3 writer and authentic disposable PG16 regression. V0079 PREPARED query rows and V0082 exact child/range category-partition rows must be inserted **together**, after independently frozen seven-category REST budgets and a real saved source calendar/draw have been verified. **The writer does not create/freeze those budgets, install V0082 on production, activate a paid collector, or certify rights and scientific FREEZE.**
