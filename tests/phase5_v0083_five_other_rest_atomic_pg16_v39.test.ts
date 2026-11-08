@@ -160,6 +160,9 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
     "NOSUPERUSER NOCREATEROLE NOCREATEDB NOINHERIT");
   await admin.query("GRANT "+group+" TO "+login+
     " WITH SET TRUE,INHERIT FALSE,ADMIN FALSE");
+  // LOGIN can resolve function/table names for an explicit negative test,
+  // but has neither EXECUTE nor table rights until SET-only NOLOGIN role.
+  await admin.query("GRANT USAGE ON SCHEMA clean TO "+login);
   await admin.query("GRANT USAGE ON SCHEMA clean TO "+group);
   await admin.query(
    "GRANT EXECUTE ON FUNCTION clean.reserve_phase5_other_rest_once_v39"+
