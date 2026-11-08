@@ -28,6 +28,7 @@ const specs=[
 const categories=["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS",
  ...specs.map(x=>x[0])];
 const requestDigest=(cat:string,code:string)=>sha("V0083-CI-"+cat+"-"+code);
+const retrySource=sha("V0083-CI-FIDS-PROSPECTIVE-SOURCE-ORIGINAL");
 const token=(req:string,units:number)=>sha(
  manifest+"|"+req+"|"+run+"|"+units+"|"+rights+"|"+price
 );
@@ -76,7 +77,7 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
    [manifest,SHA("7"),SHA("8"),categoryReview]
   );
   for(const cat of categories){
-   const units=planned.get(cat)??0;
+   const units=cat==="FIDS_BASE_UNITS"?2:planned.get(cat)??0;
    await admin.query(
     "INSERT INTO clean.phase5_fids_cycle_rest_category_cap_v39 "+
     "(manifest_sha256,category,ceiling_units) VALUES ($1,$2,$3)",
@@ -88,18 +89,56 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
     "VALUES ($1,$2::date,$3,$4)",[manifest,dayUtc,cat,units]
    );
   }
+  // A retry must refer to an exact original FIDS query. This CI source
+  // query has NO physical attempt, proving a caller cannot bill a generic
+  // retry as if a genuine failed source attempt had occurred.
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_day_budget_v39 "+
+   "(manifest_sha256,run_day_index,budget_day_utc,calendar_hash,"+
+   "config_hash,frame_hash,early_draw_sha256,daily_api_ceiling,"+
+   "daily_other_reserved_units) "+
+   "VALUES ($1,1,$2::date,$3,$4,$5,$6,1900,15)",
+   [manifest,dayUtc,cal,conf,SHA("9"),SHA("3")]
+  );
+  const serviceStart=new Date(now+2*3600000).toISOString();
+  const serviceEnd=new Date(now+3*3600000).toISOString();
+  const cutoff=new Date(now+3600000).toISOString();
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_allowed_query_v39 "+
+   "(query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,"+
+   "airport_icao,early_draw_sha256,reviewed_release_sha256,"+
+   "rights_review_sha256,provider_contract_sha256,github_run_id,"+
+   "service_window_start_utc,service_window_end_utc,from_local,to_local,"+
+   "airport_iana_timezone,provider_api_version,fids_protocol_version,"+
+   "planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,"+
+   "prediction_cutoff_utc,state) "+
+   "VALUES ($1,$2,1,'V0083_CI_RETRY_SOURCE','HUB','T-90m','WSSS',"+
+   "$3,$4,$5,$6,$7,$8,$9,'2026-11-08T08:00',"+
+   "'2026-11-08T09:00','Asia/Singapore','1.15.4','v39',$10,"+
+   "$11::date,$12,$13,'ACTIVE')",
+   [retrySource,manifest,SHA("3"),SHA("4"),rights,provider,run,
+    serviceStart,serviceEnd,dispatch,dayUtc,latest,cutoff]
+  );
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_exact_query_partition_v39 "+
+   "(query_digest,manifest_sha256,segment_index,partition_index,"+
+   "window_shape,rest_category,reviewed_provider_range_sha256) "+
+   "VALUES ($1,$2,1,1,'4h','FIDS_BASE_UNITS',$3)",
+   [retrySource,manifest,SHA("8")]
+  );
   for(const [cat,units,code] of specs){
    const req=requestDigest(cat,code);reqs.set(cat,req);
    await admin.query(
     "INSERT INTO clean.phase5_other_rest_reviewed_call_v39 "+
-    "(request_sha256,manifest_sha256,rest_category,planned_charge_day_utc,"+
-    "earliest_dispatch_utc,hard_latest_dispatch_utc,github_run_id,"+
+    "(request_sha256,manifest_sha256,rest_category,source_query_digest,"+
+    "planned_charge_day_utc,earliest_dispatch_utc,hard_latest_dispatch_utc,github_run_id,"+
     "rights_review_sha256,provider_price_sha256,"+
     "reviewed_request_context_sha256,reviewed_category_budget_sha256,"+
     "api_units_per_get) "+
-    "VALUES ($1,$2,$3,$4::date,$5::timestamptz,$6::timestamptz,"+
-    "$7,$8,$9,$10,$11,$12)",
-    [req,manifest,cat,dayUtc,dispatch,latest,run,
+    "VALUES ($1,$2,$3,$4,$5::date,$6::timestamptz,$7::timestamptz,"+
+    "$8,$9,$10,$11,$12,$13)",
+    [req,manifest,cat,cat==="FIDS_RETRY_UNIT_BUDGET"?retrySource:null,
+     dayUtc,dispatch,latest,run,
      rights,price,SHA(code),categoryReview,units]
    );
   }
@@ -190,6 +229,12 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
   )).rejects.toThrow("REVIEWED_OTHER_REST_GET_MISSING");
   expect((await read()).attempts).toBe(0);
  });
+ it("refuses FIDS retry without a real first committed source GET attempt",async()=>{
+  await expect(reserve("FIDS_RETRY_UNIT_BUDGET",2))
+   .rejects.toThrow(
+    "FIDS_RETRY_WITHOUT_UNRESOLVED_ORIGINAL_SOURCE_ATTEMPT");
+  expect((await read()).attempts).toBe(0);
+ });
  it("rolls back actual reservation if category UPDATE fails after INSERT",async()=>{
   await admin.query(`CREATE FUNCTION clean.ci_v0083_fail_after_charge() RETURNS trigger
    LANGUAGE plpgsql AS $$
@@ -212,26 +257,30 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
    await admin.query("DROP FUNCTION clean.ci_v0083_fail_after_charge()");
   }
  });
- it("atomically charges five separately reviewed OTHER-category REST calls exactly once",async()=>{
-  for(const [cat,cost] of specs){
+ it("atomically reserves the four non-retry REST categories independently",async()=>{
+  for(const [cat,cost] of specs.filter(([c])=>
+    c!=="FIDS_RETRY_UNIT_BUDGET")){
    const x=await reserve(cat,cost);
    expect(x.rowCount).toBe(1);
    expect(x.rows[0].result).toBeInstanceOf(Date);
   }
   const s=await read();
-  expect(s.attempts).toBe(5);
+  expect(s.attempts).toBe(4);
   expect(s.cycle).toEqual({n:0,other:15});
   expect(s.rows.filter((r:any)=>sourceCats.has(r.category))
    .every((r:any)=>r.n===0)).toBe(true);
-  expect(s.rows.filter((r:any)=>!sourceCats.has(r.category))
+  expect(s.rows.filter((r:any)=>
+   !sourceCats.has(r.category)&&r.category!=="FIDS_RETRY_UNIT_BUDGET")
    .every((r:any)=>r.n===r.p)).toBe(true);
+  expect(s.rows.find((r:any)=>
+    r.category==="FIDS_RETRY_UNIT_BUDGET").n).toBe(0);
  });
  it("rejects replay and cannot spend a second VALIDATION GET beyond frozen category",async()=>{
   await expect(reserve("VALIDATION_UNIT_BUDGET",4))
    .rejects.toThrow("DUPLICATE_PHYSICAL_GET_NEVER_RETRY");
   await expect(reserve("OVERFUNDED_VALIDATION",4))
    .rejects.toThrow("OTHER_CATEGORY_CAP_EXHAUSTED");
-  const s=await read();expect(s.attempts).toBe(5);
+  const s=await read();expect(s.attempts).toBe(4);
   const privilege=(await worker.query(
    "SELECT has_table_privilege(current_user,"+
    "'clean.phase5_fids_utc_rest_category_budget_v39','UPDATE') u,"+
@@ -245,17 +294,31 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
    "SET physically_reserved_units=0 "+
    "WHERE category='VALIDATION_UNIT_BUDGET'"
   )).rejects.toThrow("SAME_TRANSACTION_ONE_SHOT_PROOF");
-  // Source BASE/SPLIT continue accepting exact +2 only. Transaction is
-  // rolled back and NO physical FIDS attempt or provider GET is created.
-  await admin.query("BEGIN");
+  await expect(admin.query(
+   "UPDATE clean.phase5_fids_utc_rest_category_budget_v39 "+
+   "SET planned_units=3 WHERE category='FIDS_BASE_UNITS'"
+  )).rejects.toThrow("IMMUTABLE");
+  // Exact +2 BASE branch remains permitted inside the SOURCE physical
+  // reservation transaction; this synthetically tests only its category
+  // immutability branch, rolling back before recording any real GET.
+  const client=await admin.connect();
   try{
-   await admin.query(
+   await client.query("BEGIN");
+   await client.query(
     "UPDATE clean.phase5_fids_utc_rest_category_budget_v39 "+
-    "SET planned_units=2 WHERE category='FIDS_BASE_UNITS'"
-   ).then(()=>{throw Error("source plan mutated unexpectedly")})
-    .catch((e:any)=>expect(String(e)).toMatch(/IMMUTABLE/));
-  }finally{await admin.query("ROLLBACK");}
-  expect((await read()).attempts).toBe(5);
+    "SET physically_reserved_units=physically_reserved_units+2 "+
+    "WHERE category='FIDS_BASE_UNITS'"
+   );
+   const n=(await client.query(
+    "SELECT physically_reserved_units n FROM "+
+    "clean.phase5_fids_utc_rest_category_budget_v39 "+
+    "WHERE category='FIDS_BASE_UNITS'"
+   )).rows[0].n;
+   expect(n).toBe(2);
+  }finally{
+   await client.query("ROLLBACK");client.release();
+  }
+  expect((await read()).attempts).toBe(4);
  });
 });
 const sourceCats=new Set(["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS"]);
