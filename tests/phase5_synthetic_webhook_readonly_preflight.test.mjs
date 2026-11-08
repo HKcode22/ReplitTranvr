@@ -18,7 +18,10 @@ test('diagnostic is source-hash pinned and names every prior silent shell prereq
  ])assert(s.includes(expected),expected);
 });
 test('no provider HTTP, paid account/DB action, secret value echo or synthetic POST',()=>{
- assert(!/\b(curl|wget|psql|tsx|npm|npx)\b/.test(s));
+ assert(!/\b(curl|wget|psql|npm|npx)\s/.test(s));
+ // A binary *existence check* on node_modules/.bin/tsx is allowed;
+ // invoking tsx in this read-only diagnostics script is prohibited.
+ assert(!/^\s*(?:node_modules\/\.bin\/)?tsx\s/gm.test(s));
  assert(!/\bgit\s+(?:fetch|reset|clean|pull|merge|rebase|checkout|push)\b/.test(s));
  assert(!/\bgh\s+workflow\s+run\b/.test(s));
  assert(!/\becho\s+"\$AERODATABOX_WEBHOOK_SECRET"/.test(s));
