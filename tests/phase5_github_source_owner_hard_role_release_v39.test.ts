@@ -7,9 +7,9 @@ const provision=read("scripts/v39_phase5_source_worker_credential_owner_once.mjs
 describe("Phase5 one-source live owner: release and least-privilege provenance",()=>{
  it("requires exact main-only manual, confirmed single GET and no auto schedule",()=>{
   expect(wf).toContain("workflow_dispatch:");
-  expect(wf).not.toMatch(/\n  schedule:/);
-  expect(wf).not.toMatch(/\n  pull_request:/);
-  expect(wf).not.toMatch(/\n  push:/);
+  expect(wf).not.toMatch(/\n {2}schedule:/);
+  expect(wf).not.toMatch(/\n {2}pull_request:/);
+  expect(wf).not.toMatch(/\n {2}push:/);
   expect(wf).toContain("github.ref == 'refs/heads/main'");
   expect(wf).toContain("ONE_PAID_FIDS_GET_MAX_2_API_UNITS_NO_PHASE6");
   expect(wf).toContain('test "$GITHUB_RUN_ATTEMPT" = 1');
