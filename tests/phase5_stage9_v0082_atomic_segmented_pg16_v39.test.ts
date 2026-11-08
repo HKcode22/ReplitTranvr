@@ -118,31 +118,34 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    scheduledRequestUtc:string;maxResponseAndPersistSeconds:number;
    apiUnitsPerAttempt:number;maxAttempts:number;queryKey:string;
   }>;
+  // Two exposed 2h children, each partitioned into two 1h provider GET
+  // ranges. This tests BOTH BASE and SPLIT in the real V0082 DB table.
   for(const slot of SLOTS)for(const [horizon,offset,label] of HORIZONS)
-   for(const [seg,shift] of [[1,0],[2,3]]){
-    const partStart=start+shift*H,partEnd=partStart+2*H;
-    for(let j=0;j<3;j++){
-     const request=partStart-offset-4*M+j*45*M;
-     templates.push({
-      runDayIndex:1,budgetDayUtc:serviceStart.slice(0,10),
-      physicalChargeDayUtc:iso(request).slice(0,10),
-      slot,horizon,providerQueryDirection:"Departure",
-      serviceWindowStartUtc:iso(partStart),
-      serviceWindowEndUtc:iso(partEnd),
-      earliestPlannedCutoffUtc:iso(request+6*M),
-      scheduledRequestUtc:iso(request),
-      maxResponseAndPersistSeconds:60,apiUnitsPerAttempt:2,maxAttempts:1,
-      queryKey:["CI0082",slot,label,"s"+seg,"r"+j].join("_")
-     });
+   for(const [seg,shift] of [[1,0],[2,3]])
+    for(let part=0;part<2;part++){
+     const partStart=start+(shift+part)*H,partEnd=partStart+H;
+     for(let j=0;j<2;j++){
+      const request=partStart-offset-4*M+j*45*M;
+      templates.push({
+       runDayIndex:1,budgetDayUtc:serviceStart.slice(0,10),
+       physicalChargeDayUtc:iso(request).slice(0,10),
+       slot,horizon,providerQueryDirection:"Departure",
+       serviceWindowStartUtc:iso(partStart),
+       serviceWindowEndUtc:iso(partEnd),
+       earliestPlannedCutoffUtc:iso(request+6*M),
+       scheduledRequestUtc:iso(request),
+       maxResponseAndPersistSeconds:60,apiUnitsPerAttempt:2,maxAttempts:1,
+       queryKey:["CI0082",slot,label,"s"+seg,"p"+part,"r"+j].join("_")
+      });
+     }
     }
-   }
   const timing={
    reviewed31DayCoverageGridSha256:sha("9"),
    maxPopulationStalenessSeconds:3600,maxSchedulerSlipSeconds:0,
-   minimumPreCommitMarginSeconds:120,verifiedProviderMaxFidsWindowMinutes:120
+   minimumPreCommitMarginSeconds:120,verifiedProviderMaxFidsWindowMinutes:60
   };
   const segmented={
-   windowShape:"2x2h" as const,verifiedProviderMaxRangeMinutes:120,
+   windowShape:"2x2h" as const,verifiedProviderMaxRangeMinutes:60,
    reviewedProviderRangeEvidenceSha256:range
   };
   const saved=await readCommittedP5DayCandidateGrid(admin,{
@@ -154,7 +157,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    runDayIndex:1,templates,reviewedRefreshTiming:timing,
    reviewedSegmentedSource:segmented
   });
-  expect(saved.selectedDayCandidateGrid.acquisitionCount).toBe(72);
+  expect(saved.selectedDayCandidateGrid.acquisitionCount).toBe(96);
   const proposal=planStage8P5DayV0079Proposals({
    stage7:saved,day:{
     runDayIndex:1,scheduledStartUtc:new Date(serviceStart),
@@ -179,8 +182,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     otherCategoriesReserved:0,existingSourceReserved:0
    }))
   });
-  expect(proposal.sourceQueryCount).toBe(72);
-  expect(proposal.sourcePartitionPins).toHaveLength(72);
+  expect(proposal.sourceQueryCount).toBe(96);
+  expect(proposal.sourcePartitionPins).toHaveLength(96);
   review={
    proposal,expectedProposalSha256:proposal.dayProposalSha256,
    expectedSourceCandidateDigestSha256:
@@ -221,7 +224,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "INSERT INTO clean.phase5_fids_seven_rest_release_v39 "+
    "(manifest_sha256,reviewed_source_request_grid_sha256,"+
    "reviewed_provider_range_sha256,verified_provider_max_range_minutes,"+
-   "reviewed_category_budget_sha256) VALUES ($1,$2,$3,120,$4)",
+   "reviewed_category_budget_sha256) VALUES ($1,$2,$3,60,$4)",
    [manifest,gridHash,range,budgetHash]
   );
   const perDay=new Map<string,Map<string,number>>();
@@ -317,33 +320,36 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   await admin.query("DROP TRIGGER ci_v0082_atomic_fail ON clean.phase5_fids_exact_query_partition_v39");
   await admin.query("DROP FUNCTION clean.ci_v0082_bomb()");
  });
- it("prepares all 72 SOURCE queries plus 72 exact V0082 partitions atomically",async()=>{
+ it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
   const result=await commitStage9P5V0082AtomicSegmentedDay(writer,review);
-  expect(result.preparedQueryRows).toBe(72);
-  expect(result.preparedPartitionRows).toBe(72);
-  expect(result.databaseInserts).toBe(144);
+  expect(result.preparedQueryRows).toBe(96);
+  expect(result.preparedPartitionRows).toBe(96);
+  expect(result.databaseInserts).toBe(192);
   expect(result.providerCalls).toBe(0);
   expect(result.paidSourceAttempts).toBe(0);
   expect(result.frozenCategoryBudgetWritten).toBe(false);
   expect(result.phase6PaidGo).toBe(false);
-  expect(await counts()).toEqual({q:72,p:72,a:0,o:0});
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
   const category=(await admin.query(
    "SELECT rest_category,COUNT(*)::int n "+
    "FROM clean.phase5_fids_exact_query_partition_v39 "+
    "GROUP BY rest_category"
   )).rows;
-  expect(category).toEqual([{rest_category:"FIDS_BASE_UNITS",n:72}]);
+  expect(category).toEqual([
+    {rest_category:"FIDS_BASE_UNITS",n:48},
+    {rest_category:"FIDS_SPLIT_UNITS",n:48}
+   ]);
   const meta=(await admin.query(
    "SELECT count(*) FILTER (WHERE github_run_id='00000' "+
    "AND state='PREPARED')::int prepared "+
    "FROM clean.phase5_fids_allowed_query_v39"
   )).rows[0];
-  expect(meta.prepared).toBe(72);
+  expect(meta.prepared).toBe(96);
  });
  it("refuses replay after commit, no duplicates or excess permissions",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
     .rejects.toThrow("SOURCE_DAY_ALREADY_PARTIALLY_PREPARED_NO_REPLAY");
-  expect(await counts()).toEqual({q:72,p:72,a:0,o:0});
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
   const privileges=(await writer.query(
    "SELECT has_table_privilege(current_user,"+
    "'clean.phase5_fids_physical_attempt_v39','INSERT') AS attempt,"+
