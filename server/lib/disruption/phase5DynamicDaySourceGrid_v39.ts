@@ -25,8 +25,11 @@ export const P5_DYNAMIC_DAY_GRID_SCHEMA =
   "v39.phase5.early-draw-to-12-source-candidates.v1" as const;
 export const P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA =
   "v39.phase5.early-draw-to-multirefresh-source-candidates.v2" as const;
+export const P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA =
+  "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates.v3" as const;
 const MAX_QUERIES_PER_GROUP=32;
 const MAX_QUERIES_PER_DAY=12*MAX_QUERIES_PER_GROUP;
+const HOUR=3_600_000,MINUTE=60_000;
 const T_OFFSET:Record<P5FidsHorizon,number>={
  "T-24h":86_400_000,"T-6h":21_600_000,"T-90m":5_400_000
 };
@@ -38,6 +41,18 @@ export interface P5DayReviewedRefreshTiming {
  minimumPreCommitMarginSeconds:number;
  verifiedProviderMaxFidsWindowMinutes:number;
 }
+/** Reviewed request-range geometry; this SHA does not certify provider rights. */
+export interface P5DayReviewedSegmentedSource {
+ windowShape:"4h"|"2x2h"|"up-to-6h";
+ verifiedProviderMaxRangeMinutes:number;
+ reviewedProviderRangeEvidenceSha256:string;
+}
+export interface P5DaySourcePartitionPin {
+ queryKey:string;segmentIndex:number;partitionIndex:number;
+ windowShape:P5DayReviewedSegmentedSource["windowShape"];
+ serviceWindowStartUtc:string;serviceWindowEndUtc:string;
+ reviewedProviderRangeEvidenceSha256:string;
+}
 const HASH=/^[a-f0-9]{64}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS:P5Slot[]=["HUB","MID_A","MID_B","REGIONAL"];
@@ -48,9 +63,12 @@ const MAX_LATENCY=3_600;
 type WithoutUnknownIcao=Omit<P5FidsAcquisition,"icao"|"plannedAirportSelectionUtc">;
 
 export interface P5DynamicDayGridInput {
-  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA|typeof P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA|typeof P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA|
+  typeof P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA;
   /** Required only for multi-refresh; must come from independently reviewed grid. */
   reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
+  /** V3 Amendment C only: Stage7 verifies against persisted calendar shape. */
+  reviewedSegmentedSource?:P5DayReviewedSegmentedSource;
   /** Same frozen protocol scope as the eventual V0079 signed query set. */
   reviewedCalendarSha256:string;
   reviewedConfigSha256:string;
@@ -66,9 +84,11 @@ export interface P5DynamicDayGridInput {
 }
 export interface P5DynamicDayGridResult {
   schema:"v39.phase5.early-draw-to-12-source-candidates-result.v1"|
-    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
+    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2"|
+    "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3";
   status:"DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED"|
-    "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED";
+    "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED"|
+    "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED";
   runDayIndex:number;
   selectedAtUtc:string;
   committedDrawSha256:string;
@@ -78,6 +98,8 @@ export interface P5DynamicDayGridResult {
   plannedPhysicalGetCount:number;
   candidateFidsApiUnits:number;
   reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
+  reviewedSegmentedSource?:P5DayReviewedSegmentedSource;
+  sourcePartitionPins?:P5DaySourcePartitionPin[];
   actualChargeDayUtcCounts:{day:string;physicalRequests:number;candidateApiUnits:number}[];
   acquisitions:P5FidsAcquisition[];
   actualGithubRunPrearmVerified:false;
@@ -104,10 +126,21 @@ function digest(o:unknown):string{
  * four rows actually came from the frozen committed DB draw, not a fixture.
  */
 export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P5DynamicDayGridResult {
- if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA]
-   .includes(input.schema))hold("SCHEMA");
- const multi=input.schema===P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+ if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+   P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA].includes(input.schema))
+   hold("SCHEMA");
+ const segmented=input.schema===P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA;
+ const multi=segmented||input.schema===P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
  const timing=input.reviewedRefreshTiming;
+ const shape=input.reviewedSegmentedSource;
+ if(segmented){
+   if(!shape||!["4h","2x2h","up-to-6h"].includes(shape.windowShape)||
+      !HASH.test(shape.reviewedProviderRangeEvidenceSha256)||
+      !Number.isSafeInteger(shape.verifiedProviderMaxRangeMinutes)||
+      shape.verifiedProviderMaxRangeMinutes<1||
+      shape.verifiedProviderMaxRangeMinutes>360)
+      hold("UNVERIFIED_AMENDMENT_C_SEGMENTED_SOURCE");
+ }else if(shape)hold("LEGACY_UNREVIEWED_SEGMENTED_SOURCE");
  if(multi){
    if(!timing||!HASH.test(timing.reviewed31DayCoverageGridSha256)||
      !Number.isSafeInteger(timing.maxPopulationStalenessSeconds)||
@@ -120,8 +153,10 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      timing.minimumPreCommitMarginSeconds<120||
      timing.minimumPreCommitMarginSeconds>900||
      !Number.isSafeInteger(timing.verifiedProviderMaxFidsWindowMinutes)||
-     timing.verifiedProviderMaxFidsWindowMinutes<240||
-     timing.verifiedProviderMaxFidsWindowMinutes>1440)
+     timing.verifiedProviderMaxFidsWindowMinutes<(segmented?1:240)||
+     timing.verifiedProviderMaxFidsWindowMinutes>(segmented?360:1440)||
+     (segmented&&timing.verifiedProviderMaxFidsWindowMinutes!==
+      shape?.verifiedProviderMaxRangeMinutes))
      hold("UNVERIFIED_MULTI_REFRESH_TIMING_CONTRACT");
  }else if(timing)hold("LEGACY_GRID_CANNOT_SMUGGLE_MULTI_REFRESH_CONTRACT");
  const day=input.day;
@@ -140,6 +175,23 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
    hold("UNVERIFIED_EARLY_DRAW_READBACK");
  const start=day.scheduledStartUtc.getTime();
  if(!Number.isFinite(start))hold("FROZEN_SERVICE_START");
+ const partitions:{
+   segmentIndex:number;partitionIndex:number;start:number;end:number;
+ }[]=[];
+ if(segmented&&shape){
+   const ranges=shape.windowShape==="2x2h"?
+     [[0,2],[3,5]]:[[0,shape.windowShape==="4h"?4:6]];
+   const maxRangeMs=shape.verifiedProviderMaxRangeMinutes*MINUTE;
+   for(let seg=0;seg<ranges.length;seg++){
+     const [first,last]=ranges[seg];let idx=0;
+     for(let cur=start+first*HOUR;cur<start+last*HOUR;cur+=maxRangeMs){
+       partitions.push({segmentIndex:seg+1,partitionIndex:++idx,
+         start:cur,end:Math.min(cur+maxRangeMs,start+last*HOUR)});
+     }
+   }
+   if(partitions.length*12>MAX_QUERIES_PER_DAY)
+     hold("SEGMENTED_RANGE_NEEDS_MORE_THAN_384_GETS_PER_DAY");
+ }
  const selected=time(draw.selectedAtUtc,"SELECTED_AT");
  const advance=start-selected;
  if(advance<=MIN_EARLY||advance>MAX_EARLY)
@@ -154,6 +206,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  const byCharge=new Map<string,number>();
  const earliestBySlot=new Map<P5Slot,Record<P5FidsHorizon,number>>();
  const byGroup=new Map<string,{request:number;persistentSeconds:number}[]>();
+ const partitionByKey=new Map<string,P5DaySourcePartitionPin>();
  for(const candidate of input.templates){
   if(!candidate || Object.hasOwn(candidate,"icao") ||
       Object.hasOwn(candidate,"plannedAirportSelectionUtc"))
@@ -167,7 +220,9 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     hold("SERVICE_DAY_OR_DIRECTION_CHANGED");
   const one=draw.selections.find(v=>v.slotId===slot);
   if(!one)hold("MISSING_COMMITTED_SLOT");
-  const group=slot+"|"+horizon;
+  const group=segmented?
+    slot+"|"+horizon+"|"+candidate.serviceWindowStartUtc+"|"+
+      candidate.serviceWindowEndUtc:slot+"|"+horizon;
   if(!multi&&seen.has(group))hold("DUPLICATE_SLOT_HORIZON");
   seen.add(group);
   const groupRequests=byGroup.get(group)??[];
@@ -182,13 +237,25 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   const end=time(candidate.serviceWindowEndUtc,"WINDOW_END");
   const request=time(candidate.scheduledRequestUtc,"REQUEST");
   const cutoff=time(candidate.earliestPlannedCutoffUtc,"CUTOFF");
-  if(dayWindow!==start||end<=dayWindow||end>dayWindow+4*3_600_000)
+  if(segmented&&shape){
+    const part=partitions.find(p=>p.start===dayWindow&&p.end===end);
+    if(!part)hold("SOURCE_NOT_EXACT_AMENDMENT_C_PARTITION");
+    partitionByKey.set(candidate.queryKey,{
+      queryKey:candidate.queryKey,segmentIndex:part.segmentIndex,
+      partitionIndex:part.partitionIndex,windowShape:shape.windowShape,
+      serviceWindowStartUtc:candidate.serviceWindowStartUtc,
+      serviceWindowEndUtc:candidate.serviceWindowEndUtc,
+      reviewedProviderRangeEvidenceSha256:
+        shape.reviewedProviderRangeEvidenceSha256,
+    });
+  }else if(dayWindow!==start||end<=dayWindow||
+           end>dayWindow+4*HOUR)
     hold("UNFROZEN_SERVICE_WINDOW");
   if(selected>=request||request>=cutoff)
     hold("EARLY_DRAW_OR_QUERY_AFTER_CUTOFF");
   // A source refresh is always tied to a real candidate flight-cutoff
   // instant inside its horizon's complete four-hour service population.
-  if(multi && (cutoff<start-T_OFFSET[horizon]||
+  if(multi && (cutoff<(segmented?dayWindow:start)-T_OFFSET[horizon]||
     cutoff>=end-T_OFFSET[horizon]))
     hold("REFRESH_CUTOFF_OUTSIDE_FROZEN_SERVICE_INTERVAL");
   if(!Number.isSafeInteger(candidate.maxResponseAndPersistSeconds)||
@@ -215,17 +282,27 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   requests.push({...candidate,icao:one.icao,
     plannedAirportSelectionUtc:draw.selectedAtUtc});
  }
- if(seen.size!==12||keys.size!==input.templates.length)
+ const requiredGroupCount=segmented?12*partitions.length:12;
+ if(seen.size!==requiredGroupCount||keys.size!==input.templates.length){
+   if(segmented&&seen.size<requiredGroupCount)
+     hold("MISSING_MULTI_REFRESH_HORIZON_PARTITION");
    hold("INCOMPLETE_SIGNED_QUERY_SLOTS");
+ }
  if(multi&&timing){
    const stalenessMs=timing.maxPopulationStalenessSeconds*1000;
    const latencyMs=timing.maxSchedulerSlipSeconds*1000+
      timing.minimumPreCommitMarginSeconds*1000;
    for(const slot of SLOTS)for(const horizon of HORIZONS){
-     const one=byGroup.get(slot+"|"+horizon);
-     if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON");
-     let covered=start-T_OFFSET[horizon];
-     const endOfHorizon=start+4*3_600_000-T_OFFSET[horizon];
+     const required=segmented?partitions:[
+       {start,end:start+4*HOUR,segmentIndex:1,partitionIndex:1}];
+     for(const part of required){
+      const key=segmented?
+        slot+"|"+horizon+"|"+new Date(part.start).toISOString()+"|"+
+          new Date(part.end).toISOString():slot+"|"+horizon;
+      const one=byGroup.get(key);
+      if(!one?.length)hold("MISSING_MULTI_REFRESH_HORIZON_PARTITION");
+      let covered=part.start-T_OFFSET[horizon];
+      const endOfHorizon=part.end-T_OFFSET[horizon];
      for(const x of one.map(x=>({
        begins:x.request+latencyMs+x.persistentSeconds*1000,
        ends:x.request+stalenessMs
@@ -238,6 +315,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      }
      if(covered<endOfHorizon)
        hold("GAP_IN_ACTUAL_DYNAMIC_DAY_FLIGHT_CUTOFF_COVERAGE");
+     }
    }
  }
  for(const slot of SLOTS){
@@ -252,11 +330,13 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  const charges=[...byCharge.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
   .map(([day,physicalRequests])=>({day,physicalRequests,candidateApiUnits:physicalRequests*2}));
  return {
-  schema:multi?
-   "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
+  schema:segmented?
+   "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3":
+   multi?"v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
    "v39.phase5.early-draw-to-12-source-candidates-result.v1",
-  status:multi?
-   "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
+  status:segmented?
+   "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED":
+   multi?"DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
    "DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED",
   runDayIndex:day.runDayIndex,selectedAtUtc:draw.selectedAtUtc,
   committedDrawSha256:draw.stateHash,
@@ -265,16 +345,23 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     config:day.configHash,frame:day.frameHash,
     contract:input.providerContractSha256,
     ...(timing?{reviewedRefreshTiming:timing}:{}),
+    ...(segmented?{reviewedSegmentedSource:shape,
+      sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
     templates:requests.map(r=>({...r,icao:undefined,plannedAirportSelectionUtc:undefined}))
   }),
   sourceCandidateDigestSha256:digest({
     day:day.runDayIndex,earlyDraw:draw.stateHash,
-    ...(timing?{reviewedRefreshTiming:timing}:{}),requests
+    ...(timing?{reviewedRefreshTiming:timing}:{}),
+    ...(segmented?{reviewedSegmentedSource:shape,
+      sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
+    requests
   }),
   acquisitionCount:requests.length,
   plannedPhysicalGetCount:requests.length,
   candidateFidsApiUnits:requests.length*2,
   ...(timing?{reviewedRefreshTiming:timing}:{}),
+  ...(segmented?{reviewedSegmentedSource:shape,
+    sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey)!)}:{}),
   actualChargeDayUtcCounts:charges,acquisitions:requests,
   actualGithubRunPrearmVerified:false,actualSourceOriginalCommitted:false,
   actualFlightLevelPreCertified:false,authorizedSourceRights:false,

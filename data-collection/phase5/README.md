@@ -9,6 +9,10 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
+## Segmented upstream source planning (Amendment C)
+
+[Stage6–8 exact 4h/2×2h/6h parent + partition planning checkpoint](2026-11-08_AMENDMENT_C_UPSTREAM_SEGMENTED_DAY_GRID_AND_STAGE9_SAFE_HOLD.md) documents the opt-in new v3 source-grid, saved-calendar READ ONLY verification, V0079 query digests and V0082 BASE/SPLIT partition IDs. **Stage9 intentionally refuses these segmented packets until an independently reviewed atomic V0079+V0082 prepared-query/partition and seven-category budget writer exists.** The pure grid is not a real source GET, published producer, measured provider rights or a Phase5 FREEZE.
+
 ## Current SOURCE integration checkpoint (Amendment C, PR #468)
 
 [Amendment C exact exposed-segment SOURCE checkpoint](2026-11-08_AMENDMENT_C_REAL_SOURCE_SEGMENT_RELEASE_CHECKPOINT.md): runtime originally rejected split-window second child and 6h later provider-range partitions while hardcoding FIDS_BASE. The code now checks exact source partitions and stored calendar geometry, and distinguishes FIDS_BASE/FIDS_SPLIT in transport. This is **offline production-intended engineering only**, not measured provider-range entitlement, a category-complete live REST ledger, a legal Contents/ML-use license, first genuine Phase6 source observation or final Phase5 FREEZE. Reuse the prior Nov6 FIDS-only pilot instead of creating a redundant paid diagnostic. No repeated worker installers or Replit timed jobs.

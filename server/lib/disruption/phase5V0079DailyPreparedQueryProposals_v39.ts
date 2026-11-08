@@ -9,7 +9,9 @@ import {createHash} from "node:crypto";
 import {
   materializeP5DynamicDaySourceGrid,
   P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
-  type P5DynamicDayGridInput
+  P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
+  type P5DynamicDayGridInput,type P5DaySourcePartitionPin,
+  type P5DayReviewedSegmentedSource
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {P5CommittedDayReadonlyResult}
  from "./phase5CommittedDayGridReadonly_v39";
@@ -95,6 +97,11 @@ export interface Stage8DayProposalResult {
  actualUtcChargeBudgets:{day:string;queries:number;candidateUnits:number;
      otherReserved:number;alreadyReserved:number;remainingAfterProposal:number}[];
  queries:Stage8V0079PreparedProposal[];
+ /** Exact Amendment C query+partition proof for a later separate V0082 writer. */
+ reviewedSegmentedSource?:P5DayReviewedSegmentedSource;
+ sourcePartitionPins?:Array<P5DaySourcePartitionPin&{
+   queryDigest:string;restCategory:"FIDS_BASE_UNITS"|"FIDS_SPLIT_UNITS";
+ }>;
  databaseReadbackClaimOnly:true;
  databaseWrites:0;providerCalls:0;
  installedV0079:false;actualGitHubPrearmVerified:false;
@@ -115,11 +122,15 @@ export function planStage8P5DayV0079Proposals(
     .every(x=>typeof x==="string"&&HASH.test(x)))
    refuse("MISSING_FROZEN_SHA_CHAIN");
  const candidate=p.stage7.selectedDayCandidateGrid;
- const multi=candidate?.schema===
+ const segmented=candidate?.schema===
+   "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3";
+ const multi=segmented||candidate?.schema===
    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
  const candidateCount=candidate?.acquisitionCount;
- if(!(multi?candidate?.status===
-     "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED":
+ if(!(multi?(segmented?candidate?.status===
+     "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED":
+     candidate?.status===
+     "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED"):
      candidate?.schema==="v39.phase5.early-draw-to-12-source-candidates-result.v1"&&
      candidate.status==="DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED")||
     !Number.isSafeInteger(candidateCount)||
@@ -143,8 +154,10 @@ export function planStage8P5DayV0079Proposals(
      return rest;
    });
  const verified=materializeP5DynamicDaySourceGrid({
-   schema:multi?P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
+   schema:segmented?P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
+      multi?P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
    ...(multi?{reviewedRefreshTiming:candidate.reviewedRefreshTiming}:{}),
+   ...(segmented?{reviewedSegmentedSource:candidate.reviewedSegmentedSource}:{}),
    reviewedCalendarSha256:p.calendarSha256,
    reviewedConfigSha256:p.configSha256,
    reviewedFrameSha256:p.frameSha256,
@@ -216,6 +229,16 @@ export function planStage8P5DayV0079Proposals(
  if(new Set(proposals.map(q=>q.query_digest)).size!==candidateCount||
     new Set(proposals.map(q=>q.query_key)).size!==candidateCount)
    refuse("DUPLICATE_V0079_QUERY_PROPOSAL");
+ const pins=segmented?verified.sourcePartitionPins?.map(pin=>{
+   const q=proposals.find(r=>r.query_key===pin.queryKey);
+   if(!q)refuse("MISSING_SEGMENTED_V0079_SOURCE_QUERY");
+   return {...pin,queryDigest:q.query_digest,
+     restCategory:pin.partitionIndex===1?
+       "FIDS_BASE_UNITS" as const:"FIDS_SPLIT_UNITS" as const};
+ }):undefined;
+ if(segmented&&(!pins||pins.length!==candidateCount||
+    new Set(pins.map(pin=>pin.queryDigest)).size!==candidateCount))
+    refuse("INCOMPLETE_REVIEWED_SEGMENTED_PARTITION_PINS");
  const actual=verified.actualChargeDayUtcCounts;
  const budgets=new Map(p.chargeDayBudgets.map(x=>[x.chargeDayUtc,x]));
  if(budgets.size!==actual.length||p.chargeDayBudgets.length!==actual.length)
@@ -243,10 +266,14 @@ export function planStage8P5DayV0079Proposals(
    manifestSha256:p.manifestSha256,runDayIndex:p.day.runDayIndex,
    earlyDrawSha256:verified.committedDrawSha256,
    dayProposalSha256:sha({manifest:p.manifestSha256,
-     source:verified.sourceCandidateDigestSha256,proposals,checked}),
+     source:verified.sourceCandidateDigestSha256,proposals,checked,
+      ...(segmented?{reviewedSegmentedSource:verified.reviewedSegmentedSource,
+        sourcePartitionPins:pins}:{})}),
    sourceQueryCount:candidateCount,
    maximumCandidateGetUnits:candidateCount*2,
    actualUtcChargeBudgets:checked,queries:proposals,
+   ...(segmented?{reviewedSegmentedSource:verified.reviewedSegmentedSource,
+     sourcePartitionPins:pins}:{}),
    databaseReadbackClaimOnly:true,databaseWrites:0,providerCalls:0,
    installedV0079:false,actualGitHubPrearmVerified:false,
    independentlyReviewedSourceRights:false,providerOriginalCommitted:false,

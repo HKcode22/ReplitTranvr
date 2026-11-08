@@ -172,7 +172,20 @@ The separate staged migrations declare these tables. The previous Phase 5 GitHub
 |---|---|
 | `clean.phase5_t24_postcommit_witness_v39` | `snapshot_id`, `flight_instance_id`, `population_query_id`, `fids_response_hash`, `source_query_digest`, `rights_review_sha256`, `selected_t_version` |
 
-V0078 modifies uniqueness constraints on Phase4 evidence and declares no new table in its migration file. Earlier V0066–V0075 migrations and any separately managed runtime schema objects may add further tables: this atlas is **complete for B0062 and the V0076–V0081 set named above**, **not a claim of every table that currently exists on a live database**.
+### V0082: V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+
+**NEW staged additive migration, merged in PR #470; it has NOT been installed on production.**
+
+| Table | One row means | Representative columns |
+|---|---|---|
+| `clean.phase5_fids_seven_rest_release_v39` | Reviewed 31-day source-grid, provider-range and REST budget SHA context for one manifest | `manifest_sha256`, `reviewed_source_request_grid_sha256`, `reviewed_provider_range_sha256`, `verified_provider_max_range_minutes`, `reviewed_category_budget_sha256` |
+| `clean.phase5_fids_cycle_rest_category_cap_v39` | One of seven project REST category limits for a manifest | `manifest_sha256`, `category`, `ceiling_units` |
+| `clean.phase5_fids_utc_rest_category_budget_v39` | One category's frozen planned units and physical reservation debit on an actual UTC charge date | `manifest_sha256`, `charge_day_utc`, `category`, `planned_units`, `physically_reserved_units` |
+| `clean.phase5_fids_exact_query_partition_v39` | One V0079 approved query's exact exposure child, provider range partition, and BASE/SPLIT category | `query_digest`, `manifest_sha256`, `segment_index`, `partition_index`, `window_shape`, `rest_category` |
+
+V0082's additional `BEFORE INSERT` trigger on `clean.phase5_fids_physical_attempt_v39` enforces exact source geometry and category spending **inside the existing V0079 SQL transaction**. It is source-only and **does not yet physically book the five non-FIDS categories**, or operate real Alert SEND credits. GitHub code and disposable PG16 success do not mean a migration was installed on the live Replit/Neon database. See [V0082 engineering checkpoint](2026-11-08_SEVEN_CATEGORY_V0082_ATOMIC_SOURCE_GET_LEDGER_CHECKPOINT.md).
+
+V0078 modifies uniqueness constraints on Phase4 evidence and declares no new table in its migration file. Earlier V0066–V0075 migrations and any separately managed runtime schema objects may add further tables: this atlas is **complete for B0062 and the V0076–V0082 named source/evidence tables**, **not a claim of every table that currently exists on a live database**.
 
 ## Phase5 seven important V0079 tables — how to read them
 

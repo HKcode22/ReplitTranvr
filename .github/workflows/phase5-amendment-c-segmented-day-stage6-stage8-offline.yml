@@ -1,0 +1,50 @@
+name: Phase5 Amendment C Segmented Day Stage6-8 (OFFLINE ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5DynamicDaySourceGrid_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'tests/phase5_amendment_c_dynamic_day_grid_v39.test.ts'
+      - '.github/workflows/phase5-amendment-c-segmented-day-stage6-stage8-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5DynamicDaySourceGrid_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'tests/phase5_amendment_c_dynamic_day_grid_v39.test.ts'
+permissions:
+  contents: read
+env:
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  ADB_AUTO_COLLECT: '0'
+jobs:
+  exact-segmented-day-grid-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: TypeScript and source grid exact focused tests
+        run: |
+          set -Eeuo pipefail
+          test -z "${DATABASE_URL}"
+          test -z "${AERODATABOX_API_KEY}"
+          npm run v39:typecheck
+          npx vitest run \
+            tests/phase5_amendment_c_dynamic_day_grid_v39.test.ts \
+            tests/phase5_dynamic_day_source_grid_v39.test.ts \
+            tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts \
+            tests/phase5_committed_day_grid_readonly_v39.test.ts
+          echo 'P5_SEGMENTED_DAY_GRID_OFFLINE=PASS PROVIDER_GET=0 DATABASE_WRITES=0 PHASE6_GO=0'

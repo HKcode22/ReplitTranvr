@@ -116,6 +116,21 @@ describe("Phase5 real frozen calendar/early-draw readback (mock PG, NO provider)
   expect(o.sql.some(v=>/INSERT|DELETE|UPDATE|TRUNCATE/i.test(v))).toBe(false);
   expect(o.release).toBe(1);
  });
+ it("refuses a reviewed segmented shape that disagrees with the actual DB day",async()=>{
+   const f=fixture();
+   f.scope.reviewedSegmentedSource={
+     windowShape:"2x2h",verifiedProviderMaxRangeMinutes:120,
+     reviewedProviderRangeEvidenceSha256:sha("9")
+   };
+   const cal=f.cal as typeof f.cal&{
+      window_shape?:string;active_duration_minutes?:number};
+   cal.window_shape="4h";cal.active_duration_minutes=240;
+   const o=fake(f);
+   await expect(readCommittedP5DayCandidateGrid(o.pool,f.scope))
+     .rejects.toThrow("SAVED_AMENDMENT_C_TREATMENT_SHAPE_CHANGED");
+   expect(o.sql).toContain("ROLLBACK");
+   expect(o.sql.some(s=>s.includes("adb_sampling_draw"))).toBe(false);
+ });
  it("rejects wrong reader role before any source query, and rolls back",async()=>{
   const f=fixture(),o=fake(f,{role:"app_runtime"});
   await expect(readCommittedP5DayCandidateGrid(o.pool,f.scope))
