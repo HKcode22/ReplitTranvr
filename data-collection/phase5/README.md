@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8: exact local-only receiver test admission (pending actual signed POST)
+
+The owner supplied a **real Replit read-only checkout diagnostic**, not a signed POST receipt: local HEAD `a2d75104cfa4c74d6936da4bc06bf15939671cc0`, original reviewed `29544c30...` ancestor, protected executable/worktree and callback test Git blob **PASS**, but local commit unknown to GitHub and remote ancestry **HOLD**. Do not reset or rerun the old fast-forward. [Exact local-only SHA / guarded one-time signed synthetic receiver checkpoint](2026-11-08_LOCAL_ONLY_REPLIT_SYNTHETIC_WEBHOOK_PRECISE_ADMISSION.md) defines the reviewed no-paid test path and crash-safe no-blind-repeat rule. Published V2 source identity was independently verified already; raw signed POST/ACK/tombstone remains unverified. **Phase5 FREEZE HOLD; Phase6 paid GO NO.**
+
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
 ## START HERE — one plain-English owner guide to Phases 1–5 and the Phase 6 month
