@@ -11,8 +11,8 @@ test('immutable scoped source and only reviewed Replit dependencies',()=>{
    '29544c30e3c9833fd85035e75999ccf2d2e021f6',
    'c6438e63181fe76c7aa0217504a8d5888ad00ec3',
    '6986e2467b9df6da9715e8890730979da8acf204',
-   '653fd19a464e5d08bf349867cd51a0bbb44a40aa',
-   'df66b9c4c68096fd0722eb23f5dbe413ca198906'
+   'df10e4d943fb98c06c3f8eaef356ec5ee829b2f0',
+   'fec8e8f7da7f89495b0e65fc33225f453c222e68'
  ])assert.ok(src.includes(sha),sha);
 });
 test('loader only invokes reviewed DRY-RUN and cleans exact temporary sources',()=>{
