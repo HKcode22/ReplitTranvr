@@ -42,7 +42,7 @@ export function assessSixSlotCoverage({
  const slots=requiredSlots(nowMs);
  const scheduleRuns=api.workflow_runs.filter(r=>
    r?.event==='schedule'&&r?.head_repository?.full_name===expectedRepo&&
-   r?.path?.endsWith('/'+expectedWorkflowId)&&validUtc(r.created_at)!==null);
+   String(r?.path??'').split('@')[0]==='.github/workflows/'+expectedWorkflowId&&validUtc(r.created_at)!==null);
  const checks=slots.map(t=>{
    const candidates=scheduleRuns.filter(r=>{
     const created=validUtc(r.created_at);
