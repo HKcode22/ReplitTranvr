@@ -1,0 +1,39 @@
+name: Phase5 safe Replit V2 owner workspace forward-only, no provider offline
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/phase5_replit_v2_local_preserve_fastforward_owner_once.sh"
+      - "tests/phase5_replit_v2_safe_ff_no_provider_v39.test.mjs"
+      - ".github/workflows/phase5-replit-v2-safe-forward-only-offline.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/phase5_replit_v2_local_preserve_fastforward_owner_once.sh"
+      - "tests/phase5_replit_v2_safe_ff_no_provider_v39.test.mjs"
+      - ".github/workflows/phase5-replit-v2-safe-forward-only-offline.yml"
+permissions:
+  contents: read
+env:
+  DATABASE_URL: ''
+  AERODATABOX_API_KEY: ''
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  exact-replit-v2-safe-ff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Verify shell, immutable reviewed Git blob and no-provider refusal tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/phase5_replit_v2_local_preserve_fastforward_owner_once.sh
+          test "$(git hash-object scripts/phase5_replit_v2_local_preserve_fastforward_owner_once.sh)" = 673ab4bb3f462c9d77820d5539a681a1c3574746
+          node --test tests/phase5_replit_v2_safe_ff_no_provider_v39.test.mjs
+          echo PHASE5_V2_REPLIT_SAFE_FAST_FORWARD_SHELL_OFFLINE_PASS_NO_PROVIDER_NO_DB
