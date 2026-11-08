@@ -60,7 +60,7 @@ describe("f.8 24h WASHOUT is previous WINDOW END to new START",()=>{
  });
  it("also rejects 2x2h previous window whose last segment ended five hours after start",()=>{
   // Previous actual exposure is 08:00–10:00 and 11:00–13:00.
-  // Tuesday 12:00 gives only 23 hours from END; Wednesday 13:00 gives 24.
+  // Tuesday 12:00 gives only 23 hours from END; Tuesday 13:00 gives 24.
   expect(()=>chooseAirportsForRunDay(
     plan("2026-11-10T12:00:00.000Z"),frame,
     [state("2026-11-09T13:00:00.000Z")]))
