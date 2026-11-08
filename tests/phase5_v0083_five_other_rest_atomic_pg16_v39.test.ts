@@ -199,7 +199,7 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
  }
  it("default LOGIN cannot call SECURITY DEFINER, no table raw access",async()=>{
   const q=reqs.get("VALIDATION_UNIT_BUDGET")!;
-  await expect(runner!.query(
+  await expect(worker.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39($1,$2,$3,$4,$5,$6)",
    [manifest,q,run,rights,price,token(q,4)]
   )).rejects.toThrow(/permission denied|reserve_phase5_other_rest_once/);
