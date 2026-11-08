@@ -40,7 +40,7 @@ jobs:
           set -Eeuo pipefail
           bash -n scripts/phase5_active_frame_for_calendar_owner_readonly_launcher.sh
           node --check scripts/v39_phase5_active_frame_for_calendar_readonly_once.mjs
-          test "$(git hash-object scripts/v39_phase5_active_frame_for_calendar_readonly_once.mjs)" = e49f11502baa5c7404a34db8f7f61c922109230e
+          test "$(git hash-object scripts/v39_phase5_active_frame_for_calendar_readonly_once.mjs)" = 4bf7f52c07c48fbfaa09811674f549d79d4aa336
           grep -Fq "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" scripts/v39_phase5_active_frame_for_calendar_readonly_once.mjs
           grep -Fq "V39_PHASE6_PROCESS_ARMED=0" scripts/phase5_active_frame_for_calendar_owner_readonly_launcher.sh
       - name: Mock PG16 READ ONLY and refusal tests (no provider, no database)
