@@ -108,6 +108,11 @@ export function auditP5F8CrossoverCandidate(p){
        endsMs[1]-startsMs[1]!==2*H||
        startsMs[1]<=endsMs[0])
      failure(errors,"SPLIT_2X2_EXPOSURE_OR_GAP_INVALID");
+    // The executable Phase6 controller segmentTemplates() uses exactly
+    // a 60-minute split gap. An arbitrary longer gap changes the prior
+    // treatment END and corrupts early draw washout calculations.
+    if(startsMs[1]-endsMs[0]!==H)
+     failure(errors,"SPLIT_2X2_GAP_NOT_EXECUTABLE_FROZEN_60MIN");
    }else if(end-start!==(row.windowShape==="4h"?4:6)*H)
     failure(errors,"STANDARD_OR_UPTO6H_PLANNED_DURATION");
   }
