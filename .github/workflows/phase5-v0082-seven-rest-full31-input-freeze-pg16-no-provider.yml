@@ -1,0 +1,76 @@
+name: Phase5 V0082 Full31 Seven REST Input Freeze PG16 (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0082SevenCategoryFreezePacket_v39.mjs'
+      - 'server/lib/disruption/phase5V0082SevenCategoryBudgetFreezeWriter_v39.ts'
+      - 'tests/helpers/phase5_v0082_full31_budget_candidate_fixture_v39.mjs'
+      - 'tests/phase5_v0082_seven_rest_freeze_owner_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0082-seven-rest-full31-input-freeze-pg16-no-provider.yml'
+      - 'data-collection/phase5/2026-11-08_STAGE22_TO_V0082_SIGNED_SEVEN_REST_INPUT_FREEZE_CHECKPOINT.md'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0082SevenCategoryFreezePacket_v39.mjs'
+      - 'server/lib/disruption/phase5V0082SevenCategoryBudgetFreezeWriter_v39.ts'
+      - 'tests/helpers/phase5_v0082_full31_budget_candidate_fixture_v39.mjs'
+      - 'tests/phase5_v0082_seven_rest_freeze_owner_pg16_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  V39_P5_SOURCE_OWNER_APPROVED: '0'
+  V39_P5_V0082_SEVEN_INPUT_PG16: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+jobs:
+  authentic-full31-immutable-seven-rest-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Load authentic local B0062 and staged V0079 + V0082
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = 'true'
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test -z "${AERODATABOX_API_KEY:-}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+      - name: TypeScript and actual 31-day Stage22 to V0082 immutable budget freeze
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          npm run v39:typecheck
+          npx vitest run tests/phase5_v0082_seven_rest_freeze_owner_pg16_v39.test.ts
+          echo 'P5_V0082_31DAY_SEVEN_INPUT_PG16=PASS PAID_HTTP=0 PRODUCTION_DB=0 PHASE6_GO=0'
