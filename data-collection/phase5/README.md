@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8 13:20 UTC — actual P25 admin-only dry-run ELIGIBLE, **not executed**
+
+The owner’s corrected GitHub SHA-pinned Replit DRY_RUN returned `DRY_RUN_ELIGIBLE_OPERATOR_APPROVAL_REQUIRED` with **0 blockers**, native current AeroDataBox strict subscription LIST **0 active**, exact old YSSY probe19 231/229/2 `failed/DELIVERY_GAP`, incident31/32 matches, sole OPEN historical P25 budget cap500, 58/58 original-reference deletion tombstones, **0 SQL/provider/blob mutations**. [Actual recorded evidence and separate at-most-once admin-apply review / independent READ ONLY post-audit](2026-11-08_P25_ADMIN_ELIGIBLE_SEPARATELY_APPROVED_ONCE_APPLY_AND_POSTAUDIT.md). **No administrative closeout or synthetic signed POST has occurred yet**. The new apply wrapper is gated by *distinct exact owner approval* and an irreversible attempt marker; prior generic paid permission does not authorize this production database change. Even if approved/applied, historic P25 remains scientifically failed; Phase5 FREEZE HOLD and separate paid Phase6 GO NO.
+
+
 ## Nov 8 13:05 UTC P25 admin dry-run — current provider zero, exact timestamps parsing fix
 
 Owner ran PR #493's source-pinned `--dry-run` against live provider **strict LIST** and production SQL. Current active subscriptions **0**, active billables **0**, exact old P25 budget OPEN cap500, 58/58 tombstones, original probe19 `failed/DELIVERY_GAP` and 231/229 credit gap unchanged. It **HOLD**-refused only historical incident #31/#32 timestamp fingerprints (no SQL/provider mutations, no admin apply). Source review reproduced bug: `new Date(String(pgDate))` loses 928ms and 617ms; [narrow millisecond conversion repair + regression tests](2026-11-08_P25_INCIDENT_FINGERPRINT_MS_PARSING_FIX.md) preserves the original strict historic gates and requires an independently green dry-run **before any separately approved administrative action**. Signed synthetic webhook POST remains unattempted; previous once marker preserved. Phase5 scientific FREEZE HOLD, paid Phase6 NO-GO.
