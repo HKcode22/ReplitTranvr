@@ -50,7 +50,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Install authentic B0062 + V0079 + additive V0082 into disposable local PostgreSQL ONLY
+      - name: Install B0062 + V0079 + V0080 + additive V0082 into disposable PG16 ONLY
         run: |
           set -Eeuo pipefail
           test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
@@ -58,6 +58,8 @@ jobs:
           npx tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
           test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c \
