@@ -66,11 +66,9 @@ public_sha "$LOCAL_HEAD" && public_sha "$MAIN_HEAD" || {
 }
 printf 'LOCAL_HEAD=%s\nGITHUB_MAIN_HEAD=%s\nHISTORICAL_EXACT_HEAD=%s\n' \
   "$LOCAL_HEAD" "$MAIN_HEAD" "$REVIEWED_PIN"
-check LOCAL_HEAD_IS_HISTORICAL_EXACT_PIN test "$LOCAL_HEAD" = "$REVIEWED_PIN"
-# This first condition intentionally reports HOLD for any newer commit;
-# it is historical context, not part of the descendant safety verdict.
+# Historical equality is informational: a reviewed descendant may be safe.
 historical_exact="$([[ "$LOCAL_HEAD" == "$REVIEWED_PIN" ]] && echo YES || echo NO)"
-failures=0
+printf 'INFO HISTORICAL_EXACT_HEAD=%s\n' "$historical_exact"
 check HISTORICAL_PIN_IS_ANCESTOR_OF_LOCAL reviewed_ancestor
 check LOCAL_COMMIT_IS_GITHUB_MAIN_ANCESTOR remote_ancestor
 check PROTECTED_SOURCE_UNCHANGED_FROM_HISTORICAL_PIN protected_source_unchanged
