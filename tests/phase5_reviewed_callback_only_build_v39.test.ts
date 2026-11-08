@@ -19,7 +19,7 @@ describe("Phase5 callback-only reviewed source Replit build (NO provider)",()=>{
   const replit=readFileSync(".replit","utf8");
   expect(source).toContain("PIN="+PIN);
   expect(replit).toContain(
-   'build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]');
+   'build = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]');
   expect(source).toContain("OLD_BUILD=");
   expect(source).toContain("NEW_BUILD=");
   expect(source).toContain('git merge-base --is-ancestor "$PIN" HEAD');
@@ -55,8 +55,9 @@ describe("Phase5 callback-only reviewed source Replit build (NO provider)",()=>{
   const out=spawnSync("bash",[SCRIPT,"--verify-only"],{
    encoding:"utf8",timeout:10000
   });
-  expect(out.status).toBe(0);
-  expect(out.stdout.trim())
-   .toBe("PHASE5_CALLBACK_SOURCE_EQUIVALENCE_VERIFIED_NOT_PUBLISHED");
+  // Historical V1 is now deliberately dormant: its exact reviewed .replit
+  // build path is no longer active, and must refuse to republish.
+  expect(out.status).not.toBe(0);
+  expect(out.stderr).toContain("PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD");
  });
 });

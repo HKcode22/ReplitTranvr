@@ -5,6 +5,8 @@ on:
     paths:
       - '.replit'
       - 'scripts/v39_phase5_reviewed_source_build_v39.sh'
+      - 'scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh'
+      - 'tests/phase5_callback_release_v2_reviewed_build_v39.test.ts'
       - 'tests/phase5_reviewed_callback_only_build_v39.test.ts'
       - 'tests/phase3_gate4_reviewed_source_build_v39.test.ts'
       - 'tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts'
@@ -15,6 +17,8 @@ on:
     paths:
       - '.replit'
       - 'scripts/v39_phase5_reviewed_source_build_v39.sh'
+      - 'scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh'
+      - 'tests/phase5_callback_release_v2_reviewed_build_v39.test.ts'
       - 'tests/phase5_reviewed_callback_only_build_v39.test.ts'
       - '.github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml'
 permissions:
@@ -47,28 +51,29 @@ jobs:
           set -Eeuo pipefail
           npx vitest run \
             tests/phase5_reviewed_callback_only_build_v39.test.ts \
+            tests/phase5_callback_release_v2_reviewed_build_v39.test.ts \
             tests/phase3_gate4_reviewed_source_build_v39.test.ts \
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
             tests/phase2g_owned_callback_isolation_v39.test.ts \
             tests/phase3_gate05_v0075_published_release_v39.test.ts
-          bash scripts/v39_phase5_reviewed_source_build_v39.sh --verify-only
+          bash scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh --verify-only
       - name: Build reviewed callback-only binary without provider or production credentials
         shell: bash
         run: |
           set -Eeuo pipefail
-          bash scripts/v39_phase5_reviewed_source_build_v39.sh
+          bash scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import cp from 'node:child_process';
-          const expected='1ca938bece03b90ab952f1bb762f25aedb5ede18';
+          const expected='6c187d58e2b1339aace71079e27767523d8ca3ce';
           const actual=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
           const meta=JSON.parse(fs.readFileSync('dist/v39-build-meta.json','utf8'));
           const p=JSON.parse(fs.readFileSync('dist/v39-snapshot-provenance.json','utf8'));
-          if(meta.git_head!==expected||p.reviewed_runtime_source_commit!==expected||
+          if(meta.git_head!==expected||p.schema!=='v39.phase5.callback-reviewed-source-equivalence.v2'||p.reviewed_runtime_source_commit!==expected||
               p.actual_replit_snapshot_git_head!==actual||
               p.runtime_inputs_identical_to_reviewed!==true||
               p.phase6_paid_launch_authorized!==false||
               !fs.statSync('dist/index.mjs').isFile())
             throw Error('UNREVIEWED_CALLBACK_BINARY_REFUSED');
-          console.log('PHASE5_REVIEWED_CALLBACK_BINARY_CI_PASS_NO_DEPLOY_NO_PROVIDER');
+          console.log('PHASE5_V2_REVIEWED_CALLBACK_BINARY_CI_PASS_NO_DEPLOY_NO_PROVIDER');
           NODE

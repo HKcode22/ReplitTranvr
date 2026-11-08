@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## V2 callback-only source release candidate — no deployment yet
+
+[Nov 8 versioned reviewed callback-only build and unmodified historical source pins](2026-11-08_CALLBACK_ONLY_V2_REVIEWED_SOURCE_RELEASE_CANDIDATE.md). The previous published receiver is **stale at `84b7f...`**, and the old Phase5 builder correctly refuses new main source, because 23 protected server paths have changed since the original `1ca938...` source PIN. A **separate V2 build script** now uses reviewed GitHub main `6c187...` as its exact source, enforces unchanged app executables/config/lockfiles since that PIN, switches `.replit` **only** to the V2 builder, and builds callback-only with no provider/DB/deployment operations. CI must pass. **The public receiver is not yet republished**, and owner Replit local-only commit/untracked files must be preserved before the eventual manual release. No Phase5 FREEZE or Phase6 GO is conferred by a green build.
+
 ## Receiver P0: independently observed stale Published code, safe recovery preflight
 
 [Nov 8 published receiver mismatch and immutable NO-PUBLISH Replit owner preflight](2026-11-08_REPLIT_RECEIVER_READONLY_DEPLOYMENT_ADMISSION.md). The *actual* public GET on Nov 8 08:45:50Z was HTTP 200 and reported **published source `84b7f156...`**, older than the reviewed Phase5 callback-only source `1ca938be...`, with **no signed durable external POST proof**. Replit app "published success" does **not** mean Phase5 receiver READY. The prior Replit working tree includes local-only commit `b44b1e...`; never blindly reset/pull/republish. A reviewed one-line, source-pinned **READ ONLY** local/remote/published-SHA inspection is staged (no git mutations, provider requests, secrets, publisher, or paid GO). Independently verify real deployment and STOP before Phase5 FREEZE.

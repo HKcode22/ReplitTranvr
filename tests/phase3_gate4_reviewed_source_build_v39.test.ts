@@ -22,7 +22,7 @@ describe("Gate4 historical reviewed-content identity preserved after Phase5 rele
   const config=readFileSync(".replit","utf8");
   const phase5=readFileSync("scripts/v39_phase5_reviewed_source_build_v39.sh","utf8");
   expect(config).toContain(
-   'build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]');
+   'build = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]');
   expect(config).toContain('"V39_GATE05_DURABLE_CUSTODY_REQUIRED=1"');
   expect(config).toContain('"V39_CALLBACK_ONLY_RUNTIME=1"');
   expect(config).toContain('deploymentTarget = "autoscale"');
