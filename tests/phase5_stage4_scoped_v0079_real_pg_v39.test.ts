@@ -141,6 +141,20 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   plan:p,manifestSha256:manifest,exactQueryDigest:query,
   githubRunId:gitRun,scopedPool:pool,fetchImpl:fakeFetch,
  });
+ it("rejects signed first partition if actual PostgreSQL frozen treatment shape differs",async()=>{
+  // A four-hour GET is a valid partition of either a 4h parent or the
+  // first 4h of a six-hour parent. Only the stored calendar distinguishes.
+  const altered={...plan,sourcePartition:{
+    ...plan.sourcePartition,windowShape:"up-to-6h" as const
+  }};
+  const ports=make(altered);
+  await expect(runP5ScopedFidsSource(altered,ports))
+   .rejects.toThrow("FROZEN_QUERY_OR_SELECTION_CHANGED");
+  expect(fetches).toBe(0);
+  expect((await pool.query(
+    "SELECT physically_reserved_units n FROM clean.phase5_fids_cycle_budget_v39"
+  )).rows[0].n).toBe(0);
+ });
  it("rejects changed original query before any provider or physical reservation",async()=>{
   const fake={...plan,localTo:"2026-11-10T03:00"};
   const p=make(fake);
