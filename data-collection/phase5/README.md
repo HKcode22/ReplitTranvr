@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## START HERE — one plain-English owner guide to Phases 1–5 and the Phase 6 month
+
+[**Phases 1–5 owner's field guide and Phase 6 prestart: what we built, what V0079–V0083 mean, real study data, GitHub timing automations, where to see it, limitations and exact tasks left**](PHASES_1_TO_5_OWNER_FIELD_GUIDE_AND_PHASE6_PRESTART.md). This is a **single living explanation**, not another engineering stage, paid permission, or signed Phase5 FREEZE. It is grounded in historic Phase1–4 evidence, the actual Nov8 16-table PG16 production readback, and the pending active frame/receiver checks. It must be refreshed with the final audited outcome before paid Phase6 GO. **Do not wake up at night to run Replit manually**; automatic GitHub scheduling/independent STOP and failure reporting are an explicit remaining release gate, not assumed already passed.
+
 ## V2 callback-only source release candidate — no deployment yet
 
 [Nov 8 versioned reviewed callback-only build and unmodified historical source pins](2026-11-08_CALLBACK_ONLY_V2_REVIEWED_SOURCE_RELEASE_CANDIDATE.md). The previous published receiver is **stale at `84b7f...`**, and the old Phase5 builder correctly refuses new main source, because 23 protected server paths have changed since the original `1ca938...` source PIN. A **separate V2 build script** now uses reviewed GitHub main `6c187...` as its exact source, enforces unchanged app executables/config/lockfiles since that PIN, switches `.replit` **only** to the V2 builder, and builds callback-only with no provider/DB/deployment operations. CI must pass. **The public receiver is not yet republished**, and owner Replit local-only commit/untracked files must be preserved before the eventual manual release. No Phase5 FREEZE or Phase6 GO is conferred by a green build.
