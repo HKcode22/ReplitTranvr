@@ -102,7 +102,7 @@ export async function inspectPhase5ReleaseInventory(pool){
    phase6AuthorizationEnabled:phase6Enabled,
    blockers:blocks,
    accountPlanOrLicenseRead:false,providerCalls:0,databaseWrites:0,
-   certifiedPhysicalFlightIdentities:0,
+   certifiedPhysicalFlightIdentities:null,
    phase5ScientificFreezePassed:false,phase6PaidGo:false
   };
  }catch(e){
