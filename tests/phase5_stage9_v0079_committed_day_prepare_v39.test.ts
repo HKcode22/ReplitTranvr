@@ -198,6 +198,16 @@ describe("Phase5 Stage9: exact day V0079 PREPARED DB writer ONLY",()=>{
   expect(f.logs).toContain("COMMIT");
   expect(f.released).toBe(true);
  });
+ it("refuses an Amendment C v3 packet without V0082 atomic partition writer",async()=>{
+   const {pins,day,draw}=context(),f=fake(pins,day,draw);
+   pins.proposal.reviewedSegmentedSource={
+     windowShape:"2x2h",verifiedProviderMaxRangeMinutes:120,
+     reviewedProviderRangeEvidenceSha256:sha("9")
+   };
+   await expect(commitStage9P5DayV0079PreparedRows(f.pool as any,pins))
+     .rejects.toThrow("SEGMENTED_V0082_ATOMIC_PREPARE_WRITER_NOT_YET_RELEASED");
+   expect(f.logs).toHaveLength(0);
+ });
  it("refuses unreviewed rights or changed source-query digest *before* database connect",async()=>{
   const {pins,day,draw}=context(),f=fake(pins,day,draw);
   const a={...pins,independentRightsReviewApproved:false as any};
