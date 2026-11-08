@@ -25,8 +25,11 @@ export const P5_DYNAMIC_DAY_GRID_SCHEMA =
   "v39.phase5.early-draw-to-12-source-candidates.v1" as const;
 export const P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA =
   "v39.phase5.early-draw-to-multirefresh-source-candidates.v2" as const;
+export const P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA =
+  "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates.v3" as const;
 const MAX_QUERIES_PER_GROUP=32;
 const MAX_QUERIES_PER_DAY=12*MAX_QUERIES_PER_GROUP;
+const HOUR=3_600_000,MINUTE=60_000;
 const T_OFFSET:Record<P5FidsHorizon,number>={
  "T-24h":86_400_000,"T-6h":21_600_000,"T-90m":5_400_000
 };
@@ -38,6 +41,18 @@ export interface P5DayReviewedRefreshTiming {
  minimumPreCommitMarginSeconds:number;
  verifiedProviderMaxFidsWindowMinutes:number;
 }
+/** Reviewed request-range geometry; this SHA does not certify provider rights. */
+export interface P5DayReviewedSegmentedSource {
+ windowShape:"4h"|"2x2h"|"up-to-6h";
+ verifiedProviderMaxRangeMinutes:number;
+ reviewedProviderRangeEvidenceSha256:string;
+}
+export interface P5DaySourcePartitionPin {
+ queryKey:string;segmentIndex:number;partitionIndex:number;
+ windowShape:P5DayReviewedSegmentedSource["windowShape"];
+ serviceWindowStartUtc:string;serviceWindowEndUtc:string;
+ reviewedProviderRangeEvidenceSha256:string;
+}
 const HASH=/^[a-f0-9]{64}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS:P5Slot[]=["HUB","MID_A","MID_B","REGIONAL"];
@@ -48,9 +63,12 @@ const MAX_LATENCY=3_600;
 type WithoutUnknownIcao=Omit<P5FidsAcquisition,"icao"|"plannedAirportSelectionUtc">;
 
 export interface P5DynamicDayGridInput {
-  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA|typeof P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+  schema:typeof P5_DYNAMIC_DAY_GRID_SCHEMA|typeof P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA|
+  typeof P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA;
   /** Required only for multi-refresh; must come from independently reviewed grid. */
   reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
+  /** V3 Amendment C only: Stage7 verifies against persisted calendar shape. */
+  reviewedSegmentedSource?:P5DayReviewedSegmentedSource;
   /** Same frozen protocol scope as the eventual V0079 signed query set. */
   reviewedCalendarSha256:string;
   reviewedConfigSha256:string;
@@ -66,9 +84,11 @@ export interface P5DynamicDayGridInput {
 }
 export interface P5DynamicDayGridResult {
   schema:"v39.phase5.early-draw-to-12-source-candidates-result.v1"|
-    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
+    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2"|
+    "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3";
   status:"DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED"|
-    "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED";
+    "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED"|
+    "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED";
   runDayIndex:number;
   selectedAtUtc:string;
   committedDrawSha256:string;
@@ -78,6 +98,8 @@ export interface P5DynamicDayGridResult {
   plannedPhysicalGetCount:number;
   candidateFidsApiUnits:number;
   reviewedRefreshTiming?:P5DayReviewedRefreshTiming;
+  reviewedSegmentedSource?:P5DayReviewedSegmentedSource;
+  sourcePartitionPins?:P5DaySourcePartitionPin[];
   actualChargeDayUtcCounts:{day:string;physicalRequests:number;candidateApiUnits:number}[];
   acquisitions:P5FidsAcquisition[];
   actualGithubRunPrearmVerified:false;
