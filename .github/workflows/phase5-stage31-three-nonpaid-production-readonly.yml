@@ -1,0 +1,48 @@
+name: Phase5 Stage31 LIVE nonpaid worker roles READONLY (manual main only, no provider)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type VERIFY_NONPAID_ROLES_READONLY to inspect only DB catalog role/ACL metadata'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: phase5-stage31-manual-nonpaid-role-readonly
+  cancel-in-progress: false
+jobs:
+  three-nonpaid-actual-credentials-verified:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_NONPAID_ROLES_READONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install source-pinned JS dependencies, no provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify each real GitHub worker connection with READ ONLY SQL
+        env:
+          GITHUB_ACTIONS: 'true'
+          P5_STAGE31_EXECUTE_ENTRYPOINT: '1'
+          P5_STAGE31_READONLY_ONCE: 'VERIFY_THREE_NONPAID_WORKERS_READONLY_NO_PROVIDER'
+          V39_PHASE6_PROCESS_ARMED: '0'
+          ADB_AUTO_COLLECT: '0'
+          AERODATABOX_API_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+          P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+          P5_V39_T24_WITNESS_DATABASE_URL: ${{ secrets.P5_V39_T24_WITNESS_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/v39_phase5_stage31_three_nonpaid_live_readonly_github_workers_once.ts
+          echo 'STAGE31_GITHUB_ACTUAL_WORKER_SQL_SESSIONS_READONLY_FINISHED'
