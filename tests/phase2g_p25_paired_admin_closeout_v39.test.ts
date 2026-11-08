@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {assessP25PairedAdministrativeCloseoutV39 as check,
+ p25ExactPgTimestampMsV39 as pgMs,
  type P25AdministrativeCloseoutWitnessV39} from
  "../server/lib/disruption/phase2gP25PairedAdministrativeCloseout_v39";
 const expiry=Date.parse("2026-10-20T05:02:12.501Z");
@@ -132,5 +133,47 @@ describe("production transaction remains separate from read-only default",()=>{
   expect(script).toContain("AND resolved=false AND cause='reconciliation'");
   expect(script).toContain("WHERE probe_budget_day_id=$1 AND state='OPEN'");
   expect(script).toContain("signedWebhookTestAuthorized:false");
+ });
+});
+
+describe("node-postgres timestamp precision must preserve 31/32 fingerprints",()=>{
+ it("reproduces legacy Date->String millisecond loss as the exact incident HOLD cause",()=>{
+  const d31=new Date("2026-10-13T05:02:49.928Z");
+  const d32=new Date("2026-10-13T05:04:21.617Z");
+  expect(d31.getTime()-new Date(String(d31)).getTime()).toBe(928);
+  expect(d32.getTime()-new Date(String(d32)).getTime()).toBe(617);
+  expect(check({...witness,incident31:{...witness.incident31!,
+      occurredAtMs:new Date(String(d31)).getTime()},
+    incident32:{...witness.incident32!,
+      occurredAtMs:new Date(String(d32)).getTime()}}).blockers)
+    .toEqual(["INCIDENT31_HISTORIC_FINGERPRINT_MISMATCH",
+              "INCIDENT32_HISTORIC_FINGERPRINT_MISMATCH"]);
+ });
+ it("converts real PostgreSQL Date values with millisecond precision and keeps exact guard",()=>{
+  const i31=pgMs(new Date("2026-10-13T05:02:49.928Z"));
+  const i32=pgMs(new Date("2026-10-13T05:04:21.617Z"));
+  expect(i31).toBe(Date.parse("2026-10-13T05:02:49.928Z"));
+  expect(i32).toBe(Date.parse("2026-10-13T05:04:21.617Z"));
+  expect(check({...witness,incident31:{...witness.incident31!,
+      occurredAtMs:i31},
+    incident32:{...witness.incident32!,
+      occurredAtMs:i32}}).eligible).toBe(true);
+ });
+ it("accepts only canonical UTC fractional ISO or Date and refuses ambiguous input",()=>{
+  expect(pgMs("2026-10-13T05:02:49.928Z"))
+    .toBe(Date.parse("2026-10-13T05:02:49.928Z"));
+  for(const value of [
+    null,undefined,0,Infinity,new Date(Number.NaN),
+    "Tue Oct 13 2026 05:02:49 GMT+0000",
+    "2026-10-13T05:02:49Z",
+    "2026-10-13T05:02:49.928",
+    "2026-10-13T05:02:49.928+00:00",
+    "2026-13-99T05:02:49.928Z"
+  ])expect(pgMs(value)).toBeNaN();
+ });
+ it("preserves strict rejection on one-millisecond incident tamper",()=>{
+  expect(check({...witness,incident31:{...witness.incident31!,
+    occurredAtMs:pgMs(new Date("2026-10-13T05:02:49.929Z"))}}).blockers)
+    .toContain("INCIDENT31_HISTORIC_FINGERPRINT_MISMATCH");
  });
 });

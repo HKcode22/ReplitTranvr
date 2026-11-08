@@ -3,6 +3,7 @@ import {createHash} from "node:crypto";
 import {v39Pool as pool} from "../server/lib/disruption/db_v39";
 import {listSubscriptionsStrict} from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {assessP25PairedAdministrativeCloseoutV39 as assess,
+ p25ExactPgTimestampMsV39 as toTime,
  type P25AdministrativeCloseoutWitnessV39} from
  "../server/lib/disruption/phase2gP25PairedAdministrativeCloseout_v39";
 
@@ -86,7 +87,6 @@ async function main():Promise<void>{
    ].join(" "),["prepaid:"+SESSION+":%"]
   )).rows[0];
   const i31=inc.find(v=>Number(v.id)===31),i32=inc.find(v=>Number(v.id)===32);
-  const toTime=(v:unknown)=>new Date(String(v??"")).getTime();
   const w:P25AdministrativeCloseoutWitnessV39={
    observedAtMs:toTime(identity.observed_at_utc),
    latestOriginalExpiryMs:toTime(refs?.max_expiry),
