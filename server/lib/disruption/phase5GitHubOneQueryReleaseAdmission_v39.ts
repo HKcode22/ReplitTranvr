@@ -1,6 +1,8 @@
 /**
  * Pure release/admission guard for one GitHub-only Phase5 FIDS request.
  * No network, DB, provider call or scheduler. Explicit release must exist.
+ * This one-shot paid owner is MANUAL ONLY. No scheduled or push event can
+ * exercise this admission, even if future workflow YAML accidentally changes.
  */
 import {createHash} from "node:crypto";
 import type {P5SourceSingleQueryPlan}
@@ -45,7 +47,7 @@ export function admitP5GitHubOneQueryRelease(
  if(env.GITHUB_ACTIONS!=="true"||
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||
-    !["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME??"")||
+    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
     !RUN.test(env.GITHUB_RUN_ID??"")||
