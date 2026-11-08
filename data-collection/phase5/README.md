@@ -9,6 +9,10 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
+## Restricted V0079 + V0082 atomic query/partition preparation (unarmed)
+
+[Same-transaction segmented source preparation checkpoint](2026-11-08_V0082_ATOMIC_SEGMENTED_DAY_PREPARE_CHECKPOINT.md) describes the additive Stage9 v3 writer and authentic disposable PG16 regression. V0079 PREPARED query rows and V0082 exact child/range category-partition rows must be inserted **together**, after independently frozen seven-category REST budgets and a real saved source calendar/draw have been verified. **The writer does not create/freeze those budgets, install V0082 on production, activate a paid collector, or certify rights and scientific FREEZE.**
+
 ## Segmented upstream source planning (Amendment C)
 
 [Stage6–8 exact 4h/2×2h/6h parent + partition planning checkpoint](2026-11-08_AMENDMENT_C_UPSTREAM_SEGMENTED_DAY_GRID_AND_STAGE9_SAFE_HOLD.md) documents the opt-in new v3 source-grid, saved-calendar READ ONLY verification, V0079 query digests and V0082 BASE/SPLIT partition IDs. **Stage9 intentionally refuses these segmented packets until an independently reviewed atomic V0079+V0082 prepared-query/partition and seven-category budget writer exists.** The pure grid is not a real source GET, published producer, measured provider rights or a Phase5 FREEZE.

@@ -1,0 +1,73 @@
+name: Phase5 V0082 Atomic Segmented Day PostgreSQL16 (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0082-atomic-segmented-day-pg16-no-provider.yml'
+      - 'data-collection/phase5/2026-11-08_V0082_ATOMIC_SEGMENTED_DAY_PREPARE_CHECKPOINT.md'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0082-atomic-segmented-day-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  V39_P5_SOURCE_OWNER_APPROVED: '0'
+  V39_P5_V0082_ATOMIC_PG16: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+jobs:
+  authentic-atomic-insert-only-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify test-only local PG and install authentic B0062 + staged V0079 + V0082
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "${GITHUB_ACTIONS}" = 'true'
+          test -z "${AERODATABOX_API_KEY:-}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+      - name: Typecheck and prove two-table atomicity, forbidden role escalation, real saved draw
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          npm run v39:typecheck
+          npx vitest run tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts
+          echo 'P5_V0082_ATOMIC_DISPOSABLE_PG16=PASS PAID_HTTP=0 PRODUCTION_SQL=0 PHASE6_GO=0'
