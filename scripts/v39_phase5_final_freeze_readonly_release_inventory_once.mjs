@@ -119,7 +119,7 @@ async function main(){
   pool=new Pool({connectionString:process.env.DATABASE_URL,max:1,connectionTimeoutMillis:12000});
   const inventory=await inspectPhase5ReleaseInventory(pool);
   console.log(JSON.stringify(inventory));
-  console.log('PHASE5_INDEPENDENT_OWNER_READONLY_INVENTORY_SUCCESS_NO_PROVIDER_NO_DB_WRITES');
+  console.log('PHASE5_OWNER_READONLY_INVENTORY_SUCCESS_NO_PROVIDER_NO_DB_WRITES');
  }catch(e){
   console.error('HOLD_PHASE5_OWNER_READONLY_INVENTORY_UNAVAILABLE');
   process.exitCode=2;
