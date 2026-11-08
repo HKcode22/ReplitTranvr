@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Current SOURCE integration checkpoint (Amendment C, PR #468)
+
+[Amendment C exact exposed-segment SOURCE checkpoint](2026-11-08_AMENDMENT_C_REAL_SOURCE_SEGMENT_RELEASE_CHECKPOINT.md): runtime originally rejected split-window second child and 6h later provider-range partitions while hardcoding FIDS_BASE. The code now checks exact source partitions and stored calendar geometry, and distinguishes FIDS_BASE/FIDS_SPLIT in transport. This is **offline production-intended engineering only**, not measured provider-range entitlement, a category-complete live REST ledger, a legal Contents/ML-use license, first genuine Phase6 source observation or final Phase5 FREEZE. Reuse the prior Nov6 FIDS-only pilot instead of creating a redundant paid diagnostic. No repeated worker installers or Replit timed jobs.
+
 ## All four production GitHub worker credentials VERIFIED — no further account or role commissioning needed
 
 **Independent real GitHub Actions [run #42443811669](https://github.com/HKcode22/ReplitTranvr/actions/runs/42443811669) COMPLETED SUCCESS:** `P5_SOURCE_GITHUB_REAL_READONLY_ROLE_VERIFIED`, actual `session_user=phase5_p5_source_login_20261108`, `current_user=phase5_fids_source_prod_20261107`, `authenticatedRoleSet=true`, `readOnlyTransactionVerified=true`, zero provider FIDS/Alerts and zero source/flight rows read/written. This was a **main-only real SOURCE secret** SQL session, NOT disposable CI. The other three independent PREPARE/PRE/T24-witness connections succeeded in [run #42438676554](https://github.com/HKcode22/ReplitTranvr/actions/runs/42438676554). These four worker login/secret/role checks are now **DONE; STOP role and credential work**. Scientific FREEZE and Phase6 paid GO remain false; source rights remain unverified.
