@@ -37,7 +37,7 @@ jobs:
           set -Eeuo pipefail
           bash -n scripts/phase5_replit_receiver_provenance_readonly_owner_launcher.sh
           node --check scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs
-          test "$(git hash-object scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs)" = 4ea951a6d94bc73d5345df01a0ec8c590672c74a
+          test "$(git hash-object scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs)" = 5c2d2dea66751a31ad35bf7c722813ca8cb32fc4
           grep -Fq "P5_RECEIVER_READONLY_CLI=1" scripts/phase5_replit_receiver_provenance_readonly_owner_launcher.sh
           grep -Fq "NO_GIT_MUTATION_NO_PUBLISH" scripts/phase5_replit_receiver_provenance_readonly_owner_launcher.sh
       - name: Mock local-only, stale deployed source, no POST and zero mutation

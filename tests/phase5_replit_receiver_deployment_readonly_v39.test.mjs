@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   inspectReceiverReadiness,classifyReceiverReadiness
 } from '../scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs';
-const PIN='1ca938bece03b90ab952f1bb762f25aedb5ede18';
+const PIN='6c187d58e2b1339aace71079e27767523d8ca3ce';
 const MAIN='329490356422d5af01594fb49ef05949168ee60f';
 function fake({oldPub=false,localOnly=false,dirty=false,fetchFail=false}={}){
  const commands=[];
@@ -29,7 +29,7 @@ function fake({oldPub=false,localOnly=false,dirty=false,fetchFail=false}={}){
  };
  const readFileSync=(p)=>{
   assert.equal(p,'.replit');
-  return '[deployment]\nbuild = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]\n';
+  return '[deployment]\nbuild = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]\n';
  };
  const fetch=async(u,opt)=>{
   assert.equal(u,'https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime');
