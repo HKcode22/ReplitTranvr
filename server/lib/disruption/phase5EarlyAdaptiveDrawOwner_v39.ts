@@ -136,6 +136,9 @@ function mapSamplingRows(rows: any[]): {
       lastSuccessfulPhase6ObservationAt:iso(r.last_successful_phase6_observation_at),
       lastDirectObservationAt:iso(r.last_direct_observation_at),
       lastSelectedAt:iso(r.last_selected_at),
+      // Looked up from the SAME frozen calendar's prior treatment END.
+      // Never infer a 24h washout solely from an earlier window START.
+      lastWindowEndUtc:iso(r.last_window_end_utc),
       providerFailure:r.provider_failure === true,
       coverageFailed:r.coverage_failed === true,
       stateVersion:Number(r.state_version ?? 0),
@@ -254,11 +257,28 @@ export async function commitEarlyPhase5Draw(
               s.ema_yield,s.m_i,s.zero_yield_state,s.consecutive_zero_yield,
               s.first_zero_yield_date,s.last_successful_phase6_observation_at,
               s.last_direct_observation_at,s.last_selected_at,
-              s.provider_failure,s.coverage_failed,s.state_version
+              s.provider_failure,s.coverage_failed,s.state_version,
+              CASE WHEN prior.calendar_hash=$2
+                  AND s.last_selected_at=prior.scheduled_start_utc
+                   THEN CASE
+                     WHEN prior.window_shape='4h'
+                       AND prior.active_duration_minutes=240
+                       THEN prior.scheduled_start_utc + interval '4 hours'
+                     WHEN prior.window_shape='2x2h'
+                       AND prior.active_duration_minutes=240
+                       THEN prior.scheduled_start_utc + interval '5 hours'
+                     WHEN prior.window_shape='up-to-6h'
+                       AND prior.active_duration_minutes BETWEEN 1 AND 360
+                       THEN prior.scheduled_start_utc
+                          + prior.active_duration_minutes * interval '1 minute'
+                     ELSE NULL END
+                  ELSE NULL END AS last_window_end_utc
          FROM clean.adb_sampling_frame f
          LEFT JOIN clean.adb_airport_sampling_state s ON s.icao=f.icao
+         LEFT JOIN clean.adb_phase6_calendar_day prior
+           ON prior.run_day_index=s.last_selected_run_day
         WHERE f.frame_version=$1 ORDER BY f.icao`,
-      [registry.rows[0].active_frame_version],
+      [registry.rows[0].active_frame_version,day.calendarHash],
     );
     const {frame,states}=mapSamplingRows(candidates.rows);
     const decision=chooseAirportsForRunDay(toSamplingPlan(day),frame,states);
