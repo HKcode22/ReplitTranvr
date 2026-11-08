@@ -9,6 +9,10 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
+## V0083 independent REST approval/spend NOLOGIN schema installer (not deployed)
+
+[Read the V0083 two-role production schema, atomic rollback and SQL JOIN checkpoint](2026-11-08_V0083_PRODUCTION_SCHEMA_ROLE_INSTALL_CHECKPOINT.md). The proposed owner-only installer requires authentic V0082 production prerequisites, a pinned staged V0083 migration and an empty producer; it gives separate **NOLOGIN-only** review-INSERT and physical-reservation-EXECUTE permissions. It cannot create logins, send provider requests, approve source rights, commit PRE, or authorize Phase6. CI PG16 proofs and independent deployment review are required.
+
 ## V0083 prospective non-source REST reservation ledger (not deployed)
 
 [V0083 immutable physical REST charge/checkpoint](2026-11-08_V0083_FIVE_OTHER_REST_RESERVATION_SAFETY_CHECKPOINT.md) adds a **separate, staged, non-provider-call** physical reservation contract for validation/outcome/history/diagnostic GETs and a **source-bound** FIDS retry. It preserves V0082 BASE/SPLIT +2 charging, requires a previously committed V0079 source attempt before reserving FIDS_RETRY, and proves rollback/UTC category-caps in real disposable PostgreSQL. **No schema installation, category review input, runtime credential, paid provider GET, license or Phase6 GO is conveyed.**
