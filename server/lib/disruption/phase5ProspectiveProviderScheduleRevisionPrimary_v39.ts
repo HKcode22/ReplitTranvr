@@ -25,7 +25,7 @@ export type P5ScheduleRevisionState=
 const deny=(code:string):never=>{throw Error("REFUSED_P5_SCHEDULE_REVISION_"+code);};
 function time(v:unknown):number{
  if(typeof v!=="string"||!UTC.test(v))deny("INVALID_TIME");
- const ms=Date.parse(v);
+ const ms=Date.parse(v as string);
  if(!Number.isFinite(ms)||new Date(ms).toISOString()!==v)deny("INVALID_TIME");
  return ms;
 }
