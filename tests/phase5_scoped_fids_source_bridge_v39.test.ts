@@ -1,4 +1,4 @@
-import { describe,it,expect } from "vitest";
+import { describe,it,expect,vi,beforeEach,afterEach } from "vitest";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
@@ -100,6 +100,17 @@ function ports(
  return {p,calls};
 }
 describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
+ // Deterministic synthetic time: the fixture's durable database readback is
+ // 2026-11-08T13:42Z, so the source capture must be on/before that time.
+ // Using the wall clock makes these tests fail after 13:42Z *for the right
+ // production safety reason* (receipt would predate captured original).
+ // Mock ONLY Date inside this offline test file; do not change production
+ // source capture/DB-clock ordering or its strict receipt validation.
+ beforeEach(()=>{
+   vi.useFakeTimers({toFake:["Date"]});
+   vi.setSystemTime(new Date("2026-11-08T13:41:00.000Z"));
+ });
+ afterEach(()=>{vi.useRealTimers();});
  it("accepts exactly the SECOND exposed 2x2 child but never its inactive one-hour gap",()=>{
   const f=fixture();f.sourcePartition.windowShape="2x2h";
   f.sourcePartition.segmentIndex=2;

@@ -103,6 +103,59 @@ describe("strict V3.9 calendar + slot-region solver", () => {
     const d = input(); d.eligibleRegionsBySlot.REGIONAL = []; expect(solveV39Calendar(d).status).toBe("UNSAT");
   });
 
+
+  it("rejects impossible UTC start dates instead of silently normalizing them", () => {
+    for (const startDate of ["2026-02-29", "2026-02-31", "2026-13-01", "2026-02-30", "2026-01-01T00:00:00Z"]) {
+      const x = input(); x.startDate = startDate;
+      const r = solveV39Calendar(x);
+      expect(r.status).toBe("UNSAT");
+      expect(r.reason).toBe("invalid startDate");
+    }
+    const leap = input(); leap.startDate = "2028-02-29";
+    expect(solveV39Calendar(leap).status).toBe("SAT");
+  });
+
+  it("refuses fractional, negative, nonfinite projected whole REST and Alert units", () => {
+    for (const rest of [-1, 0.5, Number.NaN, Infinity, 50_001]) {
+      const x = input(); x.projectedRestUnitsTotal = rest;
+      expect(solveV39Calendar(x).status).toBe("UNSAT");
+    }
+    for (const budget of [-1, 0.5, Number.NaN]) {
+      const x = input(); x.protectedRestBudget = budget;
+      expect(solveV39Calendar(x).status).toBe("UNSAT");
+    }
+    for (const alert of [-1, 0.5, Number.NaN, Infinity, 1901]) {
+      const x = input(); x.projectedAlertCreditsByRunDay["12"] = alert;
+      expect(solveV39Calendar(x).status).toBe("UNSAT");
+    }
+  });
+
+  it("enforces the binding 57,900 absolute Alert design ceiling in ORIGINAL FIVE mode", () => {
+    const tooHigh = input();
+    for (let i=1; i<=31; i++) tooHigh.projectedAlertCreditsByRunDay[String(i)] = 1900;
+    const fail = solveV39Calendar(tooHigh);
+    expect(fail.status).toBe("UNSAT");
+    expect(fail.reason).toContain("57900");
+
+    const exactLimit = input();
+    for (let i=1; i<=30; i++) exactLimit.projectedAlertCreditsByRunDay[String(i)] = 1900;
+    exactLimit.projectedAlertCreditsByRunDay["31"] = 900;
+    const accepted = solveV39Calendar(exactLimit);
+    expect(accepted.status).toBe("SAT");
+    expect(accepted.days).toHaveLength(31);
+  });
+
+  it("caps planned REST physical units at 50,000 independent of claimed account envelope", () => {
+    const x = input();
+    x.protectedRestBudget = 60_000; // Provider entitlement is not project cap.
+    x.projectedRestUnitsTotal = 50_001;
+    const fail = solveV39Calendar(x);
+    expect(fail.status).toBe("UNSAT");
+    expect(fail.reason).toContain("50000");
+    x.projectedRestUnitsTotal = 50_000;
+    expect(solveV39Calendar(x).status).toBe("SAT");
+  });
+
   it("validator catches pair replay/time-class tampering", () => {
     const x = input(), r = solveV39Calendar(x);
     expect(r.status).toBe("SAT");

@@ -58,7 +58,14 @@ export interface CalendarSolveResult {
 }
 
 function hash(v: unknown): string { return createHash("sha256").update(JSON.stringify(v)).digest("hex"); }
-function parseDate(s: string): Date | null { const d = new Date(`${s}T00:00:00.000Z`); return Number.isFinite(d.getTime()) ? d : null; }
+function parseDate(s: string): Date | null {
+  // PostgreSQL / JS Date normalizes impossible dates such as February 31
+  // into March instead of refusing them. A future signed UTC calendar must
+  // never silently move its actual batch-day start.
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s ? d : null;
+}
 function plusDays(d: Date, n: number): Date { return new Date(d.getTime() + n * 86_400_000); }
 function dateText(d: Date): string { return d.toISOString().slice(0, 10); }
 function weekdayClass(d: Date): "weekday" | "weekend" { return d.getUTCDay() === 0 || d.getUTCDay() === 6 ? "weekend" : "weekday"; }
@@ -149,19 +156,25 @@ function solveCalendarByAnchorPolicy(
     const part = input.evaluationPartitionByRunDay[String(i)];
     const alert = input.projectedAlertCreditsByRunDay[String(i)];
     if (!part) return { status: "UNSAT", reason: `run day ${i} missing evaluation partition`, days: [], calendarHash: null };
-    if (!Number.isFinite(alert) || alert < 0 || alert > 1900) return { status: "UNSAT", reason: `run day ${i} Alert feasibility exceeds 1900 or is unknown`, days: [], calendarHash: null };
+    if (!Number.isSafeInteger(alert) || alert < 0 || alert > 1900) return { status: "UNSAT", reason: `run day ${i} Alert units must be nonnegative integer <=1900`, days: [], calendarHash: null };
   }
-  if (!Number.isFinite(input.projectedRestUnitsTotal) || !Number.isFinite(input.protectedRestBudget) || input.projectedRestUnitsTotal > input.protectedRestBudget) {
-    return { status: "UNSAT", reason: "REST budget infeasible/unknown", days: [], calendarHash: null };
+  // Both ledgers use physical whole charge units. Never accept negative or
+  // fractional "budgets" as feasibility, including in original-five mode.
+  if (!Number.isSafeInteger(input.projectedRestUnitsTotal) ||
+      input.projectedRestUnitsTotal < 0 ||
+      !Number.isSafeInteger(input.protectedRestBudget) ||
+      input.protectedRestBudget < 0 ||
+      input.projectedRestUnitsTotal > input.protectedRestBudget ||
+      input.projectedRestUnitsTotal > 50_000) {
+    return { status: "UNSAT", reason: "REST budget infeasible/unknown whole units or 50000 project cap", days: [], calendarHash: null };
   }
-  if (mode !== "original-five") {
-    const projectedTotal = Array.from({ length: 31 }, (_, index) =>
-      input.projectedAlertCreditsByRunDay[String(index + 1)])
-      .reduce((sum, value) => sum + value, 0);
-    // Frozen original Plan ceiling, NOT a 31 x 1900 spending target.
-    if (!Number.isSafeInteger(projectedTotal) || projectedTotal > 57_900) {
-      return { status: "UNSAT", reason: "draft exploratory total projected Alert credits exceeds original 57900 design ceiling", days: [], calendarHash: null };
-    }
+  const projectedTotal = Array.from({ length: 31 }, (_, index) =>
+    input.projectedAlertCreditsByRunDay[String(index + 1)])
+    .reduce((sum, value) => sum + value, 0);
+  // Binding f.8 absolute Alert design ceiling applies to ALL calendar modes,
+  // not just exploratory drafts. The real provider balance may be lower.
+  if (!Number.isSafeInteger(projectedTotal) || projectedTotal > 57_900) {
+    return { status: "UNSAT", reason: "projected Alert credits exceed absolute 57900 design ceiling", days: [], calendarHash: null };
   }
   for (let p = 1; p <= 5; p++) {
     if (input.evaluationPartitionByRunDay[String(p)] !== input.evaluationPartitionByRunDay[String(p + 6)]) {
