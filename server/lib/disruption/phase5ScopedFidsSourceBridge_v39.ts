@@ -103,6 +103,7 @@ export interface P5SourcePorts {
   reservePhysicalBeforeGet(input:{
     queryKey:string;runDayIndex:number;slot:string;horizon:string;
     icao:string;sourceReleaseSha256:string;earlyDrawSha256:string;
+    restCategory:"fids_base"|"fids_split";
     attemptNumber:1;units:2;
   }):Promise<P5PhysicalReservation>;
   /** MUST atomically persist original source and all members with V0077. */
@@ -285,6 +286,7 @@ export async function runP5ScopedFidsSource(
                 slot:q.slot,horizon:q.horizon,icao:q.icao,
                 sourceReleaseSha256:p.reviewedReleaseSha256,
                 earlyDrawSha256:p.expectedEarlyDrawSha256,
+                restCategory:first.restCategory,
                 attemptNumber:1,units:2,
               });
               if(!issued||!validHash(issued.reservationSha256)||
