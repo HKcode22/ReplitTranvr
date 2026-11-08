@@ -73,6 +73,11 @@ export interface P5Stage9DayPrepared {
 }
 function verifyScope(p:P5Stage9PreparedDayReview):void{
  const x=p?.proposal;
+ // V0079-only Stage9 has no permission to INSERT V0082 exact partitions
+ // and still writes a legacy single-parent window. Never let a valid v3
+ // packet silently prepare an unusable or undercategorized source release.
+ if(x?.reviewedSegmentedSource||x?.sourcePartitionPins)
+   hold("SEGMENTED_V0082_ATOMIC_PREPARE_WRITER_NOT_YET_RELEASED");
  if(!x||x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
     x.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"||
     !Number.isSafeInteger(x.sourceQueryCount)||
