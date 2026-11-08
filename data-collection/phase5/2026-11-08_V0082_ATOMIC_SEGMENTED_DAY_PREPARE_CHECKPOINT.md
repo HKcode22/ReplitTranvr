@@ -60,7 +60,7 @@ Dedicated [no-provider authentic disposable PostgreSQL16 test](../../tests/phase
 - effective ordinary Postgres owner role is rejected despite wide privileges;
 - changing the reviewed Stage6 source SHA is rejected;
 - injected second partition INSERT exception forces *whole* SERIALIZABLE transaction rollback with query=partition=attempt=original=0;
-- successful exact 72 prepared V0079 rows + 72 matching V0082 partition rows, no provider or original and `PREPARED` state;
+- successful exact **96 prepared V0079 rows + 96 matching V0082 partition rows**, including **48 BASE and 48 SPLIT** with 60-minute signed range partitions of the two exposed 2h children, no provider or original and `PREPARED` state;
 - replay is rejected, and restricted writer cannot mutate budgets or reserve a physical GET.
 
 **Exact-head CI must complete successfully before merge.** No synthetic success qualifies scientific PASS.
