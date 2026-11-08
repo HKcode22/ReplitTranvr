@@ -62,7 +62,7 @@ For every UTC day `d`:
 
 ## Verification and explicit omissions
 
-The new dedicated [disposable PostgreSQL16 test](../../tests/phase5_v0082_seven_rest_category_real_pg16_v39.test.ts) and [no-provider workflow](../../.github/workflows/phase5-v0082-seven-rest-category-disposable-pg16.yml) install authentic B0062+V0079+V0082 into a local CI database **only**, and probe missing category, missing cap, altered partition, BASE/SPLIT atomic spend, replay, and immutable cap tampering. Exact-head CI results must be verified before merge; do not treat the existence of a workflow as a PASS.
+The new dedicated [disposable PostgreSQL16 test](../../tests/phase5_v0082_seven_rest_category_real_pg16_v39.test.ts) and [no-provider workflow](../../.github/workflows/phase5-v0082-seven-rest-category-disposable-pg16.yml) install authentic B0062+V0079+V0080+V0082 into a local CI database **only**, and probe separately COMMITTED real-run V0080 prearm, missing category, missing cap, altered partition, BASE/SPLIT atomic spend, replay, and immutable cap tampering. V0081's independent PRE witness is a separate existing PG16 suite; no PRE is fabricated in this budget test. Exact-head CI results must be verified before merge; do not treat the existence of a workflow as a PASS.
 
 **Important remaining work** (do not invent more numbered engineering stages):
 1. A signed prospective real Stage21/22 **31 ordered batch-day** source calendar, actual externally measured provider query-range and timing, qualified early airport draws, rights review #300, and a proper **Stage9/V0082 seven-category freeze writer** that reconciles every charge-date/category/query before prearm.
