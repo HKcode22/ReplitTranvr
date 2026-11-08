@@ -54,6 +54,11 @@ export interface AirportSamplingState {
   lastSuccessfulPhase6ObservationAt: string | null;
   lastDirectObservationAt: string | null;
   lastSelectedAt: string | null;
+  /** Most recent actual FROZEN experimental service window END UTC.
+   * Required when lastSelectedAt is non-null. Service START is not
+   * sufficient for the f.8 end-to-start >=24h washout.
+   */
+  lastWindowEndUtc?: string | null;
   providerFailure: boolean;
   coverageFailed: boolean;
   stateVersion: number;
@@ -77,7 +82,8 @@ function stateFor(map: ReadonlyMap<string, AirportSamplingState>, icao: string):
   return map.get(norm(icao)) ?? {
     icao: norm(icao), emaYield: null, mi: 1, zeroYieldState: "normal", consecutiveZeroYield: 0,
     firstZeroYieldDate: null, lastSuccessfulPhase6ObservationAt: null, lastDirectObservationAt: null,
-    lastSelectedAt: null, providerFailure: false, coverageFailed: false, stateVersion: 0,
+    lastSelectedAt: null, lastWindowEndUtc: null,
+    providerFailure: false, coverageFailed: false, stateVersion: 0,
   };
 }
 function candidateEligible(c: FrameSamplingCandidate): boolean {
@@ -88,7 +94,14 @@ function assertFrozenHash(label: string, h: string): void {
 }
 function ms(x: string | null): number | null { if (!x) return null; const n = Date.parse(x); return Number.isFinite(n) ? n : null; }
 function violates24hWashout(state: AirportSamplingState, start: Date): boolean {
-  const last = ms(state.lastSelectedAt); return last !== null && start.getTime() - last < 24 * 3_600_000;
+  const lastStart = ms(state.lastSelectedAt);
+  if(lastStart===null)return false;
+  // f.8 §8.7 defines washout from previous END to new START, NOT
+  // START-to-START. Missing/invalid prior end cannot be treated as PASS.
+  const previousEnd=ms(state.lastWindowEndUtc??null);
+  if(previousEnd===null||previousEnd<=lastStart)
+    throw new Error("REFUSED_WASHOUT_PREVIOUS_WINDOW_END_UNVERIFIED");
+  return start.getTime()-previousEnd < 24 * 3_600_000;
 }
 function midRecent(state: AirportSamplingState, start: Date): boolean {
   const last = ms(state.lastSelectedAt); return last !== null && start.getTime() - last < 7 * 86_400_000;
