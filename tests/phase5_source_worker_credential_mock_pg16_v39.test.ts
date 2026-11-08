@@ -4,6 +4,8 @@ import {commissionPhase5SourceCredential,SOURCE}
  from "../scripts/v39_phase5_source_worker_credential_owner_once.mjs";
 import {makeP5Stage28DedicatedRolePool}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
+import {verifyP5SourceRealGitHubReadOnly}
+ from "../scripts/v39_phase5_source_live_github_readonly_once";
 const {Pool}=pg;
 const OWNER_URL="postgresql://phase5_source_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
 const active=process.env.P5_SOURCE_DISPOSABLE_PG16_TEST==="1"?describe:describe.skip;
@@ -80,7 +82,48 @@ active("Phase5 isolated SOURCE account: real disposable PG16 and GitHub secret M
     "has_table_privilege(current_user,'clean.flight_snapshots','INSERT') AS can_pre");
    expect(current.rows[0]).toEqual({login:SOURCE.login,current:SOURCE.group,
     can_original:true,can_pre:false});
+   const report=await verifyP5SourceRealGitHubReadOnly({
+    GITHUB_ACTIONS:"true",
+    GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
+    GITHUB_REF:"refs/pull/464/merge",
+    GITHUB_EVENT_NAME:"pull_request",
+    P5_SOURCE_READONLY_CI_DISPOSABLE:"1",
+    P5_SOURCE_READONLY_CONFIRM:"VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER",
+    ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+    AERODATABOX_API_KEY:"",AERODATABOX_WEBHOOK_SECRET:"",
+    V39_P5_SOURCE_DATABASE_URL:secrets.get(SOURCE.secret)
+   });
+   expect(report.status).toBe("P5_SOURCE_DISPOSABLE_PG16_READONLY_ROLE_VERIFIED");
+   expect(report.authenticatedRoleSet).toBe(true);
+   expect(report.readOnlyTransactionVerified).toBe(true);
+   expect(report.providerFidsGets).toBe(0);
+   expect(report.flightRowsRead).toBe(0);
+   expect(report.flightRowsWritten).toBe(0);
+   expect(report.phase5FreezePassed).toBe(false);
+   expect(report.phase6PaidGo).toBe(false);
   }finally{await direct.end();}
+ });
+ it("source live smoke refuses PR with real remote DB URL before making a query",async()=>{
+   await expect(verifyP5SourceRealGitHubReadOnly({
+    GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
+    GITHUB_REF:"refs/pull/464/merge",GITHUB_EVENT_NAME:"pull_request",
+    P5_SOURCE_READONLY_CI_DISPOSABLE:"1",
+    P5_SOURCE_READONLY_CONFIRM:"VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER",
+    ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+    V39_P5_SOURCE_DATABASE_URL:
+      "postgresql://"+SOURCE.login+":"+"b".repeat(72)+"@prod.example/neondb"
+   })).rejects.toThrow("REFUSED_P5_SOURCE_READONLY_CI_ONLY_DISPOSABLE_LOCALHOST");
+ });
+ it("source live smoke refuses a provider key before connecting",async()=>{
+   await expect(verifyP5SourceRealGitHubReadOnly({
+    GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
+    GITHUB_REF:"refs/pull/464/merge",GITHUB_EVENT_NAME:"pull_request",
+    P5_SOURCE_READONLY_CI_DISPOSABLE:"1",
+    P5_SOURCE_READONLY_CONFIRM:"VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER",
+    ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+    AERODATABOX_API_KEY:"NO_PROVIDER_PERMITTED",
+    V39_P5_SOURCE_DATABASE_URL:secrets.get(SOURCE.secret)
+   })).rejects.toThrow("REFUSED_P5_SOURCE_READONLY_GITHUB_ONLY_NO_PROVIDER_CONTEXT_REQUIRED");
  });
  it("refuses a replay even when only encrypted secret state exists",async()=>{
   await expect(commissionPhase5SourceCredential(owner,driver,ENV))

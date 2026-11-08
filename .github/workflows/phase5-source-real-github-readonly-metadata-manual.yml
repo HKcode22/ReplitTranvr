@@ -1,0 +1,46 @@
+name: Phase5 SOURCE real GitHub credential READONLY metadata smoke
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER (NO paid request)"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: phase5-source-live-readonly-smoke
+  cancel-in-progress: false
+jobs:
+  source-live-credential-metadata-only:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify only SOURCE existing PG16 group privileges + READ ONLY metadata
+        env:
+          P5_SOURCE_READONLY_EXECUTE: '1'
+          P5_SOURCE_READONLY_CONFIRM: 'VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER'
+          V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+          AERODATABOX_API_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          ADB_AUTO_COLLECT: '0'
+          V39_PHASE6_PROCESS_ARMED: '0'
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          npx tsx scripts/v39_phase5_source_live_github_readonly_once.ts
+          echo 'P5_SOURCE_GITHUB_ONLY_METADATA_READONLY_FINISHED_NO_PAID_PROVIDER'
