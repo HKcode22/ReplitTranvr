@@ -18,8 +18,8 @@ function fake({oldPub=false,localOnly=false,dirty=false,fetchFail=false}={}){
  };
  const gh=(args)=>{
   commands.push(['gh',...args]);
-  if(args[2]==='repos/HKcode22/ReplitTranvr/git/ref/heads/main')return MAIN;
-  if(args[2]?.startsWith('repos/HKcode22/ReplitTranvr/commits/'))
+  if(args[1]==='repos/HKcode22/ReplitTranvr/git/ref/heads/main')return MAIN;
+  if(args[1]?.startsWith('repos/HKcode22/ReplitTranvr/commits/'))
     return localOnly?'':MAIN;
   throw Error('UNEXPECTED_GH_SUBPROCESS');
  };
