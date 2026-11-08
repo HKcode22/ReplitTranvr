@@ -7,7 +7,7 @@ cd "$HOME/workspace" || { echo 'HOLD_P5_FRAME_WORKSPACE_MISSING'; exit 2; }
 R='HKcode22/ReplitTranvr'
 BASE='5f7f073539ca8cc9a84a6854cc24d17721e5c9f4'
 SOURCE='scripts/v39_phase5_active_frame_for_calendar_readonly_once.mjs'
-BLOB='e49f11502baa5c7404a34db8f7f61c922109230e'
+BLOB='4bf7f52c07c48fbfaa09811674f549d79d4aa336'
 hold(){ echo "HOLD_P5_FRAME_READONLY: $1" >&2; exit 2; }
 for c in gh git node base64 mktemp; do command -v "$c" >/dev/null 2>&1 || hold "MISSING_$c"; done
 gh auth status --hostname github.com >/dev/null 2>&1 || hold GH_AUTH_MISSING
