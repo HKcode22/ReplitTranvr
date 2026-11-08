@@ -126,10 +126,21 @@ function digest(o:unknown):string{
  * four rows actually came from the frozen committed DB draw, not a fixture.
  */
 export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P5DynamicDayGridResult {
- if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA]
-   .includes(input.schema))hold("SCHEMA");
- const multi=input.schema===P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
+ if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+   P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA].includes(input.schema))
+   hold("SCHEMA");
+ const segmented=input.schema===P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA;
+ const multi=segmented||input.schema===P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA;
  const timing=input.reviewedRefreshTiming;
+ const shape=input.reviewedSegmentedSource;
+ if(segmented){
+   if(!shape||!["4h","2x2h","up-to-6h"].includes(shape.windowShape)||
+      !HASH.test(shape.reviewedProviderRangeEvidenceSha256)||
+      !Number.isSafeInteger(shape.verifiedProviderMaxRangeMinutes)||
+      shape.verifiedProviderMaxRangeMinutes<1||
+      shape.verifiedProviderMaxRangeMinutes>360)
+      hold("UNVERIFIED_AMENDMENT_C_SEGMENTED_SOURCE");
+ }else if(shape)hold("LEGACY_UNREVIEWED_SEGMENTED_SOURCE");
  if(multi){
    if(!timing||!HASH.test(timing.reviewed31DayCoverageGridSha256)||
      !Number.isSafeInteger(timing.maxPopulationStalenessSeconds)||
@@ -142,8 +153,10 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      timing.minimumPreCommitMarginSeconds<120||
      timing.minimumPreCommitMarginSeconds>900||
      !Number.isSafeInteger(timing.verifiedProviderMaxFidsWindowMinutes)||
-     timing.verifiedProviderMaxFidsWindowMinutes<240||
-     timing.verifiedProviderMaxFidsWindowMinutes>1440)
+     timing.verifiedProviderMaxFidsWindowMinutes<(segmented?1:240)||
+     timing.verifiedProviderMaxFidsWindowMinutes>(segmented?360:1440)||
+     (segmented&&timing.verifiedProviderMaxFidsWindowMinutes!==
+      shape?.verifiedProviderMaxRangeMinutes))
      hold("UNVERIFIED_MULTI_REFRESH_TIMING_CONTRACT");
  }else if(timing)hold("LEGACY_GRID_CANNOT_SMUGGLE_MULTI_REFRESH_CONTRACT");
  const day=input.day;
@@ -162,6 +175,23 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
    hold("UNVERIFIED_EARLY_DRAW_READBACK");
  const start=day.scheduledStartUtc.getTime();
  if(!Number.isFinite(start))hold("FROZEN_SERVICE_START");
+ const partitions:{
+   segmentIndex:number;partitionIndex:number;start:number;end:number;
+ }[]=[];
+ if(segmented&&shape){
+   const ranges=shape.windowShape==="2x2h"?
+     [[0,2],[3,5]]:[[0,shape.windowShape==="4h"?4:6]];
+   const maxRangeMs=shape.verifiedProviderMaxRangeMinutes*MINUTE;
+   for(let seg=0;seg<ranges.length;seg++){
+     const [first,last]=ranges[seg];let idx=0;
+     for(let cur=start+first*HOUR;cur<start+last*HOUR;cur+=maxRangeMs){
+       partitions.push({segmentIndex:seg+1,partitionIndex:++idx,
+         start:cur,end:Math.min(cur+maxRangeMs,start+last*HOUR)});
+     }
+   }
+   if(partitions.length*12>MAX_QUERIES_PER_DAY)
+     hold("SEGMENTED_RANGE_NEEDS_MORE_THAN_384_GETS_PER_DAY");
+ }
  const selected=time(draw.selectedAtUtc,"SELECTED_AT");
  const advance=start-selected;
  if(advance<=MIN_EARLY||advance>MAX_EARLY)
@@ -176,6 +206,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  const byCharge=new Map<string,number>();
  const earliestBySlot=new Map<P5Slot,Record<P5FidsHorizon,number>>();
  const byGroup=new Map<string,{request:number;persistentSeconds:number}[]>();
+ const partitionByKey=new Map<string,P5DaySourcePartitionPin>();
  for(const candidate of input.templates){
   if(!candidate || Object.hasOwn(candidate,"icao") ||
       Object.hasOwn(candidate,"plannedAirportSelectionUtc"))
