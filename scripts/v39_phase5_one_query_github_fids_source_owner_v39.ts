@@ -5,6 +5,8 @@
  */
 import {readFileSync,statSync} from "node:fs";
 import {Pool} from "pg";
+import {makeP5Stage28DedicatedRolePool}
+ from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {admitP5GitHubOneQueryRelease,
  type P5GitHubOneQueryReleaseEnvelope}
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
@@ -38,11 +40,22 @@ async function main():Promise<void>{
   ...input.plan,
   day:{...input.plan.day,scheduledStartUtc:new Date(raw)},
  };
- const pool=new Pool({
+ // Actual source worker must be its own dedicated NOINHERIT login,
+ // with SET-only membership in the previously reviewed NOLOGIN SOURCE group.
+ // Raw PG pools are not admissible for paid V0079 custodial writes.
+ const rawPool=new Pool({
   connectionString:process.env.V39_P5_SOURCE_DATABASE_URL,
   max:1,
   connectionTimeoutMillis:10000,
   application_name:"v39_phase5_github_only_one_query_source",
+ });
+ // The forbidden identity is the separately commissioned PREPARE login;
+ // checkedOut independently requires the *exact* dedicated SOURCE session
+ // login and exactly one approved SOURCE group, denying app/pre/witness users.
+ const scoped=makeP5Stage28DedicatedRolePool(rawPool,{
+  group:"source",
+  reviewedDedicatedLogin:"phase5_p5_source_login_20261108",
+  forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107",
  });
  try{
   // A reviewed, immutable template cannot contain the future GitHub run ID.
@@ -50,7 +63,7 @@ async function main():Promise<void>{
   // independent durable V0080 DB transaction BEFORE source reservation.
   // Failed/unknown prearm is never retried blindly in this same job.
   await prearmP5V0080ActualGitHubRun({
-   pool,manifestSha256:admitted.manifestSha256,
+   pool:scoped,manifestSha256:admitted.manifestSha256,
    queryDigestSha256:admitted.queryDigestSha256,
    githubRunId:admitted.githubRunId,
    earlyDrawSha256:plan.expectedEarlyDrawSha256,
@@ -64,7 +77,7 @@ async function main():Promise<void>{
    plan.acquisition.earliestPlannedCutoffUtc,
    plan.acquisition.maxResponseAndPersistSeconds,
    async()=>{
-    const r=await pool.query("SELECT clock_timestamp() AS t");
+    const r=await scoped.query("SELECT clock_timestamp() AS t");
     if(r.rowCount!==1)throw Error("REFUSED_P5_V0080_PREARM_DB_CLOCK_MISSING");
     return new Date(r.rows[0].t);
    },
@@ -74,7 +87,7 @@ async function main():Promise<void>{
    manifestSha256:admitted.manifestSha256,
    exactQueryDigest:admitted.queryDigestSha256,
    githubRunId:admitted.githubRunId,
-   scopedPool:pool,
+   scopedPool:scoped as unknown as Pool,
    fetchImpl:fetch,
   });
   // Both DB ledger and provider request may have cost even if this fails.
@@ -96,7 +109,7 @@ async function main():Promise<void>{
   if(outcome.status!=="SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE")
    process.exitCode=3;
  }finally{
-  await pool.end().catch(()=>{});
+  await rawPool.end().catch(()=>{});
  }
 }
 main().catch(error=>{
