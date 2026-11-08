@@ -303,6 +303,16 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
    "SELECT pg_advisory_xact_lock(hashtext('v39-phase5-prepare-day'),$1)",
    [x.runDayIndex]
   );
+  // Check day ownership before spend-plan matching. This refuses a
+  // replay deterministically even though previously committed query units
+  // already fill the frozen category reservation envelope.
+  const existing=(await client.query(
+   "SELECT query_digest FROM clean.phase5_fids_allowed_query_v39 "+
+   "WHERE manifest_sha256=$1 AND run_day_index=$2",
+   [review.expectedManifestSha256,x.runDayIndex]
+  )).rows;
+  if(existing.length!==0)
+    hold("SOURCE_DAY_ALREADY_PARTIALLY_PREPARED_NO_REPLAY");
   const auth=(await client.query(
    "SELECT manifest_sha256,calendar_hash,config_hash,enabled,revoked_at_utc "+
    "FROM clean.adb_phase6_authorization WHERE singleton_key=true"
@@ -494,13 +504,6 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
        hold("FIDS_SOURCE_CHARGE_DATE_CATEGORY_UNDERFUNDED");
    }
   }
-  const existing=(await client.query(
-   "SELECT query_digest FROM clean.phase5_fids_allowed_query_v39 "+
-   "WHERE manifest_sha256=$1 AND run_day_index=$2",
-   [review.expectedManifestSha256,x.runDayIndex]
-  )).rows;
-  if(existing.length!==0)
-    hold("SOURCE_DAY_ALREADY_PARTIALLY_PREPARED_NO_REPLAY");
   // In SERIALIZABLE transaction: no half-written query without its exact
   // immutable partition (or vice versa) can survive a failure.
   const pinByDigest=new Map(reviewed.pins.map(p=>[p.queryDigest,p]));
