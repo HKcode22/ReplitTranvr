@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/v39_phase5_source_worker_credential_owner_once.mjs'
       - 'tests/phase5_source_worker_credential_mock_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_source_live_github_readonly_once.ts'
+      - '.github/workflows/phase5-source-real-github-readonly-metadata-manual.yml'
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - '.github/workflows/phase5-one-reviewed-prospective-fids-get-main-manual.yml'
       - '.github/workflows/phase5-source-login-and-manual-owner-disposable-pg16.yml'
@@ -13,6 +15,8 @@ on:
     paths:
       - 'scripts/v39_phase5_source_worker_credential_owner_once.mjs'
       - 'tests/phase5_source_worker_credential_mock_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_source_live_github_readonly_once.ts'
+      - '.github/workflows/phase5-source-real-github-readonly-metadata-manual.yml'
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - '.github/workflows/phase5-one-reviewed-prospective-fids-get-main-manual.yml'
       - '.github/workflows/phase5-source-login-and-manual-owner-disposable-pg16.yml'
