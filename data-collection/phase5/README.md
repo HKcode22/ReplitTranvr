@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 8 13:05 UTC P25 admin dry-run — current provider zero, exact timestamps parsing fix
+
+Owner ran PR #493's source-pinned `--dry-run` against live provider **strict LIST** and production SQL. Current active subscriptions **0**, active billables **0**, exact old P25 budget OPEN cap500, 58/58 tombstones, original probe19 `failed/DELIVERY_GAP` and 231/229 credit gap unchanged. It **HOLD**-refused only historical incident #31/#32 timestamp fingerprints (no SQL/provider mutations, no admin apply). Source review reproduced bug: `new Date(String(pgDate))` loses 928ms and 617ms; [narrow millisecond conversion repair + regression tests](2026-11-08_P25_INCIDENT_FINGERPRINT_MS_PARSING_FIX.md) preserves the original strict historic gates and requires an independently green dry-run **before any separately approved administrative action**. Signed synthetic webhook POST remains unattempted; previous once marker preserved. Phase5 scientific FREEZE HOLD, paid Phase6 NO-GO.
+
+
 ## Nov 8 exact P25 administrative closeout candidate — safe dry-run first
 
 Actual owner P25 census now confirms exactly #31/#32 still open, the historical probe19 `failed/DELIVERY_GAP` (231 billed vs 229 received), 58/58 original-reference tombstones after Oct20 expiry, 0 transient rows and 0 active probes; **the one historical P25 budget is still OPEN**, and *current provider active subscriptions have not been freshly read*. [Narrow paired incident31/32 + exact budget closeout candidate, negative tests and read-only owner procedure](2026-11-08_P25_EXACT_ADMIN_CLOSEOUT_DRYRUN_CANDIDATE.md) is designed to verify current strict provider LIST and the entire exact SQL state. **Only run `--dry-run` until separately reviewed and explicitly approved.** Old scientific failure and PR #490 once marker remain unchanged; Phase5 FREEZE HOLD / paid Phase6 GO NO.
