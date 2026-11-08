@@ -126,11 +126,13 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
  range:number;requestedByCharge:Map<string,Map<string,number>>;
  firstDispatch:number
 }{
- const x=p?.proposal,shape=x?.reviewedSegmentedSource;
- const pins=x?.sourcePartitionPins;
- if(!x||x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
+ const x=p?.proposal;
+ if(!x)return hold("NOT_REVIEWED_SEGMENTED_V3_PROPOSAL");
+ const shape=x.reviewedSegmentedSource,pins=x.sourcePartitionPins;
+ if(!shape||!pins)return hold("NOT_REVIEWED_SEGMENTED_V3_PROPOSAL");
+ if(x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
     x.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"||
-    !shape||!pins||!["4h","2x2h","up-to-6h"].includes(shape.windowShape)||
+    !["4h","2x2h","up-to-6h"].includes(shape.windowShape)||
     !integral(shape.verifiedProviderMaxRangeMinutes,1,360)||
     !SHA.test(shape.reviewedProviderRangeEvidenceSha256)||
     x.databaseWrites!==0||x.providerCalls!==0||
@@ -200,7 +202,8 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
  const byDigest=new Set<string>(),coverage=new Map<string,Set<string>>();
  for(const pin of pins){
   const q=qByDigest.get(pin.queryDigest);
-  if(!q||byDigest.has(pin.queryDigest)||
+  if(!q)return hold("UNSIGNED_OR_DUPLICATED_V0082_PARTITION_BINDING");
+  if(byDigest.has(pin.queryDigest)||
      pin.queryKey!==q.query_key||
      pin.reviewedProviderRangeEvidenceSha256!==
        shape.reviewedProviderRangeEvidenceSha256)
@@ -228,7 +231,8 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
  const partCount=Math.ceil(childMin/shape.verifiedProviderMaxRangeMinutes);
  for(const slot of SLOTS)for(const h of HORIZONS){
    const got=coverage.get(slot+"|"+h);
-   if(!got||got.size!==childCount*partCount)
+   if(!got)return hold("MISSING_SEGMENT_OR_RANGE_PARTITION_COVERAGE");
+   if(got.size!==childCount*partCount)
      hold("MISSING_SEGMENT_OR_RANGE_PARTITION_COVERAGE");
    for(let child=1;child<=childCount;child++)
     for(let part=1;part<=partCount;part++)
