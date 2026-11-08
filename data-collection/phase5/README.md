@@ -9,6 +9,10 @@
 
 These explain the structure **without** querying live flight data or changing any database. The table inventory comes from committed DDL and is not an assertion that Replit's visible development database is the same as production Neon.
 
+## V0082 additive empty schema and NOLOGIN permission installer (not deployed)
+
+[V0082 inert schema/NOLOGIN owner installer checkpoint](2026-11-08_V0082_INERT_SCHEMA_ROLE_INSTALLER_SECURITY_CHECKPOINT.md) explains why V0082 SQL existing in GitHub is **not** production installation. It describes exact pinned migration bytes, one-transaction PostgreSQL DDL and role grants, the new budget-freeze-only NOLOGIN group, and narrowly extended existing PREPARE query-partition INSERT permission. **No runtime LOGIN membership, provider rights, actual paid SOURCE, PRE/POST flight evidence or Phase6 GO is created by that code.**
+
 ## 31-day Stage22 → V0082 frozen seven-REST-category inputs (inert)
 
 [Scientifically audited 31-batch-day Stage22 to V0082 budget input-frozen checkpoint](2026-11-08_STAGE22_TO_V0082_SIGNED_SEVEN_REST_INPUT_FREEZE_CHECKPOINT.md) documents the complete f.8 source-range and actual UTC REST-charge-budget derivation, seven category caps, separate restricted `SERIALIZABLE` V0082 release/caps/day-budget writer, and authentic disposable PostgreSQL16 rollback/ACL tests. This *prepares reviewed future budget inputs*, not spent requests, licensed normalized Contents, selected airport observations, production migration installation, witnessed PRE or Phase6 paid GO.
