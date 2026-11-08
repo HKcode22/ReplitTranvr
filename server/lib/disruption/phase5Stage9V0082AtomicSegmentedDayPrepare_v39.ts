@@ -296,6 +296,38 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
     [access.qu,access.qd,access.pu,access.pd,access.bi,access.ri,access.ai]
      .some(v=>v!==false))
     hold("NO_EXACT_TWO_TABLE_INSERT_ONLY_ACL");
+  // Explicit defense against a mis-granted preparer. INSERT-only on two
+  // identity ledgers is insufficient if the same role could UPDATE a
+  // budget/category, TRUNCATE a query, or read raw provider Contents.
+  // Only immutable hard-coded table and privilege names form this SQL.
+  const forbidden=[
+   ["clean.phase5_fids_allowed_query_v39",["TRUNCATE"]],
+   ["clean.phase5_fids_exact_query_partition_v39",["TRUNCATE"]],
+   ["clean.phase5_fids_seven_rest_release_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_cycle_rest_category_cap_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_utc_rest_category_budget_v39",
+      ["UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_cycle_budget_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_day_budget_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_utc_charge_budget_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_physical_attempt_v39",
+      ["UPDATE","DELETE","TRUNCATE"]],
+   ["clean.phase5_fids_original_binding_v39",
+      ["INSERT","UPDATE","DELETE","TRUNCATE"]],
+   ["clean.fids_query_response",["SELECT","INSERT","UPDATE","DELETE"]],
+   ["clean.flight_population",["SELECT","INSERT","UPDATE","DELETE"]]
+  ] as const;
+  const clauses=forbidden.flatMap(([table,privs])=>
+    privs.map((priv)=>"has_table_privilege(current_user,'"+
+      table+"','"+priv+"')"));
+  const scope=(await client.query("SELECT "+clauses.join(",")+"")).rows[0];
+  if(!scope||Object.values(scope).some(v=>v!==false))
+   hold("EXTRA_FROZEN_LEDGER_OR_RAW_PROVIDER_PRIVILEGE");
   const now=dt(actor.at),x=review.proposal;
   if(now>=reviewed.firstDispatch-120000)
     hold("PREPARE_AFTER_FIRST_PROSPECTIVE_SOURCE_DEADLINE");
