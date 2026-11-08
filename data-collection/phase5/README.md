@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Receiver P0: independently observed stale Published code, safe recovery preflight
+
+[Nov 8 published receiver mismatch and immutable NO-PUBLISH Replit owner preflight](2026-11-08_REPLIT_RECEIVER_READONLY_DEPLOYMENT_ADMISSION.md). The *actual* public GET on Nov 8 08:45:50Z was HTTP 200 and reported **published source `84b7f156...`**, older than the reviewed Phase5 callback-only source `1ca938be...`, with **no signed durable external POST proof**. Replit app "published success" does **not** mean Phase5 receiver READY. The prior Replit working tree includes local-only commit `b44b1e...`; never blindly reset/pull/republish. A reviewed one-line, source-pinned **READ ONLY** local/remote/published-SHA inspection is staged (no git mutations, provider requests, secrets, publisher, or paid GO). Independently verify real deployment and STOP before Phase5 FREEZE.
+
 ## Next release dependency: true active airport sampling-frame proof, not another database migration
 
 The [Nov 8 owner READ ONLY 16-table inventory](2026-11-08_LIVE_EMPTY_PHASE5_COLD_START_AND_TRUE_RELEASE_ORDER.md) **did not inspect** the B0062 active sampling-frame registry or eligible tier/region pool. [Read the exact GitHub-pinned, no-provider READ ONLY active-frame/5-anchor-candidate verification handoff](2026-11-08_ACTIVE_FRAME_CALENDAR_REAL_ELIGIBILITY_READONLY.md). This provides the real eligible HUB/MID/REGIONAL frame metadata required before the existing strict f.8 calendar solver can legitimately receive a signed future input. **No provider/DB writes, no repeated V0079–V0083 migrations, no preselected adaptive future airports, no Phase6 paid GO.** Source/account identity and dated quota evidence are already documented in issue #300; do not ask owner to repeat them.
