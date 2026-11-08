@@ -13,8 +13,8 @@ describe("P25 Replit published callback release configuration",()=>{
   expect(section).toContain('deploymentTarget = "autoscale"');
   // Explicit Phase5 reviewed build still compiles callback-only binary only
   // after exact source/config equivalence; Gate4 historical builder retained.
-  expect(section).toContain('build = ["bash", "scripts/v39_phase5_reviewed_source_build_v39.sh"]');
-  const wrapper=readFileSync("scripts/v39_phase5_reviewed_source_build_v39.sh","utf8");
+  expect(section).toContain('build = ["bash", "scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh"]');
+  const wrapper=readFileSync("scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh","utf8");
   expect(wrapper).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(wrapper).toContain('git diff --quiet "$PIN" HEAD');
   expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "V39_GATE05_DURABLE_CUSTODY_REQUIRED=1", "node", "dist/index.mjs"]');
