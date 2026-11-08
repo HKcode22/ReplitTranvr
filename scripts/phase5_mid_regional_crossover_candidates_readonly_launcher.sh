@@ -13,7 +13,7 @@ for c in gh git node base64 mktemp; do
  command -v "$c" >/dev/null 2>&1 || hold "MISSING_$c"
 done
 gh auth status --hostname github.com >/dev/null 2>&1 || hold GH_AUTH_MISSING
-[[ -n "\${DATABASE_URL:-}" && -n "\${V39_DATABASE_RUNTIME_URL:-}" ]] || hold OWNER_DATABASE_URLS_MISSING
+[[ -n "${DATABASE_URL:-}" && -n "${V39_DATABASE_RUNTIME_URL:-}" ]] || hold OWNER_DATABASE_URLS_MISSING
 [[ "$DATABASE_URL" != "$V39_DATABASE_RUNTIME_URL" ]] || hold RUNTIME_DATABASE_NOT_SEPARATED
 [[ -d node_modules/pg && -d scripts ]] || hold LOCAL_MODULES_MISSING
 LIVE="$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" || hold MAIN_MISSING
