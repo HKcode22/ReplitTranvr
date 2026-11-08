@@ -31,7 +31,7 @@ git merge-base --is-ancestor "$OLD_PIN" "$LOCAL_PIN" || hold REVIEWED_ANCESTRY_M
 [[ "$(git hash-object server/lib/disruption/db_v39.ts 2>/dev/null)" == "$DB_BLOB" ]] || hold RUNTIME_DB_SOURCE_CHANGED
 [[ -n "${AERODATABOX_API_KEY:-}" ]] || hold PROVIDER_LIST_KEY_MISSING
 [[ -n "${V39_DATABASE_RUNTIME_URL:-}" ]] || hold RUNTIME_DB_URL_MISSING
-[[ ! -e "$GUARD" ]] || hold NEW_HELPER_PATH_COLLISION_PRESERVE_LOCAL
+[[ ! -e "$GUARD" && ! -L "$GUARD" ]] || hold NEW_HELPER_PATH_COLLISION_PRESERVE_LOCAL
 TMP_SCRIPT="$(mktemp --suffix=.ts "$PWD/scripts/.p25-admin-dryrun-XXXXXXXX")" ||
   hold TEMP_RUNNER_CREATE_FAILED
 touch "$GUARD" || hold HELPER_FILE_CREATE_FAILED
