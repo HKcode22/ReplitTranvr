@@ -42,8 +42,8 @@ if(process.argv[1] && process.argv[1].endsWith('v39_phase5_published_v2_identity
    process.env.P5_V2_PUBLIC_READONLY_CLI==='1'){
  try{
   const [bodyPath,outPath,code,exit,elapsed]=process.argv.slice(2);
-  if(!bodyPath||!outPath||!/^\\d{3}$/.test(String(code))||
-     !/^\\d+$/.test(String(exit))||!/^[\\d.]+$/.test(String(elapsed)))
+  if(!bodyPath||!outPath||!/^\d{3}$/.test(String(code))||
+     !/^\d+$/.test(String(exit))||!/^[\d.]+$/.test(String(elapsed)))
     throw Error('INVALID_CLI_ARGS');
   let body='';
   try{body=readFileSync(bodyPath,'utf8');}catch{}
