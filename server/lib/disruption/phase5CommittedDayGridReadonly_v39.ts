@@ -12,6 +12,7 @@ import type {Pool} from "pg";
 import {
  materializeP5DynamicDaySourceGrid,
  P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
+ P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
  type P5DynamicDayGridInput,type P5DynamicDayGridResult,
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {PreparedDayForReadback,PreparedDrawRow}
@@ -37,7 +38,7 @@ const AUTH_SQL=[
 const CALENDAR_SQL=[
  "SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,",
  "anchor_icao,slot_regions,pair_airport_set,calendar_hash,",
- "config_hash,frame_hash,date_utc",
+ "config_hash,frame_hash,date_utc,window_shape,active_duration_minutes",
  "FROM clean.adb_phase6_calendar_day WHERE run_day_index=$1"
 ].join(" ");
 const DRAW_SQL=[
@@ -61,6 +62,7 @@ export interface P5CommittedDayReadonlyScope {
   templates:P5DynamicDayGridInput["templates"];
   /** Optional independently reviewed timing contract for multi-refresh. */
   reviewedRefreshTiming?:P5DynamicDayGridInput["reviewedRefreshTiming"];
+  reviewedSegmentedSource?:P5DynamicDayGridInput["reviewedSegmentedSource"];
 }
 export interface P5CommittedDayReadonlyResult {
   schema:"v39.phase5.db-readback-day-grid.v1";
@@ -139,14 +141,25 @@ export async function readCommittedP5DayCandidateGrid(
   if(day.scheduledStartUtc.toISOString().slice(0,10)!==
     stamp(cr.date_utc).toISOString().slice(0,10))
     hold("SERVICE_DATE_NOT_MATCHED");
+   if(scope.reviewedSegmentedSource){
+     const expectedDuration=scope.reviewedSegmentedSource.windowShape===
+       "up-to-6h"?360:240;
+     if(cr.window_shape!==scope.reviewedSegmentedSource.windowShape||
+        Number(cr.active_duration_minutes)!==expectedDuration)
+       hold("SAVED_AMENDMENT_C_TREATMENT_SHAPE_CHANGED");
+   }
   const draws=await client.query(DRAW_SQL,[scope.runDayIndex]);
   if(draws.rowCount!==4||draws.rows.length!==4)
     hold("FOUR_COMMITTED_DRAW_ROWS_NOT_FOUND");
   const candidates=materializeP5DynamicDaySourceGrid({
-    schema:scope.reviewedRefreshTiming?
+    schema:scope.reviewedSegmentedSource?
+      P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
+      scope.reviewedRefreshTiming?
       P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
     ...(scope.reviewedRefreshTiming?
       {reviewedRefreshTiming:scope.reviewedRefreshTiming}:{}),
+     ...(scope.reviewedSegmentedSource?
+      {reviewedSegmentedSource:scope.reviewedSegmentedSource}:{}),
     reviewedCalendarSha256:scope.expectedCalendarSha256,
     reviewedConfigSha256:scope.expectedConfigSha256,
     reviewedFrameSha256:scope.expectedFrameSha256,
