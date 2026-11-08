@@ -48,11 +48,19 @@ const QUERY_SELECT=[
  "q.provider_api_version,q.fids_protocol_version,",
  "q.planned_dispatch_utc,q.prediction_cutoff_utc,",
  "q.api_units_per_attempt,q.max_physical_attempts,q.state,",
- "d.calendar_hash,d.config_hash,d.frame_hash",
+ "d.calendar_hash,d.config_hash,d.frame_hash,",
+ "c.window_shape AS calendar_window_shape,",
+ "c.active_duration_minutes AS calendar_active_duration_minutes,",
+ "c.scheduled_start_utc AS calendar_scheduled_start_utc",
  " FROM clean.phase5_fids_allowed_query_v39 q",
  " JOIN clean.phase5_fids_day_budget_v39 d",
  " ON d.manifest_sha256=q.manifest_sha256",
  " AND d.run_day_index=q.run_day_index",
+ " JOIN clean.adb_phase6_calendar_day c",
+ " ON c.run_day_index=d.run_day_index",
+ " AND c.calendar_hash=d.calendar_hash",
+ " AND c.config_hash=d.config_hash",
+ " AND c.frame_hash=d.frame_hash",
  " WHERE q.query_digest=$1 AND q.manifest_sha256=$2",
 ].join(" ");
 function checkExactApprovedQuery(row:any,ctx:P5V0079SourceDbContext):void{
@@ -75,6 +83,10 @@ function checkExactApprovedQuery(row:any,ctx:P5V0079SourceDbContext):void{
   row.calendar_hash!==p.day.calendarHash||
   row.config_hash!==p.day.configHash||
   row.frame_hash!==p.day.frameHash||
+  row.calendar_window_shape!==p.sourcePartition?.windowShape||
+  Number(row.calendar_active_duration_minutes)!==
+    (p.sourcePartition?.windowShape==="up-to-6h"?360:240)||
+  asUtc(row.calendar_scheduled_start_utc)!==p.day.scheduledStartUtc.toISOString()||
   asUtc(row.service_window_start_utc)!==q.serviceWindowStartUtc||
   asUtc(row.service_window_end_utc)!==q.serviceWindowEndUtc||
   asUtc(row.planned_dispatch_utc)!==q.scheduledRequestUtc||
