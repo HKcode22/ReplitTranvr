@@ -7,7 +7,7 @@ cd "$HOME/workspace" || { echo 'HOLD_P5_RECEIVER_WORKSPACE_MISSING'; exit 2; }
 R='HKcode22/ReplitTranvr'
 BASE='329490356422d5af01594fb49ef05949168ee60f'
 FILE='scripts/v39_phase5_replit_receiver_deployment_readonly_once.mjs'
-BLOB='4ea951a6d94bc73d5345df01a0ec8c590672c74a'
+BLOB='5c2d2dea66751a31ad35bf7c722813ca8cb32fc4'
 hold() { echo "HOLD_P5_RECEIVER_READONLY: $1" >&2; exit 2; }
 for c in gh git node base64; do
   command -v "$c" >/dev/null 2>&1 || hold "MISSING_TOOL_$c"
