@@ -185,7 +185,18 @@ The separate staged migrations declare these tables. The previous Phase 5 GitHub
 
 V0082's additional `BEFORE INSERT` trigger on `clean.phase5_fids_physical_attempt_v39` enforces exact source geometry and category spending **inside the existing V0079 SQL transaction**. It is source-only and **does not yet physically book the five non-FIDS categories**, or operate real Alert SEND credits. GitHub code and disposable PG16 success do not mean a migration was installed on the live Replit/Neon database. See [V0082 engineering checkpoint](2026-11-08_SEVEN_CATEGORY_V0082_ATOMIC_SOURCE_GET_LEDGER_CHECKPOINT.md).
 
-V0078 modifies uniqueness constraints on Phase4 evidence and declares no new table in its migration file. Earlier V0066–V0075 migrations and any separately managed runtime schema objects may add further tables: this atlas is **complete for B0062 and the V0076–V0082 named source/evidence tables**, **not a claim of every table that currently exists on a live database**.
+### V0083: separately staged non-source REST physical attempts and immutable counter proof
+
+**NEW proposed additive SQL (PR #475), not installed in production.** It depends on V0082 and does not overwrite V0079 SOURCE reservation functions.
+
+| Table | Row meaning and primary key | Useful related fields |
+|---|---|---|
+| `clean.phase5_other_rest_reviewed_call_v39` | One immutable reviewed prospective **physical** GET, `request_sha256` | `manifest_sha256`, `rest_category`, `planned_charge_day_utc`, `api_units_per_get`, `github_run_id`, `rights_review_sha256`, `provider_price_sha256`, optional `source_query_digest` **mandatory for FIDS_RETRY** |
+| `clean.phase5_other_rest_physical_reservation_v39` | One irrevocable once-only receipt, `reservation_sha256`, unique `request_sha256` | `charged_utc_date`, `approved_api_units`, `previous_reserved_units`, `reserved_txid`, `github_run_id` |
+
+The V0083 `reserve_phase5_other_rest_once_v39()` **SECURITY DEFINER** function (no PUBLIC EXECUTE) locks the frozen cycle/UTC category ledgers before any provider GET, checks exact current UTC day, authorization, independently approved rights/cost/price/GitHub run, one request only, seven-category caps, and commits a physical receipt plus the category's exact charge in **one transaction**. It extends the V0082 category-immutability trigger so non-FIDS increments require a same-transaction, matching prior-balance receipt. Source BASE/SPLIT remain exact `+2` on their original V0079 path. **FIDS_RETRY cannot be reserved without its own previous actual committed V0079 source attempt and no bound original.** See [V0083 technical checkpoint](2026-11-08_V0083_FIVE_OTHER_REST_RESERVATION_SAFETY_CHECKPOINT.md). A schema SQL source file is NOT evidence of a current physical production table.
+
+V0078 modifies uniqueness constraints on Phase4 evidence and declares no new table in its migration file. Earlier V0066–V0075 migrations and any separately managed runtime schema objects may add further tables: this atlas is **complete for B0062 and the named V0076–V0083 source/evidence tables**, **not a claim of every table that currently exists on a live database**.
 
 ## Phase5 seven important V0079 tables — how to read them
 
