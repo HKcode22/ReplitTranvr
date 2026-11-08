@@ -6,7 +6,7 @@ The user twice pasted only the middle of a 167-line owner Bash heredoc into Repl
 **Resolution:** `scripts/phase5_v0083_replit_single_line_owner_once.sh` is an immutable Git-blob-fetchable script, delivered with a **single Shell command** from a fixed Git blob ID (insert exact reviewed blob after PR merge). No 167-line manual paste. Its own Bash `pipefail`/error traps and owner's existing guarded V0083 installer provide refusal, ambiguity quarantine and second PostgreSQL readback. Only execute after CI passes at the exact new main commit.
 
 This wrapper is not a new database migration and does not run a provider GET or Alert call. It checks:
-- live `main` is a descendant of reviewed PR #476 SHA `49989d0e87c85fe9c92bae0dcda09be2cebf728e`, and current main has both `offline-safety` and `atomic-other-rest-ddl-and-role-acl` SUCCESS;
+- live `main` is a descendant of reviewed PR #476 SHA `49989d0e87c85fe9c92bae0dcda09be2cebf728e`, and current main has `offline-safety` SUCCESS while the exact reviewed V0083 ancestor has the path-filtered `atomic-other-rest-ddl-and-role-acl` SUCCESS;
 - pinned installer blob `35b6cbeee37b31e86a56ad42c3752be411f97646` and staged V0083 SQL blob `a5e1e9df39ec9b436f0576245f375985a69a3b71` remain unchanged; raw script/SQL fetched by immutable Git blob ID and hash-checked;
 - `neondb` PostgreSQL16 writable primary has V0082 installed and V0083 absent; original installer checks full V0079–V0082 prerequisites, all five existing NOLOGIN roles, no source/budget rows, NOLOGIN-only new grants and one transaction;
 - after successful commit, a second connection verifies the two empty new V0083 tables, two NOLOGIN roles and isolated `INSERT`/`EXECUTE` permissions;
