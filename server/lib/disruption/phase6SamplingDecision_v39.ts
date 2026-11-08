@@ -54,8 +54,9 @@ export interface AirportSamplingState {
   lastSuccessfulPhase6ObservationAt: string | null;
   lastDirectObservationAt: string | null;
   lastSelectedAt: string | null;
-  /** Most recent actual FROZEN experimental service window END UTC.
-   * Required when lastSelectedAt is non-null. Service START is not
+  /** Most recent frozen PLANNED experimental service window END UTC.
+   * Conservative if a live batch ends early. Required when lastSelectedAt
+   * is non-null. Service START is not
    * sufficient for the f.8 end-to-start >=24h washout.
    */
   lastWindowEndUtc?: string | null;
