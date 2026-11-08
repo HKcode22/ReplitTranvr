@@ -58,6 +58,12 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
    }));
   const drawSha=verifyPreparedDailyDraw(day,rows).stateHash;
   plan={
+    sourcePartition:{
+      schema:"v39.phase5.amendment-c.source-segment-partition.v1",
+      windowShape:"4h",segmentIndex:1,partitionIndex:1,
+      verifiedProviderMaxRangeMinutes:240,
+      reviewedProviderRangeEvidenceSha256:H("7")
+    },
     day,savedEarlyDrawRows:rows,expectedEarlyDrawSha256:drawSha,
     reviewedReleaseSha256:release,reviewedProviderRightsSha256:rights,
     openapiSha256:contract,independentlyApprovedSourceAndRetention:true,
