@@ -2,6 +2,10 @@
 
 **Purpose:** freeze the actual one-month operating study (sampling, FIDS producer→three PRE horizons, provider Alerts, operating-flight identities, rights/expiry, budgets, safety, missingness, monitoring and exact launch calendar). **This is NOT the place to redo historical YSSY incidents or re-run Phase 4 Gate5 tests.**
 
+## Replit Shell one-line V0083 owner handoff (V0082 done; V0083 unverified)
+
+[Exact Git-blob single-line V0083 production owner command and previously reported account evidence](2026-11-08_V0083_SINGLE_LINE_OWNER_HANDOFF_AND_KNOWN_ACCOUNT.md). **Do not paste a large fragmented heredoc**; a previous Replit Shell fragment was truncated and produced interactive Bash `>` / JavaScript history-expansion errors, not valid SQL installation evidence. Use the reviewed SHA-pinned one-line launcher only after its exact main CI is successful; it verifies V0082 installed, V0083 absent, installed owner role, exact reviewed SQL/script Git blobs, and independent second-connection post-commit ACL. **Zero provider GET/Alert, no Phase6 authorization**. Known grandfathered RapidAPI Team Ultra account, historical/current dated balances and support correspondence are *already in issue #300*: do not ask owner again.
+
 ## Database and SQL reader refresh (start here if the tables look confusing)
 
 - [Complete PostgreSQL table atlas — 76 baseline tables, staged Phase4/5 tables, and the scientific data relationships](PHASE5_DATABASE_ATLAS_SQL_TABLES_AND_RELATIONSHIPS_20261108.md)
