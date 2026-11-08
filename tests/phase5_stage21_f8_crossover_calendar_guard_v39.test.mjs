@@ -111,6 +111,14 @@ describe("Stage21 binding f.8 31-batch-day paired crossover hard gates",()=>{
   x.segments[1].startUtc=x.segments[0].endUtc;
   includes(p,"SPLIT_2X2_EXPOSURE_OR_GAP_INVALID");
  });
+ it("refuses 2h split gaps that the controller cannot execute",()=>{
+  const p=make(),x=p.days.find(x=>x.windowShape==="2x2h");
+  // Exposures remain 2h+2h, but the gap is now 2h, not 1h.
+  x.segments[1].startUtc=format(Date.parse(x.segments[1].startUtc)+H);
+  x.segments[1].endUtc=format(Date.parse(x.segments[1].endUtc)+H);
+  x.endUtc=x.segments[1].endUtc;
+  includes(p,"SPLIT_2X2_GAP_NOT_EXECUTABLE_FROZEN_60MIN");
+ });
  it("enforces frozen period2 same ICAOs and region, not a new adaptive draw",()=>{
   const p=make();
   p.days[6].airports.HUB="ZZZZ";
