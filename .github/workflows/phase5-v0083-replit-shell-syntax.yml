@@ -1,0 +1,30 @@
+name: Phase5 V0083 one-line Replit owner shell syntax
+on:
+  pull_request:
+    paths:
+      - "scripts/phase5_v0083_replit_single_line_owner_once.sh"
+      - ".github/workflows/phase5-v0083-replit-shell-syntax.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/phase5_v0083_replit_single_line_owner_once.sh"
+      - ".github/workflows/phase5-v0083-replit-shell-syntax.yml"
+permissions:
+  contents: read
+jobs:
+  immutable-one-line-shell-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static shell syntax and no provider activation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/phase5_v0083_replit_single_line_owner_once.sh
+          grep -Fq "ADB_AUTO_COLLECT=0" scripts/phase5_v0083_replit_single_line_owner_once.sh
+          grep -Fq "V39_PHASE6_PROCESS_ARMED=0" scripts/phase5_v0083_replit_single_line_owner_once.sh
+          grep -Fq "P5_V0083_EMPTY_INSTALL_ONCE=INSTALL_EMPTY_V0083_OTHER_REST_NOLOGIN_ROLES_NO_PROVIDER" scripts/phase5_v0083_replit_single_line_owner_once.sh
+          test "$(git hash-object scripts/v39_phase5_v0083_inert_other_rest_schema_nologin_owner_once.mjs)" = 35b6cbeee37b31e86a56ad42c3752be411f97646
+          test "$(git hash-object migrations/staged/V0083__phase5_nonfids_five_category_physical_rest_reservation_v39.sql)" = a5e1e9df39ec9b436f0576245f375985a69a3b71
+          echo 'PHASE5_V0083_ONE_LINE_OWNER_SHELL_SYNTAX_AND_PINNED_SOURCE_PASS'
