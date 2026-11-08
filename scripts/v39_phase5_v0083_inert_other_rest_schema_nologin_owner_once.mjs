@@ -182,7 +182,7 @@ async function postChecks(c){
   for(let i=0;i<probes.length;i+=100){
     const batch=probes.slice(i,i+100);
     const sql="SELECT "+batch.map((p,j)=>
-      "has_table_privilege('"+p.role+"','"+p.table+"','"+p.privilege+"') p"+j).join(",");
+      "has_table_privilege('"+p.role+"','"+p.table+"','"+p.priv+"') p"+j).join(",");
     const got=(await c.query(sql)).rows[0];
     if(!got||batch.some((p,j)=>got["p"+j]!==p.yes))
       hold("V0083_EXTRA_OR_MISSING_TABLE_PRIVILEGES");
