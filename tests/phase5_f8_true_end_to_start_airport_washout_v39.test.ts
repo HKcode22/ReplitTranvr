@@ -34,7 +34,7 @@ describe("f.8 24h WASHOUT is previous WINDOW END to new START",()=>{
   expect(()=>chooseAirportsForRunDay(
     plan("2026-11-10T08:00:00.000Z"),frame,
     [state("2026-11-09T12:00:00.000Z")]))
-   ).toThrow(/REFUSED_WASHOUT/);
+   .toThrow(/REFUSED_WASHOUT/);
  });
  it("admits exactly 24h between previous end and next start",()=>{
   const x=chooseAirportsForRunDay(
