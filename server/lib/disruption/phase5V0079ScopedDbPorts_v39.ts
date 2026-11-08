@@ -13,9 +13,10 @@ import {
   type FidsQueryObservation,
   type PopulationRow,
 } from "./fidsCensus_v3";
+import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39";
 import type {
   P5SourcePorts, P5SourceSingleQueryPlan, P5PhysicalReservation,
-  P5OriginalCommit, verifyP5F8ExactSourcePartition,
+  P5OriginalCommit,
 } from "./phase5ScopedFidsSourceBridge_v39";
 
 const SHA=/^[0-9a-f]{64}$/;
