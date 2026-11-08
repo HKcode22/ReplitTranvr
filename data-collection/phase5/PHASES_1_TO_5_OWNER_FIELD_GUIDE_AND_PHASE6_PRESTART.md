@@ -242,6 +242,16 @@ The proposal includes chronological **20 training / 5 validation / 6 held-out te
 
 The historical f.8 project uses a **50,000 REST-unit cycle ceiling** and a smaller daily operating envelope rather than spending the advertised full subscription quota automatically. The last known Nov7 account free observation was 59,968/60,000 REST remaining and 1,830 Alerts. Those balances change with requests/cycle timing and do not prove source license, range or price. A priced calendar must cover actual partitions, retries, validation, outcomes, history and diagnostic allocations—not just multiply four airports by 31.
 
+### Concrete unattended clock monitoring already implemented (still NOT a Phase 6 producer)
+
+[PR #487](https://github.com/HKcode22/ReplitTranvr/pull/487) merged a **real GitHub Actions schedule** at six UTC clock slots (00:17, 04:17, 08:17, 12:17, 16:17 and 20:17). It makes **zero provider HTTP calls and zero database writes** and cannot send a paid Alert or bypass the original Phase 5 FREEZE. A GitHub Action *running in a PR* is not evidence a production cron has fired.
+
+This newer read-only coverage monitor independently checks the **actual GitHub schedule-run inventory** for the last 24 hours. It distinguishes on-time completed slots, missed slots, late starts, duplicate attempts, failures and incomplete jobs. It never equates "a cron line exists" or "one scheduled job ran" with a full 31-day unattended source→PRE→POST workflow. Historic absence before the clock workflow's actual activation is a **warmup**, not a fabricated missed schedule. Reports are metadata-only, kept with the GitHub workflow; no flight data, credentials or provider Contents are uploaded.
+
+The existing signed synthetic webhook test can still fail on a prerequisite **without running POST**. The [named, no-network/no-database Shell diagnostic](../../scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh) prints which local script/secret/bucket/runtime configuration predicate is missing **without printing the secret**. It is not the synthetic delivery test itself and is never evidence of durable callback or STOP.
+
+**Still required for unattended Phase 6:** a separately signed future calendar, early airport draws, actual GitHub source/PRE/witness/POST execution with hard cutoffs, authenticated receiver/STOP custody, missed-run responses and automatic daytime QA/cost reports. Do not ask the owner to wake overnight to launch individual source GETs.
+
 ### Automation we intend — and what is not yet proved
 
 **The goal is fully GitHub-hosted timed ownership.** Your laptop and an open Replit Shell should *not* be required at 2 AM. Once Phase 6 GO is separately signed, reviewed GitHub Actions should:

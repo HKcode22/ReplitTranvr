@@ -11,6 +11,8 @@ on:
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
+      - 'scripts/v39_phase5_github_six_slot_coverage_report.mjs'
+      - 'tests/phase5_github_six_slot_coverage_v39.test.mjs'
   push:
     branches: [main]
     paths:
@@ -19,8 +21,11 @@ on:
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
+      - 'scripts/v39_phase5_github_six_slot_coverage_report.mjs'
+      - 'tests/phase5_github_six_slot_coverage_v39.test.mjs'
 permissions:
   contents: read
+  actions: read
 env:
   ADB_AUTO_COLLECT: '0'
   V39_PHASE6_PROCESS_ARMED: '0'
@@ -47,15 +52,32 @@ jobs:
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
           bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
           node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
+          node --test tests/phase5_github_six_slot_coverage_v39.test.mjs
       - name: Record scheduled dispatch drift; not authority to collect
         shell: bash
         run: |
           set -Eeuo pipefail
           node scripts/v39_phase5_github_autonomous_clock_canary.mjs --out "$RUNNER_TEMP/phase5-schedule-canary.json"
           echo 'PHASE5_SIX_SLOT_GITHUB_CLOCK_NO_PROVIDER_NO_DB_NO_PAID'
+      - name: Read GitHub's ACTUAL scheduled jobs, detect missing or late slots (no provider)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          TODAY="$(date -u -d '72 hours ago' '+%Y-%m-%d')"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/phase5-autonomous-clock-canary-no-provider.yml/runs?event=schedule&per_page=100&created=%3E%3D$TODAY" \
+            > "$RUNNER_TEMP/phase5-cron-history-private.json"
+          node scripts/v39_phase5_github_six_slot_coverage_report.mjs \
+            --runs-file "$RUNNER_TEMP/phase5-cron-history-private.json" \
+            --output "$RUNNER_TEMP/phase5-clock-coverage-sanitized.json"
+          echo 'PHASE5_GH_CLOCK_HISTORICAL_READONLY_NO_PAID_PRODUCTION_AUTH'
       - uses: actions/upload-artifact@v4
         with:
           name: phase5-github-clock-canary-readonly
-          path: ${{ runner.temp }}/phase5-schedule-canary.json
+          path: |
+            ${{ runner.temp }}/phase5-schedule-canary.json
+            ${{ runner.temp }}/phase5-clock-coverage-sanitized.json
           retention-days: 7
           if-no-files-found: error
