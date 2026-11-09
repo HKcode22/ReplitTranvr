@@ -51,7 +51,7 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
  it("finds next after a safely committed earlier four-slot day",()=>{
   const rows=dates();rows[0].draw_count=4;
   const out=selectP5GitHubNextEarlyDraw(args(
-   new Date(FIRST+48*3600000-48*3600000).toISOString(),rows
+   new Date(FIRST-48*3600000).toISOString(),rows
   ));
   // Day2 is still more than 72h away at this instant.
   expect(out.status).toBe("NOT_DUE_OR_ALREADY_SELECTED");
