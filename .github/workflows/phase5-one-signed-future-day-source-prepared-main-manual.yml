@@ -1,0 +1,116 @@
+name: Phase5 one SIGNED future day source PREPARED (GitHub only, NO provider)
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_review_packet:
+        description: "Exact already reviewed future data-collection/phase5/frozen/*.json after true early draw"
+        required: true
+        type: string
+      confirm:
+        description: "Type ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-one-signed-future-day-source-prepared-main-manual.yml'
+      - 'scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39.ts'
+      - 'tests/phase5_one_signed_day_source_prepare_github_owner_v39.test.ts'
+      - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
+      - 'data-collection/phase5/2026-11-09_GITHUB_ONE_SIGNED_DAY_SOURCE_PREPARE_REUSES_STAGE30_ROLE.md'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-one-reviewed-day-prepared-${{ inputs.frozen_review_packet || github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-admission-only:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify signed-bytes and real-GitHub admission guards with no DB or provider
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_one_signed_day_source_prepare_github_owner_v39.test.ts
+          echo 'P5_SIGNED_DAY_PREPARE_CI_ONLY_NO_DB_NO_PROVIDER_NO_RELEASE'
+  exact-signed-one-day-prepared:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_DAY_PREPARE_CONFIRM: ${{ inputs.confirm }}
+      V39_P5_PREPARE_OWNER_APPROVED: ${{ secrets.V39_P5_PREPARE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_PREPARE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_PREPARE_APPROVED_CODE_SHA }}
+      V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256: ${{ secrets.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Strict GO/packet gate before dependency installation or database access
+        env:
+          PACKET_FILE: ${{ inputs.frozen_review_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$ADB_AUTO_COLLECT" = "0"
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_P5_PREPARE_OWNER_APPROVED" = "1"
+          test "$V39_PHASE5_FREEZE_SIGNED" = "1"
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = "1"
+          test "$V39_PHASE6_PROCESS_ARMED" = "1"
+          test "$V39_P5_PREPARE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ "$PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+          test -f "$PACKET_FILE"
+          test -n "$V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256"
+          test -n "$P5_V39_PREPARE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prepare only exact signed real saved future day; NO paid source or PRE
+        env:
+          RELEASE_FILE: ${{ inputs.frozen_review_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39.ts "$RELEASE_FILE"
+          echo 'PHASE5_ONE_DAY_V0079_V0082_PREPARED_NO_PROVIDER_GET_NO_PRE_NO_PHASE6_GO'
