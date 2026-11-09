@@ -83,6 +83,9 @@ export interface P5Stage14SingleFlightPreResult{
  conditionalServiceCertifiedPhysicalLeg:false;
  runDayIndex:number;slot:string;horizon:PreHorizon;
  cutoffUtc:string;boundPopulationQueryId:string;
+ /** Exact durable ID read BACK after acknowledged PG COMMIT; Stage17 must
+  * use this rather than a guessed or separately copied snapshot identity. */
+ committedSnapshotId:string;
  sourceOriginalCommittedBeforeFlightCutoff:true;
  flightPreCommittedBeforeOwnCutoff:true;
  postCommitDatabaseReadbackVerified:true;
@@ -404,7 +407,7 @@ export async function persistP5V0079SingleBoundFlightPre(
   // If COMMIT succeeded but post-commit proof is unavailable or late,
   // keep the durable row and HOLD scientific acceptance; never blindly retry.
   const confirmed=await c.query(
-   "SELECT clock_timestamp() AS readback_at,id,"+
+   "SELECT clock_timestamp() AS readback_at,id::text AS id,"+
    "population_member_id IS NOT NULL AS has_member,created_at,"+
    "selected_t_milestone_utc,selected_t_version,"+
    "population_query_id,fids_response_hash,prediction_cutoff_utc"+
@@ -415,7 +418,9 @@ export async function persistP5V0079SingleBoundFlightPre(
   );
   const checked=confirmed.rows[0];
   const post=dbTime(checked?.readback_at,"POST_COMMIT_DB_CLOCK");
-  if(confirmed.rowCount!==1||checked?.has_member!==true||
+  if(confirmed.rowCount!==1||
+    !/^[1-9][0-9]{0,17}$/.test(checked?.id??"")||
+    checked?.has_member!==true||
     checked?.population_query_id!==p.expectedSourcePopulationQueryId||
     checked?.fids_response_hash!==p.expectedSourceResponseSha256||
     checked?.selected_t_version!==version||
@@ -433,6 +438,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    runDayIndex:p.runDayIndex,slot:p.slot,horizon:p.horizon,
    cutoffUtc:cutoff.toISOString(),
    boundPopulationQueryId:p.expectedSourcePopulationQueryId,
+   committedSnapshotId:checked.id as string,
    sourceOriginalCommittedBeforeFlightCutoff:true,
    flightPreCommittedBeforeOwnCutoff:true,
    postCommitDatabaseReadbackVerified:true,

@@ -4,11 +4,15 @@ on:
     branches: [main]
     paths:
       - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
       - '.github/workflows/phase5-stage29-t24-pre-witness-bound-pg16.yml'
   push:
     branches: [main]
     paths:
       - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
       - '.github/workflows/phase5-stage29-t24-pre-witness-bound-pg16.yml'
 permissions:
   contents: read

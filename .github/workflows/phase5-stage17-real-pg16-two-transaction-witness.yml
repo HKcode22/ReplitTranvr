@@ -6,6 +6,8 @@ on:
       - 'migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql'
       - 'server/lib/disruption/phase5T24IndependentPostCommitWitness_v39.ts'
       - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
       - '.github/workflows/phase5-stage17-real-pg16-two-transaction-witness.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql'
       - 'server/lib/disruption/phase5T24IndependentPostCommitWitness_v39.ts'
       - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
       - '.github/workflows/phase5-stage17-real-pg16-two-transaction-witness.yml'
 permissions:
   contents: read
