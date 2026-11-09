@@ -82,8 +82,8 @@ export interface P5Adaptive31ShapeEnvelope {
  knownUniquePairedAirports:19;
  allExperimentExposureHoursAtMaximum:128;
  activeChildExposureSegments:34;
- unpartitionedAirportSegmentTargets:136;
- unpartitionedThreeHorizonCutoffGroups:408;
+ unpartitionedAirportSegmentTargets:number;
+ unpartitionedThreeHorizonCutoffGroups:number;
  frozenAirportsForFutureOrdinaryDays:0;
  futureOrdinaryDaysStillRequireRealSelection:21;
  days:P5Adaptive31ShapeDay[];
@@ -231,7 +231,7 @@ export function proposeP5Adaptive31ShapeEnvelope(
   status:"PROVISIONAL_SHAPE_ENVELOPE_ONLY_21_ADAPTIVE_DRAWS_PENDING",
   actualCorrectedB0062SelectionSha256:
    "f5112a9ca432d9d3fede96a9805030d68e05ced5a19d029aa896805746c21592",
-  dateMapSha256:candidate.dateMapSha256,
+  dateMapSha256:candidate.dateMapSha256 as string,
   crossoverReview40Sha256:review.windowIdentitySha256,
   claimedTreatmentAssignmentSha256:treatment.assignmentSha256,
   claimedTreatmentCommitmentSha256:treatment.announcedCommitmentSha256,
