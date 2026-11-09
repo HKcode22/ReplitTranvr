@@ -88,13 +88,14 @@ export interface P5RollingFirstDayScenarioResult {
  providerCalls:0;databaseWrites:0;paidAlertCreates:0;
 }
 /**
- * Prospective lower bound:
- *   ready + worst scheduler slip + provider persist + guard + extra
- *   must be <= (first possible flight-window start - 24 hours).
+ * TWO independent deadlines must hold for the first prospective 00Z slot:
+ * (1) ready + scheduler slip + response/persist + margin + reserve
+ *     <= first slot - 24 hours (source PRE cutoff);
+ * (2) ready < first slot - 24h45m (DB owner EARLY airport draw).
  *
- * First slot is exactly 00:00 UTC in the existing six-slot rotation. This
- * never asserts a genuine flight actually begins then. The actual
- * flight-level T and T24 writer remain separate physical evidence gates.
+ * The early draw also may not be >72h before that slot. The output gives
+ * the actual [open,last-allowed] selection window for independent review.
+ * None of this proves the real selected flight's T or authorizes source GET.
  */
 export function proposeP5RollingEarliestFirstDayScenario(
  input:P5RollingFirstDayScenarioInput
