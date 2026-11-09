@@ -95,6 +95,48 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
       .toThrow("INVALID_REGIONAL_PROBABILITY_VECTOR");
   });
 
+  it("accepts two distinct REGIONAL airport candidates and retains their declared probabilities", () => {
+    const f=fixture();
+    f.rows[3].airport_layer_design_probability=0.6;
+    f.rows[3].probability_vector=[
+      {icao:"KGPT",probability:0.6,drawScore:3},
+      {icao:"KDEC",probability:0.4,drawScore:2},
+    ];
+    const regional=verifyPreparedDailyDraw(f.day,f.rows).selections[3];
+    expect(regional.designProbability).toBe(0.6);
+    expect(regional.probabilityVector).toHaveLength(2);
+  });
+
+  it("refuses repeated REGIONAL physical ICAOs even when total and selected probability match", () => {
+    for(const other of ["KGPT","kgpt"," KgPt "]) {
+      expect(guarded(f=>{
+        f.rows[3].airport_layer_design_probability=0.6;
+        f.rows[3].probability_vector=[
+          {icao:"KGPT",probability:0.6,drawScore:3},
+          {icao:other,probability:0.4,drawScore:2},
+        ];
+      })).toThrow("DUPLICATE_REGIONAL_PROBABILITY_AIRPORT");
+    }
+  });
+
+  it("refuses REGIONAL probability or draw-score coercion and invalid airport identities", () => {
+    for(const bad of [null,false,true,"1",0,-1,NaN,Infinity]) {
+      expect(guarded(f=>{
+        f.rows[3].probability_vector=[{icao:"KGPT",probability:1,drawScore:bad}];
+      })).toThrow("INVALID_REGIONAL_PROBABILITY_VECTOR");
+    }
+    for(const bad of [null,false,true,"1",0,-1,NaN,Infinity]) {
+      expect(guarded(f=>{
+        f.rows[3].probability_vector=[{icao:"KGPT",probability:bad,drawScore:1}];
+      })).toThrow("INVALID_REGIONAL_PROBABILITY_VECTOR");
+    }
+    for(const badIcao of ["NOT_AN_ICAO","KGP", "1234", "KGPT1", ""]) {
+      expect(guarded(f=>{
+        f.rows[3].probability_vector=[{icao:badIcao,probability:1,drawScore:1}];
+      })).toThrow("INVALID_REGIONAL_PROBABILITY_VECTOR");
+    }
+  });
+
   it("generates order-independent digest, not relative to PostgreSQL result order", () => {
     const a = fixture();
     const b = fixture();
