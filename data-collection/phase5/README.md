@@ -1,5 +1,13 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — real flight records, 12 conditional identities and reuse-first finish list
+
+[**Owner technical explainer: what the 12 flight keys mean, source types, replica checks, and the seven exact Phase5 remaining tasks**](2026-11-09_WHAT_THE_FLIGHT_RECORDS_MEAN_AND_PHASE5_EXACT_FINISH_LIST.md). Explains the genuine Nov6 9 FIDS PRE originals, 12 conditional service keys, 36 time-safe PRE rows, 3 POST originals and 36 schedule-revision comparisons; separates observations from measured wheels-off, Phase2/3/4 reuse from Phase5 generalization, and prelaunch prerequisites from future Phase6 Day1 receipts. **Do not repeat the Nov6 paid pilot, reinstall V0079–V0083, or invent native operating-leg/actual-only labels.**
+
+## Nov 9 — separate prelaunch design work from Day 1 after-authorized evidence (under review)
+
+[**Latest real owner inventory and circular-blocker resolution**](2026-11-08_LIVE_EMPTY_PHASE5_COLD_START_AND_TRUE_RELEASE_ORDER.md) records the November 9 13:42 UTC production snapshot: all 16 new Phase5/6 ledger tables exist and remain at zero; all seven NOLOGIN groups exist. The inventory now distinguishes actual prelaunch structural gaps from Day 1 airport draws, FIDS originals and T24 witness evidence, **which the owner cannot create until Phase6 start authorization**. The independent legal/scientific/scheduler reviews remain separate; a structural HOLD list with zero entries is never automatic Phase5 FREEZE PASS or Phase6 GO.
+
 ## Nov 9 — regional design probability must match normalized draw scores (CI pending)
 
 [**Regional score→probability integrity checkpoint**](2026-11-09_REGIONAL_DRAW_SCORE_PROBABILITY_PARITY_QA.md). The saved regional readback already requires unique ICAOs and native positive numeric weights; it now also verifies that each saved inclusion probability equals that site's positive `drawScore / sum(scores)`, not merely that arbitrary claims sum to one. Tests reject 3:2 scores incorrectly reported as 0.9:0.1 and a changed selected `designProbability`. Preserves original seed, no-redraw, clock and JSONB digest behavior. **No live source/DB/paid GO or Phase5 scientific FREEZE inferred.**

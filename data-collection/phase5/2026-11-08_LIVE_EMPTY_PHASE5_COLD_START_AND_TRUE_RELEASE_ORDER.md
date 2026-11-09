@@ -1,5 +1,27 @@
 # Phase 5 — November 8 live cold-start and shortest legitimate release path
 
+## November 9, 2026 — NEW actual owner 13:42:38.603Z snapshot and circular release-blocker correction
+
+**Current owner-provided production observation** (13:42:38.603Z; same reviewed SQL and source Git blob `0be5d015455e646ed15a24232622afe091da6027`): `PHASE5_OWNER_READONLY_INVENTORY_SUCCESS_NO_PROVIDER_NO_DB_WRITES`; `database=neondb`; `missingTables=[]`, `missingNoLoginRoles=[]`, seven NOLOGIN roles, **all sixteen Stage23–V0083 scoped Phase5/6 table counts remain 0**, `phase6AuthorizationEnabled=false`. No provider GET/Alert, no production SQL writes. This **does not** count the historical Phase2/3/4 tables; their genuine FIDS, PRE/POST and alert evidence is preserved. The Node pg SSL-mode message is a future-version advisory only, not a DB error.
+
+### Important release logic correction — distinguish FREEZE from Day1
+
+The original `v39_phase5_final_freeze_readonly_release_inventory_once.mjs` placed **absent Day1** early four-airport draw, reviewed physical source query, paid FIDS original and T24 independent witness inside the same `blockers` array as the truly **prelaunch** signed calendar and budget. **That is circular as a launch-readiness checklist:** `commitEarlyPhase5Draw` explicitly requires `adb_phase6_authorization.enabled=true` and an independent Phase5 freeze approval before writing its first draw. A new real Day1 original/witness cannot precede that approved draw. No 31-day Phase5 rehearsal is required.
+
+The existing inventory code now (PR under review) reports THREE separate classes without ever claiming scientific GO:
+
+1. `blockers`/`prelaunchStructuralHolds` — objectively missing database/schema/NOLOGIN prerequisites, **31 calendar rows**, or physical seven-category budget-release structure; zero calendar and budget rows still really need action.
+2. `independentReviewsNotAssessedByThisSql` — formal first-cycle target/source use, complete approved calendar contents and treatment order, actual GitHub source→three PRE→POST+STOP scheduler/release evidence and independently signed final science FREEZE. One COUNT(*) snapshot **cannot establish these**.
+3. `phase6Day1EvidencePendingAfterGo` — prospective four-airport draw, source queries, physical source-original binds, and durable independent T24 witness. Absent data here is **normal before Phase6 Day1** and must be checked *during Day1* with strict STOP thresholds, not used to force endless paid prelaunch pilot repetitions.
+
+**Reuse rather than repeat:** the Nov6 Phase4 WSSS 9 true PRE originals, 36 cutoff-safe snapshots, 3 POST source originals, 36 schedule-revision comparisons demonstrate the provider-observable FIDS time path within conditional identity scope. Earlier Gate4 paid webhook CREATE/STOP and exact-source receiver/public SHA checks are separate historical operational evidence. Neither must be re-bought just to generate a row in new V0079 tables before Phase6 starts. Original physical-only Gate5 scientific scope remains separately held; it is **not** a claim that no real flight data was ever obtained.
+
+**Acceptance interpretation:** A prelaunch `blockers=[]` result is **not enough** for `phase5ScientificFreezePassed`; actual calendar/rights/scheduler/reviewer remain independent and the function always emits `phase5ScientificFreezePassed=false`, `phase6PaidGo=false`. After a *separate* documented Phase6 start, Day1 quality checks and STOP examine the expected future source/flight/receiver records.
+
+**Binding operator instruction:** no rerun V0079–V0083 installers, no old paid pilot replay, no auto-paid activation. Current Phase5 status FREEZE HOLD / Phase6 paid GO NO. This is a release-state reporting correction and adds no new Stage-N milestone.
+
+---
+
 **Observed, not hypothetical.** At `2026-11-08T08:18:35.246Z`, the owner ran the exact-sha reviewed [PR #478](https://github.com/HKcode22/ReplitTranvr/pull/478) **READ ONLY** `neondb` inventory and reported `PHASE5_OWNER_READONLY_INVENTORY_SUCCESS_NO_PROVIDER_NO_DB_WRITES`. This is the project’s current live source of truth for these table counts; exact user-output archive is [issue #416, comment 6719194093](https://github.com/HKcode22/ReplitTranvr/issues/416#issuecomment-6719194093). Prior Phase4 flight records in different tables are outside this inventory. No provider HTTP or SQL writes occurred.
 
 ## 1. Don't reinstall anything: the schema is not the blocker
