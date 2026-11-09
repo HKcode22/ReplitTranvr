@@ -67,8 +67,18 @@ export function previewFirstFiveSlotRegions(){
  return Array.from({length:5},(_,i)=>{
   const HUB=cyclePick(HUBS,i,ANCHOR_ROTATION_SEED);
   const MID_A=cyclePick(regions,i,CALENDAR_REGION_SEED+"|MID_A");
-  let MID_B=cyclePick(regions,i,CALENDAR_REGION_SEED+"|MID_B");
-  if(MID_A===MID_B)MID_B=regions[(regions.indexOf(MID_B)+1)%regions.length];
+  // Mirrors the reviewed calendar solver: when both MID slots have the
+  // same six-region universe, shift a full seeded A permutation by a
+  // nonzero reproducible offset. Both slots remain balanced per six draws.
+  const cycle=Math.floor(i/regions.length);
+  const aOrder=seededOrder(regions,CALENDAR_REGION_SEED+"|MID_A|cycle-"+cycle);
+  const offset=1+(
+   parseInt(hashJson(CALENDAR_REGION_SEED+
+    "|MID_B_BALANCED_DERANGEMENT|cycle-"+cycle).slice(0,8),16)%
+   (regions.length-1)
+  );
+  const MID_B=aOrder[((i%regions.length)+offset)%regions.length];
+  if(MID_A===MID_B)fail("UNREACHABLE_BALANCED_MID_COLLISION");
   return {pairId:"pair-"+(i+1),HUB,
    MID_A,MID_B,
    REGIONAL:cyclePick(regions,i,CALENDAR_REGION_SEED+"|REGIONAL")};
