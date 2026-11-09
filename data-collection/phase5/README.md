@@ -1,8 +1,12 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — entire prior committed-airport history checked inside one restricted read-only day snapshot (CI pending)
+
+[**Prior site 24h END→START washout integration checkpoint**](2026-11-09_PRIOR_COMMITTED_GLOBAL_AIRPORT_WASHOUT_SAME_READONLY_SNAPSHOT.md). The shape-bound ordinary-day readback now also SELECTs every earlier committed parent's four airport rows in the **same restricted REPEATABLE READ READ ONLY transaction**, verifies each against the exact reviewed 31-day planned window end and saved early-draw rules, and refuses missing prior history, changed pair sites, or any repeated site inside the 24-hour washout. Only actual earlier saved sites are inspected; **no future adaptive airports invented**, no source or POST claim. This is an offline-tested engineering gate, not a production live readback or legal release. Phase5 science FREEZE HOLD; Phase6 paid GO NO.
+
 ## Nov 9 — REGIONAL saved sampling vector hardening (no provider or DB writes)
 
-[**Read the duplicate-ICAO and strict numeric readback integrity checkpoint**](2026-11-09_REGIONAL_PROBABILITY_VECTOR_STRICT_UNIQUE_READBACK.md). The actual `verifyPreparedDailyDraw()` guard formerly accepted two KGPT vector entries and numeric-coerced malformed values. This correction rejects repeated normalized airport identities and non-native or nonpositive numeric probabilities/scores while preserving valid draws, existing hashes, and timing rules. Regression tests accompany the changed guard. **CI verification pending on this branch. Phase5 FREEZE HOLD; Phase6 paid GO NO.**
+[**Read the duplicate-ICAO and strict numeric readback integrity checkpoint**](2026-11-09_REGIONAL_PROBABILITY_VECTOR_STRICT_UNIQUE_READBACK.md). The actual `verifyPreparedDailyDraw()` guard formerly accepted two KGPT vector entries and numeric-coerced malformed values. This correction rejects repeated normalized airport identities and non-native or nonpositive numeric probabilities/scores while preserving valid draws, existing hashes, and timing rules. Regression tests accompany the changed guard. **PR #517 merged after 5/5 required checks passed. Phase5 FREEZE HOLD; Phase6 paid GO NO.**
 
 ## Nov 9 — physical FIDS range-partition floor, WITHOUT choosing future 21 adaptive airports
 

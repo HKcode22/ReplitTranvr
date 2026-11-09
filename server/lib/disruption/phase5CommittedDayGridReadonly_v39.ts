@@ -22,6 +22,11 @@ import {
  type P5Adaptive31ShapeEnvelope,
  type P5OrdinaryDayCandidateBinding
 } from "./phase5Prospective31DayShapeEnvelope_v39";
+import {
+ inspectP5PriorCommittedAirportWashoutReadonly,
+ type P5JoinedPriorDayRow,
+ type P5PriorCommittedWashoutAudit
+} from "./phase5PriorCommittedAirportWashoutReadonly_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
 const DBROLE=/^[a-z_][a-z0-9_]{3,62}$/;
@@ -52,6 +57,21 @@ const DRAW_SQL=[
  "probability_vector,airport_layer_design_probability",
  "FROM clean.adb_sampling_draw WHERE run_day_index=$1",
  "ORDER BY slot_id"
+].join(" ");
+// All earlier frozen parent days AND their exact saved draws are read inside
+// the same restricted REPEATABLE READ READ ONLY transaction as today's draw.
+const PRIOR_SITES_SQL=[
+ "SELECT c.run_day_index,c.scheduled_start_utc,c.frozen_draw_seed,",
+ "c.draw_type,c.anchor_icao,c.slot_regions,c.pair_airport_set,",
+ "c.calendar_hash,c.config_hash,c.frame_hash,c.date_utc,",
+ "c.window_shape,c.active_duration_minutes,",
+ "d.slot_id,d.target_region,d.draw_type AS selected_draw_type,",
+ "d.selected_icao,d.frozen_draw_seed AS selected_draw_seed,",
+ "d.selected_at_utc,d.adaptive_state_hash,d.probability_vector,",
+ "d.airport_layer_design_probability",
+ "FROM clean.adb_phase6_calendar_day c",
+ "LEFT JOIN clean.adb_sampling_draw d ON d.run_day_index=c.run_day_index",
+ "WHERE c.run_day_index<$1 ORDER BY c.run_day_index,d.slot_id"
 ].join(" ");
 
 export interface P5CommittedDayReadonlyScope {
@@ -90,7 +110,8 @@ export interface P5CommittedDayReadonlyResult {
    status:"ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE";
    withinCheckedReadOnlyTransaction:true;
    candidate:P5OrdinaryDayCandidateBinding;
-   priorDaySiteWashoutVerified:false;
+   priorDaySiteWashoutVerified:true;
+   priorCommittedWashoutAudit:P5PriorCommittedWashoutAudit;
    realFlightSourceVerified:false;
    physicalChargeDayBudgetsVerified:false;
    phase5FreezePassed:false;phase6Go:false;
@@ -181,6 +202,7 @@ export async function readCommittedP5DayCandidateGrid(
   // the already role-checked REPEATABLE READ READ ONLY transaction.
   // A later caller must still prove prior-airport washout and source rights.
   let ordinaryCandidate:P5OrdinaryDayCandidateBinding|undefined;
+  let priorCommittedWashoutAudit:P5PriorCommittedWashoutAudit|undefined;
   if(scope.reviewedOrdinaryDayEnvelope){
    if(cr.window_shape!=="4h"||Number(cr.active_duration_minutes)!==240)
      hold("PERSISTED_ORDINARY_4H_EXPOSURE_MISMATCH");
@@ -193,6 +215,20 @@ export async function readCommittedP5DayCandidateGrid(
    });
    if(ordinaryCandidate.submittedDrawStateSha256!==scope.expectedEarlyDrawSha256)
      hold("ORDINARY_DRAW_HASH_NOT_FROZEN");
+   const prior=await client.query(PRIOR_SITES_SQL,[scope.runDayIndex]);
+   priorCommittedWashoutAudit=inspectP5PriorCommittedAirportWashoutReadonly({
+    envelope:scope.reviewedOrdinaryDayEnvelope.envelope,
+    independentlyReviewedShapeEnvelopeSha256:
+     scope.reviewedOrdinaryDayEnvelope.independentlyReviewedShapeEnvelopeSha256,
+    expectedCalendarSha256:scope.expectedCalendarSha256,
+    expectedConfigSha256:scope.expectedConfigSha256,
+    expectedFrameSha256:scope.expectedFrameSha256,
+    currentRunDayIndex:scope.runDayIndex,
+    currentStartUtc:day.scheduledStartUtc.toISOString(),
+    currentSelectedIcaos:ordinaryCandidate.selectedIcaos,
+    dbClockAtReadUtc:clock.toISOString(),
+    joinedEarlierDays:prior.rows as P5JoinedPriorDayRow[]
+   });
   }
   const candidates=materializeP5DynamicDaySourceGrid({
     schema:scope.reviewedSegmentedSource?
@@ -230,7 +266,8 @@ export async function readCommittedP5DayCandidateGrid(
      status:"ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE" as const,
      withinCheckedReadOnlyTransaction:true as const,
      candidate:ordinaryCandidate,
-     priorDaySiteWashoutVerified:false as const,
+     priorDaySiteWashoutVerified:true as const,
+     priorCommittedWashoutAudit:priorCommittedWashoutAudit!,
      realFlightSourceVerified:false as const,
      physicalChargeDayBudgetsVerified:false as const,
      phase5FreezePassed:false as const,phase6Go:false as const,
