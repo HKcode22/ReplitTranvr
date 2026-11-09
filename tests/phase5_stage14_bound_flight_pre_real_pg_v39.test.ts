@@ -17,6 +17,9 @@ import {persistP5V0079SingleBoundFlightPre,
 import {persistP5T24SeparateTransactionWitness,
  type P5Stage17T24WitnessPermit}
  from "../server/lib/disruption/phase5T24IndependentPostCommitWitness_v39";
+import {persistP5ReviewedT24PreAndIndependentWitness,
+ type P5IndependentT24WitnessReview}
+ from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const STAGE29=process.env.V39_P5_STAGE29_RESTRICTED_GROUPS_REAL_PG16==="1";
@@ -43,6 +46,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
  let witnessWriter:Pick<Pool,"connect">;
  let permit:P5Stage14SingleFlightPrePermit;
  let witnessPermit:P5Stage17T24WitnessPermit;
+ let chainedT24SnapshotId:string|undefined;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.V39_P5_STAGE14_REAL_PG16!=="1"||
@@ -261,18 +265,43 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   if(rawWriter)await rawWriter.end();
   if(admin)await admin.end();
  });
- it("commits one genuine synthetic source-bound PRE before its own T24 cutoff",async()=>{
-  const result=await persistP5V0079SingleBoundFlightPre(writer,permit);
-  expect(result.preSnapshotsInserted).toBe(1);
-  expect(result.flightPreCommittedBeforeOwnCutoff).toBe(true);
-  expect(result.postCommitDatabaseReadbackVerified).toBe(true);
-  expect(Date.parse(result.postCommitDbClockAtUtc)).toBeLessThan(
-   Date.parse(result.cutoffUtc));
-  expect(result.providerCalls).toBe(0);
-  expect(result.alertCreates).toBe(0);
-  expect(result.externalNativeTIndependentlyAuthenticatedByThisFunction).toBe(false);
-  expect(result.phase5FreezePassed).toBe(false);
-  expect(result.phase6PaidGo).toBe(false);
+ it("commits one source-bound T24 PRE and, where commissioned, its independent second-transaction witness",async()=>{
+  if(STAGE17){
+   const reviewedWitness:P5IndependentT24WitnessReview={
+    flightInstanceId:permit.flightInstanceId,
+    sourcePopulationQueryId:qid,
+    expectedSourceResponseSha256:response,
+    expectedSourceQueryDigestSha256:query,
+    expectedFrameSha256:permit.reviewedFrameSha256,
+    expectedConfigSha256:permit.reviewedConfigSha256,
+    expectedSelectedTVersion:permit.selectedTConfig.milestone+":"+
+     permit.selectedTConfig.version+":"+permit.selectedTConfig.artifactHash,
+    selectedTNativeUtc:permit.selectedTNativeUtc,
+    expectedT24CutoffUtc:iso(
+     Date.parse(permit.selectedTNativeUtc)-24*3600_000),
+    expectedWitnessOnlyRole:WITNESS_ROLE
+   };
+   const chain=await persistP5ReviewedT24PreAndIndependentWitness(
+    writer,witnessWriter,permit,reviewedWitness);
+   chainedT24SnapshotId=chain.committedSnapshotId;
+   expect(chain.preCommittedAndReadBackBeforeCutoff).toBe(true);
+   expect(chain.witnessCommittedAndReadBackBeforeCutoff).toBe(true);
+   expect(chain.phase5ScientificFreezePassed).toBe(false);
+   expect(chain.phase6PaidGo).toBe(false);
+  }else{
+   const result=await persistP5V0079SingleBoundFlightPre(writer,permit);
+   expect(result.preSnapshotsInserted).toBe(1);
+   expect(result.flightPreCommittedBeforeOwnCutoff).toBe(true);
+   expect(result.postCommitDatabaseReadbackVerified).toBe(true);
+   expect(/^[1-9][0-9]{0,17}$/.test(result.committedSnapshotId)).toBe(true);
+   expect(Date.parse(result.postCommitDbClockAtUtc)).toBeLessThan(
+    Date.parse(result.cutoffUtc));
+   expect(result.providerCalls).toBe(0);
+   expect(result.alertCreates).toBe(0);
+   expect(result.externalNativeTIndependentlyAuthenticatedByThisFunction).toBe(false);
+   expect(result.phase5FreezePassed).toBe(false);
+   expect(result.phase6PaidGo).toBe(false);
+  }
   const q=await admin.query(
     "SELECT prediction_state,horizon,population_query_id,"+
     "fids_response_hash,population_member_id IS NOT NULL AS member_linked,"+
@@ -292,6 +321,9 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
    " WHERE flight_instance_id='leg:ci:100' AND horizon='T-24h'"
   )).rows;
   expect(snap).toHaveLength(1);
+  // Stage14 returned the exact durable ID; this real PG fixture's separate
+  // transaction proves the same ID was independently witnessed.
+  expect(chainedT24SnapshotId).toBe(snap[0].id);
   witnessPermit={
    expectedSnapshotId:snap[0].id,
    flightInstanceId:permit.flightInstanceId,
@@ -310,17 +342,19 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   const tracking=(await admin.query(
    "SELECT current_setting('track_commit_timestamp') AS tracking")).rows[0];
   expect(tracking.tracking).toBe("off");
-  const out=await persistP5T24SeparateTransactionWitness(
-   witnessWriter,witnessPermit);
-  expect(out.originalT24SnapshotVisibleInSeparateTransaction).toBe(true);
-  expect(out.witnessCommittedAndReadBackBeforeOwnCutoff).toBe(true);
-  expect(out.nativeCommitTimestampTrackingRequired).toBe(false);
-  expect(out.paidPhase6Authorized).toBe(false);
-  expect(out.flightSourceAndNativeTIndependentlyCertifiedByThisModule).toBe(false);
-  expect(Date.parse(out.postPreCommitDbObservedAtUtc)).toBeLessThan(
-   Date.parse(out.postWitnessCommitReadbackAtUtc)+5);
-  expect(Date.parse(out.postWitnessCommitReadbackAtUtc)).toBeLessThan(
-   Date.parse(out.frozenT24CutoffUtc));
+  // PRE and its witness were already written by the real two-pool chain
+  // in the first test. Never replay the successful witness just to inspect it.
+  const receipt=(await admin.query(
+   "SELECT snapshot_id::text AS snapshot_id,"+
+   "post_pre_commit_db_observed_at_utc,created_at AS witness_created,"+
+   "t24_cutoff_utc FROM clean.phase5_t24_postcommit_witness_v39"
+  )).rows;
+  expect(receipt).toHaveLength(1);
+  expect(receipt[0].snapshot_id).toBe(chainedT24SnapshotId);
+  expect(new Date(receipt[0].post_pre_commit_db_observed_at_utc).getTime())
+   .toBeLessThan(new Date(receipt[0].t24_cutoff_utc).getTime());
+  expect(new Date(receipt[0].witness_created).getTime())
+   .toBeLessThan(new Date(receipt[0].t24_cutoff_utc).getTime());
   const saved=(await admin.query(
    "SELECT w.flight_instance_id,w.population_query_id,"+
    "w.source_query_digest,w.post_pre_commit_db_observed_at_utc,"+
