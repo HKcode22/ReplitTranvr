@@ -39,7 +39,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           bash -n scripts/phase5_final_freeze_readonly_owner_launcher.sh
-          test "$(git hash-object scripts/v39_phase5_final_freeze_readonly_release_inventory_once.mjs)" = 0be5d015455e646ed15a24232622afe091da6027
+          test "$(git hash-object scripts/v39_phase5_final_freeze_readonly_release_inventory_once.mjs)" = ddcacdecd26ed9a6903e157b8a8299d53776d8d7
           grep -Fq 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' scripts/v39_phase5_final_freeze_readonly_release_inventory_once.mjs
           grep -Fq "V39_PHASE6_PROCESS_ARMED=0" scripts/phase5_final_freeze_readonly_owner_launcher.sh
       - name: Metadata-only and refusal unit tests (no production DB)
