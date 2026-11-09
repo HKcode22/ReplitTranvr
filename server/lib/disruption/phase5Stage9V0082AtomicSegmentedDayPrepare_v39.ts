@@ -41,8 +41,18 @@ const dt=(x:unknown):number=>{
  return v.getTime();
 };
 const utc=(x:unknown):string=>new Date(dt(x)).toISOString().slice(0,10);
-const integral=(x:unknown,min=0,max=50000)=>
- Number.isSafeInteger(Number(x))&&Number(x)>=min&&Number(x)<=max;
+/** Reject null/blank/boolean as zero while allowing canonical PG integer strings. */
+export function phase5Stage9ExactWholeUnit(x:unknown,min=0,max=50000):boolean{
+ if(!Number.isSafeInteger(min)||!Number.isSafeInteger(max)||
+    min<0||max<min)return false;
+ let n:number;
+ if(typeof x==="number")n=x;
+ else if(typeof x==="string"&&/^(0|[1-9][0-9]*)$/.test(x))
+  n=Number(x);
+ else return false;
+ return Number.isSafeInteger(n)&&n>=min&&n<=max;
+}
+const integral=phase5Stage9ExactWholeUnit;
 
 const COLS=[
  "query_digest","manifest_sha256","run_day_index","query_key",
