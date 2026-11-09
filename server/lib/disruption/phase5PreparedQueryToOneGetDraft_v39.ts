@@ -18,9 +18,9 @@ import {verifyP5F8ExactSourcePartition,
  from "./phase5ScopedFidsSourceBridge_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
-const reject=(why:string):never=>{
+function reject(why:string):never{
  throw Error("REFUSED_P5_PREPARED_TO_ONE_GET_DRAFT_"+why);
-};
+}
 export interface P5PreparedToGetDraftReview{
  /** Exact independent SHA of the complete signed day source proposal.
   * Verifying it here is integrity only, not legal permission. */
