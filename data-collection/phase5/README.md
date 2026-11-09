@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — REAL saved-airport day → Stage8 source query → atomic Stage9 prepared ledger (under CI review)
+
+[**Actual Stage7→Stage8→Stage9 integration checkpoint**](2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md). The Stage7 restricted one-snapshot read now returns its actual **four saved draws and calendar day** as a verified readback proof; Stage8 uses exactly those rows rather than copies. One new orchestrator checks an **externally reviewed exact dynamic proposal SHA and unchanged source rights/UTC budget pins**, then calls existing V0082 restricted serializable Stage9 atomic **PREPARED** query+partition insertion. Existing disposable real PostgreSQL16 test now exercises the linked path with 96 synthetic prepared rows and 96 partitions, with zero AeroDataBox requests, zero provider credits, no real production DB writes. This is NOT yet the scheduled paid SOURCE→PRE/POST owner or science FREEZE PASS.
+
 ## Nov 9 — reuse Phase4 conditional scheduled-service PRE logic inside Phase5 restricted writer (under CI review)
 
 [**Specific Phase4→Phase5 code reuse and no-pilot checkpoint**](2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md). The existing Stage14 prospective source-bound PRE writer now supports Phase4's separately labeled `g5a_conditional_operator_composite_no_native_id` scheduled-service stratum **only** under an explicitly identified prospective scientific amendment, original-bounded immutable key/flight-number/destination check and distinct non-physical admission. Default confirmed-native operating-leg path, source custody, cutoff clock, T24 witness and no-retroactive/duplicate PRE rules remain. Disposable PostgreSQL16 CI has both native and conditional synthetic members; **no new paid pilot**, no production DB writes, no Phase5 science FREEZE PASS or Phase6 paid GO.
