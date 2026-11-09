@@ -1,15 +1,19 @@
 /**
- * STAGED ONLY. No GitHub workflow calls this script yet.
+ * Existing main-only reviewed manual GitHub source owner.
  * One approved, signed, prospective source query; ONE physical paid GET max.
  * Does NOT create Flight Alerts, PRE, POST, original rights, or Phase6 GO.
  */
 import {readFileSync,statSync} from "node:fs";
 import {Pool} from "pg";
-import {makeP5Stage28DedicatedRolePool}
+import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {admitP5GitHubOneQueryRelease,
  type P5GitHubOneQueryReleaseEnvelope}
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
+import {auditP5UpcomingSourceQueue,
+ requireP5SignedOneGetInActualDueQueue,
+ requireP5PaidGetBeforeHardLatest}
+ from "../server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39";
 import {createP5V0079ScopedDbPorts}
  from "../server/lib/disruption/phase5V0079ScopedDbPorts_v39";
 import {prearmP5V0080ActualGitHubRun,waitForP5ScheduledPhysicalDispatch}
@@ -58,6 +62,18 @@ async function main():Promise<void>{
   forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107",
  });
  try{
+  // Reuse the real PR #528 SOURCE-only metadata queue before V0080 prearm.
+  // Both the signed immutable packet AND the current unreserved DB row must
+  // match. This must be a fresh read before ANY physical reservation.
+  const dueQueue=await auditP5UpcomingSourceQueue(scoped,{
+   expectedManifestSha256:admitted.manifestSha256,
+   expectedReleaseSha256:plan.reviewedReleaseSha256,
+   expectedRightsSha256:plan.reviewedProviderRightsSha256,
+   expectedProviderContractSha256:plan.openapiSha256,
+   expectedSourceRole:P5_STAGE28_GROUPS.source,
+  });
+  const due=requireP5SignedOneGetInActualDueQueue(
+   dueQueue,plan,admitted.manifestSha256,admitted.queryDigestSha256);
   // A reviewed, immutable template cannot contain the future GitHub run ID.
   // Bind the actual GITHUB_RUN_ID to PREPARED exact V0079 query in an
   // independent durable V0080 DB transaction BEFORE source reservation.
@@ -82,6 +98,13 @@ async function main():Promise<void>{
     return new Date(r.rows[0].t);
    },
   );
+  // The time of admission is not the time of physical GET. A runner that
+  // reaches the signed hard deadline after waiting must not reserve or pay.
+  const postWaitClock=await scoped.query("SELECT clock_timestamp() AS t");
+  if(postWaitClock.rowCount!==1)
+   throw Error("REFUSED_P5_SOURCE_DUE_QUEUE_POST_WAIT_CLOCK_MISSING");
+  requireP5PaidGetBeforeHardLatest(
+   postWaitClock.rows[0].t,due.hardLatestDispatchUtc);
   const ports=createP5V0079ScopedDbPorts({
    plan,
    manifestSha256:admitted.manifestSha256,

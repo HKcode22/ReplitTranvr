@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — signed one-GET source now revalidates the real V0079 due queue before prearm (review)
+
+[**Live-source-queue → signed one-GET preflight and hard-deadline checkpoint**](2026-11-09_SIGNED_ONE_GET_REAL_QUEUE_PREFLIGHT_BRIDGE_CHECKPOINT.md). Connects the already-tested #528 SOURCE-role read-only queue to the already-existing main-only, one-signed-query paid FIDS runner. It now requires the exact DB-prepared query digest/key, airport/day/horizon/early-draw SHA and planned dispatch UTC to match the signed packet **before V0080 prearm**, then rechecks primary DB clock versus the query's hard deadline **before V0079 physical reservation**. Late, STOPPED, previously prearmed or reserved requests remain HOLD. **Not the unattended source dispatcher**; no PR CI paid provider, live DB mutation, new role or auto GO. Phase5 FREEZE HOLD; Phase6 paid GO NO.
+
+
 ## Nov 9 — scheduled-source queue observer (READ ONLY, OFF by default)
 
 [**Upcoming real V0079 PREPARED source queue from existing SOURCE role checkpoint**](2026-11-09_UNATTENDED_SOURCE_QUEUE_READONLY_FIRST_CONNECT_CHECKPOINT.md). This is the first **scheduled read-only** connection toward an unattended Phase6 source dispatcher, not another paid source pilot: every 10 minutes *only once separately enabled after Phase5 source/freeze and Phase6 GO*, GitHub checks the real `neondb` clock and existing permitted V0079 PREPARED query metadata, V0080 prearms, physical reservations and original bindings using the **already commissioned dedicated SOURCE login + Stage28 scoped role**. Categorizes upcoming 15–105-minute prearm review windows versus too early, missed, STOPPED or previously prearmed/reserved (NO replay). Source API credentials, GitHub child dispatch, database writes and flight PRE/POST are **absent**, so this cannot bypass #527's unsigned source packet or the manual one-GET provider admission. Includes offline admission tests and existing actual disposable PG16 V0079/V0080/V0082 source-readback regression. **No science FREEZE/Phase6 GO claim; default OFF.**

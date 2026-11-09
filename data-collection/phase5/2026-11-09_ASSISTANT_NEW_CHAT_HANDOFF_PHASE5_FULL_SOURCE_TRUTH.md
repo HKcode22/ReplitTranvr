@@ -1,5 +1,13 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 9 newest engineering: signed one-GET source consumes live prepared-source queue (under CI review)
+
+Before this branch, merged **#528** = main `370e6a882500872c0ea2aa6eb94298876e857129`, with **post-merge V0082 actual PG16 + repository full offline safety both SUCCESS**. The #528 read-only queue is not an unattended dispatcher and the existing signed GitHub source worker is manual-only.
+
+This branch links them **without** loosening manual release: the existing one-GET worker performs a fresh SOURCE-only, DB-clock, `REPEATABLE READ READ ONLY` V0079/V0080 queue check *before prearming*, requires exact signed query digest/key, selected draw, day/airport/horizon, planned UTC and unreserved 15–105min due-window status, and rechecks the actual DB clock against hard-latest immediately before source reservation. Existing V0080/V0079 physical attempt guards remain. New negative tests and offline workflow CI path; [exact checkpoint](2026-11-09_SIGNED_ONE_GET_REAL_QUEUE_PREFLIGHT_BRIDGE_CHECKPOINT.md). This **does not** automate scheduled paid dispatch, collect original/POST, establish legal rights or move Phase6 GO. Check the PR and exact-head CI before claiming merge. No paid or production writes by this change.
+
+
+
 ## Latest engineering branch (2026-11-09): scheduled read-only future source queue observer, no paid dispatch
 
 **Verified `main` before this branch:** `0a433930ee8c32dd7705ecf25d5843656b1ee0bd` after [PR #527](https://github.com/HKcode22/ReplitTranvr/pull/527), **5/5 exact-head checks GREEN** and *both* post-merge `main` actual V0082 PG16 and full offline safety runs GREEN. #527 already eliminated copying future selected airport, query digest, local time, budget window and BASE/SPLIT source partition manually: actual Stage7/8 saved four airports → one reproducible **UNARMED JSON source GET draft**; source rights/owner booleans explicitly false. Source paid one-GET worker remains MAIN/MANUAL/EXACT SIGNED and is tested, not unattended.
