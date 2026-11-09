@@ -8,7 +8,7 @@ cd "$HOME/workspace" || { echo HOLD_P5_FULLFRAME_PAIR_NO_WORKSPACE; exit 2; }
 REPO="HKcode22/ReplitTranvr"
 BASE="bb1baf1ae3a2c5e99b0ccc12304d9d43ee22bfe0"
 SOURCE="scripts/v39_phase5_fullframe_five_pair_preselection_readonly_once.mjs"
-PIN="e0ca2ff0954949246431f30d4abb45f7d319c52c"
+PIN="1e68ffd70b177476d598f42646ffb9976088de01"
 hold(){ printf "HOLD_P5_FULLFRAME_PAIR_NO_EXECUTION: %s\n" "$1" >&2; exit 2; }
 for c in gh git node base64 mktemp; do command -v "$c" >/dev/null 2>&1 || hold "MISSING_$c"; done
 gh auth status --hostname github.com >/dev/null 2>&1 || hold GH_AUTH_MISSING
