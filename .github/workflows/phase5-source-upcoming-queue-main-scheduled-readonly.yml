@@ -15,6 +15,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39.ts'
       - 'scripts/v39_phase5_github_source_upcoming_queue_readonly_v39.ts'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - 'tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts'
       - '.github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml'
       - 'data-collection/phase5/2026-11-09_UNATTENDED_SOURCE_QUEUE_READONLY_FIRST_CONNECT_CHECKPOINT.md'
