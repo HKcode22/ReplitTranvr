@@ -124,12 +124,19 @@ export function verifyPreparedDailyDraw(
       const vec = x.probability_vector as Array<{
         icao?: unknown; probability?: unknown; drawScore?: unknown;
       }>;
+      // Preserve exactly one physical airport per probability-vector entry.
+      // Number(null), Number(false) and Number("1") must never certify sampling.
       if (vec.length < 1 || vec.length > 1000 ||
           vec.some(v=>typeof v?.icao !== "string" ||
-            !Number.isFinite(Number(v.probability)) ||
-            !Number.isFinite(Number(v.drawScore)) ||
-            Number(v.probability) <= 0 || Number(v.probability) > 1))
+            !ICAO.test(norm(v.icao)) ||
+            typeof v.probability !== "number" ||
+            !Number.isFinite(v.probability) ||
+            v.probability <= 0 || v.probability > 1 ||
+            typeof v.drawScore !== "number" ||
+            !Number.isFinite(v.drawScore) || v.drawScore <= 0))
         refuse("INVALID_REGIONAL_PROBABILITY_VECTOR");
+      if (new Set(vec.map(v=>norm(v.icao as string))).size !== vec.length)
+        refuse("DUPLICATE_REGIONAL_PROBABILITY_AIRPORT");
       const total = vec.reduce((n, v)=>n+Number(v.probability),0);
       if (Math.abs(total - 1) > 0.000001 ||
           vec.filter(v=>norm(String(v.icao)) === airport &&

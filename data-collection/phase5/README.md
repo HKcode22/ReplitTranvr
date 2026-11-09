@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — REGIONAL saved sampling vector hardening (no provider or DB writes)
+
+[**Read the duplicate-ICAO and strict numeric readback integrity checkpoint**](2026-11-09_REGIONAL_PROBABILITY_VECTOR_STRICT_UNIQUE_READBACK.md). The actual `verifyPreparedDailyDraw()` guard formerly accepted two KGPT vector entries and numeric-coerced malformed values. This correction rejects repeated normalized airport identities and non-native or nonpositive numeric probabilities/scores while preserving valid draws, existing hashes, and timing rules. Regression tests accompany the changed guard. **CI verification pending on this branch. Phase5 FREEZE HOLD; Phase6 paid GO NO.**
+
 ## Nov 9 — physical FIDS range-partition floor, WITHOUT choosing future 21 adaptive airports
 
 [**Real 31-day shape-only FIDS GET/budget lower-bound checkpoint**](2026-11-09_REAL_F8_SOURCE_RANGE_PARTITION_FLOOR_21_ADAPTIVE_UNKNOWN.md). New `phase5ShapeOnlyFidsRangePartitionFloor_v39.ts` combines corrected actual B0062 five-pair evidence, independently pinned 31-day shape SHA, **26×4h + 3×two active 2h with 1h gap excluded + 2×up-to-6h**, and an *externally assumed* provider max FIDS range to compute the **minimum** physical airport/segment/three-horizon query partitions **without inventing 21 future adaptive selections**. Illustrative range assumptions R=360/240/120/60 min imply 408/432/768/1536 minimum GET partitions; at hypothetical 2 units each this is 816/864/1536/3072 units, **not actual provider evidence or a seven-category charge-day reserve**. Real refreshes, retries, source Contents rights, production DB, flight PRE and independent scientific/paid release remain HOLD / GO NO. The November 24 date in tests is not a forced start.
