@@ -100,7 +100,7 @@ export interface P5Adaptive31ShapeEnvelope {
 
 /**
  * This function does not guess future airports or use mock DB rows.
- * "407/408 groups" is not a number of physical GETs: the source provider's
+ * 408 unpartitioned cutoff groups is not a count of physical GETs: the provider's
  * range partitions and refreshes can expand that target count.
  */
 export function proposeP5Adaptive31ShapeEnvelope(
