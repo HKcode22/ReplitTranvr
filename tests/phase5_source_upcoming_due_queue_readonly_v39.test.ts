@@ -79,6 +79,13 @@ describe("V0079 future due queue — existing source role SELECT only",()=>{
    [row({state:"STOPPED"})],scope,instant(start-60*60_000));
   expect(stopped.candidates[0].status).toBe("ALREADY_STOPPED_NO_DISPATCH");
  });
+ it("accepts the existing source one-GET dotted query-key grammar",()=>{
+  const result=classifyP5SignedUpcomingSourceQueue(
+   [row({query_key:"P5.D01_WSSS:T24-PART01"})],
+   scope,instant(start-60*60_000));
+  expect(result.candidates[0].status)
+   .toBe("DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH");
+ });
  it("refuses swapped signed manifest/source provider/release, duplicates and altered budget units",()=>{
   for(const changed of [
    {manifest_sha256:sha("f")},
