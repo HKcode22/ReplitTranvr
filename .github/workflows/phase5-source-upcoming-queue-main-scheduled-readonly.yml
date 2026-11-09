@@ -1,0 +1,106 @@
+name: Phase5 upcoming approved source queue (READ ONLY, NO PROVIDER)
+on:
+  schedule:
+    # Deliberately inert unless repo variable is explicitly TRUE and
+    # separately signed Phase5 FREEZE + Contents rights + Phase6 GO exist.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39.ts'
+      - 'scripts/v39_phase5_github_source_upcoming_queue_readonly_v39.ts'
+      - 'tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts'
+      - '.github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml'
+      - 'data-collection/phase5/2026-11-09_UNATTENDED_SOURCE_QUEUE_READONLY_FIRST_CONNECT_CHECKPOINT.md'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-source-upcoming-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-admission-regression:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify zero-provider due queue without production DB/paid permission
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts
+          echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
+  signed-main-source-queue-readonly:
+    if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_GITHUB_SOURCE_QUEUE_ENTRYPOINT: '1'
+      P5_SOURCE_QUEUE_MANUAL_CONFIRM: ${{ inputs.confirm }}
+      V39_P5_SOURCE_QUEUE_OWNER_APPROVED: ${{ secrets.V39_P5_SOURCE_QUEUE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_QUEUE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_QUEUE_APPROVED_CODE_SHA }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse unsignaled source-read role or release before any SQL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$V39_P5_SOURCE_QUEUE_OWNER_APPROVED" = 1
+          test "$V39_P5_QUEUE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Read ONLY signed V0079 future due metadata under source login
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_github_source_upcoming_queue_readonly_v39.ts
+          echo 'SOURCE_QUEUE_OBSERVER_COMPLETED_NO_GET_NO_PREARM_NO_DISPATCH_NO_PHASE6_GO_GRANTED'
