@@ -159,8 +159,8 @@ export function calculateP5ShapeOnlyFidsRangePartitionFloor(
     e.actualCorrectedB0062SelectionSha256!==MATCHED||
     !SHA.test(input.separatelyReviewedShapeEnvelopeSha256??"")||
     e.shapeEnvelopeSha256!==input.separatelyReviewedShapeEnvelopeSha256||
-    digest(e.days)!==e.shapeEnvelopeSha256||
     !Array.isArray(e.days)||e.days.length!==31||
+    digest(e.days)!==e.shapeEnvelopeSha256||
     e.plannedBatchDays!==31||e.knownPairParentDays!==10||
     e.ordinaryAdaptiveParentDays!==21||e.activeChildExposureSegments!==34||
     e.knownUniquePairedAirports!==19||e.frozenAirportsForFutureOrdinaryDays!==0||
