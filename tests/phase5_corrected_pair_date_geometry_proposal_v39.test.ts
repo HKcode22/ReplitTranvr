@@ -76,7 +76,9 @@ describe("bounded date-only generator, using immutable REAL corrected owner five
    parts[String(i)]=i<=20?"TRAIN":i<=25?"VALIDATION":"TEST";
    credits[String(i)]=1000; // ONLY THE TEST FIXTURE, NOT PROVIDER CREDITS.
   }
-  // TEST-ONLY adapter: production requires separate independent review before\n  // candidate dates may be called the solver's 'reviewedRunDatesByIndex'.\n  const input:FrozenCalendarDesignInput={
+  // TEST-ONLY adapter: production requires separate independent review before
+  // candidate dates may be called the solver's 'reviewedRunDatesByIndex'.
+  const input:FrozenCalendarDesignInput={
    startDate:START,
    reviewedRunDatesByIndex:pre.candidateRunDatesByIndex,
    seed:owner.calendarRegionSeed,
