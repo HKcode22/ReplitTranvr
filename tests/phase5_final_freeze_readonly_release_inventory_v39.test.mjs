@@ -59,7 +59,12 @@ test('read-only counts, full seven groups and no science FREEZE from one query',
  assert.equal(res.databaseWrites,0);
  assert.equal(res.phase5ScientificFreezePassed,false);
  assert.equal(res.phase6PaidGo,false);
- assert(res.blockers.includes('SOURCE_CONTENT_ML_RETENTION_AND_EXPIRY_UNVERIFIED_BY_THIS_AUDIT'));
+ assert.equal(res.blockers.length,0);
+ assert.equal(res.noPhase6Day1EvidenceRequiredToReadPrelaunchInventory,true);
+ assert.equal(res.releaseAuthorityFromCounts,false);
+ assert.equal(res.previousPhase2To4EvidenceAssessed,false);
+ assert.equal(res.independentReviewsNotAssessedByThisSql.length,4);
+ assert.equal(res.phase6Day1EvidencePendingAfterGo.length,0);
  assert.equal(x.rollbacks(),1);
  assert(x.calls.some(([s])=>s==='BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
  assert(x.calls.every(([s])=>!/\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|COMMIT)\b/i.test(s)));
@@ -69,9 +74,34 @@ test('empty installed schema reports real gaps, not readiness',async()=>{
  assert.equal(res.tableRowCounts.sourceSevenRestRelease,0);
  assert(res.blockers.includes('ACTUAL_SIGNED_31_BATCH_DAY_CALENDAR_NOT_PROVEN'));
  assert(res.blockers.includes('SEVEN_CATEGORY_SOURCE_BUDGET_NOT_FROZEN'));
- assert(res.blockers.includes('NO_LIVE_PHASE5_SOURCE_ORIGINAL_BINDING'));
+ assert(!res.blockers.includes('NO_LIVE_PHASE5_SOURCE_ORIGINAL_BINDING'));
+ assert(res.phase6Day1EvidencePendingAfterGo.includes('DAY1_LIVE_SOURCE_ORIGINAL_NOT_YET_BOUND'));
+ assert(res.phase6Day1EvidencePendingAfterGo.includes('DAY1_DURABLE_T24_WITNESS_NOT_YET_OBSERVED'));
+ assert(res.phase6Day1EvidencePendingAfterGo.includes('DAY1_FOUR_AIRPORT_DRAW_NOT_YET_COMMITTED'));
+ assert.equal(res.independentReviewsNotAssessedByThisSql.length,4);
+ assert.equal(res.phase5ScientificFreezePassed,false);
+ assert.equal(res.phase6PaidGo,false);
  assert.equal(x.rollbacks(),1);
 });
+test('a fully prepared prelaunch calendar and budget needs no real Day1 flights before FREEZE',async()=>{
+ const x=fake({counts:{
+  adb_phase6_calendar_day:31,
+  phase5_fids_seven_rest_release_v39:1,
+  phase5_fids_cycle_rest_category_cap_v39:7,
+  phase5_fids_utc_rest_category_budget_v39:49
+ }});
+ const res=await inspectPhase5ReleaseInventory(x.pool);
+ assert.deepEqual(res.blockers,[]);
+ assert.equal(res.phase6AuthorizationEnabled,false);
+ assert.equal(res.phase6Day1EvidencePendingAfterGo.length,4);
+ assert.equal(res.independentReviewsNotAssessedByThisSql.length,4);
+ assert.equal(res.phase5ScientificFreezePassed,false);
+ assert.equal(res.phase6PaidGo,false);
+ assert.equal(res.providerCalls,0);
+ assert.equal(res.databaseWrites,0);
+ assert.equal(x.rollbacks(),1);
+});
+
 test('missing catalog is reported; no unauthorized data read',async()=>{
  const x=fake({missing:['phase5_other_rest_reviewed_call_v39'],roles:names.slice(0,5)});
  const res=await inspectPhase5ReleaseInventory(x.pool);
