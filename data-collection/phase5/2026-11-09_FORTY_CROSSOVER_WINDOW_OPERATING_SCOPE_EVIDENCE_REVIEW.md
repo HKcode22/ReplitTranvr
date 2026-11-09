@@ -1,5 +1,7 @@
 # Phase 5 — exact 40 crossover airport-window evidence backlog (native source still UNVERIFIED)
 
+**Nov 9 owner scheduling update (later checkpoint):** The fixed-date **Nov 24 example** in this original 40-row table is NOT a required start. Start Phase6 at the **earliest independently safe date after Phase5 freeze**, as documented in the [rolling-start owner guide](2026-11-09_OWNER_STUDY_GUIDE_FOUR_HUB_FIVE_PAIRS_FORTY_WINDOWS_ROLLING_EARLIEST_PHASE6.md). The real airport-selection hash remains unchanged, but **all 40 dated review-key hashes must be regenerated if the first date changes**. All public/source-operating coverage must be screened for the *new* actual UTC windows; an earlier date can change seasonal airline service and first-flight T−24h feasibility. Do not reuse Nov24-era public notes to infer an earlier positive or zero provider native source.
+
 **Date:** November 9, 2026 UTC. **Purpose:** close the *accountability/matrix* part of Phase5's next critical-path task, **not** certify any future flights, label source, budget, study dates or rights. **Source:** immutable owner-corrected B0062 five-pair packet from PR #503 + 31-date review-only candidate from merged PR #506. Selection SHA `f5112a9ca432d9d3fede96a9805030d68e05ced5a19d029aa896805746c21592`.
 
 ## Exactly what this change produces
