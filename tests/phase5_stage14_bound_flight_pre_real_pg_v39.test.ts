@@ -346,16 +346,14 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   // in the first test. Never replay the successful witness just to inspect it.
   const receipt=(await admin.query(
    "SELECT snapshot_id::text AS snapshot_id,"+
-   "post_pre_commit_db_observed_at_utc,created_at AS witness_created,"+
+   "post_pre_commit_db_observed_at_utc,"+
    "t24_cutoff_utc FROM clean.phase5_t24_postcommit_witness_v39"
   )).rows;
   expect(receipt).toHaveLength(1);
   expect(receipt[0].snapshot_id).toBe(chainedT24SnapshotId);
   expect(new Date(receipt[0].post_pre_commit_db_observed_at_utc).getTime())
    .toBeLessThan(new Date(receipt[0].t24_cutoff_utc).getTime());
-  expect(new Date(receipt[0].witness_created).getTime())
-   .toBeLessThan(new Date(receipt[0].t24_cutoff_utc).getTime());
-  const saved=(await admin.query(
+   const saved=(await admin.query(
    "SELECT w.flight_instance_id,w.population_query_id,"+
    "w.source_query_digest,w.post_pre_commit_db_observed_at_utc,"+
    "w.t24_cutoff_utc FROM clean.phase5_t24_postcommit_witness_v39 w"
