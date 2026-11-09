@@ -8,6 +8,9 @@
  * This is NOT a frozen 31-day source request grid or Phase6 GO.
  */
 import {createHash} from "node:crypto";
+import {verifyPreparedDailyDraw,
+ type PreparedDayForReadback,type PreparedDrawRow
+} from "./phase5EarlyPreselectionReadback_v39";
 import {
  proposeP5RealCorrectedPairDateGeometry
 } from "./phase5CorrectedPairDateGeometryProposal_v39";
@@ -252,5 +255,101 @@ export function proposeP5Adaptive31ShapeEnvelope(
   currentProviderCreditsAndRightsVerified:false,
   phase5ScientificFreezePassed:false,phase6PaidGo:false,
   providerCalls:0,databaseWrites:0,paidAlertCreates:0
+ };
+}
+
+
+/**
+ * Later step: purely recheck one submitted ordinary-day readback against
+ * the shape/clock envelope. Rows are UNTRUSTED until a separate restricted
+ * PostgreSQL read-only transaction proves their identity and DB clock.
+ * This function cannot certify global previously drawn airport washout,
+ * source originals, rights, budgets, flight T or a collection release.
+ */
+export interface P5OrdinaryDayCandidateBindingInput {
+ envelope:P5Adaptive31ShapeEnvelope;
+ independentlyReviewedShapeEnvelopeSha256:string;
+ independentlyReviewedSignedCalendarSha256:string;
+ preparedDay:PreparedDayForReadback;
+ submittedDrawRows:PreparedDrawRow[];
+}
+export interface P5OrdinaryDayCandidateBinding {
+ schema:"v39.phase5.ordinary-day-provisional-shape-to-draw-binding.v1";
+ status:"FOUR_SUBMITTED_EARLY_DRAW_ROWS_MATCH_SHAPE_NOT_DB_CUSTODY";
+ runDayIndex:number;
+ sourceShapeEnvelopeSha256:string;
+ expectedCalendarSha256:string;
+ submittedDrawStateSha256:string;
+ candidateBindingSha256:string;
+ selectedAtUtc:string;
+ selectedIcaos:Record<typeof SLOTS[number],string>;
+ dateAndShapeMatched:true;
+ realRestrictedPostgresReadbackAuthenticated:false;
+ fullPriorDaySiteWashoutVerified:false;
+ actualSourceAndPerFlightTVerified:false;
+ sevenCategoryChargeDayBudgetVerified:false;
+ phase5ScientificFreezePassed:false;phase6PaidGo:false;
+ providerCalls:0;databaseWrites:0;
+}
+export function inspectP5OrdinaryDayCandidateBinding(
+ input:P5OrdinaryDayCandidateBindingInput
+):P5OrdinaryDayCandidateBinding {
+ const e=input?.envelope;
+ if(!e||e.schema!=="v39.phase5.31day-shape-with-prospective-adaptive-draws.v1"||
+    e.status!=="PROVISIONAL_SHAPE_ENVELOPE_ONLY_21_ADAPTIVE_DRAWS_PENDING"||
+    !SHA.test(input.independentlyReviewedShapeEnvelopeSha256)||
+    input.independentlyReviewedShapeEnvelopeSha256!==e.shapeEnvelopeSha256||
+    hash(e.days)!==e.shapeEnvelopeSha256||e.days.length!==31||
+    e.ordinaryAdaptiveParentDays!==21||
+    e.all21AdaptiveDrawsAuthentic!==false||e.phase6PaidGo!==false||
+    e.providerCalls!==0||e.databaseWrites!==0||
+    !SHA.test(input.independentlyReviewedSignedCalendarSha256))
+  refuse("UNREVIEWED_OR_TAMPERED_31_SHAPE");
+ const day=input.preparedDay;
+ if(!day||!Number.isInteger(day.runDayIndex)||day.runDayIndex<1||
+    day.runDayIndex>31||!(day.scheduledStartUtc instanceof Date)||
+    !Number.isFinite(day.scheduledStartUtc.getTime())||
+    day.calendarHash!==input.independentlyReviewedSignedCalendarSha256)
+  refuse("SIGNED_DAY_OR_CALENDAR_NOT_MATCHED");
+ const proposed=e.days[day.runDayIndex-1];
+ if(proposed.runDayIndex!==day.runDayIndex||
+    proposed.pairId!==null||proposed.pairedAirportCandidates!==null||
+    proposed.selectionState!==
+     "ORDINARY_AIRPORT_IDENTITIES_PENDING_PROSPECTIVE_DB_DRAW"||
+    proposed.windowShape!=="4h"||proposed.activeSegments.length!==1||
+    day.scheduledStartUtc.toISOString()!==proposed.startUtc||
+    day.drawType!=="NEW_TEMPLATE"||day.pairAirportSet!==null)
+  refuse("ADAPTIVE_DAY_OR_EXPOSURE_REDRAW");
+ const checked=verifyPreparedDailyDraw(day,input.submittedDrawRows);
+ const selected=Date.parse(checked.selectedAtUtc);
+ if(selected<Date.parse(proposed.earliestPermittedEarlyDrawUtc)||
+    selected>Date.parse(proposed.latestPermittedEarlyDrawUtcInclusive))
+  refuse("DRAW_NOT_WITHIN_REAL_PROSPECTIVE_EARLY_WINDOW");
+ const icaos=Object.fromEntries(checked.selections.map(
+  row=>[row.slotId,row.icao]
+ )) as Record<typeof SLOTS[number],string>;
+ if(SLOTS.some(s=>!/^[A-Z]{4}$/.test(icaos[s]??""))||
+    new Set(Object.values(icaos)).size!==4)
+  refuse("REAL_FOUR_SLOT_BINDING_MISSING");
+ const identity={shapeEnvelopeSha256:e.shapeEnvelopeSha256,
+  calendarSha256:input.independentlyReviewedSignedCalendarSha256,
+  runDayIndex:day.runDayIndex,drawSha256:checked.stateHash,
+  selectedAtUtc:checked.selectedAtUtc,selectedIcaos:icaos};
+ return {
+  schema:"v39.phase5.ordinary-day-provisional-shape-to-draw-binding.v1",
+  status:"FOUR_SUBMITTED_EARLY_DRAW_ROWS_MATCH_SHAPE_NOT_DB_CUSTODY",
+  runDayIndex:day.runDayIndex,
+  sourceShapeEnvelopeSha256:e.shapeEnvelopeSha256,
+  expectedCalendarSha256:input.independentlyReviewedSignedCalendarSha256,
+  submittedDrawStateSha256:checked.stateHash,
+  candidateBindingSha256:hash(identity),
+  selectedAtUtc:checked.selectedAtUtc,
+  selectedIcaos:icaos,dateAndShapeMatched:true,
+  realRestrictedPostgresReadbackAuthenticated:false,
+  fullPriorDaySiteWashoutVerified:false,
+  actualSourceAndPerFlightTVerified:false,
+  sevenCategoryChargeDayBudgetVerified:false,
+  phase5ScientificFreezePassed:false,phase6PaidGo:false,
+  providerCalls:0,databaseWrites:0
  };
 }
