@@ -37,8 +37,18 @@ function fixture():FrozenCalendarDesignInput {
     projectedAlertCreditsByRunDay[String(i)]=1500;
   }
   for(let p=1;p<=5;p++)evaluationPartitionByRunDay[String(p+6)]="TRAIN";
+  // Explicitly WIDE, SYNTHETIC only: older fixture sites can recur in
+  // different crossover pairs. Never interpret these dates as real Phase6.
+  const reviewedRunDatesByIndex:Record<string,string>={};
+  const fixtureStart=Date.parse("2026-10-26T00:00:00.000Z");
+  for(let day=1;day<=31;day++){
+    const block=Math.floor((day-1)/6),within=(day-1)%6;
+    reviewedRunDatesByIndex[String(day)]=new Date(
+      fixtureStart+(block*14+within*2)*86_400_000
+    ).toISOString().slice(0,10);
+  }
   return {
-    startDate:"2026-10-26",
+    startDate:"2026-10-26",reviewedRunDatesByIndex,
     seed:"calendar-seed",
     anchorSeed:"anchor-seed",
     anchorPool:airports,

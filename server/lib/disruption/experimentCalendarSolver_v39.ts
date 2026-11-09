@@ -10,6 +10,12 @@ export type FrozenPairAirportSet = Record<SlotId, FrozenAirportSlotAssignment>;
 
 export interface FrozenCalendarDesignInput {
   startDate: string;
+  /**
+   * Optional COMPLETE externally reviewed dates for 31 run-day indices.
+   * Mandatory all-or-nothing: no silent partial date replacement. A
+   * mathematically feasible date map is NOT an approved Phase6 calendar.
+   */
+  reviewedRunDatesByIndex?: Record<string,string>;
   /** Frozen time-window/crossover seed. */
   seed: string;
   /** Separately frozen anchor rotation seed. */
@@ -149,6 +155,20 @@ function solveCalendarByAnchorPolicy(
 ): CalendarSolveResult {
   const start = parseDate(input.startDate);
   if (!start) return { status: "UNSAT", reason: "invalid startDate", days: [], calendarHash: null };
+  const explicitDates = input.reviewedRunDatesByIndex;
+  if (explicitDates !== undefined) {
+    const indices = Array.from({length:31}, (_,i)=>String(i+1));
+    if (!explicitDates || typeof explicitDates !== "object" ||
+        Array.isArray(explicitDates) ||
+        Object.keys(explicitDates).length !== 31 ||
+        indices.some(k=>!Object.prototype.hasOwnProperty.call(explicitDates,k) ||
+          !parseDate(explicitDates[k]) || explicitDates[k]<input.startDate) ||
+        explicitDates["1"]!==input.startDate ||
+        new Set(indices.map(k=>explicitDates[k])).size !== 31) {
+      return { status:"UNSAT", reason:"reviewed explicit 31 run-day dates missing, invalid, before start or duplicate",
+        days:[], calendarHash:null };
+    }
+  }
   if (!input.seed || !input.anchorSeed) return { status: "UNSAT", reason: "missing frozen calendar/anchor seed", days: [], calendarHash: null };
   const unique = new Set(input.anchorPool.map(x => x.icao.trim().toUpperCase()));
   if (mode === "original-five") {
@@ -229,7 +249,7 @@ function solveCalendarByAnchorPolicy(
   const firstPeriodByPair = new Map<number, SolvedRunDay>();
   for (let i = 1; i <= 31; i++) {
     const week = Math.floor((i - 1) / 6), within = (i - 1) % 6;
-    const date = dateText(plusDays(start, week * 7 + within));
+    const date = explicitDates?.[String(i)] ?? dateText(plusDays(start, week * 7 + within));
     const slot = SIX_SLOTS[within];
     let p: number | null = null, period: 1 | 2 | null = null;
     if (i <= 5) { p = i; period = 1; }
@@ -374,6 +394,42 @@ export function solveV39FourAnchorExploratoryDraft(
 export function validateV39Calendar(days: SolvedRunDay[], input: FrozenCalendarDesignInput): string[] {
   const v: string[] = [];
   if (days.length !== 31) v.push(`expected31:${days.length}`);
+  /*
+   * Global chronological/washout review. The old pair-specific check only
+   * compared a crossover against its own replay, missing the genuine SKBO
+   * duplicate across DIFFERENT pair-4 and pair-5 templates. The previous
+   * service END (including split gap or up-to-6h maximum) must precede the
+   * next known identical ICAO START by >=24h, regardless of pair identity.
+   * Ordinary adaptive airports are not drawn yet: their future overlap
+   * cannot be falsely certified by this review-only calendar.
+   */
+  const lastKnownByIcao=new Map<string,{runDayIndex:number,endMs:number}>();
+  let lastParentEnd=-Infinity;
+  const slotsForKnownPairs:SlotId[]=["HUB","MID_A","MID_B","REGIONAL"];
+  for(const d of days){
+    const startMs=absTime(d.date,d.utcSlot);
+    const minutes=d.windowShape==="4h"?240:
+      d.windowShape==="2x2h"?300:360;
+    const endMs=startMs+minutes*60_000;
+    if(!Number.isFinite(startMs)||startMs<lastParentEnd)
+      v.push(`run${d.runDayIndex}:nonchronological-or-overlapping-parent-windows`);
+    lastParentEnd=Math.max(lastParentEnd,endMs);
+    if(!d.pairAirportSet)continue;
+    for(const slot of slotsForKnownPairs){
+      const icao=d.pairAirportSet[slot]?.icao?.trim().toUpperCase();
+      // This mathematical solver deliberately permits synthetic airport IDs
+      // (M1A/R1) in disposable fixtures. Source-frame membership and real
+      // four-letter ICAO syntax are independently checked at real admission.
+      if(!icao){
+        v.push(`run${d.runDayIndex}:missing-known-pair-airport-${slot}`);
+        continue;
+      }
+      const previous=lastKnownByIcao.get(icao);
+      if(previous&&startMs-previous.endMs<86_400_000)
+        v.push(`run${d.runDayIndex}:${icao}:reused-airport-END-to-START-washout<24h-after-run${previous.runDayIndex}`);
+      lastKnownByIcao.set(icao,{runDayIndex:d.runDayIndex,endMs});
+    }
+  }
   const counts: Record<Shape, number> = { "4h": 0, "2x2h": 0, "up-to-6h": 0 };
   for (const d of days) counts[d.windowShape]++;
   if (counts["4h"] !== 26 || counts["2x2h"] !== 3 || counts["up-to-6h"] !== 2) v.push(`shape composition ${JSON.stringify(counts)}`);
