@@ -140,6 +140,19 @@ describe("Phase5 full B0062 selection seeded BEFORE future data, no paid calls",
   expect(plan.reason).toBeNull();
   expect(plan.status).toBe("SAT");
   expect(plan.days).toHaveLength(31);
+  // These six-region frame data surfaced an old collision fallback that
+  // destroyed MID_B complete-cycle balance. The repaired solver uses a
+  // seeded nonzero cyclic derangement, so both MID slots remain full-cycle
+  // balanced and distinct on every one of the 26 fresh templates.
+  const fresh=plan.days.filter(d=>d.drawType==="NEW_TEMPLATE");
+  expect(fresh).toHaveLength(26);
+  expect(fresh.every(d=>d.slotRegions.MID_A!==d.slotRegions.MID_B)).toBe(true);
+  for(let i=0;i+6<=fresh.length;i+=6){
+   for(const slot of ["MID_A","MID_B","REGIONAL"] as const){
+    expect(new Set(fresh.slice(i,i+6).map(d=>d.slotRegions[slot])))
+     .toEqual(new Set(REGIONS));
+   }
+  }
   expect(plan.operationalPhase6StartAuthorized).toBe(false);
   expect(plan.historicalOriginalFiveAnchorGate2Passed).toBe(false);
   for(let p=0;p<5;p++){
