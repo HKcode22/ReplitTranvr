@@ -7,7 +7,7 @@ cd "$HOME/workspace" || { echo 'HOLD_P5_READONLY_WORKSPACE_MISSING'; exit 2; }
 REPO='HKcode22/ReplitTranvr'
 REVIEWED='31f0fc61c680aed31a7d2553266f85ec06d95e43'
 SOURCE='scripts/v39_phase5_final_freeze_readonly_release_inventory_once.mjs'
-BLOB='0be5d015455e646ed15a24232622afe091da6027'
+BLOB='ddcacdecd26ed9a6903e157b8a8299d53776d8d7'
 hold(){ echo "HOLD_P5_READONLY: $1" >&2; exit 2; }
 for c in gh git base64 node mktemp; do command -v "$c" >/dev/null || hold "MISSING_$c"; done
 gh auth status --hostname github.com >/dev/null 2>&1 || hold GH_NOT_AUTHENTICATED
