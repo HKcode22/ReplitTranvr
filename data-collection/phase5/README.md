@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — GitHub operational PREPARE entrypoint reuses commissioned Stage30 DB role (CI review)
+
+[**Future signed one-day GitHub source PREPARE owner checkpoint**](2026-11-09_GITHUB_ONE_SIGNED_DAY_SOURCE_PREPARE_REUSES_STAGE30_ROLE.md). Extends merged #523's authentic saved Stage7→8→9 chain to a GitHub `workflow_dispatch` that uses the **already commissioned** `P5_V39_PREPARE_DATABASE_URL` dedicated login and original Stage28 scoped SET-only role adapter. Exact byte-signed future day packet, code/main SHA, signed Phase5 science/source-use and distinct Phase6 GO are required before any SQL; the job writes **only PREPARED query+exact partition rows** in one serializable commit, never paid GET, Alerts, real PRE or POST. New admission and strict negative tests run with NO database/provider. **Not an autonomous 31-day paid owner yet** and cannot be activated before real future 31-day calendar/budget and source review.
+
 ## Nov 9 — REAL saved-airport day → Stage8 source query → atomic Stage9 prepared ledger (under CI review)
 
 [**Actual Stage7→Stage8→Stage9 integration checkpoint**](2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md). The Stage7 restricted one-snapshot read now returns its actual **four saved draws and calendar day** as a verified readback proof; Stage8 uses exactly those rows rather than copies. One new orchestrator checks an **externally reviewed exact dynamic proposal SHA and unchanged source rights/UTC budget pins**, then calls existing V0082 restricted serializable Stage9 atomic **PREPARED** query+partition insertion. Existing disposable real PostgreSQL16 test now exercises the linked path with 96 synthetic prepared rows and 96 partitions, with zero AeroDataBox requests, zero provider credits, no real production DB writes. This is NOT yet the scheduled paid SOURCE→PRE/POST owner or science FREEZE PASS.
