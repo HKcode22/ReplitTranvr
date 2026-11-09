@@ -33,7 +33,7 @@ function fixture(){
     githubOnlyProspectiveOwnerApproved:true
    }
   }
- } as P5SignedOneDayPreparePacket;
+ } as unknown as P5SignedOneDayPreparePacket;
  const raw=Buffer.from(JSON.stringify(packet));
  const env={
   GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
