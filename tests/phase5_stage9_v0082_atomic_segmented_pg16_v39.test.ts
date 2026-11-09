@@ -16,6 +16,8 @@ import {planP5Stage8FromCommittedDayReadback,
  from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {prepareP5ReviewedSourceDayFromSavedDraw}
  from "../server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39";
+import {draftP5OneGetFromActualPreparedSource}
+ from "../server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39";
 import {commitStage9P5V0082AtomicSegmentedDay,
  type P5V0082AtomicDayReview} from
  "../server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
@@ -287,6 +289,51 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   )).rows[0];
   return r as {q:number;p:number;a:number;o:number};
  }
+ it("derives exactly one unarmed future GitHub GET draft from the actual saved four-airport PG draw and approved source BASE/SPLIT query",async()=>{
+  const saved=await readCommittedP5DayCandidateGrid(admin,readScope);
+  const planned=planP5Stage8FromCommittedDayReadback(saved,sourceReview);
+  const expected={
+   expectedDayProposalSha256:planned.dayProposalSha256,
+   expectedCandidateGridSha256:saved.selectedDayCandidateGrid.sourceCandidateDigestSha256,
+   expectedManifestSha256:manifest
+  };
+  for(const category of ["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS"] as const){
+   const pin=planned.sourcePartitionPins!.find(x=>x.restCategory===category)!;
+   const out=draftP5OneGetFromActualPreparedSource(saved,planned,{
+    ...expected,queryDigestSha256:pin.queryDigest
+   });
+   expect(out.selectedQueryDigestSha256).toBe(pin.queryDigest);
+   expect(out.restCategory).toBe(category);
+   expect(out.unsignedQueryEnvelope.queryDigestSha256).toBe(pin.queryDigest);
+   expect(out.unsignedQueryEnvelope.plan.acquisition.queryKey).toBe(pin.queryKey);
+   expect(out.unsignedQueryEnvelope.plan.acquisition.icao)
+    .toBe(planned.queries.find(q=>q.query_digest===pin.queryDigest)!.airport_icao);
+   expect(out.unsignedQueryEnvelope.plan.sourcePartition.partitionIndex).toBe(pin.partitionIndex);
+   expect(out.unsignedQueryEnvelope.plan.sourcePartition.segmentIndex).toBe(pin.segmentIndex);
+   expect(out.unsignedQueryEnvelope.plan.day.scheduledStartUtc).toBe(serviceStart);
+   expect(out.unsignedQueryEnvelope.plan.independentlyApprovedSourceAndRetention)
+    .toBe(false);
+   expect(out.unsignedQueryEnvelope.plan.githubOnlyOwnerApproved).toBe(false);
+   expect(out.selectedQueryAlreadyPreparedInProduction).toBe(false);
+   expect(out.sourceContentsAndMlRightsApproved).toBe(false);
+   expect(out.phase6PaidGo).toBe(false);
+   expect(out.providerCalls).toBe(0);
+   expect(out.databaseWrites).toBe(0);
+  }
+  const first=planned.queries[0];
+  const reviewPins={...expected,queryDigestSha256:first.query_digest};
+  expect(()=>draftP5OneGetFromActualPreparedSource(
+   saved,planned,{...reviewPins,expectedDayProposalSha256:sha("0")}
+  )).toThrow("DAY_EARLY_DRAW_CANDIDATE_OR_SOURCE_PROPOSAL_CHANGED");
+  expect(()=>draftP5OneGetFromActualPreparedSource(
+   saved,planned,{...reviewPins,expectedCandidateGridSha256:sha("0")}
+  )).toThrow("DAY_EARLY_DRAW_CANDIDATE_OR_SOURCE_PROPOSAL_CHANGED");
+  const tampered={...planned,queries:planned.queries.map(x=>({...x}))};
+  tampered.queries[0].planned_dispatch_utc=serviceStart;
+  expect(()=>draftP5OneGetFromActualPreparedSource(saved,tampered,reviewPins))
+   .toThrow("PREPARED_QUERY_OR_PARTITION_NOT_SAME_SAVED_SOURCE");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+ });
  it("refuses production owner role and tampered reviewer source digest",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(admin,review))
    .rejects.toThrow("NO_REAL_RESTRICTED_PRODUCTION_WRITER_ROLE");
