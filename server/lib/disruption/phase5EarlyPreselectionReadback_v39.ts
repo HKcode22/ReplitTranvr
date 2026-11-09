@@ -7,12 +7,12 @@
  * calendar-level condition, never sufficient to certify per-flight PRE.
  */
 import { createHash } from "node:crypto";
+import {p5EarlyDrawLeadTimeEligible} from "./phase5ProspectiveEarlyDrawClockContract_v39";
 import type { SamplingSelection, SlotId } from "./phase6SamplingDecision_v39";
 
 const SLOTS: SlotId[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
 const ICAO = /^[A-Z]{4}$/;
 const SHA = /^[a-f0-9]{64}$/;
-const MIN_PREPARE_LEAD_MS = 24 * 3600_000 + 30 * 60_000;
 
 export interface PreparedDayForReadback {
   runDayIndex: number;
@@ -81,8 +81,9 @@ export function verifyPreparedDailyDraw(
     airports.add(airport);
     const selectedAt = dateMs(x.selected_at_utc, "SELECTED");
     times.add(selectedAt);
-    if (selectedAt >= start - MIN_PREPARE_LEAD_MS)
-      refuse("DRAW_TOO_LATE_FOR_T24_SOURCE");
+    // Exact parity with the real DB early-draw owner: >24h45m and <=72h.
+    if (!p5EarlyDrawLeadTimeEligible(selectedAt,start))
+      refuse("DRAW_OUTSIDE_PROSPECTIVE_24H45M_TO_72H_WINDOW");
     if (x.frozen_draw_seed !== day.frozenDrawSeed || x.draw_type !== day.drawType)
       refuse("MISMATCHED_SEED_OR_TEMPLATE");
     if (x.target_region !== day.slotRegions[slot])
