@@ -1,5 +1,7 @@
 # Phase 5 — exact five-pair provisional UTC date map: 31 parent batch-days, no live release
 
+**Nov 9 owner superseding scheduling directive:** The hypothetical **Nov 24, 2026 → Jan 5, 2027** dates below are **not a target or intentional waiting period**. The goal is the **earliest safe Phase6 first batch-day after actual Phase5 independent FREEZE and verified pre-T−24h readiness**; see the [rolling-start study checkpoint](2026-11-09_OWNER_STUDY_GUIDE_FOUR_HUB_FIVE_PAIRS_FORTY_WINDOWS_ROLLING_EARLIEST_PHASE6.md) and the pure earliest-ready-bound helper. Recompute the entire date map when readiness is known, and re-review flight coverage/seasonality, 24h global washout, UTC slots, treatment seed and physical REST/Alert budgets. An earlier calendar has a **different date-map SHA** and cannot reuse already dated source receipts. Never treat a passed calendar SAT as paid GO.
+
 **Prepared:** November 9, 2026 UTC. **Scientific state:** REVIEW CANDIDATE ONLY. **Evidence:** actual archived Nov 9 PostgreSQL B0062 corrected five-pair readback; SHA-256 `f5112a9ca432d9d3fede96a9805030d68e05ced5a19d029aa896805746c21592`; *not* collected prospective flights, a true provider source license, physical GET budget, or signed Phase 6 schedule.
 
 ## What this actually advances
