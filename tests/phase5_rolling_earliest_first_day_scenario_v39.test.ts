@@ -9,6 +9,14 @@ function realCorrectedPacket(){
   "../data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json",
   import.meta.url),"utf8"));
 }
+import {
+ P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
+ P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS,
+ p5EarlyDrawLeadTimeEligible
+} from "../server/lib/disruption/phase5ProspectiveEarlyDrawClockContract_v39";
+import {validateEarlyDrawWindow} from
+ "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
+
 const base=()=>({
  ownerCorrectedReadback:realCorrectedPacket(),
  assumedAllGatesReadyAtUtc:"2026-11-09T09:27:00.000Z",
@@ -43,6 +51,44 @@ describe("rolling earliest prospective Phase6 day, NOT a launch permit",()=>{
    "realSourcePREPOSTReceiverVerified",
    "scientificPhase5FreezePassed","phase6PaidGo"
   ] as const)expect(p[k]).toBe(false);
+ });
+ it("closes the real 24h45m early-draw admission hole before the T24 deadline",()=>{
+  const stillEligible=proposeP5RollingEarliestFirstDayScenario({
+   ...base(),assumedAllGatesReadyAtUtc:"2026-11-09T23:14:59.999Z"
+  });
+  const missedByOneMs=proposeP5RollingEarliestFirstDayScenario({
+   ...base(),assumedAllGatesReadyAtUtc:"2026-11-09T23:15:00.000Z"
+  });
+  expect(stillEligible.earliestFirstBatchDayUtcDate).toBe("2026-11-11");
+  expect(missedByOneMs.earliestFirstBatchDayUtcDate).toBe("2026-11-12");
+  // The first T24 source alone would still have been safe for Nov 11;
+  // the early airport selection owner REJECTS exact 24h45m instead.
+  expect(missedByOneMs.conservativeReadyForFirstT24Utc)
+   .toBe("2026-11-09T23:23:00.000Z");
+  expect(stillEligible.earlyDrawLastAllowedUtcInclusive)
+   .toBe("2026-11-09T23:14:59.999Z");
+  expect(stillEligible.earlyDrawWindowOpensUtc)
+   .toBe("2026-11-08T00:00:00.000Z");
+  expect(stillEligible.earliestProspectiveDrawAtOrAfterReadyUtc)
+   .toBe("2026-11-09T23:14:59.999Z");
+  expect(stillEligible.strictEarlyDrawLeadMs).toBe(24*3_600_000+45*60_000);
+  expect(missedByOneMs.phase6PaidGo).toBe(false);
+ });
+ it("shares exactly the real early-draw and FIDS preparation clock boundaries",()=>{
+  const start=Date.parse("2026-11-11T00:00:00.000Z");
+  const strictLast=start-P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
+  const strictPass=strictLast-1;
+  const tooEarly=start-P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS-1;
+  const firstAllowed=start-P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
+  const service=new Date(start);
+  for(const [when,allowed] of [
+   [strictPass,true],[strictLast,false],[tooEarly,false],[firstAllowed,true]
+  ] as const){
+   expect(p5EarlyDrawLeadTimeEligible(when,start)).toBe(allowed);
+   if(allowed)expect(()=>validateEarlyDrawWindow(new Date(when),service)).not.toThrow();
+   else expect(()=>validateEarlyDrawWindow(new Date(when),service))
+    .toThrow(/REFUSED_PHASE5_EARLY_DRAW_/);
+  }
  });
  it("moves the earliest day later when readiness misses the T24 by minutes",()=>{
   const p=proposeP5RollingEarliestFirstDayScenario({
