@@ -84,7 +84,12 @@ export function previewFirstFiveSlotRegions(){
    REGIONAL:cyclePick(regions,i,CALENDAR_REGION_SEED+"|REGIONAL")};
  });
 }
-export function selectFiveRealPairCandidateTemplates(all){
+export function selectFiveRealPairCandidateTemplates(all,options={}){
+ const requested=options.scheduledPassengerExclusions??[];
+ if(!Array.isArray(requested)||requested.length>1||
+    requested.some(x=>x!=="KTEB")||new Set(requested).size!==requested.length)
+  fail("UNREVIEWED_OR_CHANGED_OPERATIONAL_SCOPE_EXCLUSION");
+ const excluded=new Set(requested);
  if(!Array.isArray(all)||all.length!==1013)fail("FULL_STRICT_CANDIDATE_COUNT_NOT_1013");
  if(!SHA.test(PRECOMMITTED_AIRPORT_SELECTION_SEED)||
     sha(Buffer.from(PRECOMMITTED_AIRPORT_SELECTION_SEED,"hex"))!==SEED_COMMITMENT_SHA256)
@@ -115,6 +120,10 @@ export function selectFiveRealPairCandidateTemplates(all){
   const cell=tier+"|"+REGIONS[i],n=byCell.get(cell).length;
   if(n!==strictCounts[tier][i])fail("STRICT_REGION_COUNTS_CHANGED_"+cell);
  }
+ if(excluded.has("KTEB")){
+  const row=byCell.get("MID|North America").find(x=>x.icao==="KTEB");
+  if(!row)fail("KTEB_NOT_IN_ORIGINAL_FROZEN_CENSUS");
+ }
  const slots=previewFirstFiveSlotRegions(),used=new Set();
  const sets=slots.map(t=>{
   const result={HUB:{icao:t.HUB.icao,region:t.HUB.region}};
@@ -130,7 +139,7 @@ export function selectFiveRealPairCandidateTemplates(all){
      "|"+slot+"|"+b.icao);
     return ka.localeCompare(kb)||a.icao.localeCompare(b.icao);
    });
-   const x=order.find(z=>!used.has(z.icao));
+   const x=order.find(z=>!used.has(z.icao)&&!excluded.has(z.icao));
    if(!x)fail("NO_NEW_ELIGIBLE_AIRPORT_"+t.pairId+"_"+slot);
    used.add(x.icao);
    result[slot]={
@@ -154,7 +163,9 @@ export function selectFiveRealPairCandidateTemplates(all){
   fail("NOT_ALL_FOUR_OWNER_HUBS_IN_FIVE_PAIRS");
  return {
   schema:"phase5.full-b0062-five-pair-selection-review.v1",
-  status:"FIVE_FULL_FRAME_PAIR_CANDIDATE_TEMPLATES_ONLY_NOT_FROZEN",
+  status:excluded.size?
+   "FIVE_POST_SELECTION_SCOPE_ADJUDICATED_PAIR_CANDIDATES_NOT_FROZEN":
+   "FIVE_FULL_FRAME_PAIR_CANDIDATE_TEMPLATES_ONLY_NOT_FROZEN",
   frozenFrameVersion:FRAME.version,
   frozenFrameHash:FRAME.frameHash,
   trafficReferenceHash:FRAME.trafficHash,
@@ -176,6 +187,12 @@ export function selectFiveRealPairCandidateTemplates(all){
     x.airports.HUB.icao,x.airports.MID_A.icao,x.airports.MID_B.icao,
     x.airports.REGIONAL.icao]}))),
   sampledWithoutTop48TrafficTruncation:true,
+  scheduledPassengerScopeExclusions:[...excluded],
+  exclusionAdjudicatedAfterFirstDraw:excluded.size>0,
+  scopeExclusionBasis:excluded.size?
+   "KTEB scheduled passenger service excluded by airport operator and FAA; exogenous pre-period finding, original draw retained":null,
+  exclusionAppliedToSelectionNotB0062Frame:true,
+  originalEligibleFrameStill1013:true,
   boundToOriginalFiveHubStage2Gate2:false,
   withinCrossoverPairTwoPeriodsReplaySameFourAirports:true,
   crossoverAirportSetSigned:false,
@@ -235,7 +252,39 @@ export async function inspectFiveCrossoverPairCandidatesReadOnly(pool){
   ].join(" ");
   const rows=(await c.query(sql,
    [FRAME.version,FRAME.frameHash,FRAME.trafficHash,TIERS,REGIONS])).rows;
-  const out=selectFiveRealPairCandidateTemplates(rows);
+  // Exactly reproduce the owner's earlier 03:29Z unmodified proposal
+  // before conditional selection on an exogenous operating-scope fact.
+  const original=selectFiveRealPairCandidateTemplates(rows);
+  if(original.selectedAirportIcaosSha256!==
+    "3dbcc18dd44bdbb7e5323766a9a6bfacacc0bb2e38e3ccce9aff442611738763"||
+     original.candidatePairAirportSets[2]?.airports?.MID_A?.icao!=="KTEB")
+   fail("HISTORICAL_ORIGINAL_FIVE_PAIR_RECEIPT_NOT_REPRODUCED");
+  const out=selectFiveRealPairCandidateTemplates(rows,{
+   scheduledPassengerExclusions:["KTEB"]
+  });
+  if(out.candidatePairAirportSets.some((p,i)=>
+   ["HUB","MID_A","MID_B","REGIONAL"].some(slot=>
+    p.airports[slot].icao!==original.candidatePairAirportSets[i].airports[slot].icao &&
+    !(i===2&&slot==="MID_A")))
+  )fail("SCOPE_ADJUDICATION_CHANGED_UNRELATED_PAIR_SLOT");
+  if(out.candidatePairAirportSets[2].airports.MID_A.icao==="KTEB"||
+     out.selectedAirportIcaosSha256===original.selectedAirportIcaosSha256)
+   fail("KTEB_NOT_REPLACED");
+  out.originalOwnerPairProposalSha256=original.selectedAirportIcaosSha256;
+  out.originalPair3MidA="KTEB";
+  out.replacementPair3MidA=out.candidatePairAirportSets[2].airports.MID_A.icao;
+  out.ownerOriginalProposalPreservedUnmodified=true;
+  out.exclusionEvidence={
+   authority:"Port Authority of NY and NJ / FAA",
+   discoveredAfterOriginalSeedDraw:true,
+   publicationPredatesCandidateSelection:true,
+   scheduledPassengerOperationsNotPermitted:true,
+   sources:[
+    "https://www.panynj.gov/content/dam/airports/pdfs/Airport_Rules_Regs_4_1_25.pdf",
+    "https://www.faa.gov/airports/environmental/environmental_documents/fonsi-rod-TEB-2026-appendix-q1.pdf"
+   ],
+   providerRealFlightPopulationForOtherSitesStillNotVerified:true
+  };
   out.observedUtc=new Date(db.observed_at).toISOString();
   await c.query("ROLLBACK");begun=false;
   return out;
