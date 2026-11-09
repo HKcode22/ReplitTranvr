@@ -33,15 +33,15 @@ describe("bounded date-only generator, using immutable REAL corrected owner five
   const p=candidate();
   expect(p.status).toBe("DATE_GEOMETRY_CANDIDATE_ONLY_NOT_SCIENCE_FREEZE");
   expect(p.days).toHaveLength(31);
-  expect(Object.keys(p.reviewedRunDatesByIndex)).toHaveLength(31);
+  expect(Object.keys(p.candidateRunDatesByIndex)).toHaveLength(31);
   expect(p.lastRunDateUtc).toBe("2027-01-05");
   expect(p.elapsedCalendarDays).toBe(43);
-  expect(p.reviewedRunDatesByIndex["1"]).toBe("2026-11-24");
-  expect(p.reviewedRunDatesByIndex["2"]).toBe("2026-11-25");
-  expect(p.reviewedRunDatesByIndex["4"]).toBe("2026-11-27");
-  expect(p.reviewedRunDatesByIndex["5"]).toBe("2026-11-29");
-  expect(p.reviewedRunDatesByIndex["7"]).toBe("2026-12-02");
-  expect(p.reviewedRunDatesByIndex["11"]).toBe("2026-12-12");
+  expect(p.candidateRunDatesByIndex["1"]).toBe("2026-11-24");
+  expect(p.candidateRunDatesByIndex["2"]).toBe("2026-11-25");
+  expect(p.candidateRunDatesByIndex["4"]).toBe("2026-11-27");
+  expect(p.candidateRunDatesByIndex["5"]).toBe("2026-11-29");
+  expect(p.candidateRunDatesByIndex["7"]).toBe("2026-12-02");
+  expect(p.candidateRunDatesByIndex["11"]).toBe("2026-12-12");
   expect(p.days.slice(0,11).filter(x=>x.pairId)).toHaveLength(10);
   expect(new Set(p.days.map(x=>x.dateUtc)).size).toBe(31);
   expect(p.days.filter(x=>x.pairId===null)).toHaveLength(21);
@@ -76,9 +76,9 @@ describe("bounded date-only generator, using immutable REAL corrected owner five
    parts[String(i)]=i<=20?"TRAIN":i<=25?"VALIDATION":"TEST";
    credits[String(i)]=1000; // ONLY THE TEST FIXTURE, NOT PROVIDER CREDITS.
   }
-  const input:FrozenCalendarDesignInput={
+  // TEST-ONLY adapter: production requires separate independent review before\n  // candidate dates may be called the solver's 'reviewedRunDatesByIndex'.\n  const input:FrozenCalendarDesignInput={
    startDate:START,
-   reviewedRunDatesByIndex:pre.reviewedRunDatesByIndex,
+   reviewedRunDatesByIndex:pre.candidateRunDatesByIndex,
    seed:owner.calendarRegionSeed,
    anchorSeed:owner.fourHubAnchorRotationSeed,
    anchorPool:HUBS,
