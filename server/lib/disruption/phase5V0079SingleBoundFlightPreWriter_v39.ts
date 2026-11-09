@@ -26,6 +26,9 @@ const SLOTS=["HUB","MID_A","MID_B","REGIONAL"];
 const HORIZONS=["T-24h","T-6h","T-90m"];
 const MAX_EARLY_MS=180_000;
 const COMMIT_MARGIN_MS=2000;
+const CONDITIONAL_G5A_ID=/^leg:g5a:[a-f0-9]{64}$/;
+export type P5Stage14IdentityTier=
+ "PROVIDER_NATIVE_OPERATING_LEG"|"CONDITIONAL_QUERY_FILTERED_SERVICE";
 const hold=(s:string):never=>{throw Error("REFUSED_P5_STAGE14_PRE_"+s);};
 const instant=(s:unknown,label:string):Date=>{
  if(typeof s!=="string")
@@ -63,11 +66,21 @@ export interface P5Stage14SingleFlightPrePermit{
  /** Required for T6/T90 only: reviewed real Stage17 readback and V0081 witness. */
  reviewedT24WitnessReceipt?:P5Stage24ReviewedT24Receipt;
  /** Caller review attestations are metadata, NOT self-authenticating proof. */
- externalNativeTPhysicalLegAndSourceUseReviewed:true;
+ externalNativeTPhysicalLegAndSourceUseReviewed?:true;
+ /** An explicitly adopted protocol may use Phase4's conditional-service tier
+  * without reclassifying it as a provider-certified operating aircraft leg. */
+ identityEvidenceTier?:P5Stage14IdentityTier;
+ reviewedProtocolAmendmentSha256?:string;
+ reviewedStableServiceKeySha256?:string;
+ expectedOperatorFlightNumber?:string;
+ expectedDestinationIcao?:string;
+ externalConditionalScheduleSourceAndUseReviewed?:true;
 }
 export interface P5Stage14SingleFlightPreResult{
  schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1";
  status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE";
+ identityEvidenceTier:P5Stage14IdentityTier;
+ conditionalServiceCertifiedPhysicalLeg:false;
  runDayIndex:number;slot:string;horizon:PreHorizon;
  cutoffUtc:string;boundPopulationQueryId:string;
  sourceOriginalCommittedBeforeFlightCutoff:true;
@@ -112,7 +125,8 @@ export const P5_STAGE14_PHYSICAL_MEMBER_SQL=[
  "p.dep_airport_icao,p.population_role,p.scope_classification,",
  "p.codeshare_resolution_status,p.source_type,p.response_hash,",
  "p.provider_content_expired_at_utc,p.available_at,",
- "p.dep_scheduled_utc,p.population_member_id",
+ "p.dep_scheduled_utc,p.population_member_id,",
+ "p.flight_number,p.arr_airport_icao,p.query_direction",
  "FROM clean.flight_population p",
  "WHERE p.population_query_id=$1::uuid AND p.analytic_identity_id=$2",
  "ORDER BY p.available_at,p.id"
@@ -156,9 +170,29 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit):Date{
   !Number.isInteger(p.runDayIndex)||p.runDayIndex<1||p.runDayIndex>31||
   !Number.isSafeInteger(p.maxPopulationStalenessSeconds)||
   p.maxPopulationStalenessSeconds<1||
-  p.maxPopulationStalenessSeconds>86_400||
-  p.externalNativeTPhysicalLegAndSourceUseReviewed!==true)
+  p.maxPopulationStalenessSeconds>86_400)
   hold("INDEPENDENT_PERMIT_IDENTITY_SCOPE_OR_SOURCE_RIGHTS_MISSING");
+ const tier=p.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG";
+ if(tier==="PROVIDER_NATIVE_OPERATING_LEG"){
+  if(p.externalNativeTPhysicalLegAndSourceUseReviewed!==true||
+     p.externalConditionalScheduleSourceAndUseReviewed===true||
+     p.reviewedProtocolAmendmentSha256!==undefined||
+     p.reviewedStableServiceKeySha256!==undefined||
+     p.expectedOperatorFlightNumber!==undefined||
+     p.expectedDestinationIcao!==undefined)
+   hold("INDEPENDENT_PERMIT_IDENTITY_SCOPE_OR_SOURCE_RIGHTS_MISSING");
+ }else if(tier==="CONDITIONAL_QUERY_FILTERED_SERVICE"){
+  if(p.externalNativeTPhysicalLegAndSourceUseReviewed===true||
+     p.externalConditionalScheduleSourceAndUseReviewed!==true||
+     !SHA.test(p.reviewedProtocolAmendmentSha256??"")||
+     !SHA.test(p.reviewedStableServiceKeySha256??"")||
+     p.flightInstanceId!=="leg:g5a:"+p.reviewedStableServiceKeySha256||
+     typeof p.expectedOperatorFlightNumber!=="string"||
+     !/^[A-Za-z0-9 -]{3,24}$/.test(p.expectedOperatorFlightNumber)||
+     !/^[A-Z]{4}$/.test(p.expectedDestinationIcao??"")||
+     p.expectedDestinationIcao===p.airportIcao)
+   hold("CONDITIONAL_PROTOCOL_OR_STABLE_SERVICE_KEY_UNAPPROVED");
+ }else hold("UNKNOWN_IDENTITY_TIER_NOT_AUTHORIZED");
  if(p.horizon!=="T-24h"&&!p.reviewedT24WitnessReceipt)
    hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
  const frozen=instant(p.builderFrozenAtUtc,"FROZEN_BUILDER_UTC_INVALID");
@@ -222,12 +256,22 @@ function strictMember(rows:Record<string,unknown>[],
     m.source_airport_icao!==p.airportIcao||
     m.dep_airport_icao!==p.airportIcao||
     m.population_role!=="requested_airport_primary"||
-    m.scope_classification!=="confirmed_core"||
-    m.codeshare_resolution_status!=="confirmed_operating_leg"||
     m.source_type!=="fids"||
     m.response_hash!==p.expectedSourceResponseSha256||
     m.provider_content_expired_at_utc!==null||
     !m.population_member_id)
+   hold("PHYSICAL_OPERATING_LEG_SOURCE_PROVENANCE_NOT_QUALIFIED");
+ if(p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE"){
+  // Reuse EXACT Phase4 G5A conditional status, never relabel physical.
+  if(m.scope_classification!=="unknown"||
+     m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
+     !CONDITIONAL_G5A_ID.test(String(m.canonical_flight_instance_id??""))||
+     m.flight_number!==p.expectedOperatorFlightNumber||
+     m.arr_airport_icao!==p.expectedDestinationIcao||
+     m.query_direction!=="Departure")
+   hold("CONDITIONAL_SOURCE_SERVICE_SCOPE_NOT_QUALIFIED");
+ }else if(m.scope_classification!=="confirmed_core"||
+          m.codeshare_resolution_status!=="confirmed_operating_leg")
    hold("PHYSICAL_OPERATING_LEG_SOURCE_PROVENANCE_NOT_QUALIFIED");
  const member=dbTime(m.available_at,"MEMBER_AVAILABLE_AT").getTime();
  if(member<sourceAvailable||member>cutoff.getTime())
@@ -384,6 +428,8 @@ export async function persistP5V0079SingleBoundFlightPre(
   return {
    schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1",
    status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE",
+   identityEvidenceTier:p.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG",
+   conditionalServiceCertifiedPhysicalLeg:false,
    runDayIndex:p.runDayIndex,slot:p.slot,horizon:p.horizon,
    cutoffUtc:cutoff.toISOString(),
    boundPopulationQueryId:p.expectedSourcePopulationQueryId,
