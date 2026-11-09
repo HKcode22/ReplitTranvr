@@ -118,19 +118,20 @@ describe("Phase5 dynamic early draw to one-day source grid (NO provider/DB)",()=
   const a=sample();
   for(const r of a.committedEarlyDrawRows)
    r.selected_at_utc="2026-11-08T13:20:00.000Z";
-  a.expectedCommittedEarlyDrawSha256=
-   verifyPreparedDailyDraw(a.day,a.committedEarlyDrawRows).stateHash;
+  // The saved-draw verifier now enforces the real owner boundary FIRST.
+  expect(()=>verifyPreparedDailyDraw(a.day,a.committedEarlyDrawRows))
+   .toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
   expect(()=>materializeP5DynamicDaySourceGrid(a))
-   .toThrow("REAL_EARLY_OWNER_WINDOW");
+   .toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
  });
  it("rejects selection over 72h early",()=>{
   const a=sample();
   for(const r of a.committedEarlyDrawRows)
    r.selected_at_utc="2026-11-06T13:00:00.000Z";
-  a.expectedCommittedEarlyDrawSha256=
-   verifyPreparedDailyDraw(a.day,a.committedEarlyDrawRows).stateHash;
+  expect(()=>verifyPreparedDailyDraw(a.day,a.committedEarlyDrawRows))
+   .toThrow("DRAW_TOO_EARLY_FOR_PROSPECTIVE_SAMPLING");
   expect(()=>materializeP5DynamicDaySourceGrid(a))
-   .toThrow("REAL_EARLY_OWNER_WINDOW");
+   .toThrow("DRAW_TOO_EARLY_FOR_PROSPECTIVE_SAMPLING");
  });
  it("refuses wrong calendar, swapped billing date and service start",()=>{
   const a=sample();a.reviewedCalendarSha256="e".repeat(64);
