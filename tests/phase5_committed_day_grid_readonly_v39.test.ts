@@ -5,6 +5,12 @@ import {
 import {verifyPreparedDailyDraw} from
  "../server/lib/disruption/phase5EarlyPreselectionReadback_v39";
 
+import {readFileSync} from "node:fs";
+import {proposeP5Adaptive31ShapeEnvelope}
+ from "../server/lib/disruption/phase5Prospective31DayShapeEnvelope_v39";
+import {p5TreatmentCommitmentForSeed}
+ from "../server/lib/disruption/phase5IndependentPairedTreatmentSourcePreview_v39";
+
 const sha=(x:string)=>x.repeat(64);
 const start=Date.parse("2026-11-09T14:00:00.000Z");
 const fmt=(x:number)=>new Date(x).toISOString();
@@ -187,5 +193,142 @@ describe("Phase5 real frozen calendar/early-draw readback (mock PG, NO provider)
    async connect(){called++;throw Error("should not connect");}
   } as any,f.scope)).rejects.toThrow("UNPINNED_READBACK_OR_DAY");
   expect(called).toBe(0);
+ });
+});
+
+
+// This adds NO production database connection. The 'pool' is a fake PG
+// transport so the authorization SQL/transaction/rollback sequencing and
+// same-snapshot envelope binding can be adversarially verified. Exact real
+// PG credentials and true DB custody require a separate authenticated run.
+const studySeed="31be6f0d392e4d84f72a0e8bc5369eb57a4c916083b962edef7e7319146a0d25";
+function syntheticSixthDayReadback(){
+ const corrected=JSON.parse(readFileSync(new URL(
+  "../data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json",
+  import.meta.url),"utf8"));
+ const envelope=proposeP5Adaptive31ShapeEnvelope({
+  ownerCorrectedReadback:corrected,firstRunDateUtc:"2026-11-24",
+  claimedTreatment:{
+   treatmentSeedHex:studySeed,
+   announcedCommitmentSha256:p5TreatmentCommitmentForSeed(studySeed),
+   claimedCommitmentObservedAtUtc:"2026-11-09T00:00:00.000Z"
+  }
+ });
+ const proposed=envelope.days[5]; // run6 is a genuine future ordinary-day SLOT
+ if(proposed.runDayIndex!==6||proposed.pairId!==null)
+  throw Error("TEST_EXPECTED_RUN6_ORDINARY");
+ const o=fixture();
+ const start6=Date.parse(proposed.startUtc);
+ const cal=o.cal as typeof o.cal &{
+  window_shape:string;active_duration_minutes:number
+ };
+ cal.run_day_index=6;
+ cal.scheduled_start_utc=new Date(start6);
+ cal.date_utc=proposed.dateUtc;
+ cal.window_shape="4h";
+ cal.active_duration_minutes=240;
+ const selectedAt=fmt(start6-26*3_600_000);
+ for(const row of o.draw)row.selected_at_utc=selectedAt;
+ o.scope.runDayIndex=6;
+ const day={
+  runDayIndex:6,scheduledStartUtc:cal.scheduled_start_utc,
+  frozenDrawSeed:cal.frozen_draw_seed,drawType:"NEW_TEMPLATE" as const,
+  anchorIcao:cal.anchor_icao,slotRegions:cal.slot_regions,
+  pairAirportSet:null,calendarHash:cal.calendar_hash,
+  configHash:cal.config_hash,frameHash:cal.frame_hash
+ };
+ o.scope.expectedEarlyDrawSha256=verifyPreparedDailyDraw(day,o.draw).stateHash;
+ o.scope.reviewedOrdinaryDayEnvelope={
+  envelope,independentlyReviewedShapeEnvelopeSha256:envelope.shapeEnvelopeSha256
+ };
+ o.scope.templates=[];
+ for(const [slot] of list)for(const [horizon,min,label] of horizons){
+  const cutoff=start6-min*60_000,request=cutoff-600_000;
+  o.scope.templates.push({
+   runDayIndex:6,budgetDayUtc:proposed.dateUtc,
+   physicalChargeDayUtc:fmt(request).slice(0,10),
+   slot,horizon,providerQueryDirection:"Departure",
+   serviceWindowStartUtc:fmt(start6),
+   serviceWindowEndUtc:fmt(start6+4*3_600_000),
+   earliestPlannedCutoffUtc:fmt(cutoff),
+   scheduledRequestUtc:fmt(request),
+   maxResponseAndPersistSeconds:120,
+   maxAttempts:1,apiUnitsPerAttempt:2,
+   queryKey:"p5_day6_"+slot+"_"+label
+  });
+ }
+ return {o,envelope,proposed,now:fmt(start6-25*3_600_000)};
+}
+
+describe("Phase5 shape envelope vs four REAL-scope database rows, no release",()=>{
+ it("within one restricted read-only PG mock snapshot binds ordinary run6 four rows and approved shape",async()=>{
+  const {o,envelope,now}=syntheticSixthDayReadback();
+  const pg=fake(o,{now});
+  const result=await readCommittedP5DayCandidateGrid(pg.pool,o.scope);
+  const b=result.ordinaryDayEnvelopeReadback;
+  expect(b?.status).toBe(
+   "ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE"
+  );
+  expect(b?.withinCheckedReadOnlyTransaction).toBe(true);
+  expect(b?.candidate.runDayIndex).toBe(6);
+  expect(b?.candidate.sourceShapeEnvelopeSha256).toBe(envelope.shapeEnvelopeSha256);
+  expect(b?.candidate.selectedIcaos).toEqual({
+   HUB:"WSSS",MID_A:"OMAA",MID_B:"SKBO",REGIONAL:"KGPT"
+  });
+  expect(b?.candidate.submittedDrawStateSha256).toBe(o.scope.expectedEarlyDrawSha256);
+  expect(b?.candidate.realRestrictedPostgresReadbackAuthenticated).toBe(false);
+  expect(b?.priorDaySiteWashoutVerified).toBe(false);
+  expect(b?.realFlightSourceVerified).toBe(false);
+  expect(b?.physicalChargeDayBudgetsVerified).toBe(false);
+  expect(b?.phase5FreezePassed).toBe(false);
+  expect(b?.phase6Go).toBe(false);
+  expect(result.selectedDayCandidateGrid.acquisitions).toHaveLength(12);
+  expect(result.providerCalls).toBe(0);
+  expect(result.databaseWrites).toBe(0);
+  expect(pg.sql.at(-1)).toBe("COMMIT");
+  expect(pg.sql.filter(q=>q.includes("FROM clean.adb_sampling_draw"))).toHaveLength(1);
+  expect(pg.sql.some(q=>/INSERT|UPDATE|DELETE|TRUNCATE/i.test(q))).toBe(false);
+ });
+ it("fails closed on altered persisted calendar treatment shape before materializing source",async()=>{
+  const {o,now}=syntheticSixthDayReadback();
+  const cal=o.cal as typeof o.cal&{window_shape:string;active_duration_minutes:number};
+  cal.window_shape="2x2h";
+  const pg=fake(o,{now});
+  await expect(readCommittedP5DayCandidateGrid(pg.pool,o.scope))
+   .rejects.toThrow("PERSISTED_ORDINARY_4H_EXPOSURE_MISMATCH");
+  expect(pg.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("rejects forged reviewed envelope SHA before opening a PostgreSQL session",async()=>{
+  const {o}=syntheticSixthDayReadback();
+  o.scope.reviewedOrdinaryDayEnvelope!.independentlyReviewedShapeEnvelopeSha256="!";
+  let connects=0;
+  await expect(readCommittedP5DayCandidateGrid({
+   async connect(){connects++;throw Error("should never connect");}
+  } as any,o.scope)).rejects.toThrow("UNPINNED_31_DAY_SHAPE_CONTRACT");
+  expect(connects).toBe(0);
+ });
+ it("rejects a mismatched day-index/slot against the reviewed whole 31-day envelope",async()=>{
+  const {o,now}=syntheticSixthDayReadback();
+  o.scope.reviewedOrdinaryDayEnvelope!.envelope.days[5].startUtc=
+   "2026-11-01T00:00:00.000Z";
+  const pg=fake(o,{now});
+  await expect(readCommittedP5DayCandidateGrid(pg.pool,o.scope))
+   .rejects.toThrow("UNREVIEWED_OR_TAMPERED_31_SHAPE");
+  expect(pg.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("preserves pre-existing readback path when no new reviewed 31-day envelope is supplied",async()=>{
+  const f=fixture(),pg=fake(f);
+  const result=await readCommittedP5DayCandidateGrid(pg.pool,f.scope);
+  expect(result.ordinaryDayEnvelopeReadback).toBeUndefined();
+  expect(result.selectedDayCandidateGrid.acquisitions).toHaveLength(12);
+ });
+ it("refuses fake late or future-dated selected rows and rolls back all candidate readback",async()=>{
+  const {o,now,proposed}=syntheticSixthDayReadback();
+  const at=fmt(Date.parse(proposed.startUtc)-(24*60+45)*60_000);
+  for(const row of o.draw)row.selected_at_utc=at;
+  const pg=fake(o,{now});
+  await expect(readCommittedP5DayCandidateGrid(pg.pool,o.scope))
+   .rejects.toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+  expect(pg.sql.at(-1)).toBe("ROLLBACK");
  });
 });
