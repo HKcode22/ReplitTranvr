@@ -8,10 +8,14 @@ import {Pool} from "pg";
 import {createHash} from "node:crypto";
 import {commitEarlyPhase5Draw} from
  "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
-import {readCommittedP5DayCandidateGrid} from
+import {readCommittedP5DayCandidateGrid,
+ type P5CommittedDayReadonlyScope} from
  "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
-import {planStage8P5DayV0079Proposals} from
- "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
+import {planP5Stage8FromCommittedDayReadback,
+ type P5Stage8SourceReviewWithoutCopiedDraw}
+ from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
+import {prepareP5ReviewedSourceDayFromSavedDraw}
+ from "../server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39";
 import {commitStage9P5V0082AtomicSegmentedDay,
  type P5V0082AtomicDayReview} from
  "../server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
@@ -40,6 +44,8 @@ const CATS=[
 ] as const;
 suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  let admin:Pool,writer:Pool,review:P5V0082AtomicDayReview;
+ let readScope:P5CommittedDayReadonlyScope;
+ let sourceReview:P5Stage8SourceReviewWithoutCopiedDraw;
  let selectedAt:string,serviceStart:string;
  const manifest=sha("e"),range=sha("8"),budgetHash=sha("6"),gridHash=sha("7");
  beforeAll(async()=>{
@@ -148,7 +154,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    windowShape:"2x2h" as const,verifiedProviderMaxRangeMinutes:60,
    reviewedProviderRangeEvidenceSha256:range
   };
-  const saved=await readCommittedP5DayCandidateGrid(admin,{
+  readScope={
    expectedManifestSha256:manifest,expectedCalendarSha256:sha("a"),
    expectedConfigSha256:sha("b"),expectedFrameSha256:sha("c"),
    expectedProviderContractSha256:sha("f"),
@@ -156,18 +162,11 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    expectedRestrictedReaderRole:"postgres",
    runDayIndex:1,templates,reviewedRefreshTiming:timing,
    reviewedSegmentedSource:segmented
-  });
+  };
+  const saved=await readCommittedP5DayCandidateGrid(admin,readScope);
   expect(saved.selectedDayCandidateGrid.acquisitionCount).toBe(96);
-  const proposal=planStage8P5DayV0079Proposals({
-   stage7:saved,day:{
-    runDayIndex:1,scheduledStartUtc:new Date(serviceStart),
-    frozenDrawSeed:"ci-v0082-seed",drawType:"NEW_TEMPLATE",
-    anchorIcao:"WSSS",slotRegions:{
-     HUB:"ASIA",MID_A:"MIDDLE_EAST",
-     MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"},
-    pairAirportSet:null,calendarHash:sha("a"),configHash:sha("b"),
-    frameHash:sha("c")
-   },savedEarlyDrawRows:draw,
+  expect(saved.committedDayAndDrawProof?.drawRows).toHaveLength(4);
+  sourceReview={
    manifestSha256:manifest,calendarSha256:sha("a"),configSha256:sha("b"),
    frameSha256:sha("c"),providerContractSha256:sha("f"),
    reviewedReleaseSha256:sha("1"),rightsReviewSha256:sha("2"),
@@ -181,7 +180,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     chargeDayUtc:d.day,dailyApiCeiling:1900,
     otherCategoriesReserved:0,existingSourceReserved:0
    }))
-  });
+  };
+  const proposal=planP5Stage8FromCommittedDayReadback(saved,sourceReview);
   expect(proposal.sourceQueryCount).toBe(96);
   expect(proposal.sourcePartitionPins).toHaveLength(96);
   review={
@@ -295,6 +295,23 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    .rejects.toThrow("ALTERED_V3_PROPOSAL_OR_SOURCE_DIGEST");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
+ it("refuses an externally unreviewed dynamic query after same-snapshot Stage7; zero writes",async()=>{
+  const {proposal:unusedProposal,...reviewPins}=review;
+  void unusedProposal;
+  await expect(prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
+   readScope,sourceReview,stage9Review:{
+    ...reviewPins,expectedProposalSha256:sha("0")
+   }
+  })).rejects.toThrow("DYNAMIC_DAY_PROPOSAL_NOT_EXTERNALLY_REVIEWED");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  await expect(prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
+   readScope,sourceReview:{
+    ...sourceReview,rightsReviewSha256:sha("0")
+   },
+   stage9Review:reviewPins
+  })).rejects.toThrow("STAGES_7_8_9_SOURCE_CALENDAR_OR_RIGHTS_DRIFT");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+ });
  it("rejects budget UPDATE escalation on an otherwise scoped two-table writer",async()=>{
   await admin.query(
    "GRANT UPDATE ON clean.phase5_fids_cycle_budget_v39 TO "+USER
@@ -335,7 +352,11 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   await admin.query("DROP FUNCTION clean.ci_v0082_bomb()");
  });
  it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
-  const result=await commitStage9P5V0082AtomicSegmentedDay(writer,review);
+  const {proposal:unusedProposal,...reviewPins}=review;
+  void unusedProposal;
+  const result=await prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
+   readScope,sourceReview,stage9Review:reviewPins
+  });
   expect(result.preparedQueryRows).toBe(96);
   expect(result.preparedPartitionRows).toBe(96);
   expect(result.databaseInserts).toBe(192);

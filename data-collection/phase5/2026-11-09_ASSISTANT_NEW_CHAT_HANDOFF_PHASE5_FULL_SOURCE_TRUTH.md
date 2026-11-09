@@ -1,5 +1,19 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Latest confirmed Nov 9 engineering continuation — read this BEFORE the original authoring-SHA below
+
+**Latest observed main immediately before this pending PR:** `e311ffaf31dd702b296fecb907aa683ff20d1d7b`; full postmerge safety workflow [#42635787435](https://github.com/HKcode22/ReplitTranvr/actions/runs/42635787435) **SUCCESS**. Older historical SHA `98c1e1c...` below is the authoring snapshot, not current main. Recheck live GitHub before any release or edits.
+
+**Completed + do not redo:** [PR #520](https://github.com/HKcode22/ReplitTranvr/pull/520) removed circular Day1 post-GO rows from prelaunch `blockers`; [PR #521](https://github.com/HKcode22/ReplitTranvr/pull/521) reused Phase4 G5A conditional service identity in the restricted Stage14 PRE writer under a separate independently reviewed schedule-revision amendment, never pretending physical operating-leg certification (8/8 checks success); [PR #522](https://github.com/HKcode22/ReplitTranvr/pull/522) connected existing six UTC GitHub clock slots to an **INERT unless separately authorized** signed Phase6 early four-airport selection owner, 5/5 PR-head and postmerge CI SUCCESS. [Source reuse checkpoint](2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md), [six-slot selection checkpoint](2026-11-09_GITHUB_SIX_SLOT_EARLY_AIRPORT_DRAW_OWNER_DEFAULT_INERT.md), [seven exact remaining Phase5 tasks](2026-11-09_WHAT_THE_FLIGHT_RECORDS_MEAN_AND_PHASE5_EXACT_FINISH_LIST.md).
+
+**Newest actual integration under review when this handoff was edited:** [Stage7→Stage8→Stage9 same-snapshot source-day preparation](2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md) adds a verified readback of the **same persisted calendar day and four airport rows** to Stage7 and passes them, not manual airport copies, into Stage8. One reviewed orchestrator compares externally pinned dynamic proposal SHA/source/rights/budgets then invokes existing restricted V0082 serializable Stage9 query+exact-partition INSERT. The existing actual disposable PG16 integration is changed to test linked 96 query+96 partition prepared rows (no provider). **Do not merge without exact-head CI success.** It is staged library engineering, not a newly authorized live scheduled SOURCE dispatcher or paid GET. Read README + current PR/Actions and correct this provisional status on merge.
+
+**Last genuine owner live production scope** 2026-11-09T13:42:38.603Z: 16/16 scoped new Phase5/6 tables present, all counts 0; 7 NOLOGIN groups; Phase6 disabled. This snapshot does NOT erase historical Phase2/3/4 genuine flight records. Do not reinstall SQL roles or rerun old Nov6 9 PRE/3 POST and Phase3 Alert pilots.
+
+**Actual still missing:** independently adopted first-cycle endpoint and lawful ML/use/expiry record, signed **real future 31-day calendar** and real seven-category UTC source budgets, future per-day independent dynamic source review, actual GH PREPARE and SOURCE schedule with budgeted real GET/originals, true linked PRE T24/witness/T6/T90/POST receiver/STOP, Day1 quality decision, one independent Phase5 scientific FREEZE and separate Phase6 paid GO. These are **NOT** 31 more Phase5 collection days. The existing manual one-paid FIDS source workflow remains manual; green CI not actual source provider/flight evidence. **HOLD FREEZE / NO paid Phase6 GO.**
+
+---
+
 **Checkpoint date:** 2026-11-09 Pacific / UTC. **Purpose:** allow a different ChatGPT session or engineer to resume the project from GitHub without asking the owner to repeat project history, without repeating installations or paid pilots, and without mistaking offline green CI for scientific release. **This file is a continuity index, not a new scientific approval.**
 
 **Repository:** https://github.com/HKcode22/ReplitTranvr  

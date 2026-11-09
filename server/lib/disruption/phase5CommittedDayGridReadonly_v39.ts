@@ -15,7 +15,8 @@ import {
  P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
  type P5DynamicDayGridInput,type P5DynamicDayGridResult,
 } from "./phase5DynamicDaySourceGrid_v39";
-import type {PreparedDayForReadback,PreparedDrawRow}
+import {verifyPreparedDailyDraw,
+ type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
 import {
  inspectP5OrdinaryDayCandidateBinding,
@@ -104,6 +105,19 @@ export interface P5CommittedDayReadonlyResult {
   databaseWrites:0;
   providerCalls:0;
   selectedDayCandidateGrid:P5DynamicDayGridResult;
+  /**
+   * The exact day and four draw records returned by this SAME restricted
+   * REPEATABLE READ transaction. Stage8 may reuse them rather than query
+   * a different clock or accept independently copied airport identities.
+   * Optional for earlier test-only Stage7 representations; real Stage7
+   * always returns this proof.
+   */
+  committedDayAndDrawProof?:{
+   day:PreparedDayForReadback;
+   drawRows:PreparedDrawRow[];
+   drawStateSha256:string;
+   verifiedInsideSameReadOnlyTransaction:true;
+  };
   /** Scoped DB snapshot + submitted four-row shape match, NOT paid release. */
   ordinaryDayEnvelopeReadback?:{
    schema:"v39.phase5.restricted-db-ordinary-day-envelope-readback.v1";
@@ -230,6 +244,10 @@ export async function readCommittedP5DayCandidateGrid(
     joinedEarlierDays:prior.rows as P5JoinedPriorDayRow[]
    });
   }
+  const drawProof=verifyPreparedDailyDraw(
+    day,draws.rows as PreparedDrawRow[]);
+  if(drawProof.stateHash!==scope.expectedEarlyDrawSha256)
+    hold("INDEPENDENT_FOUR_SLOT_SELECTION_SHA_DRIFT");
   const candidates=materializeP5DynamicDaySourceGrid({
     schema:scope.reviewedSegmentedSource?
       P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
@@ -249,6 +267,8 @@ export async function readCommittedP5DayCandidateGrid(
   });
   // Staged source-query prep must finish before first T24 GET; never
   // interpret a post-cutoff DB read as an earlier source prearm.
+  if(candidates.committedDrawSha256!==drawProof.stateHash)
+    hold("CANDIDATE_SELECTION_NOT_SAME_AS_READBACK");
   const soonest=Math.min(...candidates.acquisitions.map(x=>
     new Date(x.scheduledRequestUtc).getTime()));
   if(clock.getTime()>=soonest)hold("EARLIEST_SOURCE_REQUEST_ALREADY_DUE");
@@ -261,6 +281,11 @@ export async function readCommittedP5DayCandidateGrid(
     dbClockAtReadUtc:clock.toISOString(),
     restrictedReaderRoleVerified:true,databaseReadOnlySnapshot:true,
     databaseWrites:0,providerCalls:0,selectedDayCandidateGrid:candidates,
+    committedDayAndDrawProof:{
+     day,drawRows:draws.rows as PreparedDrawRow[],
+     drawStateSha256:drawProof.stateHash,
+     verifiedInsideSameReadOnlyTransaction:true
+    },
     ...(ordinaryCandidate?{ordinaryDayEnvelopeReadback:{
      schema:"v39.phase5.restricted-db-ordinary-day-envelope-readback.v1" as const,
      status:"ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE" as const,

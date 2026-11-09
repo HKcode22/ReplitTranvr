@@ -15,7 +15,8 @@ import {
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {P5CommittedDayReadonlyResult}
  from "./phase5CommittedDayGridReadonly_v39";
-import type {PreparedDayForReadback,PreparedDrawRow}
+import {verifyPreparedDailyDraw,
+ type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
 
 const HASH=/^[a-f0-9]{64}$/,ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
@@ -279,4 +280,44 @@ export function planStage8P5DayV0079Proposals(
    independentlyReviewedSourceRights:false,providerOriginalCommitted:false,
    flightLevelPreCertified:false,phase5FreezePassed:false,phase6Go:false
  };
+}
+
+
+/**
+ * Genuine Stage7 -> Stage8 pipeline connector. Stage7 supplies the *same*
+ * calendar and 4 saved early-draw rows it read from a single authenticated
+ * PG REPEATABLE READ snapshot. A caller cannot replace either with an
+ * unrelated 4-airport fixture while keeping a valid Stage7 candidate hash.
+ *
+ * The independent reviewed source-range, timezones, physical UTC day/cycle
+ * budgets, exact Stage9 writer review and rights are still required. This
+ * is an unsigned proposal only; Stage9 rechecks real SQL under SERIALIZABLE.
+ */
+export type P5Stage8SourceReviewWithoutCopiedDraw=
+ Omit<Stage8DayProposalInput,"stage7"|"day"|"savedEarlyDrawRows">;
+
+export function planP5Stage8FromCommittedDayReadback(
+ stage7:P5CommittedDayReadonlyResult,
+ review:P5Stage8SourceReviewWithoutCopiedDraw
+):Stage8DayProposalResult{
+ const proof=stage7?.committedDayAndDrawProof;
+ if(!proof||proof.verifiedInsideSameReadOnlyTransaction!==true||
+    !proof.day||!Array.isArray(proof.drawRows)||
+    proof.drawRows.length!==4||
+    stage7.restrictedReaderRoleVerified!==true||
+    stage7.databaseReadOnlySnapshot!==true||
+    stage7.databaseWrites!==0||stage7.providerCalls!==0)
+  refuse("NO_SAME_DB_SNAPSHOT_DAY_DRAW_PROOF");
+ const actual=verifyPreparedDailyDraw(proof.day,proof.drawRows);
+ if(actual.stateHash!==proof.drawStateSha256||
+    actual.stateHash!==stage7.selectedDayCandidateGrid?.committedDrawSha256||
+    stage7.selectedDayCandidateGrid?.runDayIndex!==proof.day.runDayIndex||
+    proof.day.calendarHash!==review.calendarSha256||
+    proof.day.configHash!==review.configSha256||
+    proof.day.frameHash!==review.frameSha256)
+  refuse("SAVED_DAY_DRAW_OR_FROZEN_SCOPE_CHANGED");
+ return planStage8P5DayV0079Proposals({
+  ...review,stage7,
+  day:proof.day,savedEarlyDrawRows:proof.drawRows
+ });
 }

@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
+      - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
+      - 'data-collection/phase5/2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md'
       - 'tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0082-atomic-segmented-day-pg16-no-provider.yml'
       - 'data-collection/phase5/2026-11-08_V0082_ATOMIC_SEGMENTED_DAY_PREPARE_CHECKPOINT.md'
@@ -11,6 +16,11 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
+      - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
+      - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
+      - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
+      - 'data-collection/phase5/2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md'
       - 'tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0082-atomic-segmented-day-pg16-no-provider.yml'
 permissions:
