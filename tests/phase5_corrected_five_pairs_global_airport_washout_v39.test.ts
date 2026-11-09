@@ -70,13 +70,13 @@ function input(explicit?:Record<string,string>):FrozenCalendarDesignInput{
  };
 }
 describe("actual corrected five-pair airport reuse vs frozen f.8 end-to-start washout",()=>{
- it("detects real SKBO duplication across pair 4 and 5: second week has only 22h",()=>{
+ it("detects real SKBO duplication across pair 4 and 5: first week has only 22h",()=>{
   const p=input();
   expect(p.pairAirportSets["pair-4"].HUB.icao).toBe("SKBO");
   expect(p.pairAirportSets["pair-5"].HUB.icao).toBe("SKBO");
   const r=solveV39FourAnchorExploratoryDraft(p);
   expect(r.status).toBe("UNSAT");
-  expect(r.reason).toContain("run11:SKBO:reused-airport-END-to-START-washout<24h-after-run10");
+  expect(r.reason).toContain("run5:SKBO:reused-airport-END-to-START-washout<24h-after-run4");
   expect(r.days).toEqual([]);
   expect(r.calendarHash).toBeNull();
   expect(r.operationalPhase6StartAuthorized).toBe(false);
@@ -110,6 +110,6 @@ describe("actual corrected five-pair airport reuse vs frozen f.8 end-to-start wa
  it("full default date-map still fails 22h SKBO even when every date is explicitly listed",()=>{
   const p=input(dateMap(false)),r=solveV39FourAnchorExploratoryDraft(p);
   expect(r.status).toBe("UNSAT");
-  expect(r.reason).toContain("run11:SKBO:reused-airport-END-to-START-washout<24h-after-run10");
+  expect(r.reason).toContain("run5:SKBO:reused-airport-END-to-START-washout<24h-after-run4");
  });
 });
