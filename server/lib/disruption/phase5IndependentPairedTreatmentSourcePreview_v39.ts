@@ -210,9 +210,11 @@ export function previewP5IndependentTreatmentActiveSegments(
  const ranked=templates.map(t=>({
   ...t,rank:hashString(claim.treatmentSeedHex+"|"+t.canonicalId+"|"+t.templateHash)
  })).sort((a,b)=>a.rank.localeCompare(b.rank)||a.canonicalId.localeCompare(b.canonicalId));
- const period1Roles=new Map(ranked.map((x,i)=>[
-  x.pairId,(i<3?"control":"alternative") as "control"|"alternative"
- ]));
+ const period1Roles=new Map<string,"control"|"alternative">(
+  ranked.map((x,i):[string,"control"|"alternative"]=>[
+   x.pairId,i<3?"control":"alternative"
+  ])
+ );
  const assignments:Array<{
   pairId:string;period1Role:"control"|"alternative";
   period2Role:"control"|"alternative";
