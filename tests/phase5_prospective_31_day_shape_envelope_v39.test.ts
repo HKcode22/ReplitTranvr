@@ -1,7 +1,8 @@
 import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
 import {
- proposeP5Adaptive31ShapeEnvelope
+ proposeP5Adaptive31ShapeEnvelope,
+ inspectP5OrdinaryDayCandidateBinding
 } from "../server/lib/disruption/phase5Prospective31DayShapeEnvelope_v39";
 import {p5TreatmentCommitmentForSeed}
  from "../server/lib/disruption/phase5IndependentPairedTreatmentSourcePreview_v39";
@@ -147,5 +148,111 @@ describe("31-day real sampled pair shapes + 21 NULL prospective adaptive airport
   bad.claimedTreatment.announcedCommitmentSha256="e".repeat(64);
   expect(()=>proposeP5Adaptive31ShapeEnvelope(bad))
    .toThrow(/REFUSED_P5_TREATMENT_SOURCE_PREVIEW/);
+ });
+});
+
+
+const signedCal="a".repeat(64);
+function ordinaryReadbackFixture(){
+ const envelope=env();
+ const row=envelope.days[5]; // run 6: ordinary and deliberately unselected
+ if(row.pairId!==null)throw Error("TEST_EXPECTED_ORDINARY_DAY_SIX");
+ const selectedAt=new Date(Date.parse(row.startUtc)-25*3600_000).toISOString();
+ const regions={
+  HUB:"NORTH_AMERICA",MID_A:"EUROPE",
+  MID_B:"EUROPE",REGIONAL:"NORTH_AMERICA"
+ };
+ const airports={
+  HUB:"KJFK",MID_A:"EGLL",MID_B:"EDDF",REGIONAL:"KGPT"
+ };
+ const day={
+  runDayIndex:6,scheduledStartUtc:new Date(row.startUtc),
+  frozenDrawSeed:"ci-synthetic-do-not-freeze",drawType:"NEW_TEMPLATE" as const,
+  anchorIcao:airports.HUB,slotRegions:regions,pairAirportSet:null,
+  calendarHash:signedCal,configHash:"b".repeat(64),frameHash:"c".repeat(64)
+ };
+ const rows=(["HUB","MID_A","MID_B","REGIONAL"] as const).map(slot=>({
+  slot_id:slot,target_region:regions[slot],
+  draw_type:day.drawType,selected_icao:airports[slot],
+  frozen_draw_seed:day.frozenDrawSeed,
+  selected_at_utc:selectedAt,
+  adaptive_state_hash:slot==="REGIONAL"?"d".repeat(64):null,
+  probability_vector:slot==="REGIONAL"?[
+   {icao:"KGPT",probability:1,drawScore:1}
+  ]:null,
+  airport_layer_design_probability:slot==="REGIONAL"?1:null
+ }));
+ return {
+  envelope,preparedDay:day,submittedDrawRows:rows,
+  independentlyReviewedShapeEnvelopeSha256:envelope.shapeEnvelopeSha256,
+  independentlyReviewedSignedCalendarSha256:signedCal
+ };
+}
+describe("shape-envelope ordinary-day binding is non-authorizing, never a future-draw oracle",()=>{
+ it("binds only four proposed saved rows, known day 6 date/clock and immutable envelope",()=>{
+  const x=ordinaryReadbackFixture();
+  const r=inspectP5OrdinaryDayCandidateBinding(x);
+  expect(r.status).toBe("FOUR_SUBMITTED_EARLY_DRAW_ROWS_MATCH_SHAPE_NOT_DB_CUSTODY");
+  expect(r.runDayIndex).toBe(6);
+  expect(r.selectedIcaos).toEqual({
+   HUB:"KJFK",MID_A:"EGLL",MID_B:"EDDF",REGIONAL:"KGPT"
+  });
+  expect(r.candidateBindingSha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(r.sourceShapeEnvelopeSha256).toBe(x.envelope.shapeEnvelopeSha256);
+  expect(r.submittedDrawStateSha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(r.realRestrictedPostgresReadbackAuthenticated).toBe(false);
+  expect(r.fullPriorDaySiteWashoutVerified).toBe(false);
+  expect(r.actualSourceAndPerFlightTVerified).toBe(false);
+  expect(r.sevenCategoryChargeDayBudgetVerified).toBe(false);
+  expect(r.phase5ScientificFreezePassed).toBe(false);
+  expect(r.phase6PaidGo).toBe(false);
+  expect(r.providerCalls).toBe(0);
+  expect(r.databaseWrites).toBe(0);
+ });
+ it("refuses a modified day slot/date, forged envelope digest or unreviewed calendar SHA",()=>{
+  const x=ordinaryReadbackFixture();
+  x.preparedDay.scheduledStartUtc=new Date(
+   x.preparedDay.scheduledStartUtc.getTime()+3600000);
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(x))
+   .toThrow(/ADAPTIVE_DAY_OR_EXPOSURE_REDRAW/);
+  const y=ordinaryReadbackFixture();
+  y.envelope.days[5].endUtc="2027-01-01T00:00:00.000Z";
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(y))
+   .toThrow(/UNREVIEWED_OR_TAMPERED_31_SHAPE/);
+  const z=ordinaryReadbackFixture();
+  z.preparedDay.calendarHash="f".repeat(64);
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(z))
+   .toThrow(/SIGNED_DAY_OR_CALENDAR_NOT_MATCHED/);
+ });
+ it("refuses pretending known pair day 1 is an ordinary adaptive draw",()=>{
+  const x=ordinaryReadbackFixture();
+  x.preparedDay.runDayIndex=1;
+  x.preparedDay.scheduledStartUtc=new Date(x.envelope.days[0].startUtc);
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(x))
+   .toThrow(/ADAPTIVE_DAY_OR_EXPOSURE_REDRAW/);
+ });
+ it("refuses missing four rows, missing regional probability or late/out-of-range DB times",()=>{
+  const a=ordinaryReadbackFixture();
+  a.submittedDrawRows.pop();
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(a))
+   .toThrow(/MISSING_OR_DUPLICATED_SLOTS/);
+  const b=ordinaryReadbackFixture();
+  b.submittedDrawRows[3].airport_layer_design_probability=null;
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(b))
+   .toThrow(/REGIONAL_PROBABILITY_MISSING/);
+  const c=ordinaryReadbackFixture();
+  const close=Date.parse(c.envelope.days[5].startUtc)-
+   P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
+  for(const row of c.submittedDrawRows)
+   row.selected_at_utc=new Date(close).toISOString();
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(c))
+   .toThrow(/DRAW_NOT_WITHIN_REAL_PROSPECTIVE_EARLY_WINDOW|DRAW_TOO_LATE/);
+  const d=ordinaryReadbackFixture();
+  const early=Date.parse(d.envelope.days[5].startUtc)-
+   P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS-1;
+  for(const row of d.submittedDrawRows)
+   row.selected_at_utc=new Date(early).toISOString();
+  expect(()=>inspectP5OrdinaryDayCandidateBinding(d))
+   .toThrow(/DRAW_NOT_WITHIN_REAL_PROSPECTIVE_EARLY_WINDOW|DRAW_TOO_EARLY/);
  });
 });
