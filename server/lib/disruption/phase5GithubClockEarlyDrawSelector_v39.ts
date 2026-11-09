@@ -18,7 +18,7 @@ const DAY=/^\d{4}-\d{2}-\d{2}$/;
 const REFUSE=(why:string):never=>{throw Error("REFUSED_P5_GITHUB_EARLY_DRAW_SELECT_"+why);};
 const utcMs=(v:unknown):number=>{
  const d=v instanceof Date?v:typeof v==="string"?new Date(v):null;
- if(!d||!Number.isFinite(d.getTime()))REFUSE("INVALID_CALENDAR_OR_DATABASE_UTC");
+ if(d===null||!Number.isFinite(d.getTime()))return REFUSE("INVALID_CALENDAR_OR_DATABASE_UTC");
  return d.getTime();
 };
 const readInt=(v:unknown):number=>{
