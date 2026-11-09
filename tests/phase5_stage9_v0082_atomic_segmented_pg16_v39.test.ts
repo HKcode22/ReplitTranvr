@@ -295,6 +295,23 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    .rejects.toThrow("ALTERED_V3_PROPOSAL_OR_SOURCE_DIGEST");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
+ it("refuses an externally unreviewed dynamic query after same-snapshot Stage7; zero writes",async()=>{
+  const {proposal:unusedProposal,...reviewPins}=review;
+  void unusedProposal;
+  await expect(prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
+   readScope,sourceReview,stage9Review:{
+    ...reviewPins,expectedProposalSha256:sha("0")
+   }
+  })).rejects.toThrow("DYNAMIC_DAY_PROPOSAL_NOT_EXTERNALLY_REVIEWED");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  await expect(prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
+   readScope,sourceReview:{
+    ...sourceReview,rightsReviewSha256:sha("0")
+   },
+   stage9Review:reviewPins
+  })).rejects.toThrow("STAGES_7_8_9_SOURCE_CALENDAR_OR_RIGHTS_DRIFT");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+ });
  it("rejects budget UPDATE escalation on an otherwise scoped two-table writer",async()=>{
   await admin.query(
    "GRANT UPDATE ON clean.phase5_fids_cycle_budget_v39 TO "+USER
