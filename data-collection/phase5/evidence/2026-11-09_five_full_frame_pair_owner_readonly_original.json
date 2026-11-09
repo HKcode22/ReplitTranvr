@@ -1,0 +1,410 @@
+{
+  "schema": "phase5.full-b0062-five-pair-selection-review.v1",
+  "status": "FIVE_FULL_FRAME_PAIR_CANDIDATE_TEMPLATES_ONLY_NOT_FROZEN",
+  "frozenFrameVersion": "frame_02ec6e78ba1fe3c2",
+  "frozenFrameHash": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+  "trafficReferenceHash": "8dd10dd0b5e0e9f493ad823a37f0852b6882fef49f45ee7965af557408264424",
+  "regionMappingHash": "4073cc05e958bf98b6501e418198305f80e7d17892318f6773d9e0aac9d3a764",
+  "tierHash": "18cd871421220e72cd96044ae790fc95bdae1d69b9f9e43ac35566fd786eb7dc",
+  "sourceShortlistHash": "f960476cce18b0cb868440fc10c9815a3f95837da8b74a9a2f645ae659d22479",
+  "independentAirportSelectionSeedHex": "71c2e5b845c8fce696c5371e05c3b5f06a43e2378a4a308867eb9a0a5f4be1e0",
+  "airportSeedCommitmentSha256": "c5e772c91a9e853f9db83378f4323a9670938fb9ec2a16ea4978ced60528703b",
+  "fourHubAnchorRotationSeed": "0490ed38116b3951b2cb5be213e3266938bcb5dbf18979b5aca4cf9d29b45a0d",
+  "calendarRegionSeed": "20a8aa4420d301673e7ff2fe472387578cf943772b5ada9e5208facd8984e182",
+  "scannedFullyQualifiedMidRegionalAirports": 1013,
+  "strictTierRegionCounts": [
+    {
+      "tier": "MID",
+      "region": "Asia-Pacific",
+      "originalB0062Eligible": 53,
+      "strictFeedQualified": 53
+    },
+    {
+      "tier": "MID",
+      "region": "Europe",
+      "originalB0062Eligible": 149,
+      "strictFeedQualified": 149
+    },
+    {
+      "tier": "MID",
+      "region": "Gulf/Africa",
+      "originalB0062Eligible": 15,
+      "strictFeedQualified": 15
+    },
+    {
+      "tier": "MID",
+      "region": "North America",
+      "originalB0062Eligible": 181,
+      "strictFeedQualified": 181
+    },
+    {
+      "tier": "MID",
+      "region": "Oceania",
+      "originalB0062Eligible": 19,
+      "strictFeedQualified": 19
+    },
+    {
+      "tier": "MID",
+      "region": "South America",
+      "originalB0062Eligible": 10,
+      "strictFeedQualified": 10
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "Asia-Pacific",
+      "originalB0062Eligible": 80,
+      "strictFeedQualified": 79
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "Europe",
+      "originalB0062Eligible": 167,
+      "strictFeedQualified": 167
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "Gulf/Africa",
+      "originalB0062Eligible": 28,
+      "strictFeedQualified": 28
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "North America",
+      "originalB0062Eligible": 251,
+      "strictFeedQualified": 251
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "Oceania",
+      "originalB0062Eligible": 27,
+      "strictFeedQualified": 27
+    },
+    {
+      "tier": "REGIONAL",
+      "region": "South America",
+      "originalB0062Eligible": 34,
+      "strictFeedQualified": 34
+    }
+  ],
+  "firstFiveSlotRegions": [
+    {
+      "pairId": "pair-1",
+      "HUB": {
+        "icao": "OMAA",
+        "region": "Gulf/Africa"
+      },
+      "MID_A": "Gulf/Africa",
+      "MID_B": "South America",
+      "REGIONAL": "North America"
+    },
+    {
+      "pairId": "pair-2",
+      "HUB": {
+        "icao": "WSSS",
+        "region": "Asia-Pacific"
+      },
+      "MID_A": "South America",
+      "MID_B": "North America",
+      "REGIONAL": "Europe"
+    },
+    {
+      "pairId": "pair-3",
+      "HUB": {
+        "icao": "YSSY",
+        "region": "Oceania"
+      },
+      "MID_A": "North America",
+      "MID_B": "Europe",
+      "REGIONAL": "Oceania"
+    },
+    {
+      "pairId": "pair-4",
+      "HUB": {
+        "icao": "SKBO",
+        "region": "South America"
+      },
+      "MID_A": "Europe",
+      "MID_B": "Oceania",
+      "REGIONAL": "Asia-Pacific"
+    },
+    {
+      "pairId": "pair-5",
+      "HUB": {
+        "icao": "SKBO",
+        "region": "South America"
+      },
+      "MID_A": "Oceania",
+      "MID_B": "Asia-Pacific",
+      "REGIONAL": "Gulf/Africa"
+    }
+  ],
+  "candidatePairAirportSets": [
+    {
+      "pairId": "pair-1",
+      "airports": {
+        "HUB": {
+          "icao": "OMAA",
+          "region": "Gulf/Africa"
+        },
+        "MID_A": {
+          "icao": "OMSJ",
+          "region": "Gulf/Africa",
+          "tier": "MID",
+          "frozenObservedDepartures": 44211,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 105,
+          "effectiveCarriers": 1.8650321023010428,
+          "intlShare": 0.9937345909389066,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        },
+        "MID_B": {
+          "icao": "SPJC",
+          "region": "South America",
+          "tier": "MID",
+          "frozenObservedDepartures": 26014,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 52,
+          "effectiveCarriers": 2.934971804064872,
+          "intlShare": 0.6597601291612208,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": false
+        },
+        "REGIONAL": {
+          "icao": "KDEC",
+          "region": "North America",
+          "tier": "REGIONAL",
+          "frozenObservedDepartures": 1553,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 5,
+          "effectiveCarriers": 1.6627234792829846,
+          "intlShare": 0.005795235028976175,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": false
+        }
+      },
+      "sourceFrameHashedSelection": true,
+      "templateOnlyBeforeTreatmentOrderRandomization": true
+    },
+    {
+      "pairId": "pair-2",
+      "airports": {
+        "HUB": {
+          "icao": "WSSS",
+          "region": "Asia-Pacific"
+        },
+        "MID_A": {
+          "icao": "SBFL",
+          "region": "South America",
+          "tier": "MID",
+          "frozenObservedDepartures": 17753,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 20,
+          "effectiveCarriers": 4.3061928513692544,
+          "intlShare": 0.22266659156198954,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        },
+        "MID_B": {
+          "icao": "TJSJ",
+          "region": "North America",
+          "tier": "MID",
+          "frozenObservedDepartures": 62814,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 63,
+          "effectiveCarriers": 10.76330073873128,
+          "intlShare": 0.9115006208806954,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": false
+        },
+        "REGIONAL": {
+          "icao": "LSZB",
+          "region": "Europe",
+          "tier": "REGIONAL",
+          "frozenObservedDepartures": 2891,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 10,
+          "effectiveCarriers": 16.713144725091475,
+          "intlShare": 0.6755447941888619,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": true
+        }
+      },
+      "sourceFrameHashedSelection": true,
+      "templateOnlyBeforeTreatmentOrderRandomization": true
+    },
+    {
+      "pairId": "pair-3",
+      "airports": {
+        "HUB": {
+          "icao": "YSSY",
+          "region": "Oceania"
+        },
+        "MID_A": {
+          "icao": "KTEB",
+          "region": "North America",
+          "tier": "MID",
+          "frozenObservedDepartures": 51029,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 166,
+          "effectiveCarriers": 8.354994298214661,
+          "intlShare": 0.11930470908698976,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": true
+        },
+        "MID_B": {
+          "icao": "LFQQ",
+          "region": "Europe",
+          "tier": "MID",
+          "frozenObservedDepartures": 7063,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 35,
+          "effectiveCarriers": 6.724340627483476,
+          "intlShare": 0.5895511822171882,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        },
+        "REGIONAL": {
+          "icao": "NZNP",
+          "region": "Oceania",
+          "tier": "REGIONAL",
+          "frozenObservedDepartures": 4696,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 7,
+          "effectiveCarriers": 1.4977264353261275,
+          "intlShare": 0,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        }
+      },
+      "sourceFrameHashedSelection": true,
+      "templateOnlyBeforeTreatmentOrderRandomization": true
+    },
+    {
+      "pairId": "pair-4",
+      "airports": {
+        "HUB": {
+          "icao": "SKBO",
+          "region": "South America"
+        },
+        "MID_A": {
+          "icao": "EBAW",
+          "region": "Europe",
+          "tier": "MID",
+          "frozenObservedDepartures": 7283,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 23,
+          "effectiveCarriers": 7.28572302461292,
+          "intlShare": 0.7360977619113003,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": true
+        },
+        "MID_B": {
+          "icao": "NZNS",
+          "region": "Oceania",
+          "tier": "MID",
+          "frozenObservedDepartures": 10121,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 4,
+          "effectiveCarriers": 1.5043200745073972,
+          "intlShare": 0,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        },
+        "REGIONAL": {
+          "icao": "RJNK",
+          "region": "Asia-Pacific",
+          "tier": "REGIONAL",
+          "frozenObservedDepartures": 4466,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 7,
+          "effectiveCarriers": 3.480664419347978,
+          "intlShare": 0.19637259292431705,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        }
+      },
+      "sourceFrameHashedSelection": true,
+      "templateOnlyBeforeTreatmentOrderRandomization": true
+    },
+    {
+      "pairId": "pair-5",
+      "airports": {
+        "HUB": {
+          "icao": "SKBO",
+          "region": "South America"
+        },
+        "MID_A": {
+          "icao": "YBUD",
+          "region": "Oceania",
+          "tier": "MID",
+          "frozenObservedDepartures": 4710,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 5,
+          "effectiveCarriers": 6.0876575633551395,
+          "intlShare": 0,
+          "feedSchedule": true,
+          "feedLive": false,
+          "feedAdsb": true
+        },
+        "MID_B": {
+          "icao": "RKTU",
+          "region": "Asia-Pacific",
+          "tier": "MID",
+          "frozenObservedDepartures": 15019,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 23,
+          "effectiveCarriers": 4.413161780191659,
+          "intlShare": 0.49870164458352756,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": true
+        },
+        "REGIONAL": {
+          "icao": "FAKM",
+          "region": "Gulf/Africa",
+          "tier": "REGIONAL",
+          "frozenObservedDepartures": 338,
+          "trafficMetricUnits": "resolved observed departures per fixed 365-day reference period",
+          "undirectedDegree": 2,
+          "effectiveCarriers": 1.504249651148041,
+          "intlShare": 0,
+          "feedSchedule": true,
+          "feedLive": true,
+          "feedAdsb": false
+        }
+      },
+      "sourceFrameHashedSelection": true,
+      "templateOnlyBeforeTreatmentOrderRandomization": true
+    }
+  ],
+  "selectedAirportIcaosSha256": "3dbcc18dd44bdbb7e5323766a9a6bfacacc0bb2e38e3ccce9aff442611738763",
+  "sampledWithoutTop48TrafficTruncation": true,
+  "boundToOriginalFiveHubStage2Gate2": false,
+  "withinCrossoverPairTwoPeriodsReplaySameFourAirports": true,
+  "crossoverAirportSetSigned": false,
+  "independentTreatmentOrderSeedSet": false,
+  "treatmentOrderRandomized": false,
+  "thirtyOneBatchDayCalendarSigned": false,
+  "providerFidsSourceReachabilityVerified": false,
+  "providerContentsRightsVerified": false,
+  "sevenRestChargeCategoriesBudgetVerified": false,
+  "scientificPhase5FreezePassed": false,
+  "phase6PaidGo": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "webhookPosts": 0,
+  "observedUtc": "2026-11-09T03:29:33.421Z"
+}
