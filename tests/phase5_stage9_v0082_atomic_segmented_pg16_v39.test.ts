@@ -18,6 +18,11 @@ import {prepareP5ReviewedSourceDayFromSavedDraw}
  from "../server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39";
 import {draftP5OneGetFromActualPreparedSource}
  from "../server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39";
+import {P5_SOURCE_UPCOMING_METADATA_SQL,
+ classifyP5SignedUpcomingSourceQueue}
+ from "../server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39";
+import {P5_STAGE28_GROUPS}
+ from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {commitStage9P5V0082AtomicSegmentedDay,
  type P5V0082AtomicDayReview} from
  "../server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
@@ -427,6 +432,31 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "FROM clean.phase5_fids_allowed_query_v39"
   )).rows[0];
   expect(meta.prepared).toBe(96);
+ });
+ it("observes actual 96 PREPARED queries via V0080 aware READ-ONLY queue SQL, without prearm or provider",async()=>{
+  const planned=Math.min(...review.proposal.queries.map(x=>
+   Date.parse(x.planned_dispatch_utc)));
+  const observedAt=new Date(planned-60*60_000);
+  const actual=(await admin.query(P5_SOURCE_UPCOMING_METADATA_SQL,
+   [manifest,observedAt])).rows;
+  expect(actual.length).toBeGreaterThan(0);
+  expect(actual.length).toBeLessThanOrEqual(96);
+  const result=classifyP5SignedUpcomingSourceQueue(actual,{
+   expectedManifestSha256:manifest,
+   expectedReleaseSha256:sha("1"),
+   expectedRightsSha256:sha("2"),
+   expectedProviderContractSha256:sha("f"),
+   expectedSourceRole:P5_STAGE28_GROUPS.source
+  },observedAt);
+  expect(result.observedQueries).toBe(actual.length);
+  expect(result.candidates.some(x=>
+   x.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH")).toBe(true);
+  expect(result.paidGetDispatched).toBe(false);
+  expect(result.sourceRangeAndSevenRestCategoriesNotCertifiedHere).toBe(true);
+  expect(result.providerCalls).toBe(0);
+  expect(result.dbWrites).toBe(0);
+  const budget=await counts();
+  expect(budget).toEqual({q:96,p:96,a:0,o:0});
  });
  it("refuses replay after commit, no duplicates or excess permissions",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
