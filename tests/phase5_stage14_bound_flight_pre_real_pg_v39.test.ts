@@ -34,7 +34,7 @@ const h=(c:string)=>c.repeat(64);
 const manifest=h("a"),query=h("b"),reservation=h("c");
 const rights=h("d"),response=h("e"),contract=h("f");
 const qid="a23e4567-e89b-42d3-a456-426614174000";
-const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI100"}]}));
+const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI100"},{flight:"CI200"}]}));
 const bodyHash=createHash("sha256").update(payload).digest("hex");
 const iso=(n:number)=>new Date(n).toISOString();
 active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",()=>{
@@ -151,12 +151,33 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
     "'confirmed_operating_leg',clock_timestamp(),'1.15.4','v39',$7)",
     [serviceStart,serviceStart,serviceEnd,cutoff,qid,response,contract]);
+  // Reuse Phase4's conditional scheduled-service identity in a SECOND
+  // eligible member of the same authentic (synthetic) FIDS original.
+  // It remains separate from the confirmed native CI100 leg.
+  await admin.query(
+    "INSERT INTO clean.flight_population"+
+    "(source_airport_icao,dep_airport_icao,arr_airport_icao,"+
+    "dep_scheduled_utc,window_start_utc,window_end_utc,cutoff_utc,"+
+    "source_type,population_query_id,analytic_identity_id,"+
+    "canonical_flight_instance_id,population_role,scope_classification,"+
+    "available_at,response_hash,flight_number,"+
+    "query_direction,from_local,to_local,airport_iana_timezone,"+
+    "codeshare_resolution_status,fids_retrieval_utc,"+
+    "provider_api_version,fids_protocol_version,openapi_sha256)"+
+    "VALUES('WSSS','WSSS','OMAA',$1,$2,$3,$4,'fids',$5,$6,"+
+    "$6,'requested_airport_primary','unknown',"+
+    "clock_timestamp(),$7,'CI200','Departure',"+
+    "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+    "'g5a_conditional_operator_composite_no_native_id',"+
+    "clock_timestamp(),'1.15.4','v39',$8)",
+    [serviceStart,serviceStart,serviceEnd,cutoff,qid,
+     "leg:g5a:"+h("7"),response,contract]);
   await admin.query(
     "INSERT INTO clean.phase5_fids_original_binding_v39"+
     "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
     "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
     "normalized_members_count,source_expires_at_utc)"+
-    "VALUES($1,$2,$3,$4,$5,$6,$7,1,clock_timestamp()+interval '1 hour')",
+    "VALUES($1,$2,$3,$4,$5,$6,$7,2,clock_timestamp()+interval '1 hour')",
     [qid,reservation,query,manifest,response,bodyHash,rights]);
   if(STAGE29){
    // This CI database already has the exact Stage27 NOLOGIN groups.
@@ -368,5 +389,53 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   })).rejects.toThrow("MISSED_OWN_FLIGHT_PRE_CUTOFF_NO_BACKFILL");
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
+ });
+
+ it("reuses Phase4 conditional service records only under an explicit separately reviewed protocol",async()=>{
+  const conditional:P5Stage14SingleFlightPrePermit={
+   ...permit,flightInstanceId:"leg:g5a:"+h("7"),
+   identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",
+   externalNativeTPhysicalLegAndSourceUseReviewed:undefined,
+   externalConditionalScheduleSourceAndUseReviewed:true,
+   reviewedProtocolAmendmentSha256:h("5"),
+   reviewedStableServiceKeySha256:h("7"),
+   expectedOperatorFlightNumber:"CI200",
+   expectedDestinationIcao:"OMAA",
+  };
+  // A conditional record may not masquerade as a confirmed native leg.
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+   ...permit,flightInstanceId:conditional.flightInstanceId
+  })).rejects.toThrow("PHYSICAL_OPERATING_LEG_SOURCE_PROVENANCE_NOT_QUALIFIED");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+   ...conditional,reviewedProtocolAmendmentSha256:undefined
+  })).rejects.toThrow("CONDITIONAL_PROTOCOL_OR_STABLE_SERVICE_KEY_UNAPPROVED");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+   ...conditional,externalNativeTPhysicalLegAndSourceUseReviewed:true
+  })).rejects.toThrow("CONDITIONAL_PROTOCOL_OR_STABLE_SERVICE_KEY_UNAPPROVED");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,{
+   ...conditional,expectedDestinationIcao:"SKBO"
+  })).rejects.toThrow("CONDITIONAL_SOURCE_SERVICE_SCOPE_NOT_QUALIFIED");
+
+  const result=await persistP5V0079SingleBoundFlightPre(writer,conditional);
+  expect(result.identityEvidenceTier).toBe("CONDITIONAL_QUERY_FILTERED_SERVICE");
+  expect(result.conditionalServiceCertifiedPhysicalLeg).toBe(false);
+  expect(result.externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction)
+    .toBe(false);
+  expect(result.sourceOriginalCommittedBeforeFlightCutoff).toBe(true);
+  expect(result.flightPreCommittedBeforeOwnCutoff).toBe(true);
+  expect(result.providerCalls).toBe(0);
+  expect(result.phase6PaidGo).toBe(false);
+  const rows=(await admin.query(
+   "SELECT flight_instance_id,population_query_id,fids_response_hash,"+
+   "horizon,prediction_state FROM clean.flight_snapshots ORDER BY flight_instance_id"
+  )).rows;
+  expect(rows).toHaveLength(2);
+  expect(rows[0].flight_instance_id).toBe("leg:ci:100");
+  expect(rows[1].flight_instance_id).toBe(conditional.flightInstanceId);
+  expect(rows[1].population_query_id).toBe(qid);
+  expect(rows[1].fids_response_hash).toBe(response);
+  expect(rows[1].prediction_state).toBe("PRE_DEPARTURE");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
+   .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });
 });
