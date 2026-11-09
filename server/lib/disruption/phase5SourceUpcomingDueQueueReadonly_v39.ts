@@ -115,7 +115,7 @@ export function classifyP5SignedUpcomingSourceQueue(
      !strictSha(r.early_draw_sha256)||
      !Number.isSafeInteger(Number(r.run_day_index))||
      Number(r.run_day_index)<1||Number(r.run_day_index)>31||
-     !/^[-A-Za-z0-9_:]{8,200}$/.test(r.query_key??"")||
+     !/^[A-Za-z0-9_.:-]{8,150}$/.test(r.query_key??"")||
      !["HUB","MID_A","MID_B","REGIONAL"].includes(r.slot_id)||
      !["T-24h","T-6h","T-90m"].includes(r.horizon)||
      !/^[A-Z]{4}$/.test(r.airport_icao??"")||
