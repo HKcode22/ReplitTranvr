@@ -1,0 +1,111 @@
+name: Phase5/6 six-slot actual early four-airport draw (DEFAULT INERT, NO provider)
+on:
+  schedule:
+    # Reuse the already verified six-slot GitHub UTC heartbeat.
+    - cron: '17 0,4,8,12,16,20 * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        type: string
+        required: true
+        description: "Type ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO"
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-six-slot-approved-early-four-airport-draw.yml'
+      - 'scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts'
+      - 'server/lib/disruption/phase5GithubClockEarlyDrawSelector_v39.ts'
+      - 'tests/phase5_github_six_slot_approved_early_draw_owner_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-approved-six-slot-one-early-draw
+  cancel-in-progress: false
+jobs:
+  gated-exact-early-parent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_DATABASE_RUNTIME_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check all separate Phase5 FREEZE and Phase6 GO switches BEFORE installing dependencies
+        id: gate
+        env:
+          P5_EARLY_DRAW_MANUAL_CONFIRM: ${{ inputs.confirm }}
+          V39_P5_EARLY_DRAW_OWNER_APPROVED: ${{ secrets.V39_P5_EARLY_DRAW_OWNER_APPROVED }}
+          V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+          V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+          V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+          V39_P5_EARLY_DRAW_DATABASE_URL: ${{ secrets.V39_P5_EARLY_DRAW_DATABASE_URL }}
+          V39_P5_EARLY_DRAW_EFFECTIVE_ROLE: ${{ secrets.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+          V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+          V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          echo 'active=0' >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REPOSITORY" == 'HKcode22/ReplitTranvr' &&
+                "$GITHUB_REF" == 'refs/heads/main' &&
+                "$GITHUB_RUN_ATTEMPT" == '1' &&
+                "$V39_P5_EARLY_DRAW_OWNER_APPROVED" == '1' &&
+                "$V39_PHASE5_FREEZE_SIGNED" == '1' &&
+                "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" == '1' &&
+                "$V39_PHASE6_PROCESS_ARMED" == '1' &&
+                -n "$V39_P5_EARLY_DRAW_DATABASE_URL" &&
+                -n "$V39_P5_EARLY_DRAW_EFFECTIVE_ROLE" &&
+                -n "$V39_P5_MANIFEST_SHA256" &&
+                -n "$V39_P5_CALENDAR_HASH" &&
+                -n "$V39_P5_CONFIG_HASH" &&
+                -n "$V39_P5_FRAME_HASH" ]] &&
+             [[ "$GITHUB_EVENT_NAME" == 'schedule' ||
+                ( "$GITHUB_EVENT_NAME" == 'workflow_dispatch' &&
+                  "$P5_EARLY_DRAW_MANUAL_CONFIRM" == 'ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO' ) ]]; then
+            echo 'active=1' >> "$GITHUB_OUTPUT"
+          else
+            echo 'PHASE5_GH_SIX_SLOT_EARLY_DRAW_INERT_NO_DB_NO_PROVIDER'
+          fi
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name == 'pull_request' || steps.gate.outputs.active == '1' }}
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install source-pinned dependencies ONLY for offline CI or independently armed Phase6
+        if: ${{ github.event_name == 'pull_request' || steps.gate.outputs.active == '1' }}
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Test offline future parent selection and signed GO boundary without provider/database
+        if: ${{ github.event_name == 'pull_request' }}
+        run: npx vitest run tests/phase5_github_six_slot_approved_early_draw_owner_v39.test.ts
+      - name: Select max ONE genuinely due future parent under actual DB clock and existing serializable owner
+        if: ${{ steps.gate.outputs.active == '1' }}
+        env:
+          P5_GITHUB_AUTONOMOUS_EARLY_DRAW_MAIN_ENTRYPOINT: '1'
+          P5_EARLY_DRAW_MANUAL_CONFIRM: ${{ inputs.confirm }}
+          V39_P5_EARLY_DRAW_OWNER_APPROVED: ${{ secrets.V39_P5_EARLY_DRAW_OWNER_APPROVED }}
+          V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+          V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+          V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+          V39_P5_EARLY_DRAW_DATABASE_URL: ${{ secrets.V39_P5_EARLY_DRAW_DATABASE_URL }}
+          V39_P5_EARLY_DRAW_EFFECTIVE_ROLE: ${{ secrets.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+          V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+          V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test -z "$AERODATABOX_API_KEY"
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_RUN_ATTEMPT" = '1'
+          npx tsx scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts
+          echo 'PHASE5_GH_SIX_SLOT_REAL_DB_EARLY_SELECTION_ONLY_NO_FIDS_OR_ALERT'
