@@ -120,35 +120,42 @@ export function buildP5Crossover40WindowReview(
  if(!Array.isArray(claims)||claims.length>40)
   refusal("CLAIM_SET_INVALID");
  const candidate=proposeP5RealCorrectedPairDateGeometry(input);
+ const dateMapSha256=candidate.dateMapSha256;
  if(candidate.status!=="DATE_GEOMETRY_CANDIDATE_ONLY_NOT_SCIENCE_FREEZE"||
-    !candidate.dateMapSha256||!SHA.test(candidate.dateMapSha256)||
+    !dateMapSha256||!SHA.test(dateMapSha256)||
     candidate.days.length!==31)
-  refusal("DATE_CANDIDATE_UNSAT_OR_INCOMPLETE");
+  throw new Error("REFUSED_P5_40_WINDOW_REVIEW_DATE_CANDIDATE_UNSAT_OR_INCOMPLETE");
  const paired=candidate.days.filter(d=>d.pairId!==null);
  if(paired.length!==10||
     paired.some(d=>d.crossoverPeriod===null||!d.airportsIfKnown))
   refusal("PAIR_DAY_INTEGRITY_FAILURE");
- const basic=paired.flatMap(day=>SLOTS.map(slot=>{
-  const icao=day.airportsIfKnown?.[slot];
-  if(!icao||!/^[A-Z]{4}$/.test(icao)||
-    !day.pairId||!day.crossoverPeriod)
-   refusal("INVALID_KNOWN_AIRPORT");
-  const identity={
-   dateMapSha256:candidate.dateMapSha256,
-   pairId:day.pairId,crossoverPeriod:day.crossoverPeriod,
-   runDayIndex:day.runDayIndex,slot,airportIcao:icao,
-   startUtc:day.conservativeStartUtc,
-   conservativeEndUtc:day.conservativeEndUtc
-  };
-  return {
-   reviewKeySha256:sha(identity),
-   pairId:day.pairId,crossoverPeriod:day.crossoverPeriod,
+ const basic=paired.flatMap(day=>{
+  const pairId=day.pairId;
+  const crossoverPeriod=day.crossoverPeriod;
+  const airports=day.airportsIfKnown;
+  if(!pairId||!crossoverPeriod||!airports)
+   throw new Error("REFUSED_P5_40_WINDOW_REVIEW_INVALID_PAIR_DAY");
+  return SLOTS.map(slot=>{
+   const icao=airports[slot];
+   if(!icao||!/^[A-Z]{4}$/.test(icao))
+    throw new Error("REFUSED_P5_40_WINDOW_REVIEW_INVALID_KNOWN_AIRPORT");
+   const identity={
+    dateMapSha256,
+    pairId,crossoverPeriod,
+    runDayIndex:day.runDayIndex,slot,airportIcao:icao,
+    startUtc:day.conservativeStartUtc,
+    conservativeEndUtc:day.conservativeEndUtc
+   };
+   return {
+    reviewKeySha256:sha(identity),
+    pairId,crossoverPeriod,
    runDayIndex:day.runDayIndex,slot,airportIcao:icao,
    startUtc:day.conservativeStartUtc,
    conservativeEndUtc:day.conservativeEndUtc,
-   dateUtc:day.dateUtc,weekdayClass:day.weekdayClass
-  };
- }));
+    dateUtc:day.dateUtc,weekdayClass:day.weekdayClass
+   };
+  });
+ });
  const keys=new Set(basic.map(r=>r.reviewKeySha256));
  const airportSet=new Set(basic.map(r=>r.airportIcao));
  if(basic.length!==40||keys.size!==40||airportSet.size!==19)
@@ -167,7 +174,7 @@ export function buildP5Crossover40WindowReview(
      publicByKey.has(claim.reviewKeySha256))
    refusal("UNKNOWN_OR_DUPLICATE_REVIEW_KEY");
   const base=basic.find(r=>r.reviewKeySha256===claim.reviewKeySha256);
-  if(!base)refusal("REVIEW_KEY_MISSING");
+  if(!base)throw new Error("REFUSED_P5_40_WINDOW_REVIEW_REVIEW_KEY_MISSING");
   validatedPublicContext(claim,base.startUtc);
   publicByKey.set(claim.reviewKeySha256,claim);
  }
@@ -188,7 +195,7 @@ export function buildP5Crossover40WindowReview(
   correctedOwnerSelectedIcaosSha256:
    "f5112a9ca432d9d3fede96a9805030d68e05ced5a19d029aa896805746c21592",
   firstRunDateUtc:input.firstRunDateUtc,
-  candidateDateMapSha256:candidate.dateMapSha256,
+  candidateDateMapSha256:dateMapSha256,
   windowIdentitySha256:sha(basic),
   pairedRunDays:10,
   pairedAirportWindowRows:40,
