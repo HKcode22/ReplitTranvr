@@ -13,6 +13,8 @@
  * and no direct INSERT on physical-attempt table; never add grants here.
  */
 import type {Pool} from "pg";
+import type {P5SourceSingleQueryPlan}
+ from "./phase5ScopedFidsSourceBridge_v39";
 import {P5_STAGE28_GROUPS}
  from "./phase5Stage28DedicatedRolePool_v39";
 const SHA=/^[0-9a-f]{64}$/;
@@ -62,8 +64,9 @@ export interface P5SourceUpcomingQueueScope{
  expectedSourceRole:typeof P5_STAGE28_GROUPS.source;
 }
 export interface P5SourceUpcomingCandidate{
- queryDigestSha256:string;runDayIndex:number;
+ queryDigestSha256:string;runDayIndex:number;queryKey:string;
  slot:string;horizon:string;selectedAirportIcao:string;
+ earlyDrawSha256:string;
  plannedDispatchUtc:string;latestDispatchUtc:string;
  status:P5SourceDueQueueStatus;
 }
@@ -154,7 +157,8 @@ export function classifyP5SignedUpcomingSourceQueue(
   else status="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH";
   candidates.push({
    queryDigestSha256:r.query_digest,
-   runDayIndex:Number(r.run_day_index),
+   runDayIndex:Number(r.run_day_index),queryKey:r.query_key,
+   earlyDrawSha256:r.early_draw_sha256,
    slot:r.slot_id,horizon:r.horizon,
    selectedAirportIcao:r.airport_icao,
    plannedDispatchUtc:new Date(planned).toISOString(),
@@ -176,6 +180,60 @@ export function classifyP5SignedUpcomingSourceQueue(
   candidates
  };
 }
+
+/**
+ * This is the missing READ-ONLY bridge from an actual due PREPARED query to
+ * the already reviewed one-GET worker. A raw signed packet alone is NOT a
+ * substitute for reading live PostgreSQL state immediately before prearm.
+ * No provider permission or automatic dispatch is granted by this check.
+ */
+export function requireP5SignedOneGetInActualDueQueue(
+ scan:ReturnType<typeof classifyP5SignedUpcomingSourceQueue>,
+ plan:P5SourceSingleQueryPlan,
+ manifestSha256:string,
+ queryDigestSha256:string
+){
+ if(!scan||
+    scan.schema!=="v39.phase5.source-upcoming-queue-readonly.v1"||
+    scan.status!=="METADATA_ONLY_NOT_AN_AUTOMATIC_PAID_DISPATCH"||
+    scan.providerCalls!==0||scan.dbWrites!==0||
+    scan.paidGetDispatched!==false||
+    !strictSha(manifestSha256)||!strictSha(queryDigestSha256)||
+    scan.manifestSha256!==manifestSha256||
+    !plan?.acquisition||!strictSha(plan.expectedEarlyDrawSha256))
+  hold("UNSIGNED_OR_UNVERIFIED_DUE_QUEUE_BRIDGE");
+ const selected=scan.candidates.filter(
+   c=>c.queryDigestSha256===queryDigestSha256);
+ if(selected.length!==1)
+  hold("SINGLE_SAVED_SOURCE_QUERY_NOT_FOUND_IN_DB_QUEUE");
+ const row=selected[0],q=plan.acquisition;
+ if(row.status!=="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH"||
+    row.queryKey!==q.queryKey||
+    row.runDayIndex!==q.runDayIndex||
+    row.slot!==q.slot||row.horizon!==q.horizon||
+    row.selectedAirportIcao!==q.icao||
+    row.earlyDrawSha256!==plan.expectedEarlyDrawSha256||
+    row.plannedDispatchUtc!==
+     new Date(time(q.scheduledRequestUtc,"SIGNED_DISPATCH_UTC")).toISOString()||
+    time(scan.dbClockUtc,"QUEUED_DB_CLOCK")>=
+     time(row.latestDispatchUtc,"HARD_LATEST_DISPATCH"))
+  hold("SOURCE_PLAN_NOT_CURRENT_UNRESERVED_DUE_QUERY");
+ return {
+  queryDigestSha256:row.queryDigestSha256,
+  hardLatestDispatchUtc:row.latestDispatchUtc,
+  dbClockUtc:scan.dbClockUtc,
+  status:"DB_DUE_QUEUE_REVALIDATED_NOT_PAID_AUTHORIZATION" as const
+ };
+}
+/** Recheck the actual primary DB clock after waiting, BEFORE any provider reservation. */
+export function requireP5PaidGetBeforeHardLatest(
+ dbClockUtc:Date|string,hardLatestDispatchUtc:string
+):void{
+ if(time(dbClockUtc,"POST_WAIT_DB_CLOCK")>=
+    time(hardLatestDispatchUtc,"REVIEWED_HARD_LATEST_DISPATCH"))
+  hold("MISSED_HARD_LATEST_NO_PAID_RESERVATION_OR_REPLAY");
+}
+
 export async function auditP5UpcomingSourceQueue(
  pool:Pick<Pool,"connect">,scope:P5SourceUpcomingQueueScope
 ){
