@@ -27,7 +27,7 @@ const millis=(v:unknown):number=>{
 };
 const norm=(v:unknown):string=>{
  if(typeof v!=="string")refuse("INVALID_PRIOR_ICAO");
- const s=v.trim().toUpperCase();
+ const s=(typeof v==="string"?v:refuse("INVALID_PRIOR_ICAO")).trim().toUpperCase();
  if(!ICAO.test(s))refuse("INVALID_PRIOR_ICAO");
  return s;
 };
@@ -130,8 +130,8 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
  const lastEndByAirport=new Map<string,number>();
  for(let dayIndex=1;dayIndex<input.currentRunDayIndex;dayIndex++){
   const prior=e.days[dayIndex-1];
-  const joined=rowsByDay.get(dayIndex);
-  if(!prior||prior.runDayIndex!==dayIndex||!joined||joined.length!==4)
+  const joined=rowsByDay.get(dayIndex)??refuse("MISSING_PRIOR_FOUR_AIRPORT_DRAW");
+  if(!prior||prior.runDayIndex!==dayIndex||joined.length!==4)
    refuse("MISSING_PRIOR_FOUR_AIRPORT_DRAW");
   const first=joined[0];
   const start=millis(first.scheduled_start_utc);
@@ -203,11 +203,13 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
   if(millis(checked.selectedAtUtc)>clock)
    refuse("PRIOR_DRAW_FUTURE_DATED_AT_DB_CLOCK");
   if(prior.pairId!==null){
-   if(!prior.pairedAirportCandidates||!prep.pairAirportSet)
+   const known=prior.pairedAirportCandidates??
+    refuse("PAIRED_AIRPORT_TEMPLATE_UNVERIFIED");
+   if(!prep.pairAirportSet)
     refuse("PAIRED_AIRPORT_TEMPLATE_UNVERIFIED");
    for(const slot of SLOTS){
     const saved=checked.selections.find(x=>x.slotId===slot);
-    if(!saved||saved.icao!==prior.pairedAirportCandidates[slot])
+    if(!saved||saved.icao!==known[slot])
      refuse("PRIOR_PAIRED_CANDIDATE_NOT_MATCHED");
    }
   }else if(prior.pairedAirportCandidates!==null||prep.pairAirportSet!==null)
