@@ -24,7 +24,10 @@ const refuse=(why:string):never=>{
 const digest=(x:unknown)=>createHash("sha256")
  .update(JSON.stringify(x)).digest("hex");
 const time=(x:unknown,label:string):number=>{
- if(typeof x!=="string"||!/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x))
+ // Strict TS must narrow unknown explicitly; helper throw is not a type guard.
+ if(typeof x!=="string")
+  throw Error("REFUSED_P5_SHAPE_ONLY_RANGE_FLOOR_"+label+"_NOT_EXACT_UTC");
+ if(!/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x))
   refuse(label+"_NOT_EXACT_UTC");
  const n=Date.parse(x);
  if(!Number.isFinite(n)||new Date(n).toISOString()!==x)
@@ -32,7 +35,9 @@ const time=(x:unknown,label:string):number=>{
  return n;
 };
 const integer=(x:unknown,min:number,max:number,label:string):number=>{
- if(typeof x!=="number"||!Number.isSafeInteger(x)||x<min||x>max)
+ if(typeof x!=="number")
+  throw Error("REFUSED_P5_SHAPE_ONLY_RANGE_FLOOR_"+label+"_NOT_CANONICAL_INTEGER");
+ if(!Number.isSafeInteger(x)||x<min||x>max)
   refuse(label+"_NOT_CANONICAL_INTEGER");
  return x;
 };
