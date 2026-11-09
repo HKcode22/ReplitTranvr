@@ -243,8 +243,9 @@ export function previewP5IndependentTreatmentActiveSegments(
      t+(shape==="4h"?4:6)*HOUR;
    if(end>dateMs(dayRows[0].conservativeEndUtc,"REVIEW_BOUND"))
     refuse("ACTIVE_TREATMENT_EXCEEDS_REVIEW_ENVELOPE");
-   const slotAirports=Object.fromEntries(dayRows.map(x=>[x.slot,x.airportIcao]))
-     as P5PairedWindowTreatment["airportIcaos"];
+   const slotAirports=(Object.fromEntries(
+    dayRows.map(x=>[x.slot,x.airportIcao])
+   )) as P5PairedWindowTreatment["airportIcaos"];
    windows.push({
     pairId:r.pairId,period,runDayIndex:dayRows[0].runDayIndex,
     treatment:role,windowShape:shape,startUtc:iso(t),
