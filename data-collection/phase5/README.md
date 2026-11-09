@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — reuse Phase4 conditional scheduled-service PRE logic inside Phase5 restricted writer (under CI review)
+
+[**Specific Phase4→Phase5 code reuse and no-pilot checkpoint**](2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md). The existing Stage14 prospective source-bound PRE writer now supports Phase4's separately labeled `g5a_conditional_operator_composite_no_native_id` scheduled-service stratum **only** under an explicitly identified prospective scientific amendment, original-bounded immutable key/flight-number/destination check and distinct non-physical admission. Default confirmed-native operating-leg path, source custody, cutoff clock, T24 witness and no-retroactive/duplicate PRE rules remain. Disposable PostgreSQL16 CI has both native and conditional synthetic members; **no new paid pilot**, no production DB writes, no Phase5 science FREEZE PASS or Phase6 paid GO.
+
 ## Nov 9 — real flight records, 12 conditional identities and reuse-first finish list
 
 [**Owner technical explainer: what the 12 flight keys mean, source types, replica checks, and the seven exact Phase5 remaining tasks**](2026-11-09_WHAT_THE_FLIGHT_RECORDS_MEAN_AND_PHASE5_EXACT_FINISH_LIST.md). Explains the genuine Nov6 9 FIDS PRE originals, 12 conditional service keys, 36 time-safe PRE rows, 3 POST originals and 36 schedule-revision comparisons; separates observations from measured wheels-off, Phase2/3/4 reuse from Phase5 generalization, and prelaunch prerequisites from future Phase6 Day1 receipts. **Do not repeat the Nov6 paid pilot, reinstall V0079–V0083, or invent native operating-leg/actual-only labels.**
