@@ -1,5 +1,7 @@
 # Phase 5 — external treatment-seed commitment and exact paired PRE cutoff spans
 
+**Nov 9 owner timing directive (later checkpoint):** Nov 24 was never a release date, just a **scenario input**. Use the [rolling-earliest-safe-start guide](2026-11-09_OWNER_STUDY_GUIDE_FOUR_HUB_FIVE_PAIRS_FORTY_WINDOWS_ROLLING_EARLIEST_PHASE6.md) as the precedence rule: choose the earliest actual safe future date after Phase5 FREEZE and source/rights/budget/receiver readiness with verified T−24h lead. Any changed calendar/date-map hash invalidates the earlier **40 dated review identities and 156 preview cutoff-span targets**; rederive both on the new date proposal **without reselecting or opportunistically changing the airport sample**. The test's claimed treatment seed/timestamp is synthetic, not independently committed. No earlier start justifies filling late PRE from hindsight.
+
 **Prepared November 9, 2026 UTC.** Status: **OFFLINE PROVISIONAL PREVIEW, NOT independently precommitted, NOT source/paid release.** The real corrected B0062 airport selection remains unchanged, and the example November 24 start and all candidate dates are review-only.
 
 ## Why this is release-critical engineering, not another arbitrary stage
