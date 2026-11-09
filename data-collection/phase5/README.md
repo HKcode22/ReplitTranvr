@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — regional design probability must match normalized draw scores (CI pending)
+
+[**Regional score→probability integrity checkpoint**](2026-11-09_REGIONAL_DRAW_SCORE_PROBABILITY_PARITY_QA.md). The saved regional readback already requires unique ICAOs and native positive numeric weights; it now also verifies that each saved inclusion probability equals that site's positive `drawScore / sum(scores)`, not merely that arbitrary claims sum to one. Tests reject 3:2 scores incorrectly reported as 0.9:0.1 and a changed selected `designProbability`. Preserves original seed, no-redraw, clock and JSONB digest behavior. **No live source/DB/paid GO or Phase5 scientific FREEZE inferred.**
+
 ## Nov 9 — entire prior committed-airport history checked inside one restricted read-only day snapshot (CI pending)
 
 [**Prior site 24h END→START washout integration checkpoint**](2026-11-09_PRIOR_COMMITTED_GLOBAL_AIRPORT_WASHOUT_SAME_READONLY_SNAPSHOT.md). The shape-bound ordinary-day readback now also SELECTs every earlier committed parent's four airport rows in the **same restricted REPEATABLE READ READ ONLY transaction**, verifies each against the exact reviewed 31-day planned window end and saved early-draw rules, and refuses missing prior history, changed pair sites, or any repeated site inside the 24-hour washout. Only actual earlier saved sites are inspected; **no future adaptive airports invented**, no source or POST claim. This is an offline-tested engineering gate, not a production live readback or legal release. Phase5 science FREEZE HOLD; Phase6 paid GO NO.

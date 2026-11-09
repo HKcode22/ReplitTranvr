@@ -138,10 +138,24 @@ export function verifyPreparedDailyDraw(
       if (new Set(vec.map(v=>norm(v.icao as string))).size !== vec.length)
         refuse("DUPLICATE_REGIONAL_PROBABILITY_AIRPORT");
       const total = vec.reduce((n, v)=>n+Number(v.probability),0);
-      if (Math.abs(total - 1) > 0.000001 ||
+      if (!Number.isFinite(total) || Math.abs(total - 1) > 0.000001 ||
           vec.filter(v=>norm(String(v.icao)) === airport &&
-            Math.abs(Number(v.probability)-p!) < 0.000001).length !== 1)
+            Math.abs(Number(v.probability)-p!) <=
+              1e-9*Math.max(Number(v.probability),p!)).length !== 1)
         refuse("REGIONAL_PROBABILITY_NOT_MATCHED");
+      // Production computeRegionalProbabilityVector sets each probability
+      // to drawScore / sum(drawScores). A normalized *claimed* probability
+      // distribution may still be fraudulent if its scores disagree.
+      // The chosen designProbability must match the actual scored draw too.
+      const scoreTotal = vec.reduce((n,v)=>n+Number(v.drawScore),0);
+      if (!Number.isFinite(scoreTotal) || scoreTotal <= 0 ||
+          vec.some(v=>{
+            const expected=Number(v.drawScore)/scoreTotal;
+            const actual=Number(v.probability);
+            return !Number.isFinite(expected) || expected<=0 ||
+              Math.abs(actual-expected)>1e-9*Math.max(actual,expected);
+          }))
+        refuse("REGIONAL_PROBABILITY_SCORE_MISMATCH");
     }
     selections.push({
       slotId: slot, icao: airport,
