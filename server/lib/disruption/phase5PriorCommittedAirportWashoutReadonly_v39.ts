@@ -136,14 +136,20 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
   const first=joined[0];
   const start=millis(first.scheduled_start_utc);
   const end=millis(prior.endUtc);
-  const expectedMin=prior.windowShape==="up-to-6h"?360:240;
+  // The existing production draw owner accepts an actual early STOP at
+  // 1..360 minutes for up-to-6h. The approved shape END still stays at +6h
+  // for this *conservative* washout proof, regardless of an early STOP.
+  const actualMinutes=Number(first.active_duration_minutes);
+  const validDuration=prior.windowShape==="up-to-6h"?
+   Number.isInteger(actualMinutes)&&actualMinutes>=1&&actualMinutes<=360:
+   actualMinutes===240;
   if(prior.startUtc!==new Date(start).toISOString()||
      start>=currentStart||end<=start||
      first.calendar_hash!==input.expectedCalendarSha256||
      first.config_hash!==input.expectedConfigSha256||
      first.frame_hash!==input.expectedFrameSha256||
      first.window_shape!==prior.windowShape||
-     Number(first.active_duration_minutes)!==expectedMin||
+     !validDuration||
      new Date(millis(first.date_utc)).toISOString().slice(0,10)!==prior.dateUtc)
     refuse("PRIOR_CALENDAR_SHAPE_OR_SIGNATURE_DRIFT");
   const expectedEnd=start+
