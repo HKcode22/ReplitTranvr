@@ -57,7 +57,7 @@ export interface P5DateOnlyCandidateResult{
         "HOLD_NO_DATE_GEOMETRY_WITHIN_BOUNDED_HORIZON";
  firstRunDateUtc:string;lastRunDateUtc:string|null;
  elapsedCalendarDays:number|null;dateMapSha256:string|null;
- reviewedRunDatesByIndex:Record<string,string>;
+ candidateRunDatesByIndex:Record<string,string>;
  days:P5DateOnlyCandidateDay[];
  skippedDatesByReason:Record<string,number>;
  repeatedKnownPairAirportsWashoutChecked:true;
@@ -214,7 +214,7 @@ export function proposeP5RealCorrectedPairDateGeometry(
   elapsedCalendarDays:complete?
     1+(strictDate(days[30].dateUtc)-first)/DAY:null,
   dateMapSha256:complete?digest(map):null,
-  reviewedRunDatesByIndex:map,days,
+  candidateRunDatesByIndex:map,days,
   skippedDatesByReason:skipped,
   repeatedKnownPairAirportsWashoutChecked:true,
   conservativeAllWindowsMaxSixHours:true,
