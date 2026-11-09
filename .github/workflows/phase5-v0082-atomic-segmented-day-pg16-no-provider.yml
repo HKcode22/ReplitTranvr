@@ -8,6 +8,8 @@ on:
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
       - 'server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39.ts'
+      - 'server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39.ts'
+      - 'tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_REAL_SAVED_SOURCE_PREPARED_QUERY_TO_ONE_GET_DRAFT_BRIDGE.md'
       - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md'
@@ -22,6 +24,8 @@ on:
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
       - 'server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39.ts'
+      - 'server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39.ts'
+      - 'tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_REAL_SAVED_SOURCE_PREPARED_QUERY_TO_ONE_GET_DRAFT_BRIDGE.md'
       - 'tests/phase5_committed_day_grid_readonly_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_STAGE7_STAGE8_STAGE9_AUTHENTIC_SAVED_DAY_TO_PREPARED_SOURCE_PIPELINE_CHECKPOINT.md'
@@ -76,6 +80,8 @@ jobs:
           npx tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
       - name: Typecheck and prove two-table atomicity, forbidden role escalation, real saved draw
