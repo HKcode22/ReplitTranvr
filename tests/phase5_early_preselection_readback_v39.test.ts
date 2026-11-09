@@ -107,6 +107,64 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(regional.probabilityVector).toHaveLength(2);
   });
 
+  it("rejects normalized REGIONAL probability vectors not derived from saved draw scores", () => {
+    const f=fixture();
+    f.rows[3].airport_layer_design_probability=0.9;
+    f.rows[3].probability_vector=[
+      {icao:"KGPT",probability:0.9,drawScore:3},
+      {icao:"KDEC",probability:0.1,drawScore:2},
+    ];
+    // 0.9+0.1=1 and selected airport matches 0.9, but scores 3:2
+    // imply 0.6:0.4. Wrong inclusion weights cannot certify sampling.
+    expect(()=>verifyPreparedDailyDraw(f.day,f.rows))
+      .toThrow("REGIONAL_PROBABILITY_SCORE_MISMATCH");
+  });
+
+  it("rejects a changed selected designProbability even when scored vector is valid", () => {
+    const f=fixture();
+    f.rows[3].airport_layer_design_probability=0.6000002;
+    f.rows[3].probability_vector=[
+      {icao:"KGPT",probability:0.6,drawScore:3},
+      {icao:"KDEC",probability:0.4,drawScore:2},
+    ];
+    expect(()=>verifyPreparedDailyDraw(f.day,f.rows))
+      .toThrow("REGIONAL_PROBABILITY_NOT_MATCHED");
+  });
+
+  it("rejects nonfinite summed regional draw scores and unrepresentable tiny weights", () => {
+    expect(guarded(f=>{
+      f.rows[3].airport_layer_design_probability=0.5;
+      f.rows[3].probability_vector=[
+        {icao:"KGPT",probability:0.5,drawScore:1e308},
+        {icao:"KDEC",probability:0.5,drawScore:1e308},
+      ];
+    })).toThrow("REGIONAL_PROBABILITY_SCORE_MISMATCH");
+    expect(guarded(f=>{
+      f.rows[3].airport_layer_design_probability=0.5;
+      f.rows[3].probability_vector=[
+        {icao:"KGPT",probability:0.5,drawScore:1e-320},
+        {icao:"KDEC",probability:0.5,drawScore:1e308},
+      ];
+    })).toThrow("REGIONAL_PROBABILITY_SCORE_MISMATCH");
+  });
+
+  it("retains valid unequal scores after PostgreSQL JSONB object-key reordering", () => {
+    const a=fixture(),b=fixture();
+    for(const f of [a,b]){
+      f.rows[3].airport_layer_design_probability=0.6;
+      f.rows[3].probability_vector=[
+        {icao:"KGPT",probability:0.6,drawScore:3},
+        {icao:"KDEC",probability:0.4,drawScore:2},
+      ];
+    }
+    b.rows[3].probability_vector=[
+      {drawScore:3,icao:"KGPT",probability:0.6},
+      {probability:0.4,drawScore:2,icao:"KDEC"},
+    ];
+    expect(verifyPreparedDailyDraw(a.day,a.rows).stateHash)
+      .toBe(verifyPreparedDailyDraw(b.day,b.rows).stateHash);
+  });
+
   it("refuses repeated REGIONAL physical ICAOs even when total and selected probability match", () => {
     for(const other of ["KGPT","kgpt"," KgPt "]) {
       expect(guarded(f=>{
