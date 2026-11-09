@@ -49,6 +49,14 @@ The source `phase5F8SegmentedSourceCoverage_v39.mjs` and seven-category REST bud
 
 A **complete shape-envelope** is an intermediate prerequisite to Phase 5 FREEZE, not Phase 5 FREEZE itself. A single rehearsed day is also not 31-days' scientific equivalence. The next justified integration work should validate each actual saved early-draw day **against** this immutable shape-envelope hash and real prior day identities, rather than generate an unauthorized fixed 31-airport schedule.
 
+## A real later day can be checked without pretending all 21 future draws exist
+
+The same module also exports `inspectP5OrdinaryDayCandidateBinding(...)`. It takes a **reviewed envelope hash**, the actual externally reviewed calendar SHA, and one purported ordinary-day four-row PostgreSQL selection. It calls the existing `verifyPreparedDailyDraw` checker, refuses any changes to the date, slot, window, calendar hash, prior pair designation, four selected ICAOs or strictly prospective selection window, and returns a binding SHA for the *submitted* day.
+
+**The function has no SQL connection of its own.** This means it can prove `four submitted rows agree with this proposed day`, but it explicitly returns `realRestrictedPostgresReadbackAuthenticated:false` and `fullPriorDaySiteWashoutVerified:false`. A later GitHub-only owner must first obtain and authenticate those rows using the existing restricted PostgreSQL `phase5CommittedDayGridReadonly_v39.ts` transaction, then compare against the frozen shape. Do not promote a synthetic test to a true persisted draw merely because its SHA matches.
+
+The tests exercise an **illustrative ordinary run day 6**, with four synthetic airport values and an honest non-GO result. They also reject attempts to turn a known paired day into an ordinary draw, a modified date/cal hash, a missing Regional row/probability and a late or too-early saved timestamp. The test fixture is *not* a provider population, source right, route or flight outcome.
+
 ## Engineering learning: why `null` is necessary and why this uses two validation levels
 
 ```ts
