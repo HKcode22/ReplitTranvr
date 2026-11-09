@@ -17,6 +17,11 @@ import {
 } from "./phase5DynamicDaySourceGrid_v39";
 import type {PreparedDayForReadback,PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
+import {
+ inspectP5OrdinaryDayCandidateBinding,
+ type P5Adaptive31ShapeEnvelope,
+ type P5OrdinaryDayCandidateBinding
+} from "./phase5Prospective31DayShapeEnvelope_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
 const DBROLE=/^[a-z_][a-z0-9_]{3,62}$/;
@@ -63,6 +68,12 @@ export interface P5CommittedDayReadonlyScope {
   /** Optional independently reviewed timing contract for multi-refresh. */
   reviewedRefreshTiming?:P5DynamicDayGridInput["reviewedRefreshTiming"];
   reviewedSegmentedSource?:P5DynamicDayGridInput["reviewedSegmentedSource"];
+  /** Optional; a separately reviewed SHA must be supplied for the
+   * shape-bound ordinary-day path. Neither SHA nor this read certifies GO. */
+  reviewedOrdinaryDayEnvelope?:{
+   envelope:P5Adaptive31ShapeEnvelope;
+   independentlyReviewedShapeEnvelopeSha256:string;
+  };
 }
 export interface P5CommittedDayReadonlyResult {
   schema:"v39.phase5.db-readback-day-grid.v1";
@@ -73,6 +84,17 @@ export interface P5CommittedDayReadonlyResult {
   databaseWrites:0;
   providerCalls:0;
   selectedDayCandidateGrid:P5DynamicDayGridResult;
+  /** Scoped DB snapshot + submitted four-row shape match, NOT paid release. */
+  ordinaryDayEnvelopeReadback?:{
+   schema:"v39.phase5.restricted-db-ordinary-day-envelope-readback.v1";
+   status:"ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE";
+   withinCheckedReadOnlyTransaction:true;
+   candidate:P5OrdinaryDayCandidateBinding;
+   priorDaySiteWashoutVerified:false;
+   realFlightSourceVerified:false;
+   physicalChargeDayBudgetsVerified:false;
+   phase5FreezePassed:false;phase6Go:false;
+  };
   sourceResponseCaptured:false;
   flightLevelPreCertified:false;
   accountRightsCertified:false;
@@ -93,6 +115,10 @@ export async function readCommittedP5DayCandidateGrid(
   !DBROLE.test(scope.expectedRestrictedReaderRole)||
   !Number.isInteger(scope.runDayIndex)||scope.runDayIndex<1||scope.runDayIndex>31)
   hold("UNPINNED_READBACK_OR_DAY");
+ if(scope.reviewedOrdinaryDayEnvelope&&
+    (!scope.reviewedOrdinaryDayEnvelope.envelope||
+     !SHA.test(scope.reviewedOrdinaryDayEnvelope.independentlyReviewedShapeEnvelopeSha256)))
+   hold("UNPINNED_31_DAY_SHAPE_CONTRACT");
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_POOL");
  const client=await pool.connect();
  let tx=false;
@@ -151,6 +177,23 @@ export async function readCommittedP5DayCandidateGrid(
   const draws=await client.query(DRAW_SQL,[scope.runDayIndex]);
   if(draws.rowCount!==4||draws.rows.length!==4)
     hold("FOUR_COMMITTED_DRAW_ROWS_NOT_FOUND");
+  // Check the calendar window and the same four saved draw rows INSIDE
+  // the already role-checked REPEATABLE READ READ ONLY transaction.
+  // A later caller must still prove prior-airport washout and source rights.
+  let ordinaryCandidate:P5OrdinaryDayCandidateBinding|undefined;
+  if(scope.reviewedOrdinaryDayEnvelope){
+   if(cr.window_shape!=="4h"||Number(cr.active_duration_minutes)!==240)
+     hold("PERSISTED_ORDINARY_4H_EXPOSURE_MISMATCH");
+   ordinaryCandidate=inspectP5OrdinaryDayCandidateBinding({
+    envelope:scope.reviewedOrdinaryDayEnvelope.envelope,
+    independentlyReviewedShapeEnvelopeSha256:
+     scope.reviewedOrdinaryDayEnvelope.independentlyReviewedShapeEnvelopeSha256,
+    independentlyReviewedSignedCalendarSha256:scope.expectedCalendarSha256,
+    preparedDay:day,submittedDrawRows:draws.rows as PreparedDrawRow[],
+   });
+   if(ordinaryCandidate.submittedDrawStateSha256!==scope.expectedEarlyDrawSha256)
+     hold("ORDINARY_DRAW_HASH_NOT_FROZEN");
+  }
   const candidates=materializeP5DynamicDaySourceGrid({
     schema:scope.reviewedSegmentedSource?
       P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
@@ -182,6 +225,16 @@ export async function readCommittedP5DayCandidateGrid(
     dbClockAtReadUtc:clock.toISOString(),
     restrictedReaderRoleVerified:true,databaseReadOnlySnapshot:true,
     databaseWrites:0,providerCalls:0,selectedDayCandidateGrid:candidates,
+    ...(ordinaryCandidate?{ordinaryDayEnvelopeReadback:{
+     schema:"v39.phase5.restricted-db-ordinary-day-envelope-readback.v1" as const,
+     status:"ONE_ORDINARY_DAY_DB_ROWS_MATCH_PROVISIONAL_SHAPE_NO_RELEASE" as const,
+     withinCheckedReadOnlyTransaction:true as const,
+     candidate:ordinaryCandidate,
+     priorDaySiteWashoutVerified:false as const,
+     realFlightSourceVerified:false as const,
+     physicalChargeDayBudgetsVerified:false as const,
+     phase5FreezePassed:false as const,phase6Go:false as const,
+    }}:{}),
     sourceResponseCaptured:false,flightLevelPreCertified:false,
     accountRightsCertified:false,phase5FreezePassed:false,phase6Go:false,
   };
