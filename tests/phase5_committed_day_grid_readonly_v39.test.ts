@@ -4,6 +4,8 @@ import {
 } from "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
 import {verifyPreparedDailyDraw} from
  "../server/lib/disruption/phase5EarlyPreselectionReadback_v39";
+import {planP5Stage8FromCommittedDayReadback}
+ from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 
 import {readFileSync} from "node:fs";
 import {proposeP5Adaptive31ShapeEnvelope}
@@ -123,6 +125,64 @@ describe("Phase5 real frozen calendar/early-draw readback (mock PG, NO provider)
   expect(o.sql.at(-1)).toBe("COMMIT");
   expect(o.sql.some(v=>/INSERT|DELETE|UPDATE|TRUNCATE/i.test(v))).toBe(false);
   expect(o.release).toBe(1);
+ });
+ it("bridges genuine same-transaction four-airport readback into Stage8 without manually copying draw rows",async()=>{
+  const f=fixture(),o=fake(f);
+  const stage7=await readCommittedP5DayCandidateGrid(o.pool,f.scope);
+  expect(stage7.committedDayAndDrawProof?.verifiedInsideSameReadOnlyTransaction)
+   .toBe(true);
+  expect(stage7.committedDayAndDrawProof?.drawRows).toHaveLength(4);
+  const metadata={
+   manifestSha256:sha("e"),calendarSha256:sha("a"),
+   configSha256:sha("b"),frameSha256:sha("c"),
+   providerContractSha256:sha("f"),
+   reviewedReleaseSha256:sha("1"),rightsReviewSha256:sha("2"),
+   localFrames:[
+    {slot:"HUB" as const,icao:"WSSS",ianaTimezone:"Asia/Singapore",
+     providerApiVersion:"1.15.4",fidsProtocolVersion:"v39"},
+    {slot:"MID_A" as const,icao:"OMAA",ianaTimezone:"Asia/Dubai",
+     providerApiVersion:"1.15.4",fidsProtocolVersion:"v39"},
+    {slot:"MID_B" as const,icao:"SKBO",ianaTimezone:"America/Bogota",
+     providerApiVersion:"1.15.4",fidsProtocolVersion:"v39"},
+    {slot:"REGIONAL" as const,icao:"KGPT",ianaTimezone:"America/Chicago",
+     providerApiVersion:"1.15.4",fidsProtocolVersion:"v39"},
+   ],
+   chargeDayBudgets:[
+    {chargeDayUtc:"2026-11-08",dailyApiCeiling:1900,
+     otherCategoriesReserved:50,existingSourceReserved:0},
+    {chargeDayUtc:"2026-11-09",dailyApiCeiling:1900,
+     otherCategoriesReserved:50,existingSourceReserved:0}
+   ],
+   cycleUnitsAvailable:1000,
+  };
+  const prepared=planP5Stage8FromCommittedDayReadback(stage7,metadata);
+  expect(prepared.sourceQueryCount).toBe(12);
+  expect(prepared.maximumCandidateGetUnits).toBe(24);
+  expect(prepared.runDayIndex).toBe(1);
+  expect(prepared.earlyDrawSha256).toBe(f.scope.expectedEarlyDrawSha256);
+  expect(prepared.queries.every(x=>x.github_run_id==="00000"&&
+   x.state==="PREPARED")).toBe(true);
+  expect(prepared.providerCalls).toBe(0);
+  expect(prepared.databaseWrites).toBe(0);
+  expect(prepared.phase6Go).toBe(false);
+
+  const forged={...stage7,committedDayAndDrawProof:undefined};
+  expect(()=>planP5Stage8FromCommittedDayReadback(forged,metadata))
+   .toThrow("NO_SAME_DB_SNAPSHOT_DAY_DRAW_PROOF");
+  const replaced={...stage7,
+   committedDayAndDrawProof:{
+    ...stage7.committedDayAndDrawProof!,
+    drawRows:stage7.committedDayAndDrawProof!.drawRows.map(x=>({...x}))
+   }
+  };
+  replaced.committedDayAndDrawProof.drawRows[3].selected_icao="KXYZ";
+  expect(()=>planP5Stage8FromCommittedDayReadback(replaced,metadata))
+   .toThrow();
+  const badBudget={...metadata,chargeDayBudgets:metadata.chargeDayBudgets.slice(1)};
+  expect(()=>planP5Stage8FromCommittedDayReadback(stage7,badBudget))
+   .toThrow("MISSING_OR_EXTRA_UTC_CHARGE_DAY_BUDGET");
+  expect(o.sql.filter(x=>x.startsWith("BEGIN"))).toHaveLength(1);
+  expect(o.sql.at(-1)).toBe("COMMIT");
  });
  it("refuses a reviewed segmented shape that disagrees with the actual DB day",async()=>{
    const f=fixture();
