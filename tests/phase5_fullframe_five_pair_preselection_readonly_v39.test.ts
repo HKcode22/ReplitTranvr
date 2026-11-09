@@ -73,6 +73,42 @@ function inputForStructuralTest(result:any){
  };
 }
 describe("Phase5 full B0062 selection seeded BEFORE future data, no paid calls",()=>{
+ it("the exact owner 48-candidate production snapshot SHA-256 is reproducible and all twelve cells are preserved",()=>{
+  const p=JSON.parse(readFileSync(new URL(
+   "../data-collection/phase5/evidence/2026-11-09_mid_regional_12cell_owner_live_b0062_readonly.json",
+   import.meta.url),"utf8"));
+  expect(p.status).toBe("MID_REGIONAL_12_CELLS_CANDIDATES_ONLY_NOT_PAIR_FREEZE");
+  expect(p.observedUtc).toBe("2026-11-09T02:54:44.082Z");
+  expect(p.frameHash).toBe(SHA);
+  expect(p.trafficReferenceHash).toBe(TRAFFIC);
+  expect(p.regionMappingHash).toBe(REGION_SHA);
+  expect(p.tierHash).toBe(TIER_SHA);
+  expect(p.totalActiveFrameRows).toBe(4346);
+  expect(p.verifiedDualEligibleRows).toBe(1125);
+  expect(p.exactTierRegionCounts).toHaveLength(12);
+  expect(p.candidates).toHaveLength(48);
+  expect(p.missingStrictCells).toEqual([]);
+  expect(p.candidatesSha256).toBe(
+   createHash("sha256").update(JSON.stringify({
+    frameHash:p.frameHash,regionHash:p.regionMappingHash,
+    tierHash:p.tierHash,candidates:p.candidates
+   })).digest("hex")
+  );
+  expect(p.candidatesSha256)
+   .toBe("f960476cce18b0cb868440fc10c9815a3f95837da8b74a9a2f645ae659d22479");
+  const asiaReg=p.candidates.filter((x:any)=>
+   x.tier==="REGIONAL"&&x.region==="Asia-Pacific");
+  expect(asiaReg).toHaveLength(4);
+  expect(asiaReg.every((x:any)=>x.strictlyQualifiedInRegion===79)).toBe(true);
+  expect(p.exactTierRegionCounts.find((x:any)=>
+   x.tier==="REGIONAL"&&x.region==="Asia-Pacific").count).toBe(80);
+  expect(p.crossoverPairAirportsFrozen).toBe(false);
+  expect(p.randomizationPerformed).toBe(false);
+  expect(p.phase5ScientificFreeze).toBe(false);
+  expect(p.phase6PaidGo).toBe(false);
+  expect(p.dbWrites).toBe(0);
+  expect(p.providerCalls).toBe(0);
+ });
  it("has precommitted independent airport seed SHA and stable five 4-slot templates from ALL 1013 rows",()=>{
   expect(createHash("sha256").update(Buffer.from(PRECOMMITTED_AIRPORT_SELECTION_SEED,"hex")).digest("hex"))
     .toBe(SEED_COMMITMENT_SHA256);
