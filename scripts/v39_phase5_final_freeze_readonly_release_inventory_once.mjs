@@ -73,25 +73,42 @@ export async function inspectPhase5ReleaseInventory(pool){
    phase6Enabled=x>0;
   }
   await c.query('ROLLBACK');open=false;
-  const blocks=[];
-  if(missing.length)blocks.push('SCHEMA_OR_SOURCE_LEDGER_MISSING');
-  if(missingRoles.length)blocks.push('NOLOGIN_ROLE_PREREQUISITE_MISSING');
-  if(tables.calendar!==31)blocks.push('ACTUAL_SIGNED_31_BATCH_DAY_CALENDAR_NOT_PROVEN');
-  if(tables.samplingDraw===null||tables.samplingDraw<4)blocks.push('EARLY_FOUR_AIRPORT_DRAW_NOT_COMMITTED');
+  // IMPORTANT: prior reports mixed Phase5 *prelaunch* prerequisites with
+  // FIRST-DAY source evidence, which cannot exist before Phase6 authorizes
+  // the early draw owner. Count only real prelaunch structural gaps below;
+  // don't demand post-launch data to permit the independent science review.
+  const prelaunchStructuralHolds=[];
+  if(missing.length)prelaunchStructuralHolds.push('SCHEMA_OR_SOURCE_LEDGER_MISSING');
+  if(missingRoles.length)prelaunchStructuralHolds.push('NOLOGIN_ROLE_PREREQUISITE_MISSING');
+  if(tables.calendar!==31)
+    prelaunchStructuralHolds.push('ACTUAL_SIGNED_31_BATCH_DAY_CALENDAR_NOT_PROVEN');
   if(tables.sourceSevenRestRelease!==1||tables.sourceCategoryCaps!==7||
-    tables.sourceUtcCategoryBudget===0||tables.sourceUtcCategoryBudget===null)
-    blocks.push('SEVEN_CATEGORY_SOURCE_BUDGET_NOT_FROZEN');
+     tables.sourceUtcCategoryBudget===0||tables.sourceUtcCategoryBudget===null)
+    prelaunchStructuralHolds.push('SEVEN_CATEGORY_SOURCE_BUDGET_NOT_FROZEN');
+
+  // These events belong to Phase6 Day1 execution after independent Phase5
+  // FREEZE + separately authorized GO. Absent data is NOT evidence that old
+  // Phase2–4 pilots failed or that we must repeat those pilots.
+  const day1EvidencePending=[];
+  if(tables.samplingDraw===null||tables.samplingDraw<4)
+    day1EvidencePending.push('DAY1_FOUR_AIRPORT_DRAW_NOT_YET_COMMITTED');
   if(tables.sourceQuery===0||tables.sourceQuery===null)
-    blocks.push('NO_REVIEWED_SOURCE_QUERY_PREPARED');
+    day1EvidencePending.push('DAY1_REVIEWED_SOURCE_QUERY_NOT_YET_PREPARED');
   if(tables.sourceOriginalBinding===0||tables.sourceOriginalBinding===null)
-    blocks.push('NO_LIVE_PHASE5_SOURCE_ORIGINAL_BINDING');
+    day1EvidencePending.push('DAY1_LIVE_SOURCE_ORIGINAL_NOT_YET_BOUND');
   if(tables.independentT24Witness===0||tables.independentT24Witness===null)
-    blocks.push('NO_DURABLE_INDEPENDENT_T24_WITNESS');
-  // Source-purpose/retention and real three PRE/POST/receiver cannot be certified
-  // from counts or one application-owned read-only database session.
-  blocks.push('SOURCE_CONTENT_ML_RETENTION_AND_EXPIRY_UNVERIFIED_BY_THIS_AUDIT');
-  blocks.push('GITHUB_SOURCE_THREE_PRE_POST_RECEIVER_NOT_VERIFIED_BY_THIS_AUDIT');
-  blocks.push('NO_INDEPENDENT_FINAL_PHASE5_SCIENTIFIC_FREEZE_PROVEN');
+    day1EvidencePending.push('DAY1_DURABLE_T24_WITNESS_NOT_YET_OBSERVED');
+
+  // These are independent source/legal/scientific/host assessments; metadata
+  // counts CANNOT say whether they passed, failed, or were already approved.
+  // A zero-row database is not a verdict on the user's previously reviewed
+  // provider rights, certified outcome or published callback receiver.
+  const outsideThisSqlAudit=[
+   'SOURCE_CONTENT_ML_USE_AND_EXPIRY_REQUIRE_SEPARATE_EVIDENCE_REVIEW',
+   'FROZEN_TARGET_TREATMENT_CALENDAR_AND_PROVIDER_UNIT_PLAN_REQUIRE_REVIEW',
+   'GITHUB_SOURCE_THREE_PRE_POST_RECEIVER_AND_STOP_REQUIRE_CODE_OR_LIVE_AUDIT',
+   'INDEPENDENT_FINAL_PHASE5_SCIENTIFIC_FREEZE_NOT_DETERMINABLE_FROM_COUNTS'
+  ];
   return {
    status:'PHASE5_READONLY_PRIMARY_INVENTORY_NOT_RELEASE_AUTHORITY',
    database:'neondb',
@@ -100,7 +117,14 @@ export async function inspectPhase5ReleaseInventory(pool){
    tableRowCounts:tables,missingTables:missing,
    requiredNoLoginRoles:ROLES.length,missingNoLoginRoles:missingRoles,
    phase6AuthorizationEnabled:phase6Enabled,
-   blockers:blocks,
+   // Backwards-compatible field, now *prelaunch structural holds only*.
+   blockers:prelaunchStructuralHolds,
+   prelaunchStructuralHolds,
+   phase6Day1EvidencePendingAfterGo:day1EvidencePending,
+   independentReviewsNotAssessedByThisSql:outsideThisSqlAudit,
+   previousPhase2To4EvidenceAssessed:false,
+   noPhase6Day1EvidenceRequiredToReadPrelaunchInventory:true,
+   releaseAuthorityFromCounts:false,
    accountPlanOrLicenseRead:false,providerCalls:0,databaseWrites:0,
    certifiedPhysicalFlightIdentities:null,
    phase5ScientificFreezePassed:false,phase6PaidGo:false
