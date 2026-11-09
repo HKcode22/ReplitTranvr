@@ -220,15 +220,66 @@ describe("Phase5 full B0062 selection seeded BEFORE future data, no paid calls",
   };}};
   return {pool,sql,rollback:()=>rollback,releases:()=>release};
  }
- it("owner read-only PG transaction returns five proposals with zero writes and rollback",async()=>{
-  const d=mockDb();const r=await inspectFiveCrossoverPairCandidatesReadOnly(d.pool);
-  expect(r.candidatePairAirportSets).toHaveLength(5);
-  expect(r.scientificPhase5FreezePassed).toBe(false);
-  expect(r.phase6PaidGo).toBe(false);
+ it("owner review transaction fails closed on non-real synthetic original receipt, always ROLLBACK",async()=>{
+  const d=mockDb();
+  await expect(inspectFiveCrossoverPairCandidatesReadOnly(d.pool))
+   .rejects.toThrow(/HISTORICAL_ORIGINAL_FIVE_PAIR_RECEIPT_NOT_REPRODUCED/);
   expect(d.rollback()).toBe(1);
   expect(d.releases()).toBe(1);
   expect(d.sql[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   expect(d.sql.every(x=>!/\b(?:INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|COMMIT)\b/i.test(x))).toBe(true);
+ });
+ it("archives the real 03:29 UTC original five-pair sample and SHA without falsely freezing it",()=>{
+  const original=JSON.parse(readFileSync(new URL(
+   "../data-collection/phase5/evidence/2026-11-09_five_full_frame_pair_owner_readonly_original.json",
+   import.meta.url),"utf8"));
+  expect(original.observedUtc).toBe("2026-11-09T03:29:33.421Z");
+  expect(original.status).toBe("FIVE_FULL_FRAME_PAIR_CANDIDATE_TEMPLATES_ONLY_NOT_FROZEN");
+  expect(original.scannedFullyQualifiedMidRegionalAirports).toBe(1013);
+  expect(original.candidatePairAirportSets).toHaveLength(5);
+  expect(original.candidatePairAirportSets[2].airports.MID_A.icao).toBe("KTEB");
+  const items=original.candidatePairAirportSets.map((x:any)=>({
+   pairId:x.pairId,
+   icaos:["HUB","MID_A","MID_B","REGIONAL"].map(z=>x.airports[z].icao)
+  }));
+  expect(createHash("sha256").update(JSON.stringify(items)).digest("hex"))
+   .toBe("3dbcc18dd44bdbb7e5323766a9a6bfacacc0bb2e38e3ccce9aff442611738763");
+  expect(original.crossoverAirportSetSigned).toBe(false);
+  expect(original.treatmentOrderRandomized).toBe(false);
+  expect(original.phase6PaidGo).toBe(false);
+  expect(original.providerCalls).toBe(0);
+  expect(original.databaseWrites).toBe(0);
+ });
+ it("KTEB can be objectively excluded from a full frozen 1013-cell population without altering seed or other regions",()=>{
+  const rows=allFrameRows();
+  const first=rows.find((x:any)=>x.tier==="MID"&&x.region==="North America");
+  expect(first).toBeTruthy();
+  first.icao="KTEB";
+  const original=selectFiveRealPairCandidateTemplates(rows);
+  const excluded=selectFiveRealPairCandidateTemplates(rows,{
+   scheduledPassengerExclusions:["KTEB"]
+  });
+  expect(excluded.status).toBe("FIVE_POST_SELECTION_SCOPE_ADJUDICATED_PAIR_CANDIDATES_NOT_FROZEN");
+  expect(excluded.scannedFullyQualifiedMidRegionalAirports).toBe(1013);
+  expect(excluded.scheduledPassengerScopeExclusions).toEqual(["KTEB"]);
+  expect(excluded.exclusionAdjudicatedAfterFirstDraw).toBe(true);
+  expect(excluded.candidatePairAirportSets.flatMap((p:any)=>
+   ["MID_A","MID_B","REGIONAL"].map(slot=>p.airports[slot].icao))).not.toContain("KTEB");
+  expect(excluded.independentAirportSelectionSeedHex).toBe(original.independentAirportSelectionSeedHex);
+  expect(excluded.candidatePairAirportSets).toHaveLength(5);
+  expect(excluded.phase6PaidGo).toBe(false);
+  expect(excluded.crossoverAirportSetSigned).toBe(false);
+  expect(excluded.treatmentOrderRandomized).toBe(false);
+  expect(excluded.providerCalls).toBe(0);
+  expect(excluded.databaseWrites).toBe(0);
+  for(const extra of [["KORD"],["KTEB","OTHER"],["OTHER"],["KTEB","KTEB"]]){
+   expect(()=>selectFiveRealPairCandidateTemplates(rows,{
+    scheduledPassengerExclusions:extra
+   })).toThrow(/UNREVIEWED_OR_CHANGED_OPERATIONAL_SCOPE_EXCLUSION/);
+  }
+  expect(()=>selectFiveRealPairCandidateTemplates(allFrameRows(),{
+   scheduledPassengerExclusions:["KTEB"]
+  })).toThrow(/KTEB_NOT_IN_ORIGINAL_FROZEN_CENSUS/);
  });
  it("never touches writable DB when source registry drifts or query fails",async()=>{
   for(const opts of [{drift:true},{failSql:true}]){
