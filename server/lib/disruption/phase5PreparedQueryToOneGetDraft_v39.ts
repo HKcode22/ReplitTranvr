@@ -75,7 +75,11 @@ export function draftP5OneGetFromActualPreparedSource(
       typeof x==="string"&&SHA.test(x)))
   reject("MISSING_REVIEWED_SAME_DAY_PINS");
  const proof=stage7.committedDayAndDrawProof;
- if(!proof||proof.verifiedInsideSameReadOnlyTransaction!==true||
+ if(!proof)reject("MISSING_SAVED_CALENDAR_DRAW_PROOF");
+ if(!stage8.sourcePartitionPins||!Array.isArray(stage8.sourcePartitionPins)||
+    !stage8.reviewedSegmentedSource)
+  reject("MISSING_SOURCE_PARTITION_OR_SEGMENT_REVIEW");
+ if(proof.verifiedInsideSameReadOnlyTransaction!==true||
     !proof.day||!Array.isArray(proof.drawRows)||proof.drawRows.length!==4||
     stage7.restrictedReaderRoleVerified!==true||
     stage7.databaseReadOnlySnapshot!==true||
@@ -98,9 +102,7 @@ export function draftP5OneGetFromActualPreparedSource(
     !Array.isArray(grid?.acquisitions)||
     !Array.isArray(stage8.queries)||
     stage8.queries.length!==stage8.sourceQueryCount||
-    !Array.isArray(stage8.sourcePartitionPins)||
-    stage8.sourcePartitionPins.length!==stage8.sourceQueryCount||
-    !stage8.reviewedSegmentedSource)
+    stage8.sourcePartitionPins.length!==stage8.sourceQueryCount)
   reject("DAY_EARLY_DRAW_CANDIDATE_OR_SOURCE_PROPOSAL_CHANGED");
  const query=stage8.queries.filter(q=>
   q.query_digest===review.queryDigestSha256);
