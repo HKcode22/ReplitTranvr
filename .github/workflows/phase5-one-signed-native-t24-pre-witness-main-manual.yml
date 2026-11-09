@@ -1,0 +1,121 @@
+name: Phase5 native T24 PRE + distinct V0081 witness (SIGNED, manual main only)
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_native_t24_packet:
+        description: 'Exact reviewed data-collection/phase5/frozen/*.json after genuine source original'
+        type: string
+        required: true
+      confirm:
+        description: 'Type ONE_SIGNED_NATIVE_T24_PRE_AND_WITNESS_NO_PROVIDER'
+        type: string
+        required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-one-signed-native-t24-pre-witness-main-manual.yml'
+      - 'scripts/v39_phase5_one_signed_native_t24_pre_witness_github_owner_v39.ts'
+      - 'tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'data-collection/phase5/2026-11-09_GITHUB_NATIVE_T24_PRE_WITNESS_REAL_OWNER_CHECKPOINT.md'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-signed-native-t24-${{ inputs.frozen_native_t24_packet || github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-admission-only:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify signed native source, DB-clock and distinct role admission — no DB or provider
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts
+          echo 'PHASE5_NATIVE_T24_CI_ONLY_NO_DB_NO_PROVIDER_NO_GO'
+  one-actual-signed-t24-pre-witness:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_NATIVE_T24_PRE_AND_WITNESS_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_NATIVE_T24_CONFIRM: ${{ inputs.confirm }}
+      V39_P5_T24_OWNER_APPROVED: ${{ secrets.V39_P5_T24_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_T24_APPROVED_CODE_SHA: ${{ secrets.V39_P5_T24_APPROVED_CODE_SHA }}
+      V39_P5_T24_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_T24_SIGNED_PACKET_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_QUERY_DIGEST: ${{ secrets.V39_P5_QUERY_DIGEST }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_NATIVE_T_SEMANTICS_SHA256: ${{ secrets.V39_P5_NATIVE_T_SEMANTICS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      P5_V39_T24_WITNESS_DATABASE_URL: ${{ secrets.P5_V39_T24_WITNESS_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject all unsigned or cross-scope live release before installing dependencies
+        env:
+          PACKET_FILE: ${{ inputs.frozen_native_t24_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_P5_T24_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$V39_P5_T24_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ "$PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+          test -f "$PACKET_FILE"
+          test -n "$V39_P5_T24_SIGNED_PACKET_SHA256"
+          test -n "$P5_V39_PRE_DATABASE_URL"
+          test -n "$P5_V39_T24_WITNESS_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One reviewed native flight T24 PRE + independent second transaction witness
+        env:
+          RELEASE_FILE: ${{ inputs.frozen_native_t24_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_one_signed_native_t24_pre_witness_github_owner_v39.ts "$RELEASE_FILE"
+          echo 'ONE_GENUINE_SIGNED_T24_PRE_WITNESS_GH_FINISHED_NO_PROVIDER_CALLS_NO_FREEZE_GO_GRANTED'
