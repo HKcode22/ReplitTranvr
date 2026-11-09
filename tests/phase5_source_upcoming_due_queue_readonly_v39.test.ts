@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {
  classifyP5SignedUpcomingSourceQueue,auditP5UpcomingSourceQueue,
+ requireP5SignedOneGetInActualDueQueue,requireP5PaidGetBeforeHardLatest,
  P5_SOURCE_UPCOMING_METADATA_SQL,
  type P5SourceQueueMetadataRow
 } from "../server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39";
@@ -205,5 +206,73 @@ describe("GitHub source due queue observer remains inert before separate release
   expect(()=>admitP5GitHubSourceQueueObserver({
    ...env,DATABASE_URL:env.V39_P5_SOURCE_DATABASE_URL
   })).toThrow("APPLICATION_SOURCE_ROLE_REUSE");
+ });
+});
+
+describe("signed one-GET worker consumes real PR528 queue, not standalone JSON",()=>{
+ const plan=()=>({
+  expectedEarlyDrawSha256:sha("9"),
+  acquisition:{
+   queryKey:"P5_D01_WSSS_T24_PART01",runDayIndex:1,
+   slot:"HUB",horizon:"T-24h",icao:"WSSS",
+   scheduledRequestUtc:instant(start)
+  }
+ } as any);
+ const scan=(overrides:Partial<P5SourceQueueMetadataRow>={})=>
+  classifyP5SignedUpcomingSourceQueue(
+   [row(overrides)],scope,instant(start-60*60_000));
+ it("requires exact saved selected query, future planned clock and early draw before prearm",()=>{
+  const result=requireP5SignedOneGetInActualDueQueue(
+   scan(),plan(),scope.expectedManifestSha256,sha("e"));
+  expect(result.status).toBe("DB_DUE_QUEUE_REVALIDATED_NOT_PAID_AUTHORIZATION");
+  expect(result.hardLatestDispatchUtc).toBe(instant(start+60_000));
+  requireP5PaidGetBeforeHardLatest(
+   instant(start+59_999),result.hardLatestDispatchUtc);
+ });
+ it("rejects unsaved packet swaps and never treats signed JSON alone as current DB state",()=>{
+  for(const mutation of [
+   {queryKey:"P5_OTHER_QUERY"},
+   {icao:"YSSY"},{slot:"MID_A"},{horizon:"T-6h"},
+   {runDayIndex:2},
+   {scheduledRequestUtc:instant(start+60_000)}
+  ]){
+   const x=plan();
+   x.acquisition={...x.acquisition,...mutation};
+   expect(()=>requireP5SignedOneGetInActualDueQueue(
+    scan(),x,scope.expectedManifestSha256,sha("e")))
+     .toThrow("SOURCE_PLAN_NOT_CURRENT_UNRESERVED_DUE_QUERY");
+  }
+  const changed=plan();
+  changed.expectedEarlyDrawSha256=sha("8");
+  expect(()=>requireP5SignedOneGetInActualDueQueue(
+   scan(),changed,scope.expectedManifestSha256,sha("e")))
+    .toThrow("SOURCE_PLAN_NOT_CURRENT_UNRESERVED_DUE_QUERY");
+  expect(()=>requireP5SignedOneGetInActualDueQueue(
+   scan(),plan(),scope.expectedManifestSha256,sha("f")))
+    .toThrow("SINGLE_SAVED_SOURCE_QUERY_NOT_FOUND_IN_DB_QUEUE");
+ });
+ it("refuses already reserved, prearmed, STOPPED and too close to dispatch",()=>{
+  for(const changes of [
+   {state:"STOPPED"},
+   {existing_attempt_sha256:sha("f")},
+   {existing_prearm_sha256:sha("f")}
+  ]){
+   expect(()=>requireP5SignedOneGetInActualDueQueue(
+    scan(changes),plan(),scope.expectedManifestSha256,sha("e")))
+     .toThrow("SOURCE_PLAN_NOT_CURRENT_UNRESERVED_DUE_QUERY");
+  }
+  const late=classifyP5SignedUpcomingSourceQueue(
+   [row()],scope,instant(start-10*60_000));
+  expect(()=>requireP5SignedOneGetInActualDueQueue(
+   late,plan(),scope.expectedManifestSha256,sha("e")))
+     .toThrow("SOURCE_PLAN_NOT_CURRENT_UNRESERVED_DUE_QUERY");
+ });
+ it("refuses paid GET if signed hard latest has elapsed during GitHub clock wait",()=>{
+  expect(()=>requireP5PaidGetBeforeHardLatest(
+   instant(start+60_000),instant(start+60_000)))
+   .toThrow("MISSED_HARD_LATEST_NO_PAID_RESERVATION_OR_REPLAY");
+  expect(()=>requireP5PaidGetBeforeHardLatest(
+   instant(start+60_001),instant(start+60_000)))
+   .toThrow("MISSED_HARD_LATEST_NO_PAID_RESERVATION_OR_REPLAY");
  });
 });
