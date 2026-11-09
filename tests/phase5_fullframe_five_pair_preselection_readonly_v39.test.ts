@@ -60,9 +60,20 @@ function inputForStructuralTest(result:any){
    ])
   );
  }
+ // Spread fixture days over an intentionally nonproduction timeline so
+ // same HUB SKBO in pairs 4/5 has >=24h after the longer 6h treatment.
+ // DO NOT pass these fixture dates or costs to a real Phase6 writer.
+ const fixtureStart=Date.parse("2026-11-23T00:00:00.000Z");
+ const reviewedRunDatesByIndex:Record<string,string>={};
+ for(let day=1;day<=31;day++){
+  const week=Math.floor((day-1)/6),within=(day-1)%6;
+  reviewedRunDatesByIndex[String(day)]=new Date(
+   fixtureStart+(week*14+within*2)*86_400_000
+  ).toISOString().slice(0,10);
+ }
  return {
   // DATE AND BUDGET ARE SYNTHETIC TEST FIXTURES; NOT A LIVE SCIENCE CALENDAR.
-  startDate:"2026-11-23",seed:result.calendarRegionSeed,
+  startDate:"2026-11-23",reviewedRunDatesByIndex,seed:result.calendarRegionSeed,
   anchorSeed:result.fourHubAnchorRotationSeed,
   anchorPool:HUB,eligibleRegionsBySlot:{
    MID_A:REGIONS,MID_B:REGIONS,REGIONAL:REGIONS
