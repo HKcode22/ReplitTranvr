@@ -19,15 +19,18 @@ const refusal=(s:string):never=>{
  throw new Error("REFUSED_P5_ROLLING_FIRST_DAY_"+s);
 };
 const timestamp=(v:unknown,label:string):number=>{
- if(typeof v!=="string"||!ISO.test(v)||
-    !Number.isFinite(Date.parse(v))||
+ if(typeof v!=="string")
+  throw new Error("REFUSED_P5_ROLLING_FIRST_DAY_"+label+"_NOT_EXACT_UTC");
+ if(!ISO.test(v)||!Number.isFinite(Date.parse(v))||
     new Date(Date.parse(v)).toISOString()!==v)
-  refusal(label+"_NOT_EXACT_UTC");
+  throw new Error("REFUSED_P5_ROLLING_FIRST_DAY_"+label+"_NOT_EXACT_UTC");
  return Date.parse(v);
 };
 const bound=(n:unknown,lo:number,hi:number,label:string):number=>{
- if(!Number.isSafeInteger(n)||typeof n!=="number"||n<lo||n>hi)
-  refusal(label+"_NOT_VALID_BOUND");
+ if(typeof n!=="number")
+  throw new Error("REFUSED_P5_ROLLING_FIRST_DAY_"+label+"_NOT_VALID_BOUND");
+ if(!Number.isSafeInteger(n)||n<lo||n>hi)
+  throw new Error("REFUSED_P5_ROLLING_FIRST_DAY_"+label+"_NOT_VALID_BOUND");
  return n;
 };
 const date=(n:number)=>new Date(n).toISOString().slice(0,10);
