@@ -213,7 +213,11 @@ export function previewP5IndependentTreatmentActiveSegments(
  const period1Roles=new Map(ranked.map((x,i)=>[
   x.pairId,(i<3?"control":"alternative") as "control"|"alternative"
  ]));
- const assignments=PAIRS.map(pairId=>({
+ const assignments:Array<{
+  pairId:string;period1Role:"control"|"alternative";
+  period2Role:"control"|"alternative";
+  alternativeShape:"2x2h"|"up-to-6h"
+ }>=PAIRS.map(pairId=>({
   pairId,
   period1Role:period1Roles.get(pairId)!,
   period2Role:period1Roles.get(pairId)==="control"?"alternative":"control",
