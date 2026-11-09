@@ -92,6 +92,39 @@ function cyclePick<T>(items: readonly T[], drawIndex: number, seed: string): T {
   const within = drawIndex % items.length;
   return seededOrder(items, `${seed}|cycle-${cycle}`)[within];
 }
+/**
+ * Balanced derangement for the two MID REGION slots. When both slots share
+ * the same full eligible region universe, an independent B permutation plus
+ * per-day collision fallback breaks its six-draw balance. Instead, build a
+ * seeded nonzero cyclic offset of A's permutation within each full cycle.
+ * Each MID slot visits every region exactly once and never repeats a region
+ * within a four-airport parent batch.
+ *
+ * Distinct eligible sets retain the original per-day fallback behavior.
+ */
+function balancedDistinctMidBRegion(
+  eligibleA: string[], eligibleB: string[], drawIndex: number,
+  seed: string, selectedA: string,
+): string {
+  const a = normalizedRegionSet(eligibleA);
+  const b = normalizedRegionSet(eligibleB);
+  if (a.length >= 2 && a.length === b.length && a.every((x, i) => x === b[i])) {
+    const cycle = Math.floor(drawIndex / a.length);
+    const within = drawIndex % a.length;
+    const aOrder = seededOrder(a, `${seed}|MID_A|cycle-${cycle}`);
+    const offset = 1 + (
+      parseInt(hash(`${seed}|MID_B_BALANCED_DERANGEMENT|cycle-${cycle}`).slice(0, 8), 16)
+      % (a.length - 1)
+    );
+    const assigned = aOrder[(within + offset) % a.length];
+    if (assigned === selectedA) throw new Error("unreachable MID region derangement collision");
+    return assigned;
+  }
+  const first = cyclePick(b, drawIndex, `${seed}|MID_B`);
+  if (first !== selectedA || b.length <= 1) return first;
+  return b[(b.indexOf(first) + 1) % b.length];
+}
+
 function randomizedAlternativeFirst(seed: string, pair: number): boolean {
   return parseInt(hash(`${seed}|pair-${pair}`).slice(0, 8), 16) % 2 === 1;
 }
@@ -212,17 +245,19 @@ function solveCalendarByAnchorPolicy(
       pairAirportSet = input.pairAirportSets[pairId(p)];
     } else {
       const anchor = cyclePick(input.anchorPool, newDrawIndex, input.anchorSeed);
+      const midA = cyclePick(
+        normalizedRegionSet(input.eligibleRegionsBySlot.MID_A),
+        newDrawIndex, `${input.seed}|MID_A`,
+      ).toString();
       slotRegions = {
         HUB: anchor.region,
-        MID_A: cyclePick(normalizedRegionSet(input.eligibleRegionsBySlot.MID_A), newDrawIndex, `${input.seed}|MID_A`).toString(),
-        MID_B: cyclePick(normalizedRegionSet(input.eligibleRegionsBySlot.MID_B), newDrawIndex, `${input.seed}|MID_B`).toString(),
+        MID_A: midA,
+        MID_B: balancedDistinctMidBRegion(
+          input.eligibleRegionsBySlot.MID_A, input.eligibleRegionsBySlot.MID_B,
+          newDrawIndex, input.seed, midA,
+        ),
         REGIONAL: cyclePick(normalizedRegionSet(input.eligibleRegionsBySlot.REGIONAL), newDrawIndex, `${input.seed}|REGIONAL`).toString(),
       };
-      if (slotRegions.MID_A === slotRegions.MID_B && normalizedRegionSet(input.eligibleRegionsBySlot.MID_B).length > 1) {
-        const set = normalizedRegionSet(input.eligibleRegionsBySlot.MID_B);
-        const idx = (set.indexOf(slotRegions.MID_B) + 1) % set.length;
-        slotRegions.MID_B = set[idx];
-      }
       if (p) {
         pairAirportSet = input.pairAirportSets[pairId(p)];
         const pairRegions = Object.fromEntries((Object.keys(pairAirportSet) as SlotId[]).map(s => [s, pairAirportSet![s].region])) as Record<SlotId, string>;
