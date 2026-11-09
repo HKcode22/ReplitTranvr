@@ -8,6 +8,10 @@
  * successful static plan into a Phase5 FREEZE or Phase6 paid GO.
  */
 import { createHash } from "node:crypto";
+import {
+ P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
+ P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS
+} from "./phase5ProspectiveEarlyDrawClockContract_v39";
 
 export const P5_FIDS_GRID_SCHEMA = "v39.phase5.fids-freeze-grid.utc-charge-day-one-get.v3" as const;
 export type P5FidsHorizon = "T-24h" | "T-6h" | "T-90m";
@@ -15,10 +19,9 @@ export type P5Slot = "HUB" | "MID_A" | "MID_B" | "REGIONAL";
 const SLOTS: P5Slot[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
 const HORIZONS: P5FidsHorizon[] = ["T-24h", "T-6h", "T-90m"];
 const DAY_MS = 86_400_000;
-// Match the actual committed early adaptive draw owner, not a synthetic
-// timestamp that the live writer could never persist.
-const EARLY_DRAW_MIN_LEAD_MS = 24 * 3_600_000 + 45 * 60_000;
-const EARLY_DRAW_MAX_LEAD_MS = 72 * 3_600_000;
+// Use the SAME real prospective draw boundary as the DB writer/readback.
+const EARLY_DRAW_MIN_LEAD_MS = P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
+const EARLY_DRAW_MAX_LEAD_MS = P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
 const HASH = /^[a-f0-9]{64}$/;
 const ICAO = /^[A-Z]{4}$/;
 const YYYY_MM_DD = /^\d{4}-\d\d-\d\d$/;
