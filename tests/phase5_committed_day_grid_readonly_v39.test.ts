@@ -233,7 +233,7 @@ describe("Phase5 real frozen calendar/early-draw readback (mock PG, NO provider)
   const f=fixture();f.scope.expectedEarlyDrawSha256=sha("0");
   const o=fake(f);
   await expect(readCommittedP5DayCandidateGrid(o.pool,f.scope))
-   .rejects.toThrow("UNVERIFIED_EARLY_DRAW_READBACK");
+   .rejects.toThrow("INDEPENDENT_FOUR_SLOT_SELECTION_SHA_DRIFT");
   expect(o.sql).toContain("ROLLBACK");
  });
  it("rejects a retroactive readback after the first source GET time",async()=>{
