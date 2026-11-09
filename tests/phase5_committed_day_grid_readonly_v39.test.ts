@@ -220,6 +220,14 @@ function syntheticSixthDayReadback(){
  if(proposed.runDayIndex!==6||proposed.pairId!==null)
   throw Error("TEST_EXPECTED_RUN6_ORDINARY");
  const o=fixture() as ReturnType<typeof fixture> & {priorJoinedRows?:any[]};
+ // Mock day-six airports must NOT reuse a recent paired site. The old
+ // WSSS/OMAA/SKBO/KGPT positive fixture actually violated prior END→START.
+ const fresh=["KZAZ","KZBZ","KZCZ","KZDZ"];
+ o.cal.anchor_icao=fresh[0];
+ for(let i=0;i<4;i++)o.draw[i].selected_icao=fresh[i];
+ o.draw[3].probability_vector=[
+  {icao:fresh[3],probability:1,drawScore:1}
+ ];
  const start6=Date.parse(proposed.startUtc);
  const cal=o.cal as typeof o.cal &{
   window_shape:string;active_duration_minutes:number
@@ -314,7 +322,7 @@ describe("Phase5 shape envelope vs four REAL-scope database rows, no release",()
   expect(b?.candidate.runDayIndex).toBe(6);
   expect(b?.candidate.sourceShapeEnvelopeSha256).toBe(envelope.shapeEnvelopeSha256);
   expect(b?.candidate.selectedIcaos).toEqual({
-   HUB:"WSSS",MID_A:"OMAA",MID_B:"SKBO",REGIONAL:"KGPT"
+   HUB:"KZAZ",MID_A:"KZBZ",MID_B:"KZCZ",REGIONAL:"KZDZ"
   });
   expect(b?.candidate.submittedDrawStateSha256).toBe(o.scope.expectedEarlyDrawSha256);
   expect(b?.candidate.realRestrictedPostgresReadbackAuthenticated).toBe(false);
@@ -358,6 +366,27 @@ describe("Phase5 shape envelope vs four REAL-scope database rows, no release",()
   const pg=fake(o,{now});
   await expect(readCommittedP5DayCandidateGrid(pg.pool,o.scope))
    .rejects.toThrow("UNREVIEWED_OR_TAMPERED_31_SHAPE");
+  expect(pg.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("rejects a current four-slot mock set reusing a paired airport before global 24h washout",async()=>{
+  const {o,now}=syntheticSixthDayReadback();
+  const conflict=["WSSS","OMAA","SKBO","KGPT"];
+  o.cal.anchor_icao=conflict[0];
+  for(let i=0;i<4;i++)o.draw[i].selected_icao=conflict[i];
+  o.draw[3].probability_vector=[
+   {icao:"KGPT",probability:1,drawScore:1}
+  ];
+  const p={
+   runDayIndex:6,scheduledStartUtc:o.cal.scheduled_start_utc,
+   frozenDrawSeed:o.cal.frozen_draw_seed,drawType:"NEW_TEMPLATE" as const,
+   anchorIcao:o.cal.anchor_icao,slotRegions:o.cal.slot_regions,
+   pairAirportSet:null,calendarHash:o.cal.calendar_hash,
+   configHash:o.cal.config_hash,frameHash:o.cal.frame_hash
+  };
+  o.scope.expectedEarlyDrawSha256=verifyPreparedDailyDraw(p,o.draw).stateHash;
+  const pg=fake(o,{now});
+  await expect(readCommittedP5DayCandidateGrid(pg.pool,o.scope))
+   .rejects.toThrow("CURRENT_DAY_GLOBAL_AIRPORT_WASHOUT_VIOLATED");
   expect(pg.sql.at(-1)).toBe("ROLLBACK");
  });
  it("rejects incomplete earlier saved airport history before source candidates are released",async()=>{
