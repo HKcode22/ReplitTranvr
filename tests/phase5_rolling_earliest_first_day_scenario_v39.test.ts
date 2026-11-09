@@ -66,6 +66,20 @@ describe("rolling earliest prospective Phase6 day, NOT a launch permit",()=>{
   expect(later.dateCandidate.dateMapSha256).not.toBe(earlier.dateCandidate.dateMapSha256);
   expect(later.phase6PaidGo).toBe(false);
  });
+ it("an extra safety buffer can only move the candidate start later, never earlier",()=>{
+  const ordinary=proposeP5RollingEarliestFirstDayScenario(base());
+  const safer=proposeP5RollingEarliestFirstDayScenario({
+   ...base(),additionalReserveSeconds:86_400
+  });
+  expect(safer.totalExtraPreT24SafetySeconds).toBe(
+   ordinary.totalExtraPreT24SafetySeconds+86_400
+  );
+  expect(safer.earliestFirstBatchDayUtcDate).toBe("2026-11-12");
+  expect(Date.parse(safer.earliestFirstBatchStartUtc)).toBeGreaterThan(
+   Date.parse(ordinary.earliestFirstBatchStartUtc)
+  );
+  expect(safer.phase6PaidGo).toBe(false);
+ });
  it("never allows zero, negative, fractional or missing latency assumptions",()=>{
   const bad=[
    {...base(),schedulerSlipBoundSeconds:0},
