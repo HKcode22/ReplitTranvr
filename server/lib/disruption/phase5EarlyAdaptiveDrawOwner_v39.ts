@@ -15,6 +15,10 @@
 import type { Pool, PoolClient } from "pg";
 import { createHash } from "node:crypto";
 import {
+ P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
+ P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS
+} from "./phase5ProspectiveEarlyDrawClockContract_v39";
+import {
   chooseAirportsForRunDay,
   type AirportSamplingState,
   type FrameSamplingCandidate,
@@ -28,8 +32,8 @@ import {
 } from "./phase5EarlyPreselectionReadback_v39";
 
 const SHA = /^[0-9a-f]{64}$/;
-const MIN_LEAD_MS = 24 * 3_600_000 + 45 * 60_000;
-const MAX_LEAD_MS = 72 * 3_600_000;
+const MIN_LEAD_MS = P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
+const MAX_LEAD_MS = P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
 const SLOTS = ["HUB", "MID_A", "MID_B", "REGIONAL"] as const;
 
 export interface EarlyDrawOwnerPins {

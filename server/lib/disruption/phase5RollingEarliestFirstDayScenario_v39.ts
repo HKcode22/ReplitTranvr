@@ -12,6 +12,10 @@ import {
  proposeP5RealCorrectedPairDateGeometry,
  type P5DateOnlyCandidateResult
 } from "./phase5CorrectedPairDateGeometryProposal_v39";
+import {
+ P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
+ P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS
+} from "./phase5ProspectiveEarlyDrawClockContract_v39";
 
 const MS=1000, HOUR=3_600_000, DAY=86_400_000;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
@@ -64,6 +68,10 @@ export interface P5RollingFirstDayScenarioResult {
  earliestFirstBatchDayUtcDate:string;
  earliestFirstBatchStartUtc:string;
  hypotheticalFirstWindowStartT24Utc:string;
+ earlyDrawWindowOpensUtc:string;
+ earlyDrawLastAllowedUtcInclusive:string;
+ earliestProspectiveDrawAtOrAfterReadyUtc:string;
+ strictEarlyDrawLeadMs:number;
  totalExtraPreT24SafetySeconds:number;
  dateCandidate:P5DateOnlyCandidateResult;
  proposedEndDateUtc:string|null;
@@ -80,13 +88,14 @@ export interface P5RollingFirstDayScenarioResult {
  providerCalls:0;databaseWrites:0;paidAlertCreates:0;
 }
 /**
- * Prospective lower bound:
- *   ready + worst scheduler slip + provider persist + guard + extra
- *   must be <= (first possible flight-window start - 24 hours).
+ * TWO independent deadlines must hold for the first prospective 00Z slot:
+ * (1) ready + scheduler slip + response/persist + margin + reserve
+ *     <= first slot - 24 hours (source PRE cutoff);
+ * (2) ready < first slot - 24h45m (DB owner EARLY airport draw).
  *
- * First slot is exactly 00:00 UTC in the existing six-slot rotation. This
- * never asserts a genuine flight actually begins then. The actual
- * flight-level T and T24 writer remain separate physical evidence gates.
+ * The early draw also may not be >72h before that slot. The output gives
+ * the actual [open,last-allowed] selection window for independent review.
+ * None of this proves the real selected flight's T or authorizes source GET.
  */
 export function proposeP5RollingEarliestFirstDayScenario(
  input:P5RollingFirstDayScenarioInput
@@ -100,14 +109,20 @@ export function proposeP5RollingEarliestFirstDayScenario(
  const extra=bound(input.additionalReserveSeconds??0,0,86400,"EXTRA_BUFFER");
  const total=slip+persist+margin+extra;
  const earliestCutoffSafeSourceTime=ready+total*MS;
- const earliestPossibleWindowStart=earliestCutoffSafeSourceTime+24*HOUR;
+ // Both T24 source response and the strict >24h45m early draw apply.
+ const t24Constraint=earliestCutoffSafeSourceTime+24*HOUR;
+ const drawConstraint=ready+P5_EARLY_DRAW_MIN_STRICT_LEAD_MS+1;
+ const earliestPossibleWindowStart=Math.max(t24Constraint,drawConstraint);
  if(!Number.isFinite(earliestPossibleWindowStart)||
     earliestPossibleWindowStart>8.64e15-DAY)
   refusal("OVERFLOWED_SAFETY_WINDOW");
  const firstMidnight=Math.ceil(earliestPossibleWindowStart/DAY)*DAY;
  const firstT24=firstMidnight-DAY;
- if(firstT24<earliestCutoffSafeSourceTime)
-  refusal("PROSPECTIVE_FIRST_T24_LEAD_UNSAFE");
+ const drawOpens=firstMidnight-P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
+ const drawLastAllowed=firstMidnight-P5_EARLY_DRAW_MIN_STRICT_LEAD_MS-1;
+ const earliestDraw=Math.max(ready,drawOpens);
+ if(firstT24<earliestCutoffSafeSourceTime||earliestDraw>drawLastAllowed)
+  refusal("PROSPECTIVE_FIRST_T24_OR_EARLY_DRAW_LEAD_UNSAFE");
  const firstDate=date(firstMidnight);
  const candidate=proposeP5RealCorrectedPairDateGeometry({
   ownerCorrectedReadback:input.ownerCorrectedReadback,
@@ -124,6 +139,10 @@ export function proposeP5RollingEarliestFirstDayScenario(
   earliestFirstBatchDayUtcDate:firstDate,
   earliestFirstBatchStartUtc:iso(firstMidnight),
   hypotheticalFirstWindowStartT24Utc:iso(firstT24),
+  earlyDrawWindowOpensUtc:iso(drawOpens),
+  earlyDrawLastAllowedUtcInclusive:iso(drawLastAllowed),
+  earliestProspectiveDrawAtOrAfterReadyUtc:iso(earliestDraw),
+  strictEarlyDrawLeadMs:P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
   totalExtraPreT24SafetySeconds:total,
   dateCandidate:candidate,
   proposedEndDateUtc:candidate.lastRunDateUtc,

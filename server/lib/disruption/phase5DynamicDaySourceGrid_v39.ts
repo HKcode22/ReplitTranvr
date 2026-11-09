@@ -13,6 +13,10 @@
  */
 import { createHash } from "node:crypto";
 import {
+ P5_EARLY_DRAW_MIN_STRICT_LEAD_MS,
+ P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS
+} from "./phase5ProspectiveEarlyDrawClockContract_v39";
+import {
   verifyPreparedDailyDraw,
   type PreparedDayForReadback,
   type PreparedDrawRow,
@@ -57,8 +61,8 @@ const HASH=/^[a-f0-9]{64}$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS:P5Slot[]=["HUB","MID_A","MID_B","REGIONAL"];
 const HORIZONS:P5FidsHorizon[]=["T-24h","T-6h","T-90m"];
-const MIN_EARLY= (24*60+45)*60_000;
-const MAX_EARLY=72*3_600_000;
+const MIN_EARLY=P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
+const MAX_EARLY=P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
 const MAX_LATENCY=3_600;
 type WithoutUnknownIcao=Omit<P5FidsAcquisition,"icao"|"plannedAirportSelectionUtc">;
 
