@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — actual saved early-draw readback parity with early owner (P0, no paid GO)
+
+[**Read the precise 24h45m / 72h third-guard parity fix**](2026-11-09_P0_SAVED_EARLY_DRAW_READBACK_STRICT_CLOCK_PARITY.md). After PR #510 unified the DB early selection writer and day-source grid, `phase5EarlyPreselectionReadback_v39.ts` still admitted draws after **24h30m** lead (even at exactly the writer's forbidden **24h45m** boundary) and allowed draws >72h before service. The shared strict clock now applies to **all three** components; a readback cannot quietly accept a selection the writer refuses. Exact millisecond regression tests, no source query, no migration, no production DB write. No scientific flight-level PRE is certified; **Phase5 FREEZE HOLD / Phase6 paid GO NO**.
+
 ## Nov 9 — P0 real T−24 source vs strict 24h45m early draw start-time mismatch FIXED (no paid GO)
 
 [**Read the exact first-day deadline bug, counterexample, shared-code fix and tests**](2026-11-09_P0_FIRST_DAY_EARLY_DRAW_T24_STRICT_LEAD_CONTRACT_FIX.md). The preceding rolling-start preview only checked earliest T−24h source latency; the real early airport selection owner (and segmented FIDS day adapter) also rejects a selected airport draw at **exactly** or after **24h45m before service**, and refuses more than **72h** early. These are now **shared contract constants** in `server/lib/disruption/phase5ProspectiveEarlyDrawClockContract_v39.ts`, imported by both production guard paths and the rolling-date scenario. Actual first day must satisfy BOTH source PRE and early committed draw deadlines; no synthetic Nov11 or Nov24 example may override. Regres­sion tests cover the precise one-millisecond strict boundary, both owners and date rollover. **Phase5 scientific FREEZE HOLD, paid Phase6 GO NO, no provider/production-DB calls.**

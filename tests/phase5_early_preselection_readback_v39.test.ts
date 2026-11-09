@@ -60,6 +60,21 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(result.stateHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("matches the real early writer strict 24h45m lower and 72h upper boundary", () => {
+    // Fixture service start is 2026-11-08T14:00Z.
+    // The real database owner requires >24h45m before service, <=72h.
+    const run = (at: string) => {
+      const {day,rows}=fixture();
+      for(const row of rows)row.selected_at_utc=at;
+      return ()=>verifyPreparedDailyDraw(day,rows);
+    };
+    expect(run("2026-11-07T13:15:00.000Z"))
+      .toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+    expect(run("2026-11-07T13:14:59.999Z")).not.toThrow();
+    expect(run("2026-11-05T14:00:00.000Z")).not.toThrow();
+    expect(run("2026-11-05T13:59:59.999Z"))
+      .toThrow("DRAW_TOO_EARLY_FOR_PROSPECTIVE_SAMPLING");
+  });
   it("produces same digest after PostgreSQL jsonb reorders nested object fields", () => {
     const a = fixture();
     const b = fixture();
