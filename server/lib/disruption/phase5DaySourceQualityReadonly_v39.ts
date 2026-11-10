@@ -140,6 +140,7 @@ export interface Phase5DaySourceQualityResult {
  providerRawContentsRead:false;
  storedProviderRawContentsExported:false;
  providerCalls:0;databaseWrites:0;
+ day1SourceSafetyReview?:ReturnType<typeof assessP5Day1SourceSafetyFromReadonlyAudit>;
 }
 
 /** Independent metadata-only repeatable-read transaction. */
@@ -215,6 +216,7 @@ export async function auditPhase5SourceDay(
    storedProviderRawContentsExported:false,
    providerCalls:0,databaseWrites:0,
   };
+  result.day1SourceSafetyReview=assessP5Day1SourceSafetyFromReadonlyAudit(result);
   await client.query("COMMIT");tx=false;
   return result;
  }catch(error){
@@ -268,10 +270,13 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
  const asOf=validDate(audit.asOfUtc);
  if(asOf!==audit.asOfUtc)
   refuse("DAY1_AUDIT_TIME_NOT_CANONICAL_UTC");
- for(const [label,value] of Object.entries(audit.budget??{}))
-  strictCount(value,"BUDGET_"+label);
- for(const [label,value] of Object.entries(audit.earlySample??{}))
-  strictCount(value,"DRAW_"+label);
+ for(const label of [
+  "cycleApiCeiling","otherCategoryReservedUnits",
+  "protectedApiFloorUnits","physicallyReservedUnits",
+  "dailyApiCeiling","dailyOtherReservedUnits","dailySourceReservedUnits"
+ ] as const)strictCount(audit.budget?.[label],"BUDGET_"+label);
+ for(const label of ["drawRows","distinctSlots","distinctAirports"] as const)
+  strictCount(audit.earlySample?.[label],"DRAW_"+label);
  strictCount(audit.totalPlannedQueries,"TOTAL_PLANNED");
  strictCount(audit.totalBoundOriginals,"TOTAL_BOUND");
  const ledgerHolds:string[]=[],qualityFlags:string[]=[];
@@ -290,9 +295,13 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
      seen.has(g.slot+"|"+g.horizon))
    refuse("DAY1_DUPLICATE_OR_CHANGED_SLOT_HORIZON");
   seen.add(g.slot+"|"+g.horizon);
-  for(const [label,value] of Object.entries(g))
-   if(label!=="slot"&&label!=="horizon")
-    strictCount(value,"GROUP_"+label);
+  for(const label of [
+   "plannedQueries","reservedPhysicalGets","boundOriginals",
+   "missedGetWindow","notYetDue","reservedWithoutOriginalAfterCutoff",
+   "sourceBoundBeforePlannedCutoff","sourceBoundLateToPlannedCutoff",
+   "sourceRightsMetadataExpired","populationObservationRows",
+   "activeQueryRows","stoppedQueryRows"
+  ] as const)strictCount(g[label],"GROUP_"+label);
   totals.plannedQueries+=g.plannedQueries;
   totals.reservedPhysicalGets+=g.reservedPhysicalGets;
   totals.boundOriginals+=g.boundOriginals;
