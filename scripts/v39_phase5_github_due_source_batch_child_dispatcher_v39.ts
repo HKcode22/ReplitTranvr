@@ -79,14 +79,14 @@ export interface P5GithubRecentIndex{
 }
 export interface P5ChildDispatchIntent{
  queryDigestSha256:string;
- frozenPacketPath:string;
+ frozenPacketPath?:string;
  registryFilePath:string;
  runDayIndex:number;
  plannedDispatchUtc:string;
 }
 function iso(s:unknown):number{
  if(typeof s!=="string"||
-    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d:\d\d\.\d{3}Z$/.test(s)||
+    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(s)||
     !Number.isFinite(Date.parse(s))||
     new Date(s).toISOString()!==s)
   hold("INVALID_ACTUAL_SOURCE_DB_CLOCK");
