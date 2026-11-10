@@ -45,6 +45,8 @@ export interface FidsCensusParams {
   g5aCompositeIdentityStudyStartUtc?: Date;
   /** Separately ledger-reserved G5A POST source; never a PRE identifier. */
   g5aPostReservationId?:string;
+  /** Signed future Phase5 V0083 OUTCOME physical REST attempt; POST only. */
+  phase5PostReservationSha256?:string;
 }
 
 /**
@@ -53,6 +55,13 @@ export interface FidsCensusParams {
  * This is NOT a network byte-for-byte receipt or operator-flight proof.
  */
 export function buildFidsRequestContractV39(params:FidsCensusParams){
+ if(params.phase5PostReservationSha256!==undefined&&
+    (!/^[0-9a-f]{64}$/.test(params.phase5PostReservationSha256)||
+     params.restCategory!=="outcome"||
+     params.g5aPostReservationId!==undefined||
+     params.g5aObservedScheduleProtocol===true||
+     params.direction!=="Departure"))
+    throw Error("P5_POST_V0083_RESERVATION_FRAME_INVALID_HOLD");
  const direction=params.direction??"Both";
  if(!["Departure","Arrival","Both"].includes(direction)||
     typeof params.withCancelled!=="boolean"||
@@ -86,6 +95,8 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
   providerApiVersion:params.providerApiVersion,
   fidsProtocolVersion:params.fidsProtocolVersion,
   openapiSha256:params.openapiSha256,
+  ...(params.phase5PostReservationSha256?
+    {phase5PostReservationSha256:params.phase5PostReservationSha256}:{}),
   ...(params.g5aCompositeIdentityStudyStartUtc?
    {g5aCompositeIdentityStudyStartUtc:
     params.g5aCompositeIdentityStudyStartUtc.toISOString()}: {})
@@ -635,6 +646,10 @@ export async function fetchFidsPopulation(
     ianaTimezone: params.ianaTimezone,
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
+    ...(params.phase5PostReservationSha256?{
+      phase5PostReservationSha256:params.phase5PostReservationSha256,
+      phase5PostPurpose:"FUTURE_POST_SOURCE_OBSERVATION_NOT_AN_ACTUAL_PHYSICAL_LABEL",
+    }:{}),
     ...(params.g5aPostReservationId?{
       g5aPostReservationId:params.g5aPostReservationId,
       g5aPostPurpose:"PROVIDER_REPORTED_SCHEDULE_REVISION_NOT_ACTUAL_DELAY"
