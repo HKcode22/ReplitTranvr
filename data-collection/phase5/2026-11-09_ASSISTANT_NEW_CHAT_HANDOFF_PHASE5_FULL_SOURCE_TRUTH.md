@@ -1,5 +1,15 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 10 target-neutral real POST eligibility and practical minimum exit review
+
+Last main before new PR `87601a49e4c6181323b08101a2ba80ad9acd56c3` (merged #536); both main postmerge full V3.9 Offline Safety and bounded calendar recovery SUCCEEDED. User explicitly wants *less scientifically overstrict*/less brittle operations, detailed remaining work and a completion timeline that is not a false promise. All A/B/C/D1/D2/E texts remain preserved, primary target OPEN; no signed Phase5 FREEZE and separate Phase6 paid GO.
+
+New [**minimum viable Phase5 exit with future POST partial true PRE study**](2026-11-10_MINIMUM_PHASE5_EXIT_AND_PARTIAL_PRE_POST_REUSE.md) and `phase5FuturePostSourceEligibility_v39.mjs`, dedicated synthetic tests and credential-empty GitHub CI on `phase5/target-neutral-partial-pre-future-post-source-eligibility-20261110`. This is **not** a paid POST worker. It does not require all three PRE horizons to justify reviewing a later source POST; counts any truly source-bound and cutoff-valid PRE subset while explicitly recording unknown/late horizons, matching exact original native T, provider source range, identity, POST window/actual UTC charge date, and failing on duplicates/late paid POST/replay. **Current signed T6/T90 author requires independently committed T24 witness**; allowing T6/T90 without T24 is ONLY a proposed future change, NOT accomplished or real evidence. Existing Nov5 WSSS Phase4 POST is hardcoded paid and must not be run for 31 new days. CI and PR merge must be checked.
+
+4 actual exit deliverables: (A) one prospectively defined, lawful and honest first-cycle target/source policy, not every advanced model; (B) real unattended dynamic GitHub early draw→FIDS GET→T24 witness→T6/T90→generic future POST→receiver/Alert STOP; (C) real 31 parent-day/five corrected pairs/21 future adaptive unknown + seven actual REST charge-day categories+separate Alert budget with bounded prospective calendar flexibility and measured missingness; (D) one independent Phase5 release and separate paid Phase6 GO. Installed V0079–83 schema/roles and historical P2–4 paid receipts reusable, do not reinstall or repeat pilots. Do not invent a deadline based on CI time; actual critical dependency is orchestrator + target/rights/budget decisions. Phase6 collects 31 days and Phase7 trains. **FREEZE HOLD / GO NO**.
+
+
+
 ## Nov9 evening user's new direction — operational calendar should be less brittle but never hindsight data shopping
 
 Last verified baseline main `9f2a1477045a691f78a5186cc22b4bf41a08eb4c` from #535, main postmerge **V0082 PG16 and full V3.9 offline safety both SUCCESS**. [All A/B/C/D1/D2/E documents preserved with exact provenance](../plans/AMENDMENT_LINEAGE_REGISTER_A_B_C_D1_D2_E_20261109.md), Amendment E remains unadopted; first-cycle prediction target OPEN. Current user asks to work other Phase5 completion paths and **relax operational rigidity** to avoid delays if one immutable calendar day fails, while retaining scientifically adequate safety.
