@@ -1,0 +1,132 @@
+name: Phase5 one signed future POST (V0083, PAID ONLY AFTER PHASE6 GO)
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_future_post_packet:
+        description: "Pre-reviewed future data-collection/phase5/frozen/*.json for ONE V0083 POST"
+        required: true
+        type: string
+      confirm:
+        description: "Type ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml'
+      - 'scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts'
+      - 'server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts'
+      - 'server/lib/disruption/phase5V0083RestDedicatedRolePool_v39.ts'
+      - 'server/lib/disruption/fidsCensus_v3.ts'
+      - 'tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts'
+      - 'tests/phase5_v0083_future_post_manual_owner_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_V0083_FUTURE_POST_SIGNED_OWNER_CHECKPOINT.md'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-future-post-one-shot-${{ inputs.frozen_future_post_packet || github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-pr-no-provider:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Review V0083 real SQL path, exactly-once original + NO LIVE REST
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts
+          echo P5_V0083_POST_SIGNED_OWNER_OFFLINE_CI_NO_SOURCE_USE_RIGHTS_OR_PAID_GO
+  exact-signed-one-v0083-future-post:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ADB_AUTO_COLLECT: '0'
+      GITHUB_ACTIONS: 'true'
+      P5_FUTURE_POST_CONFIRM: ${{ inputs.confirm }}
+      V39_P5_POST_OWNER_APPROVED: ${{ secrets.V39_P5_POST_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED: ${{ secrets.V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED }}
+      V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      V39_P5_POST_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_POST_SIGNED_PACKET_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
+      V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_POST_REVIEWED_REQUEST_SHA256: ${{ secrets.V39_P5_POST_REVIEWED_REQUEST_SHA256 }}
+      V39_P5_POST_CONTEXT_SHA256: ${{ secrets.V39_P5_POST_CONTEXT_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ${{ secrets.P5_V39_OTHER_REST_REVIEW_DATABASE_URL }}
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ${{ secrets.P5_V39_OTHER_REST_RESERVE_DATABASE_URL }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: HARD gate before installing dependencies or running any DB/REST
+        env:
+          PACKET: ${{ inputs.frozen_future_post_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_P5_POST_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED" = 1
+          test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ "$PACKET" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+          test -f "$PACKET"
+          test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
+          test -n "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -n "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$AERODATABOX_API_KEY"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exactly one future V0083 reviewed OUTCOME GET plus source original
+        env:
+          RELEASE_FILE: ${{ inputs.frozen_future_post_packet }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts "$RELEASE_FILE"
+          echo 'ONE_FUTURE_POST_ORIGINAL_NO_MODEL_LABEL_AND_NO_AUTOMATIC_RETRY'
