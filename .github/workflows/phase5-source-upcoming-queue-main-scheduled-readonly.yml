@@ -21,6 +21,12 @@ on:
       - 'server/lib/disruption/phase5T24GithubChildDispatchDecision_v39.ts'
       - 'server/lib/disruption/phase5FuturePostGithubReadonlyRelease_v39.ts'
       - 'server/lib/disruption/phase5LaterPreGithubChildDecision_v39.ts'
+      - 'server/lib/disruption/phase5SignedLaterPreDayRegistry_v39.ts'
+      - 'scripts/v39_phase5_later_pre_registry_child_v39.ts'
+      - 'scripts/v39_phase5_later_pre_signed_day_batch_dispatcher_v39.ts'
+      - 'tests/phase5_signed_later_pre_day_registry_v39.test.ts'
+      - 'tests/phase5_later_pre_registry_child_v39.test.ts'
+      - 'tests/phase5_later_pre_signed_day_batch_dispatcher_v39.test.ts'
       - 'scripts/v39_phase5_later_pre_github_child_dispatcher_v39.ts'
       - 'tests/phase5_later_pre_github_child_dispatcher_v39.test.ts'
       - 'scripts/v39_phase5_future_post_github_child_dispatcher_v39.ts'
@@ -71,7 +77,7 @@ jobs:
       - name: Verify zero-provider due queue without production DB/paid permission
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase5_later_pre_github_child_dispatcher_v39.test.ts
+          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase5_later_pre_github_child_dispatcher_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts tests/phase5_later_pre_signed_day_batch_dispatcher_v39.test.ts
           echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
   signed-main-source-queue-readonly:
     if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
@@ -555,3 +561,99 @@ jobs:
           set +x
           npx tsx scripts/v39_phase5_later_pre_github_child_dispatcher_v39.ts
           echo 'LATER_PRE_GH_CHILD_REQUESTED_OR_CENSORED_NO_PARENT_DB_WRITE_NO_PROVIDER'
+
+  separately-authorized-native-later-pre-signed-day-batch:
+    # One 1..96-entry signed prospective day shard. Existing cron only.
+    # OFF by default and mutually exclusive with old single-flight loop.
+    # No provider, POST REST password, application DB or PRE SQL writer here.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED == 'true' && vars.P5_LATER_PRE_AUTO_DISPATCH_ENABLED != 'true' }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    concurrency:
+      group: phase5-later-pre-signed-batch-dispatch-singleton
+      cancel-in-progress: false
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENTRYPOINT: '1'
+      P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED }}
+      P5_LATER_PRE_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_AUTO_DISPATCH_ENABLED }}
+      P5_LATER_PRE_BATCH_REGISTRY_FILE: ${{ vars.P5_LATER_PRE_BATCH_REGISTRY_FILE }}
+      P5_LATER_PRE_DAY_INDEX: ${{ vars.P5_LATER_PRE_DAY_INDEX }}
+      V39_P5_LATER_PRE_BATCH_AUTO_APPROVED: ${{ secrets.V39_P5_LATER_PRE_BATCH_AUTO_APPROVED }}
+      V39_P5_LATER_PRE_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_OWNER_APPROVED }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED }}
+      V39_P5_LATER_PRE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_LATER_PRE_APPROVED_CODE_SHA }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_SHA256: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_SHA256 }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED }}
+      V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_NATIVE_T_SEMANTICS_SHA256: ${{ secrets.V39_P5_NATIVE_T_SEMANTICS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: HOLD unless separately signed real source day, rights, freeze, GO, registry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'schedule'
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_T24_WITNESS_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED" = true
+          test "$P5_LATER_PRE_AUTO_DISPATCH_ENABLED" != true
+          test "$V39_P5_LATER_PRE_BATCH_AUTO_APPROVED" = 1
+          test "$V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED" = 1
+          test "$V39_P5_LATER_PRE_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$GITHUB_SHA" = "$V39_P5_LATER_PRE_APPROVED_CODE_SHA"
+          [[ "$P5_LATER_PRE_BATCH_REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+          [[ "$V39_P5_LATER_PRE_DAY_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$P5_LATER_PRE_DAY_INDEX" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
+          test -n "$P5_V39_PRE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify multiple prospective later PRE source members, dispatch up to four signed children
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_later_pre_signed_day_batch_dispatcher_v39.ts
+          echo 'LATER_SIGNED_DAY_BATCH_REQUEST_OR_CENSOR_NO_PARENT_SQL_WRITE_NO_PROVIDER'
