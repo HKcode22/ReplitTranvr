@@ -7,6 +7,7 @@
  * budget, actual V0080 prearm and paid GET are still separate authorities.
  * It performs no database write, external provider call or signing.
  */
+import type {P5SourceUpcomingCandidate} from "./phase5SourceUpcomingDueQueueReadonly_v39";
 import type {P5CommittedDayReadonlyResult}
  from "./phase5CommittedDayGridReadonly_v39";
 import type {Stage8DayProposalResult}
@@ -207,5 +208,129 @@ export function draftP5OneGetFromActualPreparedSource(
     githubOnlyOwnerApproved:false
    }
   }
+ };
+}
+
+
+/**
+ * Target-neutral Stage7/8 future query draft ↔ Stage9 actual V0079 queue
+ * review: BOTH inputs must come from independently verified restricted
+ * sources. This is a PURE comparison, not an independent SQL readback, a
+ * digital signature, a source-use review or authority to dispatch GitHub.
+ *
+ * Crucial for the eventual unattended owner: a static signed draft must
+ * never be treated as an actual PREPARED, unreserved, still-due DB row.
+ */
+export interface P5UnsignedRealDueQueueReview{
+ schema:"v39.phase5.actual-due-source-query-plus-unsigned-draft.v1";
+ status:"SAME_SOURCE_DRAFT_AND_DB_DUE_QUERY_AWAIT_SIGNED_RELEASE_NO_DISPATCH";
+ manifestSha256:string;
+ queryDigestSha256:string;
+ savedEarlyDrawSha256:string;
+ runDayIndex:number;
+ slot:string;horizon:string;selectedIcao:string;
+ reviewedPlannedDispatchUtc:string;
+ hardLatestDispatchUtc:string;
+ observedDatabaseClockUtc:string;
+ upstreamStage7And8IndependentlyAuthenticatedByThisFunction:false;
+ currentDbQueueAuthenticityIndependentlyAuthenticatedByThisFunction:false;
+ sourceContractAndPhysicalBudgetIndependentlyVerifiedHere:false;
+ independentSignedQueryByteReleasePresent:false;
+ providerCalls:0;databaseWrites:0;externalGithubDispatches:0;
+ phase5ScientificFreezeGranted:false;phase6PaidGoGranted:false;
+}
+export function intersectP5OneGetDraftWithActualSourceDueQueue(
+ draft:P5UnapprovedOneGetCandidate,
+ scan:{
+  schema:"v39.phase5.source-upcoming-queue-readonly.v1";
+  status:"METADATA_ONLY_NOT_AN_AUTOMATIC_PAID_DISPATCH";
+  dbClockUtc:string;manifestSha256:string;
+  observedQueries:number;providerCalls:0;dbWrites:0;
+  paidGetDispatched:false;
+  requiresIndependentDynamicQueryByteSignature:true;
+  sourceRangeAndSevenRestCategoriesNotCertifiedHere:true;
+  sourceUseAndRetentionNotCertifiedHere:true;
+  phase5FreezeCertified:false;phase6GoGrantedHere:false;
+  candidates:readonly P5SourceUpcomingCandidate[];
+ }
+):P5UnsignedRealDueQueueReview{
+ if(!draft||!scan||draft.schema!==
+       "v39.phase5.prepared-source-query-one-get-draft.v1"||
+    draft.status!==
+       "EXACT_SELECTED_DB_SOURCE_QUERY_AWAITING_INDEPENDENT_PAID_RELEASE"||
+    draft.selectedQueryAlreadyPreparedInProduction!==false||
+    draft.independentlySignedRawJsonBytes!==false||
+    draft.sourceContentsAndMlRightsApproved!==false||
+    draft.phase5ScientificFreezePassed!==false||
+    draft.phase6PaidGo!==false||
+    draft.providerCalls!==0||draft.databaseWrites!==0||
+    scan.schema!=="v39.phase5.source-upcoming-queue-readonly.v1"||
+    scan.status!=="METADATA_ONLY_NOT_AN_AUTOMATIC_PAID_DISPATCH"||
+    scan.providerCalls!==0||scan.dbWrites!==0||
+    scan.paidGetDispatched!==false||
+    scan.phase5FreezeCertified!==false||
+    scan.phase6GoGrantedHere!==false||
+    scan.requiresIndependentDynamicQueryByteSignature!==true||
+    scan.sourceRangeAndSevenRestCategoriesNotCertifiedHere!==true||
+    scan.sourceUseAndRetentionNotCertifiedHere!==true||
+    !Array.isArray(scan.candidates)||
+    scan.observedQueries!==scan.candidates.length)
+  reject("NOT_TWO_UNRELEASED_READONLY_SOURCE_VIEW_STATES");
+ const e=draft.unsignedQueryEnvelope,p=e?.plan;
+ const a=p?.acquisition;
+ if(!e||e.schema!=="v39.phase5.github-source-one-query-template.v2"||
+    p?.independentlyApprovedSourceAndRetention!==false||
+    p.githubOnlyOwnerApproved!==false||
+    !SHA.test(draft.selectedQueryDigestSha256??"")||
+    !SHA.test(draft.exactSourceCandidateSha256??"")||
+    !SHA.test(draft.expectedStage8ProposalSha256??"")||
+    !SHA.test(e.manifestSha256??"")||
+    !SHA.test(p.expectedEarlyDrawSha256??"")||
+    !a||!Number.isInteger(a.runDayIndex)||a.runDayIndex<1||
+    a.runDayIndex>31||a.apiUnitsPerAttempt!==2||a.maxAttempts!==1)
+  reject("UNREVIEWED_STATIC_QUERY_DRAFT_OR_PRICE");
+ if(e.manifestSha256!==scan.manifestSha256||
+    e.queryDigestSha256!==draft.selectedQueryDigestSha256||
+    typeof a.queryKey!=="string"||!a.queryKey||
+    !["HUB","MID_A","MID_B","REGIONAL"].includes(a.slot)||
+    !["T-24h","T-6h","T-90m"].includes(a.horizon)||
+    !/^[A-Z]{4}$/.test(a.icao??""))
+  reject("STATIC_MANIFEST_QUERY_OR_AIRPORT_SCOPE_CHANGED");
+ const matches=scan.candidates.filter(x=>
+  x.queryDigestSha256===draft.selectedQueryDigestSha256);
+ if(matches.length!==1)
+  reject("NO_UNIQUE_ACTUAL_DB_PREPARED_SOURCE_QUERY");
+ const q=matches[0];
+ const isIso=(v:unknown)=>typeof v==="string"&&
+  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)&&
+  Number.isFinite(Date.parse(v))&&new Date(Date.parse(v)).toISOString()===v;
+ if(![q.plannedDispatchUtc,q.latestDispatchUtc,
+      scan.dbClockUtc,a.scheduledRequestUtc].every(isIso))
+  reject("UNVERIFIED_PLANNED_AND_DATABASE_CLOCK");
+ if(q.status!=="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH"||
+    q.runDayIndex!==a.runDayIndex||q.queryKey!==a.queryKey||
+    q.slot!==a.slot||q.horizon!==a.horizon||
+    q.selectedAirportIcao!==a.icao||
+    q.earlyDrawSha256!==p.expectedEarlyDrawSha256||
+    q.plannedDispatchUtc!==a.scheduledRequestUtc||
+    Date.parse(scan.dbClockUtc)>=Date.parse(q.latestDispatchUtc))
+  reject("QUEUE_RESV_OR_REPLAY_OR_CHANGED_SOURCE_PLAN");
+ return {
+  schema:"v39.phase5.actual-due-source-query-plus-unsigned-draft.v1",
+  status:"SAME_SOURCE_DRAFT_AND_DB_DUE_QUERY_AWAIT_SIGNED_RELEASE_NO_DISPATCH",
+  manifestSha256:e.manifestSha256,
+  queryDigestSha256:q.queryDigestSha256,
+  savedEarlyDrawSha256:q.earlyDrawSha256,
+  runDayIndex:q.runDayIndex,slot:q.slot,horizon:q.horizon,
+  selectedIcao:q.selectedAirportIcao,
+  reviewedPlannedDispatchUtc:q.plannedDispatchUtc,
+  hardLatestDispatchUtc:q.latestDispatchUtc,
+  observedDatabaseClockUtc:scan.dbClockUtc,
+  upstreamStage7And8IndependentlyAuthenticatedByThisFunction:false,
+  currentDbQueueAuthenticityIndependentlyAuthenticatedByThisFunction:false,
+  sourceContractAndPhysicalBudgetIndependentlyVerifiedHere:false,
+  independentSignedQueryByteReleasePresent:false,
+  providerCalls:0,databaseWrites:0,externalGithubDispatches:0,
+  phase5ScientificFreezeGranted:false,phase6PaidGoGranted:false
  };
 }
