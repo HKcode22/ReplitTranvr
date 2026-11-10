@@ -1,4 +1,6 @@
 name: Phase5 native T24 PRE + distinct V0081 witness (SIGNED, manual main only)
+# Exact workflow_dispatch identity for bounded parent no-replay history.
+run-name: P5 T24 ${{ inputs.frozen_native_t24_packet }}
 on:
   workflow_dispatch:
     inputs:
