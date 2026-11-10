@@ -106,7 +106,11 @@ export function reviewP5OneNativeT24RealSourceHandoff(
     pre.reviewedConfigSha256!==pins.expectedConfigSha256||
     pre.independentlyReviewedNativeTEvidenceSha256!==pins.expectedNativeSemanticsSha256||
     pre.selectedTConfig?.verifiedProviderNativeSchedule!==true||
+    pre.selectedTConfig?.milestone!=="departure.scheduledTime.utc"||
     pre.selectedTConfig?.semanticsEvidenceSha256!==pins.expectedNativeSemanticsSha256||
+    !Number.isSafeInteger(pre.maxPopulationStalenessSeconds)||
+    pre.maxPopulationStalenessSeconds<1||
+    pre.maxPopulationStalenessSeconds>86400||
     pre.expectedRestrictedPreWriterRole!==P5_STAGE28_GROUPS.pre||
     review.expectedWitnessOnlyRole!==P5_STAGE28_GROUPS.witness||
     !UUID.test(pre.expectedSourcePopulationQueryId??"")||
@@ -185,6 +189,7 @@ export function reviewP5OneNativeT24RealSourceHandoff(
    utc(a.source_available)<=cutoff&&
    utc(a.source_expires_at_utc)>cutoff&&
    utc(a.source_expires_at_utc)>now&&
+   utc(a.source_expires_at_utc)<=utc(a.source_available)+23*3600_000&&
    cutoff-utc(a.source_available)<=pre.maxPopulationStalenessSeconds*1000&&
    utc(m.available_at)>=utc(a.source_available)&&
    utc(m.available_at)<=cutoff;
