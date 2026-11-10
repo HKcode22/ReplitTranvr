@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 V0083 two-role REST no-provider readiness
+
+[Nonpaid read-only commissioning checkpoint](2026-11-10_V0083_REST_READONLY_COMMISSIONING_CHECKPOINT.md): proposed manual-main GitHub verifier for the two existing V0083 REST NOLOGIN groups' **distinct LOGIN** roles, PG16 SET/INHERIT constraints and narrow review/reserve grants. The PR suite is offline; a real commissioned LOGIN readback has **not** yet passed. No source use, paid POST, production schema change or Phase6 GO is implied. Reuse PR #538's signed future POST code; focus next on unattended coordinator and rights/budgets/calendar, not a historic paid pilot.
+
+
 ## Nov 10 — future-date V0083 POST real DB one-attempt adapter under review (not paid commissioned)
 
 [**Future V0083 signed POST worker source/original/REST role implementation checkpoint**](2026-11-10_V0083_FUTURE_POST_SIGNED_OWNER_CHECKPOINT.md): the existing one-time physical UTC `OUTCOME_REST_UNIT_BUDGET` reserved-call schema, real SOURCE PRE readback and atomic FIDS original/normalized members have now been connected in a proposed **GitHub manual-only signed future-date worker**. It adds an explicit one-physical-attempt transport option, rather than invoking three automatic retries under one V0083 reservation. REST review/reserve LOGIN groups, necessary SELECT/INSERT grants, real source Contents rights and scientific target/Phase6 GO are NOT commissioned; no real POST/pilot or provider call occurred. This is still **NOT** full unattended 31-day source→T24 witness→T6/T90→POST/receiver/STOP. The six amendment source documents are untouched; Phase5 FREEZE HOLD / Phase6 paid GO NO.
