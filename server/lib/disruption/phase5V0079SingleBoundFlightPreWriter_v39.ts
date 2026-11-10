@@ -16,6 +16,8 @@ import {
 } from "./preSnapshotBuilder_v3";
 import {verifyP5Stage24WitnessedFrozenT,
  type P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
+import {decideP5LaterPreEvidencePath,
+ type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 const SHA=/^[0-9a-f]{64}$/;
 const ID=/^[a-zA-Z0-9_.:|-]{5,200}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -63,8 +65,11 @@ export interface P5Stage14SingleFlightPrePermit{
  selectedTNativeUtc:string;
  maxPopulationStalenessSeconds:number;
  expectedRestrictedPreWriterRole:string;
- /** Required for T6/T90 only: reviewed real Stage17 readback and V0081 witness. */
+ /** Normal T6/T90 path: real Stage17 readback and V0081 witness. */
  reviewedT24WitnessReceipt?:P5Stage24ReviewedT24Receipt;
+ /** Opt-in independently reviewed later-only as-of protocol when T24 was
+  * missed. Requires separate approved protocol SHA passed to the writer. */
+ reviewedStandaloneLaterNoT24?:P5StandaloneLaterNoT24Review;
  /** Caller review attestations are metadata, NOT self-authenticating proof. */
  externalNativeTPhysicalLegAndSourceUseReviewed?:true;
  /** An explicitly adopted protocol may use Phase4's conditional-service tier
@@ -92,6 +97,8 @@ export interface P5Stage14SingleFlightPreResult{
  postCommitDbClockAtUtc:string;
  preSnapshotsInserted:1;providerCalls:0;alertCreates:0;
  authenticPersistedT24WitnessAnchoredForLaterHorizon:boolean;
+ laterPreEvidenceTier:"NATIVE_T24"|"WITNESSED_T24_LATER"|"STANDALONE_ASOF_LATER_MISSING_T24";
+ missingT24ExplicitlyRecordedWithoutBackfill:boolean;
  externalNativeTIndependentlyAuthenticatedByThisFunction:false;
  externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false;
  providerRightsIndependentlyCertifiedByThisFunction:false;
@@ -155,7 +162,8 @@ export const P5_STAGE24_REVIEWED_WITNESSED_T24_SQL=[
  " JOIN clean.flight_snapshots s ON s.id=w.snapshot_id",
  " WHERE w.flight_instance_id=$1 LIMIT 2"
 ].join(" ");
-function assertPermit(p:P5Stage14SingleFlightPrePermit):Date{
+function assertPermit(p:P5Stage14SingleFlightPrePermit,
+ independentlyApprovedStandaloneProtocolSha256?:string):Date{
  if(!p||![p.manifestSha256,p.queryDigestSha256,
   p.expectedSourceResponseSha256,p.expectedReviewedReleaseSha256,
   p.expectedReviewedSourceRightsSha256,p.expectedProviderContractSha256,
@@ -196,8 +204,9 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit):Date{
      p.expectedDestinationIcao===p.airportIcao)
    hold("CONDITIONAL_PROTOCOL_OR_STABLE_SERVICE_KEY_UNAPPROVED");
  }else hold("UNKNOWN_IDENTITY_TIER_NOT_AUTHORIZED");
- if(p.horizon!=="T-24h"&&!p.reviewedT24WitnessReceipt)
-   hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
+ // A later horizon without a T24 witness requires separate externally
+ // reviewed standalone as-of permission; unchanged default is fail closed.
+ decideP5LaterPreEvidencePath(p,independentlyApprovedStandaloneProtocolSha256);
  const frozen=instant(p.builderFrozenAtUtc,"FROZEN_BUILDER_UTC_INVALID");
  const native=instant(p.selectedTNativeUtc,"NATIVE_T_UTC_INVALID");
  if(!p.selectedTConfig||
@@ -292,9 +301,12 @@ function due(cutoff:Date,now:Date){
  * snapshot; external legal/selected-T review cannot be inferred by code.
  */
 export async function persistP5V0079SingleBoundFlightPre(
- pool:Pick<Pool,"connect">,p:P5Stage14SingleFlightPrePermit
+ pool:Pick<Pool,"connect">,p:P5Stage14SingleFlightPrePermit,
+ options?:{independentlyApprovedStandaloneProtocolSha256:string}
 ):Promise<P5Stage14SingleFlightPreResult>{
- const native=assertPermit(p);
+ const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
+ const laterEvidence=decideP5LaterPreEvidencePath(
+  p,options?.independentlyApprovedStandaloneProtocolSha256);
  // For T6/T90 Stage24 requires a *persisted* T24 V0081 witness in
  // the same serializable database view AND an externally reviewed Stage17
  // post-COMMIT readback receipt. Without both, no later-horizon PRE.
@@ -343,6 +355,21 @@ export async function persistP5V0079SingleBoundFlightPre(
   const version=p.selectedTConfig.milestone+":"+
     p.selectedTConfig.version+":"+p.selectedTConfig.artifactHash;
   if(p.horizon!=="T-24h"){
+   if(laterEvidence==="STANDALONE_ASOF_LATER_MISSING_T24"){
+    // Never pretend T24 existed or downgrade an ambiguous T24 snapshot.
+    // Retain the same bound-source and protected native cutoff checks.
+    const oldT24=await c.query(
+     "SELECT id FROM clean.flight_snapshots WHERE flight_instance_id=$1"+
+     " AND horizon='T-24h' LIMIT 2",[p.flightInstanceId]);
+    const oldWitness=await c.query(P5_STAGE24_REVIEWED_WITNESSED_T24_SQL,
+     [p.flightInstanceId]);
+    if(oldT24.rows.length!==0||oldWitness.rows.length!==0)
+     hold("MISSING_T24_FALLBACK_BLOCKED_BY_EXISTING_T24_OR_WITNESS");
+    if(!members[0].dep_scheduled_utc||
+       dbTime(members[0].dep_scheduled_utc,
+        "STANDALONE_FIRST_NATIVE_T").getTime()!==native.getTime())
+     hold("MISSING_T24_FALLBACK_NATIVE_T_NOT_SOURCE_BOUND");
+   }else{
    const row=(await c.query(P5_STAGE24_REVIEWED_WITNESSED_T24_SQL,
      [p.flightInstanceId])).rows;
    if(row.length!==1)
@@ -358,6 +385,7 @@ export async function persistP5V0079SingleBoundFlightPre(
        expectedConfigSha256:p.reviewedConfigSha256,
        cutoffUtc:cutoff.toISOString(),horizon:p.horizon
      });
+   }
   }else{
    // The source's provider-native first T is independently authenticated,
    // not an inferred actual runway event or later schedule revision.
@@ -444,7 +472,11 @@ export async function persistP5V0079SingleBoundFlightPre(
    postCommitDatabaseReadbackVerified:true,
    postCommitDbClockAtUtc:post.toISOString(),
    preSnapshotsInserted:1,providerCalls:0,alertCreates:0,
-   authenticPersistedT24WitnessAnchoredForLaterHorizon:p.horizon!=="T-24h",
+   authenticPersistedT24WitnessAnchoredForLaterHorizon:
+    laterEvidence==="WITNESSED_T24_LATER",
+   laterPreEvidenceTier:laterEvidence,
+   missingT24ExplicitlyRecordedWithoutBackfill:
+    laterEvidence==="STANDALONE_ASOF_LATER_MISSING_T24",
    externalNativeTIndependentlyAuthenticatedByThisFunction:false,
    externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false,
    providerRightsIndependentlyCertifiedByThisFunction:false,
