@@ -32,9 +32,11 @@ const deny=(what:string):never=>{
  throw Error("REFUSED_P5_GITHUB_WITNESSED_LATER_PRE_"+what);
 };
 export interface P5SignedWitnessedLaterPrePacket{
- schema:"v39.phase5.github-witnessed-later-pre-reviewed.v1";
+ schema:"v39.phase5.github-witnessed-later-pre-reviewed.v1"|
+ "v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
  reviewedCodeSha:string;
- independentLaterHorizonAndT24ReviewAttested:true;
+ independentLaterHorizonAndT24ReviewAttested?:true;
+ independentlyReviewedLaterWithoutT24AsOfAttested?:true;
  prePermit:P5Stage14SingleFlightPrePermit;
 }
 export function admitP5SignedWitnessedLaterPre(
@@ -63,9 +65,13 @@ export function admitP5SignedWitnessedLaterPre(
   deny("PACKET_BYTES_NOT_INDEPENDENTLY_REVIEWED");
  const pre=packet?.prePermit;
  if(!packet||
-    packet.schema!=="v39.phase5.github-witnessed-later-pre-reviewed.v1"||
+    !["v39.phase5.github-witnessed-later-pre-reviewed.v1",
+      "v39.phase5.github-standalone-later-pre-asof-reviewed.v2"]
+      .includes(packet.schema)||
     packet.reviewedCodeSha!==env.GITHUB_SHA||
-    packet.independentLaterHorizonAndT24ReviewAttested!==true||
+    (packet.schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1"?
+       packet.independentLaterHorizonAndT24ReviewAttested!==true:
+       packet.independentlyReviewedLaterWithoutT24AsOfAttested!==true)||
     !pre||!["T-6h","T-90m"].includes(pre.horizon)||
     pre.expectedRestrictedPreWriterRole!==P5_STAGE28_GROUPS.pre||
     // Do not silently recertify conditional scheduled services as
@@ -86,7 +92,25 @@ export function admitP5SignedWitnessedLaterPre(
   deny("LATER_SOURCE_IDENTITY_OR_ROLE_NOT_REVIEWED");
 
  const witness=pre.reviewedT24WitnessReceipt;
- if(!witness||
+ const standalone=
+  packet.schema==="v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
+ if(standalone){
+  const a=pre.reviewedStandaloneLaterNoT24;
+  if(witness||!a||
+     packet.independentLaterHorizonAndT24ReviewAttested===true||
+     env.V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED!=="1"||
+     !SHA.test(env.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256??"")||
+     a.reviewedProtocolSha256!==
+       env.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256||
+     a.reviewedOriginalResponseSha256!==pre.expectedSourceResponseSha256||
+     a.reviewedNativeTSemanticsSha256!==
+       pre.independentlyReviewedNativeTEvidenceSha256||
+     a.independentLaterAsOfAndMissingnessReviewAttested!==true||
+     a.missingT24Class!=="HONEST_T24_UNOBSERVED_NOT_BACKFILLED")
+   deny("INDEPENDENT_STANDALONE_LATER_ASOF_AND_MISSING_T24_NOT_REVIEWED");
+ }else{
+  if(pre.reviewedStandaloneLaterNoT24||
+    !witness||
     witness.schema!=="v39.phase5.stage24.externally-reviewed-stage17-receipt.v1"||
     !SHA.test(env.V39_P5_LATER_PRE_T24_RECEIPT_SHA256??"")||
     witness.receiptSha256!==env.V39_P5_LATER_PRE_T24_RECEIPT_SHA256||
@@ -98,7 +122,8 @@ export function admitP5SignedWitnessedLaterPre(
     witness.expectedSelectedTVersion!==
       pre.selectedTConfig?.milestone+":"+
       pre.selectedTConfig?.version+":"+pre.selectedTConfig?.artifactHash)
-  deny("INDEPENDENT_T24_RECEIPT_SCOPE_NOT_REVIEWED");
+   deny("INDEPENDENT_T24_RECEIPT_SCOPE_NOT_REVIEWED");
+ }
  const native=pre.selectedTNativeUtc;
  if(typeof native!=="string"||!ISO.test(native)||
     !Number.isFinite(Date.parse(native))||
@@ -107,8 +132,8 @@ export function admitP5SignedWitnessedLaterPre(
  const cutoff=Date.parse(native)-
     (pre.horizon==="T-6h"?6*3600_000:90*60_000);
  if(!Number.isFinite(cutoff)||
-    witness.frozenT24CutoffUtc!==
-       new Date(Date.parse(native)-24*3600_000).toISOString())
+    (!standalone&&witness?.frozenT24CutoffUtc!==
+       new Date(Date.parse(native)-24*3600_000).toISOString()))
   deny("T24_ANCHOR_NOT_FROZEN_FOR_LATER_HORIZON");
 
  let u:URL;
@@ -131,7 +156,9 @@ export function admitP5SignedWitnessedLaterPre(
  return {
   prePermit:pre,cutoffMs:cutoff,
   preDatabaseUrl:env.P5_V39_PRE_DATABASE_URL!,
-  reviewedPacketSha256:env.V39_P5_LATER_PRE_SIGNED_PACKET_SHA256!
+  reviewedPacketSha256:env.V39_P5_LATER_PRE_SIGNED_PACKET_SHA256!,
+  standaloneProtocolSha256:standalone?
+   env.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256:undefined
  };
 }
 export async function runP5SignedWitnessedLaterPre(
@@ -157,21 +184,28 @@ export async function runP5SignedWitnessedLaterPre(
    return at instanceof Date?at:new Date(String(at));
   });
   const result=await persistP5V0079SingleBoundFlightPre(
-   scoped,approved.prePermit);
+   scoped,approved.prePermit,approved.standaloneProtocolSha256?
+    {independentlyApprovedStandaloneProtocolSha256:
+      approved.standaloneProtocolSha256}:undefined);
+  const hasWitness=!approved.standaloneProtocolSha256;
   if(result.horizon!==approved.prePermit.horizon||
      result.preSnapshotsInserted!==1||
      result.postCommitDatabaseReadbackVerified!==true||
-     result.authenticPersistedT24WitnessAnchoredForLaterHorizon!==true)
+     result.authenticPersistedT24WitnessAnchoredForLaterHorizon!==hasWitness||
+     result.missingT24ExplicitlyRecordedWithoutBackfill===hasWitness)
    deny("INCOMPLETE_LATER_PRE_PROOF_NO_RETRY");
   return {
    schema:"v39.phase5.github-one-witnessed-later-pre.v1" as const,
-   status:"LATER_PRE_COMMITTED_WITH_EXISTING_T24_WITNESS_NOT_SCIENTIFIC_GO" as const,
+   status:hasWitness?
+    "LATER_PRE_COMMITTED_WITH_EXISTING_T24_WITNESS_NOT_SCIENTIFIC_GO" as const:
+    "STANDALONE_LATER_ASOF_PRE_COMMITTED_T24_MISSING_NOT_SCIENTIFIC_GO" as const,
    packetSha256:approved.reviewedPacketSha256,
    runDayIndex:result.runDayIndex,horizon:result.horizon,
    committedSnapshotId:result.committedSnapshotId,
    postCommitDbClockAtUtc:result.postCommitDbClockAtUtc,
    providerCalls:0 as const,alertCreates:0 as const,
-   t24WitnessVerified:true as const,
+   t24WitnessVerified:hasWitness,
+   t24MissingExplicitlyRecorded:!hasWitness,
    noBackfill:true as const,phase5FreezeGrantedHere:false as const,
    phase6PaidGoGrantedHere:false as const
   };
