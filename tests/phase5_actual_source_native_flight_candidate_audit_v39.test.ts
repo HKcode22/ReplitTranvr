@@ -83,6 +83,10 @@ describe("actual post-COMMIT source native-flight candidates, no invented packet
   expect(r.candidateCount).toBe(2);
   expect(r.censoredCount).toBe(1);
   expect(r.candidates[1].status).toBe("CENSORED_MISSING_NATIVE_T");
+  f.members[1]={...f.members[1],dep_scheduled_utc:"not-native"};
+  const malformed=audit(f);
+  expect(malformed.candidateCount).toBe(2);
+  expect(malformed.candidates[1].status).toBe("CENSORED_MISSING_NATIVE_T");
  });
  it("censors same-flight duplicate ambiguous identity independently",()=>{
   const f=fixture();
@@ -122,7 +126,7 @@ describe("actual post-COMMIT source native-flight candidates, no invented packet
   },members:f.members.map(m=>({...m,
    available_at:utc("2027-02-10T06:10:10.000Z") })),
    clock:utc("2027-02-10T06:15:00.000Z")};
-  expect(audit(late).classifications.CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK)
+  expect(audit(late).classifications.CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF)
    .toBe(3);
  });
  it("never misclassifies a too-stale or expired source as a valid PRE",()=>{
