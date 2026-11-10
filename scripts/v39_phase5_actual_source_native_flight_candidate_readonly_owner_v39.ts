@@ -165,7 +165,7 @@ export async function runP5ActualSourceNativeCandidateOwner(
   return{
    schema:"v39.phase5.actual-native-flight-candidate-aggregate-owner.v1" as const,
    status:"NONPAID_REAL_SOURCE_REVIEW_NOT_SIGNED_PACKET" as const,
-   sourcePopulationQueryIdSha256:
+   candidateAuditSha256:
     digestP5ActualSourceCandidateAudit(audit),
    aggregate:{
     actualDbClockUtc:audit.actualDbClockUtc,
