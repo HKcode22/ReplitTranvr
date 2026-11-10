@@ -7,6 +7,9 @@ import {Pool} from "pg";
 import {readFileSync,statSync} from "node:fs";
 import {reviewP5OneSignedPacketAgainstActualDueQueue}
  from "../server/lib/disruption/phase5SignedDueSourceOnePacketHandoff_v39";
+import {reviewP5SignedSourceDayBatchAgainstActualQueue,
+ type P5SignedSourceBatchRegistry}
+ from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 import type {P5GitHubOneQueryReleaseEnvelope}
  from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
@@ -87,6 +90,41 @@ export async function runP5GitHubSourceQueueObserver(env:NodeJS.ProcessEnv){
   // dispatch, source GET, paid reservation or source-use authorization.
   let signedPacketHandoff:
    ReturnType<typeof reviewP5OneSignedPacketAgainstActualDueQueue>|null=null;
+  const batchMode=env.P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED==="true";
+  if(batchMode&&env.P5_SOURCE_SIGNED_PACKET_OBSERVER_ENABLED==="true")
+   reject("SINGLE_QUERY_AND_DAY_BATCH_MODES_CONFLICT");
+  let signedDaySourceBatch:
+   ReturnType<typeof reviewP5SignedSourceDayBatchAgainstActualQueue>|null=null;
+  if(batchMode){
+   const registryPath=env.P5_SOURCE_BATCH_REGISTRY_FILE??"";
+   if(!/^data-collection\/phase5\/frozen\/[A-Za-z0-9_.-]{8,125}\.json$/.test(registryPath))
+    reject("BATCH_REGISTRY_UNREVIEWED_PATH");
+   const day=Number(env.P5_SOURCE_BATCH_RUN_DAY_INDEX??"");
+   if(!Number.isSafeInteger(day)||day<1||day>31)
+    reject("BATCH_RUN_DAY_NOT_EXACT");
+   const read=(path:string):Buffer=>{
+    if(!/^data-collection\/phase5\/frozen\/[A-Za-z0-9_.-]{8,125}\.json$/.test(path))
+     reject("BATCH_PACKET_UNREVIEWED_PATH");
+    const st=statSync(path);
+    if(!st.isFile()||st.size<100||st.size>200000)
+     reject("BATCH_PACKET_BAD_SIZE");
+    return readFileSync(path);
+   };
+   const bytes=read(registryPath);
+   let registry:P5SignedSourceBatchRegistry;
+   try{registry=JSON.parse(bytes.toString("utf8")) as P5SignedSourceBatchRegistry;}
+   catch{reject("BATCH_REGISTRY_NOT_JSON");}
+   signedDaySourceBatch=reviewP5SignedSourceDayBatchAgainstActualQueue(
+    scanned,bytes,registry,{
+     registryFilePath:registryPath,
+     expectedRegistrySha256:env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256??"",
+     expectedManifestSha256:ctx.scope.expectedManifestSha256,
+     expectedReleaseSha256:ctx.scope.expectedReleaseSha256,
+     expectedRightsSha256:ctx.scope.expectedRightsSha256,
+     expectedProviderContractSha256:ctx.scope.expectedProviderContractSha256,
+     expectedRunDayIndex:day
+    },read);
+  }
   if(env.P5_SOURCE_SIGNED_PACKET_OBSERVER_ENABLED==="true"){
    const path=env.P5_SOURCE_SIGNED_FROZEN_PACKET_FILE??"";
    if(!new RegExp("^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}[.]json$").test(path))
@@ -117,6 +155,7 @@ export async function runP5GitHubSourceQueueObserver(env:NodeJS.ProcessEnv){
     q=>q.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").length,
    candidates:scanned.candidates,
    signedPacketHandoff,
+   signedDaySourceBatch,
    providerCalls:0 as const,
    databaseWrites:0 as const,
    externalGithubDispatches:0 as const,
