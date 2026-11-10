@@ -120,7 +120,7 @@ export interface P5ActualSourceCandidateAudit{
  * To discover up to 500 real SOURCE normalized members without choosing a
  * desired flight ID first. Exactly the existing Stage14 member projection,
  * against the SOURCE's already post-COMMIT population_query_id.
- * LIMIT 501 is intentional: excess volume HOLD, never silently truncate
+ * LIMIT 2501 is intentional: excess volume HOLD, never silently truncate
  * and pretend a full population was reviewed.
  */
 export const P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL=[
