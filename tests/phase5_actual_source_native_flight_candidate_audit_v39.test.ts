@@ -160,7 +160,7 @@ describe("actual post-COMMIT source native-flight candidates, no invented packet
  it("uses bounded true source normalized member SELECT, not paid or arbitrary source",()=>{
   expect(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL)
    .toContain("WHERE p.population_query_id=$1::uuid");
-  expect(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL).toContain("LIMIT 501");
+  expect(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL).toContain("LIMIT 2501");
   expect(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL)
    .not.toContain("INSERT");
   const f=fixture();
