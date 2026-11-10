@@ -91,6 +91,9 @@ jobs:
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
           CREATE ROLE v0083_ci_owner LOGIN NOINHERIT CREATEROLE
             NOSUPERUSER NOCREATEDB PASSWORD 'ci-only';
+          -- Test-only creator must be able to *inspect* existing ACLs.
+          -- This GRANT exists only in disposable PG16, never production.
+          GRANT USAGE ON SCHEMA clean TO v0083_ci_owner;
           GRANT phase5_other_rest_review_prod_20261108 TO v0083_ci_owner
             WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
           GRANT phase5_other_rest_reserve_prod_20261108 TO v0083_ci_owner
