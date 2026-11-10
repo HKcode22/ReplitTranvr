@@ -1,0 +1,42 @@
+name: Phase5 later PRE GitHub child capacity math (OFFLINE, NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-later-pre-gh-capacity-math-offline.yml'
+      - 'server/lib/disruption/phase5LaterPreGithubDispatchCapacityEnvelope_v39.ts'
+      - 'tests/phase5_later_pre_github_dispatch_capacity_envelope_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_LATER_PRE_GITHUB_CHILD_THROUGHPUT_UPPER_BOUND_CHECKPOINT.md'
+permissions:
+  contents: read
+jobs:
+  purely-mathematical-capacity-envelopes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify signed future PRE GitHub capacity and honest overrun classification
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_later_pre_github_dispatch_capacity_envelope_v39.test.ts
+          echo 'GH_LATER_PRE_CAPACITY_SIMULATION_ONLY_NOT_PAID_OR_ACTUAL_PRE'
