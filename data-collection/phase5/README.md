@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 00:35 PST — source due queue joined to exactly one frozen signed packet (NONPAID REVIEW)
+
+[Detailed timestamped Phase5 source handoff checkpoint](2026-11-10_0035PST_SIGNED_DUE_SOURCE_OBSERVER_HANDOFF_AND_FUTURE_DISPATCH_GAP.md): after verified merged #539 on main `03155ee1bff480122944530bbf04b58ea0ae90db` and successful postmerge V3.9 safety run #42781718880, a new review branch reuses the existing Stage9/V0079 read-only GitHub queue and signed one-GET source admission, classifies the EXACT frozen query against database deadline/attempt/prearm/airport/early-draw, and records wait/late/censor/HOLD without dispatching a paid action. Tests are offline; actual full unattended 31-day child dispatch and source rights/7-category budget/POST→receiver/STOP remain open. All amendments A/B/C/D1/D2/E preserved, target undecided, Phase5 FREEZE HOLD / Phase6 GO NO.
+
+
 ## Nov 10 V0083 two-role REST no-provider readiness
 
 [Nonpaid read-only commissioning checkpoint](2026-11-10_V0083_REST_READONLY_COMMISSIONING_CHECKPOINT.md): proposed manual-main GitHub verifier for the two existing V0083 REST NOLOGIN groups' **distinct LOGIN** roles, PG16 SET/INHERIT constraints and narrow review/reserve grants. The PR suite is offline; a real commissioned LOGIN readback has **not** yet passed. No source use, paid POST, production schema change or Phase6 GO is implied. Reuse PR #538's signed future POST code; focus next on unattended coordinator and rights/budgets/calendar, not a historic paid pilot.
