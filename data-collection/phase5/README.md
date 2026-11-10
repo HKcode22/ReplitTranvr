@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 — future-date V0083 POST real DB one-attempt adapter under review (not paid commissioned)
+
+[**Future V0083 signed POST worker source/original/REST role implementation checkpoint**](2026-11-10_V0083_FUTURE_POST_SIGNED_OWNER_CHECKPOINT.md): the existing one-time physical UTC `OUTCOME_REST_UNIT_BUDGET` reserved-call schema, real SOURCE PRE readback and atomic FIDS original/normalized members have now been connected in a proposed **GitHub manual-only signed future-date worker**. It adds an explicit one-physical-attempt transport option, rather than invoking three automatic retries under one V0083 reservation. REST review/reserve LOGIN groups, necessary SELECT/INSERT grants, real source Contents rights and scientific target/Phase6 GO are NOT commissioned; no real POST/pilot or provider call occurred. This is still **NOT** full unattended 31-day source→T24 witness→T6/T90→POST/receiver/STOP. The six amendment source documents are untouched; Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
+
 ## Nov 10 — eliminate "all three PRE or no useful POST" overstrictness; actual first-cycle science still open
 
 [**Minimum viable Phase5 exit and future-date POST eligibility with partial true PRE**](2026-11-10_MINIMUM_PHASE5_EXIT_AND_PARTIAL_PRE_POST_REUSE.md) separates the four actual completion deliverables from optional perfection work, model search and 31 live batch-days. A new **NO PROVIDER / NO DB** `auditP5FuturePostSourceEligibility()` considers a future post-source observation if **at least one truly cutoff-safe same-service PRE** exists, reporting missing T24/T6/T90 separately; it does NOT treat conditional scheduled services as real physical aircraft, require perfect labels, self-grant paid REST or change the prediction target. **Current T6/T90 writer still requires real T24 witness**; proposed T6-only/T90-only POST eligibility is not an implemented production source path. Existing Nov5 WSSS paid POST script is historical and cannot be used for future dates; a generic paid future-date POST owner, seven physical UTC REST budget/rights, receiver/STOP and fully unattended GitHub chain remain unfinished. A/B/C/D1/D2/E remain preserved and unadopted E. **FREEZE HOLD / paid Phase6 GO NO.**
