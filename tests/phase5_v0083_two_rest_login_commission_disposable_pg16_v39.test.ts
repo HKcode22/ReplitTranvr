@@ -136,7 +136,9 @@ active("V0083 2 dedicated LOGINs+mocked GitHub Secrets, actual isolated PostgreS
      "has_function_privilege(current_user,"+
       "'clean.reserve_phase5_other_rest_once_v39(text,text,text,text,text,text)',"+
       "'EXECUTE') AS reserve_execute"
-    );
+     );
+     await client.query("ROLLBACK");
+    }finally{client.release();}
     const x=q.rows[0];
     // This is a real low-privilege PostgreSQL session, NOT mocked metadata.
     expect(x.db).toBe("neondb");
