@@ -1,5 +1,19 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## 2026-11-10 14:13:34 UTC / 06:13:34 PST — V0083 REAL PRODUCTION TWO-ROLE LIVE READONLY SUCCESS
+
+**Independent actual GitHub Action**: [manual exact-main nonpaid read-only run #42831851454](https://github.com/HKcode22/ReplitTranvr/actions/runs/42831851454), job **129883677836**, **COMPLETED SUCCESS**. This is not synthetic CI, a replay of old owner commands, or merely a GitHub secret listing. GitHub main used `022bb139b987c67629d86b093554cf9c3b38a6af`, following an exact-reviewed SHA-pinned one-time live owner commission. The owner output confirmed `P5_V0083_TWO_DEDICATED_POST_REST_LOGINS_AND_ENCRYPTED_SECRETS_COMMITTED` with exactly two dedicated login roles and the two encrypted GitHub Actions secret names, no printed credentials, zero paid provider requests, zero flight/source rows, zero reservations. **Do not rerun the one-time commissioner.**
+
+The **actual live PostgreSQL16 `neondb` read-only transaction** returned `P5_V0083_TWO_POST_REST_LOGINS_READONLY_VERIFIED`. Separate verified sessions:
+
+- REVIEW: session login `phase5_p5_other_rest_review_login_20261110` / effective NOLOGIN group `phase5_other_rest_review_prod_20261108`; only reviewed-call INSERT among tested REST grants, no reserve function EXECUTE, no review SELECT/UPDATE/DELETE, no physical reservation table DML.
+- RESERVE: session login `phase5_p5_other_rest_reserve_login_20261110` / effective NOLOGIN group `phase5_other_rest_reserve_prod_20261108`; reserve function EXECUTE but **no reviewed-call INSERT**, no review SELECT/UPDATE/DELETE, no physical reservation table DML.
+- Both ran `REPEATABLE READ READ ONLY` and rolled back; `readOnlyTransactionVerified=true`, `limitedRESTPrivilegeVerified=true`. Run's enforced environment: `ADB_AUTO_COLLECT=0`, `V39_PHASE6_PROCESS_ARMED=0`, provider API key empty, no application database URL. Logged paid GETs 0, Alerts 0, DB writes 0, physical data reads 0.
+
+**Historical contrast**: [old run #42812031733](https://github.com/HKcode22/ReplitTranvr/actions/runs/42812031733) was FAILED during missing-secret preflight *before* the later successful commission; old red status is not current privilege failure. The SSL-mode/deprecated Node warnings in the successful run were nonfatal; no false claim of fixing them.
+
+**Status changed**: Production V0083 two REST restricted login commissioning + genuine independent READONLY ACL verification **COMPLETE**. Do not ask user for passwords, repeat commissioning, reapply grants or re-install V0083. **Status not changed**: lawful source Contents/ML retention and selected first-cycle target, signed 31-day real parent-day draw/physical seven-category UTC REST and distinct Alert credits, fully coupled future SOURCE→T24→T6/T90 (bounded missingness)→POST/receiver→STOP with observable misses, independent Phase5 scientific FREEZE and distinct Phase6 paid GO remain **OPEN/HOLD**. This verification alone does NOT authorize a paid POST.
+
 ## Nov 10 2026 05:04 PST — eight-day engineering recap, release critical path and partial-PRE gap
 
 [Owner-readable and technical checkpoint: 8-day recap + exact remaining A/B/C/D and T24-dependent T6/T90 inconsistency](2026-11-10_0504PST_EIGHT_DAY_STATUS_RELEASE_CRITICAL_PATH_AND_PARTIAL_PRE_AUDIT.md). Verified merged PR #547 head five PASS; actual owner commissioning and live V0083 restricted-role verifier still NOT completed. New design review flags that future POST accepts >=1 valid PRE while existing T6/T90 writer requires a prior witnessed T24, so not every partial-PRE pattern is currently feasible. No prior-source/migration replay or paid pilot. Phase5 FREEZE HOLD; Phase6 GO NO.
