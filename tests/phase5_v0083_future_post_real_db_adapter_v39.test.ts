@@ -112,7 +112,7 @@ describe("Phase5 V0083 paid POST DB port — real SQL paths but NEVER provider i
   expect(p5V0083FuturePostReservationSha256(p)).toBe(expected);
   expect(verifyP5FuturePostReviewedFrame(p).chargeDateUtc).toBe("2027-02-02");
  });
- it("executes exactly ONE serializable V0083 reservation and independent postCOMMIT readback",async()=>{
+ it("executes ONE serializable V0083 SECURITY DEFINER reservation without forbidden table SELECT",async()=>{
   const p=approved(),f=fakeDatabase(p);
   const x=await reserveP5FuturePostV0083OnePhysicalGet(f.pool as any,p);
   expect(x.physicalPaidAttemptReserved).toBe(true);
@@ -124,7 +124,9 @@ describe("Phase5 V0083 paid POST DB port — real SQL paths but NEVER provider i
   expect(f.history.some(s=>s.includes(
    "SELECT clean.reserve_phase5_other_rest_once_v39"))).toBe(true);
   expect(f.history.some(s=>s.includes(
-   "FROM clean.phase5_other_rest_physical_reservation_v39"))).toBe(true);
+   "FROM clean.phase5_other_rest_physical_reservation_v39"))).toBe(false);
+  expect(f.history.some(s=>s.includes(
+   "FROM clean.phase5_other_rest_reviewed_call_v39"))).toBe(false);
  });
  it("cannot silently retry physical request after an irreversible reservation",async()=>{
   const p=approved(),f=fakeDatabase(p);
@@ -220,12 +222,40 @@ describe("Phase5 V0083 paid POST DB port — real SQL paths but NEVER provider i
    db as any,p,res,query,rows,{
     durableAvailableAt:stamp("2027-02-02T12:02:30.000Z"),
     normalizedInsertedRows:1});
-  expect(reads).toBe(1);
+  expect(reads).toBe(0); // SOURCE cannot read V0083 reservation table
   await expect(verifyP5FuturePostOriginalBeforeCommit(
    db as any,p,res,{...query,sourceAirportIcao:"YSSY"},rows,{
     durableAvailableAt:stamp("2027-02-02T12:02:30.000Z"),
     normalizedInsertedRows:1}))
    .rejects.toThrow("UNBOUND_OR_PARTIAL_POST_SOURCE_ORIGINAL");
+ });
+ it("REVIEW inserts with its installed INSERT-only right, never SELECT/RETURNING",async()=>{
+  const p=approved();
+  const commands:string[]=[];
+  const db={
+   query:async(sql:string)=>{
+    commands.push(sql);
+    if(sql.startsWith("SELECT current_database()"))
+     return {rowCount:1,rows:[{
+      db:"neondb",role:"phase5_other_rest_review_prod_20261108",
+      ro:"off",now:stamp("2027-02-02T11:59:00.000Z")
+     }]};
+    if(sql.startsWith("INSERT INTO clean.phase5_other_rest_reviewed_call_v39"))
+     return {rowCount:1,rows:[]};
+    return {rowCount:0,rows:[]};
+   },release:()=>{}
+  };
+  const pool={connect:async()=>db};
+  const {prepareP5FuturePostV0083ReviewedCall}=await import(
+   "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39");
+  const result=await prepareP5FuturePostV0083ReviewedCall(pool as any,p);
+  expect(result.status).toBe("ONE_REAL_GITHUB_FUTURE_POST_CALL_PREPARED_NO_GET");
+  expect(result.physicalReservations).toBe(0);
+  expect(commands).toContain("COMMIT");
+  expect(commands.filter(x=>x.startsWith("INSERT INTO clean.phase5_other_rest_reviewed_call_v39"))).toHaveLength(1);
+  expect(commands.some(x=>/RETURNING request_sha256/.test(x))).toBe(false);
+  expect(commands.some(x=>/FROM clean.adb_phase6_authorization/.test(x))).toBe(false);
+  expect(commands.some(x=>/FROM clean.phase5_fids_seven_rest_release_v39/.test(x))).toBe(false);
  });
  it("checks original and all normalized members again AFTER their COMMIT",async()=>{
   const p=approved(),res=reservation(p);
