@@ -1,5 +1,9 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 10 — real SOURCE originals → native flight candidate review (NEW, IN REVIEW)
+
+[Read-only real SOURCE/normalized flight-member audit checkpoint](2026-11-10_REAL_SOURCE_POSTCOMMIT_NATIVE_FLIGHT_CANDIDATE_AUDIT_CHECKPOINT.md): new true-PG16 PRE-only restricted-role reviewer of already persisted SOURCE FIDS original and all normalized members, per-flight prospective cutoff, as-of timestamp, native scheduled-T and censor classifications. Default-OFF manual GitHub nonpaid mode; no provider key, raw content logging, provider rights certification, PRE packet signing, Phase5 FREEZE or Phase6 GO. Distinct actual future packet generator, rolling signer/registry publisher and throughput remain [issue #553](https://github.com/HKcode22/ReplitTranvr/issues/553), not yet done. PR exact-head CI and merge pending; Phase5 HOLD/Phase6 paid GO NO.
+
 ## November 10 — SOURCE-day-linked multi-flight T−6h/T−90m registry MERGED; no paid GO
 
 **Post-merge audited update (Nov 10, 2026):** [PR #552](https://github.com/HKcode22/ReplitTranvr/pull/552) was **MERGED** to main `e0e4b15cf73d64a4ba4188b3dadbaea22c0a4a36` after **six exact PR-head CI SUCCESS**, including [full V3.9 Offline Safety #42844513089](https://github.com/HKcode22/ReplitTranvr/actions/runs/42844513089), [Phase5 SOURCE queue signed batch #42844513419](https://github.com/HKcode22/ReplitTranvr/actions/runs/42844513419), and [later PRE child suite #42844515725](https://github.com/HKcode22/ReplitTranvr/actions/runs/42844515725). The first PR attempt had a SOURCE filename regex typo caught by offline CI; repaired and FULL final suite rerun green, not bypassed. **This is a tested DEFAULT-OFF mechanism only; not a real prospective signed flight dataset, production SQL readback for this new batch, paid provider, physical flight outcome, or scientific FREEZE.**
