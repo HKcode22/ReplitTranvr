@@ -187,9 +187,20 @@ describe("scheduled later PRE independent signed GH and real PG decision",()=>{
     witnessedT24Rows:[]}}).status).toBe("LATER_PRE_WITNESS_PENDING");
   expect(plan({...f,actual:{...f.actual,sameHorizonCount:1}}).status)
    .toBe("LATER_PRE_ALREADY_SAVED_NO_CHILD");
-  expect(plan({...f,actual:{...f.actual,
-   observedDbClockUtc:when("2027-02-10T04:00:00.000Z")}}).status)
-   .toBe("LATER_PRE_NOT_YET_WITHIN_LEAD");
+  // Real chronological early fixture: the original MUST exist already,
+  // otherwise the correct result is not-yet-bound, not ready-to-prearm.
+  const early={...f,actual:{...f.actual,
+   observedDbClockUtc:when("2027-02-10T04:25:00.000Z"),
+   originalRows:[{...f.actual.originalRows[0],
+    reserved_at:when("2027-02-10T04:09:00.000Z"),
+    fids_retrieval_utc:when("2027-02-10T04:09:15.000Z"),
+    raw_persisted_at_utc:when("2027-02-10T04:09:20.000Z"),
+    source_available:when("2027-02-10T04:10:00.000Z"),
+    bound_at_utc:when("2027-02-10T04:11:00.000Z")}],
+   memberRows:[{...f.actual.memberRows[0],
+    available_at:when("2027-02-10T04:10:10.000Z")}]
+  }};
+  expect(plan(early).status).toBe("LATER_PRE_NOT_YET_WITHIN_LEAD");
   expect(plan({...f,actual:{...f.actual,
    observedDbClockUtc:when("2027-02-10T05:50:00.000Z")}}).status)
    .toBe("LATER_PRE_TOO_LATE_CENSOR");
