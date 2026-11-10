@@ -21,6 +21,7 @@ function approved():P5ReviewedFuturePostOneGet{
  reviewedCategoryBudgetSha256:sh("e"),
  reviewedRequestContextSha256:sh("f"),
  reviewedProviderContractSha256:sh("9"),
+ reviewedFrameSha256:sh("8"),
  runDayIndex:1,slot:"HUB",airportIcao:"WSSS",
  flightInstanceId:"leg:phase5:abcd012345",
  expectedSelectedTNativeUtc:"2027-02-02T10:00:00.000Z",
