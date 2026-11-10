@@ -1,0 +1,46 @@
+name: Phase5 bounded calendar contingency review (OFFLINE, NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5BoundedOperationalRecoveryReview_v39.mjs'
+      - 'tests/phase5_bounded_operational_recovery_review_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_CALENDAR_CONTINGENCY_SCIENTIFIC_FLEXIBILITY_PROPOSAL.md'
+      - '.github/workflows/phase5-bounded-calendar-recovery-review-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5BoundedOperationalRecoveryReview_v39.mjs'
+      - 'tests/phase5_bounded_operational_recovery_review_v39.test.ts'
+      - '.github/workflows/phase5-bounded-calendar-recovery-review-offline.yml'
+permissions:
+  contents: read
+jobs:
+  nonpaid-boundary-and-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      V39_PHASE5_FREEZE_SIGNED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Fail closed on hindsight dates, missed PRE and known washout
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_bounded_operational_recovery_review_v39.test.ts
+          echo 'P5_PROPOSED_OPERATING_RECOVERY_NO_SIGNED_CALENDAR_NO_RETIMING_NO_PAID_GO'
