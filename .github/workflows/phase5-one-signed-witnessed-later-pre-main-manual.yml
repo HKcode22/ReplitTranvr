@@ -17,6 +17,8 @@ on:
       - 'scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39.ts'
       - 'tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts'
       - 'server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts'
+      - 'server/lib/disruption/phase5StandaloneLaterPreWithoutT24Decision_v39.ts'
+      - 'tests/phase5_standalone_later_pre_without_t24_choice_v39.test.ts'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
       - 'scripts/v39_phase5_one_signed_native_t24_pre_witness_github_owner_v39.ts'
       - 'data-collection/phase5/2026-11-09_GITHUB_WITNESSED_T6_T90_PRE_OWNER_CHECKPOINT.md'
@@ -48,7 +50,7 @@ jobs:
       - name: Review T24 anchored future T6/T90 admission without DB or provider
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts
+          npx vitest run tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts tests/phase5_standalone_later_pre_without_t24_choice_v39.test.ts
           echo 'SIGNED_LATER_PRE_CI_ONLY_NO_DB_NO_PROVIDER'
   one-reviewed-later-flight-pre:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER' }}
@@ -67,6 +69,8 @@ jobs:
       V39_P5_LATER_PRE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_LATER_PRE_APPROVED_CODE_SHA }}
       V39_P5_LATER_PRE_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_LATER_PRE_SIGNED_PACKET_SHA256 }}
       V39_P5_LATER_PRE_T24_RECEIPT_SHA256: ${{ secrets.V39_P5_LATER_PRE_T24_RECEIPT_SHA256 }}
+      V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED }}
+      V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256 }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
       V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
@@ -105,7 +109,12 @@ jobs:
           [[ "$PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
           test -f "$PACKET_FILE"
           test -n "$V39_P5_LATER_PRE_SIGNED_PACKET_SHA256"
-          test -n "$V39_P5_LATER_PRE_T24_RECEIPT_SHA256"
+          if test -z "$V39_P5_LATER_PRE_T24_RECEIPT_SHA256"; then
+            # v2 permits explicit missing T24 only under independent signed
+            # amendment; runtime verifies schema, packet and source/clock.
+            test "$V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED" = 1
+            [[ "$V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          fi
           test -n "$P5_V39_PRE_DATABASE_URL"
       - uses: actions/setup-node@v4
         with:
