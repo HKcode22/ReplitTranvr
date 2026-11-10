@@ -213,6 +213,7 @@ describe("scheduled later PRE independent signed GH and real PG decision",()=>{
    {originalRows:[{...o,original_response_hash:h("f")}]},
    {memberRows:[{...m,scope_classification:"unknown"}]},
    {memberRows:[{...m,dep_scheduled_utc:when("2027-02-10T13:00:00.000Z")}]},
+   {memberRows:[{...m,available_at:when("2027-02-10T05:30:00.000Z")}]},
    {originalRows:[{...o,source_expires_at_utc:
     when("2027-02-10T05:00:00.000Z")}]},
   ])expect(()=>plan({...f,actual:{...f.actual,...changed}}))
