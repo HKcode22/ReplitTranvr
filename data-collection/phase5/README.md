@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 2026 05:04 PST — eight-day engineering recap, release critical path and partial-PRE gap
+
+[Owner-readable and technical checkpoint: 8-day recap + exact remaining A/B/C/D and T24-dependent T6/T90 inconsistency](2026-11-10_0504PST_EIGHT_DAY_STATUS_RELEASE_CRITICAL_PATH_AND_PARTIAL_PRE_AUDIT.md). Verified merged PR #547 head five PASS; actual owner commissioning and live V0083 restricted-role verifier still NOT completed. New design review flags that future POST accepts >=1 valid PRE while existing T6/T90 writer requires a prior witnessed T24, so not every partial-PRE pattern is currently feasible. No prior-source/migration replay or paid pilot. Phase5 FREEZE HOLD; Phase6 GO NO.
+
+
 ## November 10, 2026 04:17 PST — actual V0083 two-REST-login absent-credential recovery (review)
 
 [Detailed V0083 two dedicated REST LOGIN and GitHub Actions secret commissioning checkpoint](2026-11-10_0410PST_V0083_TWO_REST_LOGIN_SECRET_COMMISSION_RECOVERY.md): owner-run [nonpaid read-only #42812031733](https://github.com/HKcode22/ReplitTranvr/actions/runs/42812031733) failed **before a database connection**, and owner read-only `pg_roles`/GitHub secret-name output confirmed **both V0083 REST LOGIN roles ABSENT and both GH Actions secrets MISSING**. New branch builds one exact-main once-only identity commissioner by reusing already verified Stage30 PG16 transaction/GH-secret choreography, **not** replaying Stage30/V0083 migration or paying a source pilot. It creates only REVIEW and RESERVE independent login memberships with SET-only no inheritance, writes only their two encrypted Actions secrets via stdin, and refuses absent native group ACL, preexisting partial state, changed main, uncertain COMMIT/cleanup. New CI uses actual **disposable PG16** and mocked GitHub driver. At this authoring checkpoint production has NOT been commissioned, PR CI/merge pending, source rights/Phase5 FREEZE HOLD, separate Phase6 paid GO NO. See current issue #416 for final result.
