@@ -108,7 +108,11 @@ active("V0083 2 dedicated LOGINs+mocked GitHub Secrets, actual isolated PostgreS
      reviewedDedicatedLogin:entry.login,
      forbiddenApplicationLogin:"phase5_fids_source_ci"
     });
-    const q=await pool.query(
+    const client=await pool.connect();
+    let q;
+    try{
+     await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+     q=await client.query(
      "SELECT current_user AS effective_role,session_user AS actual_login,"+
      "current_database() AS db,"+
      "current_setting('transaction_read_only') AS tx_readonly,"+
