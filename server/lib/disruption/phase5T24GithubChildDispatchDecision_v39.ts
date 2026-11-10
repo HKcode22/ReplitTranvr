@@ -49,7 +49,7 @@ export function planP5T24WitnessedChild(
     history.total_count<0||history.total_count>100||
     !Array.isArray(history.workflow_runs)||
     history.workflow_runs.length!==history.total_count)
-  hold("UNBOUNDED_OR_INCOMPLETE_GH_CHILD_HISTORY");
+  return hold("UNBOUNDED_OR_INCOMPLETE_GH_CHILD_HISTORY");
  let seen=false;
  for(const run of history.workflow_runs){
   if(!run||!Number.isSafeInteger(run.id)||run.id<=0||
