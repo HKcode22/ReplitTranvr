@@ -255,7 +255,8 @@ export function reviewP5LaterPreActualReadback(
     utc(a.source_expires_at_utc)<=now||
     utc(a.source_expires_at_utc)>sourceKnown+23*3600000||
     cutoff-sourceKnown>p.maxPopulationStalenessSeconds*1000||
-    utc(m.available_at)<sourceKnown||utc(m.available_at)>cutoff)
+    utc(m.available_at)<sourceKnown||
+    utc(m.available_at)>now||utc(m.available_at)>cutoff)
   fail("ACTUAL_PROVIDER_ORIGINAL_MEMBER_CLOCK_INVALID");
  if(cutoff-now>90*60000)
   return status("LATER_PRE_NOT_YET_WITHIN_LEAD");
