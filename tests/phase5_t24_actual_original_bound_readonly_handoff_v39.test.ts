@@ -170,7 +170,7 @@ describe("authentic provider original -> native T24 no-provider readonly readine
   f.original.raw_persisted_at_utc=iso(-118);
   f.original.source_available=iso(-117);
   f.original.bound_at_utc=iso(-116);
-  f.original.source_expires_at_utc=iso(22*60);
+  f.original.source_expires_at_utc=iso(21*60);
   f.member.available_at=iso(-116);
   expect(check(f).status).toBe("SIGNED_T24_NOT_YET_WITHIN_90_MINUTE_LEAD");
   const g=fixture();g.actual.observedDbClockUtc=iso(-10);
@@ -199,6 +199,8 @@ describe("authentic provider original -> native T24 no-provider readonly readine
   expect(check(c).status).toBe("SIGNED_T24_SOURCE_INVALID_OR_EXPIRED_HOLD");
   const d=fixture();d.original.early_draw_sha256=h("0");
   expect(check(d).status).toBe("SIGNED_T24_SOURCE_INVALID_OR_EXPIRED_HOLD");
+  const e=fixture();e.original.source_expires_at_utc=iso(24*60);
+  expect(check(e).status).toBe("SIGNED_T24_SOURCE_INVALID_OR_EXPIRED_HOLD");
  });
  it("rejects unsigned modified packet, changed independently reviewed code/source and forged tier",()=>{
   const a=fixture();a.bytes=Buffer.concat([a.bytes,Buffer.from(" ")]);
