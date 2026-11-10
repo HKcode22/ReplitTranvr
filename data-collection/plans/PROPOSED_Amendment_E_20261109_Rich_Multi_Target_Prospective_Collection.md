@@ -224,3 +224,22 @@ raw position/event -> airborneMaterializer_v39.ts
 - Reuse Phase2 airport reference/coverage, Phase3 paid Alert owner/receiver/STOP and Phase4 FIDS source→PRE→POST pilot, rather than pay to repeat an already resolved transport/cutoff mechanism.
 
 **End of verified evidence appendix. The proposal remains review-only, not an accepted change to primary outcome, legal interpretation, production code or Phase6 GO.**
+
+---
+
+## Appendix P — Preserve all predecessor amendments A, B, C, **both separately scoped D files**, and proposed E
+
+**Historical references; this appendix does not adopt Amendment E, silently override the binding f.8 plan, approve source rights, alter the first-cycle primary or grant Phase6 GO.** All six documents are preserved under their precise names and Git histories. The two D files are distinct, not accidental competing revisions of the same text.
+
+| Document | Exact historical file (source of truth) | Authority and relevance to E |
+| --- | --- | --- |
+| [Amendment A — Nov 2 Gate5 expedited](V3.9_f.8_Gate5_Expedited_Collection_Amendment_A_20261102.md) | `V3.9_f.8_Gate5_Expedited_Collection_Amendment_A_20261102.md` | Practical acquisition/missingness/credits ideas remain recorded. Corrected in part; cannot replace actual scientific Gate5 acceptance or original physical primary |
+| [Amendment B — Nov 2 restore science](V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md) | `V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md` | Narrows A precisely: preserved real population/PRE/inside/outside callback/POST/physical-label acceptance and bounded uncertainty. B controls where A would weaken the original scientific requirements |
+| [Amendment C — Nov 7 segmented source](V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md) | `V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md` | Corrects actual 31-parent-day window shape and physical UTC source/GET coverage, 26+3+2 and five matched crossovers; proposed binding refinement subject to independent evidence |
+| [Amendment D1 — Nov 7 schedule-revision primary](V3.9_DataCollectPlan_f.8_Amendment_D_20261107_Prospective_Schedule_Revision_Primary.md) | `V3.9_DataCollectPlan_f.8_Amendment_D_20261107_Prospective_Schedule_Revision_Primary.md` | **Target-specific alternative**: provider scheduled-version ≥15min binary prediction and Brier/prevalence; not physical flight departure delay; draft, not adopted |
+| [Amendment D2 — Nov 8 four-HUB scope](V3.9_DataCollectPlan_f.8_Amendment_D_20261108_Four_HUB_Prospective_Scope.md) | `V3.9_DataCollectPlan_f.8_Amendment_D_20261108_Four_HUB_Prospective_Scope.md` | **Sampling-scope-specific proposal**, not a second target proposal: WSSS, OMAA, SKBO, YSSY and future pair/adaptive draw design; draft, not an adopted/funded freeze |
+| **This proposed Amendment E — Nov 9** | `PROPOSED_Amendment_E_20261109_Rich_Multi_Target_Prospective_Collection.md` | Richer physical-delay, severe risk, status, arrival and distinct airborne targets with evidence tiers; an **unapproved discussion proposal**, not the binding first-cycle primary |
+
+The original [f.8 plan](V3.9_DataCollectPlan_f.8.md) remains historically intact. It is **not scientifically valid to decide a first-cycle primary outcome after inspecting future TEST labels**; nevertheless it is equally unnecessary to discard legitimate as-of PRE records when an optional physical outcome is unavailable. Leave first-cycle target selection open for an independently dated, pre-outcome decision while implementing target-neutral GitHub-only scheduling, original source custody, three PRE cutoffs, POST/receiver/STOP, physical UTC budgets, expiry, and missingness denominators.
+
+**Archive and durable registry:** The engineering branch `phase5/preserve-amendments-and-target-neutral-freeze-review-20261109` proposes a complete E snapshot `PROPOSED_Amendment_E_20261109_PRESERVED_NOT_ADOPTED.md` plus `AMENDMENT_LINEAGE_REGISTER_A_B_C_D1_D2_E_20261109.md` for `main`. This appendix references the source documents even if that PR is not yet merged; never claim the archive is binding by merely landing on main.
