@@ -470,4 +470,117 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });
+ it("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
+  if(STAGE29)return; // Stage29 tests exercise original witnessed route.
+  const dbNow=new Date((await admin.query(
+   "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
+  const ownCutoff=dbNow+150_000, t=new Date(ownCutoff+6*3600_000);
+  const end=new Date(t.getTime()+4*3600_000);
+  const q2=h("1"),r2=h("0"),qid2="a23e4567-e89b-42d3-a456-426614174001";
+  const flight="leg:ci:300";
+  const dispatch=new Date(dbNow-15*60_000);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_allowed_query_v39"+
+   "(query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,"+
+   "airport_icao,early_draw_sha256,reviewed_release_sha256,"+
+   "rights_review_sha256,provider_contract_sha256,github_run_id,"+
+   "service_window_start_utc,service_window_end_utc,from_local,to_local,"+
+   "airport_iana_timezone,provider_api_version,fids_protocol_version,"+
+   "planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,"+
+   "prediction_cutoff_utc,api_units_per_attempt,max_physical_attempts,state)"+
+   " VALUES($1,$2,1,'stage14_ci_later_only','MID_A','T-6h','WSSS',"+
+   "$3,$4,$5,$6,'42363348763',$7,$8,'2027-01-01T00:00',"+
+   "'2027-01-01T04:00','Asia/Singapore','1.15.4','v39',"+
+   "$9,$10::date,$11,$12,2,1,'ACTIVE')",
+   [q2,manifest,h("4"),h("5"),rights,contract,t,end,dispatch,
+    dispatch.toISOString().slice(0,10),
+    new Date(dbNow-10*60_000),new Date(ownCutoff)]);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_physical_attempt_v39"+
+   "(reservation_sha256,query_digest,manifest_sha256,github_run_id,"+
+   "observed_selected_at_utc,charged_utc_date)"+
+   " VALUES($1,$2,$3,'42363348763',$4,$5::date)",
+   [r2,q2,manifest,new Date(dbNow-48*3600_000),
+    dispatch.toISOString().slice(0,10)]);
+  await admin.query(
+   "WITH t AS (SELECT clock_timestamp() AS at)"+
+   " INSERT INTO clean.fids_query_response"+
+   "(population_query_id,source_airport_icao,query_direction,"+
+   "service_window_start_utc,service_window_end_utc,from_local,to_local,"+
+   "airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,"+
+   "available_at,response_hash,raw_payload,provider_api_version,"+
+   "fids_protocol_version,openapi_sha256)"+
+   " SELECT $1,'WSSS','Departure',$2,$3,"+
+   "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+   "t.at,t.at,t.at,$4,$5::jsonb,'1.15.4','v39',$6 FROM t",
+   [qid2,t,end,response,JSON.stringify({
+    originalDecodedEntityBodyPreserved:true,
+    originalHttpWireBytesPreserved:false,
+    originalDecodedEntityBodyEvidence:{
+     representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",
+     bodySha256:bodyHash,bodyBase64:payload.toString("base64"),
+     bodyLengthBytes:payload.length}
+   }),contract]);
+  await admin.query(
+   "INSERT INTO clean.flight_population"+
+   "(source_airport_icao,dep_airport_icao,dep_scheduled_utc,"+
+   "window_start_utc,window_end_utc,cutoff_utc,"+
+   "source_type,population_query_id,analytic_identity_id,"+
+   "canonical_flight_instance_id,population_role,scope_classification,"+
+   "available_at,response_hash,flight_number,"+
+   "query_direction,from_local,to_local,airport_iana_timezone,"+
+   "codeshare_resolution_status,fids_retrieval_utc,"+
+   "provider_api_version,fids_protocol_version,openapi_sha256)"+
+   " VALUES('WSSS','WSSS',$1,$2,$3,$4,'fids',$5,$6,"+
+   "$6,'requested_airport_primary','confirmed_core',"+
+   "clock_timestamp(),$7,'CI300','Departure',"+
+   "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+   "'confirmed_operating_leg',clock_timestamp(),'1.15.4','v39',$8)",
+   [t,t,end,new Date(ownCutoff),qid2,flight,response,contract]);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_original_binding_v39"+
+   "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
+   "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
+   "normalized_members_count,source_expires_at_utc)"+
+   " VALUES($1,$2,$3,$4,$5,$6,$7,1,clock_timestamp()+interval '1 hour')",
+   [qid2,r2,q2,manifest,response,bodyHash,rights]);
+  const protocol=h("a");
+  const signed:P5Stage14SingleFlightPrePermit={
+   ...permit,horizon:"T-6h",slot:"MID_A",queryDigestSha256:q2,
+   expectedSourcePopulationQueryId:qid2,flightInstanceId:flight,
+   expectedGithubSourceRunId:"42363348763",selectedTNativeUtc:t.toISOString(),
+   reviewedStandaloneLaterNoT24:{
+    schema:"v39.phase5.standalone-later-asof-no-t24.v1",
+    reviewedProtocolSha256:protocol,
+    reviewedOriginalResponseSha256:response,
+    reviewedNativeTSemanticsSha256:
+     permit.independentlyReviewedNativeTEvidenceSha256,
+    missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",
+    independentLaterAsOfAndMissingnessReviewAttested:true
+   }
+  };
+  await expect(persistP5V0079SingleBoundFlightPre(writer,signed))
+   .rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+  await expect(persistP5V0079SingleBoundFlightPre(writer,signed,{
+    independentlyApprovedStandaloneProtocolSha256:h("f")
+   })).rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+  const result=await persistP5V0079SingleBoundFlightPre(writer,signed,{
+    independentlyApprovedStandaloneProtocolSha256:protocol
+   });
+  expect(result.horizon).toBe("T-6h");
+  expect(result.laterPreEvidenceTier).toBe(
+    "STANDALONE_ASOF_LATER_MISSING_T24");
+  expect(result.authenticPersistedT24WitnessAnchoredForLaterHorizon).toBe(false);
+  expect(result.missingT24ExplicitlyRecordedWithoutBackfill).toBe(true);
+  expect(result.postCommitDatabaseReadbackVerified).toBe(true);
+  expect(result.providerCalls).toBe(0);
+  const exists=(await admin.query(
+   "SELECT horizon FROM clean.flight_snapshots"+
+   " WHERE flight_instance_id=$1",[flight])).rows;
+  expect(exists.map(x=>x.horizon)).toEqual(["T-6h"]);
+  await expect(persistP5V0079SingleBoundFlightPre(writer,signed,{
+    independentlyApprovedStandaloneProtocolSha256:protocol
+   })).rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
+ });
+
 });
