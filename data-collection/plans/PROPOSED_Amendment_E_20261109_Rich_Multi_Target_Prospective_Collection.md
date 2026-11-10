@@ -122,3 +122,105 @@ Before any material switch of official target, population, four/five HUB scope, 
 - Existing repo code `server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts`, `phase5ScopedFidsSourceBridge_v39.ts`, `phase5V0079SingleBoundFlightPreWriter_v39.ts`, `phase5T24IndependentPostCommitWitness_v39.ts` and Phase3 STOP/Phase4 PRE/POST are the integration starting points, not systems to replace.
 
 **Final status: PROPOSED / OWNER-REVIEW PENDING.** No amount of drafting here proves exact current provider paid rights, enough actual-only labels, approved Phase5 FREEZE, or Phase6 GO.
+
+
+
+## 9. November 9, 2026 source-field and code verification — concrete factual evidence
+
+**This evidence appendix updates the proposal; it does not approve an amendment or alter the live experiment.** All authoritative provider definitions were checked against the publicly accessible [AeroDataBox RapidAPI OpenAPI v1.15.4.0](https://doc.aerodatabox.com/docs/openapi-rapidapi-v1.json) and its official [AeroDataBox documentation front end](https://doc.aerodatabox.com/). Provider account/source-specific permission, actual identity or semantics remain independently unproven unless positive evidence is documented.
+
+### 9.1 Exact provider fields — a timestamp value and its meaning are distinct
+
+OpenAPI schema `FlightAirportMovementContract` identifies:
+
+| Provider field | Official semantic wording/meaning | Allowed conclusion |
+| --- | --- | --- |
+| `departure.scheduledTime` | **Scheduled** arrival/departure (generic scheduled movement) | Provider schedule; **not** independently established scheduled wheels-off or scheduled gate-out |
+| `departure.revisedTime` | **Actual or estimated** departure/arrival; when distinct from separately present runwayTime may stand for gate time, otherwise may be gate or runway | Cannot claim observed actual gate-out or takeoff just because populated |
+| `departure.runwayTime` | **Actual or estimated** time on runway; takeoff for departing, landing for arriving, if known | Field presence alone **does not** reveal actual-vs-estimated |
+| `departure.quality` | Data quality characteristics Basic, Live, Approximate | A `Live` array value does not independently certify that a particular `runwayTime` is **actual-only** |
+| LiveUpdates / AdsbUpdates airport feed status | Coverage depends on airport and individual flights | Even a healthy feed is not a guarantee of physical labels for all observations |
+
+Source: [official OpenAPI](https://doc.aerodatabox.com/docs/openapi-rapidapi-v1.json), `FlightAirportMovementContract`, `FeedServiceStatusContract`. [AeroDataBox's original runway/ADS-B announcement](https://aerodatabox.com/flight-take-off-and-landing-time-runway-detection-based-on-ads-b-data-more-flights-and-status-updates/) **does** describe actual takeoff/landing capability but explicitly warns of limited coverage, possible wrong/incomplete tracks, and retroactive inference. Historical airport examples are NOT a current per-flight warranty.
+
+A separate timestamped **Nov 1, 2026 real paid WSSS FIDS one-call metadata-only check** was already documented in [Phase4 one nonretained source semantics check](../phase4/2026-11-01_GATE5_REAL_PAID_FIDS_ONE_NONRETAINED_SEMANTIC_CHECK.md): 113 departure *observations*, 25 operator-tagged, 88 marketing/codeshare, `scheduledTime` 113, `revisedTime` 113, **`runwayTime` 0**. These are only *one request's field-presence counts*, not 113 unique operating legs and not proof runwayTime is never supplied by the API. No per-flight Contents were retained from that metadata-only check.
+
+The code's semantic caution has been explicitly documented since [Phase4 Oct31 provider-native semantic-lineage guard](../phase4/2026-10-31_GATE5_PROVIDER_NATIVE_SEMANTIC_LINEAGE_GUARD.md), the [Phase3 Oct27 paid withLeg A/B test](../phase3/2026-10-27_GATE05C_FIDS_WITHLEG_PAID_SCHEMA_RETEST_PROTOCOL.md) and the [Phase4 Nov2 fallback protocol](../phase4/2026-11-02_GATE5_RESEARCH_FALLBACK_TARGET_PROTOCOL_DRAFT.md). The **Nov6 G5A decision** reports zero positively certified actual-only wheels-off labels in the audited same cohort: [Phase4 Nov6 Gate5 residual decision](../phase4/2026-11-06_GATE5_RESIDUAL_SCIENCE_ONE_HORIZON_TEST_DECISION.md). This is not a vendor-wide impossibility claim.
+
+### 9.2 Actual existing code pipeline — what is implemented versus what is merely an intended gate
+
+```text
+AeroDataBox FIDS REST response
+    |
+    v
+aerodataboxLimiter_v3.ts (HTTP client)
+    |
+    v
+fidsCensus_v3.ts:
+  fetchFidsPopulation() -> normalizeFidsRecord()
+  -> source decoded-body hash and availability
+  -> persistFidsPopulationAtomic()
+       clean.fids_query_response (query/raw original)
+       clean.flight_population (normalized members)
+    |
+    +--> phase4Gate5NativeFidsFieldPresence_v39.ts
+    |    read-only counts presence: scheduled/revised/runway/quality
+    |    DOES NOT certify each runwayTime as actual
+    |
+    +--> gate05RunwayDelayLabelAudit_v39.ts
+    |    assessGate05ExactRunwayDelayV39() — PURE classification/guard
+    |    needs external evidence of actual semantics, scheduled runway
+    |    baseline and positively verified operating-leg match
+    |    otherwise gives NULL physical-delay minutes and
+    |    SOURCE_SEMANTICS_UNVERIFIED / PENDING / MISSING
+    |
+    +--> outcomeTerminalizer_v3.ts
+    |    terminalizeTarget() considers externally supplied
+    |    actualUtc + actualVerified and operational status:
+    |    observed, pending, missing or not_applicable
+    |    persistOutcome() stores to clean.flight_outcomes
+    |    DOES NOT by itself authenticate actualVerified
+    |
+    +--> phase4Gate5G5AScheduleRevisionOutcome_v39.ts
+         distinct source-grounded *scheduled-version revision* outcome,
+         NOT a physical departure label
+
+optional independently identified ADS-B position/airborne pipeline:
+raw position/event -> airborneMaterializer_v39.ts
+  -> quarantine bad/unjoinable points
+  -> clean airborne points, trajectories, airborne snapshots
+  -> physical departure milestone properties remain NULL
+     unless separate, actually evidenced and admitted
+```
+
+**Useful source code with navigation ranges (main, verified Nov9):**
+
+- [`fidsCensus_v3.ts`](../../server/lib/disruption/fidsCensus_v3.ts): **lines 558–640** fetch provider FIDS, validate decoded original hash and normalized arrays; **lines 845–908** transactionally save original request/response metadata then flight population members; **lines 387+** normalize source record and identity. Raw persistence is retention/permission-scoped, not an entitlement to warehouse Contents indefinitely.
+- [`phase4Gate5NativeFidsFieldPresence_v39.ts`](../../server/lib/disruption/phase4Gate5NativeFidsFieldPresence_v39.ts): **lines 20–39** SQL checks whether `departure.scheduledTime.utc`, `departure.revisedTime.utc`, `departure.runwayTime.utc`, quality and operating-vs-marketing tags are present; **lines 75–100** returns actual-only labels **NULL** and `NATIVE_FIELDS_PRESENT_NOT_ACTUAL_ONLY_PROOF`, never a false observed runway event.
+- [`gate05RunwayDelayLabelAudit_v39.ts`](../../server/lib/disruption/gate05RunwayDelayLabelAudit_v39.ts): **lines 7–20** types `VERIFIED_ACTUAL_WHEELS_OFF`, `VERIFIED_SCHEDULED_WHEELS_OFF`, `GENERAL_SCHEDULED_DEPARTURE`, `ESTIMATED_RUNWAY`, `ADSB_INFERRED_TAKEOFF_PROXY`, `UNKNOWN`. **Lines 61–98:** requires externally authenticated meaning and independently verified operating leg; only then calculates `(actual - scheduled) / 60000`; otherwise `runwayDelayMinutes: null`. **Pure code, no DB write, no provider I/O.** An arbitrary caller Boolean is not cryptographic or independent scientific verification by itself.
+- [`outcomeTerminalizer_v3.ts`](../../server/lib/disruption/outcomeTerminalizer_v3.ts): **lines 100–145** target-specific `observed/pending/missing/not_applicable` status based on externally supplied `actualVerified`; **lines 192+** SQL `INSERT ... ON CONFLICT UPDATE` into `clean.flight_outcomes` when a caller invokes persistence. This is a *capability*, not proof the Nov6 flight rows were populated or actuality verified.
+- [`phase4Gate5G5AScheduleRevisionOutcome_v39.ts`](../../server/lib/disruption/phase4Gate5G5AScheduleRevisionOutcome_v39.ts): **lines 75–151** compares two valid as-of provider schedule versions; returns observed revision category or explicit UNKNOWN, and `actualDepartureDelayClaimed=false`.
+- [`airborneMaterializer_v39.ts`](../../server/lib/disruption/airborneMaterializer_v39.ts): **lines 49–64** reject unjoinable/invalid positions; **lines 94+** materialize eligible airborne state; **lines 219–222** explicitly pass `actualWheelsOffUtc:null`, `actualGateOutUtc:null`, etc. into snapshot construction. A track is not automatically a physically verified runway event.
+- [`phase4Gate5DualSourceAdsbAdmission_v39.ts`](../../server/lib/disruption/phase4Gate5DualSourceAdsbAdmission_v39.ts) and [dual-provider plan](../phase4/2026-11-01_GATE5_ADSB_LOL_DUAL_PROVIDER_PLAN_AND_IMPLEMENTATION_SUPPLEMENT.md): offline aircraft-to-flight/source-clock/ODbL gate, **not** a confirmed deployed full live trajectory-to-actual-only label integration.
+
+**Critical distinction:** We *have* modular normalization and validation code. We **have not verified a production end-to-end rule** that ingests arbitrary AeroDataBox `runwayTime`, independently determines actual-versus-estimated for every flight, links it to a physical operating leg, stores a validated continuous physical-delay label, and supplies it at scale for the original f.8 intended population. Until verified, leave the label `NULL` / status `SOURCE_SEMANTICS_UNVERIFIED` or target-specific pending/missing, rather than treating a populated timestamp as actual.
+
+### 9.3 Source use, license and numerical-science cautions grounded in current 2026 sources
+
+- AeroDataBox's [September 7–8, 2026 Terms update](https://aerodatabox.com/2026-09-terms-update) states a **default 7-day caching cap**, plan-specific exceptions, and a stated November 7, 2026 grace-date change for existing subscribers. **Provider billable quota is not legal consent for a 31-day raw/normalized source training warehouse**. The exact account's purposes, license and backups/expiry remain [#300](https://github.com/HKcode22/ReplitTranvr/issues/300) to resolve before affected retained collection; do not infer legal advice or automatic derived-work exception from technical TTL.
+- [ADSB.lol API](https://api.adsb.lol/docs) says the public API/data are licensed ODbL and explicitly asks production users to contact the operator. ODbL and receiver coverage need review; no universal ADS-B ground truth assumption.
+- [U.S. BTS on-time data field definitions](https://transtats.bts.gov/Fields.asp?gnoyr_VQ=FGJ) explicitly distinguish `CRSDepTime` (scheduled gate departure), `DepTime` (actual gate departure), and `WheelsOff` (wheels-off time). **Do not compute wheels-off delay as BTS `WheelsOff - CRSDepTime` and silently label it a matched scheduled-runway baseline.** The [Phase4 BTS checkpoint](../phase4/2026-11-02_GATE5_FREE_BTS_ACTUAL_WHEELSOFF_MONTHLY_SOURCE_VERIFICATION.md) verified only external source schema/availability for historical U.S. domestic flights, not exact same-flight AeroDataBox join.
+- Statistical comparison: predeclare per-label estimand, positives/negatives/missingness and distinct prediction-vs-observation times; evaluate physical-minute regression with appropriate MAE or other predeclared metrics, a probability/classification target with proper probability score (e.g. Brier), and airborne ETA against matched actual arrival milestones. In a pilot with **zero positive provider schedule-revision events**, observed event classification discrimination such as AUROC cannot be estimated for that pilot. The 36 Nov6 horizon comparisons are *correlated observations on 12 service keys*, not 36 independent randomized flights. Block/cluster by batch-day and same flight for evaluation; a 20/5/6 day split is a **design** not evidence of adequate event power. Report confidence intervals, calibration and site/route coverage only when denominators permit; do not promise an arbitrary accuracy or “nearly exact” prediction.
+- The 2026 AeroDataBox OpenAPI describes actual/estimated runway information and the provider has ADS-B-based actual takeoff/landing capability in principle, but neither guarantees **this experiment** can independently disambiguate physical label semantics at every airport and actual operating leg. Do not spend more solely to repeat a known source-only FIDS pilot; a bounded metadata-only source/field-to-label audit is the finite prelaunch investigation.
+
+### 9.4 Operator-friendly explanation of the Phase5 release-manifest/owner language
+
+- **Release manifest**: one reviewed, versioned *configuration contract*, not a response from AeroDataBox. It pins primary research target and population, calendar/treatments, source/retention approvals, budgets, owner code hashes, cutoff/STOP rules and required independent review.
+- **Unattended owner**: GitHub Actions workflows and restricted database workers acting according to that contract; not a person, a provider, or the ChatGPT model running silently forever.
+- **`calendar=0`/`budget=0`** in the Nov9 inventory: no committed *future experiment setup rows* in the corresponding scoped tables at that particular timestamp. **`sourceQuery=0`**: no prepared future source request in the scoped new ledger yet. These are **not** statements that Phase2–4 never requested AeroDataBox or that historical flight records vanished.
+- **Prelaunch**: future 31-day dates/window rules, first-cycle scientific target, lawful source-class use, signed budget/STOP and tested integrated scheduler must be ready; **after-GO**: first future Day1 exact airport draw, actual paid FIDS request/reservation and provider original, per-flight PRE saved at true cutoffs, `sourceOriginalBinding` and `t24Witness`. Demanding actual future Day1 response before Day1 is legally authorized is a circular test.
+- **No future PRE backfill**: if the T−24h cutoff was yesterday and the provider returned information only today, that response can never be claimed as a genuine yesterday-as-of prediction feature.
+- **No fake signed permission**: don't set an owner/reviewer/provider-rights approval flag merely to let the workflow run; no blanket block on independently valid offline preparation.
+- Reuse Phase2 airport reference/coverage, Phase3 paid Alert owner/receiver/STOP and Phase4 FIDS source→PRE→POST pilot, rather than pay to repeat an already resolved transport/cutoff mechanism.
+
+**End of verified evidence appendix. The proposal remains review-only, not an accepted change to primary outcome, legal interpretation, production code or Phase6 GO.**
