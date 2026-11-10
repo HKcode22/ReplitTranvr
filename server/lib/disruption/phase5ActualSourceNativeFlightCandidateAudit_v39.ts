@@ -36,6 +36,10 @@ function when(x:unknown):number{
   fail("MALFORMED_OR_UNOBSERVED_NATIVE_UTC");
  return v.getTime();
 }
+function maybeWhen(x:unknown):number|null{
+ const d=x instanceof Date?x:typeof x==="string"?new Date(x):null;
+ return d&&Number.isFinite(d.getTime())?d.getTime():null;
+}
 const iso=(v:number)=>new Date(v).toISOString();
 const sha=(x:unknown):x is string=>typeof x==="string"&&SHA.test(x);
 export interface P5ActualSourceCandidateScope{
@@ -256,30 +260,32 @@ export function auditP5ActualSourceFlightCandidates(
     typeof m.population_member_id!=="string"||
     m.population_member_id.length===0){
    candidate.status="CENSORED_NONNATIVE_OR_UNCONFIRMED_OPERATING_MEMBER";
-  }else if(m.dep_scheduled_utc===null||
-    m.dep_scheduled_utc===undefined){
-   candidate.status="CENSORED_MISSING_NATIVE_T";
   }else{
-   const native=when(m.dep_scheduled_utc);
-   const arrived=when(m.available_at);
-   const cutoff=native-offset[scope.horizon];
-   candidate.selectedTNativeUtc=iso(native);
-   candidate.actualMemberAvailableUtc=iso(arrived);
-   candidate.ownCutoffUtc=iso(cutoff);
-   if(arrived>clock||arrived<sourceAt||
-      arrived>cutoff){
-    candidate.status="CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK";
-   }else if(native<windowStart||native>=windowEnd){
-    candidate.status="CENSORED_OUTSIDE_APPROVED_SOURCE_WINDOW";
-   }else if(sourceAt>cutoff){
-    candidate.status="CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF";
-   }else if(expires<=cutoff||
-      cutoff-sourceAt>scope.maxPopulationStalenessSeconds*1000){
-    candidate.status="CENSORED_SOURCE_TOO_STALE_OR_EXPIRED";
-   }else if(clock>=cutoff-MIN_LEAD){
-    candidate.status="CENSORED_NO_PROSPECTIVE_PRE_LEAD";
+   const native=maybeWhen(m.dep_scheduled_utc);
+   const arrived=maybeWhen(m.available_at);
+   if(native===null){
+    candidate.status="CENSORED_MISSING_NATIVE_T";
    }else{
-    candidate.status="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED";
+    const cutoff=native-offset[scope.horizon];
+    candidate.selectedTNativeUtc=iso(native);
+    candidate.ownCutoffUtc=iso(cutoff);
+    if(arrived!==null)
+     candidate.actualMemberAvailableUtc=iso(arrived);
+    if(native<windowStart||native>=windowEnd){
+     candidate.status="CENSORED_OUTSIDE_APPROVED_SOURCE_WINDOW";
+    }else if(sourceAt>cutoff){
+     candidate.status="CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF";
+    }else if(arrived===null||arrived>clock||arrived<sourceAt||
+       arrived>cutoff){
+     candidate.status="CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK";
+    }else if(expires<=cutoff||
+       cutoff-sourceAt>scope.maxPopulationStalenessSeconds*1000){
+     candidate.status="CENSORED_SOURCE_TOO_STALE_OR_EXPIRED";
+    }else if(clock>=cutoff-MIN_LEAD){
+     candidate.status="CENSORED_NO_PROSPECTIVE_PRE_LEAD";
+    }else{
+     candidate.status="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED";
+    }
    }
   }
   out.push(candidate);
