@@ -1,0 +1,97 @@
+name: Phase5 V0083 REST two dedicated roles READONLY (NO provider, manual main)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type VERIFY_V0083_TWO_REST_ROLES_READONLY_NO_PROVIDER'
+        type: string
+        required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0083-two-rest-roles-live-readonly.yml'
+      - 'scripts/v39_phase5_v0083_two_rest_roles_live_readonly_once.ts'
+      - 'tests/phase5_v0083_two_rest_roles_live_readonly_v39.test.ts'
+      - 'server/lib/disruption/phase5V0083RestDedicatedRolePool_v39.ts'
+      - 'data-collection/phase5/2026-11-10_V0083_REST_READONLY_COMMISSIONING_CHECKPOINT.md'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-v0083-rest-roles-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-pr-test-no-secrets:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test strict role separation, catalog-only SQL and fail-closed missing credentials
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          npx vitest run tests/phase5_v0083_two_rest_roles_live_readonly_v39.test.ts
+          echo P5_V0083_REST_READONLY_OFFLINE_TESTED_NO_LIVE_DB_NO_PROVIDER
+  manual-main-live-readonly-rest-role-verification:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_V0083_TWO_REST_ROLES_READONLY_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      P5_V0083_REST_READONLY_EXECUTE: '1'
+      P5_V0083_REST_READONLY_CONFIRM: ${{ inputs.confirm }}
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ${{ secrets.P5_V39_OTHER_REST_REVIEW_DATABASE_URL }}
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ${{ secrets.P5_V39_OTHER_REST_RESERVE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse provider or application credentials before dependency setup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -n "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -n "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Read only PostgreSQL16 role identity and ACL — no reservation or source GET
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_v0083_two_rest_roles_live_readonly_once.ts
+          echo P5_V0083_REST_ROLE_AUDIT_FINISHED_NO_DB_MUTATION_NO_PAID_GO
