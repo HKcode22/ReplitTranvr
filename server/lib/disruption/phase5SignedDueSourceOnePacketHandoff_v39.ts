@@ -122,7 +122,7 @@ export function reviewP5OneSignedPacketAgainstActualDueQueue(
  const matching=scan.candidates.filter(
   x=>x.queryDigestSha256===packet.queryDigestSha256);
  if(matching.length>1)fail("DUPLICATE_DB_QUERY_DIGEST");
- let status:P5OneSignedHandoffStatus;
+ let status:P5OneSignedHandoffStatus="SIGNED_QUERY_EXPECTED_DB_ROW_MISSING_HOLD";
  if(matching.length===0){
   // Queue reader only inspects planned GETs within [-3h,+2h].
   // If the signed candidate is outside the lookahead, it is not missing.
