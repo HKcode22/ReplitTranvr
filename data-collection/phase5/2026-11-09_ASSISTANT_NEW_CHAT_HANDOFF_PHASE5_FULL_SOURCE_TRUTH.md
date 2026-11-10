@@ -1,5 +1,9 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 10 2026 — default-OFF GitHub T−6h/T−90m scheduled child (IN REVIEW)
+
+[Technical scheduled later PRE controller checkpoint](2026-11-10_0615PST_SIGNED_LATER_PRE_GH_SCHEDULED_CHILD_REVIEW_CHECKPOINT.md): reuses the same ten-minute GH cron; independent default-OFF job with restricted PRE role actual PG16 READ ONLY source/member/T24 evidence, exact signed future one-flight later packet or separately approved no-T24 v2, deterministic GH child no-replay and existing serializable Stage14 writer. Code/tests IN REVIEW, not live; no provider PRE or production writes. Single signed flight/horizon only, not yet full multi-flight day registry, lawful use/first-cycle target, seven-REST physical budgets/POST-receiver-STOP. Phase5 FREEZE HOLD; Phase6 paid GO NO.
+
 ## 2026-11-10 14:13:34 UTC / 06:13:34 PST — V0083 REAL PRODUCTION TWO-ROLE LIVE READONLY SUCCESS
 
 **Independent actual GitHub Action**: [manual exact-main nonpaid read-only run #42831851454](https://github.com/HKcode22/ReplitTranvr/actions/runs/42831851454), job **129883677836**, **COMPLETED SUCCESS**. This is not synthetic CI, a replay of old owner commands, or merely a GitHub secret listing. GitHub main used `022bb139b987c67629d86b093554cf9c3b38a6af`, following an exact-reviewed SHA-pinned one-time live owner commission. The owner output confirmed `P5_V0083_TWO_DEDICATED_POST_REST_LOGINS_AND_ENCRYPTED_SECRETS_COMMITTED` with exactly two dedicated login roles and the two encrypted GitHub Actions secret names, no printed credentials, zero paid provider requests, zero flight/source rows, zero reservations. **Do not rerun the one-time commissioner.**
