@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 evening — real T24→Stage17 receipt candidate now feeds later PRE review (CI pending)
+
+[**Exact unsigned Stage17→Stage24 immutable T24 receipt checkpoint**](2026-11-09_UNSIGNED_T24_RECEIPT_HANDOFF_TO_LATER_PRE_CHECKPOINT.md). The existing two-commit T24 PRE/witness code now derives the later T6/T90 review receipt directly from its own committed snapshot ID, immutable source/first T, independent witness clock and postcommit readback. The native T24 GitHub owner returns it explicitly as an **unsigned candidate**. Merged #530's T6/T90 future worker must still receive independent source/receipt approval and its separate signed packet. No raw provider content, production migration, paid action or Phase6 GO; still not unattended month-long automation.
+
+
+
 ## Nov 9 evening — existing Stage24 T24 witness to native T6/T90 GitHub PRE owner (review)
 
 [**Signed future T−6h / T−90m PRE GitHub worker + exact witness checkpoint**](2026-11-09_GITHUB_WITNESSED_T6_T90_PRE_OWNER_CHECKPOINT.md). This adds an exact one-flight main-only manual GitHub caller for the already-tested Stage14 T6/T90 writer and Stage24 independently reviewed V0081 T24 witness gate. Reuses the precommissioned PRE-only login, source-original validity, strict frozen T, 90m prestart/180s due-window PostgreSQL clock, pre/post-COMMIT no-backfill guards, and external T24 receipt SHA. No paid provider request, no new DB role, no Phase6 launch. **Not yet a 31-day unattended per-flight scheduler, POST or scientific FREEZE.** CI-pending at authoring; verify PR and postmerge exact main. 
