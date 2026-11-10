@@ -149,7 +149,8 @@ active("V0083 2 dedicated LOGINs+mocked GitHub Secrets, actual isolated PostgreS
     expect([x.review_select,x.review_update,x.review_delete,
      x.reserve_insert,x.reserve_select,x.reserve_update,
      x.reserve_delete]).toEqual(Array(7).fill(false));
-    expect(verifyP5V0083RestReadonlyCatalog({...x,tx_readonly:"on"},
+    expect(x.tx_readonly).toBe("on");
+    expect(verifyP5V0083RestReadonlyCatalog(x,
      entry.group as "review"|"reserve",entry.login).limitedRESTPrivilegeVerified)
      .toBe(true);
    }finally{await raw.end();}
