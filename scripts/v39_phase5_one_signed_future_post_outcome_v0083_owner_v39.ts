@@ -188,6 +188,7 @@ export async function runP5SignedFuturePost(
       hold("PROVIDER_FRAME_CHANGED_FROM_APPROVED_FIDS_QUERY");
     return fetchFidsAirport(icao,from,to,{
      ...opts,
+     onePhysicalAttemptOnly:true,
      budgetOwner:{
       reserve:async(category,units,physicalAttempt)=>{
        budgetCalls++;
