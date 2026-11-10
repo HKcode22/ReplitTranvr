@@ -77,7 +77,7 @@ export function draftP5UnsignedStage24ReceiptFromCommittedChain(
  const cutoff=native-86_400_000;
  const instant=(v:unknown)=>{
   if(typeof v!=="string"||
-     !/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$/.test(v)||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)||
      !Number.isFinite(Date.parse(v))||
      new Date(v).toISOString()!==v)
    HOLD("UNVERIFIED_POSTCOMMIT_WITNESS_CLOCK");
