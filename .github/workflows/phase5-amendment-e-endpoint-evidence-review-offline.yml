@@ -1,0 +1,50 @@
+name: Phase5 proposed Amendment E endpoint evidence review (NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5RouteAndModelDataSupportAudit_v39.mjs'
+      - 'tests/phase5_route_model_data_support_audit_v39.test.ts'
+      - 'data-collection/phase5/2026-11-09_AMENDMENT_E_CROSS_BRANCH_SCIENCE_REVIEW_AND_ENDPOINT_MATRIX.md'
+      - '.github/workflows/phase5-amendment-e-endpoint-evidence-review-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5RouteAndModelDataSupportAudit_v39.mjs'
+      - 'tests/phase5_route_model_data_support_audit_v39.test.ts'
+      - '.github/workflows/phase5-amendment-e-endpoint-evidence-review-offline.yml'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-proposed-e-offline-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  metadata-only-scientific-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      V39_PHASE5_FREEZE_SIGNED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify legacy route support and proposed evidence-tier multi-target refusal logic
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_route_model_data_support_audit_v39.test.ts
+          echo 'PROPOSED_E_OFFLINE_ONLY_NO_MODEL_NO_DB_NO_PROVIDER_NO_SCIENTIFIC_FREEZE_NO_PAID_GO'
