@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 — measured ADS-B takeoff label uncertainty; Amendment E scientific decision support (no paid / no target switch)
+
+[**2026 research: when ADB runway times are estimated, what ADSB.lol can actually corroborate, how errors affect models, and a finite Phase5 outcome-decision rule**](2026-11-09_ADSBLOL_PHYSICAL_DEPARTURE_LABEL_ERROR_RESEARCH_PROTOCOL.md). A published OpenSky/Eurocontrol study found **>70% within 1min** ADS-B takeoff inference error for its *matched airport-operator validated sample*, but it is NOT accuracy proof for this cohort. Official adsb.lol offers per-aircraft **daily historical traces** with ODbL/production-use limits, which may support a separately sourced **takeoff interval** but not exact gate-out or guaranteed operating-leg matches. A new **no-provider/no-SQL** descriptive physical-proxy validation helper records actual-reference-vs-estimate errors and missingness by airport/source **only on independently matched eligible measurements**; no TEST leakage, primary label approval or target change. Distinguishes **actual verified**, **validated but imperfect ADS-B proxy**, **unverified/missing** rather than throwing away valid PRE rows or silently treating estimated as exact. Phase5 independent FREEZE HOLD / Phase6 paid GO NO.
+
+
+
 ## Nov 9 — reuse actual Day1 source auditor for budget HOLD versus bounded missingness
 
 [**Read-only Day1 actual source QA / STOP-versus-missingness checkpoint**](2026-11-09_DAY1_SOURCE_HARD_BUDGET_VS_BOUNDED_MISSINGNESS_QUALITY_CHECKPOINT.md). No new SQL, owner role or paid code: `auditPhase5SourceDay()` now returns a carefully derived `day1SourceSafetyReview` from the SAME restricted PG source/attempt/original/PRE/REST/draw readback. Over-reserved seven-category REST ceilings, impossible bound-original counts or inconsistent flight PRE source custody = **HARD HOLD for independent review**, not auto provider STOP. Late FIDS originals, missed deadlines, limited PRE evidence or expired Contents are **explicitly measured nonnegative quality/censoring loss**, not zero flight delay and never retrospectively backfilled. No optional ADS-B/weather source needed for PRE, no model accuracy certification, no independent safety authority, scientific FREEZE HOLD / paid Phase6 GO NO.
