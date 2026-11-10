@@ -159,6 +159,19 @@ describe("authentic provider original -> native T24 no-provider readonly readine
  });
  it("does not auto-dispatch early, too late or after cutoff",()=>{
   const f=fixture();f.actual.observedDbClockUtc=iso(-91);
+  // For a genuinely early T24 review, the source must ALSO have
+  // pre-existed this DB instant; an original bound in the future is
+  // impossible. This fixture explicitly allows a 2h source age.
+  (f.packet.prePermit as any).maxPopulationStalenessSeconds=7200;
+  f.bytes=Buffer.from(JSON.stringify(f.packet));
+  f.pins.expectedPacketSha256=sha(f.bytes);
+  f.original.reserved_at=iso(-120);
+  f.original.fids_retrieval_utc=iso(-119);
+  f.original.raw_persisted_at_utc=iso(-118);
+  f.original.source_available=iso(-117);
+  f.original.bound_at_utc=iso(-116);
+  f.original.source_expires_at_utc=iso(22*60);
+  f.member.available_at=iso(-116);
   expect(check(f).status).toBe("SIGNED_T24_NOT_YET_WITHIN_90_MINUTE_LEAD");
   const g=fixture();g.actual.observedDbClockUtc=iso(-10);
   expect(check(g).status).toBe("SIGNED_T24_CUTOFF_TOO_CLOSE_FOR_SCHEDULED_DISPATCH");
