@@ -198,3 +198,71 @@ describe("Phase5 later PRE reuses restricted Stage14 and T24 V0081 witness",()=>
     .toThrow("PACKET_BYTES_NOT_INDEPENDENTLY_REVIEWED");
  });
 });
+
+describe("honest v2 standalone later PRE is separately approved and cannot invent T24",()=>{
+ function alternate(horizon:"T-6h"|"T-90m"="T-6h"){
+  const f=fixture(horizon);
+  const packet:P5SignedWitnessedLaterPrePacket={
+   ...f.packet,
+   schema:"v39.phase5.github-standalone-later-pre-asof-reviewed.v2",
+   independentLaterHorizonAndT24ReviewAttested:undefined,
+   independentlyReviewedLaterWithoutT24AsOfAttested:true,
+   prePermit:{
+    ...f.packet.prePermit,reviewedT24WitnessReceipt:undefined,
+    reviewedStandaloneLaterNoT24:{
+     schema:"v39.phase5.standalone-later-asof-no-t24.v1",
+     reviewedProtocolSha256:hash("b"),
+     reviewedOriginalResponseSha256:
+       f.packet.prePermit.expectedSourceResponseSha256,
+     reviewedNativeTSemanticsSha256:
+       f.packet.prePermit.independentlyReviewedNativeTEvidenceSha256,
+     missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",
+     independentLaterAsOfAndMissingnessReviewAttested:true
+    }
+   }
+  };
+  const signed=resigned(f,packet);
+  return {...signed,env:{
+   ...signed.env,
+   V39_P5_LATER_PRE_T24_RECEIPT_SHA256:"",
+   V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED:"1",
+   V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256:hash("b")
+  }};
+ }
+ it.each(["T-6h","T-90m"] as const)(
+  "admits %s only under different signed no-T24 evidence tier",horizon=>{
+   const f=alternate(horizon),x=admitted(f);
+   expect(x.standaloneProtocolSha256).toBe(hash("b"));
+   expect(x.prePermit.reviewedT24WitnessReceipt).toBeUndefined();
+   expect(x.cutoffMs).toBe(Date.parse(native)-
+     (horizon==="T-6h"?21600_000:5400_000));
+  });
+ it("rejects absent external amendment, signed approval and manipulated source",()=>{
+  const f=alternate();
+  for(const bad of [
+   {V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED:"0"},
+   {V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256:hash("9")},
+   {V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256:""}
+  ])expect(()=>admitted(f,{...f.env,...bad}))
+   .toThrow("INDEPENDENT_STANDALONE_LATER_ASOF_AND_MISSING_T24_NOT_REVIEWED");
+  const p={...f.packet,prePermit:{...f.packet.prePermit,
+   expectedSourceResponseSha256:hash("e")}};
+  expect(()=>admitted(resigned(f,p))).toThrow(
+   "INDEPENDENT_STANDALONE_LATER_ASOF_AND_MISSING_T24_NOT_REVIEWED");
+ });
+ it("cannot quietly downgrade witnessed packet or claim nonexistent witness",()=>{
+  const f=alternate();
+  const bad={...f.packet,prePermit:{
+   ...f.packet.prePermit,
+   reviewedT24WitnessReceipt:fixture().packet.prePermit.reviewedT24WitnessReceipt
+  }};
+  expect(()=>admitted(resigned(f,bad))).toThrow(
+   "INDEPENDENT_STANDALONE_LATER_ASOF_AND_MISSING_T24_NOT_REVIEWED");
+  const g=fixture();
+  const forged={...g.packet,
+   schema:"v39.phase5.github-standalone-later-pre-asof-reviewed.v2" as const,
+   independentlyReviewedLaterWithoutT24AsOfAttested:true as const};
+  expect(()=>admitted(resigned(g,forged))).toThrow(
+   "INDEPENDENT_STANDALONE_LATER_ASOF_AND_MISSING_T24_NOT_REVIEWED");
+ });
+});
