@@ -107,16 +107,20 @@ async function readActualValidPreAndClock(
   return{pre,dbClockUtc:instant.toISOString()};
  }finally{await raw.end().catch(()=>{});}
 }
-export async function runP5FuturePostGithubDispatcher(
- env:NodeJS.ProcessEnv,fetcher:typeof fetch=fetch,
- readback=readActualValidPreAndClock
-){
- const admission=admitP5FuturePostGithubParent(env);
- const stat=lstatSync(admission.path);
+function readOneSignedP5FuturePostPacket(path:string):Buffer{
+ const stat=lstatSync(path);
  if(!stat.isFile()||stat.isSymbolicLink()||
     stat.size<300||stat.size>100000)
   hold("POST_SIGNED_PACKET_NOT_REGULAR_BOUNDED_FILE");
- const bytes=readFileSync(admission.path);
+ return readFileSync(path);
+}
+export async function runP5FuturePostGithubDispatcher(
+ env:NodeJS.ProcessEnv,fetcher:typeof fetch=fetch,
+ readback=readActualValidPreAndClock,
+ readSigned:((path:string)=>Buffer)=readOneSignedP5FuturePostPacket
+){
+ const admission=admitP5FuturePostGithubParent(env);
+ const bytes=readSigned(admission.path);
  let packet:P5SignedFuturePostPacket;
  try{packet=JSON.parse(bytes.toString("utf8")) as P5SignedFuturePostPacket;}
  catch{return hold("POST_SIGNED_PACKET_NOT_JSON");}
