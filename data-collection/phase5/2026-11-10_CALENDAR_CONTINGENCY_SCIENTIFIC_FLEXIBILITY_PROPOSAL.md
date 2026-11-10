@@ -1,0 +1,58 @@
+# Phase 5 practical scientific flexibility — bounded recovery without rewriting observed flight history
+
+**2026-11-10 UTC (Nov 9 Pacific) · PROPOSAL, NOT an adopted change to f.8 or A/B/C/D1/D2/E, not a signed operating calendar, not a source-license decision, and not Phase5 FREEZE / Phase6 paid GO.**
+
+## Decision for the user: we can safely relax *operations*, not the evidence
+
+The owner's concern is sound: a 31-day plan should not become unexecutable when a GitHub Actions job misses a dispatch or one provider observation is missing. A requirement for **perfect time/label coverage, every weather/ADSB feature, and every future day to succeed identically** would both overstate science and invite repeated administrative re-freezes. But simply shifting a day *after observing outcomes*, buying an undocumented second attempt, or filling in a PRE time retroactively would create measurable bias and/or fake prospective evidence.
+
+The research basis is general methodological guidance, not a claim that clinical-trial rules legally apply to aviation: SPIRIT 2025 (BMJ, DOI [10.1136/bmj-2024-081477](https://www.bmj.com/content/389/bmj-2024-081477)) describes **living, versioned protocols with transparent amendments and sensitivity analyses**. ICH E9(R1) ([original guideline](https://database.ich.org/sites/default/files/E9-R1_Step4_Guideline_2019_1203.pdf)) warns against changing the primary estimand after outcomes; the statistical cost is an interpretation issue, not an obligation to never change an operating date. The US National Academies' [missing-data analysis guidance](https://labs.annals.org/missingdata/) discusses why simple complete-case-only selection can be biased. These are **analogies to transparent study practice**, not substitute authority for our independent f.8 aviation design.
+
+## Two classes of requirements, deliberately not one hundred separate release blockers
+
+| What goes wrong | Balanced operational response | What is not allowed |
+| --- | --- | --- |
+| GitHub queued/slipped, but **before any physical GET, saved draw, PRE, or acquired original** | Reuse the same idempotent owner **if original deadline remains valid**; otherwise screen a previously documented prospective replacement date and make a short, independently signed affected-day revision | Silently treat the old missed query as captured or guess a future day/airports after looking at outcomes |
+| Future planned day becomes untenable **well before its first-source cutoff** | An optional finite prelisted fallback (not required for every day); keep the same 4 site roles, UTC slot, exposure shape, parent/partition, matched pair sites/weekday class and actual 24h shared-airport END→START washout | Automatically update the stored 31-day manifest, change crossover treatment or let a pure hash claim signature/rights |
+| Optional NOAA weather, ADSB trace or other secondary source absent | Keep time-valid provider PRE; count feature missingness; report source-specific coverage later | Mark a flight negative/on-time, or block genuine PRE solely for missing optional feature |
+| Paid FIDS GET missed its own hard cutoff | Record that specific source query as missed and label the affected PRE horizon missing; continue unaffected windows and legitimate later observations where their own cutoff permits | A postcutoff re-GET to manufacture the missed horizon or double-bill a physical attempt |
+| Part of a day already has saved draw, paid reservation, actual original, PRE, webhook, or POST | Preserve append-only incident and observed/censored denominators; review a future **separate** scientifically documented supplement only if desired, never erase/relabel the original randomized day | Pretend that the day was never run, replace it with a more successful outcome window, or delete failed sample coverage |
+| Transient callback/receiver loss | Use existing bounded 6+6 retry/STOP recovery where authorized; count lost/late separately | Infinite retries, extra unreserved Alert credits, false webhook negatives, body-before-2xx loss |
+| Actual physical UTC REST cap, Alert balance, source retention/use or application privileges unsafe | **Hard HOLD** and authorized STOP/incident process; cost/permission is not a statistical soft target | Exceed real credit caps or disclose/store unlicensed Contents to preserve the sample |
+| Target/label too rare or only provider-estimated | Keep legitimate source/time-safe observations and log eligibility; apply predeclared actual, independently measured proxy or unknown strata; later sensitivity/secondary analyses | Change first-cycle headline after inspecting TEST outcomes, or call provider-estimated runway time actual gate-out |
+
+**The already existing 31-parent-day schedule is not necessarily 31 consecutive calendar dates.** There is already a **provisional**, date-only recompute helper `phase5CorrectedPairDateGeometryProposal_v39.ts` and a finite full-calendar candidate solver `phase5F8FiniteCandidateSolver_v39.mjs`. Their SAT results are **not** source-use/license/credits/go approvals. There is no need to create a second calendar solver or another migration.
+
+## Proposed bounded protocol variant: advance schedule once, not rewrite history
+
+A future independent reviewer may allow **local prospective calendar amendments** if a recorded operational incident makes a future day infeasible. The default recovery priority is:
+
+1. **Keep the original plan** when the validated source cutoff is still reachable; permit only the retry/restart mechanism already approved for that endpoint and its physical attempt budget.
+2. **Record missingness and continue** when just an optional field or one source window is missed; don't reopen the month or infer on-time.
+3. **Pre-observation alternate-day candidate**, if an optional finite candidate pool existed **before the incident**, exact future dates satisfy the original day treatment/UTC class and neighboring 31-parent timeline and the independent reviewer approves a short append-only calendar delta. Preserve old manifest, new versioned hash and incident reason. **Do not demand alternate dates for every ordinary day**; leave a no-fallback day as honest incomplete coverage, not perpetual redesign.
+4. **No silent replacement of exposed days.** A committed four-airport early draw or genuine source/PRE is an actual irreversible experimental fact; require separately documented lineage if adding a supplement. Outcomes from that day stay in their original partition; TEST outcomes never influence treatment/date replacement.
+5. **Do not confuse structural feasibility with launch authority.** Each revised future day needs source query/first T cutoff, full provider range, all seven physical UTC REST categories, Alert balance and STOP, actual airport washout including currently unknown adaptive sites, source Contents rights and a separately reviewed signed manifest/GO check. Revision to one day doesn't require *inventing new model labels*, re-running completed pilot/migrations or reselecting untouched days, but the changed whole-calendar digest must be checked and recorded.
+
+**No proposal here silently weakens**: T−24h source first availability (strict lead >24h45m for the early draw), immutable per-flight T and prior observation clocks, operating vs marketing identities, exactly five pairs and 26/3/2 planned treatment mix, the original signed randomization, 24h real shared-airport washout, protected 20/5/6 independent day-based TEST, source-use/privacy rights, the actual UTC REST/Alert payment ceilings, or the source/POST/receiver/STOP controls.
+
+## Concrete engineering in this PR (not activated in production)
+
+New pure `reviewP5PrelistedCalendarRecovery()` in [`phase5BoundedOperationalRecoveryReview_v39.mjs`](../../server/lib/disruption/phase5BoundedOperationalRecoveryReview_v39.mjs), plus [synthetic regression tests](../../tests/phase5_bounded_operational_recovery_review_v39.test.ts) and [credential-empty GitHub offline CI](../../.github/workflows/phase5-bounded-calendar-recovery-review-offline.yml):
+
+- Accepts one reference **31-day calendar** (one original run-day and all 30 other immutable parent-day records), previously SHA-digested optional **ordered 0–4 candidate dates**, incident detected and pool prelisted clocks, outcome-blindness claim and **nonnegative observation/physical reservation counters**.
+- Refuses switched day number, treatment window duration, six UTC slot, paired weekday/weekend class, pair airport set or partition, bad UTC, 24h planned airport overlap/washout, source cutoff lead at or below **24h45m**, newly substituted fallback dates, changed candidate digest, partial day source/paid evidence, and any protected TEST-outcome access claim.
+- Distinguishes `CONTINUE_ORIGINAL_WINDOW_RECORD_OPTIONAL_MISSINGNESS`, `HOLD_RIGHTS_OR_PHYSICAL_BUDGET_NO_RESCHEDULE`, `PRESERVE_PARTIAL_DAY_AND_CENSOR_NO_ERASE_OR_REPLACE`, `SAVED_EARLY_DRAW_SEPARATE_REPLAN_REQUIRED`, `RECORD_MISSED_QUERY_CUTOFF_NO_BACKFILL` and `FIRST_PRELISTED_BACKUP_STRUCTURALLY_ELIGIBLE_FOR_INDEPENDENT_REVIEW`.
+- The **first structurally eligible candidate in the prelisted fixed order** is a *review proposal only*. It does not modify DB or calendar, sign anything, authorize money, touch provider, read protected outcomes, infer current aircraft, or calculate postchange 31-day scientific/billing feasibility. The function **cannot authenticate** whether the input is a real restricted DB readback or whether the alleged external reviewed SHA was actually independently attested. It emits explicit flags to that effect. This finite nonpaid study is safe to merge without choosing Amendment D1 or E.
+- Review outcomes are descriptive tests with **synthetic dates**; they are not evidence of a frozen real calendar, a verified 31-day availability schedule, physically collected airplanes or new scientific pass.
+
+**Critical possibility not settled by this code:** The user's request to relax the *binding* calendar rules requires a separate explicit, prospective scientific decision. This proposal does **not** make an informal automatic exception to the current signed f.8 plan. We can implement and test a recovery-admission helper now, without yet changing any existing flight collection owner.
+
+## Remaining finite Phase 5 exit, target neutral
+
+- Assemble real future 31 parent-day candidate dates with corrected five B0062 pair sets, actual region×tier/flight population, 21 genuinely unknown until prospective adaptive draw, lead time and balance; optionally prelist a few backups for at-risk **future** windows. A rolling first-day start is preferable to locking a stale historical date.
+- Produce real physical UTC seven REST category+Alert budget and source contract/retention/expiry evidence; one reviewed source rights manifest.
+- Connect fully unattended GitHub future day/source→T24 independent witness→T6/T90→POST/receiver/STOP using existing #529–535 and original V0079–V0083. Historical hardcoded Nov5 WSSS POST script is **not** a general future-day POST scheduler.
+- Adopt exactly one first-cycle outcome and source/metric/label evidence **before Phase6 outcomes**, retain A/B/C/D1/D2/E as separate historical proposed alternatives and Amendment E's richer secondaries. Phase7 algorithms need not be frozen now.
+- Independently sign Phase5 science FREEZE and separately authorize Phase6 paid GO. A paid Day1 collection and any genuine POST evidence occur **after GO**, not as circular software prerequisites.
+
+**No live DB change, API call, credit spend, source license assertion, calendar rewrite, independent release, or automatic future paid dispatch in this PR.**
