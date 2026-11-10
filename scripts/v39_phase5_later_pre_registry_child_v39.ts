@@ -125,6 +125,8 @@ export async function mainP5LaterRegistryChild(
  try{registry=JSON.parse(registryBytes.toString("utf8")) as P5SignedLaterPreDayRegistry;}
  catch{return hold("SIGNED_DAY_REGISTRY_NOT_JSON");}
  const sourcePath=registry?.sourceDayRegistryFilePath;
+ if(typeof sourcePath!=="string"||!SOURCE.test(sourcePath))
+  hold("UNSIGNED_SOURCE_DAY_REGISTRY_PATH");
  const sourceBytes=localBytes(sourcePath,100000,true);
  let source:P5SignedSourceBatchRegistry;
  try{source=JSON.parse(sourceBytes.toString("utf8")) as P5SignedSourceBatchRegistry;}
