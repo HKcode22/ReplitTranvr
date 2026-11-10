@@ -32,8 +32,9 @@ const fail=(what:string):never=>{
 };
 function when(x:unknown):number{
  const v=x instanceof Date?x:typeof x==="string"?new Date(x):null;
- if(!v||!Number.isFinite(v.getTime()))
-  fail("MALFORMED_OR_UNOBSERVED_NATIVE_UTC");
+ if(v===null)return fail("MALFORMED_OR_UNOBSERVED_NATIVE_UTC");
+ if(!Number.isFinite(v.getTime()))
+  return fail("MALFORMED_OR_UNOBSERVED_NATIVE_UTC");
  return v.getTime();
 }
 function maybeWhen(x:unknown):number|null{
@@ -136,7 +137,7 @@ export const P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL=[
  "p.dep_scheduled_utc,p.population_member_id,",
  "p.flight_number,p.arr_airport_icao,p.query_direction",
  "FROM clean.flight_population p WHERE p.population_query_id=$1::uuid",
- "ORDER BY p.analytic_identity_id,p.available_at,p.id LIMIT 501"
+ "ORDER BY p.analytic_identity_id,p.available_at,p.id LIMIT 2501"
 ].join(" ");
 export function auditP5ActualSourceFlightCandidates(
  scope:P5ActualSourceCandidateScope,
