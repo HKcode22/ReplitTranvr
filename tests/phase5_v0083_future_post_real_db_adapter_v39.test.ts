@@ -1,4 +1,4 @@
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {
  p5V0083FuturePostReservationSha256,
@@ -11,6 +11,7 @@ import {
 } from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {buildFidsRequestContractV39} from
  "../server/lib/disruption/fidsCensus_v3";
+import {fetchFidsAirport} from "../server/lib/disruption/aerodataboxLimiter_v3";
 const sh=(c:string)=>c.repeat(64);
 const stamp=(s:string)=>new Date(s);
 function approved():P5ReviewedFuturePostOneGet{
@@ -243,5 +244,46 @@ describe("Phase5 V0083 paid POST DB port — real SQL paths but NEVER provider i
    "FUTURE_POST_ORIGINAL_COMMITTED_NOT_ACTUAL_FLIGHT_OUTCOME");
   expect(x.actualPhysicalDepartureCertified).toBe(false);
   expect(x.normalizedMembers).toBe(2);
+ });
+});
+
+describe("V0083 onePhysicalAttemptOnly: no hidden FIDS transport retry after one reserved REST call",()=>{
+ it.each([429,500,503])("POST HTTP %s still executes exactly one charged attempt",async status=>{
+  let charged=0,networkCalls=0;
+  const result=await fetchFidsAirport("WSSS","2027-02-02T17:00",
+   "2027-02-02T19:00",{
+    direction:"Departure",category:"outcome",
+    strictDepartureList:true,strictArrivalList:false,
+    onePhysicalAttemptOnly:true,
+    budgetOwner:{reserve:async(category,units,attempt)=>{
+     charged++;expect(category).toBe("outcome");
+     expect(units).toBe(2);expect(attempt).toBe(1);
+     return "prepaid-one-physical-attempt";
+    }},
+    fetchImpl:vi.fn(async()=>{
+     networkCalls++;
+     return new Response("provider not ready",{status});
+    }) as typeof fetch,
+    sleepImpl:async()=>{throw Error("NO_POST_RETRY_SLEEP_ALLOWED");}
+   });
+  expect(result).toBeNull();
+  expect(charged).toBe(1);
+  expect(networkCalls).toBe(1);
+ });
+ it("a network transport exception does not cause the second HTTP GET",async()=>{
+  let charged=0,calls=0;
+  const result=await fetchFidsAirport("WSSS","2027-02-02T17:00",
+   "2027-02-02T19:00",{
+    direction:"Departure",category:"outcome",
+    onePhysicalAttemptOnly:true,
+    budgetOwner:{reserve:async()=>{charged++;return "reservation";}},
+    fetchImpl:vi.fn(async()=>{
+     calls++;throw new Error("SIMULATED_NETWORK_RESET_AFTER_PAID_DISPATCH");
+    }) as typeof fetch,
+    sleepImpl:async()=>{throw Error("NO_RETRY_SLEEP_ALLOWED");}
+   });
+  expect(result).toBeNull();
+  expect(charged).toBe(1);
+  expect(calls).toBe(1);
  });
 });
