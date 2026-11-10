@@ -148,7 +148,10 @@ export async function runP5LaterSignedBatchDispatcher(
  let registry:P5SignedLaterPreDayRegistry;
  try{registry=JSON.parse(rb.toString("utf8")) as P5SignedLaterPreDayRegistry;}
  catch{return hold("NONJSON_LATER_SIGNED_DAY_REGISTRY");}
- const sb=bytes(registry?.sourceDayRegistryFilePath,100000,true);
+ const sourcePath=registry?.sourceDayRegistryFilePath;
+ if(typeof sourcePath!=="string"||!SOURCE.test(sourcePath))
+  hold("UNSIGNED_SOURCE_DAY_REGISTRY_PATH");
+ const sb=bytes(sourcePath,100000,true);
  let source:P5SignedSourceBatchRegistry;
  try{source=JSON.parse(sb.toString("utf8")) as P5SignedSourceBatchRegistry;}
  catch{return hold("NONJSON_SOURCE_SIGNED_DAY_REGISTRY");}
