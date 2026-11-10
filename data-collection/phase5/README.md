@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 evening — existing Stage24 T24 witness to native T6/T90 GitHub PRE owner (review)
+
+[**Signed future T−6h / T−90m PRE GitHub worker + exact witness checkpoint**](2026-11-09_GITHUB_WITNESSED_T6_T90_PRE_OWNER_CHECKPOINT.md). This adds an exact one-flight main-only manual GitHub caller for the already-tested Stage14 T6/T90 writer and Stage24 independently reviewed V0081 T24 witness gate. Reuses the precommissioned PRE-only login, source-original validity, strict frozen T, 90m prestart/180s due-window PostgreSQL clock, pre/post-COMMIT no-backfill guards, and external T24 receipt SHA. No paid provider request, no new DB role, no Phase6 launch. **Not yet a 31-day unattended per-flight scheduler, POST or scientific FREEZE.** CI-pending at authoring; verify PR and postmerge exact main. 
+
+
 ## Nov 9 — signed one-GET source now revalidates the real V0079 due queue before prearm (review)
 
 [**Live-source-queue → signed one-GET preflight and hard-deadline checkpoint**](2026-11-09_SIGNED_ONE_GET_REAL_QUEUE_PREFLIGHT_BRIDGE_CHECKPOINT.md). Connects the already-tested #528 SOURCE-role read-only queue to the already-existing main-only, one-signed-query paid FIDS runner. It now requires the exact DB-prepared query digest/key, airport/day/horizon/early-draw SHA and planned dispatch UTC to match the signed packet **before V0080 prearm**, then rechecks primary DB clock versus the query's hard deadline **before V0079 physical reservation**. Late, STOPPED, previously prearmed or reserved requests remain HOLD. **Not the unattended source dispatcher**; no PR CI paid provider, live DB mutation, new role or auto GO. Phase5 FREEZE HOLD; Phase6 paid GO NO.

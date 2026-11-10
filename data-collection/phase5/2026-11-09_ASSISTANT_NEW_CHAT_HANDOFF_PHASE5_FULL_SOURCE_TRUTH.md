@@ -1,5 +1,15 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 9 evening — later T−6h/T−90m GitHub owner under exact-head CI review
+
+**Verified baseline**: merged [PR #529](https://github.com/HKcode22/ReplitTranvr/pull/529), main `1d9bebc70d20656a9bbdd41864da4d260f9b5759`; **all five postmerge** source release / V0080 / V0082 / SOURCE role / full offline safety workflows SUCCESS. #529 now requires a fresh actual SOURCE-only V0079/V0080 unreserved due-queue read before any one-GET prearm and a post-wait DB hard-deadline check before source reservation. Existing manual paid guard remains active, signed observer schedule remains OFF.
+
+**New engineering work in review (not yet merged):** [signed native T6/T90 owner checkpoint](2026-11-09_GITHUB_WITNESSED_T6_T90_PRE_OWNER_CHECKPOINT.md), [script](../../scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39.ts), [PR-only offline vs main-only signed future workflow](../../.github/workflows/phase5-one-signed-witnessed-later-pre-main-manual.yml), and [negative admission tests](../../tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts). Reuses the existing Stage14 future flight PRE writer, Stage24 independently reviewed T24 V0081 receipt, commissioned PRE-only dedicated role, and the original PG clock due-window waiter. No paid data, new role, POST or live PRE is authorized by merge alone. Requires a future independent per-flight SHA-pinned packet+T24 reviewed witness and distinct Phase5 science/source-use/Phase6 release. **This is still manual per flight, not unattended 31-day orchestration.** Check exact PR/head checks and postmerge main before claiming completion.
+
+**Remaining actual release work** is unchanged: independently select lawful first-cycle target/source-use/expiry; sign future 31-parent 26/3/2 calendar/treatment/physical seven-category UTC budget without preselecting future 21 adaptive site sets; **authorize and assemble dynamic unattended** flight-level SOURCE→PRE/witness/T6/T90→POST/receiver/STOP/quality; one independent Phase5 FREEZE, and separate Phase6 paid GO. No reinstallation, no repetition of Nov6 paid trial; Phase5 FREEZE HOLD, Phase6 paid GO NO.
+
+
+
 ## Nov 9 newest engineering: signed one-GET source consumes live prepared-source queue (under CI review)
 
 Before this branch, merged **#528** = main `370e6a882500872c0ea2aa6eb94298876e857129`, with **post-merge V0082 actual PG16 + repository full offline safety both SUCCESS**. The #528 read-only queue is not an unattended dispatcher and the existing signed GitHub source worker is manual-only.
