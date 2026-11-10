@@ -197,6 +197,10 @@ export async function runP5NativeT24GitHubRelease(
    runDayIndex:out.runDayIndex,
    committedSnapshotId:out.committedSnapshotId,
    preCommitWitnessVerified:true as const,
+   // Stage17 source+DB-clock proof candidate for the later T6/T90 worker.
+   // Public Actions logs contain hashes/times, never raw provider payload.
+   // This digest is NOT an independent source-use or scientific signoff.
+   unsignedStage24ReceiptCandidate:out.unsignedStage24ReceiptCandidate,
    providerCalls:0 as const,alertCreates:0 as const,
    scientificFreezeGrantedByWorker:false as const,
    paidPhase6GoGrantedByWorker:false as const
