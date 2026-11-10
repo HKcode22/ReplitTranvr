@@ -1,5 +1,17 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 9 20:38 PST user's latest instruction — A/B/C/two Ds/E MUST remain intact; work target-neutral Phase5 now
+
+**Actual last verified main baseline:** `c3e72f08d554c1a520add1c6462d88319bc052d5` (merged #534). Its actual postmerge dedicated proxy CI and full V3.9 safety were checked **SUCCESS**. All #529–#534 are merged. Owner explicitly requests do NOT erase A, B, C, both distinctly named D files, or E; prediction target remains OPEN, avoid a weak trivial one-target model but don't change direction or block other Phase5 completion tasks.
+
+**NEW REVIEW branch** `phase5/preserve-amendments-and-target-neutral-freeze-review-20261109`: [complete amendment lineage register](../plans/AMENDMENT_LINEAGE_REGISTER_A_B_C_D1_D2_E_20261109.md), [full source E archived for GitHub main as explicitly NOT adopted](../plans/PROPOSED_Amendment_E_20261109_PRESERVED_NOT_ADOPTED.md), and [engineering/cross-amendment checkpoint](2026-11-09_ALL_AMENDMENTS_PRESERVED_AND_DUE_SOURCE_BRIDGE_NO_GO.md). E originally from `docs/owner-phase5-target-clarity-20261109` blob `b09553a3e929179d1b76d25f9c37deb1287484f1`; original E discussion document now contains direct **Appendix P** with predecessor A/B/C/D1/D2 links (living E branch updated separately and may differ from the exact archived earlier snapshot). Do not mistake documentation archive merge as adoption. A partly superseded by B's narrow Gate5 science restoration, C segmented 31-date source, D1 schedule revision **TARGET** (not physical), D2 four-HUB **SAMPLING** (not target), E richer evidence tier proposal. Main base f.8 remains normative except explicitly approved future amendments.
+
+**Additional target-agnostic engineering under review:** extend existing `phase5PreparedQueryToOneGetDraft_v39.ts` with a **pure one-query handshake** comparing Stage7/8 saved UNARMED FIDS GET draft against current Stage9 actual V0079 SOURCE-only unreserved due queue, rejecting altered SHA/ICAO/slot/clock/draw/time/price/previous paid attempt and self-granted source rights; existing default-OFF source queue PR CI adds a dedicated negative suite. **NO auto-GET, no automatic signature, no production role, no SQL write or provider key**. It is another reusable reconciliation step but not an unattended 31-day dispatcher. Check the actual PR branch CI, merge, main and issue #416 before claiming success.
+
+**Real remaining:** independent 31 actual future parent day/26+3+2/five corrected pair approvals/21 truly unknown adaptive site draws, physical UTC seven REST charge categories + separate Alert credits, production-allowed source purpose/expiry, signed GitHub-only automatic Stage7/8/9 → source due/GET → real one-flight T24/witness → T6/T90 → POST/receiver/STOP/Day1 quality, one independently registered primary target/evidence/metric before future Phase6 outcomes (retain E alternative/sensitivity), independently reviewed Phase5 FREEZE and separate Phase6 paid GO. No new historic paid pilot, no recreating SQL roles, no Cloudflare/Replit AI, no timed Replit Shell, no provider email stall. **FREEZE HOLD / GO NO.**
+
+
+
 ## Nov 9 late physical takeoff-proxy accuracy review and Amendment E practical reconciliation
 
 **PR #533 merged main** `7d870382f23b7471f5fad10d27e3a79176bd5ec3` as independently verified; 6/6 exact-head PR checks passed. It reuses the actual metadata-only Day1 Source QA and returns source/cost HARD HOLDS vs recorded source/cutoff loss, **no auto STOP or paid GO**.
