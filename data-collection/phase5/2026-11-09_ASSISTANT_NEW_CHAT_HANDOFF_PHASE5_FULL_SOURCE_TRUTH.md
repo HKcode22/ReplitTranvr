@@ -1,5 +1,12 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## LATEST 2026-11-10T09:12:10Z / 01:12:10 PST — bounded signed per-parent-day future source registry (review)
+
+**Start from current source-of-truth**: merged #540 main `7b17e95408d1ff2a6c48a26e71dcc18a0ee7e367` and **successful** postmerge V3.9 #42785275890. Its single frozen signed query was joined to the real V0079 READ ONLY due source queue. New branch `phase5/per-day-signed-source-batch-readonly-20261110` extends this **without paid work**: 1–96 unique same-parent-day signed source packets, raw SHA registry, external manifest/release/rights/provider review pins, true-source queue collision/missingness detection, no source airport redraw, and existing single-packet reviewer reused for each. Opt-in only via existing default-OFF 10-minute source queue observer, no GitHub child paid dispatch or provider key. [Long checkpoint](2026-11-10_0112PST_SIGNED_PER_DAY_SOURCE_BATCH_V0079_READONLY_CHECKPOINT.md) enumerates all files, test matrix, boundary and remaining work. This status is IN REVIEW AT DOCUMENT WRITING; check PR and live CI before claiming merge.
+
+**Critical remaining:** signed future calendar/day registries with adaptive airports not predrawn, licensed Contents/ML/TTL #300, real 7 REST physical UTC + separate Alert cap, V0083 POST restricted LOGIN production audit, an actual independently approved and replay-safe GitHub per-query paid SOURCE dispatcher **not** yet implemented, PRE/witness/later PRE/future POST/receiver/Alert STOP/Day1 censor, one minimal prospectively adopted target, Phase5 independent FREEZE, distinct paid Phase6 GO. All A/B/C/D1/D2/E remain separate; E NOT adopted, don't demand all 3 PRE or exact native wheels-off for every record as Phase5 prerequisites. No historic paid pilots/role reinstall/reasking known account plan. FREEZE HOLD / Phase6 GO NO.
+
+
 ## 2026-11-10 08:35:12Z / 00:35:12 PST — latest Phase5 source queue handoff checkpoint
 
 **Verified main at start of this implementation:** `03155ee1bff480122944530bbf04b58ea0ae90db` (merged PR #539, 5/5 exact-head executable PR CI checks passed). The #539 exact-main V3.9 push safety run [#42781718880](https://github.com/HKcode22/ReplitTranvr/actions/runs/42781718880) finished SUCCESS. #539 supplied V0083 REST dedicated LOGIN no-provider read-only audit, not live LOGIN commissioning.
