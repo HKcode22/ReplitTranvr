@@ -16,7 +16,7 @@ const {Pool}=pg;
 
 const REPO="HKcode22/ReplitTranvr";
 const ACK="COMMISSION_ONLY_TWO_V0083_REST_LOGIN_SECRETS_NO_PROVIDER";
-const CI="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
+const CI="postgresql://v0083_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable";
 const SHA=/^[0-9a-f]{40}$/;
 export const P5_V0083_REST_LOGIN_ENTRIES=[
  {group:"review",login:"phase5_p5_other_rest_review_login_20261110",
