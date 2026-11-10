@@ -1,0 +1,44 @@
+name: Phase5 physical takeoff proxy accuracy research (NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5PhysicalDepartureProxyCalibration_v39.mjs'
+      - 'tests/phase5_physical_departure_proxy_calibration_v39.test.ts'
+      - 'data-collection/phase5/2026-11-09_ADSBLOL_PHYSICAL_DEPARTURE_LABEL_ERROR_RESEARCH_PROTOCOL.md'
+      - '.github/workflows/phase5-physical-takeoff-proxy-calibration-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5PhysicalDepartureProxyCalibration_v39.mjs'
+      - 'tests/phase5_physical_departure_proxy_calibration_v39.test.ts'
+      - '.github/workflows/phase5-physical-takeoff-proxy-calibration-offline.yml'
+permissions:
+  contents: read
+jobs:
+  paired-proxy-actual-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Run actual/matched takeoff proxy measurement and source refusal tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_physical_departure_proxy_calibration_v39.test.ts
+          echo 'PROXY_RESEARCH_ONLY ACTUAL_SOURCE_NOT_CERTIFIED MODEL_NO_PRODUCTION_NO_PAID_GO'
