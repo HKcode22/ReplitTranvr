@@ -19,7 +19,7 @@ import type {P5SignedWitnessedLaterPrePacket}
 const SHA=/^[a-f0-9]{64}$/;
 const CODE=/^[a-f0-9]{40}$/;
 const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_-]{8,100}\.json$/;
-const SOURCE_FILE=/^data-collection\\/phase5\\/frozen\\/[A-Za-z0-9_.-]{8,125}\\.json$/;
+const SOURCE_FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_.-]{8,125}\.json$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const hash=(v:Buffer)=>createHash("sha256").update(v).digest("hex");
 const hold=(s:string):never=>{throw Error("REFUSED_P5_LATER_DAY_REGISTRY_"+s);};
