@@ -150,7 +150,7 @@ describe("Phase5 Day1 actual source QA: hard budget/ledger vs ordinary recorded 
   expect(d.measuredSourceLoss).toContain(
    "RESERVED_WITHOUT_ORIGINAL_AFTER_CUTOFF");
   expect(d.measuredSourceLoss).toContain(
-   "LATE_BOUND_ORIGINAL_EXCLUDE_FROM_OWN_PRE");
+   "LATE_TO_PLANNED_QUERY_CUTOFF_CHECK_EACH_FLIGHT_ASOF");
   expect(d.missingSourceMeansNegativeOutcome).toBe(false);
   expect(d.lateOriginalMayBackfillPre).toBe(false);
   expect(d.successfulPreCertifiedByCounters).toBe(false);
