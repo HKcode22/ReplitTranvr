@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 9 evening — scientific cross-branch Amendment E review, separate from any approval
+
+[**Read the new independent multi-target source/label review and decision matrix**](2026-11-09_AMENDMENT_E_CROSS_BRANCH_SCIENCE_REVIEW_AND_ENDPOINT_MATRIX.md). Locates the owner's **proposed** rich [Amendment E on the unmerged discussion branch](https://github.com/HKcode22/ReplitTranvr/blob/docs/owner-phase5-target-clarity-20261109/data-collection/plans/PROPOSED_Amendment_E_20261109_Rich_Multi_Target_Prospective_Collection.md), independent target/data-support notes and corrected pair meeting checkpoint. Verifies current official ADB schema: `runwayTime`/`revisedTime` **actual OR estimated**, not automatically physical labels; source Contents default 7-day caching (plan/purpose exceptions need independent review); BTS/ADSB/NOAA as limited optional separately sourced evidence. The existing physical-route support audit gets an **additive, inert** TRAIN/VALIDATION-only E evidence-tier×outcome×horizon coverage function, with unknown/censored/positive versus native/conditional source groups, no TEST leakage or new paid calls. **Amendment E is NOT approved, not copied to main as a binding protocol, and no physical MAE/Brier primary switch or legal rights are asserted.** Full Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
+
 ## Nov 9 evening — real T24→Stage17 receipt candidate now feeds later PRE review (CI pending)
 
 [**Exact unsigned Stage17→Stage24 immutable T24 receipt checkpoint**](2026-11-09_UNSIGNED_T24_RECEIPT_HANDOFF_TO_LATER_PRE_CHECKPOINT.md). The existing two-commit T24 PRE/witness code now derives the later T6/T90 review receipt directly from its own committed snapshot ID, immutable source/first T, independent witness clock and postcommit readback. The native T24 GitHub owner returns it explicitly as an **unsigned candidate**. Merged #530's T6/T90 future worker must still receive independent source/receipt approval and its separate signed packet. No raw provider content, production migration, paid action or Phase6 GO; still not unattended month-long automation.
