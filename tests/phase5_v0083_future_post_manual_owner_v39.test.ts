@@ -99,7 +99,7 @@ describe("Phase5 V0083 one signed future POST main-only admission",()=>{
   const b=fixture();b.env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL=
    b.env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL;
   expect(()=>admitP5SignedFuturePostGitHub(b.env,b.bytes,b.packet,b.file))
-   .toThrow("REVIEW_NOT_DEDICATED_REAL_NEONDB_LOGIN");
+   .toThrow("RESERVE_NOT_DEDICATED_REAL_NEONDB_LOGIN");
  });
  it("rejects unauthorized rights or category budget drift",()=>{
   const a=fixture();a.env.V39_P5_POST_CATEGORY_BUDGET_SHA256=sh("9");
