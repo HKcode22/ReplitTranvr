@@ -133,6 +133,20 @@ export function reviewP5PrelistedCalendarRecovery(input){
     input.externallyReviewedFallbackSetSha256||
     prelistedAt>caught||prelistedAt>=original.start)
   refuse("CANDIDATE_POOL_WAS_NOT_PRELISTED_BEFORE_INCIDENT");
+ // Validate the ENTIRE prelisted candidate sequence before considering any
+ // first-match return; a malformed later alternative must not be hidden.
+ const fullCandidateStarts=new Set();
+ for(let n=0;n<input.candidates.length;n++){
+  const c=input.candidates[n];
+  if(!c||c.rank!==n+1||typeof c.startUtc!=="string"||
+     typeof c.endUtc!=="string")
+   refuse("INVALID_FALLBACK_SEQUENCE");
+  const begin=time(c.startUtc),finish=time(c.endUtc);
+  if(finish<=begin)refuse("INVALID_FALLBACK_EXPOSURE_INTERVAL");
+  if(fullCandidateStarts.has(c.startUtc))
+   refuse("DUPLICATE_FALLBACK_START");
+  fullCandidateStarts.add(c.startUtc);
+ }
  const others=input.otherPlannedDays.map(x=>({...x,...day(x)}));
  const indexes=[p.runDayIndex,...others.map(x=>x.runDayIndex)];
  if(!unique(indexes)||indexes.length!==31||
