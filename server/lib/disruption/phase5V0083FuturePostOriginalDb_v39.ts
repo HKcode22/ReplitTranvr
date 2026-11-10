@@ -426,3 +426,91 @@ export async function auditP5FuturePostActualPriorPre(
   throw e;
  }finally{db.release();}
 }
+
+
+/**
+ * Restricted REST REVIEW worker only: binds the true GitHub run ID to an
+ * independently signed static reviewed POST request. Review and reservation
+ * MUST be different dedicated login/NOLOGIN roles. No provider GET here.
+ */
+export async function prepareP5FuturePostV0083ReviewedCall(
+ pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet
+):Promise<{status:"ONE_REAL_GITHUB_FUTURE_POST_CALL_PREPARED_NO_GET";
+ requestSha256:string;physicalReservations:0;providerCalls:0}>{
+ const f=verifyP5FuturePostReviewedFrame(p);
+ if(!pool||typeof pool.connect!=="function")
+  fail("NO_INDEPENDENT_OTHER_REST_REVIEW_POOL");
+ const db=await pool.connect();let tx=false;
+ try{
+  await db.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
+  tx=true;
+  await db.query("SET LOCAL statement_timeout='12000ms'");
+  await db.query("SET LOCAL lock_timeout='2000ms'");
+  const session=await db.query(
+   "SELECT current_database() AS db,current_user AS role,"+
+   " current_setting('transaction_read_only') AS ro,"+
+   " clock_timestamp() AS now");
+  if(session.rowCount!==1||session.rows[0]?.db!=="neondb"||
+     session.rows[0]?.role!=="phase5_other_rest_review_prod_20261108"||
+     session.rows[0]?.ro!=="off")
+   fail("OTHER_REST_REVIEW_ROLE_NOT_ISOLATED");
+  const now=Date.parse(sqlClock(session.rows[0].now));
+  if(now>f.end||now<f.start-90*60000)
+   fail("REVIEW_NOT_IN_FUTURE_DISPATCH_ADMISSION_WINDOW");
+  const release=await db.query(
+   "SELECT reviewed_category_budget_sha256"+
+   " FROM clean.phase5_fids_seven_rest_release_v39"+
+   " WHERE manifest_sha256=$1",[p.manifestSha256]);
+  if(release.rowCount!==1||
+     release.rows[0].reviewed_category_budget_sha256!==
+       p.reviewedCategoryBudgetSha256)
+   fail("ACTUAL_SEVEN_REST_RELEASE_NOT_SIGNED");
+  const auth=await db.query(
+   "SELECT enabled,revoked_at_utc,manifest_sha256"+
+   " FROM clean.adb_phase6_authorization WHERE singleton_key=true");
+  if(auth.rowCount!==1||auth.rows[0]?.enabled!==true||
+     auth.rows[0]?.revoked_at_utc!==null||
+     auth.rows[0]?.manifest_sha256!==p.manifestSha256)
+   fail("ACTUAL_SEPARATE_PHASE6_GO_DISABLED");
+  const ins=await db.query(
+   "INSERT INTO clean.phase5_other_rest_reviewed_call_v39("+
+   "request_sha256,manifest_sha256,rest_category,source_query_digest,"+
+   "planned_charge_day_utc,earliest_dispatch_utc,"+
+   "hard_latest_dispatch_utc,github_run_id,rights_review_sha256,"+
+   "provider_price_sha256,reviewed_request_context_sha256,"+
+   "reviewed_category_budget_sha256,api_units_per_get)"+
+   " VALUES($1,$2,'OUTCOME_REST_UNIT_BUDGET',NULL,"+
+   "$3,$4,$5,$6,$7,$8,$9,$10,2) RETURNING request_sha256",
+   [p.requestSha256,p.manifestSha256,f.chargeDateUtc,
+    p.postDispatchEarliestUtc,p.postDispatchHardLatestUtc,p.githubRunId,
+    p.reviewedSourceRightsSha256,p.reviewedProviderPriceSha256,
+    p.reviewedRequestContextSha256,p.reviewedCategoryBudgetSha256]);
+  if(ins.rowCount!==1||ins.rows[0]?.request_sha256!==p.requestSha256)
+   fail("V0083_IMMUTABLE_REVIEWED_CALL_NOT_INSERTED");
+  await db.query("COMMIT");tx=false;
+  // A duplicate workflow cannot replace immutable reviewed-call metadata.
+  const other=await pool.connect();
+  try{
+   const check=await other.query(
+    "SELECT request_sha256,github_run_id,manifest_sha256,"+
+    "rest_category,reviewed_request_context_sha256"+
+    " FROM clean.phase5_other_rest_reviewed_call_v39"+
+    " WHERE request_sha256=$1",[p.requestSha256]);
+   if(check.rowCount!==1||
+      check.rows[0].request_sha256!==p.requestSha256||
+      check.rows[0].github_run_id!==p.githubRunId||
+      check.rows[0].manifest_sha256!==p.manifestSha256||
+      check.rows[0].rest_category!=="OUTCOME_REST_UNIT_BUDGET"||
+      check.rows[0].reviewed_request_context_sha256!==
+       p.reviewedRequestContextSha256)
+    fail("REVIEWED_POST_CALL_POSTCOMMIT_READBACK_MISSING");
+  }finally{other.release();}
+  return{
+   status:"ONE_REAL_GITHUB_FUTURE_POST_CALL_PREPARED_NO_GET",
+   requestSha256:p.requestSha256,physicalReservations:0,providerCalls:0
+  };
+ }catch(e){
+  if(tx)await db.query("ROLLBACK").catch(()=>{});
+  throw e;
+ }finally{db.release();}
+}
