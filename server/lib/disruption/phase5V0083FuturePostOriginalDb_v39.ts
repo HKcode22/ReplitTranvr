@@ -26,6 +26,16 @@ const sqlClock=(d:unknown):string=>{
  return v.toISOString();
 };
 const sha=(x:string)=>createHash("sha256").update(x).digest("hex");
+const dbUtcDate=(value:unknown):string=>{
+ const d=value instanceof Date?value.toISOString().slice(0,10):
+  typeof value==="string"&&/^\d{4}-\d\d-\d\d$/.test(value)?
+    value:"";
+ if(!/^\d{4}-\d\d-\d\d$/.test(d)||
+    !Number.isFinite(Date.parse(d+"T00:00:00.000Z"))||
+    new Date(d+"T00:00:00.000Z").toISOString().slice(0,10)!==d)
+  fail("INVALID_ACTUAL_PHYSICAL_UTC_CHARGE_DATE");
+ return d;
+};
 export interface P5ReviewedFuturePostOneGet {
  schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1";
  manifestSha256:string;
@@ -162,7 +172,7 @@ export async function reserveP5FuturePostV0083OnePhysicalGet(
      a.reviewed_request_context_sha256!==p.reviewedRequestContextSha256||
      Number(a.api_units_per_get)!==2||
      a.source_query_digest!==null||
-     String(a.planned_charge_day_utc).slice(0,10)!==f.chargeDateUtc||
+     dbUtcDate(a.planned_charge_day_utc)!==f.chargeDateUtc||
      sqlClock(a.earliest_dispatch_utc)!==p.postDispatchEarliestUtc||
      sqlClock(a.hard_latest_dispatch_utc)!==p.postDispatchHardLatestUtc)
    fail("NO_ACTUAL_IMMUTABLE_OUTCOME_REST_REVIEWED_CALL");
@@ -194,7 +204,7 @@ export async function reserveP5FuturePostV0083OnePhysicalGet(
       v.github_run_id!==p.githubRunId||
       v.rights_review_sha256!==p.reviewedSourceRightsSha256||
       v.provider_price_sha256!==p.reviewedProviderPriceSha256||
-      String(v.charged_utc_date).slice(0,10)!==f.chargeDateUtc||
+      dbUtcDate(v.charged_utc_date)!==f.chargeDateUtc||
       sqlClock(v.reserved_at_utc)!==clock)
     fail("POST_COMMIT_RESV_READBACK_NOT_EXACT_NO_PROVIDER");
   }finally{check.release();}
