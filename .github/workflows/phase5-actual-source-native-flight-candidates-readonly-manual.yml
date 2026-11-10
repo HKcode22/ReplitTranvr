@@ -1,0 +1,124 @@
+name: Phase5 actual SOURCE native flight candidates (READ ONLY, NO PROVIDER)
+run-name: P5 SOURCE NATIVE FLIGHT CANDIDATES READONLY
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type REVIEW_ONLY_ACTUAL_BOUND_SOURCE_NATIVE_FLIGHT_CANDIDATES_NO_GO'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-actual-source-native-flight-candidates-readonly-manual.yml'
+      - 'server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39.ts'
+      - 'scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts'
+      - 'tests/phase5_actual_source_native_flight_candidate_audit_v39.test.ts'
+      - 'tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-actual-source-native-flight-candidates-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-candidate-review-only:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No-provider real SOURCE candidate/uncertainty and role tests only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx vitest run tests/phase5_actual_source_native_flight_candidate_audit_v39.test.ts tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts
+          echo 'SOURCE_NATIVE_CANDIDATES_OFFLINE_TEST_ONLY_NOT_LICENSE_OR_SIGNED_PRE'
+  one-approved-nonpaid-real-source-candidate-review:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'REVIEW_ONLY_ACTUAL_BOUND_SOURCE_NATIVE_FLIGHT_CANDIDATES_NO_GO' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P5_ACTUAL_NATIVE_SOURCE_READONLY_CONFIRM: ${{ inputs.confirm }}
+      V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED }}
+      V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_QUERY_DIGEST: ${{ secrets.V39_P5_QUERY_DIGEST }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_ACTUAL_SOURCE_EARLY_DRAW_SHA256: ${{ secrets.V39_P5_ACTUAL_SOURCE_EARLY_DRAW_SHA256 }}
+      V39_P5_ACTUAL_SOURCE_GITHUB_RUN_ID: ${{ secrets.V39_P5_ACTUAL_SOURCE_GITHUB_RUN_ID }}
+      P5_ACTUAL_SOURCE_RUN_DAY_INDEX: ${{ vars.P5_ACTUAL_SOURCE_RUN_DAY_INDEX }}
+      P5_ACTUAL_SOURCE_SLOT: ${{ vars.P5_ACTUAL_SOURCE_SLOT }}
+      P5_ACTUAL_SOURCE_HORIZON: ${{ vars.P5_ACTUAL_SOURCE_HORIZON }}
+      P5_ACTUAL_SOURCE_AIRPORT_ICAO: ${{ vars.P5_ACTUAL_SOURCE_AIRPORT_ICAO }}
+      P5_ACTUAL_SOURCE_MAX_STALENESS_SECONDS: ${{ vars.P5_ACTUAL_SOURCE_MAX_STALENESS_SECONDS }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: HARD HOLD before dependencies without source rights and separate reviewed PRE login
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$GITHUB_SHA" = "$V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA"
+          [[ "$V39_P5_MANIFEST_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$V39_P5_QUERY_DIGEST" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$V39_P5_ACTUAL_SOURCE_EARLY_DRAW_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$V39_P5_ACTUAL_SOURCE_GITHUB_RUN_ID" =~ ^[0-9]{5,25}$ ]]
+          test -n "$P5_V39_PRE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Actual bound SOURCE and all native members READ ONLY (aggregate only)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts
+          echo 'NONPAID_REAL_NATIVE_SOURCE_CANDIDATE_AUDIT_NOT_PRE_SIGNER_NOT_PHASE6_GO'
