@@ -380,9 +380,22 @@ export async function auditP5FuturePostActualPriorPre(
    " AND q.manifest_sha256=b.manifest_sha256"+
    " JOIN clean.fids_query_response r"+
    " ON r.population_query_id=b.population_query_id"+
+   " AND r.response_hash=b.response_hash"+
+   " JOIN clean.flight_population fp"+
+   " ON fp.population_query_id=b.population_query_id"+
+   " AND fp.population_member_id=s.population_member_id"+
+   " AND fp.canonical_flight_instance_id=s.flight_instance_id"+
    " WHERE q.manifest_sha256=$1 AND q.run_day_index=$2"+
    " AND q.airport_icao=$3 AND s.flight_instance_id=$4"+
    " AND s.frame_hash=$5 AND s.prediction_state='PRE_DEPARTURE'"+
+   " AND fp.source_airport_icao=q.airport_icao"+
+   " AND fp.population_role='requested_airport_primary'"+
+   " AND fp.source_type='fids'"+
+   " AND fp.codeshare_resolution_status='confirmed_operating_leg'"+
+   " AND fp.available_at<=s.prediction_cutoff_utc"+
+   " AND fp.provider_content_expired_at_utc IS NULL"+
+   " AND s.fids_response_hash=b.response_hash"+
+   " AND q.horizon=s.horizon"+
    " AND s.horizon IN ('T-24h','T-6h','T-90m')",
    [p.manifestSha256,p.runDayIndex,p.airportIcao,
     p.flightInstanceId,p.reviewedFrameSha256]);
@@ -401,7 +414,8 @@ export async function auditP5FuturePostActualPriorPre(
    const native=Date.parse(sqlClock(row.selected_t_milestone_utc));
    if(native!==t||cutoff!==t-offset||original>cutoff||
       committed>cutoff||committed<original||committed>=expires||
-      row.fids_response_hash!==row.binding_response_hash)continue;
+      row.fids_response_hash!==row.binding_response_hash||
+      !row.snapshot_id||!/^[0-9]+$/.test(String(row.snapshot_id)))continue;
    if(valid.has(row.horizon)&&valid.get(row.horizon)!==row.snapshot_id)
     fail("DUPLICATED_SOURCE_PRE_SAME_FLIGHT_HORIZON");
    valid.set(row.horizon,String(row.snapshot_id));
