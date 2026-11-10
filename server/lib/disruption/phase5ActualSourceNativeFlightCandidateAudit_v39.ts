@@ -26,7 +26,7 @@ const offset:Record<Horizon,number>={
  "T-90m":90*60_000
 };
 const MIN_LEAD=15*60_000;
-const MAX_MEMBERS=500;
+const MAX_MEMBERS=2500;
 const fail=(what:string):never=>{
  throw Error("REFUSED_P5_ACTUAL_SOURCE_CANDIDATES_"+what);
 };
