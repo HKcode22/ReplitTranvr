@@ -112,6 +112,10 @@ export function reviewP5SignedSourceDayBatchAgainstActualQueue(
   const bytes=readFrozenBytes(e.filePath);
   if(!Buffer.isBuffer(bytes)||bytes.length<100||bytes.length>200000)
    fail("INVALID_FROZEN_PACKET_BYTES");
+  // Verify the immutable byte digest BEFORE inspecting claimed day/query,
+  // so unauthenticated content cannot affect scope or diagnostic order.
+  if(digest(bytes)!==e.expectedPacketSha256)
+   fail("UNSIGNED_FILE_OR_QUEUE_NOT_AUTHENTICATED");
   let packet:P5GitHubOneQueryReleaseEnvelope;
   try{packet=JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;}
   catch{fail("NONJSON_SIGNED_SOURCE_PACKET");}
