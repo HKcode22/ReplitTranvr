@@ -153,7 +153,7 @@ describe("actual post-COMMIT source native-flight candidates, no invented packet
    scope,[f.original,f.original],f.members,f.clock))
    .toThrow("UNSIGNED_SOURCE_SCOPE_OR_UNBOUNDED_POPULATION");
   expect(()=>auditP5ActualSourceFlightCandidates(
-   scope,[f.original],Array.from({length:501},
+   scope,[f.original],Array.from({length:2501},
     (_,i)=>({...f.members[0],analytic_identity_id:"leg:"+i+":x"})),f.clock))
    .toThrow("UNSIGNED_SOURCE_SCOPE_OR_UNBOUNDED_POPULATION");
  });
