@@ -46,6 +46,7 @@ export interface P5ReviewedFuturePostOneGet {
  reviewedCategoryBudgetSha256:string;
  reviewedRequestContextSha256:string;
  reviewedProviderContractSha256:string;
+ reviewedFrameSha256:string;
  runDayIndex:number;
  slot:"HUB"|"MID_A"|"MID_B"|"REGIONAL";
  airportIcao:string;
@@ -78,7 +79,8 @@ export function verifyP5FuturePostReviewedFrame(p:P5ReviewedFuturePostOneGet){
  if(!p||p.schema!=="v39.phase5.future-post-reviewed-outcome-one-get.v1"||
     ![p.manifestSha256,p.requestSha256,p.reviewedSourceRightsSha256,
       p.reviewedProviderPriceSha256,p.reviewedCategoryBudgetSha256,
-      p.reviewedRequestContextSha256,p.reviewedProviderContractSha256].every(
+      p.reviewedRequestContextSha256,p.reviewedProviderContractSha256,
+      p.reviewedFrameSha256].every(
         x=>typeof x==="string"&&H.test(x))||
     !G.test(p.githubRunId??"")||
     !Number.isInteger(p.runDayIndex)||p.runDayIndex<1||
@@ -324,5 +326,103 @@ export async function verifyP5FuturePostOriginalAfterCommit(
    actualPhysicalDepartureCertified:false as const,
    phase6ModelLabelApproved:false as const
   };
+ }finally{db.release();}
+}
+
+
+export interface P5FuturePostActualPreReadback {
+ status:"ACTUAL_SAME_FLIGHT_SOURCE_BOUND_PRE_PARTIAL_ALLOWED";
+ manifestSha256:string;
+ runDayIndex:number;flightInstanceId:string;
+ observedValidHorizonCount:number;
+ observedValidHorizons:string[];
+ missingPreHorizons:string[];
+ actualSourcePREReferenceIds:string[];
+ observedFromIndependentRestrictedDb:true;
+ providerCalls:0;databaseWrites:0;
+}
+/**
+ * The POST source GET is permitted for usefulness review only if its own
+ * preflight CURRENT DB already has at least one truly source-bound PRE for
+ * the same flight/manifest/T, committed on-time with a matching original.
+ * Distinct T24/T6/T90 PRE may be absent; that is a counted loss, not an
+ * experiment-wide reason to abandon a valid future observation.
+ *
+ * This uses SOURCE-scoped SELECT, requiring narrowly commissioned SELECT
+ * on existing PRE metadata; privilege missing => refuses, never app fallback.
+ */
+export async function auditP5FuturePostActualPriorPre(
+ pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet
+):Promise<P5FuturePostActualPreReadback>{
+ verifyP5FuturePostReviewedFrame(p);
+ const db=await pool.connect();let tx=false;
+ try{
+  await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await db.query("SET LOCAL statement_timeout='12000ms'");
+  const who=await db.query(
+   "SELECT current_user AS role,current_database() AS db,"+
+   " current_setting('transaction_read_only') AS ro");
+  if(who.rowCount!==1||
+     who.rows[0]?.role!=="phase5_fids_source_prod_20261107"||
+     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on")
+   fail("POST_PRE_NOT_IN_ACTUAL_RESTRICTED_SOURCE_SESSION");
+  const x=await db.query(
+   "SELECT s.id::text AS snapshot_id,s.horizon,"+
+   " s.created_at,s.prediction_cutoff_utc,"+
+   " s.selected_t_milestone_utc,s.fids_response_hash,"+
+   " r.available_at AS original_available_at,"+
+   " b.source_expires_at_utc,b.response_hash AS binding_response_hash"+
+   " FROM clean.flight_snapshots s"+
+   " JOIN clean.phase5_fids_original_binding_v39 b"+
+   " ON b.population_query_id::text=s.population_query_id"+
+   " JOIN clean.phase5_fids_allowed_query_v39 q"+
+   " ON q.query_digest=b.query_digest"+
+   " AND q.manifest_sha256=b.manifest_sha256"+
+   " JOIN clean.fids_query_response r"+
+   " ON r.population_query_id=b.population_query_id"+
+   " WHERE q.manifest_sha256=$1 AND q.run_day_index=$2"+
+   " AND q.airport_icao=$3 AND s.flight_instance_id=$4"+
+   " AND s.frame_hash=$5 AND s.prediction_state='PRE_DEPARTURE'"+
+   " AND s.horizon IN ('T-24h','T-6h','T-90m')",
+   [p.manifestSha256,p.runDayIndex,p.airportIcao,
+    p.flightInstanceId,p.reviewedFrameSha256]);
+  const offsets:Record<string,number>={
+   "T-24h":86400000,"T-6h":21600000,"T-90m":5400000
+  };
+  const t=Date.parse(p.expectedSelectedTNativeUtc);
+  const valid=new Map<string,string>();
+  for(const row of x.rows){
+   const offset=offsets[String(row.horizon)];
+   if(!offset)continue;
+   const cutoff=Date.parse(sqlClock(row.prediction_cutoff_utc));
+   const committed=Date.parse(sqlClock(row.created_at));
+   const original=Date.parse(sqlClock(row.original_available_at));
+   const expires=Date.parse(sqlClock(row.source_expires_at_utc));
+   const native=Date.parse(sqlClock(row.selected_t_milestone_utc));
+   if(native!==t||cutoff!==t-offset||original>cutoff||
+      committed>cutoff||committed<original||committed>=expires||
+      row.fids_response_hash!==row.binding_response_hash)continue;
+   if(valid.has(row.horizon)&&valid.get(row.horizon)!==row.snapshot_id)
+    fail("DUPLICATED_SOURCE_PRE_SAME_FLIGHT_HORIZON");
+   valid.set(row.horizon,String(row.snapshot_id));
+  }
+  await db.query("ROLLBACK");tx=false;
+  if(valid.size===0)fail("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
+  const names=["T-24h","T-6h","T-90m"];
+  return{
+   status:"ACTUAL_SAME_FLIGHT_SOURCE_BOUND_PRE_PARTIAL_ALLOWED",
+   manifestSha256:p.manifestSha256,runDayIndex:p.runDayIndex,
+   flightInstanceId:p.flightInstanceId,
+   observedValidHorizonCount:valid.size,
+   observedValidHorizons:names.filter(n=>valid.has(n)),
+   missingPreHorizons:names.filter(n=>!valid.has(n)),
+   actualSourcePREReferenceIds:names.filter(n=>valid.has(n))
+    .map(n=>valid.get(n)!),
+   observedFromIndependentRestrictedDb:true,
+   providerCalls:0,databaseWrites:0
+  };
+ }catch(e){
+  if(tx)await db.query("ROLLBACK").catch(()=>{});
+  throw e;
  }finally{db.release();}
 }
