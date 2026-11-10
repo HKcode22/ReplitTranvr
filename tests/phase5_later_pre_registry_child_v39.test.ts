@@ -118,7 +118,7 @@ describe("signed later PRE day registry actual child admission, no provider",()=
    {P5_V39_OTHER_REST_RESERVE_DATABASE_URL:"cross-privilege"},
    {AERODATABOX_API_KEY:"never"}
   ])expect(()=>f.check(flightPath,{...f.env,...change}))
-   .toThrow(/^Error: REFUSED_P5_LATER_REGISTRY_CHILD_/);
+   .toThrow("REFUSED_P5_LATER_REGISTRY_CHILD_");
  });
  it("refuses a packet not in the signed registry, changed day, source or packet",()=>{
   const f=fixture();
