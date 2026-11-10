@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {
- auditPhase5SourceDay,P5_DAILY_SOURCE_METRICS_SQL,
+ auditPhase5SourceDay,assessP5Day1SourceSafetyFromReadonlyAudit,
+ P5_DAILY_SOURCE_METRICS_SQL,
  P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,
 } from "../server/lib/disruption/phase5DaySourceQualityReadonly_v39";
 const manifest="a".repeat(64);
@@ -130,5 +131,92 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   await expect(auditPhase5SourceDay(m.pool,manifest,1)).rejects
    .toThrow("NO_SIGNED_SOURCE_QUERY_DENOMINATOR");
   expect(m.calls).toContain("ROLLBACK");
+ });
+});
+
+describe("Phase5 Day1 actual source QA: hard budget/ledger vs ordinary recorded losses",()=>{
+ const actual=async()=>{
+  const f=fake();
+  return await auditPhase5SourceDay(f.pool,manifest,1);
+ };
+ it("classifies actual readonly returned result: missed originals are not fake negative labels",async()=>{
+  const a=await actual();
+  const d=a.day1SourceSafetyReview!;
+  expect(d.status).toBe(
+   "SOURCE_LOSS_OR_LATE_OBSERVATIONS_REVIEW_CENSORING");
+  expect(d.sourceTotals.plannedQueries).toBe(4);
+  expect(d.sourceTotals.boundOriginals).toBe(2);
+  expect(d.measuredSourceLoss).toContain("MISSED_PAID_GET_WINDOWS_CANNOT_BACKFILL");
+  expect(d.measuredSourceLoss).toContain(
+   "RESERVED_WITHOUT_ORIGINAL_AFTER_CUTOFF");
+  expect(d.measuredSourceLoss).toContain(
+   "LATE_TO_PLANNED_QUERY_CUTOFF_CHECK_EACH_FLIGHT_ASOF");
+  expect(d.missingSourceMeansNegativeOutcome).toBe(false);
+  expect(d.lateOriginalMayBackfillPre).toBe(false);
+  expect(d.successfulPreCertifiedByCounters).toBe(false);
+  expect(d.optionalAdsbOrWeatherMissingMustBlockPre).toBe(false);
+  expect(d.independentStopOrContinueAuthorizedByThisFunction).toBe(false);
+  expect(d.paidPhase6GoGranted).toBe(false);
+ });
+ it("holds new dispatch on insufficient cycle or physical UTC day REST reservation",async()=>{
+  const a=await actual();
+  a.budget.dailySourceReservedUnits=1900;
+  a.budget.dailyOtherReservedUnits=100;
+  let r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.status).toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+  expect(r.hardHolds).toContain("PROJECT_OR_PHYSICAL_UTC_DAY_REST_BUDGET_EXCEEDED");
+  a.budget.dailySourceReservedUnits=6;
+  a.budget.physicallyReservedUnits=49_500;
+  r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.status).toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+ });
+ it("holds inconsistent physical attempts, originals and PRE proof, not green quality",async()=>{
+  const a=await actual();
+  a.sourceQueryGroups[0].reservedPhysicalGets=5;
+  const r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.status).toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+  expect(r.hardHolds).toContain(
+   "SOURCE_QUERY_RESERVATION_OR_ORIGINAL_COUNTER_CONTRADICTION");
+  a.sourceQueryGroups[0].reservedPhysicalGets=3;
+  a.preCandidateSnapshots[0].clockOrderCandidates=3;
+  expect(assessP5Day1SourceSafetyFromReadonlyAudit(a).status)
+   .toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+ });
+ it("holding incomplete four-site draw does not assert physical GO",async()=>{
+  const a=await actual();
+  a.earlySample.distinctAirports=3;
+  const r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.status).toBe("FOUR_AIRPORT_DRAW_NOT_VERIFIED_HOLD");
+  expect(r.hardHolds).toContain("FOUR_AIRPORT_DRAW_NOT_RECONCILED");
+  expect(r.scientificPhase5FreezeGranted).toBe(false);
+ });
+ it("distinguishes not-yet-due future source from failed provider collection",async()=>{
+  const a=await actual(),g=a.sourceQueryGroups[0];
+  g.reservedPhysicalGets=0;g.boundOriginals=0;
+  g.missedGetWindow=0;g.notYetDue=4;
+  g.reservedWithoutOriginalAfterCutoff=0;
+  g.sourceBoundBeforePlannedCutoff=0;
+  g.sourceBoundLateToPlannedCutoff=0;
+  a.totalBoundOriginals=0;
+  a.preCandidateSnapshots=[];
+  const r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.status).toBe("SOURCE_ATTEMPTS_NOT_MATURE_NO_OUTCOME_INFERENCE");
+  expect(r.measuredSourceLoss).toHaveLength(0);
+  expect(r.sourceTotals.notYetDue).toBe(4);
+  expect(r.paidPhase6GoGranted).toBe(false);
+ });
+ it("refuses fabricated credentials, omitted budgets, and duplicate source horizons",async()=>{
+  const a=await actual();
+  (a.budget as any).dailyApiCeiling=undefined;
+  expect(()=>assessP5Day1SourceSafetyFromReadonlyAudit(a))
+   .toThrow("DAY1_INVALID_BUDGET_dailyApiCeiling");
+  a.budget.dailyApiCeiling=1900;
+  a.sourceQueryGroups.push({...a.sourceQueryGroups[0]});
+  expect(()=>assessP5Day1SourceSafetyFromReadonlyAudit(a))
+   .toThrow("DAY1_DUPLICATE_OR_CHANGED_SLOT_HORIZON");
+  a.sourceQueryGroups.pop();
+  (a as any).providerCalls=1;
+  expect(()=>assessP5Day1SourceSafetyFromReadonlyAudit(a))
+   .toThrow("DAY1_READONLY_AUDIT_NOT_AUTHENTICATED");
  });
 });

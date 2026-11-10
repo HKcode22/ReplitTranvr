@@ -1,5 +1,15 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 9 evening Phase5 Day1 quality integration — reuse existing restricted source QA, not another paid watchdog
+
+**Merged Amendment E nonbinding research+endpoint-scorecard review:** [PR #532](https://github.com/HKcode22/ReplitTranvr/pull/532), main `ee591e6d2d18a5f5bb9e0ed5540f31922db24d68` at last verification; 5/5 PR tests passed. Owner's PROPOSED Amendment E still exists ONLY on `docs/owner-phase5-target-clarity-20261109` and has not been adopted. [External researched label/rights/evidence memo](2026-11-09_AMENDMENT_E_CROSS_BRANCH_SCIENCE_REVIEW_AND_ENDPOINT_MATRIX.md) preserved on main, with official ADB actual-or-estimated runway ambiguity and default seven-day Contents terms, plus optional ADSB/BTS/NOAA caveats. Primary physical MAE vs D schedule revision Brier remains independent owner science choice; original route support scorer unchanged.
+
+**New engineering review:** [Day1 hard budget vs bounded source-quality-loss checkpoint](2026-11-09_DAY1_SOURCE_HARD_BUDGET_VS_BOUNDED_MISSINGNESS_QUALITY_CHECKPOINT.md), additive classification in the **already existing** restricted `phase5DaySourceQualityReadonly_v39.ts` on actual `REPEATABLE READ READ ONLY` V0079 audit metadata. It **does not call provider or execute STOP**; records contradicting ledger/budget counters as HARD HOLD and late/missed/expired FIDS/PRE source as explicitly named censoring, never fake negative outcomes or retroactive PRE. Existing offline and disposable PG16 tests added/retained. Check PR head CI and postmerge main before claiming merged. This is Day1 quality admission preparation, not live 31-day GO.
+
+**Next real work still required:** independent source use/ML retention and first-cycle scientific target E vs D; real future 31 parent-day/5 pair seeded treatment and seven-category physical UTC REST + Alert budget; truly unattended authorized GH FIDS source→T24 witness→T6/T90→POST/receiver/STOP owner with cross-day first-day abort; one independent science FREEZE then separately paid Phase6 GO. Existing V0079–V0083 roles installed, original Nov6 Phase4 pilot and Phase2/3 paid safety tests already collected — do not repeat. **FREEZE HOLD / GO NO**.
+
+
+
 ## Nov 9 evening new science work — Amendment E cross-branch external verification / nonbinding endpoint support (under PR review)
 
 **Latest observed baseline before new PR:** main `53b59fcc32d3289bfcef9e0a63d0b768d08b0a0f` (#531 merged). Postmerge full safety, Stage14 source PRE, Stage17 independent witness and Stage29 PG16 all **SUCCESS**; autonomous six-slot clock canary **SUCCESS**, no Phase6 GO. Avoid rediscovering #529/#530/#531.

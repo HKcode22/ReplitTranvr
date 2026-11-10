@@ -140,6 +140,7 @@ export interface Phase5DaySourceQualityResult {
  providerRawContentsRead:false;
  storedProviderRawContentsExported:false;
  providerCalls:0;databaseWrites:0;
+ day1SourceSafetyReview?:ReturnType<typeof assessP5Day1SourceSafetyFromReadonlyAudit>;
 }
 
 /** Independent metadata-only repeatable-read transaction. */
@@ -215,10 +216,175 @@ export async function auditPhase5SourceDay(
    storedProviderRawContentsExported:false,
    providerCalls:0,databaseWrites:0,
   };
+  result.day1SourceSafetyReview=assessP5Day1SourceSafetyFromReadonlyAudit(result);
   await client.query("COMMIT");tx=false;
   return result;
  }catch(error){
   if(tx)await client.query("ROLLBACK").catch(()=>{});
   throw error;
  }finally{client.release();}
+}
+
+
+/**
+ * Day-1/readiness interpretation of the EXISTING restricted, read-only
+ * V0079 source audit. This does NOT dispatch, cancel, STOP an Alert, or
+ * authorize any paid request. A safety HOLD is a recommendation to the
+ * independently authorized STOP owner; never a self-granted provider action.
+ *
+ * Missing a paid query, a provider original, or a later optional feature
+ * changes denominators/censoring. It must never be silently converted to
+ * a valid negative outcome or retrospective PRE. Hard budget / inconsistent
+ * source-ledger proof instead refuses further acquisition review.
+ */
+export type P5Day1SourceReviewDisposition=
+ "HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH"|
+ "FOUR_AIRPORT_DRAW_NOT_VERIFIED_HOLD"|
+ "SOURCE_LOSS_OR_LATE_OBSERVATIONS_REVIEW_CENSORING"|
+ "SOURCE_ATTEMPTS_NOT_MATURE_NO_OUTCOME_INFERENCE"|
+ "DESCRIPTIVE_SOURCE_PROGRESS_NOT_SCIENCE_PASS";
+
+export function assessP5Day1SourceSafetyFromReadonlyAudit(
+ audit:Phase5DaySourceQualityResult
+){
+ const strictCount=(n:unknown,label:string):number=>{
+  if(typeof n!=="number"||!Number.isSafeInteger(n)||n<0)
+   refuse("DAY1_INVALID_"+label);
+  return n;
+ };
+ if(!audit||
+    audit.schema!=="v39.phase5.daily-source-quality-readonly.v1"||
+    audit.status!=="AUDIT_ONLY_NOT_PHASE5_FREEZE_OR_PHASE6_GO"||
+    !HASH.test(audit.manifestSha256??"")||
+    !Number.isInteger(audit.runDayIndex)||
+    audit.runDayIndex<1||audit.runDayIndex>31||
+    !Array.isArray(audit.sourceQueryGroups)||
+    audit.sourceQueryGroups.length<1||
+    audit.sourceQueryGroups.length>12||
+    !Array.isArray(audit.preCandidateSnapshots)||
+    audit.providerCalls!==0||audit.databaseWrites!==0||
+    audit.actualFlightLevelPreCertified!==false||
+    audit.providerRawContentsRead!==false||
+    audit.storedProviderRawContentsExported!==false)
+  refuse("DAY1_READONLY_AUDIT_NOT_AUTHENTICATED");
+ const asOf=validDate(audit.asOfUtc);
+ if(asOf!==audit.asOfUtc)
+  refuse("DAY1_AUDIT_TIME_NOT_CANONICAL_UTC");
+ for(const label of [
+  "cycleApiCeiling","otherCategoryReservedUnits",
+  "protectedApiFloorUnits","physicallyReservedUnits",
+  "dailyApiCeiling","dailyOtherReservedUnits","dailySourceReservedUnits"
+ ] as const)strictCount(audit.budget?.[label],"BUDGET_"+label);
+ for(const label of ["drawRows","distinctSlots","distinctAirports"] as const)
+  strictCount(audit.earlySample?.[label],"DRAW_"+label);
+ strictCount(audit.totalPlannedQueries,"TOTAL_PLANNED");
+ strictCount(audit.totalBoundOriginals,"TOTAL_BOUND");
+ const ledgerHolds:string[]=[],qualityFlags:string[]=[];
+ const totals={
+  plannedQueries:0,reservedPhysicalGets:0,boundOriginals:0,
+  missedGetWindow:0,notYetDue:0,
+  reservedWithoutOriginalAfterCutoff:0,
+  boundLateToPlannedCutoff:0,
+  sourceRightsMetadataExpired:0,
+  preRowsSeen:0,preClockOrderCandidates:0
+ };
+ const seen=new Set<string>();
+ for(const g of audit.sourceQueryGroups){
+  if(!g||!["HUB","MID_A","MID_B","REGIONAL"].includes(g.slot)||
+     !["T-24h","T-6h","T-90m"].includes(g.horizon)||
+     seen.has(g.slot+"|"+g.horizon))
+   refuse("DAY1_DUPLICATE_OR_CHANGED_SLOT_HORIZON");
+  seen.add(g.slot+"|"+g.horizon);
+  for(const label of [
+   "plannedQueries","reservedPhysicalGets","boundOriginals",
+   "missedGetWindow","notYetDue","reservedWithoutOriginalAfterCutoff",
+   "sourceBoundBeforePlannedCutoff","sourceBoundLateToPlannedCutoff",
+   "sourceRightsMetadataExpired","populationObservationRows",
+   "activeQueryRows","stoppedQueryRows"
+  ] as const)strictCount(g[label],"GROUP_"+label);
+  totals.plannedQueries+=g.plannedQueries;
+  totals.reservedPhysicalGets+=g.reservedPhysicalGets;
+  totals.boundOriginals+=g.boundOriginals;
+  totals.missedGetWindow+=g.missedGetWindow;
+  totals.notYetDue+=g.notYetDue;
+  totals.reservedWithoutOriginalAfterCutoff+=
+   g.reservedWithoutOriginalAfterCutoff;
+  totals.boundLateToPlannedCutoff+=g.sourceBoundLateToPlannedCutoff;
+  totals.sourceRightsMetadataExpired+=g.sourceRightsMetadataExpired;
+  if(g.reservedPhysicalGets>g.plannedQueries||
+     g.boundOriginals>g.reservedPhysicalGets||
+     g.missedGetWindow+g.notYetDue!==
+       g.plannedQueries-g.reservedPhysicalGets||
+     g.sourceBoundBeforePlannedCutoff+
+       g.sourceBoundLateToPlannedCutoff!==g.boundOriginals||
+     g.reservedWithoutOriginalAfterCutoff>
+       g.reservedPhysicalGets-g.boundOriginals||
+     g.sourceRightsMetadataExpired>g.boundOriginals||
+     g.activeQueryRows+g.stoppedQueryRows>g.plannedQueries)
+   ledgerHolds.push("SOURCE_QUERY_RESERVATION_OR_ORIGINAL_COUNTER_CONTRADICTION");
+ }
+ if(totals.plannedQueries!==audit.totalPlannedQueries||
+    totals.boundOriginals!==audit.totalBoundOriginals)
+  ledgerHolds.push("AGGREGATED_SOURCE_TOTALS_DRIFT");
+ const seenH=new Set<string>();
+ for(const p of audit.preCandidateSnapshots){
+  if(!p||!["T-24h","T-6h","T-90m"].includes(p.horizon)||
+     seenH.has(p.horizon))
+   refuse("DAY1_CHANGED_OR_DUPLICATE_PRE_HORIZON");
+  seenH.add(p.horizon);
+  strictCount(p.rowsSeen,"PRE_SEEN");
+  strictCount(p.clockOrderCandidates,"PRE_CLOCK_ORDER");
+  totals.preRowsSeen+=p.rowsSeen;
+  totals.preClockOrderCandidates+=p.clockOrderCandidates;
+  if(p.clockOrderCandidates>p.rowsSeen)
+   ledgerHolds.push("PRE_CANDIDATE_MORE_THAN_OBSERVED_SNAPSHOTS");
+ }
+ const b=audit.budget;
+ if(!b||b.dailySourceReservedUnits+b.dailyOtherReservedUnits>
+       b.dailyApiCeiling||
+    b.physicallyReservedUnits+b.otherCategoryReservedUnits+
+       b.protectedApiFloorUnits>b.cycleApiCeiling)
+  ledgerHolds.push("PROJECT_OR_PHYSICAL_UTC_DAY_REST_BUDGET_EXCEEDED");
+ const d=audit.earlySample;
+ if(!d||
+    d.drawRows!==4||d.distinctSlots!==4||d.distinctAirports!==4)
+  ledgerHolds.push("FOUR_AIRPORT_DRAW_NOT_RECONCILED");
+ if(totals.missedGetWindow>0)
+  qualityFlags.push("MISSED_PAID_GET_WINDOWS_CANNOT_BACKFILL");
+ if(totals.reservedWithoutOriginalAfterCutoff>0)
+  qualityFlags.push("RESERVED_WITHOUT_ORIGINAL_AFTER_CUTOFF");
+ if(totals.boundLateToPlannedCutoff>0)
+  qualityFlags.push("LATE_TO_PLANNED_QUERY_CUTOFF_CHECK_EACH_FLIGHT_ASOF");
+ if(totals.sourceRightsMetadataExpired>0)
+  qualityFlags.push("EXPIRED_SOURCE_NOT_AVAILABLE_FOR_FURTHER_USE");
+ if(totals.preRowsSeen>totals.preClockOrderCandidates)
+  qualityFlags.push("PRE_CANDIDATE_CLOCK_OR_PROVENANCE_LOSS");
+ const hard=ledgerHolds.some(x=>
+  x!=="FOUR_AIRPORT_DRAW_NOT_RECONCILED");
+ const status:P5Day1SourceReviewDisposition=hard?
+  "HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH":
+  ledgerHolds.length?
+  "FOUR_AIRPORT_DRAW_NOT_VERIFIED_HOLD":
+  qualityFlags.length?
+  "SOURCE_LOSS_OR_LATE_OBSERVATIONS_REVIEW_CENSORING":
+  totals.reservedPhysicalGets===0?
+  "SOURCE_ATTEMPTS_NOT_MATURE_NO_OUTCOME_INFERENCE":
+  "DESCRIPTIVE_SOURCE_PROGRESS_NOT_SCIENCE_PASS";
+ return{
+  schema:"v39.phase5.day1-source-safety-review-only.v1" as const,
+  status,asOfUtc:audit.asOfUtc,
+  manifestSha256:audit.manifestSha256,
+  runDayIndex:audit.runDayIndex,
+  hardHolds:[...new Set(ledgerHolds)],
+  measuredSourceLoss:[...new Set(qualityFlags)],
+  sourceTotals:totals,
+  missingSourceMeansNegativeOutcome:false as const,
+  lateOriginalMayBackfillPre:false as const,
+  successfulPreCertifiedByCounters:false as const,
+  optionalAdsbOrWeatherMissingMustBlockPre:false as const,
+  independentStopOrContinueAuthorizedByThisFunction:false as const,
+  scientificPhase5FreezeGranted:false as const,
+  paidPhase6GoGranted:false as const,
+  providerCalls:0 as const,databaseWrites:0 as const
+ };
 }
