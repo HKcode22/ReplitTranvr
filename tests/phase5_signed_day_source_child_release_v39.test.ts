@@ -59,9 +59,11 @@ function fixture(){
  };
  const registryBytes=Buffer.from(JSON.stringify(registry));
  const env={...envBase,V39_P5_SOURCE_BATCH_REGISTRY_SHA256:sha(registryBytes)};
+ const fields={packet,packetBytes,registry,registryBytes,env};
  const run=()=>admitP5SignedDaySourceChild(
-  env,registryBytes,registry,packetBytes,packet,path,registryPath);
- return{packet,packetBytes,registry,registryBytes,env,run};
+  fields.env,fields.registryBytes,fields.registry,
+  fields.packetBytes,fields.packet,path,registryPath);
+ return Object.assign(fields,{run});
 }
 describe("Phase5 per-day signed GitHub child admission never signs rights or runs provider",()=>{
  it("extracts exact immutable query SHA/identity only from externally pinned day registry",()=>{
