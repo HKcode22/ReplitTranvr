@@ -1,7 +1,10 @@
 import {describe,it,expect} from "vitest";
+import {digestP5Stage24ReviewedReceipt}
+ from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {
  verifyP5T24PreWitnessCrossReview,
- persistP5ReviewedT24PreAndIndependentWitness
+ persistP5ReviewedT24PreAndIndependentWitness,
+ draftP5UnsignedStage24ReceiptFromCommittedChain
 } from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 import type {P5Stage14SingleFlightPrePermit}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
@@ -98,5 +101,77 @@ describe("Phase5 reused PRE postcommit snapshot ID -> independent T24 witness",(
    first as any,second as any,{...f.pre,horizon:"T-6h"},f.review
   )).rejects.toThrow("ONLY_REVIEWED_NATIVE_T24_PERMITTED");
   expect(touched).toHaveLength(0);
+ });
+});
+
+describe("genuine Stage17 T24 witness → later horizon unsigned review receipt",()=>{
+ function committed(){
+  const f=fixture();
+  const saved={
+   schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1",
+   status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE",
+   horizon:"T-24h",preSnapshotsInserted:1,
+   postCommitDatabaseReadbackVerified:true,
+   flightPreCommittedBeforeOwnCutoff:true,
+   committedSnapshotId:"123456",
+   boundPopulationQueryId:f.pre.expectedSourcePopulationQueryId,
+   postCommitDbClockAtUtc:"2026-11-09T09:57:59.000Z"
+  };
+  const witness={
+   schema:"v39.phase5.stage17.separate-transaction-t24-pre-commit-witness.v1",
+   status:"T24_PRE_SEPARATE_TRANSACTION_DB_WITNESS_DURABLE_BEFORE_CUTOFF",
+   flightInstanceId:f.pre.flightInstanceId,snapshotId:"123456",
+   frozenT24CutoffUtc:"2026-11-09T10:00:00.000Z",
+   originalT24SnapshotVisibleInSeparateTransaction:true,
+   witnessCommittedAndReadBackBeforeOwnCutoff:true,
+   postPreCommitDbObservedAtUtc:"2026-11-09T09:58:00.000Z",
+   postWitnessCommitReadbackAtUtc:"2026-11-09T09:58:03.000Z"
+  };
+  return {...f,saved,witness};
+ }
+ const build=(f:ReturnType<typeof committed>)=>
+  draftP5UnsignedStage24ReceiptFromCommittedChain(
+   f.pre,f.review,f.saved as any,f.witness as any);
+ it("derives the exact immutable Stage24 receipt from TWO genuine postcommit readbacks",()=>{
+  const f=committed(),got=build(f);
+  expect(got.status).toBe(
+   "DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW");
+  expect(got.receipt.snapshotId).toBe(f.saved.committedSnapshotId);
+  expect(got.receipt.flightInstanceId).toBe(f.pre.flightInstanceId);
+  expect(got.receipt.t24OriginalFidsSha256).toBe(f.pre.expectedSourceResponseSha256);
+  expect(got.receipt.t24SourceQueryDigestSha256).toBe(f.pre.queryDigestSha256);
+  expect(got.receipt.frozenT24CutoffUtc).toBe(
+   "2026-11-09T10:00:00.000Z");
+  expect(got.receipt.stage17PostCommitReadbackAtUtc).toBe(
+   f.witness.postWitnessCommitReadbackAtUtc);
+  expect(digestP5Stage24ReviewedReceipt(got.receipt)).toBe(
+   got.receipt.receiptSha256);
+  expect(got.reviewedByIndependentAuthority).toBe(false);
+  expect(got.mayLaunchLaterPreAutomatically).toBe(false);
+  expect(got.providerCalls).toBe(0);
+ });
+ it("refuses forged snapshot or switched native T with a committed-looking result",()=>{
+  for(const patch of [
+   {snapshotId:"999999"},
+   {flightInstanceId:"leg:other"},
+   {frozenT24CutoffUtc:"2026-11-09T10:00:01.000Z"},
+   {originalT24SnapshotVisibleInSeparateTransaction:false}
+  ]){
+   const f=committed();f.witness={...f.witness,...patch};
+   expect(()=>build(f)).toThrow("CHAIN_DOES_NOT_PROVE_DURABLE_T24_RECEIPT");
+  }
+ });
+ it("refuses missing postcommit, reversed witness clock or any postcutoff receipt",()=>{
+  for(const patch of [
+   {postPreCommitDbObservedAtUtc:"2026-11-09T09:57:58.000Z"},
+   {postPreCommitDbObservedAtUtc:"2026-11-09T10:00:00.000Z"},
+   {postWitnessCommitReadbackAtUtc:"2026-11-09T10:00:01.000Z"}
+  ]){
+   const f=committed();f.witness={...f.witness,...patch};
+   expect(()=>build(f)).toThrow("CHAIN_DOES_NOT_PROVE_DURABLE_T24_RECEIPT");
+  }
+  const f=committed();
+  f.saved.postCommitDatabaseReadbackVerified=false;
+  expect(()=>build(f)).toThrow("CHAIN_DOES_NOT_PROVE_DURABLE_T24_RECEIPT");
  });
 });
