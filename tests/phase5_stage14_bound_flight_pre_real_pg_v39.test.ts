@@ -472,6 +472,16 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
  });
  it("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
   if(STAGE29)return; // Stage29 tests exercise original witnessed route.
+  const hasV0081=(await admin.query(
+   "SELECT to_regclass('clean.phase5_t24_postcommit_witness_v39') AS obj"
+  )).rows[0]?.obj;
+  // Stage14's original V0079-only CI fixture has no V0081 ledger.
+  // Stage17 CI includes the real V0081 installation and exercises this path.
+  if(!hasV0081)return;
+  // The test's synthetic Stage14 login was originally commissioned before
+  // V0081. This extra SELECT is for disposable Stage17 CI only, never PROD.
+  await admin.query(
+   "GRANT SELECT ON clean.phase5_t24_postcommit_witness_v39 TO "+ROLE);
   const dbNow=new Date((await admin.query(
    "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
   const ownCutoff=dbNow+150_000, t=new Date(ownCutoff+6*3600_000);
