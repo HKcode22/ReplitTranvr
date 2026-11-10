@@ -207,6 +207,8 @@ export async function commissionP5V0083TwoRestLoginsOnce(pool,gh,env=process.env
   if(env.GITHUB_ACTIONS==="true"&&
      env.P5_V0083_CI_INJECT_PRECOMMIT_ROLLBACK==="1")
    fail("CI_INJECTED_V0083_GITHUB_SECRET_ROLLBACK");
+  if(await gh.getMainSha()!==env.P5_V0083_APPROVED_MAIN_SHA)
+   fail("MAIN_MOVED_BETWEEN_SECRET_WRITE_AND_DB_COMMIT");
   commitAttempted=true;
   await client.query("COMMIT");
   started=false;
@@ -229,12 +231,17 @@ export async function commissionP5V0083TwoRestLoginsOnce(pool,gh,env=process.env
  }catch(e){
   if(commitAttempted)
    fail("POSTCOMMIT_OR_UNKNOWN_OUTCOME_QUARANTINE_NEVER_RETRY");
-  if(started)await client.query("ROLLBACK").catch(()=>{});
+  let rollbackVerified=!started;
+  if(started){
+   try{await client.query("ROLLBACK");rollbackVerified=true;}
+   catch{rollbackVerified=false;}
+  }
   let cleaned=true;
   for(const name of attempted.reverse()){
    try{await gh.deleteSecret(name);}catch{cleaned=false;}
   }
   if(!cleaned)fail("GITHUB_SECRET_CLEANUP_UNCERTAIN_NO_RETRY");
+  if(!rollbackVerified)fail("DB_ROLLBACK_UNVERIFIED_NEVER_RETRY");
   throw e;
  }finally{client.release();}
 }
