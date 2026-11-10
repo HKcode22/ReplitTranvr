@@ -1,0 +1,46 @@
+name: Phase5 future-date POST eligibility partial PRE (OFFLINE NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5FuturePostSourceEligibility_v39.mjs'
+      - 'tests/phase5_future_post_source_partial_pre_eligibility_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_MINIMUM_PHASE5_EXIT_AND_PARTIAL_PRE_POST_REUSE.md'
+      - '.github/workflows/phase5-future-post-partial-pre-review-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5FuturePostSourceEligibility_v39.mjs'
+      - 'tests/phase5_future_post_source_partial_pre_eligibility_v39.test.ts'
+      - '.github/workflows/phase5-future-post-partial-pre-review-offline.yml'
+permissions:
+  contents: read
+jobs:
+  future-post-no-paid-and-partial-source-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE5_FREEZE_SIGNED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify future observation does not require fake perfect source or future-labeled inputs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_future_post_source_partial_pre_eligibility_v39.test.ts
+          echo 'PARTIAL_TRUE_PRE_MAY_BE_REVIEWED FUTURE_POST_NO_PAID_CALL_NO_LABEL_APPROVAL'
