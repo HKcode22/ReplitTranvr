@@ -20,7 +20,7 @@ import {verifyP5SignedLaterPreDayRegistry,
 import type {P5SignedSourceBatchRegistry}
  from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 import {reviewP5LaterPreActualReadback,planP5LaterPreGithubChild,
- type P5LaterPreAutoPins,type P5LaterGhHistory}
+ type P5LaterPreAutoPins,type P5LaterGhHistory,type P5LaterPrePlan}
  from "../server/lib/disruption/phase5LaterPreGithubChildDecision_v39";
 import {readP5LaterPreActualReadonly}
  from "./v39_phase5_later_pre_github_child_dispatcher_v39";
@@ -123,6 +123,23 @@ async function actualReadOnlyDbClock(connectionString:string){
   }
  }finally{await raw.end().catch(()=>{});}
 }
+/** Independent GH replay check for ALL selected flights before dispatch. */
+export function planP5SignedLaterBatchChildren(
+ ready:readonly P5LaterPrePlan[],history:P5LaterGhHistory
+){
+ if(!Array.isArray(ready)||ready.length>4)
+  hold("UNBOUNDED_LATER_PRE_READY_FOR_GH_CHILD");
+ const seen=new Set<string>(),out:P5LaterPrePlan[]=[];
+ for(const r of ready){
+  if(!r||seen.has(r.frozenPacketPath))
+   hold("DUPLICATE_REAL_READY_FLIGHT_PACKET");
+  seen.add(r.frozenPacketPath);
+  if(planP5LaterPreGithubChild(r,history).shouldDispatch)
+   out.push(r);
+ }
+ return out;
+}
+
 export async function runP5LaterSignedBatchDispatcher(
  env:NodeJS.ProcessEnv,fetcher:typeof fetch=fetch
 ){
@@ -152,7 +169,7 @@ export async function runP5LaterSignedBatchDispatcher(
  const t=await actualReadOnlyDbClock(p.url);
  const due=selectP5LaterPreDueRegistryEntries(verified,t);
  const pendingStatus:Record<string,number>={};
- const ready=[];
+ const ready:P5LaterPrePlan[]=[];
  for(const entry of due.selectedForActualPgReadback){
   const permitted:P5LaterPreAutoPins={
    path:entry.filePath,sha:entry.packetSha256,
@@ -203,8 +220,7 @@ export async function runP5LaterSignedBatchDispatcher(
  if(!response.ok)hold("GITHUB_CHILD_HISTORY_UNAVAILABLE");
  const history=await response.json() as P5LaterGhHistory;
  // Audit ALL candidates and full bounded GH history BEFORE any child POST.
- const newChildren=ready.filter(r=>
-  planP5LaterPreGithubChild(r,history).shouldDispatch);
+ const newChildren=planP5SignedLaterBatchChildren(ready,history);
  let acknowledged=0;
  for(const c of newChildren){
   const sent=await fetcher(ROOT+"/actions/workflows/"+CHILD+"/dispatches",{
