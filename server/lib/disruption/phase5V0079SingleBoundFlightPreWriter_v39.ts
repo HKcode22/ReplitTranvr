@@ -204,8 +204,11 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit,
      p.expectedDestinationIcao===p.airportIcao)
    hold("CONDITIONAL_PROTOCOL_OR_STABLE_SERVICE_KEY_UNAPPROVED");
  }else hold("UNKNOWN_IDENTITY_TIER_NOT_AUTHORIZED");
- // A later horizon without a T24 witness requires separate externally
- // reviewed standalone as-of permission; unchanged default is fail closed.
+ // Preserve the original default refusal for all legacy callers.
+ if(p.horizon!=="T-24h"&&!p.reviewedT24WitnessReceipt&&
+    !p.reviewedStandaloneLaterNoT24)
+  hold("LATER_HORIZON_REQUIRES_DURABLE_T24_AFTER_COMMIT_WITNESS");
+ // A separately reviewed standalone later-only path is opt-in, never auto.
  decideP5LaterPreEvidencePath(p,independentlyApprovedStandaloneProtocolSha256);
  const frozen=instant(p.builderFrozenAtUtc,"FROZEN_BUILDER_UTC_INVALID");
  const native=instant(p.selectedTNativeUtc,"NATIVE_T_UTC_INVALID");
