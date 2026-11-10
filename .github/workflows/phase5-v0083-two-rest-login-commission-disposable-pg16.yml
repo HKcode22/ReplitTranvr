@@ -1,0 +1,108 @@
+name: Phase5 V0083 two REST LOGINs and GH secret MOCK disposable PG16 only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0083_two_post_rest_login_secrets_once.mjs'
+      - 'tests/phase5_v0083_two_rest_login_commission_disposable_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0083-two-rest-login-commission-disposable-pg16.yml'
+      - 'data-collection/phase5/2026-11-10_0410PST_V0083_TWO_REST_LOGIN_SECRET_COMMISSION_RECOVERY.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0083_two_post_rest_login_secrets_once.mjs'
+      - 'tests/phase5_v0083_two_rest_login_commission_disposable_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0083-two-rest-login-commission-disposable-pg16.yml'
+      - 'data-collection/phase5/2026-11-10_0410PST_V0083_TWO_REST_LOGIN_SECRET_COMMISSION_RECOVERY.md'
+permissions:
+  contents: read
+env:
+  GITHUB_ACTIONS: 'true'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://mock-app:ci@localhost:5432/neondb?sslmode=disable'
+  V39_P5_V0083_INERT_INSTALL_PG16: '1'
+  P5_V0083_TWO_LOGIN_DISPOSABLE_PG16_TEST: '1'
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  disposable-actual-pg16-mocked-github:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact source and no-provider local PG16 guards
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          npm run check
+      - name: Create V0079..V0082 only in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          for F in \
+            V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql \
+            V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql \
+            V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql \
+            V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          do
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+              -f "migrations/staged/$F" >/dev/null
+          done
+      - name: Reuse existing V0083 staged NOLOGIN installer on disposable PG16 only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --test tests/phase5_v0083_inert_schema_nologin_acl_real_pg16_v39.test.mjs
+      - name: Give CI-only owner CREATEROLE and ADMIN on exact two V0083 groups
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+          CREATE ROLE v0083_ci_owner LOGIN NOINHERIT CREATEROLE
+            NOSUPERUSER NOCREATEDB PASSWORD 'ci-only';
+          -- Test-only creator must be able to *inspect* existing ACLs.
+          -- This GRANT exists only in disposable PG16, never production.
+          GRANT USAGE ON SCHEMA clean TO v0083_ci_owner;
+          GRANT phase5_other_rest_review_prod_20261108 TO v0083_ci_owner
+            WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
+          GRANT phase5_other_rest_reserve_prod_20261108 TO v0083_ci_owner
+            WITH ADMIN TRUE, SET FALSE, INHERIT FALSE;
+          SQL
+      - name: Actually create two PG16 logins + mock-only GitHub encrypted secrets and rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          npx vitest run tests/phase5_v0083_two_rest_login_commission_disposable_pg16_v39.test.ts
+          echo 'V0083_REST_TWO_LOGIN_ATOMIC_MOCK=PASS PRODUCTION_ROLE_WRITES=0 GH_REAL_SECRETS=0 PROVIDER_CALLS=0 PAID_GO=NO'
