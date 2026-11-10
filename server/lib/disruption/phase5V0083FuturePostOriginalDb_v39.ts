@@ -18,7 +18,7 @@ const fail=(why:string):never=>{throw Error("REFUSED_P5_FUTURE_POST_V0083_"+why)
 const utc=(s:unknown):string=>{
  if(typeof s!=="string"||!UTC.test(s)||!Number.isFinite(Date.parse(s))||
     new Date(s).toISOString()!==s)fail("INVALID_UTC");
- return s;
+ return s as string;
 };
 const sqlClock=(d:unknown):string=>{
  const v=d instanceof Date?d:new Date(String(d));
