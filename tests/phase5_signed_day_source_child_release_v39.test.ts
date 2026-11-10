@@ -108,7 +108,7 @@ describe("Phase5 per-day signed GitHub child admission never signs rights or run
   const c=fixture();
   expect(()=>admitP5SignedDaySourceChild(
    c.env,c.registryBytes,c.registry,c.packetBytes,c.packet,
-   "data-collection/phase5/frozen/unknown.json",registryPath
+   "data-collection/phase5/frozen/unknownpacket.json",registryPath
   )).toThrow("QUERY_NOT_IN_SIGNED_REGISTRY_OR_CHANGED_RAW_BYTES");
  });
  it("rejects unsafe second physical GET, altered provider source contract and forged registry duplicates",()=>{
