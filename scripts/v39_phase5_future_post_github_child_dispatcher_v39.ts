@@ -135,7 +135,8 @@ export async function runP5FuturePostGithubDispatcher(
  // No GH request if source-bound PRE is absent or future POST is not due.
  const early=planP5FuturePostOneChild(
   p,actual.pre,actual.dbClockUtc,null,admission.path);
- if(!early.shouldDispatch&&early.status!=="FUTURE_POST_NOT_YET_IN_REVIEWED_WINDOW"&&
+ if(early.status!=="POST_DUE_REQUIRES_GITHUB_HISTORY_CHECK"&&
+    early.status!=="FUTURE_POST_NOT_YET_IN_REVIEWED_WINDOW"&&
     early.status!=="FUTURE_POST_MISSED_OR_TOO_CLOSE_NO_LATE_GET")
   hold("UNEXPECTED_GITHUB_POST_EARLY_DECISION");
  if(early.status==="FUTURE_POST_NOT_YET_IN_REVIEWED_WINDOW"||
