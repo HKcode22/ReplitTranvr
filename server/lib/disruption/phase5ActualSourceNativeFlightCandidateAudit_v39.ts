@@ -68,7 +68,7 @@ export interface P5ActualFlightPopulationRow{
  scope_classification:string;codeshare_resolution_status:string;
  source_type:string;response_hash:string;
  provider_content_expired_at_utc:Date|string|null;
- available_at:Date|string;dep_scheduled_utc:Date|string;
+ available_at:Date|string|null;dep_scheduled_utc:Date|string|null;
  population_member_id:string;flight_number:string|null;
  arr_airport_icao:string|null;query_direction:string|null;
 }
