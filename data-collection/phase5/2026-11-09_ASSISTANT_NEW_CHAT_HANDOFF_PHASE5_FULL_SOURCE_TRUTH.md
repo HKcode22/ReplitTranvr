@@ -1,5 +1,17 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov9 evening user's new direction — operational calendar should be less brittle but never hindsight data shopping
+
+Last verified baseline main `9f2a1477045a691f78a5186cc22b4bf41a08eb4c` from #535, main postmerge **V0082 PG16 and full V3.9 offline safety both SUCCESS**. [All A/B/C/D1/D2/E documents preserved with exact provenance](../plans/AMENDMENT_LINEAGE_REGISTER_A_B_C_D1_D2_E_20261109.md), Amendment E remains unadopted; first-cycle prediction target OPEN. Current user asks to work other Phase5 completion paths and **relax operational rigidity** to avoid delays if one immutable calendar day fails, while retaining scientifically adequate safety.
+
+New target-neutral **PROPOSED** [bounded calendar incident/fallback decision checkpoint](2026-11-10_CALENDAR_CONTINGENCY_SCIENTIFIC_FLEXIBILITY_PROPOSAL.md) and pure helper `phase5BoundedOperationalRecoveryReview_v39.mjs` under `phase5/target-neutral-calendar-contingency-review-20261110`. It distinguishes missing optional weather/ADSB (continue), partial FIDS/PRE/POST (preserve original + mark missing/censored), missed query cutoff (no backfill), rights/cost holds, early draw already committed (cannot silently replace), and truly future unobserved source day with optional **prelisted before-incident** bounded backup dates, while testing exact 31 parent-day order, pair group/UTC site, 24h washout and >24h45m fresh lead. Output only structural REVIEW; real independent signed calendar delta and reaudited physical REST/Alert, source rights/actual adaptive site washout mandatory. No provider, no DB writes, no prod reschedule, no new paid pilot. Negative/positive synthetic suite plus credential-empty GH CI. **Check current branch PR CI and merge status before claiming completion.**
+
+Key scientific rationale verified against 2025 SPIRIT protocol-amendment and sensitivity transparency, ICH E9 R1 risk of outcome-driven primary estimand changes, National Academies missing-data bias. These are *methodological analogies* from clinical trials, not a statement this aviation experiment has those clinical regulatory obligations.
+
+**Important after #535 code audit**: Nov5 fixed WSSS Phase4 POST paid script is one historical cohort and cannot serve dynamic future Phase6 POST; reuse its reservation/no-double-bill/original/expiry/POST custody concepts in a new reviewed future-day POST owner. Priority remains genuine unattended GitHub source→T24 independent witness→T6/T90→POST/receiver/STOP, real 31 future parent-days/7 physical UTC REST + Alert budget/rights/STOP and owner-signed first-cycle primary before Phase6 outcomes. No Cloudflare, Replit AI, role reinstallation, stale paid source-only pilot or source-rights email wait loop. **FREEZE HOLD / GO NO.**
+
+
+
 ## Nov 9 20:38 PST user's latest instruction — A/B/C/two Ds/E MUST remain intact; work target-neutral Phase5 now
 
 **Actual last verified main baseline:** `c3e72f08d554c1a520add1c6462d88319bc052d5` (merged #534). Its actual postmerge dedicated proxy CI and full V3.9 safety were checked **SUCCESS**. All #529–#534 are merged. Owner explicitly requests do NOT erase A, B, C, both distinctly named D files, or E; prediction target remains OPEN, avoid a weak trivial one-target model but don't change direction or block other Phase5 completion tasks.
