@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 10 — SOURCE-day-bound multi-flight T−6h/T−90m registry (IN REVIEW)
+
+[Checkpoint: signed multi-flight later PRE day-shard, default-off GH batch, original Stage14 writer](2026-11-10_SIGNED_MULTIFLIGHT_LATER_PRE_DAY_REGISTRY_AND_GH_BATCH_REVIEW_CHECKPOINT.md). Reuses current signed SOURCE day registry, per-flight authenticated packet bytes, PRE-only real PG16 read-only source/member/witness query and original existing manual signed PRE child. New batch GH job default OFF, signed independently per day/shard, up to 96 per shard and 4 due child requests/poll; **not yet** automatic provenance-driven packet creation/rolling multi-shard day generator, POST/receiver/STOP or 31-day collection. CI/merge status must be verified; Phase5 FREEZE HOLD, Phase6 paid GO NO. V0083 one-time commissioner must not rerun.
+
 ## Nov 10 2026 — default-OFF GitHub T−6h/T−90m scheduled child (IN REVIEW)
 
 [Technical scheduled later PRE controller checkpoint](2026-11-10_0615PST_SIGNED_LATER_PRE_GH_SCHEDULED_CHILD_REVIEW_CHECKPOINT.md): reuses the same ten-minute GH cron; independent default-OFF job with restricted PRE role actual PG16 READ ONLY source/member/T24 evidence, exact signed future one-flight later packet or separately approved no-T24 v2, deterministic GH child no-replay and existing serializable Stage14 writer. Code/tests IN REVIEW, not live; no provider PRE or production writes. Single signed flight/horizon only, not yet full multi-flight day registry, lawful use/first-cycle target, seven-REST physical budgets/POST-receiver-STOP. Phase5 FREEZE HOLD; Phase6 paid GO NO.

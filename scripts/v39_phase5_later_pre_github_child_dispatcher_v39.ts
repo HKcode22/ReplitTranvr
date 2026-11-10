@@ -14,6 +14,8 @@ import {admitP5LaterPreAutoEnv,reviewP5LaterPreActualReadback,
  planP5LaterPreGithubChild,type P5LaterPreActualReadback,
  type P5LaterGhHistory}
  from "../server/lib/disruption/phase5LaterPreGithubChildDecision_v39";
+import type {P5Stage14SingleFlightPrePermit}
+ from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import type {P5SignedWitnessedLaterPrePacket}
  from "./v39_phase5_one_signed_witnessed_later_pre_github_owner_v39";
 
@@ -23,23 +25,13 @@ const CONFIRM="ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER";
 function hold(reason:string):never{
  throw Error("REFUSED_P5_AUTO_LATER_PRE_"+reason);
 }
-export async function runP5LaterPreAuto(
- env:NodeJS.ProcessEnv,fetcher:typeof fetch=fetch
-){
- const permit=admitP5LaterPreAutoEnv(env);
- const stat=lstatSync(permit.path);
- if(!stat.isFile()||stat.isSymbolicLink()||
-    stat.size<100||stat.size>200000)
-  hold("UNREVIEWED_FROZEN_PACKET_NOT_REGULAR_FILE");
- const bytes=readFileSync(permit.path);
- let packet:P5SignedWitnessedLaterPrePacket;
- try{packet=JSON.parse(bytes.toString("utf8")) as P5SignedWitnessedLaterPrePacket;}
- catch{return hold("SIGNED_LATER_PRE_PACKET_NOT_JSON");}
- if(!packet?.prePermit||!["T-6h","T-90m"].includes(packet.prePermit.horizon))
-  hold("NOT_ONE_SIGNED_FUTURE_LATER_HORIZON");
- const pre=packet.prePermit;
+/** Real restricted PG16 PRE-only READ ONLY source/flight/witness observation.
+ * Reused verbatim by legacy single-flight and new signed day-shard scheduler. */
+export async function readP5LaterPreActualReadonly(
+ pre:P5Stage14SingleFlightPrePermit,connectionString:string
+):Promise<P5LaterPreActualReadback>{
  const raw=new Pool({
-  connectionString:permit.url,max:1,connectionTimeoutMillis:8000,
+  connectionString:connectionString,max:1,connectionTimeoutMillis:8000,
   idleTimeoutMillis:1500,application_name:"p5_later_pre_auto_readonly"
  });
  let observed:P5LaterPreActualReadback;
@@ -87,6 +79,26 @@ export async function runP5LaterPreAuto(
    c.release();
   }
  }finally{await raw.end().catch(()=>{});}
+
+ return observed;
+}
+
+export async function runP5LaterPreAuto(
+ env:NodeJS.ProcessEnv,fetcher:typeof fetch=fetch
+){
+ const permit=admitP5LaterPreAutoEnv(env);
+ const stat=lstatSync(permit.path);
+ if(!stat.isFile()||stat.isSymbolicLink()||
+    stat.size<100||stat.size>200000)
+  hold("UNREVIEWED_FROZEN_PACKET_NOT_REGULAR_FILE");
+ const bytes=readFileSync(permit.path);
+ let packet:P5SignedWitnessedLaterPrePacket;
+ try{packet=JSON.parse(bytes.toString("utf8")) as P5SignedWitnessedLaterPrePacket;}
+ catch{return hold("SIGNED_LATER_PRE_PACKET_NOT_JSON");}
+ if(!packet?.prePermit||!["T-6h","T-90m"].includes(packet.prePermit.horizon))
+  hold("NOT_ONE_SIGNED_FUTURE_LATER_HORIZON");
+ const pre=packet.prePermit;
+ const observed=await readP5LaterPreActualReadonly(pre,permit.url);
  const ready=reviewP5LaterPreActualReadback(
   bytes,packet,permit,observed,env);
  if(!ready.readyForHistory)

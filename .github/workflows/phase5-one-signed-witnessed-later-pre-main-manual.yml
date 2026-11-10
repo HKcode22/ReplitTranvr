@@ -7,6 +7,10 @@ on:
         description: 'Previously reviewed one-flight data-collection/phase5/frozen/*.json'
         required: true
         type: string
+      frozen_later_pre_registry:
+        description: 'Optional independently pinned later PRE day registry for multiple flights'
+        required: false
+        type: string
       confirm:
         description: 'Type ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER'
         required: true
@@ -16,6 +20,10 @@ on:
     paths:
       - '.github/workflows/phase5-one-signed-witnessed-later-pre-main-manual.yml'
       - 'scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39.ts'
+      - 'scripts/v39_phase5_later_pre_registry_child_v39.ts'
+      - 'server/lib/disruption/phase5SignedLaterPreDayRegistry_v39.ts'
+      - 'tests/phase5_signed_later_pre_day_registry_v39.test.ts'
+      - 'tests/phase5_later_pre_registry_child_v39.test.ts'
       - 'tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts'
       - 'server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts'
       - 'server/lib/disruption/phase5StandaloneLaterPreWithoutT24Decision_v39.ts'
@@ -51,7 +59,7 @@ jobs:
       - name: Review T24 anchored future T6/T90 admission without DB or provider
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts tests/phase5_standalone_later_pre_without_t24_choice_v39.test.ts
+          npx vitest run tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts tests/phase5_stage24_t24_witnessed_later_horizon_v39.test.ts tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts tests/phase5_standalone_later_pre_without_t24_choice_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts
           echo 'SIGNED_LATER_PRE_CI_ONLY_NO_DB_NO_PROVIDER'
   one-reviewed-later-flight-pre:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER' }}
@@ -65,11 +73,17 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ''
       V39_P5_SOURCE_DATABASE_URL: ''
       P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
       P5_LATER_PRE_CONFIRM: ${{ inputs.confirm }}
       V39_P5_LATER_PRE_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_OWNER_APPROVED }}
       V39_P5_LATER_PRE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_LATER_PRE_APPROVED_CODE_SHA }}
       V39_P5_LATER_PRE_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_LATER_PRE_SIGNED_PACKET_SHA256 }}
       V39_P5_LATER_PRE_T24_RECEIPT_SHA256: ${{ secrets.V39_P5_LATER_PRE_T24_RECEIPT_SHA256 }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_SHA256: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_SHA256 }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      P5_LATER_PRE_DAY_INDEX: ${{ vars.P5_LATER_PRE_DAY_INDEX }}
       V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED }}
       V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256 }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
@@ -91,6 +105,7 @@ jobs:
         shell: bash
         env:
           PACKET_FILE: ${{ inputs.frozen_later_pre_packet }}
+          REGISTRY_FILE: ${{ inputs.frozen_later_pre_registry }}
         run: |
           set -Eeuo pipefail
           set +x
@@ -109,8 +124,16 @@ jobs:
           test "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
           [[ "$PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
           test -f "$PACKET_FILE"
-          test -n "$V39_P5_LATER_PRE_SIGNED_PACKET_SHA256"
-          if test -z "$V39_P5_LATER_PRE_T24_RECEIPT_SHA256"; then
+          if test -n "$REGISTRY_FILE"; then
+            [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+            test "$V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED" = 1
+            [[ "$V39_P5_LATER_PRE_DAY_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$P5_LATER_PRE_DAY_INDEX" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
+          else
+            test -n "$V39_P5_LATER_PRE_SIGNED_PACKET_SHA256"
+          fi
+          if test -z "$REGISTRY_FILE" && test -z "$V39_P5_LATER_PRE_T24_RECEIPT_SHA256"; then
             # v2 permits explicit missing T24 only under independent signed
             # amendment; runtime verifies schema, packet and source/clock.
             test "$V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED" = 1
@@ -125,9 +148,14 @@ jobs:
       - name: One prospective witnessed T6/T90 PRE under existing PRE-only role
         env:
           PACKET_FILE: ${{ inputs.frozen_later_pre_packet }}
+          REGISTRY_FILE: ${{ inputs.frozen_later_pre_registry }}
         shell: bash
         run: |
           set -Eeuo pipefail
           set +x
-          npx tsx scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39.ts "$PACKET_FILE"
+          if test -n "$REGISTRY_FILE"; then
+            npx tsx scripts/v39_phase5_later_pre_registry_child_v39.ts "$PACKET_FILE" "$REGISTRY_FILE"
+          else
+            npx tsx scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39.ts "$PACKET_FILE"
+          fi
           echo 'ONE_WITNESSED_LATER_PRE_FINISHED_NO_PROVIDER_NO_FREEZE_GO_GRANTED'
