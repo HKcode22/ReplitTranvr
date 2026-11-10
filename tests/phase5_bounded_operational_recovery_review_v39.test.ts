@@ -115,7 +115,7 @@ describe("Phase5 bounded prospective calendar recovery triage without paid GO",(
  });
  it("no backfill when early T24 lead is lost or UTC slot/treatment changed",()=>{
   const x=input();
-  x.incident.detectedAtUtc=plus(x.plannedDay.startUtc,-2*HOUR);
+  x.incident.detectedAtUtc=plus(x.plannedDay.startUtc,-30*60000);
   expect(reviewP5PrelistedCalendarRecovery(x).candidateRefusals[0].code)
    .toBe("INSUFFICIENT_NEW_T24_EARLY_DRAW_LEAD");
   const y=input();
