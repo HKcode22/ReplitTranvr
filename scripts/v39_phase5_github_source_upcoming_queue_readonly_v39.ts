@@ -4,6 +4,11 @@
  * schedules are disabled unless independently enabled as repo VAR.
  */
 import {Pool} from "pg";
+import {readFileSync,statSync} from "node:fs";
+import {reviewP5OneSignedPacketAgainstActualDueQueue}
+ from "../server/lib/disruption/phase5SignedDueSourceOnePacketHandoff_v39";
+import type {P5GitHubOneQueryReleaseEnvelope}
+ from "../server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {auditP5UpcomingSourceQueue}
@@ -78,6 +83,30 @@ export async function runP5GitHubSourceQueueObserver(env:NodeJS.ProcessEnv){
  });
  try{
   const scanned=await auditP5UpcomingSourceQueue(scoped,ctx.scope);
+  // Optional signed packet handoff reports readiness only. Zero GH child
+  // dispatch, source GET, paid reservation or source-use authorization.
+  let signedPacketHandoff:
+   ReturnType<typeof reviewP5OneSignedPacketAgainstActualDueQueue>|null=null;
+  if(env.P5_SOURCE_SIGNED_PACKET_OBSERVER_ENABLED==="true"){
+   const path=env.P5_SOURCE_SIGNED_FROZEN_PACKET_FILE??"";
+   if(!new RegExp("^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}[.]json$").test(path))
+    reject("UNREVIEWED_FROZEN_SIGNED_SOURCE_FILE_PATH");
+   const stat=statSync(path);
+   if(!stat.isFile()||stat.size<100||stat.size>200000)
+    reject("INVALID_SIGNED_SOURCE_FILE");
+   const bytes=readFileSync(path);
+   const packet=JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;
+   signedPacketHandoff=reviewP5OneSignedPacketAgainstActualDueQueue(
+    scanned,bytes,packet,{
+     filePath:path,
+     expectedPacketSha256:env.V39_P5_SIGNED_QUERY_JSON_SHA256??"",
+     expectedQueryDigestSha256:env.V39_P5_QUERY_DIGEST??"",
+     expectedManifestSha256:ctx.scope.expectedManifestSha256,
+     expectedReleaseSha256:ctx.scope.expectedReleaseSha256,
+     expectedRightsSha256:ctx.scope.expectedRightsSha256,
+     expectedProviderContractSha256:ctx.scope.expectedProviderContractSha256
+    });
+  }
   return {
    schema:"v39.phase5.github-upcoming-source-queue-observer.v1" as const,
    status:scanned.status,
@@ -87,6 +116,7 @@ export async function runP5GitHubSourceQueueObserver(env:NodeJS.ProcessEnv){
    readyForIndependentPaidReviewCount:scanned.candidates.filter(
     q=>q.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").length,
    candidates:scanned.candidates,
+   signedPacketHandoff,
    providerCalls:0 as const,
    databaseWrites:0 as const,
    externalGithubDispatches:0 as const,
