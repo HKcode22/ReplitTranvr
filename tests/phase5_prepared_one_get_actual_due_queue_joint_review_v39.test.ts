@@ -116,7 +116,7 @@ describe("Phase5 source automation: Stage8 UNARMED draft meets actual Stage9 V00
   for(const edit of edits){
    const d=draft();edit(d);
    expect(()=>match(d)).toThrow(
-    /QUEUE_RESV_OR_REPLAY_OR_CHANGED_SOURCE_PLAN|NO_UNIQUE_ACTUAL_DB_PREPARED_SOURCE_QUERY/);
+    /QUEUE_RESV_OR_REPLAY_OR_CHANGED_SOURCE_PLAN|NO_UNIQUE_ACTUAL_DB_PREPARED_SOURCE_QUERY|STATIC_MANIFEST_QUERY_OR_AIRPORT_SCOPE_CHANGED/);
   }
   const d=draft();d.unsignedQueryEnvelope.manifestSha256=sha("6");
   expect(()=>match(d)).toThrow("STATIC_MANIFEST_QUERY_OR_AIRPORT_SCOPE_CHANGED");
