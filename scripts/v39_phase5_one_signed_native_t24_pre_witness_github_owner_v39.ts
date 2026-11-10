@@ -51,7 +51,7 @@ export interface P5T24GitHubReleaseAdmission{
  witnessReview:P5IndependentT24WitnessReview;
 }
 function strictDbUrl(raw:unknown,login:string):URL{
- if(typeof raw!=="string")deny("MISSING_INDEPENDENT_DATABASE_CREDENTIALS");
+ if(typeof raw!=="string")return deny("MISSING_INDEPENDENT_DATABASE_CREDENTIALS");
  let u:URL;
  try{u=new URL(raw);}catch{return deny("INVALID_DATABASE_CREDENTIAL_URL");}
  if(!["postgres:","postgresql:"].includes(u.protocol)||
