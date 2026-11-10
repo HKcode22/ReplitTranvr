@@ -354,7 +354,7 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
  if(totals.reservedWithoutOriginalAfterCutoff>0)
   qualityFlags.push("RESERVED_WITHOUT_ORIGINAL_AFTER_CUTOFF");
  if(totals.boundLateToPlannedCutoff>0)
-  qualityFlags.push("LATE_BOUND_ORIGINAL_EXCLUDE_FROM_OWN_PRE");
+  qualityFlags.push("LATE_TO_PLANNED_QUERY_CUTOFF_CHECK_EACH_FLIGHT_ASOF");
  if(totals.sourceRightsMetadataExpired>0)
   qualityFlags.push("EXPIRED_SOURCE_NOT_AVAILABLE_FOR_FURTHER_USE");
  if(totals.preRowsSeen>totals.preClockOrderCandidates)
