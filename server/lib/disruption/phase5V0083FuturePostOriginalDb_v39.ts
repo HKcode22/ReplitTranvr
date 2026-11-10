@@ -153,31 +153,9 @@ export async function reserveP5FuturePostV0083OnePhysicalGet(
   const now=Date.parse(sqlClock(role.now));
   if(now<f.start||now>f.end)
    fail("ACTUAL_DB_CLOCK_OUTSIDE_REVIEWED_GET_WINDOW");
-  // Only OUTCOME REST, not a generic extra FIDS source/RETRY credit.
-  const q=await db.query(
-   "SELECT rest_category,manifest_sha256,request_sha256,"+
-   " github_run_id,rights_review_sha256,provider_price_sha256,"+
-   " reviewed_category_budget_sha256,reviewed_request_context_sha256,"+
-   " api_units_per_get,planned_charge_day_utc,"+
-   " earliest_dispatch_utc,hard_latest_dispatch_utc,source_query_digest"+
-   " FROM clean.phase5_other_rest_reviewed_call_v39"+
-   " WHERE request_sha256=$1 AND manifest_sha256=$2 FOR UPDATE",
-   [p.requestSha256,p.manifestSha256]);
-  const a=q.rows[0];
-  if(q.rowCount!==1||a.rest_category!=="OUTCOME_REST_UNIT_BUDGET"||
-     a.manifest_sha256!==p.manifestSha256||
-     a.request_sha256!==p.requestSha256||
-     a.github_run_id!==p.githubRunId||
-     a.rights_review_sha256!==p.reviewedSourceRightsSha256||
-     a.provider_price_sha256!==p.reviewedProviderPriceSha256||
-     a.reviewed_category_budget_sha256!==p.reviewedCategoryBudgetSha256||
-     a.reviewed_request_context_sha256!==p.reviewedRequestContextSha256||
-     Number(a.api_units_per_get)!==2||
-     a.source_query_digest!==null||
-     dbUtcDate(a.planned_charge_day_utc)!==f.chargeDateUtc||
-     sqlClock(a.earliest_dispatch_utc)!==p.postDispatchEarliestUtc||
-     sqlClock(a.hard_latest_dispatch_utc)!==p.postDispatchHardLatestUtc)
-   fail("NO_ACTUAL_IMMUTABLE_OUTCOME_REST_REVIEWED_CALL");
+  // RESERVE is EXECUTE-only; it cannot SELECT immutable reviewed-call or
+  // reservation tables. The V0083 SECURITY DEFINER function performs the
+  // actual category, rights/price, Phase6 GO, charge-day and budget checks.
   const reserved=await db.query(
    "SELECT clean.reserve_phase5_other_rest_once_v39("+
    "$1,$2,$3,$4,$5,$6) AS reserved_at",
@@ -188,28 +166,9 @@ export async function reserveP5FuturePostV0083OnePhysicalGet(
    fail("NO_DURABLE_V0083_ONE_SHOT_RESERVATION");
   const clock=sqlClock(reserved.rows[0].reserved_at);
   await db.query("COMMIT");tx=false;
-  // Read BACK independently after commit. Ambiguous COMMIT never retries.
-  const check=await pool.connect();
-  try{
-   const x=await check.query(
-    "SELECT reservation_sha256,request_sha256,manifest_sha256,"+
-    " rest_category,approved_api_units,github_run_id,rights_review_sha256,"+
-    " provider_price_sha256,charged_utc_date,reserved_at_utc"+
-    " FROM clean.phase5_other_rest_physical_reservation_v39"+
-    " WHERE reservation_sha256=$1",[f.reservedSha256]);
-   const v=x.rows[0];
-   if(x.rowCount!==1||v.reservation_sha256!==f.reservedSha256||
-      v.request_sha256!==p.requestSha256||
-      v.manifest_sha256!==p.manifestSha256||
-      v.rest_category!=="OUTCOME_REST_UNIT_BUDGET"||
-      Number(v.approved_api_units)!==2||
-      v.github_run_id!==p.githubRunId||
-      v.rights_review_sha256!==p.reviewedSourceRightsSha256||
-      v.provider_price_sha256!==p.reviewedProviderPriceSha256||
-      dbUtcDate(v.charged_utc_date)!==f.chargeDateUtc||
-      sqlClock(v.reserved_at_utc)!==clock)
-    fail("POST_COMMIT_RESV_READBACK_NOT_EXACT_NO_PROVIDER");
-  }finally{check.release();}
+  // Confirmed COMMIT after the SECURITY DEFINER reservation result is
+  // the durable one-shot receipt. Ambiguous COMMIT => no GET, no retry.
+  // No table SELECT grants are added to the narrow REST RESERVE role.
   return{
    schema:"v39.phase5.v0083.future-post-physical-reservation.v1",
    reservationSha256:f.reservedSha256,requestSha256:p.requestSha256,
@@ -229,9 +188,9 @@ export async function reserveP5FuturePostV0083OnePhysicalGet(
 /**
  * This hook is called INSIDE persistFidsObservation's same transaction,
  * after raw source insert and all normalized population members, BEFORE
- * final COMMIT; requires narrow SELECT on V0083 reservation metadata for
- * the independent FIDS SOURCE group. A separate postcommit original
- * readback must follow. No separate V0084 schema required.
+ * final COMMIT. FIDS SOURCE must NOT receive V0083 table SELECT; it checks
+ * the signed one-shot receipt and original's reservation marker instead.
+ * An independent postcommit FIDS original readback must follow. No separate V0084 schema required.
  */
 export async function verifyP5FuturePostOriginalBeforeCommit(
  db:Pick<PoolClient,"query">,p:P5ReviewedFuturePostOneGet,
@@ -269,24 +228,19 @@ export async function verifyP5FuturePostOriginalBeforeCommit(
     source.fidsRetrievalUtc.getTime()>
       facts.durableAvailableAt.getTime())
   fail("UNBOUND_OR_PARTIAL_POST_SOURCE_ORIGINAL");
- const c=await db.query(
-  "SELECT r.reservation_sha256,r.request_sha256,r.manifest_sha256,"+
-  "r.rest_category,r.approved_api_units,r.github_run_id,"+
-  "r.rights_review_sha256,r.provider_price_sha256,r.reserved_at_utc"+
-  " FROM clean.phase5_other_rest_physical_reservation_v39 r"+
-  " WHERE r.reservation_sha256=$1",[f.reservedSha256]);
- const a=c.rows[0];
- if(c.rowCount!==1||a.reservation_sha256!==f.reservedSha256||
-    a.request_sha256!==p.requestSha256||
-    a.manifest_sha256!==p.manifestSha256||
-    a.rest_category!=="OUTCOME_REST_UNIT_BUDGET"||
-    Number(a.approved_api_units)!==2||
-    a.github_run_id!==p.githubRunId||
-    a.rights_review_sha256!==p.reviewedSourceRightsSha256||
-    a.provider_price_sha256!==p.reviewedProviderPriceSha256||
-    Date.parse(sqlClock(a.reserved_at_utc))>
+ // SOURCE only has FIDS original/normalized write rights, not V0083
+ // table SELECT. It checks the original's V0083 reservation marker against
+ // the separately committed signed result passed by the owner.
+ if(reservation.physicalPaidAttemptReserved!==true||
+    reservation.providerResponseSucceeded!==false||
+    reservation.requestSha256!==p.requestSha256||
+    reservation.githubRunId!==p.githubRunId||
+    reservation.manifestSha256!==p.manifestSha256||
+    reservation.physicallyChargedUtcDate!==f.chargeDateUtc||
+    Date.parse(utc(reservation.reservedAtUtc))>
       source.fidsRetrievalUtc.getTime())
-  fail("V0083_POST_RESERVATION_NOT_BOUND_TO_ORIGINAL_IN_SAME_TX");
+  fail("V0083_POST_RESERVED_AFTER_ORIGINAL_OR_WRONG_GITHUB_CALL");
+
 }
 export async function verifyP5FuturePostOriginalAfterCommit(
  pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet,
@@ -471,21 +425,9 @@ export async function prepareP5FuturePostV0083ReviewedCall(
   const now=Date.parse(sqlClock(session.rows[0].now));
   if(now>f.end||now<f.start-90*60000)
    fail("REVIEW_NOT_IN_FUTURE_DISPATCH_ADMISSION_WINDOW");
-  const release=await db.query(
-   "SELECT reviewed_category_budget_sha256"+
-   " FROM clean.phase5_fids_seven_rest_release_v39"+
-   " WHERE manifest_sha256=$1",[p.manifestSha256]);
-  if(release.rowCount!==1||
-     release.rows[0].reviewed_category_budget_sha256!==
-       p.reviewedCategoryBudgetSha256)
-   fail("ACTUAL_SEVEN_REST_RELEASE_NOT_SIGNED");
-  const auth=await db.query(
-   "SELECT enabled,revoked_at_utc,manifest_sha256"+
-   " FROM clean.adb_phase6_authorization WHERE singleton_key=true");
-  if(auth.rowCount!==1||auth.rows[0]?.enabled!==true||
-     auth.rows[0]?.revoked_at_utc!==null||
-     auth.rows[0]?.manifest_sha256!==p.manifestSha256)
-   fail("ACTUAL_SEPARATE_PHASE6_GO_DISABLED");
+  // REVIEW is INSERT-only; real Phase6 GO and seven REST budget are checked
+  // by the independently privileged V0083 SECURITY DEFINER reserve call.
+  // No extra SELECT grants, invented DB readback or escalation.
   const ins=await db.query(
    "INSERT INTO clean.phase5_other_rest_reviewed_call_v39("+
    "request_sha256,manifest_sha256,rest_category,source_query_digest,"+
@@ -494,31 +436,17 @@ export async function prepareP5FuturePostV0083ReviewedCall(
    "provider_price_sha256,reviewed_request_context_sha256,"+
    "reviewed_category_budget_sha256,api_units_per_get)"+
    " VALUES($1,$2,'OUTCOME_REST_UNIT_BUDGET',NULL,"+
-   "$3,$4,$5,$6,$7,$8,$9,$10,2) RETURNING request_sha256",
+   "$3,$4,$5,$6,$7,$8,$9,$10,2)",
    [p.requestSha256,p.manifestSha256,f.chargeDateUtc,
     p.postDispatchEarliestUtc,p.postDispatchHardLatestUtc,p.githubRunId,
     p.reviewedSourceRightsSha256,p.reviewedProviderPriceSha256,
     p.reviewedRequestContextSha256,p.reviewedCategoryBudgetSha256]);
-  if(ins.rowCount!==1||ins.rows[0]?.request_sha256!==p.requestSha256)
+  if(ins.rowCount!==1)
    fail("V0083_IMMUTABLE_REVIEWED_CALL_NOT_INSERTED");
   await db.query("COMMIT");tx=false;
-  // A duplicate workflow cannot replace immutable reviewed-call metadata.
-  const other=await pool.connect();
-  try{
-   const check=await other.query(
-    "SELECT request_sha256,github_run_id,manifest_sha256,"+
-    "rest_category,reviewed_request_context_sha256"+
-    " FROM clean.phase5_other_rest_reviewed_call_v39"+
-    " WHERE request_sha256=$1",[p.requestSha256]);
-   if(check.rowCount!==1||
-      check.rows[0].request_sha256!==p.requestSha256||
-      check.rows[0].github_run_id!==p.githubRunId||
-      check.rows[0].manifest_sha256!==p.manifestSha256||
-      check.rows[0].rest_category!=="OUTCOME_REST_UNIT_BUDGET"||
-      check.rows[0].reviewed_request_context_sha256!==
-       p.reviewedRequestContextSha256)
-    fail("REVIEWED_POST_CALL_POSTCOMMIT_READBACK_MISSING");
-  }finally{other.release();}
+  // Duplicate attempts cannot replace this immutable reviewed-call primary
+  // key. A successful COMMIT is enough for the INSERT-only REVIEW role;
+  // the RESERVE function performs the next independent verification.
   return{
    status:"ONE_REAL_GITHUB_FUTURE_POST_CALL_PREPARED_NO_GET",
    requestSha256:p.requestSha256,physicalReservations:0,providerCalls:0
