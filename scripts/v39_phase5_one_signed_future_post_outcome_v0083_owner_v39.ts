@@ -41,9 +41,9 @@ export interface P5SignedFuturePostPacket{
  independentSourceContentsUseAndRESTReleaseAttested:true;
 }
 function validateDbUrl(raw:string|undefined,username:string,label:string){
- if(!raw)hold(label+"_DB_MISSING");
+ if(!raw)return hold(label+"_DB_MISSING");
  let parsed:URL;
- try{parsed=new URL(raw);}catch{hold(label+"_DB_URL_INVALID");}
+ try{parsed=new URL(raw);}catch{return hold(label+"_DB_URL_INVALID");}
  if(!["postgres:","postgresql:"].includes(parsed.protocol)||
     parsed.username!==username||!parsed.hostname||
     !parsed.password||parsed.pathname!=="/neondb")

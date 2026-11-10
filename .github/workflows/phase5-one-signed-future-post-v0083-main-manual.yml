@@ -1,4 +1,6 @@
 name: Phase5 one signed future POST (V0083, PAID ONLY AFTER PHASE6 GO)
+# Distinct path identity for signed GH no-replay POST child history.
+run-name: P5 POST ${{ inputs.frozen_future_post_packet }}
 on:
   workflow_dispatch:
     inputs:
