@@ -19,6 +19,7 @@ import type {P5SignedWitnessedLaterPrePacket}
 const SHA=/^[a-f0-9]{64}$/;
 const CODE=/^[a-f0-9]{40}$/;
 const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_-]{8,100}\.json$/;
+const SOURCE_FILE=/^data-collection\\/phase5\\/frozen\\/[A-Za-z0-9_.-]{8,125}\\.json$/;
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const hash=(v:Buffer)=>createHash("sha256").update(v).digest("hex");
 const hold=(s:string):never=>{throw Error("REFUSED_P5_LATER_DAY_REGISTRY_"+s);};
@@ -39,6 +40,7 @@ export interface P5SignedLaterPreDayRegistry{
  manifestSha256:string;
  reviewedCodeSha:string;
  sourceDayRegistrySha256:string;
+ sourceDayRegistryFilePath:string;
  runDayIndex:number;
  shardIndex:number;
  entries:P5SignedLaterPreRegistryEntry[];
@@ -105,6 +107,8 @@ export function verifyP5SignedLaterPreDayRegistry(
     registry.manifestSha256!==pins.expectedManifestSha256||
     registry.reviewedCodeSha!==pins.expectedApprovedMainSha||
     registry.sourceDayRegistrySha256!==pins.expectedSourceDayRegistrySha256||
+    !SOURCE_FILE.test(registry.sourceDayRegistryFilePath??"")||
+    registry.sourceDayRegistryFilePath===pins.registryFilePath||
     registry.runDayIndex!==pins.expectedRunDayIndex||
     !Number.isSafeInteger(registry.shardIndex)||
     registry.shardIndex<1||registry.shardIndex>100000||
@@ -119,7 +123,7 @@ export function verifyP5SignedLaterPreDayRegistry(
   hold("REGISTRY_RUN_DAY_CODE_MANIFEST_OR_SHARD_NOT_AUTHORIZED");
  const sourceDigests=new Set<string>(),sourcePaths=new Set<string>();
  for(const s of source.entries){
-  if(!s||!FILE.test(s.filePath??"")||
+  if(!s||!SOURCE_FILE.test(s.filePath??"")||
      !SHA.test(s.expectedQueryDigestSha256??"")||
      !SHA.test(s.expectedPacketSha256??"")||
      sourceDigests.has(s.expectedQueryDigestSha256)||
