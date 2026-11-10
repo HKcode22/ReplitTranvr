@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 2026 01:12 PST — bounded per-day signed source multiquery readiness (in review)
+
+[Full dated technical checkpoint](2026-11-10_0112PST_SIGNED_PER_DAY_SOURCE_BATCH_V0079_READONLY_CHECKPOINT.md): extending merged #540's exact single frozen source packet ↔ V0079 PostgreSQL due queue to **1–96 distinct, immutable packets for one future parent-day**, with real SOURCE-role DB clock and explicit due/prearmed/STOPPED/missed/unexpected missingness. This reuses one observer/cron and never spends, dispatches or pre-draws 21 future adaptive airport sites. Initial branch work is NOT live role/rights commissioning or a signed Phase5 FREEZE, and first-cycle target A/B/C/D1/D2/E remains undecided. Exact-head CI and merge must be checked; Phase6 paid GO NO.
+
+
 ## Nov 10 00:35 PST — source due queue joined to exactly one frozen signed packet (NONPAID REVIEW)
 
 [Detailed timestamped Phase5 source handoff checkpoint](2026-11-10_0035PST_SIGNED_DUE_SOURCE_OBSERVER_HANDOFF_AND_FUTURE_DISPATCH_GAP.md): after verified merged #539 on main `03155ee1bff480122944530bbf04b58ea0ae90db` and successful postmerge V3.9 safety run #42781718880, a new review branch reuses the existing Stage9/V0079 read-only GitHub queue and signed one-GET source admission, classifies the EXACT frozen query against database deadline/attempt/prearm/airport/early-draw, and records wait/late/censor/HOLD without dispatching a paid action. Tests are offline; actual full unattended 31-day child dispatch and source rights/7-category budget/POST→receiver/STOP remain open. All amendments A/B/C/D1/D2/E preserved, target undecided, Phase5 FREEZE HOLD / Phase6 GO NO.
