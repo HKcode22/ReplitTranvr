@@ -17,6 +17,12 @@ on:
       - 'server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39.ts'
       - 'server/lib/disruption/phase5SignedDueSourceOnePacketHandoff_v39.ts'
       - 'server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39.ts'
+      - 'server/lib/disruption/phase5SignedDaySourceChildRelease_v39.ts'
+      - 'scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts'
+      - 'scripts/v39_phase5_github_due_source_batch_child_dispatcher_v39.ts'
+      - '.github/workflows/phase5-one-signed-day-source-child-dispatch.yml'
+      - 'tests/phase5_signed_day_source_child_release_v39.test.ts'
+      - 'tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts'
       - 'tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts'
       - 'tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts'
       - 'tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts'
@@ -53,7 +59,7 @@ jobs:
       - name: Verify zero-provider due queue without production DB/paid permission
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts
+          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts
           echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
   signed-main-source-queue-readonly:
     if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
@@ -119,3 +125,91 @@ jobs:
           set +x
           npx tsx scripts/v39_phase5_github_source_upcoming_queue_readonly_v39.ts
           echo 'SOURCE_QUEUE_OBSERVER_COMPLETED_NO_GET_NO_PREARM_NO_DISPATCH_NO_PHASE6_GO_GRANTED'
+
+  separately-authorized-signed-source-children:
+    # A schedule alone is NEVER authority for paid SOURCE. This job is inert
+    # until independent reviewed repository configuration enables it.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_AUTO_SOURCE_DISPATCH_ENABLED == 'true' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true' && vars.P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED == 'true' }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: phase5-source-batch-child-dispatch-singleton
+      cancel-in-progress: false
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_AUTO_SOURCE_DISPATCH_ENTRYPOINT: '1'
+      P5_GITHUB_SOURCE_QUEUE_ENTRYPOINT: '0'
+      P5_AUTO_SOURCE_DISPATCH_ENABLED: ${{ vars.P5_AUTO_SOURCE_DISPATCH_ENABLED }}
+      P5_SOURCE_QUEUE_OBSERVER_ENABLED: ${{ vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED }}
+      P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED: ${{ vars.P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED }}
+      P5_SOURCE_SIGNED_PACKET_OBSERVER_ENABLED: 'false'
+      P5_SOURCE_BATCH_REGISTRY_FILE: ${{ vars.P5_SOURCE_BATCH_REGISTRY_FILE }}
+      P5_SOURCE_BATCH_RUN_DAY_INDEX: ${{ vars.P5_SOURCE_BATCH_RUN_DAY_INDEX }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      V39_P5_QUEUE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_QUEUE_APPROVED_CODE_SHA }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_P5_SOURCE_QUEUE_OWNER_APPROVED: ${{ secrets.V39_P5_SOURCE_QUEUE_OWNER_APPROVED }}
+      V39_P5_AUTO_SOURCE_DISPATCH_APPROVED: ${{ secrets.V39_P5_AUTO_SOURCE_DISPATCH_APPROVED }}
+      V39_P5_SIGNED_DAY_REGISTRY_RELEASE: ${{ secrets.V39_P5_SIGNED_DAY_REGISTRY_RELEASE }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_SOURCE_DB_ROLE_REVIEWED: ${{ secrets.V39_P5_SOURCE_DB_ROLE_REVIEWED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_P5_REST_UNIT_PRICE_APPROVED: ${{ secrets.V39_P5_REST_UNIT_PRICE_APPROVED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse any premature paid-child release before SQL/dependencies/API
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_EVENT_NAME" = "schedule"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$ADB_AUTO_COLLECT" = "0"
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$GITHUB_SHA" = "$V39_P5_QUEUE_APPROVED_CODE_SHA"
+          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          test "$P5_AUTO_SOURCE_DISPATCH_ENABLED" = "true"
+          test "$P5_SOURCE_QUEUE_OBSERVER_ENABLED" = "true"
+          test "$P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED" = "true"
+          test "$V39_P5_AUTO_SOURCE_DISPATCH_APPROVED" = "1"
+          test "$V39_P5_SIGNED_DAY_REGISTRY_RELEASE" = "1"
+          test "$V39_PHASE5_FREEZE_SIGNED" = "1"
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = "1"
+          test "$V39_PHASE6_PROCESS_ARMED" = "1"
+          test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = "1"
+          test "$V39_P5_SOURCE_DB_ROLE_REVIEWED" = "1"
+          test -n "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Read actual signed source queue then GitHub-dispatch max four exact child owners
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_github_due_source_batch_child_dispatcher_v39.ts
+          echo 'PHASE5_GH_DISPATCH_COORDINATOR_FINISHED_NOT_SOURCE_GO_OR_PRE_OR_POST'

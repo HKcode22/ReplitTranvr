@@ -1,0 +1,114 @@
+name: Phase5 one signed per-day SOURCE child (PAID only after independent GO)
+run-name: P5 SOURCE ${{ inputs.query_digest }}
+on:
+  workflow_dispatch:
+    inputs:
+      signed_registry_file:
+        description: "Previously signed per-day frozen/*.json registry on exact approved main"
+        required: true
+        type: string
+      frozen_release_file:
+        description: "One exact previously signed packet in the per-day registry"
+        required: true
+        type: string
+      query_digest:
+        description: "Exact 64-hex source query digest already included in signed registry"
+        required: true
+        type: string
+      run_day_index:
+        description: "Approved prospective day index 1..31"
+        required: true
+        type: string
+      confirm:
+        description: "Type ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET"
+        required: true
+        type: string
+permissions:
+  contents: read
+# One running child per signed physical source query; no same-query overlap.
+concurrency:
+  group: p5-source-child-${{ inputs.query_digest }}
+  cancel-in-progress: false
+jobs:
+  exact-reviewed-source-child:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT: '1'
+      V39_P5_CHILD_CONFIRM: ${{ inputs.confirm }}
+      P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST: ${{ inputs.query_digest }}
+      P5_SOURCE_BATCH_RUN_DAY_INDEX: ${{ inputs.run_day_index }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_P5_AUTO_SOURCE_DISPATCH_APPROVED: ${{ secrets.V39_P5_AUTO_SOURCE_DISPATCH_APPROVED }}
+      V39_P5_SIGNED_DAY_REGISTRY_RELEASE: ${{ secrets.V39_P5_SIGNED_DAY_REGISTRY_RELEASE }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256: ${{ secrets.V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256 }}
+      V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES: ${{ secrets.V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES }}
+      V39_P5_SOURCE_OWNER_APPROVED: ${{ secrets.V39_P5_SOURCE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_SOURCE_DB_ROLE_REVIEWED: ${{ secrets.V39_P5_SOURCE_DB_ROLE_REVIEWED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_P5_REST_UNIT_PRICE_APPROVED: ${{ secrets.V39_P5_REST_UNIT_PRICE_APPROVED }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject unfinished release BEFORE accessing provider or SQL
+        env:
+          REGISTRY_FILE: ${{ inputs.signed_registry_file }}
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          test "$GITHUB_RUN_ATTEMPT" = '1'
+          test "$ADB_AUTO_COLLECT" = '0'
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
+          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          test "$V39_PHASE5_FREEZE_SIGNED" = '1'
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
+          test "$V39_PHASE6_PROCESS_ARMED" = '1'
+          test "$V39_P5_AUTO_SOURCE_DISPATCH_APPROVED" = '1'
+          test "$V39_P5_SIGNED_DAY_REGISTRY_RELEASE" = '1'
+          test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = '1'
+          test -n "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$AERODATABOX_API_KEY"
+          [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          [[ "$P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$P5_SOURCE_BATCH_RUN_DAY_INDEX" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Authenticate registry and run existing one-physical-GET worker
+        shell: bash
+        env:
+          REGISTRY_FILE: ${{ inputs.signed_registry_file }}
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts "$RELEASE_FILE" "$REGISTRY_FILE"
+          echo 'P5_SIGNED_SOURCE_CHILD_DONE_ONE_PHYSICAL_FIDS_GET_MAX_NO_PRE_OR_POST_CLAIM'

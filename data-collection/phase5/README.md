@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 2026 01:44 PST — first real GitHub per-day signed SOURCE child dispatcher (default OFF; pending CI)
+
+[Timestamped real GitHub source child dispatcher checkpoint](2026-11-10_0144PST_FIRST_GITHUB_SOURCE_BATCH_CHILD_DISPATCHER_SAFETY_CHECKPOINT.md). This review branch goes beyond offline queue planning: adds signed-registry **workflow_dispatch child** using the **existing** one-GET owner, and an independent GO-gated GitHub Actions controller job under the **existing** source observer's 10-minute schedule. It detects queued duplicate children, limits to four requests per run, requires actual DB source due metadata, exact signed registry/rights+physical seven-REST-UTC budget and Phase6 GO, and preserves V0080/V0079/V0082 one-physical reservation. Both jobs remain default OFF, no real paid calls or child workflow dispatch were made. This is engineering only, target and legal Contents rights still OPEN, Phase5 scientific FREEZE HOLD / paid Phase6 GO NO. Check PR and exact-head CI before claiming merged.
+
+
 ## Nov 10 2026 01:12 PST — bounded per-day signed source multiquery readiness (in review)
 
 [Full dated technical checkpoint](2026-11-10_0112PST_SIGNED_PER_DAY_SOURCE_BATCH_V0079_READONLY_CHECKPOINT.md): extending merged #540's exact single frozen source packet ↔ V0079 PostgreSQL due queue to **1–96 distinct, immutable packets for one future parent-day**, with real SOURCE-role DB clock and explicit due/prearmed/STOPPED/missed/unexpected missingness. This reuses one observer/cron and never spends, dispatches or pre-draws 21 future adaptive airport sites. Initial branch work is NOT live role/rights commissioning or a signed Phase5 FREEZE, and first-cycle target A/B/C/D1/D2/E remains undecided. Exact-head CI and merge must be checked; Phase6 paid GO NO.
