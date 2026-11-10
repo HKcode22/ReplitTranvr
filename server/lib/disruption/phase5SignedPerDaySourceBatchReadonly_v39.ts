@@ -115,6 +115,10 @@ export function reviewP5SignedSourceDayBatchAgainstActualQueue(
   let packet:P5GitHubOneQueryReleaseEnvelope;
   try{packet=JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;}
   catch{fail("NONJSON_SIGNED_SOURCE_PACKET");}
+  if(!packet?.plan?.acquisition||
+     packet.plan.acquisition.runDayIndex!==registry.runDayIndex||
+     packet.queryDigestSha256!==e.expectedQueryDigestSha256)
+   fail("CROSS_DAY_OR_CROSS_QUERY_SIGNED_PACKET");
   const one:P5OneSignedPacketPins={
    filePath:e.filePath,
    expectedPacketSha256:e.expectedPacketSha256,
