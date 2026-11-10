@@ -69,6 +69,7 @@ function fixture(){
   schema:"v39.phase5.signed-later-pre-day-registry.v1",
   manifestSha256:SHA("1"),reviewedCodeSha:code,
   sourceDayRegistrySha256:digest(sourceBytes),
+  sourceDayRegistryFilePath:"data-collection/phase5/frozen/source_day_0004.json",
   runDayIndex:4,shardIndex:1,entries:[
    {filePath:first,expectedPacketSha256:digest(files.get(first)!),
     expectedQueryDigestSha256:SHA("b"),expectedFlightInstanceId:"leg:flight:a",
