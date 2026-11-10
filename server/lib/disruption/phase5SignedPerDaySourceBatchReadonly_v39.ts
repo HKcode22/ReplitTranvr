@@ -116,9 +116,12 @@ export function reviewP5SignedSourceDayBatchAgainstActualQueue(
   // so unauthenticated content cannot affect scope or diagnostic order.
   if(digest(bytes)!==e.expectedPacketSha256)
    fail("UNSIGNED_FILE_OR_QUEUE_NOT_AUTHENTICATED");
-  let packet:P5GitHubOneQueryReleaseEnvelope;
-  try{packet=JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;}
-  catch{fail("NONJSON_SIGNED_SOURCE_PACKET");}
+  // A returning expression makes the type narrow even under strict TS;
+  // invalid JSON is always a fail-closed throw, never an undefined packet.
+  const packet:P5GitHubOneQueryReleaseEnvelope=(()=>{
+   try{return JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;}
+   catch{return fail("NONJSON_SIGNED_SOURCE_PACKET");}
+  })();
   if(!packet?.plan?.acquisition||
      packet.plan.acquisition.runDayIndex!==registry.runDayIndex||
      packet.queryDigestSha256!==e.expectedQueryDigestSha256)
