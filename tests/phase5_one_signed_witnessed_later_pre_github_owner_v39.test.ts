@@ -112,7 +112,7 @@ describe("Phase5 later PRE reuses restricted Stage14 and T24 V0081 witness",()=>
  it("refuses changed source packet raw bytes, unsigned code or missing independent GO",()=>{
   const f=fixture();
   expect(()=>admitted(f,f.env,f.packet,
-   Buffer.concat([f.bytes,Buffer.from(" ")])).toThrow(
+   Buffer.concat([f.bytes,Buffer.from(" ")]))).toThrow(
     "PACKET_BYTES_NOT_INDEPENDENTLY_REVIEWED");
   for(const bad of [
    {GITHUB_SHA:"a".repeat(40)},
