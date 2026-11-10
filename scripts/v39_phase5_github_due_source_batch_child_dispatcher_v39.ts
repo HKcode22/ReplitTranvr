@@ -51,8 +51,6 @@ export function admitP5GitHubDueChildDispatcher(env:NodeJS.ProcessEnv){
     env.V39_P5_SEVEN_REST_BUDGET_SIGNED!=="1"||
     env.V39_P5_REST_UNIT_PRICE_APPROVED!=="2"||
     !H.test(env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256??"")||
-    env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256!==
-       env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256||
     !H.test(env.V39_P5_MANIFEST_SHA256??"")||
     !H.test(env.V39_P5_RELEASE_SHA256??"")||
     !H.test(env.V39_P5_RIGHTS_SHA256??"")||
@@ -158,7 +156,7 @@ export function selectP5DueSignedSourceChildIntents(
   if(toDispatch.length<MAX_CHILDREN_PER_OBSERVER)
    toDispatch.push({
     queryDigestSha256:h.queryDigestSha256,
-    frozenPacketPath:undefined as never,
+
     registryFilePath,runDayIndex:batch.runDayIndex,
     plannedDispatchUtc:h.plannedDispatchUtc
    });
