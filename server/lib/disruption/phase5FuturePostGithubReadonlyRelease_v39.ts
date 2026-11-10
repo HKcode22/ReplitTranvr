@@ -106,7 +106,15 @@ export function planP5FuturePostOneChild(
    shouldDispatch:false as const,observedPreCount:pre.observedValidHorizonCount,
    missingPreCount:pre.missingPreHorizons.length,
    providerCalls:0 as const,databaseWrites:0 as const};
- if(!history||!Number.isSafeInteger(history.total_count)||
+ // A due check is allowed before a separate GitHub history lookup,
+ // but MUST NOT itself grant dispatch without bounded history proof.
+ if(history===null)
+  return{status:"POST_DUE_REQUIRES_GITHUB_HISTORY_CHECK" as const,
+   shouldDispatch:false as const,
+   observedPreCount:pre.observedValidHorizonCount,
+   missingPreCount:pre.missingPreHorizons.length,
+   providerCalls:0 as const,databaseWrites:0 as const};
+ if(!Number.isSafeInteger(history.total_count)||
     history.total_count<0||history.total_count>100||
     !Array.isArray(history.workflow_runs)||
     history.workflow_runs.length!==history.total_count)
