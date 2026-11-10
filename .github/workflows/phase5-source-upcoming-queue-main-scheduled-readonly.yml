@@ -18,6 +18,9 @@ on:
       - 'server/lib/disruption/phase5SignedDueSourceOnePacketHandoff_v39.ts'
       - 'server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39.ts'
       - 'server/lib/disruption/phase5T24OriginalBoundReadonlyHandoff_v39.ts'
+      - 'server/lib/disruption/phase5T24GithubChildDispatchDecision_v39.ts'
+      - 'scripts/v39_phase5_t24_github_child_dispatcher_v39.ts'
+      - 'tests/phase5_native_t24_github_child_dispatcher_v39.test.ts'
       - 'scripts/v39_phase5_native_t24_source_original_readonly_owner_v39.ts'
       - 'tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts'
       - 'server/lib/disruption/phase5SignedDaySourceChildRelease_v39.ts'
@@ -62,7 +65,7 @@ jobs:
       - name: Verify zero-provider due queue without production DB/paid permission
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts
+          npx vitest run tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts
           echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
   signed-main-source-queue-readonly:
     if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
@@ -291,3 +294,85 @@ jobs:
           set +x
           npx tsx scripts/v39_phase5_native_t24_source_original_readonly_owner_v39.ts
           echo 'P5_T24_ACTUAL_BOUND_ORIGINAL_READONLY_NOT_GITHUB_CHILD_DISPATCH_NOT_PRE_WITNESS'
+
+  separately-authorized-native-t24-gh-child:
+    # Reuses the EXISTING 10-minute schedule. Independent default OFF.
+    # Parent has actions:write but NO provider key and NO witness/SQL writer.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_T24_SOURCE_READONLY_ENABLED == 'true' && vars.P5_T24_AUTO_DISPATCH_ENABLED == 'true' }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    concurrency:
+      group: phase5-t24-github-child-dispatch-singleton
+      cancel-in-progress: false
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_T24_SOURCE_READONLY_ENTRYPOINT: '0'
+      P5_T24_AUTO_DISPATCH_ENTRYPOINT: '1'
+      P5_T24_SOURCE_READONLY_ENABLED: ${{ vars.P5_T24_SOURCE_READONLY_ENABLED }}
+      P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
+      P5_T24_READONLY_SIGNED_PACKET_FILE: ${{ vars.P5_T24_READONLY_SIGNED_PACKET_FILE }}
+      V39_P5_T24_OWNER_APPROVED: ${{ secrets.V39_P5_T24_OWNER_APPROVED }}
+      V39_P5_T24_APPROVED_CODE_SHA: ${{ secrets.V39_P5_T24_APPROVED_CODE_SHA }}
+      V39_P5_T24_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_T24_SIGNED_PACKET_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_QUERY_DIGEST: ${{ secrets.V39_P5_QUERY_DIGEST }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_NATIVE_T_SEMANTICS_SHA256: ${{ secrets.V39_P5_NATIVE_T_SEMANTICS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse PRE child dispatch without independent signed future GO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'schedule'
+          test "$GITHUB_RUN_ATTEMPT" = '1'
+          test "$ADB_AUTO_COLLECT" = '0'
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_T24_WITNESS_DATABASE_URL"
+          test "$P5_T24_AUTO_DISPATCH_ENABLED" = 'true'
+          test "$P5_T24_SOURCE_READONLY_ENABLED" = 'true'
+          test "$GITHUB_SHA" = "$V39_P5_T24_APPROVED_CODE_SHA"
+          test "$V39_P5_T24_OWNER_APPROVED" = '1'
+          test "$V39_PHASE5_FREEZE_SIGNED" = '1'
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
+          test "$V39_PHASE6_PROCESS_ARMED" = '1'
+          test -n "$V39_P5_T24_SIGNED_PACKET_SHA256"
+          test -n "$P5_V39_PRE_DATABASE_URL"
+          [[ "$P5_T24_READONLY_SIGNED_PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One actual SOURCE-bound flight T24 GitHub dispatch, no PRE/DB write in parent
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_t24_github_child_dispatcher_v39.ts
+          echo 'T24_GITHUB_CHILD_REQUESTED_OR_HELD_NOT_PRE_COMMITTED_OR_WITNESSED'
