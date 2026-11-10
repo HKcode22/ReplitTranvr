@@ -204,7 +204,8 @@ export function reviewP5LaterPreActualReadback(
     p.selectedTConfig.version+":"+p.selectedTConfig.artifactHash,
    expectedFrameSha256:p.reviewedFrameSha256,
    expectedConfigSha256:p.reviewedConfigSha256,
-   cutoffUtc:new Date(cutoff).toISOString(),horizon:p.horizon
+   cutoffUtc:new Date(cutoff).toISOString(),
+   horizon:p.horizon as "T-6h"|"T-90m"
   });
  }
  if(!actual.originalRows.length||!actual.memberRows.length)
@@ -289,7 +290,7 @@ export function planP5LaterPreGithubChild(
     history.workflow_runs.length!==history.total_count)
   fail("UNBOUNDED_GITHUB_LATER_PRE_HISTORY");
  let seen=false;
- for(const h of history.workflow_runs){
+ for(const h of history!.workflow_runs){
   if(!h||!Number.isSafeInteger(h.id)||h.id<1||
      typeof h.display_title!=="string"||
      !["queued","in_progress","completed","pending","waiting","requested"]
