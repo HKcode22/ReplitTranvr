@@ -749,6 +749,8 @@ export interface FidsFetchOptions {
   sleepImpl?: (ms: number) => Promise<void>;
   /** Optional caller-owned cancellation; existing callers unchanged. */
   signal?: AbortSignal;
+  /** One pre-reserved V0083 POST physical GET. Never run any HTTP retry. */
+  onePhysicalAttemptOnly?: boolean;
 }
 
 export async function fetchFidsAirport(
@@ -781,7 +783,8 @@ export async function fetchFidsAirport(
       withLeg: withLeg ? "true" : "false",
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const maxAttempts=opts?.onePhysicalAttemptOnly===true?1:3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (opts?.signal?.aborted) return null;
       const category: FidsRestCategory = attempt === 1 ? (opts?.category ?? "fids_base") : "fids_retry";
       await owner.reserve(category, FIDS_REST_UNITS_PER_ATTEMPT, attempt);
@@ -796,7 +799,7 @@ export async function fetchFidsAirport(
           signal: opts?.signal ? AbortSignal.any([opts.signal, deadline]) : deadline,
         });
       } catch (error) {
-        if (attempt === 3) throw error;
+        if (attempt === maxAttempts) throw error;
         await sleepImpl(RATE_LIMIT_BACKOFF_MS * attempt);
         continue;
       }
@@ -853,7 +856,7 @@ export async function fetchFidsAirport(
         return result;
       }
       const retryable = resp.status === 429 || [500, 502, 503, 504].includes(resp.status);
-      if (!retryable || attempt === 3) return null;
+      if (!retryable || attempt === maxAttempts) return null;
       const rawRetryAfter = resp.headers.get("retry-after");
       // Number(null)=0; missing Retry-After must NOT trigger immediate retry.
       const retryAfter = rawRetryAfter===null ? NaN : Number(rawRetryAfter);
