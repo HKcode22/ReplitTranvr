@@ -159,7 +159,7 @@ aerodataboxLimiter_v3.ts (HTTP client)
 fidsCensus_v3.ts:
   fetchFidsPopulation() -> normalizeFidsRecord()
   -> source decoded-body hash and availability
-  -> persistFidsPopulationAtomic()
+  -> persistFidsObservation()
        clean.fids_query_response (query/raw original)
        clean.flight_population (normalized members)
     |
