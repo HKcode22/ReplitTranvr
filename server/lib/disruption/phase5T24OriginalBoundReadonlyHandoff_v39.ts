@@ -22,7 +22,7 @@ const fail=(x:string):never=>{throw Error("REFUSED_P5_T24_SOURCE_HANDOFF_"+x);};
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 function utc(value:unknown):number{
  const date=value instanceof Date?value:typeof value==="string"?new Date(value):null;
- if(!date||!Number.isFinite(date.getTime()))fail("INVALID_REAL_DB_UTC_INSTANT");
+ if(!date||!Number.isFinite(date.getTime()))return fail("INVALID_REAL_DB_UTC_INSTANT");
  return date.getTime();
 }
 export interface P5T24ActualOriginalReadback{
