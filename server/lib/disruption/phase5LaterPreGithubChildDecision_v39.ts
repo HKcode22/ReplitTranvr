@@ -181,8 +181,9 @@ export function reviewP5LaterPreActualReadback(
   childDispatchCount:0 as const,legalRightsCertifiedHere:false as const,
   phase5FreezeGrantedHere:false as const,phase6GoGrantedHere:false as const
  };
- const status=(s:P5LaterPrePlan["status"]):P5LaterPrePlan=>
-  {...base,status:s,readyForHistory:s==="LATER_PRE_READY_FOR_GITHUB_HISTORY"};
+ const status=(s:P5LaterPrePlan["status"]):P5LaterPrePlan=>({
+  ...base,status:s,readyForHistory:s==="LATER_PRE_READY_FOR_GITHUB_HISTORY"
+ });
  if(actual.sameHorizonCount===1)
   return status("LATER_PRE_ALREADY_SAVED_NO_CHILD");
  if(now>=cutoff-15*60000)
