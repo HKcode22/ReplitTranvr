@@ -81,7 +81,7 @@ export function draftP5UnsignedStage24ReceiptFromCommittedChain(
      !Number.isFinite(Date.parse(v))||
      new Date(v).toISOString()!==v)
    HOLD("UNVERIFIED_POSTCOMMIT_WITNESS_CLOCK");
-  return Date.parse(v);
+  return Date.parse(v as string);
  };
  const preClock=instant(saved?.postCommitDbClockAtUtc),
    witnessedAt=instant(witness?.postPreCommitDbObservedAtUtc),
