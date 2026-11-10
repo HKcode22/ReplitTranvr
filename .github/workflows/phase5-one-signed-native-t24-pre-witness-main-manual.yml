@@ -17,6 +17,7 @@ on:
       - 'scripts/v39_phase5_one_signed_native_t24_pre_witness_github_owner_v39.ts'
       - 'tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts'
       - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_GITHUB_NATIVE_T24_PRE_WITNESS_REAL_OWNER_CHECKPOINT.md'
 permissions:
   contents: read
@@ -47,7 +48,7 @@ jobs:
       - name: Verify signed native source, DB-clock and distinct role admission — no DB or provider
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts
+          npx vitest run tests/phase5_one_signed_native_t24_pre_witness_github_owner_v39.test.ts tests/phase5_t24_pre_independent_witness_chain_v39.test.ts
           echo 'PHASE5_NATIVE_T24_CI_ONLY_NO_DB_NO_PROVIDER_NO_GO'
   one-actual-signed-t24-pre-witness:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_NATIVE_T24_PRE_AND_WITNESS_NO_PROVIDER' }}

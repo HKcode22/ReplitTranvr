@@ -8,13 +8,18 @@
  * transactions; on missing/ambiguous second proof, HOLD with no replay.
  */
 import type {Pool} from "pg";
+import {digestP5Stage24ReviewedReceipt,
+ type P5Stage24ReviewedT24Receipt}
+ from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
- type P5Stage14SingleFlightPrePermit
+ type P5Stage14SingleFlightPrePermit,
+ type P5Stage14SingleFlightPreResult
 } from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {
  persistP5T24SeparateTransactionWitness,
- type P5Stage17T24WitnessPermit
+ type P5Stage17T24WitnessPermit,
+ type P5Stage17WitnessResult
 } from "./phase5T24IndependentPostCommitWitness_v39";
 
 const HOLD=(m:string):never=>{
@@ -52,6 +57,78 @@ export function verifyP5T24PreWitnessCrossReview(
     witness.expectedT24CutoffUtc!==new Date(cutoff).toISOString()||
     witness.expectedSelectedTVersion!==preVersion)
    HOLD("INDEPENDENT_T24_PRE_AND_WITNESS_SCOPE_DRIFT");
+}
+
+
+/**
+ * Produce an unsigned Stage24 receipt candidate only when the actual
+ * Stage14 PRE and distinct Stage17 V0081 witness have each committed and
+ * been read back before the original T24 cutoff. No source/original body
+ * is copied here. SHA-256 integrity is NOT an independent reviewer.
+ */
+export function draftP5UnsignedStage24ReceiptFromCommittedChain(
+ pre:P5Stage14SingleFlightPrePermit,
+ review:P5IndependentT24WitnessReview,
+ saved:P5Stage14SingleFlightPreResult,
+ witness:P5Stage17WitnessResult
+){
+ verifyP5T24PreWitnessCrossReview(pre,review);
+ const native=Date.parse(pre.selectedTNativeUtc);
+ const cutoff=native-86_400_000;
+ const instant=(v:unknown)=>{
+  if(typeof v!=="string"||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)||
+     !Number.isFinite(Date.parse(v))||
+     new Date(v).toISOString()!==v)
+   HOLD("UNVERIFIED_POSTCOMMIT_WITNESS_CLOCK");
+  return Date.parse(v as string);
+ };
+ const preClock=instant(saved?.postCommitDbClockAtUtc),
+   witnessedAt=instant(witness?.postPreCommitDbObservedAtUtc),
+   readAt=instant(witness?.postWitnessCommitReadbackAtUtc);
+ if(!Number.isFinite(native)||
+    saved?.status!=="ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE"||
+    saved.horizon!=="T-24h"||
+    saved.preSnapshotsInserted!==1||
+    saved.postCommitDatabaseReadbackVerified!==true||
+    saved.flightPreCommittedBeforeOwnCutoff!==true||
+    saved.boundPopulationQueryId!==pre.expectedSourcePopulationQueryId||
+    witness?.schema!=="v39.phase5.stage17.separate-transaction-t24-pre-commit-witness.v1"||
+    witness.status!=="T24_PRE_SEPARATE_TRANSACTION_DB_WITNESS_DURABLE_BEFORE_CUTOFF"||
+    witness.flightInstanceId!==pre.flightInstanceId||
+    witness.snapshotId!==saved.committedSnapshotId||
+    witness.frozenT24CutoffUtc!==new Date(cutoff).toISOString()||
+    witness.originalT24SnapshotVisibleInSeparateTransaction!==true||
+    witness.witnessCommittedAndReadBackBeforeOwnCutoff!==true||
+    preClock>=witnessedAt||witnessedAt>readAt||
+    witnessedAt<cutoff-180_000||witnessedAt>=cutoff-2000||
+    readAt>=cutoff)
+  HOLD("CHAIN_DOES_NOT_PROVE_DURABLE_T24_RECEIPT");
+ const version=pre.selectedTConfig.milestone+":"+
+  pre.selectedTConfig.version+":"+pre.selectedTConfig.artifactHash;
+ const unsigned:Omit<P5Stage24ReviewedT24Receipt,"receiptSha256">={
+  schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1",
+  snapshotId:saved.committedSnapshotId,
+  flightInstanceId:pre.flightInstanceId,
+  selectedTNativeUtc:pre.selectedTNativeUtc,
+  frozenT24CutoffUtc:witness.frozenT24CutoffUtc,
+  expectedSelectedTVersion:version,
+  t24OriginalFidsSha256:pre.expectedSourceResponseSha256,
+  t24SourceQueryDigestSha256:pre.queryDigestSha256,
+  t24FrameSha256:pre.reviewedFrameSha256,
+  t24ConfigSha256:pre.reviewedConfigSha256,
+  witnessDbObservedAtUtc:witness.postPreCommitDbObservedAtUtc,
+  stage17PostCommitReadbackAtUtc:witness.postWitnessCommitReadbackAtUtc
+ };
+ const receipt:P5Stage24ReviewedT24Receipt={
+  ...unsigned,receiptSha256:digestP5Stage24ReviewedReceipt(unsigned)
+ };
+ return {
+  schema:"v39.phase5.unsigned-t24-stage24-handoff.v1" as const,
+  status:"DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW" as const,
+  receipt,reviewedByIndependentAuthority:false as const,
+  mayLaunchLaterPreAutomatically:false as const,providerCalls:0 as const
+ };
 }
 
 export async function persistP5ReviewedT24PreAndIndependentWitness(
@@ -98,8 +175,11 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
     observed.originalT24SnapshotVisibleInSeparateTransaction!==true||
     observed.witnessCommittedAndReadBackBeforeOwnCutoff!==true)
   HOLD("POSTCOMMIT_INDEPENDENT_WITNESS_DID_NOT_MATCH_NO_REPLAY");
+ const unsignedStage24ReceiptCandidate=
+  draftP5UnsignedStage24ReceiptFromCommittedChain(pre,witness,saved,observed);
  return {
   schema:"v39.phase5.t24-pre-to-independent-witness.v1" as const,
+  unsignedStage24ReceiptCandidate,
   status:"T24_PRE_AND_SEPARATE_WITNESS_DURABLY_SAVED_NOT_SCIENTIFIC_FREEZE" as const,
   runDayIndex:pre.runDayIndex,
   horizon:"T-24h" as const,

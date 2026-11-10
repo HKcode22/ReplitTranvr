@@ -1,5 +1,13 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
+## Nov 9 newest engineering review — preserve exact Stage17 witness receipt for signed later PRE
+
+**Verified baseline after #530:** merged main `fde550448a1647fe187bbc87ea41d81d8b03a3ed`, 5/5 exact-head PR checks passed; exact postmerge full offline safety [#42743126690](https://github.com/HKcode22/ReplitTranvr/actions/runs/42743126690) was still in progress when last checked, verify live. **New review** [Stage14/Stage17 two-COMMIT actual T24→Stage24 unsigned receipt handoff](2026-11-09_UNSIGNED_T24_RECEIPT_HANDOFF_TO_LATER_PRE_CHECKPOINT.md). Existing chain constructs the exact immutable receipt from its own bound snapshot ID, source response/query hashes, frozen native T/version, frame/config and separate witness/POST-COMMIT DB clock; existing GitHub T24 owner emits it labeled **not independently reviewed**. New actual-code negative tests forbid forged snapshot/witness, reversed/late clocks and unverified PRE; existing T24 PR offline tests run both. No new role, API GET, production dataset write from CI, rights signature or automated later PRE. Confirm PR merge and main tests before claiming success.
+
+Remaining: **actual dynamic unattended** signed source→T24/witness→T6/T90→POST/receiver/STOP/quality; independently approved first-cycle target/source-use/expiry; real future 31-parent calendar, true seven physical UTC category budgets + Alert caps while 21 adaptive airport draws remain future; independent Phase5 FREEZE then separate paid Phase6 GO. Reuse all Phase2–4 pilots and V0079–V0083 installations, do not repeat. **FREEZE HOLD / GO NO**.
+
+
+
 ## Nov 9 evening — later T−6h/T−90m GitHub owner under exact-head CI review
 
 **Verified baseline**: merged [PR #529](https://github.com/HKcode22/ReplitTranvr/pull/529), main `1d9bebc70d20656a9bbdd41864da4d260f9b5759`; **all five postmerge** source release / V0080 / V0082 / SOURCE role / full offline safety workflows SUCCESS. #529 now requires a fresh actual SOURCE-only V0079/V0080 unreserved due-queue read before any one-GET prearm and a post-wait DB hard-deadline check before source reservation. Existing manual paid guard remains active, signed observer schedule remains OFF.
