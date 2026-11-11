@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 10 — genuine SOURCE candidate → unsigned prospective PRE review dossier (IN REVIEW)
+
+[Checkpoint: SOURCE-bound unsigned native flight review dossier and 96-entry pages](2026-11-10_ACTUAL_SOURCE_TO_UNSIGNED_PRE_REVIEW_DOSSIER_CHECKPOINT.md). Reuses merged #555 actual PG16 READ ONLY SOURCE/member/cutoff candidate evidence, then binds a separately expected audit SHA to each prospective flight/horizon and pages up to 96 **unsigned** review entries. Ordinary member/native-T/duplicate missingness is censored per flight, not silently lost. Real provider physical operating-leg identity, native-T semantics, Contents lawful ML use/retention, T24 receipt or separately approved honest no-T24, frozen packet code/config and independent freeze/GO remain **unreviewed**; no production packet is signed, no provider/database/GH dispatch. PR head CI and merge pending, follow-up #553. Previously merged #557 manual bounded 8-flight Stage14 batch main `880ebecef737dfcba1a21359f9f97294721f1255` all 5 exact-head CI PASS; default OFF. Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
 ## Nov 10 — bounded signed 8-flight T−6h/T−90m PRE batch owner (IN REVIEW, DEFAULT OFF)
 
 [Checkpoint: manual signed PRE batch reuses Stage14, with GH one-time nonce and stop-on-uncertain-COMMIT](2026-11-10_BOUNDED_EIGHT_FLIGHT_T6_T90_BATCH_OWNER_REVIEW_CHECKPOINT.md). Bounded 1–8 existing signed SOURCE-day-linked true native operating legs, selected own cutoffs clustered within 2min and 15–75min after true DB clock, independent per-flight Stage14 serializable POST-COMMIT PRE proof. No cron or provider key. Extra protected approval and one-time nonce; GH prior identical batch run (including FAILED) HOLD. **Still no genuine future packet signer or automatic rolling 31-day day-shard publication; not yet CI reviewed or merged.** No Replit shell needed; FREEZE HOLD / Phase6 paid GO NO.
