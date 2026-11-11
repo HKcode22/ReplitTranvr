@@ -41,19 +41,8 @@ GRANT SELECT,UPDATE ON clean.phase5_cd_pre_task_v39
 GRANT SELECT,INSERT ON clean.phase5_cd_pre_admission_receipt_v39
  TO phase5_cd_admission_guard_owner_v39;
 
--- ALTER FUNCTION OWNER requires the new owner to have CREATE on the
--- containing schema. Grant temporarily, change ownership, then revoke.
-GRANT CREATE ON SCHEMA clean TO phase5_cd_admission_guard_owner_v39;
-ALTER FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
- bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,
- text,text,text)
- OWNER TO phase5_cd_admission_guard_owner_v39;
-ALTER FUNCTION clean.phase5_cd_scope_snapshot_insert_v39()
- OWNER TO phase5_cd_admission_guard_owner_v39;
-ALTER FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
- OWNER TO phase5_cd_admission_guard_owner_v39;
-REVOKE CREATE ON SCHEMA clean FROM phase5_cd_admission_guard_owner_v39;
-
+-- ACL changes precede function ownership transfer, because an ordinary
+-- PostgreSQL owner cannot change function ACLs after changing owner.
 -- NOLOGIN pre group already exists in Phase5; do NOT create another
 -- source/PRE runtime login or grant direct queue UPDATE/INSERT.
 REVOKE ALL ON FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
@@ -92,6 +81,46 @@ REVOKE ALL ON TABLE clean.phase5_cd_pre_admission_receipt_v39
 REVOKE ALL ON FUNCTION clean.phase5_cd_scope_snapshot_insert_v39() FROM PUBLIC;
 REVOKE ALL ON FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39() FROM PUBLIC;
 
+-- PostgreSQL16 CREATEROLE grants implicit ADMIN TRUE, SET FALSE. To
+-- ALTER FUNCTION OWNER the creator must first gain temporary SET TRUE
+-- membership. Create that grant with its own grantor so it can be revoked.
+DO $temporary_set_role_membership$
+DECLARE actor name := current_user;
+BEGIN
+ IF NOT (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=actor) THEN
+   EXECUTE pg_catalog.format(
+     'GRANT phase5_cd_admission_guard_owner_v39 TO %I WITH ADMIN FALSE, INHERIT FALSE, SET TRUE',
+     actor);
+   IF NOT pg_catalog.pg_has_role(actor,
+        'phase5_cd_admission_guard_owner_v39','SET') THEN
+     RAISE EXCEPTION 'P5_CD_V0089_TEMPORARY_SET_MEMBERSHIP_UNAVAILABLE';
+   END IF;
+ END IF;
+END $temporary_set_role_membership$;
+GRANT CREATE ON SCHEMA clean TO phase5_cd_admission_guard_owner_v39;
+ALTER FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
+ bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,
+ text,text,text)
+ OWNER TO phase5_cd_admission_guard_owner_v39;
+ALTER FUNCTION clean.phase5_cd_scope_snapshot_insert_v39()
+ OWNER TO phase5_cd_admission_guard_owner_v39;
+ALTER FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
+ OWNER TO phase5_cd_admission_guard_owner_v39;
+REVOKE CREATE ON SCHEMA clean FROM phase5_cd_admission_guard_owner_v39;
+DO $drop_temporary_set_role$
+DECLARE actor name := current_user;
+BEGIN
+ IF NOT (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=actor) THEN
+   EXECUTE pg_catalog.format(
+     'REVOKE phase5_cd_admission_guard_owner_v39 FROM %I GRANTED BY %I',
+     actor,actor);
+   IF pg_catalog.pg_has_role(actor,
+       'phase5_cd_admission_guard_owner_v39','SET') THEN
+     RAISE EXCEPTION 'P5_CD_V0089_TEMPORARY_SET_MEMBERSHIP_NOT_REVOKED';
+   END IF;
+ END IF;
+END $drop_temporary_set_role$;
+
 DO $postflight$
 DECLARE r pg_catalog.pg_roles%ROWTYPE;
 BEGIN
@@ -99,6 +128,11 @@ BEGIN
   WHERE rolname='phase5_cd_admission_guard_owner_v39';
  IF NOT FOUND OR r.rolcanlogin OR r.rolsuper OR r.rolcreaterole
     OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls OR
+    pg_catalog.pg_get_userbyid((
+      SELECT p.proowner FROM pg_catalog.pg_proc p
+      WHERE p.oid=pg_catalog.to_regprocedure(
+        'clean.phase5_cd_admit_stage14_pre_v39(bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,text,text,text)')
+    )) IS DISTINCT FROM 'phase5_cd_admission_guard_owner_v39' OR
     pg_catalog.has_schema_privilege(
       'phase5_cd_admission_guard_owner_v39','clean','CREATE') OR
     NOT pg_catalog.has_table_privilege(

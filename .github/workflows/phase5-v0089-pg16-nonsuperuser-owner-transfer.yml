@@ -1,0 +1,94 @@
+name: Phase5 V0089 PG16 non-superuser function ownership (NO LIVE, NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0089-pg16-nonsuperuser-owner-transfer.yml'
+      - 'migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql'
+permissions:
+  contents: read
+jobs:
+  exact-pg16-nonsuperuser-owner-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Refuse production DB and provider work
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$(psql "$DATABASE_URL" -XAt -c 'SHOW server_version_num')" -ge 160000
+      - name: Create only local bootstrap and staged V0087/V0088
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_fids_pre_writer_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_cd_ci_owner LOGIN PASSWORD 'ci-only'
+            CREATEROLE NOINHERIT NOSUPERUSER NOCREATEDB NOREPLICATION NOBYPASSRLS;
+          ALTER SCHEMA clean OWNER TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_task_v39 OWNER TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_admission_receipt_v39 OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
+            bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,
+            text,text,text) OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_insert_v39()
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
+            OWNER TO phase5_cd_ci_owner;
+          SQL
+      - name: Confirm CREATEROLE implicit membership is SET FALSE, run actual V0089 AS non-superuser
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT current_user")" = phase5_cd_ci_owner
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT rolsuper::text||':'||rolcreaterole::text FROM pg_catalog.pg_roles WHERE rolname=current_user")" = 'false:true'
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_has_role('phase5_cd_ci_owner','phase5_cd_admission_guard_owner_v39','SET')")" = f
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_admit_stage14_pre_v39(bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,text,text,text)'::regprocedure")" = phase5_cd_admission_guard_owner_v39
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.has_table_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_pre_task_v39','UPDATE')")" = f
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_admit_stage14_pre_v39(bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,text,text,text)','EXECUTE')")" = t
+          echo 'P5_V0089_REAL_PG16_NON_SUPERUSER_TRANSFER_SET_REVOKED_SUCCESS'
