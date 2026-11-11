@@ -6,6 +6,8 @@ on:
       - '.github/workflows/phase5-cplusd-parallel-pre-proof-of-concept-offline.yml'
       - 'server/lib/disruption/phase5CPlusDParallelPreProofOfConcept_v39.ts'
       - 'tests/phase5_cplusd_parallel_pre_proof_of_concept_v39.test.ts'
+      - 'scripts/v39_phase5_cd_queue_catalog_owner_readonly_once.mjs'
+      - 'tests/phase5_cd_queue_catalog_readonly_v39.test.ts'
       - 'data-collection/phase5/2026-11-11_C_PLUS_D_OWNER_TEACHING_AND_IMPLEMENTATION_CHECKPOINT.md'
 permissions:
   contents: read
@@ -41,5 +43,5 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$P5_V39_PRE_DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_cplusd_parallel_pre_proof_of_concept_v39.test.ts
+          npx vitest run tests/phase5_cplusd_parallel_pre_proof_of_concept_v39.test.ts tests/phase5_cd_queue_catalog_readonly_v39.test.ts
           echo 'PHASE5_CPLUS_D_SIMULATION_ONLY_NO_SOURCE_OR_DB_NO_PHASE6_GO'
