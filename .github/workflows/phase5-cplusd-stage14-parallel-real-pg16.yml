@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase5-cplusd-stage14-parallel-real-pg16.yml'
       - 'tests/phase5_cplusd_stage14_parallel_real_pg_v39.test.ts'
       - 'server/lib/disruption/phase5CPlusDStage14ResultBridgeOffline_v39.ts'
+      - 'server/lib/disruption/phase5CPlusDStage14ConfirmedAbortRetry_v39.ts'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
 permissions:
   contents: read
