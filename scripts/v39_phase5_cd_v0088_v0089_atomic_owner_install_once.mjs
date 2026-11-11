@@ -187,6 +187,9 @@ export async function commissionP5CdV0088V0089AtomicOnce(env=process.env){
   if(!locked?.ok)stop("ANOTHER_CD_COMMISSION_RUNNING");
   const baseline=await before(c,env);
   await c.query(v8);
+  if(env.GITHUB_ACTIONS==="true" &&
+     env.P5_CD_V0088_V0089_CI_INJECT_ROLLBACK_AFTER_V0088==="1")
+    stop("CI_INJECTED_ROLLBACK_AFTER_V0088");
   await c.query(v9);
   const verified=await after(c,baseline);
   // Changing the snapshot trigger and function ownership is one indivisible
