@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — V0089 reuse Phase5 PRE NOLOGIN group for actual C+D SQL guard
+
+**[Read V0089 dedicated NOLOGIN function-owner/role checkpoint and exact next release steps](2026-11-11_V0089_NOLOGIN_GUARD_OWNER_AND_PRE_ROLE_RELEASE_CHECKPOINT.md).** Live V0087 queue was installed by owner, zero tasks/no worker grants. PR #572 merged true V0087→Stage14 same-transaction source-bound admission (CI), and PR #573 merged first actually persisted Amendment E categorical FIDS features (CI). V0089 now tests transferring the staged V0088 SECURITY DEFINER guard+scoped snapshot triggers to one new **NOLOGIN least-privilege owner**, with only the existing Phase5 restricted PRE group granted guard EXECUTE; old runtime and source identities remain excluded. **No live V0088/V0089 installation yet, no paid Phase6, no new PRE login.** Nov13/Nov20 are engineering targets rather than approvals.
+
+
 ## November 11 — ONE Amendment E first REAL source-bound features in Stage14 CI
 
 **[Checkpoint: first source-issued FIDS origin/destination route features written by the existing Stage14 PRE SQL](2026-11-11_AMENDMENT_E_FIRST_REAL_STAGE14_BOUND_FIDS_ROUTE_FEATURES.md)**. Reuses the canonical Amendment E issued-time selector and the already-bound V0079 normalized FIDS source. The experiment persists `origin_icao` and `destination_icao` as actual `features_json` categorical observations (or explicit nulls when unavailable) in disposable PostgreSQL16, with no new provider/worker and no historical backfill. Remaining route/weather/status/history and live-source legal rights have **not** been certified. It is opt-in CI only pending actual private feature-lineage + role review; Stage14 default still `features:[]` and Phase5 FREEZE HOLD / Phase6 paid GO NO.
