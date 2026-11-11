@@ -17,8 +17,8 @@ import {
  persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit
 } from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
-import {reviewP5CPlusDExistingStage14ProofOffline}
- from "../server/lib/disruption/phase5CPlusDStage14ResultBridgeOffline_v39";
+import {persistP5CPlusDStage14WithConfirmedAbortRetry}
+ from "../server/lib/disruption/phase5CPlusDStage14ConfirmedAbortRetry_v39";
 import type {P5PreQueueCandidate}
  from "../server/lib/disruption/phase5CPlusDParallelPreProofOfConcept_v39";
 
@@ -255,7 +255,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    lanes:number;verified:number;elapsedMs:number;latenciesMs:number[]
   }>=[];
   for(const lanes of [1,2,4,8]){
-   let verified=0;
+   let verified=0,confirmed40001Retries=0;
    const timings:number[]=[];
    const start=performance.now();
    await Promise.all(Array.from({length:lanes},(_,k)=>(async()=>{
@@ -280,12 +280,19 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      const started=performance.now();
      // An error here intentionally leaves the queue in UNKNOWN,
      // NOT READY. No blind transaction retry is allowed.
-     const saved=await persistP5V0079SingleBoundFlightPre(writer,{
-      ...permit,flightInstanceId:claim.flight_instance_id
-     });
-     reviewP5CPlusDExistingStage14ProofOffline(q,{
-      ...permit,flightInstanceId:claim.flight_instance_id
-     },saved);
+     const response=await persistP5CPlusDStage14WithConfirmedAbortRetry(
+      writer,writer,q,{...permit,flightInstanceId:claim.flight_instance_id},
+      async()=>{
+       const live=(await admin.query(
+        "SELECT count(*)::integer AS n FROM p5_cd_stage14_ci.task"+
+        " WHERE id=$1 AND owner=$2 AND generation=$3"+
+        " AND status='WRITE_STARTED_UNKNOWN' AND lease_until>clock_timestamp()"+
+        " AND own_cutoff-INTERVAL '2 seconds'>clock_timestamp()",
+        [claim.id,claim.owner,claim.generation])).rows[0];
+       return live.n===1;
+      },6
+     );
+     confirmed40001Retries+=response.acknowledgedPrecommitSerializationRetries;
      const finalized=await admin.query(
       "UPDATE p5_cd_stage14_ci.task SET status='VERIFIED'"+
       " WHERE id=$1 AND status='WRITE_STARTED_UNKNOWN' AND owner=$2"+
@@ -301,7 +308,8 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    results.push({lanes,verified,elapsedMs,latenciesMs:timings});
    console.log("P5_CD_STAGE14_REAL_PG16_LANES="+lanes+
     " VERIFIED=8 DURATION_MS="+elapsedMs+
-    " MAX_WRITE_AND_READBACK_MS="+Math.round(Math.max(...timings)));
+    " MAX_WRITE_AND_READBACK_MS="+Math.round(Math.max(...timings))+
+    " CONFIRMED_PRECOMMIT_40001_ROLLBACK_RETRIES="+confirmed40001Retries);
   }
   const queue=(await admin.query(
    "SELECT count(*)::integer AS n,"+
