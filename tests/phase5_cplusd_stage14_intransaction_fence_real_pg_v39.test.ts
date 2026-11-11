@@ -13,6 +13,7 @@
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,type PoolClient} from "pg";
 import {createHash} from "node:crypto";
+import {URL as NodeURL} from "node:url";
 import {
  persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit
@@ -53,7 +54,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    throw Error("REFUSED_CD_TEST_LOCAL_DUMMY_CREDENTIALS_MISSING");
   let localOnly=false;
   try{
-   const u=new URL(URL);
+   const u=new NodeURL(URL);
    localOnly=u.protocol==="postgresql:"&&u.hostname==="localhost"&&
     u.port==="5432"&&u.pathname==="/neondb"&&
     u.username==="postgres"&&u.searchParams.get("sslmode")==="disable";
