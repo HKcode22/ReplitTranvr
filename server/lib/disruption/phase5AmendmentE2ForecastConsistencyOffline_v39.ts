@@ -63,7 +63,11 @@ export function reviewP5E2ForecastCandidateOffline(candidate:P5E2ForecastCandida
  if(candidate.stage==="PRE_DEPARTURE"){
   if(candidate.horizon!=="T-24h"&&candidate.horizon!=="T-6h"&&
      candidate.horizon!=="T-90m")hold("UNRECOGNIZED_PRE_HORIZON");
-  if(utc(candidate.cutoffUtc)!==forecastClock)hold("PRE_NOT_ISSUED_AT_OWN_CUTOFF");
+  // A genuine PRE prediction may be published BEFORE its future cutoff.
+  // Do not require exact timestamp equality: Stage14 intentionally commits
+  // inside a bounded lead window, and early forecasts are time-valid too.
+  if(forecastClock>utc(candidate.cutoffUtc))
+   hold("PRE_FORECAST_AFTER_OWN_CUTOFF");
   if(candidate.airborneTrackEvidence!==null||
      candidate.arrivalEtaUtc!==null)hold("POST_DEPARTURE_DATA_IN_PRE");
   const d=candidate.operatedFlightDelayMinutes;
