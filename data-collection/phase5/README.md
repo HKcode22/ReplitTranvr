@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — ONE Amendment E first REAL source-bound features in Stage14 CI
+
+**[Checkpoint: first source-issued FIDS origin/destination route features written by the existing Stage14 PRE SQL](2026-11-11_AMENDMENT_E_FIRST_REAL_STAGE14_BOUND_FIDS_ROUTE_FEATURES.md)**. Reuses the canonical Amendment E issued-time selector and the already-bound V0079 normalized FIDS source. The experiment persists `origin_icao` and `destination_icao` as actual `features_json` categorical observations (or explicit nulls when unavailable) in disposable PostgreSQL16, with no new provider/worker and no historical backfill. Remaining route/weather/status/history and live-source legal rights have **not** been certified. It is opt-in CI only pending actual private feature-lineage + role review; Stage14 default still `features:[]` and Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 11 — V0087 NOW LIVE; V0088 real-queue Stage14 integration under review
 
 Owner verified the **actual team Neon DB V0087 queue installed successfully** (`INERT_REAL_QUEUE_SCHEMA_INSTALLED_NO_WORKERS`; zero task rows, unchanged historic population-member trigger, runtime has no queue claims, zero paid credits). **Do not repeat V0087 install or earlier source audits.** [Read the durable owner checkpoint and Nov13/Nov20 Phase5 finish line](2026-11-11_V0087_LIVE_INSTALLED_V0088_ACTUAL_STAGE14_AND_NOV20_FINISHLINE.md). Current V0088 engineering uses the **real V0087 task queue** and original Stage14 PRE SQL with same-transaction admission and legacy-safe triggers in disposable CI, not the earlier V0084 CI-only table. A reviewed NOLOGIN function owner/grant and genuine Amendment E as-of features are still missing. **Phase5 FREEZE HOLD / Phase6 PAID GO NO.**
