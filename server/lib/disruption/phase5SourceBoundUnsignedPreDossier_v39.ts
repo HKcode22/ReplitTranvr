@@ -310,3 +310,55 @@ export function digestP5UnsignedNativePreDossier(
   hold("SIGNER_SCOPE_NOT_AN_UNSIGNED_SOURCE_DOSSIER");
  return hash(JSON.stringify(dossier));
 }
+
+/**
+ * Deterministic *unsigned* 96-entry review pages for a busy HUB. A page
+ * digest is NEVER a signed SOURCE/PRE registry SHA. The real signer must
+ * separately approve packet bytes, code, rights and each future day.
+ * This function consumes only one already observed original source,
+ * never rotates future day/calendar slots or draws future airports.
+ */
+export interface P5UnsignedNativePreReviewPage{
+ schema:"v39.phase5.unsigned-native-pre-review-page.v1";
+ status:"REVIEW_PAGE_NOT_SIGNED_PACKET_OR_PRODUCTION_REGISTRY";
+ sourceDossierSha256:string;
+ originalSourceAuditSha256:string;
+ runDayIndex:number;
+ pageIndex:number;
+ totalPages:number;
+ candidateCountInPage:number;
+ entries:P5UnsignedPreReviewEntry[];
+ signedPacketsIssued:0;
+ independentRightsCertified:false;
+ providerCalls:0;databaseWrites:0;paidPhase6GoGranted:false;
+}
+export function pageP5UnsignedNativePreReviewDossier(
+ dossier:P5UnsignedNativePreDossier
+):P5UnsignedNativePreReviewPage[]{
+ const digest=digestP5UnsignedNativePreDossier(dossier);
+ if(!Array.isArray(dossier.entries)||
+    dossier.entries.length!==dossier.candidateCount||
+    dossier.entries.length>MAX||
+    dossier.entries.some(e=>
+     !e||e.status!=="ACTUAL_SOURCE_ELIGIBLE_FOR_EXTERNAL_REVIEW_NOT_SIGNED"||
+     e.source.runDayIndex!==dossier.runDayIndex||
+     e.source.queryDigestSha256!==dossier.queryDigestSha256||
+     e.source.sourceResponseSha256===undefined))
+  hold("UNTRUSTED_UNSIGNED_REVIEW_PAGE_SOURCE_SCOPE");
+ const total=Math.ceil(dossier.entries.length/96);
+ const pages:P5UnsignedNativePreReviewPage[]=[];
+ for(let i=0;i<total;i++){
+  const entries=dossier.entries.slice(i*96,(i+1)*96);
+  pages.push({
+   schema:"v39.phase5.unsigned-native-pre-review-page.v1",
+   status:"REVIEW_PAGE_NOT_SIGNED_PACKET_OR_PRODUCTION_REGISTRY",
+   sourceDossierSha256:digest,
+   originalSourceAuditSha256:dossier.sourceAuditSha256,
+   runDayIndex:dossier.runDayIndex,pageIndex:i+1,totalPages:total,
+   candidateCountInPage:entries.length,entries,
+   signedPacketsIssued:0,independentRightsCertified:false,
+   providerCalls:0,databaseWrites:0,paidPhase6GoGranted:false
+  });
+ }
+ return pages;
+}
