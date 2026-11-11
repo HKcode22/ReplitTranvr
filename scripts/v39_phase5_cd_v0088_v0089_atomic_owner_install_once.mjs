@@ -181,7 +181,7 @@ export async function commissionP5CdV0088V0089AtomicOnce(env=process.env){
   connectionString:env.DATABASE_URL,connectionTimeoutMillis:10000,
   application_name:"phase5_cd_v0088_v0089_atomic_inert_ddl"
  });
- let connected=false,open=false,commitAttempted=false;
+ let connected=false,open=false,commitAttempted=false,stage='CONNECT';
  try{
   await c.connect();connected=true;
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");open=true;
@@ -192,18 +192,24 @@ export async function commissionP5CdV0088V0089AtomicOnce(env=process.env){
    "pg_catalog.hashtext('phase5-cd-schema-owner'),"+
    "pg_catalog.hashtext('v0088-v0089')) AS ok")).rows[0];
   if(!locked?.ok)stop("ANOTHER_CD_COMMISSION_RUNNING");
+  stage="PRECHECK";
   const baseline=await before(c,env);
+  stage="V0088";
   await c.query(v8);
   if(env.GITHUB_ACTIONS==="true" &&
      env.P5_CD_V0088_V0089_CI_INJECT_ROLLBACK_AFTER_V0088==="1")
     stop("CI_INJECTED_ROLLBACK_AFTER_V0088");
+  stage="V0089";
   await c.query(v9);
+  stage="PRECOMMIT_VERIFY";
   const verified=await after(c,baseline);
   // Changing the snapshot trigger and function ownership is one indivisible
   // COMMIT. Unknown COMMIT ACK is NEVER permission to rerun.
+  stage="COMMIT";
   commitAttempted=true;
   await c.query("COMMIT");open=false;
   // Independent readback AFTER acknowledged COMMIT.
+  stage="POSTCOMMIT_VERIFY";
   await after(c,baseline);
   return {
    schema:"v39.phase5.cd-v0088-v0089-inert-atomic-owner-commission.v1",
@@ -219,6 +225,15 @@ export async function commissionP5CdV0088V0089AtomicOnce(env=process.env){
    phase5ScientificFreezePassed:false,phase6PaidGo:false
   };
  }catch(e){
+  if(env.GITHUB_ACTIONS==="true"&&
+     env.P5_CD_V0088_V0089_DISPOSABLE_CI==="1"&&env.DATABASE_URL===LOCAL){
+    const sqlstate=typeof e?.code==="string"&&/^[0-9A-Z]{5}$/.test(e.code)?
+     e.code:"UNKNOWN";
+    const safe=typeof e?.message==="string"?
+      e.message.replace(/[^a-zA-Z0-9_.: -]/g," ").slice(0,150):"";
+    console.error("CI_ONLY_ATOMIC_INSTALL_STAGE_"+stage+
+      "_SQLSTATE_"+sqlstate+" "+safe);
+  }
   if(open&&!commitAttempted){
    const rollback=await c.query("ROLLBACK").then(()=>true).catch(()=>false);
    if(!rollback)
