@@ -58,7 +58,7 @@ export async function persistP5CPlusDStage14WithConfirmedAbortRetry(
  maxVerifiedAbortRetries=6
 ):Promise<{
  saved:P5Stage14SingleFlightPreResult;
- acknowledgedPrecommitSerializationRetries:number;
+ acknowledged40001AbortRetries:number;
  finalLiveQueueLeaseAuthenticatedByThisFunction:false;
  liveDbBenchmark:false;
  phase6PaidGo:false;
@@ -86,7 +86,7 @@ export async function persistP5CPlusDStage14WithConfirmedAbortRetry(
    if(!(await currentLeaseOwned()))
     hold("POST_COMMIT_LEASE_LOST_QUARANTINE_NO_RETRY");
    return{
-    saved,acknowledgedPrecommitSerializationRetries:retries,
+    saved,acknowledged40001AbortRetries:retries,
     finalLiveQueueLeaseAuthenticatedByThisFunction:false,
     liveDbBenchmark:false,phase6PaidGo:false
    };
