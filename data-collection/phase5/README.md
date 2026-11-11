@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — V0088/V0089 one-transaction production-safe commissioning candidate
+
+**[READ: atomic owner installer, non-superuser role verification, deliberate PostgreSQL rollback and PRE-versus-POST compatibility checkpoint](2026-11-11_V0088_V0089_ATOMIC_OWNER_INSTALLER_AND_PRE_POST_COMPAT_CHECKPOINT.md).** Existing V0087 queue was successfully installed live INERT (0 tasks, no paid calls). PR #576 corrected real PostgreSQL16 CREATEROLE/SET FALSE function-owner behavior. An explicitly owner-run, hash-pinned installer now applies **V0088 + V0089 in the same transaction** rather than leaving a partial privileged trigger after an error; CI deliberately fails after V0088 to prove rollback, then exercises a non-superuser commit and safe repeat HOLD. PRE guards are scoped to PRE so legitimate POST observations remain compatible; unauthorized POST-to-PRE promotion is blocked. **New installer remains uncommissioned until exact PR-head CI passes and owner executes it. No worker credentials or paid operations; Phase5 FREEZE HOLD / Phase6 paid GO NO.**
+
+
 ## November 11 — Important V0089 real PG16 owner transfer correction
 
 **[Read: why a non-superuser PG16 `CREATEROLE` session needs a temporary `SET ROLE` grant before transferring `SECURITY DEFINER` ownership](2026-11-11_V0089_PG16_NON_SUPERUSER_ROLE_TRANSFER_AND_RELEASE_BLOCKER.md).** PR #574's staged V0089 passed superuser CI, but live `neondb_owner` is not assumed to be a superuser. A new non-superuser disposable PG16 test verifies the transactional temporary SET grant, grants-before-transfer ordering, exact NOLOGIN guard owner and no lingering worker/direct privileges. **No V0088/V0089 live activation yet.** V0087 live inert installation confirmed; do not re-run it. Phase5 FREEZE HOLD / Phase6 paid GO NO.
