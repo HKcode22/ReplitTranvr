@@ -1,0 +1,55 @@
+name: Phase5 C+D all-user-schemas metadata classification (offline only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-all-schemas-catalog-classifier-offline.yml'
+      - 'scripts/v39_phase5_cd_all_schemas_privilege_readonly_once.mjs'
+permissions:
+  contents: read
+jobs:
+  bounded-metadata-classifier-no-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Parse source without contacting DB or providers
+        run: node --check scripts/v39_phase5_cd_all_schemas_privilege_readonly_once.mjs
+      - name: Reject false queue detection and accept bounded task roles
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          test "$ADB_AUTO_COLLECT" = 0
+          node --input-type=module <<'NODE'
+          import { classifyP5CDTaskCatalogCandidate as check } from './scripts/v39_phase5_cd_all_schemas_privilege_readonly_once.mjs';
+          const r=check('clean','phase5_fids_seven_rest_release_v39',[
+            'manifest_sha256','frozen_at_utc','reviewed_provider_range_sha256'
+          ]);
+          if(r.candidate)throw Error('RELEASE_METADATA_FALSE_QUEUE');
+          const q=check('ops','flight_pre_task_queue',[
+            'flight_instance_id','horizon','lease_owner','lease_until',
+            'status','generation'
+          ]);
+          if(!q.candidate||q.actuallyConfirmedReusableQueue!==false)
+            throw Error('QUEUE_CANDIDATE_CLASSIFICATION_UNTRUSTED');
+          const odd=check('clean','some_opaque_registry',[
+            'flight_instance_id','lease_owner','lease_until','status'
+          ]);
+          if(!odd.candidate)throw Error('OPAQUE_QUEUE_METADATA_NOT_FOUND');
+          console.log('P5_CD_ALL_SCHEMAS_BOUNDED_METADATA_CLASSIFIER_OFFLINE_PASS');
+          NODE
