@@ -60,7 +60,8 @@ describe("Amendment E2: research-only PRE vs AIRBORNE mathematical as-of consist
  });
  it("allows real PRE forecast issuance earlier than its cutoff, but never after it",()=>{
   const early=reviewP5E2ForecastCandidateOffline({
-   ...pre,issuedAtUtc:"2027-02-11T11:58:00.000Z"
+   ...pre,issuedAtUtc:"2027-02-11T11:58:00.000Z",
+   maxInputAvailableAtUtc:"2027-02-11T11:57:56.000Z"
   });
   expect(early.stage).toBe("PRE_DEPARTURE");
   expect(()=>reviewP5E2ForecastCandidateOffline({
