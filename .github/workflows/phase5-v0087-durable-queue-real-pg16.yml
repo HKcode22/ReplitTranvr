@@ -6,6 +6,8 @@ on:
       - '.github/workflows/phase5-v0087-durable-queue-real-pg16.yml'
       - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'
       - 'tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts'
+      - 'tests/phase5_cd_durable_queue_client_offline_v39.test.ts'
+      - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
       - 'scripts/v39_phase5_cd_v0087_inert_owner_install_once.mjs'
 permissions:
   contents: read
@@ -74,5 +76,5 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npx --no-install vitest run tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts
+          npx --no-install vitest run tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts tests/phase5_cd_durable_queue_client_offline_v39.test.ts
           echo 'P5_CD_V0087_DURABLE_QUEUE_PG16_PASS_NO_PROVIDER'
