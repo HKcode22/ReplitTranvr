@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — V0087 NOW LIVE; V0088 real-queue Stage14 integration under review
+
+Owner verified the **actual team Neon DB V0087 queue installed successfully** (`INERT_REAL_QUEUE_SCHEMA_INSTALLED_NO_WORKERS`; zero task rows, unchanged historic population-member trigger, runtime has no queue claims, zero paid credits). **Do not repeat V0087 install or earlier source audits.** [Read the durable owner checkpoint and Nov13/Nov20 Phase5 finish line](2026-11-11_V0087_LIVE_INSTALLED_V0088_ACTUAL_STAGE14_AND_NOV20_FINISHLINE.md). Current V0088 engineering uses the **real V0087 task queue** and original Stage14 PRE SQL with same-transaction admission and legacy-safe triggers in disposable CI, not the earlier V0084 CI-only table. A reviewed NOLOGIN function owner/grant and genuine Amendment E as-of features are still missing. **Phase5 FREEZE HOLD / Phase6 PAID GO NO.**
+
+
 ## November 11 — CREATE missing durable C+D per-flight PRE queue (V0087)
 
 **[READ: actual staged SQL table and 4 queue functions, 100-task disposable PG16 CI, and next inert Neon installation steps](2026-11-11_V0087_REAL_DURABLE_FLIGHT_QUEUE_IMPLEMENTATION_AND_NEXT_STEPS.md).** Owner clarified that prior code/Phase1–5 pipelines must be reused, but a nonexistent per-flight task queue should simply be created. V0087 adds the durable **flight × horizon** immutable registration, DB-clock claims/leases/fencing generations, write-start UNKNOWN quarantine, source expiry, cutoff missedness, signed after-COMMIT receipt matching and a bounded reaper. It does not replace Stage14, authorize paid work or install any experimental V0084–86 trigger in Neon. Real migration remains staged until exact-head CI and owner-run inert installation; no live schema-change claim yet. **Phase5 FREEZE HOLD / Phase6 paid GO NO.**

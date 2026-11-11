@@ -150,6 +150,51 @@ async function assertP5CdSameTxGuard(
   hold("CD_SAME_TRANSACTION_QUEUE_LOCK_PROOF_MISSING");
 }
 
+/** V0088: the REAL V0087 task table, DISPOSABLE PG16 integration only.
+ * A separate audited owner/role release is required for actual live use.
+ */
+export type P5CdV0088RealQueueCiFence=P5CdDisposableQueueFence;
+function assertP5CdV0088CiFence(f:P5CdV0088RealQueueCiFence|undefined){
+ const enabled=process.env.V39_P5_CD_V0088_STAGE14_CI==="1";
+ if(!enabled&&f!==undefined)
+  hold("V0088_REAL_QUEUE_FENCE_NOT_APPROVED_OUTSIDE_DISPOSABLE_CI");
+ if(!enabled)return;
+ if(process.env.GITHUB_ACTIONS!=="true"||
+   process.env.DATABASE_URL!==
+    "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"||
+   process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
+   process.env.ADB_AUTO_COLLECT!=="0"||
+   process.env.AERODATABOX_API_KEY||
+   process.env.AERODATABOX_WEBHOOK_SECRET||
+   process.env.V39_P5_CD_STAGE14_FENCE_DISPOSABLE==="1"||
+   process.env.P5_V39_PRE_DATABASE_URL||
+   process.env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL)
+  hold("V0088_REAL_QUEUE_REQUIRES_NO_PROVIDER_LOCAL_CI_ONLY");
+ if(!f||!/^[1-9][0-9]{0,17}$/.test(f.taskId??"")||
+    typeof f.owner!=="string"||
+    !/^[a-zA-Z0-9_.:-]{5,96}$/.test(f.owner)||
+    !(typeof f.generation==="string"?
+      /^[1-9][0-9]{0,18}$/.test(f.generation):
+      Number.isSafeInteger(f.generation)&&f.generation>=1)||
+    !SHA.test(f.packetSha256??""))
+  hold("V0088_REAL_QUEUE_CLAIM_FIELDS_INVALID");
+}
+async function assertP5CdV0088RealSameTx(
+ c:PoolClient,p:P5Stage14SingleFlightPrePermit,
+ f:P5CdV0088RealQueueCiFence,cutoff:Date){
+ const result=await c.query(
+  "SELECT clean.phase5_cd_admit_stage14_pre_v39("+
+  "$1::bigint,$2,$3::bigint,$4,$5,$6,$7,"+
+  "$8::timestamptz,$9::timestamptz,$10,$11,$12) AS ok",
+  [f.taskId,f.owner,f.generation,f.packetSha256,
+   p.manifestSha256,p.flightInstanceId,p.horizon,
+   p.selectedTNativeUtc,cutoff.toISOString(),
+   p.expectedSourcePopulationQueryId,p.expectedSourceResponseSha256,
+   p.expectedReviewedSourceRightsSha256]);
+ if(result.rowCount!==1||result.rows[0]?.ok!==true)
+  hold("V0088_REAL_QUEUE_SAME_TX_PROOF_NOT_VERIFIED");
+}
+
 export interface P5Stage14SingleFlightPreResult{
  schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1";
  status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE";
@@ -377,9 +422,11 @@ export async function persistP5V0079SingleBoundFlightPre(
  options?:{
   independentlyApprovedStandaloneProtocolSha256?:string;
   disposableCdQueueFence?:P5CdDisposableQueueFence;
+  realV0088QueueFenceCi?:P5CdV0088RealQueueCiFence;
  }
 ):Promise<P5Stage14SingleFlightPreResult>{
  assertP5CdDisposableFenceArguments(options?.disposableCdQueueFence);
+ assertP5CdV0088CiFence(options?.realV0088QueueFenceCi);
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
@@ -426,6 +473,8 @@ export async function persistP5V0079SingleBoundFlightPre(
   // Claim/reclaim UPDATE must wait; stale generation cannot write.
   if(options?.disposableCdQueueFence)
    await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
+  if(options?.realV0088QueueFenceCi)
+   await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceCi,cutoff);
   const sources=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,
    [p.manifestSha256,p.queryDigestSha256])).rows as Record<string,unknown>[];
   if(sources.length!==1)hold("NO_UNIQUE_BOUND_PROVIDER_SOURCE");
@@ -513,6 +562,8 @@ export async function persistP5V0079SingleBoundFlightPre(
   // The earlier FOR UPDATE lock remains held; reclaimer cannot race us.
   if(options?.disposableCdQueueFence)
    await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
+  if(options?.realV0088QueueFenceCi)
+   await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceCi,cutoff);
   commitAttempted=true;
   await c.query("COMMIT");begun=false;commitAcknowledged=true;
   // Before-COMMIT clock is NOT durable-commit evidence. Confirm the
