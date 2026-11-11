@@ -41,7 +41,7 @@ function source(path,sha,kind){
  const bytes=readFileSync(path);
  const txt=bytes.toString("utf8");
  if(gitBlob(bytes)!==sha||bytes.length<2500||bytes.length>25000||
-    !txt.startsWith("-- "+kind+":")||
+    !(txt.startsWith("-- "+kind+":")||txt.startsWith("-- "+kind+" "))||
     (txt.match(/^BEGIN;$/gm)||[]).length!==1||
     (txt.match(/^COMMIT;$/gm)||[]).length!==1||
     !txt.trimEnd().endsWith("COMMIT;"))stop("REVIEWED_SQL_GIT_BLOB_OR_TX_WRAPPER_CHANGED");
