@@ -4,6 +4,7 @@ import {planP5BoundedSignedLaterPreBatch}
  from "../server/lib/disruption/phase5BoundedSignedLaterPreBatchPlan_v39";
 import {admitP5BoundLaterBatchOwnerEnv,
  verifyP5BatchNoPriorGithubAttempt,
+ refuseP5BoundBatchEarlierSingleFlightAttempts,
  executeP5BoundedLaterBatchNoRetry,
  type P5BoundedBatchReadyEntry,type P5BoundLaterBatchEvent}
  from "../scripts/v39_phase5_bounded_signed_later_pre_batch_owner_v39";
@@ -139,6 +140,24 @@ describe("bounded Stage14 signed future multi-flight PRE owner",()=>{
    [{...current,display_title:"unknown legacy name"}],
    "42899999999",nonce))
    .toThrow("CURRENT_BATCH_RUN_NAME_NOT_INDEPENDENTLY_PINNED");
+ });
+ it("cross-checks existing single-flight GH workflow attempts, including FAILED",()=>{
+  const p1=entry(1).filePath,p2=entry(2).filePath;
+  expect(refuseP5BoundBatchEarlierSingleFlightAttempts([],[
+   p1,p2]).verifiedNoEarlierSingleFlightPacketAttempt).toBe(true);
+  expect(()=>refuseP5BoundBatchEarlierSingleFlightAttempts(
+   [{id:42899999998,display_title:"P5 LATER PRE "+p1}],
+   [p1,p2])).toThrow("EARLIER_SINGLE_FLIGHT_PACKET_ATTEMPT_NO_RETRY");
+  expect(refuseP5BoundBatchEarlierSingleFlightAttempts(
+   [{id:42899999998,display_title:"P5 LATER PRE "+entry(9).filePath}],
+   [p1,p2]).boundedGithubHistoryRunCount).toBe(1);
+  expect(()=>refuseP5BoundBatchEarlierSingleFlightAttempts(
+   [{id:42899999998,display_title:"legacy unknown GitHub title"}],
+   [p1,p2])).toThrow("UNKNOWN_OLDER_SINGLE_FLIGHT_GITHUB_RUN_NEEDS_REVIEW");
+  expect(()=>refuseP5BoundBatchEarlierSingleFlightAttempts(
+   [{id:42899999998,display_title:"P5 LATER PRE "+p1},
+    {id:42899999998,display_title:"P5 LATER PRE "+p2}],
+   [p1,p2])).toThrow();
  });
  it("retains earliest own PRE cutoff then path order",()=>{
   const a=entry(9,1),b=entry(2),c=entry(4,1);
