@@ -191,6 +191,9 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     " NOSUPERUSER NOCREATEDB NOCREATEROLE");
    await admin.query("GRANT USAGE ON SCHEMA clean TO "+LEGACY_ROLE);
    await admin.query("GRANT SELECT,INSERT ON clean.flight_snapshots TO "+LEGACY_ROLE);
+   // The pre-existing population-member attachment trigger is INVOKER
+   // security: even the old writer needs SELECT on flight_population.
+   await admin.query("GRANT SELECT ON clean.flight_population TO "+LEGACY_ROLE);
    await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+LEGACY_ROLE);
    legacy=new Pool({
     connectionString:LOGIN_URL.replace(ROLE,LEGACY_ROLE),max:2
