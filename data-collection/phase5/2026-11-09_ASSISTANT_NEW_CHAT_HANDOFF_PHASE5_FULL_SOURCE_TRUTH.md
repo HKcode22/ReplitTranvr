@@ -1,8 +1,18 @@
 # Phase 5 — definitive new-chat technical-lead recovery checkpoint
 
-## Nov 10 — real SOURCE originals → native flight candidate review (NEW, IN REVIEW)
+## Nov 10 — bounded signed 8-flight T−6h/T−90m PRE batch owner (IN REVIEW, DEFAULT OFF)
 
-[Read-only real SOURCE/normalized flight-member audit checkpoint](2026-11-10_REAL_SOURCE_POSTCOMMIT_NATIVE_FLIGHT_CANDIDATE_AUDIT_CHECKPOINT.md): new true-PG16 PRE-only restricted-role reviewer of already persisted SOURCE FIDS original and all normalized members, per-flight prospective cutoff, as-of timestamp, native scheduled-T and censor classifications. Default-OFF manual GitHub nonpaid mode; no provider key, raw content logging, provider rights certification, PRE packet signing, Phase5 FREEZE or Phase6 GO. Distinct actual future packet generator, rolling signer/registry publisher and throughput remain [issue #553](https://github.com/HKcode22/ReplitTranvr/issues/553), not yet done. PR exact-head CI and merge pending; Phase5 HOLD/Phase6 paid GO NO.
+[Checkpoint: manual signed PRE batch reuses Stage14, with GH one-time nonce and stop-on-uncertain-COMMIT](2026-11-10_BOUNDED_EIGHT_FLIGHT_T6_T90_BATCH_OWNER_REVIEW_CHECKPOINT.md). Bounded 1–8 existing signed SOURCE-day-linked true native operating legs, selected own cutoffs clustered within 2min and 15–75min after true DB clock, independent per-flight Stage14 serializable POST-COMMIT PRE proof. No cron or provider key. Extra protected approval and one-time nonce; GH prior identical batch run (including FAILED) HOLD. **Still no genuine future packet signer or automatic rolling 31-day day-shard publication; not yet CI reviewed or merged.** No Replit shell needed; FREEZE HOLD / Phase6 paid GO NO.
+
+## Nov 10 — PRs #555 and #556 completed and tested (not live)
+
+[PR #555 true SOURCE post-COMMIT native flight candidate reviewer](https://github.com/HKcode22/ReplitTranvr/pull/555) MERGED main `d2b40ec1bc47cc559e2d8aa0773fbde9142b3feb`, all 5 exact-head checks PASS including [V3.9 full offline safety #42854208716](https://github.com/HKcode22/ReplitTranvr/actions/runs/42854208716). Real PRE-only SQL READ ONLY candidate + per-flight censored missingness code is present, but production reviewer has **not** been dispatched and cannot itself approve Contents rights or issue a signed packet.
+
+[PR #556 actual GH request-capacity upper bound](https://github.com/HKcode22/ReplitTranvr/pull/556) MERGED main `c96bb789f791ad9a2a42bffa5570fc31d4036b44`, all 5 exact-head checks PASS including [V3.9 full offline safety #42854407867](https://github.com/HKcode22/ReplitTranvr/actions/runs/42854407867). Existing #552 controller <=4 later PRE child requests / 10min, theoretical 24/hour **requests**, not completed PRE snapshots. Unresolved independently prospective signer/day rotation, optional bounded batch if reviewed, actual POST/receiver/STOP, permitted source-use/target, physical budgets and freeze. Track in [P0 issue #553](https://github.com/HKcode22/ReplitTranvr/issues/553).
+
+## Nov 10 — real SOURCE originals → native flight candidate review (PR #555 MERGED; initial review snapshot)
+
+[Read-only real SOURCE/normalized flight-member audit checkpoint](2026-11-10_REAL_SOURCE_POSTCOMMIT_NATIVE_FLIGHT_CANDIDATE_AUDIT_CHECKPOINT.md): new true-PG16 PRE-only restricted-role reviewer of already persisted SOURCE FIDS original and all normalized members, per-flight prospective cutoff, as-of timestamp, native scheduled-T and censor classifications. Default-OFF manual GitHub nonpaid mode; no provider key, raw content logging, provider rights certification, PRE packet signing, Phase5 FREEZE or Phase6 GO. Distinct actual future packet generator, rolling signer/registry publisher and throughput remain [issue #553](https://github.com/HKcode22/ReplitTranvr/issues/553), not yet done. PR #555 exact-head CI completed 5/5 PASS and merged; live real-source review not run. Phase5 HOLD/Phase6 paid GO NO.
 
 ## November 10 — SOURCE-day-linked multi-flight T−6h/T−90m registry MERGED; no paid GO
 
