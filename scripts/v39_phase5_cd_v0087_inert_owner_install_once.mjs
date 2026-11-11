@@ -45,7 +45,7 @@ async function run(){
   connectionString:uri,connectionTimeoutMillis:8000,
   application_name:"phase5_cd_v0087_create_inert_schema_only"
  });
- let connected=false;let ro=false;
+ let connected=false;let ro=false;let schemaCommitted=false;
  try{
   await c.connect();connected=true;
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -78,6 +78,7 @@ async function run(){
   // SIMPLE query protocol (no query parameters) for multi-statements.
   // Any SQL failure before COMMIT leaves the new objects uninstalled.
   await c.query(sql);
+  schemaCommitted=true;
   const after=(await c.query(
    "SELECT to_regclass('clean.phase5_cd_pre_task_v39') IS NOT NULL AS installed,"+
    "(SELECT count(*)::integer FROM clean.phase5_cd_pre_task_v39) AS rows,"+
@@ -112,7 +113,10 @@ async function run(){
   },null,2));
  }catch{
   if(ro)await c.query("ROLLBACK").catch(()=>{});
-  console.error(NO);
+  // A post-COMMIT ACL or legacy-trigger mismatch is a HOLD requiring
+  // review, NOT evidence that the schema rolled back. Never auto-rerun it.
+  console.error(schemaCommitted?
+    "HOLD_P5_CD_V0087_SCHEMA_MAY_EXIST_POSTCOMMIT_REVIEW_NO_RERUN":NO);
   process.exitCode=2;
  }finally{
   if(connected)await c.end().catch(()=>{});
