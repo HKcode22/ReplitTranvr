@@ -1,0 +1,48 @@
+name: Phase5 actual SOURCE unsigned native PRE review dossier (OFFLINE ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-source-to-unsigned-native-pre-dossier-offline.yml'
+      - 'server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts'
+      - 'tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_ACTUAL_SOURCE_TO_UNSIGNED_PRE_REVIEW_DOSSIER_CHECKPOINT.md'
+permissions:
+  contents: read
+jobs:
+  unsigned-review-projection-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Only project simulated actual SOURCE audit into UNSIGNED independent-review packet dockets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts
+          echo 'NO_PROVIDER_NO_REAL_SOURCE_PUBLISH_NO_PACKET_SIGNING_NO_PAID_GO'
