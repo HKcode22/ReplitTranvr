@@ -98,6 +98,45 @@ export interface P5Stage14SingleFlightPrePermit{
  expectedDestinationIcao?:string;
  externalConditionalScheduleSourceAndUseReviewed?:true;
 }
+/** Experimental isolated PostgreSQL16 C+D claim evidence. NOT a production
+ * queue permit. The real source-rights/role/lease security review is separate.
+ */
+export interface P5CdDisposableQueueFence{
+ taskId:string;owner:string;generation:number;packetSha256:string;
+}
+function assertP5CdDisposableFenceArguments(f:P5CdDisposableQueueFence|undefined){
+ const required=process.env.V39_P5_CD_STAGE14_FENCE_DISPOSABLE==="1";
+ if(!required&&f!==undefined)
+  hold("CD_FENCE_NOT_AN_APPROVED_PRODUCTION_ENTRYPOINT");
+ if(!required)return;
+ if(process.env.GITHUB_ACTIONS!=="true"||
+    process.env.ADB_AUTO_COLLECT!=="0"||
+    process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
+    process.env.AERODATABOX_API_KEY||
+    process.env.AERODATABOX_WEBHOOK_SECRET||
+    process.env.DATABASE_URL!==
+      "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable")
+  hold("CD_FENCE_REQUIRES_LOCAL_CI_ONLY_NO_PAID_PROVIDER");
+ if(!f||!/^[1-9][0-9]{0,17}$/.test(f.taskId??"")||
+    typeof f.owner!=="string"||
+    !/^[a-zA-Z0-9_.:-]{5,96}$/.test(f.owner)||
+    !Number.isSafeInteger(f.generation)||f.generation<1||
+    !SHA.test(f.packetSha256??""))
+  hold("CD_FENCE_CLAIM_ARGUMENTS_MISSING_OR_UNREVIEWED");
+}
+async function assertP5CdSameTxGuard(
+ c:PoolClient,p:P5Stage14SingleFlightPrePermit,
+ f:P5CdDisposableQueueFence,cutoff:Date){
+ const proof=await c.query(
+  "SELECT p5_cd_stage14_ci.assert_write_fence("+
+  "$1::bigint,$2,$3,$4::timestamptz,$5::timestamptz,"+
+  "$6,$7,$8::bigint) AS ok",
+  [f.taskId,p.flightInstanceId,p.horizon,p.selectedTNativeUtc,
+   cutoff.toISOString(),f.packetSha256,f.owner,f.generation]);
+ if(proof.rowCount!==1||proof.rows[0]?.ok!==true)
+  hold("CD_SAME_TRANSACTION_QUEUE_LOCK_PROOF_MISSING");
+}
+
 export interface P5Stage14SingleFlightPreResult{
  schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1";
  status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE";
@@ -322,8 +361,12 @@ function due(cutoff:Date,now:Date){
  */
 export async function persistP5V0079SingleBoundFlightPre(
  pool:Pick<Pool,"connect">,p:P5Stage14SingleFlightPrePermit,
- options?:{independentlyApprovedStandaloneProtocolSha256:string}
+ options?:{
+  independentlyApprovedStandaloneProtocolSha256?:string;
+  disposableCdQueueFence?:P5CdDisposableQueueFence;
+ }
 ):Promise<P5Stage14SingleFlightPreResult>{
+ assertP5CdDisposableFenceArguments(options?.disposableCdQueueFence);
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
@@ -365,6 +408,11 @@ export async function persistP5V0079SingleBoundFlightPre(
   // duplicate or an accidental revised-T PRE.
   await c.query("SELECT pg_advisory_xact_lock(hashtext('p5-one-flight-pre'),"+
    "hashtext($1))",[p.flightInstanceId+"|"+p.horizon]);
+  // C+D proof: take and keep the exact task-row fence lock in this SAME
+  // SERIALIZABLE transaction before any PRE source read / INSERT.
+  // Claim/reclaim UPDATE must wait; stale generation cannot write.
+  if(options?.disposableCdQueueFence)
+   await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
   const sources=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,
    [p.manifestSha256,p.queryDigestSha256])).rows as Record<string,unknown>[];
   if(sources.length!==1)hold("NO_UNIQUE_BOUND_PROVIDER_SOURCE");
@@ -448,6 +496,10 @@ export async function persistP5V0079SingleBoundFlightPre(
   due(cutoff,immediatelyBeforeCommit);
   if(immediatelyBeforeCommit.getTime()+COMMIT_MARGIN_MS>cutoff.getTime())
    hold("PRE_COMMIT_MARGIN_NOT_PROTECTED");
+  // Lease must STILL be live immediately before committing the snapshot.
+  // The earlier FOR UPDATE lock remains held; reclaimer cannot race us.
+  if(options?.disposableCdQueueFence)
+   await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
   commitAttempted=true;
   await c.query("COMMIT");begun=false;commitAcknowledged=true;
   // Before-COMMIT clock is NOT durable-commit evidence. Confirm the
