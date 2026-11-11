@@ -1,0 +1,65 @@
+name: Phase5 C+D atomic claim lease fencing disposable PG16 (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cplusd-disposable-queue-lease-real-pg16.yml'
+      - 'tests/phase5_cplusd_disposable_pg16_queue_lease_fencing_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  disposable-task-queue-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_CD_DISPOSABLE_PG16: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove only disposable local PG16 and no paid provider
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_P5_CD_DISPOSABLE_PG16" = 1
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          echo 'P5_CD_DISPOSABLE_PG16_ONLY_NO_PAID_PROVIDER'
+      - name: Test atomic concurrent claims, stale fence and unknown COMMIT hold
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_cplusd_disposable_pg16_queue_lease_fencing_v39.test.ts
+          echo 'P5_CD_REAL_PG16_QUEUE_ONLY_NO_STAGE14_BENCHMARK_NO_PRODUCTION_WRITES'
