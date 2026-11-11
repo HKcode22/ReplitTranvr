@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — Broad metadata-only production queue/role audit after merged PR #568
+
+After the **V0085 CI-only no-bypass Stage14 trigger/receipt test was merged** (PR #568), the next actual *owner evidence* gap is whether a queue exists in a different PostgreSQL user schema and which existing writers/roles can insert into `clean.flight_snapshots`. The earlier 17-table read-only catalog covered selected `clean` tables, not all user schemas. **[Read new owner checkpoint and no-payload all-schema catalog plan](2026-11-11_CD_ALL_USER_SCHEMAS_METADATA_AUDIT_OWNER_CHECKPOINT.md).** A single isolated Replit read-only script is staged with pure classifier tests; it does **not** call AeroDataBox, read flight source rows, install SQL, or authorize Phase6. **FREEZE HOLD / paid GO NO.**
+
+
 ## November 11 — Stage14 NO-BYPASS transactional admission (V0085 DISPOSABLE-ONLY)
 
 **[Read next Phase 5 checkpoint: C+D mandatory SQL admission receipt, direct-INSERT bypass refusal, PG16 official sources, and Amendment E open work](2026-11-11_V0085_CD_MANDATORY_TRANSACTION_ADMISSION_AND_E_NEXT_CHECKPOINT.md).** After PR #567's verified CI-only lease-lock success, a new separately tested V0085 migration adds a **BEFORE INSERT database trigger** and an exact per-task **same-transaction receipt** to prove that a restricted PRE role cannot bypass queue admission by inserting directly. This remains **disposable PostgreSQL16 only, not an installed production schema**. No new paid ADSB service, provider calls, cloud runtime, or Phase6 activation. Production still requires independent role/permissions/source-rights approval, a no-bypass migration compatible with historical writers, authentic Amendment E source features and a complete automatic GitHub controller. **Phase5 FREEZE HOLD / Phase6 paid GO NO.**
