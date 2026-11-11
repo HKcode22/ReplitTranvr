@@ -16,7 +16,7 @@ CREATE TABLE clean.phase5_cd_pre_task_v39 (
   manifest_sha256 text NOT NULL CHECK(manifest_sha256 ~ '^[0-9a-f]{64}$'),
   flight_instance_id text NOT NULL
     CHECK(length(flight_instance_id) BETWEEN 5 AND 200
-      AND flight_instance_id ~ '^[A-Za-z0-9_.:|\-]+$'),
+      AND flight_instance_id ~ '^[A-Za-z0-9_.:|-]+$'),
   horizon text NOT NULL CHECK(horizon IN ('T-24h','T-6h','T-90m')),
   selected_native_t_utc timestamptz NOT NULL,
   prediction_cutoff_utc timestamptz NOT NULL,
@@ -159,7 +159,7 @@ CREATE FUNCTION clean.phase5_cd_claim_due_v39(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
 AS $claim$
 BEGIN
- IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:\-]{5,96}$'
+ IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:-]{5,96}$'
     OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 16
     OR p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 15 AND 120
  THEN RAISE EXCEPTION 'P5_CD_QUEUE_CLAIM_ARGUMENTS_INVALID'; END IF;
@@ -414,7 +414,7 @@ CREATE FUNCTION clean.phase5_cd_claim_due_v39(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
 AS $claim$
 BEGIN
- IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:\-]{5,96}$'
+ IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:-]{5,96}$'
     OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 16
     OR p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 15 AND 120
  THEN RAISE EXCEPTION 'P5_CD_QUEUE_CLAIM_ARGUMENTS_INVALID'; END IF;
@@ -755,7 +755,7 @@ CREATE FUNCTION clean.phase5_cd_claim_due_v39(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp
 AS $claim$
 BEGIN
- IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:\-]{5,96}$'
+ IF p_owner IS NULL OR p_owner !~ '^[A-Za-z0-9_.:-]{5,96}$'
     OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 16
     OR p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 15 AND 120
  THEN RAISE EXCEPTION 'P5_CD_QUEUE_CLAIM_ARGUMENTS_INVALID'; END IF;
