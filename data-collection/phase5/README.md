@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — V0088+V0089 one-transaction, no-partial-security owner installer
+
+**[Atomic owner installer and Phase5/6 handoff checkpoint](2026-11-11_V0088_V0089_ATOMIC_LIVE_COMMISSION_OWNER_CHECKPOINT.md).** After the successful owner-installed live V0087 queue and merged staged V0088 real Stage14 guard, V0089 dedicated NOLOGIN function-owner test and first Amendment E PRE FIDS features, this increment provides a single SHA-pinned Replit installer to commission BOTH V0088 and V0089 inside **one PostgreSQL SERIALIZABLE transaction**. It preserves the historic snapshot trigger, checks queue empty and dedicated PRE group, requires exact role/ACL, prevents partially exposed privileged functions, makes no paid GET or worker dispatch, and distinguishes pre-commit rollback from post-commit UNKNOWN. Do not execute until exact CI passes and approved pins are provided. **No human overnight operation, Phase5 FREEZE HOLD / Phase6 paid GO NO.**
+
+
 ## November 11 — V0089 reuse Phase5 PRE NOLOGIN group for actual C+D SQL guard
 
 **[Read V0089 dedicated NOLOGIN function-owner/role checkpoint and exact next release steps](2026-11-11_V0089_NOLOGIN_GUARD_OWNER_AND_PRE_ROLE_RELEASE_CHECKPOINT.md).** Live V0087 queue was installed by owner, zero tasks/no worker grants. PR #572 merged true V0087→Stage14 same-transaction source-bound admission (CI), and PR #573 merged first actually persisted Amendment E categorical FIDS features (CI). V0089 now tests transferring the staged V0088 SECURITY DEFINER guard+scoped snapshot triggers to one new **NOLOGIN least-privilege owner**, with only the existing Phase5 restricted PRE group granted guard EXECUTE; old runtime and source identities remain excluded. **No live V0088/V0089 installation yet, no paid Phase6, no new PRE login.** Nov13/Nov20 are engineering targets rather than approvals.
