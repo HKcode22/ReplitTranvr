@@ -143,9 +143,9 @@ async function after(c,before){
   "SELECT tgname,tgenabled FROM pg_catalog.pg_trigger"+
   " WHERE tgrelid='clean.flight_snapshots'::regclass AND NOT tgisinternal"
  )).rows);
- const expected=normTrigger([
+ const expected=[
   ...beforeTriggers,...NEW_TRIGGERS.map(name=>({name,enabled:"O"}))
- ]);
+ ].sort((a,b)=>a.name.localeCompare(b.name));
  if(!r||!r.receipt||r.task_rows!==0||r.receipt_rows!==0||
     r.guard_function_owner!==GUARD_OWNER||!r.pre_guard_execute||
     r.pre_queue_update||r.pre_receipt_select||r.guard_create||
