@@ -154,12 +154,41 @@ export function verifyP5BatchNoPriorGithubAttempt(
   sourceRightsOrPaidGoCertifiedHere:false as const
  };
 }
+export function refuseP5BoundBatchEarlierSingleFlightAttempts(
+ history:readonly P5SignedBatchHistoryRun[],selectedPaths:readonly string[]
+){
+ if(!Array.isArray(history)||history.length>1000||
+    !Array.isArray(selectedPaths)||selectedPaths.length<1||
+    selectedPaths.length>8||
+    selectedPaths.some(x=>!FILE.test(x)))
+  hold("UNBOUNDED_OR_UNSIGNED_SINGLE_FLIGHT_REPLAY_SCOPE");
+ const paths=new Set(selectedPaths),seen=new Set<number>();
+ for(const run of history){
+  if(!run||!Number.isSafeInteger(run.id)||run.id<1||
+     seen.has(run.id)||typeof run.display_title!=="string")
+   hold("MALFORMED_SINGLE_FLIGHT_GITHUB_HISTORY");
+  seen.add(run.id);
+  const prefix="P5 LATER PRE ";
+  if(!run.display_title.startsWith(prefix))
+   hold("UNKNOWN_OLDER_SINGLE_FLIGHT_GITHUB_RUN_NEEDS_REVIEW");
+  const path=run.display_title.slice(prefix.length);
+  if(!FILE.test(path))
+   hold("UNIDENTIFIABLE_OLDER_SINGLE_FLIGHT_PACKET_ATTEMPT");
+  if(paths.has(path))
+   hold("EARLIER_SINGLE_FLIGHT_PACKET_ATTEMPT_NO_RETRY");
+ }
+ return{
+  verifiedNoEarlierSingleFlightPacketAttempt:true as const,
+  boundedGithubHistoryRunCount:history.length,
+  phase6PaidGoGrantedHere:false as const
+ };
+}
 export async function requireP5BatchGithubOneTimeHistory(
  admission:P5BatchAdmission,fetcher:typeof fetch=fetch
 ){
- // This is GitHub scheduling/replay metadata, NOT a substitute for
- // PostgreSQL's actual prediction cutoff clock. 72h is longer than the
- // signed raw original max lifetime (<23h) and the 75m batch pre-window.
+ // GH-run wall time scopes *replay lookup only*, never prediction cutoff.
+ // Original CONTENTS expires in <23h and selected own batch cutoff is
+ // within 75m; a 72h history spans any legitimate same-packet attempt.
  const start=new Date(Date.now()-72*3600_000).toISOString();
  const end=new Date(Date.now()+5*60000).toISOString();
  const created=encodeURIComponent(start+".."+end);
@@ -168,32 +197,41 @@ export async function requireP5BatchGithubOneTimeHistory(
   Authorization:"Bearer "+admission.githubToken,
   "X-GitHub-Api-Version":"2022-11-28"
  };
- const all:P5SignedBatchHistoryRun[]=[];
- let total:number|null=null;
- for(let page=1;page<=10;page++){
-  const endpoint=
+ async function readWorkflow(workflow:string){
+  const all:P5SignedBatchHistoryRun[]=[];
+  let total:number|null=null;
+  for(let page=1;page<=10;page++){
+   const endpoint=
     "https://api.github.com/repos/HKcode22/ReplitTranvr/actions/workflows/"+
-    GH_BATCH_WORKFLOW+"/runs?event=workflow_dispatch&created="+
+    workflow+"/runs?event=workflow_dispatch&created="+
     created+"&per_page=100&page="+page;
-  const response=await fetcher(endpoint,{method:"GET",headers});
-  if(!response.ok)hold("GITHUB_HISTORY_UNAVAILABLE_NO_BATCH_WRITE");
-  const data=await response.json() as P5SignedBatchHistoryPage;
-  if(!data||!Number.isSafeInteger(data.total_count)||
-     data.total_count<1||data.total_count>1000||
-     !Array.isArray(data.workflow_runs)||
-     data.workflow_runs.length>100||
-     (total!==null&&total!==data.total_count))
-   hold("UNBOUNDED_OR_AMBIGUOUS_GITHUB_BATCH_RUN_HISTORY");
-  total=data.total_count;
-  all.push(...data.workflow_runs);
-  if(all.length>=total)break;
-  if(data.workflow_runs.length<100)
-   hold("PARTIAL_GITHUB_BATCH_RUN_HISTORY_HOLD");
+   const response=await fetcher(endpoint,{method:"GET",headers});
+   if(!response.ok)hold("GITHUB_HISTORY_UNAVAILABLE_NO_BATCH_WRITE");
+   const data=await response.json() as P5SignedBatchHistoryPage;
+   if(!data||!Number.isSafeInteger(data.total_count)||
+      data.total_count<0||data.total_count>1000||
+      !Array.isArray(data.workflow_runs)||
+      data.workflow_runs.length>100||
+      (total!==null&&total!==data.total_count))
+    hold("UNBOUNDED_OR_AMBIGUOUS_GITHUB_BATCH_RUN_HISTORY");
+   total=data.total_count;
+   all.push(...data.workflow_runs);
+   if(all.length>=total)break;
+   if(data.workflow_runs.length<100)
+    hold("PARTIAL_GITHUB_BATCH_RUN_HISTORY_HOLD");
+  }
+  if(total===null||all.length!==total)
+   hold("GITHUB_BATCH_HISTORY_INCOMPLETE_NO_WRITE");
+  return all;
  }
- if(total===null||all.length!==total)
-  hold("GITHUB_BATCH_HISTORY_INCOMPLETE_NO_WRITE");
- return verifyP5BatchNoPriorGithubAttempt(
-  all,admission.githubRunId,admission.approvedOneTimeNonceSha256);
+ const batchRuns=await readWorkflow(GH_BATCH_WORKFLOW);
+ const oneTime=verifyP5BatchNoPriorGithubAttempt(
+  batchRuns,admission.githubRunId,admission.approvedOneTimeNonceSha256);
+ const oneFlightRuns=await readWorkflow(
+  "phase5-one-signed-witnessed-later-pre-main-manual.yml");
+ const crossFlow=refuseP5BoundBatchEarlierSingleFlightAttempts(
+  oneFlightRuns,admission.selectedPaths);
+ return{...oneTime,...crossFlow};
 }
 export interface P5BoundedBatchReadyEntry{
  filePath:string;packetSha256:string;
