@@ -45,3 +45,28 @@ Even if the compatibility test passes, the real shared table contains varied his
 5. Phase6 remains paid **NO-GO** until a separate owner/independent approval. Provider quota is only last verified at 2026-11-11T13:34:38Z (60,000 total, 59,968 remaining; 1,830 Alert credits); this metadata read is not a fresh budget/spend check.
 
 The previously reported **141 tables** measure catalog complexity and legacy system reuse, **not** volume of independent flight training examples or a predictive accuracy guarantee.
+
+
+## 5. Actual first PG16 test and correction (not production)
+
+The first V0086 GitHub Actions **disposable PostgreSQL16** run completed **8/9 tests**, one failure in the synthetic *legacy role* fixture. This was not a C+D admission bypass or flight-source damage: our newly created legacy CI login had direct snapshot INSERT permission but lacked `SELECT` on `clean.flight_population`. The **existing** `clean.attach_population_member_to_snapshot()` trigger executes as an invoker and reads that table. Its error was SQLSTATE **42501, permission denied for table flight_population**. This confirms that a future privilege migration must account for the original trigger's SELECT dependency, rather than disabling it.
+
+The fixture was corrected by granting **SELECT on `clean.flight_population` to the disposable synthetic legacy writer** (not to a real database user). The exact-head rerun `9647d13d8284d2394558c3191320e9ccbe85d594`, [isolated V0086 scoped-compatibility CI job](https://github.com/HKcode22/ReplitTranvr/actions/runs/43106975012), **PASSED 9/9 tests**, including:
+
+- An unenrolled flight may be INSERTed through the simulated restricted legacy role, with the original population-member trigger left enabled.
+- A registered C+D flight cannot be written by that legacy role, cannot bypass a receipt through a shifted native-T cutoff, and cannot bypass through a T−90m horizon not yet registered in the queue.
+- True existing Stage14 SQL uses same-transaction lease and admission receipt; 32/32 synthetic source-bound snapshots were saved and verified before cutoff using 1,2,4,8 worker lanes, preserving old source and no-backfill logic.
+- Stale generation refusals, lease-row lock blocking of controller reclaim, non-overwrite/unique flight+horizon invariants still pass.
+
+**Measured one CI run only (eight flights per configuration):**
+
+| Lanes | 8-flight batch time | Confirmed 40001 aborted transaction retries |
+| ---: | ---: | ---: |
+| 1 | 103 ms | 0 |
+| 2 | 88 ms | 1 |
+| 4 | 142 ms | 3 |
+| 8 | 264 ms | 7 |
+
+These are tiny synthetic examples, not production throughput estimates or evidence that two lanes is definitively optimal. The initial 42501 fixture failure is important, preserved here rather than hidden.
+
+**Security boundary still pending:** an admitted task may not be deleted while the flight remains part of the protected cohort; production must protect the queue/tombstone register with ownership/grants, immutable identity, and a reviewed retention policy. Reusing external credentials, privileged owner bypass or dynamically modifying identity are not proven safe by this CI-only trigger. Do not install V0086 on production.
