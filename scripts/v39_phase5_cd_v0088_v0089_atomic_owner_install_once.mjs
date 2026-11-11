@@ -127,7 +127,13 @@ async function after(c,before){
   "pg_catalog.has_function_privilege($3,$2,'EXECUTE') AS pre_guard_execute,"+
   "pg_catalog.has_table_privilege($3,'clean.phase5_cd_pre_task_v39','UPDATE') AS pre_queue_update,"+
   "pg_catalog.has_table_privilege($3,$1,'SELECT') AS pre_receipt_select,"+
-  "pg_catalog.has_schema_privilege($4,'clean','CREATE') AS guard_create"
+  "pg_catalog.has_schema_privilege($4,'clean','CREATE') AS guard_create,"+
+  "pg_catalog.pg_has_role(current_user,$4,'SET') AS creator_still_can_set_guard,"+
+  "(SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p"+
+  " CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(p.proacl,"+
+  "pg_catalog.acldefault('f',p.proowner))) a"+
+  " WHERE p.oid=to_regprocedure($2) AND a.grantee=0"+
+  " AND a.privilege_type='EXECUTE')) AS public_guard_execute"
   ,[RECEIPT_TABLE,ADMIT_SIG,PRE_ROLE,GUARD_OWNER])).rows[0];
  const owner=(await c.query(
   "SELECT rolcanlogin,rolsuper,rolcreaterole,rolcreatedb,rolbypassrls"+
@@ -143,6 +149,7 @@ async function after(c,before){
  if(!r||!r.receipt||r.task_rows!==0||r.receipt_rows!==0||
     r.guard_function_owner!==GUARD_OWNER||!r.pre_guard_execute||
     r.pre_queue_update||r.pre_receipt_select||r.guard_create||
+    r.creator_still_can_set_guard||r.public_guard_execute||
     !owner||owner.rolcanlogin||owner.rolsuper||owner.rolcreaterole||
     owner.rolcreatedb||owner.rolbypassrls||
     JSON.stringify(now)!==JSON.stringify(expected))
