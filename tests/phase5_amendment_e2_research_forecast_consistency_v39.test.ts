@@ -58,6 +58,16 @@ describe("Amendment E2: research-only PRE vs AIRBORNE mathematical as-of consist
    }
   })).toThrow("INVALID_DELAY_QUANTILES");
  });
+ it("allows real PRE forecast issuance earlier than its cutoff, but never after it",()=>{
+  const early=reviewP5E2ForecastCandidateOffline({
+   ...pre,issuedAtUtc:"2027-02-11T11:58:00.000Z"
+  });
+  expect(early.stage).toBe("PRE_DEPARTURE");
+  expect(()=>reviewP5E2ForecastCandidateOffline({
+   ...pre,issuedAtUtc:"2027-02-11T12:00:01.000Z",
+   maxInputAvailableAtUtc:"2027-02-11T11:59:56.000Z"
+  })).toThrow("PRE_FORECAST_AFTER_OWN_CUTOFF");
+ });
  it("rejects POST data masquerading as a T6 PRE feature",()=>{
   expect(()=>reviewP5E2ForecastCandidateOffline({
    ...pre,maxInputAvailableAtUtc:"2027-02-11T12:00:01.000Z"
