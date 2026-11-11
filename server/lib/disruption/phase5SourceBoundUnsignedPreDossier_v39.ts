@@ -343,7 +343,7 @@ export function pageP5UnsignedNativePreReviewDossier(
      !e||e.status!=="ACTUAL_SOURCE_ELIGIBLE_FOR_EXTERNAL_REVIEW_NOT_SIGNED"||
      e.source.runDayIndex!==dossier.runDayIndex||
      e.source.queryDigestSha256!==dossier.queryDigestSha256||
-     e.source.sourceResponseSha256===undefined))
+     e.source.expectedSourceResponseSha256!==dossier.sourceResponseSha256))
   hold("UNTRUSTED_UNSIGNED_REVIEW_PAGE_SOURCE_SCOPE");
  const total=Math.ceil(dossier.entries.length/96);
  const pages:P5UnsignedNativePreReviewPage[]=[];
