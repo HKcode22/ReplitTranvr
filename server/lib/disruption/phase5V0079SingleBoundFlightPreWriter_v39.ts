@@ -102,7 +102,7 @@ export interface P5Stage14SingleFlightPrePermit{
  * queue permit. The real source-rights/role/lease security review is separate.
  */
 export interface P5CdDisposableQueueFence{
- taskId:string;owner:string;generation:number;packetSha256:string;
+ taskId:string;owner:string;generation:number|string;packetSha256:string;
 }
 function assertP5CdDisposableFenceArguments(f:P5CdDisposableQueueFence|undefined){
  const required=process.env.V39_P5_CD_STAGE14_FENCE_DISPOSABLE==="1";
@@ -120,7 +120,9 @@ function assertP5CdDisposableFenceArguments(f:P5CdDisposableQueueFence|undefined
  if(!f||!/^[1-9][0-9]{0,17}$/.test(f.taskId??"")||
     typeof f.owner!=="string"||
     !/^[a-zA-Z0-9_.:-]{5,96}$/.test(f.owner)||
-    !Number.isSafeInteger(f.generation)||f.generation<1||
+    !(typeof f.generation==="string"?
+      /^[1-9][0-9]{0,18}$/.test(f.generation):
+      Number.isSafeInteger(f.generation)&&f.generation>=1)||
     !SHA.test(f.packetSha256??""))
   hold("CD_FENCE_CLAIM_ARGUMENTS_MISSING_OR_UNREVIEWED");
 }
