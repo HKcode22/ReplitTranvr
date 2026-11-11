@@ -1,0 +1,88 @@
+name: Phase5 C+D scoped legacy-compatible Stage14 PRE trigger (isolated PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-scoped-legacy-trigger-disposable-pg16.yml'
+      - 'migrations/staged/V0084__phase5_cd_disposable_stage14_transaction_fence_v39.sql'
+      - 'migrations/staged/V0085__phase5_cd_disposable_mandatory_pre_admission_receipt_v39.sql'
+      - 'migrations/staged/V0086__phase5_cd_disposable_scoped_legacy_compatible_pre_trigger_v39.sql'
+      - 'tests/phase5_cplusd_stage14_intransaction_fence_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5CPlusDStage14ConfirmedAbortRetry_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+permissions:
+  contents: read
+jobs:
+  real-stage14-fenced-claims-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '1'
+      V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '1'
+      V39_P5_CD_STAGE14_SCOPED_DISPOSABLE: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      P5_CD_CI_PASSWORD: 'ci-test-only'
+      P5_CD_CI_WRITER_URL: 'postgresql://phase5_fids_pre_writer_cd_ciuser01:ci-test-only@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Refuse provider, live DB, production arm or secret
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_P5_CD_STAGE14_FENCE_DISPOSABLE" = 1
+          test "$V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE" = 1
+          test "$V39_P5_CD_STAGE14_SCOPED_DISPOSABLE" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          echo 'P5_CD_STAGE14_FENCED_DISPOSABLE_ONLY'
+      - name: Install existing B0062/V0079 then CI-only V0084, never live DB
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0084__phase5_cd_disposable_stage14_transaction_fence_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0085__phase5_cd_disposable_mandatory_pre_admission_receipt_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0086__phase5_cd_disposable_scoped_legacy_compatible_pre_trigger_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('p5_cd_stage14_ci.task') IS NOT NULL")" = t
+      - name: Prove legacy writes preserved, enrolled flight no bypass, and 32 real Stage14 inserts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_cplusd_stage14_intransaction_fence_real_pg_v39.test.ts
+          echo 'P5_CD_SCOPED_LEGACY_COMPAT_RECEIPT_NO_PAID_NO_LIVE_DB'
