@@ -294,6 +294,7 @@ END $reap$;
 -- NOLOGIN function-owner adoption and service EXECUTE grants. The migration
 -- creates real tables and functions but activates ZERO live workers.
 REVOKE ALL ON TABLE clean.phase5_cd_pre_task_v39 FROM PUBLIC;
+REVOKE ALL ON SEQUENCE clean.phase5_cd_pre_task_v39_task_id_seq FROM PUBLIC;
 REVOKE ALL ON FUNCTION clean.phase5_cd_task_immutable_v39() FROM PUBLIC;
 REVOKE ALL ON FUNCTION clean.phase5_cd_claim_due_v39(text,integer,integer)
   FROM PUBLIC;
