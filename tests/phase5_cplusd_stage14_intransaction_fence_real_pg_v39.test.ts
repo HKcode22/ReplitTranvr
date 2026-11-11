@@ -51,6 +51,14 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   if(!/^[A-Za-z0-9-]{6,40}$/.test(process.env.P5_CD_CI_PASSWORD??"")||
     !LOGIN_URL.includes("localhost:5432/neondb"))
    throw Error("REFUSED_CD_TEST_LOCAL_DUMMY_CREDENTIALS_MISSING");
+  let localOnly=false;
+  try{
+   const u=new URL(URL);
+   localOnly=u.protocol==="postgresql:"&&u.hostname==="localhost"&&
+    u.port==="5432"&&u.pathname==="/neondb"&&
+    u.username==="postgres"&&u.searchParams.get("sslmode")==="disable";
+  }catch{}
+  if(!localOnly)throw Error("REFUSED_CD_TEST_NONLOCAL_DATABASE");
   admin=new Pool({connectionString:URL,max:3});
   const who=(await admin.query(
    "SELECT current_database() AS db,current_user AS role,"+
@@ -243,6 +251,64 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    throw e;
   }finally{c.release();}
  }
+ it("queue row lock prevents lease-reclaim UPDATE while owned transaction runs",async()=>{
+  const task=(await admin.query(
+   "UPDATE p5_cd_stage14_ci.task SET "+
+   "status='WRITE_STARTED_UNKNOWN',owner='ci-holder',generation=1,"+
+   "lease_until=clock_timestamp()+INTERVAL '90 seconds' "+
+   "WHERE id=1 RETURNING id::text,packet_sha")).rows[0];
+  const writerSession=await writer.connect();
+  const reclaimer=await admin.connect();
+  try{
+   await writerSession.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
+   const checked=await writerSession.query(
+    "SELECT p5_cd_stage14_ci.assert_write_fence("+
+    "$1::bigint,$2,$3,$4::timestamptz,$5::timestamptz,$6,$7,$8::bigint) AS ok",
+    [task.id,permit.flightInstanceId,permit.horizon,
+     permit.selectedTNativeUtc,iso(Date.parse(permit.selectedTNativeUtc)-86_400_000),
+     task.packet_sha,"ci-holder",1]);
+   expect(checked.rows[0].ok).toBe(true);
+   await reclaimer.query("BEGIN");
+   await reclaimer.query("SET LOCAL lock_timeout='100ms'");
+   await expect(reclaimer.query(
+    "UPDATE p5_cd_stage14_ci.task SET generation=2 WHERE id=$1",
+    [task.id])).rejects.toMatchObject({code:"55P03"});
+  }finally{
+   await reclaimer.query("ROLLBACK").catch(()=>{});
+   await writerSession.query("ROLLBACK").catch(()=>{});
+   reclaimer.release();writerSession.release();
+   await admin.query(
+    "UPDATE p5_cd_stage14_ci.task SET status='READY',owner=NULL,"+
+    "generation=0,lease_until=NULL WHERE id=1");
+  }
+  const rights=(await admin.query(
+   "SELECT has_table_privilege($1,'p5_cd_stage14_ci.task','UPDATE') AS can_update,"+
+   "has_table_privilege($1,'p5_cd_stage14_ci.task','SELECT') AS can_select",
+   [ROLE])).rows[0];
+  expect(rights).toEqual({can_update:false,can_select:false});
+ });
+ it("stale owner/generation is refused by actual Stage14 before inserting PRE",async()=>{
+  const task=(await admin.query(
+   "UPDATE p5_cd_stage14_ci.task SET "+
+   "status='WRITE_STARTED_UNKNOWN',owner='ci-current',generation=2,"+
+   "lease_until=clock_timestamp()+INTERVAL '90 seconds' "+
+   "WHERE id=1 RETURNING id::text,packet_sha")).rows[0];
+  try{
+   await expect(persistP5V0079SingleBoundFlightPre(writer,permit,{
+    disposableCdQueueFence:{
+     taskId:task.id,owner:"ci-stale",generation:1,
+     packetSha256:task.packet_sha
+    }
+   })).rejects.toThrow("P5_CD_CLAIM_FENCE_STALE_OR_UNQUALIFIED");
+   expect((await admin.query(
+    "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
+   )).rows[0].n).toBe(0);
+  }finally{
+   await admin.query(
+    "UPDATE p5_cd_stage14_ci.task SET status='READY',owner=NULL,"+
+    "generation=0,lease_until=NULL WHERE id=1");
+  }
+ });
  it("1/2/4/8 workers each process eight real Stage14 SQL PRE snapshots",async()=>{
   const results:Array<{
    lanes:number;verified:number;elapsedMs:number;latenciesMs:number[]
