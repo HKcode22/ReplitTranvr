@@ -106,6 +106,9 @@ export interface P5CdDisposableQueueFence{
 }
 function assertP5CdDisposableFenceArguments(f:P5CdDisposableQueueFence|undefined){
  const required=process.env.V39_P5_CD_STAGE14_FENCE_DISPOSABLE==="1";
+ const receipt=process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1";
+ if(receipt&&!required)
+  hold("CD_RECEIPT_NEVER_WITHOUT_LOCAL_FENCE");
  if(!required&&f!==undefined)
   hold("CD_FENCE_NOT_AN_APPROVED_PRODUCTION_ENTRYPOINT");
  if(!required)return;
@@ -129,8 +132,16 @@ function assertP5CdDisposableFenceArguments(f:P5CdDisposableQueueFence|undefined
 async function assertP5CdSameTxGuard(
  c:PoolClient,p:P5Stage14SingleFlightPrePermit,
  f:P5CdDisposableQueueFence,cutoff:Date){
+ // V0085 experimental DB trigger requires a transaction receipt. V0084
+ // remains a distinct, earlier CI test with only the row-lock function.
+ // These are STATIC, reviewed function names, never caller-controlled SQL.
+ const receiptRequired=
+  process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1";
+ const fixedFunction=receiptRequired
+  ?"p5_cd_stage14_ci.begin_admitted_write"
+  :"p5_cd_stage14_ci.assert_write_fence";
  const proof=await c.query(
-  "SELECT p5_cd_stage14_ci.assert_write_fence("+
+  "SELECT "+fixedFunction+"("+
   "$1::bigint,$2,$3,$4::timestamptz,$5::timestamptz,"+
   "$6,$7,$8::bigint) AS ok",
   [f.taskId,p.flightInstanceId,p.horizon,p.selectedTNativeUtc,
