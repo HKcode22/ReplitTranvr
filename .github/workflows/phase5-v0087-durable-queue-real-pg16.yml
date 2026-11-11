@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase5-v0087-durable-queue-real-pg16.yml'
       - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'
       - 'tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_cd_v0087_inert_owner_install_once.mjs'
 permissions:
   contents: read
 jobs:
@@ -46,6 +47,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify private owner installer parses, without invoking it
+        run: node --check scripts/v39_phase5_cd_v0087_inert_owner_install_once.mjs
       - name: Refuse real provider/live database and production arm
         shell: bash
         run: |
