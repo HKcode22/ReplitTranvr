@@ -243,9 +243,9 @@ export function buildP5UnsignedNativePreReviewDossier(
     airportIcao:pins.expectedAirportIcao,
     flightInstanceId:c.flightInstanceId,
     expectedGithubSourceRunId:pins.expectedSourceGithubRunId,
-    selectedTNativeUtc:c.selectedTNativeUtc,
-    sourceMemberAvailableAtUtc:c.actualMemberAvailableUtc,
-    ownPreCutoffUtc:c.ownCutoffUtc,
+    selectedTNativeUtc:new Date(selected).toISOString(),
+    sourceMemberAvailableAtUtc:new Date(available).toISOString(),
+    ownPreCutoffUtc:new Date(cutoff).toISOString(),
     expectedReviewedReleaseSha256:pins.expectedReviewedReleaseSha256,
     expectedReviewedSourceRightsSha256:
      pins.expectedReviewedSourceRightsSha256,
