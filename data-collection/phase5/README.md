@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 21:47 UTC — all 141 live tables read; SCOPED C+D historical compatibility
+
+**[Checkpoint: 141 real catalog tables, six schemas, actual legacy PRE INSERT roles and enabled population-member trigger; reviewed next V0086 staged-only compatibility](2026-11-11_REAL_141_TABLE_CATALOG_AND_CD_SCOPED_LEGACY_COMPAT_CHECKPOINT.md).** The actual team Replit `neondb` metadata-only scan proves no confirmed per-flight task queue (the Phase4 physical owner table operates by manifest/horizon), and multiple previous writers still have snapshot INSERT privileges. Production must **not** run the blanket experimental V0085 trigger. A separate V0086 **disposable PG16-only** scoped enrollment test is under review, enforcing C+D on all horizons of an enrolled flight while preserving unrelated historical writers and existing triggers. No provider calls, account changes or production database writes; Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 11 — Broad metadata-only production queue/role audit after merged PR #568
 
 After the **V0085 CI-only no-bypass Stage14 trigger/receipt test was merged** (PR #568), the next actual *owner evidence* gap is whether a queue exists in a different PostgreSQL user schema and which existing writers/roles can insert into `clean.flight_snapshots`. The earlier 17-table read-only catalog covered selected `clean` tables, not all user schemas. **[Read new owner checkpoint and no-payload all-schema catalog plan](2026-11-11_CD_ALL_USER_SCHEMAS_METADATA_AUDIT_OWNER_CHECKPOINT.md).** A single isolated Replit read-only script is staged with pure classifier tests; it does **not** call AeroDataBox, read flight source rows, install SQL, or authorize Phase6. **FREEZE HOLD / paid GO NO.**
