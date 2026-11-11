@@ -3,6 +3,7 @@ import {createHash} from "node:crypto";
 import {planP5BoundedSignedLaterPreBatch}
  from "../server/lib/disruption/phase5BoundedSignedLaterPreBatchPlan_v39";
 import {admitP5BoundLaterBatchOwnerEnv,
+ verifyP5BatchNoPriorGithubAttempt,
  executeP5BoundedLaterBatchNoRetry,
  type P5BoundedBatchReadyEntry,type P5BoundLaterBatchEvent}
  from "../scripts/v39_phase5_bounded_signed_later_pre_batch_owner_v39";
@@ -41,6 +42,8 @@ function env():NodeJS.ProcessEnv{
   GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
   GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",
   GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:CODE,
+  GITHUB_RUN_ID:"42899999999",
+  GITHUB_TOKEN:"fake_token_for_testing_abcdefghijklmnop",
   V39_P5_LATER_PRE_APPROVED_CODE_SHA:CODE,
   P5_LATER_PRE_CONFIRM:"ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER",
   ADB_AUTO_COLLECT:"0",AERODATABOX_API_KEY:"",
@@ -56,6 +59,8 @@ function env():NodeJS.ProcessEnv{
   V39_P5_SOURCE_BATCH_REGISTRY_SHA256:H("5"),
   P5_LATER_PRE_DAY_INDEX:"4",
   V39_P5_BOUND_LATER_PRE_BATCH_OWNER_APPROVED:"1",
+  P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256:H("e"),
+  V39_P5_BOUND_LATER_PRE_BATCH_APPROVED_NONCE_SHA256:H("e"),
   P5_BOUND_LATER_PRE_BATCH_CONFIRM:
     "ONE_SIGNED_BOUND_EIGHT_FLIGHT_PRE_BATCH_NO_PROVIDER",
   P5_BOUND_LATER_PRE_BATCH_REGISTRY_FILE:
@@ -107,6 +112,28 @@ describe("bounded Stage14 signed future multi-flight PRE owner",()=>{
    [entry(1),{...entry(2),flightInstanceId:"leg:future:1"}],DB))
    .toThrow("UNAUTHENTICATED_OR_DUPLICATE_SIGNED_FLIGHT_HORIZON");
  });
+ it("requires one current GH run matching independent nonce; prior failed or unknown attempts HOLD",()=>{
+  const nonce=H("e"),title="P5 LATER SIGNED BATCH "+nonce;
+  const current={id:42899999999,display_title:title};
+  expect(verifyP5BatchNoPriorGithubAttempt(
+   [current],"42899999999",nonce).independentlyScopedOneAttempt)
+   .toBe(true);
+  expect(()=>verifyP5BatchNoPriorGithubAttempt(
+   [current,{id:42899999998,display_title:title}],
+   "42899999999",nonce))
+   .toThrow("PREVIOUS_ATTEMPT_OF_BATCH_NONCE_NO_RETRY");
+  expect(()=>verifyP5BatchNoPriorGithubAttempt(
+   [{id:42899999998,display_title:title}],
+   "42899999999",nonce))
+   .toThrow("CURRENT_GITHUB_BATCH_RUN_NOT_OBSERVED_NO_WRITE");
+  expect(()=>verifyP5BatchNoPriorGithubAttempt(
+   [current,current],"42899999999",nonce))
+   .toThrow("MALFORMED_OR_REPEATED_GITHUB_BATCH_RUN");
+  expect(()=>verifyP5BatchNoPriorGithubAttempt(
+   [{...current,display_title:"unknown legacy name"}],
+   "42899999999",nonce))
+   .toThrow("CURRENT_BATCH_RUN_NAME_NOT_INDEPENDENTLY_PINNED");
+ });
  it("retains earliest own PRE cutoff then path order",()=>{
   const a=entry(9,1),b=entry(2),c=entry(4,1);
   const p=planP5BoundedSignedLaterPreBatch([a,c,b],DB);
@@ -121,6 +148,7 @@ describe("bounded Stage14 signed future multi-flight PRE owner",()=>{
   for(const change of [
    {GITHUB_EVENT_NAME:"schedule"},
    {GITHUB_RUN_ATTEMPT:"2"},
+   {P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256:H("f")},
    {V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},
    {V39_PHASE5_FREEZE_SIGNED:"0"},
    {V39_PHASE6_PROCESS_ARMED:"0"},
