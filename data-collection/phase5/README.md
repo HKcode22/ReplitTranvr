@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — Important V0089 real PG16 owner transfer correction
+
+**[Read: why a non-superuser PG16 `CREATEROLE` session needs a temporary `SET ROLE` grant before transferring `SECURITY DEFINER` ownership](2026-11-11_V0089_PG16_NON_SUPERUSER_ROLE_TRANSFER_AND_RELEASE_BLOCKER.md).** PR #574's staged V0089 passed superuser CI, but live `neondb_owner` is not assumed to be a superuser. A new non-superuser disposable PG16 test verifies the transactional temporary SET grant, grants-before-transfer ordering, exact NOLOGIN guard owner and no lingering worker/direct privileges. **No V0088/V0089 live activation yet.** V0087 live inert installation confirmed; do not re-run it. Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 11 — V0089 reuse Phase5 PRE NOLOGIN group for actual C+D SQL guard
 
 **[Read V0089 dedicated NOLOGIN function-owner/role checkpoint and exact next release steps](2026-11-11_V0089_NOLOGIN_GUARD_OWNER_AND_PRE_ROLE_RELEASE_CHECKPOINT.md).** Live V0087 queue was installed by owner, zero tasks/no worker grants. PR #572 merged true V0087→Stage14 same-transaction source-bound admission (CI), and PR #573 merged first actually persisted Amendment E categorical FIDS features (CI). V0089 now tests transferring the staged V0088 SECURITY DEFINER guard+scoped snapshot triggers to one new **NOLOGIN least-privilege owner**, with only the existing Phase5 restricted PRE group granted guard EXECUTE; old runtime and source identities remain excluded. **No live V0088/V0089 installation yet, no paid Phase6, no new PRE login.** Nov13/Nov20 are engineering targets rather than approvals.
