@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — Stage14 NO-BYPASS transactional admission (V0085 DISPOSABLE-ONLY)
+
+**[Read next Phase 5 checkpoint: C+D mandatory SQL admission receipt, direct-INSERT bypass refusal, PG16 official sources, and Amendment E open work](2026-11-11_V0085_CD_MANDATORY_TRANSACTION_ADMISSION_AND_E_NEXT_CHECKPOINT.md).** After PR #567's verified CI-only lease-lock success, a new separately tested V0085 migration adds a **BEFORE INSERT database trigger** and an exact per-task **same-transaction receipt** to prove that a restricted PRE role cannot bypass queue admission by inserting directly. This remains **disposable PostgreSQL16 only, not an installed production schema**. No new paid ADSB service, provider calls, cloud runtime, or Phase6 activation. Production still requires independent role/permissions/source-rights approval, a no-bypass migration compatible with historical writers, authentic Amendment E source features and a complete automatic GitHub controller. **Phase5 FREEZE HOLD / Phase6 paid GO NO.**
+
+
 ## November 11 ~05:35 PST — REAL 60K ADB ACCOUNT CHECK AND NEW C+D STAGE14 + AMENDMENT E CODE
 
 **[READ: Nov11 verified free 60K provider account (59,968 remaining), first real disposable PG16 C+D-to-existing-Stage14 SQL parallel test, and nonpaid E issue-time feature selection](2026-11-11_LIVE_60K_QUOTA_CD_STAGE14_SQL_AND_AMENDMENT_E_ASOF_CHECKPOINT.md).** Owner executed exact pinned isolated Replit free-checker at **2026-11-11T13:34:38Z**: limit **60,000**, remaining **59,968**, requests **240,000/239,975**, Alert credits **1,830**, reset **2026-12-04T02:21:21Z**, paid calls **0**, DB writes **0**; the independent project-cycle **50K ceiling** stays separate. This is real account evidence despite public new RapidAPI Ultra 50K. It does not prove licensed 31-day raw retention, schedule physical-outcome semantics or paid GO.
