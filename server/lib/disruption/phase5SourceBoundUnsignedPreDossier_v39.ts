@@ -31,6 +31,17 @@ const HORIZON_MS={
  "T-90m":90*60000
 } as const;
 const MAX=2500;
+const KNOWN_STATUSES:P5CandidateClassification[]=[
+ "ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED",
+ "CENSORED_AMBIGUOUS_SOURCE_IDENTITY",
+ "CENSORED_NONNATIVE_OR_UNCONFIRMED_OPERATING_MEMBER",
+ "CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK",
+ "CENSORED_MISSING_NATIVE_T",
+ "CENSORED_SOURCE_TOO_STALE_OR_EXPIRED",
+ "CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF",
+ "CENSORED_NO_PROSPECTIVE_PRE_LEAD",
+ "CENSORED_OUTSIDE_APPROVED_SOURCE_WINDOW"
+];
 const hold=(why:string):never=>{
  throw Error("REFUSED_P5_SOURCE_BOUND_UNSIGNED_DOSSIER_"+why);
 };
@@ -171,6 +182,11 @@ export function buildP5UnsignedNativePreReviewDossier(
  if(digestP5ActualSourceCandidateAudit(audit)!==
     pins.expectedActualCandidateAuditSha256)
   hold("ACTUAL_SOURCE_CANDIDATE_BYTES_HASH_CHANGED");
+ if(!audit.classifications||
+    Object.keys(audit.classifications).length!==KNOWN_STATUSES.length||
+    KNOWN_STATUSES.some(k=>!Number.isSafeInteger(audit.classifications[k])||
+       audit.classifications[k]<0))
+  hold("MISSING_OR_EXTRA_SOURCE_CENSOR_REASON");
  const now=timestamp(audit.actualDbClockUtc);
  const seen=new Set<string>();
  const entries:P5UnsignedPreReviewEntry[]=[];
@@ -194,7 +210,8 @@ export function buildP5UnsignedNativePreReviewDossier(
      c.contentsRightsCertifiedHere!==false||
      c.stage14PermitIssuedHere!==false||
      c.providerCalls!==0||c.databaseWrites!==0||
-     seen.has(c.flightInstanceId))
+     (seen.has(c.flightInstanceId)&&
+      c.status!=="CENSORED_AMBIGUOUS_SOURCE_IDENTITY"))
    hold("CROSS_DAY_DUPLICATE_OR_SELF_CERTIFIED_FLIGHT");
   seen.add(c.flightInstanceId);
   if(!Object.prototype.hasOwnProperty.call(audit.classifications,c.status))
