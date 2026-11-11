@@ -109,3 +109,8 @@ Existing repository sources to reuse:
 | 12 | [Phase 5 README](README.md) | Overall working checkpoints and remaining release gates |
 
 **Final distinction:** Building a sophisticated database/pipeline is meaningful engineering progress, but it is not the same as having an independently validated predictor. The purpose of the remaining Phase5 work is to make Phase6 collect the evidence needed to discover what really works, rather than promise accuracy in advance.
+
+
+## G. Incremental C+D implementation added in this review
+
+The [Stage14 result bridge](../../server/lib/disruption/phase5CPlusDStage14ResultBridgeOffline_v39.ts) and [offline consistency tests](../../tests/phase5_cplusd_stage14_result_bridge_offline_v39.test.ts) map the **existing writer's committed-snapshot acknowledgment** to the offline parallel worker's result contract, refusing mismatched flight/horizon/native-T/cutoff/source identities and late post-commit evidence. It does not run Stage14 SQL, own a production lease, install a queue, authenticate an external research permit, or prove throughput. This is a narrow usable implementation step toward the full disposable-PG16 integration rather than a new data pipeline or second writer.
