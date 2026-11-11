@@ -213,8 +213,8 @@ TEST("Phase5 V0087 durable flight/horizon queue control in isolated PG16",()=>{
    " WHERE proname='phase5_cd_claim_due_v39'"
   )).rows[0];
   expect(functions.prosecdef).toBe(true);
-  expect(functions.proconfig).toEqual(expect.arrayContaining([
-   "search_path=pg_catalog,pg_temp"
-  ]));
+  expect(Array.isArray(functions.proconfig)).toBe(true);
+  expect(functions.proconfig.some((v:string)=>
+   v.replace(/\\s/g,"")==="search_path=pg_catalog,pg_temp")).toBe(true);
  });
 });
