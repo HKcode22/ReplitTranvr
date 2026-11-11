@@ -122,8 +122,14 @@ describe("bounded Stage14 signed future multi-flight PRE owner",()=>{
    [current,{id:42899999998,display_title:title}],
    "42899999999",nonce))
    .toThrow("PREVIOUS_ATTEMPT_OF_BATCH_NONCE_NO_RETRY");
+  // A prior matching nonce is stronger evidence of replay than the
+  // missing current run. Both are holds, never a license to retry.
   expect(()=>verifyP5BatchNoPriorGithubAttempt(
    [{id:42899999998,display_title:title}],
+   "42899999999",nonce))
+   .toThrow("PREVIOUS_ATTEMPT_OF_BATCH_NONCE_NO_RETRY");
+  expect(()=>verifyP5BatchNoPriorGithubAttempt(
+   [{id:42899999998,display_title:"P5 LATER SIGNED BATCH "+H("a")}],
    "42899999999",nonce))
    .toThrow("CURRENT_GITHUB_BATCH_RUN_NOT_OBSERVED_NO_WRITE");
   expect(()=>verifyP5BatchNoPriorGithubAttempt(
