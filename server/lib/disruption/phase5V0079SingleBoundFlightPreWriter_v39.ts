@@ -161,10 +161,8 @@ export type P5CdV0088RealQueueCiFence=P5CdDisposableQueueFence;
  */
 function assertP5ENativeRouteCi(flag:true|undefined){
  const enabled=process.env.V39_P5_E_NATIVE_ROUTE_STAGE14_CI==="1";
- if(!enabled&&flag!==undefined)
-  hold("E_ROUTE_SOURCE_FEATURE_BRIDGE_UNAPPROVED");
- if(!enabled)return;
- if(flag!==true||process.env.GITHUB_ACTIONS!=="true"||
+ if(flag===undefined)return;
+ if(flag!==true||!enabled||process.env.GITHUB_ACTIONS!=="true"||
     process.env.DATABASE_URL!==
      "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"||
     process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
