@@ -32,3 +32,15 @@
 - [Assistant new-chat Phase5 source-of-truth checkpoint](../phase5/2026-11-09_ASSISTANT_NEW_CHAT_HANDOFF_PHASE5_FULL_SOURCE_TRUTH.md).
 
 **No target chosen here. No source rights, FREEZE, provider credits, paid release or Phase6 GO granted.**
+
+
+## Nov 11, 2026 owner acceptance — E as expanded traveler-first design DIRECTION only; E2 is a separate prospective extension
+
+**Later state update, which does not rewrite the November 9 historical register:** On November 11 the owner expressly accepted **using Amendment E** to develop a stronger, evidence-tiered traveler-facing research model (continuous delay minutes, threshold risks, honest uncertainty, cancellation/diversion and distinct **PRE** versus genuine **AIRBORNE**/arrival-ETA stages) and requested 2026 scientific and passenger-preference research. This supersedes the earlier **“E not yet owner-selected as design direction”** ambiguity. **It does not approve** a first-cycle primary physical target/metric, its verified event fields, rights, any paid data or a commercial model; the explicit *scientific primary / independent FREEZE* remains undecided. Original f.8/A/B/C/D1/D2 and original E are kept, not rewritten.
+
+New addendum: [**November 11 Amendment E2 traveler-first PRE + AIRBORNE research design and outcome decision register**](../phase5/2026-11-11_AMENDMENT_E2_TRAVELER_FIRST_PRE_AIRBORNE_PREDICTION_2026_RESEARCH.md). It identifies one **conditional proposed first-cycle physical** headline T−6h actual gate-out lateness in minutes **only if** correctly matched actual scheduled **gate-out** reference, physical same-operating-leg data rights and suitable held-out labels are proven. It provides alternative first-cycle discussion, not automatic replacement with D1. E2 retains realistic non-primary events, probability/quantile math, C+D autonomous scheduler, weather/route omissions, source/label provenance and source-use lifetime.
+
+At the time of this review, the original E living owner branch
+\`docs/owner-phase5-target-clarity-20261109:data-collection/plans/PROPOSED_Amendment_E_20261109_Rich_Multi_Target_Prospective_Collection.md\` was observed at Git blob \`e69eeb3d29bb32a706ed81692ecf93df44f8c1d6\`, **newer than the fixed archive** \`b09553a3e929179d1b76d25f9c37deb1287484f1\` cited above. Do not silently overwrite either version; E2 is an additive new research decision.
+
+**Binding still requires one prospective signed scientific target freeze:** exact PRE event/clock/operated flight identity and eligible source, original vs actual milestone, outcome censor/unknown, primary metric, baseline, grouped chronological 20/5/6 test and source/ML storage rights. PRE-only gate snapshots cannot become retroactively AIRBORNE ETA; realistic post-takeoff aircraft-position data is a separate source/authorization gate. **Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.**
