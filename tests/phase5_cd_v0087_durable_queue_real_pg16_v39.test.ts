@@ -199,6 +199,42 @@ TEST("Phase5 V0087 durable flight/horizon queue control in isolated PG16",()=>{
   )).rows[0].state).toBe("WRITE_STARTED_UNKNOWN");
   // A forged digest by itself never creates a snapshot or completes task.
  });
+ it("matching persisted PRE plus reviewed post-COMMIT readback marks verified",async()=>{
+  await addTasks(1);
+  const c=(await claim())[0];expect(await started(c)).toBe(true);
+  const snapshot=(await admin.query(
+   "INSERT INTO clean.flight_snapshots("+
+   "flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,"+
+   "selected_t_milestone_utc,selected_t_version,population_query_id,"+
+   "fids_response_hash,builder_version,features_json,missingness_flags,"+
+   "provenance_json)"+
+   " SELECT flight_instance_id,'PRE_DEPARTURE',horizon,"+
+   "prediction_cutoff_utc,selected_native_t_utc,'ci-frozen-native-T',"+
+   "source_population_query_id,source_response_sha256,"+
+   "'ci-durable-control-only','[]'::jsonb,'{}'::jsonb,'{}'::jsonb"+
+   " FROM "+Q+" WHERE task_id=$1::bigint RETURNING id::text",
+   [c.task_id])).rows[0];
+  expect(snapshot.id).toBeTruthy();
+  const good=await worker.query(
+   "SELECT clean.phase5_cd_ack_verified_v39("+
+   "$1::bigint,$2,$3::bigint,$4::bigint,$5) AS ok",
+   [c.task_id,c.lease_owner,c.lease_generation,snapshot.id,SHA("d")]);
+  expect(good.rows[0].ok).toBe(true);
+  const final=(await admin.query(
+   "SELECT state,verified_snapshot_id::text AS sid,"+
+   "verified_receipt_sha256 FROM "+Q+" WHERE task_id=$1",[c.task_id]
+  )).rows[0];
+  expect(final).toEqual({
+   state:"VERIFIED_ON_TIME",sid:snapshot.id,
+   verified_receipt_sha256:SHA("d")
+  });
+  const repeat=await worker.query(
+   "SELECT clean.phase5_cd_ack_verified_v39("+
+   "$1::bigint,$2,$3::bigint,$4::bigint,$5) AS ok",
+   [c.task_id,c.lease_owner,c.lease_generation,snapshot.id,SHA("d")]);
+  expect(repeat.rows[0].ok).toBe(false);
+  console.log("P5_V0087_POSTCOMMIT_READBACK_MATCHED_ONCE_PASS");
+ });
  it("new queue has no commissioned public privileges or existing-flight rewrites",async()=>{
   const rights=(await admin.query(
    "SELECT has_table_privilege($1,'clean.phase5_cd_pre_task_v39','UPDATE') u,"+
