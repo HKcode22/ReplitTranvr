@@ -1,0 +1,50 @@
+name: Phase5 independently reviewed native PRE packet staging (OFFLINE NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-independent-later-pre-packet-completion-offline.yml'
+      - 'server/lib/disruption/phase5IndependentLaterPrePacketCompletion_v39.ts'
+      - 'tests/phase5_independent_later_pre_packet_completion_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_INDEPENDENT_SOURCE_DOSSIER_TO_REVIEW_READY_LATER_PRE_PACKET_CHECKPOINT.md'
+permissions:
+  contents: read
+jobs:
+  test-reviewed-native-later-packet-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify externally pinned SOURCE review packet bytes, witness/noT24, no GO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_independent_later_pre_packet_completion_v39.test.ts
+          echo 'REVIEW_READY_NATIVE_PACKET_BYTES_NOT_SIGNED_NOT_PRODUCTION_OR_PAID_GO'
