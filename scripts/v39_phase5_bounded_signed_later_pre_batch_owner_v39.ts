@@ -19,6 +19,10 @@ import {readFileSync,lstatSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
+const SHA=/^[a-f0-9]{64}$/;
+const RUN=/^[0-9]{5,25}$/;
+const GH_BATCH_NAME="P5 LATER SIGNED BATCH ";
+const GH_BATCH_WORKFLOW="phase5-bounded-signed-later-pre-batch-manual.yml";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {approveP5SignedLaterPreChild,admitP5LaterRegistryChildEnv}
@@ -55,6 +59,8 @@ function json<T>(buffer:Buffer):T{
  catch{return hold("NONJSON_SIGNED_REGISTRY_OR_PACKET");}
 }
 export interface P5BatchAdmission{
+ approvedOneTimeNonceSha256:string;
+ githubRunId:string;githubToken:string;
  registryPath:string;
  selectedPaths:string[];
  connectionString:string;
@@ -76,6 +82,13 @@ export function admitP5BoundLaterBatchOwnerEnv(
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL)
   hold("BATCH_OWNER_NOT_INDEPENDENTLY_APPROVED_OR_UNSAFE_ROLE");
+ const nonce=env.P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256??"";
+ if(!SHA.test(nonce)||
+    nonce!==env.V39_P5_BOUND_LATER_PRE_BATCH_APPROVED_NONCE_SHA256||
+    !RUN.test(env.GITHUB_RUN_ID??"")||
+    typeof env.GITHUB_TOKEN!=="string"||
+    env.GITHUB_TOKEN.length<20)
+  hold("UNSIGNED_ONE_TIME_GITHUB_BATCH_NONCE_OR_RUN");
  const registryPath=env.P5_BOUND_LATER_PRE_BATCH_REGISTRY_FILE??"";
  if(!FILE.test(registryPath))
   hold("NO_FROZEN_INDEPENDENTLY_SIGNED_DAY_REGISTRY_PATH");
@@ -95,9 +108,92 @@ export function admitP5BoundLaterBatchOwnerEnv(
     !u.password||!u.hostname||u.pathname!=="/neondb"||u.hash)
   hold("CROSS_ROLE_OR_APPLICATION_DATABASE_LOGIN");
  return{
+  approvedOneTimeNonceSha256:nonce,
+  githubRunId:env.GITHUB_RUN_ID!,githubToken:env.GITHUB_TOKEN!,
   registryPath,selectedPaths:paths as string[],
   connectionString:env.P5_V39_PRE_DATABASE_URL!,runDayIndex:day
  };
+}
+export interface P5SignedBatchHistoryRun{
+ id:number;
+ display_title:string;
+}
+export interface P5SignedBatchHistoryPage{
+ total_count:number;
+ workflow_runs:P5SignedBatchHistoryRun[];
+}
+export function verifyP5BatchNoPriorGithubAttempt(
+ history:readonly P5SignedBatchHistoryRun[],
+ currentRunId:string,nonce:string
+){
+ if(!RUN.test(currentRunId)||!SHA.test(nonce)||
+    !Array.isArray(history)||history.length<1||history.length>1000)
+  hold("UNTRUSTED_GITHUB_HISTORY_OR_OLD_NONCE");
+ const title=GH_BATCH_NAME+nonce;
+ const seen=new Set<number>();
+ let own=0;
+ for(const r of history){
+  if(!r||!Number.isSafeInteger(r.id)||r.id<1||
+     typeof r.display_title!=="string"||
+     seen.has(r.id))
+   hold("MALFORMED_OR_REPEATED_GITHUB_BATCH_RUN");
+  seen.add(r.id);
+  if(String(r.id)===currentRunId){
+   if(r.display_title!==title)
+    hold("CURRENT_BATCH_RUN_NAME_NOT_INDEPENDENTLY_PINNED");
+   own++;
+  }else if(r.display_title===title)
+   hold("PREVIOUS_ATTEMPT_OF_BATCH_NONCE_NO_RETRY");
+ }
+ if(own!==1)hold("CURRENT_GITHUB_BATCH_RUN_NOT_OBSERVED_NO_WRITE");
+ return{
+  currentRunId,
+  batchNonceSha256:nonce,
+  independentlyScopedOneAttempt:true as const,
+  githubBatchHistoryChecked:true as const,
+  sourceRightsOrPaidGoCertifiedHere:false as const
+ };
+}
+export async function requireP5BatchGithubOneTimeHistory(
+ admission:P5BatchAdmission,fetcher:typeof fetch=fetch
+){
+ // This is GitHub scheduling/replay metadata, NOT a substitute for
+ // PostgreSQL's actual prediction cutoff clock. 72h is longer than the
+ // signed raw original max lifetime (<23h) and the 75m batch pre-window.
+ const start=new Date(Date.now()-72*3600_000).toISOString();
+ const end=new Date(Date.now()+5*60000).toISOString();
+ const created=encodeURIComponent(start+".."+end);
+ const headers={
+  Accept:"application/vnd.github+json",
+  Authorization:"Bearer "+admission.githubToken,
+  "X-GitHub-Api-Version":"2022-11-28"
+ };
+ const all:P5SignedBatchHistoryRun[]=[];
+ let total:number|null=null;
+ for(let page=1;page<=10;page++){
+  const endpoint=
+    "https://api.github.com/repos/HKcode22/ReplitTranvr/actions/workflows/"+
+    GH_BATCH_WORKFLOW+"/runs?event=workflow_dispatch&created="+
+    created+"&per_page=100&page="+page;
+  const response=await fetcher(endpoint,{method:"GET",headers});
+  if(!response.ok)hold("GITHUB_HISTORY_UNAVAILABLE_NO_BATCH_WRITE");
+  const data=await response.json() as P5SignedBatchHistoryPage;
+  if(!data||!Number.isSafeInteger(data.total_count)||
+     data.total_count<1||data.total_count>1000||
+     !Array.isArray(data.workflow_runs)||
+     data.workflow_runs.length>100||
+     (total!==null&&total!==data.total_count))
+   hold("UNBOUNDED_OR_AMBIGUOUS_GITHUB_BATCH_RUN_HISTORY");
+  total=data.total_count;
+  all.push(...data.workflow_runs);
+  if(all.length>=total)break;
+  if(data.workflow_runs.length<100)
+   hold("PARTIAL_GITHUB_BATCH_RUN_HISTORY_HOLD");
+ }
+ if(total===null||all.length!==total)
+  hold("GITHUB_BATCH_HISTORY_INCOMPLETE_NO_WRITE");
+ return verifyP5BatchNoPriorGithubAttempt(
+  all,admission.githubRunId,admission.approvedOneTimeNonceSha256);
 }
 export interface P5BoundedBatchReadyEntry{
  filePath:string;packetSha256:string;
@@ -273,10 +369,12 @@ export async function runP5BoundedSignedLaterBatchOwner(
  const ready=checkP5BoundLaterBatchFrozenRegistry(
   env,a,registryBytes,registry,sourceBytes,source,
   p=>readCheckedFile(p,200000));
+ // The GH batch nonce is a separately approved one-time attempt, NOT an
+ // authorization to write or use source Contents. Unknown history HOLD.
+ await requireP5BatchGithubOneTimeHistory(a);
  // No PRE database traffic until source+day registry and every exact flight
  // SHA are independently verified. Observe true DB time using pre-role RO.
  const dbNow=await readP5BatchActualPreDbClock(a.connectionString);
- const byPath=new Map(ready.map(x=>[x.filePath,x]));
  const verified:P5VerifiedLaterPreRegistryEntry[]=ready.map(e=>({
   filePath:e.filePath,packetSha256:e.packetSha256,
   queryDigestSha256:e.packet.prePermit.queryDigestSha256,
