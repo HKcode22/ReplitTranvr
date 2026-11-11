@@ -19,7 +19,8 @@ import {persistP5V0079SingleBoundFlightPre,
  P5Stage14ConfirmedPrecommitSerializationAbort,
  P5Stage14ConfirmedCommitSerializationAbort,
  type P5Stage14SingleFlightPrePermit,
- type P5Stage14SingleFlightPreResult}
+ type P5Stage14SingleFlightPreResult,
+ type P5CdDisposableQueueFence}
  from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {reviewP5CPlusDExistingStage14ProofOffline}
  from "./phase5CPlusDStage14ResultBridgeOffline_v39";
@@ -55,7 +56,8 @@ export async function persistP5CPlusDStage14WithConfirmedAbortRetry(
  /** For a future production adapter this check MUST happen at transaction
   * admission in Stage14 as well, not only here. */
  currentLeaseOwned:()=>Promise<boolean>,
- maxVerifiedAbortRetries=6
+ maxVerifiedAbortRetries=6,
+ disposableCdQueueFence?:P5CdDisposableQueueFence
 ):Promise<{
  saved:P5Stage14SingleFlightPreResult;
  acknowledged40001AbortRetries:number;
@@ -81,7 +83,8 @@ export async function persistP5CPlusDStage14WithConfirmedAbortRetry(
     queued.horizon)))
    hold("CANONICAL_FLIGHT_HORIZON_ALREADY_HAS_PRE_NO_RETRY");
   try{
-   const saved=await persistP5V0079SingleBoundFlightPre(writer,permit);
+   const saved=await persistP5V0079SingleBoundFlightPre(writer,permit,
+    disposableCdQueueFence?{disposableCdQueueFence}:undefined);
    reviewP5CPlusDExistingStage14ProofOffline(queued,permit,saved);
    if(!(await currentLeaseOwned()))
     hold("POST_COMMIT_LEASE_LOST_QUARANTINE_NO_RETRY");
