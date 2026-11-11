@@ -3,8 +3,9 @@
  * No production queue, no live worker/cron, no provider GET or paid GO.
  *
  * A retry is considered only after Stage14 emits its special proof that:
- * (1) SQLSTATE 40001 occurred BEFORE COMMIT and
- * (2) PostgreSQL acknowledged ROLLBACK.
+ * (1) PostgreSQL returned SQLSTATE 40001 from an INSERT or COMMIT,
+ *     definitively aborting the whole transaction, and
+ * (2) a separate PostgreSQL ROLLBACK was acknowledged.
  * Before every new attempt, independently SELECT for ANY existing PRE for
  * this canonical flight+horizon and verify queue lease/owner again.
  * Any ambiguous COMMIT, lost rollback, non-40001, late deadline,
@@ -16,6 +17,7 @@
 import type {Pool} from "pg";
 import {persistP5V0079SingleBoundFlightPre,
  P5Stage14ConfirmedPrecommitSerializationAbort,
+ P5Stage14ConfirmedCommitSerializationAbort,
  type P5Stage14SingleFlightPrePermit,
  type P5Stage14SingleFlightPreResult}
  from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -89,7 +91,8 @@ export async function persistP5CPlusDStage14WithConfirmedAbortRetry(
     liveDbBenchmark:false,phase6PaidGo:false
    };
   }catch(e){
-   if(!(e instanceof P5Stage14ConfirmedPrecommitSerializationAbort))
+   if(!(e instanceof P5Stage14ConfirmedPrecommitSerializationAbort) &&
+      !(e instanceof P5Stage14ConfirmedCommitSerializationAbort))
     throw e; // Includes all unknown COMMIT/reconciliation failures.
    if(retries>=maxVerifiedAbortRetries)
     hold("BOUNDED_CONFIRMED_40001_RETRIES_EXHAUSTED");
