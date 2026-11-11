@@ -4,10 +4,10 @@
 -- member trigger. A blanket V0085 PRE trigger cannot be deployed unchanged.
 -- This exact migration must NEVER run against the production Neon DB.
 --
--- Compatibility boundary: mandatory admission is scoped to a flight+horizon
--- that is REGISTERED in the immutable, UNIQUE C+D task table. The cutoff
--- is deliberately *not* part of scope selection (prevents native-T retime
--- bypass). A legacy unrelated flight+horizon without a C+D task stays on
+-- Compatibility boundary: as soon as ANY horizon for a flight is enrolled
+-- in immutable C+D tasks, ALL horizons of that flight require exact task
+-- admission. The cutoff is never part of scope selection (prevents retime
+-- bypass). A genuinely unrelated legacy flight without any C+D task stays on
 -- existing PRE writer/trigger path; this is a design test, not proof of
 -- production authorization or scientific licensing.
 --
@@ -34,8 +34,17 @@ BEGIN
    AND horizon=NEW.horizon;
 
  IF NOT FOUND THEN
-  -- Legacy/unregistered rows still pass to the original DB constraints and
-  -- existing clean.trg_flight_snapshots_population_member trigger.
+  -- If *any* horizon of this flight has been enrolled in C+D, all its
+  -- horizons are protected, including later horizons not yet enqueued.
+  -- A caller may NEVER bypass C+D by choosing an unregistered horizon.
+  IF EXISTS(
+   SELECT 1 FROM p5_cd_stage14_ci.task
+    WHERE flight_instance_id=NEW.flight_instance_id
+  ) THEN
+   RAISE EXCEPTION 'P5_CD_PROTECTED_FLIGHT_HORIZON_NOT_REGISTERED';
+  END IF;
+  -- Legacy/unregistered flight identities still pass through to the
+  -- original table constraints and existing population-member trigger.
   RETURN NEW;
  END IF;
 
