@@ -7,6 +7,7 @@ on:
       - 'migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql'
       - 'migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql'
       - 'scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs'
+      - 'tests/phase5_cd_v0088_v0089_atomic_installer_offline_v39.test.ts'
       - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
       - 'tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts'
@@ -92,6 +93,7 @@ jobs:
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE phase5_fids_pre_writer_prod_20261107 NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE"
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE travnr_runtime NOLOGIN"
           node --check scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs
+          npx --no-install vitest run tests/phase5_cd_v0088_v0089_atomic_installer_offline_v39.test.ts
           node scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs
           test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase5_cd_pre_admission_receipt_v39') IS NOT NULL")" = t
           test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase5_cd_pre_admission_receipt_v39') IS NOT NULL")" = t
