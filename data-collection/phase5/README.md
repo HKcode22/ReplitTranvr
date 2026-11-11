@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 11 — CREATE missing durable C+D per-flight PRE queue (V0087)
+
+**[READ: actual staged SQL table and 4 queue functions, 100-task disposable PG16 CI, and next inert Neon installation steps](2026-11-11_V0087_REAL_DURABLE_FLIGHT_QUEUE_IMPLEMENTATION_AND_NEXT_STEPS.md).** Owner clarified that prior code/Phase1–5 pipelines must be reused, but a nonexistent per-flight task queue should simply be created. V0087 adds the durable **flight × horizon** immutable registration, DB-clock claims/leases/fencing generations, write-start UNKNOWN quarantine, source expiry, cutoff missedness, signed after-COMMIT receipt matching and a bounded reaper. It does not replace Stage14, authorize paid work or install any experimental V0084–86 trigger in Neon. Real migration remains staged until exact-head CI and owner-run inert installation; no live schema-change claim yet. **Phase5 FREEZE HOLD / Phase6 paid GO NO.**
+
+
 ## November 11 21:47 UTC — all 141 live tables read; SCOPED C+D historical compatibility
 
 **[Checkpoint: 141 real catalog tables, six schemas, actual legacy PRE INSERT roles and enabled population-member trigger; reviewed next V0086 staged-only compatibility](2026-11-11_REAL_141_TABLE_CATALOG_AND_CD_SCOPED_LEGACY_COMPAT_CHECKPOINT.md).** The actual team Replit `neondb` metadata-only scan proves no confirmed per-flight task queue (the Phase4 physical owner table operates by manifest/horizon), and multiple previous writers still have snapshot INSERT privileges. Production must **not** run the blanket experimental V0085 trigger. A separate V0086 **disposable PG16-only** scoped enrollment test is under review, enforcing C+D on all horizons of an enrolled flight while preserving unrelated historical writers and existing triggers. No provider calls, account changes or production database writes; Phase5 FREEZE HOLD / Phase6 paid GO NO.

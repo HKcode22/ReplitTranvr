@@ -1,0 +1,80 @@
+name: Phase5 V0087 durable per-flight PRE queue on real disposable PG16 (NO PAID)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0087-durable-queue-real-pg16.yml'
+      - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'
+      - 'tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts'
+      - 'tests/phase5_cd_durable_queue_client_offline_v39.test.ts'
+      - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
+      - 'scripts/v39_phase5_cd_v0087_inert_owner_install_once.mjs'
+permissions:
+  contents: read
+jobs:
+  actual-queue-schema-and-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_CD_V0087_DURABLE_PG16: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify private owner installer parses, without invoking it
+        run: node --check scripts/v39_phase5_cd_v0087_inert_owner_install_once.mjs
+      - name: Refuse real provider/live database and production arm
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_P5_CD_V0087_DURABLE_PG16" = 1
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+      - name: Bootstrap existing clean research schema, then REAL V0087
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase5_cd_pre_task_v39') IS NOT NULL")" = t
+          echo 'P5_CD_V0087_REAL_SCHEMA_LOCAL_PG16_NO_LIVE_NO_PAID'
+      - name: Prove durable queue, 100 concurrent tasks, recovery and ACL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_cd_v0087_durable_queue_real_pg16_v39.test.ts tests/phase5_cd_durable_queue_client_offline_v39.test.ts
+          echo 'P5_CD_V0087_DURABLE_QUEUE_PG16_PASS_NO_PROVIDER'
