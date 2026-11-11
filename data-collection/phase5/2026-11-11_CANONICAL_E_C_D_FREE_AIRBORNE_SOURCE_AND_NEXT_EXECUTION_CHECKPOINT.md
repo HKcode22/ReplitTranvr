@@ -58,3 +58,8 @@ The pasted user's shell ended at `SCRIPT="scripts/v39_phase5_free_quota_exact_pi
 - **Result:** This checkpoint and canonical E document are additive **research/review artifacts**. They do not claim Phase5 DONE or an active 31-day study.
 
 Continue to update this checkpoint only with proven commit/CI/owner evidence, not predicted completion dates or guessed provider balances.
+
+
+## New exact C+D engineering increment on this review branch
+
+The branch also adds a **pure, nonpaid C-to-Stage14 result bridge** (`server/lib/disruption/phase5CPlusDStage14ResultBridgeOffline_v39.ts`) with `tests/phase5_cplusd_stage14_result_bridge_offline_v39.test.ts` and a PR-only no-provider workflow. It maps **actual Stage14 result field names** to the existing C worker's expected proof shape only after checking canonical flight, source population query, horizon, initial native T, exact individual cutoff, saved row proof and acknowledged post-commit DB readback before cutoff. It refuses the wrong flight/source, changed-native-T cutoff, nonpending/unknown queue state, empty durable ID, false commit proof or late readback. It **does not** read an actual database, validate external signed packets or certify that a queue fence prevents a stale writer; those remain next integration gates. At the time this checkpoint was authored, the PR CI **has not yet been reviewed**; do not call this a passing production benchmark.
