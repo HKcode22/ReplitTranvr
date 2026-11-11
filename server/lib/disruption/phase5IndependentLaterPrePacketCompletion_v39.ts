@@ -302,7 +302,7 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
   sourceDayRegistrySha256:dossier.sourceDayRegistrySha256,
   reviewedCodeSha:pins.expectedApprovedMainCodeSha,
   packetSha256:digest(packetBytes),packetBytes,packet,
-  horizon:s.horizon,t24EvidenceTier:evidenceTier,
+  horizon:review.reviewedHorizon,t24EvidenceTier:evidenceTier,
   sourceContentsLawfulUseCertifiedByThisFunction:false,
   nativePhysicalFlightCertifiedByThisFunction:false,
   signedProductionRegistryPublished:false,
