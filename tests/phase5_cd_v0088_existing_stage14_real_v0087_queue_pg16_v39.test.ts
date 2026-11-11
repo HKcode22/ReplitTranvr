@@ -221,10 +221,28 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "text,text,text)') AS admission")).rows[0];
   if(!registry?.task||!registry.admission)
    throw Error("V0087_OR_V0088_REAL_DISPOSABLE_SCHEMA_NOT_INSTALLED");
+  if(process.env.V39_P5_CD_V0089_GUARD_CI==="1"){
+   // The real Phase5 PRE NOLOGIN group, NOT this synthetic login, is the
+   // principal allowed to execute the V0088 security-definer guard.
+   await admin.query("GRANT phase5_fids_pre_writer_prod_20261107 TO "+ROLE);
+   const attrs=(await admin.query(
+    "SELECT r.rolcanlogin,r.rolsuper,"+
+    "has_function_privilege($1,'clean.phase5_cd_admit_stage14_pre_v39("+
+    "bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,"+
+    "text,text,text)','EXECUTE') AS can_guard,"+
+    "has_table_privilege($1,'clean.phase5_cd_pre_task_v39','UPDATE') AS can_update,"+
+    "has_table_privilege($1,'clean.phase5_cd_pre_admission_receipt_v39','SELECT') AS can_read_receipt"+
+    " FROM pg_catalog.pg_roles r WHERE r.rolname='phase5_cd_admission_guard_owner_v39'",
+    [ROLE])).rows[0];
+   if(!attrs||attrs.rolcanlogin||attrs.rolsuper||
+      !attrs.can_guard||attrs.can_update||attrs.can_read_receipt)
+    throw Error("V0089_REAL_LEAST_PRIVILEGE_OR_PRE_GROUP_NOT_VERIFIED");
+  }else{
   await admin.query(
    "GRANT EXECUTE ON FUNCTION clean.phase5_cd_admit_stage14_pre_v39("+
    "bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,"+
    "text,text,text) TO "+ROLE);
+  }
   // Actual queue migration is already installed by the disposable CI job.
   // Source packet/rights hashes are SYNTHETIC and do not certify a license.
   await admin.query(
