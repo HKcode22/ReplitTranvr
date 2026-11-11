@@ -16,6 +16,8 @@ import {
 } from "./preSnapshotBuilder_v3";
 import {verifyP5Stage24WitnessedFrozenT,
  type P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
+import {selectP5EStage14BoundRouteFeatures}
+ from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
 import {decideP5LaterPreEvidencePath,
  type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 const SHA=/^[0-9a-f]{64}$/;
@@ -154,6 +156,22 @@ async function assertP5CdSameTxGuard(
  * A separate audited owner/role release is required for actual live use.
  */
 export type P5CdV0088RealQueueCiFence=P5CdDisposableQueueFence;
+/** Narrow, synthetic CI-only entrypoint. No change to the real
+ * Stage14 default feature array until source rights and field set are frozen.
+ */
+function assertP5ENativeRouteCi(flag:true|undefined){
+ const enabled=process.env.V39_P5_E_NATIVE_ROUTE_STAGE14_CI==="1";
+ if(flag===undefined)return;
+ if(flag!==true||!enabled||process.env.GITHUB_ACTIONS!=="true"||
+    process.env.DATABASE_URL!==
+     "postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"||
+    process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
+    process.env.ADB_AUTO_COLLECT!=="0"||
+    process.env.AERODATABOX_API_KEY||
+    process.env.AERODATABOX_WEBHOOK_SECRET||
+    process.env.P5_V39_PRE_DATABASE_URL)
+  hold("E_ROUTE_REQUIRES_EXPLICIT_LOCAL_NONPAID_SOURCE_BOUND_CI");
+}
 function assertP5CdV0088CiFence(f:P5CdV0088RealQueueCiFence|undefined){
  const enabled=process.env.V39_P5_CD_V0088_STAGE14_CI==="1";
  if(!enabled&&f!==undefined)
@@ -423,10 +441,12 @@ export async function persistP5V0079SingleBoundFlightPre(
   independentlyApprovedStandaloneProtocolSha256?:string;
   disposableCdQueueFence?:P5CdDisposableQueueFence;
   realV0088QueueFenceCi?:P5CdV0088RealQueueCiFence;
+  amendmentENativeRouteBoundCi?:true;
  }
 ):Promise<P5Stage14SingleFlightPreResult>{
  assertP5CdDisposableFenceArguments(options?.disposableCdQueueFence);
  assertP5CdV0088CiFence(options?.realV0088QueueFenceCi);
+ assertP5ENativeRouteCi(options?.amendmentENativeRouteBoundCi);
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
@@ -524,6 +544,17 @@ export async function persistP5V0079SingleBoundFlightPre(
        native.getTime())
      hold("FIRST_NATIVE_T_MUST_MATCH_QUALIFIED_SOURCE_SCHEDULE");
   }
+  const eRoute=options?.amendmentENativeRouteBoundCi===true
+   ? selectP5EStage14BoundRouteFeatures({
+      flightInstanceId:p.flightInstanceId,horizon:p.horizon,
+      selectedNativeTUtc:p.selectedTNativeUtc,
+      cutoffUtc:cutoff.toISOString(),issuedAtUtc:first.toISOString(),
+      expectedOriginalResponseSha256:p.expectedSourceResponseSha256,
+      expectedPopulationQueryId:p.expectedSourcePopulationQueryId,
+      originalSourceUseIndependentlyReviewedOutsideThisFunction:true,
+      normalizedMember:members[0]
+    }).features
+   : [];
   // No optional weather/ADSB feature is allowed to suppress a real source-
   // covered PRE. Separate feature owner may materialize only lawful as-of
   // features and must be frozen before the prediction cutoff.
@@ -536,7 +567,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    horizonEligible:true,horizon:p.horizon,
    selectedTMilestoneUtc:native,selectedTVersion:version,
    predictionCutoffUtc:cutoff,
-   features:[],frameHash:p.reviewedFrameSha256,
+   features:eRoute,frameHash:p.reviewedFrameSha256,
    configHash:p.reviewedConfigSha256,
    fidsResponseHash:p.expectedSourceResponseSha256,
    scheduleVersion:null

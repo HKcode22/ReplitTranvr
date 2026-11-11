@@ -141,7 +141,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    const fn="CD"+String(i).padStart(3,"0");
    await admin.query(
     "INSERT INTO clean.flight_population"+
-    "(source_airport_icao,dep_airport_icao,dep_scheduled_utc,"+
+    "(source_airport_icao,dep_airport_icao,arr_airport_icao,dep_scheduled_utc,"+
     "window_start_utc,window_end_utc,cutoff_utc,"+
     "source_type,population_query_id,analytic_identity_id,"+
     "canonical_flight_instance_id,population_role,scope_classification,"+
@@ -149,11 +149,11 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     "query_direction,from_local,to_local,airport_iana_timezone,"+
     "codeshare_resolution_status,fids_retrieval_utc,"+
     "provider_api_version,fids_protocol_version,openapi_sha256)"+
-    "VALUES('WSSS','WSSS',$1,$2,$3,$4,'fids',$5,$6,"+
+    "VALUES('WSSS','WSSS','YSSY',$1,$2,$3,$4,'fids',$5,$6,"+
     "$6,'requested_airport_primary','confirmed_core',"+
-    "clock_timestamp(),$7,$8,'Departure',"+
+    "statement_timestamp(),$7,$8,'Departure',"+
     "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
-    "'confirmed_operating_leg',clock_timestamp(),'1.15.4','v39',$9)",
+    "'confirmed_operating_leg',statement_timestamp(),'1.15.4','v39',$9)",
     [native,native,end,cutoff,qid,flight,response,fn,contract]);
   }
   await admin.query(
@@ -317,10 +317,23 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    generation:String(t.lease_generation),packetSha256:t.packet_sha256
   };
   const saved=await persistP5V0079SingleBoundFlightPre(writer,permit,{
-   realV0088QueueFenceCi:claimInfo
+   realV0088QueueFenceCi:claimInfo,
+   amendmentENativeRouteBoundCi:true
   });
   expect(saved.preSnapshotsInserted).toBe(1);
   expect(saved.postCommitDatabaseReadbackVerified).toBe(true);
+  const features=(await admin.query(
+   "SELECT features_json,missingness_flags FROM clean.flight_snapshots"+
+   " WHERE id=$1",[saved.committedSnapshotId])).rows[0];
+  expect(features.features_json).toEqual([
+   {name:"origin_icao",value:"WSSS"},
+   {name:"destination_icao",value:"YSSY"}
+  ]);
+  expect(features.missingness_flags).toMatchObject({
+   origin_icao:null,destination_icao:null
+  });
+  console.log("P5_E_STAGE14_ACTUAL_SOURCE_BOUND_PRE_ROUTE_FEATURES_PERSISTED");
+
   const receipt=createHash("sha256").update(
    JSON.stringify([saved.committedSnapshotId,saved.cutoffUtc,
     saved.postCommitDbClockAtUtc,claimInfo.taskId])
