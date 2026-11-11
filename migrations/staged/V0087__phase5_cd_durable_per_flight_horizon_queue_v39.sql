@@ -302,4 +302,32 @@ REVOKE ALL ON FUNCTION clean.phase5_cd_mark_write_started_v39(bigint,text,bigint
 REVOKE ALL ON FUNCTION clean.phase5_cd_ack_verified_v39(bigint,text,bigint,bigint,text)
   FROM PUBLIC;
 REVOKE ALL ON FUNCTION clean.phase5_cd_reap_once_v39(integer) FROM PUBLIC;
+-- Existing database ACL defaults may implicitly grant newly created tables
+-- or functions to legacy runtime roles. Override those grants on ONLY
+-- these freshly created V0087 objects before this DDL transaction commits.
+-- This never revokes access to any historical Phase1–5 table or trigger.
+DO $revoke_v0087$
+DECLARE n text;
+BEGIN
+ FOR n IN SELECT rolname FROM pg_catalog.pg_roles
+   WHERE rolname IN (
+     'travnr_runtime','travnr_v39_runtime_recovery1',
+     'neon_service','p4_g5_g5a_owner_20261103',
+     'phase5_fids_pre_writer_prod_20261107'
+   ) LOOP
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON TABLE clean.phase5_cd_pre_task_v39 FROM %I',n);
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON SEQUENCE clean.phase5_cd_pre_task_v39_task_id_seq FROM %I',n);
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON FUNCTION clean.phase5_cd_claim_due_v39(text,integer,integer) FROM %I',n);
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON FUNCTION clean.phase5_cd_mark_write_started_v39(bigint,text,bigint) FROM %I',n);
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON FUNCTION clean.phase5_cd_ack_verified_v39(bigint,text,bigint,bigint,text) FROM %I',n);
+   EXECUTE pg_catalog.format(
+     'REVOKE ALL PRIVILEGES ON FUNCTION clean.phase5_cd_reap_once_v39(integer) FROM %I',n);
+ END LOOP;
+END $revoke_v0087$;
+
 COMMIT;
