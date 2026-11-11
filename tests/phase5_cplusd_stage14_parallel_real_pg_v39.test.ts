@@ -255,7 +255,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    lanes:number;verified:number;elapsedMs:number;latenciesMs:number[]
   }>=[];
   for(const lanes of [1,2,4,8]){
-   let verified=0,confirmed40001Retries=0;
+   let verified=0,confirmed40001AbortRetries=0;
    const timings:number[]=[];
    const start=performance.now();
    await Promise.all(Array.from({length:lanes},(_,k)=>(async()=>{
@@ -292,7 +292,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        return live.n===1;
       },6
      );
-     confirmed40001Retries+=response.acknowledgedPrecommitSerializationRetries;
+     confirmed40001AbortRetries+=response.acknowledged40001AbortRetries;
      const finalized=await admin.query(
       "UPDATE p5_cd_stage14_ci.task SET status='VERIFIED'"+
       " WHERE id=$1 AND status='WRITE_STARTED_UNKNOWN' AND owner=$2"+
@@ -309,7 +309,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    console.log("P5_CD_STAGE14_REAL_PG16_LANES="+lanes+
     " VERIFIED=8 DURATION_MS="+elapsedMs+
     " MAX_WRITE_AND_READBACK_MS="+Math.round(Math.max(...timings))+
-    " CONFIRMED_PRECOMMIT_40001_ROLLBACK_RETRIES="+confirmed40001Retries);
+    " CONFIRMED_40001_ABORT_RETRIES="+confirmed40001AbortRetries);
   }
   const queue=(await admin.query(
    "SELECT count(*)::integer AS n,"+
