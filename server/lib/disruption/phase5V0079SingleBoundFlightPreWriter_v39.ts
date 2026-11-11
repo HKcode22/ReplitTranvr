@@ -29,6 +29,15 @@ const HORIZONS=["T-24h","T-6h","T-90m"];
 const MAX_EARLY_MS=180_000;
 const COMMIT_MARGIN_MS=2000;
 const CONDITIONAL_G5A_ID=/^leg:g5a:[a-f0-9]{64}$/;
+/** Only emitted for PostgreSQL SQLSTATE 40001 BEFORE COMMIT, after an
+ * ACKNOWLEDGED ROLLBACK. Never emitted for ambiguous COMMIT or readback.
+ * Not permission by itself to retry without read-only identity check.
+ */
+export class P5Stage14ConfirmedPrecommitSerializationAbort extends Error{
+ readonly code="P5_STAGE14_PRECOMMIT_40001_ABORT_CONFIRMED";
+ constructor(){super("P5_STAGE14_PRECOMMIT_40001_ROLLBACK_ACKNOWLEDGED");}
+}
+
 export type P5Stage14IdentityTier=
  "PROVIDER_NATIVE_OPERATING_LEG"|"CONDITIONAL_QUERY_FILTERED_SERVICE";
 const hold=(s:string):never=>{throw Error("REFUSED_P5_STAGE14_PRE_"+s);};
@@ -487,7 +496,19 @@ export async function persistP5V0079SingleBoundFlightPre(
    phase5FreezePassed:false,phase6PaidGo:false
   };
  }catch(e){
-  if(begun&&!commitAttempted)await c.query("ROLLBACK").catch(()=>{});
+  if(begun&&!commitAttempted){
+   // PostgreSQL 40001 from a pre-COMMIT statement aborts this transaction.
+   // A *confirmed* ROLLBACK allows a separately reviewed queue owner to
+   // consider a bounded fresh attempt AFTER read-only snapshot reconciliation.
+   // If the ROLLBACK acknowledgment is lost, quarantine instead of guessing.
+   let rollbackAcknowledged=false;
+   try{await c.query("ROLLBACK");rollbackAcknowledged=true;}catch{}
+   if((e as {code?:unknown})?.code==="40001"){
+    if(!rollbackAcknowledged)
+     hold("SERIALIZATION_ROLLBACK_UNACKNOWLEDGED_QUARANTINE");
+    throw new P5Stage14ConfirmedPrecommitSerializationAbort();
+   }
+  }
   if(commitAttempted)
    hold("POST_COMMIT_PROOF_MISSING_OR_AMBIGUOUS_QUARANTINE_NO_RETRY");
   throw e;
