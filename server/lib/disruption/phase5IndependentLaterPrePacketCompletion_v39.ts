@@ -152,7 +152,7 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
     dossier.entries.filter(e=>e.source.flightInstanceId===
       entry.source.flightInstanceId&&
       e.source.horizon===entry.source.horizon).length!==1||
-    !dossier.entries.some(e=>e===entry))
+    !dossier.entries.some(e=>JSON.stringify(e)===JSON.stringify(entry)))
   hold("DOSSIER_BYTES_NOT_INDEPENDENTLY_REVIEWED_OR_ENTRY_AMBIGUOUS");
  const s=entry.source;
  if(!s||!["T-6h","T-90m"].includes(s.horizon)||
