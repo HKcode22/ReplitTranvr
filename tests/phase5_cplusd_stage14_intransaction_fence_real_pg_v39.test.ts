@@ -20,6 +20,8 @@ import {
 } from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {persistP5CPlusDStage14WithConfirmedAbortRetry}
  from "../server/lib/disruption/phase5CPlusDStage14ConfirmedAbortRetry_v39";
+import {persistPreSnapshot,type PreSnapshot}
+ from "../server/lib/disruption/preSnapshotBuilder_v3";
 import type {P5PreQueueCandidate}
  from "../server/lib/disruption/phase5CPlusDParallelPreProofOfConcept_v39";
 
@@ -32,6 +34,7 @@ const manifest=h("a"),query=h("b"),reservation=h("c"),
  rights=h("d"),response=h("e"),contract=h("f");
 const qid="c23e4567-e89b-42d3-a456-426614174013";
 const FLIGHTS=32;
+const RECEIPT=process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1";
 type Claim={id:string;flight_instance_id:string;horizon:"T-24h";
  selected_native_t:string;own_cutoff:string;packet_sha:string;
  generation:number;owner:string;lease_until:string};
@@ -205,7 +208,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   const check=await admin.query("SELECT to_regclass('p5_cd_stage14_ci.task') AS relation");
   if(!check.rows[0]?.relation)throw Error("CD_STAGED_FENCE_SCHEMA_MISSING");
   await admin.query("GRANT USAGE ON SCHEMA p5_cd_stage14_ci TO "+ROLE);
-  await admin.query("GRANT EXECUTE ON FUNCTION p5_cd_stage14_ci.assert_write_fence("+
+  const allowedFunction=RECEIPT
+   ?"begin_admitted_write":"assert_write_fence";
+  await admin.query("GRANT EXECUTE ON FUNCTION p5_cd_stage14_ci."+
+   allowedFunction+"("+
    "bigint,text,text,timestamptz,timestamptz,text,text,bigint) TO "+ROLE);
   for(let i=1;i<=FLIGHTS;i++){
    const batch=[1,2,4,8][Math.floor((i-1)/8)];
@@ -263,7 +269,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   try{
    await writerSession.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
    const checked=await writerSession.query(
-    "SELECT p5_cd_stage14_ci.assert_write_fence("+
+    "SELECT p5_cd_stage14_ci."+ (RECEIPT?"begin_admitted_write":"assert_write_fence")+"("+
     "$1::bigint,$2,$3,$4::timestamptz,$5::timestamptz,$6,$7,$8::bigint) AS ok",
     [task.id,permit.flightInstanceId,permit.horizon,
      permit.selectedTNativeUtc,iso(Date.parse(permit.selectedTNativeUtc)-86_400_000),
@@ -309,6 +315,68 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     "UPDATE p5_cd_stage14_ci.task SET status='READY',owner=NULL,"+
     "generation=0,lease_until=NULL WHERE id=1");
   }
+ });
+ function syntheticPre(flightInstanceId:string):PreSnapshot{
+  const native=new Date(permit.selectedTNativeUtc);
+  const cutoff=new Date(native.getTime()-86_400_000);
+  return{
+   flightInstanceId,predictionState:"PRE_DEPARTURE",
+   horizon:"T-24h",predictionCutoffUtc:cutoff,
+   selectedTMilestoneUtc:native,selectedTVersion:"ci-direct-bypass",
+   populationQueryId:qid,features:[],
+   provenance:{
+    builderVersion:"ci-no-bypass",
+    populationQueryId:qid,fidsResponseHash:response,
+    scheduleVersion:null,frameHash:permit.reviewedFrameSha256,
+    configHash:permit.reviewedConfigSha256,missingnessFlags:{}
+   }
+  };
+ }
+ it("CI-only DB trigger refuses a direct PRE INSERT without a transaction receipt",async()=>{
+  if(!RECEIPT)return;
+  const t=await admin.query(
+   "SELECT count(*)::integer AS n FROM p5_cd_stage14_ci.admission_receipt");
+  expect(t.rows[0].n).toBe(0);
+  await expect(persistPreSnapshot(writer,syntheticPre(permit.flightInstanceId)))
+   .rejects.toThrow("P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
+  )).rows[0].n).toBe(0);
+ });
+ it("CI-only DB trigger refuses other-flight INSERT even after valid own-task admission",async()=>{
+  if(!RECEIPT)return;
+  const t=(await admin.query(
+   "UPDATE p5_cd_stage14_ci.task SET "+
+   "status='WRITE_STARTED_UNKNOWN',owner='ci-valid-writer',generation=4,"+
+   "lease_until=clock_timestamp()+INTERVAL '90 seconds' "+
+   "WHERE id=1 RETURNING id::text,packet_sha")).rows[0];
+  const c=await writer.connect();
+  try{
+   await c.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
+   const r=await c.query(
+    "SELECT p5_cd_stage14_ci.begin_admitted_write("+
+    "$1::bigint,$2,$3,$4::timestamptz,$5::timestamptz,"+
+    "$6,$7,$8::bigint) AS ok",
+    [t.id,permit.flightInstanceId,permit.horizon,
+     permit.selectedTNativeUtc,
+     new Date(Date.parse(permit.selectedTNativeUtc)-86_400_000),
+     t.packet_sha,"ci-valid-writer",4]);
+   expect(r.rows[0].ok).toBe(true);
+   await expect(persistPreSnapshot(c,syntheticPre("leg:ci:cd:002")))
+    .rejects.toThrow("P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
+  }finally{
+   await c.query("ROLLBACK").catch(()=>{});
+   c.release();
+   await admin.query(
+    "UPDATE p5_cd_stage14_ci.task SET status='READY',owner=NULL,"+
+    "generation=0,lease_until=NULL WHERE id=1");
+  }
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
+  )).rows[0].n).toBe(0);
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM p5_cd_stage14_ci.admission_receipt"
+  )).rows[0].n).toBe(0);
  });
  it("1/2/4/8 workers each process eight real Stage14 SQL PRE snapshots",async()=>{
   const results:Array<{
