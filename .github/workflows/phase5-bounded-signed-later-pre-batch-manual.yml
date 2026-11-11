@@ -1,0 +1,158 @@
+name: Phase5 bounded T6 T90 PRE batch (SIGNED manual main NO PROVIDER)
+run-name: P5 LATER SIGNED BATCH ${{ inputs.approved_batch_nonce_sha256 }}
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_later_pre_registry:
+        description: 'Independently signed source-day-linked later PRE shard'
+        type: string
+        required: true
+      batch_packet_paths_json:
+        description: 'Exact JSON array of 1-8 independently signed frozen PRE paths'
+        type: string
+        required: true
+      approved_batch_nonce_sha256:
+        description: 'One-time independently approved GH run nonce SHA'
+        type: string
+        required: true
+      confirm:
+        description: 'Type ONE_SIGNED_BOUND_EIGHT_FLIGHT_PRE_BATCH_NO_PROVIDER'
+        type: string
+        required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-bounded-signed-later-pre-batch-manual.yml'
+      - 'server/lib/disruption/phase5BoundedSignedLaterPreBatchPlan_v39.ts'
+      - 'scripts/v39_phase5_bounded_signed_later_pre_batch_owner_v39.ts'
+      - 'tests/phase5_bounded_signed_later_pre_batch_owner_v39.test.ts'
+      - 'data-collection/phase5/2026-11-10_BOUNDED_EIGHT_FLIGHT_T6_T90_BATCH_OWNER_REVIEW_CHECKPOINT.md'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  # One GH batch attempt at a time; does NOT replace Stage14 per-flight
+  # unique/transactional no-replay. Also never cancel partially committed job.
+  group: phase5-bounded-later-pre-batch-singleton
+  cancel-in-progress: false
+jobs:
+  no-provider-exact-batch-tests:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Batch T6 T90 honest deadlines and stop-on-unknown-COMMIT offline only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_bounded_signed_later_pre_batch_owner_v39.test.ts
+          echo 'SIGNED_BATCH_UNIT_TESTS_ONLY_ZERO_SQL_PROVIDER_GH_RELEASE'
+  one-separately-reviewed-bound-pre-batch:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'ONE_SIGNED_BOUND_EIGHT_FLIGHT_PRE_BATCH_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_LATER_PRE_CONFIRM: 'ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER'
+      P5_BOUND_LATER_PRE_BATCH_CONFIRM: ${{ inputs.confirm }}
+      P5_BOUND_LATER_PRE_BATCH_REGISTRY_FILE: ${{ inputs.frozen_later_pre_registry }}
+      P5_BOUND_LATER_PRE_BATCH_PACKET_PATHS_JSON: ${{ inputs.batch_packet_paths_json }}
+      P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256: ${{ inputs.approved_batch_nonce_sha256 }}
+      V39_P5_BOUND_LATER_PRE_BATCH_APPROVED_NONCE_SHA256: ${{ secrets.V39_P5_BOUND_LATER_PRE_BATCH_APPROVED_NONCE_SHA256 }}
+      V39_P5_BOUND_LATER_PRE_BATCH_OWNER_APPROVED: ${{ secrets.V39_P5_BOUND_LATER_PRE_BATCH_OWNER_APPROVED }}
+      P5_LATER_PRE_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_AUTO_DISPATCH_ENABLED }}
+      P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED }}
+      V39_P5_LATER_PRE_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_OWNER_APPROVED }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED }}
+      V39_P5_LATER_PRE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_LATER_PRE_APPROVED_CODE_SHA }}
+      V39_P5_LATER_PRE_DAY_REGISTRY_SHA256: ${{ secrets.V39_P5_LATER_PRE_DAY_REGISTRY_SHA256 }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      P5_LATER_PRE_DAY_INDEX: ${{ vars.P5_LATER_PRE_DAY_INDEX }}
+      V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_INDEPENDENT_APPROVED }}
+      V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256: ${{ secrets.V39_P5_STANDALONE_LATER_PRE_AMENDMENT_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_NATIVE_T_SEMANTICS_SHA256: ${{ secrets.V39_P5_NATIVE_T_SEMANTICS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: HARD HOLD before dependencies or source use if no separate signed GO
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test "$V39_P5_BOUND_LATER_PRE_BATCH_OWNER_APPROVED" = 1
+          test "$V39_P5_LATER_PRE_OWNER_APPROVED" = 1
+          test "$V39_P5_LATER_PRE_DAY_REGISTRY_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test "$P5_LATER_PRE_AUTO_DISPATCH_ENABLED" != true
+          test "$P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED" != true
+          [[ "$P5_BOUND_LATER_PRE_BATCH_REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+          [[ "$P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$P5_BOUND_LATER_PRE_BATCH_NONCE_SHA256" = "$V39_P5_BOUND_LATER_PRE_BATCH_APPROVED_NONCE_SHA256"
+          [[ "$V39_P5_LATER_PRE_DAY_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test -n "$P5_V39_PRE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Batch of at most eight independently signed later PREs through original Stage14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx tsx scripts/v39_phase5_bounded_signed_later_pre_batch_owner_v39.ts
+          echo 'BOUNDED_SIGNED_PRE_BATCH_VERIFIED_NOT_SOURCE_OR_FREEZE_CERTIFIER'
