@@ -35,11 +35,13 @@ const manifest=h("a"),query=h("b"),reservation=h("c"),
 const qid="c23e4567-e89b-42d3-a456-426614174013";
 const FLIGHTS=32;
 const RECEIPT=process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1";
+const SCOPED=process.env.V39_P5_CD_STAGE14_SCOPED_DISPOSABLE==="1";
+const LEGACY_ROLE="phase5_cd_legacy_ciuser01";
 type Claim={id:string;flight_instance_id:string;horizon:"T-24h";
  selected_native_t:string;own_cutoff:string;packet_sha:string;
  generation:number;owner:string;lease_until:string};
 active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",()=>{
- let admin:Pool,writer:Pool,permit:P5Stage14SingleFlightPrePermit;
+ let admin:Pool,writer:Pool,legacy:Pool|undefined,permit:P5Stage14SingleFlightPrePermit;
  let cutoffMs=0;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
@@ -182,6 +184,22 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   await admin.query("GRANT INSERT ON clean.flight_snapshots TO "+ROLE);
   await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+ROLE);
   writer=new Pool({connectionString:LOGIN_URL,max:10});
+  if(SCOPED){
+   if(!RECEIPT)throw Error("REFUSED_SCOPED_CI_WITHOUT_RECEIPT");
+   await admin.query("CREATE ROLE "+LEGACY_ROLE+
+    " LOGIN PASSWORD '"+process.env.P5_CD_CI_PASSWORD+"'"+
+    " NOSUPERUSER NOCREATEDB NOCREATEROLE");
+   await admin.query("GRANT USAGE ON SCHEMA clean TO "+LEGACY_ROLE);
+   await admin.query("GRANT SELECT,INSERT ON clean.flight_snapshots TO "+LEGACY_ROLE);
+   // The pre-existing population-member attachment trigger is INVOKER
+   // security: even the old writer needs SELECT on flight_population.
+   await admin.query("GRANT SELECT ON clean.flight_population TO "+LEGACY_ROLE);
+   await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+LEGACY_ROLE);
+   legacy=new Pool({
+    connectionString:LOGIN_URL.replace(ROLE,LEGACY_ROLE),max:2
+   });
+  }
+
   permit={
    manifestSha256:manifest,queryDigestSha256:query,
    expectedSourcePopulationQueryId:qid,expectedSourceResponseSha256:response,
@@ -225,6 +243,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
  });
  afterAll(async()=>{
   if(writer)await writer.end();
+  if(legacy)await legacy.end();
   if(admin){
    await admin.query("DROP SCHEMA IF EXISTS p5_cd_stage14_ci CASCADE").catch(()=>{});
    await admin.end();
@@ -338,7 +357,9 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "SELECT count(*)::integer AS n FROM p5_cd_stage14_ci.admission_receipt");
   expect(t.rows[0].n).toBe(0);
   await expect(persistPreSnapshot(writer,syntheticPre(permit.flightInstanceId)))
-   .rejects.toThrow("P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
+   .rejects.toThrow(SCOPED?
+     "P5_CD_PROTECTED_INSERT_REQUIRES_SAME_TX_ADMISSION":
+     "P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
   expect((await admin.query(
    "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
   )).rows[0].n).toBe(0);
@@ -363,7 +384,9 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      t.packet_sha,"ci-valid-writer",4]);
    expect(r.rows[0].ok).toBe(true);
    await expect(persistPreSnapshot(c,syntheticPre("leg:ci:cd:002")))
-    .rejects.toThrow("P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
+    .rejects.toThrow(SCOPED?
+     "P5_CD_PROTECTED_INSERT_REQUIRES_SAME_TX_ADMISSION":
+     "P5_CD_INSERT_REQUIRES_SAME_TRANSACTION_ADMISSION");
   }finally{
    await c.query("ROLLBACK").catch(()=>{});
    c.release();
@@ -376,6 +399,53 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   )).rows[0].n).toBe(0);
   expect((await admin.query(
    "SELECT count(*)::integer AS n FROM p5_cd_stage14_ci.admission_receipt"
+  )).rows[0].n).toBe(0);
+ });
+ it("scoped trigger preserves unregistered legacy writer INSERT",async()=>{
+  if(!SCOPED)return;
+  if(!legacy)throw Error("NO_DISPOSABLE_LEGACY_ROLE");
+  const old=syntheticPre("leg:ci:legacy:001");
+  // This test only proves *database compatibility*, not validity of a
+  // scientific source/label for this synthetic historical flight.
+  const n=await persistPreSnapshot(legacy,old);
+  expect(n).toBe(1);
+  const found=await admin.query(
+   "SELECT id::text AS id FROM clean.flight_snapshots"+
+   " WHERE flight_instance_id=$1 AND horizon='T-24h'",
+   [old.flightInstanceId]);
+  expect(found.rows).toHaveLength(1);
+  await admin.query("DELETE FROM clean.flight_snapshots WHERE id=$1",
+   [found.rows[0].id]);
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
+  )).rows[0].n).toBe(0);
+ });
+ it("scoped trigger refuses missing T90 task for any enrolled flight",async()=>{
+  if(!SCOPED)return;
+  const native=new Date(permit.selectedTNativeUtc);
+  const fake={
+   ...syntheticPre(permit.flightInstanceId),
+   horizon:"T-90m" as const,
+   predictionCutoffUtc:new Date(native.getTime()-90*60000)
+  };
+  await expect(persistPreSnapshot(writer,fake))
+   .rejects.toThrow("P5_CD_PROTECTED_FLIGHT_HORIZON_NOT_REGISTERED");
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
+  )).rows[0].n).toBe(0);
+ });
+ it("scoped trigger rejects a legacy actor inserting into enrolled C+D flight",async()=>{
+  if(!SCOPED)return;
+  if(!legacy)throw Error("NO_DISPOSABLE_LEGACY_ROLE");
+  await expect(persistPreSnapshot(legacy,
+   syntheticPre(permit.flightInstanceId)))
+   .rejects.toThrow("P5_CD_PROTECTED_INSERT_WRONG_ISOLATED_ROLE");
+  const shifted=syntheticPre(permit.flightInstanceId);
+  shifted.predictionCutoffUtc=new Date(shifted.predictionCutoffUtc.getTime()+15*60_000);
+  await expect(persistPreSnapshot(writer,shifted))
+   .rejects.toThrow("P5_CD_PROTECTED_INSERT_REQUIRES_SAME_TX_ADMISSION");
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.flight_snapshots"
   )).rows[0].n).toBe(0);
  });
  it("1/2/4/8 workers each process eight real Stage14 SQL PRE snapshots",async()=>{
