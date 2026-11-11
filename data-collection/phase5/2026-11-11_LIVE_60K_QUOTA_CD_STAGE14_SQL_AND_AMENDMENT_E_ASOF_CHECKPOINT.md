@@ -56,3 +56,19 @@ Owner's intent: richer traveler-facing delay-minute distributions, 15/30/60/120m
 - End-to-end as-of, source/route/weather feature binding and outcome label confidence; then preregister the single first-cycle primary target, chronological test and baseline. Real physical events are not guaranteed by FIDS or ADSB.lol proxies.
 
 **Release status:** Phase5 scientific FREEZE HOLD / Phase6 paid GO NO. Everything in this PR is offline/synthetic/durable documentation, not a license grant.
+
+
+## 5. First live disposable-PG16 test exposed REAL SERIALIZABLE contention (not production)
+
+The first PR #566 `real-stage14-synthetic-parallel-pre-only` job **FAILED** on actual PG16, even though its **single-lane eight-flight** mode succeeded (`VERIFIED=8`, elapsed **82ms**, max individual Stage14+receipt **27ms** in that CI run). Upon starting parallel work, PostgreSQL raised **SQLSTATE `40001`** during `INSERT ... ON CONFLICT DO NOTHING` inside the **existing** `persistPreSnapshot` under Stage14 `SERIALIZABLE`: *could not serialize access due to read/write dependencies among transactions; canceled on identification as a pivot during write*. The test stopped with 12 total saved PRE rows rather than 32. The later 32-count assertion was a cascading symptom of the first failure. **Do not interpret the 82ms as a representative production speed or claim C+D throughput was already proven.**
+
+This is an important **empirical** engineering finding that validates the owner's concern about parallel SQL race/contension. PostgreSQL explicitly reports an aborted serializable transaction; blindly rerunning *all* exceptions or switching globally to `READ COMMITTED` would be incorrect.
+
+**Corrective implementation on the same review branch, pending CI:**
+
+- Existing `phase5V0079SingleBoundFlightPreWriter_v39.ts` now emits a distinct `P5Stage14ConfirmedPrecommitSerializationAbort` **only** after a backend `40001` happens **before COMMIT** and an explicit `ROLLBACK` acknowledges. Lost rollback still refuses/quarantines. All errors after COMMIT attempt retain their original `POST_COMMIT_PROOF_MISSING_OR_AMBIGUOUS_QUARANTINE_NO_RETRY` refusal.
+- `phase5CPlusDStage14ConfirmedAbortRetry_v39.ts` adds **at most six** narrowly classified recovery attempts, each after an independent `REPEATABLE READ READ ONLY` readback finds **no existing PRE for the flight/horizon under any native-T cutoff**, with current queue lease/owner and deadline rechecked. It sleeps only *outside* SQL transaction to reduce hot contention. Non-`40001`, unmatched source, unknown COMMIT, lost lease, or exhausted attempts stay quarantined.
+- Disposable parallel test now invokes that confirmed-abort wrapper and logs per-lane retries. It still leaves `WRITE_STARTED_UNKNOWN` until actual Stage14 acknowledges a valid durable PRE and finalizes the queue receipt; no broad exception retry or weakening of existing SERIALIZABLE writer.
+- **Unresolved**: this wrapper's outer lease checks still do not enforce lease fencing inside Stage14's own write transaction; production queue installation and paid Phase6 release continue to HOLD.
+
+**State at time of this amendment:** the rerun on the new branch head was pending; no guarantee of success, no live DB or paid provider calls. On any renewed CI failure, investigate and retain the failure evidence rather than masking the problem. See PR #566 exact-head Actions for current outcome.
