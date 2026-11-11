@@ -334,7 +334,7 @@ export async function persistP5V0079SingleBoundFlightPre(
  const cutoff=new Date(native.getTime()-PRE_HORIZON_OFFSET_MIN[p.horizon]*60_000);
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_PRE_WRITER");
  const c:PoolClient=await pool.connect();
- let begun=false,commitAttempted=false;
+ let begun=false,commitAttempted=false,commitAcknowledged=false;
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   begun=true;
@@ -449,7 +449,7 @@ export async function persistP5V0079SingleBoundFlightPre(
   if(immediatelyBeforeCommit.getTime()+COMMIT_MARGIN_MS>cutoff.getTime())
    hold("PRE_COMMIT_MARGIN_NOT_PROTECTED");
   commitAttempted=true;
-  await c.query("COMMIT");begun=false;
+  await c.query("COMMIT");begun=false;commitAcknowledged=true;
   // Before-COMMIT clock is NOT durable-commit evidence. Confirm the
   // persisted immutable row and DB clock after the COMMIT was acknowledged.
   // If COMMIT succeeded but post-commit proof is unavailable or late,
@@ -522,7 +522,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    // definitively aborts the whole serializable transaction. In contrast,
    // a network/timeout/lost ACK or post-COMMIT readback failure has no
    // reliable COMMIT outcome; those always retain the original HOLD.
-   if((e as {code?:unknown})?.code==="40001"){
+   if(!commitAcknowledged&&(e as {code?:unknown})?.code==="40001"){
     let rollbackAcknowledged=false;
     try{await c.query("ROLLBACK");rollbackAcknowledged=true;}catch{}
     if(!rollbackAcknowledged)
