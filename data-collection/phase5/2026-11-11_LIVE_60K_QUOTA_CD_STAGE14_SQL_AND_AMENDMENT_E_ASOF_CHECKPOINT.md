@@ -66,9 +66,27 @@ This is an important **empirical** engineering finding that validates the owner'
 
 **Corrective implementation on the same review branch, pending CI:**
 
-- Existing `phase5V0079SingleBoundFlightPreWriter_v39.ts` now emits a distinct `P5Stage14ConfirmedPrecommitSerializationAbort` **only** after a backend `40001` happens **before COMMIT** and an explicit `ROLLBACK` acknowledges. Lost rollback still refuses/quarantines. All errors after COMMIT attempt retain their original `POST_COMMIT_PROOF_MISSING_OR_AMBIGUOUS_QUARANTINE_NO_RETRY` refusal.
-- `phase5CPlusDStage14ConfirmedAbortRetry_v39.ts` adds **at most six** narrowly classified recovery attempts, each after an independent `REPEATABLE READ READ ONLY` readback finds **no existing PRE for the flight/horizon under any native-T cutoff**, with current queue lease/owner and deadline rechecked. It sleeps only *outside* SQL transaction to reduce hot contention. Non-`40001`, unmatched source, unknown COMMIT, lost lease, or exhausted attempts stay quarantined.
+- Existing `phase5V0079SingleBoundFlightPreWriter_v39.ts` now distinguishes (i) PostgreSQL SQLSTATE `40001` **before COMMIT**, plus acknowledged ROLLBACK, and (ii) **a server-returned `40001` from the COMMIT statement itself**, also definitively aborted and followed by acknowledged ROLLBACK. Critically, a *successfully acknowledged COMMIT* followed by a failed readback, a lost network ACK, any non-`40001` or an unacknowledged rollback **stays quarantined**, never automatically retried. Explicit `commitAcknowledged` state guards that distinction.
+- `phase5CPlusDStage14ConfirmedAbortRetry_v39.ts` adds **at most six** narrowly classified full-transaction recovery attempts, each after independent `REPEATABLE READ READ ONLY` readback finds **no existing PRE for the flight/horizon under any native-T cutoff**, with current queue lease/owner and deadline rechecked. It sleeps only *outside* SQL transactions to reduce hot contention. Non-`40001`, unmatched source, unknown COMMIT, lost lease, or exhausted attempts stay quarantined. This follows [official PostgreSQL 16 §13.5 guidance](https://www.postgresql.org/docs/16/mvcc-serialization-failure-handling.html): retry a **complete** transaction after `40001`, with no guarantee every retry succeeds.
 - Disposable parallel test now invokes that confirmed-abort wrapper and logs per-lane retries. It still leaves `WRITE_STARTED_UNKNOWN` until actual Stage14 acknowledges a valid durable PRE and finalizes the queue receipt; no broad exception retry or weakening of existing SERIALIZABLE writer.
 - **Unresolved**: this wrapper's outer lease checks still do not enforce lease fencing inside Stage14's own write transaction; production queue installation and paid Phase6 release continue to HOLD.
 
 **State at time of this amendment:** the rerun on the new branch head was pending; no guarantee of success, no live DB or paid provider calls. On any renewed CI failure, investigate and retain the failure evidence rather than masking the problem. See PR #566 exact-head Actions for current outcome.
+
+
+## 6. Current corrected CI result — exact observed *synthetic* performance
+
+**PR #566 isolated Postgres16 Action [run #43034978362](https://github.com/HKcode22/ReplitTranvr/actions/runs/43034978362)** passed after the proven SQLSTATE-40001 recovery path. Its eight-flight trials reported the following on that one shared-hosted-runner test (not production throughput, not a representative multi-day statistical benchmark):
+
+| Parallel worker lanes | Distinct synthetic flights saved and acknowledged | Total time for eight tasks | Maximum task write + readback time | Proven SQLSTATE-40001 aborted-transaction retries |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 8 | **97 ms** | 22 ms | 0 |
+| 2 | 8 | **115 ms** | 96 ms | 1 |
+| 4 | 8 | **260 ms** | 249 ms | 5 |
+| 8 | 8 | **328 ms** | 280 ms | 10 |
+
+**Total:** 32 distinct source-bound staged Stage14 PRE rows committed/read back before their respective cutoffs, no provider GET, no production DB write. The test additionally checked nonduplicate canonical flight×horizon and refused a revised-native-T duplicate. More lanes were slower under this tiny sample because SERIALIZABLE contention and recovery overhead dominated. **Do NOT declare 1 lane optimal** from this isolated 8-task synthetic demonstration. Next benchmark should vary 50/100/250 eligible tasks, cutoff overlap, source/query grouping and p95/p99 latency; record successful, explicit-rollback retried, failed/unknown and missed deadlines as separate denominators.
+
+The testing path still **lacks an in-transaction queue generation/fence check in the actual Stage14 writer**, so it is not a production release. Production must prevent an old leased worker writing if another owner has already reclaimed the same task. The existing outer check is insufficient proof.
+
+**Scientific caution:** the first failed test was a valuable discovery, not evidence the experimental data were damaged. Only disposable local PG16 was used. No production data rows were deleted or overwritten. The subsequent successful test illustrates *a possible* bounded recovery under this synthetic scenario, not an accuracy or reliability guarantee for the 31-day prospective study.
