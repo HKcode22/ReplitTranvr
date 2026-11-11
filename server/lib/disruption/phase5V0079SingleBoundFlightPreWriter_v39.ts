@@ -37,6 +37,14 @@ export class P5Stage14ConfirmedPrecommitSerializationAbort extends Error{
  readonly code="P5_STAGE14_PRECOMMIT_40001_ABORT_CONFIRMED";
  constructor(){super("P5_STAGE14_PRECOMMIT_40001_ROLLBACK_ACKNOWLEDGED");}
 }
+/** PostgreSQL itself definitively returned 40001 from COMMIT (transaction
+ * aborted, not a lost ACK), and a separate ROLLBACK was acknowledged.
+ * Still requires read-only canonical flight reconciliation before retry.
+ */
+export class P5Stage14ConfirmedCommitSerializationAbort extends Error{
+ readonly code="P5_STAGE14_COMMIT_40001_ABORT_CONFIRMED";
+ constructor(){super("P5_STAGE14_COMMIT_40001_ROLLBACK_ACKNOWLEDGED");}
+}
 
 export type P5Stage14IdentityTier=
  "PROVIDER_NATIVE_OPERATING_LEG"|"CONDITIONAL_QUERY_FILTERED_SERVICE";
@@ -509,8 +517,20 @@ export async function persistP5V0079SingleBoundFlightPre(
     throw new P5Stage14ConfirmedPrecommitSerializationAbort();
    }
   }
-  if(commitAttempted)
+  if(commitAttempted){
+   // A SQLSTATE 40001 *returned by the PostgreSQL server on COMMIT*
+   // definitively aborts the whole serializable transaction. In contrast,
+   // a network/timeout/lost ACK or post-COMMIT readback failure has no
+   // reliable COMMIT outcome; those always retain the original HOLD.
+   if((e as {code?:unknown})?.code==="40001"){
+    let rollbackAcknowledged=false;
+    try{await c.query("ROLLBACK");rollbackAcknowledged=true;}catch{}
+    if(!rollbackAcknowledged)
+     hold("COMMIT_40001_ROLLBACK_UNACKNOWLEDGED_QUARANTINE");
+    throw new P5Stage14ConfirmedCommitSerializationAbort();
+   }
    hold("POST_COMMIT_PROOF_MISSING_OR_AMBIGUOUS_QUARANTINE_NO_RETRY");
+  }
   throw e;
  }finally{c.release();}
 }
