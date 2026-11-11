@@ -1,0 +1,75 @@
+name: Phase5 C+D actual Stage14 parallel PRE on disposable PG16 (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cplusd-stage14-parallel-real-pg16.yml'
+      - 'tests/phase5_cplusd_stage14_parallel_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5CPlusDStage14ResultBridgeOffline_v39.ts'
+      - 'server/lib/disruption/phase5CPlusDStage14ConfirmedAbortRetry_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+permissions:
+  contents: read
+jobs:
+  real-stage14-synthetic-parallel-pre-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_CD_STAGE14_REAL_PG16: '1'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Refuse real provider or production DB
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          echo 'P5_CD_STAGE14_DISPOSABLE_PG16_ONLY'
+      - name: Bootstrap existing schema and staged V0079 (local PG only)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+      - name: Run 1/2/4/8 synthetic-flight claims through actual Stage14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_cplusd_stage14_parallel_real_pg_v39.test.ts
+          echo 'P5_CD_STAGE14_REAL_SQL_PARALLEL_NO_PAID_PROVIDER_NO_PHASE6_GO'

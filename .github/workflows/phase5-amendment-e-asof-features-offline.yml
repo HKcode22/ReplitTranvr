@@ -1,0 +1,39 @@
+name: Phase5 Amendment E as-of predictive feature integrity (OFFLINE)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-amendment-e-asof-features-offline.yml'
+      - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
+      - 'tests/phase5_amendment_e_asof_feature_selection_offline_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  pre-feature-asof-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test no-provider Amendment E time-availability/feature contracts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx --no-install vitest run tests/phase5_amendment_e_asof_feature_selection_offline_v39.test.ts
+          echo 'PHASE5_AMENDMENT_E_ASOF_NO_PAID_NO_LIVE_WRITER'
