@@ -1,0 +1,150 @@
+name: Phase5 C+D one queued T24 PRE + independent V0081 witness (STOP default)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER'
+        required: true
+        type: string
+      frozen_roster:
+        description: 'Reviewed singleton roster path under data-collection/phase5/frozen/'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml'
+      - 'scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts'
+      - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+      - 'tests/phase5_cd_github_queued_t24_offline_v39.test.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-cd-queued-t24-main
+  cancel-in-progress: false
+jobs:
+  offline-queued-t24-packet-witness-and-stop:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Offline T24 signed packet role checks and queued two-commit witness
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run             tests/phase5_cd_github_queued_t24_offline_v39.test.ts             tests/phase5_t24_pre_independent_witness_chain_v39.test.ts             tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts
+          echo P5_CD_T24_SEPARATE_WITNESS_OFFLINE_STOP_NO_PROVIDER_PASS
+  one-approved-queued-native-t24:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && vars.P5_CD_GH_QUEUED_T24_ENABLED == '1'
+          && inputs.confirm == 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_QUEUED_T24_EXECUTE: '1'
+      P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ${{ inputs.confirm }}
+      P5_CD_GH_ROSTER_PATH: ${{ inputs.frozen_roster }}
+      P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      P5_V39_T24_WITNESS_DATABASE_URL: ${{ secrets.P5_V39_T24_WITNESS_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fail closed before Node modules, database or provider
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$P5_V39_PRE_DATABASE_URL"
+          test -n "$P5_V39_T24_WITNESS_DATABASE_URL"
+          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              ;;
+            *)
+              echo HOLD_NO_INDEPENDENT_T24_CANARY_OR_PHASE6_GO
+              exit 2
+              ;;
+          esac
+          [[ "$P5_CD_GH_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          test -f "$P5_CD_GH_ROSTER_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One already-registered T24 through original Stage14 and V0081
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts
+          echo P5_CD_QUEUED_T24_PRE_V0081_SEPARATE_WITNESS_ATTEMPT_NO_PAID
