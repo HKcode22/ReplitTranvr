@@ -7,6 +7,7 @@
  * is required by the signed GitHub release and documented separately.
  * Exact packet bytes and full Stage14 permit are validated BEFORE SQL.
  */
+import {createHash} from "node:crypto";
 import type {P5CdTaskExecutor} from "./phase5CdDurableQueueClient_v39";
 import {preflightP5Stage14ReviewedPermitV39}
  from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -21,6 +22,11 @@ import {
  type P5CdGithubSourceEnrollRelease
 } from "./phase5CdGithubSourceEnrollGate_v39";
 
+// In-process capability: only the exact object returned by signed-roster
+// verification can reach the V0091 caller. Detect mutation after verification.
+const REVIEWED_OBJECTS=new WeakMap<object,string>();
+const permitDigest=(p:unknown)=>createHash("sha256")
+ .update(JSON.stringify(p)).digest("hex");
 const SHA=/^[a-f0-9]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const fail=(s:string):never=>{
@@ -88,6 +94,7 @@ export function verifyP5CdOneFrozenSourceEnrollment(
  const native=preflightP5Stage14ReviewedPermitV39(p);
  if(native!==p.selectedTNativeUtc)
   fail("ORIGINAL_STAGE14_NATIVE_T_NOT_CANONICAL");
+ REVIEWED_OBJECTS.set(selected,permitDigest(selected.permit));
  return selected;
 }
 export async function registerOneP5CdGithubSourceFlightV39(
@@ -97,8 +104,10 @@ export async function registerOneP5CdGithubSourceFlightV39(
 ):Promise<P5CdSourceEnrollEvidence>{
  const release=requireP5CdGithubSourceEnrollRelease(env);
  if(!db||typeof db.query!=="function"||!verified||
-    verified.packetSha256!==release.packetSha256)
-  fail("DB_OR_EXACT_FROZEN_PACKET_MISSING");
+    verified.packetSha256!==release.packetSha256||
+    !REVIEWED_OBJECTS.has(verified)||
+    REVIEWED_OBJECTS.get(verified)!==permitDigest(verified.permit))
+  return fail("DB_OR_EXACT_FROZEN_PACKET_MISSING_OR_MUTATED");
  // This API intentionally takes only a PRE-validated packet. The
  // caller must invoke verifyP5CdOneFrozenSourceEnrollment before DB
  // connection (GH runner does so). A second identity check stays here.
