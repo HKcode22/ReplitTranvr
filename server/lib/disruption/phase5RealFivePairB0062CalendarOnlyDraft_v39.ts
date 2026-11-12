@@ -145,6 +145,8 @@ export function buildP5ActualFivePairB0062CalendarOnlyDraft(
  const anchors=indexed(p.ordinaryHubsAndRegions,ordinaryIndexes,"ORDINARY_HUB_PLAN");
  const seeds=indexed(p.predeclaredDailyDrawSeeds,
   envelope.days.map(x=>x.runDayIndex),"FUTURE_REGION_DRAW_SEEDS");
+ if(new Set([...seeds.values()].map(s=>s.frozenDrawSeed)).size!==31)
+  hold("FUTURE_REGIONAL_DAY_DRAW_SEEDS_REPEATED");
  const lastKnownHUBEnd=new Map<string,number>();
  const rows=envelope.days.map(day=>{
   const seed=seeds.get(day.runDayIndex)?.frozenDrawSeed;
