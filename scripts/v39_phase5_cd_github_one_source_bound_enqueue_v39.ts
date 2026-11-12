@@ -9,6 +9,7 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {
  makeP5Stage28DedicatedRolePool
 } from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -57,6 +58,7 @@ const QUERY="SELECT clean.phase5_cd_register_source_flight_v39("+
 export async function runP5CdGithubOneSourceEnrollment(
  env:NodeJS.ProcessEnv
 ){
+ verifyP5CdGithubFrozenCodeLineage(env);
  const approved=requireP5CdGithubPrepareAdmission(env);
  const path=env.P5_CD_GH_PRE_ROSTER_PATH;
  if(!path||!FILE.test(path))hold("MISSING_REVIEWED_FROZEN_ROSTER_PATH");
