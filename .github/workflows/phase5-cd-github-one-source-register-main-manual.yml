@@ -1,0 +1,144 @@
+name: Phase5 C+D one already-bound FIDS original to V0087 (manual, STOP default)
+on:
+  workflow_dispatch:
+    inputs:
+      frozen_roster:
+        description: 'Exact reviewed single signed future T6/T90 roster in data-collection/phase5/frozen/'
+        type: string
+        required: true
+      confirm:
+        description: 'Type REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER'
+        type: string
+        required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-github-one-source-register-main-manual.yml'
+      - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
+      - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
+      - 'tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-cd-one-bound-source-register-${{ inputs.frozen_roster || github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-source-to-queue-admission:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test signed PREPARE-only real V0091 args and STOP before DB/provider
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run             tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts
+          echo P5_CD_GH_ONE_SOURCE_REGISTRATION_STOP_DEFAULT_OFFLINE_PASS
+  register-one-reviewed-source-flight:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && inputs.confirm == 'REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER'
+          && vars.P5_CD_GH_PREPARE_SOURCE_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_PREPARE_EXECUTE: '1'
+      P5_CD_GH_PREPARE_CONFIRM: ${{ inputs.confirm }}
+      P5_CD_GH_PRE_ROSTER_PATH: ${{ inputs.frozen_roster }}
+      P5_CD_GH_PREPARE_ARMED: ${{ secrets.P5_CD_GH_PREPARE_ARMED }}
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hard STOP and PREPARE-only release before installing dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P5_CD_GH_PREPARE_CONFIRM" = REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER
+          test "$P5_CD_GH_PREPARE_ARMED" = 1
+          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -n "$P5_V39_PREPARE_DATABASE_URL"
+          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              ;;
+            *)
+              echo HOLD_SOURCE_REGISTER_NO_INDEPENDENT_CANARY_OR_PHASE6_GO
+              exit 2
+              ;;
+          esac
+          [[ "$P5_CD_GH_PRE_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          test -f "$P5_CD_GH_PRE_ROSTER_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: ONE genuine, already bound source original → existing flight queue task
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts
+          echo P5_CD_GH_ONE_V0091_BOUND_SOURCE_REGISTER_COMMAND_FINISHED_NO_PAID
