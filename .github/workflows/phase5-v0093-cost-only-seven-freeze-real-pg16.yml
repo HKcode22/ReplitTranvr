@@ -1,0 +1,71 @@
+name: Phase5 V0093 Real PG16 Atomic Cost-Only Category Freeze (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs'
+      - 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml'
+      - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs'
+      - 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  V39_P5_V0093_FREEZE_PG16: '1'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+jobs:
+  atomic-inert-category-input-freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install separate disposable PG16 baseline and preexisting V0079/V0082 then V0093
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = 'true'
+          test "${V39_PHASE6_OWNER_APPROVED}" = '0'
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          test -z "${AERODATABOX_API_KEY}"
+          test "${DATABASE_URL}" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+      - name: Real restricted PostgreSQL16 atomic late-failure rollback and zero-paid freeze tests
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}"
+          npx vitest run tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts
+          npm run v39:typecheck
+          echo 'V0093_COST_ONLY_ATOMIC_SEVEN_REST_FREEZE_PG16=PASS FIDS_GET=0 PHASE6_GO=0'

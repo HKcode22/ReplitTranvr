@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — inert V0093 seven-category budget-only freeze writer (staged code, not live)
+
+[Read the atomic restricted V0093 cost-only freeze writer checkpoint](2026-11-12_V0093_ATOMIC_COST_ONLY_SEVEN_REST_FREEZE_WRITER_REAL_PG16.md). Reuses exactly the reviewed #603 calendar/disabled authorization/physical UTC budget staging packet plus #605 seven category upper-bound digest, verifies immutable 31-day B0062 rows and V0079 ledger under a dedicated narrow budget owner, and atomically inserts **one typed `COST_UPPER_BOUND` release, 7 cycle caps, and 7×each physical UTC-date category caps**. Real PG16 CI tests rollback, restricted ACL, disabled B0062, replay refusal and **zero SOURCE requests**. The existing V0082 exact-source writer is not called and the 21 future ordinary airports remain unselected. Requires independent genuine input/rights review and separate role/SQL production installation; Phase5 FREEZE HOLD / paid GO NO.
+
 ## November 12 — V0093 typed cost-only UTC source ceiling (SQL candidate, **not installed**)
 
 [Read the staged additive V0093 V0082 compatibility checkpoint](2026-11-12_V0093_TYPED_COST_ONLY_V0082_ACTUAL_PG16_SOURCE_RESERVATION_COMPATIBILITY.md). This candidate preserves the original V0082 `EXACT_SOURCE_GRID` mode by default, adds a separately typed `COST_UPPER_BOUND` mode with **no faked signed future request-grid SHA**, and still demands genuine exact V0082 query partitions + V0079 real prospective early draw/rights and irreversible two-unit physical REST reservation. Only *unused* FIDS BASE/SPLIT budgets may be less than the planned upper caps; independent real account/source/rights review and a separate restricted **cost-only release writer** are still required. CI is disposable PG16, not production installation or scientific FREEZE/paid GO.
