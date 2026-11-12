@@ -109,10 +109,13 @@ export async function runP5CdGithubOneSourceEnrollment(
  // T24 is an entirely separate independent PRE+V0081 witness path.
  // Merely signing a roster does not give PREPARE permission to enqueue a
  // flight that the independent T24 executor cannot yet service.
- const t24Approved=env.P5_CD_GH_T24_PREPARE_APPROVED==="1";
+ const t24Approved=env.P5_CD_GH_REGISTER_HORIZON==="T-24h"&&
+  env.P5_CD_GH_T24_PREPARE_APPROVED==="1";
  const packets=verifyP5CdFrozenRoster(rosterBytes,roster,[frozen],
   approved.gate,t24Approved?"T24_WITH_SEPARATE_WITNESS":"LATER_ONLY");
  if(packets.size!==1)hold("SIGNED_SOURCE_ROSTER_NOT_SINGLETON");
+ if(env.P5_CD_GH_REGISTER_HORIZON==="T-24h"&&!t24Approved)
+  hold("T24_ENROLLMENT_REQUIRES_SEPARATE_REVIEW");
  const permit=packets.get(frozen.packetSha256)?.permit;
  if(!permit)hold("SIGNED_SOURCE_PACKET_NOT_BOUND");
  if(preflightP5Stage14ReviewedPermitV39(permit)!==
