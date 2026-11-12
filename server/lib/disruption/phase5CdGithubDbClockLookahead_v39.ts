@@ -28,6 +28,10 @@ function exactMs(value:unknown):number{
   stop("FROZEN_NATIVE_T_OR_DB_CLOCK_NOT_CANONICAL");
  return ms;
 }
+export interface P5CdDueWindowOptions{
+ /** Only dedicated PRE + separate Stage17/V0081 witness may schedule T24. */
+ allowReviewedT24Witness?:true;
+}
 export interface P5CdDueWaitDecision{
  status:"DUE_WINDOW"|"WAIT_FOR_SIGNED_CUTOFF"|"NO_NEAR_SIGNED_CUTOFF";
  waitMs:number;
@@ -35,7 +39,8 @@ export interface P5CdDueWaitDecision{
 }
 /** Pure: a signed packet is a SCHEDULING HINT, not evidence of a queued task. */
 export function decideP5CdUpcomingDueWindow(
- nowUtc:string,packets:Map<string,P5CdVerifiedTaskPacket>
+ nowUtc:string,packets:Map<string,P5CdVerifiedTaskPacket>,
+ options:P5CdDueWindowOptions={}
 ):P5CdDueWaitDecision{
  const now=exactMs(nowUtc);
  if(!(packets instanceof Map)||packets.size<1||packets.size>96)
@@ -44,10 +49,11 @@ export function decideP5CdUpcomingDueWindow(
  let eligibleSignedCutoffs=0;
  for(const x of packets.values()){
   const p=x?.permit;
-  if(!p||!["T-6h","T-90m"].includes(p.horizon))
+  if(!p||!Object.hasOwn(OFFSETS,p.horizon)||
+     (p.horizon==="T-24h"&&options.allowReviewedT24Witness!==true))
    stop("T24_OR_STANDALONE_WITNESS_REQUIRES_OTHER_WORKFLOW");
   const native=exactMs(p.selectedTNativeUtc);
-  const cutoff=native-OFFSETS[p.horizon as "T-6h"|"T-90m"];
+  const cutoff=native-OFFSETS[p.horizon as keyof typeof OFFSETS];
   if(!Number.isFinite(cutoff))stop("INVALID_NATIVE_T_CUTOFF");
   if(cutoff<=now+SAFETY_MS)continue;
   const left=cutoff-now;
@@ -87,15 +93,16 @@ export async function waitP5CdGithubSignedDueWindow(
  db:Pick<P5CdTaskExecutor,"query">,
  packets:Map<string,P5CdVerifiedTaskPacket>,
  sleep:(ms:number)=>Promise<void>=
-  ms=>new Promise(resolve=>setTimeout(resolve,ms))
+  ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+ options:P5CdDueWindowOptions={}
 ):Promise<P5CdDueWaitReport>{
- requireP5CdGithubPreRelease(env);
+ requireP5CdGithubPreRelease(env,options);
  if(!db||typeof db.query!=="function"||typeof sleep!=="function")
   stop("MISSING_RESTRICTED_PRE_DB_CLOCK_READER");
  let first=NaN,last=NaN,polls=0,waitedMs=0;
  // 8-minute maximum; little 5-second sleeps avoid monopolizing runners.
  for(let i=0;i<=105;i++){
-  requireP5CdGithubPreRelease(env);
+  requireP5CdGithubPreRelease(env,options);
   const row=(await db.query(
    "SELECT clock_timestamp() AS now_utc,current_user AS role"
   )).rows[0];
@@ -114,7 +121,7 @@ export async function waitP5CdGithubSignedDueWindow(
     dbClockPolls:polls,waitedMs,
     paidProviderCalls:0,tasksClaimedByWaiter:0,tasksEnqueuedByWaiter:0,
     noDeadlineAccuracyGuaranteed:true};
-  const decision=decideP5CdUpcomingDueWindow(now,packets);
+  const decision=decideP5CdUpcomingDueWindow(now,packets,options);
   if(decision.status!=="WAIT_FOR_SIGNED_CUTOFF")
    return{schema:"v39.phase5.gh-cd-dbclock-lookahead-no-provider.v1",
     status:decision.status,
