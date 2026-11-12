@@ -27,6 +27,11 @@ const HOLD=(m:string):never=>{
 };
 export type P5IndependentT24WitnessReview=
  Omit<P5Stage17T24WitnessPermit,"expectedSnapshotId">;
+/** Exactly the ORIGINAL Stage14 writer options; this chain does not
+ * implement a second PRE writer or its own queue admission.
+ */
+export type P5T24Stage14ForwardOptions=
+ NonNullable<Parameters<typeof persistP5V0079SingleBoundFlightPre>[2]>;
 /**
  * This checks two independently provided protocols agree BEFORE either
  * restricted transaction. It is NOT a legal/native-T authentication and
@@ -135,7 +140,8 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
  prePool:Pick<Pool,"connect">,
  witnessPool:Pick<Pool,"connect">,
  pre:P5Stage14SingleFlightPrePermit,
- witness:P5IndependentT24WitnessReview
+ witness:P5IndependentT24WitnessReview,
+ stage14Options?:P5T24Stage14ForwardOptions
 ){
  verifyP5T24PreWitnessCrossReview(pre,witness);
  if(!prePool||typeof prePool.connect!=="function"||
@@ -145,7 +151,8 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
  // Stage14 itself validates the REAL bound original and physical member,
  // native selected T, due clock, PRE INSERT, durable COMMIT, and postcommit
  // readback under the approved PRE role. No fabricated source or T.
- const saved=await persistP5V0079SingleBoundFlightPre(prePool,pre);
+ const saved=await persistP5V0079SingleBoundFlightPre(
+  prePool,pre,stage14Options);
  if(saved.horizon!=="T-24h"||
     saved.preSnapshotsInserted!==1||
     saved.postCommitDatabaseReadbackVerified!==true||
@@ -186,6 +193,11 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
   flightInstanceId:pre.flightInstanceId,
   committedSnapshotId:saved.committedSnapshotId,
   sourcePopulationQueryId:pre.expectedSourcePopulationQueryId,
+  /** Real C+D admission was enforced inside ORIGINAL Stage14 tx when set. */
+  registeredV0087TaskFenceUsed:
+   !!(stage14Options?.realV0088QueueFenceGh||
+      stage14Options?.realV0088QueueFenceCi),
+  stage14PostCommitDbClockAtUtc:saved.postCommitDbClockAtUtc,
   preCommittedAndReadBackBeforeCutoff:true as const,
   witnessCommittedAndReadBackBeforeCutoff:true as const,
   postPreCommitDbObservedAtUtc:observed.postPreCommitDbObservedAtUtc,
