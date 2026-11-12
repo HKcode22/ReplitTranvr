@@ -63,13 +63,13 @@ jobs:
           echo P5_CD_T24_SEPARATE_WITNESS_OFFLINE_STOP_NO_PROVIDER_PASS
   one-approved-queued-native-t24:
     if: >-
-      ${{ github.event_name == 'workflow_dispatch'
-          && github.ref == 'refs/heads/main'
+      ${{ github.ref == 'refs/heads/main'
           && ((github.event_name == 'workflow_dispatch'
                && vars.P5_CD_GH_QUEUED_T24_ENABLED == '1'
                && inputs.confirm == 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER')
               || (github.event_name == 'schedule'
-               && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1')) }}
+               && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1'
+               && vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 16
     env:
@@ -85,6 +85,8 @@ jobs:
       P5_CD_GH_QUEUED_T24_EXECUTE: '1'
       P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ${{ github.event_name == 'schedule' && 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER' || inputs.confirm }}
       P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+      # Legacy Stage24 source-dispatch automation and queued V0092 T24 must not compete.
+      P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
       P5_CD_GH_ROSTER_PATH: ${{ github.event_name == 'schedule' && vars.P5_CD_GH_T24_SCHEDULE_ROSTER_PATH || inputs.frozen_roster }}
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
@@ -117,6 +119,7 @@ jobs:
           case "$GITHUB_EVENT_NAME" in
             schedule)
               test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1
+              test "$P5_T24_AUTO_DISPATCH_ENABLED" != true
               ;;
             workflow_dispatch)
               test "$P5_CD_GH_T24_ONE_FLIGHT_CONFIRM" = ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER
