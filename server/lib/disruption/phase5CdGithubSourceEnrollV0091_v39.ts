@@ -10,6 +10,8 @@
 import type {P5CdTaskExecutor} from "./phase5CdDurableQueueClient_v39";
 import {preflightP5Stage14ReviewedPermitV39}
  from "./phase5V0079SingleBoundFlightPreWriter_v39";
+import {digestP5Stage24ReviewedReceipt}
+ from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {
  verifyP5CdFrozenRoster,type P5CdFrozenRoster,
  type P5CdFrozenRosterEntry,type P5CdVerifiedTaskPacket
@@ -65,6 +67,21 @@ export function verifyP5CdOneFrozenSourceEnrollment(
     !Number.isSafeInteger(p.maxPopulationStalenessSeconds)||
     p.maxPopulationStalenessSeconds<1||p.maxPopulationStalenessSeconds>86_400)
   fail("V0091_PREPARE_NATIVE_LEG_OR_SIGNED_SOURCE_NOT_REVIEWED");
+ // The digest is only an integrity check on the externally reviewed
+ // Stage17 T24 receipt; Stage14 later verifies a REAL persisted V0081
+ // witness in the serializable database transaction.
+ const w=p.reviewedT24WitnessReceipt;
+ if(w?.schema!==
+    "v39.phase5.stage24.externally-reviewed-stage17-receipt.v1"||
+    w.flightInstanceId!==p.flightInstanceId||
+    w.selectedTNativeUtc!==p.selectedTNativeUtc||
+    w.t24FrameSha256!==p.reviewedFrameSha256||
+    w.t24ConfigSha256!==p.reviewedConfigSha256||
+    w.expectedSelectedTVersion!==p.selectedTConfig.milestone+":"+
+      p.selectedTConfig.version+":"+p.selectedTConfig.artifactHash||
+    !SHA.test(w.receiptSha256??"")||
+    digestP5Stage24ReviewedReceipt(w)!==w.receiptSha256)
+   fail("EXTERNAL_T24_STAGE17_RECEIPT_DIGEST_OR_NATIVE_T_DRIFT");
  // Shares the ORIGINAL Stage14 transform/native-T/T24 evidence checks,
  // not a replacement copied preflight. SQL V0091 independently verifies
  // paid original/body, physical member, expiry and DB-clock cutoff.
