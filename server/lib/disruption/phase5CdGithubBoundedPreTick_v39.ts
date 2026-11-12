@@ -121,7 +121,9 @@ export function bindP5CdTaskToFrozenPermit(
     p.selectedTNativeUtc!==task.selectedNativeTUtc||
     p.expectedSourcePopulationQueryId!==task.sourcePopulationQueryId||
     p.expectedSourceResponseSha256!==task.sourceResponseSha256||
-    !SHA256.test(p.expectedReviewedSourceRightsSha256??""))
+    p.expectedReviewedSourceRightsSha256!==task.reviewedSourceRightsSha256||
+    !SHA256.test(p.expectedReviewedSourceRightsSha256??"")||
+    !Number.isFinite(Date.parse(task.sourceExpiresAtUtc)))
   hold("QUEUE_TASK_AND_FROZEN_PERMIT_IDENTITY_MISMATCH");
  const expected=new Date(Date.parse(task.selectedNativeTUtc)-
   (task.horizon==="T-24h"?86_400_000:
