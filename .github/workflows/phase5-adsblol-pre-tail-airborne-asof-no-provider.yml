@@ -1,0 +1,44 @@
+name: Phase5 Canonical E ADSB.lol Optional PRE-Tail + AIRBORNE Bridge (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AmendmentEAdsbThreePhaseAsOfBridge_v39.ts'
+      - 'tests/phase5_amendment_e_adsblol_pre_tail_airborne_bridge_v39.test.ts'
+      - '.github/workflows/phase5-adsblol-pre-tail-airborne-asof-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AmendmentEAdsbThreePhaseAsOfBridge_v39.ts'
+      - 'tests/phase5_amendment_e_adsblol_pre_tail_airborne_bridge_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  existing-adsb-airborne-and-tail-asof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Reuse existing source admission plus AIRBORNE and conditional PRE tail gate
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx vitest run tests/phase5_amendment_e_adsblol_pre_tail_airborne_bridge_v39.test.ts tests/phase4_gate5_dual_source_adsb_admission_v39.test.ts tests/phase5_amendment_e_tail_chain_asof_candidate_v39.test.ts tests/airborne_materializer_v39.test.ts
+          npm run v39:typecheck
+          echo 'ADSBLOL_PRE_TAIL_CONTEXT_AIRBORNE_PREFIX_OFFLINE_PASS NO_GET NO_DB NO_GO'
