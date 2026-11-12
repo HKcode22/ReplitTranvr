@@ -1,0 +1,138 @@
+name: Phase5 V0091 exact frozen source to C+D queue (STOP default, no provider)
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0091-github-one-signed-source-enrollment.yml'
+      - 'server/lib/disruption/phase5CdGithubSourceEnrollGate_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubSourceEnrollV0091_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'scripts/v39_phase5_cd_github_one_v0091_source_enrollment_v39.ts'
+      - 'tests/phase5_cd_github_v0091_source_enrollment_offline_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-cd-v0091-one-reviewed-enrollment
+  cancel-in-progress: false
+jobs:
+  offline-reuse-reviewed-source-portal:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P5_CD_GH_ENROLL_STOP: '1'
+      P5_CD_GH_PRE_STOP: '1'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Reuse existing signed packet verifier, Stage14 preflight, exact V0091 SQL, STOP
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run \
+            tests/phase5_cd_github_v0091_source_enrollment_offline_v39.test.ts \
+            tests/phase5_cd_github_pre_release_gate_v39.test.ts \
+            tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts
+          echo P5_CD_V0091_GH_FROZEN_SOURCE_NO_PAID_OFFLINE_PASS
+  one-reviewed-nonpaid-source-enrollment:
+    # Manually invoked AFTER an authentic original exists, with explicit
+    # owner-reviewed packet hash. OFF by default; no schedule/retry loop.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/main'
+          && vars.P5_CD_GH_ENROLL_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_ENROLL_EXECUTE: '1'
+      P5_CD_GH_ENROLL_CONFIRM: 'REGISTER_ONE_BOUND_EXISTING_FIDS_ORIGINAL_NO_PROVIDER'
+      P5_CD_GH_ENROLL_ARMED: ${{ secrets.P5_CD_GH_ENROLL_ARMED }}
+      P5_CD_GH_ENROLL_APPROVED: ${{ secrets.P5_CD_GH_ENROLL_APPROVED }}
+      P5_CD_GH_ENROLL_STOP: ${{ secrets.P5_CD_GH_ENROLL_STOP }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_ENROLL_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_ENROLL_APPROVED_CODE_SHA }}
+      P5_CD_GH_ROSTER_PATH: ${{ vars.P5_CD_GH_ROSTER_PATH }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      P5_CD_GH_ENROLL_PACKET_SHA256: ${{ secrets.P5_CD_GH_ENROLL_PACKET_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent earliest STOP and branch/source/role gate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P5_CD_GH_ENROLL_ARMED" = 1
+          test "$P5_CD_GH_ENROLL_APPROVED" = 1
+          test "$P5_CD_GH_ENROLL_STOP" = 0
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_ENROLL_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0 ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1 ;;
+            *) echo HOLD_NO_APPROVED_PHASE5_CANARY_OR_PHASE6_MODE; exit 2 ;;
+          esac
+          [[ "$P5_CD_GH_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          test -f "$P5_CD_GH_ROSTER_PATH"
+          test -n "$P5_CD_GH_ENROLL_PACKET_SHA256"
+          test -n "$P5_V39_PREPARE_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One real original -> reviewed future V0087 queue task (no GET/Alert)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx \
+            scripts/v39_phase5_cd_github_one_v0091_source_enrollment_v39.ts
+          echo P5_CD_V0091_GH_ONE_SOURCE_RETURNED_TASK_ID_READBACK_PENDING
