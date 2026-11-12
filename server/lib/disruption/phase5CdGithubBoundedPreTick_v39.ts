@@ -8,6 +8,10 @@
 import {createHash} from "node:crypto";
 import type {Pool} from "pg";
 import {
+ verifyP5T24PreWitnessCrossReview,
+ type P5IndependentT24WitnessReview
+} from "./phase5T24PreIndependentWitnessChain_v39";
+import {
  claimP5CdDueTasksV39,markP5CdStage14WriteStartedV39,
  acknowledgeP5CdStage14PostCommitV39,reapP5CdExpiredLeasesOnceV39,
  type P5CdClaimedTask,type P5CdTaskExecutor
@@ -48,10 +52,14 @@ export interface P5CdFrozenRoster{
 export interface P5CdVerifiedTaskPacket{
  packetSha256:string;
  permit:P5Stage14SingleFlightPrePermit;
+ /** Only present when an independently frozen T24 Stage17 witness is
+  * paired to this exact source-bound T24 packet; no fabricated receipt. */
+ witnessReview?:P5IndependentT24WitnessReview;
 }
 export function verifyP5CdFrozenRoster(
  raw:Buffer,roster:P5CdFrozenRoster,entries:P5CdFrozenRosterEntry[],
- gate:P5CdGithubPreRelease
+ gate:P5CdGithubPreRelease,
+ acceptedHorizon:"LATER_ONLY"|"T24_WITH_SEPARATE_WITNESS"="LATER_ONLY"
 ):Map<string,P5CdVerifiedTaskPacket>{
  if(!Buffer.isBuffer(raw)||raw.length<100||raw.length>SIZE||
     digest(raw)!==gate.rosterSha256||
@@ -92,9 +100,10 @@ export function verifyP5CdFrozenRoster(
   // existing separate V0081 witness writer, and standalone-later requires
   // a separately approved as-of protocol. Never mark WRITE_STARTED for
   // either incomplete branch.
-  if(t24||fallback)
+  if(fallback||(t24&&acceptedHorizon!=="T24_WITH_SEPARATE_WITNESS")||
+     (later&&acceptedHorizon!=="LATER_ONLY"))
    hold("T24_WITNESS_OR_STANDALONE_LATER_CHAIN_NOT_YET_CONNECTED");
-  if(!later||
+  if(!t24&&!later||
      packet.reviewedCodeSha!==gate.approvedCodeSha||
      (t24&&packet.independentNativeT24AndSourceReviewAttested!==true)||
      (later&&packet.independentLaterHorizonAndT24ReviewAttested!==true)||
@@ -112,7 +121,19 @@ export function verifyP5CdFrozenRoster(
      !SHA256.test(pre.reviewedFrameSha256??"")||
      !CODE.test(packet.reviewedCodeSha??""))
    hold("FROZEN_PERMIT_SOURCE_RIGHTS_OR_NATIVE_T_UNREVIEWED");
-  packets.set(expected.packetSha256,{packetSha256:expected.packetSha256,permit:pre});
+  let witnessReview:P5IndependentT24WitnessReview|undefined;
+  if(t24){
+   if(pre.horizon!=="T-24h"||
+      packet.independentNativeT24AndSourceReviewAttested!==true||
+      !packet.witnessReview)
+    hold("T24_WITNESS_OR_NATIVE_SOURCE_NOT_IN_SIGNED_PACKET");
+   witnessReview=packet.witnessReview as P5IndependentT24WitnessReview;
+   verifyP5T24PreWitnessCrossReview(pre,witnessReview);
+  }
+  packets.set(expected.packetSha256,{
+   packetSha256:expected.packetSha256,permit:pre,
+   ...(witnessReview?{witnessReview}:{})
+  });
  }
  return packets;
 }
