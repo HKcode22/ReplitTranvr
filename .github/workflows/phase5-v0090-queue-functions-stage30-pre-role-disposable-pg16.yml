@@ -84,8 +84,20 @@ jobs:
             OWNER TO phase5_cd_ci_owner;
           ALTER FUNCTION clean.phase5_cd_reap_once_v39(integer)
             OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
+            bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,
+            text,text,text) OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_insert_v39()
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
+            OWNER TO phase5_cd_ci_owner;
+          GRANT TRIGGER ON clean.flight_snapshots TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_admission_receipt_v39
+            OWNER TO phase5_cd_ci_owner;
           SQL
           OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql
+          echo P5_CD_V0090_CI_REUSED_REAL_V0089_NOLOGIN_GUARD_PREVIOUSLY_INSTALLED
           node --check scripts/v39_phase5_cd_v0090_owner_once.mjs
           umask 077
           TMP="$(mktemp -d -t p5-cd-v0090-XXXXXX)"
