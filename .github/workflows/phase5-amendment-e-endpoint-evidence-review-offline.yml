@@ -5,6 +5,8 @@ on:
     paths:
       - 'server/lib/disruption/phase5RouteAndModelDataSupportAudit_v39.mjs'
       - 'tests/phase5_route_model_data_support_audit_v39.test.ts'
+      - 'server/lib/disruption/phase5AmendmentEGateOutDelayLabel_v39.ts'
+      - 'tests/phase5_amendment_e_gateout_label_v39.test.ts'
       - 'data-collection/phase5/2026-11-09_AMENDMENT_E_CROSS_BRANCH_SCIENCE_REVIEW_AND_ENDPOINT_MATRIX.md'
       - '.github/workflows/phase5-amendment-e-endpoint-evidence-review-offline.yml'
   push:
@@ -46,5 +48,5 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_route_model_data_support_audit_v39.test.ts
+          npx vitest run tests/phase5_route_model_data_support_audit_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts
           echo 'PROPOSED_E_OFFLINE_ONLY_NO_MODEL_NO_DB_NO_PROVIDER_NO_SCIENTIFIC_FREEZE_NO_PAID_GO'
