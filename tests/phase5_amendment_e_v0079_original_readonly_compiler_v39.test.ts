@@ -159,7 +159,7 @@ describe("Phase5 reuse Stage14/V0079 read-only authenticated feature compiler",(
  it("never tries to SET ROLE or grant tables during a source read-only operation",async()=>{
   const x=fixture();
   await compileP5EOneBoundOriginalReadonly(x.db,x.scope);
-  expect(x.observed.every(q=>!/^\\s*(?:GRANT|REVOKE|ALTER|INSERT|UPDATE|DELETE|CREATE|SET ROLE)/i.test(q))).toBe(true);
+  expect(x.observed.every(q=>!/^\s*(?:GRANT|REVOKE|ALTER|INSERT|UPDATE|DELETE|CREATE|SET ROLE)/i.test(q))).toBe(true);
   expect(x.observed.some(q=>q.includes("REPEATABLE READ READ ONLY"))).toBe(true);
  });
  it("refuses original expiry and missing physical member",async()=>{
