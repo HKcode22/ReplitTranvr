@@ -60,7 +60,7 @@ export function buildP5PrelaunchSlotBudgetEnvelope(p){
     !integer(p.refreshEveryMinutes,1,240)||
     !integer(p.physicalGetsPerRefreshUpperBound,1,10)||
     !integer(p.getLeadSeconds,1,900)||
-    !integer(p.apiUnitsPerPhysicalGet,1,10)||
+    p.apiUnitsPerPhysicalGet!==2||
     !integer(p.cycleRestCeilingUnits,2,50000)||
     !integer(p.protectedRestFloorUnits,0,50000)||
     !Array.isArray(p.calendarDays)||p.calendarDays.length!==31||
