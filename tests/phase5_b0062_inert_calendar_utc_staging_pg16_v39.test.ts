@@ -5,6 +5,7 @@
  */
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
+import {URL as NodeFileURL} from "node:url";
 import {Pool} from "pg";
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {buildP5PrelaunchSlotBudgetEnvelope} from
@@ -29,7 +30,7 @@ const HUB_REGION:Record<string,string>={
 };
 // This is the archived actual owner's 2026-11-09 B0062 candidate, not mock
 // airport IDs. Dates, treatment, budgets and approval remain synthetic.
-const archived=JSON.parse(readFileSync(new URL(
+const archived=JSON.parse(readFileSync(new NodeFileURL(
  "../data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json",
  import.meta.url),"utf8"));
 if(archived.schema!=="phase5.full-b0062-five-pair-selection-review.v1"||
