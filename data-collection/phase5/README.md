@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Published horizon research, 3-vs-5 nonpaid cost model, and Phase 7 inference explanation
+
+**[Read source-backed T−24/T−6/T−90 rationale, five-horizon proposal, FIDS vs Alert budget, 4h probe versus live inference, as-of feature gaps and the six exact installed SQL file links](2026-11-12_HORIZON_LITERATURE_FIVE_HORIZON_BUDGET_AND_PHASE7_INFERENCE.md).** Research supports *multiple* forecast lead times but does **not** uniquely prescribe our exact three. T−12h/T−3h are optional **what-if** candidates, not new paid live horizons. A new offline [physical-FIDS-GET cost sensitivity helper](../../server/lib/disruption/phase5OptionalHorizonSensitivity_v39.mjs) explicitly separates 408/680 planning groups from billed requests and Alert SEND credits. Existing 31-day calendar, signed source, V0087–V0092 live inert roles/queue, STOP and one Amendment E remain **unchanged**; Stage14's production feature matrix is still sparse without individually reviewed rights and input wiring. Phase5 scientific FREEZE HOLD; paid Phase6 GO NO.
+
+
 ## November 12 — Real T24 cron bug fixed (code-only) and flight-delay study guide
 
 **[Read: concrete T−6h departure-delay prediction examples, gate-out versus runway and V0087–V0092 migration map](2026-11-12_PHASE5_STUDY_GUIDE_T6_GATEOUT_RUNWAY_T24_AND_V0087_V0092.md).** Continuous delay minutes, T−90m update and T−24h comparator are conditional research candidates under ONE Amendment E; actual gate-out, true wheels-off and ADSB.lol takeoff proxies are not interchangeable.
