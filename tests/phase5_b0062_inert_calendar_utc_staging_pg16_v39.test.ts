@@ -57,7 +57,7 @@ function fixture(){
    windowShape:shape,partition:i<20?"train":i<25?"validation":"test",
    timeClass:String(SLOTS[i%6]).padStart(2,"0"),
    budgetDayId:"p5-ci-stage-parent-"+n,
-   frozenDrawSeed:sha(String.fromCharCode(97+(pi??(i%26)))),
+   frozenDrawSeed:digest({fixtureDrawSeed:pi===null?"ordinary-"+i:"pair-"+pi}),
    anchorIcao:anchor,
    slotRegions:{...REGIONS},
    pairId:pi===null?null:"pair_00"+(pi+1),
