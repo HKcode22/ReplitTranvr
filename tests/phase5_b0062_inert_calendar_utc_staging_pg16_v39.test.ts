@@ -186,7 +186,7 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
    calendar:0,auth:0,cycle:0,utc:0,perday:0,v82:0,query:0
   });
  });
- it("refuses tampered signed calendar, invented ordinary airport, UTC cap and role",()=>{
+ it("refuses tampered signed calendar, invented ordinary airport, UTC cap and role",async()=>{
   const bad=structuredClone(input);
   bad.calendarDays[11].pairAirportSet=PAIR_SITES[0];
   const reviewBad={...review,expectedSignedStagePacketSha256:digest(bad)};
