@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — V0092 LIVE, watchdog merged, T24 source-roster SHA separation
+
+**[Read the actual V0092 production commissioning and follow-on source-roster isolation checkpoint](2026-11-12_LIVE_V0092_OWNER_VERIFIED_AND_T24_ROSTER_ISOLATION_CHECKPOINT.md).** Owner's Replit Shell returned `V0092_SIGNED_PACKET_HORIZON_CLAIM_COMMISSIONED_INERT` on real `neondb` with queue 0, valid restricted PRE function grants, the broad claim EXECUTE revoked, no paid calls, no new worker; **do not reinstall V0087–V0092**. PR #588 watchdog is now merged (`7584bad80b1cc83ed46f98983b64dc11bbba3dcf`) and remains disabled. This follow-on fix routes the **separate T24 roster hash** into the *existing* manual V0091 source registrar only for T24, with no fallback to T6/T90 if missing. Neither worker/registrar has a genuine registered future task; legal/ML source rights, one prospective source→PRE→POST/STOP chain and independent freeze remain outstanding. **Phase5 HOLD / Phase6 paid GO NO.**
+
+
 ## November 12 — Existing V0087 watchdog, no new queue
 
 **[Read the bounded lease/watchdog and UNKNOWN no-retry checkpoint](2026-11-12_CD_EXISTING_QUEUE_LEASE_WATCHDOG_STOP_DEFAULT_CHECKPOINT.md).** The proposed GitHub-only five-minute job reuses existing restricted Stage30 PRE role and `clean.phase5_cd_reap_once_v39`. Independently disabled by default, refuses if V0092 real installation/old broad claim revocation is not proven, and quarantines unknown COMMIT instead of retrying it. New watchdog is **code-only, not live**; V0092 owner commissioning remains pending. Phase5 FREEZE HOLD; Phase6 paid GO NO.
