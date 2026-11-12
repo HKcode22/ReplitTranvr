@@ -36,7 +36,9 @@ export function requireP5CdGithubSourceEnrollRelease(
  if((!canary&&!phase6)||e.GITHUB_ACTIONS!=="true"||
     e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     e.GITHUB_REF!=="refs/heads/main"||
-    !["schedule","workflow_dispatch"].includes(e.GITHUB_EVENT_NAME??"")||
+    // Registration is immutable and not idempotent: schedule auto-repeat
+    // cannot be allowed before a separate durable reconciliation path.
+    e.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     e.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(e.GITHUB_SHA??"")||
     e.GITHUB_SHA!==e.P5_CD_GH_ENROLL_APPROVED_CODE_SHA||
