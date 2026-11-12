@@ -18,11 +18,11 @@ const CODE_PATHS=[
 function hold(reason:string):never{
  throw Error("REFUSED_P5_CD_GH_CODE_LINEAGE_"+reason);
 }
-function git(args:string[],max=100):string{
+function git(args:string[],cwd:string,max=100):string{
  try{
   return execFileSync("git",args,{
    encoding:"utf8",stdio:["ignore","pipe","ignore"],
-   timeout:4000,maxBuffer:Math.max(max,256)
+   cwd,timeout:4000,maxBuffer:Math.max(max,256)
   }).trim();
  }catch{return hold("BASELINE_NOT_ANCESTOR_OR_EXECUTABLE_DRIFT");}
 }
@@ -32,7 +32,7 @@ function git(args:string[],max=100):string{
  * against every executable path, not against mutable frozen packet files.
  */
 export function verifyP5CdGithubFrozenCodeLineage(
- env:NodeJS.ProcessEnv
+ env:NodeJS.ProcessEnv,cwd:string=process.cwd()
 ):{head:string;reviewedCodeCommit:string;frozenDataMayChange:true}{
  const head=env.GITHUB_SHA??"",pin=env.P5_CD_GH_PRE_APPROVED_CODE_SHA??"";
  if(env.GITHUB_ACTIONS!=="true"||
@@ -40,13 +40,15 @@ export function verifyP5CdGithubFrozenCodeLineage(
     env.GITHUB_REF!=="refs/heads/main"||
     !SHA.test(head)||!SHA.test(pin))
   hold("REVIEWED_MAIN_CODE_PIN_MISSING");
- if(git(["rev-parse","HEAD"])!==head||
-    git(["rev-parse",pin+"^{commit}"])!==pin)
+ if(git(["rev-parse","HEAD"],cwd)!==head||
+    git(["rev-parse",pin+"^{commit}"],cwd)!==pin)
   hold("GITHUB_HEAD_OR_REVIEWED_CODE_OBJECT_CHANGED");
- git(["merge-base","--is-ancestor",pin,head]);
- git(["diff","--quiet",pin,head,"--",...CODE_PATHS]);
- git(["diff","--quiet","--",...CODE_PATHS]);
- git(["diff","--cached","--quiet","--",...CODE_PATHS]);
+ git(["merge-base","--is-ancestor",pin,head],cwd);
+ git(["diff","--quiet",pin,head,"--",...CODE_PATHS],cwd);
+ git(["diff","--quiet","--",...CODE_PATHS],cwd);
+ git(["diff","--cached","--quiet","--",...CODE_PATHS],cwd);
+ if(git(["ls-files","--others","--exclude-standard","--",...CODE_PATHS],cwd))
+  hold("UNTRACKED_EXECUTABLE_FILE_AFTER_REVIEW");
  // Process.env is mutable only in the already reviewed GitHub runtime.
  // This signal is used for *subsequent* fail-closed Stage14 checks inside
  // this same process; no independently validated git proof can be inferred
