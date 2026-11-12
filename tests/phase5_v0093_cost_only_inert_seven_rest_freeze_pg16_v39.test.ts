@@ -399,10 +399,10 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   const r=budgetReview();
   const last=r.c.days.at(-1).chargeDayUtc;
   await admin.query("CREATE FUNCTION clean.ci_v0093_cost_last_failure() "+
-   "RETURNS trigger LANGUAGE plpgsql AS $ BEGIN "+
+   "RETURNS trigger LANGUAGE plpgsql AS $ci_v0093$ BEGIN "+
    "IF NEW.charge_day_utc='"+last+"'::date THEN "+
    "RAISE EXCEPTION 'CI_EXPECTED_V0093_LAST_UTC_BUDGET_ROLLBACK';"+
-   "END IF; RETURN NEW; END $");
+   "END IF; RETURN NEW; END $ci_v0093$");
   await admin.query("CREATE TRIGGER ci_v0093_last_utc_fail "+
    "BEFORE INSERT ON clean.phase5_fids_utc_rest_category_budget_v39 "+
    "FOR EACH ROW EXECUTE FUNCTION clean.ci_v0093_cost_last_failure()");
