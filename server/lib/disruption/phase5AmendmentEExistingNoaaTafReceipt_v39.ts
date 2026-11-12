@@ -24,21 +24,23 @@ const hold=(s:string):never=>{
  throw Error("REFUSED_P5_E_NOAA_TAF_REVIEWED_SOURCE_"+s);
 };
 function instant(v:unknown):number{
- if(typeof v!=="string"||!UTC.test(v)||
-    !Number.isFinite(Date.parse(v))||
-    new Date(Date.parse(v)).toISOString()!==v)
+ const literal:string=typeof v==="string"?v:
   hold("INVALID_CANONICAL_SOURCE_OR_ISSUE_TIME");
- return Date.parse(v);
+ if(!UTC.test(literal)||
+    !Number.isFinite(Date.parse(literal))||
+    new Date(Date.parse(literal)).toISOString()!==literal)
+  hold("INVALID_CANONICAL_SOURCE_OR_ISSUE_TIME");
+ return Date.parse(literal);
 }
 function noaaIssued(v:unknown):number{
- if(typeof v!=="string")hold("TAF_ISSUED_TIME_MISSING");
- return instant(v.replace(" ","T"));
+ const literal:string=typeof v==="string"?v:hold("TAF_ISSUED_TIME_MISSING");
+ return instant(literal.replace(" ","T"));
 }
 function seconds(v:unknown):number{
- if(typeof v!=="number"||!Number.isSafeInteger(v)||
-    v<946684800||v>4102444800)
+ const value:number=typeof v==="number"?v:hold("TAF_INVALID_UNIX_SECONDS");
+ if(!Number.isSafeInteger(value)||value<946684800||value>4102444800)
   hold("TAF_INVALID_UNIX_SECONDS");
- return v*1000;
+ return value*1000;
 }
 function item(v:unknown):Record<string,unknown>|null{
  return v&&typeof v==="object"&&!Array.isArray(v)?
@@ -183,8 +185,8 @@ export function compileP5AlreadyDurableNoaaTafAsOfV39(
   const row=selected[0].raw;
   const periods:(Record<string,unknown>)[]=[];
   for(const raw of row.fcsts as unknown[]){
-   const period=item(raw);
-   if(!period)hold("UNVERIFIED_TAF_SEGMENT_SHAPE");
+   const period:Record<string,unknown>=item(raw)??
+    hold("UNVERIFIED_TAF_SEGMENT_SHAPE");
    const from=seconds(period.timeFrom),to=seconds(period.timeTo);
    if(to<=from)hold("INVALID_TAF_SEGMENT_INTERVAL");
    if(target>=from&&target<to)periods.push(period);
