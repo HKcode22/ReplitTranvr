@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Existing V0087 watchdog, no new queue
+
+**[Read the bounded lease/watchdog and UNKNOWN no-retry checkpoint](2026-11-12_CD_EXISTING_QUEUE_LEASE_WATCHDOG_STOP_DEFAULT_CHECKPOINT.md).** The proposed GitHub-only five-minute job reuses existing restricted Stage30 PRE role and `clean.phase5_cd_reap_once_v39`. Independently disabled by default, refuses if V0092 real installation/old broad claim revocation is not proven, and quarantines unknown COMMIT instead of retrying it. New watchdog is **code-only, not live**; V0092 owner commissioning remains pending. Phase5 FREEZE HOLD; Phase6 paid GO NO.
+
+
 ## November 12 — Unattended T−24h singleton clock/Witness review
 
 **[Read the T−24h GitHub scheduled singleton PRE + independent V0081 witness PR checkpoint](2026-11-12_CD_T24_UNATTENDED_SINGLETON_DB_CLOCK_PR_CHECKPOINT.md).** Extends already-merged manual queued T24 worker (#585) with a separately **STOP-default** five-minute scheduler, exact frozen source+Stage17 review and the existing bounded real PostgreSQL-clock wait; it cannot claim T6/T90 thanks to the **V0092** signed packet/horizon function. This is not an operating 31-day scheduler or evidence of paid Phase6 GO. V0092 requires live one-shot installation, all release approvals and genuine future source before enabling; no live provider work or database changes in the review branch. Phase5 FREEZE HOLD / Phase6 paid GO NO.
