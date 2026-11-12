@@ -63,6 +63,9 @@ function exactSites(x,regions){
   hold("MISSING_FOUR_REGION_BOUND_PAIRED_AIRPORTS");
  return x;
 }
+export function inspectP5B0062InertCalendarOnlyRows(calendarDays){
+ return parseDayRows({calendarDays});
+}
 function parseDayRows(p){
  const counts={"4h":0,"2x2h":0,"up-to-6h":0};
  const pairs=new Map(),lastSeenSiteEnd=new Map(),slots=[];

@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — five-real-pair-to-B0062 calendar draft and seven-UTC category cost ceilings
+
+**[Read the genuine paired-sites 31-B0062-row review draft](2026-11-12_REAL_FIVE_PAIR_B0062_CALENDAR_TO_STAGER_REVIEW_DRAFT.md).** Reuses the existing real 19-airport/5-pair owner source and previously tested prospective 31-day shape engine; requires separately supplied 21 ordinary HUB/region plans and **31** independent per-day seed values, checks all known HUB END→START washout using the exact production stager's pure calendar validator, and **does not choose** unknown ordinary MID/REGIONAL airports. No actual signed calendar or live DB writes.
+
+**[Read the seven-category physical UTC cost-only draft and V0082 compatibility blocker](2026-11-12_V0082_COST_ONLY_UTC_SEVEN_CATEGORY_DYNAMIC_UPPER_BOUND_CANDIDATE.md).** The old installed V0082 request trigger's *whole-date exact source count equals fixed ceiling* conflicts with future genuinely unknown airport draws and legitimately unspent budget. The new pure candidate reuses #602 upper bound and checks actual future signed query metadata costs **at most** the frozen upper cap, but is deliberately NOT the existing Stage22 source-grid release and does not change the installed SQL.
+
 ## November 12 — actual six B0062 regions and all-31-day known HUB washout correction
 
 **[Read the production-evidence compatibility/washout checkpoint](2026-11-12_REAL_SIX_REGION_B0062_AND_ORDINARY_ANCHOR_WASHOUT_CORRECTION.md).** Initial #603 synthetic staging code rejected the **real** six region labels (`Gulf/Africa`, `Asia-Pacific`, `North America`, etc.) and inadvertently omitted ordinary-day **known HUB** anchor reuse from prospective global 24h END→START washout. The correction anchors disposable PG16 regression to the genuine archived 19-airport / five-pair B0062 `{icao,region}` readback while retaining synthetic dates, treatment and budgets; unknown ordinary MID/REGIONAL airports remain genuinely unknown. No live Neon mutation or Phase6 GO.
