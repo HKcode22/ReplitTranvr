@@ -27,6 +27,15 @@ function fake({missing=[],roles=names,replica=false,counts={}}={}){
    if(sql.includes('FROM pg_catalog.pg_roles'))return {
     rows:roles.map(n=>({rolname:n,rolcanlogin:false}))
    };
+   if(sql.includes('COUNT(*) FILTER (WHERE category_rows=7')){
+    const days=counts.phase5_fids_utc_charge_budget_v39??0;
+    const catRows=counts.phase5_fids_utc_rest_category_budget_v39??0;
+    const complete=Math.min(days,Math.floor(catRows/7));
+    return {rows:[{
+     ledger_days:days,category_rows:catRows,
+     complete_days:complete,incomplete_days:days-complete
+    }]};
+   }
    if(sql.includes('WHERE singleton_key=true AND enabled=true'))return {rows:[{n:0}]};
    if(sql.startsWith('SELECT COUNT(*)::int AS n FROM clean.')){
     const table=sql.slice('SELECT COUNT(*)::int AS n FROM clean.'.length);
@@ -46,7 +55,9 @@ test('read-only counts, full seven groups and no science FREEZE from one query',
   adb_phase6_calendar_day:31,adb_sampling_draw:124,
   phase5_fids_seven_rest_release_v39:1,
   phase5_fids_cycle_rest_category_cap_v39:7,
-  phase5_fids_utc_rest_category_budget_v39:49,
+  phase5_fids_cycle_budget_v39:1,
+  phase5_fids_utc_charge_budget_v39:31,
+  phase5_fids_utc_rest_category_budget_v39:217,
   phase5_fids_allowed_query_v39:20,
   phase5_fids_original_binding_v39:17,
   phase5_t24_postcommit_witness_v39:1
@@ -54,6 +65,9 @@ test('read-only counts, full seven groups and no science FREEZE from one query',
  const res=await inspectPhase5ReleaseInventory(x.pool);
  assert.equal(res.tableRowCounts.calendar,31);
  assert.equal(res.tableRowCounts.sourceCategoryCaps,7);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.ledgerDays,31);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.completeDays,31);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.incompleteDays,0);
  assert.equal(res.missingNoLoginRoles.length,0);
  assert.equal(res.providerCalls,0);
  assert.equal(res.databaseWrites,0);
@@ -88,7 +102,9 @@ test('a fully prepared prelaunch calendar and budget needs no real Day1 flights 
   adb_phase6_calendar_day:31,
   phase5_fids_seven_rest_release_v39:1,
   phase5_fids_cycle_rest_category_cap_v39:7,
-  phase5_fids_utc_rest_category_budget_v39:49
+  phase5_fids_cycle_budget_v39:1,
+  phase5_fids_utc_charge_budget_v39:31,
+  phase5_fids_utc_rest_category_budget_v39:217
  }});
  const res=await inspectPhase5ReleaseInventory(x.pool);
  assert.deepEqual(res.blockers,[]);
@@ -102,6 +118,64 @@ test('a fully prepared prelaunch calendar and budget needs no real Day1 flights 
  assert.equal(x.rollbacks(),1);
 });
 
+test('seven source categories appearing on just one UTC day cannot pass 31-day readiness',async()=>{
+ const x=fake({counts:{
+  adb_phase6_calendar_day:31,
+  phase5_fids_seven_rest_release_v39:1,
+  phase5_fids_cycle_rest_category_cap_v39:7,
+  phase5_fids_cycle_budget_v39:1,
+  phase5_fids_utc_charge_budget_v39:1,
+  phase5_fids_utc_rest_category_budget_v39:7
+ }});
+ const res=await inspectPhase5ReleaseInventory(x.pool);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.completeDays,1);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.incompleteDays,0);
+ assert(res.prelaunchStructuralHolds.includes(
+  'FULL_31_DAY_UTC_CHARGE_CATEGORY_COVERAGE_NOT_PROVEN'));
+ assert.equal(res.phase5ScientificFreezePassed,false);
+ assert.equal(res.phase6PaidGo,false);
+ assert.equal(x.rollbacks(),1);
+});
+test('one missing category on Day31 blocks readiness despite all 31 charge-day rows',async()=>{
+ const x=fake({counts:{
+  adb_phase6_calendar_day:31,
+  phase5_fids_seven_rest_release_v39:1,
+  phase5_fids_cycle_rest_category_cap_v39:7,
+  phase5_fids_cycle_budget_v39:1,
+  phase5_fids_utc_charge_budget_v39:31,
+  phase5_fids_utc_rest_category_budget_v39:216
+ }});
+ const res=await inspectPhase5ReleaseInventory(x.pool);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.ledgerDays,31);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.completeDays,30);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.incompleteDays,1);
+ assert.equal(res.physicalUtcChargeDayCategoryCoverage.allLedgerDaysHaveSevenCategories,false);
+ assert(res.prelaunchStructuralHolds.includes(
+  'FULL_31_DAY_UTC_CHARGE_CATEGORY_COVERAGE_NOT_PROVEN'));
+ assert.equal(res.providerCalls,0);
+ assert.equal(res.databaseWrites,0);
+ assert.equal(x.rollbacks(),1);
+});
+test('full seven category budget matrix is metadata only, never a license or GO',async()=>{
+ const x=fake({counts:{
+  adb_phase6_calendar_day:31,
+  phase5_fids_seven_rest_release_v39:1,
+  phase5_fids_cycle_rest_category_cap_v39:7,
+  phase5_fids_cycle_budget_v39:1,
+  phase5_fids_utc_charge_budget_v39:32,
+  phase5_fids_utc_rest_category_budget_v39:224
+ }});
+ const res=await inspectPhase5ReleaseInventory(x.pool);
+ assert.deepEqual(res.prelaunchStructuralHolds,[]);
+ assert.deepEqual(res.physicalUtcChargeDayCategoryCoverage,{
+  ledgerDays:32,categoryRows:224,completeDays:32,incompleteDays:0,
+  allLedgerDaysHaveSevenCategories:true
+ });
+ assert.equal(res.releaseAuthorityFromCounts,false);
+ assert.equal(res.phase5ScientificFreezePassed,false);
+ assert.equal(res.phase6PaidGo,false);
+ assert.equal(x.rollbacks(),1);
+});
 test('missing catalog is reported; no unauthorized data read',async()=>{
  const x=fake({missing:['phase5_other_rest_reviewed_call_v39'],roles:names.slice(0,5)});
  const res=await inspectPhase5ReleaseInventory(x.pool);
