@@ -92,7 +92,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           PRE_URL='postgresql://phase5_p30_pre_login_20261107:ci-only@localhost:5432/neondb?sslmode=disable'
-          printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT CASE WHEN has_table_privilege(current_user,'clean.phase5_cd_pre_task_v39','UPDATE') THEN 1/0 ELSE 1 END;"             "SELECT CASE WHEN has_function_privilege(current_user,'clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE') THEN 1 ELSE 1/0 END;"             "SELECT CASE WHEN has_function_privilege(current_user,'clean.phase5_cd_reap_once_v39(integer)','EXECUTE') THEN 1 ELSE 1/0 END;"             "SELECT count(*) FROM clean.phase5_cd_claim_due_v39('ci-pre-worker-01',2,30);"             "SELECT count(*) FROM clean.phase5_cd_reap_once_v39(2);"             | psql "$PRE_URL" -X -v ON_ERROR_STOP=1
+          printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT has_table_privilege(current_user,'clean.phase5_cd_pre_task_v39','UPDATE') AS direct_queue_update;"             "SELECT has_function_privilege(current_user,'clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE') AS can_claim;"             "SELECT has_function_privilege(current_user,'clean.phase5_cd_reap_once_v39(integer)','EXECUTE') AS can_reap;"             "SELECT count(*) FROM clean.phase5_cd_claim_due_v39('ci-pre-worker-01',2,30);"             "SELECT count(*) FROM clean.phase5_cd_reap_once_v39(2);"             | psql "$PRE_URL" -X -v ON_ERROR_STOP=1
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_table_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_pre_task_v39','UPDATE')")" = f
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = t
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_reap_once_v39(integer)','EXECUTE')")" = t
           test "$(psql "$DATABASE_URL" -XAt -c "SELECT count(*) FROM clean.phase5_cd_pre_task_v39")" = 0
           echo P5_CD_V0090_EXISTING_PRE_LOGIN_NO_DIRECT_QUEUE_DML_FUNCTIONS_VALID
       - name: Prove no worker claim leak and wrong actor fails
