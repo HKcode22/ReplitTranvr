@@ -282,12 +282,17 @@ export async function commitP5V0082FrozenSevenRestInput(
    "SELECT manifest_sha256,calendar_hash,config_hash,enabled,revoked_at_utc "+
    "FROM clean.adb_phase6_authorization WHERE singleton_key=true"
   )).rows;
-  if(auth.length!==1||auth[0].enabled!==true||
+  // Budget freeze is a PRE-LAUNCH materialization, not a paid GO.
+  // B0062 authorization must already be independently staged with the
+  // signed manifest/calendar/config, but MUST NOT be enabled yet. The
+  // separately reviewed Phase6 GO may enable this singleton only AFTER
+  // these immutable ledgers are complete and read back independently.
+  if(auth.length!==1||auth[0].enabled!==false||
      auth[0].revoked_at_utc!==null||
      auth[0].manifest_sha256!==c.manifestSha256||
      auth[0].calendar_hash!==c.calendarSha256||
      auth[0].config_hash!==c.configSha256)
-   hold("NO_ACTUAL_FROZEN_ACTIVE_AUTHORIZATION");
+   hold("NO_MATCHING_INACTIVE_PRELAUNCH_AUTHORIZATION");
   const cal=(await client.query(
    "SELECT run_day_index,calendar_hash,config_hash,frame_hash,"+
    "scheduled_start_utc,window_shape,active_duration_minutes,date_utc,"+
