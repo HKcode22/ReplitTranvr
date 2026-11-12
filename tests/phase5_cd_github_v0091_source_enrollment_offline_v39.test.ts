@@ -126,6 +126,7 @@ describe("Phase5 real V0091 GH PREPARE-only registration from signed V0079 origi
   ["wrong branch",{GITHUB_REF:"refs/pull/100/merge"}],
   ["wrong repository",{GITHUB_REPOSITORY:"evil/fork"}],
   ["wrong event",{GITHUB_EVENT_NAME:"pull_request"}],
+  ["scheduled duplicate is forbidden",{GITHUB_EVENT_NAME:"schedule"}],
   ["retry",{GITHUB_RUN_ATTEMPT:"2"}],
   ["wrong mode",{P5_CD_GH_PRE_MODE:"PHASE6_APPROVED"}],
   ["no independent source rights",{V39_PHASE5_SOURCE_RIGHTS_APPROVED:""}],
