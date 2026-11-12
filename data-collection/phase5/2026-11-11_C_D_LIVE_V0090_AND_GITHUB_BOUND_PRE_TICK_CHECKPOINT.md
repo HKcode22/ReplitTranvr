@@ -28,3 +28,13 @@ The owner supplied Replit Shell JSON with status **`V0090_EXISTING_PRE_ONLY_QUEU
 Add a **real source-to-V0087 enrollment** function with a separate narrowly scoped owner (not the PRE worker) and exact original/normalized/rights checks. Add the **T−24h + independent V0081 witness** to the same queue-guarded autonomous path using the existing Stage17 writer. Test full controller against disposable PG16 with source-bound synthetic flight, lease crash, ACK, STOP and quarantine. Reconcile GitHub scheduled jitter with the actual flight cutoff, then authorize a SMALL genuine prospective pilot when the scientific/release prerequisites are satisfied.
 
 **Planning targets:** November 13 checkpoint and November 20 outside Phase5-readiness goal, not a guarantee or substitute for audited source rights. **Live V0087–V0090 complete; GitHub PRE controller not enabled; Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.**
+
+
+## Break the Phase5/Phase6 circular GO dependency
+
+The previous GitHub PRE owners required `V39_PHASE5_FREEZE_SIGNED=1` **and** `V39_PHASE6_PROCESS_ARMED=1` even to gather a limited Phase5 real PRE canary. That is circular if the Phase5 independent final freeze requires exactly that prospective PRE evidence. The new gate explicitly distinguishes two mutually exclusive modes:
+
+- `P5_CD_GH_PRE_MODE=PHASE5_CANARY`: separately reviewed `P5_CD_GH_PHASE5_CANARY_APPROVED=1`, signed original/roster/rights, source-use approval, STOP-clear, **`V39_PHASE6_PROCESS_ARMED=0`**, and no `V39_PHASE5_FREEZE_SIGNED=1`. It may only write bounded **non-provider** already-source-bound PRE evidence, never make FIDS paid HTTP or independently mark Phase5 frozen.
+- `P5_CD_GH_PRE_MODE=PHASE6_APPROVED`: requires separate Phase5 scientific freeze and `V39_PHASE6_PROCESS_ARMED=1`; refuses reused canary approval. Both modes still require exact pinned `GITHUB_SHA`, mandatory STOP, old signed packet and Stage30 PRE role.
+
+Neither mode is automatically armed by merging this PR. The repository schedule enable variable `P5_CD_GH_PRE_SCHEDULE_ENABLED` still defaults unset/off; any owner-reviewed activation requires genuine usable original source and V0087 tasks. **The owner has not authorized a scientific freeze or current Phase6 paid GO just by commissioning V0090.** This canary code removes the circular release-blocker without bypassing the original as-of/retention and budget controls.
