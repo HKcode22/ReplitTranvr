@@ -20,6 +20,8 @@ function approved():NodeJS.ProcessEnv{
   P5_CD_GH_PRE_CONFIRM:"ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER",
   P5_CD_GH_PRE_ARMED:"1",
   P5_CD_GH_PRE_STOP:"0",
+  P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",
+  P5_CD_GH_PHASE5_CANARY_APPROVED:"",
   V39_PHASE5_FREEZE_SIGNED:"1",
   V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
   V39_PHASE6_PROCESS_ARMED:"1",
@@ -37,6 +39,23 @@ function approved():NodeJS.ProcessEnv{
  };
 }
 describe("Phase5 C+D real GH Stage14 and STOP/release admission",()=>{
+ it("permits only separately signed non-provider Phase5 canary before Phase6 GO",()=>{
+  const e={
+   ...approved(),P5_CD_GH_PRE_MODE:"PHASE5_CANARY",
+   P5_CD_GH_PHASE5_CANARY_APPROVED:"1",
+   V39_PHASE5_FREEZE_SIGNED:"0",V39_PHASE6_PROCESS_ARMED:"0"
+  };
+  const out=requireP5CdGithubPreRelease(e);
+  expect(out.releaseMode).toBe("PHASE5_CANARY");
+  expect(out.providerCalls).toBe(0);
+  expect(out.scientificFreezeEstablishedByThisFunction).toBe(false);
+  expect(()=>requireP5CdGithubPreRelease({
+   ...e,P5_CD_GH_PHASE5_CANARY_APPROVED:""
+  })).toThrow("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
+  expect(()=>requireP5CdGithubPreRelease({
+   ...e,V39_PHASE6_PROCESS_ARMED:"1"
+  })).toThrow("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
+ });
  it("requires specific main SHA and existing dedicated Stage30 PRE secret",()=>{
   const g=requireP5CdGithubPreRelease(approved());
   expect(g.schema).toBe("v39.phase5.cd-gh-pre-explicit-release.v1");
