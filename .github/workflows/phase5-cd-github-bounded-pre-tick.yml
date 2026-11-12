@@ -21,7 +21,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: phase5-cd-bounded-pre-main
+  # PR/offline test runs must never queue ahead of live main PRE ticks.
+  group: phase5-cd-bounded-pre-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: false
 jobs:
   test-offline-release-and-bound-tick:
