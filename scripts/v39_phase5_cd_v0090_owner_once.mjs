@@ -130,7 +130,9 @@ async function postflight(c,b){
  for(const sig of SIGS){
   const g=(await c.query(
    "SELECT pg_catalog.has_function_privilege($1,$2,'EXECUTE') AS pre_exec,"+
-   "pg_catalog.has_function_privilege('travnr_runtime',$2,'EXECUTE') AS runtime_exec",
+   "COALESCE((SELECT pg_catalog.has_function_privilege(r.rolname,$2,'EXECUTE')"+
+   " FROM pg_catalog.pg_roles r WHERE r.rolname='travnr_runtime'),false)"+
+   " AS runtime_exec",
    [PRE,sig])).rows[0];
   if(!g||!g.pre_exec||g.runtime_exec)
    hold("PRE_FUNCTION_EXECUTE_NOT_EXCLUSIVE");
