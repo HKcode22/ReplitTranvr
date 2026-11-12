@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — SOURCE login was already live verified Nov 8; repaired existing native-source candidate audit
+
+**[Read the recovered successful Nov 8 dedicated SOURCE login evidence and corrected existing SOURCE candidate audit](2026-11-12_SOURCE_LOGIN_ALREADY_PROVEN_AND_REAL_NATIVE_CANDIDATE_AUDIT_FIXED.md).** [GH Actions run #42443811669](https://github.com/HKcode22/ReplitTranvr/actions/runs/42443811669) **already succeeded in real production SOURCE login/SET ROLE + read-only session**; do not repeat. Owner Nov12 Neon role catalog independently confirms SOURCE SELECT on all five source/population tables. The pre-existing native-flight review workflow and runner had still been mistakenly assigned the **PRE** worker credential for a source-original query; it now reuses the already authenticated SOURCE login/role and masks PRE credentials, with tests for denied PRE/owner login impersonation. No new role grant, migration, new audit worker, paid GET, live query, signed flight packet or Phase6 GO resulted from this corrective PR. **Next substantive milestone is a single genuine approved future V0079 source → native candidate → signed PRE/POST pilot**, not another login check. Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 12 — Actual Neon SOURCE role can read bound original; PREPARE cannot (no grants)
 
 **[Read the owner-attested SOURCE/PREPARE role-catalog readback and least-privilege original-feature-compiler correction](2026-11-12_ACTUAL_NEON_V0079_SOURCE_ROLE_CATALOG_READBACK_AND_LEAST_PRIVILEGE_FIX.md).** Real `neondb` read-only catalog: SOURCE group has SELECT on all 5 needed original/ledger/population tables; PREPARE only on allowed-query. The new V0079 feature draft reader from PR #595 therefore now requires **Stage28 SOURCE group** inside a repeatable-read READ ONLY transaction. **No PREPARE broad GRANT**; no original-body SELECT as application/owner; no DB/install/provider calls. Actual SOURCE dedicated-login session/source rights/real future packet still unverified; Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
