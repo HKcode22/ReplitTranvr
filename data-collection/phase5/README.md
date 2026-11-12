@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — actual 31-day UTC charge-date REST ledger check, reuse existing release inventory
+
+**[Read the real UTC charge-day seven-category matrix repair and current owner inventory command](2026-11-12_PHASE5_PHASE6_REAL_UTC_CHARGE_DAY_BUDGET_MATRIX_READONLY_CLOSEOUT.md).** A single seven-category UTC charge date was formerly sufficient for a misleading “budget exists” structural check; the existing metadata-only release inventory now demands **at least 31 funded actual physical charge dates**, each with **exactly seven distinct REST categories** matched to the V0079 charge-day ledger. This is source spend structure, **not** account permission, paid consumption, flight PRE/POST, source rights or Phase6 activation. It does **not** require Day1 flight data before GO and does not assume exactly 32 charge dates. Exact reviewed owner-shell launcher pin and regression tests updated. No added schema, provider GET, account role, migrations or V0087–V0092 reinstall. Phase5 scientific FREEZE HOLD / paid Phase6 GO NO until live inventory and independent reviews.
+
+
 ## November 12 — original NOAA TAF forecast categories ready as optional signed PRE features (not a fetch)
 
 **[Read the source-backed NOAA TAF decoder, signed as-of feature path and remaining real durable receipt step](2026-11-12_NOAA_TAF_FORECAST_CONTRACT_ASOF_FEATURE_CHECKPOINT.md).** Existing four bound original FIDS, two NOAA METAR, four historic and now two **optional** NOAA TAF forecast category fields use the SAME original twelve-field Amendment E signed Stage14 contract. The TAF parser uses genuine source issued/valid clocks and actual artifact availability, rejects ambiguous overlapping TEMPO/PROB/duplicate rows and records explicit missingness. No new API call, license approval, PostgreSQL migration or Feature bundle autoarm; the TAF JSON fetch/durable artifact owner is still needed for real TAF observations. Preserve the original three horizons and V0087–V0092 live-inert, Phase5 FREEZE HOLD / Phase6 paid GO NO.
