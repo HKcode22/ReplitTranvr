@@ -194,6 +194,21 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
   reviewBad.expectedSignedStagePacketSha256=digest(bad);
   expect(()=>compileP5InertB0062UtcStagePacket(bad,reviewBad))
    .toThrow("ORDINARY_DAY_FUTURE_AIRPORTS_NOT_PROSPECTIVE");
+  const badPairRegion=structuredClone(input);
+  badPairRegion.calendarDays[0].pairAirportSet.MID_A.region="UNRELATED_REGION";
+  badPairRegion.expectedSignedCalendarRowsSha256=digest(badPairRegion.calendarDays);
+  expect(()=>compileP5InertB0062UtcStagePacket(badPairRegion,{
+   ...review,expectedSignedStagePacketSha256:digest(badPairRegion)
+  })).toThrow("MISSING_FOUR_REGION_BOUND_PAIRED_AIRPORTS");
+  // The actual pair sites, not an accidentally shared per-day seed string,
+  // are what must replay. Keep explicit per-day seed and UTC class flexibility.
+  const benign=structuredClone(input);
+  benign.calendarDays[6].frozenDrawSeed=sha("9");
+  benign.calendarDays[6].timeClass="00:00";
+  benign.expectedSignedCalendarRowsSha256=digest(benign.calendarDays);
+  expect(()=>compileP5InertB0062UtcStagePacket(benign,{
+   ...review,expectedSignedStagePacketSha256:digest(benign)
+  })).not.toThrow();
   const noBudget=structuredClone(input);
   noBudget.slotBudgetInput.restOtherByUtcDate.pop();
   expect(()=>compileP5InertB0062UtcStagePacket(noBudget,{
