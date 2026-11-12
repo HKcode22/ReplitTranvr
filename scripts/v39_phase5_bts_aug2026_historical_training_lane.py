@@ -40,10 +40,13 @@ OUTPUT=[
  "historical_outcome_available_not_before_utc","source_record_sha256",
  "same_tail_predecessor_asof_live_verified"
 ]
-# Release page (last independently checked 2026-11-12) lists 2026-08
-# release DATE 2026-10-19; exact hour unknown. Use next UTC midnight as
-# conservative NOT-BEFORE when considering future feature eligibility.
-PUBLISHED_NOT_BEFORE="2026-10-20T00:00:00.000Z"
+# BTS release-history page lists August 2026 added on 2026-10-19,
+# but the exact official PREZIP archive in our existing Phase4 workflow is
+# dated 2026-10-26 15:49 in BTS directory listing. The time zone is
+# unspecified, so use 2026-10-27 UTC midnight as a CONSERVATIVE earliest
+# feature availability for this particular downloadable archive. Actual
+# first verified receipt in our own GitHub run may be LATER.
+PUBLISHED_NOT_BEFORE="2026-10-27T00:00:00.000Z"
 MAX_ZIP=45_000_000
 VALID_TAIL=re.compile(r"^[A-Z0-9-]{2,12}$")
 VALID_CARRIER=re.compile(r"^[A-Z0-9]{2,3}$")
