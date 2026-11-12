@@ -141,7 +141,9 @@ export async function runP5CdOneQueuedT24Witness(
     realV0088QueueFenceGh:{
      taskId:task.taskId,owner:task.leaseOwner,
      generation:task.leaseGeneration,packetSha256:task.packetSha256
-    }
+    },
+    ...(env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED==="1"?
+      {amendmentENativeRouteBoundGh:true as const}:{})
    });
   const id=durable.committedSnapshotId;
   // Witness role has SELECT on the existing V0081 witness and the
