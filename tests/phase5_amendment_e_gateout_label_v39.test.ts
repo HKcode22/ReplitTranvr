@@ -75,13 +75,15 @@ describe("Canonical Amendment E: same-milestone gate-out delay, no provider IO",
   const x=sample();
   x.outcome={
    operation:"CONFIRMED_CANCELLED",event:"NO_EVENT",actualUtc:null,
-   firstAvailableAtUtc:null,externallyVerifiedActualOnly:true,
+   firstAvailableAtUtc:"2035-11-25T12:43:00.000Z",
+   externallyVerifiedActualOnly:true,
    evidenceSha256:sha("d"),recoveryGraceElapsed:true
   };
   let r=assessP5AmendmentEGateOutDelayCandidate(x);
   expect(r.status).toBe("CANCELLATION_SEPARATE_OUTCOME");
   expect(r.candidateDelayMinutes).toBeNull();
   x.outcome.operation="UNKNOWN";
+  x.outcome.firstAvailableAtUtc=null;
   x.outcome.recoveryGraceElapsed=false;
   r=assessP5AmendmentEGateOutDelayCandidate(x);
   expect(r.status).toBe("PENDING_GATE_OUT_EVIDENCE");
@@ -140,6 +142,16 @@ describe("Canonical Amendment E: same-milestone gate-out delay, no provider IO",
  it("rejects conflicting cancellation and event timestamps, no fabricated zeros",()=>{
   const x=sample();
   x.outcome.operation="CONFIRMED_CANCELLED";
+  expect(()=>assessP5AmendmentEGateOutDelayCandidate(x))
+   .toThrow("CONTRADICTORY_OUTCOME_EVENT_AND_AVAILABILITY");
+ });
+ it("does not report confirmed cancellation without available evidence",()=>{
+  const x=sample();
+  x.outcome={
+   operation:"CONFIRMED_CANCELLED",event:"NO_EVENT",actualUtc:null,
+   firstAvailableAtUtc:null,externallyVerifiedActualOnly:false,
+   evidenceSha256:null,recoveryGraceElapsed:true
+  };
   expect(()=>assessP5AmendmentEGateOutDelayCandidate(x))
    .toThrow("CONTRADICTORY_OUTCOME_EVENT_AND_AVAILABILITY");
  });
