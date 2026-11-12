@@ -72,7 +72,8 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   const end=new Date(native.getTime()+4*3600_000);
   const dispatch=new Date(now-15*60_000);
   const arr=Array.from({length:FLIGHTS},(_,i)=>({
-   flight:"CD"+String(i+1).padStart(3,"0")
+   flight:"CD"+String(i+1).padStart(3,"0"),
+   status:"SCHEDULED"
   }));
   const payload=Buffer.from(JSON.stringify({departures:arr}));
   const bodyHash=createHash("sha256").update(payload).digest("hex");
