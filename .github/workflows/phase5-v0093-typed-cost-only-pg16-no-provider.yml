@@ -1,0 +1,121 @@
+name: Phase5 V0093 Typed V0082 COST Upper Bound — Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
+      - 'tests/phase5_v0093_cost_only_real_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0093-typed-cost-only-pg16-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
+      - 'tests/phase5_v0093_cost_only_real_pg16_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+  V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+jobs:
+  cost-only-upper-bound:
+    name: cost-only-upper-bound-no-provider
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      V39_P5_V0093_COST_ONLY_DISPOSABLE_PG16: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install ONLY disposable test schema B0062/V0079/V0080/V0082 and additive V0093
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = 'true'
+          test "${DATABASE_URL}" = 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+          test -z "${AERODATABOX_API_KEY}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
+      - name: Preserve exact signed partitions and fail closed in cost-only-upper-bound-no-provider
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}"
+          npx vitest run tests/phase5_v0093_cost_only_real_pg16_v39.test.ts
+          echo 'V0093_TYPED_CEILING_REAL_PG16=PASS PAID_HTTP=0 NEON_DB_WRITES=0 PHASE6_GO=0'
+
+  v0082-exact-legacy:
+    name: v0082-exact-source-legacy-preserved
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      V39_P5_V0082_DISPOSABLE_PG16: '1'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install ONLY disposable test schema B0062/V0079/V0080/V0082 and additive V0093
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = 'true'
+          test "${DATABASE_URL}" = 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+          test -z "${AERODATABOX_API_KEY}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
+      - name: Preserve exact signed partitions and fail closed in v0082-exact-source-legacy-preserved
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}"
+          npx vitest run tests/phase5_v0082_seven_rest_category_real_pg16_v39.test.ts
+          echo 'V0093_TYPED_CEILING_REAL_PG16=PASS PAID_HTTP=0 NEON_DB_WRITES=0 PHASE6_GO=0'
