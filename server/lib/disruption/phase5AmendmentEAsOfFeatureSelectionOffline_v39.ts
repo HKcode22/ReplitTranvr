@@ -2,10 +2,10 @@
  * Amendment E: OFFLINE deterministic feature-selection contract.
  * Does not fetch provider data, train a model, insert PRE, or grant use rights.
  *
- * Because real Stage14 is still features:[], this is deliberately separate:
- * an eventual writer integration must use exactly the signed, independently
- * authorized field set, identity and actual ISSUE time. Do NOT merge rows
- * into Stage14 silently or claim model readiness from passing this test.
+ * The existing Stage14 writer now supports an explicitly reviewed,
+ * separately released source-bound route and supplementary as-of feature
+ * path; the default stays empty without opt-in. Neither the time selector
+ * nor a signed packet alone proves source rights or model readiness.
  */
 import type {PreFeatureInput}
  from "./preSnapshotBuilder_v3";
