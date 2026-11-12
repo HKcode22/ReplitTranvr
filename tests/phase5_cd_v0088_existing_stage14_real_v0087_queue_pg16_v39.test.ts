@@ -287,6 +287,45 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    [t.task_id,t.lease_owner,t.lease_generation])).rows[0].ok).toBe(true);
   return t;
  }
+ it("enrolled flight preserves POST observation edits, but cannot promote POST to PRE",async()=>{
+  const post=(await admin.query(
+   "INSERT INTO clean.flight_snapshots("+
+   "flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,"+
+   "selected_t_milestone_utc,selected_t_version,population_query_id,"+
+   "fids_response_hash,builder_version)"+
+   " VALUES($1,'POST_OBSERVATION','T-24h',$2,$3,'post-v1',$4,$5,'ci-post')"+
+   " RETURNING id",
+   [permit.flightInstanceId,new Date(cutoffMs+60_000),
+    new Date(permit.selectedTNativeUtc),qid,response])).rows[0];
+  expect(post?.id).toBeDefined();
+  // An untrusted non-PRE row may NEVER preempt the exact unique-key
+  // slot reserved for the genuine C+D PRE.
+  await expect(admin.query(
+   "INSERT INTO clean.flight_snapshots("+
+   "flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,"+
+   "selected_t_milestone_utc,selected_t_version,population_query_id,"+
+   "fids_response_hash,builder_version)"+
+   " VALUES($1,'POST_OBSERVATION','T-24h',$2,$3,'post-preempt',$4,$5,'ci-post')",
+   [permit.flightInstanceId,new Date(cutoffMs),
+    new Date(permit.selectedTNativeUtc),qid,response]
+  )).rejects.toThrow("P5_CD_V0088_RESERVED_PRE_KEY_COLLISION");
+  await expect(admin.query(
+   "UPDATE clean.flight_snapshots SET prediction_cutoff_utc=$1 WHERE id=$2",
+   [new Date(cutoffMs),post.id]
+  )).rejects.toThrow("P5_CD_V0088_RESERVED_PRE_KEY_COLLISION");
+  const changed=await admin.query(
+   "UPDATE clean.flight_snapshots SET selected_t_version='post-v2'"+
+   " WHERE id=$1",[post.id]);
+  expect(changed.rowCount).toBe(1);
+  await expect(admin.query(
+   "UPDATE clean.flight_snapshots SET prediction_state='PRE_DEPARTURE'"+
+   " WHERE id=$1",[post.id])).rejects.toThrow(
+    "P5_CD_V0088_ENROLLED_SNAPSHOT_IMMUTABLE");
+  const del=await admin.query("DELETE FROM clean.flight_snapshots WHERE id=$1",
+   [post.id]);
+  expect(del.rowCount).toBe(1);
+  console.log("P5_CD_V0088_POST_COMPAT_RESERVED_PRE_KEY_AND_PROMOTION_REFUSED");
+ });
  it("real V0087 queue prevents PRE INSERT without in-transaction admission",async()=>{
   await expect(persistPreSnapshot(writer,syntheticPre(permit.flightInstanceId)))
     .rejects.toThrow("P5_CD_V0088_INSERT_REQUIRES_SAME_TX_RECEIPT");

@@ -1,0 +1,125 @@
+name: Phase5 V0088+V0089 atomic non-superuser owner installer (PG16 ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0088-v0089-atomic-owner-installer-disposable-pg16.yml'
+      - 'scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs'
+      - 'migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql'
+      - 'migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql'
+permissions:
+  contents: read
+jobs:
+  atomic-rollback-and-real-nonsuperuser-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_CD_V0088_V0089_DISPOSABLE_CI: '1'
+      P5_CD_V0088_V0089_OWNER_APPROVAL: 'INSTALL_V0088_V0089_ATOMIC_GUARD_NO_WORKERS_NO_PAID'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Refuse provider and any non-local PostgreSQL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test "$DATABASE_URL" = 'postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          node --check scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs
+      - name: Reuse existing B0062 and install only V0079 plus real V0087 in CI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OWNER_URL='postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          DATABASE_URL="$OWNER_URL" npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_fids_pre_writer_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_cd_ci_owner LOGIN PASSWORD 'ci-only'
+           CREATEROLE NOINHERIT NOSUPERUSER NOCREATEDB NOREPLICATION NOBYPASSRLS;
+          ALTER SCHEMA clean OWNER TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_task_v39 OWNER TO phase5_cd_ci_owner;
+          GRANT TRIGGER ON clean.flight_snapshots TO phase5_cd_ci_owner;
+          SQL
+      - name: Copy exact reviewed files into ephemeral private CI path
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0088-v0089-XXXXXX)"
+          V8="V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql"
+          V9="V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql"
+          cp "migrations/staged/$V8" "$TMP/$V8"
+          cp "migrations/staged/$V9" "$TMP/$V9"
+          {
+           echo "P5_CD_V0088_FILE=$TMP/$V8"
+           echo "P5_CD_V0089_FILE=$TMP/$V9"
+           echo "P5_CD_V0088_SHA=$(git hash-object "$TMP/$V8")"
+           echo "P5_CD_V0089_SHA=$(git hash-object "$TMP/$V9")"
+          } >> "$GITHUB_ENV"
+          echo "P5_CD_ATOMIC_SQL_BLOBS_VERIFIED_LOCAL_CI_ONLY"
+      - name: Prove deliberately failed V0088 rolls back ALL new trigger objects
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export P5_CD_V0088_V0089_CI_INJECT_ROLLBACK_AFTER_V0088=1
+          if node scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs > /tmp/v0088_injected.out 2>&1; then
+            echo "FAIL_INJECTED_ROLLBACK_WAS_ACCEPTED"; exit 2
+          fi
+          grep -Fq 'HOLD_P5_CD_V0088_V0089_CI_INJECTED_ROLLBACK_AFTER_V0088' /tmp/v0088_injected.out
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase5_cd_pre_admission_receipt_v39') IS NULL")" = t
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname LIKE 'p5_cd_v0088_%'")" = 0
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname='phase5_cd_admission_guard_owner_v39'")" = 0
+          unset P5_CD_V0088_V0089_CI_INJECT_ROLLBACK_AFTER_V0088
+          echo "P5_CD_V0088_V0089_ATOMIC_ROLLBACK_NO_PARTIAL_TRIGGER_PASS"
+      - name: Apply real V0088 and V0089 ATOMICALLY under non-superuser CREATEROLE
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs > /tmp/v0088_install.out
+          grep -Fq '"status": "V0088_V0089_DURABLE_GUARD_INSTALLED_NO_WORKERS_NO_PROVIDER"' /tmp/v0088_install.out
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_has_role('phase5_cd_ci_owner','phase5_cd_admission_guard_owner_v39','SET')")" = f
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_admit_stage14_pre_v39(bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,text,text,text)'::regprocedure")" = phase5_cd_admission_guard_owner_v39
+          echo "P5_CD_V0088_V0089_REAL_NON_SUPERUSER_ATOMIC_DDL_PASS"
+      - name: Repeat invocation must HOLD without modifying original trigger
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if node scripts/v39_phase5_cd_v0088_v0089_atomic_owner_install_once.mjs > /tmp/v0088_repeat.out 2>&1; then
+            echo FAIL_REPEAT_INSTALL_ALLOWED; exit 2
+          fi
+          grep -Fq 'HOLD_P5_CD_V0088_V0089_PG16_ROLE_SCHEMA_DDL_OWNERSHIP_OR_PARTIAL_V0088_NOT_SAFE' /tmp/v0088_repeat.out
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT tgenabled FROM pg_catalog.pg_trigger WHERE tgname='trg_flight_snapshots_population_member'")" = O
+          echo "P5_CD_V0088_V0089_ONE_SHOT_REFUSES_REINSTALL_PASS"

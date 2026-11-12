@@ -111,6 +111,21 @@ DECLARE
  receipt clean.phase5_cd_pre_admission_receipt_v39%ROWTYPE;
  owner_task clean.phase5_cd_pre_task_v39%ROWTYPE;
 BEGIN
+ -- Queue admission applies to PRE_DEPARTURE only. Do not block future
+ -- POST/AIRBORNE observations written through the shared snapshots table.
+ -- UPDATE trigger below prevents a non-PRE row being promoted into PRE
+ -- for an enrolled flight without authorization.
+ IF NEW.prediction_state IS DISTINCT FROM 'PRE_DEPARTURE' THEN
+   -- Non-PRE facts stay writable, but may not occupy the EXACT reserved
+   -- PRE unique key and thereby deny the enrolled PRE its one legal slot.
+   IF EXISTS(SELECT 1 FROM clean.phase5_cd_pre_task_v39 t
+     WHERE t.flight_instance_id=NEW.flight_instance_id
+       AND t.horizon=NEW.horizon
+       AND t.prediction_cutoff_utc=NEW.prediction_cutoff_utc) THEN
+     RAISE EXCEPTION 'P5_CD_V0088_RESERVED_PRE_KEY_COLLISION';
+   END IF;
+   RETURN NEW;
+ END IF;
  SELECT task_id INTO enrolled_id
  FROM clean.phase5_cd_pre_task_v39
  WHERE flight_instance_id=NEW.flight_instance_id AND horizon=NEW.horizon;
@@ -162,11 +177,34 @@ CREATE FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,pg_temp AS $immutable$
 BEGIN
- IF EXISTS(SELECT 1 FROM clean.phase5_cd_pre_task_v39
-  WHERE flight_instance_id=OLD.flight_instance_id) THEN
-  RAISE EXCEPTION 'P5_CD_V0088_ENROLLED_SNAPSHOT_IMMUTABLE';
+ IF TG_OP='DELETE' THEN
+  IF OLD.prediction_state IS DISTINCT FROM 'PRE_DEPARTURE' THEN
+    RETURN OLD;
+  END IF;
+  IF EXISTS(SELECT 1 FROM clean.phase5_cd_pre_task_v39
+    WHERE flight_instance_id=OLD.flight_instance_id) THEN
+    RAISE EXCEPTION 'P5_CD_V0088_ENROLLED_SNAPSHOT_IMMUTABLE';
+  END IF;
+  RETURN OLD;
  END IF;
- IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ -- Neither editing a real enrolled PRE nor relabeling a non-PRE row into
+ -- an enrolled PRE may bypass the registered flight's immutable identity.
+ -- A POST-to-POST UPDATE also cannot reserve the C+D flight's
+ -- exact PRE unique identity before the real protected PRE is written.
+ IF NEW.prediction_state IS DISTINCT FROM 'PRE_DEPARTURE'
+   AND EXISTS(SELECT 1 FROM clean.phase5_cd_pre_task_v39 t
+     WHERE t.flight_instance_id=NEW.flight_instance_id
+       AND t.horizon=NEW.horizon
+       AND t.prediction_cutoff_utc=NEW.prediction_cutoff_utc) THEN
+   RAISE EXCEPTION 'P5_CD_V0088_RESERVED_PRE_KEY_COLLISION';
+ END IF;
+ IF (OLD.prediction_state='PRE_DEPARTURE'
+     OR NEW.prediction_state='PRE_DEPARTURE')
+   AND EXISTS(SELECT 1 FROM clean.phase5_cd_pre_task_v39
+     WHERE flight_instance_id IN
+       (OLD.flight_instance_id,NEW.flight_instance_id)) THEN
+   RAISE EXCEPTION 'P5_CD_V0088_ENROLLED_SNAPSHOT_IMMUTABLE';
+ END IF;
  RETURN NEW;
 END $immutable$;
 CREATE TRIGGER p5_cd_v0088_registered_pre_immutable_guard
