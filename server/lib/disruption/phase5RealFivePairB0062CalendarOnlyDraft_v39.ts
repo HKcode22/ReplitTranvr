@@ -96,7 +96,8 @@ function verifiedOwnerPairs(raw:unknown){
   hold("ACTUAL_CORRECTED_PAIR_EVIDENCE_MISSING");
  const m=new Map<string,Record<Slot,PairAirport>>();
  for(let i=1;i<=5;i++){
-  const rawPair=pairs[i-1];
+  // Array existence and five-element length were validated above.
+  const rawPair=pairs![i-1];
   if(rawPair?.pairId!=="pair-"+i||
      !rawPair.airports||
      Object.keys(rawPair.airports).length!==4||
@@ -155,8 +156,11 @@ export function buildP5ActualFivePairB0062CalendarOnlyDraft(
   let anchorIcao:string,slotRegions:Regions,pairAirportSet:
     Record<Slot,PairAirport>|null;
   if(paired){
-   const sites=ownerPairs.get(day.pairId!);
-   if(!sites)hold("ACTUAL_PAIRED_AIRPORT_SHA_OR_PAIR_REPLAY_CHANGED");
+   const fromMap=ownerPairs.get(day.pairId!);
+   if(!fromMap)hold("ACTUAL_PAIRED_AIRPORT_SHA_OR_PAIR_REPLAY_CHANGED");
+   // TS strict-null control flow does not narrow through our fail-closed
+   // throw helper; runtime still explicitly denies a missing pair before use.
+   const sites=fromMap!;
    if(!day.pairedAirportCandidates||
       SLOTS.some(k=>sites[k].icao!==day.pairedAirportCandidates?.[k]))
     hold("ACTUAL_PAIRED_AIRPORT_SHA_OR_PAIR_REPLAY_CHANGED");
