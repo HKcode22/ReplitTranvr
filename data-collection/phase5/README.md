@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Real V0079 original FIDS to signed Amendment E features (no extra GET)
+
+**[Read the source-bound original FIDS compiler and its remaining authentic packet-owner handoff](2026-11-12_AMENDMENT_E_EXISTING_V0079_ORIGINAL_FIDS_TO_PRE_FEATURE_PACKET_COMPILER.md).** Reuses actual `fidsCensus_v3` decoded-original custody plus Gate5 body/envelope verifiers to extract four source-original FIDS features for one uniquely matched positively operating leg. Conflicting native flight IDs/codeshares, source hashes, routes and native T are refused; missing status/arrival/revised info is NULL rather than invented. The output fits the same opted-in signed Stage14 source packet from PR #593. No new provider API, DB, paid horizon, signed real packet, source rights certificate or Phase6 GO is inferred; Neon V0087–V0092 remain installed/inert. Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.
+
+
 ## November 12 — Evaluate 4/5/6 horizon tiers against the full FIDS + POST + Alert spend
 
 **[Read the 4-vs-5-vs-6 PRE horizon full-ledger budget model and additive migration/release requirements](2026-11-12_4_5_6_HORIZON_FULL_LEDGER_CANDIDATE_BUDGET_NO_GO.md).** A new purely offline [tier evaluator](../../server/lib/disruption/phase5OptionalHorizonTierBudget_v39.mjs) considers T−3h, T−12h and T−45m as separately optional candidates. It distinguishes 544/680/816 **planning** groups from billed physical GETs and keeps all projected REST categories, POST recovery, transport retries, project 50k cap, protected margin and Alert SEND/refills separate. Arithmetic FIT is not measured source coverage, added predictive value, rights or authorization. The current three V0087–V0092 horizons remain unchanged and live-inert; no new paid work/schema/activation. **Phase5 scientific FREEZE HOLD / paid Phase6 GO NO.**
