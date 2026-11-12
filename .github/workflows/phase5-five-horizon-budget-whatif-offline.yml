@@ -1,0 +1,53 @@
+name: Phase5 optional five horizon cost research (OFFLINE ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-five-horizon-budget-whatif-offline.yml'
+      - 'server/lib/disruption/phase5OptionalHorizonSensitivity_v39.mjs'
+      - 'tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts'
+      - 'data-collection/phase5/2026-11-12_HORIZON_LITERATURE_FIVE_HORIZON_BUDGET_AND_PHASE7_INFERENCE.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-five-horizon-budget-whatif-offline.yml'
+      - 'server/lib/disruption/phase5OptionalHorizonSensitivity_v39.mjs'
+      - 'tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: p5-five-horizon-research-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-sensitivity-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      V39_PHASE5_FREEZE_SIGNED: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Pure what-if rest/alert/physical-GET math, no real source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          npx vitest run tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts
+          echo P5_FIVE_HORIZON_RESEARCH_ONLY_NOT_NEW_SQL_NOT_PHASE6_RELEASE
