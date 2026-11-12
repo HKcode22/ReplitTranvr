@@ -186,6 +186,19 @@ describe("Phase5 real V0091 GH PREPARE-only registration from signed V0079 origi
   expect(out.providerCalls).toBe(0);
   expect(n).toBe(1);
  });
+ it("forged or modified verified-packet object cannot call V0091 SQL",async()=>{
+  const f=fixture();let calls=0;
+  const db={query:async()=>{calls++;return{rows:[{task_id:"1"}]};}};
+  const selected=verifyP5CdOneFrozenSourceEnrollment(
+   f.release,f.rawRoster,f.roster,f.entries);
+  const forged={...selected};
+  await expect(registerOneP5CdGithubSourceFlightV39(f.e,db,forged))
+   .rejects.toThrow("DB_OR_EXACT_FROZEN_PACKET_MISSING_OR_MUTATED");
+  (selected.permit as any).flightInstanceId="leg:ci:altered:001";
+  await expect(registerOneP5CdGithubSourceFlightV39(f.e,db,selected))
+   .rejects.toThrow("DB_OR_EXACT_FROZEN_PACKET_MISSING_OR_MUTATED");
+  expect(calls).toBe(0);
+ });
  it("unknown INSERT ACK stays HOLD with no blind repeat",async()=>{
   const f=fixture();let calls=0;
   const db={query:async()=>{calls++;throw Error("connection reset after unknown commit")}};
