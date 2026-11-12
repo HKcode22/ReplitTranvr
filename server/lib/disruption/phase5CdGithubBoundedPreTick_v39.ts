@@ -87,7 +87,13 @@ export function verifyP5CdFrozenRoster(
   const t24=schema==="v39.phase5.github-native-t24-pre-witness-reviewed.v1";
   const later=schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1";
   const fallback=schema==="v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
-  if((!t24&&!later&&!fallback)||
+  // FIRST controller only executes witnessed T6/T90. T24 must use the
+  // existing separate V0081 witness writer, and standalone-later requires
+  // a separately approved as-of protocol. Never mark WRITE_STARTED for
+  // either incomplete branch.
+  if(t24||fallback)
+   hold("T24_WITNESS_OR_STANDALONE_LATER_CHAIN_NOT_YET_CONNECTED");
+  if(!later||
      packet.reviewedCodeSha!==gate.approvedCodeSha||
      (t24&&packet.independentNativeT24AndSourceReviewAttested!==true)||
      (later&&packet.independentLaterHorizonAndT24ReviewAttested!==true)||
