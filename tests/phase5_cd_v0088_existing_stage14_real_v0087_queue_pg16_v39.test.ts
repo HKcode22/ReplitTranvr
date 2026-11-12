@@ -438,10 +438,53 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    taskId:String(t.task_id),owner:String(t.lease_owner),
    generation:String(t.lease_generation),packetSha256:t.packet_sha256
   };
-  const saved=await persistP5V0079SingleBoundFlightPre(writer,permit,{
-   realV0088QueueFenceCi:claimInfo,
-   amendmentENativeRouteBoundCi:true
-  });
+  // Synthetic as-of receipts exercise the original Stage14 DB feature path.
+  // They neither imply physical FIDS rights nor represent measured flights.
+  const member=(await admin.query(
+   "SELECT available_at FROM clean.flight_population"+
+   " WHERE analytic_identity_id=$1",[permit.flightInstanceId]
+  )).rows[0];
+  const memberAt=new Date(member.available_at).toISOString();
+  const nowCi=new Date((await admin.query(
+   "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
+  const observations=[
+   {flightInstanceId:permit.flightInstanceId,
+    field:"reported_pre_departure_status" as const,value:"SCHEDULED",
+    source:"AERODATABOX_FIDS" as const,sourceRecordId:response,
+    observedAtUtc:memberAt,availableAtUtc:memberAt,
+    rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const},
+   {flightInstanceId:permit.flightInstanceId,
+    field:"prior_route_departure_delay_median_minutes" as const,value:13,
+    source:"REVIEWED_HISTORIC_CONTEXT" as const,sourceRecordId:h("9"),
+    observedAtUtc:iso(nowCi-50*60_000),
+    availableAtUtc:iso(nowCi-45*60_000),
+    validFromUtc:iso(nowCi-60*60_000),validToUtc:null,
+    rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const}
+  ];
+  const extendedPermit={
+   ...permit,reviewedSupplementalFeatureBundle:{
+    schema:"v39.phase5.e-signed-source-supplement.v1" as const,
+    flightInstanceId:permit.flightInstanceId,
+    populationQueryId:qid,
+    originalResponseSha256:response,
+    observationsSha256:createHash("sha256").update(
+     JSON.stringify(observations)).digest("hex"),
+    externalSourceAndContentsReviewReceiptSha256:h("c"),
+    fields:["reported_pre_departure_status",
+     "prior_route_departure_delay_median_minutes"] as Array<
+     "reported_pre_departure_status"|
+     "prior_route_departure_delay_median_minutes">,
+    observations
+   }
+  } satisfies P5Stage14SingleFlightPrePermit;
+  process.env.V39_P5_E_SUPPLEMENT_CI="1";
+  let saved:Awaited<ReturnType<typeof persistP5V0079SingleBoundFlightPre>>;
+  try{
+   saved=await persistP5V0079SingleBoundFlightPre(writer,extendedPermit,{
+    realV0088QueueFenceCi:claimInfo,
+    amendmentENativeRouteBoundCi:true
+   });
+  }finally{delete process.env.V39_P5_E_SUPPLEMENT_CI;}
   expect(saved.preSnapshotsInserted).toBe(1);
   expect(saved.postCommitDatabaseReadbackVerified).toBe(true);
   const features=(await admin.query(
@@ -449,10 +492,14 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    " WHERE id=$1",[saved.committedSnapshotId])).rows[0];
   expect(features.features_json).toEqual([
    {name:"origin_icao",value:"WSSS"},
-   {name:"destination_icao",value:"YSSY"}
+   {name:"destination_icao",value:"YSSY"},
+   {name:"reported_pre_departure_status",value:"SCHEDULED"},
+   {name:"prior_route_departure_delay_median_minutes",value:13}
   ]);
   expect(features.missingness_flags).toMatchObject({
-   origin_icao:null,destination_icao:null
+   origin_icao:null,destination_icao:null,
+   reported_pre_departure_status:null,
+   prior_route_departure_delay_median_minutes:null
   });
   console.log("P5_E_STAGE14_ACTUAL_SOURCE_BOUND_PRE_ROUTE_FEATURES_PERSISTED");
 
