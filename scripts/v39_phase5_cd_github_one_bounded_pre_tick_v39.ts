@@ -76,8 +76,12 @@ export async function runP5CdGithubPreController(
 }
 if(process.env.P5_CD_GH_PRE_EXECUTE==="1"){
  try{
-  console.log(JSON.stringify(
-   await runP5CdGithubPreController(process.env),null,2));
+  const result=await runP5CdGithubPreController(process.env);
+  console.log(JSON.stringify(result,null,2));
+  if(result.status==="HOLD_UNSIGNED_OR_UNCERTAIN_SNAPSHOT_NO_REPLAY"){
+   console.error("REFUSED_P5_CD_GH_PRE_RUNNER_UNCERTAIN_OR_UNSIGNED_TASK_HOLD");
+   process.exitCode=2;
+  }
  }catch(e){
   const message=e instanceof Error&&
    /^REFUSED_P5_CD_[A-Z0-9_]+$/.test(e.message)?
