@@ -28,6 +28,10 @@ import {
 } from "./phase5T24PreIndependentWitnessChain_v39";
 
 const deny=(s:string):never=>{throw Error("REFUSED_P5_CD_T24_QUEUED_"+s);};
+function required<T>(v:T|undefined,reason:string):T{
+ if(v===undefined)throw Error("REFUSED_P5_CD_T24_QUEUED_"+reason);
+ return v;
+}
 export interface P5CdT24Deps{
  preDb:P5CdTaskExecutor;
  prePool:Pick<Pool,"connect">;
@@ -72,10 +76,10 @@ export async function runP5CdOneQueuedT24Witness(
   deps.files,released,"T24_WITH_SEPARATE_WITNESS");
  if(packets.size!==1)deny("INDEPENDENT_T24_WITNESS_ROSTER_INVALID");
  const expected=[...packets.values()][0];
- const witnessReview=expected.witnessReview;
- if(witnessReview===undefined||
-    expected.permit.horizon!=="T-24h")
+ if(expected.permit.horizon!=="T-24h")
   deny("T24_INDEPENDENT_WITNESS_FROZEN_SCOPE_MISSING");
+ const witnessReview=required(expected.witnessReview,
+   "T24_INDEPENDENT_WITNESS_FROZEN_SCOPE_MISSING");
  verifyP5T24PreWitnessCrossReview(
   expected.permit,witnessReview);
  preflightP5Stage14ReviewedPermitV39(expected.permit);
@@ -98,7 +102,7 @@ export async function runP5CdOneQueuedT24Witness(
   };
  }
  const task=claims[0];
- let permit:ReturnType<typeof bindP5CdTaskToFrozenPermit>|undefined;
+ let permit!:ReturnType<typeof bindP5CdTaskToFrozenPermit>;
  try{
   permit=bindP5CdTaskToFrozenPermit(task,packets);
   if(permit.horizon!=="T-24h"||
@@ -109,7 +113,7 @@ export async function runP5CdOneQueuedT24Witness(
   // can become PRE without its exact original signed packet.
   deny("CLAIMED_TASK_NOT_EXACT_SIGNED_T24_NO_WRITE");
  }
- if(permit===undefined)deny("CLAIMED_SIGNED_PRE_PERMIT_MISSING");
+
  const started=await markP5CdStage14WriteStartedV39(deps.preDb,task);
  if(!started)deny("QUEUE_WRITE_STARTED_NOT_ACKNOWLEDGED_NO_RETRY");
  try{
@@ -142,9 +146,10 @@ export async function runP5CdOneQueuedT24Witness(
   const date=(v:unknown):string=>{
    const d=v instanceof Date?v:
     typeof v==="string"?new Date(v):null;
-   if(d===null)deny("POSTWITNESS_DATABASE_UTC_MISSING");
+   if(d===null)
+    throw Error("REFUSED_P5_CD_T24_QUEUED_POSTWITNESS_DATABASE_UTC_MISSING");
    if(!Number.isFinite(d.getTime()))
-    deny("POSTWITNESS_DATABASE_UTC_INVALID");
+    throw Error("REFUSED_P5_CD_T24_QUEUED_POSTWITNESS_DATABASE_UTC_INVALID");
    return d.toISOString();
   };
   const row=witnessRow!;
