@@ -159,7 +159,7 @@ describe("Phase5 C+D one GH-only PREPARE FIDS original → V0091 queue admission
    ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
    "utf8");
   expect(yaml).toContain(
-   "inputs.horizon_mode == 'T-24h' && secrets.P5_CD_GH_T24_ROSTER_SHA256 || secrets.P5_CD_GH_PRE_ROSTER_SHA256");
+   "format('{0}{1}', inputs.horizon_mode == 'T-24h' && secrets.P5_CD_GH_T24_ROSTER_SHA256 || '', inputs.horizon_mode == 'T-6h_OR_T-90m' && secrets.P5_CD_GH_PRE_ROSTER_SHA256 || '')");
   expect(yaml).toContain(
    "P5_CD_GH_REGISTER_HORIZON: ${{ inputs.horizon_mode }}");
   expect(w24).toContain(
