@@ -28,3 +28,17 @@ A DB registration request can commit successfully and lose its acknowledgment. A
 - Owner deadline: Nov 13 interim progress, Nov 20 outside target for realistic Phase5 readiness, contingent on actual source and permit. No unconditional Phase6 paid GO.
 
 **Status:** V0087–V0090 live, V0091 **staged until owner confirms**, GH source registrar code built but default STOP, no real PRE, Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
+
+
+## Important resolved blocker — executable code PIN must precede frozen packet commits
+
+The first merged C+D controller used a self-referential rule: a packet **already committed inside GitHub HEAD** had to name that exact HEAD in `reviewedCodeSha`. That is impractical because adding the packet file creates a **new** commit SHA. The code and approved packet cannot normally be in the same commit whose SHA is embedded in the packet.
+
+This PR corrects both **GH PRE execution and GH PREPARE registration**:
+
+1. Independently review a **code-only commit** (including the actual PRE writer, source registrar, Stage28 adapter, workflows and locked dependencies) and put its SHA in the existing `P5_CD_GH_PRE_APPROVED_CODE_SHA` secret.
+2. Create frozen packet/roster JSON with `reviewedCodeSha` set to that **already existing reviewed code commit**, not the future packet-containing HEAD. Independently approve the packet SHA, roster SHA, rights and frame; commit those data files under `data-collection/phase5/frozen/`.
+3. GitHub Actions checks out **full history** (`fetch-depth: 0`). `verifyP5CdGithubFrozenCodeLineage_v39.ts` checks the real current checkout HEAD matches `GITHUB_SHA`, reviewed code commit is an ancestor, and **no executable files** in `server/`, `scripts/`, `migrations/`, `.github/workflows/`, `package.json`, `package-lock.json` or `tsconfig.json` changed, even untracked or uncommitted files, between review and dispatch. Frozen packet/doc commits are allowed. The pair of SHAs is passed internally for subsequent Stage14 release checks only **after actual Git verification**.
+4. A new throwaway local-Git CI test proves the allowed packet-only descendant and rejects edited/untracked executable code or wrong HEAD. No GitHub API, provider call or Neon database is involved.
+
+**Release interpretation:** Code cannot change after review without a fresh code pin, but **future packet data, dates, cohorts and missingness can evolve through separately reviewed frozen records**. This avoids an impossible exact-head constraint while preserving source-leakage and executable tampering protection. Do NOT set source/provider/paid approvals just to satisfy a code error; the independent source/rights and Phase5/Phase6 safety gates remain separate.
