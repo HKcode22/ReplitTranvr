@@ -64,6 +64,47 @@ export async function inspectPhase5ReleaseInventory(pool){
   )).rows;
   const found=new Set(roles.filter(x=>x.rolcanlogin===false).map(x=>x.rolname));
   const missingRoles=ROLES.filter(x=>!found.has(x));
+  // The seven categories must cover EACH real UTC charge day, not merely
+  // appear somewhere in the database. T24 may charge on service Day-1.
+  // This is aggregate budget metadata, never a paid attempt or flight row.
+  let chargeDayMatrix={
+   ledgerDays:null,categoryRows:null,completeDays:null,
+   incompleteDays:null,allLedgerDaysHaveSevenCategories:false
+  };
+  if(tables.sourceChargeBudget!==null&&
+     tables.sourceUtcCategoryBudget!==null){
+   const q=(await c.query(
+    "SELECT COUNT(*)::int AS ledger_days,"+
+    "COALESCE(SUM(category_rows),0)::int AS category_rows,"+
+    "COUNT(*) FILTER (WHERE category_rows=7 AND distinct_categories=7)::int"+
+    " AS complete_days,"+
+    "COUNT(*) FILTER (WHERE category_rows<>7 OR distinct_categories<>7)::int"+
+    " AS incomplete_days"+
+    " FROM ("+
+    " SELECT b.manifest_sha256,b.charge_day_utc,"+
+    " COUNT(cat.category)::int AS category_rows,"+
+    " COUNT(DISTINCT cat.category)::int AS distinct_categories"+
+    " FROM clean.phase5_fids_utc_charge_budget_v39 b"+
+    " LEFT JOIN clean.phase5_fids_utc_rest_category_budget_v39 cat"+
+    " ON cat.manifest_sha256=b.manifest_sha256"+
+    " AND cat.charge_day_utc=b.charge_day_utc"+
+    " GROUP BY b.manifest_sha256,b.charge_day_utc"+
+    " ) utc_categories"
+   )).rows[0];
+   if(!q||![
+     q.ledger_days,q.category_rows,q.complete_days,q.incomplete_days
+    ].every(positive)||
+     q.ledger_days!==tables.sourceChargeBudget||
+     q.category_rows!==tables.sourceUtcCategoryBudget||
+     q.complete_days+q.incomplete_days!==q.ledger_days)
+    err('INCONSISTENT_UTC_CATEGORY_CHARGE_DAY_MATRIX');
+   chargeDayMatrix={
+    ledgerDays:q.ledger_days,categoryRows:q.category_rows,
+    completeDays:q.complete_days,incompleteDays:q.incomplete_days,
+    allLedgerDaysHaveSevenCategories:
+     q.ledger_days>0&&q.incomplete_days===0
+   };
+  }
   let phase6Enabled=null;
   if(tables.phase6Authorization!==null){
    const x=(await c.query(
@@ -85,6 +126,16 @@ export async function inspectPhase5ReleaseInventory(pool){
   if(tables.sourceSevenRestRelease!==1||tables.sourceCategoryCaps!==7||
      tables.sourceUtcCategoryBudget===0||tables.sourceUtcCategoryBudget===null)
     prelaunchStructuralHolds.push('SEVEN_CATEGORY_SOURCE_BUDGET_NOT_FROZEN');
+  // Stage22 covers 31 prospective run days; at least 31 real UTC
+  // charge-date budget rows are expected (may include Day-1/Day+1).
+  // We do NOT require Day1 sampled airports, original FIDS or PRE here.
+  if(tables.sourceCycleBudget!==1||
+     !positive(tables.sourceChargeBudget)||
+     tables.sourceChargeBudget<31||
+     chargeDayMatrix.ledgerDays!==tables.sourceChargeBudget||
+     chargeDayMatrix.completeDays!==tables.sourceChargeBudget||
+     !chargeDayMatrix.allLedgerDaysHaveSevenCategories)
+    prelaunchStructuralHolds.push('FULL_31_DAY_UTC_CHARGE_CATEGORY_COVERAGE_NOT_PROVEN');
 
   // These events belong to Phase6 Day1 execution after independent Phase5
   // FREEZE + separately authorized GO. Absent data is NOT evidence that old
@@ -115,6 +166,7 @@ export async function inspectPhase5ReleaseInventory(pool){
    snapshotAtUtc:new Date(s.at).toISOString(),
    scope:'AGGREGATE_METADATA_ONLY_NO_FLIGHT_OR_SOURCE_PAYLOAD',
    tableRowCounts:tables,missingTables:missing,
+   physicalUtcChargeDayCategoryCoverage:chargeDayMatrix,
    requiredNoLoginRoles:ROLES.length,missingNoLoginRoles:missingRoles,
    phase6AuthorizationEnabled:phase6Enabled,
    // Backwards-compatible field, now *prelaunch structural holds only*.
