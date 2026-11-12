@@ -80,13 +80,14 @@ function fixture(){
   expectedOriginIcao:"WSSS",externalContentUseReviewSha256:h("d")
  };
  const observed:string[]=[];
- let released=0,role="phase5_fids_source_prod_20261107";
+ let released=0,role="phase5_fids_source_prod_20261107",
+  login="phase5_p5_source_login_20261108";
  const db={
   async connect(){return{
    async query(sql:string,params?:unknown[]){
     observed.push(sql);
     if(sql.startsWith("SELECT current_user AS actor"))
-     return{rows:[{actor:role,db:"neondb",version:160000,ro:"on",
+     return{rows:[{actor:role,session_login:login,db:"neondb",version:160000,ro:"on",
       replica:false,now}],rowCount:1};
     if(sql===P5_STAGE14_BOUND_SOURCE_SQL)
      return{rows:[source],rowCount:1};
@@ -103,7 +104,8 @@ function fixture(){
   }}
  };
  return {scope,source,member,original,observed,db,
-  getReleased:()=>released,setRole:(v:string)=>{role=v;}};
+  getReleased:()=>released,setRole:(v:string)=>{role=v;},
+  setLogin:(v:string)=>{login=v;}};
 }
 describe("Phase5 reuse Stage14/V0079 read-only authenticated feature compiler",()=>{
  it("uses existing source/member JOIN and a real unexpired original in read-only TX",async()=>{
@@ -136,6 +138,16 @@ describe("Phase5 reuse Stage14/V0079 read-only authenticated feature compiler",(
  });
  it("refuses the PREPARE role even though it can read allowed query metadata",async()=>{
   const x=fixture();x.setRole("phase5_fids_prepare_prod_20261107");
+  await expect(compileP5EOneBoundOriginalReadonly(x.db,x.scope))
+   .rejects.toThrow("NOT_EXISTING_RESTRICTED_READONLY_SOURCE_ROLE");
+  expect(x.observed).not.toContain(P5_STAGE14_BOUND_SOURCE_SQL);
+  expect(x.observed).not.toContain(P5_STAGE14_PHYSICAL_MEMBER_SQL);
+  expect(x.observed).not.toContain(P5_E_READONLY_ORIGINAL_MEMBER_SQL);
+  expect(x.observed.at(-1)).toBe("ROLLBACK");
+  expect(x.getReleased()).toBe(1);
+ });
+ it("rejects neondb_owner masquerading as SOURCE through SET ROLE",async()=>{
+  const x=fixture();x.setLogin("neondb_owner");
   await expect(compileP5EOneBoundOriginalReadonly(x.db,x.scope))
    .rejects.toThrow("NOT_EXISTING_RESTRICTED_READONLY_SOURCE_ROLE");
   expect(x.observed).not.toContain(P5_STAGE14_BOUND_SOURCE_SQL);
