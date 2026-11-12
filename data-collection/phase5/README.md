@@ -1,5 +1,11 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — bounded GitHub early-start using REAL PostgreSQL clock (not backfill)
+
+**[Read the C+D 5-minute GitHub jitter / 3-minute Stage14 prospective window mitigation](2026-11-12_CD_GITHUB_DB_CLOCK_LOOKAHEAD_NO_BACKFILL_CHECKPOINT.md).** Reuses only the reviewed frozen signed T6/T90 source roster and existing Stage30 restricted PRE login, polls real `clock_timestamp()` within a maximum eight-minute wait to reach the original unshifted 3-minute V0087 claim window, then calls original Stage14. **No paid calls, task enrollment, second worker, cutoff shift or late PRE backfill.** GH cron may still miss cutoffs; report true missingness and measure distribution instead of falsely invalidating the experiment. **V0087–V0091 already live INERT; canonical one-source PR #581 merged; duplicate #582 closed.** T24 independent Stage17/V0081 witness and genuine original still absent from new controller. STOP/default-disabled, Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
+
+
+
 ## November 12 — canonical source-to-queue PR consolidation (LIVE V0091)
 
 **Owner verified V0087–V0091 LIVE, all inert**: latest V0091 output `V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT`, reviewed blob `62f1f99883c47cc60ee00c31f21a34bbdb8a5515`, `queueRows=0`, `taskEnrollments=0`, `paidProviderCalls=0`, restricted existing PREPARE group without direct queue INSERT. **Do not run earlier installers again.** Consolidate competing #581/#582 source-registration branches into ONE canonical STOP-default GH PREPARE caller with inspected code lineage, independently frozen source packet, explicit Stage17 T24 receipt digest, original Stage14 source permit and a separate owner-only read-only unknown-ACK audit. **No authentic task has been enrolled, no real PRE or paid Phase6**. See [updated owner/checkpoint](2026-11-12_GITHUB_PREPARE_ONE_REAL_SOURCE_BOUND_REGISTRATION.md).
