@@ -8,6 +8,8 @@
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
+import {waitP5CdGithubSignedDueWindow}
+ from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
 import {
  makeP5Stage28DedicatedRolePool
 } from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -60,6 +62,10 @@ export async function runP5CdGithubPreController(
    reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
    forbiddenApplicationLogin:"phase5_runtime_application_login"
   });
+  // GitHub 5-minute cron can miss a 3-minute PRE window. Start early
+  // from the reviewed frozen native T, then check the restricted real
+  // PostgreSQL clock BEFORE claiming, never claim or write early.
+  const early=await waitP5CdGithubSignedDueWindow(env,pre,packets);
   const report=await runP5CdGithubPreTick(env,{
    db:pre,pool:pre,packets
   },{
@@ -67,6 +73,7 @@ export async function runP5CdGithubPreController(
   });
   return{
    ...report,
+   earlyDbClockDueWindow:early,
    githubRunId:env.GITHUB_RUN_ID,
    signedRosterVerified:true,
    immutableExistingDatabaseQueue:true,
@@ -80,6 +87,10 @@ if(process.env.P5_CD_GH_PRE_EXECUTE==="1"){
  try{
   const result=await runP5CdGithubPreController(process.env);
   console.log(JSON.stringify(result,null,2));
+  if(result.earlyDbClockDueWindow.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED"){
+   console.error("REFUSED_P5_CD_GH_PRE_RUNNER_LOOKAHEAD_BUDGET_EXHAUSTED");
+   process.exitCode=2;
+  }
   if(result.status==="HOLD_UNSIGNED_OR_UNCERTAIN_SNAPSHOT_NO_REPLAY"){
    console.error("REFUSED_P5_CD_GH_PRE_RUNNER_UNCERTAIN_OR_UNSIGNED_TASK_HOLD");
    process.exitCode=2;
