@@ -1,5 +1,8 @@
 # Phase 5 → Phase 6 — actual finish-line scorecard, Nov 12, 2026
 
+**LIVE OWNER-VERIFIED UPDATE (later Nov 12):** The V0092 one-shot commissioning **succeeded on real `neondb`**, status `V0092_SIGNED_PACKET_HORIZON_CLAIM_COMMISSIONED_INERT`, Git blob `b44f2e6b43d6874ab00530e149cabcbe89d499a1`; zero queue rows/new worker/provider calls, scoped PRE EXECUTE confirmed and previous broad claim revoked. **Do not re-run V0087–V0092.** PR #587 T24 scheduling merged `f27db74...`; PR #588 existing reaper watchdog merged `7584bad...`. Both jobs remain STOP-default. The earlier staged/NOT-installed descriptions below were accurate **before** this owner return, not current state. See [dated real-install checkpoint](2026-11-12_LIVE_V0092_OWNER_VERIFIED_AND_T24_ROSTER_ISOLATION_CHECKPOINT.md). Actual future flight, sources and signed Phase6 decision remain absent.
+
+
 **Source:** HKcode22/ReplitTranvr main + owner's private Replit Shell confirmation (V0091), not an independently rerun live database query.
 
 ## What is COMPLETE in real production, and must NOT be installed again
