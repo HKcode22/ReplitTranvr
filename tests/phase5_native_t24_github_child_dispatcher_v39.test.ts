@@ -64,6 +64,7 @@ describe("real GH native T24 witness child default-OFF, zero-provider admission"
   const f=fixture();expect(admitP5T24GithubDispatcher(f.env).path).toBe(path);
   for(const [name,value] of [
    ["P5_T24_AUTO_DISPATCH_ENABLED","false"],
+   ["P5_CD_GH_T24_SCHEDULE_ENABLED","1"],
    ["P5_T24_SOURCE_READONLY_ENABLED","false"],
    ["V39_PHASE5_FREEZE_SIGNED","0"],
    ["V39_PHASE5_SOURCE_RIGHTS_APPROVED","0"],
