@@ -49,7 +49,7 @@ export function verifyP5CdOneFrozenSourceEnrollment(
 ):P5CdVerifiedTaskPacket{
  const packets=verifyP5CdFrozenRoster(rawRoster,roster,entries,release);
  const selected=packets.get(release.packetSha256);
- if(!selected)fail("SELECTED_PACKET_NOT_IN_EXACT_ROSTER");
+ if(!selected)return fail("SELECTED_PACKET_NOT_IN_EXACT_ROSTER");
  const p=selected.permit;
  if(p.horizon!=="T-6h"&&p.horizon!=="T-90m")
   fail("T24_REQUIRES_SEPARATE_STAGE17_WITNESS_CONTROLLER");
@@ -117,7 +117,7 @@ export async function registerOneP5CdGithubSourceFlightV39(
   p.expectedSourcePopulationQueryId,p.expectedSourceResponseSha256,
   p.expectedReviewedSourceRightsSha256,p.maxPopulationStalenessSeconds
  ];
- let r:{rows:any[]};
+ let r:{rows:any[]}|undefined;
  try{
   r=await db.query(
    "SELECT clean.phase5_cd_register_source_flight_v39("+
@@ -130,14 +130,16 @@ export async function registerOneP5CdGithubSourceFlightV39(
   fail("REGISTRATION_RESULT_OR_COMMIT_UNKNOWN_INDEPENDENT_AUDIT_NO_RETRY");
  }
  const task=r?.rows?.[0]?.task_id;
- if(r.rows.length!==1||
+ if(!r||r.rows.length!==1||
     !(typeof task==="string"||typeof task==="number")||
     !/^[1-9][0-9]{0,18}$/.test(String(task)))
   fail("REGISTRATION_TASK_ACK_AMBIGUOUS_INDEPENDENT_AUDIT_NO_RETRY");
  return{
   schema:"v39.phase5.cd-v0091-one-source-future-flight-enrollment.v1",
   status:"REGISTERED_RETURNED_TASK_ID_INDEPENDENT_READBACK_PENDING",
-  taskId:String(task),horizon:p.horizon,flightInstanceId:p.flightInstanceId,
+  taskId:String(task),
+  horizon:p.horizon==="T-6h"?"T-6h":"T-90m",
+  flightInstanceId:p.flightInstanceId,
   nativeTUtc:p.selectedTNativeUtc,
   frozenPacketSha256:verified.packetSha256,
   sourceResponseSha256:p.expectedSourceResponseSha256,
