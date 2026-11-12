@@ -14,6 +14,7 @@ import {
 } from "./phase5CdDurableQueueClient_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
+ preflightP5Stage14ReviewedPermitV39,
  type P5Stage14SingleFlightPrePermit,
  type P5Stage14SingleFlightPreResult
 } from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -229,8 +230,15 @@ export async function runP5CdGithubPreTick(
   // avoid any further writes when the reviewed process gate is absent.
   requireP5CdGithubPreRelease(env);
   let permit:P5Stage14SingleFlightPrePermit;
-  try{permit=bindP5CdTaskToFrozenPermit(task,deps.packets);}
-  catch{
+  try{
+   permit=bindP5CdTaskToFrozenPermit(task,deps.packets);
+   // The exact original Stage14 native-T, frozen-builder, identity,
+   // T24-witness and scientific-permit shape is checked BEFORE the
+   // un-retriable UNKNOWN state is entered, not after it.
+   if(preflightP5Stage14ReviewedPermitV39(permit)!==
+      task.selectedNativeTUtc)
+    hold("ORIGINAL_STAGE14_REVIEWED_NATIVE_T_CHANGED");
+  }catch{
    // Nothing in Stage14 executed; CLAIMED lease expires. Never invent
    // source packet, source rights, native T or an automatic replacement.
    results.push({taskId:task.taskId,result:"REJECTED_UNSIGNED_TASK_NO_WRITE"});
