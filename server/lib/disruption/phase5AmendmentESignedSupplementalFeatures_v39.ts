@@ -35,8 +35,11 @@ const HIST=new Set<P5EPreField>([
  "prior_route_departure_delay_median_minutes",
  "prior_airport_departure_delay_median_minutes","airport_congestion_1h"
 ]);
-export const P5_E_SUPPLEMENTAL_FIELDS=[...FIDS,...METAR,...TAF,...ADSB,...HIST];
-type SupplementalField=typeof P5_E_SUPPLEMENTAL_FIELDS[number];
+// Preserve the original exact 12-field default for existing frozen packets,
+// fixture hashes and source-roster emitters. ADSB is explicit opt-in only.
+export const P5_E_SUPPLEMENTAL_FIELDS=[...FIDS,...METAR,...TAF,...HIST];
+const P5_E_OPT_IN_SOURCE_FIELDS=[...P5_E_SUPPLEMENTAL_FIELDS,...ADSB];
+type SupplementalField=typeof P5_E_OPT_IN_SOURCE_FIELDS[number];
 export interface P5EReviewedSupplementalObservation
  extends P5EAsOfObservation{
  field:SupplementalField;
@@ -137,9 +140,9 @@ export function selectP5EReviewedSupplementalFeatures(
     !ICAO.test(r.originIcao??"")||
     (r.destinationIcao!==null&&!ICAO.test(r.destinationIcao??""))||
     !Array.isArray(b.fields)||b.fields.length<1||
-    b.fields.length>P5_E_SUPPLEMENTAL_FIELDS.length||
+    b.fields.length>P5_E_OPT_IN_SOURCE_FIELDS.length||
     new Set(b.fields).size!==b.fields.length||
-    b.fields.some(x=>!P5_E_SUPPLEMENTAL_FIELDS.includes(x))||
+    b.fields.some(x=>!P5_E_OPT_IN_SOURCE_FIELDS.includes(x))||
     !Array.isArray(b.observations)||b.observations.length>48||
     hash(b.observations)!==b.observationsSha256)
   hold("FROZEN_SOURCE_IDENTITY_AND_CONTENT_DIGEST_NOT_MATCHED");
@@ -152,7 +155,7 @@ export function selectP5EReviewedSupplementalFeatures(
  for(const row of b.observations){
   if(!row||row.flightInstanceId!==r.flightInstanceId||
      !b.fields.includes(row.field)||
-     !P5_E_SUPPLEMENTAL_FIELDS.includes(row.field)||
+     !P5_E_OPT_IN_SOURCE_FIELDS.includes(row.field)||
      !SHA.test(row.sourceRecordId??"")||
      row.rightsDisposition!=="EXTERNALLY_REVIEWED_ALLOW"||
      !validValue(row))
