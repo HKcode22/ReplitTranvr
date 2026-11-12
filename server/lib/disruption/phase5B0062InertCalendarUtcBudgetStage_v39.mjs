@@ -184,11 +184,14 @@ export function compileP5InertB0062UtcStagePacket(p,review){
     p.slotBudgetInput.calendarSha256!==p.calendarSha256||
     p.slotBudgetInput.configSha256!==p.configSha256||
     p.slotBudgetInput.frameSha256!==p.frameSha256||
-    !same(p.slotBudgetInput.calendarDays,
-      p.calendarDays.map(d=>({
-       runDayIndex:d.runDayIndex,startUtc:d.startUtc,utcSlot:d.utcSlot,
-       windowShape:d.windowShape,partition:d.partition
-      }))))
+    !Array.isArray(p.slotBudgetInput.calendarDays)||
+    p.slotBudgetInput.calendarDays.length!==31||
+    p.slotBudgetInput.calendarDays.some((d,i)=>{
+     const x=p.calendarDays[i];
+     return d.runDayIndex!==x.runDayIndex||d.startUtc!==x.startUtc||
+      d.utcSlot!==x.utcSlot||d.windowShape!==x.windowShape||
+      d.partition!==x.partition;
+    }))
    hold("COST_ENVELOPE_NOT_BOUND_TO_THE_31_PARENT_DAYS");
  // Rebuild and verify the immutable slot budget; it is NOT an exact-ICAO
  // Stage22 source grid and cannot be treated as a V0082 release.
