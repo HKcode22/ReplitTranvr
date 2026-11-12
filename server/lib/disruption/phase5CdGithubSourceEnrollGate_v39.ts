@@ -60,9 +60,9 @@ export function requireP5CdGithubSourceEnrollRelease(
   fail("NO_EXACT_MAIN_APPROVAL_ROSTER_RIGHTS_OR_STOP_CLEAR");
  const value=e.P5_V39_PREPARE_DATABASE_URL;
  if(typeof value!=="string"||value.length<35)
-  fail("STAGE30_PREPARE_LOGIN_NOT_SUPPLIED");
+  return fail("STAGE30_PREPARE_LOGIN_NOT_SUPPLIED");
  let url:URL;
- try{url=new URL(value);}catch{fail("STAGE30_PREPARE_URL_INVALID");}
+ try{url=new URL(value);}catch{return fail("STAGE30_PREPARE_URL_INVALID");}
  if(!["postgres:","postgresql:"].includes(url.protocol)||
     decodeURIComponent(url.username)!=="phase5_p30_prepare_login_20261107"||
     !url.password||url.pathname!=="/neondb"||url.hash||
