@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Evaluate 4/5/6 horizon tiers against the full FIDS + POST + Alert spend
+
+**[Read the 4-vs-5-vs-6 PRE horizon full-ledger budget model and additive migration/release requirements](2026-11-12_4_5_6_HORIZON_FULL_LEDGER_CANDIDATE_BUDGET_NO_GO.md).** A new purely offline [tier evaluator](../../server/lib/disruption/phase5OptionalHorizonTierBudget_v39.mjs) considers T−3h, T−12h and T−45m as separately optional candidates. It distinguishes 544/680/816 **planning** groups from billed physical GETs and keeps all projected REST categories, POST recovery, transport retries, project 50k cap, protected margin and Alert SEND/refills separate. Arithmetic FIT is not measured source coverage, added predictive value, rights or authorization. The current three V0087–V0092 horizons remain unchanged and live-inert; no new paid work/schema/activation. **Phase5 scientific FREEZE HOLD / paid Phase6 GO NO.**
+
+
 ## November 12 — Published horizon research, 3-vs-5 nonpaid cost model, and Phase 7 inference explanation
 
 **[Read source-backed T−24/T−6/T−90 rationale, five-horizon proposal, FIDS vs Alert budget, 4h probe versus live inference, as-of feature gaps and the six exact installed SQL file links](2026-11-12_HORIZON_LITERATURE_FIVE_HORIZON_BUDGET_AND_PHASE7_INFERENCE.md).** Research supports *multiple* forecast lead times but does **not** uniquely prescribe our exact three. T−12h/T−3h are optional **what-if** candidates, not new paid live horizons. A new offline [physical-FIDS-GET cost sensitivity helper](../../server/lib/disruption/phase5OptionalHorizonSensitivity_v39.mjs) explicitly separates 408/680 planning groups from billed requests and Alert SEND credits. Existing 31-day calendar, signed source, V0087–V0092 live inert roles/queue, STOP and one Amendment E remain **unchanged**; Stage14's production feature matrix is still sparse without individually reviewed rights and input wiring. Phase5 scientific FREEZE HOLD; paid Phase6 GO NO.
