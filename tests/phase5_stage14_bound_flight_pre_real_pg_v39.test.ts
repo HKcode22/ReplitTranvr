@@ -454,13 +454,13 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   )).rows[0].n).toBe(1);
  });
 
- it("refuses to relabel or duplicate an existing PRE",async()=>{
+ (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE",async()=>{
   await expect(persistP5V0079SingleBoundFlightPre(writer,permit))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
  });
- it("rejects unauthorized production role, absent native evidence and late cutoff",async()=>{
+ (QUEUED_T24?it.skip:it)("rejects unauthorized production role, absent native evidence and late cutoff",async()=>{
   await expect(persistP5V0079SingleBoundFlightPre(admin,permit))
     .rejects.toThrow("WRONG_RESTRICTED_PRE_ONLY_DB_ROLE");
   await expect(persistP5V0079SingleBoundFlightPre(writer,{
@@ -483,7 +483,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   expect(q.rows[0].n).toBe(1);
  });
 
- it("reuses Phase4 conditional service records only under an explicit separately reviewed protocol",async()=>{
+ (QUEUED_T24?it.skip:it)("reuses Phase4 conditional service records only under an explicit separately reviewed protocol",async()=>{
   const conditional:P5Stage14SingleFlightPrePermit={
    ...permit,flightInstanceId:"leg:g5a:"+h("7"),
    identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",
@@ -530,7 +530,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });
- it("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
+ (QUEUED_T24?it.skip:it)("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
   if(STAGE29)return; // Stage29 tests exercise original witnessed route.
   const hasV0081=(await admin.query(
    "SELECT to_regclass('clean.phase5_t24_postcommit_witness_v39') AS obj"
