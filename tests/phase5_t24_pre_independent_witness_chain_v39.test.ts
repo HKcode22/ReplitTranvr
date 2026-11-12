@@ -80,6 +80,42 @@ describe("Phase5 reused PRE postcommit snapshot ID -> independent T24 witness",(
    f.pre,{...f.review,...change}
   )).toThrow("INDEPENDENT_T24_PRE_AND_WITNESS_SCOPE_DRIFT");
  });
+ it("queued T24 requires exactly ONE real V0087 lease fence BEFORE database access",async()=>{
+  const f=fixture();
+  let connected=0;
+  const pre={connect:async()=>{connected++;throw Error("PRE_MUST_NOT_CONNECT");}};
+  const witness={connect:async()=>{connected++;throw Error("WITNESS_MUST_NOT_CONNECT");}};
+  const lease={taskId:"12",owner:"ci-t24-worker",
+   generation:"3",packetSha256:h("1")};
+  await expect(persistP5ReviewedT24PreAndIndependentWitness(
+   pre as any,witness as any,f.pre,f.review,{
+    realV0088QueueFenceCi:lease,realV0088QueueFenceGh:lease
+   }
+  )).rejects.toThrow("QUEUED_T24_MUST_USE_EXACTLY_ONE_REAL_V0087_CLAIM_FENCE");
+  await expect(persistP5ReviewedT24PreAndIndependentWitness(
+   pre as any,witness as any,f.pre,f.review,{}
+  )).rejects.toThrow("QUEUED_T24_MUST_USE_EXACTLY_ONE_REAL_V0087_CLAIM_FENCE");
+  await expect(persistP5ReviewedT24PreAndIndependentWitness(
+   pre as any,witness as any,f.pre,f.review,{
+    disposableCdQueueFence:{} as any,realV0088QueueFenceGh:lease
+   }
+  )).rejects.toThrow("QUEUED_T24_MUST_USE_EXACTLY_ONE_REAL_V0087_CLAIM_FENCE");
+  expect(connected).toBe(0);
+ });
+ it("a queued T24 GH fence cannot bypass the main-only source release",async()=>{
+  const f=fixture();
+  let connected=0;
+  const pre={connect:async()=>{connected++;throw Error("PRE_MUST_NOT_CONNECT");}};
+  const witness={connect:async()=>{connected++;throw Error("WITNESS_MUST_NOT_CONNECT");}};
+  await expect(persistP5ReviewedT24PreAndIndependentWitness(
+   pre as any,witness as any,f.pre,f.review,{
+    realV0088QueueFenceGh:{
+     taskId:"12",owner:"ci-t24-worker",generation:"3",packetSha256:h("1")
+    }
+   }
+  )).rejects.toThrow("REFUSED_P5_CD_GITHUB_PRE_");
+  expect(connected).toBe(0);
+ });
  it("never connects or writes when restricted PRE and independent witness pools are the same",async()=>{
   const f=fixture(),touched:string[]=[];
   const one={
