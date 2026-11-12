@@ -15,6 +15,7 @@ on:
     paths:
       - '.github/workflows/phase5-cd-github-one-source-register-main-manual.yml'
       - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubCodeLineage_v39.ts'
       - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
       - 'tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts'
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
@@ -89,6 +90,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Hard STOP and PREPARE-only release before installing dependencies
         shell: bash
         run: |
@@ -102,7 +104,9 @@ jobs:
           test "$P5_CD_GH_PREPARE_ARMED" = 1
           test "$P5_CD_GH_PRE_ARMED" = 1
           test "$P5_CD_GH_PRE_STOP" = 0
-          test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
+          # The runner compares reviewed baseline SHA to HEAD ancestry and
+          # requires zero executable-code changes after packet commits.
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$ADB_AUTO_COLLECT" = 0
           test -z "$AERODATABOX_API_KEY"
