@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Reuse NOAA METAR + bitemporal history as signed, cutoff-safe PRE source features
+
+**[Read: original NOAA METAR/durable weather and historical as-of feature adapters](2026-11-12_AMENDMENT_E_REUSED_NOAA_METAR_HISTORY_RECEIPT_PACKET_ADAPTER.md).** The existing NOAA decoder/durable selector and history bitemporal rows are converted into the existing Stage14 signed feature bundle, without a new collector/provider or database. Numeric origin METAR statute-mile visibility is properly converted to meters and origin wind stays knots; verified route/airport/tail historic facts use actual as-of clocks. A single draft packet includes four original FIDS fields, up to two NOAA METAR fields and four historic fields; TAF remains explicit NULL pending a real source. STOP-default, no paid calls, no grants, no physical gate-out label; V0087–V0092 remain live-inert. Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 12 — Real V0079 original FIDS to signed Amendment E features (no extra GET)
 
 **[Read the source-bound original FIDS compiler and its remaining authentic packet-owner handoff](2026-11-12_AMENDMENT_E_EXISTING_V0079_ORIGINAL_FIDS_TO_PRE_FEATURE_PACKET_COMPILER.md).** Reuses actual `fidsCensus_v3` decoded-original custody plus Gate5 body/envelope verifiers to extract four source-original FIDS features for one uniquely matched positively operating leg. Conflicting native flight IDs/codeshares, source hashes, routes and native T are refused; missing status/arrival/revised info is NULL rather than invented. The output fits the same opted-in signed Stage14 source packet from PR #593. No new provider API, DB, paid horizon, signed real packet, source rights certificate or Phase6 GO is inferred; Neon V0087–V0092 remain installed/inert. Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.
