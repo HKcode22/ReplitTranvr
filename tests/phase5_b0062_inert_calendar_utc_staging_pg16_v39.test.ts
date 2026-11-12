@@ -174,7 +174,7 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
   )).rows[0];
   return r;
  }
- it("has 21 unknown ordinary flights and real typed inert seven-category envelope",()=>{
+ it("has 21 unknown ordinary flights and real typed inert seven-category envelope",async()=>{
   expect(packet.knownPairedAirportDays).toBe(10);
   expect(packet.unknownOrdinaryAirportDays).toBe(21);
   expect(packet.budget.utcCategoryRows.length).toBeGreaterThanOrEqual(31);
