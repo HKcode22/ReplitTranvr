@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Evaluate 4/5/6 horizon tiers against the full FIDS + POST + Alert spend
+
+**[Read the 4-vs-5-vs-6 PRE horizon full-ledger budget model and additive migration/release requirements](2026-11-12_4_5_6_HORIZON_FULL_LEDGER_CANDIDATE_BUDGET_NO_GO.md).** A new purely offline [tier evaluator](../../server/lib/disruption/phase5OptionalHorizonTierBudget_v39.mjs) considers T−3h, T−12h and T−45m as separately optional candidates. It distinguishes 544/680/816 **planning** groups from billed physical GETs and keeps all projected REST categories, POST recovery, transport retries, project 50k cap, protected margin and Alert SEND/refills separate. Arithmetic FIT is not measured source coverage, added predictive value, rights or authorization. The current three V0087–V0092 horizons remain unchanged and live-inert; no new paid work/schema/activation. **Phase5 scientific FREEZE HOLD / paid Phase6 GO NO.**
+
+
 ## November 12 — Stage14 verified-source optional FIDS/NOAA/history feature bridge
 
 **[Read: richer Amendment E source-bound Stage14 feature engineering, tests and remaining real receipt compiler](2026-11-12_AMENDMENT_E_STAGE14_SIGNED_MULTISOURCE_FEATURE_BRIDGE_CODE_CHECKPOINT.md).** The *existing* signed packet and original Stage14 writer can now produce source/issue-time-safe origin+destination and up to 12 separately reviewed supplemental fields covering original-bound FIDS revisions/status/carrier/arrival, NOAA origin METAR and origin/destination TAF, and historical turnaround/route/airport/congestion. Unobserved/late values remain NULL. A **new separately disabled feature-release secret** is required in both old T6/T90 and T24+V0081 workers; no signed task or paid call was added. The raw FIDS→receipt extractor and authentic NOAA/history receipt producer are **still necessary** before live feature readiness; self-signed metadata is not legal/source evidence. V0087–V0092 already live inert. Phase5 scientific FREEZE HOLD / paid Phase6 GO NO.
