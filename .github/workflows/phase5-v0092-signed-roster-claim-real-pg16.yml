@@ -7,6 +7,7 @@ on:
       - 'migrations/staged/V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql'
       - 'scripts/v39_phase5_cd_v0090_owner_once.mjs'
       - 'migrations/staged/V0092__phase5_cd_signed_roster_horizon_scoped_queue_claim_v39.sql'
+      - 'scripts/v39_phase5_cd_v0092_owner_once.mjs'
       - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
       - 'server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts'
@@ -127,7 +128,24 @@ jobs:
         run: |
           set -Eeuo pipefail
           OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
-          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0092__phase5_cd_signed_roster_horizon_scoped_queue_claim_v39.sql
+          node --check scripts/v39_phase5_cd_v0092_owner_once.mjs
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0092-XXXXXX)"
+          SQL="V0092__phase5_cd_signed_roster_horizon_scoped_queue_claim_v39.sql"
+          cp "migrations/staged/$SQL" "$TMP/$SQL"
+          export P5_CD_V0092_FILE="$TMP/$SQL"
+          export P5_CD_V0092_SHA="$(git hash-object "$TMP/$SQL")"
+          export P5_CD_V0092_OWNER_APPROVAL="INSTALL_ONLY_V0092_SIGNED_PACKET_CLAIM_NO_WORKERS_NO_PAID"
+          export P5_CD_V0092_DISPOSABLE_CI="1"
+          export DATABASE_URL="$OWNER_URL"
+          node scripts/v39_phase5_cd_v0092_owner_once.mjs > "$TMP/readback.json"
+          grep -Fq '"status": "V0092_SIGNED_PACKET_HORIZON_CLAIM_COMMISSIONED_INERT"' "$TMP/readback.json"
+          if node scripts/v39_phase5_cd_v0092_owner_once.mjs > "$TMP/repeat.out" 2>&1; then
+            echo FAIL_V0092_REPEATED_INSTALL_WAS_ALLOWED
+            exit 2
+          fi
+          grep -Fq 'HOLD_P5_CD_V0092_REAL_ROLE_TASKS_OR_ALREADY_INSTALLED_NOT_REVIEWED' "$TMP/repeat.out"
+          echo P5_CD_V0092_NON_SUPERUSER_OWNER_INSTALLER_VERIFIED_AND_REPEAT_REFUSED
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(proowner) FROM pg_catalog.pg_proc WHERE oid='clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)'::regprocedure")" = phase5_cd_queue_function_owner_v39
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = f
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)','EXECUTE')")" = t
