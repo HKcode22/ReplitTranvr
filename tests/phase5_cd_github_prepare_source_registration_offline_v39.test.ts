@@ -1,4 +1,5 @@
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {
  requireP5CdGithubPrepareAdmission
 } from "../server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39";
@@ -146,5 +147,27 @@ describe("Phase5 C+D one GH-only PREPARE FIDS original → V0091 queue admission
   expect(got).not.toContain("source_expires_at_utc");
   expect(()=>makeP5CdV0091RegisterArgs(permit,"BAD"))
    .toThrow("UNAPPROVED_SIGNED_PACKET_SHA256");
+ });
+ it("keeps T24 source registration SHA distinct from concurrent T6/T90 roster",()=>{
+  const yaml=readFileSync(
+   ".github/workflows/phase5-cd-github-one-source-register-main-manual.yml",
+   "utf8");
+  const w24=readFileSync(
+   ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+   "utf8");
+  const later=readFileSync(
+   ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
+   "utf8");
+  expect(yaml).toContain(
+   "inputs.horizon_mode == 'T-24h' && secrets.P5_CD_GH_T24_ROSTER_SHA256 || secrets.P5_CD_GH_PRE_ROSTER_SHA256");
+  expect(yaml).toContain(
+   "P5_CD_GH_REGISTER_HORIZON: ${{ inputs.horizon_mode }}");
+  expect(w24).toContain(
+   "P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_T24_ROSTER_SHA256 }}");
+  expect(later).toContain(
+   "P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}");
+  expect(yaml).toContain(
+   "vars.P5_CD_GH_PREPARE_SOURCE_ENABLED == '1'");
+  expect(yaml).not.toContain("P5_CD_GH_T24_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}");
  });
 });
