@@ -115,12 +115,19 @@ describe("ADSB.lol three-source Phase5 Amendment E PRE / AIRBORNE / POST without
    .reason).toBe("NO_POSITION");
  });
  it("PRE: protects exact 24h/6h/90m clock and source image cannot fabricate actual gate event",()=>{
-  const t24=P5AdsbPreInboundContextInputV39=>{
-   assessP5AdsbInboundAsOfPreV39(P5AdsbPreInboundContextInputV39);
-  };
+  const t24=(x:P5AdsbPreInboundContextInputV39)=>
+   assessP5AdsbInboundAsOfPreV39(x);
   expect(t24({...pre,horizon:"T-24h",cutoffUtc:"2027-01-01T14:00:00.000Z",
    issuedAtUtc:"2027-01-01T13:59:00.000Z",
-   inboundPosition:point("2027-01-01T13:58:50.000Z",false)}).eligible).toBe(true);
+   inboundPosition:point("2027-01-01T13:58:50.000Z",false)}).reason)
+    .toBe("UNREVIEWED_OR_AMBIGUOUS_PHYSICAL_LEG");
+  expect(t24({...pre,horizon:"T-24h",
+   cutoffUtc:"2027-01-01T14:00:00.000Z",
+   issuedAtUtc:"2027-01-01T13:59:00.000Z",
+   current:{...outbound,tailAssignmentAsOfUtc:"2027-01-01T09:00:00.000Z"},
+   inbound:{...inbound,tailAssignmentAsOfUtc:"2027-01-01T09:00:00.000Z"},
+   inboundPosition:point("2027-01-01T13:58:50.000Z",false)
+  }).eligible).toBe(true);
   expect(t24({...pre,horizon:"T-90m",cutoffUtc:"2027-01-02T12:30:00.000Z",
    issuedAtUtc:"2027-01-02T12:29:00.000Z",
    inboundPosition:point("2027-01-02T12:28:55.000Z",false)}).eligible).toBe(true);
