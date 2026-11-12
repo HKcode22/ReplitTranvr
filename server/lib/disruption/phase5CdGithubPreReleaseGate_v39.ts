@@ -43,7 +43,9 @@ export function requireP5CdGithubPreRelease(
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??"")||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !SHA.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA||
+    !SHA.test(env.P5_CD_GH_PRE_APPROVED_CODE_SHA??"")||
+    env.P5_CD_GH_CODE_LINEAGE_VERIFIED!==env.GITHUB_SHA+":"+
+      env.P5_CD_GH_PRE_APPROVED_CODE_SHA||
     env.P5_CD_GH_PRE_CONFIRM!==HOLDER||
     env.P5_CD_GH_PRE_ARMED!=="1"||
     env.P5_CD_GH_PRE_STOP!=="0"||
@@ -74,7 +76,7 @@ export function requireP5CdGithubPreRelease(
  return{
   schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
   releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
-  approvedCodeSha:env.GITHUB_SHA!,
+  approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
   rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
   rightsSha256:env.V39_P5_RIGHTS_SHA256!,
   manifestSha256:env.V39_P5_MANIFEST_SHA256!,
