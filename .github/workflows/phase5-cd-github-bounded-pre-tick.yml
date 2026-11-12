@@ -72,6 +72,8 @@ jobs:
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
       P5_CD_GH_PRE_ROSTER_PATH: ${{ vars.P5_CD_GH_ROSTER_PATH }}
       P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
@@ -97,9 +99,23 @@ jobs:
           test "$P5_CD_GH_PRE_STOP" = 0
           test "$P5_CD_GH_PRE_ARMED" = 1
           test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
-          test "$V39_PHASE5_FREEZE_SIGNED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
-          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              ;;
+            *)
+              echo HOLD_CD_GH_NO_EXPLICIT_VALID_PHASE5_CANARY_OR_PHASE6_MODE
+              exit 2
+              ;;
+          esac
           test "$ADB_AUTO_COLLECT" = 0
           test -z "$AERODATABOX_API_KEY"
           test -z "$AERODATABOX_WEBHOOK_SECRET"
