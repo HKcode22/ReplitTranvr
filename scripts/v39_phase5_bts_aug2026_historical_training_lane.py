@@ -70,6 +70,10 @@ def flag(x:str)->str:
  if v is None:refuse("INVALID_CANCEL_DIVERT_STATUS")
  return "1" if v else "0"
 def local(x:str)->str:
+ # The official 2026 technical directive explicitly permits midnight
+ # written 2400. Preserve its original local rollover marker, never
+ # silently coerce it to 0000 on an unverified UTC calendar date.
+ if re.fullmatch(r"2400(?:\.0+)?",x.strip()):return "2400"
  s=parse_hhmm(x)
  if s is None and x.strip()!="":refuse("INVALID_OR_AMBIGUOUS_HHMM")
  return s or ""
