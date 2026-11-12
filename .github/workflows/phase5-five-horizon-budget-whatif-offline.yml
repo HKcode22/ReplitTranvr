@@ -6,6 +6,9 @@ on:
       - '.github/workflows/phase5-five-horizon-budget-whatif-offline.yml'
       - 'server/lib/disruption/phase5OptionalHorizonSensitivity_v39.mjs'
       - 'tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts'
+      - 'server/lib/disruption/phase5OptionalHorizonTierBudget_v39.mjs'
+      - 'tests/phase5_optional_horizon_tier_budget_v39.test.ts'
+      - 'data-collection/phase5/2026-11-12_4_5_6_HORIZON_FULL_LEDGER_CANDIDATE_BUDGET_NO_GO.md'
       - 'data-collection/phase5/2026-11-12_HORIZON_LITERATURE_FIVE_HORIZON_BUDGET_AND_PHASE7_INFERENCE.md'
   push:
     branches: [main]
@@ -49,5 +52,5 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = '0'
-          npx vitest run tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts
+          npx vitest run tests/phase5_optional_five_horizon_cost_sensitivity_v39.test.ts tests/phase5_optional_horizon_tier_budget_v39.test.ts
           echo P5_FIVE_HORIZON_RESEARCH_ONLY_NOT_NEW_SQL_NOT_PHASE6_RELEASE
