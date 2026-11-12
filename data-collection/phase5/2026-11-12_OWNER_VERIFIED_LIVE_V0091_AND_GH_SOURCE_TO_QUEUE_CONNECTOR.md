@@ -22,3 +22,14 @@ The original C+D GitHub PRE tick, as-of route feature and Stage14 writer were me
 **Full Phase 5 exit** also requires T24 independent Stage17/V0081 witness orchestration, real source-to-V0087 registration→Stage14 PRE→POST evidence, honest cron missedness/selection bias, genuine additional Amendment E as-of FIDS status/weather/route-history predictors, stable physical departure-delay label versus ADSB.lol wheels-off proxy, source-content rights/retention and independent scientific signoff. Phase6 paid GO remains NO. Aim a Nov 13 progress checkpoint and Nov 20 readiness target if actual evidence supports it; these are planning goals, not guaranteed release or reason to fabricate rows.
 
 **Summary:** V0087–V0091 **LIVE and commissioned inert**, no installations outstanding. First GH source-to-queue caller coded; not yet released or used live. **Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.**
+
+
+## Exact one-task owner readback (new, READ ONLY)
+
+`scripts/v39_phase5_cd_v0091_exact_registration_owner_readonly_once.ts` is a scoped owner-only query for a particular manifest, canonical flight identity, horizon, selected first native T and frozen packet SHA. It starts `REPEATABLE READ READ ONLY` against `neondb`, requires the exact `neondb_owner` role, and reads at most two existing V0087 task rows. It reports one of:
+
+- `EXACT_TASK_VISIBLE_NO_DUPLICATE_REGISTRATION`: the same packet and native T are already registered; never enroll it again.
+- `NO_TASK_VISIBLE_IN_THIS_SNAPSHOT_NOT_PROOF_OF_ABORT`: no task was visible at that instant; a concurrent or uncertain COMMIT could still resolve later, so **this is not permission to automatically retry**.
+- A `HOLD` on packet/native-T drift, multiple rows, bad scope or unavailable owner read-only session.
+
+The script does not print a database URL, FIDS original payload, provider keys, or authorization secrets and explicitly reports `automaticRegistrationRetryAuthorizedByAudit:false`. It is **not** an independently provided legal/content-rights approval and cannot certify aircraft physical departure. If needed after a real ambiguous registration, the owner can run it with the exact reviewed identifiers in their private Replit Shell; do **not** run it arbitrarily or reveal secret credentials in CI.
