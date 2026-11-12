@@ -248,7 +248,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   if(process.env.V39_P5_CD_V0091_REGISTRATION_CI==="1"){
    const PREP="phase5_fids_prepare_prod_20261107";
    const sig="clean.phase5_cd_register_source_flight_v39("+
-    "text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer)";
+    "text,text,text,text,timestamptz,text,text,text,text,integer)";
    const prep=new Pool({connectionString:
     "postgresql://phase5_p30_prepare_login_20261107:ci-only"+
     "@localhost:5432/neondb?sslmode=disable",max:1});
@@ -266,14 +266,12 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      await client.query("SET LOCAL ROLE "+PREP);
      const actor=(await client.query("SELECT current_user AS role")).rows[0];
      expect(actor.role).toBe(PREP);
-     const sourceExpires=(await admin.query(
-      "SELECT source_expires_at_utc AS expires FROM "+
-      "clean.phase5_fids_original_binding_v39 "+
-      "WHERE population_query_id=$1::uuid",[qid])).rows[0].expires;
+     // Original source expiry is read exclusively from V0079 inside
+     // registration SQL; the untrusted packet may NOT supply an expiry.
      const args=[manifest,query,permit.flightInstanceId,permit.horizon,
       permit.selectedTNativeUtc,
       createHash("sha256").update("v0088-ci-packet-001").digest("hex"),
-      qid,response,rights,sourceExpires,3600];
+      qid,response,rights,3600];
      // PREPARE has only EXECUTE on scoped registration; direct queue
      // INSERT is forbidden before any signed packet is considered.
      await expect(client.query(
@@ -281,7 +279,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       .rejects.toMatchObject({code:"42501"});
      // Use parameterized arguments to the fixed reviewed function.
      const call="SELECT clean.phase5_cd_register_source_flight_v39("+
-       "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10::timestamptz,$11) "+
+       "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) "+
        "AS task";
      await client.query("ROLLBACK");
      await client.query("BEGIN");
