@@ -10,6 +10,8 @@ on:
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
       - 'scripts/v39_phase5_cd_github_one_v0091_source_enrollment_v39.ts'
       - 'tests/phase5_cd_github_v0091_source_enrollment_offline_v39.test.ts'
+      - 'scripts/v39_phase5_cd_v0091_exact_registration_owner_readonly_once.ts'
+      - 'tests/phase5_cd_v0091_exact_registration_readonly_audit_offline.test.ts'
 permissions:
   contents: read
 concurrency:
@@ -44,6 +46,7 @@ jobs:
           set -Eeuo pipefail
           npx --no-install vitest run \
             tests/phase5_cd_github_v0091_source_enrollment_offline_v39.test.ts \
+            tests/phase5_cd_v0091_exact_registration_readonly_audit_offline.test.ts \
             tests/phase5_cd_github_pre_release_gate_v39.test.ts \
             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts
           echo P5_CD_V0091_GH_FROZEN_SOURCE_NO_PAID_OFFLINE_PASS
