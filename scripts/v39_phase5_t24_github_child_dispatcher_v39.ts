@@ -27,6 +27,7 @@ export function admitP5T24GithubDispatcher(env:NodeJS.ProcessEnv){
     !CODE.test(env.GITHUB_SHA??"")||
     env.GITHUB_SHA!==env.V39_P5_T24_APPROVED_CODE_SHA||
     env.P5_T24_AUTO_DISPATCH_ENABLED!=="true"||
+    env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1"||
     env.P5_T24_SOURCE_READONLY_ENABLED!=="true"||
     env.ADB_AUTO_COLLECT!=="0"||
     env.AERODATABOX_API_KEY||env.DATABASE_URL||
