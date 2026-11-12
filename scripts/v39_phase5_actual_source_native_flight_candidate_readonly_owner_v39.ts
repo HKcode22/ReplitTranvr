@@ -1,6 +1,9 @@
 /**
  * One explicit nonpaid GitHub-only PG16 SOURCE-to-flight-PRE candidate
- * inspection, not a signer or worker. Only restricted PRE credential.
+ * inspection, not a signer or worker. Only existing restricted SOURCE
+ * credential, verified by successful real GH run #42443811669 (Nov 8).
+ * The user's Nov 12 Neon catalog proved PRE has NO source-original SELECT,
+ * while SOURCE has SELECT on the exact source and population tables.
  *
  * It reuses the Stage14 exact bound SOURCE SQL, discovers ALL (<=2500)
  * normalized members from that real SOURCE population query, and audits
@@ -45,7 +48,7 @@ export function admitP5ActualNativeSourceReviewEnv(env:NodeJS.ProcessEnv){
     env.ADB_AUTO_COLLECT!=="0"||env.AERODATABOX_API_KEY||
     env.AERODATABOX_WEBHOOK_SECRET||
     env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
-    env.V39_P5_SOURCE_DATABASE_URL||
+    env.P5_V39_PRE_DATABASE_URL||
     env.P5_V39_T24_WITNESS_DATABASE_URL||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
@@ -72,10 +75,10 @@ export function admitP5ActualNativeSourceReviewEnv(env:NodeJS.ProcessEnv){
     !/^[A-Z]{4}$/.test(airport))
   hold("FUTURE_SELECTED_SOURCE_AIRPORT_DAY_OR_HORIZON_NOT_REVIEWED");
  let url:URL;
- try{url=new URL(env.P5_V39_PRE_DATABASE_URL??"");}
- catch{return hold("RESTRICTED_PRE_LOGIN_MISSING");}
+ try{url=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");}
+ catch{return hold("RESTRICTED_SOURCE_LOGIN_MISSING");}
  if(!["postgres:","postgresql:"].includes(url.protocol)||
-    decodeURIComponent(url.username)!=="phase5_p30_pre_login_20261107"||
+    decodeURIComponent(url.username)!=="phase5_p5_source_login_20261108"||
     !url.password||!url.hostname||url.pathname!=="/neondb"||url.hash)
   hold("SOURCE_NATIVE_REVIEW_CANNOT_USE_APPLICATION_OR_OTHER_ROLE");
  const scope:P5ActualSourceCandidateScope={
@@ -90,7 +93,7 @@ export function admitP5ActualNativeSourceReviewEnv(env:NodeJS.ProcessEnv){
   expectedSourceGithubRunId:env.V39_P5_ACTUAL_SOURCE_GITHUB_RUN_ID!,
   maxPopulationStalenessSeconds:maxAge
  };
- return{scope,connectionString:env.P5_V39_PRE_DATABASE_URL!};
+ return{scope,connectionString:env.V39_P5_SOURCE_DATABASE_URL!};
 }
 export interface P5PgReadonlyClient{
  query(sql:string,args?:unknown[]):Promise<{
@@ -114,13 +117,15 @@ export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
   await client.query("SET LOCAL statement_timeout='15000ms'");
   await client.query("SET LOCAL lock_timeout='2000ms'");
   const who=await client.query(
-   "SELECT current_user AS actor,current_database() AS db,"+
+   "SELECT current_user AS actor,session_user AS session_login,"+
+   "current_database() AS db,"+
    "current_setting('transaction_read_only') AS ro,"+
    "pg_is_in_recovery() AS replica,clock_timestamp() AS now");
-  if(who.rowCount!==1||who.rows[0]?.actor!==P5_STAGE28_GROUPS.pre||
+  if(who.rowCount!==1||who.rows[0]?.actor!==P5_STAGE28_GROUPS.source||
+    who.rows[0]?.session_login!=="phase5_p5_source_login_20261108"||
     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on"||
     who.rows[0]?.replica!==false)
-   hold("ACTUAL_PG16_PRE_ONLY_READONLY_IDENTITY_UNVERIFIED");
+   hold("ACTUAL_PG16_SOURCE_ONLY_READONLY_IDENTITY_UNVERIFIED");
   const original=await client.query(P5_STAGE14_BOUND_SOURCE_SQL,
     [scope.manifestSha256,scope.queryDigestSha256]);
   if(original.rowCount!==1||original.rows.length!==1)
@@ -155,7 +160,7 @@ export async function runP5ActualSourceNativeCandidateOwner(
  });
  try{
   const scoped=makeP5Stage28DedicatedRolePool(raw,{
-   group:"pre",reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
+   group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",
    forbiddenApplicationLogin:"phase5_runtime_application_login"
   });
   const audit=await auditP5RealSourceToNativeFlightCandidatesReadonly(
