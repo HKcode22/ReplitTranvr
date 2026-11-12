@@ -100,7 +100,7 @@ jobs:
           SQL
           OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
           psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql
-          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer)'::regprocedure")" = phase5_cd_source_registration_owner_v39
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure")" = phase5_cd_source_registration_owner_v39
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
           echo P5_V0091_REAL_NON_SUPERUSER_SOURCE_REGISTRATION_ROLE_COMMISSION_PASS
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
