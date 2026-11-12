@@ -89,8 +89,8 @@ export function compileP5AmendmentEFidsOriginalFeaturesV39(
  physicalGateOutCertified:false;
  providerCalls:0;databaseWrites:0;phase6PaidGo:false;
 }{
- const e=input?.rawPayload;
- if(!obj(e)||!SHA.test(input.persistedResponseHash??"")||
+ const e=obj(input?.rawPayload);
+ if(!e||!SHA.test(input.persistedResponseHash??"")||
     !SHA.test(input.expectedBoundV0079ResponseHash??"")||
     input.persistedResponseHash!==input.expectedBoundV0079ResponseHash||
     !SHA.test(input.expectedDecodedOriginalBodySha256??"")||
