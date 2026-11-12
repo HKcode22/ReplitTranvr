@@ -163,7 +163,7 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
   const db={query:async(sql:string)=>{
    seen.push(sql);
    if(sql.includes("phase5_cd_reap_once_v39"))return{rows:[]};
-   if(sql.includes("phase5_cd_claim_due_v39")){
+   if(sql.includes("phase5_cd_claim_signed_roster_v39")){
     return{rows:[{
      task_id:unknown.taskId,manifest_sha256:unknown.manifestSha256,
      flight_instance_id:unknown.flightInstanceId,
@@ -197,7 +197,7 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
   const db={query:async(sql:string)=>{
    seen.push(sql);
    if(sql.includes("phase5_cd_reap_once_v39"))return{rows:[]};
-   if(sql.includes("phase5_cd_claim_due_v39"))return{rows:[{
+   if(sql.includes("phase5_cd_claim_signed_roster_v39"))return{rows:[{
      task_id:f.task.taskId,manifest_sha256:f.task.manifestSha256,
      flight_instance_id:f.task.flightInstanceId,
      horizon:f.task.horizon,
