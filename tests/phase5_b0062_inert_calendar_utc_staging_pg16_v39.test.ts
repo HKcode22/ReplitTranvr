@@ -221,13 +221,14 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
    ...review,expectedSignedStagePacketSha256:digest(badUnknownRegion)
   })).toThrow("INVALID_FUTURE_B0062_CALENDAR_DAY");
   // Day 6 is ordinary: its selected HUB is KNOWN prelaunch even though
-  // its remaining three airports are unknown. It cannot reuse SKBO 4h
-  // after the preceding Pair 5 ends merely because the day is adaptive.
+  // its remaining three airports are unknown. Pair 5 has an up-to-6h
+  // treatment; the next day at 20:00 is 22h after that exposure ends,
+  // within the 24h washout, despite the parent windows not overlapping.
   const badAnchorWashout=structuredClone(input);
   badAnchorWashout.calendarDays[5].anchorIcao="SKBO";
   badAnchorWashout.calendarDays[5].slotRegions.HUB="South America";
   badAnchorWashout.calendarDays[5].startUtc=iso(
-   Date.parse(badAnchorWashout.calendarDays[4].startUtc)+4*H);
+   Date.parse(badAnchorWashout.calendarDays[4].startUtc)+28*H);
   badAnchorWashout.expectedSignedCalendarRowsSha256=digest(
    badAnchorWashout.calendarDays);
   expect(()=>compileP5InertB0062UtcStagePacket(badAnchorWashout,{
