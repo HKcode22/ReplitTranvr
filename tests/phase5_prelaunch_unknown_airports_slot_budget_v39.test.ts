@@ -94,6 +94,9 @@ describe("Phase5 nonpaid 31-day slot-only UTC budget envelope",()=>{
   const late=fixture();late.asOfUtc="2027-02-01T00:00:00.000Z";
   expect(()=>buildP5PrelaunchSlotBudgetEnvelope(late))
    .toThrow("FIRST_PLANNED_SOURCE_SLOT_ALREADY_PAST");
+  const price=fixture();price.apiUnitsPerPhysicalGet=1;
+  expect(()=>buildP5PrelaunchSlotBudgetEnvelope(price))
+   .toThrow("MISSING_REVIEWED_SHAPE_RANGE_OR_FINANCIAL_INPUTS");
   const range=fixture();range.providerMaxRangeMinutes=0;
   expect(()=>buildP5PrelaunchSlotBudgetEnvelope(range))
    .toThrow("MISSING_REVIEWED_SHAPE_RANGE_OR_FINANCIAL_INPUTS");
