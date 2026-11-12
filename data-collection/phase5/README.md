@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — actual six B0062 regions and all-31-day known HUB washout correction
+
+**[Read the production-evidence compatibility/washout checkpoint](2026-11-12_REAL_SIX_REGION_B0062_AND_ORDINARY_ANCHOR_WASHOUT_CORRECTION.md).** Initial #603 synthetic staging code rejected the **real** six region labels (`Gulf/Africa`, `Asia-Pacific`, `North America`, etc.) and inadvertently omitted ordinary-day **known HUB** anchor reuse from prospective global 24h END→START washout. The correction anchors disposable PG16 regression to the genuine archived 19-airport / five-pair B0062 `{icao,region}` readback while retaining synthetic dates, treatment and budgets; unknown ordinary MID/REGIONAL airports remain genuinely unknown. No live Neon mutation or Phase6 GO.
+
 ## November 12 — restricted single-transaction B0062 calendar/disabled auth/V0079 UTC cold-start staging (code only)
 
 **[Read the actual B0062/V0079 inert prelaunch staging writer, production sequencing and PG16 tests](2026-11-12_B0062_INERT_PRELAUNCH_CALENDAR_UTC_BUDGET_ATOMIC_STAGING.md).** Adds a dedicated review-pinned, no-provider atomic PostgreSQL writer for 31 future parent-day calendar rows, ONE **disabled** B0062 authorization, ONE V0079 cycle REST cap, and each actual physical UTC charge-day V0079 envelope. Leaves 21 ordinary airport identities UNKNOWN until prospective draws and creates **zero** per-draw V0079 day budgets, exact source queries, originals, PRE, or V0082 category freeze. Uses B0062 real baseline + staged V0079/V0082 in disposable PG16 rollback/role/replay tests; no new migration or live privilege install. **No owner launcher or actual Neon write** from this PR. Genuine signed future dates, independent account use/price/rights and separate V0082 prelaunch release remain to be proven. Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
