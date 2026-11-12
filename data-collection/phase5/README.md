@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Actual Neon SOURCE role can read bound original; PREPARE cannot (no grants)
+
+**[Read the owner-attested SOURCE/PREPARE role-catalog readback and least-privilege original-feature-compiler correction](2026-11-12_ACTUAL_NEON_V0079_SOURCE_ROLE_CATALOG_READBACK_AND_LEAST_PRIVILEGE_FIX.md).** Real `neondb` read-only catalog: SOURCE group has SELECT on all 5 needed original/ledger/population tables; PREPARE only on allowed-query. The new V0079 feature draft reader from PR #595 therefore now requires **Stage28 SOURCE group** inside a repeatable-read READ ONLY transaction. **No PREPARE broad GRANT**; no original-body SELECT as application/owner; no DB/install/provider calls. Actual SOURCE dedicated-login session/source rights/real future packet still unverified; Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 12 — Reuse NOAA METAR + bitemporal history as signed, cutoff-safe PRE source features
 
 **[Read: original NOAA METAR/durable weather and historical as-of feature adapters](2026-11-12_AMENDMENT_E_REUSED_NOAA_METAR_HISTORY_RECEIPT_PACKET_ADAPTER.md).** The existing NOAA decoder/durable selector and history bitemporal rows are converted into the existing Stage14 signed feature bundle, without a new collector/provider or database. Numeric origin METAR statute-mile visibility is properly converted to meters and origin wind stays knots; verified route/airport/tail historic facts use actual as-of clocks. A single draft packet includes four original FIDS fields, up to two NOAA METAR fields and four historic fields; TAF remains explicit NULL pending a real source. STOP-default, no paid calls, no grants, no physical gate-out label; V0087–V0092 remain live-inert. Phase5 FREEZE HOLD / Phase6 paid GO NO.

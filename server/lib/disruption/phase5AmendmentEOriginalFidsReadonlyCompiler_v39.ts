@@ -1,9 +1,14 @@
 /**
- * Phase5 Amendment E: existing restricted PREPARE owner reads a V0079
+ * Phase5 Amendment E: existing restricted SOURCE owner reads a V0079
  * original + unique same-flight normalized member and invokes the pure
  * original FIDS feature compiler WITHOUT a paid GET or PRE insert.
- * No new SELECT grants are made here: if the existing dedicated group
- * cannot see still-retained source Contents, STOP for owner review.
+ *
+ * Owner's Nov12 live role-catalog audit: SOURCE already has SELECT on all
+ * five required tables; PREPARE has only allowed-query SELECT. Never give
+ * PREPARE raw Content access, assume broader grants, or run as neondb_owner.
+ * The SOURCE worker must use the existing Stage28 group:source dedicated
+ * login adapter, and this function enforces a repeatable-read READ ONLY TX.
+ * Any unavailable/expired original or permission mismatch fails closed.
  */
 import {
  P5_STAGE14_BOUND_SOURCE_SQL,P5_STAGE14_PHYSICAL_MEMBER_SQL
@@ -12,6 +17,10 @@ import {P5_STAGE28_GROUPS}
  from "./phase5Stage28DedicatedRolePool_v39";
 import {compileP5AmendmentEFidsOriginalFeaturesV39}
  from "./phase5AmendmentEFidsOriginalFeatureCompiler_v39";
+/** Exact SOURCE-only dedicated login commissioned separately from Stage30.
+ * Reuse the identity already pinned in the genuine V0079 SOURCE worker. */
+export const P5_E_V0079_SOURCE_READONLY_LOGIN_V39=
+ "phase5_p5_source_login_20261108" as const;
 const SHA=/^[0-9a-f]{64}$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -98,16 +107,18 @@ export async function compileP5EOneBoundOriginalReadonly(
   await c.query("SET LOCAL statement_timeout='12000ms'");
   await c.query("SET LOCAL lock_timeout='2000ms'");
   const who=(await c.query(
-   "SELECT current_user AS actor,current_database() AS db,"+
+   "SELECT current_user AS actor,session_user AS session_login,"+
+   "current_database() AS db,"+
    "current_setting('server_version_num')::integer AS version,"+
    "current_setting('transaction_read_only') AS ro,"+
    "pg_is_in_recovery() AS replica,clock_timestamp() AS now"
   )).rows;
   if(who.length!==1||who[0].db!=="neondb"||
-     who[0].actor!==P5_STAGE28_GROUPS.prepare||
+     who[0].actor!==P5_STAGE28_GROUPS.source||
+     who[0].session_login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||
      Number(who[0].version)<160000||
      who[0].ro!=="on"||who[0].replica!==false)
-   hold("NOT_EXISTING_RESTRICTED_READONLY_PREPARE_ROLE");
+   hold("NOT_EXISTING_RESTRICTED_READONLY_SOURCE_ROLE");
   const dbNow=time(who[0].now);
   if(dbNow>=cutoff)hold("CUTOFF_ALREADY_MISSED_NO_FEATURE_BACKFILL");
   const o=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,[
