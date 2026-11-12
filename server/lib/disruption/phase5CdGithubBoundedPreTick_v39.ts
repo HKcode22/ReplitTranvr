@@ -51,7 +51,8 @@ export interface P5CdVerifiedTaskPacket{
 }
 export function verifyP5CdFrozenRoster(
  raw:Buffer,roster:P5CdFrozenRoster,entries:P5CdFrozenRosterEntry[],
- gate:P5CdGithubPreRelease
+ gate:Pick<P5CdGithubPreRelease,
+  "rosterSha256"|"approvedCodeSha"|"manifestSha256"|"rightsSha256">
 ):Map<string,P5CdVerifiedTaskPacket>{
  if(!Buffer.isBuffer(raw)||raw.length<100||raw.length>SIZE||
     digest(raw)!==gate.rosterSha256||
