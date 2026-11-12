@@ -20,7 +20,8 @@ import {
  type P5CdFrozenRoster,type P5CdFrozenRosterEntry
 } from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {
- preflightP5Stage14ReviewedPermitV39
+ preflightP5Stage14ReviewedPermitV39,
+ type P5Stage14SingleFlightPrePermit
 } from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 
 const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_.-]{8,125}\.json$/;
@@ -34,6 +35,22 @@ function bytes(path:string):Buffer{
  if(!st.isFile()||st.isSymbolicLink()||st.size<100||st.size>MAX)
   hold("FILE_SYMLINK_OR_SOURCE_BYTES_NOT_APPROVED");
  return readFileSync(path);
+}
+/** Exact V0091 signature. No source-expiry argument: original V0079
+ * binding supplies it; no arbitrary rights or retiming input allowed. */
+export function makeP5CdV0091RegisterArgs(
+ permit:P5Stage14SingleFlightPrePermit,packetSha256:string
+):unknown[]{
+ if(!/^[0-9a-f]{64}$/.test(packetSha256??""))
+  hold("UNAPPROVED_SIGNED_PACKET_SHA256");
+ return[
+  permit.manifestSha256,permit.queryDigestSha256,
+  permit.flightInstanceId,permit.horizon,permit.selectedTNativeUtc,
+  packetSha256,permit.expectedSourcePopulationQueryId,
+  permit.expectedSourceResponseSha256,
+  permit.expectedReviewedSourceRightsSha256,
+  permit.maxPopulationStalenessSeconds
+ ];
 }
 const QUERY="SELECT clean.phase5_cd_register_source_flight_v39("+
  "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) AS task_id";
@@ -78,14 +95,8 @@ export async function runP5CdGithubOneSourceEnrollment(
    reviewedDedicatedLogin:"phase5_p30_prepare_login_20261107",
    forbiddenApplicationLogin:"phase5_runtime_application_login"
   });
-  const r=await prepare.query(QUERY,[
-   permit.manifestSha256,permit.queryDigestSha256,
-   permit.flightInstanceId,permit.horizon,permit.selectedTNativeUtc,
-   frozen.packetSha256,permit.expectedSourcePopulationQueryId,
-   permit.expectedSourceResponseSha256,
-   permit.expectedReviewedSourceRightsSha256,
-   permit.maxPopulationStalenessSeconds
-  ]);
+  const r=await prepare.query(QUERY,
+   makeP5CdV0091RegisterArgs(permit,frozen.packetSha256));
   const id=String(r.rows[0]?.task_id??"");
   if(r.rowCount!==1||!/^[1-9][0-9]{0,18}$/.test(id))
    hold("REGISTRATION_COMMIT_ACK_UNKNOWN_DO_NOT_RETRY");
