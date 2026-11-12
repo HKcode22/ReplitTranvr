@@ -1,0 +1,47 @@
+name: Phase5 ADSB.lol Signed-Supplement Inbound PRE (Offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AdsbInboundSignedSupplementCandidate_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
+      - 'tests/phase5_adsblol_signed_inbound_pre_supplement_v39.test.ts'
+      - '.github/workflows/phase5-adsblol-signed-inbound-supplement-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AdsbInboundSignedSupplementCandidate_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
+      - 'tests/phase5_adsblol_signed_inbound_pre_supplement_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  signed-packet-eligible-inbound-position:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Existing single Stage14 optional supplemental packet accepts only bound true PRE ADSB
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = 0
+          npx vitest run tests/phase5_adsblol_signed_inbound_pre_supplement_v39.test.ts
+          npm run v39:typecheck
+          echo 'ADSB_LOL_REVIEWED_PRE_PACKET_CANDIDATE_PASS NO_SOURCE_NO_DB_NO_PAID_NO_GO'
