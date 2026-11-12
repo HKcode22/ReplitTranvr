@@ -59,7 +59,7 @@ jobs:
       AERODATABOX_WEBHOOK_SECRET: ''
       DATABASE_URL: ''
       V39_DATABASE_RUNTIME_URL: ''
-      V39_P5_SOURCE_DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
       P5_V39_T24_WITNESS_DATABASE_URL: ''
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
@@ -80,12 +80,12 @@ jobs:
       P5_ACTUAL_SOURCE_HORIZON: ${{ vars.P5_ACTUAL_SOURCE_HORIZON }}
       P5_ACTUAL_SOURCE_AIRPORT_ICAO: ${{ vars.P5_ACTUAL_SOURCE_AIRPORT_ICAO }}
       P5_ACTUAL_SOURCE_MAX_STALENESS_SECONDS: ${{ vars.P5_ACTUAL_SOURCE_MAX_STALENESS_SECONDS }}
-      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+      P5_V39_PRE_DATABASE_URL: ''
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: HARD HOLD before dependencies without source rights and separate reviewed PRE login
+      - name: HARD HOLD before dependencies without source rights and existing dedicated SOURCE login
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -98,7 +98,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$AERODATABOX_WEBHOOK_SECRET"
           test -z "$DATABASE_URL"
-          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_PRE_DATABASE_URL"
           test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
           test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
@@ -109,7 +109,7 @@ jobs:
           [[ "$V39_P5_QUERY_DIGEST" =~ ^[a-f0-9]{64}$ ]]
           [[ "$V39_P5_ACTUAL_SOURCE_EARLY_DRAW_SHA256" =~ ^[a-f0-9]{64}$ ]]
           [[ "$V39_P5_ACTUAL_SOURCE_GITHUB_RUN_ID" =~ ^[0-9]{5,25}$ ]]
-          test -n "$P5_V39_PRE_DATABASE_URL"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
