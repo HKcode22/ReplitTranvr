@@ -20,7 +20,12 @@ const durable="2035-11-25T05:15:00.000Z";
 const unix=(s:string)=>Math.floor(new Date(s).getTime()/1000);
 const from=unix("2035-11-25T00:00:00.000Z"),
  to=unix("2035-11-26T00:00:00.000Z");
-function tafRows(){
+interface TafTestRow{
+ icaoId:string;issueTime:string;validTimeFrom:number;validTimeTo:number;
+ fcsts:Array<{timeFrom:number;timeTo:number;fcstChange:string|null;
+  visib:string|number;clouds:Array<{cover:string;base:number}>}>;
+}
+function tafRows():TafTestRow[]{
  return [
   {icaoId:"WSSS",issueTime:"2035-11-25 04:00:00.000Z",
    validTimeFrom:from,validTimeTo:to,
@@ -166,9 +171,9 @@ describe("ONE Amendment E: original NOAA TAF JSON forecast as-of actual PRE issu
    memberAvailableAtUtc:"2035-11-25T05:02:00.000Z",
    originIcao:"WSSS",destinationIcao:"YSSY",bundle:merged.bundle
   });
-  expect(selected.features.find(x=>x.name==="origin_taf_flight_category")?.value)
+  expect(selected.features.find(x=>x.featureName==="origin_taf_flight_category")?.value)
    .toBe("IFR");
-  expect(selected.features.find(x=>x.name==="destination_taf_flight_category")?.value)
+  expect(selected.features.find(x=>x.featureName==="destination_taf_flight_category")?.value)
    .toBe("VFR");
   expect(merged.phase6PaidGo).toBe(false);
  });
