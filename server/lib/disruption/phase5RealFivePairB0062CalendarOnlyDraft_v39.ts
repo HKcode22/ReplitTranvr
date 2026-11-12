@@ -91,12 +91,12 @@ function verifiedOwnerPairs(raw:unknown){
  const p=raw as {candidatePairAirportSets?:Array<{
   pairId:string;airports:Record<Slot,PairAirport>;
  }>};
- if(!Array.isArray(p?.candidatePairAirportSets)||
-    p.candidatePairAirportSets.length!==5)
+ const pairs=p?.candidatePairAirportSets;
+ if(!Array.isArray(pairs)||pairs.length!==5)
   hold("ACTUAL_CORRECTED_PAIR_EVIDENCE_MISSING");
  const m=new Map<string,Record<Slot,PairAirport>>();
  for(let i=1;i<=5;i++){
-  const rawPair=p.candidatePairAirportSets[i-1];
+  const rawPair=pairs[i-1];
   if(rawPair?.pairId!=="pair-"+i||
      !rawPair.airports||
      Object.keys(rawPair.airports).length!==4||
@@ -156,7 +156,8 @@ export function buildP5ActualFivePairB0062CalendarOnlyDraft(
     Record<Slot,PairAirport>|null;
   if(paired){
    const sites=ownerPairs.get(day.pairId!);
-   if(!sites||!day.pairedAirportCandidates||
+   if(!sites)hold("ACTUAL_PAIRED_AIRPORT_SHA_OR_PAIR_REPLAY_CHANGED");
+   if(!day.pairedAirportCandidates||
       SLOTS.some(k=>sites[k].icao!==day.pairedAirportCandidates?.[k]))
     hold("ACTUAL_PAIRED_AIRPORT_SHA_OR_PAIR_REPLAY_CHANGED");
    anchorIcao=sites.HUB.icao;
