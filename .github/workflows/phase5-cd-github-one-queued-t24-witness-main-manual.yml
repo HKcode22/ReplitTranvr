@@ -1,5 +1,7 @@
 name: Phase5 C+D one queued T24 PRE + independent V0081 witness (STOP default)
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       confirm:
@@ -15,6 +17,8 @@ on:
     paths:
       - '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml'
       - 'scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubDbClockLookahead_v39.ts'
+      - 'tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts'
       - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
       - 'server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts'
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
@@ -54,16 +58,19 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npx --no-install vitest run             tests/phase5_cd_github_queued_t24_offline_v39.test.ts             tests/phase5_t24_pre_independent_witness_chain_v39.test.ts             tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts
+          npx --no-install vitest run             tests/phase5_cd_github_queued_t24_offline_v39.test.ts             tests/phase5_t24_pre_independent_witness_chain_v39.test.ts             tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts
           echo P5_CD_T24_SEPARATE_WITNESS_OFFLINE_STOP_NO_PROVIDER_PASS
   one-approved-queued-native-t24:
     if: >-
       ${{ github.event_name == 'workflow_dispatch'
           && github.ref == 'refs/heads/main'
-          && vars.P5_CD_GH_QUEUED_T24_ENABLED == '1'
-          && inputs.confirm == 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER' }}
+          && ((github.event_name == 'workflow_dispatch'
+               && vars.P5_CD_GH_QUEUED_T24_ENABLED == '1'
+               && inputs.confirm == 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER')
+              || (github.event_name == 'schedule'
+               && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1')) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 16
     env:
       ADB_AUTO_COLLECT: '0'
       AERODATABOX_API_KEY: ''
@@ -75,8 +82,9 @@ jobs:
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
       P5_CD_GH_QUEUED_T24_EXECUTE: '1'
-      P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ${{ inputs.confirm }}
-      P5_CD_GH_ROSTER_PATH: ${{ inputs.frozen_roster }}
+      P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ${{ github.event_name == 'schedule' && 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER' || inputs.confirm }}
+      P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+      P5_CD_GH_ROSTER_PATH: ${{ github.event_name == 'schedule' && vars.P5_CD_GH_T24_SCHEDULE_ROSTER_PATH || inputs.frozen_roster }}
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
@@ -104,7 +112,18 @@ jobs:
           set +x
           test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
           test "$GITHUB_REF" = refs/heads/main
-          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          case "$GITHUB_EVENT_NAME" in
+            schedule)
+              test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1
+              ;;
+            workflow_dispatch)
+              test "$P5_CD_GH_T24_ONE_FLIGHT_CONFIRM" = ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER
+              ;;
+            *)
+              echo HOLD_CD_T24_UNREVIEWED_EVENT
+              exit 2
+              ;;
+          esac
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$P5_CD_GH_PRE_STOP" = 0
           test "$P5_CD_GH_PRE_ARMED" = 1
