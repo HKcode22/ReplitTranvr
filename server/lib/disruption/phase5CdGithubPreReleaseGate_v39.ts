@@ -108,9 +108,10 @@ export function requireP5CdGithubPreRelease(
  };
 }
 export function requireP5CdGithubEFeatures(
- env:NodeJS.ProcessEnv
+ env:NodeJS.ProcessEnv,
+ options?:{allowReviewedT24Witness?:true}
 ):P5CdGithubPreRelease{
- const gate=requireP5CdGithubPreRelease(env);
+ const gate=requireP5CdGithubPreRelease(env,options);
  if(env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED!=="1")
   hold("AMENDMENT_E_SOURCE_FEATURE_RELEASE_NOT_APPROVED");
  return gate;
