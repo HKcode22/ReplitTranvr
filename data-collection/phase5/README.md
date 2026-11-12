@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — V0093 typed cost-only UTC source ceiling (SQL candidate, **not installed**)
+
+[Read the staged additive V0093 V0082 compatibility checkpoint](2026-11-12_V0093_TYPED_COST_ONLY_V0082_ACTUAL_PG16_SOURCE_RESERVATION_COMPATIBILITY.md). This candidate preserves the original V0082 `EXACT_SOURCE_GRID` mode by default, adds a separately typed `COST_UPPER_BOUND` mode with **no faked signed future request-grid SHA**, and still demands genuine exact V0082 query partitions + V0079 real prospective early draw/rights and irreversible two-unit physical REST reservation. Only *unused* FIDS BASE/SPLIT budgets may be less than the planned upper caps; independent real account/source/rights review and a separate restricted **cost-only release writer** are still required. CI is disposable PG16, not production installation or scientific FREEZE/paid GO.
+
 ## November 12 — five-real-pair-to-B0062 calendar draft and seven-UTC category cost ceilings
 
 **[Read the genuine paired-sites 31-B0062-row review draft](2026-11-12_REAL_FIVE_PAIR_B0062_CALENDAR_TO_STAGER_REVIEW_DRAFT.md).** Reuses the existing real 19-airport/5-pair owner source and previously tested prospective 31-day shape engine; requires separately supplied 21 ordinary HUB/region plans and **31** independent per-day seed values, checks all known HUB END→START washout using the exact production stager's pure calendar validator, and **does not choose** unknown ordinary MID/REGIONAL airports. No actual signed calendar or live DB writes.
