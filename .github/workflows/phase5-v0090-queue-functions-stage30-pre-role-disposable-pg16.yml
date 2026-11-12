@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/phase5-v0090-queue-functions-stage30-pre-role-disposable-pg16.yml'
       - 'migrations/staged/V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql'
+      - 'scripts/v39_phase5_cd_v0090_owner_once.mjs'
 permissions:
   contents: read
 jobs:
@@ -85,8 +86,24 @@ jobs:
             OWNER TO phase5_cd_ci_owner;
           SQL
           OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
-          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql
-          echo P5_CD_V0090_REAL_PG16_NON_SUPERUSER_ROLE_MIGRATION_APPLIED
+          node --check scripts/v39_phase5_cd_v0090_owner_once.mjs
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0090-XXXXXX)"
+          SQL="V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql"
+          cp "migrations/staged/$SQL" "$TMP/$SQL"
+          export P5_CD_V0090_FILE="$TMP/$SQL"
+          export P5_CD_V0090_SHA="$(git hash-object "$TMP/$SQL")"
+          export P5_CD_V0090_OWNER_APPROVAL="INSTALL_ONLY_V0090_QUEUE_FUNCTION_OWNER_NO_WORKERS_NO_PAID"
+          export P5_CD_V0090_DISPOSABLE_CI="1"
+          export DATABASE_URL="$OWNER_URL"
+          node scripts/v39_phase5_cd_v0090_owner_once.mjs > "$TMP/readback.json"
+          grep -Fq '"status": "V0090_EXISTING_PRE_ONLY_QUEUE_FUNCTIONS_COMMISSIONED_NO_PAID"' "$TMP/readback.json"
+          if node scripts/v39_phase5_cd_v0090_owner_once.mjs > "$TMP/repeat.out" 2>&1; then
+            echo 'FAIL_V0090_BLIND_REPEAT_COMMISSION_ALLOWED'
+            exit 2
+          fi
+          grep -Eq 'HOLD_P5_CD_V0090_(STAGE30_PRE_OR_V0089_GUARD_NOT_PRESENT_OR_DUPLICATE|EXISTING_QUEUE_FUNCTION_OWNERSHIP_DRIFT)' "$TMP/repeat.out"
+          echo P5_CD_V0090_REAL_PG16_NON_SUPERUSER_ATOMIC_OWNER_INSTALLER_APPLIED_ONCE
       - name: Prove restricted existing PRE login can use functions but cannot edit task table
         shell: bash
         run: |
