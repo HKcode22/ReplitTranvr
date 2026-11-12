@@ -9,6 +9,7 @@ on:
       - 'tests/phase5_v0082_seven_rest_freeze_owner_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0082-seven-rest-full31-input-freeze-pg16-no-provider.yml'
       - 'data-collection/phase5/2026-11-08_STAGE22_TO_V0082_SIGNED_SEVEN_REST_INPUT_FREEZE_CHECKPOINT.md'
+      - 'data-collection/phase5/2026-11-12_ACTUAL_ZERO_ROW_COLD_START_INACTIVE_AUTHORIZATION_BEFORE_V0082_BUDGET_FREEZE.md'
   push:
     branches: [main]
     paths:
