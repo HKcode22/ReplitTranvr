@@ -22,7 +22,7 @@ BEGIN
   RAISE EXCEPTION 'P5_CD_V0091_ONLY_EMPTY_INERT_QUEUE_MAY_BE_COMMISSIONED';
  END IF;
  IF pg_catalog.to_regprocedure(
-  'clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer)'
+  'clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'
  ) IS NOT NULL OR EXISTS(SELECT 1 FROM pg_catalog.pg_roles
   WHERE rolname='phase5_cd_source_registration_owner_v39') THEN
   RAISE EXCEPTION 'P5_CD_V0091_REGISTRATION_ALREADY_EXISTS_NO_REINSTALL';
@@ -63,8 +63,7 @@ GRANT USAGE ON SEQUENCE clean.phase5_cd_pre_task_v39_task_id_seq
 CREATE FUNCTION clean.phase5_cd_register_source_flight_v39(
  p_manifest text,p_query text,p_flight text,p_horizon text,
  p_native_t timestamptz,p_packet text,p_population_id text,
- p_response text,p_rights text,p_source_expires timestamptz,
- p_max_staleness integer
+ p_response text,p_rights text,p_max_staleness integer
 ) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,pg_temp
@@ -89,16 +88,14 @@ BEGIN
     p_population_id IS NULL OR
     p_population_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' OR
     p_horizon IS NULL OR p_horizon NOT IN ('T-24h','T-6h','T-90m') OR
-    p_native_t IS NULL OR p_source_expires IS NULL OR
+    p_native_t IS NULL OR
     p_max_staleness IS NULL OR p_max_staleness NOT BETWEEN 1 AND 86400
  THEN RAISE EXCEPTION 'P5_CD_V0091_INVALID_FROZEN_SOURCE_PACKET_INPUT'; END IF;
  offset_utc:=CASE p_horizon WHEN 'T-24h' THEN INTERVAL '24 hours'
   WHEN 'T-6h' THEN INTERVAL '6 hours' ELSE INTERVAL '90 minutes' END;
  cutoff_utc:=p_native_t-offset_utc;
- IF cutoff_utc<=now_utc+INTERVAL '2 seconds' OR
-    p_source_expires<=cutoff_utc OR
-    p_source_expires<=now_utc THEN
-  RAISE EXCEPTION 'P5_CD_V0091_RETROSPECTIVE_OR_EXPIRED_SOURCE'; END IF;
+ IF cutoff_utc<=now_utc+INTERVAL '2 seconds' THEN
+  RAISE EXCEPTION 'P5_CD_V0091_RETROSPECTIVE_CUTOFF'; END IF;
 
  SELECT q.manifest_sha256,q.query_digest,q.state,
     q.run_day_index,q.slot_id,q.horizon,q.airport_icao,
@@ -135,7 +132,8 @@ BEGIN
     q.original_population_id<>p_population_id OR
     q.original_hash<>p_response OR q.response_hash<>p_response OR
     q.rights_review_sha256<>p_rights OR q.bound_rights<>p_rights OR
-    q.original_expires<>p_source_expires OR
+    q.original_expires<=cutoff_utc OR
+    q.original_expires<=now_utc OR
     q.original_unexpired IS DISTINCT FROM TRUE OR
     q.source_airport_icao<>q.airport_icao OR
     q.query_direction<>'Departure' OR
@@ -197,13 +195,13 @@ BEGIN
    source_response_sha256,reviewed_source_rights_sha256,
    source_expires_at_utc)
  VALUES(p_manifest,p_flight,p_horizon,p_native_t,cutoff_utc,p_packet,
-   p_population_id,p_response,p_rights,p_source_expires)
+   p_population_id,p_response,p_rights,q.original_expires)
  RETURNING task_id INTO inserted_task;
  RETURN inserted_task;
 END $enroll$;
 
 REVOKE ALL ON FUNCTION clean.phase5_cd_register_source_flight_v39(
- text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer
+ text,text,text,text,timestamptz,text,text,text,text,integer
 ) FROM PUBLIC;
 DO $untrusted$
 DECLARE role_name text;
@@ -216,12 +214,12 @@ BEGIN
     'phase5_p30_witness_login_20261107',
     'phase5_p5_source_login_20261108') LOOP
   EXECUTE pg_catalog.format(
-   'REVOKE ALL ON FUNCTION clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer) FROM %I',
+   'REVOKE ALL ON FUNCTION clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer) FROM %I',
    role_name);
  END LOOP;
 END $untrusted$;
 GRANT EXECUTE ON FUNCTION clean.phase5_cd_register_source_flight_v39(
- text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer
+ text,text,text,text,timestamptz,text,text,text,text,integer
 ) TO phase5_fids_prepare_prod_20261107;
 
 -- PG16 non-superuser CREATEROLE has implicit ADMIN-only membership, not SET.
@@ -238,7 +236,7 @@ BEGIN
 END $temp_set$;
 GRANT CREATE ON SCHEMA clean TO phase5_cd_source_registration_owner_v39;
 ALTER FUNCTION clean.phase5_cd_register_source_flight_v39(
- text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer
+ text,text,text,text,timestamptz,text,text,text,text,integer
 ) OWNER TO phase5_cd_source_registration_owner_v39;
 REVOKE CREATE ON SCHEMA clean FROM phase5_cd_source_registration_owner_v39;
 DO $temp_drop$
@@ -255,7 +253,7 @@ END $temp_drop$;
 
 DO $postflight$
 DECLARE n pg_catalog.pg_roles%ROWTYPE;
-DECLARE sig text:='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,timestamptz,integer)';
+DECLARE sig text:='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)';
 BEGIN
  SELECT * INTO n FROM pg_catalog.pg_roles
  WHERE rolname='phase5_cd_source_registration_owner_v39';
