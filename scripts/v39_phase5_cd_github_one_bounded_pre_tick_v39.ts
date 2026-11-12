@@ -7,6 +7,7 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {
  makeP5Stage28DedicatedRolePool
 } from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -32,6 +33,7 @@ function bytes(path:string):Buffer{
 export async function runP5CdGithubPreController(
  env:NodeJS.ProcessEnv
 ){
+ verifyP5CdGithubFrozenCodeLineage(env);
  const gate=requireP5CdGithubPreRelease(env);
  if(!ROSTER.test(env.P5_CD_GH_ROSTER_PATH??"")||
     !/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??""))
