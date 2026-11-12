@@ -72,7 +72,7 @@ DECLARE
  now_utc timestamptz:=clock_timestamp();
  offset_utc interval;
  cutoff_utc timestamptz;
- q record;
+ source_row record;
  v record;
  member record;
  found_count integer;
@@ -117,7 +117,7 @@ BEGIN
     r.source_airport_icao,r.query_direction,
     r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL
       AS original_unexpired
- INTO q FROM clean.phase5_fids_allowed_query_v39 q
+ INTO source_row FROM clean.phase5_fids_allowed_query_v39 q
  JOIN clean.phase5_fids_physical_attempt_v39 a
    ON a.query_digest=q.query_digest
   AND a.manifest_sha256=q.manifest_sha256
@@ -128,27 +128,27 @@ BEGIN
  JOIN clean.fids_query_response r
    ON r.population_query_id=b.population_query_id
  WHERE q.manifest_sha256=p_manifest AND q.query_digest=p_query;
- IF NOT FOUND OR q.state<>'ACTIVE' OR q.horizon<>p_horizon OR
-    q.original_population_id<>p_population_id OR
-    q.original_hash<>p_response OR q.response_hash<>p_response OR
-    q.rights_review_sha256<>p_rights OR q.bound_rights<>p_rights OR
-    q.original_expires<=cutoff_utc OR
-    q.original_expires<=now_utc OR
-    q.original_unexpired IS DISTINCT FROM TRUE OR
-    q.source_airport_icao<>q.airport_icao OR
-    q.query_direction<>'Departure' OR
-    q.actual_attempt_run<>q.github_run_id OR
-    q.normalized_members_count<1 OR
-    p_native_t<q.service_window_start_utc OR
-    p_native_t>=q.service_window_end_utc OR
-    q.hard_latest_dispatch_utc>cutoff_utc-INTERVAL '2 seconds' OR
-    q.reserved_at>q.fids_retrieval_utc OR
-    q.fids_retrieval_utc>q.raw_persisted_at_utc OR
-    q.raw_persisted_at_utc>q.original_available OR
-    q.original_available>q.bound_at_utc OR
-    q.bound_at_utc>now_utc OR
-    q.original_available>cutoff_utc OR
-    cutoff_utc-q.original_available>
+ IF NOT FOUND OR source_row.state<>'ACTIVE' OR source_row.horizon<>p_horizon OR
+    source_row.original_population_id<>p_population_id OR
+    source_row.original_hash<>p_response OR source_row.response_hash<>p_response OR
+    source_row.rights_review_sha256<>p_rights OR source_row.bound_rights<>p_rights OR
+    source_row.original_expires<=cutoff_utc OR
+    source_row.original_expires<=now_utc OR
+    source_row.original_unexpired IS DISTINCT FROM TRUE OR
+    source_row.source_airport_icao<>source_row.airport_icao OR
+    source_row.query_direction<>'Departure' OR
+    source_row.actual_attempt_run<>source_row.github_run_id OR
+    source_row.normalized_members_count<1 OR
+    p_native_t<source_row.service_window_start_utc OR
+    p_native_t>=source_row.service_window_end_utc OR
+    source_row.hard_latest_dispatch_utc>cutoff_utc-INTERVAL '2 seconds' OR
+    source_row.reserved_at>source_row.fids_retrieval_utc OR
+    source_row.fids_retrieval_utc>source_row.raw_persisted_at_utc OR
+    source_row.raw_persisted_at_utc>source_row.original_available OR
+    source_row.original_available>source_row.bound_at_utc OR
+    source_row.bound_at_utc>now_utc OR
+    source_row.original_available>cutoff_utc OR
+    cutoff_utc-source_row.original_available>
       make_interval(secs=>p_max_staleness)
  THEN
   RAISE EXCEPTION 'P5_CD_V0091_REAL_SOURCE_OR_FRAME_TIME_NOT_QUALIFIED'; END IF;
@@ -173,15 +173,15 @@ BEGIN
  IF NOT FOUND OR
    member.population_id<>p_population_id OR
    member.canonical_flight_instance_id<>p_flight OR
-   member.source_airport_icao<>q.airport_icao OR
-   member.dep_airport_icao<>q.airport_icao OR
+   member.source_airport_icao<>source_row.airport_icao OR
+   member.dep_airport_icao<>source_row.airport_icao OR
    member.population_role<>'requested_airport_primary' OR
    member.source_type<>'fids' OR
    member.scope_classification<>'confirmed_core' OR
    member.codeshare_resolution_status<>'confirmed_operating_leg' OR
    member.response_hash<>p_response OR
    member.provider_content_expired_at_utc IS NOT NULL OR
-   member.available_at<q.original_available OR
+   member.available_at<source_row.original_available OR
    member.available_at>cutoff_utc OR
    member.dep_scheduled_utc IS DISTINCT FROM p_native_t OR
    member.population_member_id IS NULL THEN
@@ -195,7 +195,7 @@ BEGIN
    source_response_sha256,reviewed_source_rights_sha256,
    source_expires_at_utc)
  VALUES(p_manifest,p_flight,p_horizon,p_native_t,cutoff_utc,p_packet,
-   p_population_id,p_response,p_rights,q.original_expires)
+   p_population_id,p_response,p_rights,source_row.original_expires)
  RETURNING task_id INTO inserted_task;
  RETURN inserted_task;
 END $enroll$;
