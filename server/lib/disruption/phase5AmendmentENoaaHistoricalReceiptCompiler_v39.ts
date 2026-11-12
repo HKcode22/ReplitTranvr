@@ -237,8 +237,8 @@ export function compileP5ExistingHistoryToE(
 }
 /**
  * Assemble FIDS + NOAA + historic AS-OF receipts into ONE existing
- * 12-field supplement packet. TAF fields remain MISSING until real
- * independently reviewed issued+valid TAF receipts are available.
+ * 12-field supplement packet. Optional already-durable NOAA TAF as-of
+ * observations may be included; absent or ambiguous TAF remains MISSING.
  * This produces a DRAFT; separate frozen GH packet/release still required.
  */
 export function draftP5ECombinedExistingSourcesPacket(
@@ -246,17 +246,20 @@ export function draftP5ECombinedExistingSourcesPacket(
   existingV0079FidsBundle:P5EReviewedSupplementalBundle;
   weather:P5EReviewedSupplementalObservation[];
   historical:P5EReviewedSupplementalObservation[];
+  /** Only from the existing already-durable NOAA TAF decoder, optional. */
+  taf?:P5EReviewedSupplementalObservation[];
   externallyReviewedWholePacketUseSha256:string;
  }
 ):{
  schema:"v39.phase5.e-combined-existing-receipts-draft.v1";
  bundle:P5EReviewedSupplementalBundle;
- tafFeaturesAvailableFromThisAdapter:false;
+ tafFeaturesAvailableFromThisAdapter:boolean;
  independentContentsRightsCertifiedHere:false;
  paidProviderCalls:0;databaseWrites:0;phase6PaidGo:false;
 }{
  const f=input?.existingV0079FidsBundle;
- const extras=[...(input?.weather??[]),...(input?.historical??[])];
+ const extras=[...(input?.weather??[]),...(input?.historical??[]),
+  ...(input?.taf??[])];
  if(!f||f.schema!=="v39.phase5.e-signed-source-supplement.v1"||
     !SHA.test(f.originalResponseSha256??"")||
     !SHA.test(f.observationsSha256??"")||
@@ -264,7 +267,7 @@ export function draftP5ECombinedExistingSourcesPacket(
     h(f.observations)!==f.observationsSha256||
     f.observations.length>4||extras.length>32||
     extras.some(x=>!x||x.flightInstanceId!==f.flightInstanceId||
-     !["NOAA_METAR","REVIEWED_HISTORIC_CONTEXT"].includes(x.source)||
+     !["NOAA_METAR","NOAA_TAF","REVIEWED_HISTORIC_CONTEXT"].includes(x.source)||
      !SHA.test(x.sourceRecordId??"")||
      !P5_E_SUPPLEMENTAL_FIELDS.includes(x.field)))
   hold("UNVERIFIED_OR_CROSS_FLIGHT_PACKET_MERGE");
@@ -275,7 +278,10 @@ export function draftP5ECombinedExistingSourcesPacket(
     extras.some(x=>x.source==="NOAA_METAR"&&
      !["origin_metar_visibility_m","origin_metar_wind_kt"].includes(x.field))||
     extras.some(x=>x.source==="REVIEWED_HISTORIC_CONTEXT"&&
-     !Object.hasOwn(HIST_FIELDS,x.field)))
+     !Object.hasOwn(HIST_FIELDS,x.field))||
+    extras.some(x=>x.source==="NOAA_TAF"&&
+     !["origin_taf_flight_category",
+       "destination_taf_flight_category"].includes(x.field)))
   hold("SOURCE_FIELD_OWNERSHIP_COLLISION");
  const allFields=[...P5_E_SUPPLEMENTAL_FIELDS];
  const bundle:P5EReviewedSupplementalBundle={
@@ -290,7 +296,8 @@ export function draftP5ECombinedExistingSourcesPacket(
  };
  return{
   schema:"v39.phase5.e-combined-existing-receipts-draft.v1",
-  bundle,tafFeaturesAvailableFromThisAdapter:false,
+  bundle,tafFeaturesAvailableFromThisAdapter:
+   extras.some(x=>x.source==="NOAA_TAF"),
   independentContentsRightsCertifiedHere:false,
   paidProviderCalls:0,databaseWrites:0,phase6PaidGo:false
  };
