@@ -6,6 +6,10 @@ on:
       - '.github/workflows/phase5-amendment-e-asof-features-offline.yml'
       - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
       - 'tests/phase5_amendment_e_asof_feature_selection_offline_v39.test.ts'
+      - 'server/lib/disruption/phase5AmendmentEExistingNoaaTafReceipt_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentENoaaHistoricalReceiptCompiler_v39.ts'
+      - 'tests/phase5_amendment_e_existing_noaa_taf_asof_v39.test.ts'
+      - 'data-collection/phase5/2026-11-12_NOAA_TAF_FORECAST_CONTRACT_ASOF_FEATURE_CHECKPOINT.md'
 permissions:
   contents: read
 jobs:
@@ -35,5 +39,5 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx --no-install vitest run tests/phase5_amendment_e_asof_feature_selection_offline_v39.test.ts
+          npx --no-install vitest run tests/phase5_amendment_e_asof_feature_selection_offline_v39.test.ts tests/phase5_amendment_e_existing_noaa_taf_asof_v39.test.ts tests/phase5_amendment_e_existing_noaa_history_receipt_compiler_v39.test.ts
           echo 'PHASE5_AMENDMENT_E_ASOF_NO_PAID_NO_LIVE_WRITER'
