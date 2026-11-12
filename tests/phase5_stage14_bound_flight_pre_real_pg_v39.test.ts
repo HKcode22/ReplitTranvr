@@ -23,6 +23,7 @@ import {persistP5ReviewedT24PreAndIndependentWitness,
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const STAGE29=process.env.V39_P5_STAGE29_RESTRICTED_GROUPS_REAL_PG16==="1";
+const QUEUED_T24=process.env.V39_P5_CD_T24_QUEUE_REAL_PG16==="1";
 const ROLE=STAGE29?P5_STAGE28_GROUPS.pre:"phase5_fids_pre_writer_ciuser01";
 const WITNESS_ROLE=STAGE29?P5_STAGE28_GROUPS.witness:"phase5_fids_t24_witness_ciuser01";
 const PRE_LOGIN=STAGE29?"phase5_stage29_pre_ci":ROLE;
@@ -47,6 +48,8 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
  let permit:P5Stage14SingleFlightPrePermit;
  let witnessPermit:P5Stage17T24WitnessPermit;
  let chainedT24SnapshotId:string|undefined;
+ let queuedTaskId:string|undefined;let queuedOwner:string|undefined;
+ let queuedGeneration:string|undefined;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.V39_P5_STAGE14_REAL_PG16!=="1"||
@@ -259,6 +262,23 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     expectedRestrictedPreWriterRole:ROLE,
     externalNativeTPhysicalLegAndSourceUseReviewed:true
   };
+  if(QUEUED_T24){
+   if(!STAGE29||!STAGE17||process.env.V39_P5_CD_V0088_STAGE14_CI!=="1")
+    throw Error("REFUSED_QUEUE_T24_CI_WITHOUT_DISTINCT_WITNESS_REAL_V0088");
+   const packet=createHash("sha256").update("reviewed-ci-t24-packet-v0087").digest("hex");
+   await admin.query(
+    "INSERT INTO clean.phase5_cd_pre_task_v39("+
+    "manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,"+
+    "prediction_cutoff_utc,packet_sha256,source_population_query_id,"+
+    "source_response_sha256,reviewed_source_rights_sha256,source_expires_at_utc)"+
+    " VALUES($1,$2,'T-24h',$3,$4,$5,$6,$7,$8,clock_timestamp()+INTERVAL '2 hours')",
+    [manifest,permit.flightInstanceId,permit.selectedTNativeUtc,
+     iso(Date.parse(permit.selectedTNativeUtc)-86_400_000),
+     packet,qid,response,rights]);
+   expect((await admin.query(
+    "SELECT count(*)::integer n FROM clean.phase5_cd_pre_task_v39"
+   )).rows[0].n).toBe(1);
+  }
  });
  afterAll(async()=>{
   if(rawWitness)await rawWitness.end();
@@ -281,8 +301,48 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
      Date.parse(permit.selectedTNativeUtc)-24*3600_000),
     expectedWitnessOnlyRole:WITNESS_ROLE
    };
+   let queueFence:Parameters<
+    typeof persistP5ReviewedT24PreAndIndependentWitness>[4];
+   if(QUEUED_T24){
+    const claimed=(await admin.query(
+     "SELECT task_id::text,lease_owner,lease_generation::text,"+
+     "packet_sha256,state FROM clean.phase5_cd_claim_due_v39("+
+     "'cd-t24-ci-owner',1,100)"
+    )).rows;
+    expect(claimed).toHaveLength(1);
+    const task=claimed[0];
+    expect(task.state).toBe("CLAIMED");
+    queuedTaskId=task.task_id;queuedOwner=task.lease_owner;
+    queuedGeneration=task.lease_generation;
+    expect((await admin.query(
+     "SELECT clean.phase5_cd_mark_write_started_v39($1::bigint,$2,$3::bigint) AS ok",
+     [queuedTaskId,queuedOwner,queuedGeneration]
+    )).rows[0].ok).toBe(true);
+    queueFence={realV0088QueueFenceCi:{
+     taskId:queuedTaskId!,owner:queuedOwner!,
+     generation:queuedGeneration!,packetSha256:task.packet_sha256
+    }};
+   }
    const chain=await persistP5ReviewedT24PreAndIndependentWitness(
-    writer,witnessWriter,permit,reviewedWitness);
+    writer,witnessWriter,permit,reviewedWitness,queueFence);
+   if(QUEUED_T24){
+    const receipt=createHash("sha256").update(
+     "real-t24-v0081-ci-receipt").digest("hex");
+    expect((await admin.query(
+     "SELECT clean.phase5_cd_ack_verified_v39($1::bigint,$2,$3::bigint,"+
+     "$4::bigint,$5) AS ok",
+     [queuedTaskId,queuedOwner,queuedGeneration,
+      chain.committedSnapshotId,receipt]
+    )).rows[0].ok).toBe(true);
+    const done=(await admin.query(
+     "SELECT state,verified_snapshot_id::text id"+
+     " FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",
+     [queuedTaskId])).rows[0];
+    expect(done).toEqual({
+     state:"VERIFIED_ON_TIME",id:chain.committedSnapshotId
+    });
+    console.log("P5_REAL_V0087_QUEUED_T24_STAGE14_V0081_WITNESS_ACK_PASS");
+   }
    chainedT24SnapshotId=chain.committedSnapshotId;
    expect(chain.preCommittedAndReadBackBeforeCutoff).toBe(true);
    expect(chain.witnessCommittedAndReadBackBeforeCutoff).toBe(true);
@@ -394,13 +454,13 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   )).rows[0].n).toBe(1);
  });
 
- it("refuses to relabel or duplicate an existing PRE",async()=>{
+ (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE",async()=>{
   await expect(persistP5V0079SingleBoundFlightPre(writer,permit))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
  });
- it("rejects unauthorized production role, absent native evidence and late cutoff",async()=>{
+ (QUEUED_T24?it.skip:it)("rejects unauthorized production role, absent native evidence and late cutoff",async()=>{
   await expect(persistP5V0079SingleBoundFlightPre(admin,permit))
     .rejects.toThrow("WRONG_RESTRICTED_PRE_ONLY_DB_ROLE");
   await expect(persistP5V0079SingleBoundFlightPre(writer,{
@@ -423,7 +483,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   expect(q.rows[0].n).toBe(1);
  });
 
- it("reuses Phase4 conditional service records only under an explicit separately reviewed protocol",async()=>{
+ (QUEUED_T24?it.skip:it)("reuses Phase4 conditional service records only under an explicit separately reviewed protocol",async()=>{
   const conditional:P5Stage14SingleFlightPrePermit={
    ...permit,flightInstanceId:"leg:g5a:"+h("7"),
    identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",
@@ -470,7 +530,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });
- it("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
+ (QUEUED_T24?it.skip:it)("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
   if(STAGE29)return; // Stage29 tests exercise original witnessed route.
   const hasV0081=(await admin.query(
    "SELECT to_regclass('clean.phase5_t24_postcommit_witness_v39') AS obj"

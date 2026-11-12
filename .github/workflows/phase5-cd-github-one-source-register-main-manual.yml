@@ -3,8 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       frozen_roster:
-        description: 'Exact reviewed single signed future T6/T90 roster in data-collection/phase5/frozen/'
+        description: 'Exact signed one-flight T24 or witnessed T6/T90 roster in data-collection/phase5/frozen/'
         type: string
+        required: true
+      horizon_mode:
+        description: 'T24 requires separate independent V0081 witness approval'
+        type: choice
+        options: ['T-6h_OR_T-90m','T-24h']
+        default: 'T-6h_OR_T-90m'
         required: true
       confirm:
         description: 'Type REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER'
@@ -76,6 +82,9 @@ jobs:
       P5_CD_GH_PREPARE_EXECUTE: '1'
       P5_CD_GH_PREPARE_CONFIRM: ${{ inputs.confirm }}
       P5_CD_GH_PRE_ROSTER_PATH: ${{ inputs.frozen_roster }}
+      P5_CD_GH_REGISTER_HORIZON: ${{ inputs.horizon_mode }}
+      P5_CD_GH_T24_PREPARE_APPROVED: ${{ secrets.P5_CD_GH_T24_PREPARE_APPROVED }}
+      P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
       P5_CD_GH_PREPARE_ARMED: ${{ secrets.P5_CD_GH_PREPARE_ARMED }}
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
@@ -119,6 +128,17 @@ jobs:
           test -z "$P5_V39_PRE_DATABASE_URL"
           test -n "$P5_V39_PREPARE_DATABASE_URL"
           test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          case "$P5_CD_GH_REGISTER_HORIZON" in
+            T-24h)
+              test "$P5_CD_GH_T24_PREPARE_APPROVED" = 1
+              test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1
+              ;;
+            T-6h_OR_T-90m) ;;
+            *)
+              echo HOLD_SOURCE_REGISTRATION_HORIZON_MODE_NOT_REVIEWED
+              exit 2
+              ;;
+          esac
           case "$P5_CD_GH_PRE_MODE" in
             PHASE5_CANARY)
               test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1

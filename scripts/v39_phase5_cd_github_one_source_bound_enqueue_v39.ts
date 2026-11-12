@@ -106,17 +106,34 @@ export async function runP5CdGithubOneSourceEnrollment(
   filePath:x.filePath,packetSha256:x.packetSha256,
   bytes:bytes(x.filePath)
  };
+ // T24 is an entirely separate independent PRE+V0081 witness path.
+ // Merely signing a roster does not give PREPARE permission to enqueue a
+ // flight that the independent T24 executor cannot yet service.
+ const t24Approved=env.P5_CD_GH_REGISTER_HORIZON==="T-24h"&&
+  env.P5_CD_GH_T24_PREPARE_APPROVED==="1";
  const packets=verifyP5CdFrozenRoster(rosterBytes,roster,[frozen],
-  approved.gate);
+  approved.gate,t24Approved?"T24_WITH_SEPARATE_WITNESS":"LATER_ONLY");
  if(packets.size!==1)hold("SIGNED_SOURCE_ROSTER_NOT_SINGLETON");
+ if(env.P5_CD_GH_REGISTER_HORIZON==="T-24h"&&!t24Approved)
+  hold("T24_ENROLLMENT_REQUIRES_SEPARATE_REVIEW");
  const permit=packets.get(frozen.packetSha256)?.permit;
  if(!permit)hold("SIGNED_SOURCE_PACKET_NOT_BOUND");
  if(preflightP5Stage14ReviewedPermitV39(permit)!==
     permit.selectedTNativeUtc)
   hold("ORIGINAL_STAGE14_FIRST_NATIVE_T_NOT_FROZEN");
- requireP5CdFrozenStage17WitnessForEnrollment(permit);
- if(permit.horizon!=="T-6h"&&permit.horizon!=="T-90m")
-  hold("T24_REQUIRES_SEPARATE_V0081_WITNESS_CONTROLLER");
+ if(permit.horizon==="T-24h"){
+  // The exact independent Stage17 witness review must already be part
+  // of the source-authenticated frozen bytes. It will be committed only
+  // AFTER the T24 PRE, in a second restricted witness transaction.
+  if(!t24Approved||
+     env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||
+     !packets.get(frozen.packetSha256)?.witnessReview)
+   hold("T24_REQUIRES_SEPARATE_V0081_WITNESS_CONTROLLER");
+ }else{
+  requireP5CdFrozenStage17WitnessForEnrollment(permit);
+  if(permit.horizon!=="T-6h"&&permit.horizon!=="T-90m")
+   hold("T24_OR_STANDALONE_PROTOCOL_UNAPPROVED");
+ }
  // The PG16 V0091 function derives actual original expiry directly
  // from V0079 and verifies source body, identity and as-of time. No
  // caller-supplied expiry, provider key, source writer or task update.

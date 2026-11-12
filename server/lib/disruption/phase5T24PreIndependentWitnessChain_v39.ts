@@ -135,9 +135,22 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
  prePool:Pick<Pool,"connect">,
  witnessPool:Pick<Pool,"connect">,
  pre:P5Stage14SingleFlightPrePermit,
- witness:P5IndependentT24WitnessReview
+ witness:P5IndependentT24WitnessReview,
+ stage14CdFence?:Parameters<typeof persistP5V0079SingleBoundFlightPre>[2]
 ){
  verifyP5T24PreWitnessCrossReview(pre,witness);
+ // Existing Phase5 T24 code remains backward compatible ONLY for flights
+ // that are not registered in V0087. For a queued flight, the caller must
+ // explicitly supply the real SQL fence; an unset option is never silently
+ // promoted into a protected queue claim.
+ if(stage14CdFence!==undefined){
+  const ci=!!stage14CdFence.realV0088QueueFenceCi;
+  const gh=!!stage14CdFence.realV0088QueueFenceGh;
+  if(ci===gh||stage14CdFence.disposableCdQueueFence||
+    stage14CdFence.independentlyApprovedStandaloneProtocolSha256||
+    stage14CdFence.amendmentENativeRouteBoundCi)
+   HOLD("QUEUED_T24_MUST_USE_EXACTLY_ONE_REAL_V0087_CLAIM_FENCE");
+ }
  if(!prePool||typeof prePool.connect!=="function"||
     !witnessPool||typeof witnessPool.connect!=="function"||
     prePool===witnessPool)
@@ -145,7 +158,8 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
  // Stage14 itself validates the REAL bound original and physical member,
  // native selected T, due clock, PRE INSERT, durable COMMIT, and postcommit
  // readback under the approved PRE role. No fabricated source or T.
- const saved=await persistP5V0079SingleBoundFlightPre(prePool,pre);
+ const saved=await persistP5V0079SingleBoundFlightPre(
+  prePool,pre,stage14CdFence);
  if(saved.horizon!=="T-24h"||
     saved.preSnapshotsInserted!==1||
     saved.postCommitDatabaseReadbackVerified!==true||

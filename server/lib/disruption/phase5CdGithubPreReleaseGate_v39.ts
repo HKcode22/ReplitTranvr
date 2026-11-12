@@ -23,7 +23,8 @@ export interface P5CdGithubPreRelease{
  scientificFreezeEstablishedByThisFunction:false;
 }
 export function requireP5CdGithubPreRelease(
- env:NodeJS.ProcessEnv
+ env:NodeJS.ProcessEnv,
+ options?:{allowReviewedT24Witness?:true}
 ):P5CdGithubPreRelease{
  // A small, no-provider Phase5 PRE pilot can furnish prospective
  // evidence BEFORE final scientific freeze. It requires its own explicit
@@ -56,13 +57,34 @@ export function requireP5CdGithubPreRelease(
     env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
     env.V39_P5_SOURCE_DATABASE_URL||
     env.P5_V39_PREPARE_DATABASE_URL||
-    env.P5_V39_T24_WITNESS_DATABASE_URL||
+    (env.P5_V39_T24_WITNESS_DATABASE_URL&&
+     options?.allowReviewedT24Witness!==true)||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
     !SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??"")||
     !SHA256.test(env.V39_P5_RIGHTS_SHA256??"")||
     !SHA256.test(env.V39_P5_MANIFEST_SHA256??""))
   hold("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
+ if(options?.allowReviewedT24Witness){
+  // T24 is the sole explicit exception to PRE-only process credentials:
+  // the 2nd transaction MUST use the already installed Stage30 witness-only
+  // login and the same Neon DB host with a distinct identity. No fallback
+  // to the PRE application login, admin, or runtime role.
+  if(env.P5_CD_GH_T24_WITNESS_APPROVED!=="1")
+   hold("SEPARATE_T24_WITNESS_RELEASE_NOT_REVIEWED");
+  let w:URL,p:URL;
+  try{
+   w=new URL(env.P5_V39_T24_WITNESS_DATABASE_URL??"");
+   p=new URL(env.P5_V39_PRE_DATABASE_URL??"");
+  }catch{hold("INDEPENDENT_STAGE30_T24_WITNESS_CREDENTIAL_MISSING");}
+  if(!["postgres:","postgresql:"].includes(w.protocol)||
+     decodeURIComponent(w.username)!=="phase5_p30_witness_login_20261107"||
+     !w.password||w.pathname!=="/neondb"||w.hash||
+     !w.hostname||w.host!==p.host||w.pathname!==p.pathname||
+     decodeURIComponent(w.username)===decodeURIComponent(p.username)||
+     ["localhost","127.0.0.1","::1"].includes(w.hostname))
+   hold("T24_MUST_USE_DISTINCT_EXISTING_WITNESS_ONLY_ROLE");
+ }
  const raw=env.P5_V39_PRE_DATABASE_URL;
  if(!raw)hold("MISSING_EXISTING_STAGE30_PRE_LOGIN");
  let url:URL;
