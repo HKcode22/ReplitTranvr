@@ -20,6 +20,9 @@ import {selectP5EStage14BoundRouteFeatures}
  from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
 import {requireP5CdGithubPreRelease,requireP5CdGithubEFeatures}
  from "./phase5CdGithubPreReleaseGate_v39";
+import {selectP5EReviewedSupplementalFeatures,
+ type P5EReviewedSupplementalBundle}
+ from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {decideP5LaterPreEvidencePath,
  type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 const SHA=/^[0-9a-f]{64}$/;
@@ -101,6 +104,8 @@ export interface P5Stage14SingleFlightPrePermit{
  expectedOperatorFlightNumber?:string;
  expectedDestinationIcao?:string;
  externalConditionalScheduleSourceAndUseReviewed?:true;
+ /** Frozen source receipt inputs, never a second API reader. */
+ reviewedSupplementalFeatureBundle?:P5EReviewedSupplementalBundle;
 }
 /** Experimental isolated PostgreSQL16 C+D claim evidence. NOT a production
  * queue permit. The real source-rights/role/lease security review is separate.
@@ -238,9 +243,10 @@ function validateP5CdGithubFence(
       Number.isSafeInteger(f.generation)&&f.generation>=1)||
     !SHA.test(f.packetSha256??""))
   hold("UNREVIEWED_GITHUB_C_D_LEASE_IDENTITY");
- if(route)requireP5CdGithubEFeatures(process.env);
- else requireP5CdGithubPreRelease(process.env,
-   horizon==="T-24h"?{allowReviewedT24Witness:true}:undefined);
+ const t24=horizon==="T-24h"?
+  {allowReviewedT24Witness:true as const}:undefined;
+ if(route)requireP5CdGithubEFeatures(process.env,t24);
+ else requireP5CdGithubPreRelease(process.env,t24);
 }
 
 export interface P5Stage14SingleFlightPreResult{
@@ -498,6 +504,15 @@ export async function persistP5V0079SingleBoundFlightPre(
   hold("CI_AND_GITHUB_QUEUE_FENCE_MUST_BE_DISJOINT");
  validateP5CdGithubFence(options?.realV0088QueueFenceGh,
   options?.amendmentENativeRouteBoundGh===true,p.horizon);
+ if(p.reviewedSupplementalFeatureBundle){
+  const ci=options?.amendmentENativeRouteBoundCi===true&&
+   process.env.V39_P5_E_SUPPLEMENT_CI==="1";
+  const gh=options?.amendmentENativeRouteBoundGh===true&&
+   options?.realV0088QueueFenceGh!==undefined&&
+   process.env.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED==="1";
+  if(!ci&&!gh)
+   hold("SUPPLEMENTAL_FEATURE_PACKET_WITHOUT_SEPARATE_REVIEWED_RELEASE");
+ }
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
@@ -609,6 +624,20 @@ export async function persistP5V0079SingleBoundFlightPre(
       normalizedMember:members[0]
     }).features
    : [];
+  const extras=p.reviewedSupplementalFeatureBundle?
+   selectP5EReviewedSupplementalFeatures({
+    flightInstanceId:p.flightInstanceId,horizon:p.horizon,
+    selectedNativeTUtc:p.selectedTNativeUtc,
+    cutoffUtc:cutoff.toISOString(),issuedAtUtc:first.toISOString(),
+    sourceOriginalSha256:p.expectedSourceResponseSha256,
+    sourcePopulationQueryId:p.expectedSourcePopulationQueryId,
+    memberAvailableAtUtc:dbTime(members[0].available_at,
+     "SUPPLEMENT_MEMBER_CLOCK").toISOString(),
+    originIcao:members[0].dep_airport_icao,
+    destinationIcao:typeof members[0].arr_airport_icao==="string"?
+     members[0].arr_airport_icao:null,
+    bundle:p.reviewedSupplementalFeatureBundle
+   }).features:[];
   // No optional weather/ADSB feature is allowed to suppress a real source-
   // covered PRE. Separate feature owner may materialize only lawful as-of
   // features and must be frozen before the prediction cutoff.
@@ -621,7 +650,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    horizonEligible:true,horizon:p.horizon,
    selectedTMilestoneUtc:native,selectedTVersion:version,
    predictionCutoffUtc:cutoff,
-   features:eRoute,frameHash:p.reviewedFrameSha256,
+   features:[...eRoute,...extras],frameHash:p.reviewedFrameSha256,
    configHash:p.reviewedConfigSha256,
    fidsResponseHash:p.expectedSourceResponseSha256,
    scheduleVersion:null
