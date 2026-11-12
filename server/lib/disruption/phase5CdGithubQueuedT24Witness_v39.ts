@@ -44,10 +44,11 @@ export interface P5CdT24QueuedResult{
  committedSnapshotId:string|null;
  registeredTaskWasSourceBound:boolean;
  stage17WitnessCommittedAndReadBack:boolean;
- unsignedStage24ReceiptCandidate:null|{
-  schema:"v39.phase5.unsigned-t24-stage24-handoff.v1";
-  reviewedByIndependentAuthority:false;
- };
+ /** Exact existing Stage17 unsigned receipt for independent review.
+  * A queue worker NEVER promotes this candidate to an approved receipt. */
+ unsignedStage24ReceiptCandidate:null|
+  Awaited<ReturnType<typeof persistP5ReviewedT24PreAndIndependentWitness>>[
+   "unsignedStage24ReceiptCandidate"];
  providerCalls:0;paidProviderCalls:0;queuedTasksInserted:0;
  phase5ScientificFreezePassed:false;phase6PaidGo:false;
 }
@@ -173,10 +174,8 @@ export async function runP5CdOneQueuedT24Witness(
    status:"T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE",
    taskId:task.taskId,committedSnapshotId:id,
    registeredTaskWasSourceBound:true,stage17WitnessCommittedAndReadBack:true,
-   unsignedStage24ReceiptCandidate:{
-    schema:"v39.phase5.unsigned-t24-stage24-handoff.v1",
-    reviewedByIndependentAuthority:false
-   },
+   unsignedStage24ReceiptCandidate:
+    durable.unsignedStage24ReceiptCandidate,
    providerCalls:0,paidProviderCalls:0,queuedTasksInserted:0,
    phase5ScientificFreezePassed:false,phase6PaidGo:false
   };
