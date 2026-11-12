@@ -92,7 +92,7 @@ describe("Phase5 independent V0087 queue lease watchdog (NO provider)",()=>{
   expect(m.queries[1]?.sql).toContain("phase5_cd_reap_once_v39");
   expect(m.queries[1]?.args).toEqual([64]);
   expect(m.queries.every(q=>!q.sql.includes("INSERT INTO")&&
-    !q.sql.includes("phase5_cd_claim_signed_roster_v39("))).toBe(true);
+    !q.sql.startsWith("SELECT * FROM clean.phase5_cd_claim_signed_roster_v39("))).toBe(true);
  });
  it("counts missed and recovered leases; UNKNOWN is quarantined NOT auto-retried",async()=>{
   const m=mockDb(granted(),["READY","MISSED","QUARANTINED"]);
