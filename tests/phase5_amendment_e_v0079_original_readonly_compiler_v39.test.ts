@@ -80,7 +80,7 @@ function fixture(){
   expectedOriginIcao:"WSSS",externalContentUseReviewSha256:h("d")
  };
  const observed:string[]=[];
- let released=0,role="phase5_fids_prepare_prod_20261107";
+ let released=0,role="phase5_fids_source_prod_20261107";
  const db={
   async connect(){return{
    async query(sql:string,params?:unknown[]){
@@ -129,10 +129,26 @@ describe("Phase5 reuse Stage14/V0079 read-only authenticated feature compiler",(
  it("rejects unreviewed role before reading any source contents",async()=>{
   const x=fixture();x.setRole("neondb_owner");
   await expect(compileP5EOneBoundOriginalReadonly(x.db,x.scope))
-   .rejects.toThrow("NOT_EXISTING_RESTRICTED_READONLY_PREPARE_ROLE");
+   .rejects.toThrow("NOT_EXISTING_RESTRICTED_READONLY_SOURCE_ROLE");
   expect(x.observed).not.toContain(P5_E_READONLY_ORIGINAL_MEMBER_SQL);
   expect(x.observed.at(-1)).toBe("ROLLBACK");
   expect(x.getReleased()).toBe(1);
+ });
+ it("refuses the PREPARE role even though it can read allowed query metadata",async()=>{
+  const x=fixture();x.setRole("phase5_fids_prepare_prod_20261107");
+  await expect(compileP5EOneBoundOriginalReadonly(x.db,x.scope))
+   .rejects.toThrow("NOT_EXISTING_RESTRICTED_READONLY_SOURCE_ROLE");
+  expect(x.observed).not.toContain(P5_STAGE14_BOUND_SOURCE_SQL);
+  expect(x.observed).not.toContain(P5_STAGE14_PHYSICAL_MEMBER_SQL);
+  expect(x.observed).not.toContain(P5_E_READONLY_ORIGINAL_MEMBER_SQL);
+  expect(x.observed.at(-1)).toBe("ROLLBACK");
+  expect(x.getReleased()).toBe(1);
+ });
+ it("never tries to SET ROLE or grant tables during a source read-only operation",async()=>{
+  const x=fixture();
+  await compileP5EOneBoundOriginalReadonly(x.db,x.scope);
+  expect(x.observed.every(q=>!/^\\s*(?:GRANT|REVOKE|ALTER|INSERT|UPDATE|DELETE|CREATE|SET ROLE)/i.test(q))).toBe(true);
+  expect(x.observed.some(q=>q.includes("REPEATABLE READ READ ONLY"))).toBe(true);
  });
  it("refuses original expiry and missing physical member",async()=>{
   const x=fixture();x.source.source_expires_at_utc=
