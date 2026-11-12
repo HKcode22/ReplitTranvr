@@ -1,0 +1,140 @@
+name: Phase5 C+D existing V0087 lease watchdog (STOP default, no provider)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml'
+      - 'server/lib/disruption/phase5CdGithubLeaseWatchdog_v39.ts'
+      - 'scripts/v39_phase5_cd_github_lease_watchdog_once_v39.ts'
+      - 'tests/phase5_cd_github_lease_watchdog_offline_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-cd-existing-lease-watchdog-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+jobs:
+  offline-watchdog-safety:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test STOP, V0092 restricted privileges and no UNKNOWN replay
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_cd_github_lease_watchdog_offline_v39.test.ts
+          echo P5_CD_EXISTING_QUEUE_WATCHDOG_OFFLINE_NO_PROVIDER_PASS
+  reviewed-existing-queue-watchdog:
+    if: >-
+      ${{ github.ref == 'refs/heads/main'
+          && vars.P5_CD_GH_WATCHDOG_ENABLED == '1'
+          && (github.event_name == 'schedule'
+              || (github.event_name == 'workflow_dispatch'
+                  && inputs.confirm == 'REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_WATCHDOG_ENABLED: ${{ vars.P5_CD_GH_WATCHDOG_ENABLED }}
+      P5_CD_GH_WATCHDOG_EXECUTE: '1'
+      P5_CD_GH_WATCHDOG_CONFIRM: ${{ github.event_name == 'schedule' && 'REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER' || inputs.confirm }}
+      P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Stop before dependencies, provider or Neon session
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P5_CD_GH_WATCHDOG_ENABLED" = 1
+          test "$P5_CD_GH_WATCHDOG_CONFIRM" = REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
+          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          test -n "$P5_V39_PRE_DATABASE_URL"
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              ;;
+            *)
+              echo HOLD_NO_INDEPENDENT_WATCHDOG_RELEASE
+              exit 2
+              ;;
+          esac
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bounded existing V0087 reaper, UNKNOWN quarantines never replay
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase5_cd_github_lease_watchdog_once_v39.ts
+          echo P5_CD_EXISTING_QUEUE_WATCHDOG_ATTEMPT_NO_PAID
