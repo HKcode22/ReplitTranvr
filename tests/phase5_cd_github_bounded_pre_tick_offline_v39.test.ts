@@ -182,13 +182,13 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
    }
    throw Error("UNEXPECTED_SQL");
   }};
-  const got=await runP5CdGithubPreTick(env(),{
+  // V0092 refuses forged/unlisted database claim results AT THE ADAPTER
+  // before any writer or irreversible queue start can be reached.
+  await expect(runP5CdGithubPreTick(env(),{
    db,pool:{connect:async()=>{throw Error("MUST_NOT_CONNECT")}} as any,
    packets:f.packetSet
-  },{owner:"ci-gh-worker-12",limit:1});
-  expect(got.claimed).toBe(1);
-  expect(got.verified).toBe(0);
-  expect(got.results[0].result).toBe("REJECTED_UNSIGNED_TASK_NO_WRITE");
+  },{owner:"ci-gh-worker-12",limit:1})).rejects.toThrow(
+    "SIGNED_DB_CLAIM_CONTAINS_UNREVIEWED_FLIGHT_OR_HORIZON");
   expect(seen).toHaveLength(2);
  });
  it("false mark-write-started cannot fall through to Stage14",async()=>{
