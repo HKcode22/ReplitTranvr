@@ -75,6 +75,19 @@ def convert(input_zip:Path,output_dir:Path,allow_fixture:bool=False)->dict:
      input_zip.stat().st_size>MAX_ZIP and not allow_fixture):
   refuse("UNVERIFIED_OR_TOO_LARGE_OFFICIAL_ZIP")
  source_sha=digest_file(input_zip)
+ if not allow_fixture:
+  # The existing Phase4 verified-source job already produced this exact
+  # month/hash and checked its full ZIP. This second stage never invents a
+  # new source identity or trusts a similarly named unverified ZIP.
+  summary=input_zip.parent/"official_bts_reporting_carrier_aug2026_summary.json"
+  if not summary.is_file():refuse("PHASE4_INDEPENDENT_OFFICIAL_SOURCE_MANIFEST_MISSING")
+  att=json.loads(summary.read_text(encoding="utf-8"))
+  if (att.get("sourceZipSha256")!=source_sha or
+      att.get("sourceMonth")!="2026-08" or
+      att.get("sourceUri")!=SOURCE or
+      att.get("phase5FreezeAuthorized") is not False or
+      att.get("phase6Authorized") is not False):
+   refuse("PHASE4_ORIGINAL_SOURCE_SHA_OR_HOLD_STATUS_MISMATCH")
  with zipfile.ZipFile(input_zip) as z:
   members=[m for m in z.infolist() if m.filename.lower().endswith(".csv")]
   if len(members)!=1 or members[0].file_size>MAX_UNCOMPRESSED or (
