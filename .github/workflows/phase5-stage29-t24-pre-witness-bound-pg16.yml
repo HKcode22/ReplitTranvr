@@ -82,5 +82,5 @@ jobs:
       - name: Persist synthetic bound original, T24 PRE, then committed independent V0081 witness via SET-only logins
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts
+          npx vitest run tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts tests/phase5_t24_pre_independent_witness_chain_v39.test.ts
           echo 'STAGE29_REAL_PG16_T24_PRE_PLUS_INDEPENDENT_WITNESS=DISPOSABLE_PASS REAL_PROD_PRE=0 PROVIDER_GETS=0 SOURCE_RIGHTS_UNVERIFIED PHASE5_FREEZE=HOLD'
