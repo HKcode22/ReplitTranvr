@@ -15,6 +15,7 @@ on:
       - 'scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts'
       - 'tests/phase5_actual_source_native_flight_candidate_audit_v39.test.ts'
       - 'tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts'
+      - 'data-collection/phase5/2026-11-12_SOURCE_LOGIN_ALREADY_PROVEN_AND_REAL_NATIVE_CANDIDATE_AUDIT_FIXED.md'
 permissions:
   contents: read
 concurrency:
