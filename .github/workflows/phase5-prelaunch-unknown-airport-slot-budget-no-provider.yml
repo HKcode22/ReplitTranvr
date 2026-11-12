@@ -1,0 +1,44 @@
+name: Phase5 Prelaunch Unknown-Airport Slot Budget (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs'
+      - 'tests/phase5_prelaunch_unknown_airports_slot_budget_v39.test.ts'
+      - '.github/workflows/phase5-prelaunch-unknown-airport-slot-budget-no-provider.yml'
+      - 'data-collection/phase5/2026-11-12_REAL_PRELAUNCH_UNKNOWN_AIRPORT_BUDGET_DEPENDENCY.md'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs'
+      - 'tests/phase5_prelaunch_unknown_airports_slot_budget_v39.test.ts'
+      - '.github/workflows/phase5-prelaunch-unknown-airport-slot-budget-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  nonpaid-slot-envelope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Nonpaid exact 31-day slot-only source spending envelope regression
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx vitest run tests/phase5_prelaunch_unknown_airports_slot_budget_v39.test.ts
+          npm run v39:typecheck
+          echo 'P5_PRELAUNCH_UNKNOWN_AIRPORT_SLOT_BUDGET=PASS PAID_HTTP=0 DB_WRITES=0 PHASE6_GO=0'
