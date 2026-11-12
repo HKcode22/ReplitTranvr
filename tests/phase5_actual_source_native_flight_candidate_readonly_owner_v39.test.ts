@@ -22,7 +22,9 @@ const env=():NodeJS.ProcessEnv=>({
  V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",ADB_AUTO_COLLECT:"0",
  AERODATABOX_API_KEY:"",AERODATABOX_WEBHOOK_SECRET:"",
  DATABASE_URL:"",V39_DATABASE_RUNTIME_URL:"",
- V39_P5_SOURCE_DATABASE_URL:"",P5_V39_T24_WITNESS_DATABASE_URL:"",
+ V39_P5_SOURCE_DATABASE_URL:
+  "postgresql://phase5_p5_source_login_20261108:test@localhost:5432/neondb",
+ P5_V39_T24_WITNESS_DATABASE_URL:"",
  P5_V39_OTHER_REST_REVIEW_DATABASE_URL:"",
  P5_V39_OTHER_REST_RESERVE_DATABASE_URL:"",
  V39_PHASE6_PROCESS_ARMED:"0",
@@ -35,8 +37,7 @@ const env=():NodeJS.ProcessEnv=>({
  P5_ACTUAL_SOURCE_HORIZON:"T-6h",
  P5_ACTUAL_SOURCE_AIRPORT_ICAO:"WSSS",
  P5_ACTUAL_SOURCE_MAX_STALENESS_SECONDS:"7200",
- P5_V39_PRE_DATABASE_URL:
-  "postgresql://phase5_p30_pre_login_20261107:test@localhost:5432/neondb"
+ P5_V39_PRE_DATABASE_URL:""
 });
 function fixture():{
  scope:P5ActualSourceCandidateScope;
@@ -86,7 +87,7 @@ function fixture():{
  return{scope,original,member};
 }
 function fakePool(options?:{
- actor?:string;source?:Record<string,unknown>[];
+ actor?:string;sessionLogin?:string;source?:Record<string,unknown>[];
  members?:Record<string,unknown>[];
  tooMany?:boolean;
 }){
@@ -97,7 +98,8 @@ function fakePool(options?:{
    sql.push(statement);
    if(statement.includes("current_user AS actor"))
     return{rowCount:1,rows:[{
-     actor:options?.actor??P5_STAGE28_GROUPS.pre,
+     actor:options?.actor??P5_STAGE28_GROUPS.source,
+     session_login:options?.sessionLogin??"phase5_p5_source_login_20261108",
      db:"neondb",ro:"on",replica:false,now:clock
     }]};
    if(statement.includes("FROM clean.phase5_fids_allowed_query_v39"))
@@ -121,7 +123,7 @@ describe("real restricted role SOURCE member audit owner, no paid or PRE",()=>{
   expect(p.scope.horizon).toBe("T-6h");
   expect(p.scope.runDayIndex).toBe(4);
   expect(p.scope.expectedSourceGithubRunId).toBe("42899999999");
-  expect(p.connectionString).toContain("phase5_p30_pre_login");
+  expect(p.connectionString).toContain("phase5_p5_source_login");
  });
  it("rejects unapproved rights, provider, Phase6 arming and other roles",()=>{
   for(const change of [
@@ -136,7 +138,7 @@ describe("real restricted role SOURCE member audit owner, no paid or PRE",()=>{
   ])expect(()=>admitP5ActualNativeSourceReviewEnv({...env(),...change}))
     .toThrow("MAIN_REVIEW_ONLY_RIGHTS_OR_SOURCE_RUN_NOT_SIGNED");
   expect(()=>admitP5ActualNativeSourceReviewEnv({
-   ...env(),P5_V39_PRE_DATABASE_URL:
+   ...env(),V39_P5_SOURCE_DATABASE_URL:
      "postgresql://application:pw@localhost/neondb"
   })).toThrow("SOURCE_NATIVE_REVIEW_CANNOT_USE_APPLICATION_OR_OTHER_ROLE");
  });
@@ -167,13 +169,27 @@ describe("real restricted role SOURCE member audit owner, no paid or PRE",()=>{
   }
  });
  it("denies incorrect SQL effective role before any original/source read",async()=>{
-  const f=fakePool({actor:P5_STAGE28_GROUPS.source});
+  const f=fakePool({actor:P5_STAGE28_GROUPS.pre});
   await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(
    f.pool,fixture().scope))
-   .rejects.toThrow("ACTUAL_PG16_PRE_ONLY_READONLY_IDENTITY_UNVERIFIED");
+   .rejects.toThrow("ACTUAL_PG16_SOURCE_ONLY_READONLY_IDENTITY_UNVERIFIED");
   expect(f.sql.some(s=>s.includes("FROM clean.flight_population p")))
    .toBe(false);
   expect(f.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("refuses owner masquerading as SOURCE through SET ROLE",async()=>{
+  const f=fakePool({actor:P5_STAGE28_GROUPS.source,sessionLogin:"neondb_owner"});
+  await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(
+   f.pool,fixture().scope))
+   .rejects.toThrow("ACTUAL_PG16_SOURCE_ONLY_READONLY_IDENTITY_UNVERIFIED");
+  expect(f.sql.some(s=>s.includes("FROM clean.flight_population p"))).toBe(false);
+  expect(f.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("never mutates any source tables or changes roles in the scoped SQL audit",async()=>{
+  const f=fakePool();
+  await auditP5RealSourceToNativeFlightCandidatesReadonly(f.pool,fixture().scope);
+  expect(f.sql.every(q=>!/^\s*(?:GRANT|REVOKE|ALTER|INSERT|UPDATE|DELETE|CREATE|SET ROLE)/i.test(q))).toBe(true);
+  expect(f.sql[0]).toContain("REPEATABLE READ READ ONLY");
  });
  it("fails above 2500 members instead of truncating a busy HUB",async()=>{
   const f=fakePool({tooMany:true});
