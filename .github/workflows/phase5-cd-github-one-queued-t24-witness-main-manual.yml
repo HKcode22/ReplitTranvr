@@ -30,7 +30,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: phase5-cd-queued-t24-main
+  # Offline PR checks must never occupy the live T24 deadline lane.
+  group: phase5-cd-queued-t24-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: false
 jobs:
   offline-queued-t24-packet-witness-and-stop:
