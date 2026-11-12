@@ -9,7 +9,7 @@ Main PR merge commit: `2719991468dcd084f3693b6cc040d96d6bc2f0d7`.
 [GitHub Actions run #43281032803](https://github.com/HKcode22/ReplitTranvr/actions/runs/43281032803), triggered by main push on November 12, 2026. All three jobs verified **SUCCESS**:
 1. `capture-free-bts`: original official BTS 2026-08 Reporting Carrier On-Time Performance PREZIP, **one public nonpaid download**, posted SHA and source-month count, uploaded raw verified ZIP 2-day artifact.
 2. `verify-free-bts`: downloaded the original Actions artifact, independently recomputed the full original ZIP SHA and metadata, **no second external HTTP request**.
-3. `normalized-aug2026-historical-only`: reused exactly that verified original ZIP + Phase4 summary SHA, streamed all rows through the isolated Phase5 historical-only normalizer, generated normalized gzip CSV and signed provenance manifest, uploaded a 30-day GitHub artifact. The synthetic self-test also passed.
+3. `normalized-aug2026-historical-only`: reused exactly that verified original ZIP + Phase4 summary SHA, streamed all rows through the isolated Phase5 historical-only normalizer, generated normalized gzip CSV and SHA provenance manifest (not a cryptographic signature), uploaded a 30-day GitHub artifact. The synthetic self-test also passed.
 
 Exact source (government): https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_2026_8.zip
 
