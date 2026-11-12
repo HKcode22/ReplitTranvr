@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — One Amendment E: gate-out first-cycle numerical label candidate
+
+**[Read the finite actual-gate-out label code and matched-milestone/missingness tests](2026-11-12_AMENDMENT_E_GATEOUT_FIRST_CYCLE_LABEL_CANDIDATE_CODE_CHECKPOINT.md).** Reuses original Stage14 source-bound native T, the existing runway/ADSB.lol proxy modules and canonical Amendment E. A T−6h actual gate-out delay candidate is numeric **only** for a separately attested same-operating-leg scheduled gate-out and real actual gate-out; general FIDS scheduled values, revised schedules, wheels-off and ADS-B takeoff proxy are never silently interchangeable. Cancellations/pending/unknown become separately recorded outcomes, not zero. This is offline mathematical code, not verified source rights, trained model, independently frozen primary or paid Phase6 GO. V0087–V0092 remain owner-confirmed installed INERT; no new flight records or provider calls.
+
+
 ## November 12 — V0092 LIVE, watchdog merged, T24 source-roster SHA separation
 
 **[Read the actual V0092 production commissioning and follow-on source-roster isolation checkpoint](2026-11-12_LIVE_V0092_OWNER_VERIFIED_AND_T24_ROSTER_ISOLATION_CHECKPOINT.md).** Owner's Replit Shell returned `V0092_SIGNED_PACKET_HORIZON_CLAIM_COMMISSIONED_INERT` on real `neondb` with queue 0, valid restricted PRE function grants, the broad claim EXECUTE revoked, no paid calls, no new worker; **do not reinstall V0087–V0092**. PR #588 watchdog is now merged (`7584bad80b1cc83ed46f98983b64dc11bbba3dcf`) and remains disabled. This follow-on fix routes the **separate T24 roster hash** into the *existing* manual V0091 source registrar only for T24, with no fallback to T6/T90 if missing. Neither worker/registrar has a genuine registered future task; legal/ML source rights, one prospective source→PRE→POST/STOP chain and independent freeze remain outstanding. **Phase5 HOLD / Phase6 paid GO NO.**
