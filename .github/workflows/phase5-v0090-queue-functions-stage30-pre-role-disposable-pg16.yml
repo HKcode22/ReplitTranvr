@@ -1,0 +1,138 @@
+name: Phase5 V0090 real V0087 queue functions plus Stage30 PRE only (PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0090-queue-functions-stage30-pre-role-disposable-pg16.yml'
+      - 'migrations/staged/V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql'
+      - 'scripts/v39_phase5_cd_v0090_owner_once.mjs'
+permissions:
+  contents: read
+jobs:
+  real-v0090-owner-pre-grants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_V39_PRE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Guard local PostgreSQL-only, no provider or paid arm
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+      - name: Bootstrap only existing source, installed V0087/88/89 in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_fids_pre_writer_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_p30_pre_login_20261107 LOGIN PASSWORD 'ci-only'
+            NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+          GRANT phase5_fids_pre_writer_prod_20261107
+            TO phase5_p30_pre_login_20261107
+            WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+          CREATE ROLE phase5_cd_ci_owner LOGIN PASSWORD 'ci-only'
+            CREATEROLE NOINHERIT NOSUPERUSER NOCREATEDB NOBYPASSRLS;
+          GRANT USAGE ON SCHEMA clean TO phase5_fids_pre_writer_prod_20261107;
+          ALTER SCHEMA clean OWNER TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_task_v39 OWNER TO phase5_cd_ci_owner;
+          GRANT SELECT ON clean.flight_snapshots
+            TO phase5_cd_ci_owner WITH GRANT OPTION;
+          ALTER FUNCTION clean.phase5_cd_claim_due_v39(text,integer,integer)
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_mark_write_started_v39(bigint,text,bigint)
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_ack_verified_v39(bigint,text,bigint,bigint,text)
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_reap_once_v39(integer)
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_admit_stage14_pre_v39(
+            bigint,text,bigint,text,text,text,text,timestamptz,timestamptz,
+            text,text,text) OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_insert_v39()
+            OWNER TO phase5_cd_ci_owner;
+          ALTER FUNCTION clean.phase5_cd_scope_snapshot_immutable_v39()
+            OWNER TO phase5_cd_ci_owner;
+          GRANT TRIGGER ON clean.flight_snapshots TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_admission_receipt_v39
+            OWNER TO phase5_cd_ci_owner;
+          SQL
+          OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql
+          echo P5_CD_V0090_CI_REUSED_REAL_V0089_NOLOGIN_GUARD_PREVIOUSLY_INSTALLED
+          node --check scripts/v39_phase5_cd_v0090_owner_once.mjs
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0090-XXXXXX)"
+          SQL="V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql"
+          cp "migrations/staged/$SQL" "$TMP/$SQL"
+          export P5_CD_V0090_FILE="$TMP/$SQL"
+          export P5_CD_V0090_SHA="$(git hash-object "$TMP/$SQL")"
+          export P5_CD_V0090_OWNER_APPROVAL="INSTALL_ONLY_V0090_QUEUE_FUNCTION_OWNER_NO_WORKERS_NO_PAID"
+          export P5_CD_V0090_DISPOSABLE_CI="1"
+          export DATABASE_URL="$OWNER_URL"
+          node scripts/v39_phase5_cd_v0090_owner_once.mjs > "$TMP/readback.json"
+          grep -Fq '"status": "V0090_EXISTING_PRE_ONLY_QUEUE_FUNCTIONS_COMMISSIONED_NO_PAID"' "$TMP/readback.json"
+          if node scripts/v39_phase5_cd_v0090_owner_once.mjs > "$TMP/repeat.out" 2>&1; then
+            echo 'FAIL_V0090_BLIND_REPEAT_COMMISSION_ALLOWED'
+            exit 2
+          fi
+          grep -Eq 'HOLD_P5_CD_V0090_(STAGE30_PRE_OR_V0089_GUARD_NOT_PRESENT_OR_DUPLICATE|EXISTING_QUEUE_FUNCTION_OWNERSHIP_DRIFT)' "$TMP/repeat.out"
+          echo P5_CD_V0090_REAL_PG16_NON_SUPERUSER_ATOMIC_OWNER_INSTALLER_APPLIED_ONCE
+      - name: Prove restricted existing PRE login can use functions but cannot edit task table
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PRE_URL='postgresql://phase5_p30_pre_login_20261107:ci-only@localhost:5432/neondb?sslmode=disable'
+          printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT has_table_privilege(current_user,'clean.phase5_cd_pre_task_v39','UPDATE') AS direct_queue_update;"             "SELECT has_function_privilege(current_user,'clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE') AS can_claim;"             "SELECT has_function_privilege(current_user,'clean.phase5_cd_reap_once_v39(integer)','EXECUTE') AS can_reap;"             "SELECT count(*) FROM clean.phase5_cd_claim_due_v39('ci-pre-worker-01',2,30);"             "SELECT count(*) FROM clean.phase5_cd_reap_once_v39(2);"             | psql "$PRE_URL" -X -v ON_ERROR_STOP=1
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_table_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_pre_task_v39','UPDATE')")" = f
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = t
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_reap_once_v39(integer)','EXECUTE')")" = t
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT count(*) FROM clean.phase5_cd_pre_task_v39")" = 0
+          echo P5_CD_V0090_EXISTING_PRE_LOGIN_NO_DIRECT_QUEUE_DML_FUNCTIONS_VALID
+      - name: Prove no worker claim leak and wrong actor fails
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT pg_catalog.pg_has_role('phase5_cd_ci_owner','phase5_cd_queue_function_owner_v39','SET')")" = f
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_claim_due_v39(text,integer,integer)'::regprocedure")" = phase5_cd_queue_function_owner_v39
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_p30_pre_login_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = f
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_mark_write_started_v39(bigint,text,bigint)','EXECUTE')")" = t
+          echo P5_CD_V0090_NOLOGIN_QUEUE_FUNCTION_OWNER_AND_SET_ONLY_PRE_VERIFIED
