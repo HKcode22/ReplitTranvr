@@ -10,6 +10,8 @@ on:
       - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
       - 'server/lib/disruption/phase5CdGithubCodeLineage_v39.ts'
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubDbClockLookahead_v39.ts'
+      - 'tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
       - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
       - 'scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts'
@@ -58,7 +60,7 @@ jobs:
           && github.ref == 'refs/heads/main'
           && vars.P5_CD_GH_PRE_SCHEDULE_ENABLED == '1' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 15
     env:
       ADB_AUTO_COLLECT: '0'
       AERODATABOX_API_KEY: ''
