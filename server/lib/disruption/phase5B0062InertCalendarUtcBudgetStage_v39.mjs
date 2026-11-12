@@ -22,7 +22,17 @@ const UID=/^[A-Za-z0-9_.:-]{6,100}$/;
 const ROLE=/^phase5_b0062_prelaunch_stage_[a-z0-9_]{6,32}$/;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"];
 const STARTS=["00","04","08","12","16","20"];
-const KNOWN_HUBS=["OMAA","SKBO","WSSS","YSSY"];
+// Historical 2026-11-08 B0062 active-frame + corrected five-pair readback.
+// These are the six literal region labels used by Phase6, NOT slug strings.
+const SIX_REGIONS=[
+ "Asia-Pacific","Europe","Gulf/Africa","North America",
+ "Oceania","South America"
+];
+const HUB_REGION={
+ WSSS:"Asia-Pacific",OMAA:"Gulf/Africa",
+ SKBO:"South America",YSSY:"Oceania"
+};
+const KNOWN_HUBS=Object.keys(HUB_REGION);
 const H=3600000,D=86400000;
 const hold=x=>{throw Error("REFUSED_P5_INERT_B0062_UTC_STAGE_"+x);};
 const num=(x,lo,hi)=>Number.isSafeInteger(x)&&x>=lo&&x<=hi;
@@ -73,12 +83,19 @@ function parseDayRows(p){
      !d.slotRegions||typeof d.slotRegions!=="object"||
      Array.isArray(d.slotRegions)||
      Object.keys(d.slotRegions).length!==4||
-     SLOTS.some(k=>typeof d.slotRegions[k]!=="string"||
-       !/^[A-Z0-9_-]{2,40}$/.test(d.slotRegions[k]))||
+     SLOTS.some(k=>!SIX_REGIONS.includes(d.slotRegions[k]))||
+     d.slotRegions.HUB!==HUB_REGION[d.anchorIcao]||
      t<prevEnd)
    hold("INVALID_FUTURE_B0062_CALENDAR_DAY");
   const end=shapeEnd(t,d.windowShape);
   prevEnd=end;counts[d.windowShape]++;slots.push(d.utcSlot);
+  // The HUB anchor is already committed for *every* parent day. Therefore
+  // its 24h END->START washout IS checkable before ordinary adaptive draws.
+  // All MID/REGIONAL ordinary airport identities remain deliberately unknown.
+  const lastAnchorEnd=lastSeenSiteEnd.get(d.anchorIcao);
+  if(lastAnchorEnd!==undefined&&t-lastAnchorEnd<D)
+   hold("PRESELECTED_HUB_ANCHOR_24H_WASHOUT");
+  lastSeenSiteEnd.set(d.anchorIcao,end);
   const paired=(i<5||i>=6&&i<11);
   if(!paired){
    ordinary++;
@@ -99,9 +116,10 @@ function parseDayRows(p){
    const list=pairs.get(d.pairId)??[];
    list.push({...d,end,weekday:weekday(t)});
    pairs.set(d.pairId,list);
-   // Only already known paired airport identities can be checked prelaunch.
-   // Ordinary-day identities MUST remain prospective; cannot claim all washouts.
-   for(const site of SLOTS.map(k=>airports[k].icao)){
+   // HUB already checked above across ALL ordinary and paired days.
+   // MID and REGIONAL paired identities are fixed; ordinary identities are
+   // unknown until real prospective early draws.
+   for(const site of SLOTS.filter(k=>k!=="HUB").map(k=>airports[k].icao)){
     if(lastSeenSiteEnd.has(site)&&t-lastSeenSiteEnd.get(site)<D)
      hold("PRESELECTED_PAIR_SITE_24H_WASHOUT");
     lastSeenSiteEnd.set(site,end);
