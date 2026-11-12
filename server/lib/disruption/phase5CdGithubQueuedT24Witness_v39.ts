@@ -42,8 +42,11 @@ export function requireP5CdT24DispatchEvent(
   deny("T24_EXACT_CONFIRMATION_REQUIRED");
  if(env.GITHUB_EVENT_NAME==="workflow_dispatch")return "MANUAL";
  if(env.GITHUB_EVENT_NAME==="schedule"&&
-    env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1")
+    env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1"){
+  if(env.P5_T24_AUTO_DISPATCH_ENABLED==="true")
+   deny("COMPETING_LEGACY_T24_AUTOMATION_ENABLED");
   return "SCHEDULED";
+ }
  return deny("T24_UNREVIEWED_EVENT_OR_SCHEDULE_DISABLED");
 }
 function required<T>(v:T|undefined,reason:string):T{
