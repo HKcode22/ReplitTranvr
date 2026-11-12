@@ -1,0 +1,53 @@
+name: Phase5 BTS Historical Month and Cutoff-Safe Tail Chain (Offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_bts_aug2026_historical_training_lane.py'
+      - 'server/lib/disruption/phase5AmendmentETailChainAsOfCandidate_v39.ts'
+      - 'tests/phase5_amendment_e_tail_chain_asof_candidate_v39.test.ts'
+      - '.github/workflows/phase5-bts-historical-tail-asof-offline.yml'
+      - '.github/workflows/phase4-gate5-free-bts-actual-reference.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_bts_aug2026_historical_training_lane.py'
+      - 'server/lib/disruption/phase5AmendmentETailChainAsOfCandidate_v39.ts'
+      - 'tests/phase5_amendment_e_tail_chain_asof_candidate_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  bts-historical-and-live-tail-asof-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Synthetic BTS original ZIP streaming and leakage guard; no HTTP or DB
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py --self-test
+      - name: Exact same physical tail and cutoff-safe prior gate-in model feature
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_amendment_e_tail_chain_asof_candidate_v39.test.ts
+          npm run v39:typecheck
+          echo 'BTS_US_MONTH_HISTORICAL_ONLY=PASS TAIL_ASOF_PRE_CUTOFF=PASS NO_PAID_NO_NEON'
