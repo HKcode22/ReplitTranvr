@@ -41,11 +41,16 @@ const categoryKeys=[
  "VALIDATION_UNIT_BUDGET","OUTCOME_REST_UNIT_BUDGET",
  "HISTORY_BOOTSTRAP_UNIT_BUDGET","DIAGNOSTIC_UNIT_BUDGET"
 ];
-function exactSites(x){
+function exactSites(x,regions){
+ // Preserve the existing Phase6 FrozenSlotAirport shape; a bare ICAO string
+ // would break chooseAirportsForRunDay() for BOTH crossover periods.
  if(!x||typeof x!=="object"||Array.isArray(x)||
-    Object.keys(x).length!==4||SLOTS.some(k=>!ICAO.test(x[k]))||
-    new Set(Object.values(x)).size!==4)
-  hold("MISSING_FOUR_DISTINCT_PAIRED_ICAOS");
+    Object.keys(x).length!==4||
+    SLOTS.some(k=>!x[k]||typeof x[k]!=="object"||
+      Array.isArray(x[k])||Object.keys(x[k]).length!==2||
+      !ICAO.test(x[k].icao)||x[k].region!==regions[k])||
+    new Set(SLOTS.map(k=>x[k].icao)).size!==4)
+  hold("MISSING_FOUR_REGION_BOUND_PAIRED_AIRPORTS");
  return x;
 }
 function parseDayRows(p){
@@ -88,15 +93,15 @@ function parseDayRows(p){
       !["control","alternative"].includes(d.pairRole)||
       d.drawType!==(d.crossoverPeriod===2?"PAIR_REPLAY":"NEW_TEMPLATE"))
     hold("CROSSOVER_PAIR_ROLE_OR_PERIOD_MISMATCH");
-   const airports=exactSites(d.pairAirportSet);
-   if(airports.HUB!==d.anchorIcao)
+   const airports=exactSites(d.pairAirportSet,d.slotRegions);
+   if(airports.HUB.icao!==d.anchorIcao)
     hold("PAIRED_HUB_NOT_ANCHOR");
    const list=pairs.get(d.pairId)??[];
    list.push({...d,end,weekday:weekday(t)});
    pairs.set(d.pairId,list);
    // Only already known paired airport identities can be checked prelaunch.
    // Ordinary-day identities MUST remain prospective; cannot claim all washouts.
-   for(const site of Object.values(airports)){
+   for(const site of SLOTS.map(k=>airports[k].icao)){
     if(lastSeenSiteEnd.has(site)&&t-lastSeenSiteEnd.get(site)<D)
      hold("PRESELECTED_PAIR_SITE_24H_WASHOUT");
     lastSeenSiteEnd.set(site,end);
