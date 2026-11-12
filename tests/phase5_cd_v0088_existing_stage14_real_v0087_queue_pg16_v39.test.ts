@@ -274,11 +274,12 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       permit.selectedTNativeUtc,
       createHash("sha256").update("v0088-ci-packet-001").digest("hex"),
       qid,response,rights,sourceExpires,3600];
-     await expect(client.query("SELECT "+sig+"("+ 
-      "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10::timestamptz,$11)",args))
-      .rejects.toThrow();
-     // Parameterized invocation through the actual function NAME,
-     // never a fully qualified signature in SELECT call syntax.
+     // PREPARE has only EXECUTE on scoped registration; direct queue
+     // INSERT is forbidden before any signed packet is considered.
+     await expect(client.query(
+      "INSERT INTO clean.phase5_cd_pre_task_v39 DEFAULT VALUES"))
+      .rejects.toMatchObject({code:"42501"});
+     // Use parameterized arguments to the fixed reviewed function.
      const call="SELECT clean.phase5_cd_register_source_flight_v39("+
        "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10::timestamptz,$11) "+
        "AS task";
