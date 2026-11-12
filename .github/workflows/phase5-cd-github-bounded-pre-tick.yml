@@ -13,6 +13,9 @@ on:
       - 'server/lib/disruption/phase5CdGithubDbClockLookahead_v39.ts'
       - 'tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
+      - 'tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts'
       - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
       - 'scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts'
       - 'tests/phase5_cd_github_pre_release_gate_v39.test.ts'
@@ -49,7 +52,7 @@ jobs:
       - name: Prove signed roster, STOP and bounded claim state machine without DB/provider
         run: |
           set -Eeuo pipefail
-          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts
+          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts
           echo 'P5_CD_GH_PRE_TICK_OFFLINE_NO_DB_NO_PROVIDER_STOP_PASS'
   bounded-reviewed-real-pre:
     # OFF unless owner separately sets repo variable to '1'. Other
@@ -88,6 +91,7 @@ jobs:
       V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
       V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
       P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
+      P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED }}
       P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4

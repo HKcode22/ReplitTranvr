@@ -256,6 +256,12 @@ export async function runP5CdGithubPreTick(
   let permit:P5Stage14SingleFlightPrePermit;
   try{
    permit=bindP5CdTaskToFrozenPermit(task,deps.packets);
+   // A source packet with extra features must not be marked WRITE_STARTED
+   // when the independently reviewed feature-release is still disabled.
+   if(permit.reviewedSupplementalFeatureBundle&&
+      (env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED!=="1"||
+       env.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED!=="1"))
+    hold("SUPPLEMENTAL_FEATURES_NOT_APPROVED_BEFORE_QUEUE_WRITE_START");
    // The exact original Stage14 native-T, frozen-builder, identity,
    // T24-witness and scientific-permit shape is checked BEFORE the
    // un-retriable UNKNOWN state is entered, not after it.
