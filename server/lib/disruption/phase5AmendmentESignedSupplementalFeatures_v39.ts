@@ -68,11 +68,11 @@ const hold=(why:string):never=>{
  throw Error("REFUSED_P5_E_SIGNED_SUPPLEMENT_"+why);
 };
 function timestamp(v:unknown){
- if(typeof v!=="string"||!ISO.test(v)||
-    !Number.isFinite(Date.parse(v))||
-    new Date(Date.parse(v)).toISOString()!==v)
+ const literal:string=typeof v==="string"?v:hold("NONCANONICAL_UTC");
+ if(!ISO.test(literal)||!Number.isFinite(Date.parse(literal))||
+    new Date(Date.parse(literal)).toISOString()!==literal)
   hold("NONCANONICAL_UTC");
- return Date.parse(v);
+ return Date.parse(literal);
 }
 const hash=(value:unknown)=>createHash("sha256")
  .update(JSON.stringify(value)).digest("hex");
@@ -143,10 +143,10 @@ export function selectP5EReviewedSupplementalFeatures(
      row.rightsDisposition!=="EXTERNALLY_REVIEWED_ALLOW"||
      !validValue(row))
    hold("UNREVIEWED_FIELD_SOURCE_OR_VALUE");
-  const available=timestamp(row.availableAtUtc),
-   observed=row.observedAtUtc===null?null:
-    timestamp(row.observedAtUtc);
-  if(observed===null||observed>available)
+  const available=timestamp(row.availableAtUtc);
+  const observed:number=row.observedAtUtc===null?
+   hold("UNVERIFIED_OBSERVATION_CLOCK"):timestamp(row.observedAtUtc);
+  if(observed>available)
    hold("UNVERIFIED_OBSERVATION_CLOCK");
   if(FIDS.has(row.field)){
    if(row.source!=="AERODATABOX_FIDS"||
