@@ -6,6 +6,12 @@ on:
       - '.github/workflows/phase5-v0090-queue-functions-stage30-pre-role-disposable-pg16.yml'
       - 'migrations/staged/V0090__phase5_cd_queue_worker_function_owner_and_pre_group_v39.sql'
       - 'scripts/v39_phase5_cd_v0090_owner_once.mjs'
+      - 'migrations/staged/V0092__phase5_cd_signed_roster_horizon_scoped_queue_claim_v39.sql'
+      - 'scripts/v39_phase5_cd_v0092_owner_once.mjs'
+      - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts'
+      - 'tests/phase5_cd_durable_queue_client_offline_v39.test.ts'
 permissions:
   contents: read
 jobs:
@@ -136,3 +142,91 @@ jobs:
           test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_p30_pre_login_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = f
           test "$(psql "$DATABASE_URL" -XAt -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_mark_write_started_v39(bigint,text,bigint)','EXECUTE')")" = t
           echo P5_CD_V0090_NOLOGIN_QUEUE_FUNCTION_OWNER_AND_SET_ONLY_PRE_VERIFIED
+      - name: Commission V0092 as real non-superuser and verify no generic PRE claim
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          node --check scripts/v39_phase5_cd_v0092_owner_once.mjs
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0092-XXXXXX)"
+          SQL="V0092__phase5_cd_signed_roster_horizon_scoped_queue_claim_v39.sql"
+          cp "migrations/staged/$SQL" "$TMP/$SQL"
+          export P5_CD_V0092_FILE="$TMP/$SQL"
+          export P5_CD_V0092_SHA="$(git hash-object "$TMP/$SQL")"
+          export P5_CD_V0092_OWNER_APPROVAL="INSTALL_ONLY_V0092_SIGNED_PACKET_CLAIM_NO_WORKERS_NO_PAID"
+          export P5_CD_V0092_DISPOSABLE_CI="1"
+          export DATABASE_URL="$OWNER_URL"
+          node scripts/v39_phase5_cd_v0092_owner_once.mjs > "$TMP/readback.json"
+          grep -Fq '"status": "V0092_SIGNED_PACKET_HORIZON_CLAIM_COMMISSIONED_INERT"' "$TMP/readback.json"
+          if node scripts/v39_phase5_cd_v0092_owner_once.mjs > "$TMP/repeat.out" 2>&1; then
+            echo FAIL_V0092_REPEATED_INSTALL_WAS_ALLOWED
+            exit 2
+          fi
+          grep -Fq 'HOLD_P5_CD_V0092_REAL_ROLE_TASKS_OR_ALREADY_INSTALLED_NOT_REVIEWED' "$TMP/repeat.out"
+          echo P5_CD_V0092_NON_SUPERUSER_OWNER_INSTALLER_VERIFIED_AND_REPEAT_REFUSED
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(proowner) FROM pg_catalog.pg_proc WHERE oid='clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)'::regprocedure")" = phase5_cd_queue_function_owner_v39
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')")" = f
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT has_function_privilege('phase5_fids_pre_writer_prod_20261107','clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)','EXECUTE')")" = t
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_has_role('phase5_cd_ci_owner','phase5_cd_queue_function_owner_v39','SET')")" = f
+          echo P5_CD_V0092_NEW_SIGNED_ONLY_FUNCTION_INSTALLED_IN_DISPOSABLE_PG16
+      - name: Two horizon collision must never cross-lease or issue unexpected PRE
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PRE_URL='postgresql://phase5_p30_pre_login_20261107:ci-only@localhost:5432/neondb?sslmode=disable'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          WITH t AS (SELECT clock_timestamp()+INTERVAL '90 seconds' AS cutoff)
+          INSERT INTO clean.phase5_cd_pre_task_v39(
+           manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,
+           prediction_cutoff_utc,packet_sha256,source_population_query_id,
+           source_response_sha256,reviewed_source_rights_sha256,
+           source_expires_at_utc)
+          SELECT repeat('c',64),'leg:ci:future:t24:01','T-24h',
+           t.cutoff+INTERVAL '24 hours',t.cutoff,repeat('a',64),
+           'c23e4567-e89b-42d3-a456-426614174013',
+           repeat('d',64),repeat('e',64),
+           clock_timestamp()+INTERVAL '12 hours' FROM t
+          UNION ALL
+          SELECT repeat('c',64),'leg:ci:future:t6:01','T-6h',
+           t.cutoff+INTERVAL '6 hours',t.cutoff,repeat('b',64),
+           'c23e4567-e89b-42d3-a456-426614174013',
+           repeat('d',64),repeat('e',64),
+           clock_timestamp()+INTERVAL '12 hours' FROM t;
+          SQL
+          INVALID="$(printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT count(*) FROM clean.phase5_cd_claim_signed_roster_v39(ARRAY[repeat('a',64)],ARRAY['T-6h'],'ci-t6-worker-01',1,60);"             | psql "$PRE_URL" -XAt -v ON_ERROR_STOP=1 | tail -1)"
+          test "$INVALID" = 0
+          T24="$(printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT horizon||':'||state FROM clean.phase5_cd_claim_signed_roster_v39(ARRAY[repeat('a',64)],ARRAY['T-24h'],'ci-t24-worker-01',1,60);"             | psql "$PRE_URL" -XAt -v ON_ERROR_STOP=1 | tail -1)"
+          test "$T24" = 'T-24h:CLAIMED'
+          T6="$(printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT horizon||':'||state FROM clean.phase5_cd_claim_signed_roster_v39(ARRAY[repeat('b',64)],ARRAY['T-6h','T-90m'],'ci-t6-worker-01',2,60);"             | psql "$PRE_URL" -XAt -v ON_ERROR_STOP=1 | tail -1)"
+          test "$T6" = 'T-6h:CLAIMED'
+          AGAIN="$(printf '%s\n'             'SET ROLE phase5_fids_pre_writer_prod_20261107;'             "SELECT count(*) FROM clean.phase5_cd_claim_signed_roster_v39(ARRAY[repeat('a',64)],ARRAY['T-24h'],'ci-t24-worker-02',1,60);"             | psql "$PRE_URL" -XAt -v ON_ERROR_STOP=1 | tail -1)"
+          test "$AGAIN" = 0
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM clean.phase5_cd_pre_task_v39 WHERE state='CLAIMED'")" = 2
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM clean.phase5_cd_pre_task_v39 WHERE horizon='T-24h' AND lease_owner='ci-t24-worker-01'")" = 1
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM clean.phase5_cd_pre_task_v39 WHERE horizon='T-6h' AND lease_owner='ci-t6-worker-01'")" = 1
+          echo P5_CD_V0092_T24_T6_SIGNED_PACKET_HORIZON_ISOLATION_REAL_PG16_PASS
+      - name: Reject duplicate SHA per horizon and validate client offline tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL' > /tmp/v0092_dedupe.out 2>&1
+          WITH t AS (SELECT clock_timestamp()+INTERVAL '90 seconds' AS cutoff)
+          INSERT INTO clean.phase5_cd_pre_task_v39(
+           manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,
+           prediction_cutoff_utc,packet_sha256,source_population_query_id,
+           source_response_sha256,reviewed_source_rights_sha256,
+           source_expires_at_utc)
+          SELECT repeat('c',64),'leg:ci:future:t6:02','T-6h',
+           t.cutoff+INTERVAL '6 hours',t.cutoff,repeat('b',64),
+           'c23e4567-e89b-42d3-a456-426614174013',
+           repeat('d',64),repeat('e',64),
+           clock_timestamp()+INTERVAL '12 hours' FROM t;
+          SQL
+          then
+             echo FAIL_V0092_DUPLICATE_SIGNED_PACKET_ACCEPTED
+             exit 2
+          fi
+          grep -Eqi '(duplicate key|unique constraint|phase5_cd_one_signed_packet_per_horizon_v39)' /tmp/v0092_dedupe.out
+          npx --no-install vitest run             tests/phase5_cd_durable_queue_client_offline_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_github_queued_t24_offline_v39.test.ts
+          echo P5_CD_V0092_SIGNED_CLAIM_AND_OLD_STAGE14_ADAPTER_TESTS_PASS
