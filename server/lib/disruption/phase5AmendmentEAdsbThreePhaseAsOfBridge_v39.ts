@@ -78,7 +78,7 @@ export function assessP5EAdsbPriorTailAsOfContext(
  // Check real native-T horizon, separate genuine previous gate-in feature.
  const tail=assessP5ETailAsOfTurnCandidate(req);
  const position=x.priorAdsbPosition;
- let disposition:P5EAdsbSourceDisposition;
+ let disposition:P5EAdsbSourceDisposition="NO_TRACK_OR_MATCH";
  if(!position){
   disposition="NO_TRACK_OR_MATCH";
  }else if(!x.licenseAndRetentionReviewed){
