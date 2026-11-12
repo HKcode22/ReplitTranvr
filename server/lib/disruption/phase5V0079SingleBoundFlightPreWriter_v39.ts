@@ -219,7 +219,8 @@ async function assertP5CdV0088RealSameTx(
  * The separate signed-main GH gate must already be met before any SQL.
  */
 function validateP5CdGithubFence(
- f:P5CdV0088RealQueueCiFence|undefined,route:boolean
+ f:P5CdV0088RealQueueCiFence|undefined,route:boolean,
+ horizon:PreHorizon
 ){
  if(f===undefined){
   if(route)hold("GH_E_ROUTE_REQUIRES_EXPLICIT_REAL_CD_LEASE");
@@ -238,7 +239,8 @@ function validateP5CdGithubFence(
     !SHA.test(f.packetSha256??""))
   hold("UNREVIEWED_GITHUB_C_D_LEASE_IDENTITY");
  if(route)requireP5CdGithubEFeatures(process.env);
- else requireP5CdGithubPreRelease(process.env);
+ else requireP5CdGithubPreRelease(process.env,
+   horizon==="T-24h"?{allowReviewedT24Witness:true}:undefined);
 }
 
 export interface P5Stage14SingleFlightPreResult{
@@ -495,7 +497,7 @@ export async function persistP5V0079SingleBoundFlightPre(
      options.amendmentENativeRouteBoundCi))
   hold("CI_AND_GITHUB_QUEUE_FENCE_MUST_BE_DISJOINT");
  validateP5CdGithubFence(options?.realV0088QueueFenceGh,
-  options?.amendmentENativeRouteBoundGh===true);
+  options?.amendmentENativeRouteBoundGh===true,p.horizon);
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
