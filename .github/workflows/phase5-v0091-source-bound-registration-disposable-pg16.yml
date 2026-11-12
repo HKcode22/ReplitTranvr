@@ -1,0 +1,128 @@
+name: Phase5 V0091 genuine-source-to-V0087 scoped enrollment PG16 (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
+      - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
+      - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
+      - 'tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts'
+permissions:
+  contents: read
+jobs:
+  actual-source-bound-v0091-registration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GITHUB_ACTIONS: 'true'
+      V39_P5_CD_V0088_STAGE14_CI: '1'
+      V39_P5_CD_V0089_GUARD_CI: '1'
+      V39_P5_CD_V0091_REGISTRATION_CI: '1'
+      V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
+      V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
+      V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_CD_CI_PASSWORD: 'ci-only'
+      P5_CD_CI_WRITER_URL: 'postgresql://phase5_fids_pre_writer_cd_ciuser01:ci-only@localhost:5432/neondb?sslmode=disable'
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Enforce local-only isolated PG16 and no paid provider
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$P5_V39_PRE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+      - name: Reuse ORIGINAL V0079 and LIVE V0087/88/89 schemas in isolated postgres
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_fids_pre_writer_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_fids_prepare_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_fids_source_prod_20261107 NOLOGIN NOINHERIT;
+          CREATE ROLE phase5_p30_prepare_login_20261107 LOGIN PASSWORD 'ci-only'
+           NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+          GRANT phase5_fids_prepare_prod_20261107
+            TO phase5_p30_prepare_login_20261107
+            WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+          GRANT USAGE ON SCHEMA clean TO phase5_fids_prepare_prod_20261107;
+          SQL
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_cd_ci_owner LOGIN PASSWORD 'ci-only'
+           CREATEROLE NOINHERIT NOSUPERUSER NOCREATEDB NOBYPASSRLS;
+          ALTER SCHEMA clean OWNER TO phase5_cd_ci_owner;
+          ALTER TABLE clean.phase5_cd_pre_task_v39 OWNER TO phase5_cd_ci_owner;
+          GRANT SELECT ON clean.phase5_fids_allowed_query_v39,
+           clean.phase5_fids_physical_attempt_v39,
+           clean.phase5_fids_original_binding_v39,
+           clean.fids_query_response,clean.flight_population,
+           clean.flight_snapshots TO phase5_cd_ci_owner WITH GRANT OPTION;
+          GRANT USAGE ON SEQUENCE clean.phase5_cd_pre_task_v39_task_id_seq
+           TO phase5_cd_ci_owner WITH GRANT OPTION;
+          SQL
+          OWNER_URL='postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable'
+          node --check scripts/v39_phase5_cd_v0091_owner_once.mjs
+          umask 077
+          TMP="$(mktemp -d -t p5-cd-v0091-XXXXXX)"
+          SQL="V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql"
+          cp "migrations/staged/$SQL" "$TMP/$SQL"
+          export P5_CD_V0091_FILE="$TMP/$SQL"
+          export P5_CD_V0091_SHA="$(git hash-object "$TMP/$SQL")"
+          export P5_CD_V0091_OWNER_APPROVAL="INSTALL_ONLY_V0091_SOURCE_BOUND_PREPARE_FUNCTION_NO_PROVIDER"
+          export P5_CD_V0091_DISPOSABLE_CI="1"
+          export DATABASE_URL="$OWNER_URL"
+          node scripts/v39_phase5_cd_v0091_owner_once.mjs > "$TMP/first.json"
+          grep -Fq '"status": "V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT"' "$TMP/first.json"
+          if node scripts/v39_phase5_cd_v0091_owner_once.mjs > "$TMP/repeat.txt" 2>&1; then
+            echo FAIL_V0091_BLIND_SECOND_COMMISSION_ALLOWED
+            exit 2
+          fi
+          grep -Fq 'HOLD_P5_CD_V0091_REAL_PG16_OWNER_OLD_QUEUE_OR_NEW_FUNCTION_ALREADY_INSTALLED' "$TMP/repeat.txt"
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure")" = phase5_cd_source_registration_owner_v39
+          test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
+          echo P5_V0091_REAL_NON_SUPERUSER_OWNER_INSTALLER_ONCE_AND_REPEAT_HOLD_PASS
+      - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run             tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts
+          echo P5_V0091_REAL_ORIGINAL_SOURCE_TO_V0087_QUEUE_TO_EXISTING_STAGE14_PASS

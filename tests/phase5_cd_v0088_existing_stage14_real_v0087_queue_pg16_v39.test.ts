@@ -245,15 +245,80 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   }
   // Actual queue migration is already installed by the disposable CI job.
   // Source packet/rights hashes are SYNTHETIC and do not certify a license.
-  await admin.query(
-   "INSERT INTO clean.phase5_cd_pre_task_v39("+
-   "manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,"+
-   "prediction_cutoff_utc,packet_sha256,source_population_query_id,"+
-   "source_response_sha256,reviewed_source_rights_sha256,source_expires_at_utc)"+
-   " VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp()+INTERVAL '1 hour')",
-   [manifest,permit.flightInstanceId,permit.horizon,permit.selectedTNativeUtc,
-    new Date(cutoffMs),createHash("sha256").update("v0088-ci-packet-001").digest("hex"),
-    qid,response,rights]);
+  if(process.env.V39_P5_CD_V0091_REGISTRATION_CI==="1"){
+   const PREP="phase5_fids_prepare_prod_20261107";
+   const sig="clean.phase5_cd_register_source_flight_v39("+
+    "text,text,text,text,timestamptz,text,text,text,text,integer)";
+   const prep=new Pool({connectionString:
+    "postgresql://phase5_p30_prepare_login_20261107:ci-only"+
+    "@localhost:5432/neondb?sslmode=disable",max:1});
+   try{
+    const before=(await admin.query(
+     "SELECT count(*)::integer n FROM clean.phase5_cd_pre_task_v39")).rows[0];
+    expect(before.n).toBe(0);
+    expect((await admin.query(
+     "SELECT has_function_privilege($1,$2,'EXECUTE') AS permitted,"+
+     "has_table_privilege($1,'clean.phase5_cd_pre_task_v39','INSERT') AS direct",
+     [PREP,sig])).rows[0]).toEqual({permitted:true,direct:false});
+    const client=await prep.connect();
+    try{
+     await client.query("BEGIN");
+     await client.query("SET LOCAL ROLE "+PREP);
+     const actor=(await client.query("SELECT current_user AS role")).rows[0];
+     expect(actor.role).toBe(PREP);
+     // Original source expiry is read exclusively from V0079 inside
+     // registration SQL; the untrusted packet may NOT supply an expiry.
+     const args=[manifest,query,permit.flightInstanceId,permit.horizon,
+      permit.selectedTNativeUtc,
+      createHash("sha256").update("v0088-ci-packet-001").digest("hex"),
+      qid,response,rights,3600];
+     // PREPARE has only EXECUTE on scoped registration; direct queue
+     // INSERT is forbidden before any signed packet is considered.
+     await expect(client.query(
+      "INSERT INTO clean.phase5_cd_pre_task_v39 DEFAULT VALUES"))
+      .rejects.toMatchObject({code:"42501"});
+     // Use parameterized arguments to the fixed reviewed function.
+     const call="SELECT clean.phase5_cd_register_source_flight_v39("+
+       "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) "+
+       "AS task";
+     await client.query("ROLLBACK");
+     await client.query("BEGIN");
+     await client.query("SET LOCAL ROLE "+PREP);
+     await expect(client.query(call,[
+      ...args.slice(0,4),
+      new Date(Date.parse(permit.selectedTNativeUtc)+900_000).toISOString(),
+      ...args.slice(5)])).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG");
+     await client.query("ROLLBACK");
+     await client.query("BEGIN");
+     await client.query("SET LOCAL ROLE "+PREP);
+     const inserted=(await client.query(call,args)).rows[0];
+     expect(String(inserted.task)).toMatch(/^[1-9][0-9]*$/);
+     await client.query("COMMIT");
+     const final=(await admin.query(
+      "SELECT task_id::text AS id,flight_instance_id AS flight,state,"+
+      "packet_sha256 AS packet FROM clean.phase5_cd_pre_task_v39")).rows[0];
+     expect(final).toMatchObject({
+      id:String(inserted.task),flight:permit.flightInstanceId,state:"READY",
+      packet:args[5]
+     });
+     await client.query("BEGIN");
+     await client.query("SET LOCAL ROLE "+PREP);
+     await expect(client.query(call,args)).rejects.toMatchObject({code:"23505"});
+     await client.query("ROLLBACK");
+     console.log("P5_V0091_REAL_V0079_ORIGINAL_TO_V0087_QUEUE_TO_STAGE14_PREPARE_ROLE_PASS");
+    }finally{client.release();}
+   }finally{await prep.end();}
+  }else{
+   await admin.query(
+    "INSERT INTO clean.phase5_cd_pre_task_v39("+
+    "manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,"+
+    "prediction_cutoff_utc,packet_sha256,source_population_query_id,"+
+    "source_response_sha256,reviewed_source_rights_sha256,source_expires_at_utc)"+
+    " VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp()+INTERVAL '1 hour')",
+    [manifest,permit.flightInstanceId,permit.horizon,permit.selectedTNativeUtc,
+     new Date(cutoffMs),createHash("sha256").update("v0088-ci-packet-001").digest("hex"),
+     qid,response,rights]);
+  }
  });
  afterAll(async()=>{
   if(writer)await writer.end();
