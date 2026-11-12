@@ -92,7 +92,7 @@ export async function waitP5CdGithubSignedDueWindow(
  requireP5CdGithubPreRelease(env);
  if(!db||typeof db.query!=="function"||typeof sleep!=="function")
   stop("MISSING_RESTRICTED_PRE_DB_CLOCK_READER");
- let first=NaN,polls=0,waitedMs=0;
+ let first=NaN,last=NaN,polls=0,waitedMs=0;
  // 8-minute maximum; little 5-second sleeps avoid monopolizing runners.
  for(let i=0;i<=105;i++){
   requireP5CdGithubPreRelease(env);
@@ -105,6 +105,8 @@ export async function waitP5CdGithubSignedDueWindow(
     row.now_utc.toISOString():row?.now_utc;
   const ms=exactMs(now);
   polls++;
+  if(Number.isFinite(last)&&ms<last)stop("DATABASE_CLOCK_MOVED_BACKWARD");
+  last=ms;
   if(!Number.isFinite(first))first=ms;
   if(ms-first>LOOKAHEAD_MS)
    return{schema:"v39.phase5.gh-cd-dbclock-lookahead-no-provider.v1",
