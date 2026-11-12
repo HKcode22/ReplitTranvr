@@ -85,7 +85,7 @@ export async function auditP5CdV0091OneFlightReadOnly(
    snapshotReceiptPresent:!!(matching&&r.verified_snapshot_id),
    observedDatabaseUtc:m.observed_utc instanceof Date?
     m.observed_utc.toISOString():m.observed_utc,
-   noRetryAuthorizedByThisReadback:true,
+   automaticRegistrationRetryAuthorizedByAudit:false,
    providerCalls:0,paidProviderCalls:0,databaseWrites:0,
    phase5FreezePassed:false,phase6PaidGo:false
   };
