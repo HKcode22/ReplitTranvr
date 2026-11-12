@@ -37,7 +37,9 @@ export function requireP5CdGithubPrepareAdmission(
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !SHA.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA||
+    !SHA.test(env.P5_CD_GH_PRE_APPROVED_CODE_SHA??"")||
+    env.P5_CD_GH_CODE_LINEAGE_VERIFIED!==env.GITHUB_SHA+":"+
+      env.P5_CD_GH_PRE_APPROVED_CODE_SHA||
     env.P5_CD_GH_PREPARE_CONFIRM!==ACK||
     env.P5_CD_GH_PREPARE_ARMED!=="1"||
     env.P5_CD_GH_PRE_ARMED!=="1"||
@@ -67,7 +69,7 @@ export function requireP5CdGithubPrepareAdmission(
   gate:{
    schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
    releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
-   approvedCodeSha:env.GITHUB_SHA!,
+   approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
    rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
    rightsSha256:env.V39_P5_RIGHTS_SHA256!,
    manifestSha256:env.V39_P5_MANIFEST_SHA256!,
