@@ -63,7 +63,7 @@ suite("Phase5 V0082 frozen 31-day seven-category budget input (PG16)",()=>{
    "unsettled_burst_margin_credits,protected_alert_floor,enabled,"+
    "predecessor_evidence_ids) "+
    "VALUES ('CI-V0082-SEVEN-CATEGORY',$1,$2,$3,$4,'v39',"+
-   "'2027-01-04'::date,1900,10,1000,true,"+
+   "'2027-01-04'::date,1900,10,1000,false,"+
    "'[\"synthetic-audit-only-no-provider\"]'::jsonb)",
    [c.manifestSha256,c.calendarSha256,c.configSha256,"f".repeat(40)]
   );
@@ -173,6 +173,44 @@ suite("Phase5 V0082 frozen 31-day seven-category budget input (PG16)",()=>{
   }finally{
    await admin.query(
     "REVOKE UPDATE ON clean.phase5_fids_cycle_budget_v39 FROM "+ROLE
+   );
+  }
+ });
+ it("refuses a paid-enabled Phase6 authorization before input budget freeze",async()=>{
+  // A later real Phase6 GO is separate from this prerequisite materialization.
+  // The budget writer must not use the enabled launch switch as admission.
+  await admin.query(
+   "UPDATE clean.adb_phase6_authorization SET enabled=true "+
+   "WHERE singleton_key=true"
+  );
+  try{
+   await expect(commitP5V0082FrozenSevenRestInput(owner,review))
+    .rejects.toThrow("NO_MATCHING_INACTIVE_PRELAUNCH_AUTHORIZATION");
+   expect(await state()).toEqual({
+    release:0,caps:0,budget:0,source:0,attempt:0
+   });
+  }finally{
+   await admin.query(
+    "UPDATE clean.adb_phase6_authorization SET enabled=false "+
+    "WHERE singleton_key=true"
+   );
+  }
+ });
+ it("refuses an unfrozen or revoked inactive authorization before inserting budgets",async()=>{
+  await admin.query(
+   "UPDATE clean.adb_phase6_authorization SET revoked_at_utc=clock_timestamp() "+
+   "WHERE singleton_key=true"
+  );
+  try{
+   await expect(commitP5V0082FrozenSevenRestInput(owner,review))
+    .rejects.toThrow("NO_MATCHING_INACTIVE_PRELAUNCH_AUTHORIZATION");
+   expect(await state()).toEqual({
+    release:0,caps:0,budget:0,source:0,attempt:0
+   });
+  }finally{
+   await admin.query(
+    "UPDATE clean.adb_phase6_authorization SET revoked_at_utc=NULL "+
+    "WHERE singleton_key=true"
    );
   }
  });
