@@ -1,0 +1,44 @@
+name: Phase5 V0082 Unknown-Airport UTC Cost Upper Bound (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs'
+      - 'tests/phase5_v0082_unknown_airports_cost_only_dynamic_cap_v39.test.ts'
+      - '.github/workflows/phase5-v0082-cost-only-seven-utc-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs'
+      - 'tests/phase5_v0082_unknown_airports_cost_only_dynamic_cap_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  DATABASE_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  seven-category-cost-only-reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No provider or database; cost-only planner and strict cap reconciliation
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${DATABASE_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = 0
+          npx vitest run tests/phase5_v0082_unknown_airports_cost_only_dynamic_cap_v39.test.ts
+          npm run v39:typecheck
+          echo 'P5_SEVEN_UTC_COST_ONLY_DRAFT_PASS NO_DB NO_PROVIDER NO_PHASE6_GO'
