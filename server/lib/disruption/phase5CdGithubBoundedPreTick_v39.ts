@@ -152,7 +152,8 @@ export interface P5CdTickRecord{
 }
 export interface P5CdTickReport{
  schema:"v39.phase5.cd-gh-bounded-pre-tick.v1";
- status:"COMPLETED_WITH_PROSPECTIVE_EVIDENCE_OR_RECORDED_MISSINGNESS";
+ status:"COMPLETED_WITH_PROSPECTIVE_EVIDENCE_OR_RECORDED_MISSINGNESS"|
+        "HOLD_UNSIGNED_OR_UNCERTAIN_SNAPSHOT_NO_REPLAY";
  claimed:number;verified:number;
  reaped:Array<{taskId:string;state:string}>;
  results:P5CdTickRecord[];
@@ -274,7 +275,10 @@ export async function runP5CdGithubPreTick(
  }
  return{
   schema:"v39.phase5.cd-gh-bounded-pre-tick.v1",
-  status:"COMPLETED_WITH_PROSPECTIVE_EVIDENCE_OR_RECORDED_MISSINGNESS",
+  status:results.some(x=>x.result!=="VERIFIED_ON_TIME")||
+   reap.some(x=>x.state==="QUARANTINED")?
+   "HOLD_UNSIGNED_OR_UNCERTAIN_SNAPSHOT_NO_REPLAY":
+   "COMPLETED_WITH_PROSPECTIVE_EVIDENCE_OR_RECORDED_MISSINGNESS",
   claimed:tasks.length,
   verified:results.filter(x=>x.result==="VERIFIED_ON_TIME").length,
   reaped:reap.map(x=>({taskId:x.taskId,state:x.state})),
