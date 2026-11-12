@@ -38,6 +38,9 @@ export interface P5CdClaimedTask{
  packetSha256:string;
  sourcePopulationQueryId:string;
  sourceResponseSha256:string;
+ /** Immutable rights/source expiry from the REAL V0087 claimed row. */
+ reviewedSourceRightsSha256:string;
+ sourceExpiresAtUtc:string;
  state:"CLAIMED";
  leaseOwner:string;
  leaseGeneration:string;
@@ -81,6 +84,7 @@ function taskFromDb(r:any):P5CdClaimedTask{
   !Object.hasOwn(P5_CD_V0087_OFFSETS_MS,r.horizon)||
   !exactHash(r.manifest_sha256)||!exactHash(r.packet_sha256)||
   !exactHash(r.source_response_sha256)||
+  !exactHash(r.reviewed_source_rights_sha256)||
   typeof r.source_population_query_id!=="string"||
   typeof r.lease_owner!=="string"||!WORKER.test(r.lease_owner))
    reject("CLAIMED_DB_ROW_INVALID");
@@ -94,7 +98,9 @@ function taskFromDb(r:any):P5CdClaimedTask{
   horizon:r.horizon,selectedNativeTUtc:native,predictionCutoffUtc:cutoff,
   packetSha256:r.packet_sha256,
   sourcePopulationQueryId:r.source_population_query_id,
-  sourceResponseSha256:r.source_response_sha256,state:"CLAIMED",
+  sourceResponseSha256:r.source_response_sha256,
+  reviewedSourceRightsSha256:r.reviewed_source_rights_sha256,
+  sourceExpiresAtUtc:utc(r.source_expires_at_utc),state:"CLAIMED",
   leaseOwner:r.lease_owner,
   leaseGeneration:checkedId(String(r.lease_generation)),
   leaseUntilUtc:utc(r.lease_until_utc)

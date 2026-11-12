@@ -18,6 +18,8 @@ import {verifyP5Stage24WitnessedFrozenT,
  type P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {selectP5EStage14BoundRouteFeatures}
  from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
+import {requireP5CdGithubPreRelease,requireP5CdGithubEFeatures}
+ from "./phase5CdGithubPreReleaseGate_v39";
 import {decideP5LaterPreEvidencePath,
  type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 const SHA=/^[0-9a-f]{64}$/;
@@ -213,6 +215,32 @@ async function assertP5CdV0088RealSameTx(
   hold("V0088_REAL_QUEUE_SAME_TX_PROOF_NOT_VERIFIED");
 }
 
+/** The ACTUAL LIVE V0087/V0088 admission. Not a new writer or queue.
+ * The separate signed-main GH gate must already be met before any SQL.
+ */
+function validateP5CdGithubFence(
+ f:P5CdV0088RealQueueCiFence|undefined,route:boolean
+){
+ if(f===undefined){
+  if(route)hold("GH_E_ROUTE_REQUIRES_EXPLICIT_REAL_CD_LEASE");
+  return;
+ }
+ if(process.env.V39_P5_CD_V0088_STAGE14_CI==="1"||
+    process.env.V39_P5_CD_STAGE14_FENCE_DISPOSABLE==="1"||
+    process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1")
+  hold("PRODUCTION_C_D_NOT_MIXED_WITH_DISPOSABLE_CI");
+ if(!/^[1-9][0-9]{0,17}$/.test(f.taskId??"")||
+    typeof f.owner!=="string"||
+    !/^[a-zA-Z0-9_.:-]{5,96}$/.test(f.owner)||
+    !(typeof f.generation==="string"?
+      /^[1-9][0-9]{0,18}$/.test(f.generation):
+      Number.isSafeInteger(f.generation)&&f.generation>=1)||
+    !SHA.test(f.packetSha256??""))
+  hold("UNREVIEWED_GITHUB_C_D_LEASE_IDENTITY");
+ if(route)requireP5CdGithubEFeatures(process.env);
+ else requireP5CdGithubPreRelease(process.env);
+}
+
 export interface P5Stage14SingleFlightPreResult{
  schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1";
  status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE";
@@ -355,6 +383,18 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit,
     hold("NATIVE_T_SOURCE_SEMANTICS_OR_FROZEN_TRANSFORM_UNVERIFIED");
  return native;
 }
+/** Reuses the ORIGINAL Stage14 permit rules BEFORE a GitHub queue
+ * task is irreversibly marked WRITE_STARTED_UNKNOWN. A DB source
+ * JOIN and genuine rights review still happen in Stage14 itself.
+ */
+export function preflightP5Stage14ReviewedPermitV39(
+ p:P5Stage14SingleFlightPrePermit,
+ independentlyApprovedStandaloneProtocolSha256?:string
+):string{
+ return assertPermit(p,independentlyApprovedStandaloneProtocolSha256)
+  .toISOString();
+}
+
 function exactSource(v:Record<string,unknown>,p:P5Stage14SingleFlightPrePermit,
  cutoff:Date,dbNow:Date,native:Date){
  const eq:Record<string,string|number>={
@@ -441,12 +481,21 @@ export async function persistP5V0079SingleBoundFlightPre(
   independentlyApprovedStandaloneProtocolSha256?:string;
   disposableCdQueueFence?:P5CdDisposableQueueFence;
   realV0088QueueFenceCi?:P5CdV0088RealQueueCiFence;
+  /** Only reviewed GH main, signed roster, STOP-clear, separate Phase5/6 GO. */
+  realV0088QueueFenceGh?:P5CdV0088RealQueueCiFence;
   amendmentENativeRouteBoundCi?:true;
+  amendmentENativeRouteBoundGh?:true;
  }
 ):Promise<P5Stage14SingleFlightPreResult>{
  assertP5CdDisposableFenceArguments(options?.disposableCdQueueFence);
  assertP5CdV0088CiFence(options?.realV0088QueueFenceCi);
  assertP5ENativeRouteCi(options?.amendmentENativeRouteBoundCi);
+ if(options?.realV0088QueueFenceGh &&
+    (options.realV0088QueueFenceCi||options.disposableCdQueueFence||
+     options.amendmentENativeRouteBoundCi))
+  hold("CI_AND_GITHUB_QUEUE_FENCE_MUST_BE_DISJOINT");
+ validateP5CdGithubFence(options?.realV0088QueueFenceGh,
+  options?.amendmentENativeRouteBoundGh===true);
  const native=assertPermit(p,options?.independentlyApprovedStandaloneProtocolSha256);
  const laterEvidence=decideP5LaterPreEvidencePath(
   p,options?.independentlyApprovedStandaloneProtocolSha256);
@@ -495,6 +544,8 @@ export async function persistP5V0079SingleBoundFlightPre(
    await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
   if(options?.realV0088QueueFenceCi)
    await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceCi,cutoff);
+  if(options?.realV0088QueueFenceGh)
+   await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceGh,cutoff);
   const sources=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,
    [p.manifestSha256,p.queryDigestSha256])).rows as Record<string,unknown>[];
   if(sources.length!==1)hold("NO_UNIQUE_BOUND_PROVIDER_SOURCE");
@@ -544,7 +595,8 @@ export async function persistP5V0079SingleBoundFlightPre(
        native.getTime())
      hold("FIRST_NATIVE_T_MUST_MATCH_QUALIFIED_SOURCE_SCHEDULE");
   }
-  const eRoute=options?.amendmentENativeRouteBoundCi===true
+  const eRoute=(options?.amendmentENativeRouteBoundCi===true||
+   options?.amendmentENativeRouteBoundGh===true)
    ? selectP5EStage14BoundRouteFeatures({
       flightInstanceId:p.flightInstanceId,horizon:p.horizon,
       selectedNativeTUtc:p.selectedTNativeUtc,
@@ -595,6 +647,8 @@ export async function persistP5V0079SingleBoundFlightPre(
    await assertP5CdSameTxGuard(c,p,options.disposableCdQueueFence,cutoff);
   if(options?.realV0088QueueFenceCi)
    await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceCi,cutoff);
+  if(options?.realV0088QueueFenceGh)
+   await assertP5CdV0088RealSameTx(c,p,options.realV0088QueueFenceGh,cutoff);
   commitAttempted=true;
   await c.query("COMMIT");begun=false;commitAcknowledged=true;
   // Before-COMMIT clock is NOT durable-commit evidence. Confirm the

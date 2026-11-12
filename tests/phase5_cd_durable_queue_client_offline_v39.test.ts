@@ -43,7 +43,10 @@ describe("Phase5 V0087 thin GitHub-worker queue client (NO provider/DB)",()=>{
    selected_native_t_utc:new Date(t),
    prediction_cutoff_utc:new Date("2035-11-25T06:00:00.000Z"),
    packet_sha256:h("b"),source_population_query_id:data.sourcePopulationQueryId,
-   source_response_sha256:h("c"),state:"CLAIMED",lease_owner:"ci-worker-23",
+   source_response_sha256:h("c"),
+   reviewed_source_rights_sha256:h("d"),
+   source_expires_at_utc:new Date("2035-11-26T12:00:00.000Z"),
+   state:"CLAIMED",lease_owner:"ci-worker-23",
    lease_generation:"3",lease_until_utc:new Date("2035-11-25T05:59:00.000Z")
   };
   const db={query:async()=>({rows:[row]})};
@@ -51,6 +54,8 @@ describe("Phase5 V0087 thin GitHub-worker queue client (NO provider/DB)",()=>{
   expect(tasks).toHaveLength(1);
   expect(tasks[0].leaseGeneration).toBe("3");
   expect(tasks[0].predictionCutoffUtc).toBe("2035-11-25T06:00:00.000Z");
+  expect(tasks[0].reviewedSourceRightsSha256).toBe(h("d"));
+  expect(tasks[0].sourceExpiresAtUtc).toBe("2035-11-26T12:00:00.000Z");
   await expect(claimP5CdDueTasksV39({
    query:async()=>({rows:[{
     ...row,selected_native_t_utc:new Date("2035-11-25T12:15:00.000Z")
@@ -65,7 +70,10 @@ describe("Phase5 V0087 thin GitHub-worker queue client (NO provider/DB)",()=>{
    horizon:"T-6h" as const,selectedNativeTUtc:t,
    predictionCutoffUtc:"2035-11-25T06:00:00.000Z",
    packetSha256:h("b"),sourcePopulationQueryId:data.sourcePopulationQueryId,
-   sourceResponseSha256:h("c"),state:"CLAIMED" as const,
+   sourceResponseSha256:h("c"),
+   reviewedSourceRightsSha256:h("d"),
+   sourceExpiresAtUtc:"2035-11-26T12:00:00.000Z",
+   state:"CLAIMED" as const,
    leaseOwner:"ci-worker-23",leaseGeneration:"2",leaseUntilUtc:"2035-11-25T05:59:00.000Z"
   };
   expect(await markP5CdStage14WriteStartedV39(db,task)).toBe(true);

@@ -1,0 +1,40 @@
+# Phase 5 — C+D bounded GitHub PRE controller / live V0090 handoff
+
+**Date:** November 11, 2026 Pacific. **Status:** engineering source ready for CI review, NOT automatic release, NOT Phase5 scientific FREEZE.
+
+## Confirmed actual owner production state
+
+The owner supplied Replit Shell JSON with status **`V0090_EXISTING_PRE_ONLY_QUEUE_FUNCTIONS_COMMISSIONED_NO_PAID`**. It verified the existing `neondb` queue contains **0 rows**, role `neondb_owner`, `phase5_cd_queue_function_owner_v39` owns the four existing V0087 claim/start/ack/reap functions, `phase5_fids_pre_writer_prod_20261107` can call them but cannot directly UPDATE the task table, original snapshot triggers unchanged, no source flight writes or provider calls, and neither PRE worker nor Phase6 GO activated. Its reviewed V0090 migration blob is `7e835903ad7cfd4cbaf595688d6d94cfc738b300`. Prior V0087+V0088+V0089 LIVE installs are already completed. **DO NOT RUN ANY OF THOSE FOUR INSTALLERS AGAIN.**
+
+## New implementation — what actually runs
+
+- **`server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts`:** shared fail-closed GitHub main-only, exact code SHA, approved frozen roster SHA and rights/manifest, STOP clear, Phase5 freeze and independent Phase6 arm, exact Stage30 PRE-only URL and no provider/runtime/source credentials. The default unconfigured state is **STOP**.
+- **`server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts`:** accepts the **existing** frozen packet formats and a reviewed per-day roster that pins exact packet bytes. Compares immutable task SHA, flight ID, horizon, first native T, source population UUID, FIDS original response SHA and source-rights SHA. Does **not** register new tasks. Bounded 2-claim/120s tick calls V0087 `reap` and `claim`, marks `WRITE_STARTED_UNKNOWN` only for a matching packet, calls the **existing original Stage14 writer** with the V0088 in-transaction guard, performs a new restricted independent post-COMMIT SQL readback, then invokes V0087 ACK. If Stage14/ACK/readback is uncertain it leaves UNKNOWN for quarantine instead of replay. A SHA-derived procedural receipt is **not** an independent source-use/license or physical-flight-outcome certificate.
+- **`server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts`:** a separate **GH-reviewed production gate** permits the exact existing V0088 queue check in the original Stage14 transaction; the earlier disposable CI path is unchanged. Amendment E's already-tested actual FIDS origin/destination as-of features are still a *separate opt-in* GH source-feature release. No second PRE writer or model.
+- **`server/lib/disruption/phase5CdDurableQueueClient_v39.ts`:** strengthened existing claimed task type to carry the **real immutable rights-review hash and source expiry** from the database; no fake rights copied from packets.
+- **`scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts`:** validates all frozen files **before opening a DB connection**; uses Stage28 SET-only PRE-login pool and no provider calls.
+- **`.github/workflows/phase5-cd-github-bounded-pre-tick.yml`:** scheduled every five minutes **but skipped until owner explicitly sets** repository variable `P5_CD_GH_PRE_SCHEDULE_ENABLED=1`. Even after that, signed code/roster + scientific source/freezing/paid authorization and STOP-clear secrets must all match. PR CI uses synthetic packet data, NO DB and no provider secrets.
+
+### Scientific boundaries and current limitations
+
+1. **This first controller handles only witnessed T−6h and T−90m.** The existing T−24h **V0081 second independent witness** is indispensable; a T−24h packet will fail closed here until that chain is wired into queue Stage14 and separately tested. The standalone-later-without-T24 protocol likewise requires its own independent approval and is refused by this controller.
+2. No future source-bound V0087 flight task has been enrolled. This is intentional: the PRE-only role must not get direct queue INSERT. A separate, independently reviewed authentic source enrollment controller needs to check live V0079 original, first native T, rights and cutoffs. Empty queue cannot produce PRE.
+3. GitHub five-minute cron is **not** a precise clock. Existing Stage14 has a three-minute due window; delayed cron runs may produce missing PRE rather than an on-time capture. Missingness is a measurable experimental limitation; never backfill, silently shift a cutoff, or label retrospectively produced PRE as prospective. Next scheduling work should reuse real signed early-draw/query and due calendar; consider bounded targeted dispatch or an evidence-backed wider *earlier issuance* tolerance while preserving actual timestamp as a modeled feature.
+4. Exact source Content use/retention and true physical gate-out label must be independently approved before paid Phase6 GO. AeroDataBox free metadata currently shows 60K units, but the project's independent 50K ceiling remains; balance ≠ Content/ML rights. Existing free ADSB.lol gives an airborne runway-takeoff **proxy**, not actual gate-out.
+5. The pipeline has **not** been exercised on real provider originals; no claimed scientific freeze, calibration, T6 delay-prediction accuracy or paid activation.
+
+### Immediate next engineering priority
+
+Add a **real source-to-V0087 enrollment** function with a separate narrowly scoped owner (not the PRE worker) and exact original/normalized/rights checks. Add the **T−24h + independent V0081 witness** to the same queue-guarded autonomous path using the existing Stage17 writer. Test full controller against disposable PG16 with source-bound synthetic flight, lease crash, ACK, STOP and quarantine. Reconcile GitHub scheduled jitter with the actual flight cutoff, then authorize a SMALL genuine prospective pilot when the scientific/release prerequisites are satisfied.
+
+**Planning targets:** November 13 checkpoint and November 20 outside Phase5-readiness goal, not a guarantee or substitute for audited source rights. **Live V0087–V0090 complete; GitHub PRE controller not enabled; Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.**
+
+
+## Break the Phase5/Phase6 circular GO dependency
+
+The previous GitHub PRE owners required `V39_PHASE5_FREEZE_SIGNED=1` **and** `V39_PHASE6_PROCESS_ARMED=1` even to gather a limited Phase5 real PRE canary. That is circular if the Phase5 independent final freeze requires exactly that prospective PRE evidence. The new gate explicitly distinguishes two mutually exclusive modes:
+
+- `P5_CD_GH_PRE_MODE=PHASE5_CANARY`: separately reviewed `P5_CD_GH_PHASE5_CANARY_APPROVED=1`, signed original/roster/rights, source-use approval, STOP-clear, **`V39_PHASE6_PROCESS_ARMED=0`**, and no `V39_PHASE5_FREEZE_SIGNED=1`. It may only write bounded **non-provider** already-source-bound PRE evidence, never make FIDS paid HTTP or independently mark Phase5 frozen.
+- `P5_CD_GH_PRE_MODE=PHASE6_APPROVED`: requires separate Phase5 scientific freeze and `V39_PHASE6_PROCESS_ARMED=1`; refuses reused canary approval. Both modes still require exact pinned `GITHUB_SHA`, mandatory STOP, old signed packet and Stage30 PRE role.
+
+Neither mode is automatically armed by merging this PR. The repository schedule enable variable `P5_CD_GH_PRE_SCHEDULE_ENABLED` still defaults unset/off; any owner-reviewed activation requires genuine usable original source and V0087 tasks. **The owner has not authorized a scientific freeze or current Phase6 paid GO just by commissioning V0090.** This canary code removes the circular release-blocker without bypassing the original as-of/retention and budget controls.

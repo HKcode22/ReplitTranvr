@@ -1,0 +1,139 @@
+name: Phase5 C+D signed source-bound PRE tick (STOP default, no provider)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-cd-github-bounded-pre-tick.yml'
+      - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
+      - 'server/lib/disruption/phase5CdDurableQueueClient_v39.ts'
+      - 'scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts'
+      - 'tests/phase5_cd_github_pre_release_gate_v39.test.ts'
+      - 'tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-cd-bounded-pre-main
+  cancel-in-progress: false
+jobs:
+  test-offline-release-and-bound-tick:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P5_CD_GH_PRE_STOP: '1'
+      DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove signed roster, STOP and bounded claim state machine without DB/provider
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts
+          echo 'P5_CD_GH_PRE_TICK_OFFLINE_NO_DB_NO_PROVIDER_STOP_PASS'
+  bounded-reviewed-real-pre:
+    # OFF unless owner separately sets repo variable to '1'. Other
+    # signed code/roster/rights/freeze/Phase6 GO secrets STILL required.
+    # This cron is best-effort: GitHub may delay 5-minute schedules and
+    # a missed Stage14 cutoff is CENSORED, never backfilled.
+    if: >-
+      ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && github.ref == 'refs/heads/main'
+          && vars.P5_CD_GH_PRE_SCHEDULE_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_PRE_EXECUTE: '1'
+      P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      P5_CD_GH_PRE_ROSTER_PATH: ${{ vars.P5_CD_GH_ROSTER_PATH }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
+      P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: STOP gate before dependencies and before any database connection
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          case "$P5_CD_GH_PRE_MODE" in
+            PHASE5_CANARY)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 0
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              ;;
+            PHASE6_APPROVED)
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              ;;
+            *)
+              echo HOLD_CD_GH_NO_EXPLICIT_VALID_PHASE5_CANARY_OR_PHASE6_MODE
+              exit 2
+              ;;
+          esac
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          test -n "$P5_V39_PRE_DATABASE_URL"
+          [[ "$P5_CD_GH_PRE_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          test -f "$P5_CD_GH_PRE_ROSTER_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One signed bounded lease tick — original Stage14 and no paid provider
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts
+          echo 'P5_CD_GH_ONE_BOUNDED_PRE_TICK_END_NO_PAID_PROVIDER'
