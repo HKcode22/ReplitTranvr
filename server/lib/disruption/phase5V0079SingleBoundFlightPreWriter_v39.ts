@@ -383,6 +383,18 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit,
     hold("NATIVE_T_SOURCE_SEMANTICS_OR_FROZEN_TRANSFORM_UNVERIFIED");
  return native;
 }
+/** Reuses the ORIGINAL Stage14 permit rules BEFORE a GitHub queue
+ * task is irreversibly marked WRITE_STARTED_UNKNOWN. A DB source
+ * JOIN and genuine rights review still happen in Stage14 itself.
+ */
+export function preflightP5Stage14ReviewedPermitV39(
+ p:P5Stage14SingleFlightPrePermit,
+ independentlyApprovedStandaloneProtocolSha256?:string
+):string{
+ return assertPermit(p,independentlyApprovedStandaloneProtocolSha256)
+  .toISOString();
+}
+
 function exactSource(v:Record<string,unknown>,p:P5Stage14SingleFlightPrePermit,
  cutoff:Date,dbNow:Date,native:Date){
  const eq:Record<string,string|number>={
