@@ -77,7 +77,7 @@ function fixture(){
      for(let t=part-offset-120000;t<Math.min(part+4*H,end)-offset-120000;t+=120*M)
       dates.add(iso(t).slice(0,10));
  }
- const input={
+ const input:any={
   schema:"v39.phase5.b0062-inert-utc-stage-input.v1",
   manifestSha256:sha("a"),calendarSha256:sha("b"),
   configSha256:sha("c"),frameSha256:sha("d"),codeSha40:"f".repeat(40),
