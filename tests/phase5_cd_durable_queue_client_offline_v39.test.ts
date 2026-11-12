@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {
  enqueueP5CdReviewedTaskV39,claimP5CdDueTasksV39,
+ claimP5CdSignedRosterDueTasksV39,
  markP5CdStage14WriteStartedV39,acknowledgeP5CdStage14PostCommitV39,
  reapP5CdExpiredLeasesOnceV39
 } from "../server/lib/disruption/phase5CdDurableQueueClient_v39";
@@ -61,6 +62,50 @@ describe("Phase5 V0087 thin GitHub-worker queue client (NO provider/DB)",()=>{
     ...row,selected_native_t_utc:new Date("2035-11-25T12:15:00.000Z")
    }]})
   },"ci-worker-23")).rejects.toThrow("DB_ROW_HORIZON_NATIVE_T_CHANGED");
+ });
+ it("V0092 claims only exact reviewed hashes and horizons; rejects unexpected SQL returns",async()=>{
+  const sqls:string[]=[];
+  const row={
+   task_id:"23",manifest_sha256:h("a"),
+   flight_instance_id:"leg:ci:durable:001",horizon:"T-6h",
+   selected_native_t_utc:new Date(t),
+   prediction_cutoff_utc:new Date("2035-11-25T06:00:00.000Z"),
+   packet_sha256:h("b"),source_population_query_id:data.sourcePopulationQueryId,
+   source_response_sha256:h("c"),reviewed_source_rights_sha256:h("d"),
+   source_expires_at_utc:new Date("2035-11-26T12:00:00.000Z"),
+   state:"CLAIMED",lease_owner:"ci-worker-23",
+   lease_generation:"3",lease_until_utc:new Date("2035-11-25T05:59:00.000Z")
+  };
+  const db={query:async(sql:string,args?:unknown[])=>{
+   sqls.push(sql);
+   expect(args?.[0]).toEqual([h("b")]);
+   expect(args?.[1]).toEqual(["T-6h","T-90m"]);
+   expect(sql).toContain("phase5_cd_claim_signed_roster_v39");
+   expect(sql).not.toContain("claim_due_v39");
+   return{rows:[row]};
+  }};
+  const tasks=await claimP5CdSignedRosterDueTasksV39(
+   db,"ci-worker-23",[h("b")],["T-6h","T-90m"],2,30);
+  expect(tasks.map(x=>x.horizon)).toEqual(["T-6h"]);
+  expect(sqls).toHaveLength(1);
+  await expect(claimP5CdSignedRosterDueTasksV39(
+   {query:async()=>({rows:[{...row,horizon:"T-24h",
+    selected_native_t_utc:new Date("2035-11-26T06:00:00.000Z")}]})},
+   "ci-worker-23",[h("b")],["T-6h","T-90m"],2,30
+  )).rejects.toThrow("SIGNED_DB_CLAIM_CONTAINS_UNREVIEWED_FLIGHT_OR_HORIZON");
+  await expect(claimP5CdSignedRosterDueTasksV39(
+   {query:async()=>({rows:[{...row,packet_sha256:h("f")}]})},
+   "ci-worker-23",[h("b")],["T-6h"],2,30
+  )).rejects.toThrow("SIGNED_DB_CLAIM_CONTAINS_UNREVIEWED_FLIGHT_OR_HORIZON");
+  let called=0;
+  const noDb={query:async()=>{called++;return{rows:[]};}};
+  await expect(claimP5CdSignedRosterDueTasksV39(
+    noDb,"ci-worker-23",[h("b"),h("b")],["T-6h"]
+  )).rejects.toThrow("SIGNED_ROSTER_SCOPE_OR_BOUNDS_INVALID");
+  await expect(claimP5CdSignedRosterDueTasksV39(
+    noDb,"ci-worker-23",[h("b")],["T-24h","T-24h"]
+  )).rejects.toThrow("SIGNED_ROSTER_SCOPE_OR_BOUNDS_INVALID");
+  expect(called).toBe(0);
  });
  it("uses reviewed Stage14 start and postcommit proof functions only",async()=>{
   const queries:string[]=[];

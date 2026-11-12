@@ -152,6 +152,39 @@ export async function claimP5CdDueTasksV39(
  if(rows.length>limit)reject("CLAIM_OVER_RETURNED");
  return rows.map(taskFromDb);
 }
+/** V0092: select ONLY the packet SHA/horizon combinations independently
+ * approved in this GH worker's exact signed roster. Unlike the old global
+ * V0087 claim_due this cannot steal T24 from the later worker (or reverse).
+ */
+export async function claimP5CdSignedRosterDueTasksV39(
+ db:P5CdTaskExecutor,owner:string,
+ packetShas:string[],horizons:P5CdHorizon[],
+ limit=2,leaseSeconds=90
+):Promise<P5CdClaimedTask[]>{
+ if(!db||typeof db.query!=="function"||!WORKER.test(owner)||
+   !Array.isArray(packetShas)||packetShas.length<1||
+   packetShas.length>96||packetShas.some(x=>!exactHash(x))||
+   new Set(packetShas).size!==packetShas.length||
+   !Array.isArray(horizons)||horizons.length<1||horizons.length>3||
+   horizons.some(x=>!Object.hasOwn(P5_CD_V0087_OFFSETS_MS,x))||
+   new Set(horizons).size!==horizons.length||
+   !Number.isInteger(limit)||limit<1||limit>16||
+   !Number.isInteger(leaseSeconds)||leaseSeconds<15||leaseSeconds>120)
+  reject("SIGNED_ROSTER_SCOPE_OR_BOUNDS_INVALID");
+ const rows=getRows(await db.query(
+  "SELECT * FROM clean.phase5_cd_claim_signed_roster_v39("+
+  "$1::text[],$2::text[],$3,$4,$5)",
+  [packetShas,horizons,owner,limit,leaseSeconds]));
+ if(rows.length>limit)reject("SIGNED_CLAIM_OVER_RETURNED");
+ const packetSet=new Set(packetShas),horizonSet=new Set(horizons);
+ const tasks=rows.map(taskFromDb);
+ if(tasks.some(x=>!packetSet.has(x.packetSha256)||
+     !horizonSet.has(x.horizon)||x.leaseOwner!==owner)||
+   new Set(tasks.map(x=>x.taskId)).size!==tasks.length)
+  reject("SIGNED_DB_CLAIM_CONTAINS_UNREVIEWED_FLIGHT_OR_HORIZON");
+ return tasks;
+}
+
 export async function markP5CdStage14WriteStartedV39(
  db:P5CdTaskExecutor,task:P5CdClaimedTask
 ):Promise<boolean>{

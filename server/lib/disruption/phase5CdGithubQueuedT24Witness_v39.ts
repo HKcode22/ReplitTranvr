@@ -10,7 +10,7 @@
 import {createHash} from "node:crypto";
 import type {Pool} from "pg";
 import {
- claimP5CdDueTasksV39,markP5CdStage14WriteStartedV39,
+ claimP5CdSignedRosterDueTasksV39,markP5CdStage14WriteStartedV39,
  acknowledgeP5CdStage14PostCommitV39,reapP5CdExpiredLeasesOnceV39,
  type P5CdTaskExecutor
 } from "./phase5CdDurableQueueClient_v39";
@@ -89,7 +89,8 @@ export async function runP5CdOneQueuedT24Witness(
  const owner="cd-t24-gh-"+env.GITHUB_RUN_ID;
  if(!/^[a-z0-9-]{10,96}$/.test(owner))
   deny("GITHUB_T24_RUN_ID_NOT_REVIEWED");
- const claims=await claimP5CdDueTasksV39(deps.preDb,owner,1,90);
+ const claims=await claimP5CdSignedRosterDueTasksV39(
+  deps.preDb,owner,[expected.packetSha256],["T-24h"],1,90);
  if(claims.length===0){
   return{
    schema:"v39.phase5.queued-t24-pre-independent-v0081-witness.v1",

@@ -12,7 +12,7 @@ import {
  type P5IndependentT24WitnessReview
 } from "./phase5T24PreIndependentWitnessChain_v39";
 import {
- claimP5CdDueTasksV39,markP5CdStage14WriteStartedV39,
+ claimP5CdSignedRosterDueTasksV39,markP5CdStage14WriteStartedV39,
  acknowledgeP5CdStage14PostCommitV39,reapP5CdExpiredLeasesOnceV39,
  type P5CdClaimedTask,type P5CdTaskExecutor
 } from "./phase5CdDurableQueueClient_v39";
@@ -245,7 +245,9 @@ export async function runP5CdGithubPreTick(
    !Number.isInteger(seconds)||seconds<30||seconds>120)
   hold("UNBOUNDED_QUEUE_WORKER_CAPACITY");
  const reap=await reapP5CdExpiredLeasesOnceV39(deps.db,64);
- const tasks=await claimP5CdDueTasksV39(deps.db,opts.owner,limit,seconds);
+ const tasks=await claimP5CdSignedRosterDueTasksV39(
+  deps.db,opts.owner,[...deps.packets.keys()],
+  ["T-6h","T-90m"],limit,seconds);
  const results:P5CdTickRecord[]=[];
  for(const task of tasks){
   // STOP/rights may have been revoked between tasks in this process;

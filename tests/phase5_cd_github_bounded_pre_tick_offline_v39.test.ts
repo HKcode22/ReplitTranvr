@@ -163,7 +163,7 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
   const db={query:async(sql:string)=>{
    seen.push(sql);
    if(sql.includes("phase5_cd_reap_once_v39"))return{rows:[]};
-   if(sql.includes("phase5_cd_claim_due_v39")){
+   if(sql.includes("phase5_cd_claim_signed_roster_v39")){
     return{rows:[{
      task_id:unknown.taskId,manifest_sha256:unknown.manifestSha256,
      flight_instance_id:unknown.flightInstanceId,
@@ -182,13 +182,13 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
    }
    throw Error("UNEXPECTED_SQL");
   }};
-  const got=await runP5CdGithubPreTick(env(),{
+  // V0092 refuses forged/unlisted database claim results AT THE ADAPTER
+  // before any writer or irreversible queue start can be reached.
+  await expect(runP5CdGithubPreTick(env(),{
    db,pool:{connect:async()=>{throw Error("MUST_NOT_CONNECT")}} as any,
    packets:f.packetSet
-  },{owner:"ci-gh-worker-12",limit:1});
-  expect(got.claimed).toBe(1);
-  expect(got.verified).toBe(0);
-  expect(got.results[0].result).toBe("REJECTED_UNSIGNED_TASK_NO_WRITE");
+  },{owner:"ci-gh-worker-12",limit:1})).rejects.toThrow(
+    "SIGNED_DB_CLAIM_CONTAINS_UNREVIEWED_FLIGHT_OR_HORIZON");
   expect(seen).toHaveLength(2);
  });
  it("false mark-write-started cannot fall through to Stage14",async()=>{
@@ -197,7 +197,7 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
   const db={query:async(sql:string)=>{
    seen.push(sql);
    if(sql.includes("phase5_cd_reap_once_v39"))return{rows:[]};
-   if(sql.includes("phase5_cd_claim_due_v39"))return{rows:[{
+   if(sql.includes("phase5_cd_claim_signed_roster_v39"))return{rows:[{
      task_id:f.task.taskId,manifest_sha256:f.task.manifestSha256,
      flight_instance_id:f.task.flightInstanceId,
      horizon:f.task.horizon,
