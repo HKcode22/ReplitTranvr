@@ -93,6 +93,27 @@ describe("Phase5 reused PRE postcommit snapshot ID -> independent T24 witness",(
   )).rejects.toThrow("MUST_USE_DISTINCT_RESTRICTED_PRE_AND_WITNESS_POOLS");
   expect(touched).toHaveLength(0);
  });
+ it("passes genuine C+D T24 fence to ORIGINAL Stage14 before either DB connection",async()=>{
+  const f=fixture();let preConnections=0,witnessConnections=0;
+  const pre={connect:async()=>{
+   preConnections++;throw Error("UNEXPECTED_PRE_CONNECTION");
+  }};
+  const witness={connect:async()=>{
+   witnessConnections++;throw Error("UNEXPECTED_WITNESS_CONNECTION");
+  }};
+  await expect(persistP5ReviewedT24PreAndIndependentWitness(
+   pre as any,witness as any,f.pre,f.review,{
+    realV0088QueueFenceGh:{
+     taskId:"17",owner:"ci-t24-gh-worker",
+     generation:"1",packetSha256:h("e")
+    }
+   }
+  )).rejects.toThrow("REFUSED_P5_CD_GITHUB_PRE_");
+  expect(preConnections).toBe(0);
+  expect(witnessConnections).toBe(0);
+  // This proves the queue option was FORWARDED to original Stage14,
+  // not ignored by the first PRE-before-separate-witness orchestration.
+ });
  it("refuses a non-T24 request before any database connection",async()=>{
   const f=fixture(),touched:string[]=[];
   const first={connect:async()=>{touched.push("PRE");throw Error("unexpected");}};
