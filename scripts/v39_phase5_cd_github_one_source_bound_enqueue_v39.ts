@@ -9,6 +9,8 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {digestP5Stage24ReviewedReceipt}
+ from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {
  makeP5Stage28DedicatedRolePool
@@ -53,6 +55,37 @@ export function makeP5CdV0091RegisterArgs(
   permit.maxPopulationStalenessSeconds
  ];
 }
+/** A later V0091 task is NOT qualified solely by a claimed "T24
+ * reviewed" boolean. Before any queue registration, check the immutable
+ * external Stage17/V0081 receipt digest and native-T witness scope.
+ * Stage14 still independently joins a genuine persisted witness in PG.
+ */
+export function requireP5CdFrozenStage17WitnessForEnrollment(
+ p:P5Stage14SingleFlightPrePermit
+):void{
+ const w=p?.reviewedT24WitnessReceipt;
+ const cfg=p?.selectedTConfig;
+ const s=p?.selectedTNativeUtc;
+ const n=typeof s==="string"?Date.parse(s):NaN;
+ if(p?.horizon!=="T-6h"&&p?.horizon!=="T-90m")
+  hold("T24_NEEDS_INDEPENDENT_WITNESS_CONTROLLER");
+ if(!w||p.reviewedStandaloneLaterNoT24||
+    !cfg||!Number.isFinite(n)||
+    new Date(n).toISOString()!==s||
+    w.schema!=="v39.phase5.stage24.externally-reviewed-stage17-receipt.v1"||
+    w.flightInstanceId!==p.flightInstanceId||
+    w.selectedTNativeUtc!==s||
+    w.frozenT24CutoffUtc!==
+      new Date(n-86_400_000).toISOString()||
+    w.t24FrameSha256!==p.reviewedFrameSha256||
+    w.t24ConfigSha256!==p.reviewedConfigSha256||
+    w.expectedSelectedTVersion!==cfg.milestone+":"+
+       cfg.version+":"+cfg.artifactHash||
+    !/^[0-9a-f]{64}$/.test(w.receiptSha256??"")||
+    digestP5Stage24ReviewedReceipt(w)!==w.receiptSha256)
+  hold("FROZEN_STAGE17_T24_WITNESS_DIGEST_OR_IDENTITY_DRIFT");
+}
+
 const QUERY="SELECT clean.phase5_cd_register_source_flight_v39("+
  "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) AS task_id";
 export async function runP5CdGithubOneSourceEnrollment(
@@ -81,6 +114,7 @@ export async function runP5CdGithubOneSourceEnrollment(
  if(preflightP5Stage14ReviewedPermitV39(permit)!==
     permit.selectedTNativeUtc)
   hold("ORIGINAL_STAGE14_FIRST_NATIVE_T_NOT_FROZEN");
+ requireP5CdFrozenStage17WitnessForEnrollment(permit);
  if(permit.horizon!=="T-6h"&&permit.horizon!=="T-90m")
   hold("T24_REQUIRES_SEPARATE_V0081_WITNESS_CONTROLLER");
  // The PG16 V0091 function derives actual original expiry directly
