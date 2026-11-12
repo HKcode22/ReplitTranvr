@@ -17,12 +17,14 @@ export const P5_E_ALLOWED_PRE_FEATURES=[
  "origin_metar_visibility_m","origin_metar_wind_kt",
  "origin_taf_flight_category","destination_taf_flight_category",
  "prior_aircraft_turnaround_minutes",
+ "prior_aircraft_adsb_not_ground_reported",
+ "prior_aircraft_adsb_position_age_seconds",
  "prior_route_departure_delay_median_minutes",
  "prior_airport_departure_delay_median_minutes","airport_congestion_1h"
 ] as const;
 export type P5EPreField=typeof P5_E_ALLOWED_PRE_FEATURES[number];
 export type P5ESource="AERODATABOX_FIDS"|"NOAA_METAR"|"NOAA_TAF"|
- "REVIEWED_HISTORIC_CONTEXT";
+ "ADSB_LOL"|"REVIEWED_HISTORIC_CONTEXT";
 export interface P5EAsOfObservation{
  flightInstanceId:string;
  field:P5EPreField;
@@ -58,7 +60,8 @@ export interface P5EAsOfFieldDecision{
 }
 const offsets={"T-24h":86_400_000,"T-6h":21_600_000,"T-90m":5_400_000};
 const allowedSources=new Set<P5ESource>([
- "AERODATABOX_FIDS","NOAA_METAR","NOAA_TAF","REVIEWED_HISTORIC_CONTEXT"]);
+ "AERODATABOX_FIDS","NOAA_METAR","NOAA_TAF","ADSB_LOL",
+ "REVIEWED_HISTORIC_CONTEXT"]);
 const allowedFields=new Set<string>(P5_E_ALLOWED_PRE_FEATURES);
 function hold(msg:string):never{throw Error("REFUSED_P5_AMENDMENT_E_ASOF_"+msg);}
 function stamp(s:string):number{

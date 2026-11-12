@@ -26,13 +26,20 @@ const METAR=new Set<P5EPreField>([
 const TAF=new Set<P5EPreField>([
  "origin_taf_flight_category","destination_taf_flight_category"
 ]);
+const ADSB=new Set<P5EPreField>([
+ "prior_aircraft_adsb_not_ground_reported",
+ "prior_aircraft_adsb_position_age_seconds"
+]);
 const HIST=new Set<P5EPreField>([
  "prior_aircraft_turnaround_minutes",
  "prior_route_departure_delay_median_minutes",
  "prior_airport_departure_delay_median_minutes","airport_congestion_1h"
 ]);
+// Preserve the original exact 12-field default for existing frozen packets,
+// fixture hashes and source-roster emitters. ADSB is explicit opt-in only.
 export const P5_E_SUPPLEMENTAL_FIELDS=[...FIDS,...METAR,...TAF,...HIST];
-type SupplementalField=typeof P5_E_SUPPLEMENTAL_FIELDS[number];
+const P5_E_OPT_IN_SOURCE_FIELDS=[...P5_E_SUPPLEMENTAL_FIELDS,...ADSB];
+type SupplementalField=typeof P5_E_OPT_IN_SOURCE_FIELDS[number];
 export interface P5EReviewedSupplementalObservation
  extends P5EAsOfObservation{
  field:SupplementalField;
@@ -42,6 +49,12 @@ export interface P5EReviewedSupplementalObservation
  airportIcao?:string|null;
  stationIcao?:string|null;
  stationDistanceKm?:number|null;
+ /** Separate genuine ADB operating-physical-leg + aircraft linkage review,
+  * verified by the upstream immutable signed packet reviewer, not by SHA.
+  */
+ reviewedPhysicalAircraftLinkSha256?:string|null;
+ /** Required ODbL attribution/derived-database policy review receipt. */
+ reviewedODbLUseReviewSha256?:string|null;
 }
 export interface P5EReviewedSupplementalBundle{
  schema:"v39.phase5.e-signed-source-supplement.v1";
@@ -96,6 +109,10 @@ function validValue(o:P5EReviewedSupplementalObservation):boolean{
  if(TAF.has(o.field))
   return typeof v==="string"&&
    ["VFR","MVFR","IFR","LIFR"].includes(v);
+ if(ADSB.has(o.field))
+  return o.field==="prior_aircraft_adsb_not_ground_reported"?
+   typeof v==="boolean":
+   typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=900;
  return typeof v==="number"&&Number.isFinite(v)&&
   (o.field==="airport_congestion_1h"?v>=0&&v<=100000:
    o.field==="prior_aircraft_turnaround_minutes"?v>=0&&v<=2880:
@@ -123,9 +140,9 @@ export function selectP5EReviewedSupplementalFeatures(
     !ICAO.test(r.originIcao??"")||
     (r.destinationIcao!==null&&!ICAO.test(r.destinationIcao??""))||
     !Array.isArray(b.fields)||b.fields.length<1||
-    b.fields.length>P5_E_SUPPLEMENTAL_FIELDS.length||
+    b.fields.length>P5_E_OPT_IN_SOURCE_FIELDS.length||
     new Set(b.fields).size!==b.fields.length||
-    b.fields.some(x=>!P5_E_SUPPLEMENTAL_FIELDS.includes(x))||
+    b.fields.some(x=>!P5_E_OPT_IN_SOURCE_FIELDS.includes(x))||
     !Array.isArray(b.observations)||b.observations.length>48||
     hash(b.observations)!==b.observationsSha256)
   hold("FROZEN_SOURCE_IDENTITY_AND_CONTENT_DIGEST_NOT_MATCHED");
@@ -138,7 +155,7 @@ export function selectP5EReviewedSupplementalFeatures(
  for(const row of b.observations){
   if(!row||row.flightInstanceId!==r.flightInstanceId||
      !b.fields.includes(row.field)||
-     !P5_E_SUPPLEMENTAL_FIELDS.includes(row.field)||
+     !P5_E_OPT_IN_SOURCE_FIELDS.includes(row.field)||
      !SHA.test(row.sourceRecordId??"")||
      row.rightsDisposition!=="EXTERNALLY_REVIEWED_ALLOW"||
      !validValue(row))
@@ -176,6 +193,25 @@ export function selectP5EReviewedSupplementalFeatures(
     if(observed>issue||from>native||to<native||from>to)
      hold("TAF_NOT_ISSUED_FOR_ORIGINAL_NATIVE_DEPARTURE");
    }
+  }else if(ADSB.has(row.field)){
+   if(row.source!=="ADSB_LOL"||
+      row.airportIcao!==r.originIcao||
+      !SHA.test(row.reviewedPhysicalAircraftLinkSha256??"")||
+      !SHA.test(row.reviewedODbLUseReviewSha256??"")||
+      observed>issue||available>issue||
+      issue-observed>15*60_000||
+      available-observed>120_000)
+    hold("ADSB_INBOUND_PHYSICAL_LEG_RIGHTS_OR_ASOF_NOT_VERIFIED");
+   // A signed field-specific **age** must agree with the original position
+   // observation timestamp. Never allow a caller to report a fresher age
+   // than this packet actually establishes from the original.
+   if(row.field==="prior_aircraft_adsb_position_age_seconds"&&
+      row.value!==null&&
+      Math.abs(Number(row.value)-(issue-observed)/1000)>0.001)
+    hold("ADSB_SIGNED_POSITION_AGE_MISMATCH");
+   // Ground-not-reported != actual wheels-off, gate-in or final aircraft.
+   // The reviewed physical link SHA is packet lineage only, not independent
+   // proof. No other source is permitted to claim these ADSB-specific fields.
   }else if(HIST.has(row.field)){
    const from=timestamp(row.validFromUtc);
    const to=row.validToUtc===null||row.validToUtc===undefined?
