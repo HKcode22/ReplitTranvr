@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — original T24 Stage14 queue guard + independent Stage17 witness bridge
+
+**[Read: queued T24 exact Stage14 V0088 same-transaction lease forwarded to existing separate V0081 post-COMMIT witness](2026-11-12_CD_T24_ORIGINAL_STAGE14_AND_INDEPENDENT_V0081_WITNESS_BRIDGE.md).** This is a **type-safe option bridge in the existing T24 chain**, not another PRE writer, queue, login or provider GET. The unapproved queue-fenced path must refuse **before both database connections**; old T24 caller remains compatible. Stage17 must commit/read back an independent witness; if witness is missing after PRE commit, the queued task remains UNKNOWN/quarantined and must not replay. New GH T24 task registration, dual-role GitHub runner and independent Stage24 receipt review are still outstanding, so **no real T24 collection activated**. V0087–V0091 live inert, Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 12 — bounded GitHub early-start using REAL PostgreSQL clock (not backfill)
 
 **[Read the C+D 5-minute GitHub jitter / 3-minute Stage14 prospective window mitigation](2026-11-12_CD_GITHUB_DB_CLOCK_LOOKAHEAD_NO_BACKFILL_CHECKPOINT.md).** Reuses only the reviewed frozen signed T6/T90 source roster and existing Stage30 restricted PRE login, polls real `clock_timestamp()` within a maximum eight-minute wait to reach the original unshifted 3-minute V0087 claim window, then calls original Stage14. **No paid calls, task enrollment, second worker, cutoff shift or late PRE backfill.** GH cron may still miss cutoffs; report true missingness and measure distribution instead of falsely invalidating the experiment. **V0087–V0091 already live INERT; canonical one-source PR #581 merged; duplicate #582 closed.** T24 independent Stage17/V0081 witness and genuine original still absent from new controller. STOP/default-disabled, Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
