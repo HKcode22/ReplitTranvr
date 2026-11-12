@@ -4,6 +4,7 @@
  * No provider keys, no paid GET, no production DB credential.
  */
 import {createHash} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {Pool} from "pg";
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {buildP5PrelaunchSlotBudgetEnvelope} from
@@ -22,17 +23,24 @@ const sha=c=>c.repeat(64);
 const iso=n=>new Date(n).toISOString();
 const SLOTS=[0,4,8,12,16,20];
 const HUBS=["OMAA","WSSS","SKBO","YSSY"];
-const SETS=[
- {HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"},
- {HUB:"WSSS",MID_A:"SBFL",MID_B:"TJSJ",REGIONAL:"LSZB"},
- {HUB:"YSSY",MID_A:"KBUF",MID_B:"LFQQ",REGIONAL:"NZNP"},
- {HUB:"SKBO",MID_A:"EBAW",MID_B:"NZNS",REGIONAL:"RJNK"},
- {HUB:"SKBO",MID_A:"YBUD",MID_B:"RKTU",REGIONAL:"FAKM"}
-];
-const REGIONS:Record<string,string>={HUB:"FIXTURE_REGION",MID_A:"FIXTURE_MIDA",MID_B:"FIXTURE_MIDB",REGIONAL:"FIXTURE_REGIONAL"};
-const PAIR_SITES=SETS.map(row=>Object.fromEntries(
- Object.entries(row).map(([slot,icao])=>[slot,{icao,region:REGIONS[slot]}])
-));
+const HUB_REGION:Record<string,string>={
+ OMAA:"Gulf/Africa",WSSS:"Asia-Pacific",
+ SKBO:"South America",YSSY:"Oceania"
+};
+// This is the archived actual owner's 2026-11-09 B0062 candidate, not mock
+// airport IDs. Dates, treatment, budgets and approval remain synthetic.
+const archived=JSON.parse(readFileSync(new URL(
+ "../data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json",
+ import.meta.url),"utf8"));
+if(archived.schema!=="phase5.full-b0062-five-pair-selection-review.v1"||
+   archived.selectedAirportIcaosSha256!==
+    "f5112a9ca432d9d3fede96a9805030d68e05ced5a19d029aa896805746c21592"||
+   archived.candidatePairAirportSets?.length!==5)
+ throw Error("REFUSED_PG16_REAL_PAIR_EVIDENCE_DRIFT");
+const PAIR_SITES=archived.candidatePairAirportSets.map(
+ (pair:any)=>Object.fromEntries(Object.entries(pair.airports).map(
+  ([slot,v]:[string,any])=>[slot,{icao:v.icao,region:v.region}]))
+);
 const OTHER=[
  "FIDS_RETRY_UNIT_BUDGET","VALIDATION_UNIT_BUDGET",
  "OUTCOME_REST_UNIT_BUDGET","HISTORY_BOOTSTRAP_UNIT_BUDGET",
@@ -59,7 +67,11 @@ function fixture(){
    budgetDayId:"p5-ci-stage-parent-"+n,
    frozenDrawSeed:digest({fixtureDrawSeed:pi===null?"ordinary-"+i:"pair-"+pi}),
    anchorIcao:anchor,
-   slotRegions:{...REGIONS},
+   slotRegions:pairSet?
+    Object.fromEntries(Object.entries(pairSet).map(
+     ([slot,v]:[string,any])=>[slot,v.region])):
+    {HUB:HUB_REGION[anchor],MID_A:"Europe",
+     MID_B:"North America",REGIONAL:"Oceania"},
    pairId:pi===null?null:"pair_00"+(pi+1),
    crossoverPeriod:period,pairRole:role,
    drawType:period===2?"PAIR_REPLAY":"NEW_TEMPLATE",
@@ -194,6 +206,32 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
   reviewBad.expectedSignedStagePacketSha256=digest(bad);
   expect(()=>compileP5InertB0062UtcStagePacket(bad,reviewBad))
    .toThrow("ORDINARY_DAY_FUTURE_AIRPORTS_NOT_PROSPECTIVE");
+  const badHubRegion=structuredClone(input);
+  badHubRegion.calendarDays[11].slotRegions.HUB="Europe";
+  badHubRegion.expectedSignedCalendarRowsSha256=digest(badHubRegion.calendarDays);
+  expect(()=>compileP5InertB0062UtcStagePacket(badHubRegion,{
+   ...review,expectedSignedStagePacketSha256:digest(badHubRegion)
+  })).toThrow("INVALID_FUTURE_B0062_CALENDAR_DAY");
+  const badUnknownRegion=structuredClone(input);
+  badUnknownRegion.calendarDays[11].slotRegions.REGIONAL="FAKE_REGION";
+  badUnknownRegion.expectedSignedCalendarRowsSha256=digest(
+   badUnknownRegion.calendarDays);
+  expect(()=>compileP5InertB0062UtcStagePacket(badUnknownRegion,{
+   ...review,expectedSignedStagePacketSha256:digest(badUnknownRegion)
+  })).toThrow("INVALID_FUTURE_B0062_CALENDAR_DAY");
+  // Day 6 is ordinary: its selected HUB is KNOWN prelaunch even though
+  // its remaining three airports are unknown. It cannot reuse SKBO 4h
+  // after the preceding Pair 5 ends merely because the day is adaptive.
+  const badAnchorWashout=structuredClone(input);
+  badAnchorWashout.calendarDays[5].anchorIcao="SKBO";
+  badAnchorWashout.calendarDays[5].slotRegions.HUB="South America";
+  badAnchorWashout.calendarDays[5].startUtc=iso(
+   Date.parse(badAnchorWashout.calendarDays[4].startUtc)+4*H);
+  badAnchorWashout.expectedSignedCalendarRowsSha256=digest(
+   badAnchorWashout.calendarDays);
+  expect(()=>compileP5InertB0062UtcStagePacket(badAnchorWashout,{
+   ...review,expectedSignedStagePacketSha256:digest(badAnchorWashout)
+  })).toThrow("PRESELECTED_HUB_ANCHOR_24H_WASHOUT");
   const badPairRegion=structuredClone(input);
   badPairRegion.calendarDays[0].pairAirportSet.MID_A.region="UNRELATED_REGION";
   badPairRegion.expectedSignedCalendarRowsSha256=digest(badPairRegion.calendarDays);
