@@ -29,6 +29,10 @@ const SETS=[
  {HUB:"SKBO",MID_A:"EBAW",MID_B:"NZNS",REGIONAL:"RJNK"},
  {HUB:"SKBO",MID_A:"YBUD",MID_B:"RKTU",REGIONAL:"FAKM"}
 ];
+const REGIONS={HUB:"FIXTURE_REGION",MID_A:"FIXTURE_MIDA",MID_B:"FIXTURE_MIDB",REGIONAL:"FIXTURE_REGIONAL"};
+const PAIR_SITES=SETS.map(row=>Object.fromEntries(
+ Object.entries(row).map(([slot,icao])=>[slot,{icao,region:REGIONS[slot]}])
+));
 const OTHER=[
  "FIDS_RETRY_UNIT_BUDGET","VALIDATION_UNIT_BUDGET",
  "OUTCOME_REST_UNIT_BUDGET","HISTORY_BOOTSTRAP_UNIT_BUDGET",
@@ -46,8 +50,8 @@ function fixture(){
   const shape=role==="alternative"?
    pi<3?"2x2h":"up-to-6h":"4h";
   const start=base+i*7*D+SLOTS[i%6]*H;
-  const pairSet=pi===null?null:SETS[pi];
-  const anchor=pairSet?.HUB??HUBS[i%4];
+  const pairSet=pi===null?null:PAIR_SITES[pi];
+  const anchor=pairSet?.HUB?.icao??HUBS[i%4];
   return {
    runDayIndex:n,startUtc:iso(start),utcSlot:String(SLOTS[i%6]).padStart(2,"0"),
    windowShape:shape,partition:i<20?"train":i<25?"validation":"test",
@@ -55,10 +59,7 @@ function fixture(){
    budgetDayId:"p5-ci-stage-parent-"+n,
    frozenDrawSeed:sha(String.fromCharCode(97+(pi??(i%26)))),
    anchorIcao:anchor,
-   slotRegions:{
-    HUB:"FIXTURE_REGION",MID_A:"FIXTURE_MIDA",MID_B:"FIXTURE_MIDB",
-    REGIONAL:"FIXTURE_REGIONAL"
-   },
+   slotRegions:{...REGIONS},
    pairId:pi===null?null:"pair_00"+(pi+1),
    crossoverPeriod:period,pairRole:role,
    drawType:period===2?"PAIR_REPLAY":"NEW_TEMPLATE",
@@ -187,7 +188,7 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
  });
  it("refuses tampered signed calendar, invented ordinary airport, UTC cap and role",()=>{
   const bad=structuredClone(input);
-  bad.calendarDays[11].pairAirportSet=SETS[0];
+  bad.calendarDays[11].pairAirportSet=PAIR_SITES[0];
   const reviewBad={...review,expectedSignedStagePacketSha256:digest(bad)};
   bad.expectedSignedCalendarRowsSha256=digest(bad.calendarDays);
   reviewBad.expectedSignedStagePacketSha256=digest(bad);
