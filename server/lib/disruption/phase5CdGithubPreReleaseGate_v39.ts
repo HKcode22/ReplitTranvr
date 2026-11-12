@@ -13,6 +13,7 @@ function hold(reason:string):never{
 }
 export interface P5CdGithubPreRelease{
  schema:"v39.phase5.cd-gh-pre-explicit-release.v1";
+ releaseMode:"PHASE5_CANARY"|"PHASE6_APPROVED";
  approvedCodeSha:string;
  rosterSha256:string;
  rightsSha256:string;
@@ -24,7 +25,19 @@ export interface P5CdGithubPreRelease{
 export function requireP5CdGithubPreRelease(
  env:NodeJS.ProcessEnv
 ):P5CdGithubPreRelease{
- if(env.GITHUB_ACTIONS!=="true"||
+ // A small, no-provider Phase5 PRE pilot can furnish prospective
+ // evidence BEFORE final scientific freeze. It requires its own explicit
+ // owner/reviewer authorization, never reuses a Phase6 paid GO.
+ const canary=env.P5_CD_GH_PRE_MODE==="PHASE5_CANARY"&&
+  env.P5_CD_GH_PHASE5_CANARY_APPROVED==="1"&&
+  env.V39_PHASE6_PROCESS_ARMED==="0"&&
+  env.V39_PHASE5_FREEZE_SIGNED!=="1";
+ const phase6=env.P5_CD_GH_PRE_MODE==="PHASE6_APPROVED"&&
+  env.P5_CD_GH_PHASE5_CANARY_APPROVED!=="1"&&
+  env.V39_PHASE5_FREEZE_SIGNED==="1"&&
+  env.V39_PHASE6_PROCESS_ARMED==="1";
+ if((!canary&&!phase6)||
+    env.GITHUB_ACTIONS!=="true"||
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??"")||
@@ -34,9 +47,7 @@ export function requireP5CdGithubPreRelease(
     env.P5_CD_GH_PRE_CONFIRM!==HOLDER||
     env.P5_CD_GH_PRE_ARMED!=="1"||
     env.P5_CD_GH_PRE_STOP!=="0"||
-    env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
-    env.V39_PHASE6_PROCESS_ARMED!=="1"||
     env.ADB_AUTO_COLLECT!=="0"||
     env.AERODATABOX_API_KEY||
     env.AERODATABOX_WEBHOOK_SECRET||
@@ -62,6 +73,7 @@ export function requireP5CdGithubPreRelease(
   hold("NOT_REAL_EXISTING_RESTRICTED_PRE_LOGIN");
  return{
   schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
+  releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
   approvedCodeSha:env.GITHUB_SHA!,
   rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
   rightsSha256:env.V39_P5_RIGHTS_SHA256!,
