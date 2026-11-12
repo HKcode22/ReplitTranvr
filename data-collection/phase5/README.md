@@ -1,5 +1,12 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Real T24 cron bug fixed (code-only) and flight-delay study guide
+
+**[Read: concrete T−6h departure-delay prediction examples, gate-out versus runway and V0087–V0092 migration map](2026-11-12_PHASE5_STUDY_GUIDE_T6_GATEOUT_RUNWAY_T24_AND_V0087_V0092.md).** Continuous delay minutes, T−90m update and T−24h comparator are conditional research candidates under ONE Amendment E; actual gate-out, true wheels-off and ADSB.lol takeoff proxies are not interchangeable.
+
+**[Read: unreachable T24 scheduled job expression and dual-owner interlock](2026-11-12_T24_SCHEDULE_UNREACHABLE_BRANCH_AND_EXCLUSIVE_AUTOMATION_REPAIR.md).** PR #587's T24 job still had an outer `workflow_dispatch` condition that made its declared `schedule` alternative unreachable. This change removes that bug and prevents the existing older automatic native T24 child and the V0092 queued scheduler from being active together, with fail-closed runtime and GH preflight checks. **No real schedule has been armed; no pilot paid calls, flight tasks or database changes.** Do not enable either automation without independently reviewed genuine source and release. Scientific Phase5 FREEZE HOLD; Phase6 paid GO NO.
+
+
 ## November 12 — One Amendment E: gate-out first-cycle numerical label candidate
 
 **[Read the finite actual-gate-out label code and matched-milestone/missingness tests](2026-11-12_AMENDMENT_E_GATEOUT_FIRST_CYCLE_LABEL_CANDIDATE_CODE_CHECKPOINT.md).** Reuses original Stage14 source-bound native T, the existing runway/ADSB.lol proxy modules and canonical Amendment E. A T−6h actual gate-out delay candidate is numeric **only** for a separately attested same-operating-leg scheduled gate-out and real actual gate-out; general FIDS scheduled values, revised schedules, wheels-off and ADS-B takeoff proxy are never silently interchangeable. Cancellations/pending/unknown become separately recorded outcomes, not zero. This is offline mathematical code, not verified source rights, trained model, independently frozen primary or paid Phase6 GO. V0087–V0092 remain owner-confirmed installed INERT; no new flight records or provider calls.

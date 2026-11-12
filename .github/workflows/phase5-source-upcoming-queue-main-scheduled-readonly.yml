@@ -310,7 +310,7 @@ jobs:
   separately-authorized-native-t24-gh-child:
     # Reuses the EXISTING 10-minute schedule. Independent default OFF.
     # Parent has actions:write but NO provider key and NO witness/SQL writer.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_T24_SOURCE_READONLY_ENABLED == 'true' && vars.P5_T24_AUTO_DISPATCH_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_T24_SOURCE_READONLY_ENABLED == 'true' && vars.P5_T24_AUTO_DISPATCH_ENABLED == 'true' && vars.P5_CD_GH_T24_SCHEDULE_ENABLED != '1' }}
     permissions:
       contents: read
       actions: write
@@ -332,6 +332,7 @@ jobs:
       P5_T24_AUTO_DISPATCH_ENTRYPOINT: '1'
       P5_T24_SOURCE_READONLY_ENABLED: ${{ vars.P5_T24_SOURCE_READONLY_ENABLED }}
       P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
+      P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
       P5_T24_READONLY_SIGNED_PACKET_FILE: ${{ vars.P5_T24_READONLY_SIGNED_PACKET_FILE }}
       V39_P5_T24_OWNER_APPROVED: ${{ secrets.V39_P5_T24_OWNER_APPROVED }}
       V39_P5_T24_APPROVED_CODE_SHA: ${{ secrets.V39_P5_T24_APPROVED_CODE_SHA }}
@@ -367,6 +368,7 @@ jobs:
           test -z "$V39_P5_SOURCE_DATABASE_URL"
           test -z "$P5_V39_T24_WITNESS_DATABASE_URL"
           test "$P5_T24_AUTO_DISPATCH_ENABLED" = 'true'
+          test "$P5_CD_GH_T24_SCHEDULE_ENABLED" != '1'
           test "$P5_T24_SOURCE_READONLY_ENABLED" = 'true'
           test "$GITHUB_SHA" = "$V39_P5_T24_APPROVED_CODE_SHA"
           test "$V39_P5_T24_OWNER_APPROVED" = '1'

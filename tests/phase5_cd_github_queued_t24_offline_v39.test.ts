@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
 import {
  verifyP5CdFrozenRoster,type P5CdFrozenRoster
@@ -204,5 +205,36 @@ describe("Phase5 true queued T24 Stage14 and separate Stage17 witness handoff",(
    files:[{filePath:path,packetSha256:f.digest,bytes:f.json}]
   })).rejects.toThrow("REFUSED_P5_CD_GITHUB_PRE_");
   expect(q).toBe(0);
+ });
+ it("genuine scheduled job admission not hidden behind manual-only event gate",()=>{
+  const queued=readFileSync(
+   ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml","utf8");
+  const old=readFileSync(
+   ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml","utf8");
+  const job=queued.split("  one-approved-queued-native-t24:")[1]
+   ?.split("    runs-on:")[0]??"";
+  expect(job).toContain("github.ref == 'refs/heads/main'");
+  expect(job).toContain("github.event_name == 'workflow_dispatch'");
+  expect(job).toContain("github.event_name == 'schedule'");
+  expect(job).toContain("vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1'");
+  expect(job).toContain("vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true'");
+  // This previously made the schedule alternative unreachable!
+  expect(job).not.toMatch(/github\.event_name == 'workflow_dispatch'\s*&&\s*github\.ref/);
+  expect(queued).toContain('test "$P5_T24_AUTO_DISPATCH_ENABLED" != true');
+  const legacy=old.split("  separately-authorized-native-t24-gh-child:")[1]
+   ?.split("    runs-on:")[0]??"";
+  expect(legacy).toContain("vars.P5_CD_GH_T24_SCHEDULE_ENABLED != '1'");
+  expect(old).toContain('test "$P5_CD_GH_T24_SCHEDULE_ENABLED" != \'1\'');
+ });
+ it("rejects simultaneous legacy source child and queued T24 schedule",()=>{
+  const f=fixture();
+  const e={...f.env,GITHUB_EVENT_NAME:"schedule",
+   P5_CD_GH_T24_SCHEDULE_ENABLED:"1",
+   P5_T24_AUTO_DISPATCH_ENABLED:"true"};
+  expect(()=>requireP5CdT24DispatchEvent(e))
+   .toThrow("COMPETING_LEGACY_T24_AUTOMATION_ENABLED");
+  expect(requireP5CdT24DispatchEvent({
+   ...e,P5_T24_AUTO_DISPATCH_ENABLED:"false"
+  })).toBe("SCHEDULED");
  });
 });
