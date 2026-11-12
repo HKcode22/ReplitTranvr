@@ -7,6 +7,8 @@ on:
       - ".github/workflows/phase4-gate5-free-bts-actual-reference.yml"
       - "scripts/v39_phase4_gate5_free_bts_aug2026_reference_actions.py"
       - "tests/phase4_gate5_free_bts_monthly_source_v39.test.ts"
+      - "scripts/v39_phase5_bts_aug2026_historical_training_lane.py"
+      - ".github/workflows/phase4-gate5-free-bts-actual-reference.yml"
 
 permissions:
   contents: read
@@ -88,3 +90,54 @@ jobs:
         run: |
           echo 'Free BTS reported WheelsOff is a historical U.S. reporting-carrier ACTUAL source, not a global AeroDataBox FIDS population or verified S/T planned runway.' >> "$GITHUB_STEP_SUMMARY"
           echo 'No first-day PRE, same-flight matching, original Gate5 PASS, provider payment, database writes or Phase5/6 activation.' >> "$GITHUB_STEP_SUMMARY"
+
+  normalized-aug2026-historical-only:
+    needs: [capture-free-bts, verify-free-bts]
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      V39_PHASE6_OWNER_APPROVED: "0"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      GATE05_AUTOMATION_DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: v39-gate5-bts-aug2026-official-public-source
+          path: /tmp/v39_gate5_free_bts_aug2026/
+      - name: Offline historical-lane normalizer and local synthetic leak guards
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${ADB_AUTO_COLLECT}" = "0"
+          test "${V39_PHASE6_PROCESS_ARMED}" = "0"
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${V39_DATABASE_RUNTIME_URL}${GATE05_AUTOMATION_DATABASE_URL}"
+          python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py --self-test
+          python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py normalize \
+            /tmp/v39_gate5_free_bts_aug2026/official_bts_reporting_carrier_2026_8.zip \
+            /tmp/v39_phase5_bts_aug2026_historical_only/
+      - name: Retain bounded historical normalized ZIP derivative for later independent Phase7 import
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-phase5-bts-aug2026-us-historical-only-not-pre
+          path: /tmp/v39_phase5_bts_aug2026_historical_only/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Report exact scope and retention
+        run: |
+          echo 'BTS Aug 2026 historical US reporting subset; not live 31-day FIDS/ADSB PRE or ADB POST.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Normalized CSV.gz + SHA manifest saved as GitHub artifact for 30 days only, not durable Neon/Phase7 storage.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Independent physical same-tail PRE feature production NOT claimed. No paid credits, no DB, no Phase6 GO.' >> "$GITHUB_STEP_SUMMARY"
