@@ -59,11 +59,11 @@ jobs:
           test -z "${AERODATABOX_API_KEY}"
           test "${V39_PHASE6_PROCESS_ARMED}" = '0'
           npx tsx scripts/apply_boot_migrations_v39.ts
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
-          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c             "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
       - name: Preserve exact signed partitions and fail closed in cost-only-upper-bound-no-provider
         run: |
           set -Eeuo pipefail
@@ -108,11 +108,11 @@ jobs:
           test -z "${AERODATABOX_API_KEY}"
           test "${V39_PHASE6_PROCESS_ARMED}" = '0'
           npx tsx scripts/apply_boot_migrations_v39.ts
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
-          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c             "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
       - name: Preserve exact signed partitions and fail closed in v0082-exact-source-legacy-preserved
         run: |
           set -Eeuo pipefail
