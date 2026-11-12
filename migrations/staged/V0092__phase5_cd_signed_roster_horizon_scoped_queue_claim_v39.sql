@@ -162,8 +162,14 @@ BEGIN
     'clean.phase5_cd_claim_due_v39(text,integer,integer)','EXECUTE')
  OR pg_catalog.has_table_privilege(p,
     'clean.phase5_cd_pre_task_v39','UPDATE')
- OR pg_catalog.has_function_privilege('PUBLIC',
-    'clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)','EXECUTE')
+ OR EXISTS(
+    SELECT 1 FROM pg_catalog.pg_proc fn
+    CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(
+     fn.proacl,pg_catalog.acldefault('f',fn.proowner))) a
+    WHERE fn.oid=
+     'clean.phase5_cd_claim_signed_roster_v39(text[],text[],text,integer,integer)'::regprocedure
+      AND a.grantee=0 AND a.privilege_type='EXECUTE'
+   )
  THEN
   RAISE EXCEPTION 'P5_CD_V0092_SOURCE_SCOPE_OWNER_AND_ACL_POSTFLIGHT_FAILED';
  END IF;
