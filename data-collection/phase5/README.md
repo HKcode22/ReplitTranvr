@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — V0091 LIVE; cross-horizon PRE lease fix before Phase6
+
+**[Nov12 actual Phase5→Phase6 finish-line scorecard and V0092 signed-packet queue contention fix](2026-11-12_PHASE5_TO_PHASE6_START_EXIT_SCORECARD_AND_V0092_CROSS_HORIZON_FIX.md).** Owner confirmed **V0087–V0091 live INERT**, empty task queue and no paid calls; NEVER reinstall them. T24 original Stage14 → independent V0081 witness merged in #585, redundant #584 closed. V0092 uses the **existing** queue/function owner and permits PRE workers to claim only exact signed packet SHA + horizon, preventing T24 from taking T6/T90 tasks (and vice versa). It will REVOKE generic claim access from existing PRE group after independent disposable CI and reviewed owner installation. Production GH workers remain STOP-default, Phase5 science FREEZE HOLD, Phase6 paid GO NO. Nov13 interim / Nov20 conditional readiness targets, **not** guarantees. One actual future source→PRE+witness→POST/STOP evidence chain and source-use/label/budget approval still needed.
+
+
 ## November 12 — V0091 LIVE / real T−24h queue→V0081 independent witness integration
 
 Owner's Replit readback verified the existing V0091 source-registration function now **installed live and inert**, exact migration SHA `62f1f99883c47cc60ee00c31f21a34bbdb8a5515`, zero queue rows and provider charges, with the prior V0087–V0090 schema/roles preserved. **Do not reinstall any V0087–V0091 step.** [Read the V0091 live evidence and original T24→Stage14→V0081 witness integration checkpoint](2026-11-12_V0091_LIVE_INSTALLED_T24_QUEUE_STAGE17_WITNESS_BRIDGE_CHECKPOINT.md). This branch reuses the existing signed T24 packet and V0091 enrollment, original Stage14 SQL with exact V0087 queue fencing, separate Stage17 V0081 witness and immutable V0087 acknowledgment, all behind a manual, STOP-default GH canary gate. No future T24 flight has been registered or observed yet. **Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.**
