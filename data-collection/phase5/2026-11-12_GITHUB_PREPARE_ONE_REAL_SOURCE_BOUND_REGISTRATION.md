@@ -1,0 +1,58 @@
+# Phase 5 — GitHub PREPARE one source-bound flight task (after V0091 owner install)
+
+**Date:** 2026-11-12 Pacific. **Engineering implementation STAGED, owner release still STOP.**
+
+## Reuse, no repetition
+
+- V0087–V0090 are **already LIVE** by owner-submitted private Replit readbacks. Do not reinstall.
+- PR #579 (merged `d95611d7750c9cb064d74c914561dfe6c1a5089f`) added **STOP-default signed GitHub T−6h/T−90m PRE execution**, real V0088 inside the original Stage14 transaction and existing Stage28 dedicated PRE identity; zero real flight jobs dispatched yet.
+- PR #580 (merged `9da3ac7ac897de8a967f8f4e99c8f18fdc79178d`) added V0091 source-bound one-flight task registration via **existing Stage30 PREPARE NOLOGIN group**, an actual one-shot V0091 owner installer and passing disposable original FIDS→V0087 queue→Stage14 tests. **Owner has now installed V0091 LIVE**, returning `V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT`, database `neondb`, role `neondb_owner`, exact migration Git blob `62f1f99883c47cc60ee00c31f21a34bbdb8a5515`, function owner `phase5_cd_source_registration_owner_v39` NOLOGIN, PREPARE group `phase5_fids_prepare_prod_20261107` EXECUTE but no direct queue INSERT, `queueRows:0`, `taskEnrollments:0`, `flightSnapshotsWritten:0`, zero provider/paid calls, no worker scheduled. **Do not run V0091 or any V0087–V0090 installer again.**
+
+## New code: the missing existing-source→queue GH packet registrar
+
+- `server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts` is an **independent PREPARE-only** release gate: manual `workflow_dispatch`, exact reviewed SHA on `main`, signed frozen roster and real signed source-rights/manifest SHA, STOP-clear, existing PREPARE login `phase5_p30_prepare_login_20261107`, no PRE login, no provider/source/runtime/witness credentials, no paid HTTP.
+- `scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts` **reuses** `verifyP5CdFrozenRoster` from the PR579 C+D PRE controller, which supports the already-established witnessed later `T−6h` and `T−90m` packet types. Requires exactly ONE reviewed packet in the frozen roster for initial canary. Uses original Stage14 `preflightP5Stage14ReviewedPermitV39` before opening a DB connection. After valid roster verification, opens the **existing Stage28 SET-only PREPARE pool** and invokes `clean.phase5_cd_register_source_flight_v39` once with exactly the ten reviewed inputs. V0091 itself verifies real bound original, rights hash, first native T, normalized single confirmed operating leg, time cutoff, raw source retention, and uniqueness, before writing **one** durable READY queue task. Caller cannot substitute the expiry; it comes only from immutable V0079 binding.
+- `.github/workflows/phase5-cd-github-one-source-register-main-manual.yml` runs only on manually dispatched `main` with a separately set `P5_CD_GH_PREPARE_SOURCE_ENABLED=1` repository variable, exact confirmation string, exact SHA and STOP-clear existing secrets, and **only the existing `P5_V39_PREPARE_DATABASE_URL`**, never source/provider/PRE/witness. Missing any owner/reviewer release condition is HOLD before `npm ci` or DB access. No schedule or blind auto-retry for source enrollment.
+- `tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts` checks one explicit Phase5 non-provider canary vs separate post-freeze Phase6 GO, wrong repository/ref/attempt, STOP, code mismatch, forbidden credentials, exact V0091 ten arguments and no caller expiry. Real V0091 SQL+Stage14 source fixture already independently tested by PR580.
+
+### Why one packet initially?
+
+A DB registration request can commit successfully and lose its acknowledgment. A blind GH retry could then hit the immutable duplicate key or conceal a source data issue. Restricting the initial canary to one exact reviewed flight/packet makes independent readback and duplicate/unknown-commit quarantine manageable. This is a **pilot safety bound**, not a month-long one-flight quota; extend after actual crash and due-window evidence. Any missing source is simply a missing/censored eligible sample, not the invalidation of the experiment.
+
+### Scientific and scheduling limits (still OPEN)
+
+- This code does **not** call AeroDataBox, spend an Alert, upload a new source, synthesize a native T, normalize extra records or install V0091 live. **It registers only an already-bound and reviewed ORIGINAL**. Source provider requests use previously reviewed GH-only acquisition workflows separately.
+- **T−24h** still requires the existing V0081 **independent post-COMMIT witness** and has not been wired into the new queue controller. The old standalone-later-without-T24 protocol is separately reviewed and NOT silently bypassed here. The T6/T90 registrar needs a genuine witnessed earlier T24 for the original Stage14 later path.
+- Signed SHA/owner approval are not self-certifying provider Contents rights or source use for ML. Bounded missingness and genuine physical labels still need review; free ADSB.lol wheels-off is not aircraft gate-out.
+- PRE controller GitHub cron `*/5` might miss its three-minute own-cutoff window; never backfill. Early source enrollment and targeted dispatch, empirical jitter distribution and STOP/reaper evidence remain necessary.
+- Owner deadline: Nov 13 interim progress, Nov 20 outside target for realistic Phase5 readiness, contingent on actual source and permit. No unconditional Phase6 paid GO.
+
+**Status:** **V0087–V0091 are ALL LIVE and inert**, owner readback confirms V0091; GH PREPARE registration workflow remains STOP/default-disabled and must not be dispatched without genuine reviewed future original and rights. No actual flight task/PRE has been created. Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
+
+
+## Important resolved blocker — executable code PIN must precede frozen packet commits
+
+The first merged C+D controller used a self-referential rule: a packet **already committed inside GitHub HEAD** had to name that exact HEAD in `reviewedCodeSha`. That is impractical because adding the packet file creates a **new** commit SHA. The code and approved packet cannot normally be in the same commit whose SHA is embedded in the packet.
+
+This PR corrects both **GH PRE execution and GH PREPARE registration**:
+
+1. Independently review a **code-only commit** (including the actual PRE writer, source registrar, Stage28 adapter, workflows and locked dependencies) and put its SHA in the existing `P5_CD_GH_PRE_APPROVED_CODE_SHA` secret.
+2. Create frozen packet/roster JSON with `reviewedCodeSha` set to that **already existing reviewed code commit**, not the future packet-containing HEAD. Independently approve the packet SHA, roster SHA, rights and frame; commit those data files under `data-collection/phase5/frozen/`.
+3. GitHub Actions checks out **full history** (`fetch-depth: 0`). `verifyP5CdGithubFrozenCodeLineage_v39.ts` checks the real current checkout HEAD matches `GITHUB_SHA`, reviewed code commit is an ancestor, and **no executable files** in `server/`, `scripts/`, `migrations/`, `.github/workflows/`, `package.json`, `package-lock.json` or `tsconfig.json` changed, even untracked or uncommitted files, between review and dispatch. Frozen packet/doc commits are allowed. The pair of SHAs is passed internally for subsequent Stage14 release checks only **after actual Git verification**.
+4. A new throwaway local-Git CI test proves the allowed packet-only descendant and rejects edited/untracked executable code or wrong HEAD. No GitHub API, provider call or Neon database is involved.
+
+**Release interpretation:** Code cannot change after review without a fresh code pin, but **future packet data, dates, cohorts and missingness can evolve through separately reviewed frozen records**. This avoids an impossible exact-head constraint while preserving source-leakage and executable tampering protection. Do NOT set source/provider/paid approvals just to satisfy a code error; the independent source/rights and Phase5/Phase6 safety gates remain separate.
+
+## Canonical single-registration implementation, no duplicate GitHub workers
+
+Two branches independently proposed a V0091 GitHub caller (PR #581 and PR #582). **Use one canonical caller** in this PR: `scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts`, backed by `phase5CdGithubPrepareRegistrationGate_v39.ts` and the already-tested signed PRE roster + V0091 SQL. The separate branch #582's useful verification has been folded into this caller; its second workflow and second producer must NOT be merged/activated.
+
+Before the first V0091 function invocation, the canonical caller now checks the **actual Stage17 T24 witness receipt digest, flight/native-T, frozen T24 cutoff, frame/config hash, and expected T-version**, as well as the entire original Stage14 permit and reviewed roster, before any DB connection. It refuses missing, retimed, or digest-tampered T24 witness. This is receipt-integrity checking, not self-certifying provider rights or proving the real V0081 DB row; original Stage14 later independently checks the database.
+
+The owner-only `scripts/v39_phase5_cd_v0091_exact_registration_owner_readonly_once.ts` and focused read-only tests are **reused** from the other branch to resolve uncertain registration ACKs without a second insertion attempt. A row missing in a single MVCC snapshot **is not proof that the first transaction aborted**. No source GET/paid HTTP, PRE writes or provider payload is exposed by the audit.
+
+### Signed-code lineage (fix self-referential SHA)
+
+Executable reviewed SHA is an ancestor of the later frozen packet/roster data commit. `phase5CdGithubCodeLineage_v39.ts` inspects Git's real commit ancestry and executable diff (including new/untracked files) so the packet can truthfully name the reviewed preexisting code commit. **Never change `scripts/`, `server/`, workflow, migrations, or lockfiles after the reviewed pin without independent re-approval.** This same code-lineage gate is reused by the PRE controller, not independently reimplemented.
+
+This checkpoint is owner-supplied **successful live V0091 installation evidence**, not proof that a future qualified FIDS original exists or that Phase5 scientific freeze/Phase6 paid GO has passed.
