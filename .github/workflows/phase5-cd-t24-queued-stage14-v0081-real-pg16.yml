@@ -1,0 +1,112 @@
+name: Phase5 real V0087 queued T24 PRE plus separate V0081 witness ACK (DISPOSABLE PG16)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts'
+      - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'
+      - 'migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql'
+      - 'migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
+      - '.github/workflows/phase5-cd-t24-queued-stage14-v0081-real-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
+      - 'server/lib/disruption/phase5T24PreIndependentWitnessChain_v39.ts'
+      - 'tests/phase5_t24_pre_independent_witness_chain_v39.test.ts'
+      - '.github/workflows/phase5-cd-t24-queued-stage14-v0081-real-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  prospective-t24-then-independent-committed-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/runtime-not-used?sslmode=disable'
+      P5_STAGE26_FOUR_NOLOGIN_ROLES_ONCE: 'INSTALL_FOUR_NOLOGIN_P5_ROLES_WITH_NO_RUNTIME_MEMBERS'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      V39_P5_STAGE14_REAL_PG16: '1'
+      V39_P5_STAGE17_REAL_PG16: '1'
+      V39_P5_STAGE29_RESTRICTED_GROUPS_REAL_PG16: '1'
+      V39_P5_CD_T24_QUEUE_REAL_PG16: '1'
+      V39_P5_CD_V0088_STAGE14_CI: '1'
+      V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
+      V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '0'
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Ensure Stage29 integrations compile
+        run: npm run check
+      - name: Apply actual B0062 and Stage23 database schema in disposable PG16
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql >/tmp/st29-v79.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql >/tmp/st29-v80.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql >/tmp/st29-v81.log
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "REVOKE EXECUTE ON FUNCTION clean.phase5_t24_witness_before_insert_v39(), clean.phase5_t24_witness_immutable_v39() FROM PUBLIC" >/dev/null
+      - name: Install actual Stage27 NOLOGIN four-group ACL matrix in disposable PG16
+        run: |
+          set -Eeuo pipefail
+          node scripts/v39_phase5_stage26_four_nologin_roles_owner_once.mjs >/tmp/st29-roles.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const p=JSON.parse(fs.readFileSync("/tmp/st29-roles.json","utf8"));
+            if(p.rolesCreated!==4||p.passwordOrRuntimeMembershipCreated!==false||
+               p.providerCalls!==0||p.phase5FreezePassed!==false)
+              throw Error("STAGE29_SCHEMA_ROLES_NOT_INERT");
+          '
+      - name: Apply existing real V0087/V0088/V0089 queued Stage14 fences in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_P5_CD_T24_QUEUE_REAL_PG16" = 1
+          test "$V39_P5_CD_V0088_STAGE14_CI" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0089__phase5_cd_v0088_no_login_function_owner_commission_v39.sql
+          test "$(psql "$DATABASE_URL" -XAt -c "SELECT to_regclass('clean.phase5_cd_pre_admission_receipt_v39') IS NOT NULL")" = t
+          echo P5_CD_T24_EXISTING_V0087_V0088_V0089_DISPOSABLE_INSTALLED
+      - name: Prove actual V0087 T24 lease to Stage14 PRE + separate V0081 witness + V0087 ACK
+        run: |
+          set -Eeuo pipefail
+          npx vitest run tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts
+          echo 'P5_CD_V0087_T24_STAGE14_V0081_WITNESS_QUEUE_ACK_REAL_PG16_PASS LIVE_PROVIDER_CALLS=0 REAL_PROD_PRE=0 PHASE5_FREEZE=HOLD'
