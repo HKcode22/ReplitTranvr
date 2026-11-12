@@ -1,5 +1,10 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — Unattended T−24h singleton clock/Witness review
+
+**[Read the T−24h GitHub scheduled singleton PRE + independent V0081 witness PR checkpoint](2026-11-12_CD_T24_UNATTENDED_SINGLETON_DB_CLOCK_PR_CHECKPOINT.md).** Extends already-merged manual queued T24 worker (#585) with a separately **STOP-default** five-minute scheduler, exact frozen source+Stage17 review and the existing bounded real PostgreSQL-clock wait; it cannot claim T6/T90 thanks to the **V0092** signed packet/horizon function. This is not an operating 31-day scheduler or evidence of paid Phase6 GO. V0092 requires live one-shot installation, all release approvals and genuine future source before enabling; no live provider work or database changes in the review branch. Phase5 FREEZE HOLD / Phase6 paid GO NO.
+
+
 ## November 12 — V0091 LIVE; cross-horizon PRE lease fix before Phase6
 
 **[Nov12 actual Phase5→Phase6 finish-line scorecard and V0092 signed-packet queue contention fix](2026-11-12_PHASE5_TO_PHASE6_START_EXIT_SCORECARD_AND_V0092_CROSS_HORIZON_FIX.md).** Owner confirmed **V0087–V0091 live INERT**, empty task queue and no paid calls; NEVER reinstall them. T24 original Stage14 → independent V0081 witness merged in #585, redundant #584 closed. V0092 uses the **existing** queue/function owner and permits PRE workers to claim only exact signed packet SHA + horizon, preventing T24 from taking T6/T90 tasks (and vice versa). It will REVOKE generic claim access from existing PRE group after independent disposable CI and reviewed owner installation. Production GH workers remain STOP-default, Phase5 science FREEZE HOLD, Phase6 paid GO NO. Nov13 interim / Nov20 conditional readiness targets, **not** guarantees. One actual future source→PRE+witness→POST/STOP evidence chain and source-use/label/budget approval still needed.

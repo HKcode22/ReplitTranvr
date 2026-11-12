@@ -6,7 +6,7 @@ import {
 import {
  requireP5CdGithubPreRelease
 } from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
-import {runP5CdOneQueuedT24Witness}
+import {runP5CdOneQueuedT24Witness,requireP5CdT24DispatchEvent}
  from "../server/lib/disruption/phase5CdGithubQueuedT24Witness_v39";
 import type {P5Stage14SingleFlightPrePermit}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
@@ -171,5 +171,38 @@ describe("Phase5 true queued T24 Stage14 and separate Stage17 witness handoff",(
    rosterBytes:f.bytes,roster:f.roster,
    files:[{filePath:path,packetSha256:f.digest,bytes:f.json}]
   })).rejects.toThrow("DISTINCT_PRE_WITNESS_OR_SINGLE_FROZEN_PACKET_REQUIRED");
+ });
+ it("keeps automatic T24 separately STOP-default and refuses unapproved event",()=>{
+  const f=fixture();
+  expect(requireP5CdT24DispatchEvent(f.env)).toBe("MANUAL");
+  const scheduled={...f.env,GITHUB_EVENT_NAME:"schedule",
+   P5_CD_GH_T24_SCHEDULE_ENABLED:"0"};
+  expect(()=>requireP5CdT24DispatchEvent(scheduled))
+   .toThrow("T24_UNREVIEWED_EVENT_OR_SCHEDULE_DISABLED");
+  expect(requireP5CdT24DispatchEvent({
+   ...scheduled,P5_CD_GH_T24_SCHEDULE_ENABLED:"1"
+  })).toBe("SCHEDULED");
+  expect(()=>requireP5CdT24DispatchEvent({
+   ...scheduled,P5_CD_GH_T24_SCHEDULE_ENABLED:"1",
+   P5_CD_GH_T24_ONE_FLIGHT_CONFIRM:""
+  })).toThrow("T24_EXACT_CONFIRMATION_REQUIRED");
+  expect(()=>requireP5CdT24DispatchEvent({
+   ...scheduled,P5_CD_GH_T24_SCHEDULE_ENABLED:"1",
+   GITHUB_EVENT_NAME:"pull_request"
+  })).toThrow("T24_UNREVIEWED_EVENT_OR_SCHEDULE_DISABLED");
+ });
+ it("scheduled mode still refuses STOP before any queue read or claim",async()=>{
+  const f=fixture();
+  let q=0;const db={query:async()=>{q++;throw Error("DB_FORBIDDEN");}};
+  const pool={connect:async()=>{q++;throw Error("POOL_FORBIDDEN");}};
+  await expect(runP5CdOneQueuedT24Witness({
+   ...f.env,GITHUB_EVENT_NAME:"schedule",
+   P5_CD_GH_T24_SCHEDULE_ENABLED:"1",P5_CD_GH_PRE_STOP:"1"
+  },{
+   preDb:db,prePool:pool as any,witnessPool:{...pool} as any,
+   rosterBytes:f.bytes,roster:f.roster,
+   files:[{filePath:path,packetSha256:f.digest,bytes:f.json}]
+  })).rejects.toThrow("REFUSED_P5_CD_GITHUB_PRE_");
+  expect(q).toBe(0);
  });
 });

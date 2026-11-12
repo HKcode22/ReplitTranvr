@@ -5,6 +5,14 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {waitP5CdGithubSignedDueWindow}
+ from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
+import {verifyP5CdFrozenRoster}
+ from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+import {preflightP5Stage14ReviewedPermitV39}
+ from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
+import {verifyP5T24PreWitnessCrossReview}
+ from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 import {verifyP5CdGithubFrozenCodeLineage}
  from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {
@@ -14,7 +22,7 @@ import {
  requireP5CdGithubPreRelease
 } from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
 import {
- runP5CdOneQueuedT24Witness
+ runP5CdOneQueuedT24Witness,requireP5CdT24DispatchEvent
 } from "../server/lib/disruption/phase5CdGithubQueuedT24Witness_v39";
 import type {P5CdFrozenRoster}
  from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
@@ -30,12 +38,11 @@ function bytes(file:string):Buffer{
 }
 export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  verifyP5CdGithubFrozenCodeLineage(env);
- requireP5CdGithubPreRelease(env,{allowReviewedT24Witness:true});
- if(!FILE.test(env.P5_CD_GH_ROSTER_PATH??"")||
-    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
-    env.P5_CD_GH_T24_ONE_FLIGHT_CONFIRM!==
-     "ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER")
-  hold("SIGNED_MANUAL_T24_ROSTER_REQUIRED");
+ const released=requireP5CdGithubPreRelease(env,
+  {allowReviewedT24Witness:true});
+ requireP5CdT24DispatchEvent(env);
+ if(!FILE.test(env.P5_CD_GH_ROSTER_PATH??""))
+  hold("SIGNED_T24_SINGLETON_ROSTER_REQUIRED");
  const rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
  let roster:P5CdFrozenRoster;
  try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
@@ -43,6 +50,18 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  if(!Array.isArray(roster.entries)||roster.entries.length!==1)
   hold("EXACT_ONE_T24_PACKET_PER_MANUAL_TICK");
  const p=roster.entries[0],packetBytes=bytes(p.filePath);
+ // Verify the entire immutable packet + independent witness contract
+ // before opening either restricted PostgreSQL connection.
+ const packets=verifyP5CdFrozenRoster(rosterBytes,roster,[{
+  filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes
+ }],released,"T24_WITH_SEPARATE_WITNESS");
+ if(packets.size!==1)hold("NOT_ONE_INDEPENDENT_T24_PACKET");
+ const expected=[...packets.values()][0];
+ if(expected.permit.horizon!=="T-24h"||!expected.witnessReview)
+  hold("NO_SIGNED_T24_INDEPENDENT_WITNESS");
+ verifyP5T24PreWitnessCrossReview(
+  expected.permit,expected.witnessReview);
+ preflightP5Stage14ReviewedPermitV39(expected.permit);
  const preRaw=new Pool({
   connectionString:env.P5_V39_PRE_DATABASE_URL,
   max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:1400,
@@ -64,12 +83,19 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
    reviewedDedicatedLogin:"phase5_p30_witness_login_20261107",
    forbiddenApplicationLogin:"phase5_runtime_application_login"
   });
-  return await runP5CdOneQueuedT24Witness(env,{
+  // Schedule may arrive early; use only DB clock and original
+  // 180-second cutoff window. V0092 still owns the actual scoped claim.
+  const clock=await waitP5CdGithubSignedDueWindow(
+   env,pre,packets,undefined,{allowReviewedT24Witness:true});
+  if(clock.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED")
+   hold("T24_DB_CLOCK_LOOKAHEAD_EXHAUSTED_NO_REPLAY");
+  const result=await runP5CdOneQueuedT24Witness(env,{
    preDb:pre,prePool:pre,witnessPool:witness,
    rosterBytes,roster,files:[{
     filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes
    }]
   });
+  return{...result,dbClockDueWindow:clock};
  }finally{
   await Promise.all([preRaw.end().catch(()=>{}),
    witnessRaw.end().catch(()=>{})]);
@@ -79,7 +105,8 @@ if(process.env.P5_CD_GH_QUEUED_T24_EXECUTE==="1"){
  runP5CdOneQueuedT24GithubMain(process.env).then(report=>{
   console.log(JSON.stringify(report,null,2));
   if(report.status!==
-    "T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE"){
+    "T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE"&&
+     report.status!=="NO_DUE_SIGNED_T24_TASK"){
    console.error("REFUSED_P5_CD_QUEUED_T24_MAIN_NO_VERIFIED_WITNESS_OR_UNCERTAIN_HOLD");
    process.exitCode=2;
   }

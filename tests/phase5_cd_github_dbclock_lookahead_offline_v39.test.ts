@@ -114,4 +114,44 @@ describe("Phase5 C+D GitHub early DB-clock PRE window, NO provider/queue writes"
   expect(result.dbClockPolls).toBeLessThanOrEqual(106);
   expect(result.tasksClaimedByWaiter).toBe(0);
  });
+ it("T24 can only enter the unchanged cutoff when isolated witness scope is explicit",()=>{
+  const t24=new Map(packets());
+  t24.set(hash,{packetSha256:hash,permit:{
+   horizon:"T-24h",selectedTNativeUtc:native
+  } as P5CdVerifiedTaskPacket["permit"]});
+  expect(()=>decideP5CdUpcomingDueWindow(
+   "2035-11-24T11:57:00.000Z",t24))
+   .toThrow("T24_OR_STANDALONE_WITNESS_REQUIRES_OTHER_WORKFLOW");
+  expect(decideP5CdUpcomingDueWindow(
+   "2035-11-24T11:56:58.000Z",t24,
+   {allowReviewedT24Witness:true}).status)
+    .toBe("WAIT_FOR_SIGNED_CUTOFF");
+  expect(decideP5CdUpcomingDueWindow(
+   "2035-11-24T11:57:00.000Z",t24,
+   {allowReviewedT24Witness:true}).status).toBe("DUE_WINDOW");
+ });
+ it("T24 dedicated clock requires distinct witness credential before DB query",async()=>{
+  const t24=new Map(packets());
+  t24.set(hash,{packetSha256:hash,permit:{
+   horizon:"T-24h",selectedTNativeUtc:native
+  } as P5CdVerifiedTaskPacket["permit"]});
+  const e={...env(),P5_CD_GH_T24_WITNESS_APPROVED:"1",
+   P5_V39_T24_WITNESS_DATABASE_URL:
+    "postgresql://phase5_p30_witness_login_20261107:ci-only@reviewed.example.com/neondb?sslmode=verify-full"};
+  let n=0;
+  const db={query:async()=>{n++;return{rows:[{
+   now_utc:new Date("2035-11-24T11:57:00.000Z"),
+   role:"phase5_fids_pre_writer_prod_20261107"
+  }]};}};
+  await expect(waitP5CdGithubSignedDueWindow(
+   {...e,P5_CD_GH_T24_WITNESS_APPROVED:"0"},
+   db,t24,async()=>{},{allowReviewedT24Witness:true}))
+    .rejects.toThrow("SEPARATE_T24_WITNESS_RELEASE_NOT_REVIEWED");
+  expect(n).toBe(0);
+  const r=await waitP5CdGithubSignedDueWindow(
+   e,db,t24,async()=>{},{allowReviewedT24Witness:true});
+  expect(r.status).toBe("DUE_WINDOW");
+  expect(r.tasksClaimedByWaiter).toBe(0);
+  expect(n).toBe(1);
+ });
 });

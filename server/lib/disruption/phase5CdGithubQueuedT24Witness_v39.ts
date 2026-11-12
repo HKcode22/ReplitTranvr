@@ -28,6 +28,24 @@ import {
 } from "./phase5T24PreIndependentWitnessChain_v39";
 
 const deny=(s:string):never=>{throw Error("REFUSED_P5_CD_T24_QUEUED_"+s);};
+const T24_CONFIRM=
+ "ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER";
+/**
+ * Scheduled T24 is separately disabled by default and can execute ONLY
+ * with the same exact reviewed singleton packet and independent V0081
+ * release as the original manual path. Never authorize paid source calls.
+ */
+export function requireP5CdT24DispatchEvent(
+ env:NodeJS.ProcessEnv
+):"MANUAL"|"SCHEDULED"{
+ if(env.P5_CD_GH_T24_ONE_FLIGHT_CONFIRM!==T24_CONFIRM)
+  deny("T24_EXACT_CONFIRMATION_REQUIRED");
+ if(env.GITHUB_EVENT_NAME==="workflow_dispatch")return "MANUAL";
+ if(env.GITHUB_EVENT_NAME==="schedule"&&
+    env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1")
+  return "SCHEDULED";
+ return deny("T24_UNREVIEWED_EVENT_OR_SCHEDULE_DISABLED");
+}
 function required<T>(v:T|undefined,reason:string):T{
  if(v===undefined)throw Error("REFUSED_P5_CD_T24_QUEUED_"+reason);
  return v;
@@ -63,10 +81,7 @@ export async function runP5CdOneQueuedT24Witness(
  // witness-only login BEFORE opening any transaction.
  const released=requireP5CdGithubPreRelease(env,
   {allowReviewedT24Witness:true});
- if(env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
-    env.P5_CD_GH_T24_ONE_FLIGHT_CONFIRM!==
-      "ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER")
-  deny("T24_REQUIRES_MANUAL_ONE_FLIGHT_RELEASE");
+ requireP5CdT24DispatchEvent(env);
  if(!deps||!deps.preDb||!deps.prePool||!deps.witnessPool||
     deps.prePool===deps.witnessPool||
     !Array.isArray(deps.files)||deps.files.length!==1||
