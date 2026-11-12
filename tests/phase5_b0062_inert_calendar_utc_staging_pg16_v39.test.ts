@@ -29,7 +29,7 @@ const SETS=[
  {HUB:"SKBO",MID_A:"EBAW",MID_B:"NZNS",REGIONAL:"RJNK"},
  {HUB:"SKBO",MID_A:"YBUD",MID_B:"RKTU",REGIONAL:"FAKM"}
 ];
-const REGIONS={HUB:"FIXTURE_REGION",MID_A:"FIXTURE_MIDA",MID_B:"FIXTURE_MIDB",REGIONAL:"FIXTURE_REGIONAL"};
+const REGIONS:Record<string,string>={HUB:"FIXTURE_REGION",MID_A:"FIXTURE_MIDA",MID_B:"FIXTURE_MIDB",REGIONAL:"FIXTURE_REGIONAL"};
 const PAIR_SITES=SETS.map(row=>Object.fromEntries(
  Object.entries(row).map(([slot,icao])=>[slot,{icao,region:REGIONS[slot]}])
 ));
