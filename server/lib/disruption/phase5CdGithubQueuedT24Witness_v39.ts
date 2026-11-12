@@ -42,7 +42,7 @@ export interface P5CdT24QueuedResult{
         "NO_DUE_SIGNED_T24_TASK"|"HOLD_T24_UNKNOWN_NO_AUTORETRY";
  taskId:string|null;
  committedSnapshotId:string|null;
- registeredTaskWasSourceBound:true;
+ registeredTaskWasSourceBound:boolean;
  stage17WitnessCommittedAndReadBack:boolean;
  unsignedStage24ReceiptCandidate:null|{
   schema:"v39.phase5.unsigned-t24-stage24-handoff.v1";
@@ -71,11 +71,12 @@ export async function runP5CdOneQueuedT24Witness(
   deps.files,released,"T24_WITH_SEPARATE_WITNESS");
  if(packets.size!==1)deny("INDEPENDENT_T24_WITNESS_ROSTER_INVALID");
  const expected=[...packets.values()][0];
- if(!expected.witnessReview||
+ const witnessReview=expected.witnessReview;
+ if(witnessReview===undefined||
     expected.permit.horizon!=="T-24h")
   deny("T24_INDEPENDENT_WITNESS_FROZEN_SCOPE_MISSING");
  verifyP5T24PreWitnessCrossReview(
-  expected.permit,expected.witnessReview);
+  expected.permit,witnessReview);
  preflightP5Stage14ReviewedPermitV39(expected.permit);
  const reaped=await reapP5CdExpiredLeasesOnceV39(deps.preDb,16);
  if(reaped.some(x=>x.state==="QUARANTINED"))
@@ -88,7 +89,7 @@ export async function runP5CdOneQueuedT24Witness(
   return{
    schema:"v39.phase5.queued-t24-pre-independent-v0081-witness.v1",
    status:"NO_DUE_SIGNED_T24_TASK",taskId:null,
-   committedSnapshotId:null,registeredTaskWasSourceBound:true,
+   committedSnapshotId:null,registeredTaskWasSourceBound:false,
    stage17WitnessCommittedAndReadBack:false,
    unsignedStage24ReceiptCandidate:null,
    providerCalls:0,paidProviderCalls:0,queuedTasksInserted:0,
@@ -96,7 +97,7 @@ export async function runP5CdOneQueuedT24Witness(
   };
  }
  const task=claims[0];
- let permit;
+ let permit:ReturnType<typeof bindP5CdTaskToFrozenPermit>|undefined;
  try{
   permit=bindP5CdTaskToFrozenPermit(task,packets);
   if(permit.horizon!=="T-24h"||
@@ -107,11 +108,12 @@ export async function runP5CdOneQueuedT24Witness(
   // can become PRE without its exact original signed packet.
   deny("CLAIMED_TASK_NOT_EXACT_SIGNED_T24_NO_WRITE");
  }
+ if(permit===undefined)deny("CLAIMED_SIGNED_PRE_PERMIT_MISSING");
  const started=await markP5CdStage14WriteStartedV39(deps.preDb,task);
  if(!started)deny("QUEUE_WRITE_STARTED_NOT_ACKNOWLEDGED_NO_RETRY");
  try{
   const durable=await persistP5ReviewedT24PreAndIndependentWitness(
-   deps.prePool,deps.witnessPool,permit,expected.witnessReview,{
+   deps.prePool,deps.witnessPool,permit,witnessReview,{
     realV0088QueueFenceGh:{
      taskId:task.taskId,owner:task.leaseOwner,
      generation:task.leaseGeneration,packetSha256:task.packetSha256
@@ -139,12 +141,13 @@ export async function runP5CdOneQueuedT24Witness(
   const date=(v:unknown):string=>{
    const d=v instanceof Date?v:
     typeof v==="string"?new Date(v):null;
-   if(!d||!Number.isFinite(d.getTime()))
+   if(d===null)deny("POSTWITNESS_DATABASE_UTC_MISSING");
+   if(!Number.isFinite(d.getTime()))
     deny("POSTWITNESS_DATABASE_UTC_INVALID");
    return d.toISOString();
   };
   const row=witnessRow!;
-  if(row.role!==expected.witnessReview.expectedWitnessOnlyRole||
+  if(row.role!==witnessReview.expectedWitnessOnlyRole||
      row.snapshot_id!==id||
      row.flight_instance_id!==task.flightInstanceId||
      row.population_query_id!==task.sourcePopulationQueryId||
