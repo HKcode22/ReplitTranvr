@@ -1,0 +1,46 @@
+name: Phase5 Real Five-Pair B0062 Calendar Draft (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
+      - 'server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs'
+      - 'tests/phase5_real_five_pair_b0062_calendar_only_draft_v39.test.ts'
+      - '.github/workflows/phase5-real-five-pair-b0062-calendar-draft-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
+      - 'server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs'
+      - 'tests/phase5_real_five_pair_b0062_calendar_only_draft_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  DATABASE_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  genuine-pairs-prospective-calendar-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Reuse five real candidate pairs, test 21 future unselected airport slots
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          npx vitest run tests/phase5_real_five_pair_b0062_calendar_only_draft_v39.test.ts
+          npm run v39:typecheck
+          echo 'P5_REAL_FIVE_PAIR_CALENDAR_DRAFT=PASS NO_DB NO_PROVIDER NO_PHASE6_GO'
