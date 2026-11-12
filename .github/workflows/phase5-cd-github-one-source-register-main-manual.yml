@@ -91,7 +91,8 @@ jobs:
       P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
       P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
-      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      # T24 has a distinct approved singleton roster; never overwrite T6/T90 pin.
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ inputs.horizon_mode == 'T-24h' && secrets.P5_CD_GH_T24_ROSTER_SHA256 || secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
       V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
