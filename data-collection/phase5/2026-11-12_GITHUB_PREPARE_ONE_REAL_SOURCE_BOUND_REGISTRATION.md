@@ -6,7 +6,7 @@
 
 - V0087–V0090 are **already LIVE** by owner-submitted private Replit readbacks. Do not reinstall.
 - PR #579 (merged `d95611d7750c9cb064d74c914561dfe6c1a5089f`) added **STOP-default signed GitHub T−6h/T−90m PRE execution**, real V0088 inside the original Stage14 transaction and existing Stage28 dedicated PRE identity; zero real flight jobs dispatched yet.
-- PR #580 (merged `9da3ac7ac897de8a967f8f4e99c8f18fdc79178d`) added V0091 source-bound one-flight task registration via **existing Stage30 PREPARE NOLOGIN group**, an actual one-shot V0091 owner installer and a **passing disposable original FIDS→V0087 queue→Stage14 test**. V0091 was **not** installed live when this document was authored. Owner must run the pinned new V0091 Replit command and provide sanitized `V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT` readback before GH registrar can work.
+- PR #580 (merged `9da3ac7ac897de8a967f8f4e99c8f18fdc79178d`) added V0091 source-bound one-flight task registration via **existing Stage30 PREPARE NOLOGIN group**, an actual one-shot V0091 owner installer and passing disposable original FIDS→V0087 queue→Stage14 tests. **Owner has now installed V0091 LIVE**, returning `V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT`, database `neondb`, role `neondb_owner`, exact migration Git blob `62f1f99883c47cc60ee00c31f21a34bbdb8a5515`, function owner `phase5_cd_source_registration_owner_v39` NOLOGIN, PREPARE group `phase5_fids_prepare_prod_20261107` EXECUTE but no direct queue INSERT, `queueRows:0`, `taskEnrollments:0`, `flightSnapshotsWritten:0`, zero provider/paid calls, no worker scheduled. **Do not run V0091 or any V0087–V0090 installer again.**
 
 ## New code: the missing existing-source→queue GH packet registrar
 
@@ -27,7 +27,7 @@ A DB registration request can commit successfully and lose its acknowledgment. A
 - PRE controller GitHub cron `*/5` might miss its three-minute own-cutoff window; never backfill. Early source enrollment and targeted dispatch, empirical jitter distribution and STOP/reaper evidence remain necessary.
 - Owner deadline: Nov 13 interim progress, Nov 20 outside target for realistic Phase5 readiness, contingent on actual source and permit. No unconditional Phase6 paid GO.
 
-**Status:** V0087–V0090 live, V0091 **staged until owner confirms**, GH source registrar code built but default STOP, no real PRE, Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
+**Status:** **V0087–V0091 are ALL LIVE and inert**, owner readback confirms V0091; GH PREPARE registration workflow remains STOP/default-disabled and must not be dispatched without genuine reviewed future original and rights. No actual flight task/PRE has been created. Phase5 scientific FREEZE HOLD / Phase6 paid GO NO.
 
 
 ## Important resolved blocker — executable code PIN must precede frozen packet commits
@@ -42,3 +42,17 @@ This PR corrects both **GH PRE execution and GH PREPARE registration**:
 4. A new throwaway local-Git CI test proves the allowed packet-only descendant and rejects edited/untracked executable code or wrong HEAD. No GitHub API, provider call or Neon database is involved.
 
 **Release interpretation:** Code cannot change after review without a fresh code pin, but **future packet data, dates, cohorts and missingness can evolve through separately reviewed frozen records**. This avoids an impossible exact-head constraint while preserving source-leakage and executable tampering protection. Do NOT set source/provider/paid approvals just to satisfy a code error; the independent source/rights and Phase5/Phase6 safety gates remain separate.
+
+## Canonical single-registration implementation, no duplicate GitHub workers
+
+Two branches independently proposed a V0091 GitHub caller (PR #581 and PR #582). **Use one canonical caller** in this PR: `scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts`, backed by `phase5CdGithubPrepareRegistrationGate_v39.ts` and the already-tested signed PRE roster + V0091 SQL. The separate branch #582's useful verification has been folded into this caller; its second workflow and second producer must NOT be merged/activated.
+
+Before the first V0091 function invocation, the canonical caller now checks the **actual Stage17 T24 witness receipt digest, flight/native-T, frozen T24 cutoff, frame/config hash, and expected T-version**, as well as the entire original Stage14 permit and reviewed roster, before any DB connection. It refuses missing, retimed, or digest-tampered T24 witness. This is receipt-integrity checking, not self-certifying provider rights or proving the real V0081 DB row; original Stage14 later independently checks the database.
+
+The owner-only `scripts/v39_phase5_cd_v0091_exact_registration_owner_readonly_once.ts` and focused read-only tests are **reused** from the other branch to resolve uncertain registration ACKs without a second insertion attempt. A row missing in a single MVCC snapshot **is not proof that the first transaction aborted**. No source GET/paid HTTP, PRE writes or provider payload is exposed by the audit.
+
+### Signed-code lineage (fix self-referential SHA)
+
+Executable reviewed SHA is an ancestor of the later frozen packet/roster data commit. `phase5CdGithubCodeLineage_v39.ts` inspects Git's real commit ancestry and executable diff (including new/untracked files) so the packet can truthfully name the reviewed preexisting code commit. **Never change `scripts/`, `server/`, workflow, migrations, or lockfiles after the reviewed pin without independent re-approval.** This same code-lineage gate is reused by the PRE controller, not independently reimplemented.
+
+This checkpoint is owner-supplied **successful live V0091 installation evidence**, not proof that a future qualified FIDS original exists or that Phase5 scientific freeze/Phase6 paid GO has passed.
