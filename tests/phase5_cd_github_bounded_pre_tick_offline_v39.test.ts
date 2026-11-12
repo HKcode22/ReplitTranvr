@@ -32,6 +32,26 @@ function fixture(){
   externalNativeTPhysicalLegAndSourceUseReviewed:true,
   expectedSourceResponseSha256:sha("c"),
   reviewedFrameSha256:sha("e"),
+  queryDigestSha256:sha("2"),
+  expectedReviewedReleaseSha256:sha("3"),
+  expectedProviderContractSha256:sha("4"),
+  expectedEarlyDrawSha256:sha("5"),
+  reviewedConfigSha256:sha("6"),
+  independentlyReviewedOperatingLegEvidenceSha256:sha("7"),
+  independentlyReviewedNativeTEvidenceSha256:sha("8"),
+  independentlyReviewedRunAndRetentionEvidenceSha256:sha("9"),
+  frozenBuilderSha256:sha("c"),
+  builderFrozenAtUtc:"2035-11-25T05:00:00.000Z",
+  selectedTConfig:{
+   milestone:"departure.scheduledTime.utc",
+   version:"ci-native-t",
+   artifactHash:sha("f"),verifiedProviderNativeSchedule:true,
+   semanticsEvidenceSha256:sha("8")
+  },
+  expectedGithubSourceRunId:"42363348888",
+  runDayIndex:1,slot:"HUB",airportIcao:"WSSS",
+  maxPopulationStalenessSeconds:3600,
+  reviewedT24WitnessReceipt:{schema:"ci-prior-independent-witness"} ,
   flightInstanceId:"leg:ci:cd:t6:001",horizon:"T-6h",
   selectedTNativeUtc:native,expectedSourcePopulationQueryId:qid
  };
