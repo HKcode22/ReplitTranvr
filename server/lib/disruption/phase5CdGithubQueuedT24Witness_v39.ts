@@ -100,6 +100,10 @@ export async function runP5CdOneQueuedT24Witness(
    "T24_INDEPENDENT_WITNESS_FROZEN_SCOPE_MISSING");
  verifyP5T24PreWitnessCrossReview(
   expected.permit,witnessReview);
+ if(expected.permit.reviewedSupplementalFeatureBundle&&
+    (env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED!=="1"||
+     env.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED!=="1"))
+  deny("SUPPLEMENTAL_FEATURES_NOT_APPROVED_BEFORE_QUEUE_WRITE_START");
  preflightP5Stage14ReviewedPermitV39(expected.permit);
  const reaped=await reapP5CdExpiredLeasesOnceV39(deps.preDb,16);
  if(reaped.some(x=>x.state==="QUARANTINED"))
@@ -141,7 +145,9 @@ export async function runP5CdOneQueuedT24Witness(
     realV0088QueueFenceGh:{
      taskId:task.taskId,owner:task.leaseOwner,
      generation:task.leaseGeneration,packetSha256:task.packetSha256
-    }
+    },
+    ...(env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED==="1"?
+      {amendmentENativeRouteBoundGh:true as const}:{})
    });
   const id=durable.committedSnapshotId;
   // Witness role has SELECT on the existing V0081 witness and the

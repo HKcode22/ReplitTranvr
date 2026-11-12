@@ -2,10 +2,10 @@
  * Amendment E: OFFLINE deterministic feature-selection contract.
  * Does not fetch provider data, train a model, insert PRE, or grant use rights.
  *
- * Because real Stage14 is still features:[], this is deliberately separate:
- * an eventual writer integration must use exactly the signed, independently
- * authorized field set, identity and actual ISSUE time. Do NOT merge rows
- * into Stage14 silently or claim model readiness from passing this test.
+ * The existing Stage14 writer now supports an explicitly reviewed,
+ * separately released source-bound route and supplementary as-of feature
+ * path; the default stays empty without opt-in. Neither the time selector
+ * nor a signed packet alone proves source rights or model readiness.
  */
 import type {PreFeatureInput}
  from "./preSnapshotBuilder_v3";
@@ -17,7 +17,8 @@ export const P5_E_ALLOWED_PRE_FEATURES=[
  "origin_metar_visibility_m","origin_metar_wind_kt",
  "origin_taf_flight_category","destination_taf_flight_category",
  "prior_aircraft_turnaround_minutes",
- "prior_route_departure_delay_median_minutes"
+ "prior_route_departure_delay_median_minutes",
+ "prior_airport_departure_delay_median_minutes","airport_congestion_1h"
 ] as const;
 export type P5EPreField=typeof P5_E_ALLOWED_PRE_FEATURES[number];
 export type P5ESource="AERODATABOX_FIDS"|"NOAA_METAR"|"NOAA_TAF"|
