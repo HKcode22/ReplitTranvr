@@ -33,3 +33,12 @@ The PR must **pass all exact-head tests** before considering a new one-shot owne
 4. Keep **ONE Amendment E**: genuine physical departure delay minutes at T−6h candidate; T−90m update and T−24h comparator. Free ADSB.lol wheels-off is only a proxy, not actual gate-out. No second paid airborne vendor.
 
 **Phase5 scientific FREEZE HOLD; Phase6 paid GO NO.** Nov 13 and Nov 20 are planning checkpoints, not unconditional authorizations.
+
+
+## One-shot owner installer now implemented and independently CI-tested
+
+`scripts/v39_phase5_cd_v0091_owner_once.mjs` is a **new, separately pinned one-time Replit owner commissioner**, not an automatic install. It checks actual non-superuser `neondb_owner`, `neondb` PG16 primary, original V0079/V0087 empty task queue, existing Phase5 PREPARE login+SET-only NOLOGIN membership, and absence of any V0091 partial objects. It reads the SQL only from a private temporary location and rechecks its exact Git blob hash. It strips the reviewed standalone outer transaction delimiters and applies SQL within **one SERIALIZABLE transaction**; it verifies owner NOLOGIN, no PUBLIC/SOURCE/PRE EXECUTE, PREPARE EXECUTE-only, no direct PREPARE queue writes, no retained temporary SET role and zero queue records **before and after COMMIT**. If COMMIT acknowledgment is uncertain, it emits HOLD without a blind retry.
+
+The disposable PG16 workflow tests this **actual owner runner as a non-superuser**, checks exact successful status `V0091_SOURCE_BOUND_PREPARE_ONLY_FUNCTION_COMMISSIONED_INERT`, verifies duplicate install REFUSED, and then executes the original synthetic FIDS→V0091 PREPARE→V0087→Stage14 pipeline. V0091 derives `source_expires_at_utc` **exclusively from the real previously bound V0079 original**, never from caller-supplied expiry.
+
+**No live V0091 installation is claimed yet.** Owner's next Replit Shell command must use an exact main merge commit and the freshly verified runner+SQL Git blob SHAs. Successful V0087–V0090 operations MUST NOT be repeated.
