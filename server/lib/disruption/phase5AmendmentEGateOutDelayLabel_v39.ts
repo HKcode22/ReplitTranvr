@@ -103,10 +103,11 @@ export function assessP5AmendmentEGateOutDelayCandidate(
   clock(input.outcome.actualUtc);
  const actualAvailable=input.outcome.firstAvailableAtUtc===null?null:
   clock(input.outcome.firstAvailableAtUtc);
- if((actual===null)!==(actualAvailable===null)||
+ if((actual!==null&&actualAvailable===null)||
     (actual!==null&&actualAvailable!==null&&actualAvailable<actual)||
     (input.outcome.operation==="CONFIRMED_CANCELLED"&&
-     (actual!==null||input.outcome.event!=="NO_EVENT"))||
+     (actual!==null||input.outcome.event!=="NO_EVENT"||
+      actualAvailable===null||!input.outcome.evidenceSha256))||
     (input.outcome.event==="NO_EVENT"&&actual!==null)||
     (input.outcome.event!=="NO_EVENT"&&actual===null))
   refuse("CONTRADICTORY_OUTCOME_EVENT_AND_AVAILABILITY");
