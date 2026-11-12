@@ -204,6 +204,8 @@ suite("P5 B0062 inert initial calendar+UTC budget real PG16",()=>{
   // are what must replay. Keep explicit per-day seed and UTC class flexibility.
   const benign=structuredClone(input);
   benign.calendarDays[6].frozenDrawSeed=sha("9");
+  // Both crossover periods must retain the same time-class convention.
+  benign.calendarDays[0].timeClass="00:00";
   benign.calendarDays[6].timeClass="00:00";
   benign.expectedSignedCalendarRowsSha256=digest(benign.calendarDays);
   expect(()=>compileP5InertB0062UtcStagePacket(benign,{
