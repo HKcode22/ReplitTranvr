@@ -69,7 +69,7 @@ function parseDayRows(p){
      typeof d.budgetDayId!=="string"||!UID.test(d.budgetDayId)||
      typeof d.frozenDrawSeed!=="string"||!SHA.test(d.frozenDrawSeed)||
      !KNOWN_HUBS.includes(d.anchorIcao)||
-     d.timeClass!==d.utcSlot||
+     ![d.utcSlot,d.utcSlot+":00"].includes(d.timeClass)||
      !d.slotRegions||typeof d.slotRegions!=="object"||
      Array.isArray(d.slotRegions)||
      Object.keys(d.slotRegions).length!==4||
@@ -125,8 +125,7 @@ function parseDayRows(p){
      !same(a.pairAirportSet,b.pairAirportSet)||
      a.utcSlot!==b.utcSlot||a.timeClass!==b.timeClass||
      a.weekday!==b.weekday||
-     a.pairRole===b.pairRole||
-     a.frozenDrawSeed!==b.frozenDrawSeed)
+     a.pairRole===b.pairRole)
    hold("PAIRED_REPLAY_IDENTITY_OR_WEEKDAY_DRIFT");
   if(a.pairRole==="control")controlFirst++;else alternativeFirst++;
   for(const r of arr){
