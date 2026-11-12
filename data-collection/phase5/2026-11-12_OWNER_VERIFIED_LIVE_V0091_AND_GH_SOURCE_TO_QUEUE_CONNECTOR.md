@@ -33,3 +33,8 @@ The original C+D GitHub PRE tick, as-of route feature and Stage14 writer were me
 - A `HOLD` on packet/native-T drift, multiple rows, bad scope or unavailable owner read-only session.
 
 The script does not print a database URL, FIDS original payload, provider keys, or authorization secrets and explicitly reports `automaticRegistrationRetryAuthorizedByAudit:false`. It is **not** an independently provided legal/content-rights approval and cannot certify aircraft physical departure. If needed after a real ambiguous registration, the owner can run it with the exact reviewed identifiers in their private Replit Shell; do **not** run it arbitrarily or reveal secret credentials in CI.
+
+
+## Source-packet identity cannot be faked between review and registration
+
+The code keeps an in-process `WeakMap` of objects that actually passed the entire exact-roster/Stage17/native-T review. Only that same object with an unchanged permit digest is accepted by `registerOneP5CdGithubSourceFlightV39`; a fabricated type-compatible object or one mutated after review **never reaches SQL**. This is a local code-integrity boundary, not external identity or licence authentication. The owner and SQL clocks remain authoritative. The offline test explicitly rejects a lookalike packet and changed leg after verification with **zero database calls**.
