@@ -9,7 +9,7 @@
  * retry, even if a PRE COMMIT actually succeeded.
  */
 import {
- reapP5CdExpiredLeasesOnceV39,type P5CdTaskExecutor
+ reapP5CdExpiredLeasesOnceV39,type P5CdTaskExecutor,type P5CdQueueState
 } from "./phase5CdDurableQueueClient_v39";
 import {requireP5CdGithubPreRelease}
  from "./phase5CdGithubPreReleaseGate_v39";
@@ -33,7 +33,7 @@ export interface P5CdLeaseWatchdogResult{
  readyAfterUnstartedLease:number;
  missedDeadlineOrExpiredSource:number;
  quarantinedUnknownWrite:number;
- taskResults:Array<{taskId:string;state:"READY"|"MISSED"|"QUARANTINED"}>;
+ taskResults:Array<{taskId:string;state:P5CdQueueState}>;
  providerCalls:0;paidProviderCalls:0;
  directSnapshotWrites:0;taskEnrollments:0;claims:0;
  unknownWriteAutomaticallyRetried:false;
