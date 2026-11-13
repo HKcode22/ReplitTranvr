@@ -5,12 +5,16 @@ on:
     paths:
       - 'scripts/v39_phase5_prelaunch_two_narrow_logins_owner_once.mjs'
       - 'tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs'
+      - 'tests/phase5_two_stage_logins_independent_readonly_v39.test.ts'
       - '.github/workflows/phase5-b0062-v0093-two-narrow-logins-owner-disposable-pg16.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/v39_phase5_prelaunch_two_narrow_logins_owner_once.mjs'
       - 'tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts'
+      - 'scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs'
+      - 'tests/phase5_two_stage_logins_independent_readonly_v39.test.ts'
 permissions:
   contents: read
 env:
@@ -65,6 +69,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
-          npx vitest run tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts
+          npx vitest run tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts tests/phase5_two_stage_logins_independent_readonly_v39.test.ts
           npm run v39:typecheck
           echo 'PHASE5_TWO_RESTRICTED_B0062_V0093_LOGINS_DISPOSABLE_PG16=PASS SOURCE=0 PAID=0 GO=0'
