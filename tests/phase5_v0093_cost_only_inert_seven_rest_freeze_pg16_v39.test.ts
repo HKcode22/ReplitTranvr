@@ -17,6 +17,8 @@ import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from
 import {
  compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce
 } from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {inspectP5V0093IndependentExactPostStage} from
+ "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const ROLE="phase5_b0062_prelaunch_stage_ci20261112";
@@ -437,6 +439,26 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   expect(await categoryCounts()).toEqual({
    release:1,caps:7,days:7*r.c.days.length,source:0,attempt:0
   });
+  // Distinct fresh PostgreSQL client/READ ONLY transaction: rederive every
+  // signed row + true UTC budget; owner writer's commit claim is not enough.
+  const independent=await inspectP5V0093IndependentExactPostStage(
+   admin,input,review,r.permit
+  );
+  expect(independent.status).toBe(
+   "INDEPENDENT_EXACT_B0062_V0093_POST_STAGE_READONLY_MATCH_NO_GO");
+  expect(independent.verifiedReadOnly).toBe(true);
+  expect(independent.calendarRows).toBe(31);
+  expect(independent.pairedAirportDays).toBe(10);
+  expect(independent.ordinaryAirportDaysUnselected).toBe(21);
+  expect(independent.categoryCycleCaps).toBe(7);
+  expect(independent.categoryUtcBudgetRows).toBe(7*r.c.days.length);
+  expect(independent.sourceQueriesAndPhysicalAttemptsZero).toBe(true);
+  expect(independent.independentHumanSignatureOrRightsAuthenticatedByThisCode)
+   .toBe(false);
+  expect(independent.providerCalls).toBe(0);
+  expect(independent.databaseWrites).toBe(0);
+  expect(independent.phase5ScientificFreeze).toBe(false);
+  expect(independent.phase6PaidGo).toBe(false);
   const release=(await admin.query(
    "SELECT budget_release_mode,reviewed_source_request_grid_sha256,"+
    "reviewed_cost_envelope_sha256,reviewed_category_budget_sha256 "+
