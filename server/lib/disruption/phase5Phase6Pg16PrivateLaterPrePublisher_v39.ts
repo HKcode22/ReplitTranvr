@@ -161,7 +161,11 @@ export async function publishP5ExternalLaterShardToPrivatePg16Once(
    "reviewed_code_sha,manifest_sha256,rights_sha256,"+
    "external_review_sha256,externally_reviewed_at_utc,"+
    "retention_not_after_utc FROM "+TABLE+
-   " WHERE logical_path=$1 FOR SHARE",[sourcePath]
+   // PostgreSQL SELECT FOR SHARE requires UPDATE privilege. The V0094
+   // publisher intentionally has SELECT+INSERT ONLY. SERIALIZABLE read
+   // plus append-only source registry and primary-key uniqueness provide
+   // the required non-mutating check without relaxing its ACL.
+   " WHERE logical_path=$1",[sourcePath]
   );
   const s=source.rows[0];
   if(source.rowCount!==1||!s||s.logical_path!==sourcePath||
