@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## November 12 — **ACTUAL owner V0093 installed LIVE inert**, independent database readback follows
+
+[Owner-confirmed real Neon V0093 schema-only success, preserved exact receipt and independent read-only verification checklist](2026-11-12_REAL_NEON_V0093_OWNER_INSTALL_SUCCESS_INDEPENDENT_RO_PENDING.md). **Do not rerun V0093 or reinstall V0079–V0092.** The Replit Shell owner installer reported `V0093_SCHEMA_ONLY_OWNER_INSTALL_AND_SAME_CONNECTION_READBACK_PASS`, real before=false/after=true, no B0062 auth enabled, no source/flight writes, no paid calls. This is an actual database installation, **not merely code CI**. Fresh separately connected **READ ONLY** verification of columns, enforced provenance CHECK, original physical-GET trigger and zero prepared-source/cost-release rows is still pending. The next science/paid gates remain genuine 31-day signed future calendar/treatment, actual provider source rights/range/UTC 7-category reservations, restricted inert staging and independent GO. Phase5 FREEZE HOLD / Phase6 paid NO-GO.
+
 ## November 12 — P0 Phase6: hash-pinned one-use **V0093 only** inert Neon schema installer
 
 [Read the exact V0093 owner installation, independent readback and NO-GO safety checkpoint](2026-11-12_V0093_INERT_ONE_USE_OWNER_INSTALLER_READINESS.md). This targets the real **missing additive V0093 schema** after #607/#608 and the owner-proven zero-row Neon cold start; it **never reinstalls V0079–V0092**. Private one-shot `neondb_owner` PG16 read-only structural/source/disabled-B0062 preflight, exact Git blob-pinned migration, atomic original SQL, independent same-session RO readback and table row count invariants. Creates NO seven-category release row, calendar/source identity, credential, flight PRE, provider GET or Phase6 GO. **Production execution is NOT claimed by CI; only a separately exact hash-pinned owner Replit Shell run can establish it.**
