@@ -122,6 +122,9 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
  pins:P5ExternalLaterReviewSignerPins,
  observedDbClockUtc:string
 ):P5VerifiedEd25519ExternalLaterReviewReceipt{
+ let parsedRegistry:unknown;
+ try{parsedRegistry=JSON.parse(plan?.registryProposalBytes?.toString("utf8")??"");}
+ catch{return fail("UNSIGNED_PROPOSAL_CHANGED_OR_SELF_APPROVED");}
  if(!plan||
     plan.schema!=="v39.phase5.review-ready-later-pre-unsigned-registry-plan.v1"||
     plan.status!==
@@ -139,7 +142,7 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
     plan.proposedPacketFiles.length<1||
     plan.proposedPacketFiles.length>96||
     plan.proposedRegistrySha256!==hash(plan.registryProposalBytes)||
-    JSON.stringify(JSON.parse(plan.registryProposalBytes.toString("utf8")))!==
+    JSON.stringify(parsedRegistry)!==
       JSON.stringify(plan.registryProposal)||
     !SOURCE.test(plan.registryProposal?.sourceDayRegistryFilePath??"")||
     !FILE.test(plan.proposedRegistryFilePath??"")||
@@ -150,6 +153,7 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
     !Number.isSafeInteger(plan.registryProposal.shardIndex)||
     plan.registryProposal.shardIndex<1||
     plan.registryProposal.shardIndex>100_000||
+    !Array.isArray(plan.registryProposal.entries)||
     plan.registryProposal.entries.length!==plan.proposedPacketFiles.length)
   fail("UNSIGNED_PROPOSAL_CHANGED_OR_SELF_APPROVED");
  const files=new Set<string>();
@@ -188,7 +192,7 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
  if(fingerprint!==pins.expectedReviewerPublicKeyFingerprintSha256)
   fail("PUBLIC_KEY_FINGERPRINT_NOT_INDEPENDENTLY_PINNED");
  const review=wire?.review;
- if(!review||wire.schema!==
+ if(!review||Object.keys(wire).length!==3||wire.schema!==
       "v39.phase5.external-ed25519-later-shard-envelope.v1"||
     review.schema!=="v39.phase5.external-ed25519-later-shard-review.v1"||
     review.audience!==AUDIENCE||
