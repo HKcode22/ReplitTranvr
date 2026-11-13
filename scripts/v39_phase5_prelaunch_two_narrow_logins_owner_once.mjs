@@ -98,11 +98,14 @@ async function snapshot(c,expectedCreated){
   "current_setting('server_version_num')::int major,"+
   "current_setting('transaction_read_only') ro,pg_is_in_recovery() replica,"+
   "(SELECT rolcreaterole OR rolsuper FROM pg_catalog.pg_roles "+
-  "WHERE rolname=current_user) creator"
+  "WHERE rolname=current_user) creator,"+
+  "(SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=current_user) superuser"
  )).rows[0];
  if(!a||a.db!=="neondb"||Number(a.major)<160000||
     a.ro!=="off"||a.replica!==false||a.creator!==true||
-    !["neondb_owner","postgres"].includes(a.actor))
+    (process.env.GITHUB_ACTIONS==="true"?
+      (a.actor!=="postgres"||a.superuser!==true):
+      (a.actor!=="neondb_owner"||a.superuser!==false)))
   fail("WRONG_PG16_OWNER_PRIMARY_OR_PRIVILEGE");
  const tables=(await c.query(
   "SELECT n,t.o IS NOT NULL AS present FROM "+
