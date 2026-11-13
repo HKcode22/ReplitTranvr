@@ -15,6 +15,8 @@ import {createHash,createPublicKey,verify}
  from "node:crypto";
 import type {P5UnsignedLaterRegistryReviewPlan}
  from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39";
+import type {P5SignedWitnessedLaterPrePacket}
+ from "../../../scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39";
 
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
@@ -183,6 +185,44 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
     !reviewerPublicKeyPem.includes("-----BEGIN PUBLIC KEY-----")||
     reviewerPublicKeyPem.includes("PRIVATE KEY"))
   fail("MISSING_INDEPENDENT_PINNED_PUBLIC_KEY_OR_RIGHTS");
+ // An external signature must cover packet bytes that actually agree with
+ // the outer independently pinned review and frozen registry fields.
+ // This is a second guard; the original native-flight completion and V0091
+ // independent PG16 SOURCE/own-cutoff checks remain authoritative.
+ for(let i=0;i<plan.proposedPacketFiles.length;i++){
+  const f=plan.proposedPacketFiles[i];
+  const e=plan.registryProposal.entries[i];
+  let pkt:P5SignedWitnessedLaterPrePacket;
+  try{pkt=JSON.parse(f.bytes.toString("utf8")) as P5SignedWitnessedLaterPrePacket;}
+  catch{return fail("REVIEWED_PACKET_NONJSON_OR_RIGHTS_MISMATCH");}
+  const p=pkt?.prePermit;
+  if(!p||pkt.reviewedCodeSha!==pins.expectedApprovedMainCodeSha||
+     p.manifestSha256!==plan.registryProposal.manifestSha256||
+     p.expectedReviewedReleaseSha256!==
+      pins.expectedReviewedReleaseSha256||
+     p.expectedReviewedSourceRightsSha256!==
+      pins.expectedReviewedRightsSha256||
+     p.runDayIndex!==plan.registryProposal.runDayIndex||
+     p.flightInstanceId!==e.expectedFlightInstanceId||
+     p.horizon!==e.expectedHorizon||
+     p.selectedTNativeUtc!==e.expectedSelectedTNativeUtc||
+     p.queryDigestSha256!==e.expectedQueryDigestSha256||
+     p.expectedSourcePopulationQueryId!==
+      e.expectedSourcePopulationQueryId||
+     !SHA.test(p.expectedSourceResponseSha256??"")||
+     !SHA.test(p.expectedProviderContractSha256??"")||
+     !SHA.test(p.expectedEarlyDrawSha256??"")||
+     !/^[0-9]{5,25}$/.test(p.expectedGithubSourceRunId??"")||
+     p.externalNativeTPhysicalLegAndSourceUseReviewed!==true||
+     p.identityEvidenceTier!=="PROVIDER_NATIVE_OPERATING_LEG"||
+     (e.expectedT24ReceiptSha256!==undefined?
+      p.reviewedT24WitnessReceipt?.receiptSha256!==
+       e.expectedT24ReceiptSha256:
+      p.reviewedT24WitnessReceipt!==undefined||
+       p.reviewedStandaloneLaterNoT24?.missingT24Class!==
+        "HONEST_T24_UNOBSERVED_NOT_BACKFILLED"))
+   fail("REVIEWED_PACKET_NONJSON_OR_RIGHTS_MISMATCH");
+ }
  let key:ReturnType<typeof createPublicKey>;
  try{key=createPublicKey(reviewerPublicKeyPem);}
  catch{return fail("NOT_ED25519_PUBLIC_KEY");}
