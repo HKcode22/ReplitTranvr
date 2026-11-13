@@ -9,6 +9,8 @@
  * SERIALIZABLE Stage14 child writer is the only PRE write authority.
  */
 import {readFileSync,lstatSync} from "node:fs";
+import {readP5CompleteGithubWorkflowHistory}
+ from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39";
 import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -219,9 +221,7 @@ export async function runP5LaterSignedBatchDispatcher(
  const url=ROOT+"/actions/workflows/"+CHILD+"/runs"+
   "?event=workflow_dispatch&per_page=100&created="+
   encodeURIComponent(first+".."+last);
- const response=await fetcher(url,{method:"GET",headers});
- if(!response.ok)hold("GITHUB_CHILD_HISTORY_UNAVAILABLE");
- const history=await response.json() as P5LaterGhHistory;
+ const history=await readP5CompleteGithubWorkflowHistory(url,fetcher,headers) as P5LaterGhHistory;
  // Audit ALL candidates and full bounded GH history BEFORE any child POST.
  const newChildren=planP5SignedLaterBatchChildren(ready,history);
  let acknowledged=0;
