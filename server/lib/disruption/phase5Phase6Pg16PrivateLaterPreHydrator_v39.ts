@@ -154,11 +154,12 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
   if(registryResult.rowCount!==1)
    fail("FROZEN_REGISTRY_NOT_COMMITTED_IN_PRIVATE_STORE");
   const registryRow=registryResult.rows[0];
-  const registryRaw=registryRow?.payload_bytes;
-  if(!Buffer.isBuffer(registryRaw)||
-     registryRaw.length<100||registryRaw.length>250000||
-     hash(registryRaw)!==pins.expectedRegistrySha256)
-   fail("PRIVATE_REGISTRY_BYTES_NOT_EXTERNALLY_PINNED");
+  const registryRawUnknown=registryRow?.payload_bytes;
+  if(!Buffer.isBuffer(registryRawUnknown)||
+     registryRawUnknown.length<100||registryRawUnknown.length>250000||
+     hash(registryRawUnknown)!==pins.expectedRegistrySha256)
+   return fail("PRIVATE_REGISTRY_BYTES_NOT_EXTERNALLY_PINNED");
+  const registryRaw:Buffer=registryRawUnknown;
   let registry:P5SignedLaterPreDayRegistry;
   try{registry=JSON.parse(registryRaw.toString("utf8")) as P5SignedLaterPreDayRegistry;}
   catch{return fail("PRIVATE_REGISTRY_NONJSON");}
@@ -221,10 +222,11 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
    if(typeof row.logical_path!=="string"||
       !paths.includes(row.logical_path)||
       index.has(row.logical_path))
-    fail("UNREVIEWED_OR_DUPLICATE_PRIVATE_PG_ROW");
-   const isSource=row.logical_path===pins.expectedSourceRegistryPath;
+    return fail("UNREVIEWED_OR_DUPLICATE_PRIVATE_PG_ROW");
+   const logicalPath:string=row.logical_path;
+   const isSource=logicalPath===pins.expectedSourceRegistryPath;
    const e=isSource?undefined:
-     registry.entries.find(x=>x.filePath===row.logical_path);
+     registry.entries.find(x=>x.filePath===logicalPath);
    if(!isSource&&!e)
     fail("PRIVATE_FLIGHT_NOT_IN_EXTERNALLY_PINNED_DAY_REGISTRY");
    const bytes=inspect(
@@ -232,13 +234,13 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
     isSource?pins.expectedSourceDayRegistrySha256:e!.expectedPacketSha256,
     isSource?pins.expectedSourceReviewEvidenceSha256:
       pins.expectedLaterReviewEvidenceSha256,
-    isSource?null:registry.shardIndex,row.logical_path,
+    isSource?null:registry.shardIndex,logicalPath,
     isSource?100000:200000
    );
-   index.set(row.logical_path,bytes);
+   index.set(logicalPath,bytes);
   }
   const sourceRaw=index.get(pins.expectedSourceRegistryPath);
-  if(!sourceRaw)fail("REVIEWED_SOURCE_REGISTRY_ABSENT");
+  if(!sourceRaw)return fail("REVIEWED_SOURCE_REGISTRY_ABSENT");
   let source:P5SignedSourceBatchRegistry;
   try{source=JSON.parse(sourceRaw.toString("utf8")) as P5SignedSourceBatchRegistry;}
   catch{return fail("PRIVATE_SOURCE_DAY_NONJSON");}
@@ -277,7 +279,7 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
   if(e instanceof Error&&
      e.message.startsWith("REFUSED_P5_PHASE6_PRIVATE_PG_HYDRATION_"))
    throw e;
-  fail("PRIVATE_SQL_READ_UNKNOWN_OR_WITHOUT_COMMIT_PROOF");
+  return fail("PRIVATE_SQL_READ_UNKNOWN_OR_WITHOUT_COMMIT_PROOF");
  }finally{
   if(started)await client.query("ROLLBACK").catch(()=>{});
  }
