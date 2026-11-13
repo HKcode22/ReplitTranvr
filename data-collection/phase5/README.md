@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 13 — Owner-requested 31-day visibility, existing Ultra rights evidence & Nov 20 conditional Phase6 launch path
+
+[Read the operator-readable data viewer, preserved RapidAPI Team Ultra/retention/PITR evidence and Nov20 readiness plan](2026-11-13_OWNER_31DAY_RECORD_VISIBILITY_PROVIDER_RIGHTS_REUSE_AND_NOV20_PHASE6_GO_PATH.md). Source rights were **already investigated** in #300, original September evidence and prior expiry code: no repeated plan-name requests or blind provider GET. New READONLY 31-UTC-day sampled source→PRE→POST database-stage CLI reports day counts and explicit missing/denied/unknown statuses, **never copies provider Contents into public GitHub logs**. Full 31-day provider values require separately reviewed actual plan/HTTP Cache-Control or other permitted retention + backup hygiene; a detailed 31-day safe operational history is independently achievable. The target **2026-11-20** is conditional, not an automatic paid GO. No production SQL/DDL/provider calls, raw flight export or updated retention caps from this code-only review.
+
 ## Nov 13 — full Phase6 preparation audit + V0094 one-use owner schema candidate (STOP default)
 
 [Read the consolidated real-world Phase6 launch preparation inventory, missing gates, cold Neon V0094 owner proof, and tested STOP-default one-use schema-only procedure](2026-11-13_PHASE6_FULL_READINESS_INVENTORY_V0094_OWNER_SCHEMA_ONCE_NO_GO.md). Reuses existing V0079–V0093, original Stage14, B0062/V0093 logins and the #632/#634 private transport: **no new Neon project**, public flight bytes, provider call, production migration, release secret, autonomous dispatch or paid GO. New exact-blob-reviewed owner candidate remains code-only, with disposable PG16 CI and explicit independent postinstall readback; schema install does not grant lawful source retention. Phase5 FREEZE HOLD / Phase6 paid NO-GO.
