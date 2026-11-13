@@ -160,8 +160,7 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
      hash(registryRaw)!==pins.expectedRegistrySha256)
    fail("PRIVATE_REGISTRY_BYTES_NOT_EXTERNALLY_PINNED");
   let registry:P5SignedLaterPreDayRegistry;
-  try{registry=JSON.parse(registryRaw.toString("utf8"))
-    as P5SignedLaterPreDayRegistry;}
+  try{registry=JSON.parse(registryRaw.toString("utf8")) as P5SignedLaterPreDayRegistry;}
   catch{return fail("PRIVATE_REGISTRY_NONJSON");}
   if(registry.sourceDayRegistryFilePath!==
       pins.expectedSourceRegistryPath||
