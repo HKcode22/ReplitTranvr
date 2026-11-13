@@ -1,0 +1,43 @@
+name: Phase5 V0093 Independent Owner Readonly Verification (Offline CI)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0093_independent_owner_readonly_once.mjs'
+      - 'tests/phase5_v0093_independent_owner_ro_readback_v39.test.mjs'
+      - '.github/workflows/phase5-v0093-independent-readonly-check-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0093_independent_owner_readonly_once.mjs'
+      - 'tests/phase5_v0093_independent_owner_ro_readback_v39.test.mjs'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+jobs:
+  independent-owner-ro-v0093-catalog-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify fresh-connection read-only PG16 audit contract, no provider or live Neon
+        run: |
+          set -Eeuo pipefail
+          test -z "${DATABASE_URL}${V39_DATABASE_RUNTIME_URL}${AERODATABOX_API_KEY}${RAPIDAPI_KEY}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          node --test tests/phase5_v0093_independent_owner_ro_readback_v39.test.mjs
+          echo 'V0093_INDEPENDENT_RO_CONTRACT_CI_PASS_REAL_NEON_NOT_QUERIED_NO_PROVIDER_NO_GO'
