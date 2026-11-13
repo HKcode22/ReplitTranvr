@@ -105,11 +105,11 @@ async function snapshot(c,expectedCreated){
     !["neondb_owner","postgres"].includes(a.actor))
   fail("WRONG_PG16_OWNER_PRIMARY_OR_PRIVILEGE");
  const tables=(await c.query(
-  "SELECT n,t.o IS NOT NULL exists FROM "+
+  "SELECT n,t.o IS NOT NULL AS present FROM "+
   "unnest($1::text[]) AS v(n) "+
   "LEFT JOIN LATERAL (SELECT to_regclass('clean.'||v.n) o) t ON true",
   [ALL])).rows;
- if(tables.length!==ALL.length||tables.some(x=>x.exists!==true))
+ if(tables.length!==ALL.length||tables.some(x=>x.present!==true))
   fail("BASELINE_V0079_V0093_TABLES_MISSING_NEVER_REINSTALL");
  const acls=(await c.query(
   "SELECT COUNT(*)::int calendar FROM clean.adb_phase6_calendar_day"
