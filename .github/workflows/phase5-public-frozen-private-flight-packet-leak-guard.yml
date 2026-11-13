@@ -1,0 +1,41 @@
+name: Phase5 public GitHub forbids private frozen AeroDataBox flight packets
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  public-repo-private-data-hold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse any tracked private SOURCE/later packet artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          grep -Fxq '/data-collection/phase5/frozen/' .gitignore ||
+            { echo 'HOLD_PUBLIC_PRIVATE_FLIGHT_PATH_NOT_IGNORED'; exit 2; }
+          # Zero tracked frozen files is essential. Do NOT print file names
+          # or contents in public Actions logs, even on refusal.
+          if test -n "$(git ls-files -- 'data-collection/phase5/frozen/')"; then
+            echo 'HOLD_PUBLIC_GITHUB_CONTAINS_PRIVATE_SOURCE_FLIGHT_CONTENTS'
+            exit 2
+          fi
+          echo 'PUBLIC_REPO_PRIVATE_FLIGHT_PACKET_PATH_EMPTY_AND_IGNORED'
