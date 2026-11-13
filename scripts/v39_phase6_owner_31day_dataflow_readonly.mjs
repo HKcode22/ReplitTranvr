@@ -64,7 +64,7 @@ const safe=(x)=>typeof x==="string"&&IDENT.test(x);
 const block=(msg)=>{throw Error("HOLD_P6_OWNER_VISIBILITY_"+msg);};
 function dayOfUtc(v){
  const s=v instanceof Date?v.toISOString():String(v);
- if(!/^\d{4}-\d\d-\d\d(?:T|\s)/.test(s))block("BAD_UTC_DAY");
+ if(!/^\d{4}-\d\d-\d\d(?:T|\s|$)/.test(s))block("BAD_UTC_DAY");
  return s.slice(0,10);
 }
 export function classifyP6ReadOnlyTable({present,canRead,columns,rows}){
