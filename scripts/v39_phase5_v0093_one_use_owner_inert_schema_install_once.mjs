@@ -138,6 +138,7 @@ export async function readV0093OwnerCatalog(c){
    versionColumns:cols,
    v0093TypedSchemaPresent:cols.hasBudgetMode&&cols.hasCostEnvelope&&
     cols.originalGridNullable,
+   tableRowCounts:counts,
    phase6AuthorizationRows:counts.adb_phase6_authorization,
    phase6EnabledRows:auth.enabled,phase6RevokedRows:auth.revoked,
    releaseRows:counts.phase5_fids_seven_rest_release_v39,
@@ -193,6 +194,8 @@ export async function installV0093OneUseOwner({client,sql,sha}){
  if(!attempted)err("INTERNAL_NOT_ATTEMPTED");
  const after=await readV0093OwnerCatalog(client);
  classifyV0093InstalledReadback(after);
+ if(JSON.stringify(before.tableRowCounts)!==JSON.stringify(after.tableRowCounts))
+  err("SOURCE_OR_BUDGET_ROWS_CHANGED_DURING_INERT_DDL_INDEPENDENT_AUDIT");
  return {
   status:"V0093_SCHEMA_ONLY_OWNER_INSTALL_AND_SAME_CONNECTION_READBACK_PASS",
   reviewedMigrationGitBlobSha1:sha,
@@ -200,7 +203,9 @@ export async function installV0093OneUseOwner({client,sql,sha}){
   afterV0093Installed:after.v0093TypedSchemaPresent,
   existingB0062AuthorizationRowsPreserved:
    before.phase6AuthorizationRows===after.phase6AuthorizationRows,
-  existingCycleBudgetRowsPreserved:true,
+  existingCycleBudgetRowsPreserved:
+   before.tableRowCounts.phase5_fids_cycle_budget_v39===
+   after.tableRowCounts.phase5_fids_cycle_budget_v39,
   existingFidsSourceAndAttemptRowsZero:true,
   verifiedAuthEnabled:false,noRolesOrCredentialsCreated:true,
   providerCalls:0,databaseSourceOrPREWrites:0,paidAlerts:0,
