@@ -135,9 +135,11 @@ describe("independent B0062/V0093 actual-login read-only audit",()=>{
    expect(history[0]).toContain("READ ONLY");
    expect(history.at(-1)).toBe("ROLLBACK");
    expect(released).toBe(true);
-   expect(history.join(" ").toUpperCase()).not.toMatch(
-    /\b(CREATE|ALTER|DROP|INSERT INTO|UPDATE |DELETE FROM|COMMIT)\b/
-   );
+   // CREATE/UPDATE/INSERT here occur only as quoted privilege names in
+   // SELECT catalog expressions. Validate top-level SQL statement verbs.
+   expect(history.every(q=>
+    /^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY$|SET LOCAL |SELECT |ROLLBACK$)/.
+     test(q))).toBe(true);
   }
  });
  it("HOLD if any inherited SECURITY DEFINER execute path is exposed",async()=>{
