@@ -200,10 +200,10 @@ describe("Phase6 real signed-shard append-only index — NOT a GO",()=>{
  });
  it("rejects same-day duplicate shard identity and path replay",()=>{
   const {s1,s2,l1}=fixture();
-  expect(()=>audit(makeIndex([s1,s2,{...s1}]))).toThrow(
+  expect(()=>audit(makeIndex([s1,{...s1},s2]))).toThrow(
    "DUPLICATE_DAY_SHARD_OR_FROZEN_PATH");
   const changed={...s1,filePath:s2.filePath};
-  expect(()=>audit(makeIndex([s1,s2,changed]))).toThrow(
+  expect(()=>audit(makeIndex([s1,changed,s2]))).toThrow(
    "DUPLICATE_DAY_SHARD_OR_FROZEN_PATH");
   // No POST may steal a source registry file and rename it a different lane.
   expect(()=>audit(makeIndex([s1,s2,l1,{...l1,shardIndex:2}]))).
