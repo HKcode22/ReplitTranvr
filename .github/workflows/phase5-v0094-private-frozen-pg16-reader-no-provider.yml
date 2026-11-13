@@ -1,0 +1,67 @@
+name: Phase5 V0094 private PG16 frozen later PRE transfer (DISPOSABLE only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0094-private-frozen-pg16-reader-no-provider.yml'
+      - 'migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql'
+      - 'server/lib/disruption/phase5Phase6Pg16PrivateLaterPreHydrator_v39.ts'
+      - 'tests/phase5_v0094_private_pg16_transport_real_pg16_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+jobs:
+  v0094-private-disposable-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install ONLY V0094 inert schema in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1             -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          test "$(psql "$DATABASE_URL" -X -At -v ON_ERROR_STOP=1             -c 'SELECT count(*) FROM phase6_private.frozen_native_packet_v39')" = 0
+      - name: Real PG16 private role, checksum, no GO, native registry readback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx vitest run tests/phase5_v0094_private_pg16_transport_real_pg16_v39.test.ts
+          npm run v39:typecheck
+          echo 'V0094_PRIVATE_PG16_ONLY_CI_PASS_NO_PRODUCTION_INSTALL_NO_PROVIDER_NO_GO'
