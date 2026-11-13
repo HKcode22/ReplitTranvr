@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs'
+      - 'server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs'
       - 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml'
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs'
+      - 'server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs'
       - 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts'
 permissions:
   contents: read
