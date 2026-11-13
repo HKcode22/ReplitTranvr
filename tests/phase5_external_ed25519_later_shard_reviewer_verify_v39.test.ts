@@ -28,7 +28,17 @@ function fixture(){
    flightInstanceId:"leg:observed:00001",runDayIndex:4,
    horizon:"T-6h",selectedTNativeUtc:"2027-02-10T12:00:00.000Z",
    manifestSha256:H("1"),queryDigestSha256:H("2"),
-   expectedSourceResponseSha256:H("a")
+   expectedSourceResponseSha256:H("a"),
+   expectedSourcePopulationQueryId:
+    "a23e4567-e89b-42d3-a456-426614174000",
+   expectedGithubSourceRunId:"42899999999",
+   expectedProviderContractSha256:H("5"),
+   expectedEarlyDrawSha256:H("6"),
+   expectedReviewedReleaseSha256:H("3"),
+   expectedReviewedSourceRightsSha256:H("4"),
+   identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG",
+   externalNativeTPhysicalLegAndSourceUseReviewed:true,
+   reviewedT24WitnessReceipt:{receiptSha256:H("3")}
   }
  }));
  const packetSha=digest(packetBytes);
@@ -150,6 +160,25 @@ describe("P5 actual externally pinned Ed25519 signature over complete unsigned l
     packetFileManifestSha256:H("c")}},
    f.publicPem,f.pins,t))
    .toThrow("EXTERNAL_REVIEW_DID_NOT_SIGN_THIS_PRIVATE_SHARD_AND_RIGHTS");
+ });
+ it("rejects an internally inconsistent rights claim inside a packet even if every candidate digest is rehashed",()=>{
+  const f=fixture(),p=JSON.parse(f.plan.proposedPacketFiles[0].bytes.toString("utf8"));
+  p.prePermit.expectedReviewedSourceRightsSha256=H("5");
+  const bytes=Buffer.from(JSON.stringify(p));
+  const registry={...f.plan.registryProposal,entries:[
+   {...f.plan.registryProposal.entries[0],expectedPacketSha256:digest(bytes)}
+  ]};
+  const registryBytes=Buffer.from(JSON.stringify(registry));
+  const changedPlan={...f.plan,
+   registryProposal:registry,registryProposalBytes:registryBytes,
+   proposedRegistrySha256:digest(registryBytes),
+   proposedPacketFiles:[{
+    ...f.plan.proposedPacketFiles[0],sha256:digest(bytes),bytes
+   }]
+  };
+  expect(()=>verifyP5ExternalEd25519ReviewOfLaterShard(
+   changedPlan,f.envelope(),f.publicPem,f.pins,t))
+   .toThrow("REVIEWED_PACKET_NONJSON_OR_RIGHTS_MISMATCH");
  });
  it("rejects wrong public key, missing independent fingerprint or RSA impersonation",()=>{
   const f=fixture();
