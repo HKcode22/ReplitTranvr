@@ -230,9 +230,10 @@ describe("review-ready real SOURCE-derived later PRE -> UNSIGNED bounded day sha
  });
  it("refuses unauthorized cross-day, unknown SOURCE query and packet file shadowing",()=>{
   const f=fixture(),a=f.file(1);
-  const wrong={...a.completed.packet,
-   prePermit:{...a.completed.packet.prePermit,queryDigestSha256:H("d")}}
-   as P5SignedWitnessedLaterPrePacket;
+  const wrong:P5SignedWitnessedLaterPrePacket={
+   ...a.completed.packet,
+   prePermit:{...a.completed.packet.prePermit,queryDigestSha256:H("d")}
+  };
   const raw=Buffer.from(JSON.stringify(wrong));
   const q={...a,completed:{
    ...a.completed,packet:wrong,
