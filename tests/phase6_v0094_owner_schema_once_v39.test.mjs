@@ -43,7 +43,8 @@ function fixture({installed=false,partial=false,actor="neondb_owner",
   if(q.includes("FROM pg_catalog.pg_roles WHERE rolname=ANY"))
    return {rows:live?roleNames.map(role):[]};
   if(q.includes("FROM pg_catalog.pg_auth_members m"))
-   return {rows:[{n:members}]};
+   return {rows:[{n:(live?2:0)+members,
+    owner_bootstrap:live?2:0,unexpected:members}]};
   if(q.includes("pg_catalog.pg_get_userbyid(c.relowner)"))
    return {rows:[{table_owner:"neondb_owner",
     primary_key:true,immutability_trigger:true,
@@ -76,6 +77,8 @@ test("owner-only read-only cold inventory matches supplied Nov13 Replit proof",a
  assert.equal(s.tableRows,null);
  assert.equal(s.roles.length,0);
  assert.equal(s.roleMembers,0);
+ assert.equal(s.ownerBootstrapAdminMembers,0);
+ assert.equal(s.unexpectedRoleMembers,0);
  assert.equal(s.providerCalls,0);
  assert.equal(s.databaseWrites,0);
  assert.equal(s.paidPhase6Go,false);
@@ -91,11 +94,15 @@ test("one exact candidate installation changes only cold schema and readback",as
  assert.equal(s.tableRows,0);
  assert.equal(s.paidPhase6Go,false);
  assert.equal(s.separateIndependentReadbackStillRequired,true);
+ assert.equal(s.ownerBootstrapAdminMembers,2);
+ assert.equal(s.unexpectedRoleMembers,0);
  assert.equal(x.queries.filter(([q])=>q===raw.toString("utf8")).length,1);
 });
 test("existing empty V0094 rejects all replay and independent inventory reports inert",async()=>{
  const x=fixture({installed:true}),s=await readV0094OwnerInventory(x.c);
  assert.equal(s.state,"INSTALLED_EMPTY_INERT_V0094_NOLOGIN_NO_GO");
+ assert.equal(s.roleMembers,2);
+ assert.equal(s.ownerBootstrapAdminMembers,2);
  await assert.rejects(installV0094OnceOwner({
   client:x.c,rawMigration:raw,blobSha:V0094_REVIEWED_SQL_BLOB_SHA
  }),/ALREADY_INSTALLED_OR_PARTIAL_NEVER_REPLAY/);
