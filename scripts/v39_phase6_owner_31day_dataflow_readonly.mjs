@@ -164,6 +164,47 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
       rowsSampled:n,lookbackUtcDays:31,countsAreCapped:true,
       days};
     }
+    // Real PRE queue state is more useful than counting tasks alone.
+    // Strict state enumeration: never SELECT flight_instance_id or packet.
+    let taskStates=null;
+    if(table==="clean.phase5_cd_pre_task_v39"&&
+       cols.includes("state")&&clock){
+      const stateSql="SELECT state,COUNT(*)::integer AS n FROM ("+
+       "SELECT state FROM "+table+" WHERE "+clock+
+       " >= clock_timestamp()-interval '31 days' "+
+       "ORDER BY "+clock+" DESC LIMIT "+P6_OWNER_SAMPLE_LIMIT+
+       ") bounded GROUP BY state ORDER BY state";
+      const stateResult=(await client.query(stateSql)).rows;
+      const allowed=new Set(["READY","CLAIMED","WRITE_STARTED_UNKNOWN",
+       "VERIFIED_ON_TIME","MISSED","QUARANTINED"]);
+      if(stateResult.some(x=>!allowed.has(x.state)||
+         !Number.isSafeInteger(Number(x.n))||Number(x.n)<0))
+        block("UNKNOWN_PRE_QUEUE_STATE");
+      taskStates=stateResult.map(x=>({state:x.state,count:Number(x.n)}));
+    }
+    // Expiry metadata only, not payload. A primary deletion marker
+    // cannot prove replicas, PITR/backups, purpose or lawfulness.
+    let deletionReview=null;
+    if(table==="clean.provider_content_blob_ref"&&
+       cols.includes("expires_at_utc")&&
+       cols.includes("deletion_verified_at_utc")){
+      const z=await client.query(
+       "SELECT COUNT(*)::integer AS n FROM ("+
+       "SELECT 1 FROM clean.provider_content_blob_ref"+
+       " WHERE expires_at_utc <= clock_timestamp()"+
+       " AND deletion_verified_at_utc IS NULL LIMIT "+
+       P6_OWNER_SAMPLE_LIMIT+") bounded"
+      );
+      const n=Number(z.rows[0]?.n);
+      if(!Number.isSafeInteger(n)||n<0||n>P6_OWNER_SAMPLE_LIMIT)
+       block("INVALID_EXPIRED_BLOB_REVIEW_COUNT");
+      deletionReview={status:n===P6_OWNER_SAMPLE_LIMIT?
+       "AT_LEAST_SAMPLE_LIMIT_NEEDS_OWNER_INSPECTION":
+       n===0?"NO_EXPIRED_UNVERIFIED_BLOBS_IN_SAMPLED_TABLE":
+       "EXPIRED_PRIMARY_BLOB_DELETION_NOT_VERIFIED_REVIEW",
+       sampledExpiredUnverified:n,
+       sourceLegalRightsOrBackupExpiryCertified:false};
+    }
     const out={event:"STAGE_RESULT",stage:label,table,
      status:dateStats?.status??"AVAILABLE_METADATA_ONLY_NO_CLOCK",
      columnCount:cols.length,
@@ -172,6 +213,8 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
      expiryMetadataColumns:expiryColumns,
      httpHeaderMetadataColumnNames:httpHeaderMetadataColumns,
      authenticatedOriginalCacheControlVerified:false,
+     preQueueStateCounts:taskStates,
+     expiredProviderBlobReview:deletionReview,
      rowsSampled:dateStats?.rowsSampled??null,
      sampleCapped:dateStats?dateStats.rowsSampled===P6_OWNER_SAMPLE_LIMIT:null,
      days:dateStats?.days??[],
@@ -223,8 +266,13 @@ export function formatP6OwnerStageHuman(e){
   const days=Array.isArray(e.days)&&e.days.length?
     " | UTC dates "+e.days.slice(0,6).map(d=>d.dayUtc+":"+d.sampleRows).join(",")+
     (e.days.length>6?" (+more)":""):"";
+  const state=e.preQueueStateCounts?
+    " | queue "+e.preQueueStateCounts.map(x=>x.state+":"+x.count).join(","):"";
+  const deletion=e.expiredProviderBlobReview?
+    " | expired primary blobs without verified deletion: "+
+     e.expiredProviderBlobReview.sampledExpiredUnverified:"";
   return "[RESULT] "+e.stage+" — "+status+" | "+rows+days+
-    " | original contents NOT read";
+    state+deletion+" | original contents NOT read";
  }
  if(e.event==="RUN_SUMMARY")
   return "[FINISH] "+e.datasetStages+" stages checked; provider calls=0,"+
