@@ -67,7 +67,7 @@ export interface P5PrivateFrozenHydrationOutput{
   actualPrivatePayloadsRead:number;
   sourceRegistrySha256:string;
   laterRegistrySha256:string;
-  producerRoleVerified:true;
+  privateReaderRoleVerified:true;
   publicCheckoutContentsEmitted:false;
   providerCalls:0;
   databaseWrites:0;
@@ -267,7 +267,7 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
     actualPrivatePayloadsRead:paths.length+1,
     sourceRegistrySha256:pins.expectedSourceDayRegistrySha256,
     laterRegistrySha256:pins.expectedRegistrySha256,
-    producerRoleVerified:true,
+    privateReaderRoleVerified:true,
     publicCheckoutContentsEmitted:false,
     providerCalls:0,databaseWrites:0,githubDispatches:0,
     phase5ScientificFreezeGranted:false,phase6PaidGoGranted:false
