@@ -6,6 +6,8 @@ on:
       - '.github/workflows/phase5-v0094-private-frozen-pg16-reader-no-provider.yml'
       - 'migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql'
       - 'server/lib/disruption/phase5Phase6Pg16PrivateLaterPreHydrator_v39.ts'
+      - 'server/lib/disruption/phase5Phase6Pg16PrivateLaterPrePublisher_v39.ts'
+      - 'tests/phase5_v0094_private_pg16_publisher_real_pg16_v39.test.ts'
       - 'tests/phase5_v0094_private_pg16_transport_real_pg16_v39.test.ts'
 permissions:
   contents: read
@@ -63,6 +65,6 @@ jobs:
           set +x
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_v0094_private_pg16_transport_real_pg16_v39.test.ts
+          npx vitest run tests/phase5_v0094_private_pg16_transport_real_pg16_v39.test.ts tests/phase5_v0094_private_pg16_publisher_real_pg16_v39.test.ts
           npm run v39:typecheck
           echo 'V0094_PRIVATE_PG16_ONLY_CI_PASS_NO_PRODUCTION_INSTALL_NO_PROVIDER_NO_GO'
