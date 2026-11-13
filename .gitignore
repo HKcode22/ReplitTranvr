@@ -30,3 +30,7 @@ travnr_db_dump/
 **/next-wsss-deployment.env
 **/receiver-gate4_receiver_2026_next1.json
 **/writer-gate4_owner_writer_2026_next1.json
+
+# PUBLIC repo: never stage actual private AeroDataBox/source flight packets
+# or source-linked frozen-day registries; protected PG16 transport instead.
+/data-collection/phase5/frozen/
