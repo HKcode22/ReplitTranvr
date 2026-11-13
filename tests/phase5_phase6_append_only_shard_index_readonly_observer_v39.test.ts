@@ -145,8 +145,8 @@ describe("default-OFF real PG-clock SHA-pinned Phase6 shard read-only observer",
    {...env,P5_SHARD_INDEX_RO_EXECUTE:"1"},read(files),
    async()=> "2027-02-10T00:55:00.000Z");
   expect(out.missedCensoredShardCounts.SOURCE).toBe(1);
-  expect(out.selectedForIndependentChildReview.SOURCE).
-   map(e=>e.runDayIndex).toEqual([2]);
+  expect(out.selectedForIndependentChildReview.SOURCE.
+   map(e=>e.runDayIndex)).toEqual([2]);
  });
  it("rejects tampered frozen day bytes even when index pin unchanged",async()=>{
   const {env,files}=fixture();
