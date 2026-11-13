@@ -83,7 +83,7 @@ test("review exact unchanged V0093 Git blob and migration structure",()=>{
  assert.match(r.sql,/COMMIT;/);
  assert.throws(()=>reviewV0093MigrationArtifact(raw,"f".repeat(40)),/BLOB_SHA_MISMATCH/);
  const altered=Buffer.from(raw.toString("utf8").replace(
-  "COST_UPPER_BOUND","UNREVIEWED_COST"));
+  "ADD COLUMN budget_release_mode text NOT NULL DEFAULT 'EXACT_SOURCE_GRID'","ADD COLUMN budget_release_mode text NOT NULL DEFAULT 'UNREVIEWED'"));
  assert.throws(()=>reviewV0093MigrationArtifact(altered,sha),/BLOB_SHA_MISMATCH/);
  assert.throws(()=>reviewV0093MigrationArtifact(altered,gitBlobSha1(altered)),
   /NOT_THE_REVIEWED_V0093_INERT_ADDITIVE_SQL/);
