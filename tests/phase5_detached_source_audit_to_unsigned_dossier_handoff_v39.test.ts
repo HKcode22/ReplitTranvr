@@ -134,7 +134,7 @@ describe("detached actual SOURCE audit -> offline UNSIGNED review pages",()=>{
    {...pins,independentlyReviewedExactAuditBytesSha256:H("f")},
    {...pins,expectedActualCandidateAuditSha256:H("f")},
    {...pins,expectedSourceDayRegistrySha256:"not-sha"},
-   {...pins,expectedGithubSourceRunId:"123"}
+   {...pins,expectedSourceGithubRunId:"123"}
   ]){
    expect(()=>projectP5DetachedActualSourceAuditToUnsignedReview(
     auditBytes,badPins)).toThrow(/REFUSED_P5_/);
