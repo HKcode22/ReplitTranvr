@@ -1,3 +1,5 @@
+> **STATUS UPDATE — superseded 2026-11-13 06:36:21 UTC:** The separate independent live Neon read-only login check is **NO LONGER PENDING**. The actual main-branch manual GitHub Actions [run #43379809484](https://github.com/HKcode22/ReplitTranvr/actions/runs/43379809484) returned `P5_B0062_V0093_BOTH_REAL_LOGINS_INDEPENDENT_PG16_READONLY_PASS_NO_GO`, with **both real dedicated GitHub-secret-authenticated roles** tested independently. [Read the full exact live PASS checkpoint](2026-11-13_ACTUAL_B0062_V0093_BOTH_RESTRICTED_LOGINS_INDEPENDENT_READONLY_PASS_NO_GO.md). This older entry below preserves the historical owner commissioning receipt and historical pending status only; **do not rerun** the commissioner. Science FREEZE HOLD; paid Phase6 NO-GO.
+
 # 2026-11-12 PDT / 2026-11-13 UTC — real B0062 + V0093 production LOGIN commissioning SUCCESS, independent readback pending
 
 **Status: ACTUAL owner-reported success receipt, no production SQL schema reinstall and no paid collection.** This is **not** merely a disposable PG16 CI result and **not** an independent readback of the two logins after the transaction. Keep these two forms of evidence separate.
