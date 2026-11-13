@@ -122,7 +122,11 @@ jobs:
             const after=await readV0094OwnerInventory(client);
             assert.equal(after.state,"INSTALLED_EMPTY_INERT_V0094_NOLOGIN_NO_GO");
             assert.equal(after.tableRows,0);
-            assert.equal(after.roleMembers,0);
+            // PG16 non-superuser CREATEROLE gets bootstrap-admin-only
+            // membership; exactly two owner-only grants, no other members.
+            assert.equal(after.roleMembers,2);
+            assert.equal(after.ownerBootstrapAdminMembers,2);
+            assert.equal(after.unexpectedRoleMembers,0);
             await assert.rejects(installV0094OnceOwner({client,
               rawMigration:readFileSync(V0094_MIGRATION_PATH),
               blobSha:V0094_REVIEWED_SQL_BLOB_SHA}),
