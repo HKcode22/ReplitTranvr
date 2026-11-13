@@ -208,8 +208,36 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
   block("SQL_OR_CONNECTION_HELD_CHECK_REDACTED_SQLSTATE");
  }
 }
+export function formatP6OwnerStageHuman(e){
+ if(!e||e.schema!==P6_OWNER_VISIBILITY_SCHEMA)block("INVALID_HUMAN_STAGE_EVENT");
+ if(e.event==="RUN_START")
+  return "[START] Connected to existing "+e.db+" as "+e.actor+
+   "; DB time "+e.dbClockUtc+
+   "; inspecting last "+e.lookbackUtcDays+" UTC days READ ONLY.";
+ if(e.event==="STAGE_START")
+  return "[CHECK] "+e.stage+": "+e.description;
+ if(e.event==="STAGE_RESULT"){
+  const status=String(e.status??"UNKNOWN");
+  const rows=e.rowsSampled===null||e.rowsSampled===undefined?"no count":
+    String(e.rowsSampled)+" recent rows sampled";
+  const days=Array.isArray(e.days)&&e.days.length?
+    " | UTC dates "+e.days.slice(0,6).map(d=>d.dayUtc+":"+d.sampleRows).join(",")+
+    (e.days.length>6?" (+more)":""):"";
+  return "[RESULT] "+e.stage+" — "+status+" | "+rows+days+
+    " | original contents NOT read";
+ }
+ if(e.event==="RUN_SUMMARY")
+  return "[FINISH] "+e.datasetStages+" stages checked; provider calls=0,"+
+   " database writes=0; Phase5 FREEZE and Phase6 paid GO remain false."+
+   " Table rows are limited samples, not 31-day completeness or data-use rights.";
+ block("UNRECOGNIZED_STAGE_EVENT");
+}
 async function main(){
- const emit=(x)=>console.log(JSON.stringify(x));
+ const args=process.argv.slice(2);
+ if(args.some(x=>x!=="--human"))block("UNKNOWN_ARG_NO_PRIVATE_DUMP");
+ const human=args.includes("--human");
+ const emit=(x)=>console.log(human?formatP6OwnerStageHuman(x):
+   JSON.stringify(x));
  if(process.env.GITHUB_ACTIONS==="true"||!process.env.DATABASE_URL)
   block("OWNER_REPLIT_ONLY_DATABASE_URL_NOT_AVAILABLE");
  const client=new pg.Client({
