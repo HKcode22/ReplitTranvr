@@ -10,6 +10,8 @@ on:
       - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
       - 'server/lib/disruption/phase5CdGithubCodeLineage_v39.ts'
       - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedStage14Microburst_v39.ts'
+      - 'tests/phase5_cd_github_bounded_stage14_microburst_v39.test.ts'
       - 'server/lib/disruption/phase5CdGithubDbClockLookahead_v39.ts'
       - 'tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts'
       - 'server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts'
@@ -58,7 +60,7 @@ jobs:
       - name: Prove signed roster, STOP and bounded claim state machine without DB/provider
         run: |
           set -Eeuo pipefail
-          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase5_amendment_e_existing_noaa_history_receipt_compiler_v39.test.ts
+          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts             tests/phase5_cd_github_bounded_stage14_microburst_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase5_amendment_e_existing_noaa_history_receipt_compiler_v39.test.ts
           echo 'P5_CD_GH_PRE_TICK_OFFLINE_NO_DB_NO_PROVIDER_STOP_PASS'
   bounded-reviewed-real-pre:
     # OFF unless owner separately sets repo variable to '1'. Other
@@ -86,6 +88,9 @@ jobs:
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      # Missing or blank => existing single two-task tick; never implicit burst.
+      P5_CD_GH_BURST_TICKS: ${{ vars.P5_CD_GH_BURST_TICKS }}
+      P5_CD_GH_BURST_APPROVED: ${{ secrets.P5_CD_GH_BURST_APPROVED }}
       P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
       P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
@@ -114,6 +119,16 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$P5_CD_GH_PRE_STOP" = 0
           test "$P5_CD_GH_PRE_ARMED" = 1
+          # Extra claims require independent Phase6 approval; Phase5 canary
+          # always retains the previous exact single-tick capacity.
+          case "${P5_CD_GH_BURST_TICKS:-1}" in
+            1) ;;
+            2|3|4)
+              test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
+              test "$P5_CD_GH_BURST_APPROVED" = 1
+              ;;
+            *) echo HOLD_CD_GH_UNREVIEWED_MICROBURST_COUNT; exit 2 ;;
+          esac
           test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
           # The runner compares reviewed baseline SHA to HEAD ancestry and
           # requires zero executable-code changes after packet commits.
