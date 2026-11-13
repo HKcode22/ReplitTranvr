@@ -1,0 +1,44 @@
+name: Phase5 ADSB AIRBORNE Prefix Reuse of Existing Phase0 and PR612 (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AdsbAirborneAsOfPrefixFromExisting_v39.ts'
+      - 'tests/phase5_adsblol_airborne_asof_existing_builder_bridge_v39.test.ts'
+      - '.github/workflows/phase5-adsb-airborne-prefix-existing-reuse-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5AdsbAirborneAsOfPrefixFromExisting_v39.ts'
+      - 'tests/phase5_adsblol_airborne_asof_existing_builder_bridge_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  only-real-added-airborne-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test true unique AIRBORNE connection plus preexisting PR612 and legacy P4 roles
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          npx vitest run tests/phase5_adsblol_airborne_asof_existing_builder_bridge_v39.test.ts tests/phase5_adsblol_pre_inbound_post_takeoff_bracket_v39.test.ts tests/phase4_gate5_dual_source_adsb_admission_v39.test.ts tests/airborne_materializer_v39.test.ts
+          npm run v39:typecheck
+          echo 'ADSB_AIRBORNE_PREFIX_REUSES_P4_P0_PR612_PASS NO_NEW_PRE_POST NO_HTTP NO_SQL NO_GO'
