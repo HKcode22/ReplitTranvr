@@ -1,0 +1,139 @@
+name: Phase6 V0094 owner schema-only review (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_v0094_owner_schema_readonly_and_once.mjs'
+      - 'tests/phase6_v0094_owner_schema_once_v39.test.mjs'
+      - '.github/workflows/phase6-v0094-owner-schema-no-provider.yml'
+      - 'migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+jobs:
+  unit-no-neon-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Offline owner inventory, replay, unknown COMMIT tests
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --test tests/phase6_v0094_owner_schema_once_v39.test.mjs
+          echo 'OWNER_V0094_STOP_DEFAULT_UNIT_PASS_NO_PROVIDER_NO_NEON'
+  real-pg16-disposable-owner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: 'postgresql://neondb_owner:ci-only-owner-password@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Create disposable matching non-superuser neondb_owner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d neondb \
+            -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-owner-password'"
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d neondb \
+            -X -v ON_ERROR_STOP=1 \
+            -c 'ALTER DATABASE neondb OWNER TO neondb_owner'
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+      - name: Verify exact unchanged SQL / one-use-only owner schema in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {readFileSync} from "node:fs";
+          import pg from "pg";
+          import {
+            V0094_MIGRATION_PATH,V0094_REVIEWED_SQL_BLOB_SHA,
+            readV0094OwnerInventory,installV0094OnceOwner
+          } from "./scripts/v39_phase6_v0094_owner_schema_readonly_and_once.mjs";
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL,
+            connectionTimeoutMillis:8000});
+          await client.connect();
+          try{
+            // CI-only baseline fixtures, not production V0079-V0093 reinstall.
+            await client.query("CREATE SCHEMA clean");
+            await client.query("CREATE TABLE clean.adb_phase6_authorization (id bigint)");
+            await client.query("CREATE TABLE clean.flight_population (id bigint)");
+            // Temporary diagnostic of PG16 CREATEROLE's automatic grantor;
+            // only role names/privileges in a rollback-only CI transaction.
+            await client.query("BEGIN");
+            await client.query("CREATE ROLE ci_v0094_nonlogin_role_probe NOLOGIN NOINHERIT");
+            const autoMembers=await client.query(
+              "SELECT g.rolname AS group_name,member.rolname AS member_name,"+
+              "grantor.rolname AS grantor_name,m.admin_option,m.inherit_option,m.set_option"+
+              " FROM pg_catalog.pg_auth_members m"+
+              " JOIN pg_catalog.pg_roles g ON m.roleid=g.oid"+
+              " JOIN pg_catalog.pg_roles member ON m.member=member.oid"+
+              " JOIN pg_catalog.pg_roles grantor ON m.grantor=grantor.oid"+
+              " WHERE g.rolname='ci_v0094_nonlogin_role_probe'");
+            console.log("CI_PG16_CREATOR_ADMIN_MEMBERSHIP",JSON.stringify(autoMembers.rows));
+            await client.query("ROLLBACK");
+            const before=await readV0094OwnerInventory(client);
+            assert.equal(before.state,"COLD_V0094_NOT_INSTALLED");
+            const installed=await installV0094OnceOwner({client,
+              rawMigration:readFileSync(V0094_MIGRATION_PATH),
+              blobSha:V0094_REVIEWED_SQL_BLOB_SHA});
+            assert.equal(installed.status,"V0094_SCHEMA_ONCE_OWNER_READBACK_PASS_INERT");
+            const after=await readV0094OwnerInventory(client);
+            assert.equal(after.state,"INSTALLED_EMPTY_INERT_V0094_NOLOGIN_NO_GO");
+            assert.equal(after.tableRows,0);
+            // PG16 non-superuser CREATEROLE gets bootstrap-admin-only
+            // membership; exactly two owner-only grants, no other members.
+            assert.equal(after.roleMembers,2);
+            assert.equal(after.ownerBootstrapAdminMembers,2);
+            assert.equal(after.unexpectedRoleMembers,0);
+            await assert.rejects(installV0094OnceOwner({client,
+              rawMigration:readFileSync(V0094_MIGRATION_PATH),
+              blobSha:V0094_REVIEWED_SQL_BLOB_SHA}),
+              /ALREADY_INSTALLED_OR_PARTIAL_NEVER_REPLAY/);
+            console.log(JSON.stringify({status:"V0094_CI_DISPOSABLE_SCHEMA_ONCE_PASS",
+              roles:after.roles.map(r=>r.rolname),rows:after.tableRows,
+              providerCalls:0,paidPhase6Go:false}));
+          } finally{await client.end();}
+          JS
+          echo 'DISPOSABLE_POSTGRES16_V0094_ONE_USE_OWNER_PASS_NO_GO'

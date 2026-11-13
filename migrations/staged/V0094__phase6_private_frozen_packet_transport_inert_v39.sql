@@ -1,6 +1,6 @@
 -- V0094: STAGED only. Private PostgreSQL16 bytea transport for SOURCE
 -- registry, externally reviewed T6/T90 packet, and late PRE registry.
--- NO production activation, no passwords or LOGIN membership, no secrets,
+-- NO production activation, no passwords or non-owner LOGIN membership, no secrets,
 -- no paid provider/Alert, no PRE/POST write, no replay of prior migrations.
 --
 -- This uses a NEW private schema and NOLOGIN roles. Existing Stage14/V0091
@@ -36,6 +36,13 @@ CREATE ROLE phase6_private_frozen_reader_v39
 CREATE ROLE phase6_private_frozen_publisher_v39
   NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
+
+-- PostgreSQL16 CREATEROLE creators receive an unavoidable bootstrap-granted
+-- ADMIN-only membership in their newly created roles (SET/INHERIT FALSE).
+-- PostgreSQL docs say a non-superuser CREATEROLE user CANNOT revoke that
+-- bootstrap grant. The postflight below allows EXACTLY the OWNER's two
+-- bootstrap grants, never another member or a SET/INHERIT-capable grant.
+-- The owner already owns this table and is NOT a future service worker.
 
 CREATE TABLE phase6_private.frozen_native_packet_v39 (
  logical_path text PRIMARY KEY,
@@ -109,12 +116,21 @@ BEGIN
   'phase6_private_frozen_publisher_v39'
  ]) LOOP
   IF EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=role_name
-    AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR
+    AND (rolcanlogin OR rolinherit OR rolsuper OR rolcreatedb OR rolcreaterole OR
       rolreplication OR rolbypassrls)) OR
      EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
        JOIN pg_catalog.pg_roles g ON g.oid=m.roleid
-       JOIN pg_catalog.pg_roles login ON login.oid=m.member
-       WHERE g.rolname=role_name AND login.rolcanlogin) THEN
+       JOIN pg_catalog.pg_roles member ON member.oid=m.member
+       JOIN pg_catalog.pg_roles grantor ON grantor.oid=m.grantor
+       WHERE g.rolname=role_name AND NOT (
+        member.rolname=current_user AND grantor.rolsuper AND
+        m.admin_option AND NOT m.inherit_option AND NOT m.set_option
+       )) OR
+     (NOT (SELECT rolsuper FROM pg_catalog.pg_roles
+              WHERE rolname=current_user) AND
+      (SELECT COUNT(*) FROM pg_catalog.pg_auth_members m
+       JOIN pg_catalog.pg_roles g ON g.oid=m.roleid
+       WHERE g.rolname=role_name)<>1) THEN
    RAISE EXCEPTION 'P5_V0094_PRIVATE_ROLE_PRIVILEGED_OR_LOGIN_MEMBER';
   END IF;
  END LOOP;
