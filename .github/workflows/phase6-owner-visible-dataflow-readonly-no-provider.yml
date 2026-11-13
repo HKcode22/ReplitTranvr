@@ -1,0 +1,122 @@
+name: Phase6 owner-visible READ ONLY dataflow metadata (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-owner-visible-dataflow-readonly-no-provider.yml'
+      - 'scripts/v39_phase6_owner_31day_dataflow_readonly.mjs'
+      - 'tests/phase6_owner_31day_dataflow_readonly_v39.test.mjs'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+jobs:
+  metadata-unit-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test safe operator-readable metadata and no source-value output
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          node --test tests/phase6_owner_31day_dataflow_readonly_v39.test.mjs
+          echo 'PHASE6_OWNER_METADATA_VIEWER_OFFLINE_PASS_NO_PAID_NO_DB'
+  disposable-postgres16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Seed synthetic only, then run real PG16 READ ONLY viewer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d neondb \
+            -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.fids_query_response (
+            available_at timestamptz NOT NULL,
+            raw_payload jsonb,
+            raw_expired_at_utc timestamptz
+          );
+          CREATE TABLE clean.flight_population (
+            available_at timestamptz NOT NULL,
+            provider_content_expired_at_utc timestamptz
+          );
+          INSERT INTO clean.fids_query_response
+            VALUES(clock_timestamp(), '{"ci":"synthetic"}'::jsonb, NULL);
+          INSERT INTO clean.flight_population VALUES(clock_timestamp(),NULL);
+          CREATE TABLE clean.phase5_cd_pre_task_v39 (
+            state text NOT NULL,created_at_utc timestamptz NOT NULL
+          );
+          CREATE TABLE clean.provider_content_blob_ref (
+            expires_at_utc timestamptz NOT NULL,
+            deletion_verified_at_utc timestamptz,
+            persisted_at_utc timestamptz NOT NULL
+          );
+          INSERT INTO clean.phase5_cd_pre_task_v39 VALUES
+            ('READY',clock_timestamp()),('MISSED',clock_timestamp());
+          INSERT INTO clean.provider_content_blob_ref
+            VALUES(clock_timestamp()-interval '1 day',NULL,clock_timestamp()-interval '2 days');
+          SQL
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {inspectP6OwnerDataflowReadOnly}
+            from "./scripts/v39_phase6_owner_31day_dataflow_readonly.mjs";
+          const c=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await c.connect();
+          const events=[];
+          try{
+            await inspectP6OwnerDataflowReadOnly(c,{emit:e=>events.push(e)});
+            assert(events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.rowsSampled===1));
+            assert(events.some(e=>e.stage==="NORMALIZED FLIGHTS"&&e.rowsSampled===1));
+            assert(events.some(e=>e.stage==="PRE SNAPSHOTS"&&e.status==="ABSENT_NOT_A_ZERO"));
+            assert(events.some(e=>e.stage==="PRE QUEUE"&&e.preQueueStateCounts?.some(
+              s=>s.state==="READY"&&s.count===1)));
+            assert(events.some(e=>e.stage==="PROVIDER BLOB EXPIRY"&&
+              e.expiredProviderBlobReview?.sampledExpiredUnverified===1));
+            const summary=events.find(e=>e.event==="RUN_SUMMARY");
+            assert(summary&&summary.databaseWrites===0&&summary.providerCalls===0);
+            assert(!JSON.stringify(events).includes("synthetic"));
+            console.log(JSON.stringify({
+              status:"DISPOSABLE_PG16_OPERATOR_VIEW_REAL_SQL_PASS",
+              stageCount:summary.datasetStages,providerCalls:0,
+              productionWrites:0,paidPhase6Go:false
+            }));
+          } finally {await c.end();}
+          JS
