@@ -1,0 +1,43 @@
+name: Phase5 V0093 One-Use OWNER Inert Schema Wrapper (No Provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0093_one_use_owner_inert_schema_install_once.mjs'
+      - 'tests/phase5_v0093_one_use_owner_schema_wrapper_v39.test.mjs'
+      - '.github/workflows/phase5-v0093-owner-wrapper-no-provider.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_v0093_one_use_owner_inert_schema_install_once.mjs'
+      - 'tests/phase5_v0093_one_use_owner_schema_wrapper_v39.test.mjs'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  v0093-owner-source-and-stop-default:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact real migration bytes + simulated one-use owner transaction (NO DB)
+        run: |
+          set -Eeuo pipefail
+          test "${ADB_AUTO_COLLECT}" = '0'
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}"
+          node --test tests/phase5_v0093_one_use_owner_schema_wrapper_v39.test.mjs
+          echo 'V0093_OWNER_INERT_ONE_USE_WRAPPER_OFFLINE_PASS; REAL_NEON_UNTOUCHED; NO_PHASE6_GO'
