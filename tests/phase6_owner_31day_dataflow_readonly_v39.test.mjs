@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
  P6_OWNER_TABLES,P6_OWNER_SAMPLE_LIMIT,inspectP6OwnerDataflowReadOnly,
- classifyP6ReadOnlyTable
+ classifyP6ReadOnlyTable,formatP6OwnerStageHuman
 } from "../scripts/v39_phase6_owner_31day_dataflow_readonly.mjs";
 
 function mock({deny=false,invalidClock=false,injectError=false}={}){
@@ -81,6 +81,17 @@ test("SQL error stays redacted and savepoint rolls back before next stage",async
  assert.equal(f.sqlstate,"42501");
  assert(!JSON.stringify(x.events).includes("secret api key"));
  assert(x.queries.some(q=>q[0]==="ROLLBACK TO SAVEPOINT p6_table_view"));
+});
+test("human-readable actual stage logs preserve counts but never print provider payloads",async()=>{
+ const x=mock();
+ await inspectP6OwnerDataflowReadOnly(x.c,{emit:e=>x.events.push(e)});
+ const lines=x.events.map(formatP6OwnerStageHuman);
+ assert(lines.some(s=>s.includes("[START] Connected to existing neondb")));
+ assert(lines.some(s=>s.includes("[CHECK] SOURCE ORIGINALS")));
+ assert(lines.some(s=>s.includes("[RESULT] SOURCE ORIGINALS")&&s.includes("3 recent rows")));
+ assert(lines.some(s=>s.includes("[FINISH]")&&s.includes("database writes=0")));
+ assert(!lines.join("\n").includes("raw_payload"));
+ assert(!lines.join("\n").includes("secret"));
 });
 test("unverified DB clock holds without collecting or printing provider rows",async()=>{
  const x=mock({invalidClock:true});
