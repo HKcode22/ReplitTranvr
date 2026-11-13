@@ -7,6 +7,8 @@ on:
       - 'server/lib/disruption/phase5IndependentLaterPrePacketCompletion_v39.ts'
       - 'server/lib/disruption/phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39.ts'
       - 'server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39.ts'
+      - 'server/lib/disruption/phase5PrivateWriteOnceLaterShardPublisher_v39.ts'
+      - 'tests/phase5_private_write_once_later_shard_publisher_v39.test.ts'
       - 'tests/phase5_external_ed25519_later_shard_reviewer_verify_v39.test.ts'
       - 'tests/phase5_reviewed_later_packet_to_unsigned_day_registry_proposal_v39.test.ts'
       - 'tests/phase5_independent_later_pre_packet_completion_v39.test.ts'
@@ -50,5 +52,5 @@ jobs:
           test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
           test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_independent_later_pre_packet_completion_v39.test.ts tests/phase5_reviewed_later_packet_to_unsigned_day_registry_proposal_v39.test.ts tests/phase5_external_ed25519_later_shard_reviewer_verify_v39.test.ts
+          npx vitest run tests/phase5_independent_later_pre_packet_completion_v39.test.ts tests/phase5_reviewed_later_packet_to_unsigned_day_registry_proposal_v39.test.ts tests/phase5_external_ed25519_later_shard_reviewer_verify_v39.test.ts tests/phase5_private_write_once_later_shard_publisher_v39.test.ts
           echo 'REVIEW_READY_NATIVE_PACKET_BYTES_NOT_SIGNED_NOT_PRODUCTION_OR_PAID_GO'
