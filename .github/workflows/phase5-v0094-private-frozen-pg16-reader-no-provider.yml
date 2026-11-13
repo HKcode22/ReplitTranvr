@@ -15,6 +15,7 @@ env:
   AERODATABOX_WEBHOOK_SECRET: ''
   V39_PHASE6_PROCESS_ARMED: '0'
   V39_PHASE6_OWNER_APPROVED: '0'
+  P5_V0094_PRIVATE_DISPOSABLE_PG_TESTS: '1'
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
 jobs:
   v0094-private-disposable-readonly:
