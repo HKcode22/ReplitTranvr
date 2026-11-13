@@ -46,7 +46,7 @@ export function planP5T24WitnessedChild(
    ready.existingT24Snapshots!==0||ready.existingT24Witnesses!==0)
   hold("NO_REAL_DUE_SOURCE_OR_ALREADY_COMMITTED");
  if(!history||!Number.isSafeInteger(history.total_count)||
-    history.total_count<0||history.total_count>100||
+    history.total_count<0||history.total_count>500||
     !Array.isArray(history.workflow_runs)||
     history.workflow_runs.length!==history.total_count)
   return hold("UNBOUNDED_OR_INCOMPLETE_GH_CHILD_HISTORY");
