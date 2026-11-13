@@ -9,6 +9,8 @@ import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {
  APPROVAL, ENTRIES, commissionP5PrelaunchTwoNarrowLoginsOnce
 } from "../scripts/v39_phase5_prelaunch_two_narrow_logins_owner_once.mjs";
+import {verifyP5TwoStageOneLiveSession,P5_TWO_STAGE_ROLES}
+ from "../scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const ENABLED=process.env.P5_PRELAUNCH_TWO_LOGIN_PG16_TEST==="1";
@@ -138,6 +140,21 @@ suite("Phase5 two narrow owner login credentials + restricted B0062/V0093 ACL",(
   expect(await zeroSource()).toEqual({
    calendar:0,auth:0,release:0,source:0,attempt:0
   });
+  // Genuinely log in as BOTH newly commissioned roles, not the owner,
+  // in distinct new PG connections; compare their exact effective ACL.
+  for(const spec of P5_TWO_STAGE_ROLES){
+   const secret=gh.secrets.get(ENTRIES.find(e=>e.role===spec.role)!.secret);
+   expect(secret).toBeTruthy();
+   const scoped=new Pool({connectionString:secret!,max:1});
+   try{
+    const proof=await verifyP5TwoStageOneLiveSession(scoped,spec);
+    expect(proof.role).toBe(spec.role);
+    expect(proof.verifiedIndependentSession).toBe(true);
+    expect(proof.executableCleanSecurityDefinerFunctions).toBe(0);
+    expect(proof.roleMemberships).toBe(0);
+    expect(proof.dbWrites).toBe(0);
+   }finally{await scoped.end();}
+  }
   await expect(commissionP5PrelaunchTwoNarrowLoginsOnce(
    pool,fakeGitHub(),baseEnv)).rejects.toThrow(
     "ROLE_ALREADY_EXISTS_OR_PARTIALLY_COMMISSIONED_NEVER_RETRY");

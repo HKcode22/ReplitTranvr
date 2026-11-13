@@ -1,0 +1,115 @@
+name: Phase5 B0062/V0093 Actual Two LOGINs Independent Read Only (STOP default)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Select actual independent PG16 readonly audit; default HOLD"
+        required: true
+        type: choice
+        default: HOLD_NO_DATABASE_CONNECTION
+        options:
+          - HOLD_NO_DATABASE_CONNECTION
+          - VERIFY_ONLY_TWO_B0062_V0093_STAGE_LOGIN_SECRETS_READONLY_NO_GO
+      approved_main_sha:
+        description: "Paste independently reviewed exact current main commit SHA (40 lowercase hex)"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-b0062-v0093-two-new-logins-independent-readonly-manual.yml'
+      - 'scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs'
+      - 'tests/phase5_two_stage_logins_independent_readonly_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-b0062-v0093-two-new-logins-ro-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-no-secrets:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL: ''
+      P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No-provider no-DB role catalog/ACL security regressions
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test -z "$P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL$P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"
+          npx vitest run tests/phase5_two_stage_logins_independent_readonly_v39.test.ts
+          echo "PHASE5_TWO_STAGE_INDEPENDENT_RO_OFFLINE_PASS_NO_NEON_NO_PROVIDER"
+  exact-main-real-two-logins-readonly:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          github.run_attempt == 1 &&
+          inputs.confirm == 'VERIFY_ONLY_TWO_B0062_V0093_STAGE_LOGIN_SECRETS_READONLY_NO_GO' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      P5_TWO_STAGE_READONLY_EXECUTE: '1'
+      P5_TWO_STAGE_READONLY_CONFIRM: ${{ inputs.confirm }}
+      P5_TWO_STAGE_READONLY_APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_PRELAUNCH_TWO_LOGIN_APPROVAL: ''
+      P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL: ${{ secrets.P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL }}
+      P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL: ${{ secrets.P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse stale HEAD, absent credentials, any GO/provider/app context
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          [[ "$P5_TWO_STAGE_READONLY_APPROVED_MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$P5_TWO_STAGE_READONLY_APPROVED_MAIN_SHA"
+          test "$P5_TWO_STAGE_READONLY_CONFIRM" = "VERIFY_ONLY_TWO_B0062_V0093_STAGE_LOGIN_SECRETS_READONLY_NO_GO"
+          test "$ADB_AUTO_COLLECT" = "0"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test "$V39_PHASE6_OWNER_APPROVED" = "0"
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P5_PRELAUNCH_TWO_LOGIN_APPROVAL"
+          test -n "$P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL"
+          test -n "$P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Two independent actual login readbacks with only catalog queries and READ ONLY transaction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs
+          echo 'P5_B0062_V0093_NEW_LOGIN_INDEPENDENT_READONLY_RESULT_RECORDED_NO_PROVIDER_NO_GO' >> "$GITHUB_STEP_SUMMARY"
