@@ -63,7 +63,7 @@ export function reviewP5HistoryUrl(base:string):URL{
    refuse("DUPLICATED_GITHUB_HISTORY_FILTER");
  }
  const m=/^(.*)\.\.(.*)$/.exec(u.searchParams.get("created")??"");
- if(!m)refuse("CREATED_WINDOW_INVALID");
+ if(!m)return refuse("CREATED_WINDOW_INVALID");
  const begin=utc(m[1]),end=utc(m[2]);
  if(end<begin||end-begin>24*3600_000)
   refuse("UNBOUNDED_GITHUB_HISTORY_WINDOW");
@@ -111,12 +111,12 @@ export async function readP5CompleteGithubWorkflowHistory(
      Number(d.total_count)>P5_COMPLETE_HISTORY_MAX||
      !Array.isArray(d.workflow_runs)||
      (total!==null&&d.total_count!==total))
-   refuse("CHANGED_OR_OVERSIZED_GITHUB_HISTORY");
+   return refuse("CHANGED_OR_OVERSIZED_GITHUB_HISTORY");
   total=Number(d.total_count);
   const expected=Math.min(PER_PAGE,total-all.length);
-  if(expected<0||d.workflow_runs.length!==expected)
+  if(expected<0||d.workflow_runs!.length!==expected)
    refuse("TRUNCATED_OR_OVERLAPPING_GITHUB_HISTORY_PAGE");
-  for(const row of d.workflow_runs){
+  for(const row of d.workflow_runs!){
    reviewRun(row);
    if(ids.has(row.id))refuse("DUPLICATE_GITHUB_CHILD_RUN_ID");
    ids.add(row.id);all.push(row);
