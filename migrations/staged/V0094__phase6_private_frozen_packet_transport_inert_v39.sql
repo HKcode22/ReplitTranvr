@@ -118,8 +118,13 @@ BEGIN
    RAISE EXCEPTION 'P5_V0094_PRIVATE_ROLE_PRIVILEGED_OR_LOGIN_MEMBER';
   END IF;
  END LOOP;
- IF pg_catalog.has_table_privilege('public',
-     'phase6_private.frozen_native_packet_v39','SELECT') THEN
+ IF EXISTS(
+  SELECT 1 FROM pg_catalog.pg_class c,
+   LATERAL pg_catalog.aclexplode(
+    COALESCE(c.relacl,pg_catalog.acldefault('r',c.relowner))) a
+  WHERE c.oid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass
+    AND a.grantee=0 AND a.privilege_type='SELECT'
+ ) THEN
   RAISE EXCEPTION 'P5_V0094_PUBLIC_SELECT_ACL';
  END IF;
 END $postflight$;
