@@ -1,0 +1,155 @@
+name: Phase5 BTS Aug2026 Verified Artifact Preservation (Manual, No Provider)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase5-bts-aug2026-verified-artifact-preservation-manual.yml"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Preserve the exact already-verified BTS artifacts within GitHub Actions for up to 90 more days; no provider fetch or production DB"
+        required: true
+        type: choice
+        default: HOLD_NO_COPY
+        options:
+          - HOLD_NO_COPY
+          - COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: bts-aug2026-verified-artifact-preservation-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ADB_AUTO_COLLECT: "0"
+  AERODATABOX_API_KEY: ""
+  RAPIDAPI_KEY: ""
+  DATABASE_URL: ""
+  GATE05_AUTOMATION_DATABASE_URL: ""
+  V39_DATABASE_RUNTIME_URL: ""
+  V39_PHASE6_PROCESS_ARMED: "0"
+  V39_PHASE6_OWNER_APPROVED: "0"
+
+jobs:
+  offline-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Existing nonpaid historical-lane synthetic regression
+        run: |
+          set -Eeuo pipefail
+          test "${ADB_AUTO_COLLECT}" = '0'
+          test "${V39_PHASE6_PROCESS_ARMED}" = '0'
+          test "${V39_PHASE6_OWNER_APPROVED}" = '0'
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${GATE05_AUTOMATION_DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
+          python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py --self-test
+          echo 'BTS_PRESERVATION_OFFLINE_CONTRACT_PASS_NO_PAID_NO_NEON' >> "$GITHUB_STEP_SUMMARY"
+
+  preserve-exact-existing-aug2026:
+    needs: offline-preflight
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 &&
+      inputs.confirm == 'COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download only original already-verified November 12 source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v39-gate5-bts-aug2026-official-public-source
+          run-id: 43281032803
+          github-token: ${{ github.token }}
+          repository: HKcode22/ReplitTranvr
+          path: /tmp/v39_bts_preserve/source/
+      - name: Download only original already-verified historical normalized artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v39-phase5-bts-aug2026-us-historical-only-not-pre
+          run-id: 43281032803
+          github-token: ${{ github.token }}
+          repository: HKcode22/ReplitTranvr
+          path: /tmp/v39_bts_preserve/normalized/
+      - name: Independently verify both exact original file hashes and strict provenance
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${GATE05_AUTOMATION_DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
+          test "${V39_PHASE6_PROCESS_ARMED}" = 0
+          test "${V39_PHASE6_OWNER_APPROVED}" = 0
+          python3 - <<'PY'
+          import gzip, hashlib, json
+          from pathlib import Path
+          base=Path("/tmp/v39_bts_preserve")
+          raw=base/"source/official_bts_reporting_carrier_2026_8.zip"
+          raw_json=base/"source/official_bts_reporting_carrier_aug2026_summary.json"
+          normalized=base/"normalized/bts_reporting_carrier_2026_08_historic_normalized.csv.gz"
+          normalized_json=base/"normalized/bts_aug2026_historical_manifest.json"
+          expected_raw="203509350f574f81728ca51175a17360d0413aa990512f8e0c8f1342f5baf23a"
+          expected_norm="406587471b44794ea1f574fad2400fc0bafdd85f6898faa8f41b6706294a4614"
+          for p,expected in ((raw,expected_raw),(normalized,expected_norm)):
+              if not p.is_file() or not (1_000_000 < p.stat().st_size < 50_000_000):
+                  raise SystemExit("HOLD_BTS_PRESERVATION_MISSING_OR_WRONG_SIZE")
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
+              if h.hexdigest()!=expected:
+                  raise SystemExit("HOLD_BTS_PRESERVATION_ORIGINAL_SHA_CHANGED")
+          a=json.loads(raw_json.read_text(encoding="utf-8"))
+          b=json.loads(normalized_json.read_text(encoding="utf-8"))
+          assert a.get("sourceZipSha256")==expected_raw
+          assert a.get("sourceMonth")=="2026-08"
+          assert a.get("phase5FreezeAuthorized") is False
+          assert a.get("phase6Authorized") is False
+          assert b.get("sourceOfficialZipSha256")==expected_raw
+          assert b.get("normalizedCsvGzipSha256")==expected_norm
+          assert b.get("totalRows")==608389
+          assert b.get("signedGateDelayLabels")==597734
+          assert b.get("missingTail")==1338
+          assert b.get("phase5ScientificFreeze") is False
+          assert b.get("phase6PaidGo") is False
+          assert b.get("databaseWrites")==0
+          assert b.get("providerCalls")==0
+          assert b.get("btsIncludedAsOriginalAeroDataBoxPre") is False
+          count=0
+          with gzip.open(normalized,"rb") as f:
+              for chunk in iter(lambda:f.read(1024*1024),b""):
+                  count+=len(chunk)
+                  if count>400_000_000:
+                      raise SystemExit("HOLD_BTS_PRESERVATION_GZIP_UNBOUNDED")
+          if count<1_000_000:
+              raise SystemExit("HOLD_BTS_PRESERVATION_GZIP_TRUNCATED")
+          print("BTS_AUG2026_TWO_ORIGINAL_SHA_MANIFEST_AND_GZIP_VERIFIED_NO_PROVIDER_NO_DB")
+          PY
+      - name: Preserve exact public BTS source and verification summary in Actions only
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-bts-aug2026-official-source-sha-preserved-20261113
+          path: /tmp/v39_bts_preserve/source/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+      - name: Preserve exact normalized history and manifest in separate Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-bts-aug2026-normalized-sha-preserved-20261113
+          path: /tmp/v39_bts_preserve/normalized/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+      - name: Explicitly retain historical-only and nonpermanent status
+        run: |
+          echo 'Exact old-source original ZIP and normalized BTS 2026-08 hashes independently passed. Requested 90-day Actions retention (actual expiry subject to repository policy).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'These are temporary same-repo GitHub artifacts, NOT durable Phase7 object storage or AeroDataBox PRE. No provider API GET, no Neon writes, no Phase5 FREEZE or paid Phase6 GO.' >> "$GITHUB_STEP_SUMMARY"
