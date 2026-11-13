@@ -18,7 +18,7 @@ const {Client}=pg;
 export const V0094_MIGRATION_PATH=
  "migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql";
 export const V0094_REVIEWED_SQL_BLOB_SHA=
- "ea78d50665bde8a53e7d5152f7166add6798e7d7";
+ "9ae9552542be837fab0fcec42e2f7cc9d192fdc8";
 export const V0094_EXPLICIT_OWNER_APPROVAL=
  "INSTALL_ONCE_V0094_EMPTY_PRIVATE_SCHEMA_TWO_NOLOGIN_ROLES_NO_PAID";
 const ROLES=[
@@ -74,7 +74,8 @@ export function classifyV0094Inventory(s){
  if(!s.schemaPresent||!s.tablePresent||s.roles.length!==2||
     !ROLES.every(r=>s.roles.some(x=>x.rolname===r&&validateRoleShape(x)))||
     s.tableOwner!=="neondb_owner"||
-    s.tableRows!==0||s.roleMembers!==0||
+    s.tableRows!==0||s.roleMembers!==2||
+    s.ownerBootstrapAdminMembers!==2||s.unexpectedRoleMembers!==0||
     s.publicTablePrivileges!==false||
     !s.privateAcl||
     s.privateAcl.readerSelect!==true||
@@ -123,12 +124,26 @@ export async function readV0094OwnerInventory(client){
    "rolcreaterole,rolreplication,rolbypassrls FROM pg_catalog.pg_roles"+
    " WHERE rolname=ANY($1::text[]) ORDER BY rolname",[ROLES]
   )).rows;
+  // PG16 non-superuser CREATEROLE automatically receives exactly one
+  // bootstrap-superuser grant (ADMIN true, SET/INHERIT false) per new role.
+  // The grant cannot be revoked by the owner; disallow ANY other member.
   const m=(await client.query(
-   "SELECT COUNT(*)::integer AS n FROM pg_catalog.pg_auth_members m"+
+   "SELECT COUNT(*)::integer AS n,"+
+   "COUNT(*) FILTER (WHERE member.rolname=current_user AND"+
+   " grantor.rolsuper AND m.admin_option AND NOT m.inherit_option"+
+   " AND NOT m.set_option)::integer AS owner_bootstrap,"+
+   "COUNT(*) FILTER (WHERE NOT(member.rolname=current_user AND"+
+   " grantor.rolsuper AND m.admin_option AND NOT m.inherit_option"+
+   " AND NOT m.set_option))::integer AS unexpected"+
+   " FROM pg_catalog.pg_auth_members m"+
    " JOIN pg_catalog.pg_roles g ON g.oid=m.roleid"+
+   " JOIN pg_catalog.pg_roles member ON member.oid=m.member"+
+   " JOIN pg_catalog.pg_roles grantor ON grantor.oid=m.grantor"+
    " WHERE g.rolname=ANY($1::text[])",[ROLES]
-  )).rows[0]?.n;
-  if(!Number.isSafeInteger(m)||m<0)fail("UNREADABLE_MEMBERSHIP");
+  )).rows[0];
+  if(!m||![m.n,m.owner_bootstrap,m.unexpected].every(x=>
+      Number.isSafeInteger(x)&&x>=0))
+   fail("UNREADABLE_MEMBERSHIP");
   let extras={tableRows:null,tableOwner:null,privateAcl:null,
    publicTablePrivileges:null,immutabilityTrigger:null,primaryKey:null};
   if(objects.table_present){
@@ -192,7 +207,8 @@ export async function readV0094OwnerInventory(client){
     phase6Authorization:objects.legacy_auth_present,
     flightPopulation:objects.legacy_population_present
    },
-   roles,roleMembers:m,...extras,
+   roles,roleMembers:m.n,ownerBootstrapAdminMembers:m.owner_bootstrap,
+   unexpectedRoleMembers:m.unexpected,...extras,
    providerCalls:0,databaseWrites:0,paidPhase6Go:false};
   return {...output,state:classifyV0094Inventory(output)};
  }catch(e){
@@ -220,7 +236,8 @@ export async function installV0094OnceOwner({client,rawMigration,blobSha}){
     JSON.stringify(before.legacyObjects)!==JSON.stringify(after.legacyObjects))
   fail("AFTER_DDL_INDEPENDENT_OWNER_AUDIT_REQUIRED");
  return {status:"V0094_SCHEMA_ONCE_OWNER_READBACK_PASS_INERT",
-  migrationBlobSha:blobSha,rolesCreatedNoLogin:2,tableRows:0,
+  migrationBlobSha:blobSha,rolesCreatedNoLogin:2,
+  ownerBootstrapAdminMembers:2,unexpectedRoleMembers:0,tableRows:0,
   baselineObjectsPreserved:true,providerCalls:0,
   databaseFlightWrites:0,paidPhase6Go:false,
   separateIndependentReadbackStillRequired:true};
@@ -278,6 +295,8 @@ async function main(){
     databaseBytes:s.databaseBytes,state:s.state,
     schemaPresent:s.schemaPresent,tablePresent:s.tablePresent,
     tableRows:s.tableRows,roleMembers:s.roleMembers,
+    ownerBootstrapAdminMembers:s.ownerBootstrapAdminMembers,
+    unexpectedRoleMembers:s.unexpectedRoleMembers,
     roles:s.roles.map(r=>({name:r.rolname,canLogin:r.rolcanlogin})),
     providerCalls:0,databaseWrites:0,paidPhase6Go:false}));
   }
