@@ -99,6 +99,20 @@ jobs:
             await client.query("CREATE SCHEMA clean");
             await client.query("CREATE TABLE clean.adb_phase6_authorization (id bigint)");
             await client.query("CREATE TABLE clean.flight_population (id bigint)");
+            // Temporary diagnostic of PG16 CREATEROLE's automatic grantor;
+            // only role names/privileges in a rollback-only CI transaction.
+            await client.query("BEGIN");
+            await client.query("CREATE ROLE ci_v0094_nonlogin_role_probe NOLOGIN NOINHERIT");
+            const autoMembers=await client.query(
+              "SELECT g.rolname AS group_name,member.rolname AS member_name,"+
+              "grantor.rolname AS grantor_name,m.admin_option,m.inherit_option,m.set_option"+
+              " FROM pg_catalog.pg_auth_members m"+
+              " JOIN pg_catalog.pg_roles g ON m.roleid=g.oid"+
+              " JOIN pg_catalog.pg_roles member ON m.member=member.oid"+
+              " JOIN pg_catalog.pg_roles grantor ON m.grantor=grantor.oid"+
+              " WHERE g.rolname='ci_v0094_nonlogin_role_probe'");
+            console.log("CI_PG16_CREATOR_ADMIN_MEMBERSHIP",JSON.stringify(autoMembers.rows));
+            await client.query("ROLLBACK");
             const before=await readV0094OwnerInventory(client);
             assert.equal(before.state,"COLD_V0094_NOT_INSTALLED");
             const installed=await installV0094OnceOwner({client,
