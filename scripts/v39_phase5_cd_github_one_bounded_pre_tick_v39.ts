@@ -16,6 +16,8 @@ import {
 import {
  requireP5CdGithubPreRelease
 } from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
+import {runP5CdGithubStage14Microburst}
+ from "../server/lib/disruption/phase5CdGithubBoundedStage14Microburst_v39";
 import {
  verifyP5CdFrozenRoster,runP5CdGithubPreTick,
  type P5CdFrozenRoster,type P5CdFrozenRosterEntry
@@ -66,11 +68,16 @@ export async function runP5CdGithubPreController(
   // from the reviewed frozen native T, then check the restricted real
   // PostgreSQL clock BEFORE claiming, never claim or write early.
   const early=await waitP5CdGithubSignedDueWindow(env,pre,packets);
-  const report=await runP5CdGithubPreTick(env,{
-   db:pre,pool:pre,packets
-  },{
-   owner:"cd-gh-"+env.GITHUB_RUN_ID,limit:2,leaseSeconds:120
-  });
+  // The opt-in capacity wrapper REUSES the original per-flight Stage14
+  // V0092 claim -> WRITE_STARTED -> postcommit readback -> ACK. Default is
+  // exactly one existing two-task tick; no additional SQL privileges.
+  const report=await runP5CdGithubStage14Microburst(env,()=>
+   runP5CdGithubPreTick(env,{
+    db:pre,pool:pre,packets
+   },{
+    owner:"cd-gh-"+env.GITHUB_RUN_ID,limit:2,leaseSeconds:120
+   })
+  );
   return{
    ...report,
    earlyDbClockDueWindow:early,
