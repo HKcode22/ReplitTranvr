@@ -1,0 +1,142 @@
+name: Phase5-6 appended SOURCE PRE POST day-shards independent DB clock READ ONLY (STOP default)
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Only READ_ONLY_PINNED_SHARDS_NO_PROVIDER_NO_DISPATCH uses actual source login"
+        type: choice
+        required: true
+        default: HOLD_NO_DATABASE_CONNECTION
+        options:
+          - HOLD_NO_DATABASE_CONNECTION
+          - READ_ONLY_PINNED_SHARDS_NO_PROVIDER_NO_DISPATCH
+      approved_main_sha:
+        description: "Independently reviewed exact main SHA; no code drift"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-phase6-append-only-day-shard-dbclock-readonly.yml'
+      - 'scripts/v39_phase5_phase6_append_only_shard_index_readonly_observer_v39.ts'
+      - 'server/lib/disruption/phase5Phase6AppendOnlyDayShardIndex_v39.ts'
+      - 'tests/phase5_phase6_append_only_shard_index_readonly_observer_v39.test.ts'
+      - 'tests/phase5_phase6_append_only_day_shard_index_v39.test.ts'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-phase6-shard-index-ro-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  no-secret-offline-integration:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: No provider/SQL/secret; simulate two-day and index revision admission
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$V39_P5_SOURCE_DATABASE_URL$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          npx vitest run tests/phase5_phase6_append_only_day_shard_index_v39.test.ts tests/phase5_phase6_append_only_shard_index_readonly_observer_v39.test.ts
+          echo 'PHASE5_PHASE6_DAY_SHARD_OBSERVER_OFFLINE_ZERO_PROVIDER_ZERO_DB_PASS' >> "$GITHUB_STEP_SUMMARY"
+  actual-existing-source-role-pgclock-readonly:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          ((github.event_name == 'schedule' &&
+            vars.P5_SHARD_INDEX_RO_ENABLED == 'true') ||
+           (github.event_name == 'workflow_dispatch' &&
+            inputs.confirm == 'READ_ONLY_PINNED_SHARDS_NO_PROVIDER_NO_DISPATCH')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      GITHUB_TOKEN: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_SHARD_INDEX_RO_EXECUTE: '1'
+      P5_SHARD_INDEX_RO_ENABLED: ${{ vars.P5_SHARD_INDEX_RO_ENABLED }}
+      P5_SHARD_INDEX_RO_CONFIRM: ${{ inputs.confirm }}
+      P5_SHARD_INDEX_RO_MANUAL_MAIN_SHA: ${{ inputs.approved_main_sha }}
+      P5_SHARD_INDEX_RO_CODE_SHA: ${{ secrets.P5_SHARD_INDEX_RO_CODE_SHA }}
+      P5_SHARD_INDEX_RO_INDEX_FILE: ${{ vars.P5_SHARD_INDEX_RO_INDEX_FILE }}
+      P5_SHARD_INDEX_RO_PRIOR_INDEX_FILE: ${{ vars.P5_SHARD_INDEX_RO_PRIOR_INDEX_FILE }}
+      P5_SHARD_INDEX_RO_PRIOR_INDEX_SHA256: ${{ vars.P5_SHARD_INDEX_RO_PRIOR_INDEX_SHA256 }}
+      P5_SHARD_INDEX_RO_CURRENT_SHA256: ${{ vars.P5_SHARD_INDEX_RO_CURRENT_SHA256 }}
+      P5_SHARD_INDEX_RO_EXTERNAL_REVIEW_SHA256: ${{ secrets.P5_SHARD_INDEX_RO_EXTERNAL_REVIEW_SHA256 }}
+      P5_SHARD_INDEX_RO_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      P5_SHARD_INDEX_RO_CALENDAR_SHA256: ${{ secrets.P5_SHARD_INDEX_RO_CALENDAR_SHA256 }}
+      P5_SHARD_INDEX_RO_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      P5_SHARD_INDEX_RO_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse missing independent pins, code drift or any paid provider before dependencies/SQL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$GITHUB_SHA" = "$P5_SHARD_INDEX_RO_CODE_SHA"
+          test "$ADB_AUTO_COLLECT" = "0"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test "$V39_PHASE6_OWNER_APPROVED" = "0"
+          test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P5_V39_PRE_DATABASE_URL$P5_V39_PREPARE_DATABASE_URL"
+          test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$P5_SHARD_INDEX_RO_INDEX_FILE"
+          [[ "$P5_SHARD_INDEX_RO_CURRENT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$P5_SHARD_INDEX_RO_CURRENT_SHA256" = "$P5_SHARD_INDEX_RO_EXTERNAL_REVIEW_SHA256"
+          [[ "$P5_SHARD_INDEX_RO_CALENDAR_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if test "$GITHUB_EVENT_NAME" = "workflow_dispatch"; then
+            test "$P5_SHARD_INDEX_RO_CONFIRM" = "READ_ONLY_PINNED_SHARDS_NO_PROVIDER_NO_DISPATCH"
+            test "$GITHUB_SHA" = "$P5_SHARD_INDEX_RO_MANUAL_MAIN_SHA"
+          else
+            test "$GITHUB_EVENT_NAME" = "schedule"
+            test "$P5_SHARD_INDEX_RO_ENABLED" = "true"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify actual original SOURCE-role PG16 clock and exact frozen registry bytes, NEVER dispatch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase5_phase6_append_only_shard_index_readonly_observer_v39.ts
+          echo 'P5_PHASE6_AUTHENTIC_PG16_CLOCK_SHARDS_REVIEWED_NO_DISPATCH_NO_GO' >> "$GITHUB_STEP_SUMMARY"
