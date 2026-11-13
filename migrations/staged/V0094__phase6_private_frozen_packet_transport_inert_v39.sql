@@ -37,6 +37,13 @@ CREATE ROLE phase6_private_frozen_publisher_v39
   NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
 
+-- PostgreSQL 16 auto-grants the CREATEROLE (non-superuser) creator an
+-- administrative membership in each role it creates. A successful Neon
+-- neondb_owner installation must remove even this implicit membership, not
+-- quietly accept a future login as a private packet role member.
+REVOKE phase6_private_frozen_reader_v39 FROM CURRENT_USER;
+REVOKE phase6_private_frozen_publisher_v39 FROM CURRENT_USER;
+
 CREATE TABLE phase6_private.frozen_native_packet_v39 (
  logical_path text PRIMARY KEY,
  run_day_index integer NOT NULL CHECK (run_day_index BETWEEN 1 AND 31),
@@ -109,12 +116,11 @@ BEGIN
   'phase6_private_frozen_publisher_v39'
  ]) LOOP
   IF EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=role_name
-    AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR
+    AND (rolcanlogin OR rolinherit OR rolsuper OR rolcreatedb OR rolcreaterole OR
       rolreplication OR rolbypassrls)) OR
      EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
        JOIN pg_catalog.pg_roles g ON g.oid=m.roleid
-       JOIN pg_catalog.pg_roles login ON login.oid=m.member
-       WHERE g.rolname=role_name AND login.rolcanlogin) THEN
+       WHERE g.rolname=role_name) THEN
    RAISE EXCEPTION 'P5_V0094_PRIVATE_ROLE_PRIVILEGED_OR_LOGIN_MEMBER';
   END IF;
  END LOOP;
