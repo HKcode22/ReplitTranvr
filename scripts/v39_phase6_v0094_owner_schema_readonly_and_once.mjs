@@ -18,7 +18,7 @@ const {Client}=pg;
 export const V0094_MIGRATION_PATH=
  "migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql";
 export const V0094_REVIEWED_SQL_BLOB_SHA=
- "42af369982e31b32055e2944492853feff1d0c51";
+ "ea78d50665bde8a53e7d5152f7166add6798e7d7";
 export const V0094_EXPLICIT_OWNER_APPROVAL=
  "INSTALL_ONCE_V0094_EMPTY_PRIVATE_SCHEMA_TWO_NOLOGIN_ROLES_NO_PAID";
 const ROLES=[
