@@ -137,6 +137,11 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
      "expires_at_utc","retention_not_after_utc",
      "deletion_verified_at_utc"
     ].filter(c=>cols.includes(c));
+    // Schema-level hint only: a column named response_headers does not
+    // prove the original FIDS response actually retained Cache-Control.
+    // Never SELECT header values; they may include credentials.
+    const httpHeaderMetadataColumns=cols.filter(c=>
+      /^(cache_control|cache_control_max_age|http_response_headers|response_headers|raw_response_headers|original_response_headers)$/.test(c));
     let dateStats=null;
     if(clock){
      // Fixed allowlisted identifiers only; LIMIT protects busy tables.
@@ -165,6 +170,8 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
      timestampColumn:clock,
      hasSensitiveProviderValues:cols.some(c=>/payload|raw_body|response_body|token|secret|flight_?number/i.test(c)),
      expiryMetadataColumns:expiryColumns,
+     httpHeaderMetadataColumnNames:httpHeaderMetadataColumns,
+     authenticatedOriginalCacheControlVerified:false,
      rowsSampled:dateStats?.rowsSampled??null,
      sampleCapped:dateStats?dateStats.rowsSampled===P6_OWNER_SAMPLE_LIMIT:null,
      days:dateStats?.days??[],
