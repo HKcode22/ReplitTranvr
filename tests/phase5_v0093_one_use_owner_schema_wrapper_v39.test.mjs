@@ -28,6 +28,11 @@ function mock({
    if(sql==="BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"||
       sql==="ROLLBACK"||sql.startsWith("SET LOCAL"))
     return {rows:[]};
+   if(sql===raw.toString("utf8")){
+    commits++;
+    if(injectedSqlFailure)throw Error("INJECTED_AMBIGUOUS_SQL_FAILURE");
+    after=true;return {rows:[]};
+   }
    if(sql.includes("current_database() AS db")){
     return {rows:[{db:"neondb",actor:badRole?"travnr_runtime":actor,
        version:160000,ro:"on",replica,superuser:false}]};
@@ -63,11 +68,6 @@ function mock({
     }[table];
     if(n===undefined)throw Error("UNKNOWN_TABLE_"+table);
     return {rows:[{n}]};
-   }
-   if(sql===raw.toString("utf8")){
-    commits++;
-    if(injectedSqlFailure)throw Error("INJECTED_AMBIGUOUS_SQL_FAILURE");
-    after=true;return {rows:[]};
    }
    throw Error("UNEXPECTED_SQL_"+sql.slice(0,150));
   }
