@@ -45,6 +45,8 @@ const OTHER=[
 const TABLES=Object.freeze([...new Set([
  ...ROLE_SPECS.flatMap(x=>[...x.read,...x.insert]),...OTHER
 ])].sort());
+export const P5_TWO_STAGE_ROLES=ROLE_SPECS;
+export const P5_TWO_STAGE_TABLES=TABLES;
 const deny=(s)=>{throw Error("HOLD_P5_TWO_STAGE_INDEPENDENT_READONLY_"+s);};
 const isTrue=v=>v===true;
 export function admitP5TwoStageIndependentReadOnly(env){
