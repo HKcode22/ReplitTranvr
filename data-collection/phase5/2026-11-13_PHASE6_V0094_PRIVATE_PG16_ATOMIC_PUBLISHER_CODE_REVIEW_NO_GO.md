@@ -21,9 +21,9 @@ GitHub `HKcode22/ReplitTranvr` is **public**; real AeroDataBox Contents, full fl
 
 ## CI and evidence scope
 
-`tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts` uses **real Node Ed25519 signatures** with a simulated SQL client. It covers authorized signing/pin, correct insertion ordering and one COMMIT, default STOP, rejected owner role, source review mismatch, duplicate target, wrong signature, expired retention, SQL insert error + rollback, unknown COMMIT quarantine, and late cutoff censor. The new no-secret, no-provider workflow also runs TypeScript checking.
+`tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts` uses **real Node Ed25519 signatures** with a simulated SQL client. It covers authorized signing/pin, correct insertion ordering and one COMMIT, default STOP, rejected owner role, source review mismatch, duplicate target, wrong signature, expired retention, SQL insert error + rollback, unknown COMMIT quarantine, and late cutoff censor. The new no-secret, no-provider workflow also runs TypeScript checking. The PG16 disposable workflow is separately extended to run the real write/rollback integration tests, and an independent test-fixture count has been scoped to its own paths rather than globally.
 
-The **reader** (#632) already has separate disposable *real PostgreSQL16* schema/readback integration tests. The publisher tests in this PR are **simulated transactions**, so they are **not yet** an independent real-PG16 write-path approval. Before any install we also need a disposable real PG16 publisher transaction/role-matrix/race/fault test and actual storage/quota/privacy/right-to-retain review.
+The **reader** (#632) has separate disposable real PostgreSQL16 schema/readback integration tests. This PR additionally introduces `tests/phase5_v0094_private_pg16_publisher_real_pg16_v39.test.ts`, executed in the same disposable PostgreSQL16 CI service, to exercise the dedicated role, actual signed restricted INSERT+COMMIT, precommitted SOURCE evidence, duplicate refusal, real ROLLBACK and forbidden UPDATE/DELETE. Its final exact-head CI result must be checked before crediting it as PASS. Real concurrent writers, network-lost unknown COMMIT, quota/backups, lawful retention and production identity still require independent review.
 
 ## Dependencies still unresolved
 
