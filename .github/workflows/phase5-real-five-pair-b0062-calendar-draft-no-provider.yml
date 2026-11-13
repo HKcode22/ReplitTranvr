@@ -5,6 +5,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts'
+      - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.d.mts'
       - 'tests/phase5_real_five_pair_calendar_to_b0062_slot_budget_review_v39.test.ts'
       - 'server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs'
       - 'tests/phase5_real_five_pair_b0062_calendar_only_draft_v39.test.ts'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts'
+      - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.d.mts'
       - 'tests/phase5_real_five_pair_calendar_to_b0062_slot_budget_review_v39.test.ts'
       - 'server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs'
       - 'tests/phase5_real_five_pair_b0062_calendar_only_draft_v39.test.ts'
