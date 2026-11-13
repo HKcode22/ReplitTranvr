@@ -148,8 +148,7 @@ export function proposeP5ReviewedLaterPacketsAsUnsignedDayShard(
     proposedFiles.length>MAX_SHARD)
   fail("EXTERNAL_SOURCE_REGISTRY_OR_SHARD_SCOPE_NOT_PINNED");
  let parsedSource:P5SignedSourceBatchRegistry;
- try{parsedSource=JSON.parse(sourceRegistryBytes.toString("utf8"))
-   as P5SignedSourceBatchRegistry;}
+ try{parsedSource=JSON.parse(sourceRegistryBytes.toString("utf8")) as P5SignedSourceBatchRegistry;}
  catch{return fail("EXTERNAL_SOURCE_REGISTRY_NOT_JSON");}
  if(JSON.stringify(parsedSource)!==JSON.stringify(sourceRegistry)||
     sourceRegistry?.schema!==
@@ -214,8 +213,7 @@ export function proposeP5ReviewedLaterPacketsAsUnsignedDayShard(
      seenReviewSha.has(v.reviewArtifactSha256))
    fail("UNAUTHENTICATED_COMPLETION_OR_SELF_CERTIFIED_PUBLISH");
   let pkt:P5SignedWitnessedLaterPrePacket;
-  try{pkt=JSON.parse(v.packetBytes.toString("utf8"))
-    as P5SignedWitnessedLaterPrePacket;}
+  try{pkt=JSON.parse(v.packetBytes.toString("utf8")) as P5SignedWitnessedLaterPrePacket;}
   catch{return fail("REVIEW_READY_NATIVE_PRE_PACKET_NONJSON");}
   if(JSON.stringify(pkt)!==JSON.stringify(v.packet))
    fail("BYTE_CHANGED_AFTER_INDEPENDENT_PACKET_REVIEW");
