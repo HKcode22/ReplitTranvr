@@ -4,6 +4,7 @@
  * The existing Stage14 PRE writer remains authoritative for exact cutoff.
  */
 import {createHash} from "node:crypto";
+import {P5_COMPLETE_HISTORY_MAX} from "./phase5GithubCompleteWorkflowHistory_v39";
 import type {P5SignedWitnessedLaterPrePacket} from
  "../../../scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
@@ -286,7 +287,7 @@ export function planP5LaterPreGithubChild(
   return{shouldDispatch:false as const,status:decision.status,
    providerCalls:0 as const,databaseWrites:0 as const};
  if(!history||!Number.isSafeInteger(history.total_count)||
-    history.total_count<0||history.total_count>100||
+    history.total_count<0||history.total_count>P5_COMPLETE_HISTORY_MAX||
     !Array.isArray(history.workflow_runs)||
     history.workflow_runs.length!==history.total_count)
   fail("UNBOUNDED_GITHUB_LATER_PRE_HISTORY");

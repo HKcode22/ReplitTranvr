@@ -12,6 +12,8 @@
  */
 import {runP5GitHubSourceQueueObserver}
  from "./v39_phase5_github_source_upcoming_queue_readonly_v39";
+import {readP5CompleteGithubWorkflowHistory,P5_COMPLETE_HISTORY_MAX}
+ from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39";
 import type {P5SourceBatchResult}
  from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 const H=/^[0-9a-f]{64}$/;
@@ -116,7 +118,7 @@ export function selectP5DueSignedSourceChildIntents(
   hold("UNVERIFIED_BATCH_OR_UNEXPECTED_DB_MISSING");
  const now=iso(batch.observedDbClockUtc);
  if(!recent||!Number.isSafeInteger(recent.total_count)||
-    recent.total_count<0||recent.total_count>100||
+    recent.total_count<0||recent.total_count>P5_COMPLETE_HISTORY_MAX||
     !Array.isArray(recent.workflow_runs)||
     recent.workflow_runs.length!==recent.total_count)
   hold("UNBOUNDED_OR_INCOMPLETE_GITHUB_RUN_HISTORY");
@@ -200,19 +202,6 @@ export function bindP5ExactChildIntentFiles(
   return {...intent,frozenPacketPath:path};
  });
 }
-async function ghJson(
- fetchImpl:typeof fetch,url:string,token:string
-):Promise<unknown>{
- const result=await fetchImpl(url,{
-  method:"GET",headers:{
-   Accept:"application/vnd.github+json",
-   Authorization:"Bearer "+token,
-   "X-GitHub-Api-Version":"2022-11-28"
-  }
- });
- if(!result.ok)hold("GITHUB_RECENT_RUNS_UNAVAILABLE_NO_DISPATCH");
- return await result.json();
-}
 export async function runP5GitHubDueChildDispatcher(
  env:NodeJS.ProcessEnv,
  fetchImpl:typeof fetch=fetch
@@ -231,7 +220,11 @@ export async function runP5GitHubDueChildDispatcher(
  const url=ORIGIN+"/actions/workflows/"+CHILD+"/runs"+
   "?event=workflow_dispatch&per_page=100"+
   "&created="+encodeURIComponent(createdFrom+".."+createdTo);
- const recent=await ghJson(fetchImpl,url,admission.token) as P5GithubRecentIndex;
+ const recent=await readP5CompleteGithubWorkflowHistory(url,fetchImpl,{
+   Accept:"application/vnd.github+json",
+   Authorization:"Bearer "+admission.token,
+   "X-GitHub-Api-Version":"2022-11-28"
+  }) as P5GithubRecentIndex;
  const proposal=selectP5DueSignedSourceChildIntents(
   batch,recent,admission.registryFilePath);
  // Load the exact registry AGAIN after the PostgreSQL observer finishes;

@@ -3,6 +3,8 @@
  * Reuses the READ ONLY source original bound reviewer and the ORIGINAL
  * Stage14 PRE / independent Stage17 V0081 GitHub worker. Nothing paid here.
  */
+import {readP5CompleteGithubWorkflowHistory}
+ from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39";
 import {runP5T24SourceReadonlyOwner}
  from "./v39_phase5_native_t24_source_original_readonly_owner_v39";
 import {planP5T24WitnessedChild,
@@ -75,9 +77,7 @@ export async function runP5T24GithubChildDispatcher(
   Authorization:"Bearer "+permit.token,
   "X-GitHub-Api-Version":"2022-11-28"
  };
- const response=await fetcher(url,{method:"GET",headers});
- if(!response.ok)hold("GITHUB_T24_RUN_HISTORY_UNAVAILABLE");
- const history=await response.json() as P5T24GhRunHistory;
+ const history=await readP5CompleteGithubWorkflowHistory(url,fetcher,headers) as P5T24GhRunHistory;
  const decision=planP5T24WitnessedChild(
   readiness,history,permit.path,permit.sha);
  if(!decision.shouldDispatch)

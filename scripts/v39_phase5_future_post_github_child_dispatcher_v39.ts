@@ -5,6 +5,8 @@
  * API key, POST reserve/review login or performs charge/SQL writes.
  */
 import {readFileSync,lstatSync} from "node:fs";
+import {readP5CompleteGithubWorkflowHistory}
+ from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39";
 import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -159,9 +161,7 @@ export async function runP5FuturePostGithubDispatcher(
  const url=ROOT+"/actions/workflows/"+CHILD+"/runs"+
   "?event=workflow_dispatch&per_page=100"+
   "&created="+encodeURIComponent(from+".."+through);
- const get=await fetcher(url,{method:"GET",headers});
- if(!get.ok)hold("GH_POST_WORKFLOW_ATTEMPTS_UNAVAILABLE");
- const history=await get.json() as P5PostGhRunHistory;
+ const history=await readP5CompleteGithubWorkflowHistory(url,fetcher,headers) as P5PostGhRunHistory;
  const decision=planP5FuturePostOneChild(
   p,actual.pre,actual.dbClockUtc,history,admission.path);
  if(!decision.shouldDispatch)

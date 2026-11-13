@@ -115,7 +115,7 @@ export function planP5FuturePostOneChild(
    missingPreCount:pre.missingPreHorizons.length,
    providerCalls:0 as const,databaseWrites:0 as const};
  if(!Number.isSafeInteger(history.total_count)||
-    history.total_count<0||history.total_count>100||
+    history.total_count<0||history.total_count>500||
     !Array.isArray(history.workflow_runs)||
     history.workflow_runs.length!==history.total_count)
   return fail("GITHUB_POST_RUN_HISTORY_TRUNCATED_OR_UNAVAILABLE");
