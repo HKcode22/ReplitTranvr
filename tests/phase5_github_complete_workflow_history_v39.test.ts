@@ -102,7 +102,7 @@ describe("one exact complete GH child history for all four Phase6 lanes",()=>{
     plannedDispatchUtc:"2027-02-10T04:00:00.000Z"
    }]
   } as any;
-  const decision=selectP5DueSignedSourceChildIntents(h as any, h as any,
+  const decision=selectP5DueSignedSourceChildIntents(empty as any, h as any,
    "data-collection/phase5/frozen/example_registry.json");
   // The first hundred were not silently treated as the whole population.
   expect(decision.alreadyGitHubDispatched).toBe(1);
