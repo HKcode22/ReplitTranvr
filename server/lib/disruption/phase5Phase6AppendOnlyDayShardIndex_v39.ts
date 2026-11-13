@@ -138,7 +138,9 @@ export function auditP5Phase6AppendOnlyDayShardIndex(
  const seenKey=new Set<string>(),seenFile=new Set<string>();
  const sources=new Map<string,P5Phase6DayShardEntry>();
  let prevPublished=-Infinity;
- const packets=new Map<string,unknown>();
+ const seenSourceQueries=new Set<string>();
+ const seenLaterFlightHorizons=new Set<string>();
+ const seenPostRequests=new Set<string>();
  // First pass: immutable index shape and monotonic review chronology.
  for(const e of index.entries){
   if(!e||!exactKeys(e,[
@@ -210,6 +212,11 @@ export function auditP5Phase6AppendOnlyDayShardIndex(
        !H.test(x?.expectedPacketSha256??"")||
        !H.test(x?.expectedQueryDigestSha256??"")))
     hold("SOURCE_NOT_AN_EXACT_EXISTING_SIGNED_DAY_REGISTRY");
+   for(const item of p.entries){
+    if(seenSourceQueries.has(item.expectedQueryDigestSha256))
+     hold("SOURCE_QUERY_REPEATED_ACROSS_DAY_SHARDS");
+    seenSourceQueries.add(item.expectedQueryDigestSha256);
+   }
   }else if(e.lane==="LATER_PRE"){
    if(p.schema!==LATER_SCHEMA||
       p.manifestSha256!==pins.expectedManifestSha256||
@@ -219,18 +226,35 @@ export function auditP5Phase6AppendOnlyDayShardIndex(
       p.sourceDayRegistryFilePath!==e.sourceRegistryFilePath||
       p.sourceDayRegistrySha256!==e.sourceRegistrySha256||
       !Array.isArray(p.entries)||p.entries.length<1||
-      p.entries.length>96)
+      p.entries.length>96||
+      p.entries.some((x:any)=>
+       !FILE.test(x?.filePath??"")||
+       !H.test(x?.expectedPacketSha256??"")||
+       !H.test(x?.expectedQueryDigestSha256??"")||
+       typeof x?.expectedFlightInstanceId!=="string"||
+       x.expectedFlightInstanceId.length<5||
+       x.expectedFlightInstanceId.length>200||
+       !["T-6h","T-90m"].includes(x?.expectedHorizon)))
     hold("LATER_NOT_AN_EXACT_EXISTING_SIGNED_REGISTRY");
+   for(const item of p.entries){
+    const key=item.expectedFlightInstanceId+"|"+item.expectedHorizon;
+    if(seenLaterFlightHorizons.has(key))
+     hold("DUPLICATE_FLIGHT_HORIZON_ACROSS_LATER_SHARDS");
+    seenLaterFlightHorizons.add(key);
+   }
   }else{
    if(p.schema!==POST_SCHEMA||
       p.approvedCodeSha!==pins.expectedCodeSha||
       p.reviewed?.manifestSha256!==pins.expectedManifestSha256||
       p.reviewed?.runDayIndex!==e.runDayIndex||
+      !H.test(p.reviewed?.requestSha256??"")||
       p.reviewed?.independentFuturePostRequestAndRightsReview!==true||
       p.independentSourceContentsUseAndRESTReleaseAttested!==true)
     hold("POST_NOT_AN_EXACT_REVIEWED_ORIGINAL_PACKET");
+   if(seenPostRequests.has(p.reviewed.requestSha256))
+    hold("DUPLICATE_PAID_POST_REQUEST_ACROSS_SHARDS");
+   seenPostRequests.add(p.reviewed.requestSha256);
   }
-  packets.set(e.filePath,p);
  }
  const due:{SOURCE:P5Phase6DueShard[];LATER_PRE:P5Phase6DueShard[];POST:P5Phase6DueShard[]}={
   SOURCE:[],LATER_PRE:[],POST:[]
