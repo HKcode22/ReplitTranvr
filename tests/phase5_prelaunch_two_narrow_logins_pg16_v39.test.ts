@@ -4,6 +4,7 @@
  * The existing V0079/V0082/V0093 source schemas are installed by CI.
  */
 import {Pool} from "pg";
+import {URL as NodeURL} from "node:url";
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {
  APPROVAL, ENTRIES, commissionP5PrelaunchTwoNarrowLoginsOnce
@@ -121,7 +122,7 @@ suite("Phase5 two narrow owner login credentials + restricted B0062/V0093 ACL",(
   // Do not emit actual connection URLs/passwords in CI logs. Merely assert
   // role-specific secrets differ and refer to the expected isolated DB.
   for(const entry of ENTRIES){
-   const url=new URL(gh.secrets.get(entry.secret)!);
+   const url=new NodeURL(gh.secrets.get(entry.secret)!);
    expect(decodeURIComponent(url.username)).toBe(entry.role);
    expect(url.pathname).toBe("/neondb");
    expect(url.password.length).toBeGreaterThan(60);
