@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/phase5-source-to-unsigned-native-pre-dossier-offline.yml'
       - 'server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts'
+      - 'server/lib/disruption/phase5DetachedSourceAuditToUnsignedDossierHandoff_v39.ts'
+      - 'tests/phase5_detached_source_audit_to_unsigned_dossier_handoff_v39.test.ts'
       - 'tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts'
       - 'data-collection/phase5/2026-11-10_ACTUAL_SOURCE_TO_UNSIGNED_PRE_REVIEW_DOSSIER_CHECKPOINT.md'
 permissions:
@@ -44,5 +46,5 @@ jobs:
           test -z "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
           test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts
+          npx vitest run tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts tests/phase5_detached_source_audit_to_unsigned_dossier_handoff_v39.test.ts
           echo 'NO_PROVIDER_NO_REAL_SOURCE_PUBLISH_NO_PACKET_SIGNING_NO_PAID_GO'
