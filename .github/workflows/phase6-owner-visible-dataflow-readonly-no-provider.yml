@@ -80,6 +80,18 @@ jobs:
           INSERT INTO clean.fids_query_response
             VALUES(clock_timestamp(), '{"ci":"synthetic"}'::jsonb, NULL);
           INSERT INTO clean.flight_population VALUES(clock_timestamp(),NULL);
+          CREATE TABLE clean.phase5_cd_pre_task_v39 (
+            state text NOT NULL,created_at_utc timestamptz NOT NULL
+          );
+          CREATE TABLE clean.provider_content_blob_ref (
+            expires_at_utc timestamptz NOT NULL,
+            deletion_verified_at_utc timestamptz,
+            persisted_at_utc timestamptz NOT NULL
+          );
+          INSERT INTO clean.phase5_cd_pre_task_v39 VALUES
+            ('READY',clock_timestamp()),('MISSED',clock_timestamp());
+          INSERT INTO clean.provider_content_blob_ref
+            VALUES(clock_timestamp()-interval '1 day',NULL,clock_timestamp()-interval '2 days');
           SQL
           node --input-type=module <<'JS'
           import assert from "node:assert/strict";
@@ -94,6 +106,10 @@ jobs:
             assert(events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.rowsSampled===1));
             assert(events.some(e=>e.stage==="NORMALIZED FLIGHTS"&&e.rowsSampled===1));
             assert(events.some(e=>e.stage==="PRE SNAPSHOTS"&&e.status==="ABSENT_NOT_A_ZERO"));
+            assert(events.some(e=>e.stage==="PRE QUEUE"&&e.preQueueStateCounts?.some(
+              s=>s.state==="READY"&&s.count===1)));
+            assert(events.some(e=>e.stage==="PROVIDER BLOB EXPIRY"&&
+              e.expiredProviderBlobReview?.sampledExpiredUnverified===1));
             const summary=events.find(e=>e.event==="RUN_SUMMARY");
             assert(summary&&summary.databaseWrites===0&&summary.providerCalls===0);
             assert(!JSON.stringify(events).includes("synthetic"));
