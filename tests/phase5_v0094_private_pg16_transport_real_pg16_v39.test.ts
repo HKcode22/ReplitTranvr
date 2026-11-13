@@ -79,6 +79,7 @@ const pins:P5PrivateFrozenHydrationPins={
 let owner:Client,reader:Client;
 const table="phase6_private.frozen_native_packet_v39";
 beforeAll(async()=>{
+ if(process.env.P5_V0094_PRIVATE_DISPOSABLE_PG_TESTS!=="1")return;
  if(process.env.ADB_AUTO_COLLECT!=="0"||
     process.env.V39_PHASE6_PROCESS_ARMED!=="0"||
     process.env.AERODATABOX_API_KEY||
@@ -121,7 +122,7 @@ afterAll(async()=>{
  if(reader)await reader.end().catch(()=>{});
  if(owner)await owner.end().catch(()=>{});
 });
-describe("actual disposable PG16 V0094 private bytea and original later-PRE registry verifier, no paid calls",()=>{
+describe.skipIf(process.env.P5_V0094_PRIVATE_DISPOSABLE_PG_TESTS!=="1")("actual disposable PG16 V0094 private bytea and original later-PRE registry verifier, no paid calls",()=>{
  it("keeps ZERO new login memberships on the actual staged V0094 schema (only disposable CI grants follow)",async()=>{
   const z=await owner.query(
    "SELECT rolcanlogin,rolsuper,rolcreaterole FROM pg_catalog.pg_roles "+
