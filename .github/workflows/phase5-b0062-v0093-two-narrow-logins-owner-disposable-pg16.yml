@@ -1,0 +1,70 @@
+name: Phase5 B0062/V0093 Two Narrow Prelaunch LOGINs (Disposable PG16, NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_prelaunch_two_narrow_logins_owner_once.mjs'
+      - 'tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts'
+      - '.github/workflows/phase5-b0062-v0093-two-narrow-logins-owner-disposable-pg16.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_prelaunch_two_narrow_logins_owner_once.mjs'
+      - 'tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  P5_PRELAUNCH_TWO_LOGIN_PG16_TEST: '1'
+jobs:
+  strict-prelaunch-owner-role-commissioner-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install exact disposable base and existing V0079/V0082/V0093, never real Neon
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          npx tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+      - name: Test atomic two-role zero-source commission and independent denied ACL
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          npx vitest run tests/phase5_prelaunch_two_narrow_logins_pg16_v39.test.ts
+          npm run v39:typecheck
+          echo 'PHASE5_TWO_RESTRICTED_B0062_V0093_LOGINS_DISPOSABLE_PG16=PASS SOURCE=0 PAID=0 GO=0'
