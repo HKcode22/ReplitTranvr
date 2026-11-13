@@ -220,7 +220,7 @@ describe("external Ed25519-verified private 0700 write-once Phase6 later shard p
  it("does not publish after source day SHA mismatch, forged signature or missing source",()=>{
   const f=fixture();
   writeFileSync(join(f.root,"source_day_0004.json"),Buffer.from(
-   JSON.stringify({schema:"wrong",entries:[]})),{mode:0o600});
+   JSON.stringify({schema:"wrong",entries:[],padding:"x".repeat(300)})),{mode:0o600});
   expect(()=>f.publish()).toThrow(
    "SOURCE_DAY_PRIVATE_BYTES_NOT_PREEXISTING_EXTERNALLY_PINNED");
   const g=fixture();
