@@ -1,0 +1,44 @@
+name: Phase5 V0094 signed private PG16 publisher (NO PROVIDER NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase5-v0094-private-pg16-publisher-no-provider.yml'
+      - 'server/lib/disruption/phase5Phase6Pg16PrivateLaterPrePublisher_v39.ts'
+      - 'tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  DATABASE_URL: ''
+jobs:
+  verify-signed-private-publisher-offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Review real crypto and transaction failure cases offline
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_WEBHOOK_SECRET"
+          test -z "$DATABASE_URL"
+          npx vitest run tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts
+          npm run v39:typecheck
+          echo 'V0094_PRIVATE_PUBLISHER_CRYPTO_AND_TX_OFFLINE_PASS_NO_NEON_NO_GO'
