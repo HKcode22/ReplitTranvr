@@ -187,7 +187,13 @@ describe.skipIf(process.env.P5_V0094_PRIVATE_DISPOSABLE_PG_TESTS!=="1")("actual 
    ["data-collection/phase5/frozen/fake_packet_0001.json",
     H("0"),code,manifest,rights,laterEvidence,packet]
   )).rejects.toMatchObject({code:"23514"});
-  const q=await owner.query("SELECT count(*)::integer AS n FROM "+table);
+  // This suite must count ONLY its own signed fixture paths: the new
+  // publisher integration suite also creates legitimate private rows in
+  // the same disposable PG16 test database.
+  const q=await owner.query(
+   "SELECT count(*)::integer AS n FROM "+table+
+   " WHERE logical_path=ANY($1::text[])",
+   [[sourcePath,packetPath,registryPath]]);
   expect(q.rows[0].n).toBe(3);
  });
 });
