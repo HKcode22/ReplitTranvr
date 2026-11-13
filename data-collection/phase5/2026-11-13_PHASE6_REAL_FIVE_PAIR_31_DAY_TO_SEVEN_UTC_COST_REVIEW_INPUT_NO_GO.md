@@ -1,0 +1,28 @@
+# 2026-11-13 UTC — corrected real five-pair 31-day calendar → exact seven UTC-category B0062 staging INPUT (unsigned, no GO)
+
+**Status: CODE candidate only.** Five real corrected four-airport paired sets and six geographic regions originate in the independently preserved November 9 owner read-only file (KBUF corrected; KTEB excluded). Future treatment/date/seeds/ordinary HUB-region plan, current provider range/price/balance, legal source Contents/ML retention and five other daily REST categories **are not independently approved by this PR**. The two dedicated B0062 and V0093 PostgreSQL logins are already independently verified against Neon by [run #43379809484](https://github.com/HKcode22/ReplitTranvr/actions/runs/43379809484). **Do not reinstall** them, V0079–V0093, Stage14 or any prior worker.
+
+## Reuse the actual existing science and staging code
+
+1. [Existing five-pair calendar draft](../../server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts) preserves 10 corrected paired days and 21 ordinary days with as-yet-unknown MID_A/MID_B/REGIONAL airport identities, 24h known HUB END-to-START washout, 31 independent claimed seeds, 26×4h + 3×2×2h + 2×up-to-6h and protected 20/5/6 train/validation/test. The date and seed claims are prospective candidates, not scientifically independently signed.
+2. [Existing slot-only budget formula](../../server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs) computes physical UTC charge-date FIDS BASE/SPLIT from four airport slot positions and three PRE horizons, explicit current max range/refresh/pagination/retry units, plus five independent non-FIDS categories. It does not invent ordinary airport ICAOs.
+3. [Existing B0062 inert calendar/staging compiler](../../server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs) verifies 31 calendar rows and budget alignment, external signed input SHA and reviewed rights/treatment/provider/Alert cap, exact existing restricted writer, disabled authorization and virgin SQL rows. [Existing V0093 cost-only freezer](../../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs) is a separate limited-credential transaction and poststage audit. **These are implemented, not to be recreated, but not executed live.**
+
+## New code: unsigned calendar-row-to-budget join
+
+[`phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts`](../../server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts) joins the real corrected five-pair review draft and externally supplied future calendar approval claims, REST price/range/timing evidence, seven physical UTC categories and Alert safety settings into the exact B0062 staging-input JSON shape. It refuses a changed owner pair-set SHA, mutated original draft core or row digest, 21 ordinary airports replaced with fake selections, calendar/budget mismatch, past first T24 source slot, missing charge dates and physical UTC spend overages. It reuses existing validators and cost arithmetic, not a second calculation or SQL writer.
+
+It returns deterministic **candidate** calendar-row, slot-envelope and full stage-input SHA256 hashes so a separate reviewer can inspect and genuinely approve their exact bytes. It does **not** write a database, call a provider or sign a packet. Although the existing B0062 input schema historically uses fields named `expectedSigned...`, values generated here are still **unsigned review candidates**. This code never supplies the preexisting review booleans, distinct private authentication or owner authorization required by the actual stager.
+
+## CI scope and no fake evidence
+
+[Offline tests](../../tests/phase5_real_five_pair_calendar_to_b0062_slot_budget_review_v39.test.ts) use the **actual archived corrected five pairs** with deliberately synthetic future dates, treatment/draw seeds, provider unit inputs and other REST category ceilings. Test 31 days, 10 actual paired/21 future unknown ordinary sites, seven physical UTC charge categories, hash parity, no SQL, tampering, missing charge dates/retrospective first slot, over-budget input, and actual existing B0062 staging refusal without separately approved review. Do **not** run CI fixtures as production study inputs or report those account prices as current.
+
+## Actual remaining next operations
+
+- Independently review a genuinely future B0062 first UTC date, treatment commitment and per-day draw seeds and prospectively planned ordinary HUB-region rotation. Do not choose the 21 ordinary future airport identities early.
+- Verify actual current AeroDataBox unit balance, max range, license/source-use and retention for intended ML, seven REST physical UTC caps, plus separate Alert/STOP headroom. Record limitations without waiting indefinitely for vendor email or inventing a permission.
+- Obtain real external SHA and source-rights review, then invoke existing #603 B0062 **disabled** staging with existing restricted B0062 login, followed by separate #608 V0093 category freeze with its existing login and #619 exact independent poststage readback. Unknown COMMIT requires independent readback, not replay.
+- Finish genuine signed post-COMMIT SOURCE → candidate audit/dossier → externally reviewed native operating-leg packet → V0091 enrolment → Stage14/V0081 PRE and V0083 POST/receiver/STOP, including 31-day automatic rotation and throughput/missingness. The new pure index observer does not dispatch child workflows.
+
+**Phase5 scientific FREEZE HOLD and Phase6 paid GO NO.** Neither this join nor green CI constitutes a real production calendar, provider permission or paid data collection.
