@@ -22,7 +22,8 @@ function source(day:number,shard:number,pub:string,first:string,last:string){
   manifestSha256:a,runDayIndex:day,
   entries:[{
    filePath:base+`source_packet_d${day}_s${shard}_01.json`,
-   expectedPacketSha256:b,expectedQueryDigestSha256:c
+   expectedPacketSha256:b,
+   expectedQueryDigestSha256:digest(Buffer.from(`query-${day}-${shard}`))
   }]
  });
  files.set(path,raw);
@@ -46,7 +47,9 @@ function later(day:number,shard:number,src:P5Phase6DayShardEntry,
   runDayIndex:day,shardIndex:shard,
   entries:[{
    filePath:base+`later_packet_day${day}_shard${shard}.json`,
-   expectedPacketSha256:c,expectedQueryDigestSha256:b
+   expectedPacketSha256:c,expectedQueryDigestSha256:b,
+   expectedFlightInstanceId:`flight_day_${day}_shard_${shard}`,
+   expectedHorizon:"T-6h"
   }]
  });
  files.set(path,raw);
@@ -67,6 +70,7 @@ function post(day:number,shard:number,src:P5Phase6DayShardEntry,
   approvedCodeSha:code,
   reviewed:{
    manifestSha256:a,runDayIndex:day,
+   requestSha256:digest(Buffer.from(`post-${day}-${shard}`)),
    independentFuturePostRequestAndRightsReview:true
   },
   independentSourceContentsUseAndRESTReleaseAttested:true
@@ -215,6 +219,39 @@ describe("Phase6 real signed-shard append-only index — NOT a GO",()=>{
   expect(selected.selectedForIndependentChildReview.SOURCE).toHaveLength(4);
   expect(selected.deferredDueShardCounts.SOURCE).toBe(93);
   expect(selected.githubChildDispatches).toBe(0);
+ });
+ it("refuses duplicate underlying paid query in distinct SOURCE shards",()=>{
+  const {s1,s2}=fixture();
+  const p2=JSON.parse(files.get(s2.filePath)!.toString("utf8"));
+  const p1=JSON.parse(files.get(s1.filePath)!.toString("utf8"));
+  p2.entries[0].expectedQueryDigestSha256=
+   p1.entries[0].expectedQueryDigestSha256;
+  const newRaw=bytes(p2);
+  files.set(s2.filePath,newRaw);
+  const x=makeIndex([s1,{...s2,fileSha256:digest(newRaw)}]);
+  expect(()=>audit(x)).toThrow("SOURCE_QUERY_REPEATED_ACROSS_DAY_SHARDS");
+ });
+ it("refuses duplicate flight-horizon across two separately signed later shards",()=>{
+  const {s1,l1}=fixture();
+  const l2=later(1,2,s1,"2027-02-09T22:30:00.000Z",
+   "2027-02-10T00:20:00.000Z","2027-02-10T00:55:00.000Z");
+  const p2=JSON.parse(files.get(l2.filePath)!.toString("utf8"));
+  const p1=JSON.parse(files.get(l1.filePath)!.toString("utf8"));
+  p2.entries[0].expectedFlightInstanceId=p1.entries[0].expectedFlightInstanceId;
+  const raw=bytes(p2);files.set(l2.filePath,raw);
+  const x=makeIndex([s1,l1,{...l2,fileSha256:digest(raw)}]);
+  expect(()=>audit(x)).toThrow("DUPLICATE_FLIGHT_HORIZON_ACROSS_LATER_SHARDS");
+ });
+ it("refuses the same paid POST request assigned twice in two signed shards",()=>{
+  const {s1,p1}=fixture();
+  const p2=post(1,2,s1,"2027-02-09T22:40:00.000Z",
+   "2027-02-10T00:31:00.000Z","2027-02-10T00:59:00.000Z");
+  const newP=JSON.parse(files.get(p2.filePath)!.toString("utf8"));
+  const oldP=JSON.parse(files.get(p1.filePath)!.toString("utf8"));
+  newP.reviewed.requestSha256=oldP.reviewed.requestSha256;
+  const raw=bytes(newP);files.set(p2.filePath,raw);
+  expect(()=>audit(makeIndex([s1,p1,{...p2,fileSha256:digest(raw)}]))).
+   toThrow("DUPLICATE_PAID_POST_REQUEST_ACROSS_SHARDS");
  });
  it("does not accept an unsigned synthetic index as an operating permit",()=>{
   const {s1,s2,l1,p1}=fixture();
