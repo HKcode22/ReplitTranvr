@@ -221,6 +221,30 @@ describe.skipIf(!actual)("V0094 real disposable PG16 signed restricted write-pat
    [[f.packetPath,f.registryPath]]);
   expect(q.rows[0].n).toBe(0);
  });
+ it("two concurrent independent PG16 publisher sessions cannot both commit the same signed registry",async()=>{
+  const f=reviewedShard("race001");
+  const url=new URL(process.env.DATABASE_URL!);
+  url.username=publisherLogin;url.password=ciPassword;
+  const peer=new Client({connectionString:url.toString()});
+  await peer.connect();
+  try{
+   await peer.query("SET ROLE phase6_private_frozen_publisher_v39");
+   const settled=await Promise.allSettled([
+    publishP5ExternalLaterShardToPrivatePg16Once(
+     publisher,f.plan,f.wire,f.publicPem,f.pins,f.scope),
+    publishP5ExternalLaterShardToPrivatePg16Once(
+     peer,f.plan,f.wire,f.publicPem,f.pins,f.scope)
+   ]);
+   expect(settled.filter(x=>x.status==="fulfilled")).toHaveLength(1);
+   expect(settled.filter(x=>x.status==="rejected")).toHaveLength(1);
+   const q=await owner.query("SELECT count(*)::integer AS n FROM "+table+
+    " WHERE logical_path=ANY($1::text[])",
+    [[f.packetPath,f.registryPath]]);
+   expect(q.rows[0].n).toBe(2);
+  }finally{
+   await peer.end();
+  }
+ });
  it("publisher LOGIN cannot UPDATE or DELETE a signed registry",async()=>{
   const f=reviewedShard("pass001");
   await expect(publisher.query("DELETE FROM "+table+
