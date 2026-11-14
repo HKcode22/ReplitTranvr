@@ -13,7 +13,8 @@ import {
  signedP6PrivateSourcePostReviewBytes,
  verifyP6ExternalSourcePostReview,
  readP6PrivateSourcePostOnce,
- materializeP6VerifiedPrivatePacketOnce
+ materializeP6VerifiedPrivatePacketOnce,
+ withP6VerifiedPrivatePacketForExistingChild
 } from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
 
 const H=(x)=>createHash("sha256").update(x).digest("hex");
@@ -191,6 +192,58 @@ test("no supported path accepts arbitrary repo output or edited bytes",async()=>
   assert.throws(()=>materializeP6VerifiedPrivatePacketOnce(r,root,{
    privateEphemeralFileApproved:true
   }),/GIT_IGNORE_NOT_ENFORCED/);
+  assert.equal(existsSync(join(root,f.pins.expectedLogicalPath)),false);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test("same-process separately admitted child always cleans private SOURCE or POST file",async()=>{
+ for(const kind of ["SOURCE_QUERY_PACKET","POST_PACKET"]){
+  const f=fixture(kind),d=f.db(),r=await readP6PrivateSourcePostOnce(
+   d.client,f.pins,f.wire,f.pem);
+  const root=mkdtempSync(join(tmpdir(),"p6-child-clean-test-"));
+  try{
+   mkdirSync(join(root,"data-collection","phase5"),{recursive:true});
+   writeFileSync(join(root,".gitignore"),"/data-collection/phase5/frozen/\n");
+   const scope={
+    privateEphemeralFileApproved:true,
+    existingChildIndependentlyAdmitted:true,
+    privateSourcePostAccessOnly:true
+   };
+   let fileSeen;
+   const good=await withP6VerifiedPrivatePacketForExistingChild(
+    r,root,scope,async(relative,summary)=>{
+      fileSeen=join(root,relative);
+      assert.deepEqual(readFileSync(fileSeen),f.data);
+      assert.equal(summary.kind,kind);
+      assert.equal(summary.actualPhase6PaidGoCertified,false);
+      // No real provider, SQL mutation or paid child invoked by unit tests.
+    });
+   assert.equal(good.mandatoryPrivateFileCleanupAttempted,true);
+   assert.equal(existsSync(fileSeen),false);
+   await assert.rejects(withP6VerifiedPrivatePacketForExistingChild(
+    r,root,scope,async(relative)=>{
+      fileSeen=join(root,relative);
+      assert.equal(existsSync(fileSeen),true);
+      throw new Error("secret provider bytes must never reach logs");
+    }),/EXISTING_CHILD_OPERATION_OR_PRIVATE_CLEANUP_HOLD_REDACTED/);
+   assert.equal(existsSync(fileSeen),false);
+  }finally{rmSync(root,{recursive:true,force:true});}
+ }
+});
+test("cannot materialize and invoke child without explicit distinct admission",async()=>{
+ const f=fixture(),d=f.db(),r=await readP6PrivateSourcePostOnce(
+  d.client,f.pins,f.wire,f.pem);
+ const root=mkdtempSync(join(tmpdir(),"p6-child-admission-test-"));
+ try{
+  mkdirSync(join(root,"data-collection","phase5"),{recursive:true});
+  writeFileSync(join(root,".gitignore"),"/data-collection/phase5/frozen/\n");
+  let called=false;
+  await assert.rejects(withP6VerifiedPrivatePacketForExistingChild(
+   r,root,{privateEphemeralFileApproved:true,
+    existingChildIndependentlyAdmitted:false,
+    privateSourcePostAccessOnly:true},async()=>{called=true;}),
+    /EXISTING_CHILD_INDEPENDENT_ADMISSION_REQUIRED/);
+  assert.equal(called,false);
   assert.equal(existsSync(join(root,f.pins.expectedLogicalPath)),false);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
