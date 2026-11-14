@@ -1,0 +1,45 @@
+name: Phase6 day-epoch signed-index real cryptographic reader and publisher (OFFLINE NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
+      - 'tests/phase6_day_epoch_signed_index_once_v39.test.ts'
+      - '.github/workflows/phase6-day-epoch-signed-index-reader-publisher-offline-no-provider.yml'
+permissions:
+  contents: read
+env:
+  CI: 'true'
+  DATABASE_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  P6_PRIVATE_READER_DATABASE_URL: ''
+  P6_PRIVATE_SOURCE_TRANSPORT_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+jobs:
+  signed-day-epoch-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Real Ed25519 signature and no-provider simulated PG index transaction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          node --check server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs
+          npx --no-install vitest run tests/phase6_day_epoch_signed_index_once_v39.test.ts
+          echo 'P6_DAY_EPOCH_ED25519_SHA_PG_ACL_OFFLINE_NO_PAID_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
