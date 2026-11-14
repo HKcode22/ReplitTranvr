@@ -116,7 +116,7 @@ export function reviewP6PrivatePostWithOriginalV0083NoDispatch({
     route.runDayIndex<1||route.runDayIndex>31||
     !Number.isSafeInteger(route.shardIndex))
   fail("V0096_POST_ROUTE_OR_SOURCE_LINK_CHANGED");
- let indexPost:Buffer,indexSource:Buffer;
+ let indexPost:Buffer=Buffer.alloc(0),indexSource:Buffer=Buffer.alloc(0);
  try{
   indexPost=perDay?indexHandoff.getFrozen(route.signedFrozenPath):
    indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
