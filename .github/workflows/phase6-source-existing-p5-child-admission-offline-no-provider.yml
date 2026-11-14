@@ -1,0 +1,49 @@
+name: Phase6 private SOURCE exact existing P5 child admission (OFFLINE NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_private_source_existing_child_admission_v39.ts'
+      - 'tests/phase6_private_source_existing_child_admission_v39.test.ts'
+      - '.github/workflows/phase6-source-existing-p5-child-admission-offline-no-provider.yml'
+      - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_SOURCE_EXISTING_P5_CHILD_ADMISSION_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-source-gate-offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Ensure no provider or private DB credential
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$GITHUB_TOKEN"
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exercise original signed Phase5 source child release in an isolated synthetic directory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install vitest run tests/phase6_private_source_existing_child_admission_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts
+          echo 'Original Phase5 one-GET signed admission preserved in Phase6 private bridge; tests do not call provider or Neon.' >> "$GITHUB_STEP_SUMMARY"
