@@ -1,5 +1,5 @@
 /**
- * Phase6: V0096 signed POST route + V0095 independently Ed25519-verified
+ * Phase6: day-epoch Ed25519 signed POST route + V0095 independently verified
  * restricted POST_PACKET -> EXISTING Phase5 V0083 POST read-only admission.
  *
  * A signed packet cannot become paid GO, a false physical flight label,
@@ -48,6 +48,8 @@ function sealed(v:unknown,key:string){
 }
 export interface P6OnePrivatePostPins{
  expectedRoutingIntentSha256:string;
+ /** Mandatory for NEW signed run-day mode; old mode retained for CI only. */
+ expectedDayEpochIndexSha256?:string;
  expectedPostPacketPath:string;
  expectedPostPacketSha256:string;
  expectedSourceRegistryPath:string;
@@ -72,22 +74,37 @@ export function reviewP6PrivatePostWithOriginalV0083NoDispatch({
     pins.expectedFlightInstanceId.length<5)
   fail("MISSING_EXACT_PRIVATE_POST_AND_SOURCE_PINS");
  const z=indexHandoff?.redactedSummary;
- if(z?.schema!==
-     "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"||
-    z.status!=="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"||
-    z.phase6PaidGo!==false||z.providerCalls!==0||z.databaseWrites!==0||
+ const oldOnly=z?.schema===
+     "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"&&
+    z.status==="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"&&
+    z.underlyingPerFlightPacketsNotHydratedHere===true&&
+    sealed(indexHandoff,"privateRegistryBytes")&&
+    indexHandoff.privateRegistryBytes instanceof Map;
+ const perDay=z?.schema===
+     "v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1"&&
+    z.status==="ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"&&
+    z.reviewedEd25519SourceWasOriginalDayBytes===true&&
+    z.originalV0096GlobalChainNotUsed===true&&
+    z.derivedProjectionIsNotAnAdditionalReviewerSignature===true&&
+    z.actualIndividualChildPaidReleaseDone===false&&
+    SHA.test(z.externallySignedDayEpochIndexSha256??"")&&
+    z.externallySignedDayEpochIndexSha256===pins.expectedDayEpochIndexSha256&&
+    Number.isSafeInteger(z.runDayIndex)&&z.runDayIndex>=1&&
+    z.runDayIndex<=31&&
+    sealed(indexHandoff,"getFrozen")&&
+    typeof indexHandoff.getFrozen==="function";
+ if((!oldOnly&&!perDay)||z.phase6PaidGo!==false||
+    z.providerCalls!==0||z.databaseWrites!==0||
     z.githubChildDispatches!==0||
-    z.underlyingPerFlightPacketsNotHydratedHere!==true||
     !sealed(indexHandoff,"privateRoutingCandidates")||
-    !sealed(indexHandoff,"privateRegistryBytes")||
-    !Array.isArray(indexHandoff.privateRoutingCandidates)||
-    !(indexHandoff.privateRegistryBytes instanceof Map))
+    !Array.isArray(indexHandoff.privateRoutingCandidates))
   fail("UNVERIFIED_V0096_SIGNED_INDEX_PRIVATE_REGISTRY");
  const routes=indexHandoff.privateRoutingCandidates.filter((v:any)=>
   v?.routingIntentSha256===pins.expectedRoutingIntentSha256);
  if(routes.length!==1)fail("NO_UNIQUE_SIGNED_POST_ROUTING_INTENT");
  const route=routes[0];
  if(route.lane!=="POST"||
+    (perDay&&route.runDayIndex!==z.runDayIndex)||
     route.signedFrozenPath!==pins.expectedPostPacketPath||
     route.signedFrozenSha256!==pins.expectedPostPacketSha256||
     route.boundSourceRegistryPath!==pins.expectedSourceRegistryPath||
@@ -99,8 +116,13 @@ export function reviewP6PrivatePostWithOriginalV0083NoDispatch({
     route.runDayIndex<1||route.runDayIndex>31||
     !Number.isSafeInteger(route.shardIndex))
   fail("V0096_POST_ROUTE_OR_SOURCE_LINK_CHANGED");
- const indexPost=indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
- const indexSource=indexHandoff.privateRegistryBytes.get(route.boundSourceRegistryPath);
+ let indexPost:Buffer=Buffer.alloc(0),indexSource:Buffer=Buffer.alloc(0);
+ try{
+  indexPost=perDay?indexHandoff.getFrozen(route.signedFrozenPath):
+   indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
+  indexSource=perDay?indexHandoff.getFrozen(route.boundSourceRegistryPath):
+   indexHandoff.privateRegistryBytes.get(route.boundSourceRegistryPath);
+ }catch{return fail("POST_OR_SOURCE_PRIVATE_REGISTRY_LOOKUP_REFUSED_REDACTED");}
  if(!Buffer.isBuffer(indexPost)||!Buffer.isBuffer(indexSource)||
     hash(indexPost)!==route.signedFrozenSha256||
     hash(indexSource)!==route.boundSourceRegistrySha256)
@@ -125,7 +147,8 @@ export function reviewP6PrivatePostWithOriginalV0083NoDispatch({
     hash(postPacketReceipt.privateBytes)!==pins.expectedPostPacketSha256||
     !postPacketReceipt.privateBytes.equals(indexPost))
   fail("POST_ED25519_PG16_READER_OR_BYTE_SHA_DRIFT");
- const indexTime=timestamp(z.observedRestrictedPgClockUtc),
+ const indexTime=timestamp(perDay?z.observedRealPgClockUtc:
+   z.observedRestrictedPgClockUtc),
    packetTime=timestamp(p.observedDatabaseClockUtc),
    preTime=timestamp(actualSourcePreDbClockUtc);
  if(packetTime<indexTime||packetTime-indexTime>120000||

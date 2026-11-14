@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase6-private-post-v0083-original-readonly-offline-no-provider.yml'
       - 'server/lib/disruption/phase6PrivatePostExistingV0083ReadOnlyBridge_v39.ts'
       - 'tests/phase6_private_post_existing_v0083_readonly_bridge_v39.test.ts'
+      - 'tests/phase6_day_epoch_post_v0083_existing_release_stop_v39.test.ts'
       - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_POST_ORIGINAL_V0083_SOURCE_PRE_BRIDGE_NO_GO.md'
   workflow_dispatch:
 permissions:
@@ -47,5 +48,5 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          npx --no-install vitest run tests/phase6_private_post_existing_v0083_readonly_bridge_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts
+          npx --no-install vitest run tests/phase6_private_post_existing_v0083_readonly_bridge_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase6_day_epoch_post_v0083_existing_release_stop_v39.test.ts
           echo 'Phase6 V0096/V0095 POST to existing V0083 read-only parent tested synthetically; no private DB read, no provider, no physical POST, no GO.' >> "$GITHUB_STEP_SUMMARY"
