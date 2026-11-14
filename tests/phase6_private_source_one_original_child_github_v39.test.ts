@@ -2,6 +2,7 @@ import {describe,it,expect} from "vitest";
 import {
  admitP6PrivateSourceExistingChildRuntime,
  runP6OnePrivateSourceOriginalGHChild,
+ isolatedP6OriginalOneGetChildEnv,
  P6_REAL_PRIVATE_SOURCE_ONE_ORIGINAL_CHILD_SCHEMA
 } from "../scripts/v39_phase6_private_source_one_original_child_github_v39.mjs";
 
@@ -101,6 +102,20 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
   expect(x.queryDigestSha256).toBe(Q);
   expect(x.expectedRegistryPath).toBe(REG);
   expect(x.expectedQueryPath).toBe(PACK);
+ });
+ it("never forwards private PostgreSQL, reviewer wire or signed-route inputs to paid Phase5 source child",()=>{
+  const f=fixture();
+  const child=isolatedP6OriginalOneGetChildEnv(f.env);
+  expect(child.P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT).toBe("1");
+  expect(child.V39_P5_SOURCE_DATABASE_URL).toBe(f.env.V39_P5_SOURCE_DATABASE_URL);
+  expect(child.AERODATABOX_API_KEY).toBe(f.env.AERODATABOX_API_KEY);
+  expect(child.V39_PHASE5_SOURCE_RIGHTS_APPROVED).toBe("1");
+  expect(child.V39_PHASE6_PROCESS_ARMED).toBe("1");
+  for(const k of Object.keys(child))
+   expect(k.startsWith("P6_PRIVATE_")).toBe(false);
+  expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_READER_DATABASE_URL);
+  expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64);
+  expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64);
  });
  it("cannot convert an offline PR or non-main/manual or rerun into a physical source GET",()=>{
   for(const override of [
