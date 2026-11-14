@@ -161,12 +161,12 @@ export function reviewP6PrivatePostWithOriginalV0083NoDispatch({
  if(actualPre===null){
   return Object.freeze({redactedSummary:Object.freeze({
    schema:P6_PRIVATE_POST_ORIGINAL_V0083_BRIDGE_SCHEMA,
-   status:"POST_NO_INDEPENDENT_SOURCE_BOUND_PRE_CENSOR_NO_DISPATCH",
+   status:"POST_SOURCE_PRE_EVIDENCE_NOT_SUPPLIED_UNRESOLVED_NO_DISPATCH",
    runDayIndex:route.runDayIndex,shardIndex:route.shardIndex,
    packetSha256:p.contentSha256,routingIntentSha256:route.routingIntentSha256,
    observedActualSourceClockUtc:actualSourcePreDbClockUtc,
-   observedValidPreHorizonCount:0,
-   missingPreHorizonCount:3,
+   observedValidPreHorizonCount:null,
+   missingPreHorizonCount:null,
    noFalseNegativeFromAbsentPRE:true,
    independentSourcePREReadbackStillRequired:true,
    providerCalls:0,sqlWrites:0,githubDispatches:0,phase6PaidGo:false
