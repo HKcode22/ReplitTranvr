@@ -48,3 +48,24 @@ This follow-on work is a **specific missing end-to-end transport edge**, not a n
 - The existing offline/real PostgreSQL workflow is updated to cover the new adapter; full PR CI must pass before merge. No production V0095/day-index installation, no private LOGIN secrets, no ADB paid REST or autonomous launch is performed by this PR.
 
 **Next real P0 after review:** use the newly authenticated private `getFrozen` with the existing full per-flight/source admission and true day-scoped scheduler, preserving original Phase5 SOURCE, T24/T6/T90 Stage14, V0081 witness, V0083 POST and STOP/unknown-COMMIT controls. Separately complete #300 lawful provider Contents/derived/backup/PITR purpose and TTL, then once-only production V0095 + reviewed replacement day-index schema, signed prospective B0062 calendar/cost/inputs and independent scientific FREEZE + separate paid Day1 GO. Do not treat synthetic success as any of these.
+
+
+## Follow-on: reuse ORIGINAL signed SOURCE/PRE/POST semantic audit under the day-epoch reader (PR pending)
+
+After merged #660, the **real** day-scoped Ed25519 reader can fetch the exact private SOURCE/LATER_PRE/POST registry bytes (rather than just the catalog of paths). One further execution edge matters: the original `phase5Phase6AppendOnlyDayShardIndex_v39.ts` semantic and due planner expects the **old global-index JSON schema**, whereas #658/#659 deliberately use a **new per-run-day JSON schema**. Passing the new bytes directly into the old planner is invalid, and enabling the original V0096 global runtime would revive the seven-day/31-day contradiction.
+
+`server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs` therefore:
+1. Calls the approved #660 restricted PostgreSQL day-scoped signed-index/full-registry read inside the same runtime, **not an externally supplied authorization string**.
+2. Produces a deterministic **in-memory compatibility projection** limited to that already signed study day. It **never stores** that projection in a database or calls the retired global V0096 table.
+3. Reuses the **exact existing** `planP6ThirtyOneDaySignedShardHandoffs` → `auditP5Phase6AppendOnlyDayShardIndex` code to validate actual SOURCE registry query digests, LATER_PRE flight-horizon duplicates, V0083 POST review shape, same-day SOURCE provenance, windows, cutoff, SHA and at-most-four-due-shards-per-lane counters.
+4. Emits separate fields for the **real externally Ed25519-reviewed original index SHA** and the **internal, UNSIGNED compatibility-projection SHA**. That projection is a deterministic computational intermediary, **not a separate independent reviewer signature**.
+5. Produces redacted due/missed/deferred summaries and nonenumerable private routing candidates; performs no collection child dispatch, payment, DB write or physical-outcome certification.
+
+Synthetic Vitest cases cover SOURCE/T−6h/POST positive semantics, corrupted private SOURCE bytes, false POST rights claim, wrong day/SHA, missing same-day predecessor, non-logging and NO-GO. The full repo CI and existing real disposable PG16 #660 reader test must pass on the exact PR head before merge. This is reusable internal scientific validation, not final child paid admission.
+
+### Still NOT done
+
+- The per-flight packet bodies, provider-origin real selected native departure T, Stage14 PRE/POST final release checks and full GitHub Day1–31 dispatcher are **not executed** by this adapter.
+- Existing production `neondb` has V0094 installed and independently read back, while **V0095 and the new day-epoch schema still need lawful approval and one-time owner installation**; **obsolete global V0096 must never be installed**.
+- See issue #300 for source/ML use, TTL, actual owner-only expiry, backup/PITR/replica verification. Issue #413 remains the single release docket; a legal or scientific HOLD cannot be replaced by CI success.
+- Historical Nov6 FIDS-only PRE/POST pilot is valid narrow schedule-revision evidence, **not** certified actual wheels-off/gate-out. Keep one canonical Amendment E T−6h departure delay candidate with T−90m update, label missingness and optional ADSB/NOAA limitations. Existing 26/3/2 calendar, seven physical REST categories, independent Alert budget, SOURCE native flight selection, GitHub C+D queue/reaper, throughput and receiver STOP all remain separate exit checks.
