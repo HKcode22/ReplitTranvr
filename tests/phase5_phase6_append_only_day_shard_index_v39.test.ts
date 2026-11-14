@@ -1,5 +1,7 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
+import {planP6ThirtyOneDaySignedShardHandoffs}
+ from "../server/lib/disruption/phase6SignedThirtyOneDayShardHandoff_v39";
 import {
  auditP5Phase6AppendOnlyDayShardIndex,
  type P5Phase6DayShardEntry,
@@ -260,5 +262,84 @@ describe("Phase6 real signed-shard append-only index — NOT a GO",()=>{
    toBe(true);
   expect(audit(x).doesNotVerifyEveryUnderlyingFlightPacket).toBe(true);
   expect(audit(x).doesNotAuthorizeSourceRightsBudgetOrGO).toBe(true);
+ });
+});
+
+describe("Phase6 dynamic signed 31-day GH child routing proposal — NEVER PAID GO",()=>{
+ function prepare(x:ReturnType<typeof makeIndex>,
+                  prior?:ReturnType<typeof makeIndex>){
+  return planP6ThirtyOneDaySignedShardHandoffs(
+   x.raw,x.index,x.pins,(path:string)=>{
+    const raw=files.get(path);
+    if(!raw)throw Error("NO_SYNTHETIC_PRIVATE_FILE");
+    return raw;
+   },prior?.raw??null,prior?.index??null
+  );
+ }
+ it("selects due cross-midnight SOURCE day1+2, T6/T90 and POST; no dispatch",()=>{
+  const {s1,s2,l1,p1}=fixture();
+  const x=prepare(makeIndex([s1,s2,l1,p1]));
+  expect(x.operatorSummary.selectedRouteCount).toBe(4);
+  expect(x.operatorSummary.routeIntentSummaries.map(r=>r.runDayIndex)).
+   toEqual([1,2,1,1]);
+  expect(x.operatorSummary.lanes.map(x=>x.proposed)).
+   toEqual([2,1,1]);
+  expect(x.operatorSummary.providerCalls).toBe(0);
+  expect(x.operatorSummary.githubChildDispatches).toBe(0);
+  expect(x.operatorSummary.phase6PaidGo).toBe(false);
+  expect(x.operatorSummary.singleDayGithubRepositoryVariablesAreNotA31DayRouter).
+   toBe(true);
+  expect(x.privateRoutingCandidates[0].mustUseExistingChildAdmission).
+   toContain("SOURCE_DAY_PARENT");
+  expect(x.privateRoutingCandidates[2].boundSourceRegistryPath).
+   toBe(s1.filePath);
+  expect(x.privateRoutingCandidates[3].mustUseExistingChildAdmission).
+   toContain("V0083_POST");
+  // No signed frozen packet names/paths in operator/public JSON.
+  expect(JSON.stringify(x.operatorSummary)).not.toContain(s1.filePath);
+  expect(JSON.stringify(x.operatorSummary)).not.toContain(s1.fileSha256);
+ });
+ it("advances to day 2 after expired day 1 and records censored misses",()=>{
+  const {s1,s2,l1,p1}=fixture();
+  const x=makeIndex([s1,s2,l1,p1]);
+  x.pins.observedDbClockUtc="2027-02-10T00:51:00.000Z";
+  const out=prepare(x);
+  expect(out.operatorSummary.lanes.find(l=>l.lane==="SOURCE")?.missed).toBe(1);
+  expect(out.privateRoutingCandidates.filter(p=>p.lane==="SOURCE")
+   .map(p=>p.runDayIndex)).toEqual([2]);
+  expect(out.operatorSummary.selectedRouteCount).toBe(3);
+ });
+ it("refuses changed source packet or fabricated independent-index SHA",()=>{
+  const {s1,s2,l1,p1}=fixture();
+  const x=makeIndex([s1,s2,l1,p1]);
+  x.pins.exactExternallyReviewedIndexSha256="f".repeat(64);
+  expect(()=>prepare(x)).toThrow("UNPINNED_OR_UNREVIEWED_INDEX");
+  x.pins.exactExternallyReviewedIndexSha256=x.pins.expectedIndexSha256;
+  files.set(s1.filePath,Buffer.from("tampered"));
+  expect(()=>prepare(x)).toThrow("UNVERIFIED_FROZEN_REGISTRY_BYTES");
+ });
+ it("refuses retrospective reordering and skips no intermediate revisions",()=>{
+  const {s1,s2,l1,p1}=fixture();
+  const first=makeIndex([s1,s2]);
+  const second=makeIndex([s1,s2,l1,p1],2,digest(first.raw));
+  const good=prepare(second,first);
+  expect(good.operatorSummary.indexRevision).toBe(2);
+  expect(good.operatorSummary.selectedRouteCount).toBe(4);
+  const tamper=makeIndex([s2,s1,l1,p1],2,digest(first.raw));
+  expect(()=>prepare(tamper,first)).toThrow(
+   "NON_MONOTONIC_OR_REWRITTEN_PREVIOUS_SHARDS");
+ });
+ it("bounded four SOURCE per tick even when 97 due in same day",()=>{
+  files.clear();
+  const all=Array.from({length:97},(_,i)=>
+   source(1,i+1,"2027-02-09T22:00:00.000Z",
+    "2027-02-10T00:10:00.000Z","2027-02-10T00:59:00.000Z"));
+  const out=prepare(makeIndex(all));
+  expect(out.operatorSummary.selectedRouteCount).toBe(4);
+  expect(out.operatorSummary.lanes[0]).toEqual({
+   lane:"SOURCE",due:97,proposed:4,deferred:93,
+   missed:0,notYetDue:0
+  });
+  expect(out.privateRoutingCandidates).toHaveLength(4);
  });
 });
