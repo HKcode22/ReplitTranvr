@@ -1,0 +1,242 @@
+name: Phase6 V0096 signed index and all private registries in memory (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase6PrivateSignedIndexRegistryInMemoryHandoff_v39.mjs'
+      - 'tests/phase6_private_signed_index_registry_inmemory_handoff_v39.test.ts'
+      - '.github/workflows/phase6-private-index-registry-inmemory-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+jobs:
+  offline-semantic-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Signed index + exact registry bytes + existing Day1/Day2 handoff with no provider or SQL writes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          npx --no-install vitest run tests/phase6_private_signed_index_registry_inmemory_handoff_v39.test.ts
+          echo 'P6_PRIVATE_INDEX_FULL_REGISTRIES_OFFLINE_SEMANTIC_HANDOFF_NO_GO_PASS'
+  real-disposable-pg16-restricted-reader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      PGSYNTH: 'ci-only-full-bridge-owner-not-production'
+      DATABASE_URL: 'postgresql://phase6_private_reader_login_ci_checks:ci-only-full-bridge-reader-not-production@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Disposable non-superuser V0094→V0095→V0096 and restricted private reader only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-full-bridge-owner-not-production'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD="$PGSYNTH"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0096__phase6_private_signed_day_shard_index_revisions_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_reader_login_ci_checks LOGIN NOINHERIT PASSWORD 'ci-only-full-bridge-reader-not-production'"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c 'GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_checks WITH INHERIT FALSE, SET TRUE'
+      - name: Actual PG16 signed Ed25519 index→two V0095 SOURCE registries→existing Day1/Day2 planner; expired row HOLD
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {createHash,generateKeyPairSync,sign} from "node:crypto";
+          import {
+            P6_INDEX_REVIEW_SCHEMA,P6_INDEX_REVIEW_AUDIENCE,
+            p6SignedIndexReviewPreimage
+          } from "./server/lib/disruption/phase6PrivateSignedIndexReadOnce_v39.mjs";
+          import {hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly}
+           from "./server/lib/disruption/phase6PrivateSignedIndexRegistryInMemoryHandoff_v39.mjs";
+          const h=b=>createHash("sha256").update(b).digest("hex");
+          const pair=generateKeyPairSync("ed25519");
+          const pem=pair.publicKey.export({format:"pem",type:"spki"}).toString();
+          const fp=h(pair.publicKey.export({format:"der",type:"spki"}));
+          const code="f".repeat(40),manifest="a".repeat(64),
+           calendar="b".repeat(64),release="c".repeat(64),
+           rights="d".repeat(64),evidence="e".repeat(64);
+          const base="data-collection/phase5/frozen/";
+          const stamp=Date.now();
+          const at=new Date(stamp-30000).toISOString();
+          const pub1=new Date(stamp-60000).toISOString();
+          const pub2=new Date(stamp-55000).toISOString();
+          const firstTime=new Date(stamp-10000).toISOString();
+          const latest=new Date(stamp+30*60000).toISOString();
+          const expiry=new Date(stamp+3600000).toISOString();
+          const valid=new Date(stamp+25*60000).toISOString();
+          const committed=new Date(stamp-65000).toISOString();
+          const owner=new pg.Client({connectionString:
+           "postgresql://neondb_owner:ci-only-full-bridge-owner-not-production@127.0.0.1:5432/neondb?sslmode=disable"});
+          const restricted=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await owner.connect();await restricted.connect();
+          try{
+           const entries=[];
+           const sourceRows=[];
+           for(const [id,day,pub] of [["abcdefgh123",1,pub1],["ijklmnop456",2,pub2]]){
+            const bytes=Buffer.from(JSON.stringify({
+             schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",
+             manifestSha256:manifest,runDayIndex:day,
+             entries:[{
+              filePath:base+"sourceq_synthetic_"+day+"_packet.json",
+              expectedPacketSha256:h("ci-synthetic-packet-"+day),
+              expectedQueryDigestSha256:h("ci-synthetic-query-"+day)
+             }]
+            }));
+            const path=base+"source_"+id+".json";
+            await owner.query(
+             "INSERT INTO phase6_private.frozen_native_packet_v39"+
+             " (logical_path,run_day_index,shard_index,kind,content_sha256,"+
+             "reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,"+
+             "externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,"+
+             "committed_at_utc) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+             [path,day,1,"SOURCE_DAY_REGISTRY",h(bytes),code,manifest,
+              rights,evidence,new Date(stamp-95000).toISOString(),expiry,
+              bytes,committed]
+            );
+            entries.push({
+             lane:"SOURCE",runDayIndex:day,shardIndex:1,filePath:path,
+             fileSha256:h(bytes),publishedAtUtc:pub,
+             notBeforeUtc:firstTime,hardLatestUtc:latest,
+             reviewEvidenceSha256:evidence,
+             sourceRegistryFilePath:null,sourceRegistrySha256:null
+            });
+            sourceRows.push(path);
+           }
+           const toIndex=(rev,parents)=>{
+            return {
+             schema:"v39.phase5.phase6-append-only-day-shard-index.v1",
+             manifestSha256:manifest,calendarSha256:calendar,
+             reviewedCodeSha:code,reviewedReleaseSha256:release,
+             reviewedRightsSha256:rights,revision:rev,
+             previousIndexSha256:parents,
+             entries:entries.slice(0,rev)
+            };
+           };
+           const first=Buffer.from(JSON.stringify(toIndex(1,null)));
+           const current=Buffer.from(JSON.stringify(toIndex(2,h(first))));
+           const insert="INSERT INTO phase6_private.signed_day_shard_index_revision_v39"+
+            " (revision,previous_index_sha256,content_sha256,reviewed_code_sha,"+
+            "manifest_sha256,calendar_sha256,release_sha256,rights_sha256,"+
+            "external_review_sha256,externally_reviewed_at_utc,"+
+            "retention_not_after_utc,payload_bytes)"+
+            " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)";
+           for(const [rev,bytes,prev] of [[1,first,null],[2,current,h(first)]]){
+            await owner.query(insert,[
+             rev,prev,h(bytes),code,manifest,calendar,
+             release,rights,evidence,at,expiry,bytes
+            ]);
+           }
+           const review={
+            schema:P6_INDEX_REVIEW_SCHEMA,
+            audience:P6_INDEX_REVIEW_AUDIENCE,
+            indexRevision:2,indexSha256:h(current),
+            previousIndexSha256:h(first),
+            reviewedCodeSha:code,manifestSha256:manifest,
+            calendarSha256:calendar,releaseSha256:release,
+            rightsSha256:rights,
+            externalReviewEvidenceSha256:evidence,
+            reviewedAtUtc:at,validUntilUtc:valid,
+            retentionNotAfterUtc:expiry,
+            reviewerPublicKeyFingerprintSha256:fp
+           };
+           const reviewWire={
+            review,signatureBase64:sign(null,p6SignedIndexReviewPreimage(review),
+             pair.privateKey).toString("base64")
+           };
+           const pins={
+            independentExternalReviewerSignaturePinsApproved:true,
+            privateIndexReadOnlyApproved:true,
+            existingPaidGithubDispatchApproved:false,
+            expectedReaderSessionLogin:"phase6_private_reader_login_ci_checks",
+            expectedIndexRevision:2,expectedIndexSha256:h(current),
+            expectedPreviousIndexSha256:h(first),
+            expectedReviewedCodeSha:code,expectedManifestSha256:manifest,
+            expectedCalendarSha256:calendar,
+            expectedReleaseSha256:release,expectedRightsSha256:rights,
+            expectedExternalReviewEvidenceSha256:evidence,
+            expectedReviewerPublicKeyFingerprintSha256:fp
+           };
+           await restricted.query("SET ROLE phase6_private_frozen_reader_v39");
+           const call=()=>hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly({
+            client:restricted,reviewPins:pins,reviewWire,
+            reviewerPublicKeyPem:pem
+           });
+           const out=await call();
+           assert.equal(out.redactedSummary.verifiedRegistryCount,2);
+           assert.equal(out.redactedSummary.selectedRouteCount,2);
+           assert.deepEqual(out.privateRoutingCandidates.map(x=>x.runDayIndex),[1,2]);
+           assert.equal(out.redactedSummary.githubChildDispatches,0);
+           assert.equal(out.redactedSummary.phase6PaidGo,false);
+           assert(!JSON.stringify(out).includes(sourceRows[0]));
+           await owner.query(
+            "DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",
+            [sourceRows[1]]
+           );
+           await assert.rejects(call(),
+            /MISSING_OR_TOO_LARGE_SIGNED_PRIVATE_REGISTRY_SET/);
+           console.log(JSON.stringify({
+            status:"DISPOSABLE_PG16_FULL_PRIVATE_INDEX_SOURCE_REGISTRY_HANDOFF_PASS",
+            signedSyntheticSourceDayCount:2,
+            privateRegistryPathsPrinted:0,
+            providerCalls:0,productionDatabaseWrites:0,
+            githubChildDispatches:0,phase6PaidGo:false
+           }));
+          }finally{
+           await restricted.end();await owner.end();
+          }
+          JS
