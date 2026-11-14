@@ -11,9 +11,10 @@ import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {
- auditP5Phase6AppendOnlyDayShardIndex,
  type P5Phase6DayShardIndex,type P5Phase6DayShardPins
 } from "../server/lib/disruption/phase5Phase6AppendOnlyDayShardIndex_v39";
+import {planP6ThirtyOneDaySignedShardHandoffs}
+ from "../server/lib/disruption/phase6SignedThirtyOneDayShardHandoff_v39";
 
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
@@ -167,20 +168,49 @@ export async function runP5Phase6ShardIndexReadOnlyObserver(
  const pins:P5Phase6DayShardPins={
   ...admitted.pins,observedDbClockUtc:t
  };
- const result=auditP5Phase6AppendOnlyDayShardIndex(
+ const route=planP6ThirtyOneDaySignedShardHandoffs(
   raw,index,pins,(path)=>readFile(path,250000),prevRaw,prior);
+ // NOTE: restricted only/private packet paths are never printed from
+ // privateRoutingCandidates. The existing index result remains intact
+ // for backward-compatible read-only clients.
  return{
   status:"P5_PHASE6_ACTUAL_CLOCK_PINNED_SHARDS_READONLY_NO_DISPATCH" as const,
   approvedCodeSha:admitted.pins.expectedCodeSha,
-  ...result,
+  ...route.verifiedExistingShardIndexResult,
+  autonomousDayShardHandoffSummary:route.operatorSummary,
+  automaticGithubChildDispatchActuallyExecuted:false as const,
   actualSourceRoleClockRequired:true as const,
   independentSignedPacketPublisherStillMissing:true as const,
   ownerAuthorizationOrPaidGoGranted:false as const
  };
 }
+/**
+ * GitHub Actions logs must never expose frozen flight packet logical paths.
+ * The internal in-process return value is unchanged for existing code; only
+ * the owner-visible operational log is a deliberately redacted projection.
+ */
+export function redactP5Phase6ActualShardObserverForPublicLog(
+ result:Awaited<ReturnType<typeof runP5Phase6ShardIndexReadOnlyObserver>>
+){
+ if(result.status!=="P5_PHASE6_ACTUAL_CLOCK_PINNED_SHARDS_READONLY_NO_DISPATCH"||
+    result.autonomousDayShardHandoffSummary?.phase6PaidGo!==false||
+    result.autonomousDayShardHandoffSummary?.githubChildDispatches!==0||
+    result.autonomousDayShardHandoffSummary?.providerCalls!==0||
+    result.autonomousDayShardHandoffSummary?.actualDatabaseWriteCount!==0)
+  HOLD("UNVERIFIED_OWNER_LOG_PROJECTION");
+ return {
+  status:result.status,
+  approvedCodeSha:result.approvedCodeSha,
+  ...result.autonomousDayShardHandoffSummary,
+  originalSignedFrozenPacketPathsLogged:false,
+  independentPerFlightAdmissionStillRequired:true,
+  actualSourceRoleClockRequired:true,
+  actualPaidSourceOrPostResultHere:false
+ };
+}
 if(process.env.P5_SHARD_INDEX_RO_EXECUTE==="1")
  runP5Phase6ShardIndexReadOnlyObserver(process.env).then(x=>{
-  console.log(JSON.stringify(x));
+  console.log(JSON.stringify(redactP5Phase6ActualShardObserverForPublicLog(x)));
  }).catch(e=>{
   const code=e instanceof Error?e.message:"";
   console.error(/^REFUSED_P5_PHASE6_[A-Z0-9_]+$/.test(code)?

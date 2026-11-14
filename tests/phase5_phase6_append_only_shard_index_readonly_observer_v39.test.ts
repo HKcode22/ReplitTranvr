@@ -2,7 +2,8 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {
  admitP5Phase6ShardReadOnlyObserver,
- runP5Phase6ShardIndexReadOnlyObserver
+ runP5Phase6ShardIndexReadOnlyObserver,
+ redactP5Phase6ActualShardObserverForPublicLog
 } from "../scripts/v39_phase5_phase6_append_only_shard_index_readonly_observer_v39";
 const H=(s:string)=>createHash("sha256").update(s).digest("hex");
 const code="f".repeat(40);
@@ -138,6 +139,24 @@ describe("default-OFF real PG-clock SHA-pinned Phase6 shard read-only observer",
   expect(result.githubChildDispatches).toBe(0);
   expect(result.providerCalls).toBe(0);
   expect(result.ownerAuthorizationOrPaidGoGranted).toBe(false);
+ });
+ it("redacts all private packet paths from actual Actions owner log",async()=>{
+  const {env,files}=fixture();
+  const result=await runP5Phase6ShardIndexReadOnlyObserver(
+   {...env,P5_SHARD_INDEX_RO_EXECUTE:"1"},
+   read(files),async()=>observed);
+  expect(result.selectedForIndependentChildReview.SOURCE[0].filePath).
+   toBe(p1);
+  const visible=redactP5Phase6ActualShardObserverForPublicLog(result);
+  const json=JSON.stringify(visible);
+  expect(json).not.toContain(p1);
+  expect(json).not.toContain(p2);
+  expect(json).not.toContain("filePath");
+  expect(json).toContain("runDayIndex");
+  expect(visible.selectedRouteCount).toBe(2);
+  expect(visible.githubChildDispatches).toBe(0);
+  expect(visible.phase6PaidGo).toBe(false);
+  expect(visible.originalSignedFrozenPacketPathsLogged).toBe(false);
  });
  it("detects retrospective/expired day 1 while preserving day 2",async()=>{
   const {env,files}=fixture();
