@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: STOP: no secrets / no paid / no database / exact main-only action
+      - name: 'STOP: no secrets / no paid / no database / exact main-only action'
         shell: bash
         run: |
           set -Eeuo pipefail
