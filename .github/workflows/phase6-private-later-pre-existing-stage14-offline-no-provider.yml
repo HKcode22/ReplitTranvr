@@ -1,0 +1,51 @@
+name: Phase6 signed private later PRE -> original Stage14 admission (OFFLINE NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-private-later-pre-existing-stage14-offline-no-provider.yml'
+      - 'server/lib/disruption/phase6PrivateLaterPreExistingStage14Bridge_v39.ts'
+      - 'tests/phase6_private_later_pre_existing_stage14_bridge_v39.test.ts'
+      - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_LATER_PRE_EXISTING_STAGE14_BRIDGE_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-later-pre-original-stage14-no-paid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Assert truly offline and unarmed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$RAPIDAPI_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$P5_V39_PRE_DATABASE_URL$GITHUB_TOKEN"
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify exact signed private later T6/T90 selection with original Phase5 admission
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install vitest run tests/phase6_private_later_pre_existing_stage14_bridge_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts tests/phase5_one_signed_witnessed_later_pre_github_owner_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts
+          echo 'Phase6 later PRE exact private index/PG receipt to original Stage14 signed admission validated on SYNTHETIC fixtures only. No provider, no DB, no GH dispatch, no GO.' >> "$GITHUB_STEP_SUMMARY"
