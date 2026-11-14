@@ -173,5 +173,6 @@ export function planP6ThirtyOneDaySignedShardHandoffs(
   providerCalls:0,githubChildDispatches:0,
   phase5ScientificFreeze:false,phase6PaidGo:false
  } as const;
- return{operatorSummary,privateRoutingCandidates:candidates};
+ return{operatorSummary,privateRoutingCandidates:candidates,
+  verifiedExistingShardIndexResult:validated};
 }
