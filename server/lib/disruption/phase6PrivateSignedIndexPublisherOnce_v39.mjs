@@ -138,6 +138,10 @@ export async function publishP6PrivateSignedIndexRevisionOnce({
  const signed=verifyP6PrivateSignedIndexExternalReview(
   reviewWire,reviewerPublicKeyPem,pins);
  const r=signed.review,idx=parseIndex(indexBytes,r);
+ // An external review cannot predate the prospective publication of any
+ // constituent source/PRE/POST registry named by its signed index bytes.
+ if(idx.entries.some(e=>exactUtc(e.publishedAtUtc)>signed.reviewedAtMs))
+  fail("EXTERNAL_REVIEW_PREDATES_A_SIGNED_REGISTRY_PUBLICATION");
  let started=false,commitAttempted=false;
  try{
   await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");
