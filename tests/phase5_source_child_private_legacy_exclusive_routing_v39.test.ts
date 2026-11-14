@@ -16,7 +16,7 @@ const job=(name:string)=>{
  return yaml.slice(begin,next<0?undefined:next);
 };
 const getMode=(block:string)=>{
- const match=block.match(/^    if: \$\{\{ ([^\n]+) \}\}$/m);
+ const match=block.match(/^ {4}if: \$\{\{ ([^\n]+) \}\}$/m);
  if(!match)return null;
  const cond=match[1];
  const mode=cond.match(/inputs\.private_transport == '(true|false)'/g);
