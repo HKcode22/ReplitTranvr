@@ -10,8 +10,8 @@ import {
  p6DayEpochReviewPreimage,publishP6DayEpochIndexRevisionOnce,
  readP6DayEpochIndexCurrentPriorOnce
 } from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
-const p="postgresql://ci_phase6_day_publisher:ci-only-day-pub@127.0.0.1:5432/neondb?sslmode=disable";
-const r="postgresql://ci_phase6_day_reader:ci-only-day-read@127.0.0.1:5432/neondb?sslmode=disable";
+const p="postgresql://phase6_private_publisher_login_ci_epoch:ci-only-day-pub@127.0.0.1:5432/neondb?sslmode=disable";
+const r="postgresql://phase6_private_reader_login_ci_epoch:ci-only-day-read@127.0.0.1:5432/neondb?sslmode=disable";
 const owner="postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable";
 if(process.env.CI!=="true"||
  process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY!=="1"||
@@ -96,13 +96,13 @@ function indexPacket(day,revision,entries,previousBytes){
   expectedRightsSha256:rights,
   expectedExternalReviewEvidenceSha256:evidence,
   expectedReviewerPublicKeyFingerprintSha256:fp,
-  expectedReaderSessionLogin:"ci_phase6_day_reader"
+  expectedReaderSessionLogin:"phase6_private_reader_login_ci_epoch"
  };
  const scope={
   privateDayIndexStorageApproved:true,
   independentProviderContentsReviewApproved:true,
   existingPaidDispatchApproved:false,adbAutoCollect:"0",
-  phase6ProcessArmed:"0",expectedPublisherSessionLogin:"ci_phase6_day_publisher",
+  phase6ProcessArmed:"0",expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_epoch",
   approvedCodeSha:code,approvedCalendarSha256:calendar,
   approvedRightsSha256:rights,
   approvedRetentionNotAfterUtc:expire
