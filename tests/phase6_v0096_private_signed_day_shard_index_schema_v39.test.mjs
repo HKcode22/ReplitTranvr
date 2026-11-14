@@ -29,7 +29,10 @@ test("MAX 1MB index bytes, SHA, previous revision chain, 7d cap and immutable up
   "phase6_private.refuse_frozen_update_v39",
   "GRANT SELECT,INSERT",
   "GRANT SELECT ON",
-  "P6_V0096_INDEX_IMMUTABLE_UPDATE_TRIGGER_MISSING"
+  "P6_V0096_INDEX_IMMUTABLE_UPDATE_TRIGGER_MISSING",
+  "phase6_private.guard_signed_index_insert_v39",
+  "P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION",
+  "P6_V0096_INDEX_CHAIN_INSERT_TRIGGER_MISSING"
  ]) assert(sql.includes(s),s);
 });
 test("no broader PUBLIC/old app service access, no derived 31d rights",()=>{
