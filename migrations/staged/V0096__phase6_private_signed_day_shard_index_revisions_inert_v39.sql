@@ -89,7 +89,129 @@ CREATE TABLE phase6_private.signed_day_shard_index_revision_v39 (
  committed_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
  CONSTRAINT p6_v0096_index_previous_sha_guard CHECK (
     (revision=1 AND previous_index_sha256 IS NULL) OR
-    (revision>1 AND previous_index_sha256 ~ '^[a-f0-9]{64}$')
+    (revision>1 AND previous_index_sha256 IS NOT NULL AND
+     previous_index_sha256 ~ '^[a-f0-9]{64}
+ ),
+ CONSTRAINT p6_v0096_index_bytes_guard CHECK (
+    octet_length(payload_bytes) BETWEEN 100 AND 1048576 AND
+    pg_catalog.encode(pg_catalog.sha256(payload_bytes),'hex')=content_sha256
+ ),
+ CONSTRAINT p6_v0096_index_retention_guard CHECK (
+    retention_not_after_utc>externally_reviewed_at_utc AND
+    retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days'
+ )
+);
+
+
+-- Row-level database-enforced chain continuity. A SHA-shaped pointer alone
+-- is NOT enough: the previous revision must be COMMITTED, exact, and bound
+-- to the same full-study code/calendar/manifest/release/rights identity.
+-- Existing Stage14 and signed index pure validator still independently
+-- recheck the complete index bytes and all covered SOURCE/PRE/POST shards.
+CREATE FUNCTION phase6_private.guard_signed_index_insert_v39()
+RETURNS trigger LANGUAGE plpgsql
+SET search_path=pg_catalog,pg_temp
+AS $immutable_chain$
+DECLARE previous_row record;
+DECLARE now_utc timestamptz;
+BEGIN
+ now_utc:=clock_timestamp();
+ IF NEW.externally_reviewed_at_utc>now_utc OR
+    NEW.retention_not_after_utc<=now_utc THEN
+  RAISE EXCEPTION 'P6_V0096_NO_FUTURE_REVIEW_OR_EXPIRED_INDEX_INSERT';
+ END IF;
+ IF NEW.revision=1 THEN
+  IF EXISTS(SELECT 1 FROM phase6_private.signed_day_shard_index_revision_v39) THEN
+   RAISE EXCEPTION 'P6_V0096_NONEMPTY_GENESIS_INDEX_REPLAY';
+  END IF;
+ ELSE
+  SELECT content_sha256,reviewed_code_sha,manifest_sha256,calendar_sha256,
+     release_sha256,rights_sha256,externally_reviewed_at_utc
+    INTO previous_row
+   FROM phase6_private.signed_day_shard_index_revision_v39
+   WHERE revision=NEW.revision-1;
+  IF NOT FOUND OR NEW.previous_index_sha256 IS NULL OR
+     previous_row.content_sha256 IS DISTINCT FROM NEW.previous_index_sha256 OR
+     previous_row.reviewed_code_sha<>NEW.reviewed_code_sha OR
+     previous_row.manifest_sha256<>NEW.manifest_sha256 OR
+     previous_row.calendar_sha256<>NEW.calendar_sha256 OR
+     previous_row.release_sha256<>NEW.release_sha256 OR
+     previous_row.rights_sha256<>NEW.rights_sha256 OR
+     previous_row.externally_reviewed_at_utc>NEW.externally_reviewed_at_utc THEN
+   RAISE EXCEPTION 'P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $immutable_chain$;
+REVOKE ALL ON FUNCTION phase6_private.guard_signed_index_insert_v39()
+ FROM PUBLIC;
+CREATE TRIGGER phase6_private_signed_index_insert_chain_hold_v39
+ BEFORE INSERT ON phase6_private.signed_day_shard_index_revision_v39
+ FOR EACH ROW EXECUTE FUNCTION phase6_private.guard_signed_index_insert_v39();
+
+CREATE TRIGGER phase6_private_signed_index_update_hold_v39
+ BEFORE UPDATE ON phase6_private.signed_day_shard_index_revision_v39
+ FOR EACH ROW EXECUTE FUNCTION phase6_private.refuse_frozen_update_v39();
+
+REVOKE ALL ON TABLE phase6_private.signed_day_shard_index_revision_v39
+ FROM PUBLIC;
+GRANT SELECT ON phase6_private.signed_day_shard_index_revision_v39
+ TO phase6_private_frozen_reader_v39;
+GRANT SELECT,INSERT ON phase6_private.signed_day_shard_index_revision_v39
+ TO phase6_private_frozen_publisher_v39;
+
+DO $v0096_postflight$
+DECLARE n integer;
+BEGIN
+ SELECT count(*)::integer INTO n
+  FROM phase6_private.signed_day_shard_index_revision_v39;
+ IF n<>0 OR (SELECT count(*) FROM phase6_private.frozen_native_packet_v39)<>0 THEN
+  RAISE EXCEPTION 'P6_V0096_SCHEMA_ONLY_BOTH_PRIVATE_TABLES_MUST_BE_EMPTY';
+ END IF;
+ IF NOT has_table_privilege('phase6_private_frozen_reader_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','SELECT') OR
+    has_table_privilege('phase6_private_frozen_reader_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','INSERT') OR
+    has_table_privilege('phase6_private_frozen_reader_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','UPDATE') OR
+    has_table_privilege('phase6_private_frozen_reader_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','DELETE') OR
+    NOT has_table_privilege('phase6_private_frozen_publisher_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','SELECT') OR
+    NOT has_table_privilege('phase6_private_frozen_publisher_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','INSERT') OR
+    has_table_privilege('phase6_private_frozen_publisher_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','UPDATE') OR
+    has_table_privilege('phase6_private_frozen_publisher_v39',
+       'phase6_private.signed_day_shard_index_revision_v39','DELETE') OR
+    EXISTS (SELECT 1 FROM pg_catalog.pg_class c,
+      LATERAL pg_catalog.aclexplode(COALESCE(
+        c.relacl,pg_catalog.acldefault('r',c.relowner))) a
+      WHERE c.oid='phase6_private.signed_day_shard_index_revision_v39'::pg_catalog.regclass
+        AND a.grantee=0 AND a.privilege_type IN (
+         'SELECT','INSERT','UPDATE','DELETE'
+        )) THEN
+  RAISE EXCEPTION 'P6_V0096_INDEX_TABLE_ACL_NOT_PRIVATE';
+ END IF;
+ IF (SELECT count(*) FROM pg_catalog.pg_trigger
+      WHERE tgrelid='phase6_private.signed_day_shard_index_revision_v39'::pg_catalog.regclass
+        AND tgname='phase6_private_signed_index_update_hold_v39'
+        AND NOT tgisinternal)<>1 THEN
+  RAISE EXCEPTION 'P6_V0096_INDEX_IMMUTABLE_UPDATE_TRIGGER_MISSING';
+ END IF;
+ IF (SELECT count(*) FROM pg_catalog.pg_trigger
+      WHERE tgrelid='phase6_private.signed_day_shard_index_revision_v39'::pg_catalog.regclass
+        AND tgname='phase6_private_signed_index_insert_chain_hold_v39'
+        AND NOT tgisinternal)<>1 THEN
+  RAISE EXCEPTION 'P6_V0096_INDEX_CHAIN_INSERT_TRIGGER_MISSING';
+ END IF;
+END $v0096_postflight$;
+COMMIT;
+
+-- This is an inert PRIVATE index byte transport only. No index reviewer key,
+-- actual future flight, index revision, provider Contents, DELETE worker,
+-- GH private reader, paid rights/credit release or Phase6 GO is created.
+)
  ),
  CONSTRAINT p6_v0096_index_bytes_guard CHECK (
     octet_length(payload_bytes) BETWEEN 100 AND 1048576 AND
