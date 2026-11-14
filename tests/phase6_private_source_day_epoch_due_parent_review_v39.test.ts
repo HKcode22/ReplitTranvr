@@ -83,7 +83,7 @@ function fixture(){
   }]
  };
  const input=()=>({
-  days:days.map(x=>x.d),sourceObserver,history,
+  days:days.map(x=>x.d),sourceObserver:sourceObserver as any,history,
   expectedManifestSha256:manifest,expectedMainSha:main
  });
  return{days,sourceObserver,history,secrets,input};
@@ -152,10 +152,7 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
  });
  it("rejects a changed source registry byte even if the route SHA looks reviewed",()=>{
   const f=fixture();
-  Object.defineProperty(f.days[0].d,"getFrozen",{
-   enumerable:false,writable:false,configurable:true,
-   value:()=>Buffer.from("TAMPER")
-  });
+  f.days[0].registry.fill(84);
   expect(()=>reviewP6PrivateDaySourceDueParentNoDispatch(f.input())).
    toThrow(/UNSIGNED_OR_CHANGED_PRIVATE_SOURCE_REGISTRY_BYTES/);
  });
@@ -170,10 +167,11 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
   expect(()=>reviewP6PrivateDaySourceDueParentNoDispatch(g.input())).
    toThrow(/NOT_ONE_VERIFIED_SIGNED_DAY_OR_FRESH_DB_CLOCK/);
   const h=fixture();
-  Object.defineProperty(h.days[0].d,"privateRoutingCandidates",{
-   enumerable:true,writable:false,configurable:true,
-   value:[h.days[0].route]
-  });
+  h.days[0].d={
+   redactedSummary:h.days[0].d.redactedSummary,
+   privateRoutingCandidates:[h.days[0].route],
+   getFrozen:h.days[0].d.getFrozen
+  };
   expect(()=>reviewP6PrivateDaySourceDueParentNoDispatch(h.input())).
    toThrow(/NOT_ONE_VERIFIED_SIGNED_DAY_OR_FRESH_DB_CLOCK/);
  });
