@@ -25,11 +25,13 @@ function candidate(id=uuid):ProviderBlobExpiryCandidateV39{
  return {blobRefId:id,objectName,contentClass:ref.contentClass,
   contentSha256:sha,expiresAtUtc:expires,ref};
 }
+const scope=reviewP5BlobOnlyCandidates([candidate()],now).scopeSha256;
 const approved={
  P5_BLOB_ONLY_CLEANUP_APPROVAL:
  "OWNER_APPLY_EXACT_EXPIRED_RAW_PROVIDER_BLOB_ONLY_DELETE_VERIFY_TOMBSTONE",
  P5_BLOB_ONLY_CLEANUP_APPROVED_MAIN_SHA:commit,
  P5_BLOB_ONLY_CLEANUP_EXPECTED_COUNT:"1",
+ P5_BLOB_ONLY_CLEANUP_SCOPE_SHA256:scope,
  ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
  V39_PHASE6_PROCESS_ARMED:"0"
 };
@@ -43,6 +45,7 @@ describe("owner-only expired raw provider object remediation never auto-arms",()
  });
  it("counts exactly reviewed raw class, expiry, id and hard TTL, no contents",()=>{
   const review=reviewP5BlobOnlyCandidates([candidate()],now,1);
+  expect(review.scopeSha256).toMatch(/^[a-f0-9]{64}$/);
   expect(review).toMatchObject({candidates:1,exactRawClassOnly:true,
    expectedCountMatched:true,readyToDelete:false,contentsDownloaded:false,
    providerCalls:0});
@@ -58,7 +61,18 @@ describe("owner-only expired raw provider object remediation never auto-arms",()
   const s=candidate();s.ref.contentClass="live_fids_cache";
   expect(()=>reviewP5BlobOnlyCandidates([s],now)).toThrow(/UNEXPECTED_CLASS/);
   expect(()=>reviewP5BlobOnlyCandidates([candidate()],Date.parse(expires)+60000))
-   .toThrow(/RECENT_NOT_EXPIRED/);
+   .toThrow(/NOT_IN_ORIGINAL_65_AGED_AUDIT_WINDOW/);
+  const later=candidate();
+  later.ref.expiresAtUtc="2026-11-11T12:00:00.000Z";
+  later.expiresAtUtc=later.ref.expiresAtUtc;
+  later.ref.persistedAtUtc="2026-11-04T12:00:00.000Z";
+  expect(()=>reviewP5BlobOnlyCandidates([later],now))
+   .toThrow(/NOT_IN_ORIGINAL_65_AGED_AUDIT_WINDOW/);
+  const changed=candidate();
+  changed.ref.contentSha256="d".repeat(64);
+  changed.contentSha256=changed.ref.contentSha256;
+  expect(reviewP5BlobOnlyCandidates([changed],now).scopeSha256)
+   .not.toBe(review.scopeSha256);
  });
  it("read-only recovery reports zero backlog and absent objects without authorizing tombstones",()=>{
   expect(classifyP5BlobOnlyReadOnlyPresence(0,0,0))
@@ -74,16 +88,21 @@ describe("owner-only expired raw provider object remediation never auto-arms",()
   expect(()=>classifyP5BlobOnlyReadOnlyPresence(101,101,0)).toThrow(/INVALID_OBJECT/);
  });
  it("APPLY denied without exact explicit actor approval, reviewed local SHA, expected count and STOP",()=>{
-  expect(()=>admitP5BlobOnlyApply({},commit,1)).toThrow(/NO_EXPLICIT/);
-  expect(()=>admitP5BlobOnlyApply({...approved,GITHUB_ACTIONS:"true"},commit,1)).toThrow();
-  expect(()=>admitP5BlobOnlyApply({...approved,V39_PHASE6_PROCESS_ARMED:"1"},commit,1)).toThrow();
+  expect(()=>admitP5BlobOnlyApply({},commit,1,scope)).toThrow(/NO_EXPLICIT/);
+  expect(()=>admitP5BlobOnlyApply({...approved,GITHUB_ACTIONS:"true"},commit,1,scope)).toThrow();
+  expect(()=>admitP5BlobOnlyApply({...approved,V39_PHASE6_PROCESS_ARMED:"1"},commit,1,scope)).toThrow();
   expect(()=>admitP5BlobOnlyApply({...approved,
-   P5_BLOB_ONLY_CLEANUP_APPROVED_MAIN_SHA:sha},commit,1)).toThrow();
+   P5_BLOB_ONLY_CLEANUP_APPROVED_MAIN_SHA:sha},commit,1,scope)).toThrow();
   expect(()=>admitP5BlobOnlyApply({...approved,
-   P5_BLOB_ONLY_CLEANUP_EXPECTED_COUNT:"65"},commit,1)).toThrow();
+   P5_BLOB_ONLY_CLEANUP_EXPECTED_COUNT:"65"},commit,1,scope)).toThrow();
   expect(()=>admitP5BlobOnlyApply({...approved,
-   V39_PROVIDER_BLOB_MODE:"off"},commit,1)).toThrow();
-  expect(admitP5BlobOnlyApply(approved,commit,1))
+   V39_PROVIDER_BLOB_MODE:"off"},commit,1,scope)).toThrow();
+  expect(()=>admitP5BlobOnlyApply({...approved,
+   P5_BLOB_ONLY_CLEANUP_SCOPE_SHA256:"c".repeat(64)},commit,1,scope))
+   .toThrow(/NO_EXPLICIT/);
+  expect(()=>admitP5BlobOnlyApply({...approved,
+   V39_PHASE6_PROCESS_ARMED:undefined},commit,1,scope)).toThrow();
+  expect(admitP5BlobOnlyApply(approved,commit,1,scope))
    .toMatchObject({approvedExpectedCount:1});
  });
 });
