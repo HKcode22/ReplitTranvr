@@ -113,6 +113,11 @@ describe("original 10-minute SOURCE parent real private NO-GO gate",()=>{
   expect(out.scope.expectedSourceRole).toBe("phase5_fids_source_prod_20261107");
   expect(out.scope.expectedManifestSha256).toBe(manifest);
   expect(out.mainSha).toBe(main);
+  expect(JSON.stringify(out)).not.toContain("ci@ep-no-live");
+  expect(JSON.stringify(out)).not.toContain("GITHUB_HISTORY_READ_TOKEN_ONLY");
+  expect(JSON.stringify(out)).not.toContain("signatureBase64");
+  expect(Object.keys(out)).not.toContain("sourceUrl");
+  expect(Object.keys(out)).not.toContain("readerUrl");
  });
  it("accepts manual read-only request independently of old paid/legacy job",()=>{
   const f=fixture();f.env.GITHUB_EVENT_NAME="workflow_dispatch";
