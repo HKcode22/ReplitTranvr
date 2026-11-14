@@ -148,7 +148,7 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
  }
  const usedDays=new Set<number>(),usedRegistries=new Set<string>();
  const seenSourceQueries=new Set<string>();
- const candidates:ReviewedPrivateSourceIntent[]=[];
+ const dueCandidates:ReviewedPrivateSourceIntent[]=[];
  let sourceRegistryCount=0,notInQueueWindow=0,alreadyDispatched=0,
      deferredDue=0,missedOrStopped=0,notYetDue=0,activeDue=0;
  for(const day of days){
@@ -237,8 +237,10 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
        latest<=now||planned>=latest)
      hold("REAL_DB_LEAD_OR_CUTOFF_CHANGED");
     activeDue++;
-    if(candidates.length>=LIMIT){deferredDue++;continue;}
-    candidates.push({
+    // Preserve all genuinely due, signed original candidate intents until
+    // a final deadline-first deterministic selection. Registry insertion
+    // order is not a valid reason to miss an earlier source cutoff.
+    dueCandidates.push({
      runDayIndex:s.runDayIndex,shardIndex:route.shardIndex,
      queryDigestSha256:entry.expectedQueryDigestSha256,
      registryFilePath:route.signedFrozenPath,
@@ -261,6 +263,16 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
    }
   }
  }
+ // Stable across equivalent signed day-review ordering. The original
+ // actual prepared DB cutoff controls priority, never an outcome/site label.
+ dueCandidates.sort((a,b)=>
+  queue.get(a.queryDigestSha256)!.latestDispatchUtc.localeCompare(
+   queue.get(b.queryDigestSha256)!.latestDispatchUtc)||
+  a.plannedDispatchUtc.localeCompare(b.plannedDispatchUtc)||
+  a.runDayIndex-b.runDayIndex||
+  a.queryDigestSha256.localeCompare(b.queryDigestSha256));
+ const candidates=dueCandidates.slice(0,LIMIT);
+ deferredDue=dueCandidates.length-candidates.length;
  const result={redactedSummary:Object.freeze({
   schema:P6_PRIVATE_SOURCE_PARENT_REVIEW_SCHEMA,
   status:"SIGNED_PRIVATE_DAY_SOURCE_AND_ACTUAL_DB_DUE_REVIEW_ONLY_NO_DISPATCH",
