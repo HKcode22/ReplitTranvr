@@ -254,7 +254,8 @@ export async function runP6OnePrivateSourceOriginalGHChild(
     "scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts",
     paths.queryPacketFilePath,paths.registryFilePath
    ],{
-    shell:false,stdio:"inherit",timeout:145*60000,
+    shell:false,stdio:["ignore","pipe","pipe"],
+    maxBuffer:10*1024*1024,timeout:145*60000,
     env:{...env,P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT:"1"}
    });
    if(child.error||child.signal||child.status!==0)
@@ -282,7 +283,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
   sourceQueryDigestSha256:out.queryDigestSha256,
   sourcePacketSha256:out.queryPacketSha256,
   privateOriginalRegistryCleaned:out.privateSourceQueryAndRegistryCleaned,
-  existingPaidWorkerMadeFinalPhysicalGetAndChargeDecision:true,
+  existingPaidWorkerMustMakeFinalPhysicalGetAndChargeDecision:true,
   providerGetOutcomeNotCertifiedByTransport:true,
   phase5ScientificFreezeCertifiedHere:false,
   phase6PaidGoCertifiedHere:false,
