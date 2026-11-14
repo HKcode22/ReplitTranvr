@@ -1,0 +1,180 @@
+name: Phase6 V0096 private 31-day index transport (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0096__phase6_private_signed_day_shard_index_revisions_inert_v39.sql'
+      - 'tests/phase6_v0096_private_signed_day_shard_index_schema_v39.test.mjs'
+      - '.github/workflows/phase6-v0096-private-signed-index-disposable-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  static-zero-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Exact empty staged schema, SHA/ACL/history and no new source or roles
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          test "$ADB_AUTO_COLLECT" = '0'
+          node --test tests/phase6_v0096_private_signed_day_shard_index_schema_v39.test.mjs
+          echo 'V0096_STAGED_INDEX_STATIC_NO_REAL_PROVIDER_NO_GO_PASS'
+  real-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      PGSYNTH: 'ci-only-owner-not-production'
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install V0094 then V0095 then V0096 ONCE in disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-owner-not-production'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD="$PGSYNTH"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0096__phase6_private_signed_day_shard_index_revisions_inert_v39.sql
+      - name: Verify strict roles, SHA, append-only history and conservative expiry without provider
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          export PGPASSWORD="$PGSYNTH"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $verify$
+          DECLARE c integer;
+          BEGIN
+            SELECT count(*) INTO c FROM phase6_private.signed_day_shard_index_revision_v39;
+            IF c<>0 OR
+               (SELECT count(*) FROM phase6_private.frozen_native_packet_v39)<>0 OR
+               NOT has_table_privilege('phase6_private_frozen_reader_v39',
+                 'phase6_private.signed_day_shard_index_revision_v39','SELECT') OR
+               has_table_privilege('phase6_private_frozen_reader_v39',
+                 'phase6_private.signed_day_shard_index_revision_v39','INSERT') OR
+               has_table_privilege('phase6_private_frozen_publisher_v39',
+                 'phase6_private.signed_day_shard_index_revision_v39','UPDATE') OR
+               has_table_privilege('phase6_private_frozen_publisher_v39',
+                 'phase6_private.signed_day_shard_index_revision_v39','DELETE')
+             THEN RAISE EXCEPTION 'DISPOSABLE_V0096_SCHEMA_ACL_EMPTY_FAIL';
+            END IF;
+          END $verify$;
+          SQL
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {createHash} from "node:crypto";
+          const h=b=>createHash("sha256").update(b).digest("hex");
+          const owner=new pg.Client({connectionString:
+           "postgresql://neondb_owner:ci-only-owner-not-production@127.0.0.1:5432/neondb?sslmode=disable"});
+          await owner.connect();
+          const table="phase6_private.signed_day_shard_index_revision_v39";
+          try{
+           const first=Buffer.from(JSON.stringify({schema:"SYNTHETIC_TEST_INDEX_ONLY",
+              revision:1,entries:[{synthetic:true},...Array(6).fill({ci:"nonprovider"})]}));
+           const second=Buffer.from(JSON.stringify({schema:"SYNTHETIC_TEST_INDEX_ONLY",
+              revision:2,previousIndexSha256:h(first),entries:[{ci:"synthetic"}]}));
+           const columns="(revision,previous_index_sha256,content_sha256,"+
+             "reviewed_code_sha,manifest_sha256,calendar_sha256,release_sha256,"+
+             "rights_sha256,external_review_sha256,externally_reviewed_at_utc,"+
+             "retention_not_after_utc,payload_bytes)";
+           const sql="INSERT INTO "+table+" "+columns+
+            " VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)";
+           const at=new Date(Date.now()-10000).toISOString();
+           const until=new Date(Date.now()+3600000).toISOString();
+           const params=(revision,prior,bytes)=>[
+             revision,prior,h(bytes),"a".repeat(40),
+             "b".repeat(64),"c".repeat(64),"d".repeat(64),
+             "e".repeat(64),"f".repeat(64),at,until,bytes
+           ];
+           await owner.query(sql,params(1,null,first));
+           await owner.query(sql,params(2,h(first),second));
+           const result=await owner.query(
+             "SELECT revision,content_sha256,previous_index_sha256 FROM "+table+
+             " ORDER BY revision");
+           assert.equal(result.rowCount,2);
+           assert.equal(result.rows[0].content_sha256,h(first));
+           assert.equal(result.rows[1].previous_index_sha256,h(first));
+           await assert.rejects(owner.query(sql,params(2,h(first),second)));
+           await assert.rejects(owner.query(
+             sql,params(3,"0".repeat(64),Buffer.from("q".repeat(130)))
+           ),/P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION/);
+           const wrongCalendar=params(3,h(second),Buffer.from("r".repeat(130)));
+           wrongCalendar[5]="0".repeat(64);
+           await assert.rejects(owner.query(
+             sql,wrongCalendar
+           ),/P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION/);
+           await assert.rejects(owner.query(
+             "UPDATE "+table+" SET reviewed_code_sha=$1 WHERE revision=1",
+             ["1".repeat(40)]),/P5_V0094_IMMUTABLE_PACKET_NO_UPDATE/);
+           await assert.rejects(owner.query(sql,
+             params(3,null,Buffer.from("z".repeat(120)))));
+           const tooLong=params(3,h(second),Buffer.from("y".repeat(120)));
+           tooLong[10]=new Date(Date.now()+8*86400000).toISOString();
+           await assert.rejects(owner.query(sql,tooLong));
+           const n=await owner.query("SELECT COUNT(*)::integer AS n FROM "+table);
+           assert.equal(n.rows[0].n,2);
+           console.log(JSON.stringify({status:"V0096_REAL_DISPOSABLE_PG16_PASS",
+             syntheticIndexRevisionCount:2,newProductionRows:0,
+             noProviderCalls:true,sourceAndPOSTChildrenDisabled:true}));
+          }finally{await owner.end();}
+          JS
+          if psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0096__phase6_private_signed_day_shard_index_revisions_inert_v39.sql \
+            >/tmp/p6_v0096_replay.txt 2>&1; then
+            echo 'UNSAFE_V0096_REINSTALL_ACCEPTED'
+            exit 2
+          fi
+          grep -Fq 'P6_V0096_ALREADY_PRESENT_NEVER_REINSTALL' /tmp/p6_v0096_replay.txt
+          rm -f /tmp/p6_v0096_replay.txt
+          echo 'V0096_REAL_DISPOSABLE_NONPROVIDER_NO_REPLAY_PASS'
