@@ -1,0 +1,149 @@
+name: Phase6 V0095 private SOURCE POST compatibility (DISPOSABLE PG16, NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql'
+      - 'tests/phase6_v0095_private_source_post_kind_scope_v39.test.mjs'
+      - '.github/workflows/phase6-v0095-private-source-post-schema-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  static-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: No new production role or changes to V0094 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node --test tests/phase6_v0095_private_source_post_kind_scope_v39.test.mjs
+          echo 'STAGED_V0095_STATIC_STOP_DEFAULT_NO_PROVIDER'
+
+  real-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: ''
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      PGSYNTH: 'ci-only-neon-owner-not-production'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Create disposable non-superuser CREATEROLE owner only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-neon-owner-not-production'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+      - name: Apply unchanged reviewed V0094 then staged V0095 once ONLY on disposable PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          export PGPASSWORD="$PGSYNTH"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT CASE WHEN COUNT(*)=2 THEN true ELSE
+            (1/0)::boolean END AS five_kind_constraints_active
+          FROM pg_catalog.pg_constraint
+          WHERE conrelid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass
+          AND conname IN ('p5_v0095_kind_allowed','p5_v0095_kind_path_guard');
+          SELECT CASE WHEN COUNT(*)=0 THEN true ELSE
+            (1/0)::boolean END AS empty_private_schema
+          FROM phase6_private.frozen_native_packet_v39;
+          SELECT CASE WHEN
+            has_table_privilege('phase6_private_frozen_reader_v39',
+              'phase6_private.frozen_native_packet_v39','SELECT') AND
+            NOT has_table_privilege('phase6_private_frozen_reader_v39',
+              'phase6_private.frozen_native_packet_v39','INSERT') AND
+            has_table_privilege('phase6_private_frozen_publisher_v39',
+              'phase6_private.frozen_native_packet_v39','INSERT') AND
+            NOT has_table_privilege('phase6_private_frozen_publisher_v39',
+              'phase6_private.frozen_native_packet_v39','UPDATE')
+            THEN true ELSE (1/0)::boolean END AS least_privilege_preserved;
+          BEGIN;
+          INSERT INTO phase6_private.frozen_native_packet_v39
+          (logical_path,run_day_index,shard_index,kind,content_sha256,
+            reviewed_code_sha,manifest_sha256,rights_sha256,
+            external_review_sha256,externally_reviewed_at_utc,
+            retention_not_after_utc,payload_bytes)
+          VALUES
+          ('data-collection/phase5/frozen/sourceq_abcdefgh123.json',
+            1,1,'SOURCE_QUERY_PACKET',
+            encode(pg_catalog.sha256(convert_to(repeat('s',120),'UTF8')),'hex'),
+            repeat('b',40),repeat('c',64),repeat('d',64),repeat('e',64),
+            clock_timestamp(),clock_timestamp()+interval '1 day',
+            convert_to(repeat('s',120),'UTF8')),
+          ('data-collection/phase5/frozen/post_abcdefgh123.json',
+            1,1,'POST_PACKET',
+            encode(pg_catalog.sha256(convert_to(repeat('p',120),'UTF8')),'hex'),
+            repeat('b',40),repeat('c',64),repeat('d',64),repeat('e',64),
+            clock_timestamp(),clock_timestamp()+interval '1 day',
+            convert_to(repeat('p',120),'UTF8'));
+          SELECT CASE WHEN COUNT(*)=2 THEN true ELSE
+            (1/0)::boolean END AS two_new_packet_kinds_accepted
+          FROM phase6_private.frozen_native_packet_v39;
+          ROLLBACK;
+          SELECT CASE WHEN COUNT(*)=0 THEN true ELSE
+            (1/0)::boolean END AS insert_test_rolled_back
+          FROM phase6_private.frozen_native_packet_v39;
+          SQL
+          echo 'V0095_DISPOSABLE_PG16_SOURCE_AND_POST_KINDS_PASS'
+      - name: Prove second install refuses replay and leaves no private rows
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          export PGPASSWORD="$PGSYNTH"
+          if psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+               -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql \
+               > /tmp/v0095_replay_log.txt 2>&1; then
+            echo 'UNSAFE_V0095_REPLAY_WAS_ACCEPTED'
+            exit 2
+          fi
+          grep -Fq 'P5_V0095_ALREADY_INSTALLED_NEVER_REPLAY' /tmp/v0095_replay_log.txt
+          rm -f /tmp/v0095_replay_log.txt
+          echo 'V0095_ONE_USE_REPLAY_REFUSED_EMPTY_SCHEMA_NO_PAID'
