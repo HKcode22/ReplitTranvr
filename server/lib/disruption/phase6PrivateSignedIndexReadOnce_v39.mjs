@@ -236,8 +236,9 @@ export async function readP6PrivateSignedIndexCurrentAndPriorOnce({
    if(!previous||
       previous.revision!==review.indexRevision-1||
       previous.content_sha256!==review.previousIndexSha256||
-      previous.previous_index_sha256!==
-        (review.indexRevision-1===1?null:previous.previous_index_sha256))
+      (review.indexRevision-1===1?
+        previous.previous_index_sha256!==null:
+        !SHA.test(previous.previous_index_sha256??"")))
     fail("PREVIOUS_INDEX_NOT_EXACTLY_COMMITTED");
    p=parseExactIndex(
     previous.payload_bytes,previous,review,now,
