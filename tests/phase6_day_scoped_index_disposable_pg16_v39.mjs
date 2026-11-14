@@ -105,9 +105,18 @@ try{
  // Other study-day epochs remain readable after the first day was purged.
  const d2r2=mk(2,2,d2r1.hash);
  await db.query(INSERT,d2r2.params);
+ // All 31 parent study days have their OWN genesis. They do not inherit a
+ // prior day's private provider bytes, prior hash or short retention clock.
+ for(let day=3;day<=30;day++){
+  await db.query(INSERT,mk(day,1).params);
+ }
  const statusFinal=await db.query(
   "SELECT COUNT(*)::integer AS n FROM "+TABLE);
- assert.equal(statusFinal.rows[0].n,3);
+ assert.equal(statusFinal.rows[0].n,31); // day1 purged, day2 has 2 revisions
+ const allClaims=await db.query(
+  "SELECT COUNT(*)::integer AS n, COUNT(DISTINCT run_day_index)::integer AS days"+
+  " FROM "+CLAIM);
+ assert.deepEqual(allClaims.rows[0],{n:31,days:31});
  // Only original two groups may read/append, never delete/UPDATE.
  const acl=await db.query(
   "SELECT has_table_privilege('phase6_private_frozen_reader_v39',$1,'SELECT') AS reader_select,"+
@@ -126,8 +135,8 @@ try{
  assert.equal(a.claim_insert,false);
  console.log(JSON.stringify({
   status:"DAY_SCOPED_PRIVATE_EPOCH_REAL_DISPOSABLE_PG16_PASS",
-  syntheticEpochs:[1,2,31],
-  revisionCountAfterDay1Purge:3,
+  syntheticRunDayEpochCount:31,
+  liveIndexRevisionCountAfterDay1Purge:31,
   contentFreeDay1ReplayFencePresent:true,
   sameDayPriorSHAEnforced:true,
   noLegacyV0096Installed:true,
