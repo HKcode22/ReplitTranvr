@@ -135,6 +135,14 @@ test("real disposable PG16: restricted SELECT-only actor, overdue -> clear -> TT
    restricted.query("UPDATE clean.provider_content_blob_ref SET retention_hours=1"),
    e=>e.code==="42501"
   );
+  await assert.rejects(
+   restricted.query("SELECT object_name FROM clean.provider_content_blob_ref LIMIT 1"),
+   e=>e.code==="42501"
+  );
+  await assert.rejects(
+   restricted.query("SELECT * FROM clean.provider_content_blob_ref LIMIT 1"),
+   e=>e.code==="42501"
+  );
  }finally{await restricted.end()}
  const admin=new pg.Client({connectionString:adminUrl});
  await admin.connect();
@@ -154,5 +162,25 @@ test("real disposable PG16: restricted SELECT-only actor, overdue -> clear -> TT
   const anomaly=await readP5RetentionMetadataReadOnly({url,expectedRole:role});
   assert.equal(anomaly.status,"HOLD_UNEXPECTED_RETENTION_METADATA");
   assert.equal(anomaly.unexpected_class_or_ttl,1);
+  await admin.query(
+   "GRANT SELECT(object_name) ON clean.provider_content_blob_ref"+
+   " TO p5_retention_test_reader"
+  );
+  await assert.rejects(
+   readP5RetentionMetadataReadOnly({url,expectedRole:role}),
+   /READER_MUST_HAVE_EXACT_FIVE_COLUMN_SELECT/
+  );
+  await admin.query(
+   "REVOKE SELECT(object_name) ON clean.provider_content_blob_ref"+
+   " FROM p5_retention_test_reader"
+  );
+  await admin.query(
+   "GRANT SELECT ON clean.provider_content_blob_ref"+
+   " TO p5_retention_test_reader"
+  );
+  await assert.rejects(
+   readP5RetentionMetadataReadOnly({url,expectedRole:role}),
+   /ACTOR_PRIVILEGE_DB_VERSION_OR_RO_MISMATCH|READER_MUST_HAVE_EXACT_FIVE_COLUMN_SELECT/
+  );
  }finally{await admin.end()}
 });

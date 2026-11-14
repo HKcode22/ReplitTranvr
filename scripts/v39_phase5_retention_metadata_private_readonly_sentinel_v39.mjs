@@ -14,6 +14,15 @@ import {appendFileSync} from "node:fs";
 
 const EXPECTED_DB="neondb";
 const TABLE="clean.provider_content_blob_ref";
+export const RETENTION_READER_REQUIRED_COLUMNS=Object.freeze([
+ "expires_at_utc","deletion_verified_at_utc",
+ "content_class","storage_kind","retention_hours"
+]);
+export const RETENTION_READER_DENIED_COLUMNS=Object.freeze([
+ "blob_ref_id","object_name","content_sha256","source_record_id",
+ "source_kind","contract_version","content_bytes",
+ "persisted_at_utc","deleted_at_utc","deletion_run_id","created_at_utc"
+]);
 const HOLD=(name)=>{throw Error("HOLD_P5_RETENTION_SENTINEL_"+name)};
 const whole=(x)=>Number.isSafeInteger(x)&&x>=0;
 const iso=(x)=>{
@@ -118,8 +127,11 @@ export async function readP5RetentionMetadataReadOnly({url,expectedRole}){
    " clock_timestamp() AS db_now,"+
    " r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolreplication,"+
    " r.rolbypassrls,r.rolinherit,"+
-   " has_table_privilege(current_user, '"+
-   TABLE+"','SELECT') AS can_read_refs,"+
+   " has_schema_privilege(current_user,'clean','USAGE') AS schema_usage,"+
+   " has_schema_privilege(current_user,'clean','CREATE') AS schema_create,"+
+   " has_database_privilege(current_user,'neondb','CREATE') AS db_create,"+
+   " EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) AS is_member,"+
+   " has_table_privilege(current_user, '"+TABLE+"','SELECT') AS table_level_select,"+
    " has_table_privilege(current_user, '"+TABLE+"','INSERT') AS can_insert,"+
    " has_table_privilege(current_user, '"+TABLE+"','UPDATE') AS can_update,"+
    " has_table_privilege(current_user, '"+TABLE+"','DELETE') AS can_delete,"+
@@ -135,10 +147,32 @@ export async function readP5RetentionMetadataReadOnly({url,expectedRole}){
      identity.rolsuper||identity.rolcreatedb||
      identity.rolcreaterole||identity.rolreplication||
      identity.rolbypassrls||identity.rolinherit||
-     identity.can_read_refs!==true||
+     identity.schema_usage!==true||identity.schema_create||
+     identity.db_create||identity.is_member||
+     identity.table_level_select||
      identity.can_insert||identity.can_update||
      identity.can_delete||identity.can_truncate)
    HOLD("ACTOR_PRIVILEGE_DB_VERSION_OR_RO_MISMATCH");
+  const permissions=(await client.query(
+   "SELECT a.attname AS column_name,"+
+   " has_column_privilege(current_user,"+
+   " '"+TABLE+"',a.attname,'SELECT') AS allowed"+
+   " FROM pg_attribute a WHERE a.attrelid=$1::regclass"+
+   " AND a.attnum>0 AND NOT a.attisdropped"+
+   " ORDER BY a.attname",
+   [TABLE]
+  )).rows;
+  if(permissions.length!==
+     RETENTION_READER_REQUIRED_COLUMNS.length+
+     RETENTION_READER_DENIED_COLUMNS.length||
+     new Set(permissions.map(x=>x.column_name)).size!==permissions.length||
+     permissions.some(x=>{
+      if(RETENTION_READER_REQUIRED_COLUMNS.includes(x.column_name))
+       return x.allowed!==true;
+      return !RETENTION_READER_DENIED_COLUMNS.includes(x.column_name)||
+       x.allowed!==false;
+     }))
+    HOLD("READER_MUST_HAVE_EXACT_FIVE_COLUMN_SELECT_NO_OBJECT_IDENTITIES");
   const result=await client.query(
    "SELECT count(*)::int AS total_refs,"+
    " count(*) FILTER (WHERE deletion_verified_at_utc IS NOT NULL)::int AS verified_refs,"+

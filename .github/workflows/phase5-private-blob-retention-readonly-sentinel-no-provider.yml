@@ -15,7 +15,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs'
+      - 'scripts/v39_phase5_retention_five_column_reader_owner_once_v39.mjs'
       - 'tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs'
+      - 'tests/phase5_retention_five_column_reader_owner_once_v39.test.mjs'
       - '.github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml'
       - 'data-collection/phase5/2026-11-14_P0_RETENTION_RECURRING_SENTINEL_STAGED_NO_GO.md'
 permissions:
@@ -75,13 +77,27 @@ jobs:
             -X -v ON_ERROR_STOP=1 <<'SQL'
           CREATE SCHEMA clean;
           CREATE TABLE clean.provider_content_blob_ref(
+            blob_ref_id uuid,
+            storage_kind text,
+            contract_version text,
+            object_name text,
+            content_class text,
+            content_sha256 text,
+            content_bytes bigint,
+            source_kind text,
+            source_record_id text,
+            persisted_at_utc timestamptz,
+            retention_hours integer,
             expires_at_utc timestamptz NOT NULL,
+            deleted_at_utc timestamptz,
             deletion_verified_at_utc timestamptz,
-            content_class text NOT NULL,
-            storage_kind text NOT NULL,
-            retention_hours integer NOT NULL
+            deletion_run_id text,
+            created_at_utc timestamptz
           );
-          INSERT INTO clean.provider_content_blob_ref VALUES
+          INSERT INTO clean.provider_content_blob_ref
+            (expires_at_utc,deletion_verified_at_utc,
+             content_class,storage_kind,retention_hours)
+          VALUES
             (clock_timestamp()-interval '10 days',NULL,'raw_provider_content','replit_app_storage',168),
             (clock_timestamp()-interval '30 minutes',NULL,'live_fids_cache','replit_app_storage',24),
             (clock_timestamp()+interval '12 hours',NULL,'raw_provider_content','replit_app_storage',168),
@@ -90,7 +106,10 @@ jobs:
             NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD 'p5test';
           GRANT CONNECT ON DATABASE neondb TO p5_retention_test_reader;
           GRANT USAGE ON SCHEMA clean TO p5_retention_test_reader;
-          GRANT SELECT ON clean.provider_content_blob_ref TO p5_retention_test_reader;
+          GRANT SELECT (
+            expires_at_utc,deletion_verified_at_utc,
+            content_class,storage_kind,retention_hours
+          ) ON clean.provider_content_blob_ref TO p5_retention_test_reader;
           SQL
       - name: Real disposable restricted actor, DB READ ONLY, no owner privileges
         shell: bash
@@ -98,7 +117,8 @@ jobs:
           set -Eeuo pipefail
           set +x
           node --test tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs
-          echo 'P5_RETENTION_SENTINEL_DISPOSABLE_PG16_READONLY_PASS_NO_PROVIDER_NO_DELETE'
+          node --test tests/phase5_retention_five_column_reader_owner_once_v39.test.mjs
+          echo 'P5_RETENTION_FIVE_COLUMN_READER_DISPOSABLE_PG16_PASS_NO_PROVIDER_NO_DELETE'
   private-main-restricted-metadata-sentinel:
     if: >-
       ${{
