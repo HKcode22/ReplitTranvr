@@ -32,8 +32,9 @@ const fail=(s:string):never=>{
 };
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 function utc(value:unknown){
- if(typeof value!=="string"||!ISO.test(value)||
-    !Number.isFinite(Date.parse(value))||
+ if(typeof value!=="string")
+  fail("UNVERIFIED_ACTUAL_DB_CLOCK_OR_NATIVE_T");
+ if(!ISO.test(value)||!Number.isFinite(Date.parse(value))||
     new Date(value).toISOString()!==value)
   fail("UNVERIFIED_ACTUAL_DB_CLOCK_OR_NATIVE_T");
  return Date.parse(value);
@@ -163,9 +164,10 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
 
  // Run the original Phase5 delegated signed-day GO check; no injection
  // of computed approvals, code SHA, query identity or provider license.
- let day:number;
- try{day=admitP5LaterRegistryChildEnv(env);}
- catch{fail("EXISTING_DAY_REGISTRY_CHILD_RELEASE_REFUSED");}
+ const day=(()=>{
+  try{return admitP5LaterRegistryChildEnv(env);}
+  catch{return fail("EXISTING_DAY_REGISTRY_CHILD_RELEASE_REFUSED");}
+ })();
  if(day!==v.runDayIndex||
     env.V39_P5_LATER_PRE_DAY_REGISTRY_SHA256!==v.registrySha256||
     env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256!==v.sourceDayRegistrySha256||
@@ -181,11 +183,11 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
   V39_P5_QUERY_DIGEST:entry.queryDigestSha256,
   V39_P5_LATER_PRE_T24_RECEIPT_SHA256:entry.t24ReceiptSha256??""
  };
- let approved:ReturnType<typeof admitP5SignedWitnessedLaterPre>;
- try{
-  approved=admitP5SignedWitnessedLaterPre(
-   delegated,entry.bytes,entry.packet,entry.filePath);
- }catch{fail("EXISTING_STAGE14_NATIVE_T_WITNESS_OR_PRE_ROLE_REFUSED");}
+ const approved=(()=>{
+  try{return admitP5SignedWitnessedLaterPre(
+   delegated,entry.bytes,entry.packet,entry.filePath);}
+  catch{return fail("EXISTING_STAGE14_NATIVE_T_WITNESS_OR_PRE_ROLE_REFUSED");}
+ })();
  if(approved.prePermit.horizon!==pins.expectedHorizon||
     approved.prePermit.flightInstanceId!==pins.expectedFlightInstanceId||
     approved.cutoffMs!==cutoff||
