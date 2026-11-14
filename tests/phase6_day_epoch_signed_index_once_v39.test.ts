@@ -150,10 +150,15 @@ function fixture(day=1,revision=1){
    if(sql.startsWith("SELECT COUNT(*)::integer AS n FROM phase6_private.signed_run_day_epoch_claim_v39"))
     return{rowCount:1,rows:[{n:0}]};
    if(sql.includes("SELECT run_day_index,revision,previous_index_sha256")){
+    const prior={
+      ...prevRow,
+      run_day_index:opts.wrongPriorDay?day+1:day,
+      retention_not_after_utc:
+       opts.shortPriorTTL?new Date("2026-11-14T02:45:00.000Z"):
+        prevRow.retention_not_after_utc
+    };
     const rows=mode==="reader"?
-      revision===1?[currentRow]:[
-       currentRow,{...prevRow,run_day_index:opts.wrongPriorDay?day+1:day}
-      ]:[prevRow];
+      revision===1?[currentRow]:[currentRow,prior]:[prior];
     return{rowCount:rows.length,rows};
    }
    if(sql.startsWith("INSERT INTO phase6_private.signed_run_day_index_revision_v39")){
@@ -254,6 +259,19 @@ describe("Signed day-epoch private reader and publisher — no provider/GO",()=>
    client:db.client,pins:a.pins,wire:a.wire,publicKeyPem:pem
   })).rejects.toThrow(/INDEX_ROW_UNKNOWN_EXPIRED_OR_CROSS_DAY/);
   expect(db.calls.some(x=>x.sql==="ROLLBACK")).toBe(true);
+ });
+ it("predecessor expiry cannot strand later same-day revision",async()=>{
+  const a=fixture(1,2);
+  const publisherDb=a.mocked("publisher",{shortPriorTTL:true});
+  await expect(publishP6DayEpochIndexRevisionOnce({
+    client:publisherDb.client,pins:a.pins,wire:a.wire,
+    publicKeyPem:pem,indexBytes:a.bytes,scope:a.scope
+  })).rejects.toThrow(/PREVIOUS_DAY_REVISION_SHA_OR_EXPIRY/);
+  expect(publisherDb.marks).toHaveLength(0);
+  const readerDb=a.mocked("reader",{shortPriorTTL:true});
+  await expect(readP6DayEpochIndexCurrentPriorOnce({
+    client:readerDb.client,pins:a.pins,wire:a.wire,publicKeyPem:pem
+  })).rejects.toThrow(/PREDECESSOR_EXPIRES_BEFORE_CURRENT_DAY_INDEX/);
  });
  it("unknown commit is never replayed or reported as success",async()=>{
   const a=fixture(),db=a.mocked("publisher",{unknownCommit:true});
