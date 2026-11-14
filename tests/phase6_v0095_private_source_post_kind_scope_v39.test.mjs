@@ -41,6 +41,6 @@ test("requires PG16 real owner/roles/empty table and no relaxed ACL",()=>{
   "phase6_private_frozen_reader_v39",
   "phase6_private_frozen_publisher_v39",
   "rolcanlogin","rolinherit","rolsuper",
-  "p5_v0095_PRIVATE_ACL_WEAKENED"
+  "P5_V0095_PRIVATE_ACL_WEAKENED"
  ])assert(sql.includes(name),name);
 });
