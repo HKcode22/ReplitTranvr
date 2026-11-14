@@ -114,7 +114,7 @@ function fixture({revision=2}={}){
      db:"neondb",version:160016,ro:"on",replica:false,
      actor:badRole?"neondb_owner":"phase6_private_frozen_reader_v39",
      login:"phase6_private_reader_login_ci_checks",
-     db_now:new Date(badClock?"2026-11-14T02:01:00Z":NOW),
+     db_now:new Date(badClock&&!first?"2026-11-14T02:01:00Z":NOW),
      select_index:true,insert_index:false,update_index:false,
      delete_index:false,select_packet:true,insert_packet:false,
      can_read:true,can_insert:false,can_update:false,can_delete:false,
