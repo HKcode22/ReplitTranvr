@@ -260,9 +260,11 @@ export async function runP6OnePrivateSourceOriginalGHChild(
    if(child.error||child.signal||child.status!==0)
     fail("ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
   });
+ const admission=options.runExistingAdmission??
+  runP6OneSourceThroughExistingP5ChildAdmission;
  let out;
  try{
-  out=await runP6OneSourceThroughExistingP5ChildAdmission({
+  out=await admission({
    indexHandoff:index,
    sourcePacketReceipt:packet,
    expectedRoutingIntentSha256:gate.routingIntentSha256,
