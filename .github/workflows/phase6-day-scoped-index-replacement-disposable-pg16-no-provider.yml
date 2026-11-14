@@ -63,6 +63,7 @@ jobs:
       PGDATABASE: 'neondb'
       P6_DAY_EPOCH_DISPOSABLE_TEST_ONLY: '1'
       P6_TEST_DATABASE_URL: 'postgresql://neondb_owner:ci-only-day-epoch@127.0.0.1:5432/neondb?sslmode=disable'
+      P6_TEST_RESTRICTED_PUBLISHER_DATABASE_URL: 'postgresql://ci_phase6_epoch_publisher:ci-only-epoch-pub@127.0.0.1:5432/neondb?sslmode=disable'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,5 +101,12 @@ jobs:
           export PGPASSWORD=ci-only-day-epoch
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/PHASE6_DAY_SCOPED_INDEX_REPLACEMENT_CANDIDATE_NOT_FOR_INSTALL.sql
+          # Create an isolated CI-only LOGIN AFTER the schema preflight.
+          # Its only capability is SET ROLE to the original NOLOGIN
+          # publisher group. Never commission this role on production.
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE ci_phase6_epoch_publisher LOGIN NOINHERIT PASSWORD 'ci-only-epoch-pub'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "GRANT phase6_private_frozen_publisher_v39 TO ci_phase6_epoch_publisher WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
           node tests/phase6_day_scoped_index_disposable_pg16_v39.mjs
           echo 'DAY_SCOPED_INDEX_DISPOSABLE_PG16_NO_PRODUCTION_NO_PAID_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
