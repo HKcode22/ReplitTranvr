@@ -144,6 +144,7 @@ jobs:
                 kp.privateKey).toString("base64")};
               const pins={
                 privateSourcePostReadOnlyApproved:true,
+                independentExternalReviewerSignaturePinsApproved:true,
                 expectedKind:kind,expectedLogicalPath:logicalPath,
                 expectedContentSha256:sha(payload),
                 expectedReviewedMainSha:"a".repeat(40),
