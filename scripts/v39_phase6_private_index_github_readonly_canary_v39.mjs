@@ -122,11 +122,18 @@ export function admitP6GithubRestrictedIndexCanary(env){
  let u;
  try{u=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");}
  catch{return fail("SCOPED_PRIVATE_PG16_READER_URL_ABSENT");}
+ const allowedParams=new Set(["sslmode","channel_binding"]);
  if(!["postgresql:","postgres:"].includes(u.protocol)||
     decodeURIComponent(u.username)!==pins.expectedReaderSessionLogin||
-    !u.password||!u.hostname||u.pathname!=="/neondb"||
-    u.hash||u.searchParams.get("sslmode")!=="require"||
-    u.searchParams.has("options"))
+    !u.password||!u.hostname.endsWith(".neon.tech")||
+    (u.port!==""&&u.port!=="5432")||
+    u.pathname!=="/neondb"||u.hash||
+    u.searchParams.getAll("sslmode").length!==1||
+    u.searchParams.get("sslmode")!=="require"||
+    (u.searchParams.has("channel_binding")&&
+      (u.searchParams.getAll("channel_binding").length!==1||
+       u.searchParams.get("channel_binding")!=="require"))||
+    [...u.searchParams.keys()].some(k=>!allowedParams.has(k)))
   fail("CROSS_ROLE_OR_NON_SSL_PRIVATE_NEONDB_LOGIN");
  return notSecret({
   schema:P6_GH_PRIVATE_READONLY_CANARY_SCHEMA,
