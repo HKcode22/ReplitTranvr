@@ -145,8 +145,12 @@ export async function hydrateP6PrivateIndexAndRegistryBytesOnce({
   const oldClock=strictUtc(index.redactedSummary.observedRestrictedPgClockUtc);
   if(now<oldClock||now-oldClock>30*1000||
      now>=strictUtc(indexReviewWire.review.validUntilUtc)||
-     now>=strictUtc(indexReviewWire.review.retentionNotAfterUtc))
-   fail("SOURCE_INDEX_READ_EXPIRED_OR_INCONSISTENT_PG_CLOCK");
+     now>=strictUtc(indexReviewWire.review.retentionNotAfterUtc)||
+     current.entries.some(e=>
+       strictUtc(e.publishedAtUtc)>now||
+       strictUtc(e.publishedAtUtc)>
+         strictUtc(indexReviewWire.review.reviewedAtUtc)))
+   fail("SOURCE_INDEX_READ_EXPIRED_OR_CHRONOLOGICALLY_IMPOSSIBLE");
   let readBytes=0,readRows=0;
   const stored=new Map();
   const entries=current.entries;
