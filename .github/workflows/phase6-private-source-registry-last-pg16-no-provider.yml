@@ -1,0 +1,213 @@
+name: Phase6 external SOURCE day-registry LAST publisher (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase6PrivateSourceRegistryLastPublisher_v39.mjs'
+      - 'tests/phase6_private_source_registry_last_publisher_v39.test.mjs'
+      - '.github/workflows/phase6-private-source-registry-last-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+jobs:
+  offline-ed25519-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Offline signature, ordering, 96-entry bounds and unknown COMMIT tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          test "$ADB_AUTO_COLLECT" = '0'
+          node --test tests/phase6_private_source_registry_last_publisher_v39.test.mjs
+          echo 'P6_EXTERNAL_SOURCE_REGISTRY_LAST_OFFLINE_PASS_NO_PROVIDER'
+  actual-disposable-pg16-registry-last:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      PGSYNTH: 'ci-only-owner-not-production'
+      DATABASE_URL: 'postgresql://phase6_private_publisher_login_ci_checks:ci-only-publisher-not-production@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install V0094 then V0095 only in throwaway non-superuser PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-owner-not-production'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD="$PGSYNTH"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_publisher_login_ci_checks LOGIN NOINHERIT PASSWORD 'ci-only-publisher-not-production'"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c 'GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_checks WITH INHERIT FALSE, SET TRUE'
+      - name: Publish two synthetic query packets then exact externally signed registry LAST
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {createHash,generateKeyPairSync,sign} from "node:crypto";
+          import {
+            publishP6SourceDayRegistryLastOnce,
+            sourceDayRegistryReviewPreimage,
+            P6_PRIVATE_SOURCE_REGISTRY_REVIEW_SCHEMA
+          } from "./server/lib/disruption/phase6PrivateSourceRegistryLastPublisher_v39.mjs";
+          const hash=b=>createHash("sha256").update(b).digest("hex");
+          const key=generateKeyPairSync("ed25519");
+          const pub=key.publicKey.export({format:"pem",type:"spki"}).toString();
+          const fp=hash(key.publicKey.export({format:"der",type:"spki"}));
+          const owner=new pg.Client({connectionString:
+            "postgresql://neondb_owner:ci-only-owner-not-production@127.0.0.1:5432/neondb?sslmode=disable"});
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          const now=Date.now(),at=new Date(now-60000).toISOString();
+          const expiry=new Date(now+86400000).toISOString();
+          const valid=new Date(now+3600000).toISOString();
+          const registryPath="data-collection/phase5/frozen/source_abcdefgh123.json";
+          await owner.connect();await client.connect();
+          try{
+            const entries=[];
+            for(const id of ["abcdefgh123","ijklmnop456"]){
+              const path="data-collection/phase5/frozen/sourceq_"+id+".json";
+              const bytes=Buffer.from(JSON.stringify({
+                schema:"CI_SYNTHETIC_PRIVATE_SOURCE_QUERY",
+                samples:"x".repeat(180),id
+              }));
+              const contentSha=hash(bytes);
+              const digest=hash(Buffer.from("CI-only-query-"+id));
+              entries.push({
+                filePath:path,expectedPacketSha256:contentSha,
+                expectedQueryDigestSha256:digest
+              });
+              await owner.query(
+                "INSERT INTO phase6_private.frozen_native_packet_v39"+
+                " (logical_path,run_day_index,shard_index,kind,content_sha256,"+
+                "reviewed_code_sha,manifest_sha256,rights_sha256,"+
+                "external_review_sha256,externally_reviewed_at_utc,"+
+                "retention_not_after_utc,payload_bytes)"+
+                " VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+                [path,1,1,"SOURCE_QUERY_PACKET",contentSha,
+                 "7".repeat(40),"b".repeat(64),"a".repeat(64),
+                 "3".repeat(64),at,expiry,bytes]
+              );
+            }
+            const registry={
+              schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",
+              manifestSha256:"b".repeat(64),
+              runDayIndex:1,entries
+            };
+            const registryBytes=Buffer.from(JSON.stringify(registry));
+            const review={
+              schema:P6_PRIVATE_SOURCE_REGISTRY_REVIEW_SCHEMA,
+              audience:"HKcode22/ReplitTranvr:PHASE6_SOURCE_DAY_REGISTRY_REVIEW_ONLY",
+              logicalPath:registryPath,registrySha256:hash(registryBytes),
+              manifestSha256:"b".repeat(64),
+              calendarSha256:"c".repeat(64),
+              releaseSha256:"d".repeat(64),
+              rightsSha256:"a".repeat(64),
+              reviewedCodeSha:"7".repeat(40),
+              externalReviewEvidenceSha256:"3".repeat(64),
+              entriesDigestSha256:hash(Buffer.from(JSON.stringify(entries))),
+              runDayIndex:1,shardIndex:1,reviewedAtUtc:at,
+              validUntilUtc:valid,retentionNotAfterUtc:expiry,
+              reviewerPublicKeyFingerprintSha256:fp
+            };
+            const reviewWire={review,signatureBase64:sign(null,
+              sourceDayRegistryReviewPreimage(review),
+              key.privateKey).toString("base64")};
+            const pins={
+              independentExternalReviewerSignaturePinsApproved:true,
+              expectedRegistryPath:registryPath,
+              expectedRegistrySha256:hash(registryBytes),
+              expectedManifestSha256:"b".repeat(64),
+              expectedCalendarSha256:"c".repeat(64),
+              expectedReleaseSha256:"d".repeat(64),
+              expectedRightsSha256:"a".repeat(64),
+              expectedReviewedMainSha:"7".repeat(40),
+              expectedReviewEvidenceSha256:"3".repeat(64),
+              expectedEntriesDigestSha256:hash(Buffer.from(JSON.stringify(entries))),
+              expectedReviewerPublicKeyFingerprintSha256:fp,
+              expectedRunDayIndex:1,expectedShardIndex:1
+            };
+            const scope={
+              privateSourceRegistryLastPublicationApproved:true,
+              externallyReviewedContentsUseApproved:true,
+              existingPaidSourceDispatchApproved:false,
+              adbAutoCollect:"0",phase6ProcessArmed:"0",
+              expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_checks",
+              approvedRetentionNotAfterUtc:expiry,
+              approvedCodeSha:"7".repeat(40),
+              approvedManifestSha256:"b".repeat(64),
+              approvedCalendarSha256:"c".repeat(64),
+              approvedReleaseSha256:"d".repeat(64),
+              approvedRightsSha256:"a".repeat(64)
+            };
+            await client.query("SET ROLE phase6_private_frozen_publisher_v39");
+            const args={client,registryBytes,reviewWire,
+              reviewerPublicKeyPem:pub,pins,scope};
+            const outcome=await publishP6SourceDayRegistryLastOnce(args);
+            assert.equal(outcome.appendOnlyRegistryInsertedLast,true);
+            assert.equal(outcome.boundSourceQueryPacketCount,2);
+            assert.equal(outcome.phase6PaidGo,false);
+            await assert.rejects(publishP6SourceDayRegistryLastOnce(args),
+              /SOURCE_REGISTRY_ALREADY_COMMITTED_NEVER_REPLAY/);
+            const rows=await owner.query(
+              "SELECT kind,COUNT(*)::integer AS n FROM phase6_private.frozen_native_packet_v39 GROUP BY kind"
+            );
+            const count=Object.fromEntries(rows.rows.map(r=>[r.kind,r.n]));
+            assert.equal(count.SOURCE_QUERY_PACKET,2);
+            assert.equal(count.SOURCE_DAY_REGISTRY,1);
+            console.log(JSON.stringify({
+              status:"DISPOSABLE_PG16_SOURCE_REGISTRY_LAST_PASS",
+              syntheticQueries:2,registryRows:1,
+              providerCalls:0,productionDatabaseWrites:0,paidPhase6Go:false
+            }));
+          }finally{await client.end();await owner.end();}
+          JS
