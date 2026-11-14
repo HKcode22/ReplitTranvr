@@ -34,10 +34,11 @@ const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 function utc(value:unknown){
  if(typeof value!=="string")
   fail("UNVERIFIED_ACTUAL_DB_CLOCK_OR_NATIVE_T");
- if(!ISO.test(value)||!Number.isFinite(Date.parse(value))||
-    new Date(value).toISOString()!==value)
+ const exact=value as string;
+ if(!ISO.test(exact)||!Number.isFinite(Date.parse(exact))||
+    new Date(exact).toISOString()!==exact)
   fail("UNVERIFIED_ACTUAL_DB_CLOCK_OR_NATIVE_T");
- return Date.parse(value);
+ return Date.parse(exact);
 }
 function hidden(obj:unknown,name:string){
  if(!obj||typeof obj!=="object")return false;
