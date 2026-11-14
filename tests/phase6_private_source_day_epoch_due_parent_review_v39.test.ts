@@ -110,9 +110,27 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
   }>;
   expect(selected.map(x=>x.runDayIndex)).toEqual([1,1,2,2]);
   expect(selected[0].childInputShape.private_transport).toBe("true");
-  expect(selected[0].childInputShape.query_digest).toBe(f.secrets.q2);
+  expect(selected.map(x=>x.childInputShape.query_digest).sort()).toEqual(
+   [f.secrets.q2,f.secrets.q3,f.secrets.q4,f.secrets.q5].sort());
   expect(selected.every(x=>x.existingChildWorkflow===
    "phase5-one-signed-day-source-child-dispatch.yml")).toBe(true);
+ });
+ it("prioritizes earliest actual DB cutoff over signed registry order and reports explicit deferral",()=>{
+  const f=fixture();
+  f.history.total_count=0;f.history.workflow_runs=[];
+  // All five are valid and due; the last registry entry has earliest
+  // actual cutoff so must not be dropped merely because it was appended last.
+  f.sourceObserver.candidates[4].latestDispatchUtc=
+   "2026-11-14T06:35:00.000Z";
+  const r=reviewP6PrivateDaySourceDueParentNoDispatch(f.input());
+  expect(r.redactedSummary.candidateCount).toBe(4);
+  expect(r.redactedSummary.eligibleDueUnsubmitted).toBe(5);
+  expect(r.redactedSummary.deferredDueCount).toBe(1);
+  const selected=(r as any).privateChildProposals as Array<{
+   queryDigestSha256:string
+  }>;
+  expect(selected[0].queryDigestSha256).toBe(f.secrets.q5);
+  expect(r.redactedSummary.githubDispatches).toBe(0);
  });
  it("honestly skips source registry queries outside the observed rolling DB queue window",()=>{
   const f=fixture();
