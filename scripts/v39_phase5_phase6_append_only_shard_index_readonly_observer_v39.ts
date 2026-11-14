@@ -184,9 +184,33 @@ export async function runP5Phase6ShardIndexReadOnlyObserver(
   ownerAuthorizationOrPaidGoGranted:false as const
  };
 }
+/**
+ * GitHub Actions logs must never expose frozen flight packet logical paths.
+ * The internal in-process return value is unchanged for existing code; only
+ * the owner-visible operational log is a deliberately redacted projection.
+ */
+export function redactP5Phase6ActualShardObserverForPublicLog(
+ result:Awaited<ReturnType<typeof runP5Phase6ShardIndexReadOnlyObserver>>
+){
+ if(result.status!=="P5_PHASE6_ACTUAL_CLOCK_PINNED_SHARDS_READONLY_NO_DISPATCH"||
+    result.autonomousDayShardHandoffSummary?.phase6PaidGo!==false||
+    result.autonomousDayShardHandoffSummary?.githubChildDispatches!==0||
+    result.autonomousDayShardHandoffSummary?.providerCalls!==0||
+    result.autonomousDayShardHandoffSummary?.actualDatabaseWriteCount!==0)
+  HOLD("UNVERIFIED_OWNER_LOG_PROJECTION");
+ return {
+  status:result.status,
+  approvedCodeSha:result.approvedCodeSha,
+  ...result.autonomousDayShardHandoffSummary,
+  originalSignedFrozenPacketPathsLogged:false,
+  independentPerFlightAdmissionStillRequired:true,
+  actualSourceRoleClockRequired:true,
+  actualPaidSourceOrPostResultHere:false
+ };
+}
 if(process.env.P5_SHARD_INDEX_RO_EXECUTE==="1")
  runP5Phase6ShardIndexReadOnlyObserver(process.env).then(x=>{
-  console.log(JSON.stringify(x));
+  console.log(JSON.stringify(redactP5Phase6ActualShardObserverForPublicLog(x)));
  }).catch(e=>{
   const code=e instanceof Error?e.message:"";
   console.error(/^REFUSED_P5_PHASE6_[A-Z0-9_]+$/.test(code)?
