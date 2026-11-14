@@ -22,6 +22,7 @@ on:
       - '.github/workflows/phase5-phase6-append-only-day-shard-dbclock-readonly.yml'
       - 'scripts/v39_phase5_phase6_append_only_shard_index_readonly_observer_v39.ts'
       - 'server/lib/disruption/phase5Phase6AppendOnlyDayShardIndex_v39.ts'
+      - 'server/lib/disruption/phase6SignedThirtyOneDayShardHandoff_v39.ts'
       - 'tests/phase5_phase6_append_only_shard_index_readonly_observer_v39.test.ts'
       - 'tests/phase5_phase6_append_only_day_shard_index_v39.test.ts'
 permissions:
