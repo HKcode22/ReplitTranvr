@@ -63,7 +63,7 @@ export function signedP6PrivateSourcePostReviewBytes(review){
 }
 export function verifyP6ExternalSourcePostReview(wire,publicKeyPem,pins){
  const rev=wire?.review;
- if(!pins||pins.privateSourcePostReadOnlyApproved!==true||
+ if(!pins||pins.independentExternalReviewerSignaturePinsApproved!==true||
     !exactShape(wire,["review","signatureBase64"])||
     !exactShape(rev,[
      "schema","audience","kind","logicalPath","contentSha256",
@@ -136,6 +136,8 @@ export async function readP6PrivateSourcePostOnce(
  client,pins,wire,publicKeyPem
 ){
  if(!client||typeof client.query!=="function")fail("NO_RESTRICTED_DB_CLIENT");
+ if(!pins||pins.privateSourcePostReadOnlyApproved!==true)
+  fail("EXPLICIT_PRIVATE_READER_SCOPE_REQUIRED");
  // No SQL before verifying externally pinned identity and signature.
  const external=verifyP6ExternalSourcePostReview(
   wire,publicKeyPem,pins);
