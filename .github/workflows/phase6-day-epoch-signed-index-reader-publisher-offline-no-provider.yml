@@ -1,0 +1,113 @@
+name: Phase6 day-epoch signed-index real cryptographic reader and publisher (OFFLINE NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
+      - 'tests/phase6_day_epoch_signed_index_once_v39.test.ts'
+      - 'tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs'
+      - '.github/workflows/phase6-day-epoch-signed-index-reader-publisher-offline-no-provider.yml'
+permissions:
+  contents: read
+env:
+  CI: 'true'
+  DATABASE_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  P6_PRIVATE_READER_DATABASE_URL: ''
+  P6_PRIVATE_SOURCE_TRANSPORT_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+jobs:
+  signed-day-epoch-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Real Ed25519 signature and no-provider simulated PG index transaction
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          node --check server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs
+          npx --no-install vitest run tests/phase6_day_epoch_signed_index_once_v39.test.ts
+          echo 'P6_DAY_EPOCH_ED25519_SHA_PG_ACL_OFFLINE_NO_PAID_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
+
+  real-restricted-postgres16-signed-day-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY: '1'
+      P6_REAL_DISPOSABLE_OWNER_URL: 'postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install original V0094+V0095 and candidate day-index ONLY IN DISPOSABLE PG16
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$CI" = true
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD=ci-only-day-real
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/PHASE6_DAY_SCOPED_INDEX_REPLACEMENT_CANDIDATE_NOT_FOR_INSTALL.sql
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_publisher_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-pub'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_reader_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-read'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_epoch WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_epoch WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+      - name: Actual signed Ed25519 day1/day31 postgres publish read and old-day byte deletion STOP
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs
+          echo 'P6_DAY_EPOCH_SIGNED_RESTRICTED_REAL_PG16_NO_PROVIDER_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
