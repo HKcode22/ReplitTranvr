@@ -185,6 +185,31 @@ function fixture(horizon:"T-6h"|"T-90m"="T-6h"){
  return {args,entry,indexHandoff,hydrated,env,route,bytes,
   sourceBytes,laterBytes,cutoff,pgAt};
 }
+function dayEpoch(f:ReturnType<typeof fixture>){
+ const bytes=f.indexHandoff.privateRegistryBytes as Map<string,Buffer>;
+ const signedDaySha=H("4");
+ f.indexHandoff.redactedSummary={
+  schema:"v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1",
+  status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",
+  runDayIndex:4,externallySignedDayEpochIndexSha256:signedDaySha,
+  reviewedEd25519SourceWasOriginalDayBytes:true,
+  originalV0096GlobalChainNotUsed:true,
+  derivedProjectionIsNotAnAdditionalReviewerSignature:true,
+  actualIndividualChildPaidReleaseDone:false,
+  observedRealPgClockUtc:new Date(f.cutoff-61*60000).toISOString(),
+  phase6PaidGo:false,providerCalls:0,databaseWrites:0,
+  githubChildDispatches:0
+ };
+ Object.defineProperty(f.indexHandoff,"getFrozen",{
+  enumerable:false,writable:false,value:(path:string)=>{
+   const raw=bytes.get(path);
+   if(!raw)throw Error("CI_PRIVATE_DAY_REGISTRY_ABSENT");
+   return Buffer.from(raw);
+  }
+ });
+ f.args.pins.expectedDayEpochIndexSha256=signedDaySha;
+ return f;
+}
 function run(f:ReturnType<typeof fixture>){
  return admitP6OneVerifiedPrivateLaterPreToExistingStage14(f.args);
 }
@@ -257,5 +282,37 @@ describe("Phase6 exact V0096 LATER_PRE route into original Stage14 without SQL/R
   expect(()=>run(f)).toThrow("NO_UNIQUE_DUE_SIGNED_LATER_FLIGHT");
   const g=fixture();g.args.indexHandoff.privateRoutingCandidates[0].lane="POST";
   expect(()=>run(g)).toThrow("SOURCE_REGISTRY_DAY_SHARD_OR_SIGNED_ROUTE_DRIFT");
+ });
+});
+
+describe("NEW authenticated per-day Ed25519 PRE: original Stage14 unchanged (NO GO)",()=>{
+ it.each(["T-6h","T-90m"] as const)(
+  "accepts actual reviewed day-epoch registry for %s and reuses T24 native cutoff/Stage14",h=>{
+   const f=dayEpoch(fixture(h)),out=run(f);
+   expect(out.redactedSummary.horizon).toBe(h);
+   expect(out.redactedSummary.originalPhase5SignedRegistryAndStage14GatesUsed).toBe(true);
+   expect(out.redactedSummary.sqlWrites).toBe(0);
+   expect(out.redactedSummary.phase6PaidGo).toBe(false);
+   expect(JSON.stringify(out)).not.toContain(FLIGHT);
+   expect(JSON.stringify(out)).not.toContain("ci-pre");
+  });
+ it("rejects wrong externally signed day index SHA and cross-day flight",()=>{
+  const a=dayEpoch(fixture());
+  a.args.pins.expectedDayEpochIndexSha256=H("8");
+  expect(()=>run(a)).toThrow("UNVERIFIED_SIGNED_PRIVATE_INDEX_HANDOFF");
+  const b=dayEpoch(fixture());
+  b.indexHandoff.redactedSummary.runDayIndex=5;
+  expect(()=>run(b)).toThrow("SOURCE_REGISTRY_DAY_SHARD_OR_SIGNED_ROUTE_DRIFT");
+ });
+ it("refuses changed exact private SOURCE bytes, missing path, or unsigned getter",()=>{
+  const a=dayEpoch(fixture());
+  a.indexHandoff.privateRegistryBytes.set(SOURCE,Buffer.from("changed"));
+  expect(()=>run(a)).toThrow("PRIVATE_SOURCE_OR_LATER_REGISTRY_SHA_CHANGED");
+  const b=dayEpoch(fixture());
+  b.indexHandoff.privateRegistryBytes.delete(LATER);
+  expect(()=>run(b)).toThrow("PRIVATE_SOURCE_OR_LATER_REGISTRY_LOOKUP_REFUSED_REDACTED");
+  const c=dayEpoch(fixture());
+  c.indexHandoff.redactedSummary.derivedProjectionIsNotAnAdditionalReviewerSignature=false;
+  expect(()=>run(c)).toThrow("UNVERIFIED_SIGNED_PRIVATE_INDEX_HANDOFF");
  });
 });
