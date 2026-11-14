@@ -1,0 +1,44 @@
+name: Phase6 verified private SOURCE query registry in-memory binding (NO PROVIDER NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-private-source-query-binding-offline-no-provider.yml'
+      - 'server/lib/disruption/phase6PrivateSourceQueryBindingInMemory_v39.mjs'
+      - 'server/lib/disruption/phase6PrivateSourceChildEphemeralPair_v39.mjs'
+      - 'tests/phase6_private_source_query_binding_inmemory_v39.test.mjs'
+      - 'tests/phase6_private_source_ephemeral_existing_child_pair_v39.test.mjs'
+      - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_SOURCE_QUERY_EXACT_REGISTRY_BINDING_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source-query-no-paid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Assert offline read-only test context
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$GITHUB_TOKEN"
+          node --test tests/phase6_private_source_query_binding_inmemory_v39.test.mjs tests/phase6_private_source_ephemeral_existing_child_pair_v39.test.mjs
+          echo 'Phase6 SOURCE one-query registry binding tested OFFLINE; no signed production packet, database write, provider call or paid GO.' >> "$GITHUB_STEP_SUMMARY"
