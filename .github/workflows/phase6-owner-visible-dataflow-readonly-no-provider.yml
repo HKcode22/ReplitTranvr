@@ -86,12 +86,21 @@ jobs:
           CREATE TABLE clean.provider_content_blob_ref (
             expires_at_utc timestamptz NOT NULL,
             deletion_verified_at_utc timestamptz,
-            persisted_at_utc timestamptz NOT NULL
+            persisted_at_utc timestamptz NOT NULL,
+            deleted_at_utc timestamptz
           );
+          CREATE TABLE clean.adb_phase6_calendar_day (
+            run_day_index integer NOT NULL
+          );
+          INSERT INTO clean.adb_phase6_calendar_day VALUES(1),(2);
           INSERT INTO clean.phase5_cd_pre_task_v39 VALUES
             ('READY',clock_timestamp()),('MISSED',clock_timestamp());
           INSERT INTO clean.provider_content_blob_ref
-            VALUES(clock_timestamp()-interval '1 day',NULL,clock_timestamp()-interval '2 days');
+            VALUES
+              (clock_timestamp()-interval '35 days',NULL,
+               clock_timestamp()-interval '40 days',NULL),
+              (clock_timestamp()-interval '1 day',NULL,
+               clock_timestamp()-interval '2 days',clock_timestamp()-interval '12 hours');
           SQL
           node --input-type=module <<'JS'
           import assert from "node:assert/strict";
@@ -108,8 +117,14 @@ jobs:
             assert(events.some(e=>e.stage==="PRE SNAPSHOTS"&&e.status==="ABSENT_NOT_A_ZERO"));
             assert(events.some(e=>e.stage==="PRE QUEUE"&&e.preQueueStateCounts?.some(
               s=>s.state==="READY"&&s.count===1)));
+            assert(events.some(e=>e.stage==="B0062 CALENDAR"&&
+              e.status==="EXACT_ROWS_ALL_TIME_UNDER_CAP_NO_CLOCK"&&
+              e.allTimeSample?.rowsSampled===2));
             assert(events.some(e=>e.stage==="PROVIDER BLOB EXPIRY"&&
-              e.expiredProviderBlobReview?.sampledExpiredUnverified===1));
+              e.expiredProviderBlobReview?.sampledExpiredUnverified===2&&
+              e.expiredProviderBlobReview?.noDeletionMarker===1&&
+              e.expiredProviderBlobReview?.deletionMarkedButUnverified===1&&
+              e.expiredProviderBlobReview?.referencePersistedMoreThan31DaysAgo===1));
             const summary=events.find(e=>e.event==="RUN_SUMMARY");
             assert(summary&&summary.databaseWrites===0&&summary.providerCalls===0);
             assert(!JSON.stringify(events).includes("synthetic"));
