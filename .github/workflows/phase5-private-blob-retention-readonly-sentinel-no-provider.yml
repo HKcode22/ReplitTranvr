@@ -1,0 +1,145 @@
+name: Phase5 private provider-blob retention sentinel (READ ONLY, STOP DEFAULT)
+on:
+  # Separate from existing GitHub-only controller heartbeat, which has
+  # deliberately no PG credentials. Remains SKIPPED until a dedicated
+  # restricted PG16 reader is commissioned and reviewed.
+  schedule:
+    - cron: '19 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs'
+      - 'tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs'
+      - '.github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml'
+      - 'data-collection/phase5/2026-11-14_P0_RETENTION_RECURRING_SENTINEL_STAGED_NO_GO.md'
+permissions:
+  contents: read
+concurrency:
+  group: p5-retention-metadata-sentinel-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+jobs:
+  disposable-pg16-readonly-no-production:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      P5_RETENTION_SENTINEL_DISPOSABLE_TEST_URL: 'postgresql://p5_retention_test_reader:p5test@127.0.0.1:5432/neondb?sslmode=disable'
+      P5_RETENTION_SENTINEL_DISPOSABLE_ADMIN_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable'
+      P5_RETENTION_EXPECTED_READER_ROLE: 'p5_retention_test_reader'
+      P5_RETENTION_READER_DATABASE_URL: ''
+      P5_RETENTION_MONITOR_EXECUTE: '0'
+      P5_RETENTION_APPROVED_MAIN_SHA: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install disposable PG16 metadata and SELECT-only role
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test -z "$P5_RETENTION_READER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          PGPASSWORD=postgres psql \
+            -h 127.0.0.1 -U postgres -d neondb \
+            -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.provider_content_blob_ref(
+            expires_at_utc timestamptz NOT NULL,
+            deletion_verified_at_utc timestamptz,
+            content_class text NOT NULL,
+            storage_kind text NOT NULL,
+            retention_hours integer NOT NULL
+          );
+          INSERT INTO clean.provider_content_blob_ref VALUES
+            (clock_timestamp()-interval '10 days',NULL,'raw_provider_content','replit_app_storage',168),
+            (clock_timestamp()-interval '30 minutes',NULL,'live_fids_cache','replit_app_storage',24),
+            (clock_timestamp()+interval '12 hours',NULL,'raw_provider_content','replit_app_storage',168),
+            (clock_timestamp()-interval '1 day',clock_timestamp(),'raw_provider_content','replit_app_storage',168);
+          CREATE ROLE p5_retention_test_reader LOGIN NOSUPERUSER NOCREATEDB
+            NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD 'p5test';
+          GRANT CONNECT ON DATABASE neondb TO p5_retention_test_reader;
+          GRANT USAGE ON SCHEMA clean TO p5_retention_test_reader;
+          GRANT SELECT ON clean.provider_content_blob_ref TO p5_retention_test_reader;
+          SQL
+      - name: Real disposable restricted actor, DB READ ONLY, no owner privileges
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --test tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs
+          echo 'P5_RETENTION_SENTINEL_DISPOSABLE_PG16_READONLY_PASS_NO_PROVIDER_NO_DELETE'
+  private-main-restricted-metadata-sentinel:
+    if: >-
+      ${{
+        github.ref == 'refs/heads/main' &&
+        vars.P5_RETENTION_READONLY_MONITOR_ENABLED == 'true' &&
+        (github.event_name == 'schedule' ||
+         (github.event_name == 'workflow_dispatch' &&
+          inputs.confirm == 'READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE'))
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      P5_RETENTION_MONITOR_EXECUTE: '1'
+      P5_RETENTION_APPROVED_MAIN_SHA: ${{ github.sha }}
+      P5_RETENTION_READER_DATABASE_URL: ${{ secrets.P5_RETENTION_READER_DATABASE_URL }}
+      P5_RETENTION_EXPECTED_READER_ROLE: ${{ vars.P5_RETENTION_EXPECTED_READER_ROLE }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: STOP unless dedicated restricted SELECT-only login, exact main and nonpaid-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          test -n "$P5_RETENTION_READER_DATABASE_URL"
+          test -n "$P5_RETENTION_EXPECTED_READER_ROLE"
+      - name: Count ONLY expired/near-due PG metadata; fail on overdue
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs
+          echo 'P5_RETENTION_READONLY_SENTINEL_NO_DELETE_NO_PROVIDER_NO_PAID_GO'
