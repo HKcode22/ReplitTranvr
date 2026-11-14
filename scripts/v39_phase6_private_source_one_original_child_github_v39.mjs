@@ -204,6 +204,24 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
 }
 
 /**
+ * The private V0096/V0095 reader exists solely in the parent. Never forward
+ * its LOGIN, signed review wires or immutable route selectors to the paid
+ * source GET process; the original Phase5 child needs only its OWN SOURCE
+ * login/authorities and the already-admitted two ephemeral frozen files.
+ */
+export function isolatedP6OriginalOneGetChildEnv(parentEnv){
+ if(!parentEnv||typeof parentEnv!=="object")
+  fail("NO_PARENT_ENV_FOR_LEAST_PRIVILEGE_CHILD");
+ const child={...parentEnv};
+ for(const key of Object.keys(child)){
+  if(key.startsWith("P6_PRIVATE_"))
+   delete child[key];
+ }
+ child.P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT="1";
+ return child;
+}
+
+/**
  * Run ONE original child, never automatically retry an ambiguous physical
  * provider GET/credit reservation or child failure. The reader is CLOSED
  * before allowing the existing paid worker to see/provider-use any bytes.
@@ -256,7 +274,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
    ],{
     shell:false,stdio:["ignore","pipe","pipe"],
     maxBuffer:10*1024*1024,timeout:145*60000,
-    env:{...env,P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT:"1"}
+    env:isolatedP6OriginalOneGetChildEnv(env)
    });
    if(child.error||child.signal||child.status!==0)
     fail("ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
