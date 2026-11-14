@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
+      - 'server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs'
       - 'tests/phase6_day_epoch_signed_index_once_v39.test.ts'
       - 'tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs'
       - '.github/workflows/phase6-day-epoch-signed-index-reader-publisher-offline-no-provider.yml'
@@ -42,6 +43,7 @@ jobs:
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           node --check server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs
+          node --check server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs
           npx --no-install vitest run tests/phase6_day_epoch_signed_index_once_v39.test.ts
           echo 'P6_DAY_EPOCH_ED25519_SHA_PG_ACL_OFFLINE_NO_PAID_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
 
