@@ -14,33 +14,38 @@ const SHA=/^[a-f0-9]{40}$/;
 const WF=/^[a-z0-9][a-z0-9-]{5,110}\.yml$/;
 const REPO="HKcode22/ReplitTranvr";
 const ROOT="https://api.github.com/repos/"+REPO;
-const MAX_AGE_MINUTES=90;
+const MAX_AGE_MINUTES=90; // Default 5/10 minute cron + GitHub jitter
 const MAX_PER_WORKFLOW=15;
 const fail=s=>{throw Error("HOLD_P6_AUTO_HEARTBEAT_"+s);};
 export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
  {
   lane:"EARLY_DRAW",
   workflow:"phase5-six-slot-approved-early-four-airport-draw.yml",
+  maxExpectedGapMinutes:330, // Six UTC slots, 4h cadence + 90m jitter
   purpose:"Six-hour UTC early selection of genuine future four-airport cohorts"
  },
  {
   lane:"SOURCE",
   workflow:"phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+  maxExpectedGapMinutes:90,
   purpose:"Ten-minute signed upcoming source + SOURCE child review"
  },
  {
   lane:"PRE",
   workflow:"phase5-cd-github-bounded-pre-tick.yml",
+  maxExpectedGapMinutes:90,
   purpose:"Five-minute existing V0092 signed-roster T24/T6/T90 PRE lease"
  },
  {
   lane:"PRE_RECOVERY",
   workflow:"phase5-cd-github-existing-queue-lease-watchdog.yml",
+  maxExpectedGapMinutes:90,
   purpose:"Five-minute existing V0087 lease/watchdog reconciliation"
  },
  {
   lane:"DAY_SHARD_SELECTOR",
   workflow:"phase5-phase6-append-only-day-shard-dbclock-readonly.yml",
+  maxExpectedGapMinutes:90,
   purpose:"Append-only rolling 31-day SOURCE/later-PRE/POST signed index observer"
  }
 ]);
@@ -70,7 +75,10 @@ export function reviewP6OneScheduledController(
  lane,latestRuns,observedAtUtc
 ){
  if(!lane||!WF.test(lane.workflow??"")||
-    typeof lane.lane!=="string"||!Array.isArray(latestRuns)||
+    typeof lane.lane!=="string"||
+    !Number.isSafeInteger(lane.maxExpectedGapMinutes)||
+    lane.maxExpectedGapMinutes<30||lane.maxExpectedGapMinutes>360||
+    !Array.isArray(latestRuns)||
     latestRuns.length>MAX_PER_WORKFLOW)fail("UNREVIEWED_LANE_OR_UNBOUNDED_HISTORY");
  const clock=stamp(observedAtUtc,"OBSERVATION_CLOCK");
  const rows=[];const seen=new Set();
@@ -106,13 +114,15 @@ export function reviewP6OneScheduledController(
  }
  let state;
  if(!last)state="NO_SCHEDULE_RUN_OBSERVED";
- else if(last.ageMinutes>MAX_AGE_MINUTES)state="SCHEDULE_OBSERVATION_STALE";
+ else if(last.ageMinutes>lane.maxExpectedGapMinutes)
+  state="SCHEDULE_OBSERVATION_STALE";
  else if(last.status!=="completed")state="SCHEDULE_WORKFLOW_PENDING_NO_FLIGHT_PROOF";
  else if(last.conclusion==="skipped")state="SCHEDULE_GATED_SKIPPED_NOT_A_FAILURE_OR_A_FLIGHT";
  else if(last.conclusion==="success")state="WORKFLOW_SUCCESS_NOT_PROOF_COLLECTION";
  else state="SCHEDULE_RUN_UNSUCCESSFUL_REVIEW";
  return{
   lane:lane.lane,workflow:lane.workflow,purpose:lane.purpose,
+  expectedMaxGapMinutes:lane.maxExpectedGapMinutes,
   state,mostRecentRun:last,observedRecentRuns:rows.length,
   runStateCounts:counts,
   githubSchedulePresenceOnly:true,
