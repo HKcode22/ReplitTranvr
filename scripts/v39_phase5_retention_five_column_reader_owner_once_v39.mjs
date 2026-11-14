@@ -115,7 +115,7 @@ async function preflight(client){
   if(active)await client.query("ROLLBACK").catch(()=>{});
  }
 }
-async function commitRole(client,password){
+export async function commitRole(client,password){
  let active=false;
  try{
   await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
@@ -155,9 +155,8 @@ export async function runP5RetentionRoleOwner(argv=process.argv.slice(2),env=pro
  if(!sha.test(local)||remote!==local)
   fail("GIT_MAIN_DRIFT_NO_DB_WRITES");
  if(mode==="--install")admitP5RetentionReaderInstall(env,local,remote);
- const ownerUrl=selectedP5DbUrl(env.DATABASE_URL,"example");
- // Replace with exact original owner URL; above only validated it.
- if(!ownerUrl)fail("BAD_OWNER_URL");
+ // Confirm the existing production owner URL shape without exposing it.
+ selectedP5DbUrl(env.DATABASE_URL,"validation-only");
  const client=new Client({
   connectionString:env.DATABASE_URL,
   options:mode==="--dry-run"?"-c default_transaction_read_only=on":undefined,
