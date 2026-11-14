@@ -18,10 +18,10 @@ const b64=(o:unknown)=>Buffer.from(
 function fixture(){
  const indexPins={
   independentExternalReviewerSignaturePinsApproved:true,
-  privateIndexReadOnlyApproved:true,
+  privateDayIndexReadOnlyApproved:true,
   existingPaidGithubDispatchApproved:false,
   expectedReaderSessionLogin:LOGIN,
-  expectedIndexRevision:1,
+  expectedRunDayIndex:1,expectedIndexRevision:1,
   expectedIndexSha256:H("1"),
   expectedPreviousIndexSha256:null,
   expectedReviewedCodeSha:CODE,
@@ -46,7 +46,7 @@ function fixture(){
   expectedReviewerPublicKeyFingerprintSha256:H("0"),
   expectedRunDayIndex:1,expectedShardIndex:2
  };
- const indexWire={review:{ciOnly:true},signatureBase64:"CI_TEST_NO_SIGNED_REVIEW"};
+ const indexWire={review:{ciOnly:true,runDayIndex:1,indexRevision:1},signatureBase64:"CI_TEST_NO_SIGNED_REVIEW"};
  const packetWire={review:{ciOnly:true},signatureBase64:"CI_TEST_NO_SIGNED_REVIEW"};
  const pem="-----BEGIN PUBLIC KEY-----\nCI_SYNTHETIC_KEY_NOT_REAL\n-----END PUBLIC KEY-----";
  const env:NodeJS.ProcessEnv={
@@ -83,9 +83,9 @@ function fixture(){
   P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH:PACK,
   P5_SOURCE_BATCH_RUN_DAY_INDEX:"1",
   P6_PRIVATE_READER_DATABASE_URL:URL,
-  P6_PRIVATE_INDEX_REVIEW_PINS_BASE64:b64(indexPins),
-  P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64:b64(indexWire),
-  P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64:b64(pem),
+  P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64:b64(indexPins),
+  P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64:b64(indexWire),
+  P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64:b64(pem),
   P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64:b64(packetPins),
   P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64:b64(packetWire),
   P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64:b64(pem)
@@ -93,6 +93,20 @@ function fixture(){
  return {env,indexPins,packetPins,indexWire,packetWire,pem};
 }
 const gate=(env:NodeJS.ProcessEnv)=>admitP6PrivateSourceExistingChildRuntime(env);
+function authenticatedDayRoute(registryPath=REG){
+ return{
+  redactedSummary:{
+   status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",
+   reviewedEd25519SourceWasOriginalDayBytes:true,
+   phase6PaidGo:false,providerCalls:0,githubChildDispatches:0,
+   runDayIndex:1,externallySignedDayEpochIndexSha256:H("1")
+  },
+  privateRoutingCandidates:[{
+   lane:"SOURCE",runDayIndex:1,routingIntentSha256:ROUTE,
+   signedFrozenPath:registryPath,signedFrozenSha256:REG_SHA
+  }]
+ };
+}
 describe("Phase5 exit: real SOURCE private PG16 into original paid child only after independent full GO",()=>{
  it("accepts only bounded exact pins/role and keeps private credentials out of visible receipt",()=>{
   const f=fixture(),x=gate(f.env);
@@ -114,7 +128,7 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
   for(const k of Object.keys(child))
    expect(k.startsWith("P6_PRIVATE_")).toBe(false);
   expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_READER_DATABASE_URL);
-  expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64);
+  expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64);
   expect(JSON.stringify(child)).not.toContain(f.env.P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64);
  });
  it("cannot convert an offline PR or non-main/manual or rerun into a physical source GET",()=>{
@@ -168,10 +182,12 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
    {expectedManifestSha256:H("d")},
    {expectedRightsSha256:H("d")},
    {existingPaidGithubDispatchApproved:true},
-   {expectedReaderSessionLogin:"neondb_owner"}
+   {expectedReaderSessionLogin:"neondb_owner"},
+   {expectedRunDayIndex:2},
+   {privateDayIndexReadOnlyApproved:false}
   ]){
    const f=fixture();
-   f.env.P6_PRIVATE_INDEX_REVIEW_PINS_BASE64=
+   f.env.P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64=
     b64({...f.indexPins,...changes});
    expect(()=>gate(f.env)).toThrow(/HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_/);
   }
@@ -192,11 +208,12 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
     expect(url).toBe(URL);calls.push("PG_OPEN");return client;
    },
    hydrateIndex:async (args:any)=>{
-    expect(args.reviewPins).toEqual(f.indexPins);
+    expect(args.pins).toEqual(f.indexPins);
+    expect(args.wire).toEqual(f.indexWire);
+    expect(args.scope).toEqual({privateDayRegistryReadOnlyApproved:true,
+     existingPaidDispatchApproved:false});
     calls.push("INDEX_VERIFIED");
-    return {privateRoutingCandidates:[{
-     routingIntentSha256:ROUTE,signedFrozenPath:REG
-    }]};
+    return authenticatedDayRoute();
    },
    readSourceQuery:async (_client:any,pins:any,wire:any)=>{
     expect(pins).toEqual(f.packetPins);
@@ -239,11 +256,7 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
     async query(sql:string){calls.push(sql);},
     async end(){calls.push("CLOSED");}
    }),
-   hydrateIndex:async()=>({
-    privateRoutingCandidates:[{
-     routingIntentSha256:ROUTE,signedFrozenPath:"data-collection/phase5/frozen/source_wrong_route.json"
-    }]
-   }),
+   hydrateIndex:async()=>authenticatedDayRoute("data-collection/phase5/frozen/source_wrong_route.json"),
    readSourceQuery:async()=>({privateLogicalPath:PACK}),
    runExistingAdmission:async()=>{calls.push("WRONG_PAID");}
   })).rejects.toThrow("UNBOUND_PRIVATE_ROUTE_REGISTRY_OR_QUERY_PATH");
@@ -264,9 +277,7 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
    openRestrictedReader:async()=>({
     async query(){},async end(){}
    }),
-   hydrateIndex:async()=>({privateRoutingCandidates:[{
-    routingIntentSha256:ROUTE,signedFrozenPath:REG
-   }]}),
+   hydrateIndex:async()=>authenticatedDayRoute(),
    readSourceQuery:async()=>({privateLogicalPath:PACK}),
    runExistingAdmission:async()=>{throw Error("original paid unknown COMMIT");}
   })).rejects.toThrow("ORIGINAL_PHASE5_PAID_GATES_OR_EPHEMERAL_CLEANUP_HOLD_NO_RETRY");
