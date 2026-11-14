@@ -23,6 +23,19 @@ on:
         description: "Type ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET"
         required: true
         type: string
+      private_transport:
+        description: "Default false. Only use true for externally reviewed signed PG16 private SOURCE packet transport."
+        required: false
+        default: 'false'
+        type: string
+      private_confirm:
+        description: "Separate independently approved private-mode exact one-child confirmation"
+        required: false
+        type: string
+      routing_intent_sha256:
+        description: "Signed V0096 immutable SOURCE route digest, not user-created new query"
+        required: false
+        type: string
 permissions:
   contents: read
 # One running child per signed physical source query; no same-query overlap.
@@ -31,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   exact-reviewed-source-child:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
@@ -112,3 +125,111 @@ jobs:
           set +x
           npx tsx scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts "$RELEASE_FILE" "$REGISTRY_FILE"
           echo 'P5_SIGNED_SOURCE_CHILD_DONE_ONE_PHYSICAL_FIDS_GET_MAX_NO_PRE_OR_POST_CLAIM'
+
+  exact-private-source-existing-one-get-child:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GITHUB_ACTIONS: 'true'
+      ADB_AUTO_COLLECT: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT: '0'
+      V39_P5_CHILD_CONFIRM: ${{ inputs.confirm }}
+      P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST: ${{ inputs.query_digest }}
+      P5_SOURCE_BATCH_RUN_DAY_INDEX: ${{ inputs.run_day_index }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_P5_AUTO_SOURCE_DISPATCH_APPROVED: ${{ secrets.V39_P5_AUTO_SOURCE_DISPATCH_APPROVED }}
+      V39_P5_SIGNED_DAY_REGISTRY_RELEASE: ${{ secrets.V39_P5_SIGNED_DAY_REGISTRY_RELEASE }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256: ${{ secrets.V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256 }}
+      V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES: ${{ secrets.V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES }}
+      V39_P5_SOURCE_OWNER_APPROVED: ${{ secrets.V39_P5_SOURCE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_SOURCE_DB_ROLE_REVIEWED: ${{ secrets.V39_P5_SOURCE_DB_ROLE_REVIEWED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_P5_REST_UNIT_PRICE_APPROVED: ${{ secrets.V39_P5_REST_UNIT_PRICE_APPROVED }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT: '1'
+      P6_PRIVATE_SOURCE_CHILD_RUNTIME_CONFIRM: ${{ inputs.private_confirm }}
+      P6_PRIVATE_SOURCE_TRANSPORT_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_TRANSPORT_APPROVED }}
+      P6_PRIVATE_SOURCE_ROUTING_INTENT_SHA256: ${{ inputs.routing_intent_sha256 }}
+      P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH: ${{ inputs.signed_registry_file }}
+      P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH: ${{ inputs.frozen_release_file }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_PRIVATE_INDEX_REVIEW_PINS_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEW_PINS_BASE64 }}
+      P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64 }}
+      P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64 }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64 }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64 }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject unfinished release BEFORE accessing provider or SQL
+        env:
+          REGISTRY_FILE: ${{ inputs.signed_registry_file }}
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          test "$GITHUB_RUN_ATTEMPT" = '1'
+          test "$ADB_AUTO_COLLECT" = '0'
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
+          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT" = 1
+          test "$P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT" = 0
+          test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_CONFIRM" = 'ONE_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_SAME_JOB_ONE_GET'
+          test "$P6_PRIVATE_SOURCE_TRANSPORT_APPROVED" = 1
+          test -n "$P6_PRIVATE_READER_DATABASE_URL"
+          test -n "$P6_PRIVATE_INDEX_REVIEW_PINS_BASE64"
+          test -n "$P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64"
+          test -n "$P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64"
+          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64"
+          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+          [[ "$P6_PRIVATE_SOURCE_ROUTING_INTENT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$V39_PHASE5_FREEZE_SIGNED" = '1'
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
+          test "$V39_PHASE6_PROCESS_ARMED" = '1'
+          test "$V39_P5_AUTO_SOURCE_DISPATCH_APPROVED" = '1'
+          test "$V39_P5_SIGNED_DAY_REGISTRY_RELEASE" = '1'
+          test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = '1'
+          test -n "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
+          test -n "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$AERODATABOX_API_KEY"
+          [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          [[ "$P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$P5_SOURCE_BATCH_RUN_DAY_INDEX" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child
+        shell: bash
+        env:
+          REGISTRY_FILE: ${{ inputs.signed_registry_file }}
+          RELEASE_FILE: ${{ inputs.frozen_release_file }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase6_private_source_one_original_child_github_v39.mjs
+          echo 'P6_SIGNED_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_RETURNED_NOT_PROVIDER_RECEIPT_NO_PRE_POST_CLAIM'
