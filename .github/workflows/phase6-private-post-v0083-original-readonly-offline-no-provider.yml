@@ -1,0 +1,51 @@
+name: Phase6 private POST original V0083 source PRE read-only bridge (NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-private-post-v0083-original-readonly-offline-no-provider.yml'
+      - 'server/lib/disruption/phase6PrivatePostExistingV0083ReadOnlyBridge_v39.ts'
+      - 'tests/phase6_private_post_existing_v0083_readonly_bridge_v39.test.ts'
+      - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_POST_ORIGINAL_V0083_SOURCE_PRE_BRIDGE_NO_GO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-post-source-pre-offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Confirm no production database, provider or GitHub credential
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL$P5_V39_OTHER_REST_REVIEW_DATABASE_URL$GITHUB_TOKEN"
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify private POST signed route, original V0083 and true 1-of-3 SOURCE PRE
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install vitest run tests/phase6_private_post_existing_v0083_readonly_bridge_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts
+          echo 'Phase6 V0096/V0095 POST to existing V0083 read-only parent tested synthetically; no private DB read, no provider, no physical POST, no GO.' >> "$GITHUB_STEP_SUMMARY"
