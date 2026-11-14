@@ -11,9 +11,10 @@ import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {
- auditP5Phase6AppendOnlyDayShardIndex,
  type P5Phase6DayShardIndex,type P5Phase6DayShardPins
 } from "../server/lib/disruption/phase5Phase6AppendOnlyDayShardIndex_v39";
+import {planP6ThirtyOneDaySignedShardHandoffs}
+ from "../server/lib/disruption/phase6SignedThirtyOneDayShardHandoff_v39";
 
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
@@ -167,12 +168,17 @@ export async function runP5Phase6ShardIndexReadOnlyObserver(
  const pins:P5Phase6DayShardPins={
   ...admitted.pins,observedDbClockUtc:t
  };
- const result=auditP5Phase6AppendOnlyDayShardIndex(
+ const route=planP6ThirtyOneDaySignedShardHandoffs(
   raw,index,pins,(path)=>readFile(path,250000),prevRaw,prior);
+ // NOTE: restricted only/private packet paths are never printed from
+ // privateRoutingCandidates. The existing index result remains intact
+ // for backward-compatible read-only clients.
  return{
   status:"P5_PHASE6_ACTUAL_CLOCK_PINNED_SHARDS_READONLY_NO_DISPATCH" as const,
   approvedCodeSha:admitted.pins.expectedCodeSha,
-  ...result,
+  ...route.verifiedExistingShardIndexResult,
+  autonomousDayShardHandoffSummary:route.operatorSummary,
+  automaticGithubChildDispatchActuallyExecuted:false as const,
   actualSourceRoleClockRequired:true as const,
   independentSignedPacketPublisherStillMissing:true as const,
   ownerAuthorizationOrPaidGoGranted:false as const
