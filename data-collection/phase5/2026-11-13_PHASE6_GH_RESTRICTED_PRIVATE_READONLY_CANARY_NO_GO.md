@@ -17,7 +17,7 @@ New GH workflow `.github/workflows/phase6-restricted-live-index-registry-readonl
 
 ## Tests and boundaries
 
-`tests/phase6_private_index_github_readonly_canary_v39.test.mjs` covers strict main/manual-only identity, wrong/duplicate run SHA, source/app/REST/owner credential refusal, disabling SSL, missing independent review pins, safe redaction, exact dedicated SET ROLE, one invocation of existing signed verifier, connection closure and no claimed paid outcome. This CI is synthetic; disposable PG16 index+registry integration already exists in `phase6-private-index-registry-inmemory-pg16-no-provider.yml`.
+`tests/phase6_private_index_github_readonly_canary_v39.test.ts` covers strict main/manual-only identity, wrong/duplicate run SHA, source/app/REST/owner credential refusal, disabling SSL, missing independent review pins, safe redaction, exact dedicated SET ROLE, one invocation of existing signed verifier, connection closure and no claimed paid outcome. This CI is synthetic; disposable PG16 index+registry integration already exists in `phase6-private-index-registry-inmemory-pg16-no-provider.yml`.
 
 **No user shell/installation is requested by this PR.** Actual production commissioning must separately inspect the *existing* `neondb` and, only once with reviewed owner action, install V0094→V0095→V0096 if absent; create a dedicated reader LOGIN membership and GH secret; publish real externally signed approved future index and packet rows. Never replay V0079–V0093 or create another DB. The last real owner read-only audit (2026-11-14 01:53Z) found V0094 absent; that snapshot is historical, not a new observation.
 

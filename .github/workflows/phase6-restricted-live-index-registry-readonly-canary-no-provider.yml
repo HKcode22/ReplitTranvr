@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/v39_phase6_private_index_github_readonly_canary_v39.mjs'
-      - 'tests/phase6_private_index_github_readonly_canary_v39.test.mjs'
+      - 'tests/phase6_private_index_github_readonly_canary_v39.test.ts'
       - '.github/workflows/phase6-restricted-live-index-registry-readonly-canary-no-provider.yml'
       - 'data-collection/phase5/2026-11-13_PHASE6_GH_RESTRICTED_PRIVATE_READONLY_CANARY_NO_GO.md'
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
           set +x
           test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$P6_PRIVATE_READER_DATABASE_URL$GITHUB_TOKEN"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx --no-install vitest run tests/phase6_private_index_github_readonly_canary_v39.test.mjs
+          npx --no-install vitest run tests/phase6_private_index_github_readonly_canary_v39.test.ts
           echo 'P6_OFFLINE_PRIVATE_INDEX_CANARY_ADMISSION_ONLY_NO_REAL_NEON_NO_PROVIDER_NO_GO' >> "$GITHUB_STEP_SUMMARY"
 
   real-private-index-readonly-canary:
