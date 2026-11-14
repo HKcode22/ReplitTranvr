@@ -5,7 +5,8 @@ import {
  classifyP6ReadOnlyTable,formatP6OwnerStageHuman
 } from "../scripts/v39_phase6_owner_31day_dataflow_readonly.mjs";
 
-function mock({deny=false,invalidClock=false,injectError=false}={}){
+function mock({deny=false,invalidClock=false,injectError=false,
+ withBlob=false}={}){
  const queries=[],events=[];
  const c={async query(sql,params=[]){
   queries.push([sql,params]);
@@ -19,11 +20,25 @@ function mock({deny=false,invalidClock=false,injectError=false}={}){
      version:160016,db_now:invalidClock?"garbled":"2026-11-13T23:01:00Z",
      database_bytes:"75415552"}]};
   if(sql.includes("to_regclass($1) IS NOT NULL AS present"))
-   return{rows:[{present:params[0]==="clean.fids_query_response",
-     can_read:!deny}]};
-  if(sql.includes("FROM information_schema.columns"))
+   return{rows:[{present:[
+     "clean.fids_query_response","clean.adb_phase6_calendar_day",
+     ...(withBlob?["clean.provider_content_blob_ref"]:[])
+    ].includes(params[0]),can_read:!deny}]};
+  if(sql.includes("FROM information_schema.columns")){
+   if(params[1]==="adb_phase6_calendar_day")
+    return{rows:[{column_name:"run_day_index"}]};
+   if(params[1]==="provider_content_blob_ref")
+    return{rows:["persisted_at_utc","expires_at_utc",
+      "deletion_verified_at_utc","deleted_at_utc"].map(column_name=>({column_name}))};
    return{rows:[{column_name:"available_at"},{column_name:"raw_payload"},
      {column_name:"raw_expired_at_utc"}]};
+  }
+  if(sql.includes("SELECT COUNT(*)::integer AS n FROM (SELECT 1 FROM "))
+   return{rows:[{n:sql.includes("adb_phase6_calendar_day")?2:
+    sql.includes("provider_content_blob_ref")?65:3}]};
+  if(sql.includes("AS marked_deleted_but_unverified"))
+   return{rows:[{n:65,marked_deleted_but_unverified:11,
+    no_delete_marker:54,older_31d:29}]};
   if(sql.includes("SELECT day_utc::text AS day_utc")){
    if(injectError){const e=new Error("secret api key never printed");
     e.code="42501";throw e;}
@@ -55,7 +70,10 @@ test("read-only pipeline emits chronological stage counts and never selects data
  const x=mock();
  const t=await inspectP6OwnerDataflowReadOnly(x.c,{emit:e=>x.events.push(e)});
  assert.equal(t["SOURCE ORIGINALS"].rowsSampled,3);
+ assert.equal(t["SOURCE ORIGINALS"].allTimeRowsSampled,3);
  assert.equal(t["PRE SNAPSHOTS"].status,"ABSENT_NOT_A_ZERO");
+ assert.equal(t["B0062 CALENDAR"].status,"EXACT_ROWS_ALL_TIME_UNDER_CAP_NO_CLOCK");
+ assert.equal(t["B0062 CALENDAR"].allTimeRowsSampled,2);
  assert(x.events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.event==="STAGE_START"));
  assert(x.events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.event==="STAGE_RESULT"&&
   e.hasSensitiveProviderValues===true&&e.contentsRead===false));
@@ -66,6 +84,21 @@ test("read-only pipeline emits chronological stage counts and never selects data
  assert(!x.queries.some(q=>/\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bCREATE\b|\bCOMMIT\b/.test(q[0])));
  assert(!x.queries.some(q=>/SELECT\s+.*(?:raw_payload|raw_body|payload_bytes)/.test(q[0])));
  assert(!JSON.stringify(x.events).includes("raw_payload"));
+});
+test("expired refs classified without claiming any object is actually present",async()=>{
+ const x=mock({withBlob:true});
+ await inspectP6OwnerDataflowReadOnly(x.c,{emit:e=>x.events.push(e)});
+ const e=x.events.find(e=>e.event==="STAGE_RESULT"&&e.stage==="PROVIDER BLOB EXPIRY");
+ assert.equal(e.expiredProviderBlobReview.sampledExpiredUnverified,65);
+ assert.equal(e.expiredProviderBlobReview.noDeletionMarker,54);
+ assert.equal(e.expiredProviderBlobReview.deletionMarkedButUnverified,11);
+ assert.equal(e.expiredProviderBlobReview.referencePersistedMoreThan31DaysAgo,29);
+ assert.equal(e.expiredProviderBlobReview.physicalObjectPresentUnknown,true);
+ const line=formatP6OwnerStageHuman(e);
+ assert(line.includes("65"));
+ assert(line.includes("object presence NOT checked"));
+ assert(x.queries.some(q=>q[0].includes("LIMIT 1201")));
+ assert(!x.queries.some(q=>/SELECT\\s+.*(?:payload_bytes|raw_body|object_name)/.test(q[0])));
 });
 test("permission denied is UNKNOWN, not zero",async()=>{
  const x=mock({deny:true});
