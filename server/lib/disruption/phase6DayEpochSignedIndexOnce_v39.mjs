@@ -309,6 +309,8 @@ export async function readP6DayEpochIndexCurrentPriorOnce({
       prior.content_sha256!==signed.review.previousIndexSha256||
       prior.revision!==revision-1)
     err("PRIOR_SAME_DAY_SHA_NOT_PRESENT");
+   if(clock(prior.retention_not_after_utc)<signed.retentionNotAfterMs)
+    err("PREDECESSOR_EXPIRES_BEFORE_CURRENT_DAY_INDEX");
    previous=readRow(prior,revision-1,signed.review,now,
       signed.review.previousIndexSha256);
    sameDayPrefix(current,previous);
@@ -424,7 +426,8 @@ export async function publishP6DayEpochIndexRevisionOnce({
     err("SAME_DAY_PREDECESSOR_NOT_COMMITTED");
    const p=previous.rows[0];
    if(p.content_sha256!==signed.review.previousIndexSha256||
-      clock(p.retention_not_after_utc)<=now)
+      clock(p.retention_not_after_utc)<=now||
+      clock(p.retention_not_after_utc)<signed.retentionNotAfterMs)
     err("PREVIOUS_DAY_REVISION_SHA_OR_EXPIRY");
    const earlier=readRow(p,rev-1,signed.review,now,
      signed.review.previousIndexSha256);
