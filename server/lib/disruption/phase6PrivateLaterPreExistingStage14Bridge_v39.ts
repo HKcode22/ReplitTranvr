@@ -117,7 +117,7 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
     route.runDayIndex!==hydrated?.verified?.runDayIndex||
     route.shardIndex!==hydrated?.verified?.shardIndex)
   fail("SOURCE_REGISTRY_DAY_SHARD_OR_SIGNED_ROUTE_DRIFT");
- let laterRaw:Buffer,sourceRaw:Buffer;
+ let laterRaw:Buffer=Buffer.alloc(0),sourceRaw:Buffer=Buffer.alloc(0);
  try{
   laterRaw=perDay?indexHandoff.getFrozen(route.signedFrozenPath):
    indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
