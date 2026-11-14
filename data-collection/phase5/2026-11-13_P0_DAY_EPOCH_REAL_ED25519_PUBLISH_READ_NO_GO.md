@@ -25,3 +25,14 @@ This draft PR #659 adds **code that targets only the candidate alternative**. It
 4. **Genuine scientific startup:** reviewed prospective B0062 day/calendar, SOURCE and flight roster, budget+REST/Alert STOP, first-cycle canonical Amendment E real-physical delay target and honest missingness. One independent Phase5 freeze; a separate capped Phase6 Day1 paid GO afterward.
 
 **Decision:** Phase5 scientific FREEZE HOLD and paid Phase6 NO-GO. No new Replit Shell action or paid provider call is required for this PR. Preserve the evidence in issue #413 and these Phase5 checkpoints.
+
+
+## November 14 UTC — actual disposable PG16 integration added and passed
+
+The original checkpoint above described mocked SQL tests only. That limitation has now been **partly resolved** by a second test executable, tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs, and the dedicated CI job real-restricted-postgres16-signed-day-index.
+
+This job provisions a fresh **disposable** postgres:16, installs original V0094 and V0095 plus #658's candidate schema **only inside CI**, creates synthetic scoped publisher and reader LOGINs, verifies authentic Ed25519 external signatures under fresh runtime-generated keys, and performs **actual PostgreSQL SERIALIZABLE index publication and REPEATABLE READ readback**. It commits first/second revisions for study day 1 and an independent genesis for study day 31. After a synthetic owner DELETE of day-1 private index bytes, a re-genesis for day 1 is blocked by the immutable day claim; day 31 remains readable. No real provider Contents or production database URL enter the test.
+
+**Verified CI receipt:** status P6_DAY_EPOCH_REAL_RESTRICTED_PG16_PUBLISH_READ_PASS; signedDayIndices [1,31]; sourceRegistries 3; day1RevisionsBeforeOwnerDeletion 2; day31SurvivesDay1PrivateByteDeletion true; immutableDay1ClaimPreventsGenesisReplay true; realExternalEd25519SignatureVerified true; realPg16SourceRoleIsolation true; productionDatabaseWrites 0; providerCalls 0; phase6PaidGo false.
+
+The phrase “owner deletion” here is only a controlled test operation on synthetic records; **the actual lawful retention/backup/PITR purge worker and real provider-use approval are still missing**, and the full V0095 SOURCE/PRE/POST packet byte semantic hydrator and GitHub Day1 flight workers are still not connected to this new index. It does not change the live V0094-installed production state.
