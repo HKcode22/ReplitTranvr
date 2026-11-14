@@ -14,7 +14,6 @@ const SHA=/^[a-f0-9]{40}$/;
 const WF=/^[a-z0-9][a-z0-9-]{5,110}\.yml$/;
 const REPO="HKcode22/ReplitTranvr";
 const ROOT="https://api.github.com/repos/"+REPO;
-const MAX_AGE_MINUTES=90; // Default 5/10 minute cron + GitHub jitter
 const MAX_PER_WORKFLOW=15;
 const fail=s=>{throw Error("HOLD_P6_AUTO_HEARTBEAT_"+s);};
 export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
