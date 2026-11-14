@@ -3,7 +3,7 @@ import type {ProviderBlobExpiryCandidateV39}
  from "../server/lib/disruption/providerBlobExpiry_v39";
 import {
  parseP5BlobOnlyArgs,reviewP5BlobOnlyCandidates,
- admitP5BlobOnlyApply
+ admitP5BlobOnlyApply,classifyP5BlobOnlyReadOnlyPresence
 } from "../scripts/v39_phase5_expired_provider_blobs_only_owner_v39";
 
 const uuid="123e4567-e89b-42d3-a456-426614174000";
@@ -46,7 +46,10 @@ describe("owner-only expired raw provider object remediation never auto-arms",()
   expect(review).toMatchObject({candidates:1,exactRawClassOnly:true,
    expectedCountMatched:true,readyToDelete:false,contentsDownloaded:false,
    providerCalls:0});
-  expect(()=>reviewP5BlobOnlyCandidates([],now)).toThrow(/EMPTY/);
+  expect(reviewP5BlobOnlyCandidates([],now)).toMatchObject({
+   candidates:0,readyToDelete:false,providerCalls:0
+  });
+  expect(()=>reviewP5BlobOnlyCandidates([],now,1)).toThrow(/DRIFTED/);
   expect(()=>reviewP5BlobOnlyCandidates([candidate()],now,65)).toThrow(/DRIFTED/);
   expect(()=>reviewP5BlobOnlyCandidates([candidate(),candidate()],now))
    .toThrow(/DUPLICATE/);
@@ -56,6 +59,19 @@ describe("owner-only expired raw provider object remediation never auto-arms",()
   expect(()=>reviewP5BlobOnlyCandidates([s],now)).toThrow(/UNEXPECTED_CLASS/);
   expect(()=>reviewP5BlobOnlyCandidates([candidate()],Date.parse(expires)+60000))
    .toThrow(/RECENT_NOT_EXPIRED/);
+ });
+ it("read-only recovery reports zero backlog and absent objects without authorizing tombstones",()=>{
+  expect(classifyP5BlobOnlyReadOnlyPresence(0,0,0))
+   .toBe("DRY_RUN_ZERO_EXPIRED_UNVERIFIED_BLOBS_NO_DELETIONS");
+  expect(classifyP5BlobOnlyReadOnlyPresence(65,65,0))
+   .toBe("DRY_RUN_BLOB_ONLY_OWNER_OBJECTS_PRESENT_NO_DELETIONS");
+  expect(classifyP5BlobOnlyReadOnlyPresence(65,63,2))
+   .toBe("DRY_RUN_MISSING_PRIMARY_OBJECTS_NEED_TOMBSTONE_REVIEW_NO_DELETIONS");
+  expect(classifyP5BlobOnlyReadOnlyPresence(1,0,1))
+   .toBe("DRY_RUN_MISSING_PRIMARY_OBJECTS_NEED_TOMBSTONE_REVIEW_NO_DELETIONS");
+  expect(()=>classifyP5BlobOnlyReadOnlyPresence(1,1,1)).toThrow(/INVALID_OBJECT/);
+  expect(()=>classifyP5BlobOnlyReadOnlyPresence(1,-1,2)).toThrow(/INVALID_OBJECT/);
+  expect(()=>classifyP5BlobOnlyReadOnlyPresence(101,101,0)).toThrow(/INVALID_OBJECT/);
  });
  it("APPLY denied without exact explicit actor approval, reviewed local SHA, expected count and STOP",()=>{
   expect(()=>admitP5BlobOnlyApply({},commit,1)).toThrow(/NO_EXPLICIT/);
