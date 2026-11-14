@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   exact-reviewed-source-child:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport != 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
@@ -54,6 +54,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ''
       AERODATABOX_WEBHOOK_SECRET: ''
       P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT: '1'
+      P6_PRIVATE_SOURCE_TRANSPORT_INPUT: ${{ inputs.private_transport }}
       V39_P5_CHILD_CONFIRM: ${{ inputs.confirm }}
       P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST: ${{ inputs.query_digest }}
       P5_SOURCE_BATCH_RUN_DAY_INDEX: ${{ inputs.run_day_index }}
@@ -96,6 +97,7 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
+          test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = 'false'
           test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
@@ -127,7 +129,9 @@ jobs:
           echo 'P5_SIGNED_SOURCE_CHILD_DONE_ONE_PHYSICAL_FIDS_GET_MAX_NO_PRE_OR_POST_CLAIM'
 
   exact-private-source-existing-one-get-child:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport != 'true' }}
+    # Strictly distinct from the checkout-local legacy child: no private
+    # SOURCE request can run both original paid jobs.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
@@ -137,6 +141,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ''
       AERODATABOX_WEBHOOK_SECRET: ''
       P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT: '0'
+      P6_PRIVATE_SOURCE_TRANSPORT_INPUT: ${{ inputs.private_transport }}
       V39_P5_CHILD_CONFIRM: ${{ inputs.confirm }}
       P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST: ${{ inputs.query_digest }}
       P5_SOURCE_BATCH_RUN_DAY_INDEX: ${{ inputs.run_day_index }}
@@ -192,6 +197,7 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
+          test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = 'true'
           test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
           test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT" = 1
           test "$P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT" = 0
