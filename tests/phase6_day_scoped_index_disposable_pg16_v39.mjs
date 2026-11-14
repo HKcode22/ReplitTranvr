@@ -105,9 +105,35 @@ try{
  // Other study-day epochs remain readable after the first day was purged.
  const d2r2=mk(2,2,d2r1.hash);
  await db.query(INSERT,d2r2.params);
+ // Exercise the actual intended PG16 privilege boundary: a distinct
+ // synthetic LOGIN with SET ROLE to the existing publisher NOLOGIN group.
+ // Its INSERT invokes the SECURITY DEFINER claim trigger without giving
+ // the worker direct claim INSERT, UPDATE or DELETE privileges.
+ if(!process.env.P6_TEST_RESTRICTED_PUBLISHER_DATABASE_URL?.startsWith(
+  "postgresql://ci_phase6_epoch_publisher:ci-only-epoch-pub@127.0.0.1:5432/neondb?sslmode=disable"))
+  fail("NO_DISPOSABLE_RESTRICTED_PUBLISHER");
+ const pub=new pg.Client({
+  connectionString:process.env.P6_TEST_RESTRICTED_PUBLISHER_DATABASE_URL
+ });
+ await pub.connect();
+ try{
+  await pub.query("SET ROLE phase6_private_frozen_publisher_v39");
+  const who=(await pub.query(
+   "SELECT current_user AS actor,session_user AS login")).rows[0];
+  assert.equal(who.actor,"phase6_private_frozen_publisher_v39");
+  assert.equal(who.login,"ci_phase6_epoch_publisher");
+  await pub.query(INSERT,mk(30,1).params);
+  await assert.rejects(pub.query(
+   "INSERT INTO "+CLAIM+" (run_day_index) VALUES (29)"),/permission denied/);
+  await assert.rejects(pub.query(
+   "UPDATE "+TABLE+" SET content_sha256=$1 WHERE run_day_index=30",
+   ["0".repeat(64)]),/permission denied/);
+  await assert.rejects(pub.query(
+   "DELETE FROM "+TABLE+" WHERE run_day_index=30"),/permission denied/);
+ }finally{await pub.end();}
  // All 31 parent study days have their OWN genesis. They do not inherit a
  // prior day's private provider bytes, prior hash or short retention clock.
- for(let day=3;day<=30;day++){
+ for(let day=3;day<=29;day++){
   await db.query(INSERT,mk(day,1).params);
  }
  const statusFinal=await db.query(
@@ -141,6 +167,7 @@ try{
   sameDayPriorSHAEnforced:true,
   noLegacyV0096Installed:true,
   existingV0094V0095RoleGroupsReused:true,
+  scopedCIOnlyPublisherSETROLEInsertAndReplayFenceVerified:true,
   externalSignerAndFull31DayWorkerStillRequired:true,
   productionDbWrites:0,providerCalls:0,phase6PaidGo:false
  }));
