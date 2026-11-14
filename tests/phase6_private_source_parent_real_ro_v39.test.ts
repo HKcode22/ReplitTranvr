@@ -110,7 +110,7 @@ describe("original 10-minute SOURCE parent real private NO-GO gate",()=>{
  it("admits only GH main, distinct scoped SOURCE+private reader, bounded independent review",()=>{
   const f=fixture(),out=admitP6RealPrivateSourceParentReadOnly(f.env);
   expect(out.reviews).toHaveLength(1);
-  expect(out.scope.expectedSourceRole).toBe("phase5_source_readonly_v39");
+  expect(out.scope.expectedSourceRole).toBe("phase5_fids_source_prod_20261107");
   expect(out.scope.expectedManifestSha256).toBe(manifest);
   expect(out.mainSha).toBe(main);
  });
