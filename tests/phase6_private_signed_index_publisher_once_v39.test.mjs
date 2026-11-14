@@ -13,7 +13,7 @@ const hash=b=>createHash("sha256").update(b).digest("hex");
 const key=generateKeyPairSync("ed25519");
 const publicPem=key.publicKey.export({type:"spki",format:"pem"}).toString();
 const fp=hash(key.publicKey.export({type:"spki",format:"der"}));
-const AT="2026-11-14T01:58:00.000Z";
+const AT="2026-11-14T01:59:50.000Z";
 const NOW="2026-11-14T02:00:00.000Z";
 const EXPIRE="2026-11-14T04:00:00.000Z";
 const VALID="2026-11-14T03:00:00.000Z";
@@ -197,6 +197,15 @@ test("bad review, disabled paid STOP and tampered payload are rejected before DB
   await assert.rejects(run(f,q,change),/HOLD_P6_SIGNED_PRIVATE_INDEX_PUBLISH_|HOLD_P6_SIGNED_PRIVATE_INDEX_READ_/);
   assert.equal(q.calls.length,0);
  }
+});
+test("even a VALID Ed25519 signature cannot attest registries before publication",async()=>{
+ const f=fixture(2),q=f.mocked();
+ const review={...f.review,reviewedAtUtc:"2026-11-14T01:58:00.000Z"};
+ const wire={review,signatureBase64:sign(null,
+  p6SignedIndexReviewPreimage(review),key.privateKey).toString("base64")};
+ await assert.rejects(run(f,q,{reviewWire:wire}),
+  /EXTERNAL_REVIEW_PREDATES_A_SIGNED_REGISTRY_PUBLICATION/);
+ assert.equal(q.calls.length,0);
 });
 test("ambiguous private index COMMIT is HOLD without replay or printing payload",async()=>{
  const f=fixture(),q=f.mocked({unknownCommit:true});
