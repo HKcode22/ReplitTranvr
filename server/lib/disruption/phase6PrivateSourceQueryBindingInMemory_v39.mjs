@@ -1,6 +1,8 @@
 /**
  * Phase 6 no-dispatch link: exact one V0095 private SOURCE_QUERY_PACKET
- * to one V0094 SOURCE_DAY_REGISTRY from the verified V0096 index bridge.
+ * to one V0094 SOURCE_DAY_REGISTRY from the verified DAY-EPOCH reader.
+ * Retain the old pure read-only binder compatibility, but paid GitHub SOURCE
+ * now mandates the new externally signed per-day path upstream.
  *
  * Does NOT read SQL, access credentials, call AeroDataBox, dispatch Actions,
  * materialize files, or assert a legal right/paid GO. The two receipts MUST
@@ -43,16 +45,31 @@ export function bindP6OnePrivateSourceQueryFromVerifiedIndex({
 }){
  const z=indexHandoff?.redactedSummary;
  const p=sourcePacketReceipt?.redactedSummary;
- if(!z||z.schema!==
-     "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"||
-    z.status!=="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"||
-    z.phase6PaidGo!==false||z.githubChildDispatches!==0||
-    z.providerCalls!==0||z.databaseWrites!==0||
-    z.underlyingPerFlightPacketsNotHydratedHere!==true||
+ const oldOnly=z?.schema===
+      "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"&&
+   z.status==="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"&&
+   z.underlyingPerFlightPacketsNotHydratedHere===true&&
+   sealedProperty(indexHandoff,"privateRegistryBytes")&&
+   indexHandoff.privateRegistryBytes instanceof Map;
+ const perDay=z?.schema===
+     "v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1"&&
+   z.status==="ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"&&
+   z.reviewedEd25519SourceWasOriginalDayBytes===true&&
+   z.originalV0096GlobalChainNotUsed===true&&
+   z.derivedProjectionIsNotAnAdditionalReviewerSignature===true&&
+   z.actualIndividualChildPaidReleaseDone===false&&
+   z.actualOperatingFlightMembershipEstablishedHere===false&&
+   z.individualUnderlyingFlightPacketsVerifiedHere===false&&
+   H.test(z.externallySignedDayEpochIndexSha256??"")&&
+   Number.isSafeInteger(z.runDayIndex)&&z.runDayIndex>=1&&
+   z.runDayIndex<=31&&
+   sealedProperty(indexHandoff,"getFrozen")&&
+   typeof indexHandoff.getFrozen==="function";
+ if((!oldOnly&&!perDay)||z.phase6PaidGo!==false||
+    z.githubChildDispatches!==0||z.providerCalls!==0||
+    z.databaseWrites!==0||
     !sealedProperty(indexHandoff,"privateRoutingCandidates")||
-    !sealedProperty(indexHandoff,"privateRegistryBytes")||
-    !Array.isArray(indexHandoff.privateRoutingCandidates)||
-    !(indexHandoff.privateRegistryBytes instanceof Map))
+    !Array.isArray(indexHandoff.privateRoutingCandidates))
   fail("UNVERIFIED_SIGNED_INDEX_OR_PRIVATE_REGISTRY_HANDOFF");
  if(!H.test(expectedRoutingIntentSha256??"")||
     !H.test(expectedQueryDigestSha256??""))
@@ -62,6 +79,7 @@ export function bindP6OnePrivateSourceQueryFromVerifiedIndex({
  if(candidates.length!==1)fail("NO_UNIQUE_SIGNED_ROUTE_INTENT");
  const c=candidates[0];
  if(c.lane!=="SOURCE"||
+    (perDay&&c.runDayIndex!==z.runDayIndex)||
     !Number.isSafeInteger(c.runDayIndex)||c.runDayIndex<1||
     c.runDayIndex>31||
     !Number.isSafeInteger(c.shardIndex)||c.shardIndex<1||
@@ -73,13 +91,18 @@ export function bindP6OnePrivateSourceQueryFromVerifiedIndex({
     c.boundSourceRegistryPath!==null||
     c.boundSourceRegistrySha256!==null)
   fail("NOT_ONE_VALID_SIGNED_SOURCE_ROUTE");
- const origin=ms(z.observedRestrictedPgClockUtc);
+ const origin=ms(perDay?z.observedRealPgClockUtc:
+  z.observedRestrictedPgClockUtc);
  const packetAt=ms(p?.observedDatabaseClockUtc);
  if(origin>packetAt||packetAt-origin>120000||
     origin<ms(c.notBeforeUtc)||packetAt>=ms(c.hardLatestUtc)||
     ms(c.notBeforeUtc)>=ms(c.hardLatestUtc))
   fail("SOURCE_WINDOW_EXPIRED_OR_PRIVATE_READ_TOO_OLD");
- const registryBytes=indexHandoff.privateRegistryBytes.get(c.signedFrozenPath);
+ let registryBytes;
+ try{
+  registryBytes=perDay?indexHandoff.getFrozen(c.signedFrozenPath):
+   indexHandoff.privateRegistryBytes.get(c.signedFrozenPath);
+ }catch{fail("SIGNED_PRIVATE_SOURCE_REGISTRY_MISSING_REDACTED");}
  if(!Buffer.isBuffer(registryBytes)||
     registryBytes.length<100||registryBytes.length>100000||
     sha(registryBytes)!==c.signedFrozenSha256)
