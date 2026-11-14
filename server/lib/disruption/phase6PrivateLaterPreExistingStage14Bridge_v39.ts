@@ -1,7 +1,7 @@
 /**
  * Phase 6: exact one due native T6/T90 packet from the AUTHENTICATED V0094
- * restricted PG16 later PRE hydrator, cross-bound to the V0096 signed
- * SOURCE/PRE/POST index, then REUSE original Phase5 later PRE admission.
+ * restricted PG16 later PRE hydrator, cross-bound to the NEW day-epoch
+ * Ed25519 signed SOURCE/PRE/POST index, then REUSE original Phase5 admission.
  *
  * Pure no-I/O reviewer. No provider HTTP, DB write, automatic GitHub
  * dispatch, signer, impersonated native operating leg or paid GO.
@@ -47,6 +47,8 @@ function hidden(obj:unknown,name:string){
 }
 export interface P6OnePrivateLaterPrePins{
  expectedRoutingIntentSha256:string;
+ /** Required for new day-epoch mode; legacy branch is historical NO GO only. */
+ expectedDayEpochIndexSha256?:string;
  expectedLaterPacketPath:string;
  expectedLaterPacketSha256:string;
  expectedQueryDigestSha256:string;
@@ -74,22 +76,37 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
   fail("MISSING_EXACT_LATER_PRE_FLIGHT_AND_ROUTE_PINS");
 
  const z=indexHandoff?.redactedSummary;
- if(z?.schema!==
-      "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"||
-    z.status!=="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"||
-    z.phase6PaidGo!==false||z.providerCalls!==0||
-    z.databaseWrites!==0||z.githubChildDispatches!==0||
-    z.underlyingPerFlightPacketsNotHydratedHere!==true||
+ const oldOnly=z?.schema===
+      "v39.phase6.private-index-and-full-registries-memory-handoff-no-dispatch.v1"&&
+    z.status==="SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH"&&
+    z.underlyingPerFlightPacketsNotHydratedHere===true&&
+    hidden(indexHandoff,"privateRegistryBytes")&&
+    indexHandoff.privateRegistryBytes instanceof Map;
+ const perDay=z?.schema===
+     "v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1"&&
+    z.status==="ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"&&
+    z.reviewedEd25519SourceWasOriginalDayBytes===true&&
+    z.originalV0096GlobalChainNotUsed===true&&
+    z.derivedProjectionIsNotAnAdditionalReviewerSignature===true&&
+    z.actualIndividualChildPaidReleaseDone===false&&
+    SHA.test(z.externallySignedDayEpochIndexSha256??"")&&
+    z.externallySignedDayEpochIndexSha256===pins.expectedDayEpochIndexSha256&&
+    Number.isSafeInteger(z.runDayIndex)&&z.runDayIndex>=1&&
+    z.runDayIndex<=31&&
+    hidden(indexHandoff,"getFrozen")&&
+    typeof indexHandoff.getFrozen==="function";
+ if((!oldOnly&&!perDay)||z.phase6PaidGo!==false||
+    z.providerCalls!==0||z.databaseWrites!==0||
+    z.githubChildDispatches!==0||
     !hidden(indexHandoff,"privateRoutingCandidates")||
-    !hidden(indexHandoff,"privateRegistryBytes")||
-    !Array.isArray(indexHandoff.privateRoutingCandidates)||
-    !(indexHandoff.privateRegistryBytes instanceof Map))
+    !Array.isArray(indexHandoff.privateRoutingCandidates))
   fail("UNVERIFIED_SIGNED_PRIVATE_INDEX_HANDOFF");
  const routes=indexHandoff.privateRoutingCandidates.filter((c:any)=>
   c?.routingIntentSha256===pins.expectedRoutingIntentSha256);
  if(routes.length!==1)fail("NO_UNIQUE_EXACT_SIGNED_LATER_ROUTE");
  const route=routes[0];
  if(route.lane!=="LATER_PRE"||
+    (perDay&&route.runDayIndex!==z.runDayIndex)||
     route.newPaidDispatchAuthorizedHere!==false||
     route.independentlyAuthenticatedGHHistoryRequired!==true||
     route.privateBytesOnlyFromRestrictedReader!==true||
@@ -100,8 +117,13 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
     route.runDayIndex!==hydrated?.verified?.runDayIndex||
     route.shardIndex!==hydrated?.verified?.shardIndex)
   fail("SOURCE_REGISTRY_DAY_SHARD_OR_SIGNED_ROUTE_DRIFT");
- const laterRaw=indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
- const sourceRaw=indexHandoff.privateRegistryBytes.get(route.boundSourceRegistryPath);
+ let laterRaw:Buffer,sourceRaw:Buffer;
+ try{
+  laterRaw=perDay?indexHandoff.getFrozen(route.signedFrozenPath):
+   indexHandoff.privateRegistryBytes.get(route.signedFrozenPath);
+  sourceRaw=perDay?indexHandoff.getFrozen(route.boundSourceRegistryPath):
+   indexHandoff.privateRegistryBytes.get(route.boundSourceRegistryPath);
+ }catch{return fail("PRIVATE_SOURCE_OR_LATER_REGISTRY_LOOKUP_REFUSED_REDACTED");}
  if(!Buffer.isBuffer(laterRaw)||!Buffer.isBuffer(sourceRaw)||
     hash(laterRaw)!==route.signedFrozenSha256||
     hash(sourceRaw)!==route.boundSourceRegistrySha256)
@@ -134,7 +156,8 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
     hydrated.observedDbClockUtc!==due.observedDbClockUtc)
   fail("NOT_AUTHENTICATED_V0094_LATER_HYDRATION_AND_DUE_RECEIPT");
 
- const indexTime=utc(z.observedRestrictedPgClockUtc);
+ const indexTime=utc(perDay?z.observedRealPgClockUtc:
+  z.observedRestrictedPgClockUtc);
  const preTime=utc(hydrated.observedDbClockUtc);
  if(preTime<indexTime||preTime-indexTime>120000||
     indexTime<utc(route.notBeforeUtc)||
