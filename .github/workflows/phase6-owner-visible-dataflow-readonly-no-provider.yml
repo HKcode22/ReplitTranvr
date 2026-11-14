@@ -77,6 +77,18 @@ jobs:
             available_at timestamptz NOT NULL,
             provider_content_expired_at_utc timestamptz
           );
+          CREATE TABLE clean.flight_snapshots (
+            created_at timestamptz NOT NULL,
+            horizon text NOT NULL,
+            features_json jsonb
+          );
+          INSERT INTO clean.flight_snapshots VALUES
+            (clock_timestamp(),'T-24h','[]'::jsonb),
+            (clock_timestamp(),'T-6h',
+              '[{"name":"departure_airport_icao","value":"CI_SYNTHETIC"}]'::jsonb),
+            (clock_timestamp(),'T-6h','[]'::jsonb),
+            (clock_timestamp(),'T-90m',
+              '[{"name":"departure_airport_icao","value":null}]'::jsonb);
           INSERT INTO clean.fids_query_response
             VALUES(clock_timestamp(), '{"ci":"synthetic"}'::jsonb, NULL);
           INSERT INTO clean.flight_population VALUES(clock_timestamp(),NULL);
@@ -114,7 +126,17 @@ jobs:
             await inspectP6OwnerDataflowReadOnly(c,{emit:e=>events.push(e)});
             assert(events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.rowsSampled===1));
             assert(events.some(e=>e.stage==="NORMALIZED FLIGHTS"&&e.rowsSampled===1));
-            assert(events.some(e=>e.stage==="PRE SNAPSHOTS"&&e.status==="ABSENT_NOT_A_ZERO"));
+            const pre=events.find(e=>e.stage==="PRE SNAPSHOTS");
+            assert(pre?.rowsSampled===4);
+            assert(pre.preFeatureCoverage?.sampledTotal===4);
+            assert(pre.preFeatureCoverage?.byHorizon?.[0]?.horizon==="T-24h");
+            assert(pre.preFeatureCoverage?.byHorizon?.[0]?.atLeastOneNonNullFeatureValue===0);
+            assert(pre.preFeatureCoverage?.byHorizon?.[1]?.horizon==="T-6h");
+            assert(pre.preFeatureCoverage?.byHorizon?.[1]?.sampledPreSnapshots===2);
+            assert(pre.preFeatureCoverage?.byHorizon?.[1]?.atLeastOneNonNullFeatureValue===1);
+            assert(pre.preFeatureCoverage?.byHorizon?.[2]?.atLeastOneNonNullFeatureValue===0);
+            assert(pre.preFeatureCoverage?.physicalDepartureLabelsVerified===false);
+            assert(pre.preFeatureCoverage?.originalProviderContentsOrMLRightsCertified===false);
             assert(events.some(e=>e.stage==="PRE QUEUE"&&e.preQueueStateCounts?.some(
               s=>s.state==="READY"&&s.count===1)));
             assert(events.some(e=>e.stage==="B0062 CALENDAR"&&
@@ -127,6 +149,7 @@ jobs:
               e.expiredProviderBlobReview?.referencePersistedMoreThan31DaysAgo===1));
             const summary=events.find(e=>e.event==="RUN_SUMMARY");
             assert(summary&&summary.databaseWrites===0&&summary.providerCalls===0);
+            assert(!JSON.stringify(events).includes("CI_SYNTHETIC"));
             assert(!JSON.stringify(events).includes("synthetic"));
             console.log(JSON.stringify({
               status:"DISPOSABLE_PG16_OPERATOR_VIEW_REAL_SQL_PASS",
