@@ -135,3 +135,60 @@ test("no pretense that matching index and query grants source rights",()=>{
  assert.equal(out.redactedSummary.privateSourcePathsAndBytesNotLogged,true);
  assert.equal(out.redactedSummary.databaseWrites,0);
 });
+
+test("new day-epoch Ed25519 original semantic route binds same SOURCE query without global V0096",()=>{
+ const f=fixture();
+ f.handoff.redactedSummary={
+  schema:"v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1",
+  status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",
+  reviewedEd25519SourceWasOriginalDayBytes:true,
+  originalV0096GlobalChainNotUsed:true,
+  derivedProjectionIsNotAnAdditionalReviewerSignature:true,
+  actualIndividualChildPaidReleaseDone:false,
+  actualOperatingFlightMembershipEstablishedHere:false,
+  individualUnderlyingFlightPacketsVerifiedHere:false,
+  externallySignedDayEpochIndexSha256:h("reviewed original day epoch"),
+  runDayIndex:1,
+  observedRealPgClockUtc:"2026-11-14T05:00:00.000Z",
+  phase6PaidGo:false,githubChildDispatches:0,providerCalls:0,databaseWrites:0
+ };
+ Object.defineProperty(f.handoff,"getFrozen",{
+  enumerable:false,writable:false,
+  value:path=>{
+   if(path!==REG)throw Error("CI_MISSING_SIGNED_REGISTRY");
+   return Buffer.from(f.registry);
+  }
+ });
+ const out=run(f);
+ assert.equal(out.redactedSummary.queryPacketSha256,h(f.query));
+ assert.equal(out.redactedSummary.runDayIndex,1);
+ assert.equal(out.redactedSummary.phase6PaidGo,false);
+ assert.ok(!JSON.stringify(out).includes("NEVER_LOG_THIS_PRIVATE"));
+ // A single changed day cannot authorize cross-day SOURCE or POST activity.
+ f.handoff.redactedSummary.runDayIndex=2;
+ assert.throws(()=>run(f),/NOT_ONE_VALID_SIGNED_SOURCE_ROUTE/);
+ f.handoff.redactedSummary.runDayIndex=1;
+ f.handoff.redactedSummary.derivedProjectionIsNotAnAdditionalReviewerSignature=false;
+ assert.throws(()=>run(f),/UNVERIFIED_SIGNED_INDEX/);
+});
+test("day-epoch missing exact SOURCE registry refuses before original one-GET",()=>{
+ const f=fixture();
+ f.handoff.redactedSummary={
+  schema:"v39.phase6.day-epoch-exact-source-pre-post-original-semantics-no-go.v1",
+  status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",
+  reviewedEd25519SourceWasOriginalDayBytes:true,
+  originalV0096GlobalChainNotUsed:true,
+  derivedProjectionIsNotAnAdditionalReviewerSignature:true,
+  actualIndividualChildPaidReleaseDone:false,
+  actualOperatingFlightMembershipEstablishedHere:false,
+  individualUnderlyingFlightPacketsVerifiedHere:false,
+  externallySignedDayEpochIndexSha256:h("day index"),
+  runDayIndex:1,
+  observedRealPgClockUtc:"2026-11-14T05:00:00.000Z",
+  phase6PaidGo:false,githubChildDispatches:0,providerCalls:0,databaseWrites:0
+ };
+ Object.defineProperty(f.handoff,"getFrozen",{
+  enumerable:false,writable:false,value:()=>{throw Error("SECRET_SQL");}
+ });
+ assert.throws(()=>run(f),/SIGNED_PRIVATE_SOURCE_REGISTRY_MISSING_REDACTED/);
+});
