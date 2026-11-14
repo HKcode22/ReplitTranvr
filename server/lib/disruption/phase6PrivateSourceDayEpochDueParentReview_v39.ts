@@ -34,9 +34,10 @@ const hold=(x:string):never=>{
 };
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 function time(x:unknown){
- if(typeof x!=="string"||
-  !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x)||
-  !Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)
+ if(typeof x!=="string")
+  hold("INVALID_ACTUAL_DB_CLOCK_OR_SOURCE_WINDOW");
+ if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x)||
+    !Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)
   hold("INVALID_ACTUAL_DB_CLOCK_OR_SOURCE_WINDOW");
  return Date.parse(x);
 }
@@ -188,7 +189,7 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
       now>=time(route.hardLatestUtc))
     hold("NOT_UNIQUE_GENUINELY_DUE_SIGNED_SOURCE_ROUTE");
    usedRegistries.add(route.signedFrozenPath);
-   let raw:Buffer;
+   let raw:Buffer=Buffer.alloc(0);
    try{raw=day.getFrozen(route.signedFrozenPath);}
    catch{hold("EXACT_SIGNED_PRIVATE_SOURCE_REGISTRY_NOT_AVAILABLE");}
    if(!Buffer.isBuffer(raw)||raw.length<100||raw.length>100000||
