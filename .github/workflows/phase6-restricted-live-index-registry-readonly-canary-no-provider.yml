@@ -1,0 +1,119 @@
+name: Phase6 production-scoped private index/registry reader CANARY (READ ONLY NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_private_index_github_readonly_canary_v39.mjs'
+      - 'tests/phase6_private_index_github_readonly_canary_v39.test.ts'
+      - '.github/workflows/phase6-restricted-live-index-registry-readonly-canary-no-provider.yml'
+      - 'data-collection/phase5/2026-11-13_PHASE6_GH_RESTRICTED_PRIVATE_READONLY_CANARY_NO_GO.md'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Exact VERIFY_RESTRICTED_PRIVATE_INDEX_READONLY_NO_PAID; no provider or migration'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: p6-private-index-readonly-canary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-synthetic-canary-admission:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+      P6_PRIVATE_INDEX_CANARY_OWNER_APPROVED: '0'
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Synthetic only no production scopes and no real provider credentials
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$P6_PRIVATE_READER_DATABASE_URL$GITHUB_TOKEN"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          npx --no-install vitest run tests/phase6_private_index_github_readonly_canary_v39.test.ts
+          echo 'P6_OFFLINE_PRIVATE_INDEX_CANARY_ADMISSION_ONLY_NO_REAL_NEON_NO_PROVIDER_NO_GO' >> "$GITHUB_STEP_SUMMARY"
+
+  real-private-index-readonly-canary:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'VERIFY_RESTRICTED_PRIVATE_INDEX_READONLY_NO_PAID' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      GITHUB_TOKEN: ''
+      P6_PRIVATE_INDEX_GH_READONLY_ENTRYPOINT: '1'
+      P6_PRIVATE_INDEX_GH_CANARY_CONFIRM: ${{ inputs.confirm }}
+      P6_PRIVATE_INDEX_CANARY_OWNER_APPROVED: ${{ secrets.P6_PRIVATE_INDEX_CANARY_OWNER_APPROVED }}
+      P6_PRIVATE_INDEX_CANARY_MAIN_SHA: ${{ secrets.P6_PRIVATE_INDEX_CANARY_MAIN_SHA }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_PRIVATE_INDEX_REVIEW_PINS_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEW_PINS_BASE64 }}
+      P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64 }}
+      P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ secrets.P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse without separately commissioned private reader and independent signed review
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_SHA" = "$P6_PRIVATE_INDEX_CANARY_MAIN_SHA"
+          test "$P6_PRIVATE_INDEX_CANARY_OWNER_APPROVED" = 1
+          test "$P6_PRIVATE_INDEX_GH_CANARY_CONFIRM" = 'VERIFY_RESTRICTED_PRIVATE_INDEX_READONLY_NO_PAID'
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL$V39_P5_SOURCE_DATABASE_URL$P5_V39_PRE_DATABASE_URL$P5_V39_OTHER_REST_REVIEW_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL$GITHUB_TOKEN"
+          test -n "$P6_PRIVATE_READER_DATABASE_URL"
+          test -n "$P6_PRIVATE_INDEX_REVIEW_PINS_BASE64"
+          test -n "$P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64"
+          test -n "$P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exactly one real authenticated private PG16 READ ONLY index/current/previous + registries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase6_private_index_github_readonly_canary_v39.mjs
+          echo 'RESTRICTED_GH_INDEX_CANARY_FINISHED_ONLY_METADATA_NO_PROVIDER_NO_DB_WRITE_NO_PAID_GO' >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 13 — real GH restricted PG16 signed index/registry read-only canary (DRAFT NO GO)
+
+[Read the one-time production-scoped **GitHub READ ONLY** V0096 current/prior index + V0094/V0095 exact private registry canary checkpoint](2026-11-13_PHASE6_GH_RESTRICTED_PRIVATE_READONLY_CANARY_NO_GO.md). New STOP-default manual GH workflow requires reviewed main SHA, independent external Ed25519 wire/immutable SHA pins and **separately commissioned** private reader LOGIN on the EXISTING Replit-attached Neon PG16 `neondb`; uses the already tested restricted `hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly`. Pull-request CI is synthetic with no real secrets. This is a real GH **read** interface, not the paid SOURCE/PRE/POST child wiring, not a recurring Replit Shell, and not proof the private schema/keys/flight packets are already installed. No provider/REST, SQL write, GH child dispatch or scientific/paid GO. Nov20 conditional.
+
 ## Nov 13 — private POST V0083 SOURCE-bound PRE signed index bridge (DRAFT NO GO)
 
 [Review the V0096 signed POST route→V0095 restricted Ed25519 POST packet→original V0083 read-only GH parent / actual 1-of-3 PRE gating checkpoint](2026-11-13_PHASE6_PRIVATE_POST_ORIGINAL_V0083_SOURCE_PRE_BRIDGE_NO_GO.md). This candidate reuses original V0083 POST request, provider rights/budget, same-flight source-bound PRE and real-clock rules; it **does not dispatch/charge**, treats missing independent PRE readback as unresolved (not fabricated 0/3 PRE or a negative label), and only proposes due POST for separate complete authenticated GH history before existing V0083 atomic two-unit reservation. Private bytes stay nonenumerable, and actual flight labels remain unproven. No new role/migration/database or provider call. Needs CI then verified actual GH/PG private reader + POST child integration, lawful retention, Phase5 FREEZE and separate paid Day1 GO. Nov20 conditional.
