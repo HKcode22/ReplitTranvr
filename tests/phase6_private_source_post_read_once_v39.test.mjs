@@ -54,6 +54,7 @@ function fixture(kind="SOURCE_QUERY_PACKET"){
  };
  const pins={
   privateSourcePostReadOnlyApproved:true,
+  independentExternalReviewerSignaturePinsApproved:true,
   expectedKind:kind,expectedLogicalPath:logicalPath,
   expectedContentSha256:H(data),expectedReviewedMainSha:review.reviewedCodeSha,
   expectedManifestSha256:review.manifestSha256,
