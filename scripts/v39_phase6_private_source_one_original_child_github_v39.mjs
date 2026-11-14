@@ -211,7 +211,7 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
 }
 
 /**
- * The private V0096/V0095 reader exists solely in the parent. Never forward
+ * The PRIVATE day-epoch/V0095 reader exists solely in the parent. Never forward
  * its LOGIN, signed review wires or immutable route selectors to the paid
  * source GET process; the original Phase5 child needs only its OWN SOURCE
  * login/authorities and the already-admitted two ephemeral frozen files.
