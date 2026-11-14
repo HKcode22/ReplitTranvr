@@ -14,7 +14,7 @@ const now=Date.parse("2026-11-14T12:00:00.000Z");
 function candidate(id=uuid):ProviderBlobExpiryCandidateV39{
  const objectName="v39/provider/raw_provider_content/"+
   id.slice(0,2)+"/"+id+".blob";
- const ref={
+ const ref:ProviderBlobExpiryCandidateV39["ref"]={
   blobRefId:id,storageKind:"replit_app_storage" as const,
   contractVersion:"provider-blob-contract-v39@1.0.0" as const,
   objectName,contentClass:"raw_provider_content" as const,
