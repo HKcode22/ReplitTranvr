@@ -149,11 +149,10 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
   fail("REVIEWED_PRIVATE_READER_LOGIN_MISSING");
  const reader=scopedURL(env.P6_PRIVATE_READER_DATABASE_URL,
     readerLogin,"PRIVATE_READONLY");
- return Object.freeze({
+ const receipt={
   schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,
-  sourceUrl:source,readerUrl:reader,
-  reviews,
-  mainSha:env.GITHUB_SHA,ghToken:env.GITHUB_TOKEN,
+  mainSha:env.GITHUB_SHA,
+  reviewedSignedDayCount:reviews.length,
   scope:{
    expectedManifestSha256:env.V39_P5_MANIFEST_SHA256,
    expectedReleaseSha256:env.V39_P5_RELEASE_SHA256,
@@ -161,7 +160,15 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
    expectedProviderContractSha256:env.V39_P5_PROVIDER_CONTRACT_SHA256,
    expectedSourceRole:P5_STAGE28_GROUPS.source
   }
+ };
+ // Never expose DB URLs, GH token or private signed review wires to logging.
+ Object.defineProperties(receipt,{
+  sourceUrl:{enumerable:false,value:source},
+  readerUrl:{enumerable:false,value:reader},
+  reviews:{enumerable:false,value:reviews},
+  ghToken:{enumerable:false,value:env.GITHUB_TOKEN}
  });
+ return Object.freeze(receipt);
 }
 
 /** Offline tests may inject data sources; real GH entrypoint never does. */
