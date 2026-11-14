@@ -10,6 +10,8 @@ import {
  p6DayEpochReviewPreimage,publishP6DayEpochIndexRevisionOnce,
  readP6DayEpochIndexCurrentPriorOnce
 } from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
+import {hydrateP6DayEpochFullRegistriesReadOnly}
+ from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
 const p="postgresql://phase6_private_publisher_login_ci_epoch:ci-only-day-pub@127.0.0.1:5432/neondb?sslmode=disable";
 const r="postgresql://phase6_private_reader_login_ci_epoch:ci-only-day-read@127.0.0.1:5432/neondb?sslmode=disable";
 const owner="postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable";
@@ -140,6 +142,28 @@ try{
  assert.deepEqual(secondRead.currentIndexBytes,second.bytes);
  assert.deepEqual(secondRead.previousIndexBytes,first.bytes);
  assert.equal(secondRead.redactedSummary.entryCount,2);
+ // Physically SELECT both protected SOURCE bytes using the same restricted
+ // reader group and one day-scoped signed index. Never print the payload.
+ const hydrated=await hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:second.pins,wire:second.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false}
+ });
+ assert.equal(hydrated.redactedSummary.privateRegistryCount,2);
+ assert.equal(hydrated.redactedSummary.actualPrivateRegistryBytesRead,true);
+ assert.equal(hydrated.redactedSummary.githubChildDispatches,0);
+ assert.deepEqual(hydrated.getFrozen(d1.path),d1.payload);
+ assert.deepEqual(hydrated.getFrozen(d2.path),d2.payload);
+ assert.deepEqual(Object.keys(hydrated),["redactedSummary"]);
+ assert.equal(JSON.stringify(hydrated).includes(d1.path),false);
+ assert.equal(JSON.stringify(hydrated).includes("TEST_SYNTHETIC_SOURCE"),false);
+ assert.throws(()=>hydrated.getFrozen("unreviewed"),
+  /UNSIGNED_PRIVATE_REGISTRY_LOOKUP/);
+ await assert.rejects(hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:second.pins,wire:second.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:false,
+   existingPaidDispatchApproved:false}
+ }),/NO_EXPLICIT_READONLY_APPROVAL/);
  const day31=indexPacket(31,1,[d31.entry],null);
  await publishP6DayEpochIndexRevisionOnce({
   client:pub,pins:day31.pins,wire:day31.wire,
@@ -149,6 +173,13 @@ try{
   client:read,pins:day31.pins,wire:day31.wire,publicKeyPem:pem
  });
  assert.equal(laterDay.redactedSummary.runDayIndex,31);
+ const day31Bytes=await hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:day31.pins,wire:day31.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false}
+ });
+ assert.equal(day31Bytes.redactedSummary.runDayIndex,31);
+ assert.deepEqual(day31Bytes.getFrozen(d31.path),d31.payload);
  // An immutable day1 owner deletion removes its bytes without affecting
  // day31: this proof still requires a separate proper expiry reviewer.
  const removed=await dbOwner.query(
@@ -162,6 +193,17 @@ try{
   client:read,pins:day31.pins,wire:day31.wire,publicKeyPem:pem
  });
  assert.equal(still.redactedSummary.runDayIndex,31);
+ // A still-valid signed index is NOT sufficient when a referenced original
+ // has disappeared: the full read must fail closed, without any paid call.
+ const missing=await dbOwner.query(
+  "DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",
+  [d31.path]);
+ assert.equal(missing.rowCount,1);
+ await assert.rejects(hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:day31.pins,wire:day31.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false}
+ }),/INCOMPLETE_OR_OVERSIZE_PRIVATE_DAY_REGISTRY_SET/);
  console.log(JSON.stringify({
   status:"P6_DAY_EPOCH_REAL_RESTRICTED_PG16_PUBLISH_READ_PASS",
   signedDayIndices:[1,31],sourceRegistries:3,
@@ -170,6 +212,8 @@ try{
   immutableDay1ClaimPreventsGenesisReplay:true,
   realExternalEd25519SignatureVerified:true,
   realPg16SourceRoleIsolation:true,
+  dayEpochPrivateFullRegistryHydrationVerified:true,
+  missingSignedRegistryRefused:true,
   productionDatabaseWrites:0,providerCalls:0,
   phase6PaidGo:false
  }));
