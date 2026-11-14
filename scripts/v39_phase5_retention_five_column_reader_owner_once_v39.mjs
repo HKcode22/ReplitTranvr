@@ -109,6 +109,32 @@ async function preflight(client){
    "SELECT rolname FROM pg_roles WHERE rolname=$1",[ROLE]
   )).rows;
   reviewP5ReaderOwnerCatalog(who,shape,existing);
+  // Prior owner catalog searched *table-level* SELECT. Column-only readers
+  // would be invisible to that older query. Refuse duplicate creation when
+  // any other exact metadata-only login already exists, even if its name is
+  // not the proposed new production role.
+  const inherited=(await client.query(
+   "SELECT r.rolname FROM pg_roles r"+
+   " WHERE r.rolcanlogin AND r.rolname<>'neondb_owner'"+
+   " AND NOT r.rolsuper AND NOT r.rolcreatedb"+
+   " AND NOT r.rolcreaterole AND NOT r.rolreplication"+
+   " AND NOT r.rolbypassrls AND NOT r.rolinherit"+
+   " AND NOT EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid)"+
+   " AND has_schema_privilege(r.rolname,'clean','USAGE')"+
+   " AND NOT has_schema_privilege(r.rolname,'clean','CREATE')"+
+   " AND NOT has_table_privilege(r.rolname,'"+TABLE+"','SELECT')"+
+   " AND NOT has_table_privilege(r.rolname,'"+TABLE+"','INSERT')"+
+   " AND NOT has_table_privilege(r.rolname,'"+TABLE+"','UPDATE')"+
+   " AND NOT has_table_privilege(r.rolname,'"+TABLE+"','DELETE')"+
+   " AND NOT has_table_privilege(r.rolname,'"+TABLE+"','TRUNCATE')"+
+   " AND (SELECT bool_and(has_column_privilege(r.rolname,"+
+   " '"+TABLE+"',c,'SELECT')) FROM unnest($1::text[]) c)"+
+   " AND (SELECT bool_and(NOT has_column_privilege(r.rolname,"+
+   " '"+TABLE+"',c,'SELECT')) FROM unnest($2::text[]) c)"+
+   " LIMIT 2",
+   [RETENTION_READER_REQUIRED_COLUMNS,RETENTION_READER_DENIED_COLUMNS]
+  )).rows;
+  if(inherited.length)fail("EXISTING_FIVE_COLUMN_READER_REUSE_REVIEW_NO_DUPLICATE_ROLE");
   await client.query("ROLLBACK");active=false;
   return {schemaVerified:true,roleAbsent:true,actorVerified:true};
  }finally{
