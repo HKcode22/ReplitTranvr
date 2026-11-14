@@ -2,8 +2,11 @@
  * Phase6 V0096 schema-only exact Git-blob-pinned ONE-TIME owner tool.
  * Default READ ONLY: inspect exact existing neondb PostgreSQL16 V0094,
  * V0095 and V0096 shape/roles without reading any flight Contents.
- * install: separately reviewed exact local main SHA, migration Git blob,
- * protected temp file, manual STOP approval; no retry on ambiguous COMMIT.
+ * V0096 LEGACY GLOBAL CHAIN HAS A VERIFIED 31-DAY / <=7-DAY TTL
+ * INCOMPATIBILITY. The CLI install mode is intentionally DISABLED, even
+ * with old owner approval tokens. Keep inventory/readback for diagnostics.
+ * The exact already-reviewed V0096 SQL is unchanged; the owner must not
+ * commission it. Replacement day-epoch proposal is disposable CI only.
  *
  * No provider REST, secrets, new LOGIN, migrations V0079–V0095 replay,
  * original/PRE/POST row writes or automatic paid Phase6 GO.
@@ -172,6 +175,10 @@ export async function readV0096OwnerInventory(client){
  }
 }
 export async function installV0096OnceOwner({client,rawMigration,blobSha}){
+ // Keep this historical API to make accidental calls fail closed. The V0096
+ // SHA-pinned SQL is preserved only for archaeology and disposable regression;
+ // its global first-revision <=7d expiry cannot serve the 31-day study.
+ fail("LEGACY_GLOBAL_CHAIN_31DAY_TTL_INCOMPATIBLE_NEVER_INSTALL");
  reviewExactV0096Sql(rawMigration,blobSha);
  const before=await readV0096OwnerInventory(client);
  if(before.state!=="V0095_READY_EMPTY_V0096_NOT_INSTALLED_NO_GO")
@@ -222,6 +229,10 @@ async function main(){
  try{
   if(!["inventory","install"].includes(mode))
    fail("UNKNOWN_OWNER_MODE");
+  // A genuine retention/31-day contradiction was found before production
+  // V0096 install. No manual approval from older chat can waive this.
+  if(mode==="install")
+   fail("LEGACY_GLOBAL_CHAIN_31DAY_TTL_INCOMPATIBLE_NEVER_INSTALL");
   if(!process.env.DATABASE_URL)
    fail("EXISTING_OWNER_DATABASE_URL_MISSING");
   let bytes;

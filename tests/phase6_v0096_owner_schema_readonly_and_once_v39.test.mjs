@@ -28,3 +28,10 @@ test("reviewed V0096 SQL exact Git blob, not plaintext path or changed migration
   corrupt,V0096_REVIEWED_SQL_BLOB_SHA
  ),/HOLD_V0096_OWNER_SCHEMA_/);
 });
+
+test("obsolete V0096 global owner installer refuses both public CLI and directly imported function",()=>{
+ const source=readFileSync("scripts/v39_phase6_v0096_owner_schema_readonly_and_once.mjs","utf8");
+ const holds=source.match(/fail\("LEGACY_GLOBAL_CHAIN_31DAY_TTL_INCOMPATIBLE_NEVER_INSTALL"\)/g)||[];
+ assert.equal(holds.length,2); // direct exported function and CLI main
+ assert(source.includes("if(mode===\"install\")"));
+});

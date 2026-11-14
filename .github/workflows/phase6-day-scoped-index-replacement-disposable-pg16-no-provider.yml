@@ -1,0 +1,112 @@
+name: Phase6 retention-bounded run-day index replacement (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/PHASE6_DAY_SCOPED_INDEX_REPLACEMENT_CANDIDATE_NOT_FOR_INSTALL.sql'
+      - 'tests/phase6_day_scoped_index_candidate_static_v39.test.mjs'
+      - 'tests/phase6_day_scoped_index_disposable_pg16_v39.mjs'
+      - '.github/workflows/phase6-day-scoped-index-replacement-disposable-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  CI: 'true'
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  static-no-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate candidate is not approved production migration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          test "$ADB_AUTO_COLLECT" = 0
+          node --test tests/phase6_day_scoped_index_candidate_static_v39.test.mjs
+          echo 'DAY_SCOPED_INDEX_STATIC_DISPOSABLE_ONLY_NO_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
+  real-disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      P6_DAY_EPOCH_DISPOSABLE_TEST_ONLY: '1'
+      P6_TEST_DATABASE_URL: 'postgresql://neondb_owner:ci-only-day-epoch@127.0.0.1:5432/neondb?sslmode=disable'
+      P6_TEST_RESTRICTED_PUBLISHER_DATABASE_URL: 'postgresql://ci_phase6_epoch_publisher:ci-only-epoch-pub@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install only original staged V0094+V0095 into disposable PG16 service
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-epoch'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD=ci-only-day-epoch
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          test -z "$(PGPASSWORD=ci-only-day-epoch psql -U neondb_owner -X -At -v ON_ERROR_STOP=1 \
+            -c "SELECT COALESCE(to_regclass('phase6_private.signed_day_shard_index_revision_v39')::text,'')")"
+      - name: Test alternative schema, same-day chain, 31 independent epochs and replay fence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          export PGPASSWORD=ci-only-day-epoch
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/PHASE6_DAY_SCOPED_INDEX_REPLACEMENT_CANDIDATE_NOT_FOR_INSTALL.sql
+          # Create an isolated CI-only LOGIN AFTER the schema preflight.
+          # Its only capability is SET ROLE to the original NOLOGIN
+          # publisher group. Never commission this role on production.
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE ci_phase6_epoch_publisher LOGIN NOINHERIT PASSWORD 'ci-only-epoch-pub'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "GRANT phase6_private_frozen_publisher_v39 TO ci_phase6_epoch_publisher WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+          node tests/phase6_day_scoped_index_disposable_pg16_v39.mjs
+          echo 'DAY_SCOPED_INDEX_DISPOSABLE_PG16_NO_PRODUCTION_NO_PAID_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
