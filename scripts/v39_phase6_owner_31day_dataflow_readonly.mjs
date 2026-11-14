@@ -142,6 +142,22 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
     // Never SELECT header values; they may include credentials.
     const httpHeaderMetadataColumns=cols.filter(c=>
       /^(cache_control|cache_control_max_age|http_response_headers|response_headers|raw_response_headers|original_response_headers)$/.test(c));
+    // All-time capped presence/volume is separate from 31-day lookback.
+    // Without a recognized timestamp, NEVER report zero or call it recent.
+    const boundedAllTime=(await client.query(
+      "SELECT COUNT(*)::integer AS n FROM (SELECT 1 FROM "+table+
+      " LIMIT "+P6_OWNER_SAMPLE_LIMIT+") bounded"
+    )).rows[0]?.n;
+    const totalN=Number(boundedAllTime);
+    if(!Number.isSafeInteger(totalN)||totalN<0||
+       totalN>P6_OWNER_SAMPLE_LIMIT)block("BAD_CAPPED_ALL_TIME_COUNT");
+    const allTimeSample={
+      rowsSampled:totalN,
+      status:totalN===P6_OWNER_SAMPLE_LIMIT?
+       "AT_LEAST_SAMPLE_LIMIT_ALL_TIME":
+       "EXACT_ALL_TIME_UNDER_CAP",
+      cap:P6_OWNER_SAMPLE_LIMIT
+    };
     let dateStats=null;
     if(clock){
      // Fixed allowlisted identifiers only; LIMIT protects busy tables.
@@ -187,26 +203,63 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
     let deletionReview=null;
     if(table==="clean.provider_content_blob_ref"&&
        cols.includes("expires_at_utc")&&
-       cols.includes("deletion_verified_at_utc")){
+       cols.includes("deletion_verified_at_utc")&&
+       cols.includes("persisted_at_utc")){
+      const hasDeletedClock=cols.includes("deleted_at_utc");
+      const hasPersistClock=cols.includes("persisted_at_utc");
       const z=await client.query(
-       "SELECT COUNT(*)::integer AS n FROM ("+
-       "SELECT 1 FROM clean.provider_content_blob_ref"+
-       " WHERE expires_at_utc <= clock_timestamp()"+
+       "SELECT COUNT(*)::integer AS n,"+
+       (hasDeletedClock?
+        "COUNT(*) FILTER (WHERE deleted_at_utc IS NOT NULL)::integer"+
+        " AS marked_deleted_but_unverified,"+
+        "COUNT(*) FILTER (WHERE deleted_at_utc IS NULL)::integer"+
+        " AS no_delete_marker,":
+        "NULL::integer AS marked_deleted_but_unverified,"+
+        "NULL::integer AS no_delete_marker,")+
+       (hasPersistClock?
+        "COUNT(*) FILTER (WHERE persisted_at_utc < "+
+        "clock_timestamp()-interval '31 days')::integer AS older_31d":
+        "NULL::integer AS older_31d")+
+       " FROM (SELECT "+[
+        ...(hasDeletedClock?["deleted_at_utc"]:[]),
+        ...(hasPersistClock?["persisted_at_utc"]:[])
+       ].join(",")+
+       " FROM clean.provider_content_blob_ref"+
+       " WHERE expires_at_utc<=clock_timestamp()"+
        " AND deletion_verified_at_utc IS NULL LIMIT "+
        P6_OWNER_SAMPLE_LIMIT+") bounded"
       );
-      const n=Number(z.rows[0]?.n);
+      const a=z.rows[0];
+      const n=Number(a?.n);
       if(!Number.isSafeInteger(n)||n<0||n>P6_OWNER_SAMPLE_LIMIT)
        block("INVALID_EXPIRED_BLOB_REVIEW_COUNT");
+      const numericOrNull=(v)=>v===null?null:
+       Number.isSafeInteger(Number(v))&&Number(v)>=0?
+       Number(v):block("INVALID_BLOB_BUCKET");
+      const marked=numericOrNull(a.marked_deleted_but_unverified);
+      const noMarker=numericOrNull(a.no_delete_marker);
+      const older=numericOrNull(a.older_31d);
+      if((marked!==null&&noMarker!==null&&marked+noMarker!==n)||
+         (older!==null&&older>n))block("BLOB_BUCKET_CONTRADICTION");
       deletionReview={status:n===P6_OWNER_SAMPLE_LIMIT?
        "AT_LEAST_SAMPLE_LIMIT_NEEDS_OWNER_INSPECTION":
        n===0?"NO_EXPIRED_UNVERIFIED_BLOBS_IN_SAMPLED_TABLE":
        "EXPIRED_PRIMARY_BLOB_DELETION_NOT_VERIFIED_REVIEW",
        sampledExpiredUnverified:n,
+       deletionMarkedButUnverified:marked,
+       noDeletionMarker:noMarker,
+       referencePersistedMoreThan31DaysAgo:older,
+       physicalObjectPresentUnknown:true,
        sourceLegalRightsOrBackupExpiryCertified:false};
     }
+    const noClockStatus=totalN===0?"NO_ROWS_ALL_TIME":
+      totalN===P6_OWNER_SAMPLE_LIMIT?
+       "AT_LEAST_SAMPLE_LIMIT_ALL_TIME_NO_CLOCK":
+       "EXACT_ROWS_ALL_TIME_UNDER_CAP_NO_CLOCK";
     const out={event:"STAGE_RESULT",stage:label,table,
-     status:dateStats?.status??"AVAILABLE_METADATA_ONLY_NO_CLOCK",
+     status:dateStats?.status??noClockStatus,
+     allTimeSample,
+     noRecognizedEventClock:clock===null,
      columnCount:cols.length,
      timestampColumn:clock,
      hasSensitiveProviderValues:cols.some(c=>/payload|raw_body|response_body|token|secret|flight_?number/i.test(c)),
@@ -220,6 +273,7 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
      days:dateStats?.days??[],
      contentsRead:false,rowValuesRead:false};
     timeline[label]={status:out.status,rowsSampled:out.rowsSampled,
+     allTimeRowsSampled:out.allTimeSample.rowsSampled,
      daysRepresented:out.days.length};
     print(out);
     await client.query("RELEASE SAVEPOINT p6_table_view");
@@ -269,10 +323,21 @@ export function formatP6OwnerStageHuman(e){
   const state=e.preQueueStateCounts?
     " | queue "+e.preQueueStateCounts.map(x=>x.state+":"+x.count).join(","):"";
   const deletion=e.expiredProviderBlobReview?
-    " | expired primary blobs without verified deletion: "+
-     e.expiredProviderBlobReview.sampledExpiredUnverified:"";
+    " | expired blob refs lacking verified deletion: "+
+      e.expiredProviderBlobReview.sampledExpiredUnverified+
+      " (no deletion marker: "+
+      (e.expiredProviderBlobReview.noDeletionMarker??"unknown")+
+      ", marked but unverified: "+
+      (e.expiredProviderBlobReview.deletionMarkedButUnverified??"unknown")+
+      ", refs older than 31d: "+
+      (e.expiredProviderBlobReview.referencePersistedMoreThan31DaysAgo??"unknown")+
+      "; object presence NOT checked)":"";
+  const allTime=e.allTimeSample?
+    " | all-time sampled: "+e.allTimeSample.rowsSampled+
+    (e.allTimeSample.status==="AT_LEAST_SAMPLE_LIMIT_ALL_TIME"?"+":"")+
+    (e.noRecognizedEventClock?" (NO timestamp; NOT 31d)":""):"";
   return "[RESULT] "+e.stage+" — "+status+" | "+rows+days+
-    state+deletion+" | original contents NOT read";
+    allTime+state+deletion+" | original contents NOT read";
  }
  if(e.event==="RUN_SUMMARY")
   return "[FINISH] "+e.datasetStages+" stages checked; provider calls=0,"+
