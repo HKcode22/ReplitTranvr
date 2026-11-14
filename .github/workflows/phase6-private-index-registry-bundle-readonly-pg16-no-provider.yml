@@ -28,7 +28,7 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
-      - name: Signed index+all exact registries: no source call / no public paths
+      - name: 'Signed index and exact registries: no source call or public paths'
         shell: bash
         run: |
           set -Eeuo pipefail
