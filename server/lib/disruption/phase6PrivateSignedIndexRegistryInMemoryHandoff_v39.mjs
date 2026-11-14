@@ -201,6 +201,7 @@ export async function hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly({
   begun=false;
   const response={
    redactedSummary:Object.freeze({
+    ...route.operatorSummary,
     schema:P6_PRIVATE_FULL_REGISTRY_BRIDGE_SCHEMA,
     status:"SIGNED_RESTRICTED_INMEMORY_31DAY_REGISTRY_HANDOFF_NO_DISPATCH",
     currentIndexSha256:reviewPins.expectedIndexSha256,
@@ -208,7 +209,6 @@ export async function hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly({
     verifiedRegistryCount:paths.length,
     verifiedTotalRegistryBytes:realBytes,
     observedRestrictedPgClockUtc:pins.observedDbClockUtc,
-    ...route.operatorSummary,
     privateRegistryBytesWereNeverWrittenToCheckout:true,
     privateSignedPathsExcludedFromPublicJson:true,
     externalSignedReviewerIsNotProviderRightsProof:true,
