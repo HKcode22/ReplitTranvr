@@ -49,6 +49,7 @@ on:
       - '.github/workflows/phase5-one-signed-day-source-child-dispatch.yml'
       - 'tests/phase5_signed_day_source_child_release_v39.test.ts'
       - 'tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts'
+      - 'tests/phase5_source_child_private_legacy_exclusive_routing_v39.test.ts'
       - 'tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts'
       - 'tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts'
       - 'tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts'
@@ -85,7 +86,7 @@ jobs:
       - name: Verify zero-provider due queue without production DB/paid permission
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_phase6_append_only_day_shard_index_v39.test.ts tests/phase5_github_complete_workflow_history_v39.test.ts tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase5_later_pre_github_child_dispatcher_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts tests/phase5_later_pre_signed_day_batch_dispatcher_v39.test.ts tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts tests/phase6_private_source_parent_real_ro_v39.test.ts
+          npx vitest run tests/phase5_phase6_append_only_day_shard_index_v39.test.ts tests/phase5_github_complete_workflow_history_v39.test.ts tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_source_child_private_legacy_exclusive_routing_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase5_later_pre_github_child_dispatcher_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts tests/phase5_later_pre_signed_day_batch_dispatcher_v39.test.ts tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts tests/phase6_private_source_parent_real_ro_v39.test.ts
           echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
   signed-main-source-queue-readonly:
     if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
