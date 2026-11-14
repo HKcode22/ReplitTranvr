@@ -127,7 +127,9 @@ jobs:
             assert(events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.rowsSampled===1));
             assert(events.some(e=>e.stage==="NORMALIZED FLIGHTS"&&e.rowsSampled===1));
             const pre=events.find(e=>e.stage==="PRE SNAPSHOTS");
-            assert(pre?.rowsSampled===4);
+            assert(pre?.rowsSampled===4,
+              "PRE stage sample HOLD status="+String(pre?.status)+
+              " sqlstate="+String(pre?.sqlstate??"NONE"));
             assert(pre.preFeatureCoverage?.sampledTotal===4);
             assert(pre.preFeatureCoverage?.byHorizon?.[0]?.horizon==="T-24h");
             assert(pre.preFeatureCoverage?.byHorizon?.[0]?.atLeastOneNonNullFeatureValue===0);
