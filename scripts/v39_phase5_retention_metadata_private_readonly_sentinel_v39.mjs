@@ -117,8 +117,13 @@ export async function readP5RetentionMetadataReadOnly({url,expectedRole}){
    " pg_is_in_recovery() AS replica,"+
    " clock_timestamp() AS db_now,"+
    " r.rolsuper,r.rolcreatedb,r.rolcreaterole,r.rolreplication,"+
+   " r.rolbypassrls,r.rolinherit,"+
    " has_table_privilege(current_user, '"+
-   TABLE+"','SELECT') AS can_read_refs"+
+   TABLE+"','SELECT') AS can_read_refs,"+
+   " has_table_privilege(current_user, '"+TABLE+"','INSERT') AS can_insert,"+
+   " has_table_privilege(current_user, '"+TABLE+"','UPDATE') AS can_update,"+
+   " has_table_privilege(current_user, '"+TABLE+"','DELETE') AS can_delete,"+
+   " has_table_privilege(current_user, '"+TABLE+"','TRUNCATE') AS can_truncate"+
    " FROM pg_roles r WHERE r.rolname=current_user"
   )).rows[0];
   if(!identity||identity.db!==EXPECTED_DB||
@@ -129,7 +134,10 @@ export async function readP5RetentionMetadataReadOnly({url,expectedRole}){
      identity.pg_version<160000||identity.pg_version>=170000||
      identity.rolsuper||identity.rolcreatedb||
      identity.rolcreaterole||identity.rolreplication||
-     identity.can_read_refs!==true)
+     identity.rolbypassrls||identity.rolinherit||
+     identity.can_read_refs!==true||
+     identity.can_insert||identity.can_update||
+     identity.can_delete||identity.can_truncate)
    HOLD("ACTOR_PRIVILEGE_DB_VERSION_OR_RO_MISMATCH");
   const result=await client.query(
    "SELECT count(*)::int AS total_refs,"+
