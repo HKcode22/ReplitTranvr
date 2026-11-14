@@ -14,7 +14,7 @@ const H=b=>createHash("sha256").update(b).digest("hex");
 const kp=generateKeyPairSync("ed25519");
 const pem=kp.publicKey.export({type:"spki",format:"pem"}).toString();
 const fp=H(kp.publicKey.export({type:"spki",format:"der"}));
-const AT="2026-11-14T01:58:00.000Z",NOW="2026-11-14T02:00:00.000Z";
+const AT="2026-11-14T01:59:50.000Z",NOW="2026-11-14T02:00:00.000Z";
 const EXPIRE="2026-11-14T04:00:00.000Z",VALID="2026-11-14T03:00:00.000Z";
 const manifest="a".repeat(64),calendar="b".repeat(64),
  release="c".repeat(64),rights="d".repeat(64),
@@ -35,7 +35,7 @@ function fixture({revision=2}={}){
    entry:{
     lane,runDayIndex:day,shardIndex:1,
     filePath:path,fileSha256:H(raw),
-    publishedAtUtc:"2026-11-14T01:59:00.000Z",
+    publishedAtUtc:"2026-11-14T01:59:45.000Z",
     notBeforeUtc:"2026-11-14T02:10:00.000Z",
     hardLatestUtc:"2026-11-14T02:55:00.000Z",
     reviewEvidenceSha256:reviewer,
@@ -47,9 +47,9 @@ function fixture({revision=2}={}){
     kind,content_sha256:H(raw),
     reviewed_code_sha:code,manifest_sha256:manifest,
     rights_sha256:rights,external_review_sha256:reviewer,
-    externally_reviewed_at_utc:new Date(AT),
+    externally_reviewed_at_utc:new Date("2026-11-14T01:59:10.000Z"),
     retention_not_after_utc:new Date(EXPIRE),
-    committed_at_utc:new Date("2026-11-14T01:58:59.000Z"),
+    committed_at_utc:new Date("2026-11-14T01:59:31.000Z"),
     payload_bytes:raw
    }
   };
