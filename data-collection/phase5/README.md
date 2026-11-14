@@ -1,5 +1,9 @@
 # Phase 5 — Final freeze, collection readiness and data visibility
 
+## Nov 13 — V0096 hash-pinned one-time owner schema installer and independent state readback (NO GO)
+
+[Read the V0096 exact Git SHA one-time owner schema/readback checkpoint and production commissioning boundary](2026-11-13_PHASE6_V0096_EXACT_HASH_OWNER_ONCE_SCHEMA_READBACK_NO_GO.md). Builds on #635 V0094, #644 V0095 and merged #645 V0096 staged index transport, then #646 private Ed25519 read-once and #647 candidate signed publisher. Default **READ ONLY** owner inventory; distinct STOP-default, exact-main/SQL blob-consented `install` only after V0094→V0095 verified empty, never a cron job or daily Replit Shell loop. Disposable non-superuser PG16 code tests, no real private LOGIN, index, paid SOURCE/Alert, original, V0087/Stage14 or provider Contents rights change. Real Phase5 scientific FREEZE and Phase6 paid GO remain false. Nov20 conditional; no user action required for code-only CI.
+
 ## Nov 13 — V0096 exact Ed25519 current+previous private index READ ONCE (NO GO)
 
 [Read the current/previous signed-index restricted PostgreSQL reader checkpoint](2026-11-13_PHASE6_V0096_RESTRICTED_CURRENT_PREVIOUS_INDEX_READ_ONCE_NO_GO.md). Builds on the staged #645 private V0096 index revision schema (after V0094→V0095): external Ed25519 signer/key fingerprint, exact current/prior index SHA, source code/calendar/manifest/release/rights pins, real PG16 reader NOLOGIN effective group, READ ONLY clock + conservative expiry, immutable revision prefix, and nonenumerable raw Buffer so operator logs only show SHA/revision/counts. **No real Neon installation or GitHub child integration yet.** Needs authentic prospective external signer/index publisher, restricted private GH hydration, signed 31-parent-day B0062 calendar/budget and lawful retention, then independent Phase5 scientific FREEZE and distinct paid Phase6 Day1 GO. No daily owner Replit Shell intended, Nov20 conditional.
