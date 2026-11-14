@@ -13,7 +13,7 @@ import {
  createHash,createPublicKey,verify
 } from "node:crypto";
 import {
- lstatSync,mkdirSync,readFileSync,writeFileSync,unlinkSync
+ lstatSync,mkdirSync,readFileSync,writeFileSync,unlinkSync,chmodSync
 } from "node:fs";
 import {resolve,join,dirname} from "node:path";
 
@@ -74,7 +74,8 @@ export function verifyP6ExternalSourcePostReview(wire,publicKeyPem,pins){
     ])||
     rev.schema!==P6_SOURCE_POST_REVIEW_SCHEMA||
     rev.audience!==P6_SOURCE_POST_REVIEW_AUDIENCE||
-    !PATHS[rev.kind]?.test(rev.logicalPath??"")||
+    !Object.hasOwn(PATHS,rev.kind)||
+    !PATHS[rev.kind].test(rev.logicalPath??"")||
     !SHA.test(rev.contentSha256??"")||
     !CODE.test(rev.reviewedCodeSha??"")||
     ![rev.manifestSha256,rev.rightsSha256,
@@ -96,9 +97,7 @@ export function verifyP6ExternalSourcePostReview(wire,publicKeyPem,pins){
     rev.reviewedCodeSha!==pins.expectedReviewedMainSha||
     rev.runDayIndex!==pins.expectedRunDayIndex||
     rev.shardIndex!==pins.expectedShardIndex||
-    !LOGIN.test(pins.expectedPrivateSessionLogin??"")||
-    !Buffer.isBuffer(pins.expectedPublicReviewSignaturePreimage)&&
-      pins.expectedPublicReviewSignaturePreimage!==undefined)
+    !LOGIN.test(pins.expectedPrivateSessionLogin??""))
   fail("MISSING_EXTERNAL_REVIEW_IDENTITY_AND_INDEPENDENT_PINS");
  const reviewed=exactUtc(rev.reviewedAtUtc);
  const expiry=exactUtc(rev.retentionNotAfterUtc);
@@ -254,7 +253,8 @@ export function materializeP6VerifiedPrivatePacketOnce(
 ){
  if(privateEphemeralFileApproved!==true||
     !receipt||!Buffer.isBuffer(receipt.privateBytes)||
-    !PATHS[receipt.redactedSummary?.kind]?.test(receipt.privateLogicalPath??"")||
+    !Object.hasOwn(PATHS,receipt.redactedSummary?.kind)||
+    !PATHS[receipt.redactedSummary.kind].test(receipt.privateLogicalPath??"")||
     h(receipt.privateBytes)!==receipt.redactedSummary.contentSha256)
   fail("UNVERIFIED_PRIVATE_EPHEMERAL_MATERIALIZATION");
  const root=resolve(repoRoot);
@@ -271,10 +271,13 @@ export function materializeP6VerifiedPrivatePacketOnce(
    if(!st.isDirectory()||st.isSymbolicLink())
     fail("REPO_PARENT_SYMLINK_REFUSED");
   }
-  mkdirSync(dir,{mode:0o700});
+  // Multiple distinct private SOURCE/POST packets may be needed in one
+  // ephemeral runner. Reuse a non-symlink dir, never overwrite a file.
+  mkdirSync(dir,{mode:0o700,recursive:true});
   const st=lstatSync(dir);
   if(!st.isDirectory()||st.isSymbolicLink())
    fail("FROZEN_DIRECTORY_SYMLINK_REFUSED");
+  chmodSync(dir,0o700);
  }catch(e){
   if(String(e?.message??"").startsWith("HOLD_P6_PRIVATE_SOURCE_POST_READ_"))
    throw e;
