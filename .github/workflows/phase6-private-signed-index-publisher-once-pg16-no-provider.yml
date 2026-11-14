@@ -159,10 +159,11 @@ jobs:
            const second=make(2);
            second.previousIndexSha256=hash(rawFirst);
            const rawSecond=Buffer.from(JSON.stringify(second));
+           const fixedIndexExpiry=new Date(Date.now()+60*60000).toISOString();
            const publisher=(revision,indexBytes,prev)=>{
-            const at=new Date(Date.now()-1000).toISOString();
+            const at=new Date().toISOString();
             const validUntil=new Date(Date.now()+30*60000).toISOString();
-            const expiry=new Date(Date.now()+60*60000).toISOString();
+            const expiry=fixedIndexExpiry;
             const review={
              schema:P6_INDEX_REVIEW_SCHEMA,audience:P6_INDEX_REVIEW_AUDIENCE,
              indexRevision:revision,indexSha256:hash(indexBytes),
