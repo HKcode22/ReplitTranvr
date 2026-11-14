@@ -22,7 +22,10 @@ const iso=(x)=>{
  return Number.isFinite(d.getTime())?d.toISOString():HOLD("INVALID_DELETE_CLOCK");
 };
 const numberField=(row,key)=>{
- const n=Number(row?.[key]);
+ const value=row?.[key];
+ if(value===null||value===undefined||value==="")
+  HOLD("INVALID_AGGREGATE");
+ const n=Number(value);
  if(!whole(n))HOLD("INVALID_AGGREGATE");
  return n;
 };
@@ -67,11 +70,13 @@ export function assertP5RetentionSentinelGate(env){
     env.V39_PHASE6_PROCESS_ARMED!=="0"||
     env.V39_PHASE6_OWNER_APPROVED!=="0"||
     env.AERODATABOX_API_KEY||
+    env.AERODATABOX_WEBHOOK_SECRET||
     env.RAPIDAPI_KEY||
     env.DATABASE_URL||
     env.V39_DATABASE_RUNTIME_URL||
     !env.P5_RETENTION_READER_DATABASE_URL||
     !/^[a-z][a-z0-9_]{2,62}$/.test(env.P5_RETENTION_EXPECTED_READER_ROLE??"")||
+    env.P5_RETENTION_EXPECTED_READER_ROLE==="neondb_owner"||
     env.P5_RETENTION_APPROVED_MAIN_SHA!==env.GITHUB_SHA)
   HOLD("UNAPPROVED_MAIN_OR_PRIVILEGED_SECRET_SCOPE");
  return Object.freeze({
