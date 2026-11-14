@@ -1,0 +1,103 @@
+name: Phase6 autonomous GitHub controller heartbeat (NO PROVIDER, NO GO)
+on:
+  # A nonpaid control-plane observation, NOT a new collection clock.
+  # Original five-/ten-minute SOURCE/PRE/REAPER jobs remain unchanged.
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs'
+      - 'scripts/v39_phase6_github_controller_heartbeat_v39.mjs'
+      - 'tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs'
+      - '.github/workflows/phase6-autonomous-gh-controller-heartbeat-no-provider.yml'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p6-nonpaid-gh-controller-heartbeat-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  P5_V39_T24_WITNESS_DATABASE_URL: ''
+jobs:
+  offline-no-provider-regression:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Offline mock scheduled SOURCE/PRE/REAPER/index histories
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$DATABASE_URL$RAPIDAPI_KEY$GITHUB_TOKEN"
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs
+          echo 'GH_AUTO_HEARTBEAT_OFFLINE_PASS_NO_PROVIDER_NO_DB_NO_PAID'
+
+  actual-main-nonpaid-controller-heartbeat:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          (github.event_name == 'schedule' ||
+           (github.event_name == 'workflow_dispatch' &&
+            inputs.confirm == 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      P6_CONTROLLER_HEARTBEAT_EXECUTE: '1'
+      P6_CONTROLLER_HEARTBEAT_CONFIRM: ${{ inputs.confirm }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 'STOP: no secrets / no paid / no database / exact main-only action'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$ADB_AUTO_COLLECT" = "0"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test "$V39_PHASE6_OWNER_APPROVED" = "0"
+          test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$V39_P5_SOURCE_DATABASE_URL"
+          test -z "$P5_V39_PRE_DATABASE_URL$P5_V39_T24_WITNESS_DATABASE_URL"
+          test -n "$GITHUB_TOKEN"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Read only GH workflow-run history for five existing controllers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node scripts/v39_phase6_github_controller_heartbeat_v39.mjs
+          echo 'PHASE6_GITHUB_AUTO_HEARTBEAT_OBSERVED_NO_PROVIDER_NO_DB_NO_GO'
