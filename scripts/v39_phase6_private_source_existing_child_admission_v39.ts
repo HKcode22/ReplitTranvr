@@ -94,10 +94,10 @@ export async function runP6OneSourceThroughExistingP5ChildAdmission(
  let registry:P5SignedSourceBatchRegistry;
  let packet:P5GitHubOneQueryReleaseEnvelope;
  try{
-  registry=JSON.parse(pair.privateRegistryBytes.toString("utf8"))
-     as P5SignedSourceBatchRegistry;
-  packet=JSON.parse(pair.privateQueryBytes.toString("utf8"))
-     as P5GitHubOneQueryReleaseEnvelope;
+  registry=(JSON.parse(pair.privateRegistryBytes.toString("utf8"))
+    as P5SignedSourceBatchRegistry);
+  packet=(JSON.parse(pair.privateQueryBytes.toString("utf8"))
+    as P5GitHubOneQueryReleaseEnvelope);
  }catch{hold("PRIVATE_SOURCE_REGISTRY_OR_QUERY_JSON_INVALID");}
 
  let admission:ReturnType<typeof admitP5SignedDaySourceChild>;
