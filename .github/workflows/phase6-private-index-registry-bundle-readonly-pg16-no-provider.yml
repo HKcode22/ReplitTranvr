@@ -117,7 +117,6 @@ jobs:
           const at=new Date(Date.now()-65000).toISOString();
           const expires=new Date(Date.now()+3600000).toISOString();
           const valid=new Date(Date.now()+1800000).toISOString();
-          const publish=new Date(Date.now()-10000).toISOString();
           const sourcePath="data-collection/phase5/frozen/source_abcdefgh123.json";
           const postPath="data-collection/phase5/frozen/post_abcdefgh123.json";
           await owner.connect();await client.connect();
@@ -144,7 +143,7 @@ jobs:
             rows.push({lane,raw:bytes,entry:{
               lane,runDayIndex:1,shardIndex:1,
               filePath:path,fileSha256:h(bytes),
-              publishedAtUtc:publish,
+              publishedAtUtc:at,
               notBeforeUtc:new Date(Date.now()+10*60000).toISOString(),
               hardLatestUtc:new Date(Date.now()+40*60000).toISOString(),
               reviewEvidenceSha256:reviewer,
@@ -152,6 +151,9 @@ jobs:
               sourceRegistrySha256:lane==="POST"?h(rows[0].raw):null
             }});
            }
+           const publish=new Date().toISOString();
+           for(const row of rows)row.entry.publishedAtUtc=publish;
+           const indexReviewedAt=new Date().toISOString();
            const idx1={
             schema:"v39.phase5.phase6-append-only-day-shard-index.v1",
             manifestSha256:manifest,calendarSha256:calendar,
@@ -174,7 +176,7 @@ jobs:
             [1,null,raw1],[2,h(raw1),raw2]
            ]){
             await owner.query(idxInsert,[rev,prev,h(bytes),code,
-             manifest,calendar,release,rights,reviewer,at,expires,bytes]);
+             manifest,calendar,release,rights,reviewer,indexReviewedAt,expires,bytes]);
            }
            const review={
             schema:P6_INDEX_REVIEW_SCHEMA,
@@ -184,7 +186,7 @@ jobs:
             reviewedCodeSha:code,manifestSha256:manifest,
             calendarSha256:calendar,releaseSha256:release,
             rightsSha256:rights,externalReviewEvidenceSha256:reviewer,
-            reviewedAtUtc:at,validUntilUtc:valid,
+            reviewedAtUtc:indexReviewedAt,validUntilUtc:valid,
             retentionNotAfterUtc:expires,
             reviewerPublicKeyFingerprintSha256:fp
            };
@@ -210,7 +212,7 @@ jobs:
             indexReviewerPublicKeyPem:pem
            });
            assert.equal(out.redactedSummary.totalVerifiedRegistryCount,2);
-           assert.equal(out.redactedSummary.sourceOrPostPaidDispatch,false);
+           assert.equal(out.redactedSummary.githubChildDispatches,0);
            assert.deepEqual(out.getFrozen(sourcePath),rows[0].raw);
            assert.deepEqual(out.getFrozen(postPath),rows[1].raw);
            assert(!JSON.stringify(out).includes(sourcePath));
