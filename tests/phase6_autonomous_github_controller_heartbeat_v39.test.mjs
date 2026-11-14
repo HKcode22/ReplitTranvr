@@ -47,6 +47,18 @@ test("skipped schedule is safety-gated, never success or failed collection",()=>
  assert.equal(s.runStateCounts.completedSuccess,0);
  assert.equal(s.successfullyCollectedFlightOrPaidRunProven,false);
 });
+test("four-hour six-slot early draw is NOT incorrectly classified as stale",()=>{
+ const early=P6_EXISTING_CONTROLLER_LANES[0];
+ assert.equal(early.maxExpectedGapMinutes,330);
+ const recent=reviewP6OneScheduledController(early,[
+   run(9,{conclusion:"skipped",created:"2026-11-13T22:20:00Z"})
+ ],T);
+ assert.equal(recent.state,"SCHEDULE_GATED_SKIPPED_NOT_A_FAILURE_OR_A_FLIGHT");
+ const tooOld=reviewP6OneScheduledController(early,[
+   run(10,{conclusion:"skipped",created:"2026-11-13T19:00:00Z"})
+ ],T);
+ assert.equal(tooOld.state,"SCHEDULE_OBSERVATION_STALE");
+});
 test("success still is not evidence provider issued an original or wrote PRE",()=>{
  const s=reviewP6OneScheduledController(P6_EXISTING_CONTROLLER_LANES[1],
   [run(2,{conclusion:"success"})],T);
