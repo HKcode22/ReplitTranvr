@@ -1,5 +1,5 @@
 /**
- * Phase 5 EXIT P0 — real private V0096 index + V0095 SOURCE_QUERY_PACKET
+ * Phase 5 EXIT P0 — real private DAY-EPOCH index + V0095 SOURCE_QUERY_PACKET
  * delivered into the ORIGINAL Phase5 one-FIDS-GET child IN THE SAME
  * GitHub Actions process, without relying on gitignored checkout files.
  *
@@ -9,7 +9,7 @@
  * paid collection. Unattended future-day rollover is STILL separate.
  *
  * Reuses:
- * - restricted PG16 V0096 full signed index+registry reader,
+ * - restricted PG16 DAY-EPOCH signed index + original semantic reader,
  * - V0095 Ed25519 private query read-once,
  * - #653 double original signed Phase5 SOURCE admission + 0600 ephemeral
  *   per-job file pair and try/finally cleanup,
@@ -21,8 +21,8 @@ import pg from "pg";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
 import {
- hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly
-} from "../server/lib/disruption/phase6PrivateSignedIndexRegistryInMemoryHandoff_v39.mjs";
+ hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly
+} from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {
  readP6PrivateSourcePostOnce
 } from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
@@ -116,11 +116,11 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
   fail("UNRELEASED_PAID_SOURCE_OR_MISSING_EXACT_PRIVATE_MAIN_INPUT");
 
  const indexPins=objectB64(
-  env.P6_PRIVATE_INDEX_REVIEW_PINS_BASE64,15000,"INDEX_PINS");
+  env.P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64,15000,"INDEX_PINS");
  const indexWire=objectB64(
-  env.P6_PRIVATE_INDEX_REVIEW_WIRE_BASE64,15000,"INDEX_WIRE");
+  env.P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64,15000,"INDEX_WIRE");
  const indexPem=parseB64(
-  env.P6_PRIVATE_INDEX_REVIEWER_PUBLIC_KEY_PEM_BASE64,
+  env.P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64,
   10000,"INDEX_PUBLIC_KEY");
  const packetPins=objectB64(
   env.P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64,
@@ -133,9 +133,10 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
   10000,"SOURCE_QUERY_PUBLIC_KEY");
  if(!exactKeys(indexPins,[
   "independentExternalReviewerSignaturePinsApproved",
-  "privateIndexReadOnlyApproved",
+  "privateDayIndexReadOnlyApproved",
   "existingPaidGithubDispatchApproved",
-  "expectedReaderSessionLogin","expectedIndexRevision",
+  "expectedReaderSessionLogin","expectedRunDayIndex",
+  "expectedIndexRevision",
   "expectedIndexSha256","expectedPreviousIndexSha256",
   "expectedReviewedCodeSha","expectedManifestSha256",
   "expectedCalendarSha256","expectedReleaseSha256",
@@ -143,8 +144,14 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
   "expectedReviewerPublicKeyFingerprintSha256"
  ])||
     indexPins.independentExternalReviewerSignaturePinsApproved!==true||
-    indexPins.privateIndexReadOnlyApproved!==true||
+    indexPins.privateDayIndexReadOnlyApproved!==true||
     indexPins.existingPaidGithubDispatchApproved!==false||
+    !Number.isSafeInteger(indexPins.expectedRunDayIndex)||
+    indexPins.expectedRunDayIndex<1||indexPins.expectedRunDayIndex>31||
+    indexPins.expectedRunDayIndex!==
+      Number(env.P5_SOURCE_BATCH_RUN_DAY_INDEX)||
+    indexWire.review?.runDayIndex!==indexPins.expectedRunDayIndex||
+    indexWire.review?.indexRevision!==indexPins.expectedIndexRevision||
     indexPins.expectedReviewedCodeSha!==env.GITHUB_SHA||
     indexPins.expectedManifestSha256!==env.V39_P5_MANIFEST_SHA256||
     indexPins.expectedReleaseSha256!==env.V39_P5_RELEASE_SHA256||
@@ -239,15 +246,17 @@ export async function runP6OnePrivateSourceOriginalGHChild(
   return c;
  });
  const hydrate=options.hydrateIndex??
-  hydrateP6SignedIndexAndFullRegistryHandoffsReadOnly;
+  hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly;
  const read=options.readSourceQuery??readP6PrivateSourcePostOnce;
  let c,index,packet;
  try{
   c=await open(gate.url);
   await c.query("SET ROLE phase6_private_frozen_reader_v39");
   index=await hydrate({
-   client:c,reviewPins:gate.indexPins,reviewWire:gate.indexWire,
-   reviewerPublicKeyPem:gate.indexPem
+   client:c,pins:gate.indexPins,wire:gate.indexWire,
+   publicKeyPem:gate.indexPem,
+   scope:{privateDayRegistryReadOnlyApproved:true,
+    existingPaidDispatchApproved:false}
   });
   packet=await read(c,gate.packetPins,gate.packetWire,gate.packetPem);
  }catch{
@@ -256,12 +265,23 @@ export async function runP6OnePrivateSourceOriginalGHChild(
   if(c)try{await c.end();}
    catch{fail("PRIVATE_READER_CLOSE_FAILED_STOP");}
  }
- // Actual path is unsigned GH input until bound to the independently
- // signed private V0096 routing intent and original SOURCE day registry.
- if(!index||!packet||
-    index.privateRoutingCandidates?.filter(x=>
+ // The GH inputs are untrusted until bound to the real Ed25519-reviewed
+ // single-day index, original semantic route and authenticated query bytes.
+ if(index?.redactedSummary?.status!==
+       "ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"||
+    index.redactedSummary.reviewedEd25519SourceWasOriginalDayBytes!==true||
+    index.redactedSummary.phase6PaidGo!==false||
+    index.redactedSummary.providerCalls!==0||
+    index.redactedSummary.githubChildDispatches!==0||
+    index.redactedSummary.runDayIndex!==gate.indexPins.expectedRunDayIndex||
+    index.redactedSummary.externallySignedDayEpochIndexSha256!==
+      gate.indexPins.expectedIndexSha256||
+    !packet||index.privateRoutingCandidates?.filter(x=>
+      x?.lane==="SOURCE"&&
+      x?.runDayIndex===gate.indexPins.expectedRunDayIndex&&
       x?.routingIntentSha256===gate.routingIntentSha256&&
-      x?.signedFrozenPath===gate.expectedRegistryPath).length!==1||
+      x?.signedFrozenPath===gate.expectedRegistryPath&&
+      x?.signedFrozenSha256===env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).length!==1||
     packet.privateLogicalPath!==gate.expectedQueryPath)
   fail("UNBOUND_PRIVATE_ROUTE_REGISTRY_OR_QUERY_PATH");
 
