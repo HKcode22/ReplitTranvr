@@ -38,7 +38,7 @@ export function reviewP5BlobOnlyCandidates(
  nowMs:number,
  expectedCount?:number
 ){
- if(!Array.isArray(rows)||rows.length===0||rows.length>MAX||
+ if(!Array.isArray(rows)||rows.length>MAX||
     !Number.isFinite(nowMs)||
     (expectedCount!==undefined&&(
       !Number.isSafeInteger(expectedCount)||expectedCount<1||
@@ -72,6 +72,20 @@ export function reviewP5BlobOnlyCandidates(
   readyToDelete:false,
   providerCalls:0
  });
+}
+/** A missing primary object is NOT a verified deletion/tombstone. */
+export function classifyP5BlobOnlyReadOnlyPresence(
+ candidateCount:number,present:number,absent:number
+){
+ if(![candidateCount,present,absent].every(x=>
+    Number.isSafeInteger(x)&&x>=0&&x<=MAX)||
+    present+absent!==candidateCount)
+  hold("INVALID_OBJECT_EXISTENCE_COUNTS");
+ if(candidateCount===0)
+  return "DRY_RUN_ZERO_EXPIRED_UNVERIFIED_BLOBS_NO_DELETIONS";
+ if(absent>0)
+  return "DRY_RUN_MISSING_PRIMARY_OBJECTS_NEED_TOMBSTONE_REVIEW_NO_DELETIONS";
+ return "DRY_RUN_BLOB_ONLY_OWNER_OBJECTS_PRESENT_NO_DELETIONS";
 }
 export function admitP5BlobOnlyApply(
  env:NodeJS.ProcessEnv, codeSha:string, actualCount:number
@@ -115,22 +129,35 @@ export async function runP5BlobOnlyOwner(
  if(apply&&(!Number.isSafeInteger(expected)||expected<1||expected>MAX))
   hold("UNPINNED_EXPECTED_CLEANUP_COUNT");
  const review=reviewP5BlobOnlyCandidates(candidates,nowMs,expected);
+ // A clean 0-row state is an expected monitoring result, not a
+ // retention incident. APPLY still requires strictly positive pinned count.
+ if(!apply&&candidates.length===0){
+  return {
+   status:classifyP5BlobOnlyReadOnlyPresence(0,0,0),
+   ...review,objectsPresent:0,objectsAbsent:0,
+   databaseWrites:0,objectDeletions:0,phase6PaidGo:false
+  };
+ }
  const store=createRequiredProviderBlobStoreV39();
  let present=0,missing=0;
  for(const x of candidates){
   const exists=await store.exists(x.objectName);
   if(exists)present++;else missing++;
  }
- // No automatic inferences from a deletion marker or a missing object.
- if(missing>0||present!==candidates.length)
-  hold("OBJECT_NOT_PRESENT_OR_UNCERTAIN_IN_DEDICATED_BUCKET");
+ const presenceStatus=classifyP5BlobOnlyReadOnlyPresence(
+  candidates.length,present,missing);
+ // READ ONLY: an absent object may indicate a partial delete or a
+ // missing marker, never assert complete disposal or touch its tombstone.
  if(!apply){
   return {
-   status:"DRY_RUN_BLOB_ONLY_OWNER_OBJECTS_PRESENT_NO_DELETIONS",
-   ...review,objectsPresent:present,objectsAbsent:missing,
+   status:presenceStatus,...review,
+   objectsPresent:present,objectsAbsent:missing,
+   missingObjectsRequireIndependentTombstoneReview:missing>0,
    databaseWrites:0,objectDeletions:0,phase6PaidGo:false
   };
  }
+ if(missing>0)
+  hold("OBJECT_NOT_PRESENT_OR_UNCERTAIN_IN_DEDICATED_BUCKET");
  let liveSha="";
  try{liveSha=execFileSync("git",["rev-parse","HEAD"],{
   encoding:"utf8",stdio:["ignore","pipe","ignore"]
