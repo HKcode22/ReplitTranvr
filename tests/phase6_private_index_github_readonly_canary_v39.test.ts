@@ -150,7 +150,11 @@ describe("GH private V0096 index canary: live workflow admission, offline tests"
    "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=disable",
    "postgresql://"+LOGIN+":ci@test.neon.tech/postgres?sslmode=require",
    "postgresql://"+LOGIN+":ci@test.neon.tech/neondb",
-   "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=require&options=-c"
+   "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=require&options=-c",
+   "postgresql://"+LOGIN+":ci@attacker.invalid/neondb?sslmode=require",
+   "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=require&host=attacker.invalid",
+   "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=require&sslmode=require",
+   "postgresql://"+LOGIN+":ci@test.neon.tech/neondb?sslmode=require&channel_binding=disable"
   ]){
    const f=fixture();f.env.P6_PRIVATE_READER_DATABASE_URL=u;
    expect(()=>admitP6GithubRestrictedIndexCanary(f.env))
