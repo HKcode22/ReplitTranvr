@@ -15,7 +15,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs'
+      - 'scripts/v39_phase5_retention_five_column_reader_owner_once_v39.mjs'
       - 'tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs'
+      - 'tests/phase5_retention_five_column_reader_owner_once_v39.test.mjs'
       - '.github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml'
       - 'data-collection/phase5/2026-11-14_P0_RETENTION_RECURRING_SENTINEL_STAGED_NO_GO.md'
 permissions:
@@ -115,7 +117,8 @@ jobs:
           set -Eeuo pipefail
           set +x
           node --test tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs
-          echo 'P5_RETENTION_SENTINEL_DISPOSABLE_PG16_READONLY_PASS_NO_PROVIDER_NO_DELETE'
+          node --test tests/phase5_retention_five_column_reader_owner_once_v39.test.mjs
+          echo 'P5_RETENTION_FIVE_COLUMN_READER_DISPOSABLE_PG16_PASS_NO_PROVIDER_NO_DELETE'
   private-main-restricted-metadata-sentinel:
     if: >-
       ${{
