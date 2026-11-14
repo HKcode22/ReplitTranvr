@@ -1,4 +1,4 @@
-name: Phase6 V0096 hashpinned one-time owner schema (DISPOSABLE PG16 NO GO)
+name: Phase6 deprecated global V0096 owner STOP guard (DISPOSABLE PG16 NO GO)
 on:
   pull_request:
     branches: [main]
@@ -83,7 +83,7 @@ jobs:
             -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
-      - name: Verify cold V0096 then exact one-time owner install, independently read back, refuse replay
+      - name: Prove obsolete global V0096 install refuses even in disposable PG16; V0095 remains clean
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -91,6 +91,7 @@ jobs:
           node --input-type=module <<'JS'
           import assert from "node:assert/strict";
           import {readFileSync} from "node:fs";
+          import {spawnSync} from "node:child_process";
           import pg from "pg";
           import {
             readV0096OwnerInventory,installV0096OnceOwner,
@@ -99,43 +100,36 @@ jobs:
           const owner=new pg.Client({connectionString:process.env.DATABASE_URL});
           await owner.connect();
           try{
-            const cold=await readV0096OwnerInventory(owner);
-            assert.equal(cold.state,
-              "V0095_READY_EMPTY_V0096_NOT_INSTALLED_NO_GO");
-            const done=await installV0096OnceOwner({
-              client:owner,
-              rawMigration:readFileSync(V0096_MIGRATION_PATH),
-              blobSha:V0096_REVIEWED_SQL_BLOB_SHA
-            });
-            assert.equal(done.privateIndexRowCount,0);
-            assert.equal(done.newLoginRoleCount,0);
-            assert.equal(done.phase6PaidGo,false);
+            const before=await readV0096OwnerInventory(owner);
+            assert.equal(before.state,"V0095_READY_EMPTY_V0096_NOT_INSTALLED_NO_GO");
             await assert.rejects(installV0096OnceOwner({
               client:owner,
               rawMigration:readFileSync(V0096_MIGRATION_PATH),
               blobSha:V0096_REVIEWED_SQL_BLOB_SHA
-            }),/OUT_OF_ORDER_ALREADY_INSTALLED_OR_DRIFTED_NEVER_REPLAY/);
+            }),/LEGACY_GLOBAL_CHAIN_31DAY_TTL_INCOMPATIBLE_NEVER_INSTALL/);
+            const after=await readV0096OwnerInventory(owner);
+            assert.equal(after.state,before.state);
           }finally{await owner.end();}
-          const independent=new pg.Client({
-            connectionString:process.env.DATABASE_URL
-          });
+          // Direct old CLI install mode must also refuse, regardless of owner
+          // tokens; no SQL transaction or paid provider is touched.
+          const direct=spawnSync(process.execPath,[
+           "scripts/v39_phase6_v0096_owner_schema_readonly_and_once.mjs","install"
+          ],{env:process.env,encoding:"utf8"});
+          assert.equal(direct.status,2);
+          assert.match(direct.stderr,/HOLD_V0096_OWNER_SCHEMA_NO_RETRY_NO_PROVIDER_NO_GO/);
+          const independent=new pg.Client({connectionString:process.env.DATABASE_URL});
           await independent.connect();
           try{
-            const verified=await readV0096OwnerInventory(independent);
-            assert.equal(verified.state,
-              "V0096_INSTALLED_EMPTY_PRIVATE_INDEX_INERT_NO_GO");
-            assert.equal(verified.tableRows,0);
-            assert.equal(verified.immutableAndChainTriggers,2);
-            const schemas=await independent.query(
-              "SELECT count(*)::integer AS n FROM phase6_private.frozen_native_packet_v39"
-            );
-            assert.equal(schemas.rows[0].n,0);
+            const r=await readV0096OwnerInventory(independent);
+            assert.equal(r.state,"V0095_READY_EMPTY_V0096_NOT_INSTALLED_NO_GO");
+            const empty=await independent.query(
+              "SELECT count(*)::integer AS n FROM phase6_private.frozen_native_packet_v39");
+            assert.equal(empty.rows[0].n,0);
             console.log(JSON.stringify({
-              status:"V0096_ONE_TIME_OWNER_PG16_INDEPENDENT_READBACK_PASS",
-              syntheticPrivateIndexRows:0,newLoginRoles:0,
-              existingV0094V0095Reused:true,
-              realProductionDatabaseWrites:0,
-              paidProviderCalls:0,phase6PaidGo:false
+              status:"V0096_OLD_GLOBAL_OWNER_INSTALL_DISABLED_DISPOSABLE_PASS",
+              obsoleteGlobalIndexInstalled:false,
+              verifiedV0095Rows:0,providerCalls:0,
+              productionDatabaseWrites:0,phase6PaidGo:false
             }));
           }finally{await independent.end();}
           JS
