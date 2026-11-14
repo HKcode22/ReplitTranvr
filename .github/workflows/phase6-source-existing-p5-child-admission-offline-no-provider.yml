@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/v39_phase6_private_source_existing_child_admission_v39.ts'
+      - 'scripts/v39_phase6_private_source_one_original_child_github_v39.mjs'
+      - 'tests/phase6_private_source_one_original_child_github_v39.test.ts'
+      - '.github/workflows/phase5-one-signed-day-source-child-dispatch.yml'
       - 'tests/phase6_private_source_existing_child_admission_v39.test.ts'
       - '.github/workflows/phase6-source-existing-p5-child-admission-offline-no-provider.yml'
       - 'data-collection/phase5/2026-11-13_PHASE6_PRIVATE_SOURCE_EXISTING_P5_CHILD_ADMISSION_NO_GO.md'
@@ -45,5 +48,5 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          npx --no-install vitest run tests/phase6_private_source_existing_child_admission_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts
+          npx --no-install vitest run tests/phase6_private_source_one_original_child_github_v39.test.ts tests/phase6_private_source_existing_child_admission_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts
           echo 'Original Phase5 one-GET signed admission preserved in Phase6 private bridge; tests do not call provider or Neon.' >> "$GITHUB_STEP_SUMMARY"
