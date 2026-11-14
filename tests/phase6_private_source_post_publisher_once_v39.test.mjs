@@ -100,7 +100,7 @@ function fixture(kind="SOURCE_QUERY_PACKET"){
    if(sql.includes("SELECT run_day_index,kind,content_sha256"))
     return{rowCount:missingSource?0:1,rows:missingSource?[]:[{
      run_day_index:1,kind:"SOURCE_DAY_REGISTRY",
-     content_sha256:badSource?"f".repeat(64):scope.expectedSourceDayRegistrySha256,
+     content_sha256:badSource?"0".repeat(64):scope.expectedSourceDayRegistrySha256,
      manifest_sha256:review.manifestSha256,
      rights_sha256:review.rightsSha256,
      reviewed_code_sha:review.reviewedCodeSha,
