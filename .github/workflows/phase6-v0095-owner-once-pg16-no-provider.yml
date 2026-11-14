@@ -1,0 +1,135 @@
+name: Phase6 V0095 owner once-only schema inventory and installer (DISPOSABLE PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_v0095_owner_schema_readonly_and_once.mjs'
+      - 'tests/phase6_v0095_owner_schema_readonly_and_once_v39.test.mjs'
+      - '.github/workflows/phase6-v0095-owner-once-pg16-no-provider.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  offline-hashpinned-code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact V0095 blob, V0094-first, no login/paid/COMMIT retry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node --test tests/phase6_v0095_owner_schema_readonly_and_once_v39.test.mjs
+          echo 'V0095_OWNER_SCHEMA_STATIC_PIN_COLD_NO_GO_PASS'
+  actual-disposable-pg16-owner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: 'neondb'
+      PGSYNTH: 'ci-only-owner-not-production'
+      DATABASE_URL: 'postgresql://neondb_owner:ci-only-owner-not-production@127.0.0.1:5432/neondb?sslmode=disable'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Create disposable non-superuser CREATEROLE owner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-owner-not-production'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+      - name: Exact actual owner state cold, V0094-first, once V0095, refused replay
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {readFileSync} from "node:fs";
+          import pg from "pg";
+          import {
+           readV0095OwnerInventory,installV0095OnceOwner,
+           V0095_MIGRATION_PATH,V0095_REVIEWED_SQL_BLOB_SHA
+          } from "./scripts/v39_phase6_v0095_owner_schema_readonly_and_once.mjs";
+          const owner=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await owner.connect();
+          try{
+           const cold=await readV0095OwnerInventory(owner);
+           assert.equal(cold.state,
+             "V0094_MISSING_V0095_NOT_INSTALLED_NO_GO");
+           const sql94=readFileSync(
+             "migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql",
+             "utf8");
+           await owner.query(sql94);
+           const before=await readV0095OwnerInventory(owner);
+           assert.equal(before.state,
+             "V0094_READY_EMPTY_V0095_NOT_INSTALLED_NO_GO");
+           const result=await installV0095OnceOwner({
+             client:owner,
+             rawMigration:readFileSync(V0095_MIGRATION_PATH),
+             blobSha:V0095_REVIEWED_SQL_BLOB_SHA
+           });
+           assert.equal(result.additionalLoginRolesCreated,0);
+           assert.equal(result.originalPrivatePacketRows,0);
+           assert.equal(result.paidPhase6Go,false);
+           const after=await readV0095OwnerInventory(owner);
+           assert.equal(after.state,
+             "V0095_INSTALLED_EMPTY_PRIVATE_KIND_EXTENSION_INERT_NO_GO");
+           assert.equal(after.tableRows,0);
+           await assert.rejects(installV0095OnceOwner({
+             client:owner,
+             rawMigration:readFileSync(V0095_MIGRATION_PATH),
+             blobSha:V0095_REVIEWED_SQL_BLOB_SHA
+           }),/OUT_OF_ORDER_ALREADY_INSTALLED_OR_NOT_EMPTY_NEVER_REPLAY/);
+           const rows=await owner.query(
+             "SELECT COUNT(*)::integer AS n FROM phase6_private.frozen_native_packet_v39"
+           );
+           assert.equal(rows.rows[0].n,0);
+           console.log(JSON.stringify({
+             status:"V0095_OWNER_ONCE_DISPOSABLE_PG16_PASS",
+             v0094OriginalRolesReused:true,realProductionWrites:0,
+             newLoginRoles:0,privateRows:0,paidPhase6Go:false
+           }));
+          }finally{await owner.end();}
+          JS
