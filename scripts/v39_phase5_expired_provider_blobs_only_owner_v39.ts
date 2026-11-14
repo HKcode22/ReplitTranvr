@@ -167,7 +167,7 @@ async function main(){
    "HOLD_P5_BLOB_ONLY_OWNER_DRY_RUN_NO_DELETIONS");
   process.exitCode=2;
  }finally{
-  await v39Pool.end().catch(()=>{});
+  try{await v39Pool.end();}catch{}
  }
 }
 if(process.argv[1]&&resolve(process.argv[1])===
