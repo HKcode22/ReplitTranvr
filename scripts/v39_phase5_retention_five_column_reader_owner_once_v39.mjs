@@ -198,6 +198,15 @@ export async function runP5RetentionRoleOwner(argv=process.argv.slice(2),env=pro
    databaseWrites:0,paidProviderCalls:0,monitorEnabled:false,
    phase6PaidGo:false
   };
+  // An already commissioned secret is independent state. Never overwrite
+  // or rotate it just because the proposed role name was absent.
+  let existingSecrets;
+  try{
+   existingSecrets=JSON.parse(gh(["secret","list","-R",REPO,"--json","name"]));
+  }catch{fail("GH_SECRET_INVENTORY_UNAVAILABLE")}
+  if(!Array.isArray(existingSecrets)||
+     existingSecrets.some(x=>x?.name===SECRET))
+    fail("EXISTING_GITHUB_SECRET_MUST_BE_RECONCILED_NO_OVERWRITE");
   // Keep production monitoring disabled before creating a credential.
   gh(["variable","set",ENABLE_VAR,"-R",REPO,"--body","false"]);
   const password=randomBytes(48).toString("base64url");
