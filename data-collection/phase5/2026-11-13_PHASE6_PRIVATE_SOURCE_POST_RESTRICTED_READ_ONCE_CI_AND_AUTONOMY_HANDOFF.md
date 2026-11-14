@@ -1,0 +1,43 @@
+# Phase5→6, 2026-11-13 PT — V0095 private SOURCE/POST read-once and ephemeral GH child-input handoff
+
+**Scope:** Code-only nonpaid engineering checkpoint. **Never interpret a merged PR, signed SHA, dummy Ed25519 CI proof or GitHub cron success as a live provider Contents license, Phase5 scientific FREEZE, or Phase6 paid GO.** User target Friday November 20 is conditional on actual independent release evidence.
+
+## Verified context before this PR
+
+- Actual existing Replit-attached Neon `neondb` (PG16), not a Neon plugin project or new database. Nov13 17:53 PST owner READONLY inventory reports **17 historic FIDS originals**, **at least 1,201 sampled normalized rows** (not exact population), **36 PRE snapshots**, **zero** signed 31-day B0062 calendar rows, zero source physical-attempt and original-binding rows, zero PRE queue rows, **V0094 still absent**, and **838** provider blob references, 65 expired with no deletion marker (30 persisted >31d; actual physical objects unverified). This did not spend any API credits or change data.
+- Existing installed V0079–V0093, Stage14, V0081, V0087 lease/witness, V0091 and V0092 horizon-safe queue, V0083 POST, scheduled existing SOURCE/PRE/reaper and single-day dispatchers are NOT to be reinstalled or replaced.
+- [PR #638](https://github.com/HKcode22/ReplitTranvr/pull/638) merged nonpaid autonomous **GitHub-only control-plane heartbeat**; it monitors the existing scheduled jobs without owner Replit Shell but does not carry private flight packets, cause paid GETs, or prove 31-day rollover.
+- [PR #639](https://github.com/HKcode22/ReplitTranvr/pull/639) **merged** additive V0095 **STAGED ONLY** PG16 private kinds for `SOURCE_QUERY_PACKET` and `POST_PACKET`; retains existing V0094 registry and later PRE types, zero real schema installation or payloads, no new LOGINs/credentials. Its disposable PG16 + broad CI passed. **Deploy order is V0094 one-use schema + independent readback THEN V0095 one-use extension + separate independent readback**, with separate authorized owner/custody review, not every cron cycle.
+
+## Why this is essential for unattended SOURCE and POST
+
+The existing signed SOURCE and V0083 POST GH child workflows read checkout-local `data-collection/phase5/frozen/*.json` inputs, but the public repo's leak guard correctly forbids private flight/provider Contents. A GitHub-only scheduled job cannot create authentic, signed lawful flight input from nothing, and V0094 alone lacked two packet types. The goal is eventual narrowly scoped GH child **ephemeral read** of a genuinely reviewed private packet, **without** exporting private bytes to a public repo, logs or artifacts. One-time schema/login commissioning may need an owner-approved operation; **no per-day Replit Shell intervention** is part of the intended runtime.
+
+## New code under review in this PR (not connected to production children yet)
+
+`server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs`:
+- Verifies an **externally pre-pinned Ed25519 reviewer public key fingerprint**, the exact signed review wire bytes/domain and approved SOURCE_QUERY or POST kind, path, SHA-256, reviewed main code SHA, manifest, rights digest, external reviewer evidence digest and precise 1–31 day/shard. An internally fabricated SHA alone is not review authority.
+- Connects using a **separate restricted LOGIN**, with effective `current_user=phase6_private_frozen_reader_v39` after `SET ROLE`, not `neondb_owner` or a publisher/group service. Checks real PG16 `neondb`, `REPEATABLE READ READ ONLY` plus correct SELECT/no INSERT, UPDATE, DELETE, timestamps, committed private row, original byte SHA and live DB-clock max 7-day conservative retention.
+- Returns **one packet only**, with bytes stored in an intentionally *non-enumerable* local Buffer so standard JSON result contains **counts/hash/status only**, never flight values; verifies packet is JSON but intentionally does **not** claim per-flight review, provider rights, scientific label, POST cutoff or paid acquisition admission. Existing authoritative source/POST child code will still have to make those separate release decisions.
+- Optional **explicitly approved** GH-job-local ephemeral materialization helper writes only to an existing `.gitignore`-protected `data-collection/phase5/frozen/` directory (`0700`) using exclusive file creation (`0600`), rejects symlink paths, refuses overwrite, and returns an explicit cleanup function. Current SOURCE/POST children are **NOT YET WIRED** to this; a future separate reviewed adapter must execute cleanup in a `finally`/always-cleanup job action.
+- No provider API call, no private signing key, no standalone DB login creation, no workflow child dispatch, no raw source export in GitHub, no mutation of licensed Contents, no new schema change, no claim user’s requested 31-day Content rights.
+
+### Tests and release integrity
+
+- Offline Node tests forge a synthetic Ed25519 key pair and sign **CI-only synthetic**, never authentic provider, packets. Test exact pin mismatch, signature/path tampering, wrong DB role, old/expired clock, corrupted payload, read-only SQL, no JSON byte leak, only one `0600` file and safe cleanup, no overwrite or unignored path.
+- Disposable **real PostgreSQL 16** CI applies the existing staged V0094 then V0095 **only to throwaway CI postgres**, creates a synthetic restricted `phase6_private_reader_login_ci_checks` with non-inheriting `SET ROLE` to the V0094 NOLOGIN reader, inserts synthetic SOURCE and POST bytes as dummy owner with valid SHA, then runs the real signed read-once module and checks private byte SHA and redacted receipt. No production secrets.
+- This PR must be kept DRAFT until exact-head Node + real disposable PG16 and existing safety checks PASS; it is **not** a credential commission or true 31-day live autonomous execution test.
+
+## Next specific engineering actions (P0; do not wait for perfection in optional data)
+
+1. **One-time owner/private transport commissioning** after actual rights/storage and production readiness: V0094 then V0095 and independent receipt, narrow reader/publisher LOGINs and GitHub-only restricted secret permissions. Do **not** reinstall V0079–V0093, rotate working `DATABASE_URL` or create another Neon database. The owner’s approval for paid experiment calls does not authorize unqualified legal raw retention.
+2. **Actual independent SOURCE/POST publisher**: save authentic source query and POST packet only after genuine future source/reviewer evidence, per original SHA, signed UTC calendar, budget and external Ed25519 reviewer; private registry must commit and pass independent readback first. SHA-matching one's own generated evidence is not independent.
+3. **Child adapter + 31-day rollover**: source/later PRE/POST child GitHub workflows must hydrate exactly the already-approved private signed packet from a restricted reader, no log/artifact of its bytes, cleanup even on error, preserve each child’s existing real acquisition/Pre-write/no-retry and STOP. Existing 31-day append-only index and native PG DB clock drive **bounded** per-shard rolling day selection (not fixed day1 repository variables). The private packet read must be preceded by independent source/rights/budget release, not grant it.
+4. **Receiver/POST and physical label QC**: actual original saved-before-2xx callback recovery, meaningful observed/censored physical departure/arrival timing and non-reconstructable project-owned operational telemetry; optional weather/ADSB missingness accepted and documented. Resolve 65 expired blob refs without blind deletion; 31-day Contents permission remains #300.
+5. **Independent scientific freeze and separately approved paid Phase6 Day1** by Nov20 target only on real signed future-day evidence, proper physical REST/Alert budgets and account rights. GitHub Actions scheduling jitter must never create backdated PRE or assert no missing flights. Operate unattended after one-time commissioning; no routine operator Replit commands.
+
+## Where next session should resume
+
+Review this file, [Phase5 README](README.md), [current full autonomy gap](2026-11-13_1755PST_PHASE6_AUTONOMOUS_GH_CONTROLLER_AUDIT_AND_31DAY_ROLLOVER_P0.md), [V0095 schema-only evidence](2026-11-13_V0095_PRIVATE_SOURCE_POST_PACKET_COMPATIBILITY_STAGED_ONLY.md), and real issue [#553](https://github.com/HKcode22/ReplitTranvr/issues/553) before adding more migrations. Continue actual restricted child hydration/31-day index integration, do NOT start an unrelated plan or new provider.
+
+**Current safe state:** Phase5 scientific FREEZE HOLD; Phase6 paid NO-GO; existing production Neon remains unchanged by this PR.
