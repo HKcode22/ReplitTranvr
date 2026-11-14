@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
  P6_OWNER_TABLES,P6_OWNER_SAMPLE_LIMIT,inspectP6OwnerDataflowReadOnly,
- classifyP6ReadOnlyTable,formatP6OwnerStageHuman
+ classifyP6ReadOnlyTable,reviewP6OwnerPreFeatureCoverageCounts,
+ formatP6OwnerStageHuman
 } from "../scripts/v39_phase6_owner_31day_dataflow_readonly.mjs";
 
 function mock({deny=false,invalidClock=false,injectError=false,
- withBlob=false}={}){
+ withBlob=false,withPre=false}={}){
  const queries=[],events=[];
  const c={async query(sql,params=[]){
   queries.push([sql,params]);
@@ -22,9 +23,12 @@ function mock({deny=false,invalidClock=false,injectError=false,
   if(sql.includes("to_regclass($1) IS NOT NULL AS present"))
    return{rows:[{present:[
      "clean.fids_query_response","clean.adb_phase6_calendar_day",
+     ...(withPre?["clean.flight_snapshots"]:[]),
      ...(withBlob?["clean.provider_content_blob_ref"]:[])
     ].includes(params[0]),can_read:!deny}]};
   if(sql.includes("FROM information_schema.columns")){
+   if(params[1]==="flight_snapshots")
+    return{rows:["created_at","horizon","features_json"].map(column_name=>({column_name}))};
    if(params[1]==="adb_phase6_calendar_day")
     return{rows:[{column_name:"run_day_index"}]};
    if(params[1]==="provider_content_blob_ref")
@@ -39,6 +43,15 @@ function mock({deny=false,invalidClock=false,injectError=false,
   if(sql.includes("AS marked_deleted_but_unverified"))
    return{rows:[{n:65,marked_deleted_but_unverified:11,
     no_delete_marker:54,older_31d:29}]};
+  if(sql.includes("AS with_nonnull_feature"))
+   return{rows:[
+    {horizon:"T-24h",n:1,invalid_shape:0,empty_feature_array:1,
+     with_feature_items:0,with_nonnull_feature:0},
+    {horizon:"T-6h",n:1,invalid_shape:0,empty_feature_array:0,
+     with_feature_items:1,with_nonnull_feature:1},
+    {horizon:"T-90m",n:1,invalid_shape:0,empty_feature_array:0,
+     with_feature_items:1,with_nonnull_feature:0}
+   ]};
   if(sql.includes("SELECT day_utc::text AS day_utc")){
    if(injectError){const e=new Error("secret api key never printed");
     e.code="42501";throw e;}
@@ -132,4 +145,48 @@ test("unverified DB clock holds without collecting or printing provider rows",as
   emit:e=>x.events.push(e)}),/HOLD_P6_OWNER_VISIBILITY_UNVERIFIED_DB_CLOCK/);
  assert.equal(x.events.length,0);
  assert(x.queries.some(q=>q[0]==="ROLLBACK"));
+});
+
+test("PRE feature coverage aggregates are per-horizon counts only, not scientific label acceptance",()=>{
+ const good=reviewP6OwnerPreFeatureCoverageCounts([
+  {horizon:"T-90m",n:3,invalid_shape:1,empty_feature_array:1,
+   with_feature_items:1,with_nonnull_feature:0},
+  {horizon:"T-6h",n:2,invalid_shape:0,empty_feature_array:0,
+   with_feature_items:2,with_nonnull_feature:1}
+ ]);
+ assert.equal(good.sampledTotal,5);
+ assert.equal(good.byHorizon[0].horizon,"T-6h");
+ assert.equal(good.byHorizon[0].allFeaturesEmptyOrNull,1);
+ assert.equal(good.byHorizon[1].allFeaturesEmptyOrNull,3);
+ assert.equal(good.physicalDepartureLabelsVerified,false);
+ assert.equal(good.originalProviderContentsOrMLRightsCertified,false);
+ assert.equal(good.rawFlightValuesTransferredToOwnerCli,false);
+ assert.throws(()=>reviewP6OwnerPreFeatureCoverageCounts([
+  {horizon:"T-6h",n:1,invalid_shape:0,empty_feature_array:0,
+   with_feature_items:1,with_nonnull_feature:2}
+ ]),/PRE_FEATURE_AGGREGATE_CONTRADICTION/);
+ assert.throws(()=>reviewP6OwnerPreFeatureCoverageCounts([
+  {horizon:"SOME-NEW-UNREVIEWED",n:1,invalid_shape:0,
+   empty_feature_array:1,with_feature_items:0,with_nonnull_feature:0}
+ ]),/PRE_FEATURE_AGGREGATE_CONTRADICTION/);
+});
+test("existing PRE owner visibility shows only bounded nonnull feature counts without flight values",async()=>{
+ const x=mock({withPre:true});
+ await inspectP6OwnerDataflowReadOnly(x.c,{emit:e=>x.events.push(e)});
+ const e=x.events.find(e=>e.event==="STAGE_RESULT"&&e.stage==="PRE SNAPSHOTS");
+ assert.equal(e.preFeatureCoverage.sampledTotal,3);
+ assert.equal(e.preFeatureCoverage.byHorizon.length,3);
+ assert.equal(e.preFeatureCoverage.byHorizon[0].atLeastOneNonNullFeatureValue,0);
+ assert.equal(e.preFeatureCoverage.byHorizon[1].atLeastOneNonNullFeatureValue,1);
+ assert.equal(e.preFeatureCoverage.byHorizon[2].atLeastOneNonNullFeatureValue,0);
+ assert.equal(e.preFeatureCoverage.physicalDepartureLabelsVerified,false);
+ assert.equal(e.contentsRead,false);
+ assert.equal(e.rowValuesRead,false);
+ assert(!JSON.stringify(x.events).includes("PRIVATE_ORIGINAL_FLIGHT_VALUE"));
+ assert(x.queries.some(([sql])=>sql.includes("AS with_nonnull_feature")&&
+   sql.includes("LIMIT 1201")&&sql.includes("GROUP BY horizon")));
+ assert(!x.queries.some(([sql])=>/SELECT\s+flight_instance_id|SELECT\s+features_json|SELECT\s+raw_payload/.test(sql)));
+ const readable=formatP6OwnerStageHuman(e);
+ assert(readable.includes("T-6h=1/1 with ≥1 non-null feature"));
+ assert(readable.includes("not label or ML readiness"));
 });
