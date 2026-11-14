@@ -86,24 +86,23 @@ jobs:
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 <<'SQL'
-          SELECT CASE WHEN COUNT(*)=2 THEN true ELSE
-            (1/0)::boolean END AS five_kind_constraints_active
-          FROM pg_catalog.pg_constraint
-          WHERE conrelid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass
-          AND conname IN ('p5_v0095_kind_allowed','p5_v0095_kind_path_guard');
-          SELECT CASE WHEN COUNT(*)=0 THEN true ELSE
-            (1/0)::boolean END AS empty_private_schema
-          FROM phase6_private.frozen_native_packet_v39;
-          SELECT CASE WHEN
-            has_table_privilege('phase6_private_frozen_reader_v39',
-              'phase6_private.frozen_native_packet_v39','SELECT') AND
-            NOT has_table_privilege('phase6_private_frozen_reader_v39',
-              'phase6_private.frozen_native_packet_v39','INSERT') AND
-            has_table_privilege('phase6_private_frozen_publisher_v39',
-              'phase6_private.frozen_native_packet_v39','INSERT') AND
-            NOT has_table_privilege('phase6_private_frozen_publisher_v39',
-              'phase6_private.frozen_native_packet_v39','UPDATE')
-            THEN true ELSE (1/0)::boolean END AS least_privilege_preserved;
+          DO $assert$
+          BEGIN
+            IF (SELECT COUNT(*) FROM pg_catalog.pg_constraint
+                WHERE conrelid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass
+                AND conname IN ('p5_v0095_kind_allowed','p5_v0095_kind_path_guard'))<>2
+              OR (SELECT COUNT(*) FROM phase6_private.frozen_native_packet_v39)<>0
+              OR NOT has_table_privilege('phase6_private_frozen_reader_v39',
+                    'phase6_private.frozen_native_packet_v39','SELECT')
+              OR has_table_privilege('phase6_private_frozen_reader_v39',
+                    'phase6_private.frozen_native_packet_v39','INSERT')
+              OR NOT has_table_privilege('phase6_private_frozen_publisher_v39',
+                    'phase6_private.frozen_native_packet_v39','INSERT')
+              OR has_table_privilege('phase6_private_frozen_publisher_v39',
+                    'phase6_private.frozen_native_packet_v39','UPDATE')
+            THEN RAISE EXCEPTION 'V0095_REAL_PG16_PRE_TEST_SAFETY_ASSERT_FAILED';
+            END IF;
+          END $assert$;
           BEGIN;
           INSERT INTO phase6_private.frozen_native_packet_v39
           (logical_path,run_day_index,shard_index,kind,content_sha256,
@@ -123,13 +122,19 @@ jobs:
             repeat('b',40),repeat('c',64),repeat('d',64),repeat('e',64),
             clock_timestamp(),clock_timestamp()+interval '1 day',
             convert_to(repeat('p',120),'UTF8'));
-          SELECT CASE WHEN COUNT(*)=2 THEN true ELSE
-            (1/0)::boolean END AS two_new_packet_kinds_accepted
-          FROM phase6_private.frozen_native_packet_v39;
+          DO $assert$
+          BEGIN
+            IF (SELECT COUNT(*) FROM phase6_private.frozen_native_packet_v39)<>2 THEN
+              RAISE EXCEPTION 'V0095_NEW_PACKET_INSERT_TEST_FAILED';
+            END IF;
+          END $assert$;
           ROLLBACK;
-          SELECT CASE WHEN COUNT(*)=0 THEN true ELSE
-            (1/0)::boolean END AS insert_test_rolled_back
-          FROM phase6_private.frozen_native_packet_v39;
+          DO $assert$
+          BEGIN
+            IF (SELECT COUNT(*) FROM phase6_private.frozen_native_packet_v39)<>0 THEN
+              RAISE EXCEPTION 'V0095_TEST_ROWS_NOT_ROLLED_BACK';
+            END IF;
+          END $assert$;
           SQL
           echo 'V0095_DISPOSABLE_PG16_SOURCE_AND_POST_KINDS_PASS'
       - name: Prove second install refuses replay and leaves no private rows
