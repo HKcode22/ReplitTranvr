@@ -6,6 +6,7 @@
  * reuses the original delete->absent->tombstone function, NOT SQL hacks.
  */
 import {execFileSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {v39Pool} from "../server/lib/disruption/db_v39";
@@ -22,6 +23,11 @@ import {createRequiredProviderBlobStoreV39}
 const CODE=/^[0-9a-f]{40}$/;
 const APPROVE="OWNER_APPLY_EXACT_EXPIRED_RAW_PROVIDER_BLOB_ONLY_DELETE_VERIFY_TOMBSTONE";
 const MAX=100;
+// Exact owner REAL database audit, Nov14 2026. Prevent adding later-expired
+// objects to the owner approval for the original 65-item backlog.
+export const ORIGINAL_OWNER_AUDIT_UTC="2026-11-14T11:55:54.029Z";
+export const ORIGINAL_OWNER_AUDIT_MIN_OVERDUE_MS=7*24*3600000;
+const SNAPSHOT=Date.parse(ORIGINAL_OWNER_AUDIT_UTC);
 const hold=(code:string):never=>{
  throw Error("HOLD_P5_BLOB_ONLY_OWNER_"+code);
 };
@@ -45,6 +51,7 @@ export function reviewP5BlobOnlyCandidates(
       expectedCount>MAX||rows.length!==expectedCount)))
   hold("EMPTY_UNBOUNDED_OR_DRIFTED_EXPIRED_BACKLOG");
  const ids=new Set<string>(),names=new Set<string>();
+ const allMetadata: string[]=[];
  for(const r of rows){
   if(!r||r.contentClass!=="raw_provider_content"||
      r.ref?.contentClass!=="raw_provider_content"||
@@ -57,14 +64,28 @@ export function reviewP5BlobOnlyCandidates(
    hold("UNEXPECTED_CLASS_IDENTITY_OR_DUPLICATE_REF");
   validateProviderBlobRefV39(r.ref);
   const expiry=Date.parse(r.expiresAtUtc);
-  if(!Number.isFinite(expiry)||
+  const persisted=Date.parse(r.ref.persistedAtUtc);
+  if(!Number.isFinite(expiry)||!Number.isFinite(persisted)||
      expiry!==Date.parse(r.ref.expiresAtUtc)||
-     expiry>nowMs-24*3600000)
-   hold("RECENT_NOT_EXPIRED_OR_DISAGREEING_TIME");
+     expiry>nowMs-24*3600000||
+     expiry>SNAPSHOT-ORIGINAL_OWNER_AUDIT_MIN_OVERDUE_MS||
+     persisted>SNAPSHOT)
+   hold("NOT_IN_ORIGINAL_65_AGED_AUDIT_WINDOW_OR_DISAGREEING_TIME");
   ids.add(r.blobRefId);names.add(r.objectName);
+  // Deterministic fingerprint over exact references, bytes hash, times
+  // and storage identity. Never show object names, flight data or hashes.
+  allMetadata.push(JSON.stringify([
+   r.ref.blobRefId,r.ref.objectName,r.ref.contentSha256,
+   r.ref.persistedAtUtc,r.ref.expiresAtUtc,
+   r.ref.storageKind,r.ref.contentClass,r.ref.retentionHours,
+   r.ref.contractVersion,r.ref.contentBytes
+  ]));
  }
+ const scopeSha256=createHash("sha256")
+  .update(allMetadata.sort().join("\n")).digest("hex");
  return Object.freeze({
   candidates:rows.length,
+  scopeSha256,
   exactRawClassOnly:true,
   expectedCountMatched:expectedCount===undefined?
    null:rows.length===expectedCount,
@@ -88,15 +109,18 @@ export function classifyP5BlobOnlyReadOnlyPresence(
  return "DRY_RUN_BLOB_ONLY_OWNER_OBJECTS_PRESENT_NO_DELETIONS";
 }
 export function admitP5BlobOnlyApply(
- env:NodeJS.ProcessEnv, codeSha:string, actualCount:number
+ env:NodeJS.ProcessEnv, codeSha:string, actualCount:number,
+ scopeSha256:string
 ){
  if(env.GITHUB_ACTIONS==="true"||
     env.P5_BLOB_ONLY_CLEANUP_APPROVAL!==APPROVE||
     !CODE.test(codeSha)||
     env.P5_BLOB_ONLY_CLEANUP_APPROVED_MAIN_SHA!==codeSha||
     env.P5_BLOB_ONLY_CLEANUP_EXPECTED_COUNT!==String(actualCount)||
+    !/^[a-f0-9]{64}$/.test(scopeSha256)||
+    env.P5_BLOB_ONLY_CLEANUP_SCOPE_SHA256!==scopeSha256||
     env.ADB_AUTO_COLLECT!=="0"||
-    env.V39_PHASE6_PROCESS_ARMED==="1"||
+    env.V39_PHASE6_PROCESS_ARMED!=="0"||
     env.V39_PROVIDER_BLOB_MODE!=="required")
   hold("NO_EXPLICIT_PINNED_OWNER_DELETE_APPROVAL");
  return Object.freeze({approvedExpectedCount:actualCount});
@@ -162,7 +186,7 @@ export async function runP5BlobOnlyOwner(
  try{liveSha=execFileSync("git",["rev-parse","HEAD"],{
   encoding:"utf8",stdio:["ignore","pipe","ignore"]
  }).trim();}catch{hold("UNVERIFIED_OWNER_CHECKOUT_SHA");}
- admitP5BlobOnlyApply(env,liveSha,candidates.length);
+ admitP5BlobOnlyApply(env,liveSha,candidates.length,review.scopeSha256);
  // Original existing function alone performs delete, absence verification
  // and then SQL tombstone. No identity/account/session cleanup here.
  const applied=await applyExpiredProviderBlobsV39(candidates);
