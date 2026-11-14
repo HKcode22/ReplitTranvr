@@ -300,3 +300,54 @@ export function materializeP6VerifiedPrivatePacketOnce(
   cleanup
  });
 }
+
+/**
+ * Always-clean private-file boundary for a **separately admitted** existing
+ * SOURCE or POST child. No paid authorization is implied here. In contrast
+ * to two independent GH steps, a same-process try/finally cannot strand a
+ * packet following an exception from the injected child callback.
+ *
+ * Caller must run the existing signed child admission (rights, budget,
+ * planned UTC, POST receipt, STOP, idempotence) independently; this function
+ * never sets or changes those controls and returns no child payload.
+ */
+export async function withP6VerifiedPrivatePacketForExistingChild(
+ receipt,repoRoot,scope,runSeparatelyAdmittedChild
+){
+ if(!scope||
+    scope.privateEphemeralFileApproved!==true||
+    scope.existingChildIndependentlyAdmitted!==true||
+    scope.privateSourcePostAccessOnly!==true||
+    typeof runSeparatelyAdmittedChild!=="function")
+  fail("EXISTING_CHILD_INDEPENDENT_ADMISSION_REQUIRED");
+ let file;
+ try{
+  file=materializeP6VerifiedPrivatePacketOnce(receipt,repoRoot,{
+   privateEphemeralFileApproved:true
+  });
+  // Only the exact relative path and redacted receipt are provided. The
+  // child must not print/read out Contents to GitHub logs or persist it.
+  await runSeparatelyAdmittedChild(
+   file.pathRelativeToRepo,
+   Object.freeze({...receipt.redactedSummary})
+  );
+  return Object.freeze({
+   ...receipt.redactedSummary,
+   status:"PRIVATE_JOB_PACKET_USED_AND_CLEANED_NO_PHASE6_RELEASE",
+   mandatoryPrivateFileCleanupAttempted:true,
+   sourceOrPostActualPaidResultAttestedHere:false,
+   externalRightsOrBudgetGoCertifiedHere:false
+  });
+ }catch{
+  // Do not echo errors from an injected child: they may include packet data.
+  fail("EXISTING_CHILD_OPERATION_OR_PRIVATE_CLEANUP_HOLD_REDACTED");
+ }finally{
+  if(file){
+   try{file.cleanup();}
+   catch{
+    // If cleanup fails, never record success; this must remain an incident.
+    fail("PRIVATE_FILE_CLEANUP_FAILED_HOLD_NO_PUBLIC_BYTES");
+   }
+  }
+ }
+}
