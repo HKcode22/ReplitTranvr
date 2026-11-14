@@ -33,7 +33,7 @@ on:
         required: false
         type: string
       routing_intent_sha256:
-        description: "Signed V0096 immutable SOURCE route digest, not user-created new query"
+        description: "New day-epoch Ed25519-backed immutable SOURCE route digest, not user-created new query"
         required: false
         type: string
 permissions:
