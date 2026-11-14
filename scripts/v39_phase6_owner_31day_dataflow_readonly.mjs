@@ -17,6 +17,7 @@ import {resolve} from "node:path";
 
 export const P6_OWNER_VISIBILITY_SCHEMA="v39.phase6.owner-readonly-dataflow.v1";
 export const P6_OWNER_SAMPLE_LIMIT=1201;
+export const P6_OWNER_PRE_HORIZONS=Object.freeze(["T-24h","T-6h","T-90m"]);
 export const P6_OWNER_TABLES=Object.freeze([
  ["SOURCE ORIGINALS","clean.fids_query_response",
   ["available_at","raw_persisted_at_utc"],"Provider FIDS originals and availability"],
@@ -77,6 +78,55 @@ export function classifyP6ReadOnlyTable({present,canRead,columns,rows}){
  if(rows===0)return "NO_ROWS_IN_SELECTED_LOOKBACK";
  return rows===P6_OWNER_SAMPLE_LIMIT?"AT_LEAST_SAMPLE_LIMIT_ROWS":
   "EXACT_ROWS_IN_LOOKBACK_UNDER_CAP";
+}
+
+/**
+ * Counts-only, bounded existing PRE feature visibility.
+ * No flight IDs, feature names, provider values, sample rows or training
+ * payloads leave SQL. Empty/non-null does not itself establish label
+ * correctness, completeness, provenance, lawful use or model quality.
+ */
+export function reviewP6OwnerPreFeatureCoverageCounts(rows){
+ if(!Array.isArray(rows)||rows.length>3)block("PRE_FEATURE_AGGREGATE_SHAPE");
+ const seen=new Set(),out=[];
+ let total=0;
+ for(const r of rows){
+  const n=Number(r?.n),invalid=Number(r?.invalid_shape),
+   empty=Number(r?.empty_feature_array),
+   withItems=Number(r?.with_feature_items),
+   usable=Number(r?.with_nonnull_feature);
+  if(!P6_OWNER_PRE_HORIZONS.includes(r?.horizon)||
+     seen.has(r.horizon)||
+     ![n,invalid,empty,withItems,usable].every(x=>
+      Number.isSafeInteger(x)&&x>=0&&x<=P6_OWNER_SAMPLE_LIMIT)||
+     invalid+empty+withItems!==n||
+     usable>withItems||
+     total+n>P6_OWNER_SAMPLE_LIMIT)
+   block("PRE_FEATURE_AGGREGATE_CONTRADICTION");
+  seen.add(r.horizon);total+=n;
+  out.push(Object.freeze({
+   horizon:r.horizon,sampledPreSnapshots:n,
+   missingOrInvalidFeatureArray:invalid,
+   emptyFeatureArray:empty,
+   anyFeatureObjects:withItems,
+   atLeastOneNonNullFeatureValue:usable,
+   allFeaturesEmptyOrNull:n-usable
+  }));
+ }
+ out.sort((a,b)=>P6_OWNER_PRE_HORIZONS.indexOf(a.horizon)-
+  P6_OWNER_PRE_HORIZONS.indexOf(b.horizon));
+ return Object.freeze({
+  status:total===0?"NO_PRE_ROWS_IN_CAPPED_RECENT_LOOKBACK":
+   total===P6_OWNER_SAMPLE_LIMIT?"CAPPED_PRE_SAMPLE_NOT_A_31DAY_DENOMINATOR":
+   "PRE_FEATURE_PRESENCE_COUNTS_ONLY_NOT_MODEL_READINESS",
+  sampledTotal:total,limit:P6_OWNER_SAMPLE_LIMIT,
+  countMayBeCapped:total===P6_OWNER_SAMPLE_LIMIT,
+  byHorizon:out,
+  physicalDepartureLabelsVerified:false,
+  originalProviderContentsOrMLRightsCertified:false,
+  rawFlightValuesTransferredToOwnerCli:false,
+  legitimateFeatureUseAtForecastIssuanceCertifiedHere:false
+ });
 }
 export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
  if(!client||typeof client.query!=="function")block("INVALID_CLIENT");
@@ -198,6 +248,46 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
         block("UNKNOWN_PRE_QUEUE_STATE");
       taskStates=stateResult.map(x=>({state:x.state,count:Number(x.n)}));
     }
+    // PRE science visibility: only counts, never SELECT any feature value
+    // to this process. A missing features_json column means UNKNOWN, not 0.
+    let preFeatureCoverage=null;
+    if(table==="clean.flight_snapshots"){
+     if(!clock||!cols.includes("horizon")||
+        !cols.includes("features_json")||!cols.includes("created_at")){
+      preFeatureCoverage={status:"UNKNOWN_REQUIRED_PRE_FEATURE_METADATA",
+       sampledTotal:null,byHorizon:[],
+       physicalDepartureLabelsVerified:false,
+       rawFlightValuesTransferredToOwnerCli:false};
+     }else{
+      // Bounded newest rows only. Evaluate JSON fields inside PostgreSQL,
+      // expose ONLY the per-horizon aggregated sample counts.
+      const safeJson="CASE WHEN jsonb_typeof(features_json::jsonb)='array'"+
+       " THEN features_json::jsonb ELSE '[]'::jsonb END";
+      const valid="jsonb_typeof(features_json::jsonb)='array'";
+      const sql="SELECT horizon,COUNT(*)::integer AS n,"+
+       "COUNT(*) FILTER (WHERE features_json IS NULL OR NOT ("+
+          valid+"))::integer AS invalid_shape,"+
+       "COUNT(*) FILTER (WHERE "+valid+
+          " AND jsonb_array_length("+safeJson+")=0)::integer"+
+          " AS empty_feature_array,"+
+       "COUNT(*) FILTER (WHERE "+valid+
+          " AND jsonb_array_length("+safeJson+")>0)::integer"+
+          " AS with_feature_items,"+
+       "COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM "+
+          "jsonb_array_elements("+safeJson+") AS v(field)"+
+          " WHERE jsonb_typeof(v.field)='object'"+
+          " AND v.field ? 'value'"+
+          " AND v.field->'value' <> 'null'::jsonb))::integer"+
+          " AS with_nonnull_feature"+
+       " FROM (SELECT horizon,features_json FROM clean.flight_snapshots"+
+       " WHERE created_at >= clock_timestamp()-interval '31 days'"+
+       " AND created_at <= clock_timestamp()"+
+       " ORDER BY created_at DESC LIMIT "+P6_OWNER_SAMPLE_LIMIT+
+       ") capped GROUP BY horizon ORDER BY horizon";
+      preFeatureCoverage=reviewP6OwnerPreFeatureCoverageCounts(
+       (await client.query(sql)).rows);
+     }
+    }
     // Expiry metadata only, not payload. A primary deletion marker
     // cannot prove replicas, PITR/backups, purpose or lawfulness.
     let deletionReview=null;
@@ -267,6 +357,7 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
      httpHeaderMetadataColumnNames:httpHeaderMetadataColumns,
      authenticatedOriginalCacheControlVerified:false,
      preQueueStateCounts:taskStates,
+     preFeatureCoverage,
      expiredProviderBlobReview:deletionReview,
      rowsSampled:dateStats?.rowsSampled??null,
      sampleCapped:dateStats?dateStats.rowsSampled===P6_OWNER_SAMPLE_LIMIT:null,
@@ -322,6 +413,16 @@ export function formatP6OwnerStageHuman(e){
     (e.days.length>6?" (+more)":""):"";
   const state=e.preQueueStateCounts?
     " | queue "+e.preQueueStateCounts.map(x=>x.state+":"+x.count).join(","):"";
+  const preFeatures=e.preFeatureCoverage?
+    " | PRE feature coverage: "+
+    (e.preFeatureCoverage.sampledTotal===null?"unknown":
+      String(e.preFeatureCoverage.sampledTotal)+" recent sampled")+
+    (e.preFeatureCoverage.countMayBeCapped?" (capped)":"")+
+    (Array.isArray(e.preFeatureCoverage.byHorizon)?
+     e.preFeatureCoverage.byHorizon.map(x=>
+      x.horizon+"="+x.atLeastOneNonNullFeatureValue+
+      "/"+x.sampledPreSnapshots+" with ≥1 non-null feature").join(","):"")+
+    " (not label or ML readiness)":"";
   const deletion=e.expiredProviderBlobReview?
     " | expired blob refs lacking verified deletion: "+
       e.expiredProviderBlobReview.sampledExpiredUnverified+
@@ -337,7 +438,7 @@ export function formatP6OwnerStageHuman(e){
     (e.allTimeSample.status==="AT_LEAST_SAMPLE_LIMIT_ALL_TIME"?"+":"")+
     (e.noRecognizedEventClock?" (NO timestamp; NOT 31d)":""):"";
   return "[RESULT] "+e.stage+" — "+status+" | "+rows+days+
-    allTime+state+deletion+" | original contents NOT read";
+    allTime+state+preFeatures+deletion+" | original contents NOT read";
  }
  if(e.event==="RUN_SUMMARY")
   return "[FINISH] "+e.datasetStages+" stages checked; provider calls=0,"+
