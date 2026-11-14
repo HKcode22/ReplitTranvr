@@ -156,13 +156,15 @@ describe("Phase6 private POST V0096→V0095→original Phase5 V0083 + 1 real PRE
   expect(JSON.stringify(result)).not.toContain(FLIGHT);
   expect(JSON.stringify(result)).not.toContain("ci-only");
  });
- it("no independently observed SOURCE-bound PRE censors, never invents a negative",()=>{
+ it("unknown independent SOURCE PRE readback remains unresolved, not three missing facts or a negative",()=>{
   const f=fixture();f.args.actualPre=null;
   const result=run(f);
   expect(result.redactedSummary.status)
-   .toBe("POST_NO_INDEPENDENT_SOURCE_BOUND_PRE_CENSOR_NO_DISPATCH");
-  expect(result.redactedSummary.missingPreHorizonCount).toBe(3);
+   .toBe("POST_SOURCE_PRE_EVIDENCE_NOT_SUPPLIED_UNRESOLVED_NO_DISPATCH");
+  expect(result.redactedSummary.observedValidPreHorizonCount).toBeNull();
+  expect(result.redactedSummary.missingPreHorizonCount).toBeNull();
   expect(result.redactedSummary.noFalseNegativeFromAbsentPRE).toBe(true);
+  expect(result.redactedSummary.independentSourcePREReadbackStillRequired).toBe(true);
   expect(Object.hasOwn(result,"privatePostPacketBytes")).toBe(false);
  });
  it("not due or late POST remains without private runnable input",()=>{
