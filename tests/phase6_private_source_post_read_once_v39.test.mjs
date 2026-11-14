@@ -54,6 +54,7 @@ function fixture(kind="SOURCE_QUERY_PACKET"){
  };
  const pins={
   privateSourcePostReadOnlyApproved:true,
+  independentExternalReviewerSignaturePinsApproved:true,
   expectedKind:kind,expectedLogicalPath:logicalPath,
   expectedContentSha256:H(data),expectedReviewedMainSha:review.reviewedCodeSha,
   expectedManifestSha256:review.manifestSha256,
@@ -119,10 +120,21 @@ test("reject false review pin even when live reviewer signed something",()=>{
  for(const changed of [
   {...f.pins,expectedContentSha256:"e".repeat(64)},
   {...f.pins,expectedReviewerPublicKeyFingerprintSha256:"f".repeat(64)},
-  {...f.pins,privateSourcePostReadOnlyApproved:false},
-  {...f.pins,expectedPrivateSessionLogin:"neondb_owner"}
+  {...f.pins,independentExternalReviewerSignaturePinsApproved:false}
  ])assert.throws(()=>verifyP6ExternalSourcePostReview(
    f.wire,f.pem,changed),/HOLD_P6_PRIVATE_SOURCE_POST_READ_/);
+});
+test("restricted private-reader authorization is a separate gate from review signature",async()=>{
+ const f=fixture();
+ for(const bad of [
+  {...f.pins,privateSourcePostReadOnlyApproved:false},
+  {...f.pins,expectedPrivateSessionLogin:"neondb_owner"}
+ ]){
+  const db=f.db();
+  await assert.rejects(readP6PrivateSourcePostOnce(db.client,bad,
+   f.wire,f.pem),/EXPLICIT_PRIVATE_READER_SCOPE_REQUIRED/);
+  assert.equal(db.queries.length,0);
+ }
 });
 test("same restricted PG16 READ ONLY transaction, byte SHA and no JSON leak",async()=>{
  for(const kind of ["SOURCE_QUERY_PACKET","POST_PACKET"]){
