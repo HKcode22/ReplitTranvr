@@ -264,26 +264,31 @@ export async function inspectP6OwnerDataflowReadOnly(client,{emit=()=>{}}={}){
       const safeJson="CASE WHEN jsonb_typeof(features_json::jsonb)='array'"+
        " THEN features_json::jsonb ELSE '[]'::jsonb END";
       const valid="jsonb_typeof(features_json::jsonb)='array'";
+      // Classify each bounded row BEFORE GROUP BY. A correlated EXISTS
+      // inside aggregate FILTER could trigger PostgreSQL ungrouped-column
+      // errors on the raw private JSON. Return only five count columns.
       const sql="SELECT horizon,COUNT(*)::integer AS n,"+
-       "COUNT(*) FILTER (WHERE features_json IS NULL OR NOT ("+
-          valid+"))::integer AS invalid_shape,"+
-       "COUNT(*) FILTER (WHERE "+valid+
-          " AND jsonb_array_length("+safeJson+")=0)::integer"+
-          " AS empty_feature_array,"+
-       "COUNT(*) FILTER (WHERE "+valid+
-          " AND jsonb_array_length("+safeJson+")>0)::integer"+
-          " AS with_feature_items,"+
-       "COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM "+
-          "jsonb_array_elements("+safeJson+") AS v(field)"+
-          " WHERE jsonb_typeof(v.field)='object'"+
+       "COUNT(*) FILTER (WHERE invalid_shape)::integer AS invalid_shape,"+
+       "COUNT(*) FILTER (WHERE empty_array)::integer AS empty_feature_array,"+
+       "COUNT(*) FILTER (WHERE has_items)::integer AS with_feature_items,"+
+       "COUNT(*) FILTER (WHERE has_nonnull)::integer AS with_nonnull_feature"+
+       " FROM (SELECT horizon,"+
+       " (features_json IS NULL OR NOT ("+valid+"))"+
+          " AS invalid_shape,"+
+       " ("+valid+" AND jsonb_array_length("+safeJson+")=0)"+
+          " AS empty_array,"+
+       " ("+valid+" AND jsonb_array_length("+safeJson+")>0)"+
+          " AS has_items,"+
+       " EXISTS (SELECT 1 FROM jsonb_array_elements("+safeJson+")"+
+          " AS v(field) WHERE jsonb_typeof(v.field)='object'"+
           " AND v.field ? 'value'"+
-          " AND v.field->'value' <> 'null'::jsonb))::integer"+
-          " AS with_nonnull_feature"+
+          " AND v.field->'value' <> 'null'::jsonb)"+
+          " AS has_nonnull"+
        " FROM (SELECT horizon,features_json FROM clean.flight_snapshots"+
        " WHERE created_at >= clock_timestamp()-interval '31 days'"+
        " AND created_at <= clock_timestamp()"+
        " ORDER BY created_at DESC LIMIT "+P6_OWNER_SAMPLE_LIMIT+
-       ") capped GROUP BY horizon ORDER BY horizon";
+       ") capped) classified GROUP BY horizon ORDER BY horizon";
       preFeatureCoverage=reviewP6OwnerPreFeatureCoverageCounts(
        (await client.query(sql)).rows);
      }
