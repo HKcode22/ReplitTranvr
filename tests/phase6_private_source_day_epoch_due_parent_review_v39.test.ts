@@ -104,7 +104,10 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
   expect(exposed).not.toContain("source_study_day_");
   expect(exposed).not.toContain("sourceq_packet_");
   expect(exposed).not.toContain(f.secrets.q2);
-  const selected=r.privateChildProposals;
+  const selected=(r as any).privateChildProposals as Array<{
+   runDayIndex:number;existingChildWorkflow:string;
+   childInputShape:{private_transport:string;query_digest:string}
+  }>;
   expect(selected.map(x=>x.runDayIndex)).toEqual([1,1,2,2]);
   expect(selected[0].childInputShape.private_transport).toBe("true");
   expect(selected[0].childInputShape.query_digest).toBe(f.secrets.q2);
