@@ -147,6 +147,14 @@ jobs:
            assert.equal(result.rows[1].previous_index_sha256,h(first));
            await assert.rejects(owner.query(sql,params(2,h(first),second)));
            await assert.rejects(owner.query(
+             sql,params(3,"0".repeat(64),Buffer.from("q".repeat(130)))
+           ),/P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION/);
+           const wrongCalendar=params(3,h(second),Buffer.from("r".repeat(130)));
+           wrongCalendar[5]="0".repeat(64);
+           await assert.rejects(owner.query(
+             sql,wrongCalendar
+           ),/P6_V0096_MISSING_OR_DRIFTED_PREVIOUS_COMMITTED_REVISION/);
+           await assert.rejects(owner.query(
              "UPDATE "+table+" SET reviewed_code_sha=$1 WHERE revision=1",
              ["1".repeat(40)]),/P5_V0094_IMMUTABLE_PACKET_NO_UPDATE/);
            await assert.rejects(owner.query(sql,
