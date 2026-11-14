@@ -34,12 +34,14 @@ const hold=(x:string):never=>{
 };
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 function time(x:unknown){
- if(typeof x!=="string")
+ // Explicit concrete string avoids TS strict-control-flow assumptions about
+ // a never-returning failure helper in this dual JS/TS repository build.
+ const value=typeof x==="string"?x:"";
+ if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value)||
+    !Number.isFinite(Date.parse(value))||
+    new Date(value).toISOString()!==value)
   hold("INVALID_ACTUAL_DB_CLOCK_OR_SOURCE_WINDOW");
- if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x)||
-    !Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)
-  hold("INVALID_ACTUAL_DB_CLOCK_OR_SOURCE_WINDOW");
- return Date.parse(x);
+ return Date.parse(value);
 }
 const sealed=(o:unknown,k:string)=>{
  const d=Object.getOwnPropertyDescriptor(o??{},k);
