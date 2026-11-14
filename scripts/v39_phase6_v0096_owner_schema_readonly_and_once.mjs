@@ -175,6 +175,10 @@ export async function readV0096OwnerInventory(client){
  }
 }
 export async function installV0096OnceOwner({client,rawMigration,blobSha}){
+ // Keep this historical API to make accidental calls fail closed. The V0096
+ // SHA-pinned SQL is preserved only for archaeology and disposable regression;
+ // its global first-revision <=7d expiry cannot serve the 31-day study.
+ fail("LEGACY_GLOBAL_CHAIN_31DAY_TTL_INCOMPATIBLE_NEVER_INSTALL");
  reviewExactV0096Sql(rawMigration,blobSha);
  const before=await readV0096OwnerInventory(client);
  if(before.state!=="V0095_READY_EMPTY_V0096_NOT_INSTALLED_NO_GO")
