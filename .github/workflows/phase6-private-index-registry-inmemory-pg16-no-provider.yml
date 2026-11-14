@@ -143,7 +143,7 @@ jobs:
              " (logical_path,run_day_index,shard_index,kind,content_sha256,"+
              "reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,"+
              "externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,"+
-             "committed_at_utc) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+             "committed_at_utc) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
              [path,day,1,"SOURCE_DAY_REGISTRY",h(bytes),code,manifest,
               rights,evidence,new Date(stamp-95000).toISOString(),expiry,
               bytes,committed]
