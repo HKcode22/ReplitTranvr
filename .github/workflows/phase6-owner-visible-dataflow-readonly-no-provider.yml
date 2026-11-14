@@ -126,7 +126,7 @@ jobs:
             await inspectP6OwnerDataflowReadOnly(c,{emit:e=>events.push(e)});
             assert(events.some(e=>e.stage==="SOURCE ORIGINALS"&&e.rowsSampled===1));
             assert(events.some(e=>e.stage==="NORMALIZED FLIGHTS"&&e.rowsSampled===1));
-            const pre=events.find(e=>e.stage==="PRE SNAPSHOTS");
+            const pre=events.find(e=>e.stage==="PRE SNAPSHOTS"&&e.event==="STAGE_RESULT");
             assert(pre?.rowsSampled===4,
               "PRE stage sample HOLD status="+String(pre?.status)+
               " sqlstate="+String(pre?.sqlstate??"NONE"));
