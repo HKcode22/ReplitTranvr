@@ -106,7 +106,7 @@ export async function runP6NativePostProducer(env){
   if(!scan.privateWindows.length)return {status:"NO_PROSPECTIVE_NATIVE_POST_WINDOW",missingDays:scan.missingDays,
    late:scan.late,notYet:scan.notYet,alreadyIndexedHints:scan.already,crossUtc:scan.crossUtc,providerCalls:0,phase6PaidGo:false};
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
-  return executeP6PostProducerTick(scan,h=>runP6NativePostPublication({readerClient:reader,publisherClient:publisher,sourcePool,
+  return await executeP6PostProducerTick(scan,h=>runP6NativePostPublication({readerClient:reader,publisherClient:publisher,sourcePool,
    trust:c.trust,authority:c.authority,t24Trust:c.t24Trust,selector:h,githubRunId:env.GITHUB_RUN_ID}));
  }finally{await Promise.allSettled([raw.end(),reader.end(),publisher.end()]);}
 }
