@@ -1,0 +1,10 @@
+# Nov15 UTC — real V0097–V0099 empty transport verified
+
+User supplied two actual Replit shell transcripts on checkout f9cc7cc5b7564602396244a09f3e6bca930a6284. All six calls reported ALREADY_COMPLETE_NO_REPLAY, installed=[], final V0099_INSTALLED_EMPTY_DAILY_REVIEW_INERT_NO_GO, neondb / neondb_owner / version 160016, revisions=0 claims=0 packets=0, wireColumns=2 guardCount=4, providerCalls=0 databaseWrites=0 flightWrites=0 paidPhase6Go=false. Both commands ended P6_PRIVATE_EMPTY_SCHEMA_CHAIN_COMPLETE. This verifies already-installed exact final empty schema, not when/by whom the DDL ran. Do not replay V0094/V0095/V0097/V0098/V0099 or obsolete V0096. Earlier generic pre-install hold is superseded; its exact cause was not established, and the old command also succeeded on the later readback. #714 changes startup config and redacted diagnostics only; not needed to repeat live schema.
+
+## Merged (exact green CI)
+- #709 production V0095 checkpoint 5/5; #710 empty DDL chain 6/6; #711 calendar-selected enrollment 6/6; #712 PRE roster env repair 6/6.
+- #713 dedicated private two-login commissioner, head f4e3122d54b120a1b654dab447978a086a2717ff, 6/6 green including disposable PG16 real role test 43695384404, merge 2fc11a9beadbeb2f35adbc10133ea8541d4331a5. No live credentials established by CI. Next separate owner operation uses exact preflight empty V0099, creates two SET-only logins and protected encrypted Actions secrets, verifies fresh read-only connections. Never repeat schema-only V0099 inventory after the new group memberships are commissioned; it deliberately requires no worker members. Independent GitHub session readback still needed. #715 V0100 owner installer pending final CI.
+- Reader direct endpoint vs older worker exact host comparison must be checked before activation; do not silently assume a pooled endpoint matches a direct hostname.
+
+No payload or provider rights proof, real SOURCE/PRE/POST evidence, approved actual calendar, throughput capacity or scientific freeze/paid GO established. Retention cleanup already closed; no provider email required for engineering. Preserve Amendment E and missingness rules.
