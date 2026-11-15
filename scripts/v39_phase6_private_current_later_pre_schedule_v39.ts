@@ -8,7 +8,7 @@ import {requireP5CdGithubCurrentPrivatePreScope,requireP5CdGithubPreRelease} fro
 import {assertP6CurrentPrivatePreMode,withP6AuthenticatedCurrentPrivateRoster,readP6UnchangedCurrentPreRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
-import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {loadP6CurrentPreCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {verifyP5CdFrozenRoster,runP5CdGithubPreTick,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
@@ -34,7 +34,7 @@ export function admitP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
     [...reader.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
     (reader.searchParams.has("channel_binding")&&(reader.searchParams.getAll("channel_binding").length!==1||reader.searchParams.get("channel_binding")!=="require")))
   hold("SEPARATE_RESTRICTED_TLS_READER_REQUIRED");
- const calendar=loadP6LaterCalendarWindows(env,trust);
+ const calendar=loadP6CurrentPreCalendarWindows(env,trust);
  return {trust,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
   policy:{independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
    independentlyApprovedStandaloneProtocolSha256:base.independentlyApprovedStandaloneProtocolSha256}};
