@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/phase5-source-to-unsigned-native-pre-dossier-offline.yml'
       - 'server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts'
+      - 'server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts'
       - 'server/lib/disruption/phase5DetachedSourceAuditToUnsignedDossierHandoff_v39.ts'
       - 'tests/phase5_detached_source_audit_to_unsigned_dossier_handoff_v39.test.ts'
       - 'tests/phase5_source_bound_unsigned_pre_dossier_v39.test.ts'

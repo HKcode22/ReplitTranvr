@@ -173,6 +173,7 @@ export function buildP5UnsignedNativePreReviewDossier(
     audit.candidates.length>MAX||
     audit.observedMemberCount!==audit.candidates.length||
     audit.candidateCount+audit.censoredCount!==audit.candidates.length||
+    (audit.sourceGithubRunId!==undefined&&audit.sourceGithubRunId!==pins.expectedSourceGithubRunId)||
     audit.sourcePopulationQueryId!==pins.expectedSourcePopulationQueryId||
     audit.sourceResponseSha256!==pins.expectedSourceResponseSha256||
     audit.queryDigestSha256!==pins.expectedQueryDigestSha256)
