@@ -8,3 +8,8 @@ export function verifyP6DayEpochExternalReview(input:{
  organizationalIndependenceCertifiedHere:false;providerContentsOrDerivedWorksRightsCertifiedHere:false};
 export function validateP6DayEpochIndexBytes(bytes:Buffer,review:Record<string,unknown>):Record<string,unknown>;
 export function readP6DayEpochRestrictedReaderClock(client:{query:(sql:string,values?:any[])=>Promise<any>},login:string):Promise<string>;
+
+export function publishP6DayEpochIndexRevisionOnce(input:{
+ client:{query:(sql:string,values?:any[])=>Promise<any>};pins:Record<string,unknown>;
+ wire:{review:Record<string,unknown>;signatureBase64:string};publicKeyPem:string;indexBytes:Buffer;scope:Record<string,unknown>
+}):Promise<{status:"ONE_DAY_INDEX_COMMITTED_SEPARATE_READBACK_REQUIRED_NO_GO";runDayIndex:number;revision:number;indexSha256:string;registryCount:number;independentPostcommitReadbackRequired:true;providerCalls:0;githubDispatches:0;phase6PaidGo:false}>;
