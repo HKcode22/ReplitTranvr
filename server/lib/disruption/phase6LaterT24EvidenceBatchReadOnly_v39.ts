@@ -10,7 +10,7 @@ import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE24_REVIEWED_WITNESSED_T24_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {digestP5Stage24ReviewedReceipt,verifyP5Stage24WitnessedFrozenT,type P5Stage24ReviewedT24Receipt}
  from "./phase5T24WitnessedLaterHorizonGuard_v39";
-import {digestP5UnsignedNativePreDossier,pageP5UnsignedNativePreReviewDossier,type P5UnsignedNativePreDossier}
+import {digestP5UnsignedNativePreDossier,pageP5UnsignedNativePreReviewDossier,type P5UnsignedNativePreDossier,type P5UnsignedPreReviewEntry}
  from "./phase5SourceBoundUnsignedPreDossier_v39";
 const H=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9_.:|-]{5,200}$/;
@@ -41,6 +41,9 @@ export interface P6LaterT24EvidenceReadScope{
  expectedConfigSha256:string;
  expectedSelectedTVersion:string;
  pageIndex:number;
+ /** Optional exact subset of original page, selected by current signed
+  * day-index duplicate/lead filtering. Never change the original dossier SHA. */
+ selectedFlightInstanceIds?:readonly string[];
  /** Exact existing Stage17 receipt obtained via lawful private custody.
   * No reconstruction of second post-COMMIT observation from today's DB
   * clock. A digest is not independent organizational approval. */
@@ -68,11 +71,17 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
   hold("NO_EXACT_INDEPENDENT_READ_SCOPE");
  const pages=pageP5UnsignedNativePreReviewDossier(dossier);
  const page=pages[scope.pageIndex-1];
- if(!page||page.entries.length<1||page.entries.length>96||scope.reviewedReceipts.length>page.entries.length)
+ if(!page||page.entries.length<1||page.entries.length>96)
   hold("UNBOUNDED_OR_EMPTY_PAGE");
- const priorClock=utc(dossier.sourceObservedDbClockUtc),ids=page.entries.map(e=>e.source.flightInstanceId);
+ const requested=scope.selectedFlightInstanceIds;
+ if(requested!==undefined&&(!Array.isArray(requested)||requested.length<1||requested.length>96||
+    new Set(requested).size!==requested.length||requested.some(id=>!ID.test(id)||!page.entries.some(e=>e.source.flightInstanceId===id))))
+  hold("INVALID_SELECTED_PAGE_SUBSET");
+ const selected=requested===undefined?page.entries:page.entries.filter(e=>requested.includes(e.source.flightInstanceId));
+ if(scope.reviewedReceipts.length>selected.length)hold("UNBOUNDED_OR_EMPTY_PAGE");
+ const priorClock=utc(dossier.sourceObservedDbClockUtc),ids=selected.map(e=>e.source.flightInstanceId);
  if(new Set(ids).size!==ids.length||ids.some(id=>!ID.test(id))||
-    page.entries.some(e=>e.source.manifestSha256!==scope.expectedManifestSha256||
+    selected.some(e=>e.source.manifestSha256!==scope.expectedManifestSha256||
      e.source.expectedReviewedReleaseSha256!==scope.expectedReleaseSha256||
      e.source.expectedReviewedSourceRightsSha256!==scope.expectedRightsSha256||e.source.horizon!==dossier.horizon||
      utc(e.source.selectedTNativeUtc)-utc(e.source.ownPreCutoffUtc)!==(dossier.horizon==="T-6h"?21600000:5400000)))
@@ -113,7 +122,7 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
    return by;
   };
   const snaps=map(snap.rows),witnesses=map(witness.rows);
-  const decisions:Decision[]=page.entries.map(e=>{
+  const decisions:Decision[]=selected.map(e=>{
    const s=e.source,id=s.flightInstanceId,native=utc(s.selectedTNativeUtc),cutoff=utc(s.ownPreCutoffUtc),
     sr=snaps.get(id)??[],wr=witnesses.get(id)??[],r=byReceipt.get(id);
    let status:P6LaterT24EvidenceStatus;
@@ -148,4 +157,44 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
   if(begun)await c.query("ROLLBACK").catch(()=>{});
   c.release();
  }
+}
+
+
+/** Connect #747's private selected candidates to the original T24 reader.
+ * One invocation is bounded to one original page. An empty selection is
+ * not evidence of missing T24 and requires no DB connection. The caller
+ * supplies its existing independently pinned dossier/release scope. */
+export async function readP6PendingLaterT24EvidencePage(
+ pool:Pick<Pool,"connect">,
+ handoff:{status:string;horizon:string;runDayIndex:number;reviewEntryCount:number;
+  privateOriginalDossier:P5UnsignedNativePreDossier;privateOriginalDossierSha256:string;
+  privateReviewEntries:readonly P5UnsignedPreReviewEntry[]},
+ scope:Omit<P6LaterT24EvidenceReadScope,"selectedFlightInstanceIds">
+){
+ const sealed=(k:string)=>{const d=Object.getOwnPropertyDescriptor(handoff??{},k);return Boolean(d&&!d.enumerable&&!d.writable);};
+ const d=handoff?.privateOriginalDossier,entries=handoff?.privateReviewEntries;
+ if(!scope||scope.independentDossierReviewPinned!==true||scope.independentT24EvidenceReadApproved!==true||
+    scope.existingPaidDispatchApproved!==false||!Number.isSafeInteger(scope.pageIndex)||scope.pageIndex<1||
+    !Array.isArray(scope.reviewedReceipts)||handoff?.status!=="UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED"||
+    !sealed("privateOriginalDossier")||!sealed("privateOriginalDossierSha256")||!sealed("privateReviewEntries")||
+    !d||handoff.horizon!==d.horizon||!["T-6h","T-90m"].includes(d.horizon)||
+    handoff.runDayIndex!==d.runDayIndex||handoff.privateOriginalDossierSha256!==scope.expectedDossierSha256||
+    d.manifestSha256!==scope.expectedManifestSha256||digestP5UnsignedNativePreDossier(d)!==scope.expectedDossierSha256||
+    !Array.isArray(entries)||entries.length!==handoff.reviewEntryCount||entries.length>d.entries.length)
+  hold("NO_EXACT_PENDING_HANDOFF");
+ const ids=new Set<string>();
+ for(const e of entries){
+  if(!e?.source||ids.has(e.source.flightInstanceId)||!d.entries.some(x=>JSON.stringify(x)===JSON.stringify(e)))
+   hold("PENDING_HANDOFF_ENTRY_DRIFT");
+  ids.add(e.source.flightInstanceId);
+ }
+ const page=pageP5UnsignedNativePreReviewDossier(d)[scope.pageIndex-1];
+ if(!page)hold("INVALID_PENDING_PAGE");
+ const selected=page.entries.filter(e=>ids.has(e.source.flightInstanceId)).map(e=>e.source.flightInstanceId);
+ if(!selected.length){
+  if(scope.reviewedReceipts.length)hold("RECEIPT_WITHOUT_PENDING_SELECTION");
+  return {status:"NO_PENDING_T24_EVIDENCE_ON_PAGE_NO_SQL",runDayIndex:d.runDayIndex,pageIndex:scope.pageIndex,
+   candidateCount:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ }
+ return readP6LaterT24EvidencePage(pool,d,{...scope,selectedFlightInstanceIds:selected});
 }

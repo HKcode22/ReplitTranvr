@@ -202,7 +202,7 @@ describe("actual SOURCE → UNSIGNED future PRE reviewer dossier",()=>{
  });
 });
 
-import {readP6LaterT24EvidencePage,P6_LATER_T24_SNAPSHOTS_BATCH_SQL,P6_LATER_T24_WITNESSES_BATCH_SQL} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
+import {readP6LaterT24EvidencePage,readP6PendingLaterT24EvidencePage,P6_LATER_T24_SNAPSHOTS_BATCH_SQL,P6_LATER_T24_WITNESSES_BATCH_SQL} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 import {P5_STAGE28_GROUPS} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 describe("bounded actual-role T24 evidence intake for existing later SOURCE dossiers",()=>{
@@ -251,6 +251,30 @@ describe("bounded actual-role T24 evidence intake for existing later SOURCE doss
   const g=fixture();g.identity.login="wrong";
   await expect(readP6LaterT24EvidencePage(g.pool,g.d,g.scope)).rejects.toThrow("ACTUAL_COMMISSIONED");
   expect(g.calls.some(s=>s.includes("ANY($1::text[])"))).toBe(false);
+ });
+ it("queries only selected unresolved flights and skips an empty pending page without SQL",async()=>{
+  const f=fixture(),entry=f.d.entries[3],calls:string[]=[];
+  const handoff=(entries:typeof f.d.entries)=>Object.defineProperties({
+   status:"UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED",runDayIndex:f.d.runDayIndex,horizon:f.d.horizon,reviewEntryCount:entries.length
+  },{privateOriginalDossier:{value:f.d},privateOriginalDossierSha256:{value:f.scope.expectedDossierSha256},
+   privateReviewEntries:{value:entries}}) as Parameters<typeof readP6PendingLaterT24EvidencePage>[1];
+  const pool:any={connect:async()=>({query:async(sql:string,args?:any[])=>{
+   calls.push(sql);const rows=sql.startsWith("SELECT current_database")?[f.identity]:[];
+   if(sql===P6_LATER_T24_SNAPSHOTS_BATCH_SQL||sql===P6_LATER_T24_WITNESSES_BATCH_SQL)
+    expect(args).toEqual([[entry.source.flightInstanceId],3]);
+   return {rows,rowCount:rows.length};},release:()=>{}})};
+  const scope={...f.scope,reviewedReceipts:[]};
+  const result=await readP6PendingLaterT24EvidencePage(pool,handoff([entry]),scope);
+  expect(result.candidateCount).toBe(1);
+  expect(result.status).toBe("ACTUAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO");
+  expect(JSON.stringify(result)).not.toContain(entry.source.flightInstanceId);
+  expect(calls.filter(s=>s.includes("ANY($1::text[])"))).toHaveLength(2);
+  calls.length=0;
+  expect(await readP6PendingLaterT24EvidencePage(pool,handoff([]),scope)).toMatchObject({status:"NO_PENDING_T24_EVIDENCE_ON_PAGE_NO_SQL",candidateCount:0});
+  expect(calls).toHaveLength(0);
+  await expect(readP6PendingLaterT24EvidencePage(pool,handoff([entry,entry]),scope)).rejects.toThrow("PENDING_HANDOFF_ENTRY_DRIFT");
+  await expect(readP6PendingLaterT24EvidencePage(pool,handoff([entry]),f.scope)).rejects.toThrow();
+  expect(calls).toHaveLength(0);
  });
  it("rejects wrong exact dossier and source run binding",async()=>{
   const f=fixture();
