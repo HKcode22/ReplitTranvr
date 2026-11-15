@@ -164,7 +164,7 @@ async function verifyQuery(client,trust,p){
  if(!Buffer.isBuffer(read.privateBytes)||!read.privateBytes.equals(p.bytes))
   fail("EXISTING_QUERY_BYTES_DIFFER_NO_REPLAY");
 }
-async function verifyRegistry(client,trust,plan,registryBytes){
+async function verifyRegistry(client,trust,plan,registryBytes,reattested=false){
  const r=plan.r;
  let tx=false;
  try{
@@ -182,8 +182,9 @@ async function verifyRegistry(client,trust,plan,registryBytes){
      q.run_day_index!==r.runDayIndex||q.shard_index!==r.shardIndex||q.content_sha256!==r.registrySha256||
      q.reviewed_code_sha!==r.reviewedCodeSha||q.manifest_sha256!==r.manifestSha256||
      q.rights_sha256!==r.rightsSha256||q.external_review_sha256!==r.externalReviewEvidenceSha256||
-     at(q.externally_reviewed_at_utc)!==r.reviewedAtUtc||at(q.retention_not_after_utc)!==r.retentionNotAfterUtc||
-     utc(at(q.committed_at_utc))<utc(r.reviewedAtUtc)||utc(at(q.committed_at_utc))>utc(now)||
+     (!reattested&&at(q.externally_reviewed_at_utc)!==r.reviewedAtUtc)||at(q.retention_not_after_utc)!==r.retentionNotAfterUtc||
+     (reattested?(utc(at(q.externally_reviewed_at_utc))>utc(at(q.committed_at_utc))||utc(at(q.committed_at_utc))>utc(r.reviewedAtUtc)):
+     utc(at(q.committed_at_utc))<utc(r.reviewedAtUtc))||utc(at(q.committed_at_utc))>utc(now)||
      !Buffer.isBuffer(q.payload_bytes)||!q.payload_bytes.equals(registryBytes))
    fail("REGISTRY_INDEPENDENT_READBACK_DRIFT");
   await client.query("ROLLBACK");tx=false;
@@ -208,6 +209,9 @@ export async function publishP6StoredSourceShardOnce(args){
   live(r,now,p.expiry);
   for(const q of p.packets)live(q.review,now,p.expiry);
   const registryAlready=before.present.has(r.logicalPath);
+  const reattested=scope.registryReattestationFromCommittedRowApproved===true;
+  if(reattested&&(!registryAlready||!scope.resumeFromIndependentReadbackApproved))
+   fail("REGISTRY_REATTESTATION_REQUIRES_EXISTING_ROW_AND_RECOVERY_APPROVAL");
   const existing=p.packets.filter(q=>before.present.has(q.e.filePath));
   if(registryAlready&&existing.length!==p.packets.length)
    fail("COMMITTED_REGISTRY_MISSING_CONSTITUENT_NO_BACKFILL");
@@ -243,12 +247,13 @@ export async function publishP6StoredSourceShardOnce(args){
      requireStoredQueryReviews:true,storedQueryReviewTrust:trust
     }});
   }
-  const verified=await verifyRegistry(reader,trust,p,registryBytes);
+  const verified=await verifyRegistry(reader,trust,p,registryBytes,reattested);
   return Object.freeze({schema:"v39.phase6.stored-source-shard-publication.v1",
    status:"EXACT_SOURCE_SHARD_QUERY_FIRST_REGISTRY_LAST_READBACK_NO_GO",
    runDayIndex:r.runDayIndex,shardIndex:r.shardIndex,registrySha256:r.registrySha256,
    independentlyReadBackQueryCount:p.packets.length,existingQueryCount:existing.length,
    insertedQueryCount,insertedRegistryCount:registryAlready?0:1,
+   registryFreshlyReattestedNotOriginalSignature:reattested,
    ...verified,registryValidUntilUtc:r.validUntilUtc,registryRetentionNotAfterUtc:r.retentionNotAfterUtc,
    separateSignedDayIndexPublicationStillRequired:true,providerCalls:0,githubDispatches:0,
    paidPhase6Go:false,phase5ScientificFreeze:false});

@@ -51,6 +51,7 @@ type Pins={
  expectedPolicySha256:string;expectedDailyPreparePacketSha256:string;
  expectedReviewedMainSha:string;existingPaidDispatchApproved:false;
  noProviderCredentialsInSigner:true;
+ independentRegistryRecoveryApproved?:true;
 };
 function parse<T>(bytes:Buffer,max:number,digest:string):T{
  if(!SHA.test(digest??"")||!Buffer.isBuffer(bytes)||bytes.length<100||
@@ -211,6 +212,7 @@ export async function signP6ReviewedPreparedSourceDay({
    expectedRunDayIndex:day.runDayIndex,expectedShardIndex:sh.shardIndex
   });
   return {shardIndex:sh.shardIndex,registryBytes,registryReviewWire,
+   registryReattestedFromCommittedRow:false as boolean,
    queryPackets:queryPackets.map(q=>q.packet),
    earliestProposedNotBeforeUtc:sh.earliestProposedNotBeforeUtc,
    latestFirstQueryParentReviewUtc:sh.latestFirstQueryParentReviewUtc,hardLatestUtc:sh.hardLatestUtc};
@@ -226,6 +228,140 @@ export async function signP6ReviewedPreparedSourceDay({
  return Object.defineProperty(result,"privateSignedShards",{
   value:bundles,enumerable:false,writable:false,configurable:false
  }) as typeof result & {readonly privateSignedShards:readonly typeof bundles[number][]};
+}
+
+
+/** Restart recovery before the first physical request and before index genesis.
+ * Persisted query wires are reused byte-for-byte. A historical registry has
+ * no stored wire in V0098: independently re-attest its exact immutable row at
+ * the NEW database clock, never pretend to reproduce a historical signature.
+ * No inserts or dispatch. Missing rows alone may receive NEW reviews.
+ */
+export async function recoverP6ReviewedPreparedSourceDayFromCommittedPackets(args:
+ Parameters<typeof signP6ReviewedPreparedSourceDay>[0]&{
+ readerClient:{query:(sql:string,values?:any[])=>Promise<any>};
+ expectedReaderSessionLogin:string;
+ }){
+ if(args?.pins?.independentRegistryRecoveryApproved!==true)
+  hold("RESTART_RECOVERY_NOT_INDEPENDENTLY_APPROVED");
+ if(!args.readerClient||typeof args.readerClient.query!=="function"||
+    !/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(args.expectedReaderSessionLogin??""))
+  hold("RESTART_SEPARATE_PRIVATE_READER_REQUIRED");
+ const fresh=await signP6ReviewedPreparedSourceDay(args);
+ const p=parse<Policy>(args.policyBytes,20000,args.pins.expectedPolicySha256);
+ const qPem=keyInfo(args.queryKey,p.queryReviewerFingerprintSha256);
+ const rPem=keyInfo(args.registryKey,p.registryReviewerFingerprintSha256);
+ const client=args.readerClient;
+ const expected=new Map<string,{kind:string;bytes:Buffer;review:any}>();
+ for(const sh of fresh.privateSignedShards){
+  const r=sh.registryReviewWire.review;
+  expected.set(r.logicalPath,{kind:"SOURCE_DAY_REGISTRY",bytes:sh.registryBytes,review:r});
+  for(const q of sh.queryPackets)
+   expected.set(q.wire.review.logicalPath,{kind:"SOURCE_QUERY_PACKET",bytes:q.bytes,review:q.wire.review});
+ }
+ if(expected.size!==fresh.queryCount+fresh.shardCount||
+    [...expected.values()].reduce((n,x)=>n+x.bytes.length,0)>16*1024*1024)
+  hold("RESTART_EXPECTED_SET_BOUND");
+ let tx=false;
+ try{
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await client.query("SET LOCAL statement_timeout='12000ms'");
+  await client.query("SET LOCAL lock_timeout='2000ms'");
+  const observed=await readP6DayEpochRestrictedReaderClock(client,args.expectedReaderSessionLogin);
+  const now=utc(observed);
+  if(now<utc(fresh.observedDatabaseClockUtc)||now>=utc(fresh.retentionNotAfterUtc)||
+     fresh.privateSignedShards.some(sh=>sh.queryPackets.some(q=>
+      utc(JSON.parse(q.bytes.toString("utf8")).plan.acquisition.scheduledRequestUtc)<=now)))
+   hold("RESTART_NO_BACKFILL_OR_EXPIRED");
+  const state=await client.query("SELECT (SELECT count(*)::int FROM phase6_private.signed_run_day_epoch_claim_v39 WHERE run_day_index=$1) AS claims,"+
+   "(SELECT count(*)::int FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=$1) AS revisions",[fresh.runDayIndex]);
+  if(state.rowCount!==1||state.rows[0]?.claims!==0||state.rows[0]?.revisions!==0)
+   hold("RESTART_INDEX_ALREADY_CLAIMED");
+  const selected=await client.query("SELECT logical_path,kind,run_day_index,shard_index,content_sha256,reviewed_code_sha,"+
+   "manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,"+
+   "committed_at_utc,payload_bytes,review_wire_bytes FROM phase6_private.frozen_native_packet_v39 "+
+   "WHERE logical_path=ANY($1::text[]) OR (manifest_sha256=$2 AND run_day_index=$3 AND kind IN ('SOURCE_QUERY_PACKET','SOURCE_DAY_REGISTRY')) LIMIT 769",
+   [[...expected.keys()],p.manifestSha256,fresh.runDayIndex]);
+  if(selected.rowCount!==selected.rows.length||selected.rows.length>expected.size)hold("RESTART_EXTRA_ROWS");
+  const at=(v:any)=>new Date(v instanceof Date?v.getTime():String(v)).toISOString();
+  const rows=new Map<string,any>();
+  let minExpiry=utc(fresh.retentionNotAfterUtc),reused=0,reattested=0;
+  for(const row of selected.rows){
+   const x=expected.get(row.logical_path),v=x?.review;
+   if(!x||rows.has(row.logical_path)||row.kind!==x.kind||
+      row.run_day_index!==fresh.runDayIndex||row.shard_index!==v.shardIndex||
+      row.content_sha256!==hash(x.bytes)||row.reviewed_code_sha!==p.approvedCodeSha||
+      row.manifest_sha256!==p.manifestSha256||row.rights_sha256!==p.rightsSha256||
+      row.external_review_sha256!==v.externalReviewEvidenceSha256||
+      !Buffer.isBuffer(row.payload_bytes)||!row.payload_bytes.equals(x.bytes))
+    hold("RESTART_IMMUTABLE_PACKET_DRIFT");
+   const old=utc(at(row.externally_reviewed_at_utc)),commit=utc(at(row.committed_at_utc)),expiry=utc(at(row.retention_not_after_utc));
+   if(old<utc(p.validFromUtc)||old>commit||commit>now||expiry<=now||
+      expiry>utc(p.validUntilUtc)||expiry-old>p.maximumReviewRetentionHours*3600000)
+    hold("RESTART_OLD_ROW_CLOCK_OR_EXPIRY");
+   minExpiry=Math.min(minExpiry,expiry);
+   if(row.kind==="SOURCE_QUERY_PACKET"){
+    if(!Buffer.isBuffer(row.review_wire_bytes)||row.review_wire_bytes.length<100||row.review_wire_bytes.length>4096)
+     hold("RESTART_ORIGINAL_QUERY_WIRE_MISSING");
+    const wire=JSON.parse(row.review_wire_bytes.toString("utf8"));
+    if(!Buffer.from(JSON.stringify(wire),"utf8").equals(row.review_wire_bytes))
+     hold("RESTART_ORIGINAL_QUERY_WIRE_NOT_EXACT");
+    verifyP6ExternalSourcePostReview(wire,qPem,{
+     independentExternalReviewerSignaturePinsApproved:true,expectedKind:v.kind,
+     expectedLogicalPath:v.logicalPath,expectedContentSha256:v.contentSha256,
+     expectedReviewedMainSha:p.approvedCodeSha,expectedManifestSha256:p.manifestSha256,
+     expectedRightsSha256:p.rightsSha256,expectedExternalReviewEvidenceSha256:v.externalReviewEvidenceSha256,
+     expectedReviewerPublicKeyFingerprintSha256:p.queryReviewerFingerprintSha256,
+     expectedRunDayIndex:fresh.runDayIndex,expectedShardIndex:v.shardIndex});
+    if(wire.review.reviewedAtUtc!==at(row.externally_reviewed_at_utc)||
+       wire.review.retentionNotAfterUtc!==at(row.retention_not_after_utc)||
+       utc(wire.review.validUntilUtc)<=now)
+     hold("RESTART_ORIGINAL_QUERY_WIRE_CLOCK_DRIFT");
+    minExpiry=Math.min(minExpiry,utc(wire.review.validUntilUtc));
+    row.verifiedOriginalWire=wire;reused++;
+   }else if(row.review_wire_bytes!==null)
+    hold("RESTART_UNEXPECTED_REGISTRY_WIRE");
+   rows.set(row.logical_path,row);
+  }
+  if(fresh.privateSignedShards.some(sh=>utc(sh.hardLatestUtc)>=minExpiry))
+   hold("RESTART_EXISTING_EXPIRY_TOO_SHORT_NO_EXTENSION");
+  const expiry=new Date(minExpiry).toISOString();
+  const bundles=fresh.privateSignedShards.map(sh=>{
+   const r=sh.registryReviewWire.review,existing=rows.get(r.logicalPath);
+   const queryPackets=sh.queryPackets.map(q=>{
+    const original=rows.get(q.wire.review.logicalPath);
+    if(original)return {bytes:q.bytes,wire:original.verifiedOriginalWire as typeof q.wire};
+    const review={...q.wire.review,reviewedAtUtc:observed,validUntilUtc:expiry,retentionNotAfterUtc:expiry};
+    return {bytes:q.bytes,wire:{review,signatureBase64:sign(null,signedP6PrivateSourcePostReviewBytes(review),args.queryKey).toString("base64")}};
+   });
+   if(existing){
+    if(sh.queryPackets.some(q=>!rows.has(q.wire.review.logicalPath)||
+        utc(at(rows.get(q.wire.review.logicalPath).committed_at_utc))>utc(at(existing.committed_at_utc))))
+     hold("RESTART_COMMITTED_REGISTRY_MISSING_PRIOR_QUERY");
+    reattested++;
+   }
+   const registryExpiry=existing?at(existing.retention_not_after_utc):expiry;
+   const validUntilUtc=new Date(Math.min(utc(registryExpiry),...queryPackets.map(q=>utc(q.wire.review.validUntilUtc)))).toISOString();
+   if(queryPackets.some(q=>utc(q.wire.review.retentionNotAfterUtc)<utc(registryExpiry)))
+    hold("RESTART_REGISTRY_OUTLIVES_QUERY");
+   const review={...r,reviewedAtUtc:observed,retentionNotAfterUtc:registryExpiry,validUntilUtc};
+   const registryReviewWire={review,signatureBase64:sign(null,sourceDayRegistryReviewPreimage(review),args.registryKey).toString("base64")};
+   verifyP6ExternalSourceRegistryLastReview(registryReviewWire,rPem,{
+    independentExternalReviewerSignaturePinsApproved:true,expectedRegistryPath:r.logicalPath,
+    expectedRegistrySha256:r.registrySha256,expectedManifestSha256:p.manifestSha256,
+    expectedCalendarSha256:p.calendarSha256,expectedReleaseSha256:p.releaseSha256,
+    expectedRightsSha256:p.rightsSha256,expectedReviewedMainSha:p.approvedCodeSha,
+    expectedReviewEvidenceSha256:r.externalReviewEvidenceSha256,expectedEntriesDigestSha256:r.entriesDigestSha256,
+    expectedReviewerPublicKeyFingerprintSha256:p.registryReviewerFingerprintSha256,
+    expectedRunDayIndex:fresh.runDayIndex,expectedShardIndex:r.shardIndex});
+   return {...sh,queryPackets,registryReviewWire,registryReattestedFromCommittedRow:Boolean(existing)};
+  });
+  await client.query("ROLLBACK");tx=false;
+  const result={...fresh,observedDatabaseClockUtc:observed,retentionNotAfterUtc:expiry,
+   exactOriginalQueryWiresReused:reused,existingRegistriesFreshlyReattested:reattested,
+   historicalRegistrySignatureRecreated:false as const};
+  return Object.defineProperty(result,"privateSignedShards",{value:bundles,enumerable:false,writable:false,configurable:false}) as typeof result;
+ }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});}
 }
 
 /**
@@ -268,7 +404,7 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
   hold("INDEX_UNAPPROVED_SIGNED_DAY_OR_POLICY");
  const rPem=keyInfo(registryKey,p.registryReviewerFingerprintSha256);
  const paths=new Set<string>(),queries=new Set<string>();
- const allExpected=new Map<string,{bytes:Buffer;review:any;kind:string;wireBytes?:Buffer}>();
+ const allExpected=new Map<string,{bytes:Buffer;review:any;kind:string;wireBytes?:Buffer;reattested?:boolean}>();
  const routeDrafts=d.privateSignedShards.map((sh,i)=>{
   const r=sh.registryReviewWire?.review;
   if(sh.shardIndex!==i+1||!r||r.runDayIndex!==d.runDayIndex||
@@ -292,7 +428,9 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
    expectedReviewerPublicKeyFingerprintSha256:p.registryReviewerFingerprintSha256,
    expectedRunDayIndex:d.runDayIndex,expectedShardIndex:sh.shardIndex
   });
-  paths.add(r.logicalPath);allExpected.set(r.logicalPath,{bytes:sh.registryBytes,review:r,kind:"SOURCE_DAY_REGISTRY"});
+  if(sh.registryReattestedFromCommittedRow&&pins.independentRegistryRecoveryApproved!==true)
+   hold("INDEX_REATTESTATION_NOT_APPROVED");
+  paths.add(r.logicalPath);allExpected.set(r.logicalPath,{bytes:sh.registryBytes,review:r,kind:"SOURCE_DAY_REGISTRY",reattested:sh.registryReattestedFromCommittedRow});
   const starts:number[]=[],ends:number[]=[],queryPaths:string[]=[];
   for(let n=0;n<reg.entries.length;n++){
    const e=reg.entries[n],q=sh.queryPackets[n],v=q?.wire?.review;
@@ -367,14 +505,16 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
       row.content_sha256!==(v.contentSha256??v.registrySha256)||
       row.reviewed_code_sha!==p.approvedCodeSha||row.manifest_sha256!==p.manifestSha256||
       row.rights_sha256!==p.rightsSha256||row.external_review_sha256!==v.externalReviewEvidenceSha256||
-      at(row.externally_reviewed_at_utc)!==v.reviewedAtUtc||
+      (!x.reattested&&at(row.externally_reviewed_at_utc)!==v.reviewedAtUtc)||
       at(row.retention_not_after_utc)!==v.retentionNotAfterUtc||
       utc(v.retentionNotAfterUtc)<expiry||utc(v.validUntilUtc)<=now||
       !Buffer.isBuffer(row.payload_bytes)||!row.payload_bytes.equals(x.bytes)||
       (x.wireBytes&&(!Buffer.isBuffer(row.review_wire_bytes)||!row.review_wire_bytes.equals(x.wireBytes))))
     hold("INDEX_ACTUAL_COMMITTED_PACKET_DRIFT");
    const when=utc(at(row.committed_at_utc));
-   if(when>now||when<utc(v.reviewedAtUtc))hold("INDEX_UNTRUSTED_COMMIT_CLOCK");
+   if(when>now||utc(v.reviewedAtUtc)>now||
+      (x!.reattested?(utc(at(row.externally_reviewed_at_utc))>when||when>utc(v.reviewedAtUtc)):
+       when<utc(v.reviewedAtUtc)))hold("INDEX_UNTRUSTED_COMMIT_CLOCK");
    committed.set(row.logical_path,when);
   }
   const entries=routeDrafts.map(({r,first,last,starts,queryPaths})=>{
