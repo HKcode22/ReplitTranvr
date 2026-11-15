@@ -5,6 +5,7 @@
  * All publication uses independently approved protected policies and
  * existing restricted logins; STOP default. */
 import pg from "pg";
+import {readP6T24RegistryRoutingTrust} from "../server/lib/disruption/phase6CurrentPrivateT24Routing_v39.mjs";
 import {readP6T24CurrentRegistrySet,buildP6DelegatedT24PrivateRegistry,publishP6T24PrivateRegistryOnce} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {createHash,createPrivateKey,createPublicKey} from "node:crypto";
 import {pathToFileURL} from "node:url";
@@ -156,12 +157,7 @@ export async function runP6NativeLaterRuntime(env){
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   if(handoff.horizon==="T-24h"){
    if(v.independentT24WitnessProtocolReviewed!==true||v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107")hold("T24_WITNESS_PROTOCOL_NOT_APPROVED");
-   const trust={...t,independentNativeT24RegistryApproved:true,
-    expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:x.authority.expectedPolicySha256,
-    expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
-    expectedSelectedTVersion:v.selectedTConfig.milestone+":"+v.selectedTConfig.version+":"+v.selectedTConfig.artifactHash,
-    maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,
-    t24ReviewerPublicKeyPem:createPublicKey(x.authority.laterReviewerKey).export({type:"spki",format:"pem"})};
+   const trust=readP6T24RegistryRoutingTrust(env);
    const maxPages=Math.ceil(handoff.reviewEntryCount/96);
    for(let i=0;i<maxPages;i++){
     const current=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});
