@@ -3,6 +3,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts'
+      - 'tests/phase6_reviewed_later_shard_append_real_pg16_v39.mts'
       - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
       - 'migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql'
       - 'server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs'
