@@ -10,7 +10,7 @@ import {hydrateP6DayEpochFullRegistriesReadOnly} from "./phase6DayEpochFullRegis
 import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {P6_SOURCE_POST_REVIEW_SCHEMA,P6_SOURCE_POST_REVIEW_AUDIENCE,signedP6PrivateSourcePostReviewBytes,verifyP6ExternalSourcePostReview,readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
 import {publishP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostPublisherOnce_v39.mjs";
-import {P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,p6DayEpochReviewPreimage,validateP6DayEpochIndexBytes,verifyP6DayEpochExternalReview,publishP6DayEpochIndexRevisionOnce} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
+import {readP6DayEpochRestrictedReaderClock,P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,p6DayEpochReviewPreimage,validateP6DayEpochIndexBytes,verifyP6DayEpochExternalReview,publishP6DayEpochIndexRevisionOnce} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {admitP5FuturePostFrozenForReadOnly} from "./phase5FuturePostGithubReadonlyRelease_v39.ts";
 import {verifyP5FuturePostReviewedFrame,auditP5FuturePostActualPriorPreBatch} from "./phase5V0083FuturePostOriginalDb_v39.ts";
 const H=/^[a-f0-9]{64}$/,LOGIN=/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/;
@@ -124,7 +124,10 @@ export function buildP6DelegatedNativePostPacket({currentDay:x,proposal,sourceQu
  const reviewed={...d,independentFuturePostRequestAndRightsReview:true};
  verifyP5FuturePostReviewedFrame({...reviewed,githubRunId});
  const packet={schema:"v39.phase5.github-future-post-reviewed-release.v1",approvedCodeSha:t.reviewedCodeSha,
-  independentSourceContentsUseAndRESTReleaseAttested:true,reviewed};
+  independentSourceContentsUseAndRESTReleaseAttested:true,reviewed,
+  nativePostSourceBinding:{schema:"v39.phase6.native-post-source-binding.v1",sourceRegistryPath:source.filePath,
+   sourceRegistrySha256:source.fileSha256,queryDigestSha256:e.sourceQueryDigestSha256,policySha256:a.expectedPolicySha256,
+   anchorBoundPreRetentionNotAfterUtc:e.anchorBoundPreRetentionNotAfterUtc}};
  const packetBytes=bytes(packet),contentSha256=hash(packetBytes);
  // Stable immutable logical path, based on physical request rather than
  // a different anchor's content digest; DB uniqueness is cross-run-day.
@@ -158,6 +161,8 @@ export function buildP6PostDayAppend({currentDay:x,signedPacket:b,receipt,author
     !seal(b,"privatePins")||!seal(b,"privateSource")||!src||!receipt||
     receipt.redactedSummary?.status!=="VERIFIED_ONE_PRIVATE_PACKET_BYTE_TRANSPORT_NO_GO"||
     receipt.redactedSummary.verifiedEd25519Review!==true||receipt.redactedSummary.kind!=="POST_PACKET"||
+    receipt.redactedSummary.contentSha256!==r.contentSha256||receipt.redactedSummary.runDayIndex!==r.runDayIndex||
+    receipt.redactedSummary.shardIndex!==r.shardIndex||
     receipt.redactedSummary.providerCalls!==0||receipt.redactedSummary.databaseWrites!==0||
     !seal(receipt,"privateBytes")||!receipt.privateBytes.equals(raw)||receipt.privateLogicalPath!==r.logicalPath)
   hold("NO_INDEPENDENT_POST_PACKET_READBACK");
@@ -201,6 +206,54 @@ export function buildP6PostDayAppend({currentDay:x,signedPacket:b,receipt,author
  return Object.freeze(Object.defineProperties({status:"DELEGATED_POST_DAY_APPEND_AWAIT_PUBLICATION_NO_GO",indexSha256,revision:next.revision,
   providerCalls:0,phase6PaidGo:false},{privateIndexBytes:{value:indexBytes},privateWire:{value:wire},privatePins:{value:pins}}));
 }
+/** Exact stable path observation, metadata only until independent signature
+ * and expiry checks. Existing packet bytes, not a newly chosen anchor or
+ * newly issued signature, are the only allowed recovery input. */
+async function readExistingNativePost({readerClient,trust,authority,requestSha256}){
+ const path="data-collection/phase5/frozen/post_"+requestSha256+".json";
+ if(!H.test(requestSha256??""))hold("INVALID_RECOVERY_REQUEST_DIGEST");
+ let tx=false,row,now;
+ try{
+  await readerClient.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await readerClient.query("SET LOCAL statement_timeout='8000ms'");
+  now=await readP6DayEpochRestrictedReaderClock(readerClient,trust.expectedReaderSessionLogin);
+  const q=await readerClient.query("SELECT run_day_index,shard_index,kind,content_sha256,manifest_sha256,rights_sha256,reviewed_code_sha,retention_not_after_utc FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[path]);
+  if(q.rowCount===0){await readerClient.query("ROLLBACK");tx=false;return null;}
+  if(q.rowCount!==1||q.rows.length!==1)hold("AMBIGUOUS_STABLE_POST_PATH");
+  row=q.rows[0];
+  if(row.kind!=="POST_PACKET"||!H.test(row.content_sha256??"")||row.manifest_sha256!==trust.manifestSha256||
+     row.rights_sha256!==trust.rightsSha256||row.reviewed_code_sha!==trust.reviewedCodeSha||
+     !Number.isSafeInteger(row.run_day_index)||row.run_day_index<1||row.run_day_index>31||
+     !Number.isSafeInteger(row.shard_index)||row.shard_index<1||row.shard_index>100000)
+    hold("EXISTING_STABLE_PATH_SCOPE_DRIFT");
+  const expires=new Date(row.retention_not_after_utc).getTime();
+  if(!Number.isFinite(expires))hold("EXISTING_STABLE_PATH_EXPIRY_UNKNOWN");
+  await readerClient.query("ROLLBACK");tx=false;
+  if(expires<=utc(now))return {status:"POST_PHYSICAL_REQUEST_ALREADY_EXPIRED_NO_REPLAY"};
+ }finally{if(tx)await readerClient.query("ROLLBACK").catch(()=>{});}
+ const stored=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope:ro,
+  selector:{kind:"POST",runDayIndex:row.run_day_index,shardIndex:row.shard_index,logicalPath:path,contentSha256:row.content_sha256}});
+ const receipt=await readP6PrivateSourcePostOnce(readerClient,stored.pins,stored.wire,stored.publicKeyPem);
+ const packet=JSON.parse(receipt.privateBytes.toString("utf8")),d=packet.reviewed,b=packet.nativePostSourceBinding;
+ if(packet.schema!=="v39.phase5.github-future-post-reviewed-release.v1"||packet.approvedCodeSha!==trust.reviewedCodeSha||
+    packet.independentSourceContentsUseAndRESTReleaseAttested!==true||d?.independentFuturePostRequestAndRightsReview!==true||
+    d.requestSha256!==requestSha256||d.runDayIndex!==row.run_day_index||d.manifestSha256!==trust.manifestSha256||
+    d.reviewedSourceRightsSha256!==trust.rightsSha256||!b||
+    b.schema!=="v39.phase6.native-post-source-binding.v1"||b.policySha256!==authority.expectedPolicySha256||
+    !H.test(b.sourceRegistrySha256??"")||!H.test(b.queryDigestSha256??"")||
+    !/^data-collection\\/phase5\\/frozen\\/source_[A-Za-z0-9_.-]{8,125}\\.json$/.test(b.sourceRegistryPath??""))
+  hold("EXISTING_POST_PACKET_IS_NOT_EXACT_PROTECTED_BINDING_NO_REPLAY");
+ return {status:"EXACT_EXISTING_NATIVE_POST",stored,receipt,packet};
+}
+async function recheckAnchor({sourcePool,trust,d,queryDigest,reviewClock}){
+ const actual=await auditP5FuturePostActualPriorPreBatch(sourcePool,{manifestSha256:trust.manifestSha256,runDayIndex:d.runDayIndex,
+  airportIcao:d.airportIcao,reviewedFrameSha256:d.reviewedFrameSha256,candidates:[{flightInstanceId:d.flightInstanceId,
+   expectedSelectedTNativeUtc:d.expectedSelectedTNativeUtc,boundSourceQueryDigests:[queryDigest]}]});
+ const anchor=actual.privateDecisions[0],at=utc(actual.completedDbClockUtc),ref=utc(reviewClock);
+ return actual.eligibleCount===1&&anchor?.status==="VALID_ACTUAL_PRE_FOR_POST_REVIEW"&&
+  utc(anchor.boundPreRetentionNotAfterUtc)>utc(d.postDispatchHardLatestUtc)&&at>=ref&&at-ref<=120000&&
+  at+120000<utc(d.postDispatchEarliestUtc);
+}
 /** Only this wrapper performs real publication. No caller-supplied PRE
  * proof: use actual restricted DB read. A failed/unknown commit MUST NOT
  * reinsert the packet. A committed orphan needs exact independent recovery.
@@ -226,31 +279,47 @@ export async function runP6NativePostPublication({readerClient,publisherClient,s
    return noGo(proposal.status);
  }
  if(proposal?.status!=="ONE_UNSIGNED_NATIVE_POST_PHYSICAL_REQUEST")return noGo("POST_CANDIDATE_PAGE_BOUND_DEFERRED");
- const head=await current(readerClient,trust,selector.runDayIndex);
- const b=buildP6DelegatedNativePostPacket({currentDay:head,proposal,sourceQueryRetentionNotAfterUtc:page.privateSourceQueryRetentionNotAfterUtc,
-  authority,trust,githubRunId});
- if(b.status!=="DELEGATED_POST_PACKET_AWAIT_PUBLICATION_NO_GO")return b;
- const r=b.privateWire.review,d=proposal.privateReviewedDraft;
- // Recheck the exact anchor independently immediately before publishing,
- // including retained SOURCE at the prospective POST dispatch end.
- const actual=await auditP5FuturePostActualPriorPreBatch(sourcePool,{manifestSha256:trust.manifestSha256,runDayIndex:d.runDayIndex,
-  airportIcao:d.airportIcao,reviewedFrameSha256:d.reviewedFrameSha256,candidates:[{flightInstanceId:d.flightInstanceId,
-   expectedSelectedTNativeUtc:d.expectedSelectedTNativeUtc,boundSourceQueryDigests:[proposal.privateEvidence.sourceQueryDigestSha256]}]});
- const anchor=actual.privateDecisions[0];
- if(actual.eligibleCount!==1||anchor?.status!=="VALID_ACTUAL_PRE_FOR_POST_REVIEW"||
-    utc(anchor.boundPreRetentionNotAfterUtc)<=utc(d.postDispatchHardLatestUtc)||
-    utc(actual.completedDbClockUtc)-utc(r.reviewedAtUtc)>120000||utc(actual.completedDbClockUtc)<utc(r.reviewedAtUtc)||
-    utc(actual.completedDbClockUtc)+120000>=utc(d.postDispatchEarliestUtc))
+ let b,receipt,recovered=false;
+ const existingPacket=await readExistingNativePost({readerClient,trust,authority,requestSha256:proposal.requestSha256});
+ if(existingPacket){
+  if(existingPacket.status!=="EXACT_EXISTING_NATIVE_POST")return noGo(existingPacket.status);
+  const {packet,stored}=existingPacket,s=packet.nativePostSourceBinding,d=packet.reviewed;
+  if(d.runDayIndex!==selector.runDayIndex)return noGo("POST_PHYSICAL_REQUEST_EXISTS_OTHER_DAY_NO_REPLAY");
+  const head=await current(readerClient,trust,d.runDayIndex),h=checkCurrent(head,trust,d.runDayIndex);
+  const source=h.entries.filter(e=>e.lane==="SOURCE"&&e.filePath===s.sourceRegistryPath&&e.fileSha256===s.sourceRegistrySha256);
+  if(source.length!==1||!JSON.parse(head.index.getFrozen(source[0].filePath).toString("utf8")).entries.some(x=>x.expectedQueryDigestSha256===s.queryDigestSha256))
+    hold("ORPHAN_POST_SOURCE_NO_LONGER_AUTHENTICATED_NO_REPLAY");
+  if(d.reviewedFrameSha256!==p.reviewedFrameSha256||d.reviewedCategoryBudgetSha256!==p.reviewedCategoryBudgetSha256||
+     d.reviewedProviderPriceSha256!==p.reviewedProviderPriceSha256||d.reviewedProviderContractSha256!==p.reviewedProviderContractSha256)
+    hold("ORPHAN_POST_POLICY_DRIFT");
+  verifyP5FuturePostReviewedFrame({...d,githubRunId});
+  if(!await recheckAnchor({sourcePool,trust,d,queryDigest:s.queryDigestSha256,reviewClock:head.index.redactedSummary.observedDbClockUtc}))
+   return noGo("EXISTING_POST_ANCHOR_NO_LONGER_ELIGIBLE_NO_REPLAY");
+  // The wire and packet are the independently authenticated original bytes.
+  b=Object.freeze(Object.defineProperties({status:"EXACT_EXISTING_POST_READBACK_NO_REPLAY",phase6PaidGo:false},
+   {privatePacketBytes:{value:existingPacket.receipt.privateBytes},privateWire:{value:stored.wire},
+    privatePins:{value:stored.pins},privateSource:{value:source[0]}}));
+  // Refresh after the anchor read. Never try to reinsert the existing row.
+  receipt=await readP6PrivateSourcePostOnce(readerClient,stored.pins,stored.wire,stored.publicKeyPem);recovered=true;
+ }else{
+  const head=await current(readerClient,trust,selector.runDayIndex);
+  b=buildP6DelegatedNativePostPacket({currentDay:head,proposal,sourceQueryRetentionNotAfterUtc:page.privateSourceQueryRetentionNotAfterUtc,
+   authority,trust,githubRunId});
+  if(b.status!=="DELEGATED_POST_PACKET_AWAIT_PUBLICATION_NO_GO")return b;
+  const r=b.privateWire.review,d=proposal.privateReviewedDraft;
+  if(!await recheckAnchor({sourcePool,trust,d,queryDigest:proposal.privateEvidence.sourceQueryDigestSha256,reviewClock:r.reviewedAtUtc}))
    return noGo("POST_ANCHOR_NO_LONGER_ELIGIBLE");
- await publishP6PrivateSourcePostOnce({client:publisherClient,pins:b.privatePins,wire:b.privateWire,reviewerPublicKeyPem:trust.postReviewerPublicKeyPem,
-  packetBytes:b.privatePacketBytes,scope:{privateStoragePublicationApproved:true,separateProviderContentRightsReviewApproved:true,
-   existingChildOrPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",approvedMainCodeSha:trust.reviewedCodeSha,
-   expectedPublisherSessionLogin:p.expectedPublisherSessionLogin,approvedRetentionNotAfterUtc:r.retentionNotAfterUtc,
-   reviewedRightsSha256:trust.rightsSha256,externalReviewEvidenceSha256:r.externalReviewEvidenceSha256,persistVerifiedReviewWire:true,
-   expectedSourceDayRegistryLogicalPath:b.privateSource.filePath,expectedSourceDayRegistrySha256:b.privateSource.fileSha256}});
- const stored=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope:ro,
-  selector:{kind:"POST",runDayIndex:r.runDayIndex,shardIndex:r.shardIndex,logicalPath:r.logicalPath,contentSha256:r.contentSha256}});
- const receipt=await readP6PrivateSourcePostOnce(readerClient,stored.pins,stored.wire,stored.publicKeyPem);
+  await publishP6PrivateSourcePostOnce({client:publisherClient,pins:b.privatePins,wire:b.privateWire,reviewerPublicKeyPem:trust.postReviewerPublicKeyPem,
+   packetBytes:b.privatePacketBytes,scope:{privateStoragePublicationApproved:true,separateProviderContentRightsReviewApproved:true,
+    existingChildOrPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",approvedMainCodeSha:trust.reviewedCodeSha,
+    expectedPublisherSessionLogin:p.expectedPublisherSessionLogin,approvedRetentionNotAfterUtc:r.retentionNotAfterUtc,
+    reviewedRightsSha256:trust.rightsSha256,externalReviewEvidenceSha256:r.externalReviewEvidenceSha256,persistVerifiedReviewWire:true,
+    expectedSourceDayRegistryLogicalPath:b.privateSource.filePath,expectedSourceDayRegistrySha256:b.privateSource.fileSha256}});
+  const stored=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope:ro,
+   selector:{kind:"POST",runDayIndex:r.runDayIndex,shardIndex:r.shardIndex,logicalPath:r.logicalPath,contentSha256:r.contentSha256}});
+  receipt=await readP6PrivateSourcePostOnce(readerClient,stored.pins,stored.wire,stored.publicKeyPem);
+ }
+ const r=b.privateWire.review,d=JSON.parse(b.privatePacketBytes.toString("utf8")).reviewed;
  const next=buildP6PostDayAppend({currentDay:await current(readerClient,trust,r.runDayIndex),signedPacket:b,receipt,authority,trust});
  if(next.status!=="DELEGATED_POST_DAY_APPEND_AWAIT_PUBLICATION_NO_GO")return next;
  await publishP6DayEpochIndexRevisionOnce({client:publisherClient,pins:next.privatePins,wire:next.privateWire,publicKeyPem:trust.dayReviewerPublicKeyPem,
@@ -262,7 +331,7 @@ export async function runP6NativePostPublication({readerClient,publisherClient,s
  if(!hit||hit.fileSha256!==r.contentSha256||hit.filePath!==r.logicalPath||after.index.redactedSummary.indexSha256!==next.indexSha256)
   hold("SIGNED_POST_DAY_READBACK_UNKNOWN_NO_REPLAY");
  return noGo("NATIVE_POST_PACKET_AND_DAY_APPEND_VERIFIED_NO_GO",{runDayIndex:r.runDayIndex,revision:next.revision,
-  requestSha256:d.requestSha256,independentPaidChildAdmissionStillRequired:true});
+  requestSha256:d.requestSha256,existingPacketRecoveredWithoutReinsert:recovered,independentPaidChildAdmissionStillRequired:true});
 }
 
 
