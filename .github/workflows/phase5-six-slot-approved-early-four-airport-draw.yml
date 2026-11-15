@@ -29,6 +29,8 @@ jobs:
       ADB_AUTO_COLLECT: '0'
       AERODATABOX_API_KEY: ''
       AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
       V39_DATABASE_RUNTIME_URL: ''
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
         env:
           P5_EARLY_DRAW_MANUAL_CONFIRM: ${{ inputs.confirm }}
           V39_P5_EARLY_DRAW_OWNER_APPROVED: ${{ secrets.V39_P5_EARLY_DRAW_OWNER_APPROVED }}
+          V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
           V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
           V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
           V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
@@ -56,6 +59,7 @@ jobs:
           if [[ "$GITHUB_REPOSITORY" == 'HKcode22/ReplitTranvr' &&
                 "$GITHUB_REF" == 'refs/heads/main' &&
                 "$GITHUB_RUN_ATTEMPT" == '1' &&
+                "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" &&
                 "$V39_P5_EARLY_DRAW_OWNER_APPROVED" == '1' &&
                 "$V39_PHASE5_FREEZE_SIGNED" == '1' &&
                 "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" == '1' &&
@@ -90,6 +94,7 @@ jobs:
           P5_GITHUB_AUTONOMOUS_EARLY_DRAW_MAIN_ENTRYPOINT: '1'
           P5_EARLY_DRAW_MANUAL_CONFIRM: ${{ inputs.confirm }}
           V39_P5_EARLY_DRAW_OWNER_APPROVED: ${{ secrets.V39_P5_EARLY_DRAW_OWNER_APPROVED }}
+          V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
           V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
           V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
           V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
@@ -107,5 +112,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test "$GITHUB_REF" = 'refs/heads/main'
           test "$GITHUB_RUN_ATTEMPT" = '1'
-          npx tsx scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts
+          test "$V39_P5_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$RAPIDAPI_KEY"
+          npx --no-install tsx scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts
           echo 'PHASE5_GH_SIX_SLOT_REAL_DB_EARLY_SELECTION_ONLY_NO_FIDS_OR_ALERT'
