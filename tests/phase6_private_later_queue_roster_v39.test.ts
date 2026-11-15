@@ -150,3 +150,30 @@ describe("dynamic current-day later queue routing",()=>{
   expect(queries).toBe(0);
  });
 });
+
+import {chooseP6BoundedLaterEnrollmentSelectors} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+describe("bounded EDF bands and rotating same-band enrollment",()=>{
+ const base=Date.parse("2035-11-25T05:00:00.000Z");
+ const iso=(n:number)=>new Date(n).toISOString();
+ const items=Array.from({length:9},(_,i)=>({runDayIndex:1,shardIndex:i+1,hardLatestUtc:iso(base+3_000_000+1000+i)}));
+ it("does not permanently repeat the first four shards of the same deadline band",()=>{
+  const seen=new Set<number>();
+  for(let i=0;i<5;i++){
+   const out=chooseP6BoundedLaterEnrollmentSelectors(items,iso(base+i*600000));
+   expect(out).toHaveLength(4);expect(new Set(out.map(x=>x.shardIndex)).size).toBe(4);
+   for(const x of out)seen.add(x.shardIndex);
+  }
+  expect(seen.size).toBeGreaterThan(4);
+ });
+ it("protects earlier deadline bands, skips expired ordinary missingness",()=>{
+  const early={runDayIndex:2,shardIndex:1,hardLatestUtc:iso(base+1000)};
+  const expired={runDayIndex:2,shardIndex:2,hardLatestUtc:iso(base)};
+  const got=chooseP6BoundedLaterEnrollmentSelectors([...items,early,expired],iso(base));
+  expect(got).toHaveLength(4);expect(got[0]).toEqual(early);expect(got).not.toContain(expired);
+ });
+ it("exposes no full due-route identifiers to serialized logs",()=>{
+  const f=fixture(),out=selectP6DueLaterQueueSelectors(f.index,f.trust,f.policy);
+  expect(out.privateAllDueSelectors).toHaveLength(1);
+  expect(JSON.stringify(out)).not.toContain("privateAllDueSelectors");
+ });
+});
