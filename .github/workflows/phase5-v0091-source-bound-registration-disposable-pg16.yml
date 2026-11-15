@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
       - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
       - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
+      - 'scripts/v39_phase6_v0100_owner_schema_once_v39.mjs'
       - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
       - 'tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts'
 permissions:
@@ -121,7 +122,25 @@ jobs:
           grep -Fq 'HOLD_P5_CD_V0091_REAL_PG16_OWNER_OLD_QUEUE_OR_NEW_FUNCTION_ALREADY_INSTALLED' "$TMP/repeat.txt"
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure")" = phase5_cd_source_registration_owner_v39
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
-          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {readFileSync} from "node:fs";
+          import {PATH,inspectV0100,installV0100Once} from "./scripts/v39_phase6_v0100_owner_schema_once_v39.mjs";
+          const url=process.env.DATABASE_URL;
+          assert.equal(url,"postgresql://phase5_cd_ci_owner:ci-only@localhost:5432/neondb?sslmode=disable");
+          const bytes=readFileSync(PATH);
+          const open=async()=>{const c=new pg.Client({connectionString:url});await c.connect();return c;};
+          const c=await open();
+          try{assert.equal((await inspectV0100(c,bytes,{ci:true})).status,"V0091_READY_V0100_ABSENT_EMPTY_QUEUE_NO_GO");}finally{await c.end();}
+          const first=await installV0100Once({open,bytes,ci:true});
+          assert.equal(first.status,"V0100_INSTALLED_EXACT_EMPTY_RESTART_WRAPPER_NO_GO");
+          assert.equal(first.alreadyInstalledNoReplay,false);
+          assert.equal(first.queueEnrollments,0);
+          const again=await installV0100Once({open,bytes,ci:true});
+          assert.equal(again.alreadyInstalledNoReplay,true);
+          console.log("P6_V0100_REAL_OWNER_FRESH_EXACT_BODY_ACL_NO_REPLAY_PASS");
+          JS
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
           echo P5_V0091_REAL_NON_SUPERUSER_OWNER_INSTALLER_ONCE_AND_REPEAT_HOLD_PASS
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
