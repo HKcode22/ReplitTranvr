@@ -88,14 +88,20 @@ export function selectP6PrivateEnrollmentPackets(
   }
  }
  const ordered=[...all.values()].sort((a,b)=>a.cutoff-b.cutoff||a.entry.packetSha256.localeCompare(b.entry.packetSha256));
- return {packets:ordered.slice(0,96),deferred:Math.max(0,ordered.length-96),alreadyExpired};
+ if(ordered.length>384)hold("FOUR_SHARD_PACKET_BOUND");
+ // Four existing 96-member shards; do not truncate to the same earliest
+ // 96 on every restart and starve the other due shards.
+ return {packets:ordered,deferred:0,alreadyExpired};
 }
 type Queryer={query:(sql:string,args?:unknown[])=>Promise<{rows:any[];rowCount?:number|null}>};
 export async function executeP6PrivateEnrollmentBatch(db:Queryer,packets:ReturnType<typeof selectP6PrivateEnrollmentPackets>["packets"]){
- if(packets.length>96)hold("UNBOUNDED_BATCH");
- const start=Date.now();let added=0,existing=0,expired=0;
+ if(packets.length>384)hold("UNBOUNDED_BATCH");
+ const start=performance.now();let added=0,existing=0,expired=0,processed=0;
  for(const {entry,cutoff} of packets){
-  if(Date.now()-start>=120000)hold("TIME_BOUND_REACHED_EXACT_RESTART_ONLY");
+  // A clean time bound is an ordinary deferred suffix, not an ambiguous
+  // commit. Unknown SQL results still throw and halt immediately.
+  if(performance.now()-start>=120000)break;
+  processed++;
   const r=await db.query("SELECT clock_timestamp() AS now");
   const now=new Date(r.rows[0]?.now).getTime();
   if(r.rows.length!==1||!Number.isFinite(now))hold("MISSING_DATABASE_CLOCK");
@@ -109,7 +115,7 @@ export async function executeP6PrivateEnrollmentBatch(db:Queryer,packets:ReturnT
    hold("UNKNOWN_REGISTRATION_ACK_STOP_EXACT_RESTART_ONLY");
   if(x.newly_registered)added++;else existing++;
  }
- return {newlyRegistered:added,alreadyRegistered:existing,expiredBeforeEnrollment:expired};
+ return {newlyRegistered:added,alreadyRegistered:existing,expiredBeforeEnrollment:expired,timeBoundDeferred:packets.length-processed};
 }
 export async function runP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  verifyP5CdGithubFrozenCodeLineage(env);
