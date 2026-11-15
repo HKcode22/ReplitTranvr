@@ -81,12 +81,12 @@ export async function runP5GitHubAutonomousEarlyDraw(
    "current_setting('transaction_read_only') AS ro,"+
    "pg_is_in_recovery() AS replica,clock_timestamp() AS now,"+
    "(SELECT NOT (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls) AND rolcanlogin FROM pg_roles WHERE rolname=current_user) AS restricted_login,"+
-   "has_table_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') AS auth_update,"+
-   "has_table_privilege(current_user,'clean.fids_query_response','INSERT') AS source_insert,"+
-   "has_table_privilege(current_user,'clean.flight_snapshots','INSERT') AS pre_insert"
+   "(has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') OR has_any_column_privilege(current_user,'clean.adb_phase6_authorization','INSERT') OR has_table_privilege(current_user,'clean.adb_phase6_authorization','DELETE')) AS auth_update,"+
+   "has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') AS source_insert,"+
+   "has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') AS pre_insert"
   )).rows[0];
   if(who?.db!=="neondb"||who.role!==ctx.expectedRole||
-     who.login!==ctx.expectedRole||who.version<160000||who.version>=170000||
+     who.login!==ctx.expectedRole||!Number.isSafeInteger(who.version)||who.version<160000||who.version>=170000||
      who.restricted_login!==true||who.auth_update!==false||who.source_insert!==false||who.pre_insert!==false||
      who.ro!=="on"||who.replica!==false)
    HOLD("WRONG_READONLY_DATABASE_IDENTITY");
