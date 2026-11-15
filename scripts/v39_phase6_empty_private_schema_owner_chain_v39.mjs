@@ -74,6 +74,21 @@ export async function runEmptyOwnerChain({open,readBytes=readFileSync,installAll
   additionalLoginRolesCreated:0,providerCalls:0,flightWrites:0,paidPhase6Go:false,
   payloadPublicationApproved:false,legalRetentionOrPitrCertified:false};
 }
+/** Use the successful V0095 connection shape. Neon pooled connections
+ * may reject startup options. Every inventory function already explicitly
+ * begins REPEATABLE READ READ ONLY and rolls back; no startup GUC needed. */
+export function emptyOwnerConnectionConfig(databaseUrl){
+ return {connectionString:databaseUrl,connectionTimeoutMillis:8000,
+  query_timeout:40000,application_name:"p6_empty_schema_owner_chain"};
+}
+export function redactedEmptyOwnerFailure(e,mode){
+ const known=String(e?.message??"");
+ if(/^HOLD_(?:P6_EMPTY_OWNER_CHAIN|V009[45789])_[A-Z0-9_]+$/.test(known))
+  return {status:known,mode};
+ const state=typeof e?.code==="string"&&/^[0-9A-Z]{5}$/.test(e.code)?e.code:null;
+ return {status:mode==="inventory"?"HOLD_P6_EMPTY_OWNER_CHAIN_READONLY_FAILED_NO_DDL":
+  "HOLD_P6_EMPTY_OWNER_CHAIN_UNKNOWN_OR_COMMIT_UNKNOWN_NO_RETRY",mode,sqlstate:state};
+}
 async function main(){
  const env=process.env,mode=process.argv[2]??"inventory";
  if(!["inventory","install"].includes(mode))hold("MODE");
@@ -81,10 +96,9 @@ async function main(){
  const verify=()=>admitEmptyOwnerChain(env,cmd("git",["rev-parse","HEAD"]),cmd("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha"]));
  verify();
  const out=await runEmptyOwnerChain({installAllowed:mode==="install",assertStillPinned:verify,open:async()=>{
-  const c=new pg.Client({connectionString:env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:40000,
-   options:mode==="inventory"?"-c default_transaction_read_only=on":undefined,application_name:"p6_empty_schema_owner_chain"});
+  const c=new pg.Client(emptyOwnerConnectionConfig(env.DATABASE_URL));
   await c.connect();return c;}});
  console.log(JSON.stringify(out));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
- main().catch(e=>{console.error(/^HOLD_P6_EMPTY_OWNER_CHAIN_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_EMPTY_OWNER_CHAIN_UNKNOWN_OR_COMMIT_UNKNOWN_NO_RETRY");process.exitCode=2;});
+ main().catch(e=>{console.error(JSON.stringify(redactedEmptyOwnerFailure(e,process.argv[2]??"inventory")));process.exitCode=2;});
