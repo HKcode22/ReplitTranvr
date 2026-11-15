@@ -35,7 +35,7 @@ function fixture(){
   candidateCount:4,observedSourceDatabaseClockUtc:clock};
  Object.defineProperty(planned,"privateStoredChildInputProposals",{value:inputs});
  const run=(id,status,display_title,conclusion=null)=>({id,display_title,status,conclusion,created_at:clock.replace(".000","")});
- function mock({children=[],previous=[],jobs=[],badPost=false}={}){
+ function mock({children=[],previous=[],previousManual=[],currentEvent="schedule",jobs=[],badPost=false,missingOther=false}={}){
   const calls=[],posts=[];
   return {calls,posts,fetchImpl:async (url,opts)=>{
    calls.push([opts.method,url]);
@@ -47,7 +47,11 @@ function fixture(){
      html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+id})};
    }
    if(url.includes("/jobs?"))return{ok:true,json:async()=>({total_count:jobs.length,jobs})};
-   const p=url.includes("event=schedule")?[run(12345,"in_progress","parent"),...previous]:children;
+   const parent=url.includes("queue-main-scheduled");
+   const event=new URL(url).searchParams.get("event");
+   if(parent&&missingOther&&event!==currentEvent)return {ok:false,status:503};
+   const prior=event==="schedule"?previous:previousManual;
+   const p=parent?[...(event===currentEvent?[run(12345,"in_progress","parent")]:[]),...prior]:children;
    return {ok:true,json:async()=>({total_count:p.length,workflow_runs:p})};
   }};
  }
@@ -133,3 +137,28 @@ test("unavailable selected days are disclosed without posting any unsigned query
  const near=f.mock({children:Array.from({length:23},(_,i)=>f.run(100+i,"in_progress","P5 SOURCE "+H("9")))});
  assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,observe:async()=>planned,fetchImpl:near.fetchImpl})).acknowledgedGithubChildCount,1);
  });
+
+test("exact explicit SOURCE parent route preserves both trigger histories and original release gates",async()=>{
+ const f=fixture(),manual={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",P6_CURRENT_PARENT_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_SOURCE_PARENT"};
+ assert.doesNotThrow(()=>admitP6StoredSourceDispatcher(manual));
+ for(const change of [{P6_CURRENT_PARENT_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_POST_PARENT"},{P6_CURRENT_PARENT_DISPATCH_CONFIRM:""},{V39_PHASE6_PROCESS_ARMED:"0"},{V39_P5_SEVEN_REST_BUDGET_SIGNED:"0"}])
+  assert.throws(()=>admitP6StoredSourceDispatcher({...manual,...change}),/NO_EXACT_INDEPENDENT/);
+ const m=f.mock({currentEvent:"workflow_dispatch"});
+ const out=await runP6StoredSourceDispatcher(manual,{...f.options,fetchImpl:m.fetchImpl,observe:async(e,o)=>{
+  assert.equal(e.GITHUB_EVENT_NAME,"workflow_dispatch");
+  assert.equal(e.P6_PRIVATE_SOURCE_PARENT_RO_CONFIRM,"READ_ONLY_AUTHENTIC_PRIVATE_DAY_SOURCE_NO_PROVIDER_NO_DISPATCH");
+  assert.equal(e.V39_PHASE6_PROCESS_ARMED,"0");
+  return f.options.observe(e,o);
+ }});
+ assert.equal(out.acknowledgedGithubChildCount,4);
+ assert.equal(m.calls.filter(([method,url])=>method==="GET"&&url.includes("queue-main-scheduled")).length,2);
+ const job={name:"separately-authorized-stored-source-children",status:"completed",conclusion:"failure",
+  steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"failure"}]};
+ const prior=f.run(12344,"completed","parent","failure");
+ for(const [e,opts] of [[manual,{currentEvent:"workflow_dispatch",previous:[prior],jobs:[job]}],
+  [f.env,{previousManual:[prior],jobs:[job]}],[manual,{currentEvent:"workflow_dispatch",missingOther:true}]]){
+  const h=f.mock(opts);
+  assert.equal((await runP6StoredSourceDispatcher(e,{...f.options,fetchImpl:h.fetchImpl})).status,"HOLD_PRE_DISPATCH_NO_POST");
+  assert.equal(h.posts.length,0);
+ }
+});
