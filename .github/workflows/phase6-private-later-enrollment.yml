@@ -14,6 +14,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
       - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
       - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
       - 'server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs'
