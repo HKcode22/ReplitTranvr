@@ -338,6 +338,8 @@ export const P5_FUTURE_POST_ACTUAL_PRE_SQL=
    " AND fp.codeshare_resolution_status='confirmed_operating_leg'"+
    " AND fp.available_at<=s.prediction_cutoff_utc"+
    " AND fp.provider_content_expired_at_utc IS NULL"+
+   " AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL"+
+   " AND b.source_expires_at_utc>transaction_timestamp()"+
    " AND s.fids_response_hash=b.response_hash"+
    " AND q.horizon=s.horizon"+
    " AND s.horizon IN ('T-24h','T-6h','T-90m')";
@@ -411,14 +413,22 @@ export async function auditP5FuturePostActualPriorPre(
   await db.query("SET LOCAL statement_timeout='12000ms'");
   const who=await db.query(
    "SELECT current_user AS role,current_database() AS db,"+
-   " current_setting('transaction_read_only') AS ro");
+   " current_setting('transaction_read_only') AS ro,session_user AS login,"+
+   " current_setting('server_version_num')::int AS version,pg_is_in_recovery() AS replica,clock_timestamp() AS now");
   if(who.rowCount!==1||
      who.rows[0]?.role!=="phase5_fids_source_prod_20261107"||
-     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on")
+     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on"||
+     who.rows[0]?.login!=="phase5_p5_source_login_20261108"||
+     Number(who.rows[0]?.version)<160000||Number(who.rows[0]?.version)>=170000||who.rows[0]?.replica!==false)
    fail("POST_PRE_NOT_IN_ACTUAL_RESTRICTED_SOURCE_SESSION");
   const x=await db.query(P5_FUTURE_POST_ACTUAL_PRE_SQL,
    [p.manifestSha256,p.runDayIndex,p.airportIcao,p.flightInstanceId,p.reviewedFrameSha256]);
-  const result=classifyP5PostPreRows(p,x.rows,bound);
+  const now=Date.parse(sqlClock(who.rows[0].now));
+  // Do not use a source merely because its expiry marker has not yet been
+  // written. The historical cutoff proof stays intact, but current lawful
+  // source availability is needed before this paid request can proceed.
+  const retained=x.rows.filter(row=>Date.parse(sqlClock(row.source_expires_at_utc))>now);
+  const result=classifyP5PostPreRows(p,retained,bound);
   await db.query("ROLLBACK");tx=false;
   return result;
  }catch(e){
