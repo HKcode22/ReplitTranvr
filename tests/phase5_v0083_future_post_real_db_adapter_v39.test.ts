@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {
  p5V0083FuturePostReservationSha256,
- verifyP5FuturePostReviewedFrame,
+ verifyP5FuturePostReviewedFrame,auditP5FuturePostActualPriorPre,
  reserveP5FuturePostV0083OnePhysicalGet,
  verifyP5FuturePostOriginalBeforeCommit,
  verifyP5FuturePostOriginalAfterCommit,
@@ -315,5 +315,50 @@ describe("V0083 onePhysicalAttemptOnly: no hidden FIDS transport retry after one
   expect(result).toBeNull();
   expect(charged).toBe(1);
   expect(calls).toBe(1);
+ });
+});
+
+describe("stored signed SOURCE registry provenance for POST PRE audit",()=>{
+ function fake(q1=sh("1"),q2=sh("2")){
+  const p=approved(),rows=[
+   {snapshot_id:"101",horizon:"T-24h",query_digest:q1,prediction_cutoff_utc:stamp("2027-02-01T10:00:00.000Z"),
+    created_at:stamp("2027-02-01T09:59:00.000Z"),original_available_at:stamp("2027-02-01T09:58:00.000Z")},
+   {snapshot_id:"102",horizon:"T-6h",query_digest:q2,prediction_cutoff_utc:stamp("2027-02-02T04:00:00.000Z"),
+    created_at:stamp("2027-02-02T03:59:00.000Z"),original_available_at:stamp("2027-02-02T03:58:00.000Z")}
+  ].map(x=>({...x,source_expires_at_utc:stamp("2027-02-05T09:58:00.000Z"),
+   selected_t_milestone_utc:stamp(p.expectedSelectedTNativeUtc),fids_response_hash:sh("a"),binding_response_hash:sh("a")}));
+  const sqls:string[]=[];
+  const pool={connect:async()=>({query:async(sql:string)=>{
+   sqls.push(sql);
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",db:"neondb",ro:"on"}]};
+   if(sql.includes("FROM clean.flight_snapshots"))return {rowCount:rows.length,rows};
+   return{rowCount:0,rows:[]};
+  },release:()=>{}})};
+  return{pool,p,rows,sqls};
+ }
+ it("one bound PRE is sufficient and another valid horizon from a different shard remains valid",async()=>{
+  const f=fake(),x=await auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")]);
+  expect(x.boundSourceRegistryValidHorizonCount).toBe(1);
+  expect(x.observedValidHorizonCount).toBe(2);
+  expect(x.missingPreHorizons).toEqual(["T-90m"]);
+  expect(x.providerCalls).toBe(0);
+  expect(f.sqls.some(s=>s.includes("q.query_digest"))).toBe(true);
+  expect(f.sqls).toContain("ROLLBACK");
+ });
+ it("distinguishes zero bound-registry PRE from no valid PRE anywhere; legacy mode unchanged",async()=>{
+  const f=fake();
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("3")])).rejects.toThrow("NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY");
+  const legacy=await auditP5FuturePostActualPriorPre(f.pool as any,f.p);
+  expect(legacy.observedValidHorizonCount).toBe(2);
+  expect(legacy.boundSourceRegistryValidHorizonCount).toBeUndefined();
+  f.rows.splice(0);
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")])).rejects.toThrow("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
+ });
+ it("rejects malformed or duplicate digest list before DB and rejects ambiguous query provenance",async()=>{
+  const f=fake();
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1"),sh("1")])).rejects.toThrow("INVALID_SIGNED_SOURCE_REGISTRY_QUERY_SCOPE");
+  expect(f.sqls.length).toBe(0);
+  f.rows.push({...f.rows[0],query_digest:sh("3")});
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")])).rejects.toThrow("AMBIGUOUS_PRE_SOURCE_QUERY_PROVENANCE");
  });
 });
