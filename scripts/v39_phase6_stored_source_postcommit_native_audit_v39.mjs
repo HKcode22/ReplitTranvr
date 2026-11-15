@@ -14,6 +14,7 @@ import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6Stor
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
 import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
+import {compileP5EBoundOriginalBatchReadonly} from "../server/lib/disruption/phase5AmendmentEOriginalFidsReadonlyCompiler_v39.ts";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/,GH=/^[0-9]{5,25}$/;
 const hold=x=>{throw Error("HOLD_P6_POSTCOMMIT_NATIVE_AUDIT_"+x);};
 const sha=x=>createHash("sha256").update(x).digest("hex");
@@ -80,7 +81,15 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync){
  if(plan?.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||plan.runDayIndex!==day||
     !Number.isSafeInteger(maxAge)||maxAge<1||maxAge>86400)
   hold("STALENESS_NOT_BOUND_TO_APPROVED_DAY");
+ // Reuse the one protected daily review policy; a SOURCE acquisition
+ // approval alone is not a new ML feature-derivation authorization.
+ const featureReview=p.nativePreFeatureReview;
+ if(featureReview!==undefined&&(!featureReview||featureReview.approved!==true||
+    !SHA.test(featureReview.externalContentUseReviewSha256??"")||
+    featureReview.rightsSha256!==trust.rightsSha256))
+  hold("FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  return {trust,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL,sourceUrl:env.V39_P5_SOURCE_DATABASE_URL,
+  nativePreFeatureReview:featureReview===undefined?null:Object.freeze({...featureReview}),
   expectedSourceRunId:env.GITHUB_RUN_ID,
   selector:{runDayIndex:day,indexRevision:Number(env.P6_PRIVATE_DAY_INDEX_REVISION),
    indexSha256:env.P6_PRIVATE_DAY_INDEX_SHA256,queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST},
@@ -124,6 +133,33 @@ export function redactP6PostcommitNativeAudit(a,c){
   classifications:a.classifications,sourceTimingDiagnostics:a.sourceTimingDiagnostics,observedDbClockUtc:a.actualDbClockUtc,
   providerCalls:0,databaseWrites:0,providerContentsPrinted:false,signedPrePacketsIssued:0,phase6PaidGo:false};
 }
+/** Invoke the existing read-only original compiler for the actual private
+ * handoff, only if its independently approved rights purpose is pinned in
+ * the protected study policy. Never output flight values in logs. */
+export async function reviewP6PostcommitNativeFeatures(pool,a,review,c){
+ if(c.nativePreFeatureReview===null)return null;
+ const d=review?.privateOriginalDossier,s=a?.privateSourceScope;
+ if(review?.status!=="UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED"||!d||!s||
+    d.sourceAuditSha256!==a.candidateAuditSha256||d.queryDigestSha256!==s.queryDigestSha256||
+    d.manifestSha256!==c.trust.manifestSha256||d.sourceResponseSha256!==JSON.parse(a.privateAuditBytes.toString("utf8")).sourceResponseSha256||
+    !Array.isArray(review.privateReviewEntries)||review.privateReviewEntries.length!==review.reviewEntryCount||
+    c.nativePreFeatureReview?.approved!==true||c.nativePreFeatureReview.rightsSha256!==c.trust.rightsSha256||
+    !SHA.test(c.nativePreFeatureReview.externalContentUseReviewSha256??""))
+  hold("EXACT_FEATURE_REVIEW_HANDOFF_REQUIRED");
+ // Preserve the original positive leg-ID condition as ordinary per-flight
+ // missingness rather than failing all selected candidates.
+ const selected=review.privateReviewEntries.filter(e=>/^leg:[a-zA-Z0-9:|._-]{5,196}$/.test(e.source.flightInstanceId));
+ const unsupported=review.reviewEntryCount-selected.length;
+ if(!selected.length)return {status:"NO_NATIVE_FEATURE_CANDIDATES_NO_SQL",selectedCount:review.reviewEntryCount,
+  unsupportedNativeIdentityCount:unsupported,matchedCount:0,originalBodyReadCount:0,providerCalls:0,dbWrites:0,phase6PaidGo:false};
+ const result=await compileP5EBoundOriginalBatchReadonly(pool,{
+  source:s,expectedPopulationQueryId:d.sourcePopulationQueryId,expectedResponseSha256:d.sourceResponseSha256,
+  externalContentUseReviewSha256:c.nativePreFeatureReview.externalContentUseReviewSha256,
+  selected:selected.map(e=>({flightInstanceId:e.source.flightInstanceId,expectedSelectedNativeTUtc:e.source.selectedTNativeUtc,
+   expectedForecastCutoffUtc:e.source.ownPreCutoffUtc,expectedMemberAvailableUtc:e.source.sourceMemberAvailableAtUtc}))});
+ const out={...result,unsupportedNativeIdentityCount:unsupported,totalPendingCount:review.reviewEntryCount};
+ return Object.freeze(Object.defineProperty(out,"privateDecisions",{value:result.privateDecisions,enumerable:false}));
+}
 export async function runP6PostcommitNativeAudit(env){
  const c=admitP6PostcommitNativeAudit(env);
  const reader=new pg.Client({connectionString:c.readerUrl,connectionTimeoutMillis:8000,query_timeout:25000,
@@ -139,14 +175,17 @@ export async function runP6PostcommitNativeAudit(env){
   const report=redactP6PostcommitNativeAudit(a,c);
   const pending=a.horizon==="T-24h"?null:await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
   const review=buildP6PostcommitUnsignedPreReview(a,c.trust,pending);
+  const features=await reviewP6PostcommitNativeFeatures(pool,a,review,c);
   const result={...report,unsignedPreReview:{...review},
+   ...(features?{nativeFeatureReview:{...features}}:{}),
    ...(pending?{pendingLaterReview:{indexRevision:pending.indexRevision,indexSha256:pending.indexSha256,
    originalEligibleCount:pending.originalEligibleCount,alreadyIndexed:pending.alreadyIndexed,changedNativeT:pending.changedNativeT,
    tooLate:pending.tooLate,notYetWithinShardWindow:pending.notYetWithinShardWindow,pendingCount:pending.pendingCount,
    independentReviewStillRequired:true}}:{})};
   // Existing CLI prints only the aggregate. A subsequent authorized
   // in-process reviewer may consume the exact private handoff.
-  return Object.freeze(Object.defineProperty(result,"privateUnsignedPreReview",{value:review,enumerable:false}));
+  return Object.freeze(Object.defineProperties(result,{privateUnsignedPreReview:{value:review,enumerable:false},
+   privateNativeFeatureReview:{value:features,enumerable:false}}));
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
