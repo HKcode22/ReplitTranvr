@@ -12,7 +12,7 @@ import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSour
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
-import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/,GH=/^[0-9]{5,25}$/;
 const hold=x=>{throw Error("HOLD_P6_POSTCOMMIT_NATIVE_AUDIT_"+x);};
@@ -137,12 +137,16 @@ export async function runP6PostcommitNativeAudit(env){
   const selector=await selectP6CurrentPostcommitAuditSelector({readerClient:reader,trust:c.trust,selector:c.selector});
   const a=await auditP6StoredCommittedNativeSource({readerClient:reader,sourcePool:pool,trust:c.trust,selector,policy:c.policy});
   const report=redactP6PostcommitNativeAudit(a,c);
-  if(a.horizon==="T-24h")return report;
-  const pending=await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
-  return {...report,pendingLaterReview:{indexRevision:pending.indexRevision,indexSha256:pending.indexSha256,
+  const pending=a.horizon==="T-24h"?null:await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
+  const review=buildP6PostcommitUnsignedPreReview(a,c.trust,pending);
+  const result={...report,unsignedPreReview:{...review},
+   ...(pending?{pendingLaterReview:{indexRevision:pending.indexRevision,indexSha256:pending.indexSha256,
    originalEligibleCount:pending.originalEligibleCount,alreadyIndexed:pending.alreadyIndexed,changedNativeT:pending.changedNativeT,
    tooLate:pending.tooLate,notYetWithinShardWindow:pending.notYetWithinShardWindow,pendingCount:pending.pendingCount,
-   independentReviewStillRequired:true}};
+   independentReviewStillRequired:true}}:{})};
+  // Existing CLI prints only the aggregate. A subsequent authorized
+  // in-process reviewer may consume the exact private handoff.
+  return Object.freeze(Object.defineProperty(result,"privateUnsignedPreReview",{value:review,enumerable:false}));
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
