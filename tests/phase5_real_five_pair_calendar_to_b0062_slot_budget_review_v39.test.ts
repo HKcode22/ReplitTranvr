@@ -1,3 +1,4 @@
+import {compileP6UnsignedFutureSourceDayPlans} from "../server/lib/disruption/phase6UnsignedFutureSourceDayPlanCompiler_v39";
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
@@ -38,7 +39,7 @@ const other=[
  "OUTCOME_REST_UNIT_BUDGET","HISTORY_BOOTSTRAP_UNIT_BUDGET",
  "DIAGNOSTIC_UNIT_BUDGET"
 ] as const;
-function fixture(){
+function fixture(refreshMinutes=240,leadSeconds=120){
  const original=source();
  const envelope=proposeP5Adaptive31ShapeEnvelope({
   ownerCorrectedReadback:original,firstRunDateUtc:first,
@@ -89,9 +90,9 @@ function fixture(){
   for(const [start,end] of segments)
    for(let part=start;part<end;part+=4*ONE_HOUR)
     for(const offset of [24*ONE_HOUR,6*ONE_HOUR,90*MINUTE])
-     for(let time=part-offset-120_000;
-       time<Math.min(part+4*ONE_HOUR,end)-offset-120_000;
-       time+=240*MINUTE)
+     for(let time=part-offset-leadSeconds*1000;
+       time<Math.min(part+4*ONE_HOUR,end)-offset-leadSeconds*1000;
+       time+=refreshMinutes*MINUTE)
       chargeDates.add(new Date(time).toISOString().slice(0,10));
  }
  const ext={
@@ -117,9 +118,9 @@ function fixture(){
   timingEvidenceSha256:H("f"),
   asOfUtc:"2026-12-01T00:00:00.000Z",
   providerMaxRangeMinutes:240,
-  refreshEveryMinutes:240,
+  refreshEveryMinutes:refreshMinutes,
   physicalGetsPerRefreshUpperBound:1,
-  getLeadSeconds:120,
+  getLeadSeconds:leadSeconds,
   apiUnitsPerPhysicalGet:2 as const,
   cycleRestCeilingUnits:50000,
   protectedRestFloorUnits:1000,
@@ -129,7 +130,7 @@ function fixture(){
     Record<typeof other[number],number>
   }))
  };
- return{draft,ext};
+ return{draft,ext,envelope};
 }
 describe("actual corrected five paired sites + authentic-geometry B0062 → UNSIGNED UTC slot-budget stage review",()=>{
  it("joins exactly 31 calendar dates with seven physical charge categories without filling ordinary airport identities",()=>{
@@ -207,5 +208,36 @@ describe("actual corrected five paired sites + authentic-geometry B0062 → UNSI
   over.restOtherByUtcDate[0].dailyRestCeilingUnits=2;
   expect(()=>assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(
    draft,over)).toThrow("PHYSICAL_UTC_REST_BUDGET_OVERSPENT");
+ });
+});
+
+describe("metadata-only daily plan compiler reuses frozen cost formula",()=>{
+ it("produces 31 byte-pinned day plans, no future adaptive ICAOs and exact charge categories",()=>{
+  const {draft,ext,envelope}=fixture(60,300);
+  const handoff=assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,ext);
+  const timing={timingEvidenceSha256:ext.timingEvidenceSha256,
+   maxPopulationStalenessSeconds:4200,maxSchedulerSlipSeconds:60,
+   maxResponseAndPersistSeconds:60,minimumPreCommitMarginSeconds:120,minimumPreparationLeadMinutes:20};
+  const input={stage:handoff.unsignedStageInput,expectedStageInputSha256:handoff.unsignedStageInputSha256,
+   envelope,expectedShapeEnvelopeSha256:envelope.shapeEnvelopeSha256,timing,expectedTimingJsonSha256:digest(timing)};
+  const result=compileP6UnsignedFutureSourceDayPlans(input);
+  expect(result.files).toHaveLength(31);
+  expect(result.totalPlannedQueries*2).toBe(handoff.slotOnlyBudget.cycleSourceUnits);
+  expect(result.dayPlanSha256s).toEqual(compileP6UnsignedFutureSourceDayPlans(input).dayPlanSha256s);
+  const plans=result.files.map(f=>JSON.parse(f.bytes));
+  expect(plans.filter(p=>p.pairedIcaos===null)).toHaveLength(21);
+  expect(plans.filter(p=>p.pairedIcaos!==null)).toHaveLength(10);
+  for(const p of plans){
+   expect(p.templates.every((q:any)=>!("icao" in q)&&!("plannedAirportSelectionUtc" in q))).toBe(true);
+   expect(p.templates.length).toBeGreaterThan(12);
+   expect(p.templates.length).toBeLessThanOrEqual(384);
+  }
+  expect(result.phase6PaidGo).toBe(false);
+  expect(result.ordinaryAirportSelectionsCreated).toBe(0);
+  expect(()=>compileP6UnsignedFutureSourceDayPlans({...input,expectedTimingJsonSha256:H("f")})).toThrow("EXACT_INPUT_PIN");
+  const stale={...timing,maxPopulationStalenessSeconds:1800};
+  expect(()=>compileP6UnsignedFutureSourceDayPlans({...input,timing:stale,expectedTimingJsonSha256:digest(stale)})).toThrow("COVERAGE_GAP");
+  const late={...timing,minimumPreparationLeadMinutes:60};
+  expect(()=>compileP6UnsignedFutureSourceDayPlans({...input,timing:late,expectedTimingJsonSha256:digest(late)})).toThrow("INSUFFICIENT_PREPARATION_LEAD");
  });
 });
