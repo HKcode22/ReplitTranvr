@@ -11,6 +11,10 @@ on:
         description: 'Type READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE'
         required: true
         type: string
+      approved_main_sha:
+        description: 'Exact reviewed main SHA for one-time read-only credential verification'
+        required: true
+        type: string
   pull_request:
     branches: [main]
     paths:
@@ -123,16 +127,17 @@ jobs:
     if: >-
       ${{
         github.ref == 'refs/heads/main' &&
-        vars.P5_RETENTION_READONLY_MONITOR_ENABLED == 'true' &&
-        (github.event_name == 'schedule' ||
+        ((github.event_name == 'schedule' &&
+          vars.P5_RETENTION_READONLY_MONITOR_ENABLED == 'true') ||
          (github.event_name == 'workflow_dispatch' &&
-          inputs.confirm == 'READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE'))
+          inputs.confirm == 'READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE' &&
+          inputs.approved_main_sha == github.sha))
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       P5_RETENTION_MONITOR_EXECUTE: '1'
-      P5_RETENTION_APPROVED_MAIN_SHA: ${{ github.sha }}
+      P5_RETENTION_APPROVED_MAIN_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.approved_main_sha || github.sha }}
       P5_RETENTION_READER_DATABASE_URL: ${{ secrets.P5_RETENTION_READER_DATABASE_URL }}
       P5_RETENTION_EXPECTED_READER_ROLE: ${{ vars.P5_RETENTION_EXPECTED_READER_ROLE }}
     steps:
@@ -149,6 +154,8 @@ jobs:
           test "$GITHUB_REPOSITORY" = "HKcode22/ReplitTranvr"
           test "$GITHUB_REF" = 'refs/heads/main'
           test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$P5_RETENTION_APPROVED_MAIN_SHA" = "$GITHUB_SHA"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           test "$V39_PHASE6_OWNER_APPROVED" = 0
