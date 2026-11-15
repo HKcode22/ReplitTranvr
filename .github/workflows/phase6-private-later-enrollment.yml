@@ -1,5 +1,7 @@
 name: Phase6 restartable private later V0091 enrollment (STOP default, no provider)
 on:
+  schedule:
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
       run_days:
@@ -14,6 +16,7 @@ on:
     paths:
       - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
       - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
+      - 'server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs'
       - '.github/workflows/phase6-private-later-enrollment.yml'
       - 'tests/phase6_private_restartable_later_enrollment_v39.test.ts'
 permissions:
@@ -37,7 +40,7 @@ jobs:
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx --no-install vitest run tests/phase6_private_restartable_later_enrollment_v39.test.ts tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts tests/phase6_private_later_queue_roster_v39.test.ts
   enroll-current-signed-day:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && vars.P6_PRIVATE_LATER_ENROLL_ENABLED == '1' && inputs.confirm == 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER' }}
+    if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_LATER_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && inputs.confirm == 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER') || (github.event_name == 'schedule' && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     env:
@@ -52,7 +55,7 @@ jobs:
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
       P5_CD_GH_PREPARE_CONFIRM: REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER
-      P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM: ${{ inputs.confirm }}
+      P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM: ${{ github.event_name == 'schedule' && 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER' || inputs.confirm }}
       P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED: ${{ secrets.P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED }}
       P5_CD_GH_PREPARE_ARMED: ${{ secrets.P5_CD_GH_PREPARE_ARMED }}
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
@@ -72,6 +75,9 @@ jobs:
       P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
       P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
       P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+      P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ github.event_name == 'schedule' && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '' }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ github.event_name == 'schedule' && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '' }}
       P6_PRIVATE_LATER_RUN_DAYS: ${{ inputs.run_days }}
       P6_PRIVATE_LATER_ENROLL_ENTRYPOINT: '1'
     steps:
