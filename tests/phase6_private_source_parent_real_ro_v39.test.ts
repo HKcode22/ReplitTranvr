@@ -1,7 +1,7 @@
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6RealPrivateSourceParentReadOnly,
- runP6RealPrivateSourceParentReadOnly}
+ runP6RealPrivateSourceParentReadOnly,readP6SelectedStoredSourceDays}
  from "../scripts/v39_phase6_private_source_parent_readonly_v39.mjs";
 const H=(s:string)=>createHash("sha256").update(s).digest("hex");
 const hex=(c:string)=>c.repeat(64),main="f".repeat(40),
@@ -239,7 +239,7 @@ describe("stored parent rolling days (no external calls)",()=>{
    readSource:async()=>f.scan,
    readDays:async (_ctx:any,selection:any)=>{
     expect(selection.dayIndices).toEqual([1]);calls.push("DUE_DAY");
-    return [f.day];
+    return {days:[f.day],unavailableDayIndices:[]};
    },
    readHistory:async()=>f.history
   });
@@ -252,6 +252,46 @@ describe("stored parent rolling days (no external calls)",()=>{
   expect(JSON.stringify(out)).not.toContain(path);
   expect(JSON.stringify(out)).not.toContain(digest);
   expect(out.githubDispatches).toBe(0);
+ });
+ it("one missing review defers its own day but preserves the valid other day",async()=>{
+  const f=stored();
+  const missing={...f.scan.candidates[0],runDayIndex:2,queryDigestSha256:H("unavailable day2")};
+  const scan={...f.scan,observedQueries:2,candidates:[f.scan.candidates[0],missing]};
+  const calls:number[]=[];
+  const result=await runP6RealPrivateSourceParentReadOnly(f.env,{
+   readSource:async()=>scan,
+   readDays:async (_ctx:any,selection:any)=>readP6SelectedStoredSourceDays(selection.dayIndices,
+    async (d:number)=>{calls.push(d);
+     if(d===2)throw Error("HOLD_P6_STORED_REVIEW_CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED");
+     return f.day;},async (x:any)=>x),
+   readHistory:async()=>f.history
+  });
+  expect(calls).toEqual([1,2]);
+  expect(result.candidateCount).toBe(1);
+  expect(result.unavailableSelectedDayCount).toBe(1);
+  expect(result.unavailableSelectedDueQueryCount).toBe(1);
+  expect(result.privateStoredChildInputProposals[0].query_digest).toBe(digest);
+  expect(JSON.stringify(result)).not.toContain(missing.queryDigestSha256);
+ });
+ it("all unavailable is explicit no dispatch, wrong/duplicate day or integrity error holds",async()=>{
+  const f=stored();
+  const options={readSource:async()=>f.scan,readHistory:async()=>{throw Error("NO_HISTORY_EXPECTED");}};
+  const empty=await runP6RealPrivateSourceParentReadOnly(f.env,{...options,
+   readDays:async()=>({days:[],unavailableDayIndices:[1]})});
+  expect(empty.status).toBe("SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH");
+  expect(empty.unavailableSelectedDueQueryCount).toBe(1);
+  for(const result of [{days:[],unavailableDayIndices:[]},
+   {days:[f.day],unavailableDayIndices:[1]},{days:[],unavailableDayIndices:[2]}])
+   await expect(runP6RealPrivateSourceParentReadOnly(f.env,{...options,readDays:async()=>result}))
+    .rejects.toThrow(/AUTHENTICATED_PRIVATE_SOURCE_QUEUE_OR_HISTORY_HOLD/);
+  for(const error of ["HOLD_P6_STORED_REVIEW_INVALID_STORED_WIRE_BYTES",
+   "HOLD_P6_STORED_REVIEW_RESTRICTED_READ_OR_SIGNATURE_HOLD_REDACTED",
+   "HOLD_P6_STORED_REVIEW_EXACT_COMMITTED_REVIEW_NOT_FOUND"]){
+   await expect(readP6SelectedStoredSourceDays([1,2],async()=>{throw Error(error);},async()=>f.day))
+    .rejects.toThrow(error);
+  }
+  await expect(readP6SelectedStoredSourceDays([2],async()=>f.day,async x=>x))
+   .rejects.toThrow(/HYDRATED_DAY_SELECTOR_DRIFT/);
  });
  it("idle does not read historical packets, and mode mixing fails",async()=>{
   const f=stored();

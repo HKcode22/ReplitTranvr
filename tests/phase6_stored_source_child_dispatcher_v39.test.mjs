@@ -107,3 +107,19 @@ test("successful rerun cannot hide a previous ambiguous dispatch attempt",async(
  assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl})).status,"HOLD_PRE_DISPATCH_NO_POST");
  assert.equal(m.posts.length,0);
 });
+
+test("unavailable selected days are disclosed without posting any unsigned query",async()=>{
+ const f=fixture(),m=f.mock();
+ const missing=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl,
+  observe:async()=>({status:"SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",providerCalls:0,
+   databaseWrites:0,githubDispatches:0,paidPhase6Go:false,unavailableSelectedDayCount:2,
+   unavailableSelectedDueQueryCount:5})});
+ assert.equal(m.calls.length,0);
+ assert.equal(missing.unavailableSelectedDueQueryCount,5);
+ assert.equal(missing.acknowledgedGithubChildCount,0);
+ f.planned.unavailableSelectedDayCount=1;
+ f.planned.unavailableSelectedDueQueryCount=3;
+ const out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl});
+ assert.equal(out.unavailableSelectedDueQueryCount,3);
+ assert.equal(out.acknowledgedGithubChildCount,4);
+});

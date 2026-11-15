@@ -107,7 +107,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  const observe=options.observe??runP6RealPrivateSourceParentReadOnly,now=options.now??Date.now;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,
   "X-GitHub-Api-Version":"2022-11-28"};
- let proposals,previousIds,active,historyClock;
+ let proposals,previousIds,active,historyClock,unavailableDays=0,unavailableQueries=0;
  try{
   // Local read-only arguments only. No mutation of repository global arm.
   const pl=await observe({...env,V39_PHASE6_PROCESS_ARMED:"0",
@@ -116,12 +116,21 @@ export async function runP6StoredSourceDispatcher(env,options={}){
    fail("OBSERVATION_NOT_READ_ONLY");
   if(pl.status==="NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH")
    return summary("NO_DUE_SOURCE_NO_DISPATCH",{acknowledgedGithubChildCount:0});
+  if(pl.status==="SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH")
+   return summary("SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",{
+    acknowledgedGithubChildCount:0,unavailableSelectedDayCount:pl.unavailableSelectedDayCount,
+    unavailableSelectedDueQueryCount:pl.unavailableSelectedDueQueryCount});
   const desc=Object.getOwnPropertyDescriptor(pl,"privateStoredChildInputProposals");
   if(pl.status!=="SIGNED_PRIVATE_DAY_SOURCE_AND_ACTUAL_DB_DUE_REVIEW_ONLY_NO_DISPATCH"||
      pl.storedReviewMode!==true||!desc||desc.enumerable||desc.writable||
      !Array.isArray(desc.value)||desc.value.length!==pl.candidateCount||desc.value.length>4)
    fail("NOT_EXACT_STORED_DUE_OBSERVATION");
   proposals=desc.value;
+  unavailableDays=pl.unavailableSelectedDayCount??0;
+  unavailableQueries=pl.unavailableSelectedDueQueryCount??0;
+  if(!Number.isSafeInteger(unavailableDays)||unavailableDays<0||unavailableDays>2||
+     !Number.isSafeInteger(unavailableQueries)||unavailableQueries<0||unavailableQueries>700||
+     (unavailableDays===0&&unavailableQueries!==0))fail("INVALID_UNAVAILABLE_DAY_DENOMINATOR");
   const digests=new Set();
   for(const p of proposals){
    validateInputs(p);
@@ -130,7 +139,9 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   }
   historyClock=Date.parse(pl.observedSourceDatabaseClockUtc);
   if(!Number.isFinite(historyClock)||Math.abs(now()-historyClock)>120000)fail("OBSERVED_DB_CLOCK_STALE");
-  if(!proposals.length)return summary("NO_SIGNED_DUE_CHILD_NO_DISPATCH",{acknowledgedGithubChildCount:0});
+  if(!proposals.length)return summary("NO_SIGNED_DUE_CHILD_NO_DISPATCH",{
+   acknowledgedGithubChildCount:0,unavailableSelectedDayCount:unavailableDays,
+   unavailableSelectedDueQueryCount:unavailableQueries});
   const prior=await readP5CompleteGithubWorkflowHistory(historyUrl(PARENT,"schedule",historyClock),fetcher,headers);
   await proveNoPriorUncertainStoredDispatch({history:prior,currentRunId:Number(env.GITHUB_RUN_ID),fetcher,headers});
   const child=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",historyClock),fetcher,headers);
@@ -167,7 +178,8 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  }
  return summary("BOUNDED_STORED_SOURCE_CHILD_DISPATCH_ACKS_NOT_PAID_RECEIPTS",{
   activeSourceChildCountBefore:active,acknowledgedGithubChildCount:acknowledged.length,
-  acknowledgedGithubRunIds:acknowledged,inFlightCap:8,perTickCap:4});
+  acknowledgedGithubRunIds:acknowledged,inFlightCap:8,perTickCap:4,
+  unavailableSelectedDayCount:unavailableDays,unavailableSelectedDueQueryCount:unavailableQueries});
 }
 if(process.env.P6_PRIVATE_STORED_SOURCE_DISPATCH_ENTRYPOINT==="1")
  runP6StoredSourceDispatcher(process.env).then(out=>console.log(JSON.stringify(out)))
