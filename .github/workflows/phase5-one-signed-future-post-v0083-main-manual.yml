@@ -40,6 +40,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
       - '.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml'
       - 'scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts'
       - 'scripts/v39_phase6_private_post_existing_v0083_child_v39.ts'
