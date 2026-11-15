@@ -292,7 +292,21 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      await client.query("ROLLBACK");
      await client.query("BEGIN");
      await client.query("SET LOCAL ROLE "+PREP);
-     const inserted=(await client.query(call,args)).rows[0];
+     const restartable=process.env.V39_P6_V0100_RESTARTABLE_CI==="1";
+     const ensure="SELECT * FROM clean.phase5_cd_ensure_exact_source_flight_v39("+
+       "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10)";
+     if(restartable){
+      await expect(client.query(ensure,[
+       ...args.slice(0,4),
+       new Date(Date.parse(permit.selectedTNativeUtc)+900_000).toISOString(),
+       ...args.slice(5)])).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG");
+      await client.query("ROLLBACK");
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE "+PREP);
+     }
+     const raw=await client.query(restartable?ensure:call,args);
+     const inserted=restartable?{task:raw.rows[0].task_id}:raw.rows[0];
+     if(restartable)expect(raw.rows[0].newly_registered).toBe(true);
      expect(String(inserted.task)).toMatch(/^[1-9][0-9]*$/);
      await client.query("COMMIT");
      const final=(await admin.query(
@@ -306,6 +320,20 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      await client.query("SET LOCAL ROLE "+PREP);
      await expect(client.query(call,args)).rejects.toMatchObject({code:"23505"});
      await client.query("ROLLBACK");
+     if(restartable){
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE "+PREP);
+      const repeat=(await client.query(ensure,args)).rows[0];
+      expect(repeat).toEqual({task_id:String(inserted.task),newly_registered:false});
+      await client.query("COMMIT");
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE "+PREP);
+      const conflicting=[...args];conflicting[5]="f".repeat(64);
+      await expect(client.query(ensure,conflicting)).rejects.toThrow("P6_V0100_EXISTING_TASK_IDENTITY_OR_PACKET_CONFLICT");
+      await client.query("ROLLBACK");
+      expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_cd_pre_task_v39")).rows[0].n).toBe(1);
+      console.log("P6_V0100_REAL_ORIGINAL_EXACT_REPLAY_CONFLICT_PREPARE_ROLE_PASS");
+     }
      console.log("P5_V0091_REAL_V0079_ORIGINAL_TO_V0087_QUEUE_TO_STAGE14_PREPARE_ROLE_PASS");
     }finally{client.release();}
    }finally{await prep.end();}

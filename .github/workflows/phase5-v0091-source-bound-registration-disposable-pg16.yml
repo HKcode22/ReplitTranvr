@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
       - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
       - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
+      - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
       - 'tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts'
 permissions:
   contents: read
@@ -18,6 +19,7 @@ jobs:
       V39_P5_CD_V0088_STAGE14_CI: '1'
       V39_P5_CD_V0089_GUARD_CI: '1'
       V39_P5_CD_V0091_REGISTRATION_CI: '1'
+      V39_P6_V0100_RESTARTABLE_CI: '1'
       V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
       V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
       V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '0'
@@ -118,6 +120,8 @@ jobs:
           fi
           grep -Fq 'HOLD_P5_CD_V0091_REAL_PG16_OWNER_OLD_QUEUE_OR_NEW_FUNCTION_ALREADY_INSTALLED' "$TMP/repeat.txt"
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p WHERE p.oid='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure")" = phase5_cd_source_registration_owner_v39
+          test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
           echo P5_V0091_REAL_NON_SUPERUSER_OWNER_INSTALLER_ONCE_AND_REPEAT_HOLD_PASS
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
