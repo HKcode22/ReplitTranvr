@@ -52,6 +52,8 @@ type Pins={
  expectedReviewedMainSha:string;existingPaidDispatchApproved:false;
  noProviderCredentialsInSigner:true;
  independentRegistryRecoveryApproved?:true;
+ /** When called from durable daily review, never extend that approval. */
+ maximumRetentionNotAfterUtc?:string;
 };
 function parse<T>(bytes:Buffer,max:number,digest:string):T{
  if(!SHA.test(digest??"")||!Buffer.isBuffer(bytes)||bytes.length<100||
@@ -137,7 +139,8 @@ export async function signP6ReviewedPreparedSourceDay({
  });
  const proof=await readBackP5Stage9PreparedDayOnce(readPool,{...z,proposal:stage8});
  const now=utc(proof.observedDatabaseClockUtc);
- const expiry=Math.min(until,now+p.maximumReviewRetentionHours*3600000);
+ const expiry=Math.min(until,now+p.maximumReviewRetentionHours*3600000,
+  pins.maximumRetentionNotAfterUtc===undefined?Infinity:utc(pins.maximumRetentionNotAfterUtc));
  if(now<from||now>=until||expiry<=now||
     drafts.privateDraftShards.some(sh=>utc(sh.hardLatestUtc)>=expiry))
   hold("POLICY_OR_REVIEW_RETENTION_DOES_NOT_COVER_ACTUAL_DAY");
@@ -297,7 +300,8 @@ export async function recoverP6ReviewedPreparedSourceDayFromCommittedPackets(arg
     hold("RESTART_IMMUTABLE_PACKET_DRIFT");
    const old=utc(at(row.externally_reviewed_at_utc)),commit=utc(at(row.committed_at_utc)),expiry=utc(at(row.retention_not_after_utc));
    if(old<utc(p.validFromUtc)||old>commit||commit>now||expiry<=now||
-      expiry>utc(p.validUntilUtc)||expiry-old>p.maximumReviewRetentionHours*3600000)
+      expiry>utc(p.validUntilUtc)||expiry-old>p.maximumReviewRetentionHours*3600000||
+      (args.pins.maximumRetentionNotAfterUtc!==undefined&&expiry>utc(args.pins.maximumRetentionNotAfterUtc)))
     hold("RESTART_OLD_ROW_CLOCK_OR_EXPIRY");
    minExpiry=Math.min(minExpiry,expiry);
    if(row.kind==="SOURCE_QUERY_PACKET"){

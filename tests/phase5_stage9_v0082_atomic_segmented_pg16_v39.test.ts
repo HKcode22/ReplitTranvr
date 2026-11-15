@@ -5,6 +5,8 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,Client} from "pg";
+import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6StoredSourceDayPublicationRuntime_v39.mjs";
+import {readP6DailyPrepareReviewOnce} from "../server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs";
 import {runP6DurableDailySourcePreparation} from "../server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39";
 import {produceP6DelegatedDailySourceReview} from "../server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39";
 import {createHash,generateKeyPairSync} from "node:crypto";
@@ -64,6 +66,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  let selectedAt:string,serviceStart:string;
  let runtimeProducer:Parameters<typeof produceP6DelegatedDailySourceReview>[0];
  let originalDurableDayBytes:Buffer|undefined;
+ let originalDailyTrust:Parameters<typeof readP6DailyPrepareReviewOnce>[0]["trust"]|undefined;
+ let originalDailyExpiry:string|undefined;
  const manifest=sha("e"),range=sha("8"),budgetHash=sha("6"),gridHash=sha("7");
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
@@ -518,6 +522,11 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     expect(resumed.preparedLedgerInserts).toBe(0);
     expect(resumed.privateDailyPreparePacketBytes).toEqual(result.privateDailyPreparePacketBytes);
     originalDurableDayBytes=Buffer.from(resumed.privateDailyPreparePacketBytes);
+    originalDailyTrust=trust;
+    const original=await readP6DailyPrepareReviewOnce({client:reader,trust,
+     scope:{privateDailyReviewTransportApproved:true,existingPaidDispatchApproved:false,
+      adbAutoCollect:"0",phase6ProcessArmed:"0",expectedSessionLogin:scope.expectedReaderSessionLogin}});
+    originalDailyExpiry=String(original.privateWire.review.retentionNotAfterUtc);
     await expect(runP6DurableDailySourcePreparation({...args,trust:{...trust,policyValidUntilUtc:iso(Date.parse(trust.policyValidUntilUtc)+H)}}))
      .rejects.toThrow("APPROVED_POLICY_AND_STORAGE_TRUST_DRIFT");
     expect(JSON.stringify(resumed)).not.toContain("reviewedPrepareInput");
@@ -634,7 +643,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     expectedPolicySha256:createHash("sha256").update(bytes).digest("hex"),
     expectedDailyPreparePacketSha256:createHash("sha256").update(daily).digest("hex"),
     expectedReviewedMainSha:day.approvedCodeSha,existingPaidDispatchApproved:false as const,
-    noProviderCredentialsInSigner:true as const},queryKey:query.privateKey,registryKey:registry.privateKey};
+    noProviderCredentialsInSigner:true as const,maximumRetentionNotAfterUtc:originalDailyExpiry},queryKey:query.privateKey,registryKey:registry.privateKey};
   const result=await signP6ReviewedPreparedSourceDay(args);
   expect(result.queryCount).toBe(96);
   expect(result.actualPreparedLedgerVerified).toBe(true);
@@ -712,42 +721,32 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
      .toEqual(result.privateSignedShards[0].queryPackets.map(q=>q.wire));
     expect(recovered.privateSignedShards[1].queryPackets[0].wire)
      .toEqual(result.privateSignedShards[1].queryPackets[0].wire);
-    let published=first.insertedQueryCount+1,registries=1;
-    for(const sh of recovered.privateSignedShards){
-     const receipt=await publishP6StoredSourceShardOnce(pubArgs(sh,true));
-     published+=receipt.insertedQueryCount;registries+=receipt.insertedRegistryCount;
-     if(sh.shardIndex===1){
-      expect(receipt.insertedRegistryCount).toBe(0);
-      expect(receipt.insertedQueryCount).toBe(0);
-      expect(receipt.registryFreshlyReattestedNotOriginalSignature).toBe(true);
-     }
-    }
-    expect(published).toBe(96);
-    expect(registries).toBe(result.shardCount);
-    await expect(signP6InitialSourceIndexAfterRegistryReadback({...idxArgs,signedDay:recovered}))
-     .rejects.toThrow("INDEX_REATTESTATION_NOT_APPROVED");
-    const idx=await signP6InitialSourceIndexAfterRegistryReadback({...idxArgs,
-     pins:recoveryPins,signedDay:recovered});
-    expect(idx.registryCount).toBe(result.shardCount);
-    expect(idx.expiredShardCount).toBe(0);
-    expect(JSON.stringify(idx)).not.toContain("signatureBase64");
-    const put=await publishP6DayEpochIndexRevisionOnce({client:publisher,...idx.privateSignedIndex,
-     scope:{privateDayIndexStorageApproved:true,independentProviderContentsReviewApproved:true,
+    // A completely fresh runtime now reads the original signed daily
+    // packet from PostgreSQL; do not pass the earlier in-memory bundles.
+    const dailyTrust=originalDailyTrust!;
+    expect(dailyTrust).toBeDefined();
+    const pubRuntime={readerClient:reader,publisherClient:publisher,prepareReadPool:writer,
+     dailyTrust,sourceTrust:trust,signingPolicyBytes:bytes,expectedSigningPolicySha256:args.pins.expectedPolicySha256,
+     queryKey:query.privateKey,registryKey:registry.privateKey,
+     scope:{independentlyApprovedSourceDayPublicationRuntime:true,independentlyApprovedReadbackRecovery:true,
       existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
-      expectedPublisherSessionLogin:publisherLogin,approvedCodeSha:policy.approvedCodeSha,
-      approvedCalendarSha256:policy.calendarSha256,approvedRightsSha256:policy.rightsSha256,
-      approvedRetentionNotAfterUtc:recovered.retentionNotAfterUtc,persistVerifiedReviewWire:true}});
-    expect(put.indexSha256).toBe(idx.indexSha256);
-    const stored=await readP6StoredPrivateReviewOnce({client:reader,trust,
-     scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
-     selector:{kind:"CURRENT_DAY",runDayIndex:1}});
-    const semantic=await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
-     client:reader,pins:stored.pins,wire:stored.wire,publicKeyPem:stored.publicKeyPem,
-     scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:true}});
-    expect(semantic.redactedSummary.externallySignedDayEpochIndexSha256).toBe(idx.indexSha256);
-    expect(semantic.redactedSummary.phase6PaidGo).toBe(false);
-    await expect(signP6InitialSourceIndexAfterRegistryReadback({...idxArgs,pins:recoveryPins,signedDay:recovered}))
-     .rejects.toThrow("INDEX_GENESIS_ALREADY_CLAIMED_NO_REPLAY");
+      expectedReaderSessionLogin:readerLogin,expectedPublisherSessionLogin:publisherLogin}};
+    await expect(runP6StoredSourceDayPublication({...pubRuntime,scope:{...pubRuntime.scope,independentlyApprovedReadbackRecovery:false}}))
+     .rejects.toThrow("NO_EXACT_INDEPENDENT_NONPAID_SCOPE");
+    const done=await runP6StoredSourceDayPublication(pubRuntime);
+    expect(done.status).toBe("SOURCE_DAY_SIGNED_PUBLISHED_AND_READ_BACK_NO_PAID_GO");
+    expect(done.verifiedQueryCount).toBe(96);
+    expect(done.insertedQueryCount+first.insertedQueryCount+1).toBe(96);
+    expect(done.insertedRegistryCount+1).toBe(result.shardCount);
+    expect(done.insertedIndexCount).toBe(1);
+    expect(done.expiredShardCount).toBe(0);
+    expect(done.phase6PaidGo).toBe(false);
+    const repeated=await runP6StoredSourceDayPublication(pubRuntime);
+    expect(repeated.status).toBe("EXISTING_SIGNED_DAY_INDEX_VERIFIED_NO_REPLAY");
+    expect(repeated.indexSha256).toBe(done.indexSha256);
+    expect(repeated.insertedQueryCount).toBe(0);
+    expect(repeated.insertedRegistryCount).toBe(0);
+    expect(repeated.insertedIndexCount).toBe(0);
     const rows=(await admin.query("SELECT kind,count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 GROUP BY kind")).rows;
     expect(Object.fromEntries(rows.map(x=>[x.kind,x.n]))).toEqual({
      SOURCE_QUERY_PACKET:96,SOURCE_DAY_REGISTRY:result.shardCount,SOURCE_DAY_PREPARE_REVIEW:1});

@@ -60,7 +60,9 @@ export function planP6StoredSourceDraftShards(
   if(close<=open)hold("QUERY_WINDOW_ALREADY_EXPIRED");
   const tooClose=observed>utc(entry.latestParentReviewUtc)?1:0;
   if(!s||s.entries.length===96||
-     Math.max(utc(s.hardLatestUtc),close)-utc(s.earliestProposedNotBeforeUtc)>180*minute){
+     // Membership must stay stable across runner restart even if the
+     // independent readback occurs later than the original review lead.
+     Math.max(utc(s.hardLatestUtc),close)-utc(s.entries[0].earliestParentReviewUtc)>180*minute){
    s={shardIndex:shards.length+1,earliestProposedNotBeforeUtc:iso(open),
       hardLatestUtc:entry.hardLatestUtc,
       latestFirstQueryParentReviewUtc:entry.latestParentReviewUtc,
