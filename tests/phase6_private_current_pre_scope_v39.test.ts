@@ -1,9 +1,10 @@
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect,vi} from "vitest";
 import {requireP5CdGithubCurrentPrivatePreScope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
-import {withP6AuthenticatedCurrentPrivateRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
-const mock=vi.hoisted(()=>({read:vi.fn()}));
+import {withP6AuthenticatedCurrentPrivateRoster,readP6UnchangedCurrentPreRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
+const mock=vi.hoisted(()=>({read:vi.fn(),current:vi.fn()}));
 vi.mock("../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs",()=>({readP6PrivateLaterQueueRoster:mock.read}));
+vi.mock("../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs",()=>({readP6StoredPrivateReviewOnce:mock.current}));
 const hash="a".repeat(64),code="b".repeat(40),login="phase6_private_reader_login_ci_current";
 const pub=generateKeyPairSync("ed25519").publicKey;
 const pem=pub.export({type:"spki",format:"pem"}).toString(),fp=createHash("sha256").update(pub.export({type:"spki",format:"der"})).digest("hex");
@@ -66,5 +67,32 @@ describe("scheduled current-day PRE scope — no real DB or provider",()=>{
   mock.read.mockResolvedValue(fakeRead(sel(2)));const work=vi.fn();
   await expect(withP6AuthenticatedCurrentPrivateRoster({client:{},env:env(),selector:sel(1),policy},work)).rejects.toThrow("CURRENT_AUTHENTICATED_PROJECTION_REQUIRED");
   expect(work).not.toHaveBeenCalled();
+ });
+});
+
+describe("current signed-day append-safe reauthentication",()=>{
+ it("continues exact old shard under authenticated newer revision, not guessed pins",async()=>{
+  const original=sel(1),digest=fakeRead(original).derivedCompatibilityRosterSha256,latest="d".repeat(64);
+  mock.current.mockResolvedValue({pins:{expectedRunDayIndex:1,expectedIndexRevision:3,expectedIndexSha256:latest}});
+  mock.read.mockImplementation(async({selector})=>fakeRead(selector));
+  const x=await readP6UnchangedCurrentPreRoster({client:{},env:env(),selector:original,policy,expectedUnchangedRosterDigest:digest});
+  expect(x.selector).toEqual({...original,indexRevision:3,indexSha256:latest});
+  expect(x.projection.derivedCompatibilityRosterSha256).toBe(digest);
+  const e=env();
+  await withP6AuthenticatedCurrentPrivateRoster({client:{},env:e,selector:original,policy,expectedUnchangedRosterDigest:digest},async p=>{
+   expect(p.revision).toBe(3);expect(requireP5CdGithubPreRelease(e).rosterSha256).toBe(digest);
+  });
+  expect(()=>requireP5CdGithubPreRelease(e)).toThrow("NO_LIVE_AUTHENTICATED_ROSTER_CONTEXT");
+ });
+ it("rejects rollback, equal-revision changed SHA and changed roster bytes",async()=>{
+  const original=sel(1),digest=fakeRead(original).derivedCompatibilityRosterSha256;
+  const x={client:{},env:env(),selector:original,policy,expectedUnchangedRosterDigest:digest};
+  mock.current.mockResolvedValue({pins:{expectedRunDayIndex:1,expectedIndexRevision:1,expectedIndexSha256:hash}});
+  await expect(readP6UnchangedCurrentPreRoster(x)).rejects.toThrow("ROLLBACK");
+  mock.current.mockResolvedValue({pins:{expectedRunDayIndex:1,expectedIndexRevision:2,expectedIndexSha256:"d".repeat(64)}});
+  await expect(readP6UnchangedCurrentPreRoster(x)).rejects.toThrow("ROLLBACK");
+  mock.current.mockResolvedValue({pins:{expectedRunDayIndex:1,expectedIndexRevision:3,expectedIndexSha256:"d".repeat(64)}});
+  mock.read.mockImplementation(async({selector})=>({...fakeRead(selector),privateRosterBytes:Buffer.from("changed")}));
+  await expect(readP6UnchangedCurrentPreRoster(x)).rejects.toThrow("CHANGED_OR_CURRENT_READ");
  });
 });
