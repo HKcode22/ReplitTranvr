@@ -292,6 +292,8 @@ export interface P5FuturePostActualPreReadback {
  observedValidHorizons:string[];
  missingPreHorizons:string[];
  actualSourcePREReferenceIds:string[];
+ /** Present only for an independently signed SOURCE registry scope. */
+ boundSourceRegistryValidHorizonCount?:number;
  observedFromIndependentRestrictedDb:true;
  providerCalls:0;databaseWrites:0;
 }
@@ -306,9 +308,16 @@ export interface P5FuturePostActualPreReadback {
  * on existing PRE metadata; privilege missing => refuses, never app fallback.
  */
 export async function auditP5FuturePostActualPriorPre(
- pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet
+ pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet,
+ boundSourceQueryDigests?:readonly string[]
 ):Promise<P5FuturePostActualPreReadback>{
  verifyP5FuturePostReviewedFrame(p);
+ if(boundSourceQueryDigests!==undefined&&(!Array.isArray(boundSourceQueryDigests)||
+    boundSourceQueryDigests.length<1||boundSourceQueryDigests.length>96||
+    boundSourceQueryDigests.some(x=>typeof x!=="string"||!H.test(x))||
+    new Set(boundSourceQueryDigests).size!==boundSourceQueryDigests.length))
+  fail("INVALID_SIGNED_SOURCE_REGISTRY_QUERY_SCOPE");
+ const bound=boundSourceQueryDigests===undefined?null:new Set(boundSourceQueryDigests);
  const db=await pool.connect();let tx=false;
  try{
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
@@ -321,7 +330,7 @@ export async function auditP5FuturePostActualPriorPre(
      who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on")
    fail("POST_PRE_NOT_IN_ACTUAL_RESTRICTED_SOURCE_SESSION");
   const x=await db.query(
-   "SELECT s.id::text AS snapshot_id,s.horizon,"+
+   "SELECT s.id::text AS snapshot_id,s.horizon,q.query_digest,"+
    " s.created_at,s.prediction_cutoff_utc,"+
    " s.selected_t_milestone_utc,s.fids_response_hash,"+
    " r.available_at AS original_available_at,"+
@@ -357,7 +366,8 @@ export async function auditP5FuturePostActualPriorPre(
    "T-24h":86400000,"T-6h":21600000,"T-90m":5400000
   };
   const t=Date.parse(p.expectedSelectedTNativeUtc);
-  const valid=new Map<string,string>();
+  const valid=new Map<string,string>(),validQuery=new Map<string,string>();
+  const boundHorizons=new Set<string>();
   for(const row of x.rows){
    const offset=offsets[String(row.horizon)];
    if(!offset)continue;
@@ -372,10 +382,18 @@ export async function auditP5FuturePostActualPriorPre(
       !row.snapshot_id||!/^[0-9]+$/.test(String(row.snapshot_id)))continue;
    if(valid.has(row.horizon)&&valid.get(row.horizon)!==row.snapshot_id)
     fail("DUPLICATED_SOURCE_PRE_SAME_FLIGHT_HORIZON");
+   if(bound){
+    if(typeof row.query_digest!=="string"||!H.test(row.query_digest)||
+       (validQuery.has(row.horizon)&&validQuery.get(row.horizon)!==row.query_digest))
+     fail("AMBIGUOUS_PRE_SOURCE_QUERY_PROVENANCE");
+    validQuery.set(row.horizon,row.query_digest);
+    if(bound.has(row.query_digest))boundHorizons.add(row.horizon);
+   }
    valid.set(row.horizon,String(row.snapshot_id));
   }
   await db.query("ROLLBACK");tx=false;
   if(valid.size===0)fail("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
+  if(bound&&boundHorizons.size===0)fail("NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY");
   const names=["T-24h","T-6h","T-90m"];
   return{
    status:"ACTUAL_SAME_FLIGHT_SOURCE_BOUND_PRE_PARTIAL_ALLOWED",
@@ -386,6 +404,7 @@ export async function auditP5FuturePostActualPriorPre(
    missingPreHorizons:names.filter(n=>!valid.has(n)),
    actualSourcePREReferenceIds:names.filter(n=>valid.has(n))
     .map(n=>valid.get(n)!),
+   ...(bound?{boundSourceRegistryValidHorizonCount:boundHorizons.size}:{}),
    observedFromIndependentRestrictedDb:true,
    providerCalls:0,databaseWrites:0
   };

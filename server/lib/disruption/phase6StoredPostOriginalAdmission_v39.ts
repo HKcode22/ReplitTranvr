@@ -98,8 +98,21 @@ export async function inspectP6StoredPostOriginalV0083({
   pins:{expectedRoutingIntentSha256:selector.routingIntentSha256,expectedDayEpochIndexSha256:selector.indexSha256,
    expectedPostPacketPath:route.signedFrozenPath,expectedPostPacketSha256:route.signedFrozenSha256,
    expectedSourceRegistryPath:route.boundSourceRegistryPath,expectedFlightInstanceId:exact.flightInstanceId}});
+ // At least one actual valid PRE must trace to a query from the exact
+ // SOURCE registry signed into this route. Other valid horizons may use
+ // other reviewed shards from the same day: preserve those observations.
+ let source;
+ try{source=JSON.parse(index.getFrozen(route.boundSourceRegistryPath).toString("utf8"));}
+ catch{return hold("SOURCE_REGISTRY_JSON_DRIFT");}
+ if(source?.schema!=="v39.phase5.signed-per-day-source-batch-readonly.v1"||
+    source.manifestSha256!==trust.manifestSha256||source.runDayIndex!==route.runDayIndex||
+    !Array.isArray(source.entries)||source.entries.length<1||source.entries.length>96)
+  hold("SOURCE_REGISTRY_QUERY_SCOPE_DRIFT");
+ const digests=source.entries.map((e:any)=>e?.expectedQueryDigestSha256);
+ if(digests.some((x:unknown)=>typeof x!=="string"||!SHA.test(x))||new Set(digests).size!==digests.length)
+  hold("SOURCE_REGISTRY_QUERY_SCOPE_DRIFT");
  let actual;
- try{actual=await readActualValidPreAndClock(admission.conn,exact);}
+ try{actual=await readActualValidPreAndClock(admission.conn,exact,digests);}
  catch(e){
   if(e instanceof Error&&e.message==="REFUSED_P5_FUTURE_POST_V0083_NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST")
    return Object.freeze({redactedSummary:Object.freeze({
@@ -107,8 +120,16 @@ export async function inspectP6StoredPostOriginalV0083({
     runDayIndex:route.runDayIndex,shardIndex:route.shardIndex,
     verifiedValidPreHorizonCount:0,providerCalls:0,sqlWrites:0,githubDispatches:0,phase6PaidGo:false
    })});
+  if(e instanceof Error&&e.message==="REFUSED_P5_FUTURE_POST_V0083_NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY")
+   return Object.freeze({redactedSummary:Object.freeze({status:"SKIP_NO_VALID_PRE_FROM_BOUND_SOURCE_REGISTRY_NO_DISPATCH",
+    runDayIndex:route.runDayIndex,shardIndex:route.shardIndex,verifiedBoundRegistryValidPreHorizonCount:0,
+    otherValidPREMayExist:true,providerCalls:0,sqlWrites:0,githubDispatches:0,phase6PaidGo:false})});
   throw e;
  }
+ if(!Number.isSafeInteger(actual.pre.boundSourceRegistryValidHorizonCount)||
+    (actual.pre.boundSourceRegistryValidHorizonCount??0)<1||
+    actual.pre.boundSourceRegistryValidHorizonCount!>actual.pre.observedValidHorizonCount)
+  hold("NO_EXACT_BOUND_REGISTRY_PRE_PROOF");
  return reviewP6PrivatePostWithOriginalV0083NoDispatch({
   indexHandoff:index,postPacketReceipt:receipt,actualPre:actual.pre,actualSourcePreDbClockUtc:actual.dbClockUtc,env:local,
   pins:{expectedRoutingIntentSha256:selector.routingIntentSha256,expectedDayEpochIndexSha256:selector.indexSha256,

@@ -89,7 +89,7 @@ export function admitP5FuturePostGithubParent(env:NodeJS.ProcessEnv){
   pins,githubToken:env.GITHUB_TOKEN!};
 }
 export async function readActualValidPreAndClock(
- connectionString:string,p:P5ReviewedFuturePostOneGet
+ connectionString:string,p:P5ReviewedFuturePostOneGet,boundSourceQueryDigests?:readonly string[]
 ):Promise<{pre:P5FuturePostActualPreReadback;dbClockUtc:string}>{
  const raw=new Pool({connectionString,max:1,connectionTimeoutMillis:8000,
   idleTimeoutMillis:1500,
@@ -99,7 +99,7 @@ export async function readActualValidPreAndClock(
    group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",
    forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107"
   });
-  const pre=await auditP5FuturePostActualPriorPre(source,p);
+  const pre=await auditP5FuturePostActualPriorPre(source,p,boundSourceQueryDigests);
   const q=await source.query("SELECT clock_timestamp() AS at");
   if(q.rowCount!==1)hold("NO_ACTUAL_SOURCE_DB_CLOCK_FOR_POST");
   const d=q.rows[0]?.at;
