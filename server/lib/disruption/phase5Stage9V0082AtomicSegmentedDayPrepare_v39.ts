@@ -55,6 +55,32 @@ export function phase5Stage9ExactWholeUnit(x:unknown,min=0,max=50000):boolean{
  return Number.isSafeInteger(n)&&n>=min&&n<=max;
 }
 const integral=phase5Stage9ExactWholeUnit;
+/**
+ * Original signed proposal remains byte-identical. A later preparation
+ * may observe irreversible SOURCE reservations from earlier queries.
+ * Never increase the signed daily ceiling, decrease its observed spend,
+ * change other-category reserves or exceed CURRENT remaining units.
+ * Stage9 separately checks all seven frozen category plans and cycle cap.
+ */
+export function phase5Stage9MonotoneChargeBudgetAdmissible(
+ reviewed:{otherReserved:number;alreadyReserved:number;candidateUnits:number;remainingAfterProposal:number},
+ actual:{daily_api_ceiling:unknown;daily_other_reserved_units:unknown;physically_reserved_units:unknown}
+):boolean{
+ if(!reviewed||!actual||
+    ![reviewed.otherReserved,reviewed.alreadyReserved,reviewed.candidateUnits,
+      reviewed.remainingAfterProposal].every(x=>typeof x==="number"&&integral(x,0,1900))||
+    !integral(actual.daily_api_ceiling,2,1900)||
+    !integral(actual.daily_other_reserved_units,0,1900)||
+    !integral(actual.physically_reserved_units,0,1900))return false;
+ const cap=reviewed.otherReserved+reviewed.alreadyReserved+
+  reviewed.candidateUnits+reviewed.remainingAfterProposal;
+ const current=Number(actual.physically_reserved_units);
+ return reviewed.candidateUnits>=2&&reviewed.candidateUnits%2===0&&
+  current>=reviewed.alreadyReserved&&(current-reviewed.alreadyReserved)%2===0&&
+  Number(actual.daily_api_ceiling)===cap&&
+  Number(actual.daily_other_reserved_units)===reviewed.otherReserved&&
+  reviewed.otherReserved+current+reviewed.candidateUnits<=cap;
+}
 
 const COLS=[
  "query_digest","manifest_sha256","run_day_index","query_key",
@@ -505,10 +531,7 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
   const days=new Map(chargeRows.map(r=>[utc(r.charge_day_utc),r]));
   for(const b of x.actualUtcChargeBudgets){
    const row=days.get(b.day);
-   if(!row||Number(row.daily_other_reserved_units)!==b.otherReserved||
-      Number(row.physically_reserved_units)!==b.alreadyReserved||
-      Number(row.daily_api_ceiling)<
-        b.otherReserved+b.alreadyReserved+b.candidateUnits)
+   if(!row||!phase5Stage9MonotoneChargeBudgetAdmissible(b,row))
      hold("REAL_UTC_CHARGE_DAY_BUDGET_MISMATCH");
    const data=(await client.query(
     "SELECT category,planned_units,physically_reserved_units "+
@@ -542,9 +565,15 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
    )).rows;
    const old=new Map(prior.map(r=>[r.rest_category,Number(r.n)*2]));
    const upcoming=reviewed.requestedByCharge.get(b.day)!;
+   // Reconcile the actual SOURCE counters against their category lanes
+   // and prior committed query allocation. A fabricated/unmapped increase
+   // cannot pass simply because the remaining daily cap looks sufficient.
+   if(byCat.get("FIDS_BASE_UNITS")!.spent+byCat.get("FIDS_SPLIT_UNITS")!.spent!==
+      Number(row.physically_reserved_units))
+     hold("SOURCE_UTC_RESERVATION_CATEGORY_COUNTER_DRIFT");
    for(const cat of ["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS"]){
-     if((old.get(cat)??0)+(upcoming.get(cat)??0)>
-        byCat.get(cat)!.planned)
+     if(byCat.get(cat)!.spent>(old.get(cat)??0)||
+        (old.get(cat)??0)+(upcoming.get(cat)??0)>byCat.get(cat)!.planned)
        hold("FIDS_SOURCE_CHARGE_DATE_CATEGORY_UNDERFUNDED");
    }
   }
