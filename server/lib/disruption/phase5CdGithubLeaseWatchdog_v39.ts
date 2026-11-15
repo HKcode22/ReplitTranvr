@@ -11,7 +11,7 @@
 import {
  reapP5CdExpiredLeasesOnceV39,type P5CdTaskExecutor,type P5CdQueueState
 } from "./phase5CdDurableQueueClient_v39";
-import {requireP5CdGithubPreRelease}
+import {requireP5CdGithubPreRelease,requireP5CdGithubCurrentLeaseRecoveryScope}
  from "./phase5CdGithubPreReleaseGate_v39";
 
 const CONFIRM="REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER";
@@ -24,7 +24,8 @@ export function requireP5CdLeaseWatchdogRelease(env:NodeJS.ProcessEnv){
     env.P5_CD_GH_WATCHDOG_CONFIRM!==CONFIRM||
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??""))
   deny("NOT_SEPARATELY_ENABLED_OR_CONFIRMED");
- return requireP5CdGithubPreRelease(env);
+ return env.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED==="1"?
+  requireP5CdGithubCurrentLeaseRecoveryScope(env):requireP5CdGithubPreRelease(env);
 }
 export interface P5CdLeaseWatchdogResult{
  schema:"v39.phase5.gh-lease-watchdog-no-autoretry.v1";
