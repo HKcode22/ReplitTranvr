@@ -6,7 +6,9 @@
  * Zero AeroDataBox HTTP, Alert, provider original, PRE/POST or source rights
  * inference. No Replit Shell, no new migrations, no retiming missed cutoffs.
  * This worker is MANUAL and INERT unless a separately signed Day1+ packet
- * exists AFTER its real early four-airport draw and Phase6 GO.
+ * exists AFTER its real early four-airport draw and actual freeze/rights/
+ * budget release. Explicit pre-arm mode permits preparation without paid
+ * acquisition GO. The existing armed mode stays distinct.
  */
 import {createHash} from "node:crypto";
 import {Pool} from "pg";
@@ -23,9 +25,28 @@ const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_-]{8,100}\.json$/;
 const PREFIX="REFUSED_P5_SIGNED_DAY_PREPARE_";
 export const P5_PRIVATE_PREPARE_CONFIRM=
  "ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET";
+export const P5_PRIVATE_PREARM_PREPARE_CONFIRM=
+ "ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_BEFORE_PAID_ARM";
 const PRIVATE_B64_LIMIT=48000;
 const PRIVATE_RAW_LIMIT=36000;
 const hold=(why:string):never=>{throw Error(PREFIX+why);};
+function prepareMode(env:NodeJS.ProcessEnv){
+ const prearm=env.P5_DAY_PREPARE_PRIVATE_CONFIRM===P5_PRIVATE_PREARM_PREPARE_CONFIRM;
+ if(prearm){
+  if(env.P5_DAY_PREPARE_PRIVATE_MODE!=="1"||
+     env.V39_P5_PREPARE_PREARM_APPROVED!=="1"||
+     env.V39_PHASE6_PROCESS_ARMED!=="0"||
+     env.V39_PHASE6_OWNER_APPROVED!=="0")
+   hold("PREARM_REQUIRES_SEPARATE_NONPAID_APPROVAL_AND_STOP");
+  return "PREARM_NONPAID" as const;
+ }
+ if(env.P5_DAY_PREPARE_PRIVATE_CONFIRM&&
+    env.P5_DAY_PREPARE_PRIVATE_CONFIRM!==P5_PRIVATE_PREPARE_CONFIRM)
+  hold("UNKNOWN_PRIVATE_PREPARATION_MODE");
+ if(env.V39_PHASE6_PROCESS_ARMED!=="1")
+  hold("UNSIGNED_GITHUB_MAIN_OR_SEPARATE_PHASE6_GO");
+ return "ARMED_STUDY_PREPARE" as const;
+}
 
 export interface P5SignedOneDayPreparePacket{
  schema:"v39.phase5.github-signed-one-day-source-preparation.v1";
@@ -45,7 +66,8 @@ export interface P5SignedOneDayPreparePacket{
  */
 export function loadP5PrivatePrepareReviewPacket(env:NodeJS.ProcessEnv){
  const encoded=env.P5_SOURCE_PREPARE_PRIVATE_PACKET_B64??"";
- if(env.P5_DAY_PREPARE_PRIVATE_CONFIRM!==P5_PRIVATE_PREPARE_CONFIRM||
+ if(![P5_PRIVATE_PREPARE_CONFIRM,P5_PRIVATE_PREARM_PREPARE_CONFIRM].includes(
+      env.P5_DAY_PREPARE_PRIVATE_CONFIRM??"")||
     env.P5_DAY_PREPARE_CONFIRM!=="ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"||
     env.P5_DAY_PREPARE_PRIVATE_MODE!=="1"||
     !/^(?:[1-9]|[12][0-9]|3[01])$/.test(env.P5_DAY_PREPARE_EXPECTED_DAY??"")||
@@ -98,9 +120,9 @@ export function admitP5SignedDayGitHubPrepare(
     env.AERODATABOX_API_KEY||env.AERODATABOX_WEBHOOK_SECRET||env.RAPIDAPI_KEY||
     env.V39_P5_PREPARE_OWNER_APPROVED!=="1"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||
-    env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
-    env.V39_PHASE6_PROCESS_ARMED!=="1")
+    env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1")
   hold("UNSIGNED_GITHUB_MAIN_OR_SEPARATE_PHASE6_GO");
+ const preparationMode=prepareMode(env);
  if(!FILE.test(filePath??"")||
     !Buffer.isBuffer(raw)||raw.length<100||raw.length>500_000||
     !SHA.test(env.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256??"")||
@@ -169,7 +191,7 @@ export function admitP5SignedDayGitHubPrepare(
  }))hold("NO_CROSS_ROLE_OR_APPLICATION_CONNECTION");
  return {
   schema:"v39.phase5.github-one-day-prepare-admitted.v1" as const,
-  runDayIndex:packet.runDayIndex,
+  runDayIndex:packet.runDayIndex,preparationMode,
   signedPacketSha256:env.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256!,
   manifestSha256:manifest!,
   reviewedPrepareInput:r
@@ -200,7 +222,7 @@ export async function runP5SignedDayGitHubPrepare(
   return {
    schema:"v39.phase5.github-one-signed-day-prepared.v1" as const,
    status:r.status,codeSha:env.GITHUB_SHA,
-   runDayIndex:r.runDayIndex,
+   runDayIndex:r.runDayIndex,preparationMode:admitted.preparationMode,
    signedPacketSha256:admitted.signedPacketSha256,
    preparedQueryRows:r.preparedQueryRows,
    preparedPartitionRows:r.preparedPartitionRows,
