@@ -31,6 +31,7 @@ function fake(mode:"ok"|"no-budget"|"no-denominator"="ok"){
    if(sql.includes("clean.flight_snapshots"))
      return {rowCount:1,rows:[{
       horizon:"T-24h",snapshots_seen:2,clock_order_candidate_pre:1,
+      unexpired_clock_order_candidate_pre:1,expired_clock_order_candidate_pre:0,expired_source_linked_pre:0,
      }]};
    if(sql===P5_DAILY_SOURCE_METRICS_SQL)
      return mode==="no-denominator"?{rowCount:0,rows:[]}:
@@ -42,7 +43,7 @@ function fake(mode:"ok"|"no-budget"|"no-denominator"="ok"){
        source_bound_before_planned_cutoff:1,
        source_bound_late_to_planned_cutoff:1,
        source_rights_metadata_expired:0,
-       population_observation_rows:"123",active_query_rows:4,
+       population_observation_rows:"123",currently_linked_population_rows:"123",active_query_rows:4,
        stopped_query_rows:0,
       }]};
    throw Error("UNEXPECTED_SQL_IN_READ_ONLY_TEST");
@@ -63,6 +64,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(r.totalBoundOriginals).toBe(2);
   expect(r.sourceQueryGroups[0].missedGetWindow).toBe(1);
   expect(r.sourceQueryGroups[0].populationObservationRows).toBe(123);
+  expect(r.sourceQueryGroups[0].currentlyLinkedPopulationRows).toBe(123);
   expect(r.earlySample.distinctAirports).toBe(4);
   expect(r.preCandidateSnapshots[0].clockOrderCandidates).toBe(1);
   expect(r.actualFlightLevelPreCertified).toBe(false);
@@ -80,6 +82,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("raw_body");
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("SELECT *");
   expect(P5_DAILY_SOURCE_METRICS_SQL).toContain("prediction_cutoff_utc");
+  expect(P5_DAILY_SOURCE_METRICS_SQL).toContain("SUM(b.normalized_members_count)");
  });
  it("queries canonical PRE_DEPARTURE rows, NOT the invalid PRE alias",()=>{
   expect(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL).toContain("s.prediction_state='PRE_DEPARTURE'");
@@ -95,7 +98,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(sql).toContain("s.created_at<=s.prediction_cutoff_utc");
   expect(sql).toContain("s.created_at<b.source_expires_at_utc");
   expect(sql).toContain("q.horizon=s.horizon");
-  expect(sql).toContain("COUNT(DISTINCT s.id)");
+  expect(sql).toContain("COUNT(DISTINCT id)");
   expect(sql).toContain("EXISTS (SELECT 1 FROM clean.flight_population fp");
   expect(sql).toContain("fp.canonical_flight_instance_id=s.flight_instance_id");
   expect(sql).toContain("fp.population_role='requested_airport_primary'");
@@ -181,6 +184,17 @@ describe("Phase5 Day1 actual source QA: hard budget/ledger vs ordinary recorded 
   a.preCandidateSnapshots[0].clockOrderCandidates=3;
   expect(assessP5Day1SourceSafetyFromReadonlyAudit(a).status)
    .toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+ });
+ it("expired source receipt is not a missed collection or currently usable feature proof",async()=>{
+  const a=await actual(),p=a.preCandidateSnapshots[0];
+  Object.assign(p,{rowsSeen:2,clockOrderCandidates:0,unexpiredClockOrderCandidates:0,
+   expiredClockOrderCandidates:0,expiredSourceLinkedSnapshots:2});
+  const r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.measuredSourceLoss).toContain("EXPIRED_LINKED_PRE_RECEIPTS_NOT_MISSED_COLLECTION_OR_CURRENT_USABLE_DATA");
+  expect(r.measuredSourceLoss).not.toContain("PRE_CANDIDATE_CLOCK_OR_PROVENANCE_LOSS");
+  expect(r.expiredReceiptCertifiesHistoricalPreOrCurrentTrainingData).toBe(false);
+  p.expiredSourceLinkedSnapshots=3;
+  expect(assessP5Day1SourceSafetyFromReadonlyAudit(a).hardHolds).toContain("PRE_EXPIRY_COUNTER_PARTITION_CONTRADICTION");
  });
  it("holding incomplete four-site draw does not assert physical GO",async()=>{
   const a=await actual();

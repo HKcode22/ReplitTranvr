@@ -34,7 +34,8 @@ export const P5_DAILY_SOURCE_METRICS_SQL=[
  " r.available_at>q.prediction_cutoff_utc)::integer source_bound_late_to_planned_cutoff,",
  "COUNT(*) FILTER(WHERE b.population_query_id IS NOT NULL AND",
  " b.source_expires_at_utc <= $3::timestamptz)::integer source_rights_metadata_expired,",
- "COALESCE(SUM(p.members),0)::bigint population_observation_rows,",
+ "COALESCE(SUM(b.normalized_members_count),0)::bigint population_observation_rows,",
+ "COALESCE(SUM(p.members),0)::bigint currently_linked_population_rows,",
  "COUNT(*) FILTER(WHERE q.state='ACTIVE')::integer active_query_rows,",
  "COUNT(*) FILTER(WHERE q.state='STOPPED')::integer stopped_query_rows",
  "FROM clean.phase5_fids_allowed_query_v39 q",
@@ -78,24 +79,34 @@ const DRAW_SQL=[
  * permission to retain source Content; final scientific PRE remains HOLD.
  */
 export const P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL=[
- "SELECT s.horizon,COUNT(DISTINCT s.id)::integer snapshots_seen,",
- "COUNT(DISTINCT s.id) FILTER (WHERE",
- " s.created_at<=s.prediction_cutoff_utc",
- " AND s.selected_t_milestone_utc IS NOT NULL",
+ "WITH linked AS (SELECT s.id,s.horizon,",
+ " (b.source_expires_at_utc <= $3::timestamptz OR r.raw_expired_at_utc IS NOT NULL) AS expired,",
+ // B0062 clears the original response hash on compliant purge.
+ // The binding is a source receipt, not reconstructable member evidence.
+ " (s.fids_response_hash=b.response_hash AND (r.response_hash=b.response_hash",
+ " OR (r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NULL))) AS hash_match,",
+ " (s.created_at<=s.prediction_cutoff_utc AND s.created_at<= $3::timestamptz",
+ " AND r.available_at<=s.created_at AND s.selected_t_milestone_utc IS NOT NULL",
  " AND s.selected_t_version IS NOT NULL",
+ " AND s.selected_t_milestone_utc-s.prediction_cutoff_utc=CASE s.horizon",
+ " WHEN 'T-24h' THEN interval '24 hours' WHEN 'T-6h' THEN interval '6 hours'",
+ " WHEN 'T-90m' THEN interval '90 minutes' END",
+ " AND s.created_at<b.source_expires_at_utc",
  " AND s.fids_response_hash=r.response_hash",
  " AND s.fids_response_hash=b.response_hash",
  " AND r.available_at<=s.prediction_cutoff_utc",
- " AND s.created_at<b.source_expires_at_utc",
  " AND EXISTS (SELECT 1 FROM clean.flight_population fp",
  " WHERE fp.population_query_id=b.population_query_id",
  " AND fp.canonical_flight_instance_id=s.flight_instance_id",
  " AND fp.source_type='fids'",
  " AND fp.population_role='requested_airport_primary'",
+ " AND fp.scope_classification='confirmed_core'",
+ " AND fp.codeshare_resolution_status='confirmed_operating_leg'",
  " AND fp.source_airport_icao=q.airport_icao",
  " AND fp.response_hash=r.response_hash",
- " AND fp.available_at<=s.prediction_cutoff_utc)",
- ")::integer clock_order_candidate_pre",
+ " AND fp.available_at<=s.prediction_cutoff_utc",
+ " AND fp.available_at<=s.created_at",
+ " AND fp.provider_content_expired_at_utc IS NULL)) AS candidate",
  "FROM clean.flight_snapshots s",
  "JOIN clean.phase5_fids_original_binding_v39 b",
  " ON b.population_query_id::text=s.population_query_id",
@@ -107,9 +118,15 @@ export const P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL=[
  " ON r.population_query_id=b.population_query_id",
  " AND r.source_airport_icao=q.airport_icao",
  "WHERE s.prediction_state='PRE_DEPARTURE'",
- " AND q.manifest_sha256=$1 AND q.run_day_index=$2",
- "GROUP BY s.horizon",
+ " AND q.manifest_sha256=$1 AND q.run_day_index=$2)",
+ "SELECT horizon,COUNT(DISTINCT id)::integer snapshots_seen,",
+ " COUNT(DISTINCT id) FILTER (WHERE candidate)::integer clock_order_candidate_pre,",
+ " COUNT(DISTINCT id) FILTER (WHERE candidate AND NOT expired)::integer unexpired_clock_order_candidate_pre,",
+ " COUNT(DISTINCT id) FILTER (WHERE candidate AND expired)::integer expired_clock_order_candidate_pre,",
+ " COUNT(DISTINCT id) FILTER (WHERE expired AND hash_match)::integer expired_source_linked_pre",
+ " FROM linked GROUP BY horizon",
 ].join(" ");
+
 
 export interface Phase5DayQualityRow {
  slot:string;horizon:string;plannedQueries:number;
@@ -117,7 +134,7 @@ export interface Phase5DayQualityRow {
  missedGetWindow:number;notYetDue:number;
  reservedWithoutOriginalAfterCutoff:number;
  sourceBoundBeforePlannedCutoff:number;sourceBoundLateToPlannedCutoff:number;
- sourceRightsMetadataExpired:number;populationObservationRows:number;
+ sourceRightsMetadataExpired:number;populationObservationRows:number;currentlyLinkedPopulationRows:number;
  activeQueryRows:number;stoppedQueryRows:number;
 }
 export interface Phase5DaySourceQualityResult {
@@ -133,7 +150,8 @@ export interface Phase5DaySourceQualityResult {
   dailySourceReservedUnits:number;
  };
  earlySample:{drawRows:number;distinctSlots:number;distinctAirports:number};
- preCandidateSnapshots:{horizon:string;rowsSeen:number;clockOrderCandidates:number}[];
+ preCandidateSnapshots:{horizon:string;rowsSeen:number;clockOrderCandidates:number;
+  unexpiredClockOrderCandidates:number;expiredClockOrderCandidates:number;expiredSourceLinkedSnapshots:number}[];
  totalPlannedQueries:number;
  totalBoundOriginals:number;
  actualFlightLevelPreCertified:false;
@@ -164,7 +182,7 @@ export async function auditPhase5SourceDay(
    client.query(BUDGET_SQL,[manifestSha256,day]),
    client.query(P5_DAILY_SOURCE_METRICS_SQL,[manifestSha256,day,asOfUtc]),
    client.query(DRAW_SQL,[day]),
-   client.query(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,[manifestSha256,day]),
+   client.query(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,[manifestSha256,day,asOfUtc]),
   ]);
   if(budget.rowCount!==1)refuse("DAY_BUDGET_NOT_INSTALLED_OR_FROZEN");
   if(rows.rows.length===0)refuse("NO_SIGNED_SOURCE_QUERY_DENOMINATOR");
@@ -182,6 +200,7 @@ export async function auditPhase5SourceDay(
    sourceBoundLateToPlannedCutoff:safeInt(r.source_bound_late_to_planned_cutoff),
    sourceRightsMetadataExpired:safeInt(r.source_rights_metadata_expired),
    populationObservationRows:safeInt(r.population_observation_rows),
+   currentlyLinkedPopulationRows:safeInt(r.currently_linked_population_rows),
    activeQueryRows:safeInt(r.active_query_rows),
    stoppedQueryRows:safeInt(r.stopped_query_rows),
   }));
@@ -208,6 +227,9 @@ export async function auditPhase5SourceDay(
     horizon:String(r.horizon),
     rowsSeen:safeInt(r.snapshots_seen),
     clockOrderCandidates:safeInt(r.clock_order_candidate_pre),
+    unexpiredClockOrderCandidates:safeInt(r.unexpired_clock_order_candidate_pre),
+    expiredClockOrderCandidates:safeInt(r.expired_clock_order_candidate_pre),
+    expiredSourceLinkedSnapshots:safeInt(r.expired_source_linked_pre),
    })),
    totalPlannedQueries:groups.reduce((n,r)=>n+r.plannedQueries,0),
    totalBoundOriginals:groups.reduce((n,r)=>n+r.boundOriginals,0),
@@ -286,7 +308,8 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
   reservedWithoutOriginalAfterCutoff:0,
   boundLateToPlannedCutoff:0,
   sourceRightsMetadataExpired:0,
-  preRowsSeen:0,preClockOrderCandidates:0
+  preRowsSeen:0,preClockOrderCandidates:0,
+  preUnexpiredClockOrderCandidates:0,preExpiredClockOrderCandidates:0,preExpiredSourceLinkedSnapshots:0
  };
  const seen=new Set<string>();
  for(const g of audit.sourceQueryGroups){
@@ -299,7 +322,7 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
    "plannedQueries","reservedPhysicalGets","boundOriginals",
    "missedGetWindow","notYetDue","reservedWithoutOriginalAfterCutoff",
    "sourceBoundBeforePlannedCutoff","sourceBoundLateToPlannedCutoff",
-   "sourceRightsMetadataExpired","populationObservationRows",
+   "sourceRightsMetadataExpired","populationObservationRows","currentlyLinkedPopulationRows",
    "activeQueryRows","stoppedQueryRows"
   ] as const)strictCount(g[label],"GROUP_"+label);
   totals.plannedQueries+=g.plannedQueries;
@@ -320,6 +343,7 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
      g.reservedWithoutOriginalAfterCutoff>
        g.reservedPhysicalGets-g.boundOriginals||
      g.sourceRightsMetadataExpired>g.boundOriginals||
+     g.currentlyLinkedPopulationRows>g.populationObservationRows||
      g.activeQueryRows+g.stoppedQueryRows>g.plannedQueries)
    ledgerHolds.push("SOURCE_QUERY_RESERVATION_OR_ORIGINAL_COUNTER_CONTRADICTION");
  }
@@ -334,6 +358,17 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
   seenH.add(p.horizon);
   strictCount(p.rowsSeen,"PRE_SEEN");
   strictCount(p.clockOrderCandidates,"PRE_CLOCK_ORDER");
+  strictCount(p.unexpiredClockOrderCandidates,"PRE_UNEXPIRED_CLOCK_ORDER");
+  strictCount(p.expiredClockOrderCandidates,"PRE_EXPIRED_CLOCK_ORDER");
+  strictCount(p.expiredSourceLinkedSnapshots,"PRE_EXPIRED_SOURCE_LINKED");
+  totals.preUnexpiredClockOrderCandidates+=p.unexpiredClockOrderCandidates;
+  totals.preExpiredClockOrderCandidates+=p.expiredClockOrderCandidates;
+  totals.preExpiredSourceLinkedSnapshots+=p.expiredSourceLinkedSnapshots;
+  if(p.unexpiredClockOrderCandidates+p.expiredClockOrderCandidates!==p.clockOrderCandidates||
+     p.expiredClockOrderCandidates>p.expiredSourceLinkedSnapshots||
+     p.expiredSourceLinkedSnapshots>p.rowsSeen||
+     p.unexpiredClockOrderCandidates+p.expiredSourceLinkedSnapshots>p.rowsSeen)
+   ledgerHolds.push("PRE_EXPIRY_COUNTER_PARTITION_CONTRADICTION");
   totals.preRowsSeen+=p.rowsSeen;
   totals.preClockOrderCandidates+=p.clockOrderCandidates;
   if(p.clockOrderCandidates>p.rowsSeen)
@@ -357,7 +392,12 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
   qualityFlags.push("LATE_TO_PLANNED_QUERY_CUTOFF_CHECK_EACH_FLIGHT_ASOF");
  if(totals.sourceRightsMetadataExpired>0)
   qualityFlags.push("EXPIRED_SOURCE_NOT_AVAILABLE_FOR_FURTHER_USE");
- if(totals.preRowsSeen>totals.preClockOrderCandidates)
+ // An expired original may have lost the eligible member needed to
+ // recompute a historical proof. Its linked receipt is not a certified
+ // successful PRE, but neither is it proof of a missed collection.
+ if(totals.preExpiredSourceLinkedSnapshots>0)
+  qualityFlags.push("EXPIRED_LINKED_PRE_RECEIPTS_NOT_MISSED_COLLECTION_OR_CURRENT_USABLE_DATA");
+ if(totals.preRowsSeen>totals.preUnexpiredClockOrderCandidates+totals.preExpiredSourceLinkedSnapshots)
   qualityFlags.push("PRE_CANDIDATE_CLOCK_OR_PROVENANCE_LOSS");
  const hard=ledgerHolds.some(x=>
   x!=="FOUR_AIRPORT_DRAW_NOT_RECONCILED");
@@ -381,6 +421,10 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
   missingSourceMeansNegativeOutcome:false as const,
   lateOriginalMayBackfillPre:false as const,
   successfulPreCertifiedByCounters:false as const,
+  expiredReceiptCertifiesHistoricalPreOrCurrentTrainingData:false as const,
+  unexpiredMetadataProvesRawPresenceOrRights:false as const,
+  historicalPopulationCountFromImmutableOriginalBinding:true as const,
+  expiredPopulationMembersDoNotEraseHistoricalObservationCount:true as const,
   optionalAdsbOrWeatherMissingMustBlockPre:false as const,
   independentStopOrContinueAuthorizedByThisFunction:false as const,
   scientificPhase5FreezeGranted:false as const,
