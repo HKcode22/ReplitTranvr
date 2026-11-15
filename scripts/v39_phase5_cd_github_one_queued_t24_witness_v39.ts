@@ -55,7 +55,7 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
 /** Same original singleton PRE and independent witness; no private bytes
  * written to a checkout. The private runtime reauthenticates after waiting. */
 export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,rosterBytes:Buffer,roster:P5CdFrozenRoster,
- files:{filePath:string;packetSha256:string;bytes:Buffer}[],afterWait?:()=>Promise<void>){
+ files:{filePath:string;packetSha256:string;bytes:Buffer}[],afterWait?:()=>Promise<boolean>){
  const released=requireP5CdGithubPreRelease(env,{allowReviewedT24Witness:true});
  requireP5CdT24DispatchEvent(env);
  if(!Array.isArray(roster.entries)||roster.entries.length!==1||files.length!==1)
@@ -100,7 +100,12 @@ export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,ros
    env,pre,packets,undefined,{allowReviewedT24Witness:true});
   if(clock.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED")
    hold("T24_DB_CLOCK_LOOKAHEAD_EXHAUSTED_NO_REPLAY");
-  if(afterWait)await afterWait();
+  if(afterWait&&(clock.status!=="DUE_WINDOW"||!await afterWait()))return {
+   schema:"v39.phase5.queued-t24-pre-independent-v0081-witness.v1" as const,
+   status:"NO_DUE_SIGNED_T24_TASK" as const,taskId:null,committedSnapshotId:null,registeredTaskWasSourceBound:false,
+   stage17WitnessCommittedAndReadBack:false,unsignedStage24ReceiptCandidate:null,providerCalls:0 as const,paidProviderCalls:0 as const,
+   queuedTasksInserted:0 as const,phase5ScientificFreezePassed:false as const,phase6PaidGo:false as const,
+   dbClockDueWindow:clock,privateCustodyCommittedAndReadBack:false};
   const result=await runP5CdOneQueuedT24Witness(env,{
    preDb:pre,prePool:pre,witnessPool:witness,
    rosterBytes,roster,files
