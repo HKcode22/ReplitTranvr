@@ -5,7 +5,7 @@
  * A signed packet digest is still not a provider Contents license.
  * All facts and native first T must be verified in V0091 PG16.
  */
-import type {P5CdGithubPreRelease}
+import {readP5CdStandaloneLaterProtocol,type P5CdGithubPreRelease}
  from "./phase5CdGithubPreReleaseGate_v39";
 const SHA=/^[0-9a-f]{40}$/;
 const HASH=/^[0-9a-f]{64}$/;
@@ -65,8 +65,10 @@ export function requireP5CdGithubPrepareAdmission(
     !url.password||url.pathname!=="/neondb"||url.hash||
     !url.hostname||["localhost","127.0.0.1","::1"].includes(url.hostname))
   deny("UNREVIEWED_OR_SHARED_APPLICATION_DB_ROLE");
+ const standalone=readP5CdStandaloneLaterProtocol(env);
  return {
   gate:{
+   ...(standalone?{independentlyApprovedStandaloneProtocolSha256:standalone}:{}),
    schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
    releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
    approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,

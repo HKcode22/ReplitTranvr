@@ -87,6 +87,8 @@ jobs:
       P5_CD_GH_PRE_EXECUTE: '1'
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_STANDALONE_LATER_APPROVED: ${{ secrets.P5_CD_GH_STANDALONE_LATER_APPROVED }}
+      P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256: ${{ secrets.P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256 }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
       # Missing or blank => existing single two-task tick; never implicit burst.
       P5_CD_GH_BURST_TICKS: ${{ vars.P5_CD_GH_BURST_TICKS }}
