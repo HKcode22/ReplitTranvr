@@ -1,11 +1,12 @@
 import type {P5SignedOneDayPreparePacket} from "../../../scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39";
 type Client={query:(sql:string,values?:any[])=>Promise<any>};
-type Trust={
+import type {P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
+type Trust=P5TypedSourceBudgetBinding&{
  independentDailyReviewerTrustApproved:true;runDayIndex:number;reviewedCodeSha:string;
  manifestSha256:string;calendarSha256:string;configSha256:string;frameSha256:string;
  releaseSha256:string;rightsSha256:string;providerContractSha256:string;
  policySha256:string;dayPlanSha256:string;reviewerFingerprintSha256:string;
- reviewed31DaySourceRequestGridSha256:string;reviewedCategoryBudgetSha256:string;
+ reviewedCategoryBudgetSha256:string;
  reviewerPublicKeyPem:string;maximumRetentionHours:number;policyValidFromUtc:string;policyValidUntilUtc:string
 };
 type Scope={privateDailyReviewTransportApproved:boolean;existingPaidDispatchApproved:boolean;

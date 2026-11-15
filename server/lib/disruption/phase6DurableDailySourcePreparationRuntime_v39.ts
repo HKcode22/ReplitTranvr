@@ -11,6 +11,7 @@ import {readP6DayEpochRestrictedReaderClock} from "./phase6DayEpochSignedIndexOn
 import {p6DailyPrepareReviewPreimage,P6_DAILY_PREPARE_REVIEW_SCHEMA,
  publishP6DailyPrepareReviewOnce,readP6DailyPrepareReviewOnce}
  from "./phase6PrivateDailyPrepareReviewTransport_v39.mjs";
+import {sameP5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const hash=(bytes:Buffer)=>createHash("sha256").update(bytes).digest("hex");
 const hold=(s:string):never=>{throw Error("HOLD_P6_DURABLE_PREPARE_RUNTIME_"+s);};
 type ProduceArgs=Parameters<typeof produceP6DelegatedDailySourceReview>[0];
@@ -50,8 +51,9 @@ export async function runP6DurableDailySourcePreparation({
     policy.approvedCodeSha!==trust.reviewedCodeSha||
     policy.validFromUtc!==trust.policyValidFromUtc||policy.validUntilUtc!==trust.policyValidUntilUtc||
     !["manifestSha256","calendarSha256","configSha256","frameSha256","releaseSha256","rightsSha256",
-      "providerContractSha256","reviewed31DaySourceRequestGridSha256","reviewedCategoryBudgetSha256"]
+      "providerContractSha256","reviewedCategoryBudgetSha256"]
      .every(k=>policy[k]===trust[k as keyof Trust])||
+    !sameP5TypedSourceBudgetBinding(policy,trust)||
     !Array.isArray(policy.dayPlanSha256s)||policy.dayPlanSha256s.length!==31||
     policy.dayPlanSha256s[trust.runDayIndex-1]?.runDayIndex!==trust.runDayIndex||
     policy.dayPlanSha256s[trust.runDayIndex-1]?.sha256!==trust.dayPlanSha256)

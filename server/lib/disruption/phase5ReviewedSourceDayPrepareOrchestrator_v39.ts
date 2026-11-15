@@ -25,6 +25,7 @@ import {
  type P5V0082AtomicDayReview
 } from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
 import {planP6StoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
+import {normalizeP5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const hold=(m:string):never=>{
  throw Error("REFUSED_P5_SOURCE_DAY_REVIEWED_PIPELINE_"+m);
@@ -57,9 +58,9 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
       input.stage9Review.expectedProviderContractSha256,
       input.stage9Review.expectedReleaseSha256,
       input.stage9Review.expectedRightsReviewSha256,
-      input.stage9Review.reviewed31DaySourceRequestGridSha256,
       input.stage9Review.reviewedCategoryBudgetSha256]
-     .every(v=>typeof v==="string"&&SHA.test(v)))
+     .every(v=>typeof v==="string"&&SHA.test(v))||
+     !normalizeP5TypedSourceBudgetBinding(input.stage9Review))
    hold("INCOMPLETE_SEPARATELY_REVIEWED_QUERY_AND_BUDGET");
  if(!readOnlyPool||typeof readOnlyPool.connect!=="function"||
     !insertOnlyPool||typeof insertOnlyPool.connect!=="function")
