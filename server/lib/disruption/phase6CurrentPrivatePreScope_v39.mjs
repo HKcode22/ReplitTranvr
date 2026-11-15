@@ -6,6 +6,7 @@
 import {AsyncLocalStorage} from "node:async_hooks";
 import {createHash} from "node:crypto";
 import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
+import {readP6PrivateLaterQueueRoster} from "./phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 const storage=new AsyncLocalStorage();
 const fail=s=>{throw Error("REFUSED_P5_CD_GH_CURRENT_PRIVATE_SCOPE_"+s);};
 const HASH=/^[a-f0-9]{64}$/;
@@ -57,9 +58,7 @@ export async function withP6AuthenticatedCurrentPrivateRoster({client,env,select
   protocolEnabled=env.P5_CD_GH_STANDALONE_LATER_APPROVED||"";
  if(policy?.independentlyApprovedStandaloneProtocolSha256!==(protocolEnabled==="1"?protocol:undefined))
   fail("STANDALONE_PROTOCOL_DRIFT");
- // Lazy load keeps the pure admission gate and old writer out of a static
- // import cycle with the existing roster reader/Stage14 verifier.
- const {readP6PrivateLaterQueueRoster}=await import("./phase6PrivateLaterQueueRosterReadOnce_v39.mjs");
+ // Imported function is called only here, after module initialization.
  const p=await readP6PrivateLaterQueueRoster({client,trust,selector,policy});
  if(p.status!=="VERIFIED_PRIVATE_LATER_QUEUE_ROSTER_PROJECTION_NO_GO"||
     p.day!==selector.runDayIndex||p.revision!==selector.indexRevision||
