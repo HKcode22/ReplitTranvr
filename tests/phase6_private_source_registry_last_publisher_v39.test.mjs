@@ -8,6 +8,7 @@ import {
  verifyP6ExternalSourceRegistryLastReview,
  publishP6SourceDayRegistryLastOnce
 } from "../server/lib/disruption/phase6PrivateSourceRegistryLastPublisher_v39.mjs";
+import {P6_SOURCE_POST_REVIEW_SCHEMA,P6_SOURCE_POST_REVIEW_AUDIENCE,signedP6PrivateSourcePostReviewBytes} from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
 const hash=b=>createHash("sha256").update(b).digest("hex");
 const kp=generateKeyPairSync("ed25519");
 const pem=kp.publicKey.export({format:"pem",type:"spki"}).toString();
@@ -76,7 +77,8 @@ function fixture(){
   approvedReleaseSha256:review.releaseSha256,
   approvedRightsSha256:review.rightsSha256
  };
- function db({missing=false,changed=false,duplicate=false,
+ const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_checks",reviewedCodeSha:review.reviewedCodeSha,manifestSha256:review.manifestSha256,calendarSha256:review.calendarSha256,releaseSha256:review.releaseSha256,rightsSha256:review.rightsSha256,dayReviewerFingerprintSha256:fp,queryReviewerFingerprintSha256:fp,queryReviewerPublicKeyPem:pem};
+ function db({storedFault="",missing=false,changed=false,duplicate=false,
   wrongRole=false,broadAcl=false,unknownCommit=false,expired=false}={}){
   const calls=[];
   const client={async query(sql,params=[]){
@@ -111,6 +113,23 @@ function fixture(){
      committed_at_utc:new Date("2026-11-14T01:59:00Z"),
      retention_not_after_utc:new Date(E)
     }));
+    if(sql.includes("review_wire_bytes")){
+     for(const row of rows){
+      const rev={schema:P6_SOURCE_POST_REVIEW_SCHEMA,audience:P6_SOURCE_POST_REVIEW_AUDIENCE,
+       kind:"SOURCE_QUERY_PACKET",logicalPath:row.logical_path,contentSha256:row.content_sha256,
+       reviewedCodeSha:review.reviewedCodeSha,manifestSha256:review.manifestSha256,rightsSha256:review.rightsSha256,
+       runDayIndex:1,shardIndex:1,externalReviewEvidenceSha256:"9".repeat(64),
+       reviewedAtUtc:A,retentionNotAfterUtc:E,
+       validUntilUtc:storedFault==="short"?"2026-11-14T02:30:00.000Z":review.validUntilUtc,
+       reviewerPublicKeyFingerprintSha256:fp};
+      const w={review:rev,signatureBase64:sign(null,signedP6PrivateSourcePostReviewBytes(rev),kp.privateKey).toString("base64")};
+      if(storedFault==="forged")w.signatureBase64=Buffer.alloc(64).toString("base64");
+      Object.assign(row,{shard_index:storedFault==="shard"?2:1,
+       external_review_sha256:rev.externalReviewEvidenceSha256,
+       externally_reviewed_at_utc:new Date(storedFault==="clock"?N:A),
+       review_wire_bytes:storedFault==="missing"?null:Buffer.from(JSON.stringify(w)+(storedFault==="nonexact"?" ":""))});
+     }
+    }
     const out=missing?rows.slice(0,-1):rows;
     return{rowCount:out.length,rows:out};
    }
@@ -122,7 +141,7 @@ function fixture(){
   }};
   return{client,calls};
  }
- return{entries,registryBytes,review,wire,pins,scope,db};
+ return{entries,registryBytes,review,wire,pins,scope,trust,db};
 }
 test("valid external signature and matching exact ordered entry digest",()=>{
  const f=fixture();
@@ -196,4 +215,26 @@ test("unknown COMMIT is an independently readback-only HOLD, never retry",async(
  assert.equal(d.calls.filter(c=>c.sql==="COMMIT").length,1);
  assert.equal(d.calls.filter(c=>c.sql.startsWith("INSERT INTO")).length,1);
  assert(!d.calls.some(c=>c.sql==="ROLLBACK"));
+});
+
+test("stored registry requires every committed query's exact usable signed review",async()=>{
+ const f=fixture();
+ for(const fault of ["","missing","forged","shard","clock","nonexact","short"]){
+  const d=f.db({storedFault:fault});
+  const invoke=()=>publishP6SourceDayRegistryLastOnce({client:d.client,registryBytes:f.registryBytes,
+   reviewWire:f.wire,reviewerPublicKeyPem:pem,pins:f.pins,
+   scope:{...f.scope,requireStoredQueryReviews:true,storedQueryReviewTrust:f.trust}});
+  if(fault){
+   await assert.rejects(invoke(),/HOLD_P6_SOURCE_REGISTRY_LAST_/);
+   assert(!d.calls.some(c=>c.sql.startsWith("INSERT INTO")||c.sql==="COMMIT"));
+  }else{
+   assert.equal((await invoke()).storedConstituentReviewsVerified,true);
+   assert(d.calls.some(c=>c.sql==="COMMIT"));
+  }
+ }
+ const d=f.db();
+ await assert.rejects(publishP6SourceDayRegistryLastOnce({client:d.client,registryBytes:f.registryBytes,
+  reviewWire:f.wire,reviewerPublicKeyPem:pem,pins:f.pins,
+  scope:{...f.scope,requireStoredQueryReviews:true,storedQueryReviewTrust:{...f.trust,rightsSha256:"0".repeat(64)}}}),/STORED_QUERY_REVIEW_TRUST/);
+ assert.equal(d.calls.length,0);
 });
