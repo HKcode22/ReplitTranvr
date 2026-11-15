@@ -88,7 +88,7 @@ export function admitP5FuturePostGithubParent(env:NodeJS.ProcessEnv){
  return{path:pins.frozenPacketPath,conn:env.V39_P5_SOURCE_DATABASE_URL!,
   pins,githubToken:env.GITHUB_TOKEN!};
 }
-async function readActualValidPreAndClock(
+export async function readActualValidPreAndClock(
  connectionString:string,p:P5ReviewedFuturePostOneGet
 ):Promise<{pre:P5FuturePostActualPreReadback;dbClockUtc:string}>{
  const raw=new Pool({connectionString,max:1,connectionTimeoutMillis:8000,
