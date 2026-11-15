@@ -18,7 +18,7 @@ import type {P5SignedLaterPreDayRegistry}
 import type {P5SignedSourceBatchRegistry}
  from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 
-import {prepareP6ReviewedLaterShardAppend,commitP6ExternallyReviewedLaterAppend}
+import {prepareP6ReviewedLaterShardAppend,commitP6ExternallyReviewedLaterAppend,runP6DelegatedReviewedLaterAppend}
  from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39";
 import {P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
  p6DayEpochReviewPreimage,publishP6DayEpochIndexRevisionOnce}
@@ -33,7 +33,7 @@ const sourceEvidence=H("8");
 let owner:Client,publisher:Client,sourceRaw:Buffer,clock:number;
 
 const format=(t:number)=>new Date(t).toISOString();
-function reviewedShard(suffix:string){
+function reviewedShard(suffix:string,shardIndex=1){
  const packetPath="data-collection/phase5/frozen/later_packet_appendci_"+suffix+".json";
  const registryPath="data-collection/phase5/frozen/later_day_appendci_"+suffix+".json";
  const native=format(clock+7*3600_000);
@@ -59,7 +59,7 @@ function reviewedShard(suffix:string){
   schema:"v39.phase5.signed-later-pre-day-registry.v1",
   manifestSha256:H("1"),reviewedCodeSha:code,
   sourceDayRegistrySha256:sha(sourceRaw),
-  sourceDayRegistryFilePath:sourcePath,runDayIndex:17,shardIndex:1,
+  sourceDayRegistryFilePath:sourcePath,runDayIndex:17,shardIndex,
   entries:[{
    filePath:packetPath,expectedPacketSha256:sha(packetBytes),
    expectedQueryDigestSha256:H("2"),
@@ -110,7 +110,7 @@ function reviewedShard(suffix:string){
   proposedRegistrySha256:sha(registryBytes),
   proposedRegistryFilePath:registryPath,
   packetFileManifestSha256:digestP5LaterShardPrivatePacketFileManifest(plan),
-  runDayIndex:17,shardIndex:1,
+  runDayIndex:17,shardIndex,
   reviewedAtUtc:format(clock-60_000),
   validUntilUtc:format(clock+3*3600_000),
   independentReviewerEvidenceDigestSha256:H("9")
@@ -206,5 +206,34 @@ try{
  const packets=await owner.query("SELECT count(*)::int AS n FROM "+table+" WHERE run_day_index=17");
  assert.equal(packets.rows[0].n,3);
  await assert.rejects(publisher.query("DELETE FROM "+table+" WHERE logical_path=$1",[f.registryPath]),(e:any)=>e.code==="42501");
+
+ const next=reviewedShard("auto017",2),auto={...input,plan:next.plan,wire:next.wire,
+  reviewerPublicKeyPem:next.publicPem,reviewerPins:next.pins,publisherScope:next.scope,
+  scope:{...input.scope,expectedLaterReviewerFingerprintSha256:next.pins.expectedReviewerPublicKeyFingerprintSha256}};
+ const policyBytes=Buffer.from(JSON.stringify({
+  schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,
+  approvedCodeSha:code,manifestSha256:manifest,calendarSha256:calendar,releaseSha256:release,rightsSha256:rights,
+  dayReviewerFingerprintSha256:fp,queryReviewerFingerprintSha256:trust.queryReviewerFingerprintSha256,
+  laterReviewerFingerprintSha256:next.pins.expectedReviewerPublicKeyFingerprintSha256,
+  maximumIndexRevision:1024,validFromUtc:at(-60000),validUntilUtc:at(6*3600000)
+ }));
+ const approval={policyBytes,expectedPolicySha256:sha(policyBytes),dayReviewerKey:dayKey.privateKey,
+  independentlyApprovedDelegatedDayAppend:true as const,noProviderCredentialsInSigner:true as const};
+ await assert.rejects(runP6DelegatedReviewedLaterAppend(auto,{...approval,dayReviewerKey:queryKey.privateKey}),/WRONG_PRIVATE_KEY/);
+ await assert.rejects(runP6DelegatedReviewedLaterAppend(auto,{...approval,expectedPolicySha256:H("0")}),/POLICY_NOT_INDEPENDENTLY_PINNED/);
+ const got=await runP6DelegatedReviewedLaterAppend(auto,approval);
+ assert.equal(got.status,"REVIEWED_LATER_SHARD_AND_SIGNED_DAY_APPEND_ACTUAL_READBACK_NO_GO");
+ assert.equal(got.automatedDelegatedDaySignatureIssued,true);
+ assert.equal(got.insertedPrivateRows,2);
+ assert.equal(got.phase6PaidGo,false);
+ const again=await runP6DelegatedReviewedLaterAppend(auto,approval);
+ assert.equal(again.status,"EXACT_LATER_SHARD_ALREADY_IN_SIGNED_DAY_NO_REPLAY");
+ assert.equal(again.automatedDelegatedDaySignatureIssued,false);
+ assert.equal(again.insertedPrivateRows,0);
+ const q2=await owner.query("SELECT count(*)::int AS n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=17");
+ assert.equal(q2.rows[0].n,3);
+ const rows2=await owner.query("SELECT count(*)::int AS n FROM "+table+" WHERE run_day_index=17");
+ assert.equal(rows2.rows[0].n,5);
+ console.log("PASS_REAL_PG16_DELEGATED_LATER_APPEND_DISTINCT_SIGNING_KEY_READBACK_NO_REPLAY_SYNTHETIC_ONLY");
  console.log("PASS_REAL_PG16_REVIEWED_LATER_APPEND_READBACK_AND_NO_REPLAY_SYNTHETIC_ONLY");
 }finally{await Promise.allSettled([reader.end(),publisher.end(),owner.end()]);}
