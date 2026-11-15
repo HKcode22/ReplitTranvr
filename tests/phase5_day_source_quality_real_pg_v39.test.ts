@@ -137,6 +137,8 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   const r=await auditPhase5SourceDay(db,manifest,1);
   expect(r.sourceQueryGroups[0].plannedQueries).toBe(1);
   expect(r.totalBoundOriginals).toBe(1);
+  expect(r.sourceQueryGroups[0].populationObservationRows).toBe(1);
+  expect(r.sourceQueryGroups[0].currentlyLinkedPopulationRows).toBe(1);
   const t24=r.preCandidateSnapshots.find(x=>x.horizon==="T-24h");
   expect(t24).toEqual({horizon:"T-24h",rowsSeen:3,clockOrderCandidates:1,
    unexpiredClockOrderCandidates:1,expiredClockOrderCandidates:0,expiredSourceLinkedSnapshots:0});
@@ -163,4 +165,25 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   expect(rows[0]).toMatchObject({horizon:"T-24h",snapshots_seen:3,clock_order_candidate_pre:1,
    unexpired_clock_order_candidate_pre:0,expired_clock_order_candidate_pre:1,expired_source_linked_pre:2});
  });
+ it("preserves historical counts and expired linkage after the actual B0062 tombstoned purge",async()=>{
+  const c=await db.connect();
+  try{
+   await c.query("BEGIN");
+   // Disposable test-only: exercise real audited expiry, not a mocked NULL.
+   await c.query("INSERT INTO clean.retention_tombstone(surface,record_id,content_hash,expired_at,plan_hash,content_class,source_table,content_columns,retention_rule,expiry_run_id,deletion_mode) VALUES('primary',$1,$2,clock_timestamp(),$3,'fids_population','clean.fids_query_response',ARRAY['raw_payload'],'synthetic-ci-only','ci-expiry','content-nullification')",["fids_query_response:"+pid+":raw_payload",bodySha,manifest]);
+   await c.query("UPDATE clean.fids_query_response SET raw_payload=NULL,raw_expired_at_utc=clock_timestamp() WHERE population_query_id=$1",[pid]);
+   await c.query("COMMIT");
+  }catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
+  const meta=(await db.query("SELECT response_hash IS NULL AS hash_cleared,raw_expired_at_utc IS NOT NULL AS expired FROM clean.fids_query_response WHERE population_query_id=$1",[pid])).rows[0];
+  expect(meta).toEqual({hash_cleared:true,expired:true});
+  const members=(await db.query("SELECT COUNT(*)::int n FROM clean.flight_population WHERE population_query_id=$1",[pid])).rows[0].n;
+  expect(members).toBe(0);
+  const audit=await auditPhase5SourceDay(db,manifest,1);
+  expect(audit.sourceQueryGroups[0]).toMatchObject({boundOriginals:1,populationObservationRows:1,currentlyLinkedPopulationRows:0});
+  expect(audit.preCandidateSnapshots).toEqual([{horizon:"T-24h",rowsSeen:3,clockOrderCandidates:0,
+   unexpiredClockOrderCandidates:0,expiredClockOrderCandidates:0,expiredSourceLinkedSnapshots:2}]);
+  expect(audit.day1SourceSafetyReview?.measuredSourceLoss).toContain("EXPIRED_LINKED_PRE_RECEIPTS_NOT_MISSED_COLLECTION_OR_CURRENT_USABLE_DATA");
+  expect(audit.day1SourceSafetyReview?.expiredReceiptCertifiesHistoricalPreOrCurrentTrainingData).toBe(false);
+ });
+
 });

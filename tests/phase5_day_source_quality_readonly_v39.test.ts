@@ -43,7 +43,7 @@ function fake(mode:"ok"|"no-budget"|"no-denominator"="ok"){
        source_bound_before_planned_cutoff:1,
        source_bound_late_to_planned_cutoff:1,
        source_rights_metadata_expired:0,
-       population_observation_rows:"123",active_query_rows:4,
+       population_observation_rows:"123",currently_linked_population_rows:"123",active_query_rows:4,
        stopped_query_rows:0,
       }]};
    throw Error("UNEXPECTED_SQL_IN_READ_ONLY_TEST");
@@ -64,6 +64,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(r.totalBoundOriginals).toBe(2);
   expect(r.sourceQueryGroups[0].missedGetWindow).toBe(1);
   expect(r.sourceQueryGroups[0].populationObservationRows).toBe(123);
+  expect(r.sourceQueryGroups[0].currentlyLinkedPopulationRows).toBe(123);
   expect(r.earlySample.distinctAirports).toBe(4);
   expect(r.preCandidateSnapshots[0].clockOrderCandidates).toBe(1);
   expect(r.actualFlightLevelPreCertified).toBe(false);
@@ -81,6 +82,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("raw_body");
   expect(P5_DAILY_SOURCE_METRICS_SQL).not.toContain("SELECT *");
   expect(P5_DAILY_SOURCE_METRICS_SQL).toContain("prediction_cutoff_utc");
+  expect(P5_DAILY_SOURCE_METRICS_SQL).toContain("SUM(b.normalized_members_count)");
  });
  it("queries canonical PRE_DEPARTURE rows, NOT the invalid PRE alias",()=>{
   expect(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL).toContain("s.prediction_state='PRE_DEPARTURE'");

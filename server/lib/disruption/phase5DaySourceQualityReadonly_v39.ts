@@ -34,7 +34,8 @@ export const P5_DAILY_SOURCE_METRICS_SQL=[
  " r.available_at>q.prediction_cutoff_utc)::integer source_bound_late_to_planned_cutoff,",
  "COUNT(*) FILTER(WHERE b.population_query_id IS NOT NULL AND",
  " b.source_expires_at_utc <= $3::timestamptz)::integer source_rights_metadata_expired,",
- "COALESCE(SUM(p.members),0)::bigint population_observation_rows,",
+ "COALESCE(SUM(b.normalized_members_count),0)::bigint population_observation_rows,",
+ "COALESCE(SUM(p.members),0)::bigint currently_linked_population_rows,",
  "COUNT(*) FILTER(WHERE q.state='ACTIVE')::integer active_query_rows,",
  "COUNT(*) FILTER(WHERE q.state='STOPPED')::integer stopped_query_rows",
  "FROM clean.phase5_fids_allowed_query_v39 q",
@@ -80,7 +81,10 @@ const DRAW_SQL=[
 export const P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL=[
  "WITH linked AS (SELECT s.id,s.horizon,",
  " (b.source_expires_at_utc <= $3::timestamptz OR r.raw_expired_at_utc IS NOT NULL) AS expired,",
- " (s.fids_response_hash=r.response_hash AND s.fids_response_hash=b.response_hash) AS hash_match,",
+ // B0062 clears the original response hash on compliant purge.
+ // The binding is a source receipt, not reconstructable member evidence.
+ " (s.fids_response_hash=b.response_hash AND (r.response_hash=b.response_hash",
+ " OR (r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NULL))) AS hash_match,",
  " (s.created_at<=s.prediction_cutoff_utc AND s.created_at<= $3::timestamptz",
  " AND r.available_at<=s.created_at AND s.selected_t_milestone_utc IS NOT NULL",
  " AND s.selected_t_version IS NOT NULL",
@@ -130,7 +134,7 @@ export interface Phase5DayQualityRow {
  missedGetWindow:number;notYetDue:number;
  reservedWithoutOriginalAfterCutoff:number;
  sourceBoundBeforePlannedCutoff:number;sourceBoundLateToPlannedCutoff:number;
- sourceRightsMetadataExpired:number;populationObservationRows:number;
+ sourceRightsMetadataExpired:number;populationObservationRows:number;currentlyLinkedPopulationRows:number;
  activeQueryRows:number;stoppedQueryRows:number;
 }
 export interface Phase5DaySourceQualityResult {
@@ -196,6 +200,7 @@ export async function auditPhase5SourceDay(
    sourceBoundLateToPlannedCutoff:safeInt(r.source_bound_late_to_planned_cutoff),
    sourceRightsMetadataExpired:safeInt(r.source_rights_metadata_expired),
    populationObservationRows:safeInt(r.population_observation_rows),
+   currentlyLinkedPopulationRows:safeInt(r.currently_linked_population_rows),
    activeQueryRows:safeInt(r.active_query_rows),
    stoppedQueryRows:safeInt(r.stopped_query_rows),
   }));
@@ -317,7 +322,7 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
    "plannedQueries","reservedPhysicalGets","boundOriginals",
    "missedGetWindow","notYetDue","reservedWithoutOriginalAfterCutoff",
    "sourceBoundBeforePlannedCutoff","sourceBoundLateToPlannedCutoff",
-   "sourceRightsMetadataExpired","populationObservationRows",
+   "sourceRightsMetadataExpired","populationObservationRows","currentlyLinkedPopulationRows",
    "activeQueryRows","stoppedQueryRows"
   ] as const)strictCount(g[label],"GROUP_"+label);
   totals.plannedQueries+=g.plannedQueries;
@@ -338,6 +343,7 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
      g.reservedWithoutOriginalAfterCutoff>
        g.reservedPhysicalGets-g.boundOriginals||
      g.sourceRightsMetadataExpired>g.boundOriginals||
+     g.currentlyLinkedPopulationRows>g.populationObservationRows||
      g.activeQueryRows+g.stoppedQueryRows>g.plannedQueries)
    ledgerHolds.push("SOURCE_QUERY_RESERVATION_OR_ORIGINAL_COUNTER_CONTRADICTION");
  }
@@ -417,6 +423,8 @@ export function assessP5Day1SourceSafetyFromReadonlyAudit(
   successfulPreCertifiedByCounters:false as const,
   expiredReceiptCertifiesHistoricalPreOrCurrentTrainingData:false as const,
   unexpiredMetadataProvesRawPresenceOrRights:false as const,
+  historicalPopulationCountFromImmutableOriginalBinding:true as const,
+  expiredPopulationMembersDoNotEraseHistoricalObservationCount:true as const,
   optionalAdsbOrWeatherMissingMustBlockPre:false as const,
   independentStopOrContinueAuthorizedByThisFunction:false as const,
   scientificPhase5FreezeGranted:false as const,
