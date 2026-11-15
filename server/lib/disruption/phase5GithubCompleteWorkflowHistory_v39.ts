@@ -19,6 +19,18 @@ const WORKFLOWS=new Set([
  "phase5-one-signed-future-post-v0083-main-manual.yml"
 ]);
 const ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+const API_UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
+const STORED_SOURCE_PARENT="phase5-source-upcoming-queue-main-scheduled-readonly.yml";
+// Only GitHub response timestamps may use the API's second precision.
+// Keep signed science times and request window geometry canonical ms UTC.
+function canonicalGithubCreatedAt(x:unknown):string{
+ if(typeof x!=="string")return refuse("MALFORMED_GITHUB_CHILD_HISTORY");
+ const value=API_UTC.test(x)?x.slice(0,-1)+".000Z":x;
+ if(!ISO.test(value)||!Number.isFinite(Date.parse(value))||
+    new Date(value).toISOString()!==value)
+  return refuse("MALFORMED_GITHUB_CHILD_HISTORY");
+ return value;
+}
 const STAGES=new Set([
  "queued","in_progress","completed","pending","waiting","requested"
 ]);
@@ -50,10 +62,11 @@ export function reviewP5HistoryUrl(base:string):URL{
     !u.pathname.endsWith("/runs"))
   refuse("UNTRUSTED_GITHUB_HISTORY_ORIGIN");
  const workflow=u.pathname.slice(PREFIX.length,-"/runs".length);
- if(!WORKFLOWS.has(workflow)||
+ const parent=workflow===STORED_SOURCE_PARENT;
+ if((!parent&&!WORKFLOWS.has(workflow))||
     [...u.searchParams.keys()].some(k=>!
      ["event","per_page","created"].includes(k))||
-    u.searchParams.get("event")!=="workflow_dispatch"||
+    u.searchParams.get("event")!==(parent?"schedule":"workflow_dispatch")||
     u.searchParams.get("per_page")!=="100"||
     u.searchParams.has("page")||
     !u.searchParams.has("created"))
@@ -76,12 +89,10 @@ function reviewRun(a:unknown):asserts a is P5CompleteGithubWorkflowRun{
     typeof v.display_title!=="string"||
     v.display_title.length>240||
     typeof v.created_at!=="string"||
-    !ISO.test(v.created_at)||
-    !Number.isFinite(Date.parse(v.created_at))||
-    new Date(v.created_at).toISOString()!==v.created_at||
     typeof v.status!=="string"||!STAGES.has(v.status)||
     (v.conclusion!==null&&typeof v.conclusion!=="string"))
   refuse("MALFORMED_GITHUB_CHILD_HISTORY");
+ canonicalGithubCreatedAt(v?.created_at);
 }
 export async function readP5CompleteGithubWorkflowHistory(
  base:string,
@@ -119,7 +130,7 @@ export async function readP5CompleteGithubWorkflowHistory(
   for(const row of d.workflow_runs!){
    reviewRun(row);
    if(ids.has(row.id))refuse("DUPLICATE_GITHUB_CHILD_RUN_ID");
-   ids.add(row.id);all.push(row);
+   ids.add(row.id);all.push({...row,created_at:canonicalGithubCreatedAt(row.created_at)});
   }
   if(all.length===total)
    return{total_count:total,workflow_runs:all};

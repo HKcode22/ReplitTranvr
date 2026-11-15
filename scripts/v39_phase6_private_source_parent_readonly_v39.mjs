@@ -296,7 +296,8 @@ export async function runP6RealPrivateSourceParentReadOnly(
      planned.redactedSummary.phase6PaidGo!==false)
    fail("UNSAFE_PRIVATE_SOURCE_PARENT_PLANNER");
   const out={...planned.redactedSummary,
-   ...(selection?{storedReviewMode:true,deferredDueDayCount:selection.deferredDueDayCount}:{}),
+   ...(selection?{storedReviewMode:true,deferredDueDayCount:selection.deferredDueDayCount,
+    observedSourceDatabaseClockUtc:scan.checkedAtDatabaseUtc}:{}),
    realPgQueriesReadWithOriginalSourceLogin:true,
    protectedDayEpochsReadWithSeparateReaderLogin:true,
    completeGHChildRunHistoryConsulted:true,
