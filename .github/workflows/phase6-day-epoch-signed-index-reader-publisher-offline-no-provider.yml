@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql'
+      - 'scripts/v39_phase6_v0101_owner_schema_once_v39.mjs'
       - 'server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs'
       - 'tests/phase6_private_t24_witness_transport_real_pg16_v39.mts'
       - 'server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts'
@@ -155,7 +156,32 @@ jobs:
           set -Eeuo pipefail
           set +x
           test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
-          PGPASSWORD=ci-only-day-real psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {readFileSync} from "node:fs";
+          import {PATH,inspectV0101,installV0101Once} from "./scripts/v39_phase6_v0101_owner_schema_once_v39.mjs";
+          const url="postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable";
+          assert.equal(process.env.CI,"true");
+          assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
+          assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,url);
+          const open=async()=>{const c=new pg.Client({connectionString:url});await c.connect();return c;};
+          const bytes=readFileSync(PATH);
+          const read=async()=>{const c=await open();try{return await inspectV0101(c);}finally{await c.end();}};
+          const before=await read();
+          assert.equal(before.status,"V0099_READY_V0101_ABSENT_EMPTY_NO_GO");
+          await assert.rejects(installV0101Once({open,bytes:Buffer.from("not reviewed SQL")}),/EXACT_SQL_BLOB/);
+          const result=await installV0101Once({open,bytes});
+          assert.equal(result.status,"V0101_INSTALLED_EMPTY_T24_TRANSPORT_NO_GO");
+          assert.equal(result.schemaInstallPerformed,true);
+          assert.deepEqual(result.counts,{packets:0,revisions:0,claims:0});
+          assert.equal(result.aclFingerprint,before.aclFingerprint);
+          const again=await installV0101Once({open,bytes,assertPinned:()=>{throw Error("unexpected replay");}});
+          assert.equal(again.alreadyInstalledNoReplay,true);
+          assert.equal(again.schemaInstallPerformed,false);
+          assert.equal((await read()).aclFingerprint,before.aclFingerprint);
+          console.log("P6_V0101_EXISTING_COMMISSIONED_ROLES_FRESH_PG16_OWNER_INSTALL_NO_REPLAY_PASS");
+          JS
           if PGPASSWORD=ci-only-day-real psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql; then
             echo 'V0101 unexpected replay success'; exit 1
           fi
