@@ -51,7 +51,8 @@ function fixture(){
    return {ok:true,json:async()=>({total_count:p.length,workflow_runs:p})};
   }};
  }
- const observe=async e=>{
+ const observe=async (e,opts)=>{
+  assert.equal(opts.storedCapacityProfile,true);
   assert.equal(e.V39_PHASE6_PROCESS_ARMED,"0");
   assert.equal(env.V39_PHASE6_PROCESS_ARMED,"1");
   return planned;
@@ -60,7 +61,7 @@ function fixture(){
 }
 test("uses actual API 200 run IDs, caps in-flight and avoids a previously submitted digest",async()=>{
  const f=fixture(),children=[f.run(11,"completed","P5 SOURCE "+H("a"),"success"),
-  ...Array.from({length:6},(_,i)=>f.run(20+i,"in_progress","P5 SOURCE "+H("9")))];
+  ...Array.from({length:22},(_,i)=>f.run(20+i,"in_progress","P5 SOURCE "+H("9")))];
  const m=f.mock({children});
  const out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl});
  assert.equal(m.posts.length,2);
@@ -91,7 +92,7 @@ test("separate release, no legacy dispatcher or provider credential, cap and sta
  for(const change of [{P5_AUTO_SOURCE_DISPATCH_ENABLED:"true"},{P6_PRIVATE_SOURCE_STORED_DISPATCH_APPROVED:"0"},
   {AERODATABOX_API_KEY:"NO"},{GITHUB_RUN_ATTEMPT:"2"}])
   assert.throws(()=>admitP6StoredSourceDispatcher({...f.env,...change}),/NO_EXACT_INDEPENDENT/);
- const m=f.mock({children:Array.from({length:8},(_,i)=>f.run(100+i,"queued","P5 SOURCE "+H("9")))});
+ const m=f.mock({children:Array.from({length:24},(_,i)=>f.run(100+i,"queued","P5 SOURCE "+H("9")))});
  assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl})).acknowledgedGithubChildCount,0);
  assert.equal(m.posts.length,0);
  const stale=f.mock();
@@ -123,3 +124,12 @@ test("unavailable selected days are disclosed without posting any unsigned query
  assert.equal(out.unavailableSelectedDueQueryCount,3);
  assert.equal(out.acknowledgedGithubChildCount,4);
 });
+
+ test("bounded exact stored profile can submit eight distinct requests, but does not overfill 24 active",async()=>{
+ const f=fixture(),make=n=>f.inputs.map((p,i)=>({...p,query_digest:H(String(n+i))})),input=[...f.inputs,...make(1)];
+ const planned={...f.planned,candidateCount:8};Object.defineProperty(planned,"privateStoredChildInputProposals",{value:input});
+ const m=f.mock(),out=await runP6StoredSourceDispatcher(f.env,{...f.options,observe:async()=>planned,fetchImpl:m.fetchImpl});
+ assert.equal(out.acknowledgedGithubChildCount,8);assert.equal(out.inFlightCap,24);assert.equal(out.perTickCap,8);assert.equal(out.maxLeadMinutes,35);
+ const near=f.mock({children:Array.from({length:23},(_,i)=>f.run(100+i,"in_progress","P5 SOURCE "+H("9")))});
+ assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,observe:async()=>planned,fetchImpl:near.fetchImpl})).acknowledgedGithubChildCount,1);
+ });
