@@ -173,13 +173,13 @@ export async function resumeP5ReviewedSourceDayPreparation(
    throw e;
   const inserted=await prepareP5ReviewedSourceDayFromSavedDraw(readOnlyPool,insertOnlyPool,
    {...input,preparePrivateUnsignedSourceDraftShards:true});
-  if(!inserted.preparedDayReadback)hold("COMMITTED_READBACK_REQUIRED_NO_REPLAY");
+  const freshProof=inserted.preparedDayReadback??hold("COMMITTED_READBACK_REQUIRED_NO_REPLAY");
   return Object.freeze({
    status:"INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK" as const,
    runDayIndex:inserted.runDayIndex,
    preparedProposalSha256:inserted.preparedProposalSha256,
-   verifiedQueryCount:inserted.preparedDayReadback.verifiedQueryCount,
-   verifiedPartitionCount:inserted.preparedDayReadback.verifiedPartitionCount,
+   verifiedQueryCount:freshProof.verifiedQueryCount,
+   verifiedPartitionCount:freshProof.verifiedPartitionCount,
    databaseInserts:inserted.databaseInserts,providerCalls:0 as const,
    phase6PaidGo:false as const
   });
