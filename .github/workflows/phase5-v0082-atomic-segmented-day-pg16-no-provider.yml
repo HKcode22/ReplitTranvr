@@ -5,6 +5,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
+      - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
@@ -24,6 +25,7 @@ on:
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
+      - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
