@@ -50,6 +50,43 @@ export function parseP5EarlyDrawReadonlyContext(env:Env){
  return parseEarlyDrawLogin(env);
 }
 
+export const EARLY_DRAW_READ_TABLES=["adb_phase6_authorization","adb_phase6_calendar_day","adb_sampling_frame_registry","adb_sampling_frame",
+     "adb_airport_sampling_state","adb_sampling_draw"];
+const other=["fids_query_response","flight_snapshots"];
+export const EARLY_DRAW_INSERT_COLUMNS:Record<string,string[]>={
+   adb_sampling_draw:["run_day_index","slot_id","target_region","draw_type","selected_icao","frozen_draw_seed","adaptive_state_hash","probability_vector","airport_layer_design_probability","selected_at_utc"],
+   adb_airport_sampling_state:["icao","last_selected_at","last_selected_run_day"]
+  };
+export const EARLY_DRAW_UPDATE_COLUMNS:Record<string,string[]>={adb_airport_sampling_state:["last_selected_at","last_selected_run_day","updated_at_utc"]};
+
+export async function verifyP5EarlyDrawObjectAcl(c:Pick<import("pg").PoolClient,"query">,role:string){
+  for(const table of [...EARLY_DRAW_READ_TABLES,...other]){
+   const relation="clean."+table;
+   const columns=(await c.query(`SELECT attname,
+    has_column_privilege($2,attrelid,attnum,'SELECT') AS sel,
+    has_column_privilege($2,attrelid,attnum,'INSERT') AS ins,
+    has_column_privilege($2,attrelid,attnum,'UPDATE') AS upd
+    FROM pg_attribute WHERE attrelid=to_regclass($1) AND attnum>0 AND NOT attisdropped ORDER BY attname`,[relation,role])).rows;
+   if(!columns.length)HOLD("ACL_REQUIRED_TABLE_MISSING");
+   const actual=(key:"ins"|"upd")=>columns.filter(x=>x[key]===true).map(x=>String(x.attname)).sort().join(",");
+   if(actual("ins")!==(EARLY_DRAW_INSERT_COLUMNS[table]??[]).slice().sort().join(",")||
+      actual("upd")!==(EARLY_DRAW_UPDATE_COLUMNS[table]??[]).slice().sort().join(",")||
+      (EARLY_DRAW_READ_TABLES.includes(table)&&columns.some(x=>x.sel!==true)))
+    HOLD("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");
+   const broad=(await c.query(`SELECT has_table_privilege($2,$1,'DELETE') OR
+      has_table_privilege($2,$1,'TRUNCATE') OR has_table_privilege($2,$1,'TRIGGER') bad`,[relation,role])).rows[0];
+   if(broad?.bad!==false)HOLD("ACL_EXCESS_TABLE_GRANTS");
+  }
+  const seq=(await c.query(`SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') name`)).rows[0]?.name;
+  if(seq){
+   const s=(await c.query(`SELECT has_sequence_privilege($2,$1,'USAGE') allowed,
+     has_sequence_privilege($2,$1,'UPDATE') excess`,[seq,role])).rows[0];
+   if(s?.allowed!==true||s.excess!==false)HOLD("ACL_DRAW_SEQUENCE_GRANTS");
+  }
+
+ return EARLY_DRAW_READ_TABLES.length+other.length;
+}
+
 // The same live narrow credential used by the existing writer, but no
 // calendar or flight records are selected, and no writes are attempted.
 // Expected database is injectable only for disposable real-PG tests.
@@ -70,40 +107,10 @@ export async function verifyP5EarlyDrawReadonlyAcl(pool:Pick<Pool,"connect">,exp
      who.replica!==false||who.restricted!==true||who.schema_usage!==true||who.schema_create!==false||
      !Number.isInteger(who.version)||who.version<160000||who.version>=170000)
    HOLD("WRONG_READONLY_ACL_IDENTITY");
-  const reads=["adb_phase6_authorization","adb_phase6_calendar_day","adb_sampling_frame_registry","adb_sampling_frame",
-     "adb_airport_sampling_state","adb_sampling_draw"];
-  const other=["fids_query_response","flight_snapshots"];
-  const allowedInsert:Record<string,string[]>={
-   adb_sampling_draw:["run_day_index","slot_id","target_region","draw_type","selected_icao","frozen_draw_seed","adaptive_state_hash","probability_vector","airport_layer_design_probability","selected_at_utc"],
-   adb_airport_sampling_state:["icao","last_selected_at","last_selected_run_day"]
-  };
-  const allowedUpdate:Record<string,string[]>={adb_airport_sampling_state:["last_selected_at","last_selected_run_day","updated_at_utc"]};
-  for(const table of [...reads,...other]){
-   const relation="clean."+table;
-   const columns=(await c.query(`SELECT attname,
-    has_column_privilege(current_user,attrelid,attnum,'SELECT') AS sel,
-    has_column_privilege(current_user,attrelid,attnum,'INSERT') AS ins,
-    has_column_privilege(current_user,attrelid,attnum,'UPDATE') AS upd
-    FROM pg_attribute WHERE attrelid=to_regclass($1) AND attnum>0 AND NOT attisdropped ORDER BY attname`,[relation])).rows;
-   if(!columns.length)HOLD("ACL_REQUIRED_TABLE_MISSING");
-   const actual=(key:"ins"|"upd")=>columns.filter(x=>x[key]===true).map(x=>String(x.attname)).sort().join(",");
-   if(actual("ins")!==(allowedInsert[table]??[]).slice().sort().join(",")||
-      actual("upd")!==(allowedUpdate[table]??[]).slice().sort().join(",")||
-      (reads.includes(table)&&columns.some(x=>x.sel!==true)))
-    HOLD("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");
-   const broad=(await c.query(`SELECT has_table_privilege(current_user,$1,'DELETE') OR
-      has_table_privilege(current_user,$1,'TRUNCATE') OR has_table_privilege(current_user,$1,'TRIGGER') bad`,[relation])).rows[0];
-   if(broad?.bad!==false)HOLD("ACL_EXCESS_TABLE_GRANTS");
-  }
-  const seq=(await c.query(`SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') name`)).rows[0]?.name;
-  if(seq){
-   const s=(await c.query(`SELECT has_sequence_privilege(current_user,$1,'USAGE') allowed,
-     has_sequence_privilege(current_user,$1,'UPDATE') excess`,[seq])).rows[0];
-   if(s?.allowed!==true||s.excess!==false)HOLD("ACL_DRAW_SEQUENCE_GRANTS");
-  }
+  const verifiedTableCount=await verifyP5EarlyDrawObjectAcl(c,expectedRole);
   await c.query("ROLLBACK");tx=false;
   return {status:"EXISTING_EARLY_DRAW_LOGIN_READONLY_ACL_PASS_NO_GO",actor:expectedRole,database:expectedDb,
-   pgVersion:who.version,verifiedTableCount:reads.length+other.length,databaseWrites:0,providerCalls:0,phase6PaidGo:false};
+   pgVersion:who.version,verifiedTableCount,databaseWrites:0,providerCalls:0,phase6PaidGo:false};
  }finally{
   if(tx)await c.query("ROLLBACK").catch(()=>{});
   c.release();
