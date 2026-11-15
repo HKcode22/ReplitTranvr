@@ -173,6 +173,21 @@ export function planP6ThirtyOneDaySignedShardHandoffs(
   providerCalls:0,githubChildDispatches:0,
   phase5ScientificFreeze:false,phase6PaidGo:false
  } as const;
- return{operatorSummary,privateRoutingCandidates:candidates,
+ // The first four are the public planning preview only. A dispatcher must
+ // skip previously acknowledged packets before selecting its next four.
+ // All entries have already passed the exact byte and provenance audit.
+ const postUsed=new Set<string>();
+ const allDuePost=index.entries.filter(e=>e.lane==="POST"&&
+  checkedUTC(e.notBeforeUtc)<=now&&now<checkedUTC(e.hardLatestUtc))
+  .sort((a,b)=>a.hardLatestUtc.localeCompare(b.hardLatestUtc)||
+   a.runDayIndex-b.runDayIndex||a.shardIndex-b.shardIndex)
+  .map(e=>validateDueShard(e,"POST",now,postUsed));
+ if(allDuePost.length!==validated.dueShardCounts.POST||
+    JSON.stringify(allDuePost.slice(0,4))!==JSON.stringify(candidates.filter(c=>c.lane==="POST")))
+  forbid("ALL_DUE_POST_AUDIT_COUNT_DRIFT");
+ const output={operatorSummary,privateRoutingCandidates:candidates,
   verifiedExistingShardIndexResult:validated};
+ return Object.defineProperty(output,"privateAllDuePostRoutingCandidates",{
+  enumerable:false,value:Object.freeze(allDuePost.map(c=>Object.freeze(c)))
+ }) as typeof output & {readonly privateAllDuePostRoutingCandidates:readonly P6ProspectiveShardHandoff[]};
 }

@@ -16,10 +16,11 @@ const SHA=/^[a-f0-9]{64}$/;
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const hold=(s:string):never=>{throw Error("HOLD_P6_PRIVATE_POST_CHILD_"+s);};
 export function admitP6PrivatePostChildTransport(env:NodeJS.ProcessEnv){
+ const dynamic=env.P6_PRIVATE_POST_CHILD_MODE==="stored-current";
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
-    env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PRIVATE_POST_CHILD_MODE!=="stored"||
-    env.P6_PRIVATE_POST_CHILD_CONFIRM!=="ONE_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS"||
+    env.GITHUB_RUN_ATTEMPT!=="1"||!["stored","stored-current"].includes(env.P6_PRIVATE_POST_CHILD_MODE??"")||
+    env.P6_PRIVATE_POST_CHILD_CONFIRM!==(dynamic?"ONE_CURRENT_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS":"ONE_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS")||
     env.P6_PRIVATE_POST_CHILD_APPROVED!=="1"||
     env.P6_PRIVATE_POST_LEGACY_PATH!=="PRIVATE_STORED"||
     env.P5_FUTURE_POST_CONFIRM!=="ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY"||
@@ -43,7 +44,7 @@ export function admitP6PrivatePostChildTransport(env:NodeJS.ProcessEnv){
   packetSha256:env.P6_PRIVATE_POST_PACKET_SHA??"",
   routingIntentSha256:env.P6_PRIVATE_POST_ROUTE_SHA??""};
  if(![selector.indexSha256,selector.packetSha256,selector.routingIntentSha256].every(x=>SHA.test(x))||
-    selector.packetSha256!==env.V39_P5_POST_SIGNED_PACKET_SHA256)
+    (!dynamic&&selector.packetSha256!==env.V39_P5_POST_SIGNED_PACKET_SHA256))
   hold("PRIVATE_POST_SELECTOR_NOT_PROTECTED_PACKET_PIN");
  let reader:URL,source:URL;
  try{reader=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");}
@@ -57,7 +58,28 @@ export function admitP6PrivatePostChildTransport(env:NodeJS.ProcessEnv){
     [...reader.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
     (reader.searchParams.has("channel_binding")&&(reader.searchParams.getAll("channel_binding").length!==1||reader.searchParams.get("channel_binding")!=="require")))
   hold("PRIVATE_READER_WRONG_TLS_OR_ROLE");
- return {trust,selector,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!};
+ // Dynamic mode substitutes only authenticated per-packet values. The
+ // stable study/category/contract/price/frame pins stay protected.
+ if(dynamic){
+  if(env.P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED!=="1"||
+    [env.V39_P5_POST_SIGNED_PACKET_SHA256,env.V39_P5_POST_REVIEWED_REQUEST_SHA256,
+     env.V39_P5_POST_CONTEXT_SHA256].some(Boolean)||
+    ![env.V39_P5_POST_CATEGORY_BUDGET_SHA256,env.V39_P5_POST_PROVIDER_CONTRACT_SHA256,
+       env.V39_P5_FRAME_HASH,env.V39_P5_POST_PRICE_SHA256].every(x=>SHA.test(x??""))||
+    env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
+   hold("DYNAMIC_POST_REQUIRES_SEPARATE_STABLE_APPROVAL_NO_LEGACY_PACKET_PINS");
+  for(const [raw,login] of [[env.V39_P5_SOURCE_DATABASE_URL,"phase5_p5_source_login_20261108"],
+   [env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,"phase5_p5_other_rest_review_login_20261110"],
+   [env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,"phase5_p5_other_rest_reserve_login_20261110"]] as const){
+   let u:URL;try{u=new URL(raw??"");}catch{return hold("DYNAMIC_POST_RESTRICTED_DB_MISSING");}
+   if(!sameP6NeonDatabaseEndpoint(reader,u)||decodeURIComponent(u.username)!==login||!u.password||
+      u.searchParams.getAll("sslmode").length!==1||u.searchParams.get("sslmode")!=="require"||
+      [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+      (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))
+    hold("DYNAMIC_POST_REQUIRES_DISTINCT_SAME_ENDPOINT_TLS_ROLES");
+  }
+ }else if(env.P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED==="1")hold("MIXED_STATIC_AND_DYNAMIC_POST_MODE");
+ return {trust,selector,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,dynamic};
 }
 export function bindP6PostPrivateDayRoute(handoff:any,ctx:ReturnType<typeof admitP6PrivatePostChildTransport>){
  const s=ctx.selector,z=handoff?.redactedSummary;
@@ -68,7 +90,11 @@ export function bindP6PostPrivateDayRoute(handoff:any,ctx:ReturnType<typeof admi
     z.providerCalls!==0||z.databaseWrites!==0||z.phase6PaidGo!==false||
     !Array.isArray(handoff.privateRoutingCandidates)||typeof handoff.getFrozen!=="function")
   hold("UNAUTHENTICATED_CURRENT_SIGNED_DAY");
- const hits=handoff.privateRoutingCandidates.filter((r:any)=>r.lane==="POST"&&
+ const routes=ctx.dynamic?handoff.privateAllDuePostRoutingCandidates:handoff.privateRoutingCandidates;
+ if(!Array.isArray(routes)||routes.length>1024||
+    (ctx.dynamic&&Object.getOwnPropertyDescriptor(handoff,"privateAllDuePostRoutingCandidates")?.enumerable!==false))
+  hold("MISSING_PRIVATE_ALL_DUE_POST_AUDIT");
+ const hits=routes.filter((r:any)=>r.lane==="POST"&&
   r.runDayIndex===s.runDayIndex&&r.shardIndex===s.shardIndex&&
   r.routingIntentSha256===s.routingIntentSha256&&r.signedFrozenSha256===s.packetSha256);
  if(hits.length!==1)hold("EXACT_DUE_POST_ROUTE_MISSING");
@@ -88,8 +114,8 @@ export function bindP6PostPrivateDayRoute(handoff:any,ctx:ReturnType<typeof admi
   hold("BAD_SOURCE_QUERY_DIGEST_SCOPE");
  return {route:r,post,sourceDigests:sourceDigests as string[],observedDbClockUtc:z.observedRealPgClockUtc};
 }
-export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
- const ctx=admitP6PrivatePostChildTransport(env),s=ctx.selector;
+export async function readP6ExactPrivatePostOriginal(ctx:ReturnType<typeof admitP6PrivatePostChildTransport>,requireCurrentRevisionForPlanning:boolean){
+ const s=ctx.selector;
  const c=new Client({connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,query_timeout:25000});
  await c.connect();
  let bound:ReturnType<typeof bindP6PostPrivateDayRoute>,packet:P5SignedFuturePostPacket,raw:Buffer;
@@ -100,7 +126,7 @@ export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
    selector:{kind:"EXACT_DAY",runDayIndex:s.runDayIndex,indexRevision:s.indexRevision,indexSha256:s.indexSha256}});
   const handoff=await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({client:c,pins:day.pins,wire:day.wire,
    publicKeyPem:day.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
-    requireCurrentRevisionForPlanning:true}});
+    requireCurrentRevisionForPlanning}});
   bound=bindP6PostPrivateDayRoute(handoff,ctx);
   const review=await readP6StoredPrivateReviewOnce({client:c,trust:ctx.trust,scope,
    selector:{kind:"POST",runDayIndex:s.runDayIndex,shardIndex:s.shardIndex,logicalPath:bound.route.signedFrozenPath,contentSha256:s.packetSha256}});
@@ -116,7 +142,44 @@ export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
    hold("POST_PACKET_READ_OR_SIGNED_WINDOW_DRIFT");
   raw=read.privateBytes;packet=JSON.parse(raw.toString("utf8"));
  }finally{await c.end();}
- const p=admitP5SignedFuturePostGitHub(env,raw,packet,bound.route.signedFrozenPath);
+ return {bound,packet,raw};
+}
+/** Called only AFTER actual restricted reader and separate Ed25519 review.
+ * Local per-call pins are derived from the actual verified bytes, never
+ * GitHub variables or caller-provided loose request/context fields.
+ * Static study, code, category, price and original worker guards still apply.
+ */
+export function deriveP6PostOriginalLocalEnv(env:NodeJS.ProcessEnv,
+ ctx:ReturnType<typeof admitP6PrivatePostChildTransport>,
+ raw:Buffer,packet:P5SignedFuturePostPacket){
+ if(!ctx.dynamic)return env;
+ if(!Buffer.isBuffer(raw)||hash(raw)!==ctx.selector.packetSha256||
+    JSON.stringify(JSON.parse(raw.toString("utf8")))!==JSON.stringify(packet)||
+    packet?.schema!=="v39.phase5.github-future-post-reviewed-release.v1"||
+    packet.approvedCodeSha!==ctx.trust.reviewedCodeSha||
+    packet.independentSourceContentsUseAndRESTReleaseAttested!==true||
+    !packet.reviewed||Object.hasOwn(packet.reviewed,"githubRunId")||
+    !SHA.test(packet.reviewed.requestSha256??"")||!SHA.test(packet.reviewed.reviewedRequestContextSha256??"")||
+    packet.reviewed.manifestSha256!==ctx.trust.manifestSha256||
+    packet.reviewed.reviewedSourceRightsSha256!==ctx.trust.rightsSha256||
+    packet.reviewed.reviewedCategoryBudgetSha256!==env.V39_P5_POST_CATEGORY_BUDGET_SHA256||
+    packet.reviewed.reviewedProviderContractSha256!==env.V39_P5_POST_PROVIDER_CONTRACT_SHA256||
+    packet.reviewed.reviewedProviderPriceSha256!==env.V39_P5_POST_PRICE_SHA256||
+    packet.reviewed.reviewedFrameSha256!==env.V39_P5_FRAME_HASH||
+    packet.reviewed.runDayIndex!==ctx.selector.runDayIndex)
+  hold("AUTHENTICATED_DYNAMIC_POST_STUDY_OR_PACKET_DRIFT");
+ return Object.freeze({...env,
+  V39_P5_POST_SIGNED_PACKET_SHA256:ctx.selector.packetSha256,
+  V39_P5_POST_REVIEWED_REQUEST_SHA256:packet.reviewed.requestSha256,
+  V39_P5_POST_CONTEXT_SHA256:packet.reviewed.reviewedRequestContextSha256});
+}
+export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
+ const ctx=admitP6PrivatePostChildTransport(env),s=ctx.selector;
+ // An admitted child can finish with its exact retained append-only revision
+ // even if the current index gained other routes; it is not a new planner.
+ const {bound,packet,raw}=await readP6ExactPrivatePostOriginal(ctx,!ctx.dynamic);
+ const local=deriveP6PostOriginalLocalEnv(env,ctx,raw,packet);
+ const p=admitP5SignedFuturePostGitHub(local,raw,packet,bound.route.signedFrozenPath);
  if(p.runDayIndex!==s.runDayIndex)hold("ORIGINAL_POST_WRONG_RUN_DAY");
  const actual=await readActualValidPreAndClock(env.V39_P5_SOURCE_DATABASE_URL!,p,bound.sourceDigests);
  const clock=Date.parse(actual.dbClockUtc);
@@ -125,7 +188,7 @@ export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
   hold("ORIGINAL_SAME_FLIGHT_PRE_OUTSIDE_SIGNED_SOURCE_OR_TIME");
  // Existing child rechecks same bound SOURCE PRE, original V0083 review
  // and irreversible exact budget reservation, one GET and atomic custody.
- return runP5SignedFuturePost(env,raw,packet,bound.route.signedFrozenPath,bound.sourceDigests);
+ return runP5SignedFuturePost(local,raw,packet,bound.route.signedFrozenPath,bound.sourceDigests);
 }
 if(process.env.P6_PRIVATE_POST_CHILD_ENTRYPOINT==="1"){
  runP6PrivatePostExistingV0083Child(process.env).then(x=>{

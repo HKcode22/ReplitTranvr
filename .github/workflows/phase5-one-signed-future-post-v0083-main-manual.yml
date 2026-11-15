@@ -1,6 +1,6 @@
 name: Phase5 one signed future POST (V0083, PAID ONLY AFTER PHASE6 GO)
 # Distinct path identity for signed GH no-replay POST child history.
-run-name: P5 POST ${{ inputs.private_transport == 'stored' && inputs.post_packet_sha256 || inputs.frozen_future_post_packet }}
+run-name: P5 POST ${{ inputs.private_transport != 'checkout' && inputs.post_packet_sha256 || inputs.frozen_future_post_packet }}
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,7 @@ on:
         type: string
       private_transport:
         type: choice
-        options: [checkout, stored]
+        options: [checkout, stored, stored-current]
         default: checkout
       private_confirm:
         type: string
@@ -55,7 +55,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: phase5-future-post-one-shot-${{ inputs.frozen_future_post_packet || github.ref }}
+  group: phase5-future-post-one-shot-${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && inputs.post_packet_sha256 || inputs.frozen_future_post_packet || github.ref }}
   cancel-in-progress: false
 jobs:
   offline-pr-no-provider:
@@ -97,7 +97,8 @@ jobs:
       P5_FUTURE_POST_CONFIRM: ${{ inputs.confirm }}
       P6_PRIVATE_POST_CHILD_MODE: ${{ inputs.private_transport || 'checkout' }}
       P6_PRIVATE_POST_CHILD_CONFIRM: ${{ inputs.private_confirm }}
-      P6_PRIVATE_POST_CHILD_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_CHILD_APPROVED || '' }}
+      P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED: ${{ inputs.private_transport == 'stored-current' && secrets.P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED || '' }}
+      P6_PRIVATE_POST_CHILD_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_POST_CHILD_APPROVED || '' }}
       P6_PRIVATE_POST_LEGACY_PATH: ${{ inputs.frozen_future_post_packet }}
       P6_PRIVATE_POST_DAY: ${{ inputs.run_day }}
       P6_PRIVATE_POST_REVISION: ${{ inputs.index_revision }}
@@ -105,11 +106,11 @@ jobs:
       P6_PRIVATE_POST_SHARD: ${{ inputs.shard_index }}
       P6_PRIVATE_POST_PACKET_SHA: ${{ inputs.post_packet_sha256 }}
       P6_PRIVATE_POST_ROUTE_SHA: ${{ inputs.route_sha256 }}
-      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED || '' }}
-      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
-      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED || '' }}
-      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 || '' }}
-      P6_PRIVATE_READER_DATABASE_URL: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_READER_DATABASE_URL || '' }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
+      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 || '' }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PRIVATE_READER_DATABASE_URL || '' }}
       V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
       V39_P5_POST_OWNER_APPROVED: ${{ secrets.V39_P5_POST_OWNER_APPROVED }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
@@ -117,13 +118,13 @@ jobs:
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
       V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED: ${{ secrets.V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED }}
       V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
-      V39_P5_POST_SIGNED_PACKET_SHA256: ${{ secrets.V39_P5_POST_SIGNED_PACKET_SHA256 }}
+      V39_P5_POST_SIGNED_PACKET_SHA256: ${{ inputs.private_transport != 'stored-current' && secrets.V39_P5_POST_SIGNED_PACKET_SHA256 || '' }}
       V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
       V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
       V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
       V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
-      V39_P5_POST_REVIEWED_REQUEST_SHA256: ${{ secrets.V39_P5_POST_REVIEWED_REQUEST_SHA256 }}
-      V39_P5_POST_CONTEXT_SHA256: ${{ secrets.V39_P5_POST_CONTEXT_SHA256 }}
+      V39_P5_POST_REVIEWED_REQUEST_SHA256: ${{ inputs.private_transport != 'stored-current' && secrets.V39_P5_POST_REVIEWED_REQUEST_SHA256 || '' }}
+      V39_P5_POST_CONTEXT_SHA256: ${{ inputs.private_transport != 'stored-current' && secrets.V39_P5_POST_CONTEXT_SHA256 || '' }}
       V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
       V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ${{ secrets.P5_V39_OTHER_REST_REVIEW_DATABASE_URL }}
@@ -163,17 +164,27 @@ jobs:
               test -z "$P6_PRIVATE_READER_DATABASE_URL"
               test -z "$P6_PRIVATE_POST_INDEX_SHA"
               test -z "$P6_PRIVATE_POST_PACKET_SHA"
+              test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
               ;;
             stored)
               test "$PACKET" = PRIVATE_STORED
               test "$P6_PRIVATE_POST_CHILD_APPROVED" = 1
               test "$P6_PRIVATE_POST_CHILD_CONFIRM" = ONE_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS
               test -n "$P6_PRIVATE_READER_DATABASE_URL"
+              test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
               test "$P6_PRIVATE_POST_PACKET_SHA" = "$V39_P5_POST_SIGNED_PACKET_SHA256"
+              ;;
+            stored-current)
+              test "$PACKET" = PRIVATE_STORED
+              test "$P6_PRIVATE_POST_CHILD_APPROVED" = 1
+              test "$P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED" = 1
+              test "$P6_PRIVATE_POST_CHILD_CONFIRM" = ONE_CURRENT_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS
+              test -n "$P6_PRIVATE_READER_DATABASE_URL"
+              [[ "$P6_PRIVATE_POST_PACKET_SHA" =~ ^[a-f0-9]{64}$ ]]
+              test -z "$V39_P5_POST_SIGNED_PACKET_SHA256$V39_P5_POST_CONTEXT_SHA256$V39_P5_POST_REVIEWED_REQUEST_SHA256"
               ;;
             *) exit 2 ;;
           esac
-          test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
           test -n "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
           test -n "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           test -n "$V39_P5_SOURCE_DATABASE_URL"
@@ -190,7 +201,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          if [ "$P6_PRIVATE_POST_CHILD_MODE" = stored ]; then
+          if [ "$P6_PRIVATE_POST_CHILD_MODE" = stored ] || [ "$P6_PRIVATE_POST_CHILD_MODE" = stored-current ]; then
             P6_PRIVATE_POST_CHILD_ENTRYPOINT=1 npx tsx scripts/v39_phase6_private_post_existing_v0083_child_v39.ts
           else
             npx tsx scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts "$RELEASE_FILE"
