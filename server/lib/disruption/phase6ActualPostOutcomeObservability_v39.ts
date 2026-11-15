@@ -38,7 +38,7 @@ const atField=(x:unknown)=>date(obj(x).utc);
 export const P6_POST_PARTITION_PRE_SQL=P5_FUTURE_POST_ACTUAL_PRE_SQL
  .replace("SELECT s.id::text AS snapshot_id","SELECT s.flight_instance_id,s.id::text AS snapshot_id,fp.provider_record_key,fp.flight_number,fp.dep_airport_icao,fp.arr_airport_icao,fp.dep_scheduled_utc,fp.available_at AS member_available_at")
  .replace("s.flight_instance_id=$4","s.selected_t_milestone_utc >= $4::timestamptz AND s.selected_t_milestone_utc < $6::timestamptz")
- +" AND q.state='ACTIVE' AND q.rights_review_sha256=$7 AND b.rights_review_sha256=$7 "+
+ +" AND q.state='ACTIVE' AND fp.scope_classification='confirmed_core' AND fp.query_direction='Departure' AND q.rights_review_sha256=$7 AND b.rights_review_sha256=$7 "+
  " AND q.service_window_start_utc=$4::timestamptz AND q.service_window_end_utc=$6::timestamptz "+
  " AND b.source_expires_at_utc>$8::timestamptz AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL "+
  " ORDER BY s.flight_instance_id,s.horizon,s.id LIMIT 7501";
@@ -80,7 +80,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
     verifyStoredDecodedFidsBodyV39({payload:raw,persisted_response_hash:s.responseSha256})!=="verified"||
     verifyCanonicalFidsEnvelopeV39(raw)!=="verified"||!Array.isArray(raw.departures)||raw.departures.length>900)
   hold("POST_BODY_RECEIPT_OR_FRESHNESS_DRIFT");
- const byId=new Map<string,Row[]>(),movements=raw.departures.map(obj);
+ const byId=new Map<string,Row[]>(),movements=(raw.departures as unknown[]).map(obj);
  const fieldShape=inspectP4OnePaidNonretainedFidsV39({departures:movements});
  for(const m of movements){const k=m.id;if(id(k)){const a=byId.get(k)??[];a.push(m);byId.set(k,a);}}
  const counts:Record<Horizon,ReturnType<typeof empty>>={"T-24h":empty(),"T-6h":empty(),"T-90m":empty()};
