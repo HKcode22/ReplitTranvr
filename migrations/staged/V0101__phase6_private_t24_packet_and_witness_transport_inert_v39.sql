@@ -23,6 +23,7 @@ BEGIN
      WHERE oid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass)<>current_user THEN
   RAISE EXCEPTION 'P6_V0101_OWNER_DRIFT';
  END IF;
+ LOCK TABLE phase6_private.frozen_native_packet_v39, phase6_private.signed_run_day_index_revision_v39, phase6_private.signed_run_day_epoch_claim_v39 IN ACCESS EXCLUSIVE MODE;
  SELECT count(*)::integer INTO n FROM pg_catalog.pg_constraint
  WHERE conrelid='phase6_private.frozen_native_packet_v39'::pg_catalog.regclass
  AND conname IN ('p6_v0099_kind_allowed','p6_v0099_kind_path_guard','p6_v0099_bytes_guard','p6_v0099_packet_wire_scope');
@@ -49,9 +50,12 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
  ADD CONSTRAINT p6_v0101_kind_path_guard CHECK (
   (kind='SOURCE_DAY_REGISTRY' AND logical_path ~ '^data-collection/phase5/frozen/source_[A-Za-z0-9_.-]{8,125}\.json$') OR
   (kind='SOURCE_QUERY_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/sourceq_[A-Za-z0-9_.-]{8,110}\.json$') OR
-  (kind IN ('LATER_PRE_PACKET','LATER_PRE_DAY_REGISTRY') AND logical_path ~ '^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$') OR
+  (kind IN ('LATER_PRE_PACKET','LATER_PRE_DAY_REGISTRY') AND logical_path ~ '^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$' AND logical_path !~ '/t24[prw]_') OR
   (kind='POST_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/post_[A-Za-z0-9_-]{8,110}\.json$') OR
-  (kind='T24_PRE_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/t24p_[A-Za-z0-9_-]{8,100}\\.json AND logical_path=
+  (kind='T24_PRE_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/t24p_[A-Za-z0-9_-]{8,100}\.json$') OR
+  (kind='T24_PRE_DAY_REGISTRY' AND logical_path ~ '^data-collection/phase5/frozen/t24r_[A-Za-z0-9_-]{8,100}\.json$') OR
+  (kind='T24_WITNESS_RECEIPT_CANDIDATE' AND shard_index=1 AND logical_path ~ '^data-collection/phase5/frozen/t24w_[a-f0-9]{64}\.json$') OR
+  (kind='SOURCE_DAY_PREPARE_REVIEW' AND shard_index=1 AND logical_path=
     'data-collection/phase5/frozen/prepare_d'||run_day_index::text||'_'||manifest_sha256||'.json')),
  ADD CONSTRAINT p6_v0101_bytes_guard CHECK (
   octet_length(payload_bytes) BETWEEN 100 AND
@@ -63,48 +67,6 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
     AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
   (kind='T24_PRE_PACKET' AND review_wire_bytes IS NULL AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
   (kind NOT IN ('SOURCE_DAY_PREPARE_REVIEW','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','T24_PRE_PACKET') AND
-   (review_wire_bytes IS NULL OR
-    (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
-) OR
-  (kind='T24_PRE_DAY_REGISTRY' AND logical_path ~ '^data-collection/phase5/frozen/t24r_[A-Za-z0-9_-]{8,100}\\.json AND logical_path=
-    'data-collection/phase5/frozen/prepare_d'||run_day_index::text||'_'||manifest_sha256||'.json')),
- ADD CONSTRAINT p6_v0101_bytes_guard CHECK (
-  octet_length(payload_bytes) BETWEEN 100 AND
-   (CASE WHEN kind='SOURCE_DAY_PREPARE_REVIEW' THEN 500000 ELSE 250000 END)
-  AND pg_catalog.encode(pg_catalog.sha256(payload_bytes),'hex')=content_sha256),
- ADD CONSTRAINT p6_v0101_packet_wire_scope CHECK (
-  (kind='SOURCE_DAY_PREPARE_REVIEW' AND review_wire_bytes IS NOT NULL
-    AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096
-    AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
-  (kind<>'SOURCE_DAY_PREPARE_REVIEW' AND
-   (review_wire_bytes IS NULL OR
-    (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
-) OR
-  (kind='T24_WITNESS_RECEIPT_CANDIDATE' AND shard_index=1 AND logical_path ~ '^data-collection/phase5/frozen/t24w_[a-f0-9]{64}\\.json AND logical_path=
-    'data-collection/phase5/frozen/prepare_d'||run_day_index::text||'_'||manifest_sha256||'.json')),
- ADD CONSTRAINT p6_v0101_bytes_guard CHECK (
-  octet_length(payload_bytes) BETWEEN 100 AND
-   (CASE WHEN kind='SOURCE_DAY_PREPARE_REVIEW' THEN 500000 ELSE 250000 END)
-  AND pg_catalog.encode(pg_catalog.sha256(payload_bytes),'hex')=content_sha256),
- ADD CONSTRAINT p6_v0101_packet_wire_scope CHECK (
-  (kind='SOURCE_DAY_PREPARE_REVIEW' AND review_wire_bytes IS NOT NULL
-    AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096
-    AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
-  (kind<>'SOURCE_DAY_PREPARE_REVIEW' AND
-   (review_wire_bytes IS NULL OR
-    (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
-) OR
-  (kind='SOURCE_DAY_PREPARE_REVIEW' AND shard_index=1 AND logical_path=
-    'data-collection/phase5/frozen/prepare_d'||run_day_index::text||'_'||manifest_sha256||'.json')),
- ADD CONSTRAINT p6_v0101_bytes_guard CHECK (
-  octet_length(payload_bytes) BETWEEN 100 AND
-   (CASE WHEN kind='SOURCE_DAY_PREPARE_REVIEW' THEN 500000 ELSE 250000 END)
-  AND pg_catalog.encode(pg_catalog.sha256(payload_bytes),'hex')=content_sha256),
- ADD CONSTRAINT p6_v0101_packet_wire_scope CHECK (
-  (kind='SOURCE_DAY_PREPARE_REVIEW' AND review_wire_bytes IS NOT NULL
-    AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096
-    AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
-  (kind<>'SOURCE_DAY_PREPARE_REVIEW' AND
    (review_wire_bytes IS NULL OR
     (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
 -- Existing immutable UPDATE trigger, PK, ACLs and owner-only deletion unchanged.
