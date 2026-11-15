@@ -11,7 +11,7 @@ import {verifyP5CdFrozenRoster}
  from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {preflightP5Stage14ReviewedPermitV39}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
-import {verifyP5T24PreWitnessCrossReview}
+import {verifyP5T24PreWitnessCrossReview,summarizeP5T24PrivateReceiptForPublicLog}
  from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 import {verifyP5CdGithubFrozenCodeLineage}
  from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
@@ -103,7 +103,14 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
 }
 if(process.env.P5_CD_GH_QUEUED_T24_EXECUTE==="1"){
  runP5CdOneQueuedT24GithubMain(process.env).then(report=>{
-  console.log(JSON.stringify(report,null,2));
+  // Explicit allowlist. Do not print task/snapshot ID, roster-derived clock
+  // details or full native receipt to public Actions logs.
+  console.log(JSON.stringify({schema:report.schema,status:report.status,
+   registeredTaskWasSourceBound:report.registeredTaskWasSourceBound,
+   stage17WitnessCommittedAndReadBack:report.stage17WitnessCommittedAndReadBack,
+   ...summarizeP5T24PrivateReceiptForPublicLog(report.unsignedStage24ReceiptCandidate),
+   providerCalls:report.providerCalls,paidProviderCalls:report.paidProviderCalls,
+   phase5ScientificFreezePassed:report.phase5ScientificFreezePassed,phase6PaidGo:report.phase6PaidGo}));
   if(report.status!==
     "T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE"&&
      report.status!=="NO_DUE_SIGNED_T24_TASK"){
