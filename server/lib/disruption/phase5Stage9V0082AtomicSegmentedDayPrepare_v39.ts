@@ -599,7 +599,8 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
  * is not a separate reviewer identity or a source-use authorization.
  */
 export async function readBackP5Stage9PreparedDayOnce(
- pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview
+ pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview,
+ options?:{distinguishConfirmedEmptyDay:true}
 ){
  const validated=checkedProposal(review);
  if(!pool||typeof pool.connect!=="function")hold("READBACK_NO_RESTRICTED_POOL");
@@ -645,6 +646,12 @@ export async function readBackP5Stage9PreparedDayOnce(
    "JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=p.query_digest "+
    "WHERE q.manifest_sha256=$1 AND q.run_day_index=$2 ORDER BY p.query_digest LIMIT 385",
    [review.expectedManifestSha256,review.proposal.runDayIndex]);
+  // Only a complete zero/zero read in this authenticated snapshot
+  // permits a prospective initial preparation. Partial data is not absence.
+  if(options?.distinguishConfirmedEmptyDay===true&&
+     selected.rowCount===0&&Array.isArray(selected.rows)&&selected.rows.length===0&&
+     parts.rowCount===0&&Array.isArray(parts.rows)&&parts.rows.length===0)
+   hold("READBACK_CONFIRMED_EMPTY_DAY");
   if(selected.rowCount!==validated.queries.length||selected.rows.length!==validated.queries.length||
      parts.rowCount!==validated.pins.length||parts.rows.length!==validated.pins.length)
    hold("READBACK_INCOMPLETE_OR_EXTRA_PREPARED_DAY");
