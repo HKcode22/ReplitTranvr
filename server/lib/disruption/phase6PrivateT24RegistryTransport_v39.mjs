@@ -323,3 +323,89 @@ export async function readP6T24PrivateRegistryPackets({client,trust:t,runDayInde
    {privateRegistry:{value:reg,enumerable:false},privateFiles:{value:files,enumerable:false}}));
  }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});}
 }
+
+
+/** Read-only workers consume the SAME protected policy bytes and a public
+ * verification key, never the private registry signing key. */
+export function readP6StableT24RegistryTrust(env,t){
+ const raw=env.P6_NONPAID_DAILY_POLICY_BASE64??"",digest=env.P6_NONPAID_DAILY_POLICY_SHA256;
+ if(env.P6_PRIVATE_T24_REGISTRY_READ_APPROVED!=="1"||!H.test(digest??"")||
+    typeof raw!=="string"||raw.length<100||raw.length>46668||!/^[A-Za-z0-9+/]+={0,2}$/.test(raw))
+  hold("NO_PROTECTED_T24_READER_POLICY");
+ const b=Buffer.from(raw,"base64");
+ if(b.toString("base64")!==raw||hash(b)!==digest||b.length>35000)hold("T24_READER_POLICY_HASH_DRIFT");
+ const p=JSON.parse(b.toString("utf8")),v=p.nativeLaterReview,cfg=v?.selectedTConfig;
+ if(p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
+    p.approvedCodeSha!==t.reviewedCodeSha||!["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>p[k]===t[k])||
+    v?.nativeT24ReviewApproved!==true||v.independentT24WitnessProtocolReviewed!==true||
+    v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107"||
+    cfg?.verifiedProviderNativeSchedule!==true||cfg.milestone!=="departure.scheduledTime.utc"||!H.test(cfg.artifactHash??"")||
+    typeof cfg.version!=="string"||!cfg.version.length||typeof v.laterReviewerPublicKeyPem!=="string"||
+    !v.laterReviewerPublicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----"))hold("T24_READER_POLICY_SCOPE_DRIFT");
+ const trust={...t,independentNativeT24RegistryApproved:true,
+  expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:digest,
+  expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
+  expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash,
+  maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,
+  policyValidUntilUtc:v.validUntilUtc,t24ReviewerPublicKeyPem:v.laterReviewerPublicKeyPem};
+ trustCheck(trust);return Object.freeze(trust);
+}
+/** Earliest eligible cutoff per registry. Use all currently authenticated
+ * entries, not publication time, and hydrate at most four existing shards.
+ * Enrollment and execution use different lookaheads; neither makes a claim.
+ */
+export function chooseP6T24RegistrySelectors(sets,observedDbClockUtc,purpose){
+ if(!["ENROLLMENT","PRE_EXECUTION"].includes(purpose)||!Array.isArray(sets)||sets.length>2)
+  hold("T24_SELECTION_SCOPE");
+ const now=utc(observedDbClockUtc),seenDays=new Set(),seenFlights=new Set(),ranked=[];
+ let expired=0,notYetDue=0;
+ for(const current of sets){
+  if(current?.status!=="CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO"||
+     current.providerCalls!==0||current.databaseWrites!==0||current.phase6PaidGo!==false||
+     seenDays.has(current.runDayIndex)||!seal(current,"privateRegistries")||
+     !Array.isArray(current.privateRegistries)||current.privateRegistries.length!==current.registryCount||
+     utc(current.observedDbClockUtc)>now||now-utc(current.observedDbClockUtc)>120000)
+   hold("T24_SELECTION_UNAUTHENTICATED_SET");
+  seenDays.add(current.runDayIndex);
+  for(const {reg,review} of current.privateRegistries){
+   if(reg.runDayIndex!==current.runDayIndex||!H.test(review.registrySha256??"")||
+      !Array.isArray(reg.entries)||reg.entries.length<1||reg.entries.length>96)hold("T24_SELECTION_REGISTRY_DRIFT");
+   const cutoffs=[];
+   for(const e of reg.entries){
+    if(seenFlights.has(e.flightInstanceId))hold("T24_DUPLICATE_ACROSS_DAYS");
+    seenFlights.add(e.flightInstanceId);
+    const at=utc(e.cutoffUtc);
+    if(at<=now+2000)expired++;
+    else if(at>now+(purpose==="ENROLLMENT"?10800000:660000))notYetDue++;
+    else cutoffs.push(at);
+   }
+   if(cutoffs.length)ranked.push({runDayIndex:reg.runDayIndex,registrySha256:review.registrySha256,
+    earliestCutoff:Math.min(...cutoffs)});
+  }
+ }
+ ranked.sort((a,b)=>a.earliestCutoff-b.earliestCutoff||a.runDayIndex-b.runDayIndex||a.registrySha256.localeCompare(b.registrySha256));
+ const out={status:"BOUNDED_NATIVE_T24_REGISTRY_SELECTION_NO_GO",dueShardCount:ranked.length,
+  deferredShardCount:Math.max(0,ranked.length-4),expired,notYetDue,providerCalls:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(out,"privateSelectors",{value:Object.freeze(ranked.slice(0,4)),enumerable:false}));
+}
+export async function readP6SelectedT24RegistryPackets({client,trust,runDayIndices,purpose}){
+ if(!Array.isArray(runDayIndices)||runDayIndices.length<1||runDayIndices.length>2||
+    new Set(runDayIndices).size!==runDayIndices.length||runDayIndices.some(d=>!Number.isSafeInteger(d)||d<1||d>31))
+  hold("T24_BOUNDED_DAY_SELECTION");
+ const sets=[];let unavailableDayCount=0;
+ for(const runDayIndex of runDayIndices){
+  try{sets.push(await readP6T24CurrentRegistrySet({client,trust,runDayIndex}));}
+  catch(e){if(e?.message!=="HOLD_P6_STORED_REVIEW_CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED")throw e;unavailableDayCount++;}
+ }
+ if(!sets.length)return Object.freeze(Object.defineProperty({status:"CURRENT_NATIVE_T24_PACKETS_READONLY_NO_GO",
+  unavailableDayCount,dueShardCount:0,deferredShardCount:0,packetCount:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  "privateRosters",{value:Object.freeze([]),enumerable:false}));
+ const now=sets.reduce((a,b)=>utc(a.observedDbClockUtc)>utc(b.observedDbClockUtc)?a:b).observedDbClockUtc;
+ const plan=chooseP6T24RegistrySelectors(sets,now,purpose),rosters=[];
+ for(const s of plan.privateSelectors){
+  rosters.push(await readP6T24PrivateRegistryPackets({client,trust,runDayIndex:s.runDayIndex,registrySha256:s.registrySha256}));
+ }
+ return Object.freeze(Object.defineProperty({status:"CURRENT_NATIVE_T24_PACKETS_READONLY_NO_GO",unavailableDayCount,
+  dueShardCount:plan.dueShardCount,deferredShardCount:plan.deferredShardCount,packetCount:rosters.reduce((n,r)=>n+r.packetCount,0),
+  providerCalls:0,databaseWrites:0,phase6PaidGo:false},"privateRosters",{value:Object.freeze(rosters),enumerable:false}));
+}
