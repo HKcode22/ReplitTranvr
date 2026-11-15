@@ -60,7 +60,7 @@ function prepare({trust,scope,registryBytes,registryReviewWire,queryPackets}){
     !READ.test(trust.expectedReaderSessionLogin??"")||
     !CODE.test(trust.reviewedCodeSha??"")||
     ![trust.manifestSha256,trust.calendarSha256,trust.releaseSha256,trust.rightsSha256,
-      trust.queryReviewerFingerprintSha256,trust.registryReviewerFingerprintSha256]
+      trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256,trust.registryReviewerFingerprintSha256]
       .every(x=>typeof x==="string"&&SHA.test(x))||
     typeof trust.queryReviewerPublicKeyPem!=="string"||trust.queryReviewerPublicKeyPem.length>4096||
     typeof trust.registryReviewerPublicKeyPem!=="string"||trust.registryReviewerPublicKeyPem.length>4096)
