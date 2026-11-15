@@ -10,10 +10,12 @@ const h=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_LATER_CALENDAR_"+s);};
 const offsets={"T-6h":21600000,"T-90m":5400000};
 const utc=x=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("BAD_UTC");return Date.parse(x);};
-export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){
- if(env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
+export function loadP6LaterCalendarWindows(env,trust,read=readFileSync,horizonMode="LATER"){
+ if(!["LATER","T24"].includes(horizonMode))hold("INVALID_CALENDAR_HORIZON");
+ const selectedOffsets=horizonMode==="T24"?{"T-24h":86400000}:offsets;
+ if((horizonMode==="T24"?env.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED)!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="1"||
-    env.P6_PRIVATE_LATER_RUN_DAYS||env.P6_NONPAID_DAILY_POLICY_BASE64?.length>50000)
+    (horizonMode==="T24"?env.P6_PRIVATE_T24_RUN_DAYS:env.P6_PRIVATE_LATER_RUN_DAYS)||env.P6_NONPAID_DAILY_POLICY_BASE64?.length>50000)
   hold("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
  const wire=env.P6_NONPAID_DAILY_POLICY_BASE64??"";
  if(!/^[A-Za-z0-9+/]+={0,2}$/.test(wire))hold("MISSING_REVIEWED_POLICY");
@@ -37,9 +39,9 @@ export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){
      !Array.isArray(plan.templates)||plan.templates.length<12||plan.templates.length>384||
      plan.templates.some(t=>t.runDayIndex!==d.runDayIndex||!["T-24h","T-6h","T-90m"].includes(t.horizon)))
    hold("DAY_PLAN_SCOPE_DRIFT");
-  const children=plan.templates.filter(t=>Object.hasOwn(offsets,t.horizon)).map(t=>{
+  const children=plan.templates.filter(t=>Object.hasOwn(selectedOffsets,t.horizon)).map(t=>{
    const start=utc(t.scheduledRequestUtc),cutoff=utc(t.earliestPlannedCutoffUtc),
-     end=utc(t.serviceWindowEndUtc)-offsets[t.horizon];
+     end=utc(t.serviceWindowEndUtc)-selectedOffsets[t.horizon];
    if(!(start<cutoff&&cutoff<end))hold("INVALID_SIGNED_LATER_GEOMETRY");
    return {start,end};
   });
