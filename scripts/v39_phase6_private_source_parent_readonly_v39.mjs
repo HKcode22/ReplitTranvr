@@ -197,6 +197,32 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
  return Object.freeze(receipt);
 }
 
+/**
+ * Only a confirmed absent CURRENT_DAY row is ordinary unavailable data.
+ * All other failures (wrong signature/role, DB connectivity, mixed day,
+ * stale revision, incomplete registry) must propagate, not be hidden.
+ */
+export async function readP6SelectedStoredSourceDays(dayIndices,readReview,hydrate){
+ if(!Array.isArray(dayIndices)||dayIndices.length<1||dayIndices.length>2||
+    new Set(dayIndices).size!==dayIndices.length||
+    dayIndices.some(d=>!Number.isSafeInteger(d)||d<1||d>31))
+  fail("INVALID_SELECTED_DAY_SET");
+ const days=[],unavailableDayIndices=[];
+ for(const d of dayIndices){
+  let b;
+  try{b=await readReview(d);}
+  catch(e){
+   if(e?.message!=="HOLD_P6_STORED_REVIEW_CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED")
+    throw e;
+   unavailableDayIndices.push(d);continue;
+  }
+  const hydrated=await hydrate(b);
+  if(hydrated?.redactedSummary?.runDayIndex!==d)
+   fail("HYDRATED_DAY_SELECTOR_DRIFT");
+  days.push(hydrated);
+ }
+ return{days,unavailableDayIndices};
+}
 /** Offline tests may inject data sources; real GH entrypoint never does. */
 export async function runP6RealPrivateSourceParentReadOnly(
  env,options={}
@@ -233,23 +259,19 @@ export async function runP6RealPrivateSourceParentReadOnly(
   await c.connect();
   try{
    await c.query("SET ROLE phase6_private_frozen_reader_v39");
-   const all=[];
-   const reviews=ctx.reviewMode==="stored"?
-    await Promise.resolve().then(async()=>{
-     const resolved=[];
-     for(const day of selection.dayIndices)
-      resolved.push(await readP6StoredPrivateReviewOnce({client:c,trust:ctx.trust,
-       scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
-       selector:{kind:"CURRENT_DAY",runDayIndex:day}}));
-     return resolved;
-    }):ctx.reviews;
-   for(const b of reviews)
-    all.push(await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
+   const hydrate=b=>hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
      client:c,pins:b.pins,wire:b.wire,publicKeyPem:b.publicKeyPem,
      scope:{privateDayRegistryReadOnlyApproved:true,
       existingPaidDispatchApproved:false,
       requireCurrentRevisionForPlanning:true}
-    }));
+    });
+   if(ctx.reviewMode==="stored")
+    return await readP6SelectedStoredSourceDays(selection.dayIndices,
+     day=>readP6StoredPrivateReviewOnce({client:c,trust:ctx.trust,
+      scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
+      selector:{kind:"CURRENT_DAY",runDayIndex:day}}),hydrate);
+   const all=[];
+   for(const b of ctx.reviews)all.push(await hydrate(b));
    return all;
   }finally{await c.end();}
  });
@@ -280,10 +302,27 @@ export async function runP6RealPrivateSourceParentReadOnly(
     observedActualSourceQueueQueries:scan.observedQueries,
     candidateCount:0,deferredDueDayCount:0,providerCalls:0,databaseWrites:0,
     githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
-  const days=await readDays(ctx,selection);
-  if(selection&&(days.length!==selection.dayIndices.length||
-    selection.dayIndices.some(d=>days.filter(x=>x.redactedSummary.runDayIndex===d).length!==1)))
-   fail("NOT_EXACT_SELECTED_DUE_DAYS");
+  const result=await readDays(ctx,selection);
+  const days=selection?result?.days:result;
+  const unavailable=selection?result?.unavailableDayIndices:[];
+  if(selection){
+   if(!Array.isArray(days)||!Array.isArray(unavailable))
+    fail("NOT_REVIEWED_SELECTED_DAY_OUTCOMES");
+   const resolved=[...days.map(x=>x?.redactedSummary?.runDayIndex),...unavailable];
+   if(resolved.length!==selection.dayIndices.length||
+      new Set(resolved).size!==resolved.length||
+      resolved.some(d=>!selection.dayIndices.includes(d)))
+    fail("NOT_EXACT_SELECTED_DUE_DAYS");
+   if(days.length===0)
+    return Object.freeze({schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,
+     status:"SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",
+     storedReviewMode:true,observedActualSourceQueueQueries:scan.observedQueries,
+     candidateCount:0,unavailableSelectedDayCount:unavailable.length,
+     unavailableSelectedDueQueryCount:scan.candidates.filter(x=>
+      unavailable.includes(x.runDayIndex)&&x.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").length,
+     deferredDueDayCount:selection.deferredDueDayCount,providerCalls:0,databaseWrites:0,
+     githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
+  }
   const history=await readHistory(scan,ctx);
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
@@ -296,7 +335,11 @@ export async function runP6RealPrivateSourceParentReadOnly(
      planned.redactedSummary.phase6PaidGo!==false)
    fail("UNSAFE_PRIVATE_SOURCE_PARENT_PLANNER");
   const out={...planned.redactedSummary,
-   ...(selection?{storedReviewMode:true,deferredDueDayCount:selection.deferredDueDayCount}:{}),
+   ...(selection?{storedReviewMode:true,deferredDueDayCount:selection.deferredDueDayCount,
+    unavailableSelectedDayCount:unavailable.length,
+    unavailableSelectedDueQueryCount:scan.candidates.filter(x=>
+      unavailable.includes(x.runDayIndex)&&x.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").length,
+    observedSourceDatabaseClockUtc:scan.checkedAtDatabaseUtc}:{}),
    realPgQueriesReadWithOriginalSourceLogin:true,
    protectedDayEpochsReadWithSeparateReaderLogin:true,
    completeGHChildRunHistoryConsulted:true,

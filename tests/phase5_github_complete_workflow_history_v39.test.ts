@@ -137,3 +137,24 @@ describe("one exact complete GH child history for all four Phase6 lanes",()=>{
   }
  });
 });
+
+describe("actual GitHub REST UTC and exact stored SOURCE parent history",()=>{
+ it("accepts documented seconds UTC, normalizes once; rejects offsets or invalid dates",async()=>{
+  for(const raw of ["2027-02-10T02:00:00Z","2027-02-10T02:00:00.000Z"]){
+   const result=await readP5CompleteGithubWorkflowHistory(base(workflows[0]),
+    (async()=>({ok:true,json:async()=>({total_count:1,workflow_runs:[{...run(1),created_at:raw}]})})) as any,headers);
+   expect(result.workflow_runs[0].created_at).toBe("2027-02-10T02:00:00.000Z");
+  }
+  for(const raw of ["2027-02-30T02:00:00Z","2027-02-10T02:00:00+00:00","2027-02-10T02:00:00.1234Z"]){
+   await expect(readP5CompleteGithubWorkflowHistory(base(workflows[0]),
+    (async()=>({ok:true,json:async()=>({total_count:1,workflow_runs:[{...run(1),created_at:raw}]})})) as any,headers))
+    .rejects.toThrow(/MALFORMED_GITHUB_CHILD_HISTORY/);
+  }
+ });
+ it("permits schedule ONLY for exact parent and workflow_dispatch ONLY for exact children",()=>{
+  const parent=base("phase5-source-upcoming-queue-main-scheduled-readonly.yml");
+  expect(()=>reviewP5HistoryUrl(parent)).toThrow(/WORKFLOW_OR_FILTER_UNREVIEWED/);
+  expect(reviewP5HistoryUrl(parent.replace("workflow_dispatch","schedule")).searchParams.get("event")).toBe("schedule");
+  expect(()=>reviewP5HistoryUrl(base(workflows[0]).replace("workflow_dispatch","schedule"))).toThrow(/WORKFLOW_OR_FILTER_UNREVIEWED/);
+ });
+});

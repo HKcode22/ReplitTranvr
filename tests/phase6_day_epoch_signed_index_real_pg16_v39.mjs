@@ -158,6 +158,8 @@ try{
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
  const stored=await readP6StoredPrivateReviewOnce({client:read,trust,scope,
   selector:{kind:"CURRENT_DAY",runDayIndex:1}});
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{kind:"CURRENT_DAY",runDayIndex:2}}),/CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED/);
  assert.equal(stored.pins.expectedIndexRevision,2);
  assert.deepEqual(stored.wire,second.wire);
  const old=await readP6StoredPrivateReviewOnce({client:read,trust,scope,

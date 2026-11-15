@@ -77,6 +77,11 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
     ",revision,previous_index_sha256,calendar_sha256,release_sha256 FROM "+INDEX+
     " WHERE run_day_index=$1"+(exact?" AND revision=$2":" ORDER BY revision DESC LIMIT 1"),
     exact?[s.runDayIndex,s.indexRevision]:[s.runDayIndex]);
+  // Only an actual empty CURRENT_DAY result can be isolated by a
+  // prospective planner. Corrupt shape, missing exact child references,
+  // SQL/ACL or signature failures remain hard holds.
+  if(current&&res?.rowCount===0&&Array.isArray(res.rows)&&res.rows.length===0)
+   fail("CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED");
   if(res?.rowCount!==1||res.rows?.length!==1)
    fail("EXACT_COMMITTED_REVIEW_NOT_FOUND");
   const row=res.rows[0],wire=wireOf(row);
