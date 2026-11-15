@@ -52,3 +52,13 @@ describe("stored POST child original release",()=>{
   expect(()=>bindP6PostPrivateDayRoute({redactedSummary:z,privateRoutingCandidates:[],getFrozen:()=>Buffer.alloc(0)},c)).toThrow("EXACT_DUE_POST_ROUTE_MISSING");
  });
 });
+
+describe("POST restricted reader endpoint continuity",()=>{
+ it("accepts the original source pooler on the same endpoint only",()=>{
+  const e=env();
+  e.V39_P5_SOURCE_DATABASE_URL=e.V39_P5_SOURCE_DATABASE_URL!.replace("ep-test.neon.tech","ep-test-pooler.neon.tech:5432");
+  expect(admitP6PrivatePostChildTransport(e).selector.packetSha256).toBe(h);
+  e.V39_P5_SOURCE_DATABASE_URL=e.V39_P5_SOURCE_DATABASE_URL!.replace("ep-test-pooler","ep-other-pooler");
+  expect(()=>admitP6PrivatePostChildTransport(e)).toThrow();
+ });
+});
