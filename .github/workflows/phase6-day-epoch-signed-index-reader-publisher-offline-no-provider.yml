@@ -118,11 +118,11 @@ jobs:
           node --input-type=module <<'JS'
           import assert from "node:assert/strict";
           import pg from "pg";
-          import {runEmptyOwnerChain} from "./scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs";
+          import {runEmptyOwnerChain,emptyOwnerConnectionConfig} from "./scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs";
           assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
           assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,
             "postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable");
-          const open=async()=>{const c=new pg.Client({connectionString:process.env.P6_REAL_DISPOSABLE_OWNER_URL});await c.connect();return c;};
+          const open=async()=>{const c=new pg.Client(emptyOwnerConnectionConfig(process.env.P6_REAL_DISPOSABLE_OWNER_URL));await c.connect();return c;};
           const before=await runEmptyOwnerChain({open});
           assert.equal(before.status,"EMPTY_OWNER_CHAIN_READ_ONLY");
           assert.equal(before.initial.state,"V0098_PREREQUISITE_NOT_READY_NO_GO");
