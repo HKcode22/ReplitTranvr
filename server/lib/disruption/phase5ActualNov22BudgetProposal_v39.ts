@@ -7,7 +7,6 @@ import {readFileSync} from "node:fs";
 import {buildP5PrelaunchSlotBudgetEnvelope} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {P5PrelaunchSlotBudgetInput,P5PrelaunchSlotChargeDayInput} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {buildP5ActualFivePairB0062CalendarOnlyDraft} from "./phase5RealFivePairB0062CalendarOnlyDraft_v39";
-import {partitionP5F8ServiceSegments} from "./phase5F8SegmentedSourceCoverage_v39.mjs";
 const sha=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const hash=(x:Buffer)=>createHash("sha256").update(x).digest("hex");
 const H=3600000,M=60000,D=86400000;
@@ -18,7 +17,6 @@ const expectedRows="45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70
 const reset=Date.parse("2026-12-04T02:21:21.000Z");
 const asOf="2026-11-15T09:37:44.000Z";
 const day=(x:number)=>new Date(x).toISOString().slice(0,10);
-const iso=(x:number)=>new Date(x).toISOString();
 const settings=Object.freeze({providerMaxRangeMinutes:240,refreshEveryMinutes:15,
  physicalGetsPerRefreshUpperBound:1,getLeadSeconds:900,apiUnitsPerPhysicalGet:2 as const,
  cycleRestCeilingUnits:50000,protectedRestFloorUnits:1000,dailyRestCeilingUnits:1900,
@@ -43,12 +41,16 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   for(const [a,b] of segments){
    dates(a,b-1,activeDates);dates(a,b+settings.outcomeTailAfterSegmentEndHours*H,outcomeDates);
   }
-  for(const p of partitionP5F8ServiceSegments({segments:segments.map(([a,b])=>({startUtc:iso(a),endUtc:iso(b)}))},settings.providerMaxRangeMinutes)){
+  // Independent enumeration for comparison with the original cost compiler.
+  // Split within actual exposed segments only, never include the inactive gap.
+  const range=settings.providerMaxRangeMinutes*M;
+  for(const [a,b] of segments)for(let p=a;p<b;p+=range){
+   const end=Math.min(p+range,b);
    for(const offset of [24*H,6*H,90*M]){
-    for(let t=Date.parse(p.partStartUtc)-offset-settings.getLeadSeconds*1000;
-        t<Date.parse(p.partEndUtc)-offset-settings.getLeadSeconds*1000;t+=settings.refreshEveryMinutes*M){
+    for(let t=p-offset-settings.getLeadSeconds*1000;
+        t<end-offset-settings.getLeadSeconds*1000;t+=settings.refreshEveryMinutes*M){
      const date=day(t),r=physicalSource.get(date)??{base:0,split:0};
-     r[p.partitionIndex===1?"base":"split"]+=8;physicalSource.set(date,r);
+     r[p===a?"base":"split"]+=8;physicalSource.set(date,r);
      if(t<reset)sourceBeforeReset+=8;else sourceAfterReset+=8;
     }
    }
