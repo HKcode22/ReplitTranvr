@@ -26,6 +26,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
       - '.github/workflows/phase5-cd-github-bounded-pre-tick.yml'
       - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
       - 'server/lib/disruption/phase5CdGithubCodeLineage_v39.ts'
