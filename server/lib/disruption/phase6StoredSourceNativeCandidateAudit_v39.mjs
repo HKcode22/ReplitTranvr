@@ -12,6 +12,7 @@ import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39
 import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
+import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
 const SHA=/^[a-f0-9]{64}$/;
 const REG=/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$/;
 const QUERY=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.json$/;
@@ -224,4 +225,70 @@ export async function readP6PendingNativeLaterReview({readerClient,trust,a,selec
   publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
   requireCurrentRevisionForPlanning:true}});
  return selectP6PendingNativeLaterReview(a,index,current,trust);
+}
+
+
+/** In-process SOURCE -> existing unsigned PRE review handoff.
+ * Keep the whole authenticated audit/dossier intact. For later horizons,
+ * give the reviewer only the chosen pending entries; never rewrite the
+ * original audit or pretend its digest is independent reviewer authority.
+ * All flight-bearing objects are nonenumerable and never CLI output.
+ */
+export function buildP6PostcommitUnsignedPreReview(a,trust,pending=null){
+ const s=a?.privateSourceScope,b=a?.privateAuditBytes;
+ if(trust?.independentStudyTrustPinsApproved!==true||
+    a?.status!=="ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW"||
+    !sealed(a,"privateAuditBytes")||!sealed(a,"privateSourceScope")||!sealed(a,"privateSourceRegistrySha256")||
+    !Buffer.isBuffer(b)||b.length<100||b.length>6000000||hash(b)!==a.candidateAuditSha256||
+    !SHA.test(a.privateSourceRegistrySha256??"")||s?.manifestSha256!==trust.manifestSha256||
+    s.rightsReviewSha256!==trust.rightsSha256||s.reviewedReleaseSha256!==trust.releaseSha256||
+    s.runDayIndex!==a.runDayIndex||s.horizon!==a.horizon||
+    a.providerCalls!==0||a.databaseWrites!==0||a.signedPrePacketsIssued!==0||a.phase6PaidGo!==false)
+  fail("UNSIGNED_REVIEW_UNAUTHENTICATED_SOURCE");
+ const audit=JSON.parse(b.toString("utf8"));
+ if(audit.actualDbClockUtc!==a.actualDbClockUtc||audit.sourceGithubRunId!==s.expectedSourceGithubRunId||
+    audit.observedMemberCount!==a.observedMemberCount||audit.candidateCount!==a.candidateCount||
+    audit.censoredCount!==a.censoredCount||digestP5ActualSourceCandidateAudit(audit)!==a.candidateAuditSha256)
+  fail("UNSIGNED_REVIEW_AUDIT_DRIFT");
+ const dossier=buildP5UnsignedNativePreReviewDossier(audit,{
+  expectedActualCandidateAuditSha256:a.candidateAuditSha256,expectedManifestSha256:s.manifestSha256,
+  expectedQueryDigestSha256:s.queryDigestSha256,expectedSourceResponseSha256:audit.sourceResponseSha256,
+  expectedSourcePopulationQueryId:audit.sourcePopulationQueryId,expectedSourceGithubRunId:s.expectedSourceGithubRunId,
+  expectedReviewedReleaseSha256:s.reviewedReleaseSha256,expectedReviewedSourceRightsSha256:s.rightsReviewSha256,
+  expectedEarlyDrawSha256:s.earlyDrawSha256,expectedProviderContractSha256:s.providerContractSha256,
+  expectedSourceDayRegistrySha256:a.privateSourceRegistrySha256,expectedReviewedMainCodeSha:trust.reviewedCodeSha,
+  expectedRunDayIndex:s.runDayIndex,expectedSlot:s.slot,expectedHorizon:s.horizon,expectedAirportIcao:s.airportIcao});
+ let entries=dossier.entries;
+ if(s.horizon==="T-24h"){
+  if(pending!==null)fail("UNSIGNED_REVIEW_T24_LATER_SCOPE");
+ }else{
+  if(!["T-6h","T-90m"].includes(s.horizon)||
+     pending?.status!=="NATIVE_LATER_PENDING_INDEPENDENT_REVIEW_ONLY"||
+     pending.originalAuditSha256!==a.candidateAuditSha256||pending.runDayIndex!==a.runDayIndex||
+     pending.horizon!==a.horizon||pending.originalEligibleCount!==dossier.candidateCount||
+     pending.providerCalls!==0||pending.databaseWrites!==0||pending.signedPrePacketsIssued!==0||
+     pending.phase6PaidGo!==false||!sealed(pending,"privatePendingCandidates")||
+     !sealed(pending,"privateOriginalAuditBytes")||!Buffer.isBuffer(pending.privateOriginalAuditBytes)||
+     !pending.privateOriginalAuditBytes.equals(b)||!Array.isArray(pending.privatePendingCandidates)||
+     pending.privatePendingCandidates.length!==pending.pendingCount)
+   fail("UNSIGNED_REVIEW_PENDING_SCOPE");
+  const ids=new Set(),original=new Map(audit.candidates.filter(c=>c.status==="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED")
+   .map(c=>[c.flightInstanceId,c]));
+  for(const c of pending.privatePendingCandidates){
+   if(ids.has(c.flightInstanceId)||!original.has(c.flightInstanceId)||
+      JSON.stringify(original.get(c.flightInstanceId))!==JSON.stringify(c))
+    fail("UNSIGNED_REVIEW_PENDING_CANDIDATE_DRIFT");
+   ids.add(c.flightInstanceId);
+  }
+  entries=dossier.entries.filter(e=>ids.has(e.source.flightInstanceId));
+  if(entries.length!==pending.pendingCount)fail("UNSIGNED_REVIEW_PENDING_COUNT_DRIFT");
+ }
+ const out={status:"UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED",runDayIndex:a.runDayIndex,horizon:a.horizon,
+  originalCandidateCount:dossier.candidateCount,reviewEntryCount:entries.length,
+  independentReviewStillRequired:true,signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ Object.defineProperties(out,{
+  privateOriginalDossier:{value:dossier,enumerable:false},
+  privateOriginalDossierSha256:{value:digestP5UnsignedNativePreDossier(dossier),enumerable:false},
+  privateReviewEntries:{value:Object.freeze(entries.slice()),enumerable:false}});
+ return Object.freeze(out);
 }
