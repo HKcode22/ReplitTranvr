@@ -8,7 +8,6 @@
  * This worker is MANUAL and INERT unless a separately signed Day1+ packet
  * exists AFTER its real early four-airport draw and Phase6 GO.
  */
-import {readFileSync,statSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {Pool} from "pg";
 import {fileURLToPath} from "node:url";
@@ -22,6 +21,10 @@ import {prepareP5ReviewedSourceDayFromSavedDraw,
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_-]{8,100}\.json$/;
 const PREFIX="REFUSED_P5_SIGNED_DAY_PREPARE_";
+export const P5_PRIVATE_PREPARE_CONFIRM=
+ "ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET";
+const PRIVATE_B64_LIMIT=48000;
+const PRIVATE_RAW_LIMIT=36000;
 const hold=(why:string):never=>{throw Error(PREFIX+why);};
 
 export interface P5SignedOneDayPreparePacket{
@@ -33,6 +36,49 @@ export interface P5SignedOneDayPreparePacket{
  /** This is an external review *claim*. Its integrity is backed by the
   * separately pinned raw packet hash, not by a boolean alone. */
  independentlyReviewedExactDaySourcePacket:true;
+}
+/**
+ * Bounded one-day planning/review packet, NOT a provider Content store.
+ * Exact bytes obtained through a dedicated secret and independently reviewed
+ * SHA. No local file, body logging, upload/artifact, or SOURCE registry cycle.
+ * Human-reviewed one-day bridge only; not the autonomous day publication path.
+ */
+export function loadP5PrivatePrepareReviewPacket(env:NodeJS.ProcessEnv){
+ const encoded=env.P5_SOURCE_PREPARE_PRIVATE_PACKET_B64??"";
+ if(env.P5_DAY_PREPARE_PRIVATE_CONFIRM!==P5_PRIVATE_PREPARE_CONFIRM||
+    env.P5_DAY_PREPARE_CONFIRM!=="ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"||
+    env.P5_DAY_PREPARE_PRIVATE_MODE!=="1"||
+    !/^(?:[1-9]|[12][0-9]|3[01])$/.test(env.P5_DAY_PREPARE_EXPECTED_DAY??"")||
+    encoded.length<136||encoded.length>PRIVATE_B64_LIMIT||
+    encoded.length%4!==0||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))
+  hold("PRIVATE_PREPARE_PACKET_SCOPE_OR_SIZE");
+ const bytes=Buffer.from(encoded,"base64");
+ if(bytes.length<100||bytes.length>PRIVATE_RAW_LIMIT||
+    bytes.toString("base64")!==encoded||
+    !SHA.test(env.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256??"")||
+    createHash("sha256").update(bytes).digest("hex")!==env.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256)
+  hold("PRIVATE_PREPARE_EXACT_REVIEW_BYTES_MISMATCH");
+ let packet:P5SignedOneDayPreparePacket;
+ try{packet=JSON.parse(bytes.toString("utf8"));}
+ catch{return hold("PRIVATE_PREPARE_REVIEW_JSON_INVALID");}
+ const day=Number(env.P5_DAY_PREPARE_EXPECTED_DAY);
+ if(!packet||packet.runDayIndex!==day||
+    packet.schema!=="v39.phase5.github-signed-one-day-source-preparation.v1")
+  hold("PRIVATE_PREPARE_REVIEW_WRONG_DAY_OR_SCHEMA");
+ const logicalPath="data-collection/phase5/frozen/day"+
+   String(day).padStart(2,"0")+"_signed_source_prepare.json";
+ // This is an identifier required by the original admission function,
+ // NOT a file to be read or written. Keep raw artifacts nonenumerable.
+ const out={logicalPath,runDayIndex:day} as {
+  logicalPath:string;runDayIndex:number;
+  readonly bytes:Buffer;readonly packet:P5SignedOneDayPreparePacket
+ };
+ Object.defineProperties(out,{
+  bytes:{value:bytes,enumerable:false},
+  packet:{value:packet,enumerable:false}
+ });
+ return Object.freeze(out);
 }
 export function admitP5SignedDayGitHubPrepare(
  env:NodeJS.ProcessEnv,raw:Buffer,
@@ -49,7 +95,7 @@ export function admitP5SignedDayGitHubPrepare(
     !CODE.test(env.V39_P5_PREPARE_APPROVED_CODE_SHA??"")||
     env.GITHUB_SHA!==env.V39_P5_PREPARE_APPROVED_CODE_SHA||
     env.ADB_AUTO_COLLECT!=="0"||
-    env.AERODATABOX_API_KEY||
+    env.AERODATABOX_API_KEY||env.AERODATABOX_WEBHOOK_SECRET||env.RAPIDAPI_KEY||
     env.V39_P5_PREPARE_OWNER_APPROVED!=="1"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
@@ -61,6 +107,13 @@ export function admitP5SignedDayGitHubPrepare(
     createHash("sha256").update(raw).digest("hex")!==
       env.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256)
   hold("REVIEWED_PACKET_BYTES_OR_ALLOWED_FILE_MISMATCH");
+ // Bind caller-supplied parsed packet to the SAME exact reviewed bytes.
+ // The original CLI parsed them together, but library calls must not be
+ // able to substitute a different object alongside a valid raw digest.
+ try{
+  if(JSON.stringify(JSON.parse(raw.toString("utf8")))!==JSON.stringify(packet))
+   hold("PARSED_PACKET_DIFFERS_FROM_REVIEWED_BYTES");
+ }catch{return hold("PARSED_PACKET_DIFFERS_FROM_REVIEWED_BYTES");}
  const r=packet?.reviewedPrepareInput,stage7=r?.readScope,
   stage8=r?.sourceReview,stage9=r?.stage9Review;
  const manifest=env.V39_P5_MANIFEST_SHA256,
@@ -161,15 +214,11 @@ export async function runP5SignedDayGitHubPrepare(
  }
 }
 async function main(){
- if(process.argv.length!==3)hold("ONE_PACKET_FILE_REQUIRED");
- const path=process.argv[2];
- if(!FILE.test(path))hold("UNREVIEWED_FILE_PATH");
- const stat=statSync(path);
- if(!stat.isFile()||stat.size<100||stat.size>500_000)
-  hold("INVALID_REVIEWED_PACKET_SIZE");
- const bytes=readFileSync(path);
- const packet=JSON.parse(bytes.toString("utf8")) as P5SignedOneDayPreparePacket;
- const r=await runP5SignedDayGitHubPrepare(process.env,path,bytes,packet);
+ if(process.argv.length!==3||process.argv[2]!=="--private-review-packet")
+  hold("PRIVATE_REVIEW_PACKET_ONLY_NO_CHECKOUT_FILE");
+ const plan=loadP5PrivatePrepareReviewPacket(process.env);
+ const r=await runP5SignedDayGitHubPrepare(
+  process.env,plan.logicalPath,plan.bytes,plan.packet);
  console.log(JSON.stringify(r));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
