@@ -241,7 +241,7 @@ async function readExistingNativePost({readerClient,trust,authority,requestSha25
     d.reviewedSourceRightsSha256!==trust.rightsSha256||!b||
     b.schema!=="v39.phase6.native-post-source-binding.v1"||b.policySha256!==authority.expectedPolicySha256||
     !H.test(b.sourceRegistrySha256??"")||!H.test(b.queryDigestSha256??"")||
-    !/^data-collection\\/phase5\\/frozen\\/source_[A-Za-z0-9_.-]{8,125}\\.json$/.test(b.sourceRegistryPath??""))
+    !/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$/.test(b.sourceRegistryPath??""))
   hold("EXISTING_POST_PACKET_IS_NOT_EXACT_PROTECTED_BINDING_NO_REPLAY");
  return {status:"EXACT_EXISTING_NATIVE_POST",stored,receipt,packet};
 }
