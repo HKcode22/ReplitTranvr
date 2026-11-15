@@ -69,7 +69,7 @@ export async function commissionP5EarlyDrawOnce(pool:Pick<Pool,"connect">,driver
    await c.query("GRANT UPDATE ("+cols.join(",")+") ON clean."+table+" TO "+ROLE);
   const seq=(await c.query("SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') name")).rows[0]?.name;
   if(seq){
-   if(!/^clean\\.adb_sampling_draw_[a-z0-9_]+$/.test(seq))fail("UNREVIEWED_SEQUENCE");
+   if(!/^clean\.adb_sampling_draw_[a-z0-9_]+$/.test(seq))fail("UNREVIEWED_SEQUENCE");
    await c.query("GRANT USAGE ON SEQUENCE "+seq+" TO "+ROLE);
   }
   await verifyP5EarlyDrawObjectAcl(c,ROLE);
