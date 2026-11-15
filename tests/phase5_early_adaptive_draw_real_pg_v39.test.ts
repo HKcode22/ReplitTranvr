@@ -25,12 +25,25 @@ const pins:EarlyDrawOwnerPins={
 };
 suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
   let db:Pool;
+  let drawDb:Pool;
   let serviceStart:string;
   beforeAll(async()=>{
     if(process.env.DATABASE_URL!==URL || process.env.GITHUB_ACTIONS!=="true" ||
        process.env.V39_P5_PG16_INTEGRATION!=="1")
       throw Error("REFUSED_NON_DISPOSABLE_REAL_PG16");
     db=new Pool({connectionString:URL,max:3});
+    // Dedicated disposable actor: no owner, source or PRE privileges.
+    await db.query("CREATE ROLE p5_early_draw_ci LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD 'ci_only_draw'");
+    await db.query("GRANT USAGE ON SCHEMA clean TO p5_early_draw_ci");
+    await db.query("GRANT SELECT ON clean.adb_phase6_authorization,clean.adb_phase6_calendar_day,clean.adb_sampling_frame_registry,clean.adb_sampling_frame,clean.adb_airport_sampling_state,clean.adb_sampling_draw TO p5_early_draw_ci");
+    await db.query("GRANT INSERT (run_day_index,slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,adaptive_state_hash,probability_vector,airport_layer_design_probability,selected_at_utc) ON clean.adb_sampling_draw TO p5_early_draw_ci");
+    await db.query("GRANT INSERT (icao,last_selected_at,last_selected_run_day), UPDATE (last_selected_at,last_selected_run_day,updated_at_utc) ON clean.adb_airport_sampling_state TO p5_early_draw_ci");
+    const sequence=(await db.query("SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') AS name")).rows[0].name;
+    if(sequence!==null){
+      expect(sequence).toMatch(/^clean\.adb_sampling_draw_[a-z0-9_]+$/);
+      await db.query("GRANT USAGE ON SEQUENCE "+sequence+" TO p5_early_draw_ci");
+    }
+    drawDb=new Pool({connectionString:"postgresql://p5_early_draw_ci:ci_only_draw@localhost:5432/v39_ci?sslmode=disable",max:2});
     const today=await db.query("SELECT clock_timestamp() AS now");
     serviceStart=new Date(new Date(today.rows[0].now).getTime()+28*3_600_000)
       .toISOString();
@@ -84,10 +97,12 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
        serviceStart,pins.expectedFrameHash],
     );
   });
-  afterAll(async()=>{if(db)await db.end();});
+  afterAll(async()=>{if(drawDb)await drawDb.end();if(db)await db.end();});
 
   it("commits real atomic four-row selections and advances historical washout state",async()=>{
-    const output=await commitEarlyPhase5Draw(db,pins);
+    const acl=(await drawDb.query("SELECT current_user actor,session_user login,has_any_column_privilege(current_user,'clean.adb_sampling_draw','UPDATE') draw_update,has_table_privilege(current_user,'clean.adb_sampling_draw','DELETE') draw_delete,has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') auth_update,has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') pre_insert,has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') source_insert")).rows[0];
+    expect(acl).toMatchObject({actor:"p5_early_draw_ci",login:"p5_early_draw_ci",draw_update:false,draw_delete:false,auth_update:false,pre_insert:false,source_insert:false});
+    const output=await commitEarlyPhase5Draw(drawDb,pins);
     expect(output.status).toBe("EARLY_DRAW_COMMITTED");
     expect(output.selectedAirportCount).toBe(4);
     expect(output.flightLevelPreVerified).toBe(false);
@@ -108,7 +123,7 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     const before=(await db.query(
       "SELECT array_agg(draw_id ORDER BY slot_id) ids FROM clean.adb_sampling_draw"
     )).rows[0].ids;
-    const reread=await commitEarlyPhase5Draw(db,pins);
+    const reread=await commitEarlyPhase5Draw(drawDb,pins);
     expect(reread.status).toBe("EARLY_DRAW_IDEMPOTENT_READBACK");
     const after=(await db.query(
       "SELECT array_agg(draw_id ORDER BY slot_id) ids FROM clean.adb_sampling_draw"
@@ -169,7 +184,7 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
 
     await expect(readCommittedP5DayCandidateGrid(db,{
       ...scope,expectedEarlyDrawSha256:hex("0"),
-    })).rejects.toThrow("UNVERIFIED_EARLY_DRAW_READBACK");
+    })).rejects.toThrow("INDEPENDENT_FOUR_SLOT_SELECTION_SHA_DRIFT");
     const preserved=await db.query(
       "SELECT COUNT(*)::integer AS n FROM clean.adb_sampling_draw"
     );

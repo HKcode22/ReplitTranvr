@@ -24,13 +24,14 @@ export function parseP5GitHubApprovedEarlyDrawContext(env:Env){
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
-    env.GITHUB_RUN_ATTEMPT!=="1"||
+    env.GITHUB_RUN_ATTEMPT!=="1"||env.V39_P5_APPROVED_CODE_SHA!==env.GITHUB_SHA||
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??"")||
     (env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
      env.P5_EARLY_DRAW_MANUAL_CONFIRM!==
       "ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO")||
     env.ADB_AUTO_COLLECT!=="0"||
-    env.AERODATABOX_API_KEY||
+    env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET||
+    env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
     env.V39_P5_EARLY_DRAW_OWNER_APPROVED!=="1"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
@@ -41,9 +42,17 @@ export function parseP5GitHubApprovedEarlyDrawContext(env:Env){
  if(!keys.every(x=>typeof x==="string"&&SHA.test(x)))
   HOLD("UNPINNED_SCENE_HASHES");
  const expectedRole=env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE;
+ let u:URL;
+ try{u=new URL(env.V39_P5_EARLY_DRAW_DATABASE_URL??"");}
+ catch{return HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");}
  if(!ROLE.test(expectedRole??"")||
-    typeof env.V39_P5_EARLY_DRAW_DATABASE_URL!=="string"||
-    !/^postgres(?:ql)?:\/\//.test(env.V39_P5_EARLY_DRAW_DATABASE_URL))
+    !["postgresql:","postgres:"].includes(u.protocol)||decodeURIComponent(u.username)!==expectedRole||
+    !u.password||!u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hash||
+    (u.port!==""&&u.port!=="5432")||u.searchParams.getAll("sslmode").length!==1||
+    !["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
+    [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+    (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||
+     u.searchParams.get("channel_binding")!=="require")))
   HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");
  return {
   manifest:keys[0]!,calendar:keys[1]!,config:keys[2]!,
@@ -67,11 +76,19 @@ export async function runP5GitHubAutonomousEarlyDraw(
   tx=true;
   await client.query("SET LOCAL statement_timeout='10000ms'");
   const who=(await client.query(
-   "SELECT current_database() AS db,current_user AS role,"+
+   "SELECT current_database() AS db,current_user AS role,session_user AS login,"+
+   "current_setting('server_version_num')::integer AS version,"+
    "current_setting('transaction_read_only') AS ro,"+
-   "pg_is_in_recovery() AS replica,clock_timestamp() AS now"
+   "pg_is_in_recovery() AS replica,clock_timestamp() AS now,"+
+   "(SELECT NOT (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls) AND rolcanlogin FROM pg_roles WHERE rolname=current_user) AS restricted_login,"+
+   "(has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') OR has_any_column_privilege(current_user,'clean.adb_phase6_authorization','INSERT') OR has_table_privilege(current_user,'clean.adb_phase6_authorization','DELETE')) AS auth_update,"+
+   "has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') AS source_insert,"+
+   "has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') AS pre_insert,"+
+   "(NOT has_any_column_privilege(current_user,'clean.adb_sampling_draw','UPDATE') AND NOT has_table_privilege(current_user,'clean.adb_sampling_draw','DELETE')) AS draw_immutable"
   )).rows[0];
   if(who?.db!=="neondb"||who.role!==ctx.expectedRole||
+     who.login!==ctx.expectedRole||!Number.isSafeInteger(who.version)||who.version<160000||who.version>=170000||
+     who.restricted_login!==true||who.auth_update!==false||who.source_insert!==false||who.pre_insert!==false||who.draw_immutable!==true||
      who.ro!=="on"||who.replica!==false)
    HOLD("WRONG_READONLY_DATABASE_IDENTITY");
   const auth=await client.query(
@@ -100,7 +117,8 @@ export async function runP5GitHubAutonomousEarlyDraw(
    expectedCalendarSha256:ctx.calendar,
    expectedConfigSha256:ctx.config,
    expectedFrameSha256:ctx.frame,
-   rows:calendar.rows as P5SchedulerDayRow[]
+   // Exact separately approved code includes this prospective censoring policy.
+   allowLocalMissedDay:true,rows:calendar.rows as P5SchedulerDayRow[]
   });
   await client.query("ROLLBACK");tx=false;
   client.release();client=undefined;
@@ -128,6 +146,7 @@ export async function runP5GitHubAutonomousEarlyDraw(
    status:"ONE_APPROVED_EARLY_FOUR_SLOT_DRAW_COMMITTED_NOT_SOURCE",
    runDayIndex:selected.runDayIndex,
    priorCommittedDays:selected.priorCommittedDays,
+   missedRunDayIndices:selected.missedRunDayIndices,
    immutableDrawSha256:committed.drawSha256,
    selectedAirportCount:committed.selectedAirportCount,
    selectedAtUtc:committed.selectedAtUtc,

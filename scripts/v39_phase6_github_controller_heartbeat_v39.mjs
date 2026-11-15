@@ -36,7 +36,7 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
  lines.push(
   "",
   "**Not yet proved by this heartbeat:** authentic private SOURCE/publisher; "+
-  "live V0094 schema; signed 31-day calendar, day rollover and charge budgets; "+
+  "production schema/readback (separately evidenced); signed 31-day calendar, day rollover and charge budgets; "+
   "actual operating PRE/POST; provider rights/retention, callback storage "+
   "and physical-label quality.",
   "",
@@ -63,7 +63,7 @@ async function main(){
     recentSkipped:x.runStateCounts.completedSkipped,
     recentFailed:x.runStateCounts.completedFailed
    })),
-   missingAutonomousLanes:report.honestMissingAutonomousEndToEndLanes,
+   releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,
    signed31DayRolloverVerified:false,providerCalls:0,databaseWrites:0,
    dispatches:0,paidPhase6Go:false,phase5Freeze:false
   }));

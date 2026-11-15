@@ -30,12 +30,12 @@ function env(){
   P5_V39_PRE_DATABASE_URL:"",P5_V39_T24_WITNESS_DATABASE_URL:"",
   GITHUB_TOKEN:"this_is_synthetic_nonsecret_token_for_unit_tests"};
 }
-test("five exact existing GH cron lanes, not a duplicate new SOURCE/PRE/POST",()=>{
- assert.equal(P6_EXISTING_CONTROLLER_LANES.length,5);
+test("nine exact existing GH cron lanes, not a duplicate new SOURCE/PRE/POST",()=>{
+ assert.equal(P6_EXISTING_CONTROLLER_LANES.length,9);
  assert.deepEqual(P6_EXISTING_CONTROLLER_LANES.map(x=>x.lane),[
-  "EARLY_DRAW","SOURCE","PRE","PRE_RECOVERY","DAY_SHARD_SELECTOR"
+  "EARLY_DRAW","SOURCE","PRE","PRE_RECOVERY","DAY_SHARD_SELECTOR","DAILY_PREPARE","PRE_ENROLLMENT","T24","RETENTION"
  ]);
- assert.equal(new Set(P6_EXISTING_CONTROLLER_LANES.map(x=>x.workflow)).size,5);
+ assert.equal(new Set(P6_EXISTING_CONTROLLER_LANES.map(x=>x.workflow)).size,9);
  assert(P6_MANUAL_OR_MISSING_RELEASE_LANES.some(x=>x.lane==="FULL_31_DAY_ROLLOVER"));
  assert(P6_MANUAL_OR_MISSING_RELEASE_LANES.some(x=>x.lane==="POST_CHILD"));
 });
@@ -118,7 +118,7 @@ test("role boundaries: scheduled GH only, no provider or DB credentials",()=>{
   GITHUB_EVENT_NAME:"workflow_dispatch",P6_CONTROLLER_HEARTBEAT_CONFIRM:"wrong"}),
   /NOT_MAIN_READONLY_GITHUB_ACTION/);
 });
-test("five bounded GitHub read-only list calls and human summary redacted",async()=>{
+test("nine bounded GitHub read-only list calls and human summary redacted",async()=>{
  const calls=[];
  const fetcher=async(url,opts)=>{
   calls.push({url,opts});
@@ -138,8 +138,8 @@ test("five bounded GitHub read-only list calls and human summary redacted",async
   fetcher,now:()=>new Date(T)
  });
  assert.equal(x.schema,P6_AUTO_CONTROL_HEARTBEAT_V39);
- assert.equal(x.controllerStates.length,5);
- assert.equal(calls.length,5);
+ assert.equal(x.controllerStates.length,9);
+ assert.equal(calls.length,9);
  assert.equal(x.status,"AUTONOMOUS_GITHUB_SCHEDULE_PRESENT_NOT_COLLECTION_PROOF_NO_GO");
  assert.equal(x.paidPhase6Go,false);
  assert.equal(x.automaticFull31DayRolloverVerified,false);

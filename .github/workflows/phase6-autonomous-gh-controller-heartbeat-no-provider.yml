@@ -49,7 +49,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Offline mock scheduled SOURCE/PRE/REAPER/index histories
+      - name: Offline mock current nine controller histories
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -94,7 +94,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Read only GH workflow-run history for five existing controllers
+      - name: Read only GH workflow-run history for nine existing controllers
         shell: bash
         run: |
           set -Eeuo pipefail

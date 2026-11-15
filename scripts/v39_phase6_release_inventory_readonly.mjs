@@ -9,6 +9,7 @@ import {fileURLToPath} from "node:url";
 import {resolve} from "node:path";
 const REPO="HKcode22/ReplitTranvr";
 export const lanes=[
+ ["early_draw","phase5-six-slot-approved-early-four-airport-draw.yml","gated-exact-early-parent"],
  ["daily","phase6-nonpaid-source-day-prepare-publish.yml","protected-main-one-day-nonpaid"],
  ["source_parent","phase5-source-upcoming-queue-main-scheduled-readonly.yml","separately-authorized-stored-source-children"],
  ["source_child_and_pre_producer","phase5-one-signed-day-source-child-dispatch.yml","exact-private-source-existing-one-get-child"],
@@ -18,7 +19,9 @@ export const lanes=[
  ["t24_worker","phase5-cd-github-one-queued-t24-witness-main-manual.yml","current-private-native-t24"],
  ["post_producer","phase5-source-upcoming-queue-main-scheduled-readonly.yml","separately-authorized-native-post-producer"],
  ["post_parent","phase5-source-upcoming-queue-main-scheduled-readonly.yml","separately-authorized-current-private-post-children"],
- ["post_child","phase5-one-signed-future-post-v0083-main-manual.yml","exact-signed-one-v0083-future-post"]
+ ["post_child","phase5-one-signed-future-post-v0083-main-manual.yml","exact-signed-one-v0083-future-post"],
+ ["pre_recovery","phase5-cd-github-existing-queue-lease-watchdog.yml","reviewed-existing-queue-watchdog"],
+ ["retention_metadata","phase5-private-blob-retention-readonly-sentinel-no-provider.yml","private-main-restricted-metadata-sentinel"]
 ];
 export const intended={
  P6_NONPAID_SOURCE_SCHEDULE_ENABLED:"true",
@@ -31,6 +34,7 @@ export const intended={
  P6_PRIVATE_T24_ENROLL_ENABLED:"1",
  P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",
  P5_CD_GH_PRE_SCHEDULE_ENABLED:"1",
+ P5_CD_GH_WATCHDOG_ENABLED:"1",
  P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED:"1",
  P6_PRIVATE_T24_EXECUTION_ENABLED:"1",
  P5_CD_GH_T24_SCHEDULE_ENABLED:"1",
