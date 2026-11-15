@@ -1,0 +1,17 @@
+{
+  "schema": "v39.phase5.owner-free-account-observation.v1",
+  "source": "owner Replit Shell supplied P4_ACCOUNT_FREE_QUOTA_CHECK_COMPLETE_NO_BILLABLE_PROVIDER_NO_WRITES",
+  "reviewedCodeSha": "09b80926caae24ba07a1f8a20c819090d8f2528c",
+  "observedAtUtc": "2026-11-15T09:37:44.000Z",
+  "apiUnitsLimit": 60000,
+  "apiUnitsRemaining": 59968,
+  "apiUnitsResetAtUtc": "2026-12-04T02:21:21.000Z",
+  "requestsLimit": 240000,
+  "requestsRemaining": 239974,
+  "alertCreditsRemaining": 1830,
+  "independentProjectCeilingUnits": 50000,
+  "paidProviderCalls": 0,
+  "databaseWrites": 0,
+  "sourceRightsCertified": false,
+  "phase6PaidGo": false
+}
