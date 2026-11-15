@@ -172,7 +172,7 @@ export function admitP5SignedDayGitHubPrepare(
     stage9.githubOnlyProspectiveOwnerApproved!==true)
   hold("DAY_SOURCE_REVIEW_SCENE_OR_ROLE_DRIFT");
  const url=env.P5_V39_PREPARE_DATABASE_URL;
- if(!url||typeof url!=="string")hold("REVIEWED_EXISTING_PREPARE_LOGIN_MISSING");
+ if(!url||typeof url!=="string")return hold("REVIEWED_EXISTING_PREPARE_LOGIN_MISSING");
  let parsed:URL;
  try{parsed=new URL(url);}catch{return hold("BAD_PREPARE_DB_URL");}
  if(!["postgres:","postgresql:"].includes(parsed.protocol)||

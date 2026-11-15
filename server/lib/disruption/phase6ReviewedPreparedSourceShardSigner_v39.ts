@@ -378,8 +378,8 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
    committed.set(row.logical_path,when);
   }
   const entries=routeDrafts.map(({r,first,last,starts,queryPaths})=>{
-   const published=committed.get(r.logicalPath);
-   if(published===undefined||queryPaths.some(path=>!committed.has(path)||committed.get(path)!>published))
+   const published=committed.get(r.logicalPath)??hold("INDEX_MISSING_REGISTRY_COMMIT_CLOCK");
+   if(queryPaths.some(path=>!committed.has(path)||committed.get(path)!>published))
     hold("INDEX_REGISTRY_WAS_NOT_COMMITTED_LAST");
    // Do not change actual query clocks. The routing window is derived
    // solely from signed query times and the observed real registry commit.
