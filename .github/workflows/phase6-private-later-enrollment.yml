@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
+      - 'server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs'
       - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
       - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
       - 'server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs'
@@ -97,6 +98,82 @@ jobs:
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
           test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx --no-install tsx scripts/v39_phase6_private_later_restartable_enrollment_v39.ts
+
+  enroll-current-native-t24:
+    if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_T24_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && inputs.confirm == 'REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER') || (github.event_name == 'schedule' && vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED == '1')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_CD_GH_PREPARE_CONFIRM: REGISTER_ONE_ALREADY_BOUND_SOURCE_FLIGHT_NO_PROVIDER
+      P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM: ${{ github.event_name == 'schedule' && 'REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER' || inputs.confirm }}
+      P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED: ${{ secrets.P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED }}
+      P5_CD_GH_PREPARE_ARMED: ${{ secrets.P5_CD_GH_PREPARE_ARMED }}
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+      P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      P5_CD_GH_STANDALONE_LATER_APPROVED: ${{ secrets.P5_CD_GH_STANDALONE_LATER_APPROVED }}
+      P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256: ${{ secrets.P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256 }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+      P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+      P6_PRIVATE_LATER_RUN_DAYS: ${{ inputs.run_days }}
+      P6_PRIVATE_LATER_ENROLL_ENTRYPOINT: '1'
+      P6_PRIVATE_T24_ENROLL_MODE: '1'
+      P6_PRIVATE_T24_REGISTRY_READ_APPROVED: ${{ secrets.P6_PRIVATE_T24_REGISTRY_READ_APPROVED }}
+      P5_CD_GH_T24_PREPARE_APPROVED: ${{ secrets.P5_CD_GH_T24_PREPARE_APPROVED }}
+      P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
+      P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
+      P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: STOP before opening any DB session
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$P5_CD_GH_PREPARE_ARMED" = 1
+          test "$P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$P6_PRIVATE_T24_REGISTRY_READ_APPROVED" = 1
+          test "$P5_CD_GH_T24_PREPARE_APPROVED" = 1
+          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1
+          test "$P5_CD_GH_E_ROUTE_FEATURES_APPROVED" = 1
+          test "$P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED" = 1
+          test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
