@@ -1,0 +1,35 @@
+name: Phase5 first actual seed and seven-category budget proposal (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase5ActualNov22BudgetProposal_v39.ts'
+      - 'tests/phase5_actual_nov22_budget_proposal_v39.test.ts'
+      - '.github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml'
+      - 'data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json'
+      - 'data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json'
+      - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
+permissions:
+  contents: read
+jobs:
+  exact-real-metadata-reproduction-and-cost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts
