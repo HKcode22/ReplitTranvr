@@ -77,7 +77,6 @@ export async function commissionP5EarlyDrawOnce(pool:Pick<Pool,"connect">,driver
   if(membership!==0)fail("UNEXPECTED_ROLE_MEMBERSHIP");
   const scoped=new URL(ctx.url.toString());scoped.username=ROLE;scoped.password=password;
   if(await driver.mainSha()!==ctx.main)fail("MAIN_CHANGED_BEFORE_SECRET");
-  if(SECRET_NAMES.some(n=>(names as string[]).includes(n)))fail("SECRET_ALREADY_PRESENT");
   const fresh=await driver.names();
   if(SECRET_NAMES.some(n=>fresh.includes(n)))fail("SECRET_APPEARED_NO_OVERWRITE");
   for(const [n,v] of [[URL_SECRET,scoped.toString()],[ROLE_SECRET,ROLE]]){

@@ -63,9 +63,9 @@ export async function verifyP5EarlyDrawObjectAcl(c:Pick<import("pg").PoolClient,
   for(const table of [...EARLY_DRAW_READ_TABLES,...other]){
    const relation="clean."+table;
    const columns=(await c.query(`SELECT attname,
-    has_column_privilege($2,attrelid,attnum,'SELECT') AS sel,
-    has_column_privilege($2,attrelid,attnum,'INSERT') AS ins,
-    has_column_privilege($2,attrelid,attnum,'UPDATE') AS upd
+    has_column_privilege($2::name,attrelid,attnum,'SELECT') AS sel,
+    has_column_privilege($2::name,attrelid,attnum,'INSERT') AS ins,
+    has_column_privilege($2::name,attrelid,attnum,'UPDATE') AS upd
     FROM pg_attribute WHERE attrelid=to_regclass($1) AND attnum>0 AND NOT attisdropped ORDER BY attname`,[relation,role])).rows;
    if(!columns.length)HOLD("ACL_REQUIRED_TABLE_MISSING");
    const actual=(key:"ins"|"upd")=>columns.filter(x=>x[key]===true).map(x=>String(x.attname)).sort().join(",");
@@ -73,14 +73,14 @@ export async function verifyP5EarlyDrawObjectAcl(c:Pick<import("pg").PoolClient,
       actual("upd")!==(EARLY_DRAW_UPDATE_COLUMNS[table]??[]).slice().sort().join(",")||
       (EARLY_DRAW_READ_TABLES.includes(table)&&columns.some(x=>x.sel!==true)))
     HOLD("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");
-   const broad=(await c.query(`SELECT has_table_privilege($2,$1,'DELETE') OR
-      has_table_privilege($2,$1,'TRUNCATE') OR has_table_privilege($2,$1,'TRIGGER') bad`,[relation,role])).rows[0];
+   const broad=(await c.query(`SELECT has_table_privilege($2::name,$1::text,'DELETE') OR
+      has_table_privilege($2::name,$1::text,'TRUNCATE') OR has_table_privilege($2::name,$1::text,'TRIGGER') bad`,[relation,role])).rows[0];
    if(broad?.bad!==false)HOLD("ACL_EXCESS_TABLE_GRANTS");
   }
   const seq=(await c.query(`SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') name`)).rows[0]?.name;
   if(seq){
-   const s=(await c.query(`SELECT has_sequence_privilege($2,$1,'USAGE') allowed,
-     has_sequence_privilege($2,$1,'UPDATE') excess`,[seq,role])).rows[0];
+   const s=(await c.query(`SELECT has_sequence_privilege($2::name,$1::text,'USAGE') allowed,
+     has_sequence_privilege($2::name,$1::text,'UPDATE') excess`,[seq,role])).rows[0];
    if(s?.allowed!==true||s.excess!==false)HOLD("ACL_DRAW_SEQUENCE_GRANTS");
   }
 
