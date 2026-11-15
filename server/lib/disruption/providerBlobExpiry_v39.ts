@@ -146,6 +146,81 @@ export async function verifyOneExpiredProviderBlobV39(
   }
 }
 
+/**
+ * One bounded recurring expiry batch, using the same immutable reference and
+ * deletion primitive as the existing owners. The caller must separately admit
+ * the exact runtime, dedicated bucket, scoped credentials and retention policy.
+ * This core has no scheduler, production entrypoint or provider client.
+ *
+ * The cutoff is sampled from PostgreSQL and retained at database precision.
+ * A fresh metadata query plus primary-store existence check is required after
+ * each committed marker. The readback interfaces may be separately scoped; a
+ * passing batch alone does not certify those credentials or backup disposal.
+ */
+export async function runBoundedProviderBlobExpiryBatchV39(
+  db: Pick<Pool,"query"|"connect">,
+  store: Pick<ProviderBlobStoreV39,"exists"|"delete">,
+  readback: Pick<Pool,"query">,
+  readbackStore: Pick<ProviderBlobStoreV39,"exists">,
+  limit: number,
+): Promise<{
+  status:"DUE_AT_CUTOFF_CLEARED"|"BACKLOG_REMAINS_AT_CUTOFF";
+  selectedCount:number; verifiedNowCount:number; alreadyVerifiedCount:number;
+  independentlyReadBackCount:number; remainingAtCutoff:number;
+}> {
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100)
+    throw Error("PROVIDER_BLOB_RECURRING_BATCH_LIMIT_INVALID");
+  const clock=await db.query("SELECT clock_timestamp()::text AS cutoff");
+  const cutoff=clock.rows[0]?.cutoff;
+  if(typeof cutoff!=="string"||!Number.isFinite(Date.parse(cutoff)))
+    throw Error("PROVIDER_BLOB_RECURRING_DB_CLOCK_INVALID");
+  const due=await db.query(
+    `SELECT blob_ref_id,storage_kind,contract_version,object_name,content_class,
+            content_sha256,content_bytes,persisted_at_utc,expires_at_utc,retention_hours
+       FROM clean.provider_content_blob_ref
+      WHERE deletion_verified_at_utc IS NULL AND expires_at_utc <= $1::timestamptz
+      ORDER BY expires_at_utc,blob_ref_id LIMIT $2`,[cutoff,limit]);
+  const candidates:ProviderBlobExpiryCandidateV39[]=due.rows.map(row=>{
+    const ref=rowToRef(row);validateProviderBlobRefV39(ref);
+    return {blobRefId:ref.blobRefId,objectName:ref.objectName,contentClass:ref.contentClass,
+      contentSha256:ref.contentSha256,expiresAtUtc:ref.expiresAtUtc,ref};
+  });
+  if(candidates.length>limit||new Set(candidates.map(c=>c.blobRefId)).size!==candidates.length)
+    throw Error("PROVIDER_BLOB_RECURRING_SCOPE_INVALID");
+  const runId=`provider-blob-expiry-${randomUUID()}`;
+  let verifiedNowCount=0,alreadyVerifiedCount=0,independentlyReadBackCount=0;
+  // No automatic retry of an ambiguous delete/COMMIT. A later admitted batch
+  // must reconcile under the original row lock, not replay an old authorization.
+  for(const candidate of candidates){
+    const result=await verifyOneExpiredProviderBlobV39(db,store,candidate,runId);
+    if(result==="VERIFIED_NOW")verifiedNowCount++;else alreadyVerifiedCount++;
+    const proof=await readback.query(
+      `SELECT blob_ref_id,storage_kind,contract_version,object_name,content_class,
+              content_sha256,content_bytes,persisted_at_utc,expires_at_utc,retention_hours,
+              deletion_run_id,
+              (deleted_at_utc>=expires_at_utc AND deletion_verified_at_utc>=deleted_at_utc
+                AND deletion_run_id IS NOT NULL) AS marker_valid
+         FROM clean.provider_content_blob_ref WHERE blob_ref_id=$1`,[candidate.blobRefId]);
+    const row=proof.rows[0];
+    if(proof.rowCount!==1||row?.marker_valid!==true||
+       (result==="VERIFIED_NOW"&&row.deletion_run_id!==runId))
+      throw Error("PROVIDER_BLOB_RECURRING_MARKER_READBACK_FAILED");
+    const actual=rowToRef(row);
+    if((Object.keys(actual) as (keyof ProviderBlobRefV39)[]).some(k=>actual[k]!==candidate.ref[k])||
+       await readbackStore.exists(candidate.objectName))
+      throw Error("PROVIDER_BLOB_RECURRING_PRIMARY_READBACK_FAILED");
+    independentlyReadBackCount++;
+  }
+  const remaining=await readback.query(
+    "SELECT count(*)::text AS n FROM clean.provider_content_blob_ref WHERE deletion_verified_at_utc IS NULL AND expires_at_utc <= $1::timestamptz",
+    [cutoff]);
+  const remainingAtCutoff=Number(remaining.rows[0]?.n);
+  if(remaining.rowCount!==1||!Number.isSafeInteger(remainingAtCutoff)||remainingAtCutoff<0)
+    throw Error("PROVIDER_BLOB_RECURRING_BACKLOG_READBACK_FAILED");
+  return {status:remainingAtCutoff===0?"DUE_AT_CUTOFF_CLEARED":"BACKLOG_REMAINS_AT_CUTOFF",
+    selectedCount:candidates.length,verifiedNowCount,alreadyVerifiedCount,independentlyReadBackCount,remainingAtCutoff};
+}
+
 export async function applyExpiredProviderBlobsV39(
   candidates: readonly ProviderBlobExpiryCandidateV39[],
 ): Promise<{ runId: string; expiredCount: number; alreadyVerifiedCount:number }> {
