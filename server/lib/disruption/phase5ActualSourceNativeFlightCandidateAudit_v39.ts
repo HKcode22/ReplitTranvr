@@ -50,6 +50,8 @@ export interface P5ActualSourceCandidateScope{
  runDayIndex:number;slot:string;horizon:Horizon;airportIcao:string;
  expectedSourceGithubRunId:string;
  maxPopulationStalenessSeconds:number;
+ /** Signed dynamic query schedule, if available; diagnostic only. */
+ plannedRequestUtc?:string;
 }
 export interface P5ActualBoundOriginalRow {
  manifest_sha256:string;run_day_index:number|string;slot_id:string;
@@ -104,6 +106,24 @@ export interface P5ActualFlightCandidateReview{
  providerCalls:0;
  databaseWrites:0;
 }
+export interface P5SourceTimingDiagnostics{
+ /** Database-observed durations from the existing committed original.
+  * Retrieval time is NOT necessarily the beginning of the HTTP request. */
+ reservationToRetrievalMs:number;
+ retrievalToRawPersistMs:number;
+ rawPersistToSourceAvailableMs:number;
+ sourceAvailableToBindingMs:number;
+ bindingToAuditTransactionClockMs:number;
+ plannedToReservationMs:number|null;
+ plannedToSourceAvailableMs:number|null;
+ sourceAgeAndLeadSampleCount:number;
+ sourceAgeAtCutoffMs:{min:number;p50:number;p95:number;p99:number;max:number}|null;
+ auditLeadToCutoffMs:{min:number;p50:number;p95:number;p99:number;max:number}|null;
+ /** Sensitivity only, among members that meet identity, source age,
+  * expiry, member availability and window rules; never a PRE permit. */
+ timingOnlyCountsByReviewLeadSeconds:{leadSeconds:number;eligible:number}[];
+ policyChanged:false;
+}
 export interface P5ActualSourceCandidateAudit{
  schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1";
  status:"ACTUAL_SOURCE_CANDIDATE_REVIEW_NOT_PACKET_SIGNING";
@@ -111,6 +131,8 @@ export interface P5ActualSourceCandidateAudit{
  sourceGithubRunId?:string;
  actualDbClockUtc:string;sourcePopulationQueryId:string;
  sourceResponseSha256:string;queryDigestSha256:string;
+ /** Optional only for historical audit objects written before telemetry. */
+ sourceTimingDiagnostics?:P5SourceTimingDiagnostics;
  observedMemberCount:number;candidateCount:number;
  censoredCount:number;
  classifications:Record<P5CandidateClassification,number>;
@@ -196,6 +218,29 @@ export function auditP5ActualSourceFlightCandidates(
   fail("CHANGED_OR_NONPROSPECTIVE_SOURCE_TIME_CUSTODY");
  if(memberRows.length!==Number(o.normalized_members_count))
   fail("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
+ const planned=scope.plannedRequestUtc===undefined?null:when(scope.plannedRequestUtc);
+ const summarizeTiming=(candidates:readonly P5ActualFlightCandidateReview[]):P5SourceTimingDiagnostics=>{
+  // Earlier validation has already established source clocks and identity.
+  // Include only otherwise eligible candidates or ones failing solely the
+  // existing lead-time rule; don't speculate about ambiguous or stale members.
+  const eligibleForTiming=candidates.filter(c=>c.status==="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED"||
+   c.status==="CENSORED_NO_PROSPECTIVE_PRE_LEAD");
+  const ages=eligibleForTiming.map(c=>when(c.ownCutoffUtc)-sourceAt);
+  const leads=eligibleForTiming.map(c=>when(c.ownCutoffUtc)-clock);
+  const quantiles=(xs:number[])=>{
+   if(xs.length===0)return null;
+   const sorted=[...xs].sort((a,b)=>a-b);
+   const q=(p:number)=>sorted[Math.max(0,Math.ceil(p*sorted.length)-1)];
+   return {min:sorted[0],p50:q(.5),p95:q(.95),p99:q(.99),max:sorted[sorted.length-1]};
+  };
+  return {reservationToRetrievalMs:retrieved-reserved,retrievalToRawPersistMs:persisted-retrieved,
+   rawPersistToSourceAvailableMs:sourceAt-persisted,sourceAvailableToBindingMs:bound-sourceAt,
+   bindingToAuditTransactionClockMs:clock-bound,plannedToReservationMs:planned===null?null:reserved-planned,
+   plannedToSourceAvailableMs:planned===null?null:sourceAt-planned,
+   sourceAgeAndLeadSampleCount:eligibleForTiming.length,sourceAgeAtCutoffMs:quantiles(ages),auditLeadToCutoffMs:quantiles(leads),
+   timingOnlyCountsByReviewLeadSeconds:[900,600,300].map(leadSeconds=>({leadSeconds,eligible:leads.filter(n=>n>leadSeconds*1000).length})),
+   policyChanged:false};
+ };
  if(memberRows.length===0)
   return{
    schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1",
@@ -204,6 +249,7 @@ export function auditP5ActualSourceFlightCandidates(
    sourcePopulationQueryId:o.population_query_id,
    sourceResponseSha256:o.original_response_hash,
    queryDigestSha256:scope.queryDigestSha256,
+   sourceTimingDiagnostics:summarizeTiming([]),
    observedMemberCount:0,candidateCount:0,censoredCount:0,
    classifications:{
     ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED:0,
@@ -316,6 +362,7 @@ export function auditP5ActualSourceFlightCandidates(
   sourcePopulationQueryId:o.population_query_id,
   sourceResponseSha256:o.original_response_hash,
   queryDigestSha256:scope.queryDigestSha256,
+  sourceTimingDiagnostics:summarizeTiming(out),
   observedMemberCount:out.length,candidateCount:eligible,
   censoredCount:out.length-eligible,
   classifications,candidates:out,

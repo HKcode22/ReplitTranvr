@@ -203,7 +203,8 @@ export async function runP5ActualSourceNativeCandidateOwner(
     observedMemberCount:audit.observedMemberCount,
     candidateCount:audit.candidateCount,
     censoredCount:audit.censoredCount,
-    classifications:audit.classifications
+    classifications:audit.classifications,
+    sourceTimingDiagnostics:audit.sourceTimingDiagnostics
    },
    flightIdentitiesPrinted:0 as const,
    providerContentsPrinted:false as const,

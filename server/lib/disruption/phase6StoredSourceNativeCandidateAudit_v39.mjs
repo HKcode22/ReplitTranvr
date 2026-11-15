@@ -94,7 +94,8 @@ export function deriveP6CommittedNativeQueryScope(receipt,selected,selector,trus
   providerContractSha256:p.openapiSha256,earlyDrawSha256:p.expectedEarlyDrawSha256,
   runDayIndex:a.runDayIndex,slot:a.slot,horizon:a.horizon,airportIcao:a.icao,
   maxPopulationStalenessSeconds:policy.maximumPopulationStalenessSeconds,
-  expectedServiceWindowStartUtc:a.serviceWindowStartUtc,expectedServiceWindowEndUtc:a.serviceWindowEndUtc});
+  expectedServiceWindowStartUtc:a.serviceWindowStartUtc,expectedServiceWindowEndUtc:a.serviceWindowEndUtc,
+  ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{})});
 }
 export async function auditP6StoredCommittedNativeSource({readerClient,sourcePool,trust,selector,policy}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
@@ -122,6 +123,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
   candidateCount:audit.candidateCount,censoredCount:audit.censoredCount,classifications:audit.classifications,
+  sourceTimingDiagnostics:audit.sourceTimingDiagnostics,
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
  Object.defineProperties(out,{privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
