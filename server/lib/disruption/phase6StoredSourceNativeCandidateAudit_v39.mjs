@@ -7,6 +7,7 @@ import {createHash} from "node:crypto";
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "./phase6DayEpochFullRegistryReadOnce_v39.mjs";
+import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39.ts";
 import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
@@ -126,4 +127,99 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false}});
  return Object.freeze(out);
+}
+
+/** Intake only, NOT authorization or a PRE observation. The current signed
+ * day already contains immutable reviewed flight/horizon choices. Overlapping
+ * SOURCE refreshes must not replace them, nor block other new flights.
+ * Preserve the complete original audit bytes and classify a private subset.
+ * Final publisher still independently rechecks latest revision/duplicates. */
+export function selectP6PendingNativeLaterReview(a,index,selector,trust){
+ const selected=selectP6CommittedNativeSourceQuery(index,selector,trust);
+ inspectP6DayEpochExistingShardSemanticsNoGo(index);
+ const s=a?.privateSourceScope,b=a?.privateAuditBytes;
+ if(a?.status!=="ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW"||
+    !sealed(a,"privateAuditBytes")||!sealed(a,"privateSourceScope")||!sealed(a,"privateSourceRegistrySha256")||
+    !Buffer.isBuffer(b)||b.length<100||b.length>6000000||hash(b)!==a.candidateAuditSha256||
+    a.privateSourceRegistrySha256!==selected.entry.fileSha256||
+    a.runDayIndex!==selector.runDayIndex||s?.runDayIndex!==selector.runDayIndex||
+    s.queryDigestSha256!==selector.queryDigestSha256||s.manifestSha256!==trust.manifestSha256||
+    s.rightsReviewSha256!==trust.rightsSha256||s.reviewedReleaseSha256!==trust.releaseSha256||
+    !["T-6h","T-90m"].includes(a.horizon)||s.horizon!==a.horizon||
+    a.providerCalls!==0||a.databaseWrites!==0||a.signedPrePacketsIssued!==0||a.phase6PaidGo!==false)
+  fail("PENDING_REVIEW_UNVERIFIED_OR_WRONG_HORIZON");
+ const audit=JSON.parse(b.toString("utf8")),clock=index.redactedSummary.observedDbClockUtc;
+ if(!iso(clock)||!iso(a.actualDbClockUtc)||audit.actualDbClockUtc!==a.actualDbClockUtc||
+    Date.parse(clock)<Date.parse(a.actualDbClockUtc)||Date.parse(clock)-Date.parse(a.actualDbClockUtc)>120000||
+    digestP5ActualSourceCandidateAudit(audit)!==a.candidateAuditSha256||
+    audit.sourceGithubRunId!==s.expectedSourceGithubRunId||audit.queryDigestSha256!==s.queryDigestSha256||
+    !Array.isArray(audit.candidates)||audit.candidates.length>2500||
+    audit.candidates.length!==a.observedMemberCount||audit.observedMemberCount!==a.observedMemberCount||
+    audit.candidateCount!==a.candidateCount||audit.censoredCount!==a.censoredCount||
+    audit.candidateCount+audit.censoredCount!==audit.candidates.length)
+  fail("PENDING_REVIEW_AUDIT_OR_CLOCK_DRIFT");
+ const used=new Map();
+ for(const e of index.privateParsedIndex.entries.filter(x=>x.lane==="LATER_PRE")){
+  const raw=index.getFrozen(e.filePath);
+  if(!Buffer.isBuffer(raw)||hash(raw)!==e.fileSha256)fail("PENDING_REVIEW_FROZEN_REGISTRY_DRIFT");
+  const registry=JSON.parse(raw.toString("utf8"));
+  for(const f of registry.entries){
+   const key=f.expectedFlightInstanceId+"|"+f.expectedHorizon;
+   if(used.has(key)||!iso(f.expectedSelectedTNativeUtc))fail("PENDING_REVIEW_INVALID_FROZEN_NATIVE_T");
+   used.set(key,f.expectedSelectedTNativeUtc);
+  }
+ }
+ const now=Date.parse(clock),offset=a.horizon==="T-6h"?21600000:5400000;
+ const pending=[],seen=new Set();
+ let alreadyIndexed=0,changedNativeT=0,tooLate=0,notYetWithinShardWindow=0,eligible=0;
+ for(const c of audit.candidates){
+  if(c.status!=="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED")continue;
+  eligible++;
+  const key=c.flightInstanceId+"|"+c.horizon;
+  if(!/^[a-zA-Z0-9_.:|-]{5,200}$/.test(c.flightInstanceId??"")||seen.has(key)||
+     c.manifestSha256!==s.manifestSha256||c.queryDigestSha256!==s.queryDigestSha256||
+     c.runDayIndex!==s.runDayIndex||c.slot!==s.slot||c.horizon!==s.horizon||c.sourceAirportIcao!==s.airportIcao||
+     c.sourcePopulationQueryId!==audit.sourcePopulationQueryId||c.sourceResponseSha256!==audit.sourceResponseSha256||
+     c.externalNativeTAndPhysicalIdentityReviewRequired!==true||c.contentsRightsCertifiedHere!==false||
+     c.stage14PermitIssuedHere!==false||c.providerCalls!==0||c.databaseWrites!==0||
+     !iso(c.selectedTNativeUtc)||!iso(c.ownCutoffUtc)||!iso(c.actualMemberAvailableUtc)||
+     Date.parse(c.selectedTNativeUtc)-offset!==Date.parse(c.ownCutoffUtc)||
+     Date.parse(c.actualMemberAvailableUtc)>Date.parse(a.actualDbClockUtc))
+   fail("PENDING_REVIEW_INVALID_CANDIDATE");
+  seen.add(key);
+  if(used.has(key)){alreadyIndexed++;if(used.get(key)!==c.selectedTNativeUtc)changedNativeT++;continue;}
+  const cutoff=Date.parse(c.ownCutoffUtc);
+  if(cutoff<=now+900000){tooLate++;continue;}
+  if(cutoff>now+10800000){notYetWithinShardWindow++;continue;}
+  pending.push(Object.freeze({...c}));
+ }
+ if(eligible!==audit.candidateCount)fail("PENDING_REVIEW_ELIGIBLE_COUNT_DRIFT");
+ pending.sort((x,y)=>Date.parse(x.ownCutoffUtc)-Date.parse(y.ownCutoffUtc)||
+  (x.flightInstanceId<y.flightInstanceId?-1:x.flightInstanceId>y.flightInstanceId?1:0));
+ const out={status:"NATIVE_LATER_PENDING_INDEPENDENT_REVIEW_ONLY",runDayIndex:a.runDayIndex,horizon:a.horizon,
+  originalAuditSha256:a.candidateAuditSha256,indexSha256:selector.indexSha256,indexRevision:selector.indexRevision,
+  observedDbClockUtc:clock,originalEligibleCount:eligible,alreadyIndexed,changedNativeT,tooLate,notYetWithinShardWindow,
+  pendingCount:pending.length,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
+ Object.defineProperties(out,{privatePendingCandidates:{value:Object.freeze(pending),enumerable:false},
+  privateOriginalAuditBytes:{value:Buffer.from(b),enumerable:false}});
+ return Object.freeze(out);
+}
+/** Runtime authenticates the actual newest day and all retained registries.
+ * No reliance on a guessed index, stale cached roster or log artifact. */
+export async function readP6PendingNativeLaterReview({readerClient,trust,a,selector,policy}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
+    policy?.independentNativeCandidateReadOnlyApproved!==true||
+    policy.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true)
+  fail("NO_EXPLICIT_NONPAID_PENDING_REVIEW_SCOPE");
+ const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,
+  scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
+  selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
+ const current={...selector,indexRevision:review.pins.expectedIndexRevision,indexSha256:review.pins.expectedIndexSha256};
+ if(current.indexRevision<selector.indexRevision||
+    (current.indexRevision===selector.indexRevision&&current.indexSha256!==selector.indexSha256))
+  fail("PENDING_REVIEW_REVISION_ROLLBACK");
+ const index=await hydrateP6DayEpochFullRegistriesReadOnly({client:readerClient,pins:review.pins,wire:review.wire,
+  publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
+  requireCurrentRevisionForPlanning:true}});
+ return selectP6PendingNativeLaterReview(a,index,current,trust);
 }

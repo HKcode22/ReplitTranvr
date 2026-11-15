@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -58,6 +58,76 @@ describe("signed committed SOURCE candidate handoff",()=>{
   const f=fixture();let calls=0;
   await expect(auditP6StoredCommittedNativeSource({readerClient:{query:async()=>{calls++;throw Error("NO")}},
    sourcePool:{},trust:f.trust,selector:f.selector,policy:f.policy})).rejects.toThrow("NO_EXPLICIT");
+  expect(calls).toBe(0);
+ });
+});
+
+function pendingFixture(){
+ const f=fixture(),old=f.index.privateParsedIndex.entries[0],source=f.index.getFrozen(old.filePath);
+ const sourceEntry={...old,publishedAtUtc:"2027-02-10T03:59:00.000Z",reviewEvidenceSha256:H("7"),
+  sourceRegistryFilePath:null,sourceRegistrySha256:null};
+ const laterPath="data-collection/phase5/frozen/later_synthetic_registry.json";
+ const later=Buffer.from(JSON.stringify({schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:f.trust.manifestSha256,
+  reviewedCodeSha:f.trust.reviewedCodeSha,runDayIndex:1,shardIndex:1,sourceDayRegistryFilePath:old.filePath,
+  sourceDayRegistrySha256:old.fileSha256,entries:[{filePath:"data-collection/phase5/frozen/pre_synthetic_packet.json",
+   expectedPacketSha256:H("8"),expectedQueryDigestSha256:f.selector.queryDigestSha256,
+   expectedFlightInstanceId:"flight_existing",expectedHorizon:"T-6h",expectedSelectedTNativeUtc:"2027-02-10T11:20:00.000Z"}]}));
+ const prior={...f.index.privateParsedIndex,previousIndexSha256:null,entries:[sourceEntry]};
+ const priorBytes=Buffer.from(JSON.stringify(prior));
+ const current={...prior,revision:2,previousIndexSha256:h(priorBytes),entries:[sourceEntry,
+  {...sourceEntry,lane:"LATER_PRE",filePath:laterPath,fileSha256:h(later),publishedAtUtc:"2027-02-10T04:10:00.000Z",
+   notBeforeUtc:"2027-02-10T04:10:00.000Z",hardLatestUtc:"2027-02-10T05:20:00.000Z",
+   sourceRegistryFilePath:old.filePath,sourceRegistrySha256:old.fileSha256}]};
+ const raw=Buffer.from(JSON.stringify(current)),selector={...f.selector,indexRevision:2,indexSha256:h(raw)};
+ const index:any={redactedSummary:{...f.index.redactedSummary,indexRevision:2,indexSha256:h(raw),
+  observedDbClockUtc:"2027-02-10T04:40:30.000Z",authoritativeFlightSemanticAdmissionDone:false,githubChildDispatches:0}};
+ Object.defineProperties(index,{privateParsedIndex:{value:current},privateCurrentIndexBytes:{value:raw},
+  privatePreviousIndexBytes:{value:priorBytes},getFrozen:{value:(p:string)=>p===laterPath?later:source}});
+ const scope={...deriveP6CommittedNativeQueryScope(f.receipt,selectP6CommittedNativeSourceQuery(index,selector,f.trust),
+  selector,f.trust,f.policy),expectedSourceGithubRunId:"123456"};
+ const candidate=(id:string,native:string)=>({flightInstanceId:id,sourcePopulationQueryId:"aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+  sourceResponseSha256:H("3"),manifestSha256:scope.manifestSha256,queryDigestSha256:scope.queryDigestSha256,
+  runDayIndex:1,slot:scope.slot,horizon:scope.horizon,sourceAirportIcao:scope.airportIcao,selectedTNativeUtc:native,
+  ownCutoffUtc:new Date(Date.parse(native)-21600000).toISOString(),actualMemberAvailableUtc:"2027-02-10T04:30:00.000Z",
+  status:"ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED",externalNativeTAndPhysicalIdentityReviewRequired:true,
+  contentsRightsCertifiedHere:false,stage14PermitIssuedHere:false,providerCalls:0,databaseWrites:0});
+ const candidates=[candidate("flight_existing","2027-02-10T11:25:00.000Z"),
+  candidate("flight_new","2027-02-10T11:05:00.000Z"),candidate("flight_too_late","2027-02-10T10:55:15.000Z"),
+  candidate("flight_future","2027-02-10T14:00:00.000Z")];
+ const audit={schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1",
+  status:"ACTUAL_SOURCE_CANDIDATE_REVIEW_NOT_PACKET_SIGNING",sourceGithubRunId:"123456",
+  actualDbClockUtc:"2027-02-10T04:40:00.000Z",sourcePopulationQueryId:candidates[0].sourcePopulationQueryId,
+  sourceResponseSha256:H("3"),queryDigestSha256:scope.queryDigestSha256,observedMemberCount:4,candidateCount:4,censoredCount:0,
+  candidates,providerCalls:0,databaseWrites:0,signedPrePacketsCreated:0,phase6PaidGoGranted:false};
+ const build=(x:any)=>{const bytes=Buffer.from(JSON.stringify(x));const a:any={
+  status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",runDayIndex:1,horizon:scope.horizon,
+  candidateAuditSha256:h(bytes),observedMemberCount:4,candidateCount:4,censoredCount:0,actualDbClockUtc:x.actualDbClockUtc,
+  providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
+  Object.defineProperties(a,{privateAuditBytes:{value:bytes},privateSourceScope:{value:scope},
+   privateSourceRegistrySha256:{value:old.fileSha256}});return a;};
+ return {a:build(audit),audit,build,index,selector,trust:f.trust};
+}
+describe("overlapping native source refresh intake preserves existing frozen horizons",()=>{
+ it("keeps only prospective new candidates while preserving changed-T and late/deferred counts and original bytes",()=>{
+  const f=pendingFixture(),x=selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust);
+  expect(x).toMatchObject({originalEligibleCount:4,alreadyIndexed:1,changedNativeT:1,tooLate:1,
+   notYetWithinShardWindow:1,pendingCount:1,phase6PaidGo:false,signedPrePacketsIssued:0});
+  expect(x.privatePendingCandidates.map((c:any)=>c.flightInstanceId)).toEqual(["flight_new"]);
+  expect(h(x.privateOriginalAuditBytes)).toBe(f.a.candidateAuditSha256);
+  expect(JSON.stringify(x)).not.toContain("flight_new");
+ });
+ it("rejects invalid native cutoff and tampered source audit",()=>{
+  const f=pendingFixture();const bad={...f.audit,candidates:f.audit.candidates.map((c,i)=>i===1?{...c,ownCutoffUtc:"2027-02-10T05:06:00.000Z"}:c)};
+  expect(()=>selectP6PendingNativeLaterReview(f.build(bad),f.index,f.selector,f.trust)).toThrow("INVALID_CANDIDATE");
+  f.a.privateAuditBytes[0]=0;
+  expect(()=>selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust)).toThrow("UNVERIFIED_OR_WRONG_HORIZON");
+ });
+ it("does not plan from a stale readback or unapproved runtime",async()=>{
+  const f=pendingFixture();f.index.redactedSummary.observedDbClockUtc="2027-02-10T04:43:00.000Z";
+  expect(()=>selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust)).toThrow("AUDIT_OR_CLOCK_DRIFT");
+  let calls=0;
+  await expect(readP6PendingNativeLaterReview({readerClient:{query:async()=>{calls++;}},trust:f.trust,
+    a:f.a,selector:f.selector,policy:{}})).rejects.toThrow("NO_EXPLICIT");
   expect(calls).toBe(0);
  });
 });
