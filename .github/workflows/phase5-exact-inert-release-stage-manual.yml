@@ -1,0 +1,75 @@
+name: Phase5 exact one-time inert B0062 or V0093 release stage (NO PROVIDER)
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        type: choice
+        options: [calendar, cost]
+        required: true
+      confirm:
+        type: string
+        required: true
+        description: 'Exact selected calendar or cost stage confirmation'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-inert-release-stage-no-provider
+  cancel-in-progress: false
+jobs:
+  existing-restricted-inert-stage:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      P6_INERT_STAGE_MODE: ${{ inputs.stage }}
+      P6_INERT_STAGE_CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Exact STOP and chosen operation before dependencies
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          case "$P6_INERT_STAGE_MODE" in
+            calendar) test "$P6_INERT_STAGE_CONFIRM" = STAGE_EXACT_31_DAY_CALENDAR_DISABLED_AUTH_NO_PROVIDER ;;
+            cost) test "$P6_INERT_STAGE_CONFIRM" = STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER ;;
+            *) exit 2 ;;
+          esac
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: One exact independently reviewed insert-only stage, never a retry
+        env:
+          P6_INERT_CALENDAR_REVIEW_APPROVED: ${{ secrets.P6_INERT_CALENDAR_REVIEW_APPROVED }}
+          P6_INERT_COST_REVIEW_APPROVED: ${{ inputs.stage == 'cost' && secrets.P6_INERT_COST_REVIEW_APPROVED || '' }}
+          P6_INERT_COST_ENVELOPE_SHA256: ${{ inputs.stage == 'cost' && secrets.P6_INERT_COST_ENVELOPE_SHA256 || '' }}
+          V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ inputs.stage == 'cost' && secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED || '' }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          P6_INERT_STAGE_INPUT_JSON: ${{ secrets.P6_INERT_STAGE_INPUT_JSON }}
+          P6_INERT_STAGE_INPUT_SHA256: ${{ secrets.P6_INERT_STAGE_INPUT_SHA256 }}
+          P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL: ${{ inputs.stage == 'calendar' && secrets.P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL || '' }}
+          P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL: ${{ inputs.stage == 'cost' && secrets.P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL || '' }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node scripts/v39_phase6_inert_release_stage_manual_v39.mjs

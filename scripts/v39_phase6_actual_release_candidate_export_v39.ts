@@ -8,6 +8,7 @@ import {resolve,dirname,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
 import {buildP5ProspectiveSeedCalendarPreview} from "./v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
 import {assembleP6ActualFirstSeedReleaseCandidate} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const H=/^[a-f0-9]{64}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_ACTUAL_RELEASE_EXPORT_"+s);};
@@ -43,7 +44,9 @@ export function compileP6ActualCandidateExport(input:{
     files.some((f,i)=>f.path!=="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"||hash(f.bytes)!==f.sha256))
   hold("EXACT_OUTPUT_PARITY");
  files.push({path:"unsigned-stage-input.json",sha256:hash(stageBytes),bytes:stageBytes});
+ const cost=buildP5V0082UnknownAirportSevenCostOnlyDraft({schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",slotBudgetInput:assembled.unsignedStageInput.slotBudgetInput,expectedReviewerSlotEnvelopeSha256:assembled.unsignedStageInput.expectedSignedSlotEnvelopeSha256});
  const summary={status:"ACTUAL_FIRST_SEED_LOCAL_REVIEW_EXPORT_UNSIGNED_NO_GO",
+  unsignedCostOnlyEnvelopeSha256:cost.costOnlyCategoryDraftSha256,unsignedStageInputByteCount:Buffer.byteLength(stageBytes),
   originalPreviewSha256:preview.sha256,inputExternalFileSha256:input.expectedExternalFileSha256,inputTimingFileSha256:input.expectedTimingFileSha256,
   unsignedStageInputSha256:assembled.unsignedStageInputSha256,dayPlanSha256s:assembled.dayPlans.dayPlanSha256s,
   sourceQueries:assembled.dayPlans.totalPlannedQueries,totalReservedUnits:assembled.totalReservedUnits,peakDailyUnits:assembled.peakDailyUnits,
