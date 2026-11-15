@@ -24,6 +24,49 @@ type Timing={
  minimumPreparationLeadMinutes:number;
 };
 const integer=(x:number,a:number,b:number)=>Number.isSafeInteger(x)&&x>=a&&x<=b;
+/** Existing candidate audit requires >15 minutes before the individual PRE
+ * cutoff. Evaluate nominal scheduled requests plus reviewed delay bounds.
+ * This diagnostic measures cutoff TIME geometry, never flight counts or
+ * an observed yield. Assumes no early GET; no extra hard release gate. */
+const NATIVE_CANDIDATE_AUDIT_LEAD_SECONDS=900;
+export function summarizeP6CandidateLeadCoverage(
+ templates:readonly P5DynamicDayGridInput["templates"][number][],
+ timing:Pick<Timing,"maxPopulationStalenessSeconds"|"maxSchedulerSlipSeconds"|"maxResponseAndPersistSeconds">,
+ additionalAuditDelaySeconds:number
+){
+ if(!integer(additionalAuditDelaySeconds,0,3600))hold("INVALID_DIAGNOSTIC_AUDIT_DELAY");
+ const groups=new Map<string,{horizon:typeof HORIZONS[number][0];start:number;end:number;intervals:[number,number][]}>();
+ for(const q of templates){
+  const h=HORIZONS.find(([name])=>name===q.horizon);
+  if(!h)hold("INVALID_DIAGNOSTIC_HORIZON");
+  const start=Date.parse(q.serviceWindowStartUtc)-h![1],end=Date.parse(q.serviceWindowEndUtc)-h![1],
+    request=Date.parse(q.scheduledRequestUtc);
+  if(![start,end,request].every(Number.isFinite)||start>=end)hold("INVALID_DIAGNOSTIC_CLOCK");
+  const key=[q.runDayIndex,q.slot,q.horizon,q.serviceWindowStartUtc,q.serviceWindowEndUtc].join("|");
+  const group=groups.get(key)??{horizon:h![0],start,end,intervals:[]};
+  const earliest=Math.max(start,request+(timing.maxSchedulerSlipSeconds+timing.maxResponseAndPersistSeconds+
+   additionalAuditDelaySeconds+NATIVE_CANDIDATE_AUDIT_LEAD_SECONDS)*1000);
+  const latest=Math.min(end,request+timing.maxPopulationStalenessSeconds*1000);
+  if(earliest<latest)group.intervals.push([earliest,latest]);
+  groups.set(key,group);
+ }
+ const byHorizon=HORIZONS.map(([horizon])=>({horizon,exposedCutoffSeconds:0,
+  modeledEligibleCutoffSeconds:0,modeledUncoveredCutoffSeconds:0}));
+ for(const g of groups.values()){
+  const out=byHorizon.find(x=>x.horizon===g.horizon)!;
+  let covered=0,prior=g.start;
+  for(const [a,b] of g.intervals.sort((x,y)=>x[0]-y[0])){
+   covered+=Math.max(0,b-Math.max(a,prior));prior=Math.max(prior,b);
+  }
+  const total=(g.end-g.start)/1000,eligible=covered/1000;
+  out.exposedCutoffSeconds+=total;out.modeledEligibleCutoffSeconds+=eligible;
+  out.modeledUncoveredCutoffSeconds+=total-eligible;
+ }
+ return {candidateAuditMinimumLeadSeconds:NATIVE_CANDIDATE_AUDIT_LEAD_SECONDS,
+  additionalAuditDelaySeconds,assumption:"NOMINAL_REQUEST_NO_EARLY_GET_REVIEWED_SOURCE_DELAY_BOUND",
+  units:"airport-slot-cutoff-seconds",actualFlightYieldMeasured:false,
+  scientificReleaseBlockedByDiagnostic:false,byHorizon};
+}
 export function compileP6UnsignedFutureSourceDayPlans(input:{
  stage:Stage;expectedStageInputSha256:string;
  envelope:P5Adaptive31ShapeEnvelope;expectedShapeEnvelopeSha256:string;
@@ -133,7 +176,12 @@ export function compileP6UnsignedFutureSourceDayPlans(input:{
   return {runDayIndex:d.runDayIndex,path:`data-collection/phase5/planning/phase6-source-day-${String(d.runDayIndex).padStart(2,"0")}.json`,
    sha256:createHash("sha256").update(bytes).digest("hex"),bytes};
  });
+ const diagnosticTemplates=perDay.flatMap(d=>d.templates);
+ // Reports only. Never change signed plan bytes or force full coverage.
+ const candidateLeadCoverageScenarios=[0,300].map(delay=>
+  summarizeP6CandidateLeadCoverage(diagnosticTemplates,timing,delay));
  return {status:"UNSIGNED_31_DAY_METADATA_REVIEW_CANDIDATE_NO_GO",files,
+  candidateLeadCoverageScenarios,
   dayPlanSha256s:files.map(({runDayIndex,sha256})=>({runDayIndex,sha256})),coverageGridSha256,
   costEnvelopeSha256:budget.prelaunchEnvelopeSha256,totalPlannedQueries:[...charge.values()].reduce((n,x)=>n+x.count,0),
   providerCalls:0,databaseWrites:0,phase6PaidGo:false,ordinaryAirportSelectionsCreated:0};
