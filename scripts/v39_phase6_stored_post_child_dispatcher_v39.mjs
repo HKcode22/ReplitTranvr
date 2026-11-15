@@ -215,7 +215,8 @@ async function verifyCandidate(env,trust,route,day){
   frameSha256:env.V39_P5_FRAME_HASH,providerPriceSha256:env.V39_P5_POST_PRICE_SHA256});
  let actual;
  try{actual=await readActualValidPreAndClock(env.V39_P5_SOURCE_DATABASE_URL,p,bound.sourceDigests);}
- catch(e){if(e?.message==="REFUSED_P5_FUTURE_POST_V0083_NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST")return null;throw e;}
+ catch(e){if(["REFUSED_P5_FUTURE_POST_V0083_NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST",
+  "REFUSED_P5_FUTURE_POST_V0083_NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY"].includes(e?.message))return null;throw e;}
  if((actual.pre.boundSourceRegistryValidHorizonCount??0)<1)return null;
  const decision=planP5FuturePostOneChild(p,actual.pre,actual.dbClockUtc,null,route.signedFrozenPath);
  if(decision.status!=="POST_DUE_REQUIRES_GITHUB_HISTORY_CHECK"||utc(actual.dbClockUtc)>=utc(route.hardLatestUtc)-120000)return null;
