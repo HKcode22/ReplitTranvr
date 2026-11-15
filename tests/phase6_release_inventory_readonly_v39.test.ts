@@ -7,7 +7,11 @@ describe("Phase6 release metadata inventory no GO",()=>{
    secretNames:["P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL"],
    variables:[{name:"P6_PRIVATE_SOURCE_REVIEW_MODE",value:"stored"},{name:"P6_PRIVATE_POST_PARENT_ENABLED",value:"secret-looking-unknown-value"},
     {name:"P5_AUTO_SOURCE_DISPATCH_ENABLED",value:"true"},{name:"UNRELATED_VAR",value:"DO_NOT_PRINT"}]});
+  expect(a.lanes).toHaveLength(13);
   expect(a.lanes).toHaveLength(lanes.length);
+  expect(a.lanes.find(x=>x.lane==="early_draw")?.missingRepositorySecretReferences).toContain("V39_P5_EARLY_DRAW_DATABASE_URL");
+  expect(a.lanes.find(x=>x.lane==="pre_recovery")?.missingRepositorySecretReferences).toContain("P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64");
+  expect(a.lanes.find(x=>x.lane==="retention_metadata")?.missingRepositorySecretReferences).toContain("P5_RETENTION_READER_DATABASE_URL");
   expect(a.lanes.every(x=>x.repositorySecretReferences>0&&x.conditionalOrInheritedSecretsNotResolved)).toBe(true);
   expect(a.lanes.find(x=>x.lane==="daily")?.missingRepositorySecretReferences).toContain("P6_NONPAID_DAILY_POLICY_BASE64");
   expect(a.lanes.find(x=>x.lane==="daily")?.missingRepositorySecretReferences).not.toContain("P6_PRIVATE_READER_DATABASE_URL");
