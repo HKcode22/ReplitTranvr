@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6UnsignedFutureSourceDayPlanCompiler_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts'
       - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.d.mts'
@@ -13,6 +14,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6UnsignedFutureSourceDayPlanCompiler_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062CalendarOnlyDraft_v39.ts'
       - 'server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39.ts'
       - 'server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.d.mts'
