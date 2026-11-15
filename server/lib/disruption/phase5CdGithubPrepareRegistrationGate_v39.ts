@@ -19,9 +19,9 @@ export interface P5CdGithubPrepareAdmission{
  /** GH cannot self-certify ML/legal rights or scientific freeze. */
  sourceRightsIndependentlyCertifiedByThisFunction:false;
 }
-export function requireP5CdGithubPrepareAdmission(
- env:NodeJS.ProcessEnv
-):P5CdGithubPrepareAdmission{
+function requireP5CdGithubPrepareScopeInternal(
+ env:NodeJS.ProcessEnv,privateDay:boolean
+):Omit<P5CdGithubPrepareAdmission,"gate">&{gate:Omit<P5CdGithubPreRelease,"rosterSha256">}{
  const canary=env.P5_CD_GH_PRE_MODE==="PHASE5_CANARY"&&
   env.P5_CD_GH_PHASE5_CANARY_APPROVED==="1"&&
   env.V39_PHASE6_PROCESS_ARMED==="0"&&
@@ -34,7 +34,8 @@ export function requireP5CdGithubPrepareAdmission(
     env.GITHUB_ACTIONS!=="true"||
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||
-    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
+    (privateDay?!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME??""):
+     env.GITHUB_EVENT_NAME!=="workflow_dispatch")||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !SHA.test(env.GITHUB_SHA??"")||
     !SHA.test(env.P5_CD_GH_PRE_APPROVED_CODE_SHA??"")||
@@ -53,7 +54,10 @@ export function requireP5CdGithubPrepareAdmission(
     env.P5_V39_T24_WITNESS_DATABASE_URL||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
-    !HASH.test(env.P5_CD_GH_PRE_ROSTER_SHA256??"")||
+    (privateDay?(env.P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED!=="1"||
+     !!env.P5_CD_GH_PRE_ROSTER_SHA256||!!env.P5_CD_GH_PRE_ROSTER_PATH||!!env.RAPIDAPI_KEY||
+     (env.GITHUB_EVENT_NAME==="schedule"&&!phase6)):
+     (!HASH.test(env.P5_CD_GH_PRE_ROSTER_SHA256??"")||!!env.P6_PRIVATE_READER_DATABASE_URL))||
     !HASH.test(env.V39_P5_MANIFEST_SHA256??"")||
     !HASH.test(env.V39_P5_RIGHTS_SHA256??""))
   deny("NO_REVIEWED_MAIN_SOURCE_RIGHTS_EXPLICIT_PREPARE_ARM_OR_STOP");
@@ -72,7 +76,6 @@ export function requireP5CdGithubPrepareAdmission(
    schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
    releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
    approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
-   rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
    rightsSha256:env.V39_P5_RIGHTS_SHA256!,
    manifestSha256:env.V39_P5_MANIFEST_SHA256!,
    stop:false,providerCalls:0,
@@ -81,4 +84,18 @@ export function requireP5CdGithubPrepareAdmission(
   databaseUrl:raw!,
   sourceRightsIndependentlyCertifiedByThisFunction:false
  };
+}
+
+// Original manually pinned checkout admission is unchanged.
+export function requireP5CdGithubPrepareAdmission(
+ env:NodeJS.ProcessEnv
+):P5CdGithubPrepareAdmission{
+ const scoped=requireP5CdGithubPrepareScopeInternal(env,false);
+ return {...scoped,gate:{...scoped.gate,rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!}};
+}
+/** Stable scope only, NOT packet authority. A separately approved retained
+ * current-day Ed25519 chain must be actually verified before enrollment.
+ * No legacy roster SHA is accepted or manufactured for this mode. */
+export function requireP5CdGithubPreparePrivateDayScope(env:NodeJS.ProcessEnv){
+ return requireP5CdGithubPrepareScopeInternal(env,true);
 }
