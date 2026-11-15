@@ -174,3 +174,49 @@ test("mixed stale/skipped/failed summary remains science NO-GO",()=>{
  assert.equal(x.signedPhysicalFlightPreObserved,false);
  assert.equal(x.signed31DayB0062CalendarOrBudgetsObserved,false);
 });
+
+test("recent successful or skipped run does not hide multi-hour history gaps",()=>{
+ const lane=P6_EXISTING_CONTROLLER_LANES[1];
+ const recent=reviewP6OneScheduledController(lane,[
+  run(9,{created:"2026-11-14T01:50:00Z"}),
+  run(5,{created:"2026-11-13T20:00:00Z"}),
+  run(7,{created:"2026-11-14T01:40:00Z"}),
+ ],T);
+ assert.equal(recent.state,"SCHEDULE_GATED_SKIPPED_NOT_A_FAILURE_OR_A_FLIGHT");
+ assert.deepEqual(recent.historicalCadence,{
+  observedIntervals:2,recentWindowOldestUtc:"2026-11-13T20:00:00Z",
+  recentWindowNewestUtc:"2026-11-14T01:50:00Z",
+  medianObservedGapMinutes:175,maxObservedGapMinutes:340,
+  intervalsExceedingExpectedMax:1,newestObservedGapMinutes:10,
+  latestAgeExceedsExpected:false,measuredActualWorkerLatency:false,
+  exactMissingCronSlotsKnown:false
+ });
+ const all=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>i===1?recent:
+  reviewP6OneScheduledController(l,[run(i+100)],T));
+ const summary=summarizeP6ControllerHeartbeat(all,T);
+ assert.equal(summary.controllerProblemCount,1);
+ assert.equal(summary.controllerCurrentProblemCount,0);
+ assert.equal(summary.controllerHistoricalGapCount,1);
+ assert.equal(summary.status,"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO");
+ assert(formatP6ControllerHeartbeatHuman(summary).includes("340"));
+ assert.equal(summary.paidPhase6Go,false);
+});
+test("single observation cannot establish cadence; strict exact gap and age boundaries",()=>{
+ const lane=P6_EXISTING_CONTROLLER_LANES[2];
+ const one=reviewP6OneScheduledController(lane,[run(1)],T);
+ assert.equal(one.historicalCadence.observedIntervals,0);
+ assert.equal(one.historicalCadence.maxObservedGapMinutes,null);
+ const exactly=reviewP6OneScheduledController(lane,[
+  run(1,{created:"2026-11-14T00:30:00Z"}),
+  run(2,{created:"2026-11-13T23:00:00Z"})
+ ],T);
+ assert.equal(exactly.historicalCadence.intervalsExceedingExpectedMax,0);
+ assert.equal(exactly.historicalCadence.latestAgeExceedsExpected,false);
+ const over=reviewP6OneScheduledController(lane,[
+  run(1,{created:"2026-11-14T00:29:59Z"}),
+  run(2,{created:"2026-11-13T22:59:58Z"})
+ ],T);
+ assert.equal(over.historicalCadence.intervalsExceedingExpectedMax,1);
+ assert.equal(over.state,"SCHEDULE_OBSERVATION_STALE");
+ assert.equal(reviewP6OneScheduledController(lane,[],T).historicalCadence.latestAgeExceedsExpected,false);
+});
