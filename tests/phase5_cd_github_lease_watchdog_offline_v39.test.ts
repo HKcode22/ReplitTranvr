@@ -1,4 +1,6 @@
 import {describe,it,expect} from "vitest";
+import {createHash,generateKeyPairSync} from "node:crypto";
+import {requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
 import {
  requireP5CdLeaseWatchdogRelease,runP5CdGithubLeaseWatchdog
 } from "../server/lib/disruption/phase5CdGithubLeaseWatchdog_v39";
@@ -24,6 +26,18 @@ function released():NodeJS.ProcessEnv{
   P5_V39_PRE_DATABASE_URL:
    "postgresql://phase5_p30_pre_login_20261107:ci-only@reviewed.example.com/neondb?sslmode=verify-full"
  };
+}
+function current():NodeJS.ProcessEnv{
+ const d=generateKeyPairSync("ed25519").publicKey,q=generateKeyPairSync("ed25519").publicKey;
+ const fingerprint=(key:typeof d)=>createHash("sha256").update(key.export({format:"der",type:"spki"})).digest("hex");
+ const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_reaper",
+  reviewedCodeSha:code,manifestSha256:hash,calendarSha256:hash,releaseSha256:hash,rightsSha256:hash,
+  dayReviewerFingerprintSha256:fingerprint(d),dayReviewerPublicKeyPem:d.export({format:"pem",type:"spki"}).toString(),
+  queryReviewerFingerprintSha256:fingerprint(q),queryReviewerPublicKeyPem:q.export({format:"pem",type:"spki"}).toString()};
+ return {...released(),P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",P5_CD_GH_PHASE5_CANARY_APPROVED:"0",
+  V39_PHASE5_FREEZE_SIGNED:"1",V39_PHASE6_PROCESS_ARMED:"1",P5_CD_GH_PRE_ROSTER_SHA256:"",
+  P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED:"1",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",
+  P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),V39_P5_RELEASE_SHA256:hash};
 }
 function granted(){return{
  db:"neondb",role:"phase5_fids_pre_writer_prod_20261107",
@@ -63,6 +77,21 @@ describe("Phase5 independent V0087 queue lease watchdog (NO provider)",()=>{
     ...released(),...delta
    },m.db)).rejects.toThrow("REFUSED_P5_CD_");
    expect(m.queries.length).toBe(0);
+  }
+ });
+ it("allows recovery only under current reviewed study without minting any flight roster authority",async()=>{
+  const e=current(),m=mockDb(granted(),["READY","QUARANTINED"]);
+  expect(requireP5CdLeaseWatchdogRelease(e).releaseMode).toBe("PHASE6_APPROVED");
+  expect(()=>requireP5CdGithubPreRelease(e)).toThrow("NO_REVIEWED_MAIN");
+  const r=await runP5CdGithubLeaseWatchdog(e,m.db);
+  expect(r).toMatchObject({claims:0,taskEnrollments:0,directSnapshotWrites:0,quarantinedUnknownWrite:1,readyAfterUnstartedLease:1,providerCalls:0,unknownWriteAutomaticallyRetried:false});
+  expect(m.queries.length).toBe(2);expect(m.queries[1].args).toEqual([64]);
+  for(const delta of [{P5_CD_GH_PRE_ROSTER_SHA256:hash},{P5_CD_GH_PRE_STOP:"1"},
+   {V39_PHASE6_PROCESS_ARMED:"0"},{V39_P5_RELEASE_SHA256:"c".repeat(64)},
+   {P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:"invalid"},{P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"0"},
+   {RAPIDAPI_KEY:"CI_FORBIDDEN"},{P5_CD_GH_PRIVATE_CURRENT_APPROVED:"1"}]){
+   const bad=mockDb();await expect(runP5CdGithubLeaseWatchdog({...e,...delta},bad.db)).rejects.toThrow();
+   expect(bad.queries.length).toBe(0);
   }
  });
  it("requires V0092 and PRE grant, denies old broad claim and direct queue DML",async()=>{
