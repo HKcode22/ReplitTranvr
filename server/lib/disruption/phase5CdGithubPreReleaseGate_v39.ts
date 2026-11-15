@@ -39,9 +39,12 @@ export interface P5CdGithubPreRelease{
 }
 function requireP5CdGithubPreScopeInternal(
  env:NodeJS.ProcessEnv,
- options?:{allowReviewedT24Witness?:true}
+ options?:{allowReviewedT24Witness?:true;privateT24ScopeOnly?:true}
 ):Omit<P5CdGithubPreRelease,"rosterSha256">{
  const current=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE";
+ if(options?.privateT24ScopeOnly&&(current||options.allowReviewedT24Witness!==true||env.P6_PRIVATE_T24_CURRENT_EXECUTE!=="1"||
+    env.P6_PRIVATE_T24_CURRENT_APPROVED!=="1"||env.P5_CD_GH_PRE_ROSTER_SHA256||env.P5_CD_GH_ROSTER_PATH||
+    env.GITHUB_EVENT_NAME!=="schedule"))hold("PRIVATE_T24_STABLE_SCOPE_NOT_APPROVED");
  if(current){if(options?.allowReviewedT24Witness)hold("CURRENT_LATER_NEVER_T24");assertP6CurrentPrivatePreMode(env);}
  else if(env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1")hold("MIXED_CURRENT_PRIVATE_MODE");
  // A small, no-provider Phase5 PRE pilot can furnish prospective
@@ -79,7 +82,7 @@ function requireP5CdGithubPreScopeInternal(
      options?.allowReviewedT24Witness!==true)||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
-    (!current&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
+    (!current&&!options?.privateT24ScopeOnly&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
     !SHA256.test(env.V39_P5_RIGHTS_SHA256??"")||
     !SHA256.test(env.V39_P5_MANIFEST_SHA256??""))
   hold("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
@@ -131,6 +134,11 @@ function requireP5CdGithubPreScopeInternal(
 export function requireP5CdGithubCurrentPrivatePreScope(env:NodeJS.ProcessEnv){
  assertP6CurrentPrivatePreMode(env);
  return requireP5CdGithubPreScopeInternal(env);
+}
+/** Stable T24 schedule scope only. No roster authority until the exact
+ * independently authenticated current private registry has been read. */
+export function requireP5CdGithubCurrentPrivateT24Scope(env:NodeJS.ProcessEnv){
+ return requireP5CdGithubPreScopeInternal(env,{allowReviewedT24Witness:true,privateT24ScopeOnly:true});
 }
 export function requireP5CdGithubPreRelease(
  env:NodeJS.ProcessEnv,options?:{allowReviewedT24Witness?:true}
