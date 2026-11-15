@@ -31,6 +31,7 @@ function fake(mode:"ok"|"no-budget"|"no-denominator"="ok"){
    if(sql.includes("clean.flight_snapshots"))
      return {rowCount:1,rows:[{
       horizon:"T-24h",snapshots_seen:2,clock_order_candidate_pre:1,
+      unexpired_clock_order_candidate_pre:1,expired_clock_order_candidate_pre:0,expired_source_linked_pre:0,
      }]};
    if(sql===P5_DAILY_SOURCE_METRICS_SQL)
      return mode==="no-denominator"?{rowCount:0,rows:[]}:
@@ -95,7 +96,7 @@ describe("Phase5 independent daily metadata-only source quality",()=>{
   expect(sql).toContain("s.created_at<=s.prediction_cutoff_utc");
   expect(sql).toContain("s.created_at<b.source_expires_at_utc");
   expect(sql).toContain("q.horizon=s.horizon");
-  expect(sql).toContain("COUNT(DISTINCT s.id)");
+  expect(sql).toContain("COUNT(DISTINCT id)");
   expect(sql).toContain("EXISTS (SELECT 1 FROM clean.flight_population fp");
   expect(sql).toContain("fp.canonical_flight_instance_id=s.flight_instance_id");
   expect(sql).toContain("fp.population_role='requested_airport_primary'");
@@ -181,6 +182,17 @@ describe("Phase5 Day1 actual source QA: hard budget/ledger vs ordinary recorded 
   a.preCandidateSnapshots[0].clockOrderCandidates=3;
   expect(assessP5Day1SourceSafetyFromReadonlyAudit(a).status)
    .toBe("HARD_LEDGER_OR_BUDGET_HOLD_NO_FURTHER_DISPATCH");
+ });
+ it("expired source receipt is not a missed collection or currently usable feature proof",async()=>{
+  const a=await actual(),p=a.preCandidateSnapshots[0];
+  Object.assign(p,{rowsSeen:2,clockOrderCandidates:0,unexpiredClockOrderCandidates:0,
+   expiredClockOrderCandidates:0,expiredSourceLinkedSnapshots:2});
+  const r=assessP5Day1SourceSafetyFromReadonlyAudit(a);
+  expect(r.measuredSourceLoss).toContain("EXPIRED_LINKED_PRE_RECEIPTS_NOT_MISSED_COLLECTION_OR_CURRENT_USABLE_DATA");
+  expect(r.measuredSourceLoss).not.toContain("PRE_CANDIDATE_CLOCK_OR_PROVENANCE_LOSS");
+  expect(r.expiredReceiptCertifiesHistoricalPreOrCurrentTrainingData).toBe(false);
+  p.expiredSourceLinkedSnapshots=3;
+  expect(assessP5Day1SourceSafetyFromReadonlyAudit(a).hardHolds).toContain("PRE_EXPIRY_COUNTER_PARTITION_CONTRADICTION");
  });
  it("holding incomplete four-site draw does not assert physical GO",async()=>{
   const a=await actual();

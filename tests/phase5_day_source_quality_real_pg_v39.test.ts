@@ -130,7 +130,7 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
  afterAll(async()=>{if(db)await db.end()});
  it("compiles source/physical-leg joins on real B0062 and staged V0079",async()=>{
   const plan=await db.query("EXPLAIN "+P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,
-    [manifest,1]);
+    [manifest,1,new Date()]);
   expect(plan.rows.length).toBeGreaterThan(0);
  });
  it("counts 3 matching-original PRE rows but only ONE source-clock and leg-valid candidate",async()=>{
@@ -138,7 +138,8 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   expect(r.sourceQueryGroups[0].plannedQueries).toBe(1);
   expect(r.totalBoundOriginals).toBe(1);
   const t24=r.preCandidateSnapshots.find(x=>x.horizon==="T-24h");
-  expect(t24).toEqual({horizon:"T-24h",rowsSeen:3,clockOrderCandidates:1});
+  expect(t24).toEqual({horizon:"T-24h",rowsSeen:3,clockOrderCandidates:1,
+   unexpiredClockOrderCandidates:1,expiredClockOrderCandidates:0,expiredSourceLinkedSnapshots:0});
   expect(r.actualFlightLevelPreCertified).toBe(false);
   expect(r.providerRawContentsRead).toBe(false);
   expect(r.providerCalls).toBe(0);
@@ -153,5 +154,12 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   const linked=(await db.query("SELECT population_member_id IS NOT NULL AS linked"+
     " FROM clean.flight_snapshots WHERE flight_instance_id='leg:ci:one'")).rows[0];
   expect(linked.linked).toBe(true);
+ });
+ it("distinguishes a source whose retention clock has elapsed from collection failure without altering originals",async()=>{
+  const afterExpiry=new Date((await db.query("SELECT source_expires_at_utc FROM clean.phase5_fids_original_binding_v39 WHERE population_query_id=$1",[pid])).rows[0].source_expires_at_utc);
+  const rows=(await db.query(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,[manifest,1,afterExpiry])).rows;
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({horizon:"T-24h",snapshots_seen:3,clock_order_candidate_pre:1,
+   unexpired_clock_order_candidate_pre:0,expired_clock_order_candidate_pre:1,expired_source_linked_pre:2});
  });
 });
