@@ -1,0 +1,124 @@
+name: Phase6 bounded SOURCE daily preparation and publication (NONPAID, STOP DEFAULT)
+on:
+  schedule:
+    - cron: '2,12,22,32,42,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      run_day_index:
+        description: 'One actual reviewed prospective study day (1-31)'
+        required: true
+        type: string
+      confirm:
+        description: 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs'
+      - 'tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs'
+      - '.github/workflows/phase6-nonpaid-source-day-prepare-publish.yml'
+      - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceDayPublicationRuntime_v39.mjs'
+      - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-one-reviewed-day-prepared-${{ github.event_name == 'pull_request' && github.ref || 'private-main-singleton' }}
+  cancel-in-progress: false
+env:
+  # These flags are LOCAL no-provider isolation, not global STOP/GO mutation.
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+jobs:
+  offline-exact-admission-and-day-selection:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify exact scoped admission, stable day plans and bounded no-provider selector
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          npx --no-install tsx --test tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs
+  protected-main-one-day-nonpaid:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+        ((github.event_name == 'schedule' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true') ||
+         (github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      P6_NONPAID_SOURCE_REQUESTED_DAY: ${{ inputs.run_day_index }}
+      P6_NONPAID_SOURCE_CONFIRM: ${{ inputs.confirm }}
+      P6_NONPAID_SOURCE_SCHEDULE_ENABLED: ${{ vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED }}
+      P6_NONPAID_SOURCE_APPROVED_MAIN_SHA: ${{ secrets.P6_NONPAID_SOURCE_APPROVED_MAIN_SHA }}
+      P6_NONPAID_SOURCE_RUNTIME_APPROVED: ${{ secrets.P6_NONPAID_SOURCE_RUNTIME_APPROVED }}
+      V39_P5_PREPARE_OWNER_APPROVED: ${{ secrets.V39_P5_PREPARE_OWNER_APPROVED }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Exact reviewed main and independent freeze/rights/runtime gates
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$P6_NONPAID_SOURCE_APPROVED_MAIN_SHA" = "$GITHUB_SHA"
+          test "$P6_NONPAID_SOURCE_RUNTIME_APPROVED" = 1
+          test "$V39_P5_PREPARE_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prepare and publish at most one eligible independently reviewed future day
+        env:
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+          V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+          V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+          V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+          V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+          V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+          P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          P6_NONPAID_SIGNING_POLICY_BASE64: ${{ secrets.P6_NONPAID_SIGNING_POLICY_BASE64 }}
+          P6_NONPAID_SIGNING_POLICY_SHA256: ${{ secrets.P6_NONPAID_SIGNING_POLICY_SHA256 }}
+          P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 }}
+          P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 }}
+          P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64 }}
+          P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64 }}
+          P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64 }}
+          P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs
+          echo 'ONE_BOUNDED_NONPAID_SOURCE_DAY_RUNTIME_NO_PROVIDER_NO_PAID_GO' >> "$GITHUB_STEP_SUMMARY"
