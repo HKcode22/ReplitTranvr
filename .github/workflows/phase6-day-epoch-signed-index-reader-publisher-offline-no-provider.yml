@@ -8,6 +8,8 @@ on:
       - 'server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs'
       - 'tests/phase6_day_epoch_original_semantic_handoff_v39.test.ts'
       - 'tests/phase6_day_epoch_signed_index_once_v39.test.ts'
+      - 'server/lib/disruption/phase6DynamicSourceReviewSelection_v39.mjs'
+      - 'tests/phase6_dynamic_source_review_selection_v39.test.mjs'
       - 'tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs'
       - 'scripts/v39_phase6_v0097_day_epoch_owner_schema_readonly_and_once.mjs'
       - 'tests/phase6_v0097_day_epoch_owner_schema_v39.test.mjs'
@@ -47,7 +49,7 @@ jobs:
           test -z "$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_v0097_day_epoch_owner_schema_v39.test.mjs
+          node --test tests/phase6_v0097_day_epoch_owner_schema_v39.test.mjs tests/phase6_dynamic_source_review_selection_v39.test.mjs
           node --check server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs
           node --check server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs
           node --check server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs
