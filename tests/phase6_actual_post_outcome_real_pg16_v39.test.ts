@@ -98,6 +98,7 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    const report=await readP6CommittedPostOutcomeObservability(restricted as any,scope);
    expect(report.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:2,matchedNativePost:1,postAbsent:1,actualGateOutNumericCandidates:0});
    expect(report.uniqueRetainedPreFlights).toBe(2);
+   expect(report.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:2,retainedT6UniquePre:2,retainedT90UniquePre:0,t6OnlyAmongRetainedHorizons:2,retainedConsistentT6T90Pairs:0,actualPhysicalLabelPairsCertified:0});
    const hint=await readP6PostSourceQueryHints({sourcePool:restricted,trust:{manifestSha256:p.manifestSha256},runDayIndex:1,queryDigests:[query],frameSha256:p.reviewedFrameSha256});
    expect(hint.hintCount).toBe(1);
    expect(hint.privateHints[0].committedPreHintCount).toBe(2);

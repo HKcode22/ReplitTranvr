@@ -43,7 +43,7 @@ function fixture(){
    cutoff=t-offsets[horizon],iso=(n:number)=>new Date(n).toISOString();
   return {flight_instance_id:flightId,snapshot_id:String(idx),horizon,query_digest:H("1"),provider_record_key:key,
    flight_number:"SQ78",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",dep_scheduled_utc:p.expectedSelectedTNativeUtc,
-   selected_t_milestone_utc:p.expectedSelectedTNativeUtc,prediction_cutoff_utc:iso(cutoff),created_at:iso(cutoff-1000),
+   selected_t_milestone_utc:p.expectedSelectedTNativeUtc,selected_t_version:"ci-native",prediction_cutoff_utc:iso(cutoff),created_at:iso(cutoff-1000),
    original_available_at:iso(cutoff-5000),member_available_at:iso(cutoff-4000),source_expires_at_utc:"2027-02-03T09:00:00.000Z",
    fids_response_hash:H("2"),binding_response_hash:H("2")};
  }
@@ -55,8 +55,9 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(a).toMatchObject({uniqueRetainedPreFlights:1,actualGateOutNumericCandidates:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
    fullStudyDenominatorCertified:false,providerCalls:0,databaseWrites:0});
   expect(a.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:1,matchedNativePost:1,reportedRevisedTime:1,
-   reportedRunwayTime:1,labelEvidenceUnverified:1,actualGateOutNumericCandidates:0});
+   reportedRunwayTime:1,reportedDistinctGateRunwayTimes:1,reportedGateBeforeRunway:1,reportedGateAfterRunway:0,labelEvidenceUnverified:1,actualGateOutNumericCandidates:0});
   expect(a.byHorizon["T-90m"].matchedNativePost).toBe(1);
+  expect(a.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:1,retainedT6UniquePre:1,retainedT90UniquePre:1,retainedConsistentT6T90Pairs:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1,actualPhysicalLabelPairsCertified:0,fullStudyDenominatorCertified:false});
   expect(a.privateDecisions[0].draft.scheduled).toMatchObject({milestone:"GENERAL_SCHEDULED_DEPARTURE",externallyVerifiedGateOutMeaning:false});
   expect(a.privateDecisions[0].draft.outcome).toMatchObject({event:"NO_EVENT",actualUtc:null,externallyVerifiedActualOnly:false});
   expect(JSON.stringify(a)).not.toContain("native-001");expect(JSON.stringify(a)).not.toContain("leg:synthetic:001");
@@ -75,6 +76,26 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(a.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:4,postAbsent:1,missingNativeId:1,ambiguousIdentity:2,reportedCancelled:0});
   expect(a.byHorizon["T-90m"].duplicatePre).toBe(1);expect(a.invalidPreRows).toBe(2);
   expect(a.confirmedCancellationLabels).toBe(0);
+ });
+ it("does not equate separate horizon counts with paired observations; duplicate and native version conflicts are local",()=>{
+  const f=fixture();
+  const a=auditP6ActualPostOutcomeObservability(f.s,f.row,[
+   f.pre("T-6h",1,"native-a","leg:synthetic:010"),f.pre("T-90m",2,"native-b","leg:synthetic:011"),
+   f.pre("T-6h",3,"native-c","leg:synthetic:012"),{...f.pre("T-90m",4,"native-c","leg:synthetic:012"),selected_t_version:"other"},
+   f.pre("T-6h",5,"native-d","leg:synthetic:013"),f.pre("T-6h",6,"native-d","leg:synthetic:013"),f.pre("T-90m",7,"native-d","leg:synthetic:013"),
+   f.pre("T-6h",8,"native-001"),f.pre("T-90m",9,"native-001"),f.pre("T-24h",10,"native-001")
+  ],f.clock);
+  expect(a.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:5,flightsWithDuplicateHorizon:1,
+   flightsWithCrossHorizonTOrIdentityConflict:1,retainedT6UniquePre:3,retainedT90UniquePre:4,retainedConsistentT6T90Pairs:1,
+   retainedConsistentT6T24Pairs:1,retainedConsistentAllThree:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1,
+   t24OriginalExpiryCanRemoveEvidence:true,actualPhysicalLabelPairsCertified:0});
+  expect(JSON.stringify(a.pairedHorizonObservability)).not.toContain("native-001");
+ });
+ it("counts an expired T24 as unavailable retained evidence, not absent original collection or fake pair",()=>{
+  const f=fixture(),a=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre(),{
+   ...f.pre("T-24h",2),source_expires_at_utc:"2027-02-02T09:59:00.000Z"}],f.clock);
+  expect(a.invalidPreRows).toBe(1);
+  expect(a.pairedHorizonObservability).toMatchObject({retainedT6UniquePre:1,retainedT24UniquePre:0,retainedConsistentT6T24Pairs:0,t6OnlyAmongRetainedHorizons:1,fullStudyDenominatorCertified:false});
  });
  it("reports documented ID-less scheduled services separately from native-ID and physical labels",()=>{
   const f=fixture(),{id:_id,...flight}=f.flight,pre=f.pre("T-6h",1,"fidsrec:provisional");
@@ -95,6 +116,19 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(run([{...flight,status:"Canceled"}]).byHorizon["T-6h"].idlessServiceReportedCancelled).toBe(1);
   expect(exact.actualGateOutNumericCandidates).toBe(0);expect(exact.confirmedCancellationLabels).toBe(0);
   expect(exact.privateDecisions).toHaveLength(0);expect(JSON.stringify(exact)).not.toContain("leg:synthetic");
+ });
+ it("measures distinct reported gate/runway field values but never promotes them to actual",()=>{
+  const f=fixture(),run=(dep:unknown)=>{
+   const original=f.original([{...f.flight,departure:dep}]);
+   return auditP6ActualPostOutcomeObservability(original.s,original.row,[f.pre()],f.clock);
+  };
+  const equal=run({...f.flight.departure,runwayTime:f.flight.departure.revisedTime});
+  expect(equal.byHorizon["T-6h"]).toMatchObject({reportedDistinctGateRunwayTimes:0,reportedRevisedWithoutDistinctRunway:1,actualGateOutNumericCandidates:0});
+  const absent=run({...f.flight.departure,runwayTime:null});
+  expect(absent.byHorizon["T-6h"].reportedRevisedWithoutDistinctRunway).toBe(1);
+  const reversed=run({...f.flight.departure,runwayTime:{utc:"2027-02-02T10:25:00.000Z"}});
+  expect(reversed.byHorizon["T-6h"]).toMatchObject({reportedDistinctGateRunwayTimes:1,reportedGateAfterRunway:1,reportedGateBeforeRunway:0,actualGateOutNumericCandidates:0});
+  expect(reversed.physicalGateOutLabels).toBe(0);
  });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);
