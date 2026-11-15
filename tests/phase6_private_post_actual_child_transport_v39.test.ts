@@ -142,3 +142,33 @@ describe("signed due POST backlog",()=>{
   expect(bindP6PostPrivateDayRoute(handoff,ctx).route.shardIndex).toBe(6);
  });
 });
+
+
+describe("native POST binding is carried into original actual PRE check",()=>{
+ it("narrows the bound registry to the original anchor query and rejects another registry/digest",()=>{
+  const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+  const sourcePath="data-collection/phase5/frozen/source_synthetic_bound_registry.json",
+   request="c".repeat(64),query="d".repeat(64),other="e".repeat(64);
+  const source=Buffer.from(JSON.stringify({manifestSha256:h,runDayIndex:1,entries:[{expectedQueryDigestSha256:query},{expectedQueryDigestSha256:other}]}));
+  const sourceSha=hash(source),postPath="data-collection/phase5/frozen/post_"+request+".json";
+  function bind(delta:Record<string,unknown>={}){
+   const post=Buffer.from(JSON.stringify({reviewed:{requestSha256:request},nativePostSourceBinding:{
+    schema:"v39.phase6.native-post-source-binding.v1",sourceRegistryPath:sourcePath,sourceRegistrySha256:sourceSha,
+    queryDigestSha256:query,policySha256:h,anchorBoundPreRetentionNotAfterUtc:"2027-02-10T14:00:00.000Z",...delta}}));
+   const route={lane:"POST",runDayIndex:1,shardIndex:3,routingIntentSha256:h,signedFrozenSha256:hash(post),signedFrozenPath:postPath,
+    boundSourceRegistryPath:sourcePath,boundSourceRegistrySha256:sourceSha,hardLatestUtc:"2027-02-10T13:00:00.000Z",
+    privateBytesOnlyFromRestrictedReader:true,newPaidDispatchAuthorizedHere:false};
+   const handoff={redactedSummary:{status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",runDayIndex:1,
+    indexRevision:2,externallySignedDayEpochIndexSha256:h,reviewedEd25519SourceWasOriginalDayBytes:true,providerCalls:0,databaseWrites:0,
+    phase6PaidGo:false,observedRealPgClockUtc:"2027-02-10T12:40:00.000Z"},privateRoutingCandidates:[route],
+    getFrozen:(p:string)=>p===sourcePath?source:post};
+   const ctx={...admitP6PrivatePostChildTransport(env()),selector:{runDayIndex:1,indexRevision:2,indexSha256:h,shardIndex:3,
+    packetSha256:hash(post),routingIntentSha256:h}};
+   return bindP6PostPrivateDayRoute(handoff,ctx);
+  }
+  expect(bind().sourceDigests).toEqual([query]);
+  expect(()=>bind({queryDigestSha256:"f".repeat(64)})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
+  expect(()=>bind({sourceRegistrySha256:h})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
+  expect(()=>bind({anchorBoundPreRetentionNotAfterUtc:"2027-02-10T12:59:00.000Z"})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
+ });
+});
