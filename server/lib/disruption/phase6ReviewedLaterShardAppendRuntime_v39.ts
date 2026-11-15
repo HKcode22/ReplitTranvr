@@ -4,7 +4,7 @@
  * V0097/V0098 writer + actual reader. No new table, role, provider, key
  * minting, flight evidence, paid GO or purported human review.
  */
-import {createHash} from "node:crypto";
+import {createHash,createPublicKey,sign,type KeyObject} from "node:crypto";
 import {publishP5ExternalLaterShardToPrivatePg16Once,type P5PrivatePgPublisherClient,type P5PrivatePgPublisherScope} from "./phase5Phase6Pg16PrivateLaterPrePublisher_v39";
 import {verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ReviewWireEnvelope,type P5ExternalLaterReviewSignerPins} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39";
 import {hydrateP5PrivateLaterPreFromPg16ReadOnly} from "./phase5Phase6Pg16PrivateLaterPreHydrator_v39";
@@ -13,7 +13,7 @@ import type {P5UnsignedLaterRegistryReviewPlan} from "./phase5ReviewedLaterPacke
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "./phase6DayEpochFullRegistryReadOnce_v39.mjs";
 import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
-import {validateP6DayEpochIndexBytes,publishP6DayEpochIndexRevisionOnce,verifyP6DayEpochExternalReview} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
+import {P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,p6DayEpochReviewPreimage,validateP6DayEpochIndexBytes,publishP6DayEpochIndexRevisionOnce,verifyP6DayEpochExternalReview} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 const H=/^[a-f0-9]{64}$/;
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const hold=(s:string):never=>{throw Error("HOLD_P6_REVIEWED_LATER_APPEND_"+s);};
@@ -75,6 +75,13 @@ export function proposeP6LaterDayAppendBytes(priorBytes:Buffer,prior:Day,source:
  if(!Number.isFinite(earliest)||earliest<=now+900000||latest>now+180*60000||latest>=retention||latest>utc(reviewValidUntilUtc)||
     utc(prior.entries.at(-1)!.publishedAtUtc)>now)
   hold("LATE_OR_OVERWIDE_SHARD_NEEDS_CENSOR_OR_PROSPECTIVE_SPLIT");
+ // An append must not make a remaining independently authorized SOURCE,
+ // PRE or POST route unreachable solely by shortening the day validity.
+ // Refuse this append (NOT the entire day); arrange lawful longer-lived
+ // metadata or retain/censor the new shard instead of silently cutting it.
+ const activeLatest=Math.max(now,...prior.entries.map(e=>utc(e.hardLatestUtc)));
+ if(activeLatest>Math.min(retention,utc(reviewValidUntilUtc)))
+  hold("APPEND_WOULD_STRAND_EXISTING_ROUTE");
  const next:Day={...prior,revision:prior.revision+1,previousIndexSha256:hash(priorBytes),
   entries:[...prior.entries,{lane:"LATER_PRE",runDayIndex:prior.runDayIndex,shardIndex:registry.shardIndex,
    filePath:registryPath,fileSha256:registrySha,publishedAtUtc:observedDbClockUtc,notBeforeUtc:observedDbClockUtc,
@@ -87,7 +94,7 @@ export function proposeP6LaterDayAppendBytes(priorBytes:Buffer,prior:Day,source:
  const out={status:"PRIVATE_LATER_SHARD_APPEND_PROPOSAL_NEEDS_EXTERNAL_DAY_SIGNATURE",runDayIndex:next.runDayIndex,
   revision:next.revision,indexSha256,previousIndexSha256:next.previousIndexSha256,
   latestAllowedRetentionUtc:iso(retention),latestAllowedReviewValidityUtc:iso(Math.min(retention,utc(reviewValidUntilUtc))),
-  earliestCutoffUtc:iso(earliest),latestCutoffUtc:iso(latest),independentDayReviewIssuedHere:false,phase6PaidGo:false};
+  earliestCutoffUtc:iso(earliest),latestCutoffUtc:iso(latest),observedDbClockUtc,independentDayReviewIssuedHere:false,phase6PaidGo:false};
  return Object.defineProperty(out,"privateIndexBytes",{value:nextBytes,enumerable:false}) as typeof out&{readonly privateIndexBytes:Buffer};
 }
 function sourceAndDuplicates(index:any,x:Input){
@@ -146,7 +153,7 @@ export async function prepareP6ReviewedLaterShardAppend(x:Input){
  if(!before.already)proposeP6LaterDayAppendBytes(initial.index.privateCurrentIndexBytes,before.head,before.source,
   x.plan.registryProposal,x.plan.proposedRegistryFilePath,x.plan.proposedRegistrySha256,
   x.reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,initial.index.redactedSummary.observedDbClockUtc,
-  bound,x.publisherScope.approvedRetentionNotAfterUtc,x.wire.review.validUntilUtc);
+  bound,x.publisherScope.approvedRetentionNotAfterUtc,iso(Math.min(utc(initial.day.wire.review.validUntilUtc),utc(x.wire.review.validUntilUtc))));
  let inserted=0;
  if(x.scope.mode==="PUBLISH_ONCE"&&!before.already){
   const r=await publishP5ExternalLaterShardToPrivatePg16Once(x.publisherClient,x.plan,x.wire,x.reviewerPublicKeyPem,x.reviewerPins,x.publisherScope);
@@ -160,7 +167,7 @@ export async function prepareP6ReviewedLaterShardAppend(x:Input){
  const next=proposeP6LaterDayAppendBytes(after.index.privateCurrentIndexBytes,fresh.head,fresh.source,x.plan.registryProposal,
   x.plan.proposedRegistryFilePath,x.plan.proposedRegistrySha256,x.reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,
   after.index.redactedSummary.observedDbClockUtc,after.day.wire.review.retentionNotAfterUtc,
-  x.publisherScope.approvedRetentionNotAfterUtc,x.wire.review.validUntilUtc);
+  x.publisherScope.approvedRetentionNotAfterUtc,iso(Math.min(utc(after.day.wire.review.validUntilUtc),utc(x.wire.review.validUntilUtc))));
  const out={...next,verifiedPacketCount:got.verified.entries.length,insertedPrivateRows:inserted,providerCalls:0};
  return Object.defineProperty(out,"privateIndexBytes",{value:next.privateIndexBytes,enumerable:false}) as typeof out&{readonly privateIndexBytes:Buffer};
 }
@@ -210,7 +217,8 @@ export async function commitP6ExternallyReviewedLaterAppend(x:Input,approved:{
     signed.reviewedAtMs>utc(got.observedDbClockUtc)||signed.validUntilMs<=utc(got.observedDbClockUtc)||
     signed.validUntilMs<latest||signed.retentionNotAfterMs<=latest||
     signed.retentionNotAfterMs>Math.min(utc(initial.day.wire.review.retentionNotAfterUtc),utc(x.publisherScope.approvedRetentionNotAfterUtc))||
-    signed.validUntilMs>utc(x.wire.review.validUntilUtc))
+    signed.validUntilMs>Math.min(utc(x.wire.review.validUntilUtc),utc(initial.day.wire.review.validUntilUtc))||
+    before.head.entries.some(e=>utc(e.hardLatestUtc)>signed.validUntilMs))
   hold("EXTERNAL_DAY_APPEND_CHANGED_OR_TOO_LATE");
  const committed=await publishP6DayEpochIndexRevisionOnce({client:x.publisherClient,pins,wire:approved.wire,publicKeyPem:t.dayReviewerPublicKeyPem,
   indexBytes:approved.indexBytes,scope:{privateDayIndexStorageApproved:true,independentProviderContentsReviewApproved:true,existingPaidDispatchApproved:false,
@@ -222,4 +230,85 @@ export async function commitP6ExternallyReviewedLaterAppend(x:Input,approved:{
   hold("SIGNED_INDEX_READBACK_UNKNOWN_NO_REPLAY");
  return {status:"REVIEWED_LATER_SHARD_AND_SIGNED_DAY_APPEND_ACTUAL_READBACK_NO_GO",runDayIndex:next.runDayIndex,revision:next.revision,
   indexSha256:committed.indexSha256,verifiedPacketCount:got.verified.entries.length,providerCalls:0,phase6PaidGo:false};
+}
+
+/** The OWNER/independent authority may approve one stable automated
+ * day-index signing policy before Phase6. It does not confer per-flight
+ * native semantics, a later-shard signature, source rights, or paid GO.
+ * Distinct earlier LATER reviewer wire remains mandatory. Runtime calls the
+ * real registry-last publisher and separate PG reader, then the unchanged
+ * externally signed day append writer. No new provider/DDL/queue calls.
+ *
+ * PUBLISH_ONCE commits packet rows once; RECOVER_READONLY never re-inserts
+ * packet rows but can publish the separately approved new INDEX. After an
+ * uncertain write or concurrent revision, stop and independently recover.
+ */
+export async function runP6DelegatedReviewedLaterAppend(x:Input,approval:{
+ policyBytes:Buffer;expectedPolicySha256:string;dayReviewerKey:KeyObject;
+ independentlyApprovedDelegatedDayAppend:true;noProviderCredentialsInSigner:true
+}){
+ checkScope(x);
+ if(approval?.independentlyApprovedDelegatedDayAppend!==true||approval.noProviderCredentialsInSigner!==true||
+    !Buffer.isBuffer(approval.policyBytes)||approval.policyBytes.length<100||approval.policyBytes.length>20000||
+    !H.test(approval.expectedPolicySha256??"")||hash(approval.policyBytes)!==approval.expectedPolicySha256)
+  hold("DELEGATED_DAY_APPEND_POLICY_NOT_INDEPENDENTLY_PINNED");
+ let p:any;
+ try{p=JSON.parse(approval.policyBytes.toString("utf8"));}catch{hold("INVALID_DELEGATED_DAY_APPEND_POLICY");}
+ const t=x.trust;
+ if(p?.schema!=="v39.phase6.delegated-later-day-append-review-policy.v1"||
+    p.delegatedAutomatedLaterDayAppendApproved!==true||p.approvedCodeSha!==t.reviewedCodeSha||
+    !["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>p[k]===t[k as keyof Trust])||
+    p.dayReviewerFingerprintSha256!==t.dayReviewerFingerprintSha256||
+    p.queryReviewerFingerprintSha256!==t.queryReviewerFingerprintSha256||
+    p.laterReviewerFingerprintSha256!==x.scope.expectedLaterReviewerFingerprintSha256||
+    new Set([p.dayReviewerFingerprintSha256,p.queryReviewerFingerprintSha256,p.laterReviewerFingerprintSha256]).size!==3||
+    !Number.isSafeInteger(p.maximumIndexRevision)||p.maximumIndexRevision<2||p.maximumIndexRevision>1024||
+    utc(p.validFromUtc)>=utc(p.validUntilUtc))
+  hold("DELEGATED_DAY_APPEND_POLICY_STUDY_OR_DISTINCT_KEYS_DRIFT");
+ let fp="";
+ try{
+  if(approval.dayReviewerKey?.type!=="private"||approval.dayReviewerKey.asymmetricKeyType!=="ed25519")
+   hold("DELEGATED_DAY_APPEND_WRONG_PRIVATE_KEY");
+  fp=hash(createPublicKey(approval.dayReviewerKey).export({type:"spki",format:"der"}) as Buffer);
+ }catch{hold("DELEGATED_DAY_APPEND_WRONG_PRIVATE_KEY");}
+ if(fp!==t.dayReviewerFingerprintSha256)hold("DELEGATED_DAY_APPEND_WRONG_PRIVATE_KEY");
+ const initial=await current(x),first=sourceAndDuplicates(initial.index,x);
+ const initialNow=utc(initial.index.redactedSummary.observedDbClockUtc);
+ if(initialNow<utc(p.validFromUtc)||initialNow>=utc(p.validUntilUtc)||
+    (!first.already&&first.head.revision>=p.maximumIndexRevision))
+  hold("DELEGATED_DAY_APPEND_POLICY_EXPIRED_OR_REVISION_BOUND");
+ // Check prospective date scope before publishing packets; exact same
+ // checks occur later in prepare/commit against fresh independent clocks.
+ if(!first.already&&utc(initial.day.wire.review.retentionNotAfterUtc)>utc(p.validUntilUtc)&&
+    utc(x.publisherScope.approvedRetentionNotAfterUtc)>utc(p.validUntilUtc))
+  hold("DELEGATED_DAY_APPEND_RETENTION_EXCEEDS_POLICY");
+ const prepared=await prepareP6ReviewedLaterShardAppend(x);
+ if(!("privateIndexBytes" in prepared))return {
+  ...prepared,automatedDelegatedDaySignatureIssued:false,automatedDelegatedSignatureNotHumanReview:true};
+ if(prepared.revision>p.maximumIndexRevision||
+    utc(prepared.observedDbClockUtc)<utc(p.validFromUtc)||
+    utc(prepared.observedDbClockUtc)>=utc(p.validUntilUtc)||
+    utc(prepared.latestAllowedRetentionUtc)>utc(p.validUntilUtc))
+  hold("DELEGATED_DAY_APPEND_PREPARE_CLOCK_OR_RETENTION_DRIFT_NO_REPLAY");
+ const bytes=prepared.privateIndexBytes;
+ const evidence=hash(Buffer.from(JSON.stringify({
+  schema:"v39.phase6.delegated-later-append-evidence.v1",
+  policySha256:approval.expectedPolicySha256,
+  previousIndexSha256:prepared.previousIndexSha256,indexSha256:prepared.indexSha256,
+  laterRegistrySha256:x.plan.proposedRegistrySha256,
+  independentlySignedLaterWireSha256:hash(Buffer.from(JSON.stringify(x.wire))),
+  independentlyReadBackPacketCount:prepared.verifiedPacketCount,observedDbClockUtc:prepared.observedDbClockUtc})));
+ const review={schema:P6_DAY_EPOCH_REVIEW_SCHEMA,audience:P6_DAY_EPOCH_REVIEW_AUDIENCE,
+  runDayIndex:prepared.runDayIndex,indexRevision:prepared.revision,indexSha256:prepared.indexSha256,
+  previousIndexSha256:prepared.previousIndexSha256,reviewedCodeSha:t.reviewedCodeSha,
+  manifestSha256:t.manifestSha256,calendarSha256:t.calendarSha256,releaseSha256:t.releaseSha256,
+  rightsSha256:t.rightsSha256,externalReviewEvidenceSha256:evidence,
+  reviewedAtUtc:prepared.observedDbClockUtc,validUntilUtc:prepared.latestAllowedReviewValidityUtc,
+  retentionNotAfterUtc:prepared.latestAllowedRetentionUtc,reviewerPublicKeyFingerprintSha256:fp};
+ validateP6DayEpochIndexBytes(bytes,review);
+ const wire={review,signatureBase64:sign(null,p6DayEpochReviewPreimage(review),approval.dayReviewerKey).toString("base64")};
+ const result=await commitP6ExternallyReviewedLaterAppend({...x,scope:{...x.scope,mode:"RECOVER_READONLY"}},
+  {indexBytes:bytes,expectedIndexSha256:prepared.indexSha256,expectedDayReviewEvidenceSha256:evidence,wire});
+ return {...result,insertedPrivateRows:prepared.insertedPrivateRows,automatedDelegatedDaySignatureIssued:true,
+  automatedDelegatedSignatureNotHumanReview:true,approvedPolicySha256:approval.expectedPolicySha256};
 }
