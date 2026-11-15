@@ -6,3 +6,13 @@ export function verifyP6ExternalSourcePostReview(wire:{review:Record<string,unkn
  review:Record<string,unknown>;reviewedAtMs:number;retentionNotAfterMs:number;validUntilMs:number;
  ed25519SignatureCryptographicallyVerified:true;legalSourceRightsCertified:false;organizationalIndependenceCertified:false
 };
+
+export function readP6PrivateSourcePostOnce(
+ client:{query:(sql:string,values?:any[])=>Promise<any>},
+ pins:Record<string,unknown>,wire:{review:Record<string,unknown>;signatureBase64:string},publicKeyPem:string
+):Promise<{readonly privateBytes:Buffer;readonly privateLogicalPath:string;redactedSummary:{
+ schema:string;status:string;kind:"SOURCE_QUERY_PACKET"|"POST_PACKET";runDayIndex:number;shardIndex:number;
+ contentSha256:string;observedDatabaseClockUtc:string;verifiedEd25519Review:true;
+ independentlyAuthorizedProviderUseCertified:false;reviewerOrganizationalIndependenceCertified:false;
+ actualPhase6PaidGoCertified:false;contentsWereCopiedToPublicLogs:false;providerCalls:0;databaseWrites:0;githubDispatches:0
+}}>;
