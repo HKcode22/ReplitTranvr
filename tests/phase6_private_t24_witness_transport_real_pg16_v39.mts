@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
 import {digestP5Stage24ReviewedReceipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39.ts";
-import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage,publishP6T24WitnessCustodyOnce,readP6T24WitnessCustodyOnce,verifyP6T24WitnessCustody} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
+import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage,publishP6T24WitnessCustodyOnce,readP6T24WitnessCustodyOnce,readP6T24WitnessCustodyBatch,verifyP6T24WitnessCustody} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
 assert.equal(process.env.CI,"true");
 assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
 assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,"postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable");
@@ -50,6 +50,17 @@ try{
  const got=await readP6T24WitnessCustodyOnce({client:reader,trust,scope:rs});
  assert.deepEqual(got.privateReceipt,receipt);assert.equal(got.scientificReviewCompleted,false);
  assert(!JSON.stringify(got).includes(trust.flightInstanceId));assert(!JSON.stringify(got).includes("snapshotId"));
+ const absent={...trust,flightInstanceId:"synthetic-absent-ci-only"};
+ const batch=await readP6T24WitnessCustodyBatch({client:reader,trusts:[trust,absent],scope:rs});
+ assert.equal(batch.verifiedCount,1);assert.equal(batch.absentCount,1);assert.equal(batch.unresolvedCount,0);
+ assert.deepEqual(batch.privateDecisions[0].receipt,receipt);
+ assert.equal(batch.privateDecisions[1].status,"CUSTODY_ABSENT_NOT_NEGATIVE_T24_EVIDENCE");
+ assert(!JSON.stringify(batch).includes(trust.flightInstanceId));assert(!JSON.stringify(batch).includes("snapshotId"));
+ await assert.rejects(readP6T24WitnessCustodyBatch({client:reader,trusts:[trust,trust],scope:rs}),/CROSS_SCOPE_OR_DUPLICATE/);
+ await assert.rejects(readP6T24WitnessCustodyBatch({client:reader,trusts:[trust,{...absent,runDayIndex:20}],scope:rs}),/CROSS_SCOPE_OR_DUPLICATE/);
+ const invalid=await readP6T24WitnessCustodyBatch({client:reader,trusts:[{...trust,expectedSelectedTVersion:"changed-version"}],scope:rs});
+ assert.equal(invalid.unresolvedCount,1);assert.equal(invalid.verifiedCount,0);assert.equal(invalid.absentCount,0);
+
  await assert.rejects(pub.query("DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[review.logicalPath]),/permission denied/);
  await assert.rejects(reader.query("UPDATE phase6_private.frozen_native_packet_v39 SET kind=kind WHERE logical_path=$1",[review.logicalPath]),/permission denied/);
  // Owner may delete the synthetic test fixture; document lifecycle, no actual rights claim.
