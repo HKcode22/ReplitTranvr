@@ -81,9 +81,10 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
     ",revision,previous_index_sha256,calendar_sha256,release_sha256 FROM "+INDEX+
     " WHERE run_day_index=$1"+(exact?" AND revision=$2":" ORDER BY revision DESC LIMIT 1"),
     exact?[s.runDayIndex,s.indexRevision]:[s.runDayIndex,now]);
-  // Only an actual empty CURRENT_DAY result can be isolated by a
-  // prospective planner. Corrupt shape, missing exact child references,
-  // SQL/ACL or signature failures remain hard holds.
+  // A missing or expired CURRENT_DAY is local to that day. Corrupt shape,
+  // missing exact child references, SQL/ACL or signature failures remain holds.
+  // The owner cleanup must delete the whole expired day index atomically;
+  // deleting just the head would hide that revision from this reader.
   if(current&&res?.rowCount===0&&Array.isArray(res.rows)&&res.rows.length===0)
    fail("CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED");
   if(res?.rowCount!==1||res.rows?.length!==1)
@@ -128,7 +129,7 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
      previousIndexSha256:row.previous_index_sha256,
      externalReviewEvidenceSha256:row.external_review_sha256}});
    }catch(e){
-    // Only translate the actual signed resolver\'s post-verification expiry
+    // Only translate the actual signed resolver's post-verification expiry
     // refusal. Invalid signatures or future-reviewed wires are hard errors.
     if(current&&e?.message==="HOLD_P6_DYNAMIC_SOURCE_REVIEW_SIGNED_REVIEW_NOT_LIVE_AT_DB_CLOCK"&&
        time(wire.review.reviewedAtUtc)<=now&&time(wire.review.validUntilUtc)<=now)
