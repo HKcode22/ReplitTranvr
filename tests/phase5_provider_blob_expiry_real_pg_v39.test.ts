@@ -2,21 +2,22 @@
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {Pool} from "pg";
 import {randomUUID} from "node:crypto";
-import {verifyOneExpiredProviderBlobV39,type ProviderBlobExpiryCandidateV39} from "../server/lib/disruption/providerBlobExpiry_v39";
+import {verifyOneExpiredProviderBlobV39,runBoundedProviderBlobExpiryBatchV39,type ProviderBlobExpiryCandidateV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {providerBlobObjectNameV39,type ProviderBlobRefV39} from "../server/lib/disruption/providerBlobStore_v39";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const suite=process.env.V39_P5_DAILY_QA_REAL_PG16==="1"?describe:describe.skip;
 const run=()=> "provider-blob-expiry-"+randomUUID();
 suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
- let db:Pool;
+ let db:Pool,readback:Pool;
  const makeStore=()=>{const objects=new Set<string>();let deletes=0,refuse=false,loseAck=false;return {objects,get deletes(){return deletes;},set refuse(x:boolean){refuse=x;},set loseAck(x:boolean){loseAck=x;},
   exists:async(name:string)=>objects.has(name),delete:async(name:string)=>{deletes++;if(!refuse)objects.delete(name);if(loseAck)throw Error("CI_LOST_STORAGE_ACK");}};};
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==URL||
    process.env.V39_PHASE6_PROCESS_ARMED!=="0"||process.env.AERODATABOX_API_KEY)throw Error("NOT_DISPOSABLE_PG16");
   db=new Pool({connectionString:URL,max:4});
+  readback=new Pool({connectionString:URL,max:2});
  });
- afterAll(async()=>{await db?.end();});
+ afterAll(async()=>{await db?.end();await readback?.end();});
  async function make(future=false):Promise<ProviderBlobExpiryCandidateV39>{
   const blobRefId=randomUUID(),contentClass="live_fids_cache" as const;
   const dbNow=new Date((await db.query("SELECT clock_timestamp() AS at")).rows[0].at).getTime();
@@ -46,6 +47,8 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   const changed={...c,ref:{...c.ref,contentBytes:999}};
   await expect(verifyOneExpiredProviderBlobV39(db,s,changed,run())).rejects.toThrow("REF_DRIFT");
   expect(s.deletes).toBe(0);expect((await marker(c)).deletion_run_id).toBeNull();
+  // Retire the valid synthetic overdue fixture before the later all-due batch.
+  await verifyOneExpiredProviderBlobV39(db,s,c,run());
  });
  it("does not tombstone a failed physical delete, then reconciles observed absence after a lost ACK",async()=>{
   const c=await make(),s=makeStore();s.objects.add(c.objectName);s.refuse=true;
@@ -57,4 +60,33 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   const next=run();expect(await verifyOneExpiredProviderBlobV39(db,s,c,next)).toBe("VERIFIED_NOW");
   expect(s.deletes).toBe(2);expect(await marker(c)).toEqual({deletion_run_id:next,after_expiry:true});
  });
+ it("services oldest due rows in bounded batches, leaves future rows and independently reads back each commit",async()=>{
+  const a=await make(),b=await make(),future=await make(true),s=makeStore();
+  for(const c of [a,b,future])s.objects.add(c.objectName);
+  await expect(runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,0)).rejects.toThrow("BATCH_LIMIT_INVALID");
+  expect(s.deletes).toBe(0);
+  const first=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1);
+  expect(first).toEqual({status:"BACKLOG_REMAINS_AT_CUTOFF",selectedCount:1,verifiedNowCount:1,
+   alreadyVerifiedCount:0,independentlyReadBackCount:1,remainingAtCutoff:1});
+  expect(s.deletes).toBe(1);expect(await s.exists(future.objectName)).toBe(true);
+  expect([await marker(a),await marker(b)].filter(x=>x.deletion_run_id!==null)).toHaveLength(1);
+  const second=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,2);
+  expect(second).toEqual({status:"DUE_AT_CUTOFF_CLEARED",selectedCount:1,verifiedNowCount:1,
+   alreadyVerifiedCount:0,independentlyReadBackCount:1,remainingAtCutoff:0});
+  expect(s.deletes).toBe(2);expect(await s.exists(future.objectName)).toBe(true);
+  expect(await marker(future)).toMatchObject({deletion_run_id:null});
+  expect(await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1)).toMatchObject({
+   status:"DUE_AT_CUTOFF_CLEARED",selectedCount:0,remainingAtCutoff:0});
+  expect(s.deletes).toBe(2);
+ });
+ it("refuses a contradictory independent primary readback even after marker commit",async()=>{
+  const c=await make(),s=makeStore();s.objects.add(c.objectName);
+  await expect(runBoundedProviderBlobExpiryBatchV39(db,s,readback,{exists:async()=>true},1))
+   .rejects.toThrow("RECURRING_PRIMARY_READBACK_FAILED");
+  expect(s.deletes).toBe(1);expect(await s.exists(c.objectName)).toBe(false);
+  expect((await marker(c)).deletion_run_id).not.toBeNull();
+  // Caller must durably hold the incident; a later empty batch is not proof
+  // that this contradictory post-readback has been resolved.
+ });
+
 });
