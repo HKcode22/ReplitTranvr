@@ -27,7 +27,7 @@ const args=(dbClockUtc=NOW,rows=dates())=>({
 const env=()=>({
  GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
  GITHUB_REF:"refs/heads/main",GITHUB_SHA:"e".repeat(40),
- GITHUB_RUN_ATTEMPT:"1",GITHUB_EVENT_NAME:"schedule",
+ GITHUB_RUN_ATTEMPT:"1",GITHUB_EVENT_NAME:"schedule",V39_P5_APPROVED_CODE_SHA:"e".repeat(40),
  ADB_AUTO_COLLECT:"0",AERODATABOX_API_KEY:"",
  V39_P5_EARLY_DRAW_OWNER_APPROVED:"1",
  V39_PHASE5_FREEZE_SIGNED:"1",
@@ -37,7 +37,7 @@ const env=()=>({
  V39_P5_CONFIG_HASH:h("b"),V39_P5_FRAME_HASH:h("c"),
  V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:"phase5_fids_early_draw_ci",
  V39_P5_EARLY_DRAW_DATABASE_URL:
-  "postgresql://phase5_fids_early_draw_ci:dummy@localhost:5432/neondb"
+  "postgresql://phase5_fids_early_draw_ci:dummy@ep-ci.neon.tech:5432/neondb?sslmode=require"
 });
 describe("one real-time GitHub clock owner reuses existing early selector",()=>{
  it("selects day1 48h early without fabricating airport identities or provider calls",()=>{
@@ -70,6 +70,17 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
    new Date(FIRST+25*3600000).toISOString(),rows
   ))).toThrow("EARLIER_UNSELECTED_DAY_MISSED_NON_BACKFILLABLE_CUTOFF");
  });
+ it("discloses missed days locally only under reviewed candidate policy, never backfills or skips partial rows",()=>{
+  const rows=dates(),clock=new Date(FIRST+25*3600000).toISOString();
+  // Day2 in this fixture starts 48h after day1; at +25h it too is
+  // too late for the strict >24h45m window. Day3 is still future.
+  const result=selectP5GitHubNextEarlyDraw({...args(clock,rows),allowLocalMissedDay:true});
+  expect(result).toMatchObject({status:"ONE_DUE_REVIEWED_DAY",runDayIndex:3,priorCommittedDays:0,missedRunDayIndices:[1,2]});
+  const all=selectP5GitHubNextEarlyDraw({...args(new Date(FIRST+100*86400000).toISOString(),rows),allowLocalMissedDay:true});
+  expect(all).toMatchObject({status:"NOT_DUE_OR_ALREADY_SELECTED",selectedDays:0,missedRunDayIndices:Array.from({length:31},(_,i)=>i+1)});
+  rows[0].draw_count=2;
+  expect(()=>selectP5GitHubNextEarlyDraw({...args(clock,rows),allowLocalMissedDay:true})).toThrow("CALENDAR_OR_FOUR_SLOT_DRAW_DRIFT");
+ });
  it("enforces strict 24h45 and inclusive 72h selection clock",()=>{
   expect(selectP5GitHubNextEarlyDraw(args(
    new Date(FIRST-72*3600000).toISOString()
@@ -100,6 +111,9 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
   for(const bad of [
    {GITHUB_EVENT_NAME:"pull_request"},
    {GITHUB_RUN_ATTEMPT:"2"},
+   {V39_P5_APPROVED_CODE_SHA:"f".repeat(40)},
+   {DATABASE_URL:"forbidden"},
+   {RAPIDAPI_KEY:"forbidden"},
    {GITHUB_REF:"refs/heads/other"},
    {AERODATABOX_API_KEY:"secret"},
    {V39_PHASE5_FREEZE_SIGNED:"0"},
@@ -110,6 +124,8 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
   expect(()=>parseP5GitHubApprovedEarlyDrawContext({
    ...v,GITHUB_EVENT_NAME:"workflow_dispatch"
   })).toThrow("NO_MAIN_ONLY_SIGNED_PHASE6_AUTH");
+  for(const url of ["postgresql://owner:ci@ep-ci.neon.tech/neondb?sslmode=require","postgresql://phase5_fids_early_draw_ci:ci@localhost/neondb?sslmode=require","postgresql://phase5_fids_early_draw_ci:ci@ep-ci.neon.tech/neondb?sslmode=disable"])
+   expect(()=>parseP5GitHubApprovedEarlyDrawContext({...v,V39_P5_EARLY_DRAW_DATABASE_URL:url})).toThrow("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");
   expect(parseP5GitHubApprovedEarlyDrawContext({
    ...v,GITHUB_EVENT_NAME:"workflow_dispatch",
    P5_EARLY_DRAW_MANUAL_CONFIRM:"ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO"
@@ -124,6 +140,7 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
      calls.push(sql);
      if(sql.includes("current_database()"))return {rows:[{
       db:"neondb",role:"phase5_fids_early_draw_ci",
+      login:"phase5_fids_early_draw_ci",version:160016,restricted_login:true,auth_update:false,source_insert:false,pre_insert:false,
       ro:"on",replica:false,now:new Date(FIRST-80*3600000)
      }]};
      if(sql.includes("FROM clean.adb_phase6_authorization"))return{
