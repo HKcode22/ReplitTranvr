@@ -156,7 +156,8 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   expect(linked.linked).toBe(true);
  });
  it("distinguishes a source whose retention clock has elapsed from collection failure without altering originals",async()=>{
-  const afterExpiry=new Date((await db.query("SELECT source_expires_at_utc FROM clean.phase5_fids_original_binding_v39 WHERE population_query_id=$1",[pid])).rows[0].source_expires_at_utc);
+  // Preserve PostgreSQL microseconds at the exact equality boundary; JS Date truncates them.
+  const afterExpiry=(await db.query("SELECT source_expires_at_utc::text AS exact_expiry FROM clean.phase5_fids_original_binding_v39 WHERE population_query_id=$1",[pid])).rows[0].exact_expiry;
   const rows=(await db.query(P5_DAILY_PRE_SNAPSHOT_CANDIDATE_SQL,[manifest,1,afterExpiry])).rows;
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({horizon:"T-24h",snapshots_seen:3,clock_order_candidate_pre:1,
