@@ -13,6 +13,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase6_stored_post_child_dispatcher_v39.mjs'
+      - 'tests/phase6_stored_post_child_dispatcher_v39.test.mjs'
       - 'server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39.ts'
       - 'server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts'
       - 'scripts/v39_phase6_private_source_parent_readonly_v39.mjs'
@@ -93,6 +95,7 @@ jobs:
           set -Eeuo pipefail
           npx vitest run tests/phase5_phase6_append_only_day_shard_index_v39.test.ts tests/phase5_github_complete_workflow_history_v39.test.ts tests/phase5_source_upcoming_due_queue_readonly_v39.test.ts tests/phase5_prepared_one_get_actual_due_queue_joint_review_v39.test.ts tests/phase5_signed_due_source_one_packet_handoff_v39.test.ts tests/phase5_signed_per_day_source_batch_readonly_v39.test.ts tests/phase5_signed_day_source_child_release_v39.test.ts tests/phase5_github_due_source_batch_child_dispatcher_v39.test.ts tests/phase5_source_child_private_legacy_exclusive_routing_v39.test.ts tests/phase5_t24_actual_original_bound_readonly_handoff_v39.test.ts tests/phase5_native_t24_github_child_dispatcher_v39.test.ts tests/phase5_future_post_github_child_dispatcher_v39.test.ts tests/phase5_later_pre_github_child_dispatcher_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_later_pre_registry_child_v39.test.ts tests/phase5_later_pre_signed_day_batch_dispatcher_v39.test.ts tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts tests/phase6_private_source_parent_real_ro_v39.test.ts tests/phase6_private_source_one_original_child_github_v39.test.ts
           npx --no-install tsx --test tests/phase6_stored_source_child_dispatcher_v39.test.mjs
+          npx --no-install tsx --test tests/phase6_stored_post_child_dispatcher_v39.test.mjs
           echo 'P5_DUE_SOURCE_QUEUE_CI_NO_PROVIDER_NO_DB_NO_GO'
   signed-main-source-queue-readonly:
     if: ${{ github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && vars.P5_SOURCE_QUEUE_OBSERVER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER')) }}
@@ -409,7 +412,7 @@ jobs:
   separately-authorized-future-v0083-post-gh-child:
     # Existing 10-minute cron only. Future signed POSTs remain default OFF.
     # Parent is provider-free and has only restricted SOURCE read privileges.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_POST_AUTO_DISPATCH_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P5_POST_AUTO_DISPATCH_ENABLED == 'true' && vars.P6_PRIVATE_POST_PARENT_ENABLED != 'true' }}
     permissions:
       contents: read
       actions: write
@@ -853,3 +856,79 @@ jobs:
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs
+
+  separately-authorized-current-private-post-children:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P6_PRIVATE_POST_PARENT_ENABLED == 'true' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    concurrency:
+      group: phase5-future-post-gh-dispatch-singleton
+      cancel-in-progress: false
+    env:
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P6_PRIVATE_POST_PARENT_ENTRYPOINT: '1'
+      P6_PRIVATE_POST_PARENT_ENABLED: ${{ vars.P6_PRIVATE_POST_PARENT_ENABLED }}
+      P5_POST_AUTO_DISPATCH_ENABLED: ${{ vars.P5_POST_AUTO_DISPATCH_ENABLED }}
+      GITHUB_TOKEN: ${{ github.token }}
+      P6_PRIVATE_POST_PARENT_APPROVED: ${{ secrets.P6_PRIVATE_POST_PARENT_APPROVED }}
+      P6_PRIVATE_POST_OUTCOME_TAIL_HOURS: ${{ secrets.P6_PRIVATE_POST_OUTCOME_TAIL_HOURS }}
+      P6_PRIVATE_POST_CHILD_APPROVED: ${{ secrets.P6_PRIVATE_POST_CHILD_APPROVED }}
+      P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED: ${{ secrets.P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 }}
+      V39_P5_POST_OWNER_APPROVED: ${{ secrets.V39_P5_POST_OWNER_APPROVED }}
+      V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED: ${{ secrets.V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED }}
+      V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
+      V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: STOP before dependencies unless separately approved
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$P6_PRIVATE_POST_PARENT_APPROVED" = 1
+          test "$P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED" = 1
+          test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = 1
+          test "$P6_PRIVATE_POST_OUTCOME_TAIL_HOURS" = 48
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Dispatch current private POST exact children
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase6_stored_post_child_dispatcher_v39.mjs
