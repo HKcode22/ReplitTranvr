@@ -4,7 +4,9 @@
  */
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
-import {summarizeP6CandidateLeadCoverage} from "./phase6UnsignedFutureSourceDayPlanCompiler_v39";
+import {summarizeP6CandidateLeadCoverage,compileP6UnsignedFutureSourceDayPlans} from "./phase6UnsignedFutureSourceDayPlanCompiler_v39";
+import {assembleP5UnsignedRealFivePairCalendarSlotBudgetReview,type P5B0062ExternallyClaimedSlotCostInput} from "./phase5RealFivePairB0062UnsignedStageInputHandoff_v39";
+import type {P5Adaptive31ShapeEnvelope} from "./phase5Prospective31DayShapeEnvelope_v39";
 import {buildP5PrelaunchSlotBudgetEnvelope} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {P5PrelaunchSlotBudgetInput,P5PrelaunchSlotChargeDayInput} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {buildP5ActualFivePairB0062CalendarOnlyDraft} from "./phase5RealFivePairB0062CalendarOnlyDraft_v39";
@@ -130,4 +132,72 @@ export function proposeP5ActualNov22Budget(draft:Draft){
    replenishmentsAssumed:0,fullStudyAlertBudgetApproved:false},
   independentBudgetApproved:false,providerRangePriceAndTimingCertified:false,sourceRightsCertified:false,
   physicalReservations:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+}
+
+/** Assemble the actual first-seed candidate using the EXISTING two compilers.
+ * No evidence hashes synthesized, no new draw, no signature or live writes.
+ * The caller supplies the complete separately reviewed input; the proposal
+ * is a parity check, not proof of approval. A changed budget requires an
+ * explicit revised review, not this exact-proposal assembly.
+ */
+export function assembleP6ActualFirstSeedReleaseCandidate(input:{
+ draft:Draft;
+ envelope:P5Adaptive31ShapeEnvelope;
+ external:P5B0062ExternallyClaimedSlotCostInput;
+ expectedExternalInputSha256:string;
+ timing:Parameters<typeof compileP6UnsignedFutureSourceDayPlans>[0]["timing"];
+ expectedTimingJsonSha256:string;
+}){
+ const {draft,envelope,external,timing}=input;
+ const proposal=proposeP5ActualNov22Budget(draft);
+ if(!external||sha(external)!==input.expectedExternalInputSha256||
+    external.expectedExternalCalendarDraftJsonSha256!==expectedDraft||
+    external.expectedCalendarRowsSha256!==expectedRows||
+    !envelope||envelope.shapeEnvelopeSha256!==draft.proposedShapeEnvelopeSha256||
+    !timing||sha(timing)!==input.expectedTimingJsonSha256)
+  hold("EXACT_EXTERNAL_INPUT_SHAPE_OR_TIMING_REQUIRED");
+ const s=proposal.settings;
+ if(external.providerMaxRangeMinutes!==s.providerMaxRangeMinutes||
+    external.refreshEveryMinutes!==s.refreshEveryMinutes||
+    external.physicalGetsPerRefreshUpperBound!==s.physicalGetsPerRefreshUpperBound||
+    external.getLeadSeconds!==s.getLeadSeconds||
+    external.apiUnitsPerPhysicalGet!==s.apiUnitsPerPhysicalGet||
+    external.cycleRestCeilingUnits!==s.cycleRestCeilingUnits||
+    external.protectedRestFloorUnits!==s.protectedRestFloorUnits||
+    external.restOtherByUtcDate.some(r=>r.dailyRestCeilingUnits!==s.dailyRestCeilingUnits))
+  hold("EXACT_PROPOSAL_SETTINGS_CHANGED");
+ const review=assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,external);
+ const actual=review.slotOnlyBudget.utcCategoryRows;
+ if(actual.length!==proposal.physicalUtcRows.length||
+    actual.some((r,i)=>{
+     const p=proposal.physicalUtcRows[i];
+     return r.chargeDayUtc!==p.chargeDayUtc||
+      Object.keys(r.categories).length!==Object.keys(p.categories).length||
+      Object.entries(r.categories).some(([k,v])=>p.categories[k as keyof typeof p.categories]!==v);
+    })||
+    review.slotOnlyBudget.cycleSourceUnits+review.slotOnlyBudget.cycleOtherUnits!==proposal.totalReservedUnits)
+  hold("EXACT_PROPOSED_PHYSICAL_CAPS_CHANGED");
+ const plans=compileP6UnsignedFutureSourceDayPlans({
+  stage:review.unsignedStageInput,expectedStageInputSha256:review.unsignedStageInputSha256,
+  envelope,expectedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,
+  timing,expectedTimingJsonSha256:input.expectedTimingJsonSha256});
+ if(plans.files.length!==31||plans.totalPlannedQueries!==6144||
+    plans.totalPlannedQueries*2!==review.slotOnlyBudget.cycleSourceUnits||
+    plans.ordinaryAirportSelectionsCreated!==0)
+  hold("ACTUAL_FIRST_SEED_PLAN_PARITY");
+ return {
+  status:"EXACT_FIRST_SEED_RELEASE_REVIEW_BUNDLE_UNSIGNED_NO_GO" as const,
+  externalInputSha256:input.expectedExternalInputSha256,
+  timingJsonSha256:input.expectedTimingJsonSha256,
+  calendarDraftSha256:expectedDraft,
+  calendarRowsSha256:expectedRows,
+  seedReplayedNotRedrawn:true,
+  unsignedStageInputSha256:review.unsignedStageInputSha256,
+  unsignedStageInput:review.unsignedStageInput,
+  dayPlans:plans,
+  totalReservedUnits:proposal.totalReservedUnits,
+  peakDailyUnits:proposal.peakDailyUnits,
+  independentReleaseStillRequired:true,
+  providerCalls:0,databaseWrites:0,phase6PaidGo:false
+ };
 }
