@@ -243,6 +243,13 @@ export async function readP6DayEpochRestrictedReaderClock(client,login){
  validPgId(ident.rows[0],"reader",login);
  return new Date(clock(ident.rows[0].db_now)).toISOString();
 }
+// Existing identity/ACL policy, reused by the metadata-only publisher.
+export async function readP6DayEpochRestrictedPublisherClock(client,login){
+ const ident=await client.query(identitySQL);
+ if(ident?.rowCount!==1)err("NO_ACTUAL_POSTGRESQL_PUBLISHER_IDENTITY");
+ validPgId(ident.rows[0],"publisher",login);
+ return new Date(clock(ident.rows[0].db_now)).toISOString();
+}
 const indexSQL=
  "SELECT run_day_index,revision,previous_index_sha256,content_sha256,"+
  "reviewed_code_sha,manifest_sha256,calendar_sha256,"+

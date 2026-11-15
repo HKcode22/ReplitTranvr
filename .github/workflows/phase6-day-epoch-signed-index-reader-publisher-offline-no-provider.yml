@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
+      - 'migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql'
+      - 'server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs'
+      - 'tests/phase6_private_daily_prepare_review_real_pg16_v39.mjs'
       - 'server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs'
       - 'server/lib/disruption/phase6PrivateSourcePostPublisherOnce_v39.mjs'
       - 'migrations/staged/V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql'
@@ -162,6 +165,7 @@ jobs:
             console.log("V0098_DISPOSABLE_OWNER_SCHEMA_EMPTY_NO_REPLAY_NO_PAID_PASS");
           }finally{await c.end()}
           JS
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql
           PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE phase6_private_publisher_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-pub'"
           PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
@@ -176,5 +180,6 @@ jobs:
           set -Eeuo pipefail
           set +x
           test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node tests/phase6_private_daily_prepare_review_real_pg16_v39.mjs
           node tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs
           echo 'P6_DAY_EPOCH_SIGNED_RESTRICTED_REAL_PG16_NO_PROVIDER_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
