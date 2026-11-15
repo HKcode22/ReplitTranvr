@@ -142,6 +142,26 @@ try{
  assert.deepEqual(secondRead.currentIndexBytes,second.bytes);
  assert.deepEqual(secondRead.previousIndexBytes,first.bytes);
  assert.equal(secondRead.redactedSummary.entryCount,2);
+ // After publishing r2, the r1 signature is still cryptographically valid.
+ // A planner must refuse it; an already-admitted, exact immutable child
+ // may still read r1, so new publication does not strand in-flight work.
+ await assert.rejects(hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:first.pins,wire:first.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:true}
+ }),/STALE_OR_MISSING_DAY_REVISION_FOR_PLANNING/);
+ const historical=await hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:first.pins,wire:first.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false}
+ });
+ assert.equal(historical.redactedSummary.indexRevision,1);
+ const currentPlanning=await hydrateP6DayEpochFullRegistriesReadOnly({
+  client:read,pins:second.pins,wire:second.wire,publicKeyPem:pem,
+  scope:{privateDayRegistryReadOnlyApproved:true,
+   existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:true}
+ });
+ assert.equal(currentPlanning.redactedSummary.indexRevision,2);
  // Physically SELECT both protected SOURCE bytes using the same restricted
  // reader group and one day-scoped signed index. Never print the payload.
  const hydrated=await hydrateP6DayEpochFullRegistriesReadOnly({

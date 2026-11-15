@@ -102,6 +102,18 @@ export async function hydrateP6DayEpochFullRegistriesReadOnly({
      now>=millis(review.validUntilUtc)||
      now>=millis(review.retentionNotAfterUtc))
    fail("DAY_INDEX_EXPIRED_BETWEEN_READS");
+  // A scheduler needs the latest committed revision visible in this
+  // REPEATABLE READ snapshot, not merely a still-valid historical signature.
+  // Exact already-admitted children may use their immutable older revision:
+  // publishing another append-only revision must not strand in-flight work.
+  if(scope.requireCurrentRevisionForPlanning===true){
+   const head=await client.query(
+    "SELECT max(revision)::integer AS revision FROM "+INDEX+
+    " WHERE run_day_index=$1",[review.runDayIndex]);
+   if(head?.rowCount!==1||
+      head.rows?.[0]?.revision!==review.indexRevision)
+    fail("STALE_OR_MISSING_DAY_REVISION_FOR_PLANNING");
+  }
   const count=await client.query(
    "SELECT count(*)::integer AS n,"+
    "COALESCE(sum(octet_length(payload_bytes)),0)::bigint AS bytes"+
