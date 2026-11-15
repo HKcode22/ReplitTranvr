@@ -6,7 +6,7 @@ import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeo
 import {readP6T24RegistryRoutingTrust,readP6CurrentT24Routing,projectP6T24CompatibilityRoster} from "../server/lib/disruption/phase6CurrentPrivateT24Routing_v39.mjs";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {requireP5CdGithubPreparePrivateDayScope} from "../server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39";
-import {verifyP5CdFrozenRoster,type P5CdVerifiedTaskPacket} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+import {verifyP5CdFrozenRoster,type P5CdVerifiedTaskPacket,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {preflightP5Stage14ReviewedPermitV39} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {executeP6PrivateEnrollmentBatch} from "./v39_phase6_private_later_restartable_enrollment_v39";
@@ -42,7 +42,7 @@ export function selectP6T24EnrollmentPackets(report:Awaited<ReturnType<typeof re
  let expired=0;
  for(const p of report.privatePackets){
   const x=projectP6T24CompatibilityRoster(p,ctx.trust);
-  const verified=verifyP5CdFrozenRoster(x.raw,x.roster,x.files,{...ctx.scoped.gate,rosterSha256:x.digest},"T24_WITH_SEPARATE_WITNESS");
+  const verified=verifyP5CdFrozenRoster(x.raw,x.roster as P5CdFrozenRoster,x.files,{...ctx.scoped.gate,rosterSha256:x.digest},"T24_WITH_SEPARATE_WITNESS");
   const clock=Date.parse(p.observedDbClockUtc);
   if(!Number.isFinite(clock)||verified.size!==p.packetCount)hold("BAD_CLOCK_OR_T24_PACKET_COUNT");
   for(const entry of verified.values()){
