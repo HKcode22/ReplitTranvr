@@ -26,6 +26,37 @@ const settings=Object.freeze({providerMaxRangeMinutes:240,refreshEveryMinutes:15
  retryReserveFractionOfSourceUnits:0.1,validationUnitsPerActiveServiceDate:16,
  outcomeUnitsPerEligiblePhysicalDate:640,outcomeTailAfterSegmentEndHours:48,
  historyBootstrapPaidUnits:0,diagnosticUnitsPerBudgetDate:8});
+/** Idealized scheduler capacity, not observed GH runner timing. Exact UTC
+ * nominal request times, 15m minimum prearm lead, existing EDF order.
+ * A child occupies a slot through nominal GET plus assumed completion tail.
+ * Constant phase offset is a grid sensitivity, NOT random/missed ticks.
+ */
+function modelStoredSourceCapacity(templates:readonly {scheduledRequestUtc:string}[]){
+ const tasks=templates.map(t=>Date.parse(t.scheduledRequestUtc)).sort((a,b)=>a-b);
+ const scenarios=[{name:"CURRENT",perTickCap:4,inFlightCap:8,maxLeadMinutes:105},
+  {name:"CANDIDATE",perTickCap:8,inFlightCap:24,maxLeadMinutes:35}];
+ const results=scenarios.flatMap(profile=>[0,5,15,25,35,60].map(completionTailMinutes=>{
+  const runs=Array.from({length:10},(_,phaseMinutes)=>{
+   let i=0,submitted=0,missed=0,peak=0;let active:number[]=[];
+   for(let tick=Math.floor((tasks[0]-105*M)/(10*M))*10*M+phaseMinutes*M;tick<=tasks[tasks.length-1];tick+=10*M){
+    active=active.filter(x=>x>tick);
+    while(i<tasks.length&&tasks[i]-15*M<tick){i++;missed++;}
+    let available=Math.max(0,Math.min(profile.perTickCap,profile.inFlightCap-active.length));
+    while(available>0&&i<tasks.length&&tasks[i]-tick<=profile.maxLeadMinutes*M){
+     active.push(tasks[i]+completionTailMinutes*M);i++;submitted++;available--;
+    }
+    peak=Math.max(peak,active.length);
+   }
+   missed+=tasks.length-i;
+   if(submitted+missed!==tasks.length)hold("CAPACITY_MODEL_DENOMINATOR_DRIFT");
+   return {phaseMinutes,submitted,missed,peak};
+  });
+  return {profile,completionTailMinutes,phaseZero:runs[0],worstMissed:Math.max(...runs.map(r=>r.missed)),peakActive:Math.max(...runs.map(r=>r.peak))};
+ }));
+ return {status:"EXACT_FIRST_SEED_IDEALIZED_DISPATCH_CAPACITY_NOT_LIVE_THROUGHPUT",
+  templateCount:tasks.length,tickMinutes:10,minimumLeadMinutes:15,actualJitterMeasured:false,actualChildCompletionMeasured:false,actualProviderYieldMeasured:false,
+  policyChangedByModel:false,results};
+}
 export function proposeP5ActualNov22Budget(draft:Draft){
  if(sha(draft)!==expectedDraft||sha(draft.calendarDays)!==expectedRows||
     draft.proposedCalendarRowsSha256!==expectedRows||draft.phase6PaidGo!==false||
@@ -165,6 +196,7 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   settings,totals,physicalUtcRows:rows,explicitOtherOnlyChargeDates,
   nativeLeadDiagnostic:{status:"ILLUSTRATIVE_EXACT_FIRST_CALENDAR_CUTOFF_TIME_ONLY",templateCount:timingTemplates.length,
    actualLatencyMeasured:false,actualFlightYieldMeasured:false,policyChanged:false,timingScenarios},
+  sourceDispatcherCapacityDiagnostic:modelStoredSourceCapacity(timingTemplates),
   postGeometryDiagnostic:{status:"ILLUSTRATIVE_ACTUAL_CALENDAR_ONE_POST_PER_PARTITION_SLOT",
    nominalSourceRetentionHours:23,actualAnchorAvailabilityMeasured:false,actualOutcomeCoverageMeasured:false,
    providerRightsCertified:false,policyChanged:false,scenarios:postScenarios},
