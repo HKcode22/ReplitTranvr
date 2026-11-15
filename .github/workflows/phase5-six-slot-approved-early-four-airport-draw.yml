@@ -8,7 +8,11 @@ on:
       confirm:
         type: string
         required: true
-        description: "Type ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO"
+        description: "Use exact approved draw confirmation, or VERIFY_EXISTING_EARLY_DRAW_LOGIN_READONLY_NO_GO"
+      reviewed_main_sha:
+        type: string
+        required: false
+        description: "Exact main SHA for read-only credential verification only"
   pull_request:
     branches: [main]
     paths:
@@ -22,7 +26,44 @@ concurrency:
   group: phase5-approved-six-slot-one-early-draw
   cancel-in-progress: false
 jobs:
+  existing-early-draw-login-readonly:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'VERIFY_EXISTING_EARLY_DRAW_LOGIN_READONLY_NO_GO' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      P5_EARLY_DRAW_READONLY_MAIN: ${{ inputs.reviewed_main_sha }}
+      P5_EARLY_DRAW_MANUAL_CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Exact main and unarmed scope before dependencies
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_SHA" = "$P5_EARLY_DRAW_READONLY_MAIN"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$V39_PHASE6_PROCESS_ARMED" || test "$V39_PHASE6_PROCESS_ARMED" = 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify only existing early draw login and ACL, no actual draw
+        env:
+          P5_EARLY_DRAW_READONLY_ENTRYPOINT: '1'
+          V39_P5_EARLY_DRAW_DATABASE_URL: ${{ secrets.V39_P5_EARLY_DRAW_DATABASE_URL }}
+          V39_P5_EARLY_DRAW_EFFECTIVE_ROLE: ${{ secrets.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE }}
+        run: npx --no-install tsx scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts
   gated-exact-early-parent:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.confirm != 'VERIFY_EXISTING_EARLY_DRAW_LOGIN_READONLY_NO_GO' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
