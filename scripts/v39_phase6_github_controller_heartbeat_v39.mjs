@@ -25,15 +25,19 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   "",
   "**"+heartbeat.status+"**",
   "",
-  "| Existing controller | GitHub schedule observation | Last age (minutes) |",
-  "| --- | --- | ---: |"
+  "| Existing controller | GitHub schedule observation | Last age (min) | Largest recent gap (min) | Gaps above expected max |",
+  "| --- | --- | ---: | ---: | ---: |"
  ];
  for(const c of heartbeat.controllerStates){
   const age=c.mostRecentRun?.ageMinutes;
   lines.push("| "+c.lane+" | "+c.state+" | "+
-   (age===undefined?"Not observed":String(age))+" |");
+   (age===undefined?"Not observed":String(age))+" | "+
+   (c.historicalCadence?.maxObservedGapMinutes??"Not observed")+" | "+
+   (c.historicalCadence?.intervalsExceedingExpectedMax??"Not observed")+" |");
  }
  lines.push(
+  "",
+  "Recent interarrival gaps use GitHub run creation metadata, including skipped runs. They are not exact missing cron slots, provider latency or execution-time guarantees.",
   "",
   "**Not yet proved by this heartbeat:** authentic private SOURCE/publisher; "+
   "production schema/readback (separately evidenced); signed 31-day calendar, day rollover and charge budgets; "+
@@ -61,8 +65,11 @@ async function main(){
     lastRunAgeMinutes:x.mostRecentRun?.ageMinutes??null,
     recentSucceeded:x.runStateCounts.completedSuccess,
     recentSkipped:x.runStateCounts.completedSkipped,
-    recentFailed:x.runStateCounts.completedFailed
+    recentFailed:x.runStateCounts.completedFailed,
+    historicalCadence:x.historicalCadence
    })),
+   controllerProblemCount:report.controllerProblemCount,
+   controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,
    signed31DayRolloverVerified:false,providerCalls:0,databaseWrites:0,
    dispatches:0,paidPhase6Go:false,phase5Freeze:false
