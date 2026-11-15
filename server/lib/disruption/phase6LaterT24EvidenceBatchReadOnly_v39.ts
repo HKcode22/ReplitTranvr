@@ -226,8 +226,8 @@ export async function readP6PendingLaterT24EvidencePage(
     t.expectedConfigSha256!==scope.expectedConfigSha256||t.expectedSelectedTVersion!==scope.expectedSelectedTVersion)
   hold("STORED_CUSTODY_TRUST_NOT_EXACT_PENDING_PAGE");
  const got=await readP6T24WitnessCustodyBatch({client:custody.readerClient,trusts:selected.map(flightInstanceId=>({...t,flightInstanceId})),scope:custody.scope});
- const receipts:ReviewReceipt[]=got.privateDecisions.filter(x=>x.status==="EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW")
-  .map(x=>({receipt:x.receipt,expectedReceiptSha256:x.receipt.receiptSha256}));
+ const receipts:ReviewReceipt[]=got.privateDecisions.flatMap(x=>x.status==="EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW"?
+  [{receipt:x.receipt,expectedReceiptSha256:x.receipt.receiptSha256}]:[]);
  const unresolved=got.privateDecisions.filter(x=>x.status==="CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED").map(x=>x.flightInstanceId);
  const evidence=await readP6LaterT24EvidencePage(pool,d,{...scope,selectedFlightInstanceIds:selected,reviewedReceipts:receipts,
   unresolvedCustodyFlightInstanceIds:unresolved});
