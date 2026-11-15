@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
-import {admitP5SignedDayGitHubPrepare,
+import {admitP5SignedDayGitHubPrepare,loadP5PrivatePrepareReviewPacket,P5_PRIVATE_PREPARE_CONFIRM,
  type P5SignedOneDayPreparePacket}
  from "../scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39";
 import {P5_STAGE28_GROUPS}
@@ -138,5 +138,55 @@ describe("Phase5 signed source-day owner (GitHub only, no provider)",()=>{
   expect(()=>admitP5SignedDayGitHubPrepare({
    ...env,DATABASE_URL:URL
   },raw,packet,PATH)).toThrow("NO_CROSS_ROLE_OR_APPLICATION_CONNECTION");
+ });
+});
+
+describe("private bounded one-day preparation handoff",()=>{
+ function privateFixture(){
+  const {packet,raw,env}=fixture();
+  return {packet,raw,env:{...env,
+   P5_DAY_PREPARE_PRIVATE_CONFIRM:P5_PRIVATE_PREPARE_CONFIRM,
+   P5_DAY_PREPARE_PRIVATE_MODE:"1",P5_DAY_PREPARE_EXPECTED_DAY:"1",
+   P5_SOURCE_PREPARE_PRIVATE_PACKET_B64:raw.toString("base64")}};
+ }
+ it("reuses exact original admission with private bytes and no filesystem",()=>{
+  const {env,raw,packet}=privateFixture();
+  const p=loadP5PrivatePrepareReviewPacket(env);
+  expect(p.bytes.equals(raw)).toBe(true);
+  expect(p.packet).toEqual(packet);
+  expect(Object.keys(p)).toEqual(["logicalPath","runDayIndex"]);
+  expect(JSON.stringify(p)).not.toContain("reviewedPrepareInput");
+  expect(admitP5SignedDayGitHubPrepare(env,p.bytes,p.packet,p.logicalPath).runDayIndex).toBe(1);
+ });
+ it("refuses altered B64, wrong day, bad hash or unapproved private mode",()=>{
+  const {env}=privateFixture();
+  for(const bad of [
+   {P5_DAY_PREPARE_PRIVATE_MODE:"0"},
+   {P5_DAY_PREPARE_PRIVATE_CONFIRM:"wrong"},
+   {P5_DAY_PREPARE_EXPECTED_DAY:"2"},
+   {P5_DAY_PREPARE_EXPECTED_DAY:"01"},
+   {P5_DAY_PREPARE_EXPECTED_DAY:"32"},
+   {P5_SOURCE_PREPARE_PRIVATE_PACKET_B64:""},
+   {P5_SOURCE_PREPARE_PRIVATE_PACKET_B64:env.P5_SOURCE_PREPARE_PRIVATE_PACKET_B64+"\n"},
+   {P5_SOURCE_PREPARE_PRIVATE_PACKET_B64:"A".repeat(48004)},
+   {V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256:sh("e")}
+  ])expect(()=>loadP5PrivatePrepareReviewPacket({...env,...bad})).toThrow(/PRIVATE_PREPARE_/);
+ });
+ it("rejects substituted decoded in-memory packet even with unchanged reviewed bytes",()=>{
+  const {packet,env,raw}=privateFixture();
+  expect(()=>admitP5SignedDayGitHubPrepare(env,raw,{...packet,runDayIndex:2},PATH))
+   .toThrow("PARSED_PACKET_DIFFERS_FROM_REVIEWED_BYTES");
+ });
+ it("does not waive any paid arm, freeze or rights gate",()=>{
+  const {env}=privateFixture();
+  const p=loadP5PrivatePrepareReviewPacket(env);
+  for(const bad of [
+   {V39_PHASE5_FREEZE_SIGNED:"0"},
+   {V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},
+   {V39_PHASE6_PROCESS_ARMED:"0"},
+   {RAPIDAPI_KEY:"ci-forbidden"},
+   {AERODATABOX_WEBHOOK_SECRET:"ci-forbidden"}
+  ])expect(()=>admitP5SignedDayGitHubPrepare({...env,...bad},p.bytes,p.packet,p.logicalPath))
+   .toThrow("UNSIGNED_GITHUB_MAIN_OR_SEPARATE_PHASE6_GO");
  });
 });
