@@ -14,6 +14,9 @@ on:
       - 'scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs'
       - 'tests/phase5_prospective_study_seed_commit_reveal_v39.test.ts'
       - '.github/workflows/phase5-prospective-study-seed-commit-reveal-no-provider.yml'
+      - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
+      - 'tests/phase5_seed_to_calendar_preview_v39.test.mjs'
+      - 'server/lib/disruption/phase5ProspectiveOrdinaryHubRegionRotation_v39.ts'
 permissions:
   contents: read
 concurrency:
@@ -45,6 +48,7 @@ jobs:
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx --no-install vitest run tests/phase5_prospective_study_seed_commit_reveal_v39.test.ts
+      - run: npx --no-install tsx --test tests/phase5_seed_to_calendar_preview_v39.test.mjs
   commit:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-latest
@@ -76,7 +80,7 @@ jobs:
     needs: commit
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 12
     env:
       P5_SEED_EXPECTED_COMMITMENT: ${{ needs.commit.outputs.commitment }}
     steps:
@@ -96,3 +100,16 @@ jobs:
           set +x
           test "$(git rev-parse HEAD)" = "$P5_SEED_APPROVED_MAIN"
           node scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs reveal "$RUNNER_TEMP/seed-reveal/study-seeds.json"
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Compile original real-pair calendar draft from the already revealed seed bundle
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node_path="$RUNNER_TEMP/seed-reveal/study-seeds.json"
+          npx --no-install tsx scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs "$node_path" "$RUNNER_TEMP/calendar-preview.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prospective-31-day-calendar-preview
+          path: ${{ runner.temp }}/calendar-preview.json
+          retention-days: 7
+          if-no-files-found: error

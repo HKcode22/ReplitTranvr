@@ -1,0 +1,22 @@
+import {test} from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {generateP5ProspectiveStudySeedBundle} from "../scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs";
+import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
+const ownerEvidenceBytes=readFileSync("data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json");
+const dateCandidateBytes=readFileSync("data-collection/phase5/planning/2026-11-15_nov22_service_start_date_only_candidate.json");
+const id={reviewedCodeSha:"a".repeat(40),workflowRunId:"123456",firstRunDateUtc:"2026-11-22",claimedCommitmentObservedAtUtc:"2026-11-15T00:00:00.000Z",dateCandidateBytesSha256:createHash("sha256").update(dateCandidateBytes).digest("hex")};
+test("commit reveal builds exact original calendar through independent compiler, no real study approval",()=>{
+ const {bundle,bundleCommitmentSha256}=generateP5ProspectiveStudySeedBundle(id);
+ const input={seedBundle:bundle,expected:{...id,bundleCommitmentSha256},ownerEvidenceBytes,dateCandidateBytes};
+ const x=buildP5ProspectiveSeedCalendarPreview(input);
+ assert.equal(x.result.calendarDraft.calendarDays.length,31);
+ assert.equal(x.result.calendarDraft.calendarDays.filter(d=>d.pairAirportSet===null).length,21);
+ assert.equal(x.result.shapeEnvelope.activeChildExposureSegments,34);
+ assert.equal(x.result.shapeEnvelope.allExperimentExposureHoursAtMaximum,128);
+ assert.equal(x.result.independentSeedWitnessVerified,false);assert.equal(x.result.phase6PaidGo,false);
+ assert.equal(buildP5ProspectiveSeedCalendarPreview(input).sha256,x.sha256);
+ assert.throws(()=>buildP5ProspectiveSeedCalendarPreview({...input,dateCandidateBytes:Buffer.from("altered")}));
+ assert.throws(()=>buildP5ProspectiveSeedCalendarPreview({...input,expected:{...input.expected,bundleCommitmentSha256:"c".repeat(64)}}));
+});
