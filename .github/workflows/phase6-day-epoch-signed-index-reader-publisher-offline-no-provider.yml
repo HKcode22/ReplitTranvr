@@ -152,4 +152,5 @@ jobs:
           test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node tests/phase6_private_daily_prepare_review_real_pg16_v39.mjs
           node tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs
+          npx tsx tests/phase6_reviewed_later_shard_append_real_pg16_v39.mts
           echo 'P6_DAY_EPOCH_SIGNED_RESTRICTED_REAL_PG16_NO_PROVIDER_GO_PASS' >> "$GITHUB_STEP_SUMMARY"
