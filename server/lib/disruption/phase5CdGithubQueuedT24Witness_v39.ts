@@ -8,6 +8,7 @@
  * witness or a network COMMIT acknowledgment is lost.
  */
 import {createHash} from "node:crypto";
+import {assertP6CurrentPrivateT24Mode} from "./phase6CurrentPrivateT24Scope_v39.mjs";
 import type {Pool} from "pg";
 import {
  claimP5CdSignedRosterDueTasksV39,markP5CdStage14WriteStartedV39,
@@ -40,6 +41,9 @@ export function requireP5CdT24DispatchEvent(
 ):"MANUAL"|"SCHEDULED"{
  if(env.P5_CD_GH_T24_ONE_FLIGHT_CONFIRM!==T24_CONFIRM)
   deny("T24_EXACT_CONFIRMATION_REQUIRED");
+ if(env.P5_CD_GH_PRIVATE_T24_MODE==="PRIVATE_CURRENT_T24_SCHEDULE"){
+  assertP6CurrentPrivateT24Mode(env);return "SCHEDULED";
+ }
  if(env.GITHUB_EVENT_NAME==="workflow_dispatch")return "MANUAL";
  if(env.GITHUB_EVENT_NAME==="schedule"&&
     env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1"){
