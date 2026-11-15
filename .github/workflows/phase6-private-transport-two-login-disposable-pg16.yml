@@ -1,0 +1,64 @@
+name: Phase6 private transport two restricted logins (DISPOSABLE PG16 ONLY)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase6_private_transport_two_logins_owner_once.mjs'
+      - 'tests/phase6_private_transport_two_logins_real_pg16_v39.mjs'
+      - '.github/workflows/phase6-private-transport-two-login-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  no-production-credentials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGDATABASE: neondb
+      P6_PRIVATE_TRANSPORT_DISPOSABLE_ONLY: '1'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact prior empty schema in disposable database only
+        run: |
+          set -Eeuo pipefail
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real'"
+          PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          export PGPASSWORD=ci-only-day-real
+          for sql in \
+            migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql \
+            migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql \
+            migrations/staged/V0097__phase6_private_run_day_epoch_index_inert_v39.sql \
+            migrations/staged/V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql \
+            migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql; do
+            psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f "$sql"
+          done
+      - name: Real two distinct restricted sessions and mock encrypted secret driver
+        run: node tests/phase6_private_transport_two_logins_real_pg16_v39.mjs
