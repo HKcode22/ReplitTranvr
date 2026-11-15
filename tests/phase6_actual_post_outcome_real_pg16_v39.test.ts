@@ -6,7 +6,7 @@ import {describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {createHash} from "node:crypto";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
-import {p5V0083FuturePostReservationSha256,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+import {p5V0083FuturePostReservationSha256,auditP5FuturePostActualPriorPre,auditP5FuturePostActualPriorPreBatch,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {readP6CommittedPostOutcomeObservability} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 import {readP6PostSourceQueryHints} from "../server/lib/disruption/phase6NativePostSignedPublication_v39.mjs";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -100,6 +100,19 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    const hint=await readP6PostSourceQueryHints({sourcePool:restricted,trust:{manifestSha256:p.manifestSha256},runDayIndex:1,queryDigests:[query],frameSha256:p.reviewedFrameSha256});
    expect(hint.hintCount).toBe(1);
    expect(hint.privateHints[0].committedPreHintCount).toBe(2);
+   // The actual same-flight V0083 admission and the batched native
+   // producer must agree against the real SOURCE role and original schema.
+   const prior=await auditP5FuturePostActualPriorPre(restricted as any,p,[query]);
+   expect(prior.observedValidHorizons).toEqual(["T-6h"]);
+   expect(prior.boundSourceRegistryValidHorizonCount).toBe(1);
+   const batchScope={manifestSha256:p.manifestSha256,runDayIndex:1,airportIcao:p.airportIcao,
+    reviewedFrameSha256:p.reviewedFrameSha256,candidates:[p.flightInstanceId,"leg:ci:post:002","leg:ci:post:missing"].map(flightInstanceId=>({
+     flightInstanceId,expectedSelectedTNativeUtc:p.expectedSelectedTNativeUtc,boundSourceQueryDigests:[query]}))};
+   const batch=await auditP5FuturePostActualPriorPreBatch(restricted as any,batchScope);
+   expect(batch).toMatchObject({candidateCount:3,eligibleCount:2,unavailableCount:1,providerCalls:0,databaseWrites:0});
+   expect(batch.privateDecisions[0]).toMatchObject({status:"VALID_ACTUAL_PRE_FOR_POST_REVIEW",pre:prior});
+   await expect(auditP5FuturePostActualPriorPre(restricted as any,p,[h("0")])).rejects.toThrow("NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY");
+   console.log("P6_POST_ACTUAL_SINGLETON_AND_BATCH_SOURCE_ADMISSION_PG16_PASS");
    expect(report.providerCalls).toBe(0);expect(report.databaseWrites).toBe(0);
    console.log("P6_POST_ACTUAL_PARTITION_RESTRICTED_PG16=PASS SYNTHETIC_ONLY PROVIDER_CALLS=0");
   }finally{await Promise.allSettled([db.end(),login?.end()]);}
