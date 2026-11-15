@@ -7,6 +7,9 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {P6_PRIVATE_LATER_PINNED_PATH,readP6PrivatePinnedRosterForOriginalRunner}
+ from "../server/lib/disruption/phase6PrivateLaterPinnedRosterRuntime_v39.mjs";
+
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {waitP5CdGithubSignedDueWindow}
  from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
@@ -39,18 +42,27 @@ export async function runP5CdGithubPreController(
 ){
  verifyP5CdGithubFrozenCodeLineage(env);
  const gate=requireP5CdGithubPreRelease(env);
- if(!ROSTER.test(env.P5_CD_GH_ROSTER_PATH??"")||
+ const privateMode=env.P5_CD_GH_ROSTER_PATH===P6_PRIVATE_LATER_PINNED_PATH;
+ if((!privateMode&&!ROSTER.test(env.P5_CD_GH_ROSTER_PATH??""))||
     !/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??""))
   fail("ROSTER_PATH_OR_GH_RUN_ID_NOT_FROZEN");
- const rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
- let roster:P5CdFrozenRoster;
- try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
- catch{fail("ROSTER_JSON_NOT_VALID");}
- const entries:P5CdFrozenRosterEntry[]=(roster.entries??[]).map(x=>({
-  filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)
- }));
- // ALL signed packets verified BEFORE any session is opened or queue
- // is claimed; no source, weather or provider API call.
+ // The reader is separate, read-only, and closes BEFORE opening PRE.
+ // Never copy the derived roster digest into env or bypass the old gate.
+ const readPrivate=()=>readP6PrivatePinnedRosterForOriginalRunner(
+  env,requireP5CdGithubPreRelease(env),env.P5_V39_PRE_DATABASE_URL);
+ let rosterBytes:Buffer,roster:P5CdFrozenRoster,entries:P5CdFrozenRosterEntry[];
+ if(privateMode){
+  const p=await readPrivate();
+  ({rosterBytes,roster,entries}=p);
+ }else{
+  if(env.P6_PRIVATE_READER_DATABASE_URL)fail("PRIVATE_AND_LEGACY_ROSTER_MIXED");
+  rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
+  try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
+  catch{fail("ROSTER_JSON_NOT_VALID");}
+  entries=(roster.entries??[]).map(x=>({
+   filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)
+  }));
+ }
  const packets=verifyP5CdFrozenRoster(rosterBytes,roster,entries,gate);
  const base=new Pool({
   connectionString:env.P5_V39_PRE_DATABASE_URL,
@@ -71,13 +83,15 @@ export async function runP5CdGithubPreController(
   // The opt-in capacity wrapper REUSES the original per-flight Stage14
   // V0092 claim -> WRITE_STARTED -> postcommit readback -> ACK. Default is
   // exactly one existing two-task tick; no additional SQL privileges.
-  const report=await runP5CdGithubStage14Microburst(env,()=>
-   runP5CdGithubPreTick(env,{
-    db:pre,pool:pre,packets
-   },{
+  const report=await runP5CdGithubStage14Microburst(env,async()=>{
+   // After lookahead (and before each claim), the original authenticated
+   // current revision, private row TTL and protected roster must still match.
+   // The existing V0092 and Stage14 DB clock/cutoff checks are authoritative.
+   const current=privateMode?(await readPrivate()).packets:packets;
+   return runP5CdGithubPreTick(env,{db:pre,pool:pre,packets:current},{
     owner:"cd-gh-"+env.GITHUB_RUN_ID,limit:2,leaseSeconds:120
-   })
-  );
+   });
+  });
   return{
    ...report,
    earlyDbClockDueWindow:early,
@@ -93,7 +107,11 @@ export async function runP5CdGithubPreController(
 if(process.env.P5_CD_GH_PRE_EXECUTE==="1"){
  try{
   const result=await runP5CdGithubPreController(process.env);
-  console.log(JSON.stringify(result,null,2));
+  if(process.env.P5_CD_GH_PRE_ROSTER_PATH===P6_PRIVATE_LATER_PINNED_PATH){
+   const {results,reaped,...summary}=result;
+   console.log(JSON.stringify({...summary,privateRosterTransport:true,
+    resultCount:results.length,reapedCount:reaped.length},null,2));
+  }else console.log(JSON.stringify(result,null,2));
   if(result.earlyDbClockDueWindow.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED"){
    console.error("REFUSED_P5_CD_GH_PRE_RUNNER_LOOKAHEAD_BUDGET_EXHAUSTED");
    process.exitCode=2;
