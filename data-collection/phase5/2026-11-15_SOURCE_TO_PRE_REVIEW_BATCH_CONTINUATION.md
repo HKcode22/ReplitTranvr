@@ -1,0 +1,17 @@
+# Phase5 continuation — SOURCE → PRE review batch (2026-11-15 UTC)
+
+Current continuation of #413, not a new stage or paid authorization. Preserve original A/B/C/D1/D2/E, C+D, 31-day first-seed calendar and the existing database. November 20 is the readiness objective, not automatic GO.
+
+## Confirmed
+- PR #746 actual SOURCE stage timing diagnostics merged. PR #747 exact head `2cedb344c971c0350e44cc9e61f3e2a02d6e4947`: all six CI workflows SUCCESS, merged as `d899f1eb16246e1bad7beb204eebe9bc881f6f2b`. The same postcommit SOURCE runtime now constructs the existing unsigned PRE review dossier, retaining full original audit privately and selecting new later-horizon candidates only. CLI output remains aggregate. Not a real independent review or published packet.
+- V0079–V0095 and V0097–V0100 installed, previous scoped logins commissioned and independently verified (prior real owner checkpoint). No replay; obsolete V0096 never install. V0101 staged in #745 only, not installed; no new migration for this continuation.
+- #748 proposed bounded completion of independently pinned reviews through original T24/later PRE packet assemblers and original later registry proposal. Original SOURCE registry bytes and approved freshness limit are retained privately. Omitted reviews and expired preparation time yield missingness counts, not fabricated data. Exact-head `fa79d99eb83243d8be9757dfa6774d40ce0bf8ea`: five of six workflows SUCCESS at checkpoint, full offline safety pending. No signature, write, production activation or real review proof.
+- #749 proposed pending-only T24 evidence intake: reuse existing actual-role read-only SQL for selected unresolved flights on an original dossier page; empty selection makes no SQL call, receipt mismatch/partial/absence semantics unchanged. Synthetic test, not a live DB read. No new role/schema/key.
+
+## Remaining direct execution work
+1. Connect an independently authorized reviewer to the private pending selection and original packet completion. Actual source/physical leg/native milestone, approved frame/config, lawful retention and missing-T24 protocol require genuine pinned evidence; never promote locally derived hashes alone into independent approval. No need for manual approval per flight if an independently approved delegated policy is in place. Same-process handoffs are not durable storage, and CLI exits without a reviewer today.
+2. Feed approved later registry into existing external signature verification and registry-last publisher / signed day-index append. Integrate original T24 execution and genuine witness custody only where needed. Honest missing comparator must not invalidate all valid later PRE.
+3. Finish POST packet production and actual end-to-end bounded collection evidence. Prior first seed/budget stays unchanged; no extra SOURCE queries or provider spending from this work. 15-minute refresh and currently reviewed lead unchanged, 30/40/45-minute age scenarios remain diagnostics until measured/reviewed. No postcutoff backfill.
+4. Finalize exact authority, budget, retention/expiry, native outcome evidence and separate freeze/paid activation. No repeated provider email checking to block engineering. Scientific FREEZE HOLD, paid Phase6 NO-GO.
+
+No owner shell commands required by #747–#749. No live provider call, DB mutation, quota change, deployment or activation performed in this continuation. See #413 for subsequent CI/readback status.
