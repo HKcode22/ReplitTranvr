@@ -71,3 +71,18 @@ describe("existing checkout workflow canonical roster path",()=>{
   expect(()=>admitP5PrivateLaterWorker({...env(),P5_CD_GH_ROSTER_PATH:path})).toThrow();
  });
 });
+
+describe("direct private reader and existing pooler PRE use one endpoint",()=>{
+ it("accepts only same Neon endpoint with direct/pooler spelling and canonical port",()=>{
+  const e=env();
+  e.P5_V39_PRE_DATABASE_URL=e.P5_V39_PRE_DATABASE_URL!.replace("ep-test.neon.tech","ep-test-pooler.neon.tech:5432");
+  expect(admitP5PrivateLaterWorker(e).gate.rosterSha256).toBe(H);
+ });
+ it("does not permit another endpoint or another port",()=>{
+  const e=env();
+  e.P5_V39_PRE_DATABASE_URL=e.P5_V39_PRE_DATABASE_URL!.replace("ep-test.neon.tech","ep-test-other-pooler.neon.tech");
+  expect(()=>admitP5PrivateLaterWorker(e)).toThrow();
+  e.P5_V39_PRE_DATABASE_URL=env().P5_V39_PRE_DATABASE_URL!.replace("ep-test.neon.tech","ep-test-pooler.neon.tech:6432");
+  expect(()=>admitP5PrivateLaterWorker(e)).toThrow();
+ });
+});

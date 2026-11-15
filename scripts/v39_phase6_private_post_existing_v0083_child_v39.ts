@@ -4,6 +4,7 @@
  * Separate restricted reader, source, REVIEW and RESERVE roles.
  */
 import {Client} from "pg";
+import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {createHash} from "node:crypto";
 import {readP6StablePostTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
@@ -50,7 +51,7 @@ export function admitP6PrivatePostChildTransport(env:NodeJS.ProcessEnv){
  if(!["postgres:","postgresql:"].includes(reader.protocol)||
     decodeURIComponent(reader.username)!==trust.expectedReaderSessionLogin||
     decodeURIComponent(source.username)!=="phase5_p5_source_login_20261108"||
-    !reader.password||reader.pathname!=="/neondb"||reader.hash||reader.host!==source.host||
+    !reader.password||reader.pathname!=="/neondb"||reader.hash||!sameP6NeonDatabaseEndpoint(reader,source)||
     !reader.hostname.endsWith(".neon.tech")||(reader.port!==""&&reader.port!=="5432")||
     reader.searchParams.getAll("sslmode").length!==1||reader.searchParams.get("sslmode")!=="require"||
     [...reader.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||

@@ -6,6 +6,7 @@
  * independent stored day signature and stable scope are the authority.
  */
 import {Client,Pool} from "pg";
+import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
@@ -41,7 +42,7 @@ export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  if(!["postgresql:","postgres:"].includes(u.protocol)||
     decodeURIComponent(u.username)!==trust.expectedReaderSessionLogin||
     decodeURIComponent(u.username)===decodeURIComponent(p.username)||
-    !u.password||u.pathname!=="/neondb"||u.hash||u.host!==p.host||
+    !u.password||u.pathname!=="/neondb"||u.hash||!sameP6NeonDatabaseEndpoint(u,p)||
     !u.hostname.endsWith(".neon.tech")||(u.port!==""&&u.port!=="5432")||
     u.searchParams.getAll("sslmode").length!==1||u.searchParams.get("sslmode")!=="require"||
     [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
