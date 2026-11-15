@@ -60,7 +60,7 @@ function registry(day,shard){
 }
 const dbOwner=new pg.Client({connectionString:owner});
 await dbOwner.connect();
-async function insertRegistry(d){
+async function insertRegistry(d,retention=packetExpire){
  const res=await dbOwner.query(
   "INSERT INTO phase6_private.frozen_native_packet_v39 "+
   "(logical_path,run_day_index,shard_index,kind,content_sha256,"+
@@ -69,7 +69,7 @@ async function insertRegistry(d){
   "retention_not_after_utc,committed_at_utc,payload_bytes)"+
   " VALUES($1,$2,$3,'SOURCE_DAY_REGISTRY',$4,$5,$6,$7,$8,$9,$10,$11,$12)",
   [d.path,d.entry.runDayIndex,d.entry.shardIndex,hash(d.payload),
-   code,manifest,rights,evidence,reviewed,packetExpire,committed,d.payload]);
+   code,manifest,rights,evidence,reviewed,retention,committed,d.payload]);
  assert.equal(res.rowCount,1);
 }
 function indexPacket(day,revision,entries,previousBytes){
@@ -348,21 +348,26 @@ try{
  console.log("P6_CURRENT_DAY_VERIFIED_EXPIRED_HEAD_LOCAL_SKIP_NO_PREVIOUS_FALLBACK_REAL_PG16_PASS");
  // Redacted exact expiry scope: expired head of day3 must retire both
  // revisions together; day31 and its unexpired packet must survive.
+ const expiredPacket=registry(3,9);
+ await insertRegistry(expiredPacket,t(-1000));
  const plan=await reviewPrivateExpiry(dbOwner);
  assert.equal(plan.closedDays,1);
  assert.equal(plan.indexRevisions,2);
  assert.equal(plan.earlierLiveIndexRevisionsRetired,1);
- assert.equal(plan.expiredPackets,0);
+ assert.equal(plan.expiredPackets,1);
  assert.equal(plan.applied,false);
  await assert.rejects(reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:"0".repeat(64),approval:expiryApproval}),/REVIEWED_SCOPE_DRIFT/);
  await assert.rejects(reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:plan.scopeSha256}),/EXPLICIT_SCOPE_APPROVAL/);
  const applied=await reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:plan.scopeSha256,approval:expiryApproval});
- assert.equal(applied.indexRevisions,2);assert.equal(applied.claimDeletes,0);
+ assert.equal(applied.indexRevisions,2);assert.equal(applied.expiredPackets,1);assert.equal(applied.claimDeletes,0);
+ assert.equal((await dbOwner.query('SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1',[expiredPacket.path])).rows[0].n,0);
+ assert.equal((await dbOwner.query('SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1',[shortA.path])).rows[0].n,1);
+ assert.equal((await dbOwner.query('SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1',[d31.path])).rows[0].n,1);
  await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:3}}),/CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED/);
  await assert.rejects(publishP6DayEpochIndexRevisionOnce({client:pub,pins:sa.pins,wire:sa.wire,publicKeyPem:pem,indexBytes:sa.bytes,scope:sa.scope}),/DAY_GENESIS_ALREADY_CLAIMED_NO_REPLAY/);
  assert.equal((await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:31}})).pins.expectedRunDayIndex,31);
  const afterExpiry=await reviewPrivateExpiry(dbOwner,{cutoff:plan.cutoff});
- assert.equal(afterExpiry.indexRevisions,0);assert.equal(afterExpiry.claimsPreserved,plan.claimsPreserved);
+ assert.equal(afterExpiry.indexRevisions,0);assert.equal(afterExpiry.expiredPackets,0);assert.equal(afterExpiry.claimsPreserved,plan.claimsPreserved);
  console.log("P6_EXPIRED_HEAD_ATOMIC_CLOSE_NO_FALLBACK_EXACT_REVIEWED_SCOPE_PG16_PASS");
  // An immutable day1 owner deletion removes its bytes without affecting
  // day31: this proof still requires a separate proper expiry reviewer.
