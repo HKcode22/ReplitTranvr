@@ -57,7 +57,9 @@ export interface P6PostOriginalReadback{
 type Row=Record<string,unknown>;
 const empty=()=>({retainedCutoffSafePre:0,matchedNativePost:0,missingNativeId:0,postAbsent:0,ambiguousIdentity:0,
  reportedCancelled:0,reportedRevisedTime:0,reportedRunwayTime:0,changedGenericSchedule:0,duplicatePre:0,
- labelEvidenceUnverified:0,actualGateOutNumericCandidates:0});
+ labelEvidenceUnverified:0,actualGateOutNumericCandidates:0,
+ idlessExactReportedService:0,idlessDepartureQueryContextService:0,idlessServiceAmbiguous:0,idlessServiceNotObserved:0,
+ idlessServiceReportedRevised:0,idlessServiceReportedRunway:0,idlessServiceReportedCancelled:0});
 /** Existing raw-body integrity, exact V0083 observation scope, then native
  * ID + operator + explicit route and number match. Never substitute latest
  * POST schedule for frozen PRE native T. No supplied truth booleans. */
@@ -100,6 +102,40 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
  }
  const uniqueRetainedFlights=new Set<string>();const privateDecisions: {draft:P5EGateOutFirstCycleInput;postResponseSha256:string;postDecodedBodySha256:string;postMatch:"EXACT_REPORTED_NATIVE_ID_ROUTE_NUMBER_NOT_INDEPENDENT_PHYSICAL_CERTIFICATION";reportedRevisedUtc:string|null;reportedRunwayUtc:string|null;reportedCancellation:boolean}[]=[];
  const bodySha=String(obj(raw.originalDecodedEntityBodyEvidence).bodySha256);
+ // The public FlightContract does not promise a stable id. Report a separate
+ // diagnostic for ID-less exact scheduled services; never invent an id or
+ // replace the positive-native-id evidence tier. Retime cannot qualify.
+ const serviceKey=(num:unknown,dest:unknown,t:number|null)=>{
+  const n=number(num);return n&&ico(dest)&&t!==null?JSON.stringify([p.airportIcao,n,dest,t]):null;
+ };
+ const serviceRows=new Map<string,Row[]>(),servicePreIds=new Map<string,Set<string>>();
+ for(const m of movements){
+  const dep=obj(m.departure),arr=obj(m.arrival),origin=obj(dep.airport).icao;
+  // An explicitly conflicting airport is never repaired by query context.
+  if(origin!==undefined&&origin!==null&&origin!==p.airportIcao)continue;
+  const k=serviceKey(m.number,obj(arr.airport).icao,atField(dep.scheduledTime));
+  if(k){const a=serviceRows.get(k)??[];a.push(m);serviceRows.set(k,a);}
+ }
+ for(const a of grouped.values())for(const x of a){
+  const k=serviceKey(x.flight_number,x.arr_airport_icao,date(x.selected_t_milestone_utc));
+  if(k){const ids=servicePreIds.get(k)??new Set<string>();ids.add(String(x.flight_instance_id));servicePreIds.set(k,ids);}
+ }
+ function observeIdlessService(x:Row,c:ReturnType<typeof empty>){
+  const k=serviceKey(x.flight_number,x.arr_airport_icao,date(x.selected_t_milestone_utc));
+  if(!k){c.idlessServiceNotObserved++;return;}
+  if(servicePreIds.get(k)?.size!==1){c.idlessServiceAmbiguous++;return;}
+  const hits=serviceRows.get(k)??[];
+  if(hits.length===0){c.idlessServiceNotObserved++;return;}
+  if(hits.length!==1||!["IsOperator",1].includes(hits[0].codeshareStatus as string|number)){
+   c.idlessServiceAmbiguous++;return;
+  }
+  const m=hits[0],dep=obj(m.departure),origin=obj(dep.airport).icao;
+  if(origin===p.airportIcao)c.idlessExactReportedService++;
+  else c.idlessDepartureQueryContextService++;
+  if(atField(dep.revisedTime)!==null)c.idlessServiceReportedRevised++;
+  if(atField(dep.runwayTime)!==null)c.idlessServiceReportedRunway++;
+  if(m.status==="Canceled"||m.status===10)c.idlessServiceReportedCancelled++;
+ }
  const preIdsByProvider=new Map<string,Set<string>>();
  for(const a of grouped.values())for(const x of a){
   if(!id(x.provider_record_key))continue;
@@ -110,7 +146,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   const x=a[0],h=x.horizon as Horizon,c=counts[h];c.retainedCutoffSafePre++;
   uniqueRetainedFlights.add(String(x.flight_instance_id));
   if(a.length!==1){c.duplicatePre++;continue;}
-  if(!id(x.provider_record_key)){c.missingNativeId++;continue;}
+  if(!id(x.provider_record_key)){c.missingNativeId++;observeIdlessService(x,c);continue;}
   if(preIdsByProvider.get(x.provider_record_key)?.size!==1){c.ambiguousIdentity++;continue;}
   const matches=byId.get(x.provider_record_key)??[];
   if(!matches.length){c.postAbsent++;continue;}
@@ -149,7 +185,8 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   originalPostDepartureRows:fieldShape.observedDepartureRecords,postOperatorReportedRows:fieldShape.providerOperatorTaggedObservations,
   postGenericScheduledRows:fieldShape.scheduledTimeFieldPresent,postRevisedRows:fieldShape.revisedTimeFieldPresent,
   postRunwayRows:fieldShape.runwayTimeFieldPresent,invalidPreRows:invalidPre,uniqueRetainedPreFlights:uniqueRetainedFlights.size,
-  byHorizon:counts,actualGateOutNumericCandidates:0,fullStudyDenominatorCertified:false,
+  byHorizon:counts,idlessServiceEvidenceTier:"CONDITIONAL_EXACT_REPORTED_SCHEDULE_ROUTE_NUMBER_ONLY_NOT_PHYSICAL_LEG",
+  actualGateOutNumericCandidates:0,fullStudyDenominatorCertified:false,
   confirmedCancellationLabels:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
   retainedEvidenceOnly:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperty(out,"privateDecisions",{value:Object.freeze(privateDecisions),enumerable:false})) as typeof out&{readonly privateDecisions:typeof privateDecisions};
