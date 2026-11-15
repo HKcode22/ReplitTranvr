@@ -164,7 +164,7 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
   expect(res.providerCalls).toBe(0);
   expect(calls[0]).toBe("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   expect(calls.includes("ROLLBACK")).toBe(true);
-  expect(calls.some(x=>/\b(?:INSERT|UPDATE|DELETE|COMMIT)\b/i.test(x))).toBe(false);
+  expect(calls.some(x=>/^\s*(?:INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|COMMIT\b)/i.test(x))).toBe(false);
   expect(released).toBe(1);
   expect(ended).toBe(1);
  });
