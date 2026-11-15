@@ -307,29 +307,10 @@ export interface P5FuturePostActualPreReadback {
  * This uses SOURCE-scoped SELECT, requiring narrowly commissioned SELECT
  * on existing PRE metadata; privilege missing => refuses, never app fallback.
  */
-export async function auditP5FuturePostActualPriorPre(
- pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet,
- boundSourceQueryDigests?:readonly string[]
-):Promise<P5FuturePostActualPreReadback>{
- verifyP5FuturePostReviewedFrame(p);
- if(boundSourceQueryDigests!==undefined&&(!Array.isArray(boundSourceQueryDigests)||
-    boundSourceQueryDigests.length<1||boundSourceQueryDigests.length>96||
-    boundSourceQueryDigests.some(x=>typeof x!=="string"||!H.test(x))||
-    new Set(boundSourceQueryDigests).size!==boundSourceQueryDigests.length))
-  fail("INVALID_SIGNED_SOURCE_REGISTRY_QUERY_SCOPE");
- const bound=boundSourceQueryDigests===undefined?null:new Set(boundSourceQueryDigests);
- const db=await pool.connect();let tx=false;
- try{
-  await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
-  await db.query("SET LOCAL statement_timeout='12000ms'");
-  const who=await db.query(
-   "SELECT current_user AS role,current_database() AS db,"+
-   " current_setting('transaction_read_only') AS ro");
-  if(who.rowCount!==1||
-     who.rows[0]?.role!=="phase5_fids_source_prod_20261107"||
-     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on")
-   fail("POST_PRE_NOT_IN_ACTUAL_RESTRICTED_SOURCE_SESSION");
-  const x=await db.query(
+/** Original same-flight SQL retained as one source of truth. The batched
+ * read-only planner below changes only flight-ID projection and predicates,
+ * not the original PRE lineage or cutoff rules. */
+export const P5_FUTURE_POST_ACTUAL_PRE_SQL=
    "SELECT s.id::text AS snapshot_id,s.horizon,q.query_digest,"+
    " s.created_at,s.prediction_cutoff_utc,"+
    " s.selected_t_milestone_utc,s.fids_response_hash,"+
@@ -359,16 +340,20 @@ export async function auditP5FuturePostActualPriorPre(
    " AND fp.provider_content_expired_at_utc IS NULL"+
    " AND s.fids_response_hash=b.response_hash"+
    " AND q.horizon=s.horizon"+
-   " AND s.horizon IN ('T-24h','T-6h','T-90m')",
-   [p.manifestSha256,p.runDayIndex,p.airportIcao,
-    p.flightInstanceId,p.reviewedFrameSha256]);
+   " AND s.horizon IN ('T-24h','T-6h','T-90m')";
+export const P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL=P5_FUTURE_POST_ACTUAL_PRE_SQL
+ .replace("SELECT s.id::text AS snapshot_id","SELECT s.flight_instance_id,s.id::text AS snapshot_id")
+ .replace("s.flight_instance_id=$4","s.flight_instance_id=ANY($4::text[])")
+ +" ORDER BY s.flight_instance_id,s.horizon,s.id LIMIT $6";
+type P5PostPreIdentity=Pick<P5ReviewedFuturePostOneGet,"manifestSha256"|"runDayIndex"|"flightInstanceId"|"expectedSelectedTNativeUtc">;
+function classifyP5PostPreRows(p:P5PostPreIdentity,rows:readonly Record<string,any>[],bound:Set<string>|null):P5FuturePostActualPreReadback{
   const offsets:Record<string,number>={
    "T-24h":86400000,"T-6h":21600000,"T-90m":5400000
   };
   const t=Date.parse(p.expectedSelectedTNativeUtc);
   const valid=new Map<string,string>(),validQuery=new Map<string,string>();
   const boundHorizons=new Set<string>();
-  for(const row of x.rows){
+  for(const row of rows){
    const offset=offsets[String(row.horizon)];
    if(!offset)continue;
    const cutoff=Date.parse(sqlClock(row.prediction_cutoff_utc));
@@ -391,7 +376,6 @@ export async function auditP5FuturePostActualPriorPre(
    }
    valid.set(row.horizon,String(row.snapshot_id));
   }
-  await db.query("ROLLBACK");tx=false;
   if(valid.size===0)fail("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
   if(bound&&boundHorizons.size===0)fail("NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY");
   const names=["T-24h","T-6h","T-90m"];
@@ -408,6 +392,35 @@ export async function auditP5FuturePostActualPriorPre(
    observedFromIndependentRestrictedDb:true,
    providerCalls:0,databaseWrites:0
   };
+}
+
+export async function auditP5FuturePostActualPriorPre(
+ pool:Pick<Pool,"connect">,p:P5ReviewedFuturePostOneGet,
+ boundSourceQueryDigests?:readonly string[]
+):Promise<P5FuturePostActualPreReadback>{
+ verifyP5FuturePostReviewedFrame(p);
+ if(boundSourceQueryDigests!==undefined&&(!Array.isArray(boundSourceQueryDigests)||
+    boundSourceQueryDigests.length<1||boundSourceQueryDigests.length>96||
+    boundSourceQueryDigests.some(x=>typeof x!=="string"||!H.test(x))||
+    new Set(boundSourceQueryDigests).size!==boundSourceQueryDigests.length))
+  fail("INVALID_SIGNED_SOURCE_REGISTRY_QUERY_SCOPE");
+ const bound=boundSourceQueryDigests===undefined?null:new Set(boundSourceQueryDigests);
+ const db=await pool.connect();let tx=false;
+ try{
+  await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await db.query("SET LOCAL statement_timeout='12000ms'");
+  const who=await db.query(
+   "SELECT current_user AS role,current_database() AS db,"+
+   " current_setting('transaction_read_only') AS ro");
+  if(who.rowCount!==1||
+     who.rows[0]?.role!=="phase5_fids_source_prod_20261107"||
+     who.rows[0]?.db!=="neondb"||who.rows[0]?.ro!=="on")
+   fail("POST_PRE_NOT_IN_ACTUAL_RESTRICTED_SOURCE_SESSION");
+  const x=await db.query(P5_FUTURE_POST_ACTUAL_PRE_SQL,
+   [p.manifestSha256,p.runDayIndex,p.airportIcao,p.flightInstanceId,p.reviewedFrameSha256]);
+  const result=classifyP5PostPreRows(p,x.rows,bound);
+  await db.query("ROLLBACK");tx=false;
+  return result;
  }catch(e){
   if(tx)await db.query("ROLLBACK").catch(()=>{});
   throw e;
@@ -474,4 +487,80 @@ export async function prepareP5FuturePostV0083ReviewedCall(
   if(tx)await db.query("ROLLBACK").catch(()=>{});
   throw e;
  }finally{db.release();}
+}
+
+
+export interface P5PostPreBatchScope{
+ manifestSha256:string;runDayIndex:number;airportIcao:string;reviewedFrameSha256:string;
+ candidates:readonly {flightInstanceId:string;expectedSelectedTNativeUtc:string;
+  boundSourceQueryDigests:readonly string[]}[];
+}
+/** For an already authenticated private signed registry candidate page,
+ * read the exact original POST PRE lineage for all flights in one session.
+ * No raw provider body transfer, no external approval, no POST request or
+ * mutation. Each flight with zero usable PRE is ordinary missingness. */
+export async function auditP5FuturePostActualPriorPreBatch(pool:Pick<Pool,"connect">,scope:P5PostPreBatchScope){
+ if(!scope||!H.test(scope.manifestSha256??"")||!H.test(scope.reviewedFrameSha256??"")||
+    !Number.isSafeInteger(scope.runDayIndex)||scope.runDayIndex<1||scope.runDayIndex>31||
+    !ICAO.test(scope.airportIcao??"")||!Array.isArray(scope.candidates)||
+    scope.candidates.length<1||scope.candidates.length>384||typeof pool?.connect!=="function")fail("INVALID_POST_PRE_BATCH_SCOPE");
+ const ids=new Set<string>();
+ for(const p of scope.candidates){
+  if(!p||!/^[-A-Za-z0-9_.:|]{5,200}$/.test(p.flightInstanceId??"")||ids.has(p.flightInstanceId)||
+     !Array.isArray(p.boundSourceQueryDigests)||p.boundSourceQueryDigests.length<1||p.boundSourceQueryDigests.length>96||
+     new Set(p.boundSourceQueryDigests).size!==p.boundSourceQueryDigests.length||
+     p.boundSourceQueryDigests.some(x=>!H.test(x??"")))fail("UNBOUND_OR_DUPLICATE_POST_PRE_BATCH_CANDIDATE");
+  utc(p.expectedSelectedTNativeUtc);ids.add(p.flightInstanceId);
+ }
+ const db=await pool.connect();let tx=false;
+ try{
+  await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await db.query("SET LOCAL statement_timeout='12000ms'");await db.query("SET LOCAL lock_timeout='2000ms'");
+  const who=await db.query("SELECT current_user AS role,session_user AS login,current_database() AS db,"+
+   "current_setting('transaction_read_only') AS ro,current_setting('server_version_num')::integer AS version,"+
+   "pg_is_in_recovery() AS replica,clock_timestamp() AS now");
+  const row=who.rows[0];
+  if(who.rowCount!==1||row?.role!=="phase5_fids_source_prod_20261107"||
+    row.login!=="phase5_p5_source_login_20261108"||row.db!=="neondb"||row.ro!=="on"||
+    Number(row.version)<160000||Number(row.version)>=170000||row.replica!==false)
+   fail("POST_BATCH_NOT_REAL_RESTRICTED_READONLY_SOURCE_SESSION");
+  const clock=sqlClock(row.now),now=Date.parse(clock),limit=scope.candidates.length*6+1;
+  const q=await db.query(P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL,[scope.manifestSha256,scope.runDayIndex,
+   scope.airportIcao,[...ids],scope.reviewedFrameSha256,limit]);
+  if(!Array.isArray(q.rows)||q.rowCount!==q.rows.length||q.rows.length>=limit)fail("POST_PRE_BATCH_UNBOUNDED_ROWS");
+  const by=new Map<string,Record<string,any>[]>();
+  for(const x of q.rows){
+   const id=String(x.flight_instance_id);
+   if(!ids.has(id))fail("POST_PRE_BATCH_CROSS_FLIGHT_ROW");
+   const a=by.get(id)??[];a.push(x);by.set(id,a);
+  }
+  const decisions=scope.candidates.map(p=>{
+   // No fresh use of an expired original even when the retention job has
+   // not yet run. Do not infer longer rights from still-present metadata.
+   const retained=(by.get(p.flightInstanceId)??[]).filter(x=>Date.parse(sqlClock(x.source_expires_at_utc))>now);
+   try{
+    const pre=classifyP5PostPreRows({...p,manifestSha256:scope.manifestSha256,runDayIndex:scope.runDayIndex},
+      retained,new Set(p.boundSourceQueryDigests));
+    return {flightInstanceId:p.flightInstanceId,status:"VALID_ACTUAL_PRE_FOR_POST_REVIEW" as const,pre};
+   }catch(e){
+    const s=e instanceof Error?e.message:"";
+    if(s=== "REFUSED_P5_FUTURE_POST_V0083_NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST"||
+      s==="REFUSED_P5_FUTURE_POST_V0083_NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY"||
+      s==="REFUSED_P5_FUTURE_POST_V0083_DUPLICATED_SOURCE_PRE_SAME_FLIGHT_HORIZON"||
+      s==="REFUSED_P5_FUTURE_POST_V0083_AMBIGUOUS_PRE_SOURCE_QUERY_PROVENANCE")
+     return {flightInstanceId:p.flightInstanceId,status:"POST_PRE_UNAVAILABLE_OR_AMBIGUOUS" as const,reason:s};
+    throw e;
+   }
+  });
+  const end=await db.query("SELECT clock_timestamp() AS now");
+  const completed=sqlClock(end.rows[0]?.now);
+  if(end.rowCount!==1||Date.parse(completed)<now||Date.parse(completed)-now>120000)fail("POST_PRE_BATCH_CLOCK_DRIFT");
+  await db.query("ROLLBACK");tx=false;
+  const eligible=decisions.filter(d=>d.status==="VALID_ACTUAL_PRE_FOR_POST_REVIEW").length;
+  const out={status:"ACTUAL_SOURCE_BOUND_PRE_BATCH_FOR_POST_REVIEW_NO_GO",runDayIndex:scope.runDayIndex,
+   observedDbClockUtc:clock,completedDbClockUtc:completed,candidateCount:decisions.length,
+   eligibleCount:eligible,unavailableCount:decisions.length-eligible,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+  return Object.freeze(Object.defineProperty(out,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof out&
+   {readonly privateDecisions:readonly (typeof decisions)[number][]};
+ }finally{if(tx)await db.query("ROLLBACK").catch(()=>{});db.release();}
 }
