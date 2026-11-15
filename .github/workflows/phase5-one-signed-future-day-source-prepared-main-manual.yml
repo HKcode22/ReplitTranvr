@@ -2,12 +2,12 @@ name: Phase5 one SIGNED future day source PREPARED (GitHub only, NO provider)
 on:
   workflow_dispatch:
     inputs:
-      frozen_review_packet:
-        description: "Exact already reviewed future data-collection/phase5/frozen/*.json after true early draw"
+      run_day_index:
+        description: "One exact reviewed parent run day (1-31)"
         required: true
         type: string
       confirm:
-        description: "Type ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
+        description: "Type ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
         required: true
         type: string
   pull_request:
@@ -21,7 +21,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: phase5-one-reviewed-day-prepared-${{ inputs.frozen_review_packet || github.ref }}
+  group: phase5-one-reviewed-day-prepared-${{ github.event_name == 'pull_request' && github.ref || 'private-main-singleton' }}
   cancel-in-progress: false
 jobs:
   offline-admission-only:
@@ -49,7 +49,7 @@ jobs:
           npx vitest run tests/phase5_one_signed_day_source_prepare_github_owner_v39.test.ts
           echo 'P5_SIGNED_DAY_PREPARE_CI_ONLY_NO_DB_NO_PROVIDER_NO_RELEASE'
   exact-signed-one-day-prepared:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -60,7 +60,11 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ''
       P5_V39_PRE_DATABASE_URL: ''
       V39_P5_SOURCE_DATABASE_URL: ''
-      P5_DAY_PREPARE_CONFIRM: ${{ inputs.confirm }}
+      P5_DAY_PREPARE_CONFIRM: 'ONE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET'
+      P5_DAY_PREPARE_PRIVATE_CONFIRM: ${{ inputs.confirm }}
+      P5_DAY_PREPARE_PRIVATE_MODE: '1'
+      P5_DAY_PREPARE_EXPECTED_DAY: ${{ inputs.run_day_index }}
+      RAPIDAPI_KEY: ''
       V39_P5_PREPARE_OWNER_APPROVED: ${{ secrets.V39_P5_PREPARE_OWNER_APPROVED }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
@@ -77,8 +81,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Strict GO/packet gate before dependency installation or database access
-        env:
-          PACKET_FILE: ${{ inputs.frozen_review_packet }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -96,8 +98,11 @@ jobs:
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = "1"
           test "$V39_PHASE6_PROCESS_ARMED" = "1"
           test "$V39_P5_PREPARE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
-          [[ "$PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
-          test -f "$PACKET_FILE"
+          [[ "$P5_DAY_PREPARE_EXPECTED_DAY" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
+          test "$P5_DAY_PREPARE_PRIVATE_CONFIRM" = "ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
+          test "$P5_DAY_PREPARE_PRIVATE_MODE" = 1
+          test -z "$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -n "$V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256"
           test -n "$P5_V39_PREPARE_DATABASE_URL"
       - uses: actions/setup-node@v4
@@ -107,10 +112,11 @@ jobs:
       - run: npm ci --include=dev --no-audit --no-fund
       - name: Prepare only exact signed real saved future day; NO paid source or PRE
         env:
-          RELEASE_FILE: ${{ inputs.frozen_review_packet }}
+          P5_SOURCE_PREPARE_PRIVATE_PACKET_B64: ${{ secrets.P5_SOURCE_PREPARE_PRIVATE_PACKET_B64 }}
         shell: bash
         run: |
           set -Eeuo pipefail
           set +x
-          npx tsx scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39.ts "$RELEASE_FILE"
+          test -n "$P5_SOURCE_PREPARE_PRIVATE_PACKET_B64"
+          npx --no-install tsx scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39.ts --private-review-packet
           echo 'PHASE5_ONE_DAY_V0079_V0082_PREPARED_NO_PROVIDER_GET_NO_PRE_NO_PHASE6_GO'
