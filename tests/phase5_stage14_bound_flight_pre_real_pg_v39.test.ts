@@ -650,7 +650,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     "manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,"+
     "prediction_cutoff_utc,packet_sha256,source_population_query_id,"+
     "source_response_sha256,reviewed_source_rights_sha256,source_expires_at_utc)"+
-    " SELECT $1,$2,'T-6h',$3,$4,$5,$6,$7,$8,source_expires_at_utc"+
+    " SELECT $1,$2,'T-6h',$3,$4,$5,population_query_id::text,$7,$8,source_expires_at_utc"+
     " FROM clean.phase5_fids_original_binding_v39 WHERE population_query_id=$6::uuid",
     [manifest,flight,signed.selectedTNativeUtc,iso(ownCutoff),packet,qid2,response,rights]);
    const rows=(await admin.query(
