@@ -100,11 +100,18 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
  }
  const uniqueRetainedFlights=new Set<string>();const privateDecisions: {draft:P5EGateOutFirstCycleInput;postResponseSha256:string;postDecodedBodySha256:string;postMatch:"EXACT_REPORTED_NATIVE_ID_ROUTE_NUMBER_NOT_INDEPENDENT_PHYSICAL_CERTIFICATION";reportedRevisedUtc:string|null;reportedRunwayUtc:string|null;reportedCancellation:boolean}[]=[];
  const bodySha=String(obj(raw.originalDecodedEntityBodyEvidence).bodySha256);
+ const preIdsByProvider=new Map<string,Set<string>>();
+ for(const a of grouped.values())for(const x of a){
+  if(!id(x.provider_record_key))continue;
+  const seen=preIdsByProvider.get(x.provider_record_key)??new Set<string>();
+  seen.add(String(x.flight_instance_id));preIdsByProvider.set(x.provider_record_key,seen);
+ }
  for(const a of grouped.values()){
   const x=a[0],h=x.horizon as Horizon,c=counts[h];c.retainedCutoffSafePre++;
   uniqueRetainedFlights.add(String(x.flight_instance_id));
   if(a.length!==1){c.duplicatePre++;continue;}
   if(!id(x.provider_record_key)){c.missingNativeId++;continue;}
+  if(preIdsByProvider.get(x.provider_record_key)?.size!==1){c.ambiguousIdentity++;continue;}
   const matches=byId.get(x.provider_record_key)??[];
   if(!matches.length){c.postAbsent++;continue;}
   if(matches.length!==1){c.ambiguousIdentity++;continue;}
