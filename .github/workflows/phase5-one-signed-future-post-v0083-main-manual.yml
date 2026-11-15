@@ -47,6 +47,8 @@ on:
       - 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs'
       - 'tests/phase6_private_post_actual_child_transport_v39.test.ts'
       - 'server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts'
+      - 'server/lib/disruption/phase6ActualPostOutcomeObservability_v39.ts'
+      - 'tests/phase6_actual_post_outcome_observability_v39.test.ts'
       - 'server/lib/disruption/phase5V0083RestDedicatedRolePool_v39.ts'
       - 'server/lib/disruption/fidsCensus_v3.ts'
       - 'tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts'
@@ -85,7 +87,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts
+          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts tests/phase6_actual_post_outcome_observability_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts
           echo P5_V0083_POST_SIGNED_OWNER_OFFLINE_CI_NO_SOURCE_USE_RIGHTS_OR_PAID_GO
   exact-signed-one-v0083-future-post:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY' }}
