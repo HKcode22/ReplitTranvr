@@ -973,3 +973,5 @@ The source-pinned **Stage18 owner production audit 2026-11-07 12:36:14Z** confir
 - No new paid provider calls, database writes, expiry extension, deployment, or Phase6 authorization were made by this Phase5 documentation work.
 
 **Phase5 next implementation:** build the actual 31-day GitHub-only FIDS→PRE→POST schedule and its independent audit, source/operating-leg crosswalk, per-provider rights classification, receiver deployment verification, a secure real-column/row-quality explorer and first-day bounded STOP logic. Avoid repetition of one-hour G5A source-only experiments.
+
+- [Owner engineering guide: SOURCE refresh, timing, PRE and T24 witness, simplification](2026-11-15_OWNER_GUIDE_SOURCE_REFRESH_PRE_WITNESS_AND_SIMPLIFICATION.md) (November 15; explanatory, no GO).
