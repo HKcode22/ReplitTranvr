@@ -121,7 +121,7 @@ export function redactP6PostcommitNativeAudit(a,c){
  return {status:"P6_SAME_CHILD_ACTUAL_SOURCE_NATIVE_CANDIDATE_AUDIT_NO_GO",
   runDayIndex:a.runDayIndex,horizon:a.horizon,candidateAuditSha256:a.candidateAuditSha256,
   observedMemberCount:a.observedMemberCount,candidateCount:a.candidateCount,censoredCount:a.censoredCount,
-  classifications:a.classifications,observedDbClockUtc:a.actualDbClockUtc,
+  classifications:a.classifications,sourceTimingDiagnostics:a.sourceTimingDiagnostics,observedDbClockUtc:a.actualDbClockUtc,
   providerCalls:0,databaseWrites:0,providerContentsPrinted:false,signedPrePacketsIssued:0,phase6PaidGo:false};
 }
 export async function runP6PostcommitNativeAudit(env){
