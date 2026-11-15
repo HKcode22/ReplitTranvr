@@ -290,7 +290,7 @@ describe("protected delegated native later review reuses exact original packet a
 });
 
 
-import {buildP6DelegatedT24PrivateRegistry,verifyP6T24PrivateRegistry} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {buildP6DelegatedT24PrivateRegistry,verifyP6T24PrivateRegistry,readP6StableT24RegistryTrust,chooseP6T24RegistrySelectors} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 function t24RegistryFixture(){
  const f=pendingFixture(),base=delegatedNativeFixture(),raw=f.a.privateAuditBytes,sourceScope={...f.a.privateSourceScope,horizon:"T-24h"};
  const id="leg:synthetic-t24-001",c={...f.audit.candidates[1],flightInstanceId:id,horizon:"T-24h",
@@ -337,5 +337,38 @@ describe("private native T24 registry",()=>{
   expect(()=>verifyP6T24PrivateRegistry({...args,wire:{...p.privateWire,signatureBase64:Buffer.alloc(64).toString("base64")}})).toThrow("REGISTRY_SIGNATURE_INVALID");
   f.current.privateExistingFlightIds.add(f.id);
   expect(buildP6DelegatedT24PrivateRegistry(f)).toMatchObject({status:"NO_ELIGIBLE_NEW_NATIVE_T24_PACKET",candidateCount:0});
+ });
+});
+
+
+describe("private native T24 current registry queue selection",()=>{
+ it("uses the exact protected policy public key, never a private signing key",()=>{
+  const f=t24RegistryFixture(),p=JSON.parse(f.authority.policyBytes.toString("utf8"));
+  p.nativeLaterReview.laterReviewerPublicKeyPem=f.trust.t24ReviewerPublicKeyPem;
+  p.nativeLaterReview.maximumPrivateRetentionHours=12;
+  const b=Buffer.from(JSON.stringify(p)),env={P6_PRIVATE_T24_REGISTRY_READ_APPROVED:"1",
+   P6_NONPAID_DAILY_POLICY_BASE64:b.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:h(b)};
+  expect(readP6StableT24RegistryTrust(env,f.authority.trust)).toMatchObject({
+   expectedT24ReviewerFingerprintSha256:f.trust.expectedT24ReviewerFingerprintSha256,
+   expectedT24PolicySha256:h(b),expectedSelectedTVersion:f.trust.expectedSelectedTVersion});
+  expect(()=>readP6StableT24RegistryTrust({...env,P6_PRIVATE_T24_REGISTRY_READ_APPROVED:"0"},f.authority.trust)).toThrow("NO_PROTECTED_T24_READER_POLICY");
+  expect(()=>readP6StableT24RegistryTrust({...env,P6_NONPAID_DAILY_POLICY_SHA256:H("3")},f.authority.trust)).toThrow("HASH_DRIFT");
+ });
+ it("selects by future native cutoff with four-shard bound and no public flight ids",()=>{
+  const f=t24RegistryFixture(),proposal=buildP6DelegatedT24PrivateRegistry(f),v=verifyP6T24PrivateRegistry({
+   trust:f.trust,index:f.current.privateIndex,registryBytes:proposal.privateRegistryBytes,wire:proposal.privateWire,
+   observedDbClockUtc:f.current.observedDbClockUtc,files:proposal.privateFiles});
+  const at="2027-02-10T04:42:00.000Z";
+  const set=(registries:any[])=>Object.defineProperty({status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:1,
+   observedDbClockUtc:at,registryCount:registries.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   "privateRegistries",{value:registries});
+  const records=Array.from({length:5},(_,i)=>({reg:{...v.reg,entries:[{...v.reg.entries[0],flightInstanceId:"synthetic-"+i,
+   cutoffUtc:new Date(Date.parse(at)+(24-i)*60000).toISOString()}]},review:{...v.review,registrySha256:h(String(i))}}));
+  const a=chooseP6T24RegistrySelectors([set(records)],at,"ENROLLMENT");
+  expect(a).toMatchObject({dueShardCount:5,deferredShardCount:1});
+  expect(a.privateSelectors).toHaveLength(4);expect(a.privateSelectors?.[0].registrySha256).toBe(h("4"));
+  expect(JSON.stringify(a)).not.toContain("synthetic");
+  expect(chooseP6T24RegistrySelectors([set(records)],at,"PRE_EXECUTION")).toMatchObject({dueShardCount:0,notYetDue:5});
+  expect(()=>chooseP6T24RegistrySelectors([set([records[0],records[0]])],at,"ENROLLMENT")).toThrow("T24_DUPLICATE_ACROSS_DAYS");
  });
 });
