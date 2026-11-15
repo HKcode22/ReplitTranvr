@@ -212,6 +212,43 @@ try{
  assert.equal(removedQuery.rowCount,1);
  await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:qSelector}),
   /EXACT_COMMITTED_REVIEW_NOT_FOUND/);
+ // The existing V0098/V0099 transport also stores POST wires. Test
+ // exact independent signer, precommitted SOURCE registry, authentic byte
+ // readback, cross-kind refusal and missing-after-deletion behavior.
+ const pk=generateKeyPairSync("ed25519"),postPem=pk.publicKey.export({format:"pem",type:"spki"}).toString(),
+  postFp=hash(pk.publicKey.export({format:"der",type:"spki"}));
+ const postPath="data-collection/phase5/frozen/post_synthetic_day01.json";
+ const postBytes=Buffer.from(JSON.stringify({synthetic:true,filler:"p".repeat(300)}));
+ const postReview={...qReview,kind:"POST_PACKET",logicalPath:postPath,
+  contentSha256:hash(postBytes),shardIndex:3,reviewerPublicKeyFingerprintSha256:postFp};
+ const postWire={review:postReview,signatureBase64:sign(null,signedP6PrivateSourcePostReviewBytes(postReview),pk.privateKey).toString("base64")};
+ await publishP6PrivateSourcePostOnce({client:pub,pins:{...qPins,expectedKind:"POST_PACKET",
+  expectedLogicalPath:postPath,expectedContentSha256:hash(postBytes),expectedShardIndex:3,
+  expectedReviewerPublicKeyFingerprintSha256:postFp},wire:postWire,reviewerPublicKeyPem:postPem,
+  packetBytes:postBytes,scope:{privateStoragePublicationApproved:true,separateProviderContentRightsReviewApproved:true,
+   existingChildOrPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
+   approvedMainCodeSha:code,expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_epoch",
+   approvedRetentionNotAfterUtc:expire,reviewedRightsSha256:rights,externalReviewEvidenceSha256:evidence,
+   expectedSourceDayRegistryLogicalPath:d1.path,expectedSourceDayRegistrySha256:hash(d1.payload),
+   persistVerifiedReviewWire:true}});
+ const postTrust={...trust,independentPostReviewerPinsApproved:true,
+  postReviewerFingerprintSha256:postFp,postReviewerPublicKeyPem:postPem};
+ const postSelector={kind:"POST",runDayIndex:1,shardIndex:3,logicalPath:postPath,contentSha256:hash(postBytes)};
+ const postStored=await readP6StoredPrivateReviewOnce({client:read,trust:postTrust,scope,selector:postSelector});
+ assert.deepEqual(postStored.wire,postWire);
+ const postVerified=await readP6PrivateSourcePostOnce(read,postStored.pins,postStored.wire,postStored.publicKeyPem);
+ assert.deepEqual(postVerified.privateBytes,postBytes);
+ assert.equal(postVerified.redactedSummary.kind,"POST_PACKET");
+ assert.equal(JSON.stringify(postStored).includes(postWire.signatureBase64),false);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:postSelector}));
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust:postTrust,scope,
+  selector:{...postSelector,kind:"SOURCE_QUERY"}}),/UNMATCHED_EXACT_SELECTOR/);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust:postTrust,scope,
+  selector:{...postSelector,runDayIndex:2}}),/CROSS_DAY_REVIEW/);
+ const postRemoved=await dbOwner.query("DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[postPath]);
+ assert.equal(postRemoved.rowCount,1);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust:postTrust,scope,selector:postSelector}),
+  /EXACT_COMMITTED_REVIEW_NOT_FOUND/);
  // After publishing r2, the r1 signature is still cryptographically valid.
  // A planner must refuse it; an already-admitted, exact immutable child
  // may still read r1, so new publication does not strand in-flight work.

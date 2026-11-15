@@ -13,6 +13,7 @@ const SHA=/^[a-f0-9]{64}$/;
 const CODE=/^[a-f0-9]{40}$/;
 const LOGIN=/^phase6_private_reader_login_[a-z0-9_]{6,50}$/;
 const PACK=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.json$/;
+const POST=/^data-collection\/phase5\/frozen\/post_[A-Za-z0-9_-]{8,110}\.json$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const hold=x=>{throw Error("HOLD_P6_DYNAMIC_SOURCE_REVIEW_"+x);};
 const hash=x=>typeof x==="string"&&SHA.test(x);
@@ -143,4 +144,40 @@ export function resolveP6DynamicSourceQueryReview({
   wire,trust.queryReviewerPublicKeyPem,pins);
  live(external,now);
  return result("SOURCE_QUERY_PACKET",pins,wire,trust.queryReviewerPublicKeyPem);
+}
+
+/** POST requires a separately approved stable reviewer key. Callers must
+ * still independently authenticate the signed index route and native SOURCE
+ * link, then invoke the existing V0083 same-flight PRE / reservation gates.
+ * No SOURCE-key fallback, no static secret rotation, no paid authorization.
+ */
+export function resolveP6DynamicPostReview({trust,selector,wires,observedDbClockUtc}){
+ trustCheck(trust,"postReviewerPublicKeyPem");
+ if(trust.independentPostReviewerPinsApproved!==true||
+    !hash(trust.postReviewerFingerprintSha256)||
+    trust.postReviewerFingerprintSha256===trust.queryReviewerFingerprintSha256||
+    trust.postReviewerFingerprintSha256===trust.dayReviewerFingerprintSha256)
+  hold("SEPARATE_STABLE_POST_REVIEWER_REQUIRED");
+ const now=utc(observedDbClockUtc),s=selector;
+ if(!s||!day(s.runDayIndex)||!shard(s.shardIndex)||
+    !POST.test(s.logicalPath??"")||!hash(s.contentSha256)||
+    !hash(s.externalReviewEvidenceSha256))
+  hold("INVALID_EXACT_POST_METADATA_SELECTOR");
+ const wire=select(wires,r=>r.kind==="POST_PACKET"&&r.logicalPath===s.logicalPath,128);
+ const pins={
+  independentExternalReviewerSignaturePinsApproved:true,
+  privateSourcePostReadOnlyApproved:true,
+  expectedPrivateSessionLogin:trust.expectedReaderSessionLogin,
+  expectedKind:"POST_PACKET",expectedLogicalPath:s.logicalPath,
+  expectedReviewedMainSha:trust.reviewedCodeSha,
+  expectedManifestSha256:trust.manifestSha256,
+  expectedRightsSha256:trust.rightsSha256,
+  expectedContentSha256:s.contentSha256,
+  expectedExternalReviewEvidenceSha256:s.externalReviewEvidenceSha256,
+  expectedReviewerPublicKeyFingerprintSha256:trust.postReviewerFingerprintSha256,
+  expectedRunDayIndex:s.runDayIndex,expectedShardIndex:s.shardIndex
+ };
+ const external=verifyP6ExternalSourcePostReview(wire,trust.postReviewerPublicKeyPem,pins);
+ live(external,now);
+ return result("POST_PACKET",pins,wire,trust.postReviewerPublicKeyPem);
 }
