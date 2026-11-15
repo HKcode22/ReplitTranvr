@@ -48,7 +48,8 @@ type Policy=P5TypedSourceBudgetBinding&{
  expectedPrepareRole:string;validFromUtc:string;validUntilUtc:string;
  maxQueriesPerDay:number;dailyRestCeiling:number;cycleRestCeiling:number;
  minimumProtectedFloor:number;providerApiVersion:string;fidsProtocolVersion:string;
- airportFrames:{icao:string;ianaTimezone:string}[];
+ airportFrames?:{icao:string;ianaTimezone:string}[];
+ airportTimezoneGroups?:{ianaTimezone:string;icaos:string[]}[];
  dayPlanSha256s:{runDayIndex:number;sha256:string}[];
  delegatedDailyPacketProductionApproved:true;
 };
@@ -67,6 +68,41 @@ const CATS=["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS","FIDS_RETRY_UNIT_BUDGET",
  "VALIDATION_UNIT_BUDGET","OUTCOME_REST_UNIT_BUDGET","HISTORY_BOOTSTRAP_UNIT_BUDGET",
  "DIAGNOSTIC_UNIT_BUDGET"];
 const int=phase5Stage9ExactWholeUnit;
+// Compact representation preserves the same independently committed mapping.
+// Exactly one representation is permitted: no implicit union or fallback.
+export function resolveP6DailyAirportTimezoneCatalog(p:Pick<Policy,"airportFrames"|"airportTimezoneGroups">):Map<string,string>{
+ const legacy=p.airportFrames,groups=p.airportTimezoneGroups;
+ if((legacy===undefined)===(groups===undefined))hold("INVALID_AIRPORT_TIMEZONE_CATALOG_REPRESENTATION");
+ const frames=new Map<string,string>();
+ const validatedZones=new Set<string>();
+ const add=(icao:unknown,zone:unknown)=>{
+  if(typeof icao!=="string"||! /^[A-Z]{4}$/.test(icao)||typeof zone!=="string"||
+     zone.length<1||zone.length>80||frames.has(icao)||frames.size>=2000)
+   return hold("INVALID_AIRPORT_TIMEZONE_CATALOG_ENTRY");
+  if(!validatedZones.has(zone)){
+   try{new Intl.DateTimeFormat("en-US",{timeZone:zone});}
+   catch{return hold("INVALID_AIRPORT_TIMEZONE_CATALOG_ZONE");}
+   validatedZones.add(zone);
+  }
+  frames.set(icao,zone);
+ };
+ if(legacy!==undefined){
+  if(!Array.isArray(legacy)||legacy.length<4||legacy.length>2000)hold("INVALID_AIRPORT_TIMEZONE_CATALOG_SIZE");
+  for(const f of legacy){if(!f)hold("INVALID_AIRPORT_TIMEZONE_CATALOG_ENTRY");add(f.icao,f.ianaTimezone);}
+ }else{
+  if(!Array.isArray(groups)||groups.length<1||groups.length>500)hold("INVALID_AIRPORT_TIMEZONE_CATALOG_GROUPS");
+  const seenZones=new Set<string>();
+  for(const g of groups!){
+   if(!g||typeof g.ianaTimezone!=="string"||seenZones.has(g.ianaTimezone)||
+      !Array.isArray(g.icaos)||g.icaos.length<1||g.icaos.length>2000)
+    hold("INVALID_AIRPORT_TIMEZONE_CATALOG_GROUP");
+   seenZones.add(g.ianaTimezone);
+   for(const i of g.icaos)add(i,g.ianaTimezone);
+  }
+ }
+ if(frames.size<4)hold("INVALID_AIRPORT_TIMEZONE_CATALOG_SIZE");
+ return frames;
+}
 export async function produceP6DelegatedDailySourceReview({
  readPool,policyBytes,dayPlanBytes,pins
 }:{
@@ -91,12 +127,9 @@ export async function produceP6DelegatedDailySourceReview({
     !/^[a-zA-Z0-9._-]{2,50}$/.test(p.fidsProtocolVersion??"")||
     !Array.isArray(p.dayPlanSha256s)||p.dayPlanSha256s.length!==31||
     p.dayPlanSha256s.some((d,i)=>d?.runDayIndex!==i+1||!SHA.test(d.sha256??""))||
-    new Set(p.dayPlanSha256s.map(d=>d.sha256)).size!==31||
-    !Array.isArray(p.airportFrames)||p.airportFrames.length<4||p.airportFrames.length>2000||
-    p.airportFrames.some(f=>!f||! /^[A-Z]{4}$/.test(f.icao??"")||
-      typeof f.ianaTimezone!=="string"||f.ianaTimezone.length>80)||
-    new Set(p.airportFrames.map(f=>f.icao)).size!==p.airportFrames.length)
+    new Set(p.dayPlanSha256s.map(d=>d.sha256)).size!==31)
   hold("INCOMPLETE_INDEPENDENT_31_DAY_POLICY");
+ const frames=resolveP6DailyAirportTimezoneCatalog(p);
  const plan=parse<DayPlan>(dayPlanBytes,500000,p.dayPlanSha256s[pins.expectedRunDayIndex-1].sha256);
  if(plan?.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||
     plan.runDayIndex!==pins.expectedRunDayIndex||
@@ -154,7 +187,6 @@ export async function produceP6DelegatedDailySourceReview({
   if(actual.selectedAtUtc>=observed||
      (plan.pairedIcaos&&actual.selections.some(s=>plan.pairedIcaos![s.slotId]!==s.icao)))
    hold("ACTUAL_DRAW_NOT_APPROVED_OR_PERSISTED");
-  const frames=new Map(p.airportFrames.map(f=>[f.icao,f.ianaTimezone]));
   const localFrames=actual.selections.map(s=>{
    const zone=frames.get(s.icao)??hold("ACTUAL_AIRPORT_NOT_IN_APPROVED_TIMEZONE_CATALOG");
    return {slot:s.slotId,icao:s.icao,ianaTimezone:zone,

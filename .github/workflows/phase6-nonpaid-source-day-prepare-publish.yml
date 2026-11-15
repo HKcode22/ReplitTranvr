@@ -19,6 +19,8 @@ on:
       - 'tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs'
       - '.github/workflows/phase6-nonpaid-source-day-prepare-publish.yml'
       - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
+      - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
+      - 'tests/phase6_compact_airport_timezone_policy_v39.test.ts'
       - 'server/lib/disruption/phase6StoredSourceDayPublicationRuntime_v39.mjs'
       - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs'
 permissions:
@@ -55,6 +57,7 @@ jobs:
           set +x
           test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           npx --no-install tsx --test tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs
+          npx --no-install vitest run tests/phase6_compact_airport_timezone_policy_v39.test.ts
   protected-main-one-day-nonpaid:
     if: >-
       ${{ github.ref == 'refs/heads/main' &&
