@@ -17,6 +17,8 @@ on:
       - 'server/lib/disruption/phase6DynamicSourceReviewSelection_v39.mjs'
       - 'tests/phase6_dynamic_source_review_selection_v39.test.mjs'
       - 'tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs'
+      - 'scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs'
+      - 'tests/phase6_empty_private_schema_owner_chain_v39.test.mjs'
       - 'scripts/v39_phase6_v0098_owner_schema_readonly_and_once.mjs'
       - 'scripts/v39_phase6_v0099_owner_schema_readonly_and_once.mjs'
       - 'tests/phase6_v0098_owner_schema_v39.test.mjs'
@@ -58,7 +60,7 @@ jobs:
           test -z "$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_v0098_owner_schema_v39.test.mjs tests/phase6_v0097_day_epoch_owner_schema_v39.test.mjs tests/phase6_dynamic_source_review_selection_v39.test.mjs
+          node --test tests/phase6_empty_private_schema_owner_chain_v39.test.mjs tests/phase6_v0098_owner_schema_v39.test.mjs tests/phase6_v0097_day_epoch_owner_schema_v39.test.mjs tests/phase6_dynamic_source_review_selection_v39.test.mjs
           node --check server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs
           node --check server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs
           node --check server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs
@@ -115,80 +117,24 @@ jobs:
             -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
           node --input-type=module <<'JS'
           import assert from "node:assert/strict";
-          import {readFileSync} from "node:fs";
           import pg from "pg";
-          import {
-            V0097_PATH,readV0097OwnerInventory,installV0097OnceOwner
-          } from "./scripts/v39_phase6_v0097_day_epoch_owner_schema_readonly_and_once.mjs";
+          import {runEmptyOwnerChain} from "./scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs";
           assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
           assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,
             "postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable");
-          const c=new pg.Client({
-            connectionString:process.env.P6_REAL_DISPOSABLE_OWNER_URL
-          });
-          await c.connect();
-          try {
-            const before=await readV0097OwnerInventory(c);
-            assert.equal(before.state,"V0095_READY_EMPTY_V0097_NOT_INSTALLED_NO_GO");
-            const bytes=readFileSync(V0097_PATH);
-            const installed=await installV0097OnceOwner({client:c,bytes});
-            assert.deepEqual(installed.indexRows,{claims:0,revisions:0});
-            assert.equal(installed.additionalLoginRolesCreated,0);
-            assert.equal(installed.paidPhase6Go,false);
-            const after=await readV0097OwnerInventory(c);
-            assert.equal(after.state,"V0097_INSTALLED_EMPTY_PER_DAY_INDEX_INERT_NO_GO");
-            await assert.rejects(installV0097OnceOwner({client:c,bytes}),
-              /PREREQUISITE_OR_ALREADY_PRESENT_NEVER_REPLAY/);
-            console.log("V0097_DISPOSABLE_OWNER_SCHEMA_EMPTY_NO_REPLAY_NO_PAID_PASS");
-          }finally{await c.end()}
-          JS
-          node --input-type=module <<'JS'
-          import assert from "node:assert/strict";
-          import {readFileSync} from "node:fs";
-          import pg from "pg";
-          import {V0098_PATH,readV0098OwnerInventory,installV0098OnceOwner}
-            from "./scripts/v39_phase6_v0098_owner_schema_readonly_and_once.mjs";
-          assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
-          assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,
-            "postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable");
-          const c=new pg.Client({connectionString:process.env.P6_REAL_DISPOSABLE_OWNER_URL});
-          await c.connect();
-          try {
-            assert.equal((await readV0098OwnerInventory(c)).state,"V0097_READY_EMPTY_V0098_NOT_INSTALLED_NO_GO");
-            const bytes=readFileSync(V0098_PATH);
-            const installed=await installV0098OnceOwner({client:c,bytes});
-            assert.equal(installed.wireColumnCount,2);
-            assert.equal(installed.additionalLoginRolesCreated,0);
-            assert.equal(installed.paidPhase6Go,false);
-            assert.deepEqual(installed.indexRows,{claims:0,revisions:0});
-            assert.equal((await readV0098OwnerInventory(c)).state,"V0098_INSTALLED_EMPTY_PRIVATE_WIRE_EXTENSION_INERT_NO_GO");
-            await assert.rejects(installV0098OnceOwner({client:c,bytes}),/PREREQUISITE_OR_ALREADY_PRESENT_NEVER_REPLAY/);
-            console.log("V0098_DISPOSABLE_OWNER_SCHEMA_EMPTY_NO_REPLAY_NO_PAID_PASS");
-          }finally{await c.end()}
-          JS
-          node --input-type=module <<'JS'
-          import assert from "node:assert/strict";
-          import {readFileSync} from "node:fs";
-          import pg from "pg";
-          import {V0099_PATH,readV0099OwnerInventory,installV0099OnceOwner}
-            from "./scripts/v39_phase6_v0099_owner_schema_readonly_and_once.mjs";
-          assert.equal(process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY,"1");
-          assert.equal(process.env.P6_REAL_DISPOSABLE_OWNER_URL,
-            "postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable");
-          const c=new pg.Client({connectionString:process.env.P6_REAL_DISPOSABLE_OWNER_URL});
-          await c.connect();
-          try{
-            assert.equal((await readV0099OwnerInventory(c)).state,"V0098_READY_EMPTY_V0099_NOT_INSTALLED_NO_GO");
-            const bytes=readFileSync(V0099_PATH);
-            const installed=await installV0099OnceOwner({client:c,bytes});
-            assert.equal(installed.state,"V0099_INSTALLED_EMPTY_DAILY_REVIEW_INERT_NO_GO");
-            assert.deepEqual(installed.counts,{revisions:0,claims:0,packets:0});
-            assert.equal(installed.additionalLoginRolesCreated,0);
-            assert.equal(installed.paidPhase6Go,false);
-            assert.equal((await readV0099OwnerInventory(c)).state,"V0099_INSTALLED_EMPTY_DAILY_REVIEW_INERT_NO_GO");
-            await assert.rejects(installV0099OnceOwner({client:c,bytes}),/PREREQUISITE_OR_ALREADY_PRESENT_NEVER_REPLAY/);
-            console.log("V0099_DISPOSABLE_OWNER_SCHEMA_EMPTY_NO_REPLAY_NO_PAID_PASS");
-          }finally{await c.end()}
+          const open=async()=>{const c=new pg.Client({connectionString:process.env.P6_REAL_DISPOSABLE_OWNER_URL});await c.connect();return c;};
+          const before=await runEmptyOwnerChain({open});
+          assert.equal(before.status,"EMPTY_OWNER_CHAIN_READ_ONLY");
+          assert.equal(before.initial.state,"V0098_PREREQUISITE_NOT_READY_NO_GO");
+          const result=await runEmptyOwnerChain({open,installAllowed:true});
+          assert.deepEqual(result.installed,["V0097","V0098","V0099"]);
+          assert.deepEqual(result.final.counts,{claims:0,revisions:0,packets:0});
+          assert.equal(result.paidPhase6Go,false);
+          assert.equal(result.payloadPublicationApproved,false);
+          const again=await runEmptyOwnerChain({open,installAllowed:true});
+          assert.equal(again.status,"ALREADY_COMPLETE_NO_REPLAY");
+          assert.deepEqual(again.installed,[]);
+          console.log("P6_EMPTY_OWNER_CHAIN_REAL_PG16_FRESH_NO_REPLAY_PASS");
           JS
           PGPASSWORD=postgres psql -U postgres -X -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE phase6_private_publisher_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-pub'"
