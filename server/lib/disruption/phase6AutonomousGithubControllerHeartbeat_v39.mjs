@@ -107,6 +107,28 @@ export function reviewP6OneScheduledController(
  }
  rows.sort((a,b)=>b.createdAtUtc.localeCompare(a.createdAtUtc));
  const last=rows[0]??null;
+ // A freshly created run can hide hours of scheduler silence. Measure
+ // interarrival gaps on the actual returned history, without pretending
+ // to know the exact scheduled event time, runner wait or flight outcomes.
+ const gaps=rows.slice(1).map((older,i)=>
+  stamp(rows[i].createdAtUtc,"RUN_CLOCK")-stamp(older.createdAtUtc,"RUN_CLOCK"));
+ const ordered=[...gaps].sort((a,b)=>a-b);
+ const n=ordered.length;
+ const medianMs=n===0?null:n%2?ordered[(n-1)/2]:(ordered[n/2-1]+ordered[n/2])/2;
+ const gapLimitMs=lane.maxExpectedGapMinutes*60_000;
+ const toMinutes=ms=>ms===null?null:Math.round(ms/6000)/10;
+ const historicalCadence={
+  observedIntervals:n,
+  recentWindowOldestUtc:rows.at(-1)?.createdAtUtc??null,
+  recentWindowNewestUtc:last?.createdAtUtc??null,
+  medianObservedGapMinutes:toMinutes(medianMs),
+  maxObservedGapMinutes:toMinutes(n?ordered[n-1]:null),
+  intervalsExceedingExpectedMax:gaps.filter(ms=>ms>gapLimitMs).length,
+  newestObservedGapMinutes:toMinutes(gaps[0]??null),
+  latestAgeExceedsExpected:last!==null&&clock-stamp(last.createdAtUtc,"RUN_CLOCK")>gapLimitMs,
+  measuredActualWorkerLatency:false,
+  exactMissingCronSlotsKnown:false
+ };
  const counts={completedSuccess:0,completedSkipped:0,completedFailed:0,
    pendingOrInProgress:0};
  for(const row of rows){
@@ -117,7 +139,7 @@ export function reviewP6OneScheduledController(
  }
  let state;
  if(!last)state="NO_SCHEDULE_RUN_OBSERVED";
- else if(last.ageMinutes>lane.maxExpectedGapMinutes)
+ else if(historicalCadence.latestAgeExceedsExpected)
   state="SCHEDULE_OBSERVATION_STALE";
  else if(last.status!=="completed")state="SCHEDULE_WORKFLOW_PENDING_NO_FLIGHT_PROOF";
  else if(last.conclusion==="skipped")state="SCHEDULE_GATED_SKIPPED_NOT_A_FAILURE_OR_A_FLIGHT";
@@ -128,6 +150,7 @@ export function reviewP6OneScheduledController(
   expectedMaxGapMinutes:lane.maxExpectedGapMinutes,
   state,mostRecentRun:last,observedRecentRuns:rows.length,
   runStateCounts:counts,
+  historicalCadence,
   githubSchedulePresenceOnly:true,
   actualDatabaseQueueOrSignedSourceObserved:false,
   successfullyCollectedFlightOrPaidRunProven:false
@@ -142,15 +165,19 @@ export function summarizeP6ControllerHeartbeat(assessments,observedAtUtc){
  const problem=assessments.filter(x=>["NO_SCHEDULE_RUN_OBSERVED",
   "SCHEDULE_OBSERVATION_STALE","SCHEDULE_RUN_UNSUCCESSFUL_REVIEW"]
   .includes(x.state));
+ const historicalProblems=assessments.filter(x=>x.historicalCadence?.intervalsExceedingExpectedMax>0);
+ const unionProblems=new Set([...problem,...historicalProblems].map(x=>x.lane));
  return{
   schema:P6_AUTO_CONTROL_HEARTBEAT_V39,
-  status:problem.length?
+  status:unionProblems.size?
    "AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":
    "AUTONOMOUS_GITHUB_SCHEDULE_PRESENT_NOT_COLLECTION_PROOF_NO_GO",
   observedAtGithubRunnerUtc:observedAtUtc,
   existingScheduledControllerCount:assessments.length,
   controllerStates:assessments,
-  controllerProblemCount:problem.length,
+  controllerProblemCount:unionProblems.size,
+  controllerCurrentProblemCount:problem.length,
+  controllerHistoricalGapCount:historicalProblems.length,
   honestMissingAutonomousEndToEndLanes:P6_MANUAL_OR_MISSING_RELEASE_LANES,
   isActualPgClock:false,
   authorizedProviderContentsAnd31DayRetention:false,
