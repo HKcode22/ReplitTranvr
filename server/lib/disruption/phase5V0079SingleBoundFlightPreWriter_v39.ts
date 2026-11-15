@@ -18,7 +18,7 @@ import {verifyP5Stage24WitnessedFrozenT,
  type P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {selectP5EStage14BoundRouteFeatures}
  from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
-import {requireP5CdGithubPreRelease,requireP5CdGithubEFeatures}
+import {requireP5CdGithubPreRelease,requireP5CdGithubEFeatures,readP5CdStandaloneLaterProtocol}
  from "./phase5CdGithubPreReleaseGate_v39";
 import {selectP5EReviewedSupplementalFeatures,
  type P5EReviewedSupplementalBundle}
@@ -504,6 +504,13 @@ export async function persistP5V0079SingleBoundFlightPre(
   hold("CI_AND_GITHUB_QUEUE_FENCE_MUST_BE_DISJOINT");
  validateP5CdGithubFence(options?.realV0088QueueFenceGh,
   options?.amendmentENativeRouteBoundGh===true,p.horizon);
+ // A real GH queue fence is not permission to invent the separate later
+ // missing-T24 protocol at the writer boundary.
+ if(options?.realV0088QueueFenceGh&&p.reviewedStandaloneLaterNoT24){
+  const approved=readP5CdStandaloneLaterProtocol(process.env);
+  if(!approved||approved!==options.independentlyApprovedStandaloneProtocolSha256)
+   hold("GH_STANDALONE_PROTOCOL_NOT_IN_PROTECTED_RELEASE");
+ }
  if(p.reviewedSupplementalFeatureBundle){
   const ci=options?.amendmentENativeRouteBoundCi===true&&
    process.env.V39_P5_E_SUPPLEMENT_CI==="1";
