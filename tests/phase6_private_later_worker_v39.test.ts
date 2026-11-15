@@ -1,6 +1,6 @@
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {admitP5PrivateLaterWorker,bindP5PrivateProjectionToWorker} from "../scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39";
+import {admitP5PrivateLaterWorker,bindP5PrivateProjectionToWorker,readP5CdCheckoutRosterPath} from "../scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39";
 const H="a".repeat(64),code="b".repeat(40);
 const pub=generateKeyPairSync("ed25519").publicKey;
 const pem=pub.export({type:"spki",format:"pem"}).toString();
@@ -55,5 +55,19 @@ describe("actual private exact later PRE worker transport gate",()=>{
    derivedCompatibilityRosterSha256:"c".repeat(64),
    providerCalls:0,databaseWrites:0,phase6PaidGo:false
   } as any,ctx)).toThrow("PRIVATE_PROJECTION_NOT_MATCHED_TO_PROTECTED_ROSTER_PIN");
+ });
+});
+
+describe("existing checkout workflow canonical roster path",()=>{
+ const path="data-collection/phase5/frozen/ci_reviewed_roster.json";
+ it("uses the exact actual workflow variable rather than an unexported alias",()=>{
+  expect(readP5CdCheckoutRosterPath({P5_CD_GH_PRE_ROSTER_PATH:path})).toBe(path);
+  expect(readP5CdCheckoutRosterPath({P5_CD_GH_ROSTER_PATH:path})).toBe(path);
+  expect(readP5CdCheckoutRosterPath({P5_CD_GH_PRE_ROSTER_PATH:path,P5_CD_GH_ROSTER_PATH:path})).toBe(path);
+ });
+ it("refuses conflict or non-frozen paths",()=>{
+  expect(()=>readP5CdCheckoutRosterPath({P5_CD_GH_PRE_ROSTER_PATH:path,P5_CD_GH_ROSTER_PATH:"different.json"})).toThrow("CONFLICTING_LEGACY_ROSTER_PATH");
+  expect(()=>readP5CdCheckoutRosterPath({P5_CD_GH_PRE_ROSTER_PATH:"/tmp/roster.json"})).toThrow();
+  expect(()=>admitP5PrivateLaterWorker({...env(),P5_CD_GH_ROSTER_PATH:path})).toThrow();
  });
 });
