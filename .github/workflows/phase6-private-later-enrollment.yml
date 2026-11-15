@@ -16,6 +16,9 @@ on:
     paths:
       - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
       - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
+      - 'scripts/v39_phase6_private_t24_restartable_enrollment_v39.ts'
+      - 'server/lib/disruption/phase6CurrentPrivateT24Routing_v39.mjs'
+      - 'tests/phase6_private_t24_routing_v39.test.mjs'
       - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
       - 'server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs'
       - '.github/workflows/phase6-private-later-enrollment.yml'
@@ -40,8 +43,9 @@ jobs:
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx --no-install vitest run tests/phase6_private_restartable_later_enrollment_v39.test.ts tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts tests/phase6_private_later_queue_roster_v39.test.ts
+      - run: npx --no-install tsx --test tests/phase6_private_t24_routing_v39.test.mjs
   enroll-current-signed-day:
-    if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_LATER_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && inputs.confirm == 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER') || (github.event_name == 'schedule' && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1')) }}
+    if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_LATER_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && inputs.confirm == 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER') || (github.event_name == 'schedule' && (vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1' || vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED == '1'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     env:
@@ -102,4 +106,18 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install tsx scripts/v39_phase6_private_later_restartable_enrollment_v39.ts
+      - name: Enroll T24 from current signed packets (same prepare-only login)
+        if: ${{ github.event_name == 'schedule' && vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED == '1' }}
+        env:
+          P6_PRIVATE_LATER_ENROLL_ENTRYPOINT: '0'
+          P6_PRIVATE_T24_ENROLL_ENTRYPOINT: '1'
+          P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
+          P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM: REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER
+          P5_CD_GH_T24_PREPARE_APPROVED: ${{ secrets.P5_CD_GH_T24_PREPARE_APPROVED }}
+          P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
+          P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
+          P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+        run: npx --no-install tsx scripts/v39_phase6_private_t24_restartable_enrollment_v39.ts
+      - name: Enroll T6/T90 from current signed packets
+        if: ${{ github.event_name == 'workflow_dispatch' || vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1' }}
+        run: npx --no-install tsx scripts/v39_phase6_private_later_restartable_enrollment_v39.ts
