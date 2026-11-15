@@ -10,8 +10,8 @@ const h=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_LATER_CALENDAR_"+s);};
 const offsets={"T-6h":21600000,"T-90m":5400000};
 const utc=x=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("BAD_UTC");return Date.parse(x);};
-export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){
- if(env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
+function loadWindows(env,trust,read,horizons,scheduleFlag){
+ if(env[scheduleFlag]!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="1"||
     env.P6_PRIVATE_LATER_RUN_DAYS||env.P6_NONPAID_DAILY_POLICY_BASE64?.length>50000)
   hold("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
@@ -37,9 +37,9 @@ export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){
      !Array.isArray(plan.templates)||plan.templates.length<12||plan.templates.length>384||
      plan.templates.some(t=>t.runDayIndex!==d.runDayIndex||!["T-24h","T-6h","T-90m"].includes(t.horizon)))
    hold("DAY_PLAN_SCOPE_DRIFT");
-  const children=plan.templates.filter(t=>Object.hasOwn(offsets,t.horizon)).map(t=>{
+  const children=plan.templates.filter(t=>Object.hasOwn(horizons,t.horizon)).map(t=>{
    const start=utc(t.scheduledRequestUtc),cutoff=utc(t.earliestPlannedCutoffUtc),
-     end=utc(t.serviceWindowEndUtc)-offsets[t.horizon];
+     end=utc(t.serviceWindowEndUtc)-horizons[t.horizon];
    if(!(start<cutoff&&cutoff<end))hold("INVALID_SIGNED_LATER_GEOMETRY");
    return {start,end};
   });
@@ -48,6 +48,8 @@ export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){
  });
  return {windows,validFrom:utc(p.validFromUtc),validUntil:utc(p.validUntilUtc)};
 }
+export function loadP6LaterCalendarWindows(env,trust,read=readFileSync){return loadWindows(env,trust,read,offsets,"P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED");}
+export function loadP6T24CalendarWindows(env,trust,read=readFileSync){return loadWindows(env,trust,read,{"T-24h":86400000},"P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED");}
 export function selectP6LaterCalendarDueDays(reviewed,observedUtc){
  const now=utc(observedUtc);
  if(now<reviewed.validFrom||now>=reviewed.validUntil)hold("CALENDAR_POLICY_NOT_LIVE_AT_DB_CLOCK");
