@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs'
+      - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.d.mts'
+      - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
@@ -28,6 +31,9 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs'
+      - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.d.mts'
+      - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
@@ -62,6 +68,12 @@ env:
   V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
 jobs:
   authentic-atomic-insert-only-pg16:
+    strategy:
+      fail-fast: false
+      matrix:
+        budget-release: [EXACT_SOURCE_GRID, COST_UPPER_BOUND]
+    env:
+      P6_TEST_BUDGET_RELEASE_MODE: ${{ matrix.budget-release }}
     runs-on: ubuntu-latest
     timeout-minutes: 16
     services:
@@ -101,6 +113,11 @@ jobs:
             -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          if [[ "$P6_TEST_BUDGET_RELEASE_MODE" == COST_UPPER_BOUND ]]; then
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          else
+            test "$P6_TEST_BUDGET_RELEASE_MODE" = EXACT_SOURCE_GRID
+          fi
       - name: Install exact private transport only on same disposable PostgreSQL16
         run: |
           set -Eeuo pipefail

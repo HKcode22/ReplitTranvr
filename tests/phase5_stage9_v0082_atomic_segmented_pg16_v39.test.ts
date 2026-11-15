@@ -5,6 +5,7 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,Client} from "pg";
+import {normalizeP5TypedSourceBudgetBinding,type P5TypedSourceBudgetBinding} from "../server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs";
 import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6StoredSourceDayPublicationRuntime_v39.mjs";
 import {readP6DailyPrepareReviewOnce} from "../server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs";
 import {runP6DurableDailySourcePreparation} from "../server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39";
@@ -69,6 +70,10 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  let originalDailyTrust:Parameters<typeof readP6DailyPrepareReviewOnce>[0]["trust"]|undefined;
  let originalDailyExpiry:string|undefined;
  const manifest=sha("e"),range=sha("8"),budgetHash=sha("6"),gridHash=sha("7");
+ const costMode=process.env.P6_TEST_BUDGET_RELEASE_MODE==="COST_UPPER_BOUND";
+ const typedBudget:P5TypedSourceBudgetBinding=costMode?
+  {budgetReleaseMode:"COST_UPPER_BOUND",reviewed31DaySourceRequestGridSha256:null,reviewedCostEnvelopeSha256:sha("4")}:
+  {reviewed31DaySourceRequestGridSha256:gridHash};
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
      process.env.V39_P5_V0082_ATOMIC_PG16!=="1"||
@@ -215,7 +220,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    expectedRightsReviewSha256:sha("2"),expectedReleaseSha256:sha("1"),
    expectedRestrictedWriterRole:USER,
    expectedChargeDayBudgetHashSha256:digest(proposal.actualUtcChargeBudgets),
-   reviewed31DaySourceRequestGridSha256:gridHash,
+   ...typedBudget,
    reviewedCategoryBudgetSha256:budgetHash,
    independentFreezeApproved:true,independentRightsReviewApproved:true,
    githubOnlyProspectiveOwnerApproved:true
@@ -241,7 +246,13 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     [manifest,day]
    );
   }
-  await admin.query(
+  if(costMode)await admin.query(
+   "INSERT INTO clean.phase5_fids_seven_rest_release_v39 "+
+   "(manifest_sha256,reviewed_source_request_grid_sha256,"+
+   "reviewed_provider_range_sha256,verified_provider_max_range_minutes,"+
+   "reviewed_category_budget_sha256,budget_release_mode,reviewed_cost_envelope_sha256) "+
+   "VALUES ($1,NULL,$2,60,$3,'COST_UPPER_BOUND',$4)",[manifest,range,budgetHash,typedBudget.reviewedCostEnvelopeSha256]
+  );else await admin.query(
    "INSERT INTO clean.phase5_fids_seven_rest_release_v39 "+
    "(manifest_sha256,reviewed_source_request_grid_sha256,"+
    "reviewed_provider_range_sha256,verified_provider_max_range_minutes,"+
@@ -425,6 +436,16 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "(manifest_sha256,charge_day_utc,category,planned_units) "+
    "VALUES ($1,$2::date,'DIAGNOSTIC_UNIT_BUDGET',0)",[manifest,day]);
  });
+ it("refuses substituting cost envelope for exact grid or vice versa",async()=>{
+  const other:P5TypedSourceBudgetBinding=costMode?{budgetReleaseMode:"EXACT_SOURCE_GRID",
+   reviewed31DaySourceRequestGridSha256:gridHash,reviewedCostEnvelopeSha256:null}:
+   {budgetReleaseMode:"COST_UPPER_BOUND",reviewed31DaySourceRequestGridSha256:null,reviewedCostEnvelopeSha256:sha("4")};
+  await expect(commitStage9P5V0082AtomicSegmentedDay(writer,{...review,...other}))
+   .rejects.toThrow("MISSING_REAL_SAVED_REVIEWED_SEVEN_CATEGORY_FREEZE");
+  await expect(readBackP5Stage9PreparedDayOnce(writer,{...review,...other},{distinguishConfirmedEmptyDay:true}))
+   .rejects.toThrow("READBACK_TYPED_RELEASE_DRIFT");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+ });
  it("rolls back BOTH table inserts on an injected 2nd partition failure",async()=>{
   await admin.query(`CREATE FUNCTION clean.ci_v0082_bomb() RETURNS trigger
     LANGUAGE plpgsql AS $$
@@ -452,7 +473,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    calendarSha256:review.expectedCalendarSha256,configSha256:review.expectedConfigSha256,
    frameSha256:review.expectedFrameSha256,releaseSha256:review.expectedReleaseSha256,
    rightsSha256:review.expectedRightsReviewSha256,providerContractSha256:review.expectedProviderContractSha256,
-   reviewed31DaySourceRequestGridSha256:gridHash,reviewedCategoryBudgetSha256:budgetHash,
+   ...typedBudget,reviewedCategoryBudgetSha256:budgetHash,
    expectedPrepareRole:USER,validFromUtc:iso(now-H),validUntilUtc:iso(now+6*24*H),
    maxQueriesPerDay:384,dailyRestCeiling:1900,cycleRestCeiling:50000,minimumProtectedFloor:100,
    providerApiVersion:"1.15.4",fidsProtocolVersion:"v39",
@@ -469,6 +490,9 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   runtimeProducer=args;
   const produced=await produceP6DelegatedDailySourceReview(args);
   expect(produced.queryCount).toBe(96);
+  expect(normalizeP5TypedSourceBudgetBinding(produced.privatePacket.reviewedPrepareInput.stage9Review))
+   .toEqual(normalizeP5TypedSourceBudgetBinding(typedBudget));
+  if(costMode)expect(produced.privatePacket.reviewedPrepareInput.stage9Review.reviewed31DaySourceRequestGridSha256).toBeNull();
   expect(produced.privatePacket.reviewedPrepareInput.readScope.expectedEarlyDrawSha256)
    .toBe(readScope.expectedEarlyDrawSha256);
   expect(produced.privatePacket.reviewedPrepareInput.sourceReview.cycleUnitsAvailable).toBe(49900);
@@ -502,7 +526,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
      manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,frameSha256:p.frameSha256,
      releaseSha256:p.releaseSha256,rightsSha256:p.rightsSha256,providerContractSha256:p.providerContractSha256,
      policySha256:runtimeProducer.pins.expectedPolicySha256,dayPlanSha256:createHash("sha256").update(runtimeProducer.dayPlanBytes).digest("hex"),
-     reviewed31DaySourceRequestGridSha256:p.reviewed31DaySourceRequestGridSha256,reviewedCategoryBudgetSha256:p.reviewedCategoryBudgetSha256,
+     ...normalizeP5TypedSourceBudgetBinding(p)!,reviewedCategoryBudgetSha256:p.reviewedCategoryBudgetSha256,
      reviewerFingerprintSha256:createHash("sha256").update(key.publicKey.export({format:"der",type:"spki"})).digest("hex"),
      reviewerPublicKeyPem:key.publicKey.export({format:"pem",type:"spki"}).toString(),maximumRetentionHours:96,
      policyValidFromUtc:p.validFromUtc,policyValidUntilUtc:p.validUntilUtc};
@@ -630,7 +654,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    calendarSha256:review.expectedCalendarSha256,configSha256:review.expectedConfigSha256,
    frameSha256:review.expectedFrameSha256,releaseSha256:review.expectedReleaseSha256,
    rightsSha256:review.expectedRightsReviewSha256,providerContractSha256:review.expectedProviderContractSha256,
-   reviewed31DaySourceRequestGridSha256:review.reviewed31DaySourceRequestGridSha256,
+   ...typedBudget,
    reviewedCategoryBudgetSha256:review.reviewedCategoryBudgetSha256,
    expectedPrepareRole:USER,validFromUtc:new Date(now-3600000).toISOString(),
    validUntilUtc:new Date(now+6*86400000).toISOString(),
