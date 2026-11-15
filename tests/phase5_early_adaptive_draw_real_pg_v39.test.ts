@@ -184,7 +184,7 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
 
     await expect(readCommittedP5DayCandidateGrid(db,{
       ...scope,expectedEarlyDrawSha256:hex("0"),
-    })).rejects.toThrow("UNVERIFIED_EARLY_DRAW_READBACK");
+    })).rejects.toThrow("INDEPENDENT_FOUR_SLOT_SELECTION_SHA_DRIFT");
     const preserved=await db.query(
       "SELECT COUNT(*)::integer AS n FROM clean.adb_sampling_draw"
     );
