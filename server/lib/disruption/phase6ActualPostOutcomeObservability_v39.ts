@@ -25,7 +25,7 @@ const date=(x:unknown):number|null=>{
 };
 const reqDate=(x:unknown):number=>{const n=date(x);return n===null?hold("INVALID_DATABASE_CLOCK"):n;};
 const iso=(n:number)=>new Date(n).toISOString();
-const id=(x:unknown):x is string=>typeof x==="string"&&x.length>=3&&x.length<=180&&!x.startsWith("fidsrec:")&&!/[\x00-\x1f]/.test(x);
+const id=(x:unknown):x is string=>typeof x==="string"&&x.length>=3&&x.length<=180&&!x.startsWith("fidsrec:")&&![...x].some(c=>c.charCodeAt(0)<32);
 const number=(x:unknown)=>{
  const m=typeof x==="string"?x.trim().toUpperCase().match(/^([A-Z0-9]{2})[ \t]*([0-9]{1,4})$/):null;
  return m?m[1]+(m[2].replace(/^0+/,"")||"0"):null;
