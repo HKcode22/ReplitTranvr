@@ -1,7 +1,9 @@
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect,vi} from "vitest";
 import {requireP5CdGithubCurrentPrivatePreScope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
-import {withP6AuthenticatedCurrentPrivateRoster,readP6UnchangedCurrentPreRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
+import {assertP6CurrentPrivatePreMode,withP6AuthenticatedCurrentPrivateRoster,readP6UnchangedCurrentPreRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
+import {loadP6LaterCalendarWindows,loadP6CurrentPreCalendarWindows,P6_CURRENT_PRE_DISPATCH_CONFIRM}
+ from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 const mock=vi.hoisted(()=>({read:vi.fn(),current:vi.fn()}));
 vi.mock("../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs",()=>({readP6PrivateLaterQueueRoster:mock.read}));
 vi.mock("../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs",()=>({readP6StoredPrivateReviewOnce:mock.current}));
@@ -94,5 +96,53 @@ describe("current signed-day append-safe reauthentication",()=>{
   mock.current.mockResolvedValue({pins:{expectedRunDayIndex:1,expectedIndexRevision:3,expectedIndexSha256:"d".repeat(64)}});
   mock.read.mockImplementation(async({selector})=>({...fakeRead(selector),privateRosterBytes:Buffer.from("changed")}));
   await expect(readP6UnchangedCurrentPreRoster(x)).rejects.toThrow("CHANGED_OR_CURRENT_READ");
+ });
+});
+
+describe("explicit dispatch uses the same current PRE route, not a legacy or enrollment bypass",()=>{
+ const dispatch=()=>({...env(),GITHUB_EVENT_NAME:"workflow_dispatch",
+  P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:P6_CURRENT_PRE_DISPATCH_CONFIRM});
+ it("requires original release and gate flags and authenticates current shard in same scope",async()=>{
+  const e=dispatch();
+  expect(requireP5CdGithubCurrentPrivatePreScope(e)).not.toHaveProperty("rosterSha256");
+  expect(()=>requireP5CdGithubPreRelease(e)).toThrow("NO_LIVE_AUTHENTICATED_ROSTER_CONTEXT");
+  mock.read.mockImplementation(async({selector})=>fakeRead(selector));
+  await withP6AuthenticatedCurrentPrivateRoster({client:{},env:e,selector:sel(1),policy},async p=>{
+   expect(requireP5CdGithubPreRelease(e).rosterSha256).toBe(p.derivedCompatibilityRosterSha256);
+   expect(()=>requireP5CdGithubPreRelease({...e,P5_CD_GH_PRE_STOP:"1"})).toThrow();
+  });
+  for(const delta of [{P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:"wrong"},
+   {P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED:"0"},{P5_CD_GH_PRIVATE_CURRENT_APPROVED:"0"},
+   {V39_PHASE5_FREEZE_SIGNED:"0"},{P5_CD_GH_PRIVATE_DAY:"1"},
+   {GITHUB_EVENT_NAME:"schedule"},{P5_CD_GH_PRE_MODE:"PHASE5_CANARY"}])
+   expect(()=>requireP5CdGithubCurrentPrivatePreScope({...e,...delta})).toThrow();
+ });
+ it("reads identical pinned day plans for current PRE; original enrollment and T24 calendar entry reject dispatch",()=>{
+  const e=env(),trust=assertP6CurrentPrivatePreMode(e);
+  const raw=new Map<string,Buffer>();
+  const dayPlanSha256s=Array.from({length:31},(_,i)=>{
+   const runDayIndex=i+1;
+   const b=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex,
+    templates:Array.from({length:12},(_,j)=>({runDayIndex,horizon:j<6?"T-6h":"T-90m",
+     scheduledRequestUtc:"2030-01-01T00:00:00.000Z",earliestPlannedCutoffUtc:"2030-01-01T00:15:00.000Z",
+     serviceWindowEndUtc:"2030-01-01T08:00:00.000Z"}))}));
+   raw.set("data-collection/phase5/planning/phase6-source-day-"+String(runDayIndex).padStart(2,"0")+".json",b);
+   return {runDayIndex,sha256:createHash("sha256").update(b).digest("hex")};
+  });
+  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",
+   delegatedDailyPacketProductionApproved:true,approvedCodeSha:trust.reviewedCodeSha,
+   manifestSha256:trust.manifestSha256,calendarSha256:trust.calendarSha256,releaseSha256:trust.releaseSha256,
+   rightsSha256:trust.rightsSha256,dayPlanSha256s,validFromUtc:"2030-01-01T00:00:00.000Z",
+   validUntilUtc:"2030-03-01T00:00:00.000Z"}));
+  const calendarEnv={...e,P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED:"1",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",
+   P6_NONPAID_DAILY_POLICY_BASE64:bytes.toString("base64"),
+   P6_NONPAID_DAILY_POLICY_SHA256:createHash("sha256").update(bytes).digest("hex")};
+  const read=(path:string)=>raw.get(path)!;
+  const manual={...calendarEnv,GITHUB_EVENT_NAME:"workflow_dispatch",
+   P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:P6_CURRENT_PRE_DISPATCH_CONFIRM};
+  expect(loadP6CurrentPreCalendarWindows(manual,trust,read)).toEqual(loadP6CurrentPreCalendarWindows(calendarEnv,trust,read));
+  expect(()=>loadP6LaterCalendarWindows(manual,trust,read)).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
+  expect(()=>loadP6LaterCalendarWindows(manual,trust,read,"T24")).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
+  expect(()=>loadP6CurrentPreCalendarWindows({...manual,P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:""},trust,read)).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
  });
 });
