@@ -21,7 +21,7 @@ export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
   lane:"EARLY_DRAW",
   workflow:"phase5-six-slot-approved-early-four-airport-draw.yml",
   maxExpectedGapMinutes:330, // Six UTC slots, 4h cadence + 90m jitter
-  purpose:"Six-hour UTC early selection of genuine future four-airport cohorts"
+  purpose:"Four-hour cadence for prospective early four-airport cohorts"
  },
  {
   lane:"SOURCE",
@@ -33,7 +33,7 @@ export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
   lane:"PRE",
   workflow:"phase5-cd-github-bounded-pre-tick.yml",
   maxExpectedGapMinutes:90,
-  purpose:"Five-minute existing V0092 signed-roster T24/T6/T90 PRE lease"
+  purpose:"Five-minute signed current later PRE worker"
  },
  {
   lane:"PRE_RECOVERY",
@@ -45,22 +45,26 @@ export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
   lane:"DAY_SHARD_SELECTOR",
   workflow:"phase5-phase6-append-only-day-shard-dbclock-readonly.yml",
   maxExpectedGapMinutes:90,
-  purpose:"Append-only rolling 31-day SOURCE/later-PRE/POST signed index observer"
- }
+  purpose:"Legacy independent day-index observer; not required for current stored dispatcher"
+ },
+ {lane:"DAILY_PREPARE",workflow:"phase6-nonpaid-source-day-prepare-publish.yml",maxExpectedGapMinutes:90,purpose:"Current-day nonpaid SOURCE preparation and private publication"},
+ {lane:"PRE_ENROLLMENT",workflow:"phase6-private-later-enrollment.yml",maxExpectedGapMinutes:90,purpose:"Current signed later and T24 enrollment"},
+ {lane:"T24",workflow:"phase5-cd-github-one-queued-t24-witness-main-manual.yml",maxExpectedGapMinutes:90,purpose:"Native T24 and independent witness execution"},
+ {lane:"RETENTION",workflow:"phase5-private-blob-retention-readonly-sentinel-no-provider.yml",maxExpectedGapMinutes:150,purpose:"Restricted primary-blob expiry metadata monitoring; not deletion"}
 ]);
 export const P6_MANUAL_OR_MISSING_RELEASE_LANES=Object.freeze([
  {
-  lane:"POST_CHILD",state:"EXISTING_MANUAL_CHILD_REQUIRES_AUTHENTIC_DAILY_SIGNED_INPUT",
+  lane:"POST_CHILD",state:"CURRENT_POST_PARENT_AND_CHILD_IMPLEMENTED_ACTUAL_RELEASE_UNVERIFIED",
   workflow:"phase5-one-signed-future-post-v0083-main-manual.yml"
  },
  {
   lane:"PRIVATE_SOURCE_PUBLISHER",
-  state:"NO_LIVE_SOURCE_REGISTRY_PUBLISHER_AT_LAST_OWNER_READBACK",
-  workflow:null
+  state:"CURRENT_NONPAID_PUBLISHER_IMPLEMENTED_ACTUAL_RELEASE_UNVERIFIED",
+  workflow:"phase6-nonpaid-source-day-prepare-publish.yml"
  },
  {
   lane:"FULL_31_DAY_ROLLOVER",
-  state:"SINGLE_DAY_PACKET_VARIABLES_NOT_PROVEN_TO_ADVANCE_AUTONOMOUSLY",
+  state:"DYNAMIC_STORED_DAY_ROUTING_IMPLEMENTED_ACTUAL_ROLLOVER_UNVERIFIED",
   workflow:null
  }
 ]);
