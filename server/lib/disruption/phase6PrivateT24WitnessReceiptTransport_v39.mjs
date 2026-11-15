@@ -95,26 +95,88 @@ export async function publishP6T24WitnessCustodyOnce({client,trust,wire,packetBy
  }catch(e){if(attempted)fail("UNKNOWN_COMMIT_READBACK_ONLY_NEVER_REPLAY");if(tx)await client.query("ROLLBACK").catch(()=>{});
   if(/^HOLD_P6_T24_CUSTODY_[A-Z0-9_]+$/.test(e?.message??""))throw e;fail("PUBLISHER_FAILURE_REDACTED");}
 }
-export async function readP6T24WitnessCustodyOnce({client,trust,scope}){
- scopeCheck(scope,"reader");trustCheck(trust);let tx=false;
- try{
-  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
-  await client.query("SET LOCAL statement_timeout='12000ms'");await client.query("SET LOCAL lock_timeout='2000ms'");
-  const now=await readP6DayEpochRestrictedReaderClock(client,scope.expectedSessionLogin);
-  const out=await client.query("SELECT logical_path,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes,review_wire_bytes FROM "+TABLE+" WHERE logical_path=$1",[p6T24WitnessCustodyPath(trust)]);
-  if(out.rowCount===0)fail("EXACT_RECEIPT_ABSENT_NOT_NEGATIVE_T24_EVIDENCE");
-  if(out.rowCount!==1||out.rows.length!==1)fail("NOT_UNIQUE");
-  const x=out.rows[0],wire=json(x.review_wire_bytes,4096);
+const T24_READ_FIELDS="logical_path,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes,review_wire_bytes";
+function verifyP6StoredT24CustodyRow(x,trust,now){
+  const wire=json(x.review_wire_bytes,4096);
   const {review:r,receipt}=verifyP6T24WitnessCustody({trust,wire,packetBytes:x.payload_bytes,observedDbClockUtc:now});
   if(x.kind!==KIND||x.logical_path!==r.logicalPath||x.run_day_index!==r.runDayIndex||x.shard_index!==1||
    x.content_sha256!==r.packetSha256||x.reviewed_code_sha!==r.reviewedCodeSha||x.manifest_sha256!==r.manifestSha256||
    x.rights_sha256!==r.rightsSha256||x.external_review_sha256!==hash(x.review_wire_bytes)||
    at(x.externally_reviewed_at_utc)!==r.reviewedAtUtc||at(x.retention_not_after_utc)!==r.retentionNotAfterUtc||
    at(x.committed_at_utc)<r.reviewedAtUtc||at(x.committed_at_utc)>now)fail("IMMUTABLE_ROW_DRIFT");
+
+ return {review:r,receipt};
+}
+export async function readP6T24WitnessCustodyOnce({client,trust,scope}){
+ scopeCheck(scope,"reader");trustCheck(trust);let tx=false;
+ try{
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await client.query("SET LOCAL statement_timeout='12000ms'");await client.query("SET LOCAL lock_timeout='2000ms'");
+  const now=await readP6DayEpochRestrictedReaderClock(client,scope.expectedSessionLogin);
+  const out=await client.query("SELECT "+T24_READ_FIELDS+" FROM "+TABLE+" WHERE logical_path=$1",[p6T24WitnessCustodyPath(trust)]);
+  if(out.rowCount===0)fail("EXACT_RECEIPT_ABSENT_NOT_NEGATIVE_T24_EVIDENCE");
+  if(out.rowCount!==1||out.rows.length!==1)fail("NOT_UNIQUE");
+  const {review:r,receipt}=verifyP6StoredT24CustodyRow(out.rows[0],trust,now);
   await client.query("ROLLBACK");tx=false;
   const result={runDayIndex:r.runDayIndex,receiptSha256:r.receiptSha256,exactCustodyWireVerified:true,scientificReviewCompleted:false,
    mayLaunchLaterPreAutomatically:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
   return Object.freeze(Object.defineProperty(result,"privateReceipt",{value:Object.freeze(receipt),enumerable:false}));
+ }catch(e){if(tx)await client.query("ROLLBACK").catch(()=>{});
+  if(/^HOLD_P6_T24_CUSTODY_[A-Z0-9_]+$/.test(e?.message??""))throw e;fail("READER_FAILURE_REDACTED");}
+}
+
+
+/** One original selected review page, one private-reader transaction.
+ * A missing custody row is NOT missing T24; only the separate actual PRE
+ * and witness read can establish absence. Invalid/expired stored rows
+ * remain unresolved, never synthesize or backdate a receipt. */
+export async function readP6T24WitnessCustodyBatch({client,trusts,scope}){
+ scopeCheck(scope,"reader");
+ if(!Array.isArray(trusts)||trusts.length<1||trusts.length>96)fail("UNBOUNDED_CUSTODY_BATCH");
+ const byPath=new Map(),first=trusts[0];
+ const stable=["runDayIndex","reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","policySha256",
+  "reviewerFingerprintSha256","reviewerPublicKeyPem","expectedFrameSha256","expectedConfigSha256","expectedSelectedTVersion",
+  "maximumRetentionHours","policyValidFromUtc","policyValidUntilUtc"];
+ for(const t of trusts){
+  trustCheck(t);
+  const path=p6T24WitnessCustodyPath(t);
+  if(byPath.has(path)||stable.some(k=>t[k]!==first[k]))fail("CROSS_SCOPE_OR_DUPLICATE_CUSTODY_BATCH");
+  byPath.set(path,t);
+ }
+ let tx=false;
+ try{
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await client.query("SET LOCAL statement_timeout='12000ms'");await client.query("SET LOCAL lock_timeout='2000ms'");
+  const now=await readP6DayEpochRestrictedReaderClock(client,scope.expectedSessionLogin);
+  const out=await client.query("SELECT "+T24_READ_FIELDS+" FROM "+TABLE+" WHERE logical_path=ANY($1::text[]) LIMIT $2",
+   [[...byPath.keys()],trusts.length+1]);
+  if(!Array.isArray(out.rows)||out.rowCount!==out.rows.length||out.rows.length>trusts.length)fail("CUSTODY_BATCH_CARDINALITY");
+  const rows=new Map();
+  for(const x of out.rows){
+   if(!byPath.has(x.logical_path)||rows.has(x.logical_path))fail("CUSTODY_BATCH_UNREVIEWED_OR_DUPLICATE_ROW");
+   rows.set(x.logical_path,x);
+  }
+  const decisions=[];
+  for(const [path,t] of byPath){
+   const row=rows.get(path);
+   if(!row){decisions.push(Object.freeze({flightInstanceId:t.flightInstanceId,status:"CUSTODY_ABSENT_NOT_NEGATIVE_T24_EVIDENCE"}));continue;}
+   try{
+    const {receipt}=verifyP6StoredT24CustodyRow(row,t,now);
+    decisions.push(Object.freeze({flightInstanceId:t.flightInstanceId,status:"EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW",receipt:Object.freeze(receipt)}));
+   }catch(e){
+    const msg=String(e?.message??"");
+    if(!/^HOLD_P6_T24_CUSTODY_[A-Z0-9_]+$/.test(msg))throw e;
+    decisions.push(Object.freeze({flightInstanceId:t.flightInstanceId,status:"CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED",reason:msg}));
+   }
+  }
+  await client.query("ROLLBACK");tx=false;
+  const count=s=>decisions.filter(x=>x.status===s).length;
+  const result={status:"BOUNDED_T24_PRIVATE_CUSTODY_READ_ONLY_NOT_SCIENTIFIC_REVIEW",runDayIndex:first.runDayIndex,
+   observedDbClockUtc:now,requestedCount:trusts.length,
+   verifiedCount:count("EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW"),absentCount:count("CUSTODY_ABSENT_NOT_NEGATIVE_T24_EVIDENCE"),
+   unresolvedCount:count("CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED"),scientificReviewCompleted:false,
+   mayLaunchLaterPreAutomatically:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+  return Object.freeze(Object.defineProperty(result,"privateDecisions",{value:Object.freeze(decisions),enumerable:false}));
  }catch(e){if(tx)await client.query("ROLLBACK").catch(()=>{});
   if(/^HOLD_P6_T24_CUSTODY_[A-Z0-9_]+$/.test(e?.message??""))throw e;fail("READER_FAILURE_REDACTED");}
 }
