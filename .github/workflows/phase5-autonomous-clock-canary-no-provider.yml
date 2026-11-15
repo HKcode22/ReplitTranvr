@@ -1,13 +1,45 @@
 name: Phase5 Autonomous Six-Slot Clock Canary (NO provider)
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'BOUNDED_HANDOFF' &&
+      format('P5 HANDOFF {0} {1} {2}', inputs.chain_id, inputs.hop, inputs.parent_run_id) ||
+      'Phase5 Autonomous Six-Slot Clock Canary (NO provider)' }}
 on:
   schedule:
     - cron: '17 0,4,8,12,16,20 * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [OBSERVE, BOUNDED_HANDOFF]
+        default: OBSERVE
+      handoff_confirm:
+        type: string
+        default: ''
+      approved_main_sha:
+        type: string
+        default: ''
+      chain_id:
+        type: string
+        default: ''
+      hop:
+        type: string
+        default: '0'
+      parent_run_id:
+        type: string
+        default: '0'
+      deadline_utc:
+        type: string
+        default: ''
+      sent_at_utc:
+        type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/phase5-autonomous-clock-canary-no-provider.yml'
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
+      - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
+      - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
@@ -18,6 +50,8 @@ on:
     paths:
       - '.github/workflows/phase5-autonomous-clock-canary-no-provider.yml'
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
+      - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
+      - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
@@ -36,6 +70,7 @@ env:
   V39_DATABASE_RUNTIME_URL: ''
 jobs:
   six-slot-cron-observation-only:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'BOUNDED_HANDOFF' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -50,6 +85,7 @@ jobs:
           set -Eeuo pipefail
           node --check scripts/v39_phase5_github_autonomous_clock_canary.mjs
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
+          node --test tests/phase5_github_bounded_handoff_canary_v39.test.mjs
           bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
           node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
           node --test tests/phase5_github_six_slot_coverage_v39.test.mjs
@@ -81,3 +117,42 @@ jobs:
             ${{ runner.temp }}/phase5-clock-coverage-sanitized.json
           retention-days: 7
           if-no-files-found: error
+  bounded-manual-github-handoff:
+    # Separate explicit 3-run measurement. Does not execute SOURCE/PRE/POST,
+    # does not change the existing scheduled six-slot observation.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'BOUNDED_HANDOFF' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      group: p5-github-handoff-${{ inputs.chain_id }}
+      cancel-in-progress: false
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      P5_GH_HANDOFF_CONFIRM: ${{ inputs.handoff_confirm }}
+      P5_GH_HANDOFF_APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+      P5_GH_HANDOFF_CHAIN_ID: ${{ inputs.chain_id }}
+      P5_GH_HANDOFF_HOP: ${{ inputs.hop }}
+      P5_GH_HANDOFF_PARENT_RUN_ID: ${{ inputs.parent_run_id }}
+      P5_GH_HANDOFF_DEADLINE_UTC: ${{ inputs.deadline_utc }}
+      P5_GH_HANDOFF_SENT_AT_UTC: ${{ inputs.sent_at_utc }}
+      RAPIDAPI_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Measure one exact-main handoff; dispatch at most one successor
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase5_github_bounded_handoff_canary.mjs
