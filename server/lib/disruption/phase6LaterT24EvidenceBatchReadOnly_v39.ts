@@ -12,6 +12,7 @@ import {digestP5Stage24ReviewedReceipt,verifyP5Stage24WitnessedFrozenT,type P5St
  from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {digestP5UnsignedNativePreDossier,pageP5UnsignedNativePreReviewDossier,type P5UnsignedNativePreDossier,type P5UnsignedPreReviewEntry}
  from "./phase5SourceBoundUnsignedPreDossier_v39";
+import {readP6T24WitnessCustodyBatch} from "./phase6PrivateT24WitnessReceiptTransport_v39.mjs";
 const H=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9_.:|-]{5,200}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_LATER_T24_EVIDENCE_READ_"+s);};
@@ -27,6 +28,7 @@ export type P6LaterT24EvidenceStatus=
  "T24_EXISTS_PRIVATE_RECEIPT_UNAVAILABLE"|
  "T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY"|
  "T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH"|
+ "T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED"|
  "LATER_REVIEW_LEAD_MISSED_CENSOR";
 type ReviewReceipt={expectedReceiptSha256:string;receipt:P5Stage24ReviewedT24Receipt};
 export interface P6LaterT24EvidenceReadScope{
@@ -44,6 +46,9 @@ export interface P6LaterT24EvidenceReadScope{
  /** Optional exact subset of original page, selected by current signed
   * day-index duplicate/lead filtering. Never change the original dossier SHA. */
  selectedFlightInstanceIds?:readonly string[];
+ /** Only from actual exact stored-custody validation; never call absence
+  * when a conflicting/expired custody record was seen. */
+ unresolvedCustodyFlightInstanceIds?:readonly string[];
  /** Exact existing Stage17 receipt obtained via lawful private custody.
   * No reconstruction of second post-COMMIT observation from today's DB
   * clock. A digest is not independent organizational approval. */
@@ -86,10 +91,13 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
      e.source.expectedReviewedSourceRightsSha256!==scope.expectedRightsSha256||e.source.horizon!==dossier.horizon||
      utc(e.source.selectedTNativeUtc)-utc(e.source.ownPreCutoffUtc)!==(dossier.horizon==="T-6h"?21600000:5400000)))
   hold("CROSS_STUDY_PAGE_OR_NATIVE_CUTOFF_DRIFT");
+ const unresolved=scope.unresolvedCustodyFlightInstanceIds??[];
+ if(!Array.isArray(unresolved)||new Set(unresolved).size!==unresolved.length||unresolved.some(id=>!ids.includes(id)))
+  hold("INVALID_UNRESOLVED_CUSTODY_SCOPE");
  const byReceipt=new Map<string,ReviewReceipt>();
  for(const r of scope.reviewedReceipts){
   const id=r?.receipt?.flightInstanceId;
-  if(!ids.includes(id)||byReceipt.has(id)||!H.test(r.expectedReceiptSha256??"")||
+  if(!ids.includes(id)||byReceipt.has(id)||unresolved.includes(id)||!H.test(r.expectedReceiptSha256??"")||
      r.receipt.receiptSha256!==r.expectedReceiptSha256||
      digestP5Stage24ReviewedReceipt(r.receipt)!==r.expectedReceiptSha256)
    hold("UNPINNED_DUPLICATE_OR_CROSS_PAGE_RECEIPT");
@@ -128,6 +136,7 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
    let status:P6LaterT24EvidenceStatus;
    let receiptSha256:string|null=null;
    if(now>=cutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
+   else if(unresolved.includes(id))status="T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED";
    else if(sr.length===0&&wr.length===0){
     if(r)status="T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH";
     else status=now<native-86400000?"T24_NOT_YET_DUE_NO_MISSINGNESS_CLAIM":
@@ -164,12 +173,24 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
  * One invocation is bounded to one original page. An empty selection is
  * not evidence of missing T24 and requires no DB connection. The caller
  * supplies its existing independently pinned dossier/release scope. */
+type PendingStoredT24Custody={
+ readerClient:{query:(sql:string,args?:any[])=>Promise<any>};
+ /** Independent stable custody trust from protected review configuration.
+  * Flight IDs below are derived solely from the exact selected page. */
+ trust:{independentT24CustodyTrustApproved:true;runDayIndex:number;reviewedCodeSha:string;
+  manifestSha256:string;rightsSha256:string;releaseSha256:string;policySha256:string;
+  reviewerFingerprintSha256:string;reviewerPublicKeyPem:string;expectedFrameSha256:string;
+  expectedConfigSha256:string;expectedSelectedTVersion:string;maximumRetentionHours:number;
+  policyValidFromUtc:string;policyValidUntilUtc:string};
+ scope:{privateT24CustodyApproved:true;existingPaidDispatchApproved:false;adbAutoCollect:"0";phase6ProcessArmed:"0";expectedSessionLogin:string};
+};
 export async function readP6PendingLaterT24EvidencePage(
  pool:Pick<Pool,"connect">,
  handoff:{status:string;horizon:string;runDayIndex:number;reviewEntryCount:number;
   privateOriginalDossier:P5UnsignedNativePreDossier;privateOriginalDossierSha256:string;
   privateReviewEntries:readonly P5UnsignedPreReviewEntry[]},
- scope:Omit<P6LaterT24EvidenceReadScope,"selectedFlightInstanceIds">
+ scope:Omit<P6LaterT24EvidenceReadScope,"selectedFlightInstanceIds"|"unresolvedCustodyFlightInstanceIds">,
+ custody?:PendingStoredT24Custody
 ){
  const sealed=(k:string)=>{const d=Object.getOwnPropertyDescriptor(handoff??{},k);return Boolean(d&&!d.enumerable&&!d.writable);};
  const d=handoff?.privateOriginalDossier,entries=handoff?.privateReviewEntries;
@@ -196,5 +217,25 @@ export async function readP6PendingLaterT24EvidencePage(
   return {status:"NO_PENDING_T24_EVIDENCE_ON_PAGE_NO_SQL",runDayIndex:d.runDayIndex,pageIndex:scope.pageIndex,
    candidateCount:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  }
- return readP6LaterT24EvidencePage(pool,d,{...scope,selectedFlightInstanceIds:selected});
+ if(!custody)return readP6LaterT24EvidencePage(pool,d,{...scope,selectedFlightInstanceIds:selected});
+ const t=custody.trust;
+ if(scope.reviewedReceipts.length||!t||t.independentT24CustodyTrustApproved!==true||
+    t.runDayIndex!==d.runDayIndex||t.reviewedCodeSha!==d.reviewedMainCodeSha||
+    t.manifestSha256!==scope.expectedManifestSha256||t.rightsSha256!==scope.expectedRightsSha256||
+    t.releaseSha256!==scope.expectedReleaseSha256||t.expectedFrameSha256!==scope.expectedFrameSha256||
+    t.expectedConfigSha256!==scope.expectedConfigSha256||t.expectedSelectedTVersion!==scope.expectedSelectedTVersion)
+  hold("STORED_CUSTODY_TRUST_NOT_EXACT_PENDING_PAGE");
+ const got=await readP6T24WitnessCustodyBatch({client:custody.readerClient,trusts:selected.map(flightInstanceId=>({...t,flightInstanceId})),scope:custody.scope});
+ const receipts:ReviewReceipt[]=got.privateDecisions.flatMap(x=>x.status==="EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW"?
+  [{receipt:x.receipt,expectedReceiptSha256:x.receipt.receiptSha256}]:[]);
+ const unresolved=got.privateDecisions.filter(x=>x.status==="CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED").map(x=>x.flightInstanceId);
+ const evidence=await readP6LaterT24EvidencePage(pool,d,{...scope,selectedFlightInstanceIds:selected,reviewedReceipts:receipts,
+  unresolvedCustodyFlightInstanceIds:unresolved});
+ if(utc(evidence.observedDbClockUtc)<utc(got.observedDbClockUtc))hold("CUSTODY_TO_ACTUAL_PRE_CLOCK_REGRESSION");
+ // Verified custody is NOT independent native/source/scientific review.
+ const out={...evidence,privateCustodyVerifiedCount:got.verifiedCount,privateCustodyAbsentCount:got.absentCount,
+  privateCustodyUnresolvedCount:got.unresolvedCount,scientificReviewStillRequired:true};
+ return Object.freeze(Object.defineProperties(out,{privateDecisions:{value:evidence.privateDecisions,enumerable:false},
+  privateCustodyReceipts:{value:Object.freeze(receipts),enumerable:false}}));
+
 }

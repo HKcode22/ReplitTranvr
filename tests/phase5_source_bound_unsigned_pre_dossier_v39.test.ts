@@ -1,3 +1,5 @@
+import {createHash,generateKeyPairSync,sign} from "node:crypto";
+import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
 import {describe,it,expect} from "vitest";
 import {auditP5ActualSourceFlightCandidates,
  digestP5ActualSourceCandidateAudit,
@@ -275,6 +277,58 @@ describe("bounded actual-role T24 evidence intake for existing later SOURCE doss
   await expect(readP6PendingLaterT24EvidencePage(pool,handoff([entry,entry]),scope)).rejects.toThrow("PENDING_HANDOFF_ENTRY_DRIFT");
   await expect(readP6PendingLaterT24EvidencePage(pool,handoff([entry]),f.scope)).rejects.toThrow();
   expect(calls).toHaveLength(0);
+ });
+ it("reads stored receipt custody only for pending page, joins actual PRE/witness and refuses false absence for invalid custody",async()=>{
+  const f=fixture(),key=generateKeyPairSync("ed25519"),sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+  const receipt=f.scope.reviewedReceipts[0].receipt,login="phase6_private_reader_login_ci_epoch";
+  const trust={independentT24CustodyTrustApproved:true as const,runDayIndex:f.d.runDayIndex,reviewedCodeSha:f.d.reviewedMainCodeSha,
+   manifestSha256:f.d.manifestSha256,rightsSha256:f.scope.expectedRightsSha256,releaseSha256:f.scope.expectedReleaseSha256,
+   expectedFrameSha256:f.scope.expectedFrameSha256,expectedConfigSha256:f.scope.expectedConfigSha256,
+   expectedSelectedTVersion:f.scope.expectedSelectedTVersion,policySha256:H("e"),
+   reviewerFingerprintSha256:sha(key.publicKey.export({format:"der",type:"spki"})),
+   reviewerPublicKeyPem:key.publicKey.export({format:"pem",type:"spki"}).toString(),maximumRetentionHours:48,
+   policyValidFromUtc:"2027-02-09T00:00:00.000Z",policyValidUntilUtc:"2027-02-11T11:59:00.000Z"};
+  const pathFor=(flightInstanceId:string)=>p6T24WitnessCustodyPath({...trust,flightInstanceId});
+  const raw=Buffer.from(JSON.stringify({schema:"v39.phase6.private-t24-witness-candidate.v1",runDayIndex:trust.runDayIndex,
+   manifestSha256:trust.manifestSha256,candidate:{schema:"v39.phase5.unsigned-t24-stage24-handoff.v1",
+    status:"DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW",receipt,reviewedByIndependentAuthority:false,
+    mayLaunchLaterPreAutomatically:false,providerCalls:0}}));
+  const review={schema:P6_T24_CUSTODY_SCHEMA,audience:"HKcode22/ReplitTranvr:PHASE6_T24_WITNESS_CUSTODY_ONLY",
+   logicalPath:pathFor(receipt.flightInstanceId),runDayIndex:trust.runDayIndex,packetSha256:sha(raw),receiptSha256:receipt.receiptSha256,
+   reviewedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,
+   releaseSha256:trust.releaseSha256,policySha256:trust.policySha256,reviewedAtUtc:"2027-02-09T11:59:00.000Z",
+   validUntilUtc:"2027-02-10T11:59:00.000Z",retentionNotAfterUtc:"2027-02-11T11:59:00.000Z",
+   reviewerPublicKeyFingerprintSha256:trust.reviewerFingerprintSha256};
+  const wire=Buffer.from(JSON.stringify({review,signatureBase64:sign(null,p6T24WitnessCustodyPreimage(review),key.privateKey).toString("base64")}));
+  const row={logical_path:review.logicalPath,run_day_index:trust.runDayIndex,shard_index:1,kind:"T24_WITNESS_RECEIPT_CANDIDATE",
+   content_sha256:review.packetSha256,reviewed_code_sha:trust.reviewedCodeSha,manifest_sha256:trust.manifestSha256,
+   rights_sha256:trust.rightsSha256,external_review_sha256:sha(wire),externally_reviewed_at_utc:review.reviewedAtUtc,
+   retention_not_after_utc:review.retentionNotAfterUtc,committed_at_utc:"2027-02-09T12:01:00.000Z",payload_bytes:raw,review_wire_bytes:wire};
+  const id3=f.d.entries[3].source.flightInstanceId,readCalls:string[]=[];
+  const client={query:async(sql:string,args?:any[])=>{
+   readCalls.push(sql);let rows:any[]=[];
+   if(sql.startsWith("SELECT current_database"))rows=[{db:"neondb",version:160016,ro:"on",replica:false,
+    actor:"phase6_private_frozen_reader_v39",login,db_now:"2027-02-10T05:00:30.000Z",
+    index_select:true,index_insert:false,index_update:false,index_delete:false,packet_select:true,packet_insert:false,
+    packet_update:false,packet_delete:false,login_enabled:true,login_superuser:false,login_createrole:false,login_bypassrls:false,
+    group_login:false,group_superuser:false,group_bypassrls:false}];
+   else if(sql.includes("logical_path=ANY")){expect(args).toEqual([f.d.entries.map(e=>pathFor(e.source.flightInstanceId)),5]);
+    rows=[row,{...row,logical_path:pathFor(id3)}];}
+   return {rows,rowCount:rows.length};
+  }};
+  const handoff=Object.defineProperties({status:"UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED",
+   horizon:f.d.horizon,runDayIndex:f.d.runDayIndex,reviewEntryCount:f.d.entries.length},
+   {privateOriginalDossier:{value:f.d},privateOriginalDossierSha256:{value:f.scope.expectedDossierSha256},
+    privateReviewEntries:{value:f.d.entries}}) as Parameters<typeof readP6PendingLaterT24EvidencePage>[1];
+  const r=await readP6PendingLaterT24EvidencePage(f.pool,handoff,{...f.scope,reviewedReceipts:[]},
+   {readerClient:client,trust,scope:{privateT24CustodyApproved:true,existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",expectedSessionLogin:login}});
+  expect(r).toMatchObject({privateCustodyVerifiedCount:1,privateCustodyAbsentCount:2,privateCustodyUnresolvedCount:1,
+   scientificReviewStillRequired:true,reviewedPacketsIssued:0,providerCalls:0});
+  expect((r as any).privateDecisions.map((x:any)=>x.status)).toEqual([
+   "T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED","T24_EXISTS_PRIVATE_RECEIPT_UNAVAILABLE",
+   "T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY","T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED"]);
+  expect(readCalls.filter(q=>q.includes("logical_path=ANY"))).toHaveLength(1);
+  expect(readCalls.at(-1)).toBe("ROLLBACK");expect(JSON.stringify(r)).not.toMatch(/leg:future:|snapshotId|privateCustodyReceipts/);
  });
  it("rejects wrong exact dossier and source run binding",async()=>{
   const f=fixture();
