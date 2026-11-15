@@ -91,6 +91,13 @@ export async function inspectP6StoredPostOriginalV0083({
  const admission=admitP5FuturePostGithubParent(local);
  const exact=admitP5FuturePostFrozenForReadOnly(receipt.privateBytes,packet,admission.pins);
  if(exact.runDayIndex!==route.runDayIndex)hold("NATIVE_POST_DAY_DRIFT");
+ // Apply original signed-route and restricted-reader clock checks even if
+ // the later actual PRE audit proves zero valid horizons (not an outage).
+ reviewP6PrivatePostWithOriginalV0083NoDispatch({indexHandoff:index,postPacketReceipt:receipt,
+  actualPre:null,actualSourcePreDbClockUtc:receipt.redactedSummary.observedDatabaseClockUtc,env:local,
+  pins:{expectedRoutingIntentSha256:selector.routingIntentSha256,expectedDayEpochIndexSha256:selector.indexSha256,
+   expectedPostPacketPath:route.signedFrozenPath,expectedPostPacketSha256:route.signedFrozenSha256,
+   expectedSourceRegistryPath:route.boundSourceRegistryPath,expectedFlightInstanceId:exact.flightInstanceId}});
  let actual;
  try{actual=await readActualValidPreAndClock(admission.conn,exact);}
  catch(e){
