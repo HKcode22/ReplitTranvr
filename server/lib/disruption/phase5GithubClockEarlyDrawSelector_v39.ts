@@ -43,15 +43,18 @@ export interface P5EarlyDrawScheduledSelectInput{
  expectedConfigSha256:string;
  expectedFrameSha256:string;
  rows:readonly P5SchedulerDayRow[];
+ /** Reviewed prospective policy: a wholly missed day is censored, not redrawn. */
+ allowLocalMissedDay?:true;
 }
 export type P5EarlyDrawScheduledSelection=
  | {status:"ONE_DUE_REVIEWED_DAY";runDayIndex:number;scheduledStartUtc:string;
-    priorCommittedDays:number;providerCalls:0;databaseWrites:0}
+    priorCommittedDays:number;missedRunDayIndices:number[];providerCalls:0;databaseWrites:0}
  | {status:"NOT_DUE_OR_ALREADY_SELECTED";nextDueRunDayIndex:number|null;
-    selectedDays:number;providerCalls:0;databaseWrites:0};
+    selectedDays:number;missedRunDayIndices:number[];providerCalls:0;databaseWrites:0};
 
 /** Fail-closed: 31 signed parents, no partial/duplicate selected-day rows,
- * and NEVER bypass a missed earlier parent day by sampling a later day. */
+ * Default remains strict; reviewed current-mode may disclose a wholly
+ * missed parent and move forward without a retrospective draw. */
 export function selectP5GitHubNextEarlyDraw(
  input:P5EarlyDrawScheduledSelectInput
 ):P5EarlyDrawScheduledSelection{
@@ -82,27 +85,30 @@ export function selectP5GitHubNextEarlyDraw(
      (i>0&&checked[i].start<=checked[i-1].start))
    REFUSE("UNORDERED_OR_DUPLICATED_31_DAY_SCHEDULE");
  }
- let selected=0;
+ let selected=0;const missedRunDayIndices:number[]=[];
  for(const row of checked){
   if(row.count===4){selected++;continue;}
   const lead=row.start-now;
-  if(lead<=P5_EARLY_DRAW_MIN_STRICT_LEAD_MS)
-   REFUSE("EARLIER_UNSELECTED_DAY_MISSED_NON_BACKFILLABLE_CUTOFF");
+  if(lead<=P5_EARLY_DRAW_MIN_STRICT_LEAD_MS){
+   if(input.allowLocalMissedDay!==true)
+    REFUSE("EARLIER_UNSELECTED_DAY_MISSED_NON_BACKFILLABLE_CUTOFF");
+   missedRunDayIndices.push(row.day);continue;
+  }
   if(lead>P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS)
    return {
     status:"NOT_DUE_OR_ALREADY_SELECTED",nextDueRunDayIndex:row.day,
-    selectedDays:selected,providerCalls:0,databaseWrites:0
+    selectedDays:selected,missedRunDayIndices,providerCalls:0,databaseWrites:0
    };
   if(!p5EarlyDrawLeadTimeEligible(now,row.start))
    REFUSE("EARLY_DRAW_CLOCK_CONTRACT_MISMATCH");
   return {
    status:"ONE_DUE_REVIEWED_DAY",runDayIndex:row.day,
    scheduledStartUtc:new Date(row.start).toISOString(),
-   priorCommittedDays:selected,providerCalls:0,databaseWrites:0
+   priorCommittedDays:selected,missedRunDayIndices,providerCalls:0,databaseWrites:0
   };
  }
  return {
   status:"NOT_DUE_OR_ALREADY_SELECTED",nextDueRunDayIndex:null,
-  selectedDays:31,providerCalls:0,databaseWrites:0
+  selectedDays:selected,missedRunDayIndices,providerCalls:0,databaseWrites:0
  };
 }
