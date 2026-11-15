@@ -21,7 +21,7 @@ import {
  type P5Stage8SourceReviewWithoutCopiedDraw
 } from "./phase5V0079DailyPreparedQueryProposals_v39";
 import {
- commitStage9P5V0082AtomicSegmentedDay,
+ commitStage9P5V0082AtomicSegmentedDay,readBackP5Stage9PreparedDayOnce,
  type P5V0082AtomicDayReview
 } from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
 import {planP6StoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
@@ -96,6 +96,11 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
   }):undefined;
  const stage9=await commitStage9P5V0082AtomicSegmentedDay(
    insertOnlyPool,{...z,proposal});
+ // Never expose an unsigned private publisher handoff without a fresh
+ // committed ledger readback. A failure here means COMMIT already returned;
+ // the caller must inspect the existing ledger, not replay Stage9.
+ const readback=drafts?await readBackP5Stage9PreparedDayOnce(insertOnlyPool,{...z,proposal})
+  .catch(()=>hold("STAGE9_COMMITTED_READBACK_HOLD_NO_REPLAY")):undefined;
  const result={
   schema:"v39.phase5.same-snapshot-source-day-to-atomic-prepared.v1" as const,
   status:"REAL_SAVED_FOUR_AIRPORT_DAY_PREPARED_UNARMED" as const,
@@ -115,6 +120,7 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
   providerCalls:0 as const,
   phase5ScientificFreezePassed:false as const,
   phase6PaidGoGrantedByThisFunction:false as const,
+  ...(readback?{preparedDayReadback:readback}:{}),
   ...(drafts?{unsignedSourceDraftSummary:{
     queryCount:drafts.queryCount,shardCount:drafts.shardCount,
     alreadyTooCloseAtReadCount:drafts.alreadyTooCloseAtReadCount,

@@ -24,7 +24,7 @@ import {P5_SOURCE_UPCOMING_METADATA_SQL,
  from "../server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39";
 import {P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
-import {commitStage9P5V0082AtomicSegmentedDay,
+import {commitStage9P5V0082AtomicSegmentedDay,readBackP5Stage9PreparedDayOnce,
  type P5V0082AtomicDayReview} from
  "../server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
 
@@ -357,6 +357,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   tampered.queries[0].planned_dispatch_utc=serviceStart;
   expect(()=>draftP5OneGetFromActualPreparedSource(saved,tampered,reviewPins))
    .toThrow("PREPARED_QUERY_OR_PARTITION_NOT_SAME_SAVED_SOURCE");
+  await expect(readBackP5Stage9PreparedDayOnce(writer,review))
+   .rejects.toThrow("READBACK_INCOMPLETE_OR_EXTRA_PREPARED_DAY");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
  it("refuses production owner role and tampered reviewer source digest",async()=>{
@@ -430,6 +432,9 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    readScope,sourceReview,stage9Review:reviewPins,
    preparePrivateUnsignedSourceDraftShards:true
   });
+  expect(result.preparedDayReadback?.verifiedQueryCount).toBe(96);
+  expect(result.preparedDayReadback?.verifiedPartitionCount).toBe(96);
+  expect(result.preparedDayReadback?.separateReadOnlySnapshot).toBe(true);
   expect(result.unsignedSourceDraftSummary?.queryCount).toBe(96);
   expect(result.privateUnsignedSourceDraftPlan?.privateDraftShards.flatMap(s=>s.entries).length).toBe(96);
   expect(JSON.stringify(result)).not.toContain("privateUnsignedSourceDraftPlan");
@@ -482,6 +487,20 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   expect(result.dbWrites).toBe(0);
   const budget=await counts();
   expect(budget).toEqual({q:96,p:96,a:0,o:0});
+ });
+ it("fresh exact prepared readback is repeatable without rewriting, refuses unreviewed actor or proposal",async()=>{
+  const ok=await readBackP5Stage9PreparedDayOnce(writer,review);
+  expect(ok.verifiedQueryCount).toBe(96);
+  expect(ok.verifiedPartitionCount).toBe(96);
+  expect(ok.independentReviewerAuthorityEstablishedHere).toBe(false);
+  expect(ok.databaseWrites).toBe(0);
+  expect(ok.providerCalls).toBe(0);
+  await expect(readBackP5Stage9PreparedDayOnce(admin,review))
+   .rejects.toThrow("READBACK_WRONG_RESTRICTED_ROLE_OR_DATABASE");
+  await expect(readBackP5Stage9PreparedDayOnce(writer,{...review,
+   expectedSourceCandidateDigestSha256:sha("0")}))
+   .rejects.toThrow("ALTERED_V3_PROPOSAL_OR_SOURCE_DIGEST");
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
  });
  it("refuses replay after commit, no duplicates or excess permissions",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
