@@ -86,3 +86,13 @@ describe("direct private reader and existing pooler PRE use one endpoint",()=>{
   expect(()=>admitP5PrivateLaterWorker(e)).toThrow();
  });
 });
+
+import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
+describe("pooler canonicalization never rewrites region DNS labels",()=>{
+ const at=(host:string)=>new URL("postgresql://test:ci@"+host+"/neondb?sslmode=require");
+ it("only canonicalizes first endpoint label",()=>{
+  expect(sameP6NeonDatabaseEndpoint(at("ep-a-pooler.us-east-2.aws.neon.tech"),at("ep-a.us-east-2.aws.neon.tech"))).toBe(true);
+  expect(sameP6NeonDatabaseEndpoint(at("ep-a.us-east-2-pooler.aws.neon.tech"),at("ep-a.us-east-2.aws.neon.tech"))).toBe(false);
+  expect(sameP6NeonDatabaseEndpoint(at("ep-a-pooler-pooler.us-east-2.aws.neon.tech"),at("ep-a.us-east-2.aws.neon.tech"))).toBe(false);
+ });
+});

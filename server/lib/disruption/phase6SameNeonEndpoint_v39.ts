@@ -9,10 +9,12 @@ export function sameP6NeonDatabaseEndpoint(a:URL,b:URL):boolean{
     (u.port!==""&&u.port!=="5432"))return null;
   const host=u.hostname.toLowerCase();
   if(!/^ep-[a-z0-9-]+(?:\.[a-z0-9-]+)*\.neon\.tech$/.test(host))return null;
-  const canonical=host.replace(/-pooler(?=\.)/,"");
-  // No multi-suffix alias or cross-region/branch equivalence.
-  if(/-pooler(?=\.)/.test(canonical))return null;
-  return canonical;
+  // Neon appends "-pooler" to the endpoint label ONLY. Region and
+  // DNS routing labels are part of the exact endpoint identity.
+  const [label,...suffix]=host.split(".");
+  const canonicalLabel=label.replace(/-pooler$/,"");
+  if(canonicalLabel.endsWith("-pooler")||canonicalLabel.length<=3)return null;
+  return [canonicalLabel,...suffix].join(".");
  };
  const x=endpoint(a),y=endpoint(b);
  return x!==null&&x===y;
