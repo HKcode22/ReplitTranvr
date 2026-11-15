@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6RealPrivateSourceParentReadOnly,
  runP6RealPrivateSourceParentReadOnly}
@@ -211,5 +211,60 @@ describe("original 10-minute SOURCE parent real private NO-GO gate",()=>{
    readHistory:async()=>{throw Error("PRIVATE_SOURCE_SQL_OR_GH_TOKEN_SECRET");}
   })).rejects.toThrow(
    "AUTHENTICATED_PRIVATE_SOURCE_QUEUE_OR_HISTORY_HOLD_REDACTED");
+ });
+});
+
+describe("stored parent rolling days (no external calls)",()=>{
+ function stored(){
+  const f=fixture();
+  const {publicKey}=generateKeyPairSync("ed25519");
+  const pem=publicKey.export({format:"pem",type:"spki"}).toString();
+  const fp=createHash("sha256").update(publicKey.export({format:"der",type:"spki"})).digest("hex");
+  Object.assign(f.env,{
+   P6_PRIVATE_SOURCE_PARENT_RO_DAY_REVIEWS_BASE64:"",
+   P6_PRIVATE_SOURCE_REVIEW_MODE:"stored",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",
+   P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:b64({independentStudyTrustPinsApproved:true,
+    expectedReaderSessionLogin:f.pins.expectedReaderSessionLogin,reviewedCodeSha:main,
+    manifestSha256:manifest,calendarSha256:H("calendar"),releaseSha256:release,
+    rightsSha256:rights,dayReviewerPublicKeyPem:pem,dayReviewerFingerprintSha256:fp,
+    queryReviewerPublicKeyPem:pem,queryReviewerFingerprintSha256:fp})
+  });
+  f.day.redactedSummary.indexRevision=1;
+  return f;
+ }
+ it("selects from original due queue, admits exact revision and opaque child inputs",async()=>{
+  const f=stored(),calls:string[]=[];
+  expect(admitP6RealPrivateSourceParentReadOnly(f.env).reviewMode).toBe("stored");
+  const out=await runP6RealPrivateSourceParentReadOnly(f.env,{
+   readSource:async()=>f.scan,
+   readDays:async (_ctx:any,selection:any)=>{
+    expect(selection.dayIndices).toEqual([1]);calls.push("DUE_DAY");
+    return [f.day];
+   },
+   readHistory:async()=>f.history
+  });
+  expect(calls).toEqual(["DUE_DAY"]);
+  expect(out.candidateCount).toBe(1);
+  expect(out.privateStoredChildInputProposals[0]).toMatchObject({
+   private_transport:"stored",signed_registry_file:"PRIVATE_STORED",
+   frozen_release_file:"PRIVATE_STORED",day_index_revision:"1",
+   day_index_sha256:f.pins.expectedIndexSha256,query_digest:digest});
+  expect(JSON.stringify(out)).not.toContain(path);
+  expect(JSON.stringify(out)).not.toContain(digest);
+  expect(out.githubDispatches).toBe(0);
+ });
+ it("idle does not read historical packets, and mode mixing fails",async()=>{
+  const f=stored();
+  const out=await runP6RealPrivateSourceParentReadOnly(f.env,{
+   readSource:async()=>({...f.scan,observedQueries:0,candidates:[]}),
+   readDays:async()=>{throw Error("NO_DAY_READ_EXPECTED");},
+   readHistory:async()=>{throw Error("NO_HISTORY_EXPECTED");}
+  });
+  expect(out.status).toBe("NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH");
+  expect(out.githubDispatches).toBe(0);
+  expect(()=>admitP6RealPrivateSourceParentReadOnly({...f.env,
+   P6_PRIVATE_SOURCE_PARENT_RO_DAY_REVIEWS_BASE64:b64(f.reviews)})).toThrow(/MUST_NOT_MIX/);
+  expect(()=>admitP6RealPrivateSourceParentReadOnly({...f.env,
+   P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"0"})).toThrow(/APPROVAL_REQUIRED/);
  });
 });

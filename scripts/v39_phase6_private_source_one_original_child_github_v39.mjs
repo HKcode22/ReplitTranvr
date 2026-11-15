@@ -18,6 +18,10 @@
  * MAY do ONE paid GET only when all its own gates independently pass.
  */
 import pg from "pg";
+import {createHash} from "node:crypto";
+import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
+import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
+ from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
 import {
@@ -81,7 +85,9 @@ function safeReaderUrl(s,expectedLogin){
  return s;
 }
 export function admitP6PrivateSourceExistingChildRuntime(env){
- if(!env||
+ const stored=env?.P6_PRIVATE_SOURCE_TRANSPORT_INPUT==="stored";
+ if(!env||(!stored&&env.P6_PRIVATE_SOURCE_TRANSPORT_INPUT!==undefined&&
+    env.P6_PRIVATE_SOURCE_TRANSPORT_INPUT!=="true")||
     env.P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT!=="1"||
     env.GITHUB_ACTIONS!=="true"||
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
@@ -108,13 +114,36 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
     !env.V39_P5_SOURCE_DATABASE_URL||
     !SHA.test(env.P6_PRIVATE_SOURCE_ROUTING_INTENT_SHA256??"")||
     !SHA.test(env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST??"")||
-    !SHA.test(env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256??"")||
-    !ROUTE.test(env.P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH??"")||
-    !PACK.test(env.P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH??"")||
+    (stored?(
+     env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256||
+     env.P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH!==P6_STORED_PRIVATE_PATH_PLACEHOLDER||
+     env.P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH!==P6_STORED_PRIVATE_PATH_PLACEHOLDER||
+     !/^(?:[1-9][0-9]{0,3})$/.test(env.P6_PRIVATE_DAY_INDEX_REVISION??"")||
+     Number(env.P6_PRIVATE_DAY_INDEX_REVISION)>1024||
+     !SHA.test(env.P6_PRIVATE_DAY_INDEX_SHA256??"")):(
+     !SHA.test(env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256??"")||
+     !ROUTE.test(env.P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH??"")||
+     !PACK.test(env.P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH??"")))||
     !/^(?:[1-9]|[12][0-9]|3[01])$/.test(
       env.P5_SOURCE_BATCH_RUN_DAY_INDEX??""))
   fail("UNRELEASED_PAID_SOURCE_OR_MISSING_EXACT_PRIVATE_MAIN_INPUT");
 
+ if(stored){
+  if(["P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64","P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64",
+    "P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64","P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64",
+    "P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64","P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64"]
+    .some(k=>env[k]))fail("STORED_AND_STATIC_REVIEW_MUST_NOT_MIX");
+  const trust=readP6StableSourceTrust(env);
+  const url=safeReaderUrl(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin);
+  return Object.freeze({stored:true,trust,url,
+   runDayIndex:Number(env.P5_SOURCE_BATCH_RUN_DAY_INDEX),
+   indexRevision:Number(env.P6_PRIVATE_DAY_INDEX_REVISION),
+   indexSha256:env.P6_PRIVATE_DAY_INDEX_SHA256,
+   routingIntentSha256:env.P6_PRIVATE_SOURCE_ROUTING_INTENT_SHA256,
+   queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST});
+ }
+ if(env.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64||env.P6_PRIVATE_DAY_INDEX_REVISION||
+    env.P6_PRIVATE_DAY_INDEX_SHA256)fail("STORED_AND_STATIC_REVIEW_MUST_NOT_MIX");
  const indexPins=objectB64(
   env.P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64,15000,"INDEX_PINS");
  const indexWire=objectB64(
@@ -236,7 +265,8 @@ export function isolatedP6OriginalOneGetChildEnv(parentEnv){
 export async function runP6OnePrivateSourceOriginalGHChild(
  env,options={}
 ){
- const gate=admitP6PrivateSourceExistingChildRuntime(env);
+ let gate=admitP6PrivateSourceExistingChildRuntime(env);
+ let admittedEnv=env;
  const open=options.openRestrictedReader??(async url=>{
   const c=new pg.Client({
    connectionString:url,connectionTimeoutMillis:7000,
@@ -248,17 +278,69 @@ export async function runP6OnePrivateSourceOriginalGHChild(
  const hydrate=options.hydrateIndex??
   hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly;
  const read=options.readSourceQuery??readP6PrivateSourcePostOnce;
+ const readStored=options.readStoredReview??readP6StoredPrivateReviewOnce;
+ const scopeStored={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
  let c,index,packet;
  try{
   c=await open(gate.url);
   await c.query("SET ROLE phase6_private_frozen_reader_v39");
-  index=await hydrate({
-   client:c,pins:gate.indexPins,wire:gate.indexWire,
-   publicKeyPem:gate.indexPem,
-   scope:{privateDayRegistryReadOnlyApproved:true,
-    existingPaidDispatchApproved:false}
-  });
-  packet=await read(c,gate.packetPins,gate.packetWire,gate.packetPem);
+  if(gate.stored){
+   const exact=await readStored({client:c,trust:gate.trust,scope:scopeStored,
+    selector:{kind:"EXACT_DAY",runDayIndex:gate.runDayIndex,
+     indexRevision:gate.indexRevision,indexSha256:gate.indexSha256}});
+   if(exact.pins.expectedIndexRevision!==gate.indexRevision||
+      exact.pins.expectedIndexSha256!==gate.indexSha256||
+      exact.pins.expectedRunDayIndex!==gate.runDayIndex)
+    fail("EXACT_STORED_DAY_SELECTOR_DRIFT");
+   index=await hydrate({client:c,pins:exact.pins,wire:exact.wire,
+    publicKeyPem:exact.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,
+     existingPaidDispatchApproved:false}});
+   const routes=index.privateRoutingCandidates?.filter(x=>x.lane==="SOURCE"&&
+    x.runDayIndex===gate.runDayIndex&&x.routingIntentSha256===gate.routingIntentSha256);
+   if(routes?.length!==1)fail("NO_EXACT_STORED_SIGNED_SOURCE_ROUTE");
+   const route=routes[0];
+   if(!ROUTE.test(route.signedFrozenPath??"")||!SHA.test(route.signedFrozenSha256??"")||
+      !Number.isSafeInteger(route.shardIndex)||route.shardIndex<1||
+      typeof index.getFrozen!=="function")fail("INVALID_STORED_SOURCE_ROUTE");
+   const bytes=index.getFrozen(route.signedFrozenPath);
+   if(!Buffer.isBuffer(bytes)||bytes.length<100||bytes.length>100000||
+      createHash("sha256").update(bytes).digest("hex")!==route.signedFrozenSha256)
+    fail("STORED_SOURCE_REGISTRY_BYTES_DRIFT");
+   const registry=JSON.parse(bytes.toString("utf8"));
+   if(registry?.schema!=="v39.phase5.signed-per-day-source-batch-readonly.v1"||
+      registry.runDayIndex!==gate.runDayIndex||
+      registry.manifestSha256!==gate.trust.manifestSha256||
+      !Array.isArray(registry.entries)||registry.entries.length<1||registry.entries.length>96)
+    fail("INVALID_STORED_SOURCE_REGISTRY");
+   const hits=registry.entries.filter(e=>e?.expectedQueryDigestSha256===gate.queryDigestSha256);
+   if(hits.length!==1||!PACK.test(hits[0].filePath??"")||
+      !SHA.test(hits[0].expectedPacketSha256??""))
+    fail("NO_EXACT_STORED_SOURCE_QUERY");
+   const entry=hits[0];
+   const q=await readStored({client:c,trust:gate.trust,scope:scopeStored,
+    selector:{kind:"SOURCE_QUERY",runDayIndex:gate.runDayIndex,
+     shardIndex:route.shardIndex,logicalPath:entry.filePath,
+     contentSha256:entry.expectedPacketSha256}});
+   if(q.pins.expectedContentSha256!==entry.expectedPacketSha256||
+      q.pins.expectedLogicalPath!==entry.filePath||
+      q.pins.expectedRunDayIndex!==gate.runDayIndex||
+      q.pins.expectedShardIndex!==route.shardIndex)
+    fail("EXACT_STORED_QUERY_SELECTOR_DRIFT");
+   packet=await read(c,q.pins,q.wire,q.publicKeyPem);
+   gate={...gate,indexPins:exact.pins,expectedRegistryPath:route.signedFrozenPath,
+    expectedQueryPath:entry.filePath};
+   // Local child-process-only pin, obtained from verified signed index bytes.
+   // Never change a shared GitHub secret, repository setting or process.env.
+   admittedEnv={...env,V39_P5_SOURCE_BATCH_REGISTRY_SHA256:route.signedFrozenSha256};
+  }else{
+   index=await hydrate({
+    client:c,pins:gate.indexPins,wire:gate.indexWire,
+    publicKeyPem:gate.indexPem,
+    scope:{privateDayRegistryReadOnlyApproved:true,
+     existingPaidDispatchApproved:false}
+   });
+   packet=await read(c,gate.packetPins,gate.packetWire,gate.packetPem);
+  }
  }catch{
   fail("AUTHENTICATED_PRIVATE_SOURCE_AND_INDEX_READER_HOLD_REDACTED");
  }finally{
@@ -281,7 +363,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
       x?.runDayIndex===gate.indexPins.expectedRunDayIndex&&
       x?.routingIntentSha256===gate.routingIntentSha256&&
       x?.signedFrozenPath===gate.expectedRegistryPath&&
-      x?.signedFrozenSha256===env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).length!==1||
+      x?.signedFrozenSha256===admittedEnv.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).length!==1||
     packet.privateLogicalPath!==gate.expectedQueryPath)
   fail("UNBOUND_PRIVATE_ROUTE_REGISTRY_OR_QUERY_PATH");
 
@@ -294,7 +376,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
    ],{
     shell:false,stdio:["ignore","pipe","pipe"],
     maxBuffer:10*1024*1024,timeout:145*60000,
-    env:isolatedP6OriginalOneGetChildEnv(env)
+    env:isolatedP6OriginalOneGetChildEnv(admittedEnv)
    });
    if(child.error||child.signal||child.status!==0)
     fail("ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
@@ -308,7 +390,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
    sourcePacketReceipt:packet,
    expectedRoutingIntentSha256:gate.routingIntentSha256,
    expectedQueryDigestSha256:gate.queryDigestSha256,
-   env,repoRoot:resolve(process.cwd()),
+   env:admittedEnv,repoRoot:resolve(process.cwd()),
    runPreviouslyAdmittedExistingChild:runOriginal
   });
  }catch{

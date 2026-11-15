@@ -19,15 +19,15 @@ const getMode=(block:string)=>{
  const match=block.match(/^ {4}if: \$\{\{ ([^\n]+) \}\}$/m);
  if(!match)return null;
  const cond=match[1];
- const mode=cond.match(/inputs\.private_transport == '(true|false)'/g);
- if(!mode||mode.length!==1)return null;
- return {condition:cond,mode:mode[0].endsWith("'true'")?"true":"false"};
+ const modes=[...cond.matchAll(/inputs\.private_transport == '(true|false|stored)'/g)].map(x=>x[1]);
+ if(!modes.length)return null;
+ return {condition:cond,modes};
 };
 describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
  it("requires exact false for checkout-local, exact true for protected private",()=>{
   const a=getMode(job(LEGACY)),b=getMode(job(PRIVATE));
-  expect(a?.mode).toBe("false");
-  expect(b?.mode).toBe("true");
+  expect(a?.modes).toEqual(["false"]);
+  expect(b?.modes).toEqual(["true","stored"]);
   for(const x of [a,b]){
    expect(x?.condition).toContain("github.ref == 'refs/heads/main'");
    expect(x?.condition).toContain("github.event_name == 'workflow_dispatch'");
@@ -35,10 +35,10 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
     "inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'");
    expect(x?.condition).not.toMatch(/private_transport\s*!=/);
   }
-  for(const transport of ["false","true","", "missing","unexpected"]){
-   const selected=[a,b].filter(x=>x?.mode===transport);
+  for(const transport of ["false","true","stored","", "missing","unexpected"]){
+   const selected=[a,b].filter(x=>x?.modes.includes(transport));
    expect(selected.length).toBe(
-    transport==="false"||transport==="true"?1:0);
+    ["false","true","stored"].includes(transport)?1:0);
   }
  });
  it("rechecks exact mode BEFORE setup-node or any paid worker",()=>{
