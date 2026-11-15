@@ -16,7 +16,7 @@ const H=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const REG=/^data-collection\/phase5\/frozen\/t24r_[A-Za-z0-9_-]{8,100}\.json$/;
 const PACK=/^data-collection\/phase5\/frozen\/t24p_[A-Za-z0-9_-]{8,100}\.json$/;
 const SRC=/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$/;
-const ID=/^leg:[a-zA-Z0-9:|._-]{5,196}$/;
+const ID=/^[A-Za-z0-9_.:|-]{5,200}$/;
 const schema="v39.phase6.native-t24-private-registry.v1",reviewSchema="v39.phase6.native-t24-registry-ed25519.v1";
 const AUD="HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY_ONLY";
 const hold=s=>{throw Error("HOLD_P6_PRIVATE_T24_REGISTRY_"+s);};
