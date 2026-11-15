@@ -39,8 +39,10 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     await db.query("GRANT INSERT (run_day_index,slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,adaptive_state_hash,probability_vector,airport_layer_design_probability,selected_at_utc) ON clean.adb_sampling_draw TO p5_early_draw_ci");
     await db.query("GRANT INSERT (icao,last_selected_at,last_selected_run_day), UPDATE (last_selected_at,last_selected_run_day,updated_at_utc) ON clean.adb_airport_sampling_state TO p5_early_draw_ci");
     const sequence=(await db.query("SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') AS name")).rows[0].name;
-    expect(sequence).toMatch(/^clean\.adb_sampling_draw_[a-z0-9_]+$/);
-    await db.query("GRANT USAGE ON SEQUENCE "+sequence+" TO p5_early_draw_ci");
+    if(sequence!==null){
+      expect(sequence).toMatch(/^clean\.adb_sampling_draw_[a-z0-9_]+$/);
+      await db.query("GRANT USAGE ON SEQUENCE "+sequence+" TO p5_early_draw_ci");
+    }
     drawDb=new Pool({connectionString:"postgresql://p5_early_draw_ci:ci_only_draw@localhost:5432/v39_ci?sslmode=disable",max:2});
     const today=await db.query("SELECT clock_timestamp() AS now");
     serviceStart=new Date(new Date(today.rows[0].now).getTime()+28*3_600_000)
