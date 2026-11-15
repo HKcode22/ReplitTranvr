@@ -1,6 +1,6 @@
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -218,5 +218,73 @@ describe("existing native packet completion from selected independently reviewed
   expect(()=>completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item(),f.item()])).toThrow("REVIEW_BATCH_UNSELECTED_DUPLICATE_OR_POLICY_DRIFT");
   f.handoff.privateSourceRegistryBytes[0]=0;
   expect(()=>completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item()])).toThrow("REVIEW_BATCH_SCOPE_OR_SOURCE_DRIFT");
+ });
+});
+
+
+import {verifyP5ExternalEd25519ReviewOfLaterShard} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
+function delegatedNativeFixture(){
+ const f=completedBatchFixture(),d=f.handoff.privateOriginalDossier,s=f.handoff.privateReviewEntries[0].source;
+ const key=generateKeyPairSync("ed25519"),fp=h(key.publicKey.export({type:"spki",format:"der"}));
+ const trust={independentStudyTrustPinsApproved:true,reviewedCodeSha:d.reviewedMainCodeSha,manifestSha256:d.manifestSha256,
+  releaseSha256:s.expectedReviewedReleaseSha256,rightsSha256:s.expectedReviewedSourceRightsSha256,calendarSha256:H("d"),
+  dayReviewerFingerprintSha256:H("0"),queryReviewerFingerprintSha256:H("1")};
+ const receipt=H("5"),observations=[{flightInstanceId:s.flightInstanceId,field:"reported_pre_departure_status",value:"Expected",
+  source:"AERODATABOX_FIDS",sourceRecordId:s.expectedSourceResponseSha256,observedAtUtc:s.sourceMemberAvailableAtUtc,
+  availableAtUtc:s.sourceMemberAvailableAtUtc,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"}];
+ const bundle={schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:s.flightInstanceId,
+  populationQueryId:s.expectedSourcePopulationQueryId,originalResponseSha256:s.expectedSourceResponseSha256,
+  observationsSha256:h(JSON.stringify(observations)),externalSourceAndContentsReviewReceiptSha256:receipt,
+  fields:["reported_pre_departure_status"],observations};
+ const policy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,
+  approvedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,releaseSha256:trust.releaseSha256,
+  rightsSha256:trust.rightsSha256,calendarSha256:trust.calendarSha256,providerContractSha256:s.expectedProviderContractSha256,
+  nativePreFeatureReview:{approved:true,rightsSha256:trust.rightsSha256,externalContentUseReviewSha256:receipt},
+  nativeLaterReview:{approved:true,laterReviewerFingerprintSha256:fp,frameSha256:H("8"),configSha256:H("9"),builderSha256:H("a"),
+   builderFrozenAtUtc:"2027-02-10T04:00:00.000Z",runAndRetentionEvidenceSha256:H("5"),selectedTConfig:f.review.selectedTConfig,
+   standaloneNoT24ProtocolSha256:H("e"),validFromUtc:"2027-02-10T00:00:00.000Z",validUntilUtc:"2027-02-11T00:00:00.000Z"}};
+ const authorityFor=(p:any=policy)=>{const policyBytes=Buffer.from(JSON.stringify(p));return{trust,policyBytes,expectedPolicySha256:h(policyBytes),
+  independentDelegatedNativeReviewApproved:true,noProviderCredentialsInReviewer:true,laterReviewerKey:key.privateKey};};
+ const feature=(matched=true)=>Object.defineProperty({status:"EXACT_BOUND_ORIGINAL_NATIVE_FEATURE_BATCH_NOT_SIGNED",runDayIndex:d.runDayIndex,
+  horizon:d.horizon,observedDbClockUtc:"2027-02-10T04:41:00.000Z",providerCalls:0,dbWrites:0,phase6PaidGo:false,matchedCount:matched?1:0},
+  "privateDecisions",{value:[{flightInstanceId:s.flightInstanceId,status:matched?"MATCHED_NATIVE_ORIGINAL":"CENSORED_NATIVE_ORIGINAL_MEMBER",
+   compiled:matched?{bundle,sourceBodyAndCanonicalEnvelopeIntegrityVerified:true,sameOriginalNativeOperatingLegBoundOnly:true,
+    physicalGateOutCertified:false,sourceRightsIndependentlyCertifiedByThisFunction:false,providerCalls:0,databaseWrites:0}:undefined}]});
+ const evidence=(status="T24_ABSENT_AFTER_CUTOFF_SEPARATE_MISSINGNESS_REVIEW_REQUIRED")=>Object.defineProperty({
+  status:"ACTUAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO",runDayIndex:d.runDayIndex,expectedDossierSha256:f.scope.expectedDossierSha256,
+  observedDbClockUtc:"2027-02-10T04:41:30.000Z",candidateCount:1,reviewedPacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  "privateDecisions",{value:[{flightInstanceId:s.flightInstanceId,horizon:s.horizon,status,receiptSha256:null}]});
+ const args={handoff:f.handoff,featureReview:feature(),evidence:evidence(),authority:authorityFor(),
+  scope:{...f.scope,reviewValidUntilUtc:"2027-02-10T08:00:00.000Z",retentionNotAfterUtc:"2027-02-10T12:00:00.000Z"}};
+ return{args,authorityFor,policy,feature,evidence,bundle};
+}
+describe("protected delegated native later review reuses exact original packet and shard signing",()=>{
+ it("signs existing later registry only for the source-matched flight with approved genuine missing T24, including its feature bundle",()=>{
+  const f=delegatedNativeFixture(),x=signP6DelegatedNativeLaterReviewPage(f.args);
+  expect(x).toMatchObject({pageCandidateCount:1,reviewedCount:1,signatureIssued:true,humanReviewPerformed:false,
+   providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  const plan=x.privatePlan!,wire=x.privateWire!,pins=x.privateReviewerPins!;
+  const pkt=JSON.parse(plan.proposedPacketFiles[0].bytes.toString("utf8"));
+  expect(pkt.prePermit.reviewedSupplementalFeatureBundle).toEqual(f.bundle);
+  expect(pkt.prePermit.reviewedStandaloneLaterNoT24.missingT24Class).toBe("HONEST_T24_UNOBSERVED_NOT_BACKFILLED");
+  expect(verifyP5ExternalEd25519ReviewOfLaterShard(plan,wire,x.privateReviewerPublicKeyPem!,pins,f.args.scope.observedDbClockUtc))
+   .toMatchObject({signatureCryptographicallyVerified:true,privatePacketOrRegistryFilesPublished:0,phase6PaidGoGranted:false});
+  expect(JSON.stringify(x)).not.toMatch(/flight_new|observations|privatePlan|signatureBase64/);
+ });
+ it("does not sign an unresolved/invalid T24, missing source-native record, or unapproved no-T24 tier",()=>{
+  const f=delegatedNativeFixture();
+  for(const evidence of [f.evidence("T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED"),f.evidence("T24_EXISTS_PRIVATE_RECEIPT_UNAVAILABLE")])
+   expect(signP6DelegatedNativeLaterReviewPage({...f.args,evidence})).toMatchObject({signatureIssued:false,unresolvedT24:1});
+  expect(signP6DelegatedNativeLaterReviewPage({...f.args,featureReview:f.feature(false)})).toMatchObject({signatureIssued:false,missingNativeOriginal:1});
+  expect(signP6DelegatedNativeLaterReviewPage({...f.args,authority:f.authorityFor({...f.policy,
+   nativeLaterReview:{...f.policy.nativeLaterReview,standaloneNoT24ProtocolSha256:null}})})).toMatchObject({signatureIssued:false,unresolvedT24:1});
+ });
+ it("rejects unpinned policy and mismatched separate key, and does not review late candidates",()=>{
+  const f=delegatedNativeFixture();
+  expect(()=>signP6DelegatedNativeLaterReviewPage({...f.args,authority:{...f.args.authority,expectedPolicySha256:H("9")}})).toThrow("NO_EXACT_POLICY");
+  expect(()=>signP6DelegatedNativeLaterReviewPage({...f.args,authority:{...f.args.authority,
+   laterReviewerKey:generateKeyPairSync("ed25519").privateKey}})).toThrow("WRONG_KEY");
+  expect(signP6DelegatedNativeLaterReviewPage({...f.args,scope:{...f.args.scope,observedDbClockUtc:"2027-02-10T04:50:00.000Z"}}))
+   .toMatchObject({signatureIssued:false,lateOrRetention:1});
  });
 });
