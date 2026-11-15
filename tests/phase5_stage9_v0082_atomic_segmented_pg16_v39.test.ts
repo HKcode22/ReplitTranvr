@@ -16,6 +16,7 @@ import {planP5Stage8FromCommittedDayReadback,
  from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {prepareP5ReviewedSourceDayFromSavedDraw}
  from "../server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39";
+import {planP6StoredSourceDraftShards} from "../server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39";
 import {draftP5OneGetFromActualPreparedSource}
  from "../server/lib/disruption/phase5PreparedQueryToOneGetDraft_v39";
 import {P5_SOURCE_UPCOMING_METADATA_SQL,
@@ -302,6 +303,25 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    expectedCandidateGridSha256:saved.selectedDayCandidateGrid.sourceCandidateDigestSha256,
    expectedManifestSha256:manifest
   };
+  const sharded=planP6StoredSourceDraftShards(saved,planned,expected);
+  expect(sharded.queryCount).toBe(96);
+  expect(sharded.shardCount).toBeGreaterThan(1);
+  expect(sharded.providerCalls).toBe(0);
+  expect(sharded.phase6PaidGo).toBe(false);
+  expect(JSON.stringify(sharded)).not.toContain("unsignedDraft");
+  const all=sharded.privateDraftShards.flatMap(s=>s.entries);
+  expect(new Set(all.map(e=>e.queryDigestSha256))).toEqual(new Set(planned.queries.map(q=>q.query_digest)));
+  for(const s of sharded.privateDraftShards){
+   expect(s.entries.length).toBeLessThanOrEqual(96);
+   expect(Date.parse(s.hardLatestUtc)-Date.parse(s.earliestProposedNotBeforeUtc)).toBeLessThanOrEqual(180*60_000);
+   for(const e of s.entries){
+    expect(e.unsignedDraft.unsignedQueryEnvelope.plan.githubOnlyOwnerApproved).toBe(false);
+    expect(e.unsignedDraft.unsignedQueryEnvelope.plan.independentlyApprovedSourceAndRetention).toBe(false);
+   }
+  }
+  const changed={...planned,queries:planned.queries.map(x=>({...x}))};
+  changed.queries[0].hard_latest_dispatch_utc=serviceStart;
+  expect(()=>planP6StoredSourceDraftShards(saved,changed,expected)).toThrow("ALTERED_OR_INCOMPLETE_REVIEWED_PROPOSAL");
   for(const category of ["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS"] as const){
    const pin=planned.sourcePartitionPins!.find(x=>x.restCategory===category)!;
    const out=draftP5OneGetFromActualPreparedSource(saved,planned,{
