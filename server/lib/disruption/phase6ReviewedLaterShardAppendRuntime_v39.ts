@@ -17,7 +17,7 @@ import {validateP6DayEpochIndexBytes,publishP6DayEpochIndexRevisionOnce,verifyP6
 const H=/^[a-f0-9]{64}$/;
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const hold=(s:string):never=>{throw Error("HOLD_P6_REVIEWED_LATER_APPEND_"+s);};
-const utc=(x:string)=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_EXACT_UTC");return Date.parse(x);};
+const utc=(x:unknown)=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_EXACT_UTC");return Date.parse(x as string);};
 const iso=(n:number)=>new Date(n).toISOString();
 type Trust={independentStudyTrustPinsApproved:true;reviewedCodeSha:string;manifestSha256:string;calendarSha256:string;releaseSha256:string;rightsSha256:string;
  expectedReaderSessionLogin:string;dayReviewerFingerprintSha256:string;dayReviewerPublicKeyPem:string;queryReviewerFingerprintSha256:string;queryReviewerPublicKeyPem:string};
@@ -56,7 +56,7 @@ function checkScope(x:Input){
  * SHA as proof of independent signature. */
 export function proposeP6LaterDayAppendBytes(priorBytes:Buffer,prior:Day,source:Entry,
  registry:P5SignedLaterPreDayRegistry,registryPath:string,registrySha:string,reviewEvidenceSha:string,
- observedDbClockUtc:string,priorRetentionUtc:string,newRetentionUtc:string,reviewValidUntilUtc:string){
+ observedDbClockUtc:string,priorRetentionUtc:unknown,newRetentionUtc:string,reviewValidUntilUtc:string){
  const now=utc(observedDbClockUtc),retention=Math.min(utc(priorRetentionUtc),utc(newRetentionUtc));
  if(!Buffer.isBuffer(priorBytes)||priorBytes.toString("utf8")!==JSON.stringify(prior)||
     prior.schema!=="v39.phase6.run-day-scoped-append-only-index.v1"||prior.revision<1||prior.revision>=1024||
@@ -186,7 +186,7 @@ export async function commitP6ExternallyReviewedLaterAppend(x:Input,approved:{
   expectedExternalReviewEvidenceSha256:approved.expectedDayReviewEvidenceSha256,
   expectedReviewerPublicKeyFingerprintSha256:t.dayReviewerFingerprintSha256};
  const signed=verifyP6DayEpochExternalReview({wire:approved.wire,publicKeyPem:t.dayReviewerPublicKeyPem,pins});
- const next=validateP6DayEpochIndexBytes(approved.indexBytes,signed.review) as Day;
+ const next=validateP6DayEpochIndexBytes(approved.indexBytes,signed.review) as unknown as Day;
  verifyP5ExternalEd25519ReviewOfLaterShard(p,x.wire,x.reviewerPublicKeyPem,x.reviewerPins,now);
  const got=await readback(x,before.source);
  if(before.already){
