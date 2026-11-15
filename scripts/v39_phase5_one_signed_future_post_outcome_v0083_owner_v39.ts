@@ -119,7 +119,7 @@ export function admitP5SignedFuturePostGitHub(
 }
 export async function runP5SignedFuturePost(
  env:NodeJS.ProcessEnv,bytes:Buffer,packet:P5SignedFuturePostPacket,
- file:string
+ file:string,boundSourceQueryDigests?:readonly string[]
 ){
  const p=admitP5SignedFuturePostGitHub(env,bytes,packet,file);
  const reservePool=new Pool({
@@ -155,7 +155,7 @@ export async function runP5SignedFuturePost(
  try{
   // All PRE checks use actual same-flight SOURCE-role PostgreSQL records.
   // No source body, flight record or protected TEST outcomes are printed.
-  const pre=await auditP5FuturePostActualPriorPre(source,p);
+  const pre=await auditP5FuturePostActualPriorPre(source,p,boundSourceQueryDigests);
   // Independent REST-review role stages exactly this signed GitHub run ID;
   // the source paid reservation comes only from a separate REST role.
   await prepareP5FuturePostV0083ReviewedCall(reviewer,p);
