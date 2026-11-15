@@ -4,6 +4,8 @@ import {join} from "node:path";
 import {compileP6ActualCandidateExport,writeP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
+import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
+import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
 import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 const seedBytes=readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json");
@@ -143,6 +145,36 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.unsignedStageInput.calendarDays.filter(d=>d.pairAirportSet===null)).toHaveLength(21);
   expect(x.independentReleaseStillRequired).toBe(true);
   expect(x.phase6PaidGo).toBe(false);
+ });
+ it("admits one independently pinned inert stage using existing role names; never shares both credentials or implies GO",()=>{
+  const a=assembleP6ActualFirstSeedReleaseCandidate(reviewFixture()),input=a.unsignedStageInput;
+  const raw=JSON.stringify(input);
+  // Ensure the actual original-seed metadata packet fits the protected
+  // GitHub secret size; all keys/hashes/approvals here are CI fixtures.
+  expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(48000);
+  const c=buildP5V0082UnknownAirportSevenCostOnlyDraft({schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",
+   slotBudgetInput:input.slotBudgetInput,expectedReviewerSlotEnvelopeSha256:input.expectedSignedSlotEnvelopeSha256});
+  const url=(role:string)=>"postgresql://"+role+":CI_ONLY@ep-ci.neon.tech/neondb?sslmode=require";
+  const stageRole="phase5_b0062_prelaunch_stage_prod20261113",costRole="phase5_fids_budget_freeze_prod20261113";
+  const stageKey="P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL",costKey="P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL";
+  const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",
+   GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:input.codeSha40,V39_P5_APPROVED_CODE_SHA:input.codeSha40,
+   P6_INERT_STAGE_MODE:"calendar",P6_INERT_STAGE_CONFIRM:"STAGE_EXACT_31_DAY_CALENDAR_DISABLED_AUTH_NO_PROVIDER",
+   P6_INERT_CALENDAR_REVIEW_APPROVED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0",
+   P6_INERT_STAGE_INPUT_JSON:raw,P6_INERT_STAGE_INPUT_SHA256:hash(Buffer.from(raw)),V39_P5_MANIFEST_SHA256:input.manifestSha256,
+   [stageKey]:url(stageRole)};
+  const x=admitP6InertReleaseStage(env);
+  expect(x).toMatchObject({mode:"calendar",role:stageRole,phase6PaidGo:false});
+  expect(JSON.stringify(x)).not.toContain("CI_ONLY");expect(JSON.stringify(x)).not.toContain(raw);
+  for(const bad of [{[costKey]:url(costRole)},{P6_INERT_STAGE_INPUT_SHA256:"0".repeat(64)},{GITHUB_RUN_ATTEMPT:"2"},
+   {V39_PHASE6_PROCESS_ARMED:"1"},{P6_INERT_CALENDAR_REVIEW_APPROVED:"0"},{AERODATABOX_API_KEY:"forbidden"},{DATABASE_URL:"forbidden"}])
+   expect(()=>admitP6InertReleaseStage({...env,...bad})).toThrow();
+  const cost={...env,[stageKey]:"",[costKey]:url(costRole),P6_INERT_STAGE_MODE:"cost",
+   P6_INERT_STAGE_CONFIRM:"STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER",V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
+   P6_INERT_COST_REVIEW_APPROVED:"1",P6_INERT_COST_ENVELOPE_SHA256:c.costOnlyCategoryDraftSha256};
+  expect(admitP6InertReleaseStage(cost)).toMatchObject({mode:"cost",role:costRole,phase6PaidGo:false});
+  expect(()=>admitP6InertReleaseStage({...cost,V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"})).toThrow("NO_DISTINCT_COST_AND_RIGHTS_APPROVAL");
+  expect(()=>admitP6InertReleaseStage({...cost,P6_INERT_COST_ENVELOPE_SHA256:"0".repeat(64)})).toThrow("MISSING_DISTINCT_AUTHENTIC");
  });
  it("exports original reviewed-input candidates with exact byte pins, no overwrite and no release authority",()=>{
   const f=reviewFixture(),externalBytes=Buffer.from(JSON.stringify(f.external,null,2)),timingBytes=Buffer.from(JSON.stringify(f.timing));
