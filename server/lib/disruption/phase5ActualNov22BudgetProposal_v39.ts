@@ -116,11 +116,58 @@ export function proposeP5ActualNov22Budget(draft:Draft){
    const coverage=summarizeP6CandidateLeadCoverage(timingTemplates,timing,additionalAuditDelaySeconds);
    return {timing,additionalAuditDelaySeconds,coverage};
   }));
+ // Physical follow-up design diagnostic, NOT an approved runtime policy.
+ // Group the exact existing refresh templates across all three horizons.
+ // Distinct slots can subsequently resolve to the same physical airport;
+ // treating them as distinct here makes the cost an upper bound.
+ const postGroups=new Map<string,typeof timingTemplates>();
+ for(const t of timingTemplates){
+  const k=[t.runDayIndex,t.slot,t.serviceWindowStartUtc,t.serviceWindowEndUtc].join("|");
+  const group=postGroups.get(k)??[];group.push(t);postGroups.set(k,group);
+ }
+ if(postGroups.size!==144)hold("ACTUAL_POST_PARTITION_SLOT_COUNT_DRIFT");
+ const postScenarios=[30,60,120,240,720,960,1440].flatMap(followupMinutes=>[10,20,30].map(dispatchWindowMinutes=>{
+  const byHorizon=horizons.map(([horizon])=>({horizon,totalTemplates:0,modeledRetainedTemplates:0,
+   possibleAnchorGroups:0}));
+  const costByDate=new Map<string,number>();
+  let crossing=0,admittedGeometry=0,modeledAnyAnchorGroups=0;
+  for(const group of postGroups.values()){
+   const endOfService=Date.parse(group[0].serviceWindowEndUtc);
+   const from=endOfService+followupMinutes*M,to=from+dispatchWindowMinutes*M;
+   const crosses=day(from)!==day(to);if(crosses)crossing++;
+   if(!crosses){
+    admittedGeometry++;const charge=day(from);
+    costByDate.set(charge,(costByDate.get(charge)??0)+settings.apiUnitsPerPhysicalGet);
+   }
+   let any=false;
+   for(const h of byHorizon){
+    const templates=group.filter(t=>t.horizon===h.horizon);
+    h.totalTemplates+=templates.length;
+    // Illustrative expiry 23h after nominal source GET. Actual committed
+    // DB retention and actual lawful use must still be independently established.
+    const retained=crosses?0:templates.filter(t=>Date.parse(t.scheduledRequestUtc)+23*H>to).length;
+    h.modeledRetainedTemplates+=retained;
+    if(retained>0){h.possibleAnchorGroups++;any=true;}
+   }
+   if(any)modeledAnyAnchorGroups++;
+  }
+  const physicalUtcUnits=[...costByDate].sort((a,b)=>a[0].localeCompare(b[0])).map(([chargeDayUtc,upperBoundUnits])=>({chargeDayUtc,upperBoundUnits,
+   proposedOutcomeCapUnits:rows.find(r=>r.chargeDayUtc===chargeDayUtc)?.categories.OUTCOME_REST_UNIT_BUDGET??0}));
+  return {followupMinutes,dispatchWindowMinutes,partitionSlotUpperBound:postGroups.size,
+   midnightCrossingGroups:crossing,geometryEligibleGroups:admittedGeometry,modeledAnyAnchorGroups,
+   maximumOneGetPerPartitionSlotUnits:admittedGeometry*settings.apiUnitsPerPhysicalGet,
+   peakPhysicalUtcUnits:Math.max(0,...costByDate.values()),
+   everyGeometryEligibleChargeDateWithinProposedOutcomeCap:physicalUtcUnits.every(x=>x.upperBoundUnits<=x.proposedOutcomeCapUnits),
+   byHorizon,physicalUtcUnits};
+ }));
  return {schema:"v39.phase5.actual-first-seed-budget-proposal-not-stage-input.v1",
   status:"ACTUAL_CALENDAR_PROPOSED_CAPS_NOT_AUTHORIZED",calendarDraftJsonSha256:expectedDraft,calendarRowsSha256:expectedRows,
   settings,totals,physicalUtcRows:rows,explicitOtherOnlyChargeDates,
   nativeLeadDiagnostic:{status:"ILLUSTRATIVE_EXACT_FIRST_CALENDAR_CUTOFF_TIME_ONLY",templateCount:timingTemplates.length,
    actualLatencyMeasured:false,actualFlightYieldMeasured:false,policyChanged:false,timingScenarios},
+  postGeometryDiagnostic:{status:"ILLUSTRATIVE_ACTUAL_CALENDAR_ONE_POST_PER_PARTITION_SLOT",
+   nominalSourceRetentionHours:23,actualAnchorAvailabilityMeasured:false,actualOutcomeCoverageMeasured:false,
+   providerRightsCertified:false,policyChanged:false,scenarios:postScenarios},
   sourceChargeDates:physicalSource.size,outcomeChargeDates:outcomeDates.size,
   totalReservedUnits:total,protectedFloorUnits:1000,unallocatedUnits:unallocated,
   peakDailyUnits:Math.max(...rows.map(r=>r.totalReservedUnits)),
