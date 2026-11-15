@@ -3,6 +3,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts'
+      - 'tests/phase6_reviewed_later_shard_append_runtime_v39.test.ts'
       - '.github/workflows/phase5-v0094-private-pg16-publisher-no-provider.yml'
       - 'server/lib/disruption/phase5Phase6Pg16PrivateLaterPrePublisher_v39.ts'
       - 'tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts'
@@ -39,6 +41,6 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$AERODATABOX_WEBHOOK_SECRET"
           test -z "$DATABASE_URL"
-          npx vitest run tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts
+          npx vitest run tests/phase5_v0094_private_pg16_publisher_stop_default_v39.test.ts tests/phase6_reviewed_later_shard_append_runtime_v39.test.ts
           npm run v39:typecheck
           echo 'V0094_PRIVATE_PUBLISHER_CRYPTO_AND_TX_OFFLINE_PASS_NO_NEON_NO_GO'
