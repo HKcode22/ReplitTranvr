@@ -29,6 +29,8 @@ import {digestP5Stage24ReviewedReceipt,
  from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import type {P5StandaloneLaterNoT24Review}
  from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
+import {selectP5EReviewedSupplementalFeatures,type P5EReviewedSupplementalBundle}
+ from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import type {SelectedTMilestoneConfig}
  from "./preSnapshotBuilder_v3";
 import type {P5SignedWitnessedLaterPrePacket}
@@ -73,6 +75,8 @@ export interface P5ExternalNativeLaterPreReviewArtifact{
  builderFrozenAtUtc:string;
  selectedTConfig:SelectedTMilestoneConfig;
  maxPopulationStalenessSeconds:number;
+ /** Optional reviewed output of the existing original FIDS compiler. */
+ reviewedSupplementalFeatureBundle?:P5EReviewedSupplementalBundle;
  externalNativeTPhysicalLegAndSourceUseReviewed:true;
  /** Exactly one of these two evidence tiers, no silent T24 substitution. */
  reviewedT24WitnessReceipt?:P5Stage24ReviewedT24Receipt;
@@ -85,6 +89,8 @@ export interface P5ExternalNativeLaterPacketPins{
  expectedReviewedReleaseSha256:string;
  expectedReviewedSourceRightsSha256:string;
  expectedSourceDayRegistrySha256:string;
+ expectedReviewedSupplementalFeatureBundleSha256?:string;
+ expectedExternalSupplementalContentUseReviewSha256?:string;
  expectedT24ReceiptSha256?:string;
  separatelyApprovedNoT24ProtocolSha256?:string;
 }
@@ -218,6 +224,26 @@ function validateCommonNativeReview(
      review.independentlyReviewedNativeTEvidenceSha256)
   hold("REVIEWED_SELECTED_NATIVE_T_SEMANTICS_NOT_BINDING");
 
+ // Bind the existing original-FIDS compiler's optional observations
+ // into the exact reviewed packet, not merely into an unsigned CLI report.
+ // Optional later weather/ADSB/history inputs retain their separate paths.
+ const supplement=review.reviewedSupplementalFeatureBundle;
+ const hasFeaturePins=pins.expectedReviewedSupplementalFeatureBundleSha256!==undefined||
+  pins.expectedExternalSupplementalContentUseReviewSha256!==undefined;
+ if(supplement!==undefined){
+  if(!SHA.test(pins.expectedReviewedSupplementalFeatureBundleSha256??"")||
+     !SHA.test(pins.expectedExternalSupplementalContentUseReviewSha256??"")||
+     digest(Buffer.from(JSON.stringify(supplement)))!==pins.expectedReviewedSupplementalFeatureBundleSha256||
+     supplement.externalSourceAndContentsReviewReceiptSha256!==pins.expectedExternalSupplementalContentUseReviewSha256||
+     !Array.isArray(supplement.fields)||supplement.fields.some(f=>!["operating_carrier","scheduled_arrival_utc",
+      "provider_revised_departure_utc","reported_pre_departure_status"].includes(f)))
+   hold("SUPPLEMENTAL_ORIGINAL_FEATURE_REVIEW_NOT_PINNED");
+  selectP5EReviewedSupplementalFeatures({flightInstanceId:s.flightInstanceId,horizon:s.horizon,
+   selectedNativeTUtc:s.selectedTNativeUtc,cutoffUtc:s.ownPreCutoffUtc,issuedAtUtc:review.reviewedAtUtc,
+   sourceOriginalSha256:s.expectedSourceResponseSha256,sourcePopulationQueryId:s.expectedSourcePopulationQueryId,
+   memberAvailableAtUtc:s.sourceMemberAvailableAtUtc,originIcao:s.airportIcao,destinationIcao:null,bundle:supplement});
+ }else if(hasFeaturePins)hold("SUPPLEMENTAL_ORIGINAL_FEATURE_REVIEW_NOT_PINNED");
+
  const prePermit:P5Stage14SingleFlightPrePermit={
   manifestSha256:s.manifestSha256,
   queryDigestSha256:s.queryDigestSha256,
@@ -246,7 +272,8 @@ function validateCommonNativeReview(
   maxPopulationStalenessSeconds:review.maxPopulationStalenessSeconds,
   expectedRestrictedPreWriterRole:P5_STAGE28_GROUPS.pre,
   externalNativeTPhysicalLegAndSourceUseReviewed:true,
-  identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"
+  identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG",
+  ...(supplement?{reviewedSupplementalFeatureBundle:supplement}:{})
  };
 
  return {prePermit,s,selected,cutoff,cfg};

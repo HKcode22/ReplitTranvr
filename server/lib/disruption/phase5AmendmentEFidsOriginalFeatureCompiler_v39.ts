@@ -76,8 +76,41 @@ export interface P5EOriginalFidsCompilerInput{
  /** Independently reviewed source rights/retention/purpose receipt digest. */
  externallyReviewedSourceAndContentsSha256:string;
 }
-export function compileP5AmendmentEFidsOriginalFeaturesV39(
- input:P5EOriginalFidsCompilerInput
+type P5EVerifiedOriginal={
+ rawPayload:unknown;persistedResponseHash:string;expectedDecodedOriginalBodySha256:string;
+ originIcao:string;retrieved:number;byProviderId:Map<unknown,unknown[]>;
+};
+function verifyP5EOriginalForBatch(input:P5EOriginalFidsCompilerInput):P5EVerifiedOriginal{
+ const e=obj(input?.rawPayload);
+ if(!e||!SHA.test(input.persistedResponseHash??"")||
+    !SHA.test(input.expectedBoundV0079ResponseHash??"")||
+    input.persistedResponseHash!==input.expectedBoundV0079ResponseHash||
+    !SHA.test(input.expectedDecodedOriginalBodySha256??"")||
+    !SHA.test(input.externallyReviewedSourceAndContentsSha256??"")||
+    !ICAO.test(input.normalizedOriginIcao??""))
+  hold("UNBOUND_SOURCE_OR_NORMALIZED_FLIGHT_IDENTITY");
+ const row={payload:e,persisted_response_hash:input.persistedResponseHash};
+ if(verifyStoredDecodedFidsBodyV39(row)!=="verified"||
+    verifyCanonicalFidsEnvelopeV39(e)!=="verified"||
+    deep(e,"originalDecodedEntityBodyEvidence","bodySha256")!==input.expectedDecodedOriginalBodySha256)
+  hold("ORIGINAL_DECODED_BODY_OR_ENVELOPE_INTEGRITY_UNVERIFIED");
+ if(deep(e,"fidsRequestContract","direction")!=="Departure"||
+    deep(e,"fidsRequestContract","airportIcao")!==input.normalizedOriginIcao)
+  hold("ORIGINAL_REQUEST_DIRECTION_OR_AIRPORT_CHANGED");
+ const retrieved=stamp(deep(e,"fetchedAtUtc")),movements=e.departures;
+ if(!Array.isArray(movements)||movements.length>MAX_ROWS)
+  hold("ORIGINAL_DEPARTURE_COUNT_OUT_OF_BOUNDS");
+ const byProviderId=new Map<unknown,unknown[]>();
+ for(const movement of movements){
+  const id=deep(movement,"id"),found=byProviderId.get(id)??[];
+  found.push(movement);byProviderId.set(id,found);
+ }
+ return {rawPayload:input.rawPayload,persistedResponseHash:input.persistedResponseHash,
+  expectedDecodedOriginalBodySha256:input.expectedDecodedOriginalBodySha256,
+  originIcao:input.normalizedOriginIcao,retrieved,byProviderId};
+}
+function compileP5EFromVerifiedOriginal(
+ input:P5EOriginalFidsCompilerInput,verified:P5EVerifiedOriginal
 ):{
  schema:"v39.phase5.e-original-fids-packet-compiler.v1";
  bundle:P5EReviewedSupplementalBundle;
@@ -89,8 +122,9 @@ export function compileP5AmendmentEFidsOriginalFeaturesV39(
  physicalGateOutCertified:false;
  providerCalls:0;databaseWrites:0;phase6PaidGo:false;
 }{
- const e=obj(input?.rawPayload);
- if(!e||!SHA.test(input.persistedResponseHash??"")||
+ if(!input||input.rawPayload!==verified.rawPayload||input.persistedResponseHash!==verified.persistedResponseHash||
+    input.expectedDecodedOriginalBodySha256!==verified.expectedDecodedOriginalBodySha256||
+    input.normalizedOriginIcao!==verified.originIcao||!SHA.test(input.persistedResponseHash??"")||
     !SHA.test(input.expectedBoundV0079ResponseHash??"")||
     input.persistedResponseHash!==input.expectedBoundV0079ResponseHash||
     !SHA.test(input.expectedDecodedOriginalBodySha256??"")||
@@ -107,26 +141,12 @@ export function compileP5AmendmentEFidsOriginalFeaturesV39(
   hold("UNBOUND_SOURCE_OR_NORMALIZED_FLIGHT_IDENTITY");
  const selected=stamp(input.originalSelectedDepartureUtc);
  const available=stamp(input.normalizedAvailableAtUtc);
- const row={payload:e,persisted_response_hash:input.persistedResponseHash};
- if(verifyStoredDecodedFidsBodyV39(row)!=="verified"||
-    verifyCanonicalFidsEnvelopeV39(e)!=="verified"||
-    deep(e,"originalDecodedEntityBodyEvidence","bodySha256")!==
-     input.expectedDecodedOriginalBodySha256)
-  hold("ORIGINAL_DECODED_BODY_OR_ENVELOPE_INTEGRITY_UNVERIFIED");
- if(deep(e,"fidsRequestContract","direction")!=="Departure"||
-    deep(e,"fidsRequestContract","airportIcao")!==
-       input.normalizedOriginIcao)
-  hold("ORIGINAL_REQUEST_DIRECTION_OR_AIRPORT_CHANGED");
- const retrieved=stamp(deep(e,"fetchedAtUtc"));
+ const retrieved=verified.retrieved;
  if(retrieved>available)hold("FIDS_FETCHED_AFTER_MEMBER_AVAILABLE");
- const movements=e.departures;
- if(!Array.isArray(movements)||movements.length>MAX_ROWS)
-  hold("ORIGINAL_DEPARTURE_COUNT_OUT_OF_BOUNDS");
  // Positive original-native flight ID is required for this exact first
  // compiler version. A conditional id-less source does NOT become a
  // physical flight merely via flight number/schedule matching.
- const candidates=movements.filter((f:unknown)=>
-  deep(f,"id")===input.providerRecordKey);
+ const candidates=verified.byProviderId.get(input.providerRecordKey)??[];
  if(candidates.length!==1)
   hold("PROVIDER_NATIVE_ID_MISSING_OR_DUPLICATE_IN_ORIGINAL");
  const movement=candidates[0];
@@ -205,4 +225,46 @@ export function compileP5AmendmentEFidsOriginalFeaturesV39(
   physicalGateOutCertified:false,
   providerCalls:0,databaseWrites:0,phase6PaidGo:false
  };
+}
+
+
+/** Single-flight API preserved; same verified original path as batch. */
+export function compileP5AmendmentEFidsOriginalFeaturesV39(input:P5EOriginalFidsCompilerInput){
+ return compileP5EFromVerifiedOriginal(input,verifyP5EOriginalForBatch(input));
+}
+
+/** One exact original, bounded by the existing 2500-member SOURCE audit.
+ * Original envelope/body integrity checked once, provider ID lookup indexed
+ * once. Per-flight native-ID or schedule ambiguity is counted, not allowed
+ * to invalidate unrelated flights. Never use this to certify physical
+ * gate-out, external rights or independent packet signing. */
+export function compileP5AmendmentEFidsOriginalFeatureBatchV39(inputs:readonly P5EOriginalFidsCompilerInput[]){
+ if(!Array.isArray(inputs)||inputs.length<1||inputs.length>2500)hold("UNBOUNDED_OR_EMPTY_ORIGINAL_BATCH");
+ const first=inputs[0],verified=verifyP5EOriginalForBatch(first),seen=new Set<string>();
+ for(const x of inputs){
+  if(!x||x.rawPayload!==first.rawPayload||x.persistedResponseHash!==first.persistedResponseHash||
+    x.expectedBoundV0079ResponseHash!==first.expectedBoundV0079ResponseHash||
+    x.expectedDecodedOriginalBodySha256!==first.expectedDecodedOriginalBodySha256||
+    x.populationQueryId!==first.populationQueryId||x.normalizedOriginIcao!==first.normalizedOriginIcao||
+    x.externallyReviewedSourceAndContentsSha256!==first.externallyReviewedSourceAndContentsSha256||
+    seen.has(x.flightInstanceId))hold("CROSS_ORIGINAL_OR_DUPLICATE_BATCH_MEMBER");
+  seen.add(x.flightInstanceId);
+ }
+ const nativeCounts=new Map<string,number>();
+ for(const x of inputs)nativeCounts.set(x.providerRecordKey,(nativeCounts.get(x.providerRecordKey)??0)+1);
+ const decisions=inputs.map(input=>{
+  if((nativeCounts.get(input.providerRecordKey)??0)>1)return {flightInstanceId:input.flightInstanceId,
+   status:"CENSORED_NATIVE_ORIGINAL_MEMBER" as const,reason:"REFUSED_P5_E_FIDS_ORIGINAL_COMPILER_NATIVE_ID_SHARED_BY_NORMALIZED_MEMBERS"};
+  try{return {flightInstanceId:input.flightInstanceId,status:"MATCHED_NATIVE_ORIGINAL" as const,
+   compiled:compileP5EFromVerifiedOriginal(input,verified)};}
+  catch(e){
+   const msg=e instanceof Error?e.message:"";
+   if(!/^REFUSED_P5_E_FIDS_ORIGINAL_COMPILER_(?:UNBOUND_SOURCE_OR_NORMALIZED_FLIGHT_IDENTITY|NONCANONICAL_SOURCE_UTC|FIDS_FETCHED_AFTER_MEMBER_AVAILABLE|PROVIDER_NATIVE_ID_MISSING_OR_DUPLICATE_IN_ORIGINAL|NOT_POSITIVELY_IDENTIFIED_OPERATING_MOVEMENT|ORIGINAL_FLIGHT_NUMBER_NOT_BOUND_NORMALIZED_MEMBER|ORIGINAL_ROUTE_OR_NATIVE_T_DRIFT)$/.test(msg))throw e;
+   return {flightInstanceId:input.flightInstanceId,status:"CENSORED_NATIVE_ORIGINAL_MEMBER" as const,reason:msg};
+  }
+ });
+ const matched=decisions.filter(x=>x.status==="MATCHED_NATIVE_ORIGINAL").length;
+ const summary={status:"ONE_ORIGINAL_NATIVE_FEATURE_REVIEW_BATCH_NOT_SIGNED",candidateCount:inputs.length,
+  matchedCount:matched,censoredCount:inputs.length-matched,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(summary,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof summary&{readonly privateDecisions:typeof decisions};
 }

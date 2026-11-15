@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39}
  from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
-import {compileP5AmendmentEFidsOriginalFeaturesV39,
+import {compileP5AmendmentEFidsOriginalFeaturesV39,compileP5AmendmentEFidsOriginalFeatureBatchV39,
  type P5EOriginalFidsCompilerInput}
  from "../server/lib/disruption/phase5AmendmentEFidsOriginalFeatureCompiler_v39";
 import {selectP5EReviewedSupplementalFeatures}
@@ -156,5 +156,26 @@ describe("Phase5 actual V0079-decoded-source FIDS feature packet compiler (offli
   delete raw.canonicalEnvelopeSha256;
   delete raw.canonicalEnvelopeHashSchema;
   expect(()=>compile(i)).toThrow("ORIGINAL_DECODED_BODY_OR_ENVELOPE_INTEGRITY_UNVERIFIED");
+ });
+});
+
+describe("one verified FIDS original, many native candidate feature packets",()=>{
+ it("produces exactly the existing single-flight output and censors unrelated id-less candidate",()=>{
+  const a=input([flight(),{...flight(),id:"native-002",number:"SQ 0079"}]);
+  const b={...a,flightInstanceId:"leg:ci:batch:002",providerRecordKey:"native-002",normalizedOperatingFlightNumber:"SQ79"};
+  const missing={...a,flightInstanceId:"leg:ci:batch:003",providerRecordKey:"native-not-found"};
+  const r=compileP5AmendmentEFidsOriginalFeatureBatchV39([a,b,missing]);
+  expect(r).toMatchObject({candidateCount:3,matchedCount:2,censoredCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(r.privateDecisions[0]).toMatchObject({status:"MATCHED_NATIVE_ORIGINAL",compiled:compile(a)});
+  expect(r.privateDecisions[1]).toMatchObject({status:"MATCHED_NATIVE_ORIGINAL",compiled:compile(b)});
+  expect(r.privateDecisions[2]).toMatchObject({status:"CENSORED_NATIVE_ORIGINAL_MEMBER",reason:expect.stringContaining("NATIVE_ID_MISSING")});
+  expect(JSON.stringify(r)).not.toMatch(/native-002|leg:ci|observations/);
+ });
+ it("holds a corrupted original, mixed original or duplicate normalized member rather than treating them as valid",()=>{
+  const a=input(),b={...a,flightInstanceId:"leg:ci:batch:002"};
+  expect(()=>compileP5AmendmentEFidsOriginalFeatureBatchV39([a,a])).toThrow("CROSS_ORIGINAL_OR_DUPLICATE");
+  expect(()=>compileP5AmendmentEFidsOriginalFeatureBatchV39([a,{...b,rawPayload:input().rawPayload}])).toThrow("CROSS_ORIGINAL_OR_DUPLICATE");
+  (a.rawPayload as Record<string,any>).departures[0].status="Departed";
+  expect(()=>compileP5AmendmentEFidsOriginalFeatureBatchV39([a,b])).toThrow("ORIGINAL_DECODED_BODY_OR_ENVELOPE_INTEGRITY_UNVERIFIED");
  });
 });
