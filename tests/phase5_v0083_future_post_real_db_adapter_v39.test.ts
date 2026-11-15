@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {
  p5V0083FuturePostReservationSha256,
- verifyP5FuturePostReviewedFrame,auditP5FuturePostActualPriorPre,
+ verifyP5FuturePostReviewedFrame,auditP5FuturePostActualPriorPre,auditP5FuturePostActualPriorPreBatch,P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL,
  reserveP5FuturePostV0083OnePhysicalGet,
  verifyP5FuturePostOriginalBeforeCommit,
  verifyP5FuturePostOriginalAfterCommit,
@@ -360,5 +360,51 @@ describe("stored signed SOURCE registry provenance for POST PRE audit",()=>{
   expect(f.sqls.length).toBe(0);
   f.rows.push({...f.rows[0],query_digest:sh("3")});
   await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")])).rejects.toThrow("AMBIGUOUS_PRE_SOURCE_QUERY_PROVENANCE");
+ });
+});
+
+
+describe("bounded same-source PRE batch for future POST",()=>{
+ const p=approved(),clock="2027-02-02T11:00:00.000Z",id=p.flightInstanceId;
+ const row=(flight_instance_id:string,horizon="T-6h",snapshot_id="1")=>{
+  const t=Date.parse(p.expectedSelectedTNativeUtc),off=horizon==="T-6h"?21600000:horizon==="T-90m"?5400000:86400000;
+  const at=t-off;
+  return {flight_instance_id,snapshot_id,horizon,query_digest:sh("b"),created_at:new Date(at-30000),
+   prediction_cutoff_utc:new Date(at),selected_t_milestone_utc:new Date(t),fids_response_hash:sh("c"),
+   original_available_at:new Date(at-120000),source_expires_at_utc:new Date(Date.parse(clock)+3600000),binding_response_hash:sh("c")};
+ };
+ const ids=[id,"leg:test:missing","leg:test:expired","leg:test:ambiguous","leg:test:partial"];
+ const scope={manifestSha256:p.manifestSha256,runDayIndex:p.runDayIndex,airportIcao:p.airportIcao,reviewedFrameSha256:p.reviewedFrameSha256,
+  candidates:ids.map(flightInstanceId=>({flightInstanceId,expectedSelectedTNativeUtc:p.expectedSelectedTNativeUtc,boundSourceQueryDigests:[sh("b")]}))};
+ function mock(rows:any[],role="phase5_fids_source_prod_20261107"){
+  const calls:string[]=[];const pool={connect:async()=>({query:async(sql:string,args?:unknown[])=>{
+   calls.push(sql);let result:any[]=[];
+   if(sql.startsWith("SELECT current_user"))result=[{role,login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:clock}];
+   else if(sql===P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL){
+    expect(args).toEqual([scope.manifestSha256,1,"WSSS",ids,scope.reviewedFrameSha256,31]);result=rows;
+   }else if(sql.startsWith("SELECT clock_timestamp"))result=[{now:clock}];
+   return {rows:result,rowCount:result.length};},release:()=>calls.push("RELEASE")})};
+  return {pool,calls};
+ }
+ it("one exact metadata read, actual horizon cutoff checks, ordinary missingness and no expired source use",async()=>{
+  const f=mock([row(id),{...row(ids[2]),source_expires_at_utc:clock},row(ids[3],"T-6h","5"),row(ids[3],"T-6h","6"),row(ids[4],"T-90m","7")]);
+  const x=await auditP5FuturePostActualPriorPreBatch(f.pool as any,scope);
+  expect(x).toMatchObject({candidateCount:5,eligibleCount:2,unavailableCount:3,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(x.privateDecisions.map(d=>d.status)).toEqual(["VALID_ACTUAL_PRE_FOR_POST_REVIEW","POST_PRE_UNAVAILABLE_OR_AMBIGUOUS","POST_PRE_UNAVAILABLE_OR_AMBIGUOUS","POST_PRE_UNAVAILABLE_OR_AMBIGUOUS","VALID_ACTUAL_PRE_FOR_POST_REVIEW"]);
+  expect(x.privateDecisions[4]).toMatchObject({pre:{observedValidHorizons:["T-90m"],boundSourceRegistryValidHorizonCount:1}});
+  expect(f.calls.filter(s=>s===P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL)).toHaveLength(1);
+  expect(f.calls).toContain("ROLLBACK");expect(JSON.stringify(x)).not.toContain("leg:");
+ });
+ it("rejects wrong actual role, duplicate selection and out-of-scope SQL row",async()=>{
+  const f=mock([],"app_runtime");await expect(auditP5FuturePostActualPriorPreBatch(f.pool as any,scope)).rejects.toThrow("POST_BATCH_NOT_REAL");
+  expect(f.calls).not.toContain(P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL);
+  const g=mock([]);await expect(auditP5FuturePostActualPriorPreBatch(g.pool as any,{...scope,candidates:[scope.candidates[0],scope.candidates[0]]})).rejects.toThrow("DUPLICATE");expect(g.calls).toHaveLength(0);
+  const k=mock([row("leg:unexpected")]);await expect(auditP5FuturePostActualPriorPreBatch(k.pool as any,scope)).rejects.toThrow("CROSS_FLIGHT_ROW");expect(k.calls).toContain("ROLLBACK");
+ });
+ it("a valid PRE from a different source binding cannot qualify this signed SOURCE registry",async()=>{
+  const f=mock([{...row(id),query_digest:sh("d")}]);
+  const x=await auditP5FuturePostActualPriorPreBatch(f.pool as any,scope);
+  expect(x.eligibleCount).toBe(0);
+  expect(x.privateDecisions[0]).toMatchObject({reason:"REFUSED_P5_FUTURE_POST_V0083_NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY"});
  });
 });
