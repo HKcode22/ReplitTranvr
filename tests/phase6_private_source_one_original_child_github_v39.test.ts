@@ -291,7 +291,7 @@ describe("stored SOURCE child keeps private paths, fixed trust and original gate
   const pem=publicKey.export({format:"pem",type:"spki"}).toString(),
    fp=createHash("sha256").update(publicKey.export({format:"der",type:"spki"})).digest("hex");
   for(const k of Object.keys(f.env))
-   if(k.startsWith("P6_PRIVATE_DAY_EPOCH_REVIEW_")||k.startsWith("P6_PRIVATE_SOURCE_QUERY_REVIEW_"))
+   if(k.startsWith("P6_PRIVATE_DAY_EPOCH_REVIEW")||k.startsWith("P6_PRIVATE_SOURCE_QUERY_REVIEW"))
     delete f.env[k];
   Object.assign(f.env,{
    P6_PRIVATE_SOURCE_TRANSPORT_INPUT:"stored",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",
