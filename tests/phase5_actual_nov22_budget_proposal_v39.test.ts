@@ -2,13 +2,13 @@ import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {proposeP5ActualNov22Budget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 const seedBytes=readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json");
 const seedBundle=JSON.parse(seedBytes.toString("utf8"));
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const ownerEvidenceBytes=readFileSync("data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json");
 const dateCandidateBytes=readFileSync("data-collection/phase5/planning/2026-11-15_nov22_service_start_date_only_candidate.json");
-function actual(){
+function actualPreview(){
  expect(hash(seedBytes)).toBe("66e523802a513b9ce57ca1130ad282577ff53fa7522c78364ba5ef72f72f0d93");
  const x=buildP5ProspectiveSeedCalendarPreview({seedBundle,expected:{
   bundleCommitmentSha256:"925b94cbb236d0a981637eeccae985a2924cc3f11afcb47727b3acf93e792bcf",
@@ -16,8 +16,9 @@ function actual(){
   dateCandidateBytesSha256:"9be154ce8ac2d897643558ff0c575a83a33bc8a4f77768d68fdd791a73c12311",
   firstRunDateUtc:"2026-11-22"},ownerEvidenceBytes,dateCandidateBytes});
  expect(x.sha256).toBe("003885e93f3a3daa1098f648502c5a7dd3beb6e317e906ffe281760aaba763af");
- return x.result.calendarDraft;
+ return x.result;
 }
+const actual=()=>actualPreview().calendarDraft;
 describe("original actual first randomization and seven-category cap PROPOSAL",()=>{
  it("reproduces the expired-artifact-independent exact preview, no new seed",()=>{
   const x=actual();expect(x.calendarDays).toHaveLength(31);expect(x.futureOrdinaryAirportsSelected).toBe(0);
@@ -52,5 +53,66 @@ describe("original actual first randomization and seven-category cap PROPOSAL",(
  it("refuses a revised calendar rather than silently redrawing",()=>{
   const d=actual();d.calendarDays[0].startUtc="2026-11-23T00:00:00.000Z";
   expect(()=>proposeP5ActualNov22Budget(d)).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
+ });
+});
+
+describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
+ // Fixture identities are deliberately synthetic, NOT runtime release pins.
+ // Actual calendar and proposed budget use the preserved first seed.
+ function reviewFixture(){
+  const preview=actualPreview(),draft=preview.calendarDraft,b=proposeP5ActualNov22Budget(draft);
+  const h=(c:string)=>c.repeat(64);
+  const external:Parameters<typeof assembleP6ActualFirstSeedReleaseCandidate>[0]["external"]={
+   schema:"v39.phase5.b0062-calendar-slot-review-input.v1",
+   expectedExternalCalendarDraftJsonSha256:b.calendarDraftJsonSha256,
+   expectedCalendarRowsSha256:b.calendarRowsSha256,
+   expectedCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,
+   manifestSha256:h("a"),calendarSha256:h("b"),configSha256:h("c"),frameSha256:h("d"),
+   codeSha40:"e".repeat(40),phase6AuthorizationId:"CI-ONLY-NOT-RELEASE",
+   predecessorEvidenceIds:["CI-ONLY-NOT-EVIDENCE"],
+   alertSafety:{
+    unsettledBurstMarginCredits:10,protectedAlertFloorCredits:1000,
+    alertRunSpendCeilingCredits:830,dailySoftStopMarginCredits:10,
+    productionReconcileToleranceCredits:0,startAdmissionToleranceSeconds:120,
+    safetyWatchdogPollMs:10000,settlementInitialWaitSeconds:60,settlementPollIntervalSeconds:30,
+    settlementStableReadCount:3,settlementTimeoutSeconds:300
+   },
+   providerRangeEvidenceSha256:h("e"),timingEvidenceSha256:h("f"),
+   asOfUtc:"2026-11-15T09:37:44.000Z",
+   providerMaxRangeMinutes:240,refreshEveryMinutes:15,physicalGetsPerRefreshUpperBound:1,
+   getLeadSeconds:900,apiUnitsPerPhysicalGet:2,cycleRestCeilingUnits:50000,
+   protectedRestFloorUnits:1000,explicitOtherOnlyChargeDates:b.explicitOtherOnlyChargeDates,
+   restOtherByUtcDate:b.physicalUtcRows.map(r=>({chargeDayUtc:r.chargeDayUtc,dailyRestCeilingUnits:1900,
+    categories:{FIDS_RETRY_UNIT_BUDGET:r.categories.FIDS_RETRY_UNIT_BUDGET,
+     VALIDATION_UNIT_BUDGET:r.categories.VALIDATION_UNIT_BUDGET,
+     OUTCOME_REST_UNIT_BUDGET:r.categories.OUTCOME_REST_UNIT_BUDGET,
+     HISTORY_BOOTSTRAP_UNIT_BUDGET:r.categories.HISTORY_BOOTSTRAP_UNIT_BUDGET,
+     DIAGNOSTIC_UNIT_BUDGET:r.categories.DIAGNOSTIC_UNIT_BUDGET}}))
+  };
+  const timing={timingEvidenceSha256:external.timingEvidenceSha256,
+   maxPopulationStalenessSeconds:2700,maxSchedulerSlipSeconds:120,
+   maxResponseAndPersistSeconds:180,minimumPreCommitMarginSeconds:120,minimumPreparationLeadMinutes:20};
+  const digest=(x:unknown)=>hash(Buffer.from(JSON.stringify(x)));
+  return {draft,envelope:preview.shapeEnvelope,external,expectedExternalInputSha256:digest(external),
+   timing,expectedTimingJsonSha256:digest(timing)};
+ }
+ it("produces 31 exact review-only metadata plans with first-seed cost parity",()=>{
+  const f=reviewFixture(),x=assembleP6ActualFirstSeedReleaseCandidate(f);
+  expect(x.dayPlans.files).toHaveLength(31);
+  expect(x.dayPlans.totalPlannedQueries).toBe(6144);
+  expect(x.totalReservedUnits).toBe(41960);
+  expect(x.peakDailyUnits).toBe(1228);
+  expect(x.dayPlans.dayPlanSha256s).toEqual(assembleP6ActualFirstSeedReleaseCandidate(f).dayPlans.dayPlanSha256s);
+  expect(x.unsignedStageInput.calendarDays.filter(d=>d.pairAirportSet===null)).toHaveLength(21);
+  expect(x.independentReleaseStillRequired).toBe(true);
+  expect(x.phase6PaidGo).toBe(false);
+ });
+ it("does not replace missing review hashes or silently alter the proposed budget",()=>{
+  const f=reviewFixture();
+  expect(()=>assembleP6ActualFirstSeedReleaseCandidate({...f,expectedExternalInputSha256:"0".repeat(64)})).toThrow("EXACT_EXTERNAL_INPUT");
+  const external=structuredClone(f.external);
+  external.restOtherByUtcDate[0].categories.DIAGNOSTIC_UNIT_BUDGET+=2;
+  expect(()=>assembleP6ActualFirstSeedReleaseCandidate({...f,external,
+   expectedExternalInputSha256:hash(Buffer.from(JSON.stringify(external)))})).toThrow("EXACT_PROPOSED_PHYSICAL_CAPS_CHANGED");
  });
 });
