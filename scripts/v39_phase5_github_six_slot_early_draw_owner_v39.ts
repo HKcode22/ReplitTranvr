@@ -83,11 +83,12 @@ export async function runP5GitHubAutonomousEarlyDraw(
    "(SELECT NOT (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls) AND rolcanlogin FROM pg_roles WHERE rolname=current_user) AS restricted_login,"+
    "(has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') OR has_any_column_privilege(current_user,'clean.adb_phase6_authorization','INSERT') OR has_table_privilege(current_user,'clean.adb_phase6_authorization','DELETE')) AS auth_update,"+
    "has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') AS source_insert,"+
-   "has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') AS pre_insert"
+   "has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') AS pre_insert,"+
+   "(NOT has_any_column_privilege(current_user,'clean.adb_sampling_draw','UPDATE') AND NOT has_table_privilege(current_user,'clean.adb_sampling_draw','DELETE')) AS draw_immutable"
   )).rows[0];
   if(who?.db!=="neondb"||who.role!==ctx.expectedRole||
      who.login!==ctx.expectedRole||!Number.isSafeInteger(who.version)||who.version<160000||who.version>=170000||
-     who.restricted_login!==true||who.auth_update!==false||who.source_insert!==false||who.pre_insert!==false||
+     who.restricted_login!==true||who.auth_update!==false||who.source_insert!==false||who.pre_insert!==false||who.draw_immutable!==true||
      who.ro!=="on"||who.replica!==false)
    HOLD("WRONG_READONLY_DATABASE_IDENTITY");
   const auth=await client.query(
