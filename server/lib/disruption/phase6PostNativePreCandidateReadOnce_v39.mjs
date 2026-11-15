@@ -105,6 +105,7 @@ export async function readP6ActualNativePostPreCandidatePage({readerClient,sourc
   privateCandidates:{value:page.privateCandidates,enumerable:false},
   privateDecisions:{value:result?.privateDecisions??Object.freeze([]),enumerable:false},
   privateSourceScope:{value:sourceScope,enumerable:false},
+  privateReviewedFrameSha256:{value:policy.reviewedFrameSha256,enumerable:false},
   privateSourceQueryBytes:{value:Buffer.from(receipt.privateBytes),enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
@@ -140,7 +141,7 @@ export function proposeP6NativePostPhysicalWindow({page,policyBytes,expectedPoli
     policy.manifestSha256!==trust.manifestSha256||policy.releaseSha256!==trust.releaseSha256||
     policy.rightsSha256!==trust.rightsSha256||policy.reviewedCodeSha!==trust.reviewedCodeSha||
     !H.test(policy.reviewedCategoryBudgetSha256??"")||!H.test(policy.reviewedProviderPriceSha256??"")||
-    !H.test(policy.reviewedFrameSha256??"")||policy.reviewedProviderContractSha256!==s.providerContractSha256||
+    !H.test(policy.reviewedFrameSha256??"")||policy.reviewedFrameSha256!==page.privateReviewedFrameSha256||policy.reviewedProviderContractSha256!==s.providerContractSha256||
     !Number.isSafeInteger(policy.followupAfterPartitionEndSeconds)||policy.followupAfterPartitionEndSeconds<0||
     !Number.isSafeInteger(policy.dispatchWindowSeconds)||policy.dispatchWindowSeconds<1||policy.dispatchWindowSeconds>1800||
     policy.followupAfterPartitionEndSeconds+policy.dispatchWindowSeconds>48*3600||
@@ -186,15 +187,18 @@ export function proposeP6NativePostPhysicalWindow({page,policyBytes,expectedPoli
      !Array.isArray(pre.actualSourcePREReferenceIds)||pre.actualSourcePREReferenceIds.length!==pre.observedValidHorizonCount||
      c.boundSourceQueryDigests.length!==1||c.boundSourceQueryDigests[0]!==s.queryDigestSha256||
      utc(c.expectedSelectedTNativeUtc)<from||utc(c.expectedSelectedTNativeUtc)>=to)hold("POST_ACTUAL_PRE_LINEAGE_DRIFT");
-  eligible.push({c,pre});
+  eligible.push({c,pre,expires:utc(x.boundPreRetentionNotAfterUtc)});
  }
  if(eligible.length!==page.eligibleCount)hold("POST_ACTUAL_PRE_COUNT_DRIFT");
  if(!eligible.length)return Object.freeze({...base,status:"NO_ACTUAL_RETAINED_BOUND_PRE_FOR_POST"});
- eligible.sort((x,y)=>x.c.flightInstanceId<y.c.flightInstanceId?-1:x.c.flightInstanceId>y.c.flightInstanceId?1:0);
- const {c,pre}=eligible[0];
+ const surviving=eligible.filter(x=>x.expires>utc(end));
+ if(!surviving.length)return Object.freeze({...base,status:"BOUND_PRE_EXPIRES_BEFORE_POST_DISPATCH_WINDOW"});
+ surviving.sort((x,y)=>x.c.flightInstanceId<y.c.flightInstanceId?-1:x.c.flightInstanceId>y.c.flightInstanceId?1:0);
+ const {c,pre,expires}=surviving[0];
  const context={schema:"v39.phase6.unsigned-native-post-request-evidence.v1",requestSha256,policySha256:expectedPolicySha256,
   sourceRegistrySha256:page.privateSourceRegistrySha256,sourceQueryDigestSha256:s.queryDigestSha256,
   sourceIndexSha256:page.privateIndexSha256,observedDbClockUtc:page.observedDbClockUtc,anchorPre:pre,
+  anchorBoundPreRetentionNotAfterUtc:new Date(expires).toISOString(),
   flightInstanceId:c.flightInstanceId,expectedSelectedTNativeUtc:c.expectedSelectedTNativeUtc};
  const reviewed={schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",manifestSha256:trust.manifestSha256,
   requestSha256,reviewedSourceRightsSha256:trust.rightsSha256,
