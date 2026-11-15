@@ -6,6 +6,8 @@
  * independent stored day signature and stable scope are the authority.
  */
 import {Client,Pool} from "pg";
+import {createHash} from "node:crypto";
+import {readP6StableT24RegistryTrust,readP6SelectedT24RegistryPackets} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
@@ -23,18 +25,21 @@ const QUERY="SELECT * FROM clean.phase5_cd_ensure_exact_source_flight_v39($1,$2,
 export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  const scoped=requireP5CdGithubPreparePrivateDayScope(env);
  const trust=readP6StableSourceTrust(env);
+ const t24=env.P6_PRIVATE_T24_ENROLL_MODE==="1";
+ if(t24&&(env.P5_CD_GH_T24_PREPARE_APPROVED!=="1"||env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED!=="1"||env.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED!=="1"||env.P5_CD_GH_PRE_MODE!=="PHASE6_APPROVED"))hold("T24_SEPARATE_PREPARE_WITNESS_FEATURE_RELEASE_REQUIRED");
+ const t24Trust=t24?readP6StableT24RegistryTrust(env,trust):null;
  if(trust.reviewedCodeSha!==scoped.gate.approvedCodeSha||
     env.P5_CD_GH_PREPARE_EXECUTE==="1"||
     env.P5_CD_GH_REGISTER_HORIZON==="T-24h"||
     env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
-    env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER")
+    env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!==(t24?"REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER":"REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER"))
   hold("WRONG_STABLE_PRIVATE_RELEASE_OR_LEGACY_MODE");
  const raw=env.P6_PRIVATE_LATER_RUN_DAYS??"";
  const scheduled=env.GITHUB_EVENT_NAME==="schedule";
  if(scheduled?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))
   hold("ONE_OR_TWO_EXPLICIT_REVIEWED_RUN_DAYS_OR_SCHEDULE_ONLY");
  const runDayIndices=scheduled?[]:raw.split(",").map(Number);
- const calendar=scheduled?loadP6LaterCalendarWindows(env,trust):null;
+ const calendar=scheduled?loadP6LaterCalendarWindows(env,trust,undefined,t24?"T24_PRE":"LATER_PRE"):null;
  if(new Set(runDayIndices).size!==runDayIndices.length)hold("DUPLICATE_DAY");
  let u:URL,p:URL;
  try{u=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");p=new URL(scoped.databaseUrl);}
@@ -48,7 +53,7 @@ export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
     [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
     (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))
   hold("WRONG_SEPARATE_TLS_READER");
- return {scoped,trust,runDayIndices,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
+ return {scoped,trust,t24Trust,runDayIndices,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
   policy:{independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
    independentlyApprovedStandaloneProtocolSha256:scoped.gate.independentlyApprovedStandaloneProtocolSha256}};
 }
@@ -98,6 +103,42 @@ export function selectP6PrivateEnrollmentPackets(
  // 96 on every restart and starve the other due shards.
  return {packets:ordered,deferred:0,alreadyExpired};
 }
+/** Same exact V0100 executor, but T24 bytes must come from the separately
+ * authenticated private registry and include the original V0081 review. */
+export function selectP6PrivateT24EnrollmentPackets(report:Awaited<ReturnType<typeof readP6SelectedT24RegistryPackets>>,ctx:ReturnType<typeof admitP6PrivateLaterEnrollment>){
+ if(!ctx.t24Trust||report.status!=="CURRENT_NATIVE_T24_PACKETS_READONLY_NO_GO"||
+    report.providerCalls!==0||report.databaseWrites!==0||report.phase6PaidGo!==false||
+    !Array.isArray(report.privateRosters)||report.privateRosters.length>4)
+  hold("BAD_T24_PRIVATE_REGISTRY_REPORT");
+ const packets:{entry:P5CdVerifiedTaskPacket;cutoff:number}[]=[],seen=new Set<string>(),hashes=new Set<string>();
+ let alreadyExpired=0,total=0;
+ for(const r of report.privateRosters){
+  if(r.status!=="EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO"||!ctx.runDayIndices.includes(r.runDayIndex)||
+     r.providerCalls!==0||r.databaseWrites!==0||r.phase6PaidGo!==false||r.packetCount!==r.privateFiles.length||
+     !SHA.test(r.registrySha256??""))hold("BAD_T24_PRIVATE_PACKET_REPORT");
+  const roster:P5CdFrozenRoster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",
+   reviewedCodeSha:ctx.trust.reviewedCodeSha,manifestSha256:ctx.trust.manifestSha256,rightsSha256:ctx.trust.rightsSha256,
+   entries:r.privateFiles.map((f:{filePath:string;packetSha256:string})=>({filePath:f.filePath,packetSha256:f.packetSha256}))};
+  const raw=Buffer.from(JSON.stringify(roster)),digest=createHash("sha256").update(raw).digest("hex");
+  const verified=verifyP5CdFrozenRoster(raw,roster,r.privateFiles,{...ctx.scoped.gate,rosterSha256:digest},"T24_WITH_SEPARATE_WITNESS");
+  const now=Date.parse(r.observedDbClockUtc);
+  if(!Number.isFinite(now)||verified.size!==r.packetCount)hold("T24_PACKET_CLOCK_OR_COUNT");
+  total+=verified.size;
+  for(const [sha,entry] of verified){
+   const p=entry.permit,cutoff=Date.parse(p.selectedTNativeUtc)-86400000;
+   if(p.horizon!=="T-24h"||!entry.witnessReview||seen.has(p.flightInstanceId)||hashes.has(sha)||
+      p.runDayIndex!==r.runDayIndex||p.expectedReviewedReleaseSha256!==ctx.trust.releaseSha256||
+      preflightP5Stage14ReviewedPermitV39(p)!==p.selectedTNativeUtc)
+    hold("T24_DUPLICATE_OR_WITNESS_PERMIT_DRIFT");
+   seen.add(p.flightInstanceId);hashes.add(sha);
+   if(cutoff<=now+2000){alreadyExpired++;continue;}
+   packets.push({entry,cutoff});
+  }
+ }
+ if(total!==report.packetCount||packets.length>384)hold("T24_PACKET_COUNT_DRIFT");
+ packets.sort((a,b)=>a.cutoff-b.cutoff||a.entry.packetSha256.localeCompare(b.entry.packetSha256));
+ return {packets,deferred:report.deferredShardCount,alreadyExpired};
+}
 type Queryer={query:(sql:string,args?:unknown[])=>Promise<{rows:any[];rowCount?:number|null}>};
 export async function executeP6PrivateEnrollmentBatch(db:Queryer,packets:ReturnType<typeof selectP6PrivateEnrollmentPackets>["packets"]){
  if(packets.length>384)hold("UNBOUNDED_BATCH");
@@ -140,8 +181,13 @@ export async function runP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
    if(!ctx.runDayIndices.length)return {status:"NO_DUE_REVIEWED_CALENDAR_DAYS",providerCalls:0,preWrites:0,phase6PaidGo:false};
    console.log(JSON.stringify({selectedStudyDays:due.dayIndices.length,deferredStudyDays:due.deferredDays}));
   }
-  const report=await readP6CurrentLaterQueueRosters({client:c,trust:ctx.trust,policy:ctx.policy,runDayIndices:ctx.runDayIndices});
-  selected=selectP6PrivateEnrollmentPackets(report,ctx);
+  if(ctx.t24Trust){
+   const report=await readP6SelectedT24RegistryPackets({client:c,trust:ctx.t24Trust,runDayIndices:ctx.runDayIndices,purpose:"ENROLLMENT"});
+   selected=selectP6PrivateT24EnrollmentPackets(report,ctx);
+  }else{
+   const report=await readP6CurrentLaterQueueRosters({client:c,trust:ctx.trust,policy:ctx.policy,runDayIndices:ctx.runDayIndices});
+   selected=selectP6PrivateEnrollmentPackets(report,ctx);
+  }
  }finally{await c.end();}
  if(!selected.packets.length)return {status:"NO_PROSPECTIVE_CURRENT_SIGNED_LATER_PACKETS",newlyRegistered:0,
   alreadyRegistered:0,expiredBeforeEnrollment:selected.alreadyExpired,providerCalls:0,preWrites:0,phase6PaidGo:false};
@@ -151,7 +197,7 @@ export async function runP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
   const conn=await pre.connect();
   try{
    const result=await executeP6PrivateEnrollmentBatch(conn,selected.packets);
-   return {status:"CURRENT_SIGNED_LATER_V0091_REGISTRATION_COMPLETE_NO_PRE",
+   return {status:ctx.t24Trust?"CURRENT_SIGNED_T24_V0091_REGISTRATION_COMPLETE_NO_PRE":"CURRENT_SIGNED_LATER_V0091_REGISTRATION_COMPLETE_NO_PRE",
     ...result,expiredAtProjection:selected.alreadyExpired,deferredPackets:selected.deferred,
     providerCalls:0,preWrites:0,phase6PaidGo:false};
   }finally{conn.release();}
