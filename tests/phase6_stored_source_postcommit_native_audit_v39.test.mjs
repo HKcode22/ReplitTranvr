@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {admitP6PostcommitNativeAudit,redactP6PostcommitNativeAudit} from "../scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
+import {admitP6PostcommitNativeAudit,redactP6PostcommitNativeAudit,reviewP6PostcommitNativeFeatures} from "../scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
 const hash="a".repeat(64),code="b".repeat(40),reader="phase6_private_reader_login_ci_native";
 const key=generateKeyPairSync("ed25519").publicKey;
 const pem=key.export({type:"spki",format:"pem"}).toString(),fp=createHash("sha256").update(key.export({type:"spki",format:"der"})).digest("hex");
@@ -45,4 +45,24 @@ test("aggregate only and actual committed run must match original child; never p
  assert.equal(out.candidateCount,2);assert.equal(out.providerContentsPrinted,false);
  assert.ok(!JSON.stringify(out).includes("PRIVATE DO NOT PRINT"));
  assert.throws(()=>redactP6PostcommitNativeAudit({...a,privateSourceScope:{...a.privateSourceScope,expectedSourceGithubRunId:"123457"}},c));
+});
+
+test("original feature compiler requires scoped approval within existing protected policy, disabled by default",()=>{
+ const a=admitP6PostcommitNativeAudit(env(),()=>plan);
+ assert.equal(a.nativePreFeatureReview,null);
+ const p=JSON.parse(policy.toString("utf8"));
+ const feature={approved:true,externalContentUseReviewSha256:"c".repeat(64),rightsSha256:hash};
+ const withFeature=v=>{const b=Buffer.from(JSON.stringify({...p,nativePreFeatureReview:v}));return {...env(),
+  P6_NONPAID_DAILY_POLICY_BASE64:b.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:sha(b)}};
+ assert.deepEqual(admitP6PostcommitNativeAudit(withFeature(feature),()=>plan).nativePreFeatureReview,feature);
+ for(const bad of [{...feature,approved:false},{...feature,rightsSha256:"d".repeat(64)},{...feature,externalContentUseReviewSha256:"bad"}])
+  assert.throws(()=>admitP6PostcommitNativeAudit(withFeature(bad),()=>plan),/FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT/);
+});
+test("feature readback is not called without approved purpose; mismatched private handoff fails before SQL",async()=>{
+ const c=admitP6PostcommitNativeAudit(env(),()=>plan);let connections=0;
+ const pool={connect:async()=>{connections++;throw Error("unexpected connection");}};
+ assert.equal(await reviewP6PostcommitNativeFeatures(pool,{},null,c),null);
+ await assert.rejects(()=>reviewP6PostcommitNativeFeatures(pool,{},null,{...c,nativePreFeatureReview:{approved:true,
+  rightsSha256:hash,externalContentUseReviewSha256:"c".repeat(64)}}),/EXACT_FEATURE_REVIEW_HANDOFF_REQUIRED/);
+ assert.equal(connections,0);
 });
