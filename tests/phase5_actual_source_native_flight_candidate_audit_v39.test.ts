@@ -168,8 +168,17 @@ describe("actual post-COMMIT source native-flight candidates, no invented packet
   expect(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL)
    .not.toContain("INSERT");
   const f=fixture();
-  const r=audit({...f,members:[]});
+  const r=audit({...f,original:{...f.original,normalized_members_count:0},members:[]});
   expect(r.observedMemberCount).toBe(0);
   expect(r.signedPrePacketsCreated).toBe(0);
+ });
+});
+
+describe("committed normalized member cardinality",()=>{
+ it("does not turn missing rows into a true empty source or partial audited population",()=>{
+  const f=fixture();
+  expect(()=>audit({...f,members:[]})).toThrow("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
+  expect(()=>audit({...f,members:f.members.slice(0,2)})).toThrow("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
+  expect(()=>audit({...f,original:{...f.original,normalized_members_count:2}})).toThrow("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
  });
 });

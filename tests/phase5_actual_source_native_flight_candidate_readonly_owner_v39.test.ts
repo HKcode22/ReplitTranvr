@@ -199,3 +199,28 @@ describe("real restricted role SOURCE member audit owner, no paid or PRE",()=>{
   expect(f.sql.at(-1)).toBe("ROLLBACK");
  });
 });
+
+describe("derive actual source run from exact committed reservation and signed query scope",()=>{
+ function committed(){
+  const {expectedSourceGithubRunId,...scope}=fixture().scope;
+  return {...scope,expectedServiceWindowStartUtc:"2027-02-10T11:00:00.000Z",
+   expectedServiceWindowEndUtc:"2027-02-10T13:00:00.000Z"};
+ }
+ it("uses actual committed attempt identity, no per-query GH secret rotation",async()=>{
+  const f=fixture();const actual={...f.original,github_run_id:"99999999999",attempt_run_id:"99999999999"};
+  const p=fakePool({source:[actual]});
+  const x=await auditP5RealSourceToNativeFlightCandidatesReadonly(p.pool,committed());
+  expect(x.candidateCount).toBe(1);
+  expect(p.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("refuses mismatched actual attempt or different signed service window",async()=>{
+  const f=fixture();
+  const p=fakePool({source:[{...f.original,attempt_run_id:"12345678"}]});
+  await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(p.pool,committed()))
+   .rejects.toThrow("COMMITTED_SOURCE_RUN_OR_SIGNED_QUERY_WINDOW_DRIFT");
+  const a=fakePool();
+  await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(a.pool,{...committed(),expectedServiceWindowEndUtc:"2027-02-10T14:00:00.000Z"}))
+   .rejects.toThrow("COMMITTED_SOURCE_RUN_OR_SIGNED_QUERY_WINDOW_DRIFT");
+  expect(a.sql.at(-1)).toBe("ROLLBACK");
+ });
+});

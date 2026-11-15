@@ -192,6 +192,8 @@ export function auditP5ActualSourceFlightCandidates(
     expires<=clock||expires<=sourceAt||
     expires>sourceAt+23*3600_000||windowStart>=windowEnd)
   fail("CHANGED_OR_NONPROSPECTIVE_SOURCE_TIME_CUSTODY");
+ if(memberRows.length!==Number(o.normalized_members_count))
+  fail("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
  if(memberRows.length===0)
   return{
    schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1",
