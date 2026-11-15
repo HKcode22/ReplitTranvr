@@ -187,9 +187,33 @@ export function selectP6DueLaterQueueSelectors(index,trust,policy){
  if(all.length!==lane.due||all.length>1024||
     JSON.stringify(all.slice(0,4))!==JSON.stringify(selectors))
   hold("FULL_DUE_SET_OR_ORIGINAL_EDF_DRIFT");
+ // PRE claims need the earliest *individual* native cutoff, not the
+ // end of a whole 96-packet shard. A long shard may contain a much more
+ // urgent flight than an apparently earlier-ending short shard.
+ const nativeCandidates=all.map(selector=>{
+  const e=signed.entries.find(x=>x.lane==="LATER_PRE"&&x.shardIndex===selector.shardIndex);
+  const raw=index.getFrozen(e.filePath);
+  if(!Buffer.isBuffer(raw)||hash(raw)!==selector.laterRegistrySha256)
+   hold("NATIVE_PRE_PRIORITY_REGISTRY_SHA_DRIFT");
+  const registry=JSON.parse(raw.toString("utf8"));
+  if(!Array.isArray(registry.entries)||registry.entries.length<1||registry.entries.length>96)
+   hold("NATIVE_PRE_PRIORITY_REGISTRY_BOUND");
+  const cutoffs=registry.entries.map(f=>{
+   const offset=f.expectedHorizon==="T-6h"?21600000:f.expectedHorizon==="T-90m"?5400000:null;
+   if(offset===null)hold("NATIVE_PRE_PRIORITY_WRONG_HORIZON");
+   const c=utc(f.expectedSelectedTNativeUtc)-offset;
+   if(c<=utc(e.notBeforeUtc)||c>utc(e.hardLatestUtc))
+    hold("NATIVE_PRE_PRIORITY_OUTSIDE_SIGNED_WINDOW");
+   return c;
+  });
+  // Retain the bounded list, not just the first cutoff; another day read
+  // can advance the actual planning clock past an already examined member.
+  return Object.freeze({selector,cutoffs:Object.freeze(cutoffs)});
+ });
  Object.defineProperties(out,{
   privateSelectors:{value:Object.freeze(selectors),enumerable:false},
-  privateAllDueSelectors:{value:Object.freeze(all),enumerable:false}
+  privateAllDueSelectors:{value:Object.freeze(all),enumerable:false},
+  privateNativePreCandidates:{value:Object.freeze(nativeCandidates),enumerable:false}
  });
  return Object.freeze(out);
 }
@@ -235,18 +259,42 @@ export function chooseP6BoundedLaterEnrollmentSelectors(selectors,observedDbCloc
  }
  return picked.sort(compareP6LaterSelectors);
 }
+/** Urgent PRE differs from restartable enrollment. Match original 3-min
+ * claim + 8-min lookahead; expired or far-future members cannot monopolize
+ * four lanes. EDF on actual remaining signed per-flight cutoffs. No claim
+ * or source evidence here; the original restricted packet reader and Stage14
+ * are still invoked. A future unprocessed flight may remain missing if the
+ * GitHub scheduler is late; no coverage guarantee or increased spend. */
+export function chooseP6BoundedNativePreSelectors(candidates,observedDbClockUtc){
+ const now=utc(observedDbClockUtc);
+ if(!Array.isArray(candidates)||candidates.length>2048)
+  hold("UNBOUNDED_NATIVE_PRE_SELECTION");
+ const seen=new Set(),ranked=[];
+ for(const x of candidates){
+  const s=x?.selector,key=s?.runDayIndex+":"+s?.shardIndex;
+  if(!s||seen.has(key)||!Array.isArray(x.cutoffs)||x.cutoffs.length<1||x.cutoffs.length>96||
+     x.cutoffs.some(c=>!Number.isSafeInteger(c)||c>utc(s.hardLatestUtc)))
+   hold("INVALID_OR_DUPLICATE_NATIVE_PRE_SELECTION");
+  seen.add(key);
+  const eligible=x.cutoffs.filter(c=>c>now+2000&&c<=now+660000);
+  if(eligible.length)ranked.push({selector:s,first:Math.min(...eligible)});
+ }
+ ranked.sort((a,b)=>a.first-b.first||compareP6LaterSelectors(a.selector,b.selector));
+ return ranked.slice(0,4).map(x=>x.selector);
+}
 /** Read at most two independently selected study days and four due shards
  * per invocation. No wall-clock inference of the study day, no GH checkout,
  * no queue writes, no paid dispatch. A revision change during re-read holds
  * rather than allowing the superseded route to execute. */
-export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDayIndices}){
+export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDayIndices,selectionPurpose="ENROLLMENT"}){
  trustPolicyCheck(trust,policy);
+ if(!["ENROLLMENT","PRE_EXECUTION"].includes(selectionPurpose))hold("UNKNOWN_SELECTION_PURPOSE");
  if(!Array.isArray(runDayIndices)||runDayIndices.length<1||runDayIndices.length>2||
     new Set(runDayIndices).size!==runDayIndices.length||
     runDayIndices.some(d=>!Number.isSafeInteger(d)||d<1||d>31))
   hold("INVALID_BOUNDED_STUDY_DAY_SELECTION");
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
- const selectors=[],unavailable=[];
+ const selectors=[],unavailable=[],nativeCandidates=[];
  let due=0,missed=0,notYetDue=0,latestClock=null;
  for(const day of runDayIndices){
   let review;
@@ -268,16 +316,19 @@ export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDay
   const plan=selectP6DueLaterQueueSelectors(index,trust,policy);
   due+=plan.due;missed+=plan.missed;notYetDue+=plan.notYetDue;
   selectors.push(...plan.privateAllDueSelectors);
+  nativeCandidates.push(...plan.privateNativePreCandidates);
   if(latestClock===null||utc(index.redactedSummary.observedDbClockUtc)>utc(latestClock))latestClock=index.redactedSummary.observedDbClockUtc;
  }
- const chosen=latestClock===null?[]:chooseP6BoundedLaterEnrollmentSelectors(selectors,latestClock);
+ const chosen=latestClock===null?[]:selectionPurpose==="PRE_EXECUTION"?
+  chooseP6BoundedNativePreSelectors(nativeCandidates,latestClock):
+  chooseP6BoundedLaterEnrollmentSelectors(selectors,latestClock);
  const rosters=[];
  // Reauthenticate exact current revision and all native permit bytes.
  // Serial reads avoid overlapping transactions on the restricted client.
  for(const selector of chosen)
   rosters.push(await readP6PrivateLaterQueueRoster({client,trust,selector,policy}));
  const out={status:"CURRENT_SIGNED_LATER_QUEUE_ROSTERS_READONLY_NO_GO",
-  requestedDayCount:runDayIndices.length,unavailableDayCount:unavailable.length,
+  requestedDayCount:runDayIndices.length,unavailableDayCount:unavailable.length,selectionPurpose,
   due,missed,notYetDue,hydratedShardCount:rosters.length,deferredDueShardCount:due-rosters.length,
   providerCalls:0,databaseWrites:0,queueClaims:0,tasksEnqueued:0,phase6PaidGo:false};
  Object.defineProperty(out,"privateRosters",{value:Object.freeze(rosters),enumerable:false});
