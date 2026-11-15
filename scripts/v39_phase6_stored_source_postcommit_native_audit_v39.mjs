@@ -12,7 +12,7 @@ import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSour
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
-import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/,GH=/^[0-9]{5,25}$/;
 const hold=x=>{throw Error("HOLD_P6_POSTCOMMIT_NATIVE_AUDIT_"+x);};
@@ -136,7 +136,13 @@ export async function runP6PostcommitNativeAudit(env){
    forbiddenApplicationLogin:"phase5_runtime_application_login"});
   const selector=await selectP6CurrentPostcommitAuditSelector({readerClient:reader,trust:c.trust,selector:c.selector});
   const a=await auditP6StoredCommittedNativeSource({readerClient:reader,sourcePool:pool,trust:c.trust,selector,policy:c.policy});
-  return redactP6PostcommitNativeAudit(a,c);
+  const report=redactP6PostcommitNativeAudit(a,c);
+  if(a.horizon==="T-24h")return report;
+  const pending=await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
+  return {...report,pendingLaterReview:{indexRevision:pending.indexRevision,indexSha256:pending.indexSha256,
+   originalEligibleCount:pending.originalEligibleCount,alreadyIndexed:pending.alreadyIndexed,changedNativeT:pending.changedNativeT,
+   tooLate:pending.tooLate,notYetWithinShardWindow:pending.notYetWithinShardWindow,pendingCount:pending.pendingCount,
+   independentReviewStillRequired:true}};
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
