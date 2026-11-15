@@ -5,6 +5,7 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {admitP6CommittedT24Custody,openP6CommittedT24Custody} from "./v39_phase6_committed_t24_witness_custody_v39.mjs";
 import {waitP5CdGithubSignedDueWindow}
  from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
 import {verifyP5CdFrozenRoster}
@@ -51,10 +52,8 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  const p=roster.entries[0],packetBytes=bytes(p.filePath);
  return runP5CdOneQueuedT24VerifiedBytes(env,rosterBytes,roster,[{filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes}]);
 }
-/** Reuse the exact original singleton writer for authenticated in-memory
- * registry packets. No file dump of private provider contents. Caller must
- * reauthenticate its registry after waiting; original scoped claim still
- * owns durable write authority. */
+/** Same original singleton PRE and independent witness; no private bytes
+ * written to a checkout. The private runtime reauthenticates after waiting. */
 export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,rosterBytes:Buffer,roster:P5CdFrozenRoster,
  files:{filePath:string;packetSha256:string;bytes:Buffer}[],afterWait?:()=>Promise<void>){
  const released=requireP5CdGithubPreRelease(env,{allowReviewedT24Witness:true});
@@ -71,6 +70,7 @@ export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,ros
  verifyP5T24PreWitnessCrossReview(
   expected.permit,expected.witnessReview);
  preflightP5Stage14ReviewedPermitV39(expected.permit);
+ const custodyCtx=admitP6CommittedT24Custody(env,expected.permit,expected.witnessReview);
  const preRaw=new Pool({
   connectionString:env.P5_V39_PRE_DATABASE_URL,
   max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:1400,
@@ -81,7 +81,9 @@ export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,ros
   max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:1400,
   application_name:"p5_cd_t24_separate_v0081_witness_only"
  });
+ let custody:Awaited<ReturnType<typeof openP6CommittedT24Custody>>=null;
  try{
+  custody=await openP6CommittedT24Custody(custodyCtx);
   const pre=makeP5Stage28DedicatedRolePool(preRaw,{
    group:"pre",
    reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
@@ -98,13 +100,18 @@ export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,ros
    env,pre,packets,undefined,{allowReviewedT24Witness:true});
   if(clock.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED")
    hold("T24_DB_CLOCK_LOOKAHEAD_EXHAUSTED_NO_REPLAY");
-  if(afterWait&&clock.status==="DUE_WINDOW")await afterWait();
+  if(afterWait)await afterWait();
   const result=await runP5CdOneQueuedT24Witness(env,{
    preDb:pre,prePool:pre,witnessPool:witness,
    rosterBytes,roster,files
   });
-  return{...result,dbClockDueWindow:clock};
+  // Preserve the exact in-memory original receipt after actual ACK; a
+  // storage failure is not permission to repeat Stage14 or Stage17.
+  const custodyReport=custody&&result.status==="T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE"?
+   await custody.publish(result):null;
+  return{...result,dbClockDueWindow:clock,privateCustodyCommittedAndReadBack:custodyReport?.privateT24CustodyCommittedAndReadBack??false};
  }finally{
+  await custody?.close();
   await Promise.all([preRaw.end().catch(()=>{}),
    witnessRaw.end().catch(()=>{})]);
  }
@@ -117,6 +124,7 @@ if(process.env.P5_CD_GH_QUEUED_T24_EXECUTE==="1"){
    registeredTaskWasSourceBound:report.registeredTaskWasSourceBound,
    stage17WitnessCommittedAndReadBack:report.stage17WitnessCommittedAndReadBack,
    ...summarizeP5T24PrivateReceiptForPublicLog(report.unsignedStage24ReceiptCandidate),
+   privateCustodyCommittedAndReadBack:report.privateCustodyCommittedAndReadBack,
    providerCalls:report.providerCalls,paidProviderCalls:report.paidProviderCalls,
    phase5ScientificFreezePassed:report.phase5ScientificFreezePassed,phase6PaidGo:report.phase6PaidGo}));
   if(report.status!==
