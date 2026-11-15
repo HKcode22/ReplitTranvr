@@ -317,7 +317,7 @@ describe("same reviewed source dossier to original T24 PRE + distinct V0081 witn
   const roster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1" as const,reviewedCodeSha:code,
    manifestSha256:H("1"),rightsSha256:H("4"),entries:[{filePath,packetSha256:x.packetSha256}]};
   const raw=Buffer.from(JSON.stringify(roster)),files=[{filePath,packetSha256:x.packetSha256,bytes:x.packetBytes}];
-  const gate={approvedCodeSha:code,manifestSha256:H("1"),rightsSha256:H("4"),rosterSha256:sha(raw)};
+  const gate={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:code,manifestSha256:H("1"),rightsSha256:H("4"),rosterSha256:sha(raw),stop:false as const,providerCalls:0 as const,scientificFreezeEstablishedByThisFunction:false as const};
   expect(verifyP5CdFrozenRoster(raw,roster,files,gate,"T24_WITH_SEPARATE_WITNESS").size).toBe(1);
   expect(()=>verifyP5CdFrozenRoster(raw,roster,files,gate)).toThrow("T24_WITNESS_OR_STANDALONE");
  });
