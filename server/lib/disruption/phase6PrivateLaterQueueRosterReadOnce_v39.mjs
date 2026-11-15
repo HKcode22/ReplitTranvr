@@ -171,10 +171,70 @@ export function selectP6DueLaterQueueSelectors(index,trust,policy){
   hold("DUE_LANE_COUNT_DRIFT");
  const out={due:lane.due,proposed:lane.proposed,deferred:lane.deferred,
   missed:lane.missed,notYetDue:lane.notYetDue,phase6PaidGo:false};
- Object.defineProperty(out,"privateSelectors",{value:Object.freeze(selectors),enumerable:false});
+ // The original semantic audit validates EVERY index member and reports
+ // the entire due count, although its routing output is limited to four.
+ // Keep an in-memory private list for fair bounded enrollment, never
+ // return it as public metadata or use it as write authority.
+ const now=utc(sum.observedDbClockUtc);
+ const all=signed.entries.filter(e=>e.lane==="LATER_PRE"&&
+  utc(e.notBeforeUtc)<=now&&now<utc(e.hardLatestUtc)).map(e=>{
+   const x={runDayIndex:e.runDayIndex,indexRevision:sum.indexRevision,
+    indexSha256:sum.indexSha256,shardIndex:e.shardIndex,
+    laterRegistrySha256:e.fileSha256,hardLatestUtc:e.hardLatestUtc};
+   selectorCheck(x,trust,policy);
+   return Object.freeze(x);
+ }).sort(compareP6LaterSelectors);
+ if(all.length!==lane.due||all.length>1024||
+    JSON.stringify(all.slice(0,4))!==JSON.stringify(selectors))
+  hold("FULL_DUE_SET_OR_ORIGINAL_EDF_DRIFT");
+ Object.defineProperties(out,{
+  privateSelectors:{value:Object.freeze(selectors),enumerable:false},
+  privateAllDueSelectors:{value:Object.freeze(all),enumerable:false}
+ });
  return Object.freeze(out);
 }
 
+function compareP6LaterSelectors(a,b){
+ return utc(a.hardLatestUtc)-utc(b.hardLatestUtc)||
+  a.runDayIndex-b.runDayIndex||a.shardIndex-b.shardIndex;
+}
+/**
+ * Deterministic bounded fairness for restartable enrollment:
+ * preserve strict EDF across distinct 10-minute deadline bands;
+ * rotate equally urgent shards using actual PostgreSQL clock.
+ * No persisted scheduler cursor, no claim/write authority; a missed
+ * invocation can still mean missingness. Only signed current selectors
+ * may be consumed by the real reauthentication below.
+ */
+export function chooseP6BoundedLaterEnrollmentSelectors(selectors,observedDbClockUtc){
+ const now=utc(observedDbClockUtc);
+ if(!Array.isArray(selectors)||selectors.length>2048)
+  hold("UNBOUNDED_DUE_SELECTION");
+ const all=selectors.slice().sort(compareP6LaterSelectors),seen=new Set(),groups=new Map();
+ for(const x of all){
+  const key=x.runDayIndex+":"+x.shardIndex;
+  const end=utc(x.hardLatestUtc);
+  if(end<=now)continue;
+  if(seen.has(key))hold("DUPLICATE_DUE_SHARD");
+  seen.add(key);
+  const band=Math.floor(end/600000);
+  const list=groups.get(band)??[];list.push(x);groups.set(band,list);
+ }
+ const picked=[];
+ for(const list of groups.values()){
+  const remaining=4-picked.length;
+  if(remaining===0)break;
+  if(list.length<=remaining)picked.push(...list);
+  else{
+   // Step one per 10-min DB-clock slot (not the number of available
+   // slots, which can alias modulo list length). Equal-band order is
+   // stable for the same signed current revision.
+   const offset=Math.floor(now/600000)%list.length;
+   for(let i=0;i<remaining;i++)picked.push(list[(offset+i)%list.length]);
+  }
+ }
+ return picked.sort(compareP6LaterSelectors);
+}
 /** Read at most two independently selected study days and four due shards
  * per invocation. No wall-clock inference of the study day, no GH checkout,
  * no queue writes, no paid dispatch. A revision change during re-read holds
@@ -187,7 +247,7 @@ export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDay
   hold("INVALID_BOUNDED_STUDY_DAY_SELECTION");
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
  const selectors=[],unavailable=[];
- let due=0,missed=0,notYetDue=0;
+ let due=0,missed=0,notYetDue=0,latestClock=null;
  for(const day of runDayIndices){
   let review;
   try{
@@ -207,14 +267,14 @@ export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDay
    hold("CURRENT_DAY_OR_REVIEW_EXPIRY_DRIFT");
   const plan=selectP6DueLaterQueueSelectors(index,trust,policy);
   due+=plan.due;missed+=plan.missed;notYetDue+=plan.notYetDue;
-  selectors.push(...plan.privateSelectors);
+  selectors.push(...plan.privateAllDueSelectors);
+  if(latestClock===null||utc(index.redactedSummary.observedDbClockUtc)>utc(latestClock))latestClock=index.redactedSummary.observedDbClockUtc;
  }
- selectors.sort((a,b)=>utc(a.hardLatestUtc)-utc(b.hardLatestUtc)||
-  a.runDayIndex-b.runDayIndex||a.shardIndex-b.shardIndex);
+ const chosen=latestClock===null?[]:chooseP6BoundedLaterEnrollmentSelectors(selectors,latestClock);
  const rosters=[];
  // Reauthenticate exact current revision and all native permit bytes.
  // Serial reads avoid overlapping transactions on the restricted client.
- for(const selector of selectors.slice(0,4))
+ for(const selector of chosen)
   rosters.push(await readP6PrivateLaterQueueRoster({client,trust,selector,policy}));
  const out={status:"CURRENT_SIGNED_LATER_QUEUE_ROSTERS_READONLY_NO_GO",
   requestedDayCount:runDayIndices.length,unavailableDayCount:unavailable.length,
