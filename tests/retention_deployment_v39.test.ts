@@ -4,6 +4,7 @@ import {
   assertPaidProviderPersistenceAllowed,
   verifyRetentionDeploymentEvidence,
   type RetentionDeploymentEvidenceV39,
+  type RoutineBackupExceptionReviewV39,
 } from "../server/lib/disruption/retentionDeployment_v39";
 
 function evidence(overrides: Partial<RetentionDeploymentEvidenceV39> = {}): RetentionDeploymentEvidenceV39 {
@@ -75,4 +76,63 @@ describe("V3.9 retention deployment / recovery-window safety", () => {
     expect(verdict.pass).toBe(false);
     expect(verdict.failures).toContain("retention-surface-unknown:replica");
   });
+  function withReviewedBackup(): RetentionDeploymentEvidenceV39 {
+    const e=evidence({verifiedAtUtc:"2026-11-15T20:00:00.000Z"});
+    e.surfaces.backup={state:"DEPLOYED",plaintextProviderContentRecoverable:true,
+      recoveryWindowHours:168,source:"CI routine backup fixture only"};
+    const r:RoutineBackupExceptionReviewV39={
+      schema:"v39.retention.routine-backup-review.v1",reviewedAtUtc:"2026-11-15T19:00:00.000Z",
+      accountTermsReviewSha256:"0123456789abcdef".repeat(4),
+      rotationAndAccessReviewSha256:"123456789abcdef0".repeat(4),
+      restoreDrillReviewSha256:"23456789abcdef01".repeat(4),
+      reviewedRotationHours:168,applicableAccountTermsAllowIncidentalBackup:true,
+      routineMinimumNecessaryScopeVerified:true,restrictedOperationalPurposeOnlyVerified:true,
+      noResearchOrTrainingReadVerified:true,restoreQuarantineAndOriginalExpiryVerified:true
+    };
+    e.routineBackupExceptionReview=r;
+    return e;
+  }
+  it("accounts for an explicitly reviewed routine backup without changing actual recoverable age or active TTL",()=>{
+    const e=withReviewedBackup(),v=verifyRetentionDeploymentEvidence(e);
+    expect(v.pass).toBe(true);
+    expect(v.routineBackupExceptionDisposition).toBe("REVIEW_EVIDENCE_ACCEPTED");
+    expect(v.effectiveRecoverableHours).toEqual({raw_provider_content:336,live_fids_cache:192});
+    expect(v.nonIncidentalRecoverableHours).toEqual({raw_provider_content:168,live_fids_cache:24});
+    e.primaryExpiryHours={raw_provider_content:168,live_fids_cache:25};
+    expect(verifyRetentionDeploymentEvidence(e).pass).toBe(false);
+  });
+  it("does not use public terms alone, a policy-only claim, stale rotation or unverified restore to approve backup",()=>{
+    const e=withReviewedBackup(),r=e.routineBackupExceptionReview!;
+    for(const bad of [
+      {applicableAccountTermsAllowIncidentalBackup:false},
+      {restrictedOperationalPurposeOnlyVerified:false},
+      {routineMinimumNecessaryScopeVerified:false},
+      {noResearchOrTrainingReadVerified:false},
+      {restoreQuarantineAndOriginalExpiryVerified:false},
+      {reviewedRotationHours:24},
+      {reviewedAtUtc:"2026-09-12T05:59:00Z"},
+      {reviewedAtUtc:"2026-11-16T00:00:00Z"},
+      {restoreDrillReviewSha256:"a".repeat(64)},
+      {accountTermsReviewSha256:r.restoreDrillReviewSha256}
+    ]) {
+      const v=verifyRetentionDeploymentEvidence({...e,routineBackupExceptionReview:{...r,...bad} as RoutineBackupExceptionReviewV39});
+      expect(v.pass).toBe(false);
+      expect(v.routineBackupExceptionDisposition).toBe("REVIEW_EVIDENCE_INVALID");
+      expect(v.failures).toContain("routine-backup-exception-review-invalid");
+    }
+  });
+  it("never exempts separately queryable replicas, objects or logs, and still rejects unknown surfaces",()=>{
+    for(const name of ["replica","object","log"] as const){
+      const e=withReviewedBackup();
+      e.surfaces[name]={state:"DEPLOYED",plaintextProviderContentRecoverable:true,recoveryWindowHours:1,source:"CI"};
+      const v=verifyRetentionDeploymentEvidence(e);
+      expect(v.pass).toBe(false);
+      expect(v.effectiveRecoverableHours.live_fids_cache).toBe(192);
+      expect(v.nonIncidentalRecoverableHours.live_fids_cache).toBe(25);
+    }
+    const e=withReviewedBackup();
+    e.surfaces.object={state:"UNKNOWN",plaintextProviderContentRecoverable:null,recoveryWindowHours:null,source:"unknown"};
+    expect(verifyRetentionDeploymentEvidence(e).pass).toBe(false);
+  });
+
 });
