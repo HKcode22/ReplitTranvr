@@ -36,7 +36,7 @@ const atField=(x:unknown)=>date(obj(x).utc);
  * as existing V0083, expanded to the whole original UTC service partition.
  * Metadata only; no read of PRE raw bodies or expired source content. */
 export const P6_POST_PARTITION_PRE_SQL=P5_FUTURE_POST_ACTUAL_PRE_SQL
- .replace("SELECT s.id::text AS snapshot_id","SELECT s.flight_instance_id,s.id::text AS snapshot_id,fp.provider_record_key,fp.flight_number,fp.dep_airport_icao,fp.arr_airport_icao,fp.dep_scheduled_utc,fp.available_at AS member_available_at")
+ .replace("SELECT s.id::text AS snapshot_id","SELECT s.flight_instance_id,s.id::text AS snapshot_id,s.selected_t_version,fp.provider_record_key,fp.flight_number,fp.dep_airport_icao,fp.arr_airport_icao,fp.dep_scheduled_utc,fp.available_at AS member_available_at")
  .replace("s.flight_instance_id=$4","s.selected_t_milestone_utc >= $4::timestamptz AND s.selected_t_milestone_utc < $6::timestamptz")
  +" AND q.state='ACTIVE' AND fp.scope_classification='confirmed_core' AND fp.query_direction='Departure' AND q.rights_review_sha256=$7 AND b.rights_review_sha256=$7 "+
  " AND q.service_window_start_utc=$4::timestamptz AND q.service_window_end_utc=$6::timestamptz "+
@@ -93,7 +93,8 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   if(!Object.hasOwn(offsets,h)||!/^leg:[A-Za-z0-9:|._-]{5,196}$/.test(String(x.flight_instance_id??""))||
      !/^\d+$/.test(String(x.snapshot_id??""))||typeof x.query_digest!=="string"||!SHA.test(x.query_digest)||
      t===null||t<f.from||t>=f.to||cutoff===null||t-cutoff!==offsets[h]||
-     issued===null||source===null||member===null||expires===null||expires<=now||
+     issued===null||issued>now||source===null||member===null||expires===null||expires<=now||
+     typeof x.selected_t_version!=="string"||x.selected_t_version.length<1||x.selected_t_version.length>180||
      source>member||member>issued||issued>cutoff||issued>=expires||
      !SHA.test(String(x.fids_response_hash??""))||x.fids_response_hash!==x.binding_response_hash||
      x.dep_airport_icao!==p.airportIcao||date(x.dep_scheduled_utc)!==t){invalidPre++;continue;}
@@ -180,12 +181,64 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
    postMatch:"EXACT_REPORTED_NATIVE_ID_ROUTE_NUMBER_NOT_INDEPENDENT_PHYSICAL_CERTIFICATION",
    reportedRevisedUtc:revised===null?null:iso(revised),reportedRunwayUtc:runway===null?null:iso(runway),reportedCancellation:cancellation});
  }
+ // Compare horizons on the same retained leg and the same immutable T/route,
+ // not the intersection of unrelated aggregate horizon totals. These are
+ // observable candidate pairs, NOT a complete source-frame or label denominator.
+ const perFlight=new Map<string,Map<Horizon,Row[]>>();
+ for(const a of grouped.values()){
+  const x=a[0],k=String(x.flight_instance_id);
+  const hs=perFlight.get(k)??new Map<Horizon,Row[]>();
+  hs.set(x.horizon as Horizon,a);perFlight.set(k,hs);
+ }
+ const matched=new Set(privateDecisions.map(d=>JSON.stringify([d.draft.flightInstanceId,d.draft.horizon])));
+ const pair=(a:Row,b:Row)=>
+  date(a.selected_t_milestone_utc)===date(b.selected_t_milestone_utc)&&
+  a.selected_t_version===b.selected_t_version&&a.dep_airport_icao===b.dep_airport_icao&&
+  ico(a.arr_airport_icao)&&a.arr_airport_icao===b.arr_airport_icao&&
+  number(a.flight_number)!==null&&number(a.flight_number)===number(b.flight_number)&&
+  (!id(a.provider_record_key)||!id(b.provider_record_key)||a.provider_record_key===b.provider_record_key);
+ const coverage={
+  retainedUniqueFlightCandidates:perFlight.size,
+  flightsWithDuplicateHorizon:0,flightsWithCrossHorizonTOrIdentityConflict:0,
+  retainedT6UniquePre:0,retainedT90UniquePre:0,retainedT24UniquePre:0,
+  retainedConsistentT6T90Pairs:0,retainedConsistentT6T24Pairs:0,retainedConsistentAllThree:0,
+  sameNativeReportedPostT6T90PairsAfterScheduledT:0,
+  sameNativeReportedPostT6T24PairsAfterScheduledT:0,
+  t6OnlyAmongRetainedHorizons:0,matchedHorizonObservationsBeforeScheduledT:0,
+  actualPhysicalLabelPairsCertified:0,
+  t24OriginalExpiryCanRemoveEvidence:true,
+  fullStudyDenominatorCertified:false
+ };
+ for(const [k,hs] of perFlight){
+  if([...hs.values()].some(a=>a.length!==1))coverage.flightsWithDuplicateHorizon++;
+  const singles=[...hs.entries()].filter(([,a])=>a.length===1);
+  if(hs.size>1&&singles.some(([,a],i)=>singles.slice(i+1).some(([,b])=>!pair(a[0],b[0]))))
+   coverage.flightsWithCrossHorizonTOrIdentityConflict++;
+  const x=hs.get("T-6h"),y=hs.get("T-90m"),z=hs.get("T-24h");
+  if(x?.length===1)coverage.retainedT6UniquePre++;
+  if(y?.length===1)coverage.retainedT90UniquePre++;
+  if(z?.length===1)coverage.retainedT24UniquePre++;
+  if(x?.length===1&&hs.size===1)coverage.t6OnlyAmongRetainedHorizons++;
+  for(const [h,a] of singles)
+   if(matched.has(JSON.stringify([k,h]))&&available<reqDate(a[0].selected_t_milestone_utc))
+    coverage.matchedHorizonObservationsBeforeScheduledT++;
+  const valid=(a:Row[]|undefined,b:Row[]|undefined)=>a?.length===1&&b?.length===1&&pair(a[0],b[0]);
+  const xy=valid(x,y),xz=valid(x,z);
+  if(xy)coverage.retainedConsistentT6T90Pairs++;
+  if(xz)coverage.retainedConsistentT6T24Pairs++;
+  if(xy&&xz&&valid(y,z))coverage.retainedConsistentAllThree++;
+  const both=(a:Horizon,b:Horizon)=>matched.has(JSON.stringify([k,a]))&&matched.has(JSON.stringify([k,b]));
+  if(xy&&both("T-6h","T-90m")&&available>=reqDate(x![0].selected_t_milestone_utc))
+   coverage.sameNativeReportedPostT6T90PairsAfterScheduledT++;
+  if(xz&&both("T-6h","T-24h")&&available>=reqDate(x![0].selected_t_milestone_utc))
+   coverage.sameNativeReportedPostT6T24PairsAfterScheduledT++;
+ }
  const out={schema:"v39.phase6.actual-post-outcome-observability.v1",status:"COMMITTED_POST_MATCHED_PRE_FIELD_OBSERVABILITY_NOT_ACTUAL_LABEL",
   preScope:"CURRENTLY_RETAINED_PRE_IN_EXACT_PHYSICAL_SERVICE_PARTITION",normalizedPostMembers:s.normalizedMembers,
   originalPostDepartureRows:fieldShape.observedDepartureRecords,postOperatorReportedRows:fieldShape.providerOperatorTaggedObservations,
   postGenericScheduledRows:fieldShape.scheduledTimeFieldPresent,postRevisedRows:fieldShape.revisedTimeFieldPresent,
   postRunwayRows:fieldShape.runwayTimeFieldPresent,invalidPreRows:invalidPre,uniqueRetainedPreFlights:uniqueRetainedFlights.size,
-  byHorizon:counts,idlessServiceEvidenceTier:"CONDITIONAL_EXACT_REPORTED_SCHEDULE_ROUTE_NUMBER_ONLY_NOT_PHYSICAL_LEG",
+  byHorizon:counts,pairedHorizonObservability:Object.freeze(coverage),idlessServiceEvidenceTier:"CONDITIONAL_EXACT_REPORTED_SCHEDULE_ROUTE_NUMBER_ONLY_NOT_PHYSICAL_LEG",
   actualGateOutNumericCandidates:0,fullStudyDenominatorCertified:false,
   confirmedCancellationLabels:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
   retainedEvidenceOnly:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
