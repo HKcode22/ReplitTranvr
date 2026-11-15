@@ -165,7 +165,7 @@ describe("Phase5 C+D one GH-only PREPARE FIDS original → V0091 queue admission
   expect(w24).toContain(
    "P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_T24_ROSTER_SHA256 }}");
   expect(later).toContain(
-   "P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}");
+   "P5_CD_GH_PRE_ROSTER_SHA256: ${{ !(github.event_name == 'schedule' && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && secrets.P5_CD_GH_PRE_ROSTER_SHA256 || '' }}");
   expect(yaml).toContain(
    "vars.P5_CD_GH_PREPARE_SOURCE_ENABLED == '1'");
   expect(yaml).not.toContain("P5_CD_GH_T24_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}");

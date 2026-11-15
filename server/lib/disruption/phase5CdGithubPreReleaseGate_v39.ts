@@ -5,6 +5,7 @@
  * In live use, release secrets and reviewed code SHA must be established
  * separately by the owner/independent reviewer. Default is STOP.
  */
+import {assertP6CurrentPrivatePreMode,readP6ScopedCurrentPrivateRosterDigest} from "./phase6CurrentPrivatePreScope_v39.mjs";
 const SHA=/^[a-f0-9]{40}$/;
 const SHA256=/^[a-f0-9]{64}$/;
 const HOLDER="ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER";
@@ -36,10 +37,13 @@ export interface P5CdGithubPreRelease{
  providerCalls:0;
  scientificFreezeEstablishedByThisFunction:false;
 }
-export function requireP5CdGithubPreRelease(
+function requireP5CdGithubPreScopeInternal(
  env:NodeJS.ProcessEnv,
  options?:{allowReviewedT24Witness?:true}
-):P5CdGithubPreRelease{
+):Omit<P5CdGithubPreRelease,"rosterSha256">{
+ const current=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE";
+ if(current){if(options?.allowReviewedT24Witness)hold("CURRENT_LATER_NEVER_T24");assertP6CurrentPrivatePreMode(env);}
+ else if(env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1")hold("MIXED_CURRENT_PRIVATE_MODE");
  // A small, no-provider Phase5 PRE pilot can furnish prospective
  // evidence BEFORE final scientific freeze. It requires its own explicit
  // owner/reviewer authorization, never reuses a Phase6 paid GO.
@@ -75,7 +79,7 @@ export function requireP5CdGithubPreRelease(
      options?.allowReviewedT24Witness!==true)||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
-    !SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??"")||
+    (!current&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
     !SHA256.test(env.V39_P5_RIGHTS_SHA256??"")||
     !SHA256.test(env.V39_P5_MANIFEST_SHA256??""))
   hold("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
@@ -115,13 +119,26 @@ export function requireP5CdGithubPreRelease(
   ...(standalone?{independentlyApprovedStandaloneProtocolSha256:standalone}:{}),
   releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
   approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
-  rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
   rightsSha256:env.V39_P5_RIGHTS_SHA256!,
   manifestSha256:env.V39_P5_MANIFEST_SHA256!,
   stop:false,
   providerCalls:0,
   scientificFreezeEstablishedByThisFunction:false
  };
+}
+/** Stable scope does not grant a claim or a roster digest. Only the real
+ * private reader's ephemeral authenticated scope can authorize that digest. */
+export function requireP5CdGithubCurrentPrivatePreScope(env:NodeJS.ProcessEnv){
+ assertP6CurrentPrivatePreMode(env);
+ return requireP5CdGithubPreScopeInternal(env);
+}
+export function requireP5CdGithubPreRelease(
+ env:NodeJS.ProcessEnv,options?:{allowReviewedT24Witness?:true}
+):P5CdGithubPreRelease{
+ const base=requireP5CdGithubPreScopeInternal(env,options);
+ const rosterSha256=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE"?
+  readP6ScopedCurrentPrivateRosterDigest(env):env.P5_CD_GH_PRE_ROSTER_SHA256!;
+ return {...base,rosterSha256};
 }
 export function requireP5CdGithubEFeatures(
  env:NodeJS.ProcessEnv,
