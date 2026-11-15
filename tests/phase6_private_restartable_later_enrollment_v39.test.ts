@@ -69,3 +69,18 @@ describe("bounded reviewed calendar scheduling",()=>{
   expect(()=>selectP6LaterCalendarDueDays({windows:[],validFrom:now-100,validUntil:now},new Date(now).toISOString())).toThrow("CALENDAR_POLICY_NOT_LIVE");
  });
 });
+
+import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
+describe("same Neon physical endpoint, not same hostname spelling",()=>{
+ const url=(host:string,db="neondb")=>new URL("postgresql://ci:ci@"+host+"/"+db+"?sslmode=require");
+ it("canonicalizes only one pooler suffix and default PostgreSQL port",()=>{
+  expect(sameP6NeonDatabaseEndpoint(url("ep-test.neon.tech"),url("ep-test-pooler.neon.tech:5432"))).toBe(true);
+  expect(sameP6NeonDatabaseEndpoint(url("ep-test.aws.neon.tech"),url("ep-test-pooler.aws.neon.tech"))).toBe(true);
+ });
+ it.each(["ep-other-pooler.neon.tech","ep-test-pooler.neon.tech:6432","ep-test-pooler.neon.tech.evil.example","ep-test-pooler-pooler.neon.tech","ep-test-pooler.other.neon.tech"])("rejects different physical endpoints: %s",host=>{
+  expect(sameP6NeonDatabaseEndpoint(url("ep-test.neon.tech"),url(host))).toBe(false);
+ });
+ it("rejects a different database on the same endpoint",()=>{
+  expect(sameP6NeonDatabaseEndpoint(url("ep-test.neon.tech"),url("ep-test-pooler.neon.tech","other"))).toBe(false);
+ });
+});
