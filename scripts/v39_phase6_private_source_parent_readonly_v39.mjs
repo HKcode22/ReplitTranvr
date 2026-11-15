@@ -212,7 +212,8 @@ export async function runP6RealPrivateSourceParentReadOnly(
     all.push(await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
      client:c,pins:b.pins,wire:b.wire,publicKeyPem:b.publicKeyPem,
      scope:{privateDayRegistryReadOnlyApproved:true,
-      existingPaidDispatchApproved:false}
+      existingPaidDispatchApproved:false,
+      requireCurrentRevisionForPlanning:true}
     }));
    return all;
   }finally{await c.end();}
