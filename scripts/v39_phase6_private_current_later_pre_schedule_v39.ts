@@ -63,8 +63,8 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
   finally{await c.query("ROLLBACK");}
   const due=selectP6LaterCalendarDueDays(ctx.calendar,now);
   if(!due.dayIndices.length)return {rosters:[] as Projection[],deferredDays:due.deferredDays,deferredShards:0};
-  const z=await readP6CurrentLaterQueueRosters({client:c,trust:ctx.trust,policy:ctx.policy,runDayIndices:due.dayIndices});
-  if(z.providerCalls!==0||z.databaseWrites!==0||z.phase6PaidGo!==false||
+  const z=await readP6CurrentLaterQueueRosters({client:c,trust:ctx.trust,policy:ctx.policy,runDayIndices:due.dayIndices,selectionPurpose:"PRE_EXECUTION"});
+  if(z.selectionPurpose!=="PRE_EXECUTION"||z.providerCalls!==0||z.databaseWrites!==0||z.phase6PaidGo!==false||
     z.privateRosters.length>4||z.privateRosters.length!==z.hydratedShardCount)
    hold("UNBOUNDED_OR_UNVERIFIED_ROSTER_SELECTION");
   return {rosters:[...z.privateRosters] as Projection[],deferredDays:due.deferredDays,deferredShards:z.deferredDueShardCount};
