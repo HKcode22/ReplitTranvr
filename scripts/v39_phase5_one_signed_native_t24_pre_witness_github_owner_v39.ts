@@ -15,7 +15,7 @@ import {
  makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS
 } from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {
- persistP5ReviewedT24PreAndIndependentWitness,
+ summarizeP5T24PrivateReceiptForPublicLog,persistP5ReviewedT24PreAndIndependentWitness,
  verifyP5T24PreWitnessCrossReview,
  type P5IndependentT24WitnessReview
 } from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
@@ -221,7 +221,12 @@ async function main(){
  const bytes=readFileSync(path);
  const packet=JSON.parse(bytes.toString("utf8")) as P5NativeT24SignedReleasePacket;
  const out=await runP5NativeT24GitHubRelease(process.env,bytes,packet,path);
- console.log(JSON.stringify(out));
+ console.log(JSON.stringify({schema:out.schema,status:out.status,packetSha256:out.packetSha256,
+  runDayIndex:out.runDayIndex,preCommitWitnessVerified:out.preCommitWitnessVerified,
+  ...summarizeP5T24PrivateReceiptForPublicLog(out.unsignedStage24ReceiptCandidate),
+  providerCalls:out.providerCalls,alertCreates:out.alertCreates,
+  scientificFreezeGrantedByWorker:out.scientificFreezeGrantedByWorker,
+  paidPhase6GoGrantedByWorker:out.paidPhase6GoGrantedByWorker}));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  main().catch(e=>{
