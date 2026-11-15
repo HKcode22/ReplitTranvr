@@ -104,9 +104,22 @@ export interface P5PgReadonlyClient{
 export interface P5PgReadonlyPool{
  connect():Promise<P5PgReadonlyClient>;
 }
+/** Runtime may learn the original run ID from the actual immutable V0079
+ * reservation/binding join. The signed query envelope must already have
+ * supplied every other scope pin and service window. This is NOT a new
+ * independent reviewer signature or a permit.
+ */
+export type P5ReviewedCommittedQueryScope=Omit<P5ActualSourceCandidateScope,"expectedSourceGithubRunId">&{
+ expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string;
+};
 export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
- pool:P5PgReadonlyPool,scope:P5ActualSourceCandidateScope
+ pool:P5PgReadonlyPool,scope:P5ActualSourceCandidateScope|P5ReviewedCommittedQueryScope
 ):Promise<P5ActualSourceCandidateAudit>{
+ const dynamic="expectedServiceWindowStartUtc" in scope||"expectedServiceWindowEndUtc" in scope;
+ if(dynamic&&("expectedSourceGithubRunId" in scope||
+    !("expectedServiceWindowStartUtc" in scope)||!("expectedServiceWindowEndUtc" in scope)))
+  hold("MANUAL_RUN_ID_AND_COMMITTED_QUERY_MODE_MUST_NOT_MIX");
+ let exactScope:P5ActualSourceCandidateScope;
  if(!pool||typeof pool.connect!=="function")
   hold("UNVERIFIED_RESTRICTED_PG_POOL");
  const client=await pool.connect();
@@ -131,6 +144,17 @@ export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
   if(original.rowCount!==1||original.rows.length!==1)
    hold("SOURCE_ORIGINAL_ABSENT_OR_AMBIGUOUS_NO_BACKFILL");
   const source=original.rows[0];
+  if(dynamic){
+   const s=scope as P5ReviewedCommittedQueryScope;
+   const asUtc=(value:unknown)=>{const d=value instanceof Date?value:new Date(String(value));
+    return Number.isFinite(d.getTime())?d.toISOString():null;};
+   if(typeof source.github_run_id!=="string"||!GH.test(source.github_run_id)||
+      source.github_run_id!==source.attempt_run_id||
+      asUtc(source.service_window_start_utc)!==s.expectedServiceWindowStartUtc||
+      asUtc(source.service_window_end_utc)!==s.expectedServiceWindowEndUtc)
+    hold("COMMITTED_SOURCE_RUN_OR_SIGNED_QUERY_WINDOW_DRIFT");
+   exactScope={...s,expectedSourceGithubRunId:source.github_run_id};
+  }else exactScope=scope as P5ActualSourceCandidateScope;
   const id=source.population_query_id;
   if(typeof id!=="string"||!UUID.test(id))
    hold("SOURCE_ORIGINAL_INVALID_POPULATION_QUERY_ID");
@@ -139,11 +163,11 @@ export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
   if(members.rows.length>2500)
    hold("SOURCE_POPULATION_EXCEEDS_REVIEW_CAP_NO_SILENT_TRUNCATION");
   const report=auditP5ActualSourceFlightCandidates(
-   scope,original.rows as unknown as P5ActualBoundOriginalRow[],
+   exactScope,original.rows as unknown as P5ActualBoundOriginalRow[],
    members.rows as unknown as P5ActualFlightPopulationRow[],
    who.rows[0].now as Date|string);
   await client.query("ROLLBACK");tx=false;
-  return report;
+  return dynamic?{...report,sourceGithubRunId:exactScope.expectedSourceGithubRunId}:report;
  }catch(e){
   if(tx)await client.query("ROLLBACK").catch(()=>{});
   throw e;

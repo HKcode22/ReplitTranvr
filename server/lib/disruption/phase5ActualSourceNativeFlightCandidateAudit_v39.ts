@@ -107,6 +107,8 @@ export interface P5ActualFlightCandidateReview{
 export interface P5ActualSourceCandidateAudit{
  schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1";
  status:"ACTUAL_SOURCE_CANDIDATE_REVIEW_NOT_PACKET_SIGNING";
+ /** Present for dynamically verified committed-query scope only. */
+ sourceGithubRunId?:string;
  actualDbClockUtc:string;sourcePopulationQueryId:string;
  sourceResponseSha256:string;queryDigestSha256:string;
  observedMemberCount:number;candidateCount:number;
@@ -192,6 +194,8 @@ export function auditP5ActualSourceFlightCandidates(
     expires<=clock||expires<=sourceAt||
     expires>sourceAt+23*3600_000||windowStart>=windowEnd)
   fail("CHANGED_OR_NONPROSPECTIVE_SOURCE_TIME_CUSTODY");
+ if(memberRows.length!==Number(o.normalized_members_count))
+  fail("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
  if(memberRows.length===0)
   return{
    schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1",
