@@ -5,6 +5,7 @@
  */
 import {AsyncLocalStorage} from "node:async_hooks";
 import {createHash} from "node:crypto";
+import {isP6CurrentPreTrigger} from "./phase6LaterCalendarDueDays_v39.mjs";
 import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6PrivateLaterQueueRoster} from "./phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
@@ -15,7 +16,7 @@ export function assertP6CurrentPrivatePreMode(env){
  if(env.P5_CD_GH_PRIVATE_LATER_MODE!=="PRIVATE_CURRENT_SCHEDULE"||
     env.P5_CD_GH_PRIVATE_CURRENT_APPROVED!=="1"||
     env.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED!=="1"||
-    env.GITHUB_EVENT_NAME!=="schedule"||
+    !isP6CurrentPreTrigger(env)||
     env.P5_CD_GH_PRE_MODE!=="PHASE6_APPROVED"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE6_PROCESS_ARMED!=="1"||
