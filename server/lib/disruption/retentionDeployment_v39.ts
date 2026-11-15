@@ -14,7 +14,26 @@ export interface RetentionSurfaceEvidence {
   note?: string;
 }
 
+/** Reviewed account-specific application of Article 5.8 incidental backup
+ * category. Evidence is supplied by the independent reviewer; this verifier
+ * does not fetch, authenticate or interpret the underlying agreement.
+ * Not an extension of live Contents, a data-source license, or a GO. */
+export interface RoutineBackupExceptionReviewV39 {
+  schema: "v39.retention.routine-backup-review.v1";
+  reviewedAtUtc: string;
+  accountTermsReviewSha256: string;
+  rotationAndAccessReviewSha256: string;
+  restoreDrillReviewSha256: string;
+  reviewedRotationHours: number;
+  applicableAccountTermsAllowIncidentalBackup: true;
+  routineMinimumNecessaryScopeVerified: true;
+  restrictedOperationalPurposeOnlyVerified: true;
+  noResearchOrTrainingReadVerified: true;
+  restoreQuarantineAndOriginalExpiryVerified: true;
+}
+
 export interface RetentionDeploymentEvidenceV39 {
+  routineBackupExceptionReview?: RoutineBackupExceptionReviewV39;
   schemaVersion: "v3.9-retention-deployment-evidence-1";
   evidenceId: string;
   verifiedAtUtc: string;
@@ -31,11 +50,33 @@ export interface RetentionDeploymentEvidenceV39 {
 export interface RetentionDeploymentVerdict {
   pass: boolean;
   failures: string[];
+  /** Physical recoverability includes even qualifying incidental backup copies. */
   effectiveRecoverableHours: Readonly<Record<HardRetentionClass, number | null>>;
+  nonIncidentalRecoverableHours: Readonly<Record<HardRetentionClass, number | null>>;
+  routineBackupExceptionDisposition: "NOT_REVIEWED" | "REVIEW_EVIDENCE_INVALID" | "REVIEW_EVIDENCE_ACCEPTED";
 }
 
 function isNonNegativeFinite(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n) && n >= 0;
+}
+const SHA = /^[a-f0-9]{64}$/;
+function reviewedRoutineBackup(e: RetentionDeploymentEvidenceV39): boolean {
+  const r=e.routineBackupExceptionReview, b=e.surfaces?.backup;
+  if(!r || !b || b.state!=="DEPLOYED" || b.plaintextProviderContentRecoverable!==true ||
+     !isNonNegativeFinite(b.recoveryWindowHours) || b.recoveryWindowHours<=0) return false;
+  const reviewed=Date.parse(r.reviewedAtUtc), verified=Date.parse(e.verifiedAtUtc);
+  return r.schema==="v39.retention.routine-backup-review.v1" &&
+    Number.isFinite(reviewed) && Number.isFinite(verified) &&
+    reviewed>=Date.parse("2026-10-11T00:00:00Z") && reviewed<=verified &&
+    [r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,r.restoreDrillReviewSha256]
+      .every(x=>typeof x==="string"&&SHA.test(x)&&!/^([a-f0-9])\1{63}$/.test(x)) &&
+    new Set([r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,r.restoreDrillReviewSha256]).size===3 &&
+    r.reviewedRotationHours===b.recoveryWindowHours &&
+    r.applicableAccountTermsAllowIncidentalBackup===true &&
+    r.routineMinimumNecessaryScopeVerified===true &&
+    r.restrictedOperationalPurposeOnlyVerified===true &&
+    r.noResearchOrTrainingReadVerified===true &&
+    r.restoreQuarantineAndOriginalExpiryVerified===true;
 }
 
 /**
@@ -45,7 +86,11 @@ function isNonNegativeFinite(n: unknown): n is number {
  * the recovery window extends the age at which the content remains recoverable.
  * Example: primary deletion at 24h plus 168h PITR means the original FIDS
  * plaintext can remain recoverable at an age of roughly 192h, so a 24h hard
- * maximum is not satisfied.
+ * maximum is not satisfied under the original ordinary-cache policy.
+ * The later Article 5.8 incidental-backup path is conditional on actual
+ * account applicability, verified ordinary rotation, restricted use and
+ * a restore drill that re-enforces the original expiry before access.
+ * No backup-only exception enlarges primary/replica/object/log retention.
  */
 export function verifyRetentionDeploymentEvidence(
   evidence: RetentionDeploymentEvidenceV39,
@@ -63,9 +108,10 @@ export function verifyRetentionDeploymentEvidence(
       continue;
     }
     if (surface.state === "UNKNOWN") failures.push(`retention-surface-unknown:${name}`);
+    if (!["DEPLOYED","NOT_DEPLOYED","UNKNOWN"].includes(surface.state)) failures.push(`retention-surface-state-invalid:${name}`);
     if (!surface.source?.trim()) failures.push(`retention-surface-source-missing:${name}`);
     if (surface.state === "DEPLOYED") {
-      if (surface.plaintextProviderContentRecoverable === null) failures.push(`retention-surface-recoverability-unknown:${name}`);
+      if (typeof surface.plaintextProviderContentRecoverable !== "boolean") failures.push(`retention-surface-recoverability-unknown:${name}`);
       if (surface.plaintextProviderContentRecoverable === true && !isNonNegativeFinite(surface.recoveryWindowHours)) {
         failures.push(`retention-surface-window-unknown:${name}`);
       }
@@ -79,6 +125,16 @@ export function verifyRetentionDeploymentEvidence(
     live_fids_cache: null,
   };
 
+  const operational: Record<HardRetentionClass, number | null> = {
+    raw_provider_content: null,
+    live_fids_cache: null,
+  };
+  const exceptionProvided=evidence.routineBackupExceptionReview!==undefined;
+  const reviewedBackup=reviewedRoutineBackup(evidence);
+  const routineBackupExceptionDisposition = reviewedBackup ? "REVIEW_EVIDENCE_ACCEPTED" as const :
+    exceptionProvided ? "REVIEW_EVIDENCE_INVALID" as const : "NOT_REVIEWED" as const;
+  if(exceptionProvided&&!reviewedBackup) failures.push("routine-backup-exception-review-invalid");
+
   for (const contentClass of Object.keys(HARD_RETENTION_LIMIT_HOURS) as HardRetentionClass[]) {
     const primaryExpiry = evidence.primaryExpiryHours?.[contentClass];
     if (!isNonNegativeFinite(primaryExpiry)) {
@@ -89,6 +145,7 @@ export function verifyRetentionDeploymentEvidence(
     if (primaryExpiry > hardLimit) failures.push(`primary-expiry-over-hard-limit:${contentClass}`);
 
     let longestRecovery = 0;
+    let longestOperationalRecovery = 0;
     let recoveryKnown = true;
     for (const name of surfaceNames) {
       if (name === "primary") continue;
@@ -99,12 +156,19 @@ export function verifyRetentionDeploymentEvidence(
         continue;
       }
       longestRecovery = Math.max(longestRecovery, surface.recoveryWindowHours);
+      // Only the independently reviewed routine backup may be excluded
+      // from the ordinary active-data ceiling; replicas, objects and logs
+      // remain on the original conservative clock.
+      if(name!=="backup"||!reviewedBackup)
+        longestOperationalRecovery=Math.max(longestOperationalRecovery,surface.recoveryWindowHours);
     }
     if (!recoveryKnown) continue;
     const recoverableAge = primaryExpiry + longestRecovery;
     effective[contentClass] = recoverableAge;
-    if (recoverableAge > hardLimit) {
-      failures.push(`recoverable-age-over-hard-limit:${contentClass}:${recoverableAge}h>${hardLimit}h`);
+    const activeAge=primaryExpiry+longestOperationalRecovery;
+    operational[contentClass]=activeAge;
+    if (activeAge > hardLimit) {
+      failures.push(`recoverable-age-over-hard-limit:${contentClass}:${activeAge}h>${hardLimit}h`);
     }
   }
 
@@ -112,6 +176,8 @@ export function verifyRetentionDeploymentEvidence(
     pass: failures.length === 0,
     failures: [...new Set(failures)].sort(),
     effectiveRecoverableHours: effective,
+    nonIncidentalRecoverableHours: operational,
+    routineBackupExceptionDisposition,
   };
 }
 
