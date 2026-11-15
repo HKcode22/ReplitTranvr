@@ -9,6 +9,7 @@ import {readP5CompleteGithubWorkflowHistory}
  from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39.ts";
 import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
  from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
+import {P6_STORED_SOURCE_CAPACITY as CAP} from "../server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts";
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const CHILD="phase5-one-signed-day-source-child-dispatch.yml";
 const PARENT="phase5-source-upcoming-queue-main-scheduled-readonly.yml";
@@ -111,7 +112,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  try{
   // Local read-only arguments only. No mutation of repository global arm.
   const pl=await observe({...env,V39_PHASE6_PROCESS_ARMED:"0",
-   V39_PHASE6_OWNER_APPROVED:"0",P6_PRIVATE_SOURCE_PARENT_RO_ENABLED:"true"});
+   V39_PHASE6_OWNER_APPROVED:"0",P6_PRIVATE_SOURCE_PARENT_RO_ENABLED:"true"},{storedCapacityProfile:true});
   if(pl?.providerCalls!==0||pl.databaseWrites!==0||pl.githubDispatches!==0||pl.paidPhase6Go!==false)
    fail("OBSERVATION_NOT_READ_ONLY");
   if(pl.status==="NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH")
@@ -123,7 +124,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   const desc=Object.getOwnPropertyDescriptor(pl,"privateStoredChildInputProposals");
   if(pl.status!=="SIGNED_PRIVATE_DAY_SOURCE_AND_ACTUAL_DB_DUE_REVIEW_ONLY_NO_DISPATCH"||
      pl.storedReviewMode!==true||!desc||desc.enumerable||desc.writable||
-     !Array.isArray(desc.value)||desc.value.length!==pl.candidateCount||desc.value.length>4)
+     !Array.isArray(desc.value)||desc.value.length!==pl.candidateCount||desc.value.length>CAP.perTickCap)
    fail("NOT_EXACT_STORED_DUE_OBSERVATION");
   proposals=desc.value;
   unavailableDays=pl.unavailableSelectedDayCount??0;
@@ -152,7 +153,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
    submitted.add(x.display_title.slice("P5 SOURCE ".length));
    if(x.status!=="completed")active++;
   }
-  proposals=proposals.filter(x=>!submitted.has(x.query_digest)).slice(0,Math.max(0,Math.min(4,8-active)));
+  proposals=proposals.filter(x=>!submitted.has(x.query_digest)).slice(0,Math.max(0,Math.min(CAP.perTickCap,CAP.inFlightCap-active)));
   if(Math.abs(now()-historyClock)>120000)fail("PRE_DISPATCH_CLOCK_STALE");
  }catch{
   // No POST occurred; ordinary preflight failure should not quarantine
@@ -178,7 +179,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  }
  return summary("BOUNDED_STORED_SOURCE_CHILD_DISPATCH_ACKS_NOT_PAID_RECEIPTS",{
   activeSourceChildCountBefore:active,acknowledgedGithubChildCount:acknowledged.length,
-  acknowledgedGithubRunIds:acknowledged,inFlightCap:8,perTickCap:4,
+  acknowledgedGithubRunIds:acknowledged,inFlightCap:CAP.inFlightCap,perTickCap:CAP.perTickCap,maxLeadMinutes:CAP.maxLeadMinutes,
   unavailableSelectedDayCount:unavailableDays,unavailableSelectedDueQueryCount:unavailableQueries});
 }
 if(process.env.P6_PRIVATE_STORED_SOURCE_DISPATCH_ENTRYPOINT==="1")
