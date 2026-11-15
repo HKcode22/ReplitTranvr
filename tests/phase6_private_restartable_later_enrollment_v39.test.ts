@@ -55,3 +55,17 @@ describe("bounded original registration exact restart",()=>{
   expect(writes).toBe(1);
  });
 });
+
+import {selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+describe("bounded reviewed calendar scheduling",()=>{
+ it("selects earliest closing relevant days using DB clock, not today's UTC day number",()=>{
+  const now=Date.parse("2035-01-01T00:00:00.000Z"),ms=[{day:1,children:[{start:now-1,end:now+100}]},
+   {day:2,children:[{start:now-1,end:now+200}]},{day:3,children:[{start:now-1,end:now+50}]},
+   {day:4,children:[{start:now+1,end:now+1000}]},{day:5,children:[{start:now-100,end:now}]}];
+  expect(selectP6LaterCalendarDueDays({windows:ms,validFrom:now-1000,validUntil:now+10000},new Date(now).toISOString())).toEqual({dayIndices:[3,1],deferredDays:1});
+ });
+ it("rejects expired protected calendar policy",()=>{
+  const now=Date.parse("2035-01-01T00:00:00.000Z");
+  expect(()=>selectP6LaterCalendarDueDays({windows:[],validFrom:now-100,validUntil:now},new Date(now).toISOString())).toThrow("CALENDAR_POLICY_NOT_LIVE");
+ });
+});

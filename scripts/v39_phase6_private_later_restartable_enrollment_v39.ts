@@ -6,6 +6,8 @@
  * independent stored day signature and stable scope are the authority.
  */
 import {Client,Pool} from "pg";
+import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
@@ -27,9 +29,11 @@ export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
     env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER")
   hold("WRONG_STABLE_PRIVATE_RELEASE_OR_LEGACY_MODE");
  const raw=env.P6_PRIVATE_LATER_RUN_DAYS??"";
- if(!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))
-  hold("ONE_OR_TWO_EXPLICIT_REVIEWED_RUN_DAYS");
- const runDayIndices=raw.split(",").map(Number);
+ const scheduled=env.GITHUB_EVENT_NAME==="schedule";
+ if(scheduled?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))
+  hold("ONE_OR_TWO_EXPLICIT_REVIEWED_RUN_DAYS_OR_SCHEDULE_ONLY");
+ const runDayIndices=scheduled?[]:raw.split(",").map(Number);
+ const calendar=scheduled?loadP6LaterCalendarWindows(env,trust):null;
  if(new Set(runDayIndices).size!==runDayIndices.length)hold("DUPLICATE_DAY");
  let u:URL,p:URL;
  try{u=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");p=new URL(scoped.databaseUrl);}
@@ -43,7 +47,7 @@ export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
     [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
     (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))
   hold("WRONG_SEPARATE_TLS_READER");
- return {scoped,trust,runDayIndices,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
+ return {scoped,trust,runDayIndices,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
   policy:{independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
    independentlyApprovedStandaloneProtocolSha256:scoped.gate.independentlyApprovedStandaloneProtocolSha256}};
 }
@@ -125,6 +129,16 @@ export async function runP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  let selected:ReturnType<typeof selectP6PrivateEnrollmentPackets>;
  try{
   await c.query("SET ROLE phase6_private_frozen_reader_v39");
+  if(ctx.calendar){
+   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   let at:string;
+   try{at=await readP6DayEpochRestrictedReaderClock(c,ctx.trust.expectedReaderSessionLogin);}
+   finally{await c.query("ROLLBACK");}
+   const due=selectP6LaterCalendarDueDays(ctx.calendar,at);
+   ctx.runDayIndices=due.dayIndices;
+   if(!ctx.runDayIndices.length)return {status:"NO_DUE_REVIEWED_CALENDAR_DAYS",providerCalls:0,preWrites:0,phase6PaidGo:false};
+   console.log(JSON.stringify({selectedStudyDays:due.dayIndices.length,deferredStudyDays:due.deferredDays}));
+  }
   const report=await readP6CurrentLaterQueueRosters({client:c,trust:ctx.trust,policy:ctx.policy,runDayIndices:ctx.runDayIndices});
   selected=selectP6PrivateEnrollmentPackets(report,ctx);
  }finally{await c.end();}
