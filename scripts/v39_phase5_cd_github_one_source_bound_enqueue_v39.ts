@@ -9,6 +9,9 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {P6_PRIVATE_LATER_PINNED_PATH,readP6PrivatePinnedRosterForOriginalRunner}
+ from "../server/lib/disruption/phase6PrivateLaterPinnedRosterRuntime_v39.mjs";
+
 import {digestP5Stage24ReviewedReceipt}
  from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
@@ -105,18 +108,23 @@ export async function runP5CdGithubOneSourceEnrollment(
  verifyP5CdGithubFrozenCodeLineage(env);
  const approved=requireP5CdGithubPrepareAdmission(env);
  const path=env.P5_CD_GH_PRE_ROSTER_PATH;
- if(!path||!FILE.test(path))hold("MISSING_REVIEWED_FROZEN_ROSTER_PATH");
- const rosterBytes=bytes(path);
- let roster:P5CdFrozenRoster;
- try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
- catch{return hold("FROZEN_ROSTER_NOT_JSON");}
- if(!Array.isArray(roster?.entries)||roster.entries.length!==1)
-  hold("ONE_FUTURE_SOURCE_PACKET_PER_REGISTRATION_ONLY");
- const x=roster.entries[0];
- const frozen:P5CdFrozenRosterEntry={
-  filePath:x.filePath,packetSha256:x.packetSha256,
-  bytes:bytes(x.filePath)
- };
+ const privateMode=path===P6_PRIVATE_LATER_PINNED_PATH;
+ if(!path||(!privateMode&&!FILE.test(path)))hold("MISSING_REVIEWED_FROZEN_ROSTER_PATH");
+ let rosterBytes:Buffer,roster:P5CdFrozenRoster,frozen:P5CdFrozenRosterEntry;
+ if(privateMode){
+  const p=await readP6PrivatePinnedRosterForOriginalRunner(env,approved.gate,approved.databaseUrl);
+  if(p.packetCount!==1||p.entries.length!==1)hold("ONE_FUTURE_SOURCE_PACKET_PER_REGISTRATION_ONLY");
+  ({rosterBytes,roster}=p);frozen=p.entries[0];
+ }else{
+  if(env.P6_PRIVATE_READER_DATABASE_URL)hold("PRIVATE_AND_LEGACY_ROSTER_MIXED");
+  rosterBytes=bytes(path);
+  try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
+  catch{return hold("FROZEN_ROSTER_NOT_JSON");}
+  if(!Array.isArray(roster?.entries)||roster.entries.length!==1)
+   hold("ONE_FUTURE_SOURCE_PACKET_PER_REGISTRATION_ONLY");
+  const x=roster.entries[0];
+  frozen={filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)};
+ }
  // T24 is an entirely separate independent PRE+V0081 witness path.
  // Merely signing a roster does not give PREPARE permission to enqueue a
  // flight that the independent T24 executor cannot yet service.
@@ -182,7 +190,10 @@ export async function runP5CdGithubOneSourceEnrollment(
 }
 if(process.env.P5_CD_GH_PREPARE_EXECUTE==="1"){
  runP5CdGithubOneSourceEnrollment(process.env).then(result=>{
-  console.log(JSON.stringify(result,null,2));
+  if(process.env.P5_CD_GH_PRE_ROSTER_PATH===P6_PRIVATE_LATER_PINNED_PATH){
+   const {flightInstanceId,taskId,packetSha256,sourcePopulationQueryId,...summary}=result;
+   console.log(JSON.stringify({...summary,privateRosterTransport:true,registeredTasks:1},null,2));
+  }else console.log(JSON.stringify(result,null,2));
  }).catch(err=>{
   const msg=err instanceof Error?err.message:"";
   const safe=/^REFUSED_P5_CD_[A-Z0-9_]+$/.test(msg)?
