@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -98,7 +98,12 @@ function pendingFixture(){
   status:"ACTUAL_SOURCE_CANDIDATE_REVIEW_NOT_PACKET_SIGNING",sourceGithubRunId:"123456",
   actualDbClockUtc:"2027-02-10T04:40:00.000Z",sourcePopulationQueryId:candidates[0].sourcePopulationQueryId,
   sourceResponseSha256:H("3"),queryDigestSha256:scope.queryDigestSha256,observedMemberCount:4,candidateCount:4,censoredCount:0,
-  candidates,providerCalls:0,databaseWrites:0,signedPrePacketsCreated:0,phase6PaidGoGranted:false};
+  candidates,providerCalls:0,databaseWrites:0,signedPrePacketsCreated:0,phase6PaidGoGranted:false,
+  providerContentsRightsCertified:false,physicalOperatingLegIndependentlyCertified:false,nativeTIndependentlyCertified:false,phase5ScientificFreezeGranted:false,
+  classifications:{ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED:4,CENSORED_AMBIGUOUS_SOURCE_IDENTITY:0,
+   CENSORED_NONNATIVE_OR_UNCONFIRMED_OPERATING_MEMBER:0,CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK:0,
+   CENSORED_MISSING_NATIVE_T:0,CENSORED_SOURCE_TOO_STALE_OR_EXPIRED:0,CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF:0,
+   CENSORED_NO_PROSPECTIVE_PRE_LEAD:0,CENSORED_OUTSIDE_APPROVED_SOURCE_WINDOW:0}};
  const build=(x:any)=>{const bytes=Buffer.from(JSON.stringify(x));const a:any={
   status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",runDayIndex:1,horizon:scope.horizon,
   candidateAuditSha256:h(bytes),observedMemberCount:4,candidateCount:4,censoredCount:0,actualDbClockUtc:x.actualDbClockUtc,
@@ -129,5 +134,26 @@ describe("overlapping native source refresh intake preserves existing frozen hor
   await expect(readP6PendingNativeLaterReview({readerClient:{query:async()=>{calls++;}},trust:f.trust,
     a:f.a,selector:f.selector,policy:{}})).rejects.toThrow("NO_EXPLICIT");
   expect(calls).toBe(0);
+ });
+});
+
+
+describe("existing unsigned review builder connected to actual postcommit scope",()=>{
+ it("keeps full audit and dossier, forwards only new timely later entries, and emits redacted counts",()=>{
+  const f=pendingFixture(),p=selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust);
+  const x=buildP6PostcommitUnsignedPreReview(f.a,f.trust,p);
+  expect(x).toMatchObject({originalCandidateCount:4,reviewEntryCount:1,independentReviewStillRequired:true,
+   signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(x.privateOriginalDossier.entries).toHaveLength(4);
+  expect(x.privateOriginalDossier.sourceAuditSha256).toBe(f.a.candidateAuditSha256);
+  expect(x.privateReviewEntries.map((e:any)=>e.source.flightInstanceId)).toEqual(["flight_new"]);
+  expect(JSON.stringify(x)).not.toMatch(/flight_new|flight_existing|privateOriginalDossier/);
+ });
+ it("refuses missing selection, cross-study trust and altered original private bytes",()=>{
+  const f=pendingFixture(),p=selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust);
+  expect(()=>buildP6PostcommitUnsignedPreReview(f.a,f.trust)).toThrow("UNSIGNED_REVIEW_PENDING_SCOPE");
+  expect(()=>buildP6PostcommitUnsignedPreReview(f.a,{...f.trust,rightsSha256:H("9")},p)).toThrow("UNSIGNED_REVIEW_UNAUTHENTICATED_SOURCE");
+  p.privateOriginalAuditBytes[0]=0;
+  expect(()=>buildP6PostcommitUnsignedPreReview(f.a,f.trust,p)).toThrow("UNSIGNED_REVIEW_PENDING_SCOPE");
  });
 });
