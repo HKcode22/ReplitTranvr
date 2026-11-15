@@ -7,12 +7,13 @@
  * are mandatory. No caller-supplied signer from row or workflow input.
  */
 import {readP6DayEpochRestrictedReaderClock} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
-import {resolveP6DynamicDayReview,resolveP6DynamicSourceQueryReview}
+import {resolveP6DynamicDayReview,resolveP6DynamicSourceQueryReview,resolveP6DynamicPostReview}
  from "./phase6DynamicSourceReviewSelection_v39.mjs";
 const INDEX="phase6_private.signed_run_day_index_revision_v39";
 const PACKET="phase6_private.frozen_native_packet_v39";
 const SHA=/^[a-f0-9]{64}$/;
 const PATH=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.json$/;
+const POST=/^data-collection\/phase5\/frozen\/post_[A-Za-z0-9_-]{8,110}\.json$/;
 const fail=s=>{throw Error("HOLD_P6_STORED_REVIEW_"+s);};
 function wireOf(row){
  const b=row?.review_wire_bytes;
@@ -53,11 +54,13 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
  const s=selector;
  const current=s.kind==="CURRENT_DAY";
  const exact=s.kind==="EXACT_DAY";
- const query=s.kind==="SOURCE_QUERY";
- if((!current&&!exact&&!query)||
+ const query=s.kind==="SOURCE_QUERY",post=s.kind==="POST";
+ const packet=query||post;
+ const expectedKind=post?"POST_PACKET":"SOURCE_QUERY_PACKET";
+ if((!current&&!exact&&!packet)||
     (exact&&(!Number.isSafeInteger(s.indexRevision)||s.indexRevision<1||
       s.indexRevision>1024||!SHA.test(s.indexSha256??"")))||
-    (query&&(!PATH.test(s.logicalPath??"")||!SHA.test(s.contentSha256??"")||
+    (packet&&(!(post?POST:PATH).test(s.logicalPath??"")||!SHA.test(s.contentSha256??"")||
       !Number.isSafeInteger(s.shardIndex)||s.shardIndex<1||s.shardIndex>100000)))
   fail("UNMATCHED_EXACT_SELECTOR");
  let begun=false;
@@ -70,9 +73,9 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
   const fields="run_day_index,content_sha256,reviewed_code_sha,manifest_sha256,"+
    "rights_sha256,external_review_sha256,externally_reviewed_at_utc,"+
    "retention_not_after_utc,committed_at_utc,review_wire_bytes";
-  const res=query?await client.query("SELECT "+fields+
+  const res=packet?await client.query("SELECT "+fields+
     ",logical_path,shard_index,kind FROM "+PACKET+
-    " WHERE logical_path=$1 AND kind='SOURCE_QUERY_PACKET'",[s.logicalPath]):
+    " WHERE logical_path=$1 AND kind=$2",[s.logicalPath,expectedKind]):
    await client.query("SELECT "+fields+
     ",revision,previous_index_sha256,calendar_sha256,release_sha256 FROM "+INDEX+
     " WHERE run_day_index=$1"+(exact?" AND revision=$2":" ORDER BY revision DESC LIMIT 1"),
@@ -89,11 +92,11 @@ export async function readP6StoredPrivateReviewOnce({client,trust,selector,scope
   if(row.run_day_index!==s.runDayIndex)
    fail("CROSS_DAY_REVIEW");
   let result;
-  if(query){
-   if(row.kind!=="SOURCE_QUERY_PACKET"||row.logical_path!==s.logicalPath||
+  if(packet){
+   if(row.kind!==expectedKind||row.logical_path!==s.logicalPath||
       row.shard_index!==s.shardIndex||row.content_sha256!==s.contentSha256)
     fail("QUERY_REGISTRY_SELECTOR_DRIFT");
-   result=resolveP6DynamicSourceQueryReview({trust,wires:[wire],
+   result=(post?resolveP6DynamicPostReview:resolveP6DynamicSourceQueryReview)({trust,wires:[wire],
     observedDbClockUtc:now,selector:{runDayIndex:s.runDayIndex,
      shardIndex:s.shardIndex,logicalPath:s.logicalPath,
      contentSha256:s.contentSha256,externalReviewEvidenceSha256:row.external_review_sha256}});

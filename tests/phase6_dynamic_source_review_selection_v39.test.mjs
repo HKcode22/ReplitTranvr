@@ -10,7 +10,7 @@ import {
  signedP6PrivateSourcePostReviewBytes
 } from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
 import {
- resolveP6DynamicDayReview,resolveP6DynamicSourceQueryReview
+ resolveP6DynamicDayReview,resolveP6DynamicSourceQueryReview,resolveP6DynamicPostReview
 } from "../server/lib/disruption/phase6DynamicSourceReviewSelection_v39.mjs";
 const H=c=>c.repeat(64);
 function key(){
@@ -90,4 +90,30 @@ test("untrusted signer, altered signature, unapproved stable policy and clock ca
  assert.throws(()=>day(ds(a),[a],{observedDbClockUtc:"invalid"}),/REAL_DB_CLOCK_REQUIRED/);
  assert.throws(()=>day(ds(a),Array(65).fill(a)),/CANDIDATE_COUNT_BOUND/);
  assert.throws(()=>packet(ps(x),Array(129).fill(x)),/CANDIDATE_COUNT_BOUND/);
+});
+
+test("POST stored review selection requires independent separate key; no SOURCE fallback or cross-day/shard substitution",()=>{
+ const post=key(),postTrust={...trust,independentPostReviewerPinsApproved:true,
+  postReviewerFingerprintSha256:post.fp,postReviewerPublicKeyPem:post.pem};
+ const path="data-collection/phase5/frozen/post_synthetic_alpha.json";
+ const w=p(1,"alpha",3,{kind:"POST_PACKET",logicalPath:path},post);
+ const read=(selector=ps(w),wires=[w],extra={})=>resolveP6DynamicPostReview({
+  trust:postTrust,selector,wires,observedDbClockUtc:clock,...extra});
+ const out=read();
+ assert.equal(out.kind,"POST_PACKET");
+ assert.equal(out.pins.expectedKind,"POST_PACKET");
+ assert.equal(out.pins.expectedShardIndex,3);
+ assert.equal(out.paidPhase6Go,false);
+ assert.equal(JSON.stringify(out).includes(w.signatureBase64),false);
+ assert.equal(JSON.stringify(out).includes(path),false);
+ assert.throws(()=>read(ps(w),[w],{trust}),/STABLE_APPROVED|SEPARATE_STABLE/);
+ assert.throws(()=>read(ps(w),[w],{trust:{...postTrust,independentPostReviewerPinsApproved:false}}),/SEPARATE_STABLE/);
+ assert.throws(()=>read(ps(w),[w],{trust:{...postTrust,postReviewerFingerprintSha256:q.fp,postReviewerPublicKeyPem:q.pem}}),/SEPARATE_STABLE/);
+ assert.throws(()=>read(ps(w),[p(1,"alpha",3,{kind:"POST_PACKET",logicalPath:path},q)]));
+ assert.throws(()=>read({...ps(w),runDayIndex:2}));
+ assert.throws(()=>read({...ps(w),shardIndex:4}));
+ assert.throws(()=>read({...ps(w),contentSha256:H("9")}));
+ assert.throws(()=>read(ps(w),[w,w]),/MISSING_OR_AMBIGUOUS/);
+ assert.throws(()=>read(ps(w),[w],{observedDbClockUtc:time.validUntilUtc}),/NOT_LIVE/);
+ assert.throws(()=>packet(ps(w),[w]));
 });
