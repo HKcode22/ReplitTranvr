@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -109,7 +109,7 @@ function pendingFixture(){
   candidateAuditSha256:h(bytes),observedMemberCount:4,candidateCount:4,censoredCount:0,actualDbClockUtc:x.actualDbClockUtc,
   providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
   Object.defineProperties(a,{privateAuditBytes:{value:bytes},privateSourceScope:{value:scope},
-   privateSourceRegistrySha256:{value:old.fileSha256}});return a;};
+   privateSourceRegistrySha256:{value:old.fileSha256},privateSourceRegistryPath:{value:old.filePath},privateSourceRegistryBytes:{value:Buffer.from(source)}});return a;};
  return {a:build(audit),audit,build,index,selector,trust:f.trust};
 }
 describe("overlapping native source refresh intake preserves existing frozen horizons",()=>{
@@ -155,5 +155,68 @@ describe("existing unsigned review builder connected to actual postcommit scope"
   expect(()=>buildP6PostcommitUnsignedPreReview(f.a,{...f.trust,rightsSha256:H("9")},p)).toThrow("UNSIGNED_REVIEW_UNAUTHENTICATED_SOURCE");
   p.privateOriginalAuditBytes[0]=0;
   expect(()=>buildP6PostcommitUnsignedPreReview(f.a,f.trust,p)).toThrow("UNSIGNED_REVIEW_PENDING_SCOPE");
+ });
+});
+
+
+function completedBatchFixture(){
+ const f=pendingFixture(),p=selectP6PendingNativeLaterReview(f.a,f.index,f.selector,f.trust);
+ const handoff=buildP6PostcommitUnsignedPreReview(f.a,f.trust,p);
+ const d=handoff.privateOriginalDossier,e=handoff.privateReviewEntries[0],s=e.source;
+ const review={
+  schema:"v39.phase5.external-native-later-pre-packet-review.v1",reviewedCodeSha:d.reviewedMainCodeSha,
+  reviewedSourceDossierSha256:handoff.privateOriginalDossierSha256,reviewedSourceAuditSha256:d.sourceAuditSha256,
+  reviewedSourceDayRegistrySha256:d.sourceDayRegistrySha256,reviewedFlightInstanceId:s.flightInstanceId,
+  reviewedQueryDigestSha256:s.queryDigestSha256,reviewedSourcePopulationQueryId:s.expectedSourcePopulationQueryId,
+  reviewedSourceOriginalResponseSha256:s.expectedSourceResponseSha256,reviewedSourceGithubRunId:s.expectedGithubSourceRunId,
+  reviewedRunDayIndex:s.runDayIndex,reviewedHorizon:s.horizon,reviewedNativeScheduledTUtc:s.selectedTNativeUtc,
+  reviewedOwnCutoffUtc:s.ownPreCutoffUtc,reviewedAtUtc:"2027-02-10T04:41:00.000Z",
+  independentlyReviewedOperatingLegEvidenceSha256:H("7"),independentlyReviewedNativeTEvidenceSha256:H("7"),
+  independentlyReviewedRunAndRetentionEvidenceSha256:H("5"),reviewedFrameSha256:H("8"),reviewedConfigSha256:H("9"),
+  frozenBuilderSha256:H("a"),builderFrozenAtUtc:"2027-02-10T04:00:00.000Z",
+  selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:H("d"),
+   verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:H("7")},
+  maxPopulationStalenessSeconds:3600,externalNativeTPhysicalLegAndSourceUseReviewed:true,
+  reviewedStandaloneLaterNoT24:{schema:"v39.phase5.standalone-later-asof-no-t24.v1",
+   reviewedProtocolSha256:H("e"),reviewedOriginalResponseSha256:s.expectedSourceResponseSha256,
+   reviewedNativeTSemanticsSha256:H("7"),missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",
+   independentLaterAsOfAndMissingnessReviewAttested:true}};
+ const scope={expectedDossierSha256:handoff.privateOriginalDossierSha256,
+  expectedReviewedReleaseSha256:s.expectedReviewedReleaseSha256,expectedReviewedSourceRightsSha256:s.expectedReviewedSourceRightsSha256,
+  proposedLaterRegistryFilePath:"data-collection/phase5/frozen/later_review_batch.json",shardIndex:2,
+  observedDbClockUtc:"2027-02-10T04:42:00.000Z"};
+ const item=(v:any=review)=>{const reviewBytes=Buffer.from(JSON.stringify(v));return{reviewBytes,
+  proposedFilePath:"data-collection/phase5/frozen/pre_review_batch_packet.json",
+  pins:{expectedDossierSha256:scope.expectedDossierSha256,expectedReviewArtifactSha256:h(reviewBytes),
+   expectedApprovedMainCodeSha:d.reviewedMainCodeSha,expectedReviewedReleaseSha256:scope.expectedReviewedReleaseSha256,
+   expectedReviewedSourceRightsSha256:scope.expectedReviewedSourceRightsSha256,
+   expectedSourceDayRegistrySha256:d.sourceDayRegistrySha256,separatelyApprovedNoT24ProtocolSha256:H("e")}}};
+ return {handoff,scope,review,item};
+}
+describe("existing native packet completion from selected independently reviewed candidates",()=>{
+ it("constructs exact original v2 packet and later registry proposal with no provider calls or public flight data",()=>{
+  const f=completedBatchFixture(),x=completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item()]);
+  expect(x).toMatchObject({selectedCount:1,suppliedReviewCount:1,unreviewedCount:0,lateReviewedCount:0,
+   completedPacketCount:1,laterRegistryProposed:true,independentlySignedRegistry:false,phase6PaidGo:false});
+  const plan=x.privateLaterRegistryPlan!;
+  expect(plan.registryProposal.entries[0].expectedFlightInstanceId).toBe("flight_new");
+  expect(plan.registryProposal.entries[0].expectedHorizon).toBe("T-6h");
+  expect(plan.proposedPacketFiles[0].sha256).toBe(h(plan.proposedPacketFiles[0].bytes));
+  expect(JSON.stringify(x)).not.toMatch(/flight_new|privateLaterRegistryPlan|packetBytes/);
+ });
+ it("tolerates no independent review or elapsed preparation time without issuing a packet",()=>{
+  const f=completedBatchFixture();
+  expect(completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[])).toMatchObject({unreviewedCount:1,completedPacketCount:0});
+  expect(completeP6PostcommitReviewedPreBatch(f.handoff,{...f.scope,observedDbClockUtc:"2027-02-10T04:50:00.000Z"},[f.item()]))
+   .toMatchObject({lateReviewedCount:1,completedPacketCount:0,laterRegistryProposed:false});
+ });
+ it("rejects review for excluded flight, duplicate review, age-policy drift, and modified SOURCE bytes",()=>{
+  const f=completedBatchFixture();
+  for(const bad of [{...f.review,reviewedFlightInstanceId:"flight_existing"},{...f.review,maxPopulationStalenessSeconds:7200},
+    {...f.review,reviewedAtUtc:"2027-02-10T04:43:00.000Z"}])
+   expect(()=>completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item(bad)])).toThrow("REVIEW_BATCH_UNSELECTED_DUPLICATE_OR_POLICY_DRIFT");
+  expect(()=>completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item(),f.item()])).toThrow("REVIEW_BATCH_UNSELECTED_DUPLICATE_OR_POLICY_DRIFT");
+  f.handoff.privateSourceRegistryBytes[0]=0;
+  expect(()=>completeP6PostcommitReviewedPreBatch(f.handoff,f.scope,[f.item()])).toThrow("REVIEW_BATCH_SCOPE_OR_SOURCE_DRIFT");
  });
 });

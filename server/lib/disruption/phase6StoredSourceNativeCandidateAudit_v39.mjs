@@ -13,6 +13,8 @@ import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
 import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
+import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning} from "./phase5IndependentLaterPrePacketCompletion_v39.ts";
+import {proposeP5ReviewedLaterPacketsAsUnsignedDayShard} from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39.ts";
 const SHA=/^[a-f0-9]{64}$/;
 const REG=/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$/;
 const QUERY=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.json$/;
@@ -128,7 +130,9 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
  Object.defineProperties(out,{privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
-  privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false}});
+  privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
+  privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},
+  privateSourceRegistryBytes:{value:Buffer.from(index.getFrozen(selected.entry.filePath)),enumerable:false}});
  return Object.freeze(out);
 }
 
@@ -289,6 +293,81 @@ export function buildP6PostcommitUnsignedPreReview(a,trust,pending=null){
  Object.defineProperties(out,{
   privateOriginalDossier:{value:dossier,enumerable:false},
   privateOriginalDossierSha256:{value:digestP5UnsignedNativePreDossier(dossier),enumerable:false},
-  privateReviewEntries:{value:Object.freeze(entries.slice()),enumerable:false}});
+  privateReviewEntries:{value:Object.freeze(entries.slice()),enumerable:false},
+  privateMaximumSourceAgeSeconds:{value:s.maxPopulationStalenessSeconds,enumerable:false},
+  privateSourceRegistryPath:{value:a.privateSourceRegistryPath,enumerable:false},
+  privateSourceRegistryBytes:{value:Buffer.isBuffer(a.privateSourceRegistryBytes)?Buffer.from(a.privateSourceRegistryBytes):null,enumerable:false}});
+ return Object.freeze(out);
+}
+
+
+/** Consume independently supplied, pinned review bytes for at most one
+ * existing 96-entry shard. Missing reviews are ordinary missingness;
+ * an invalid supplied review is not silently approved. Reuse the original
+ * T24/later packet completion and later registry proposal. This is not a
+ * reviewer, signature, producer-data write or paid admission. The caller
+ * must provide the fresh observed DB clock; actual publisher rechecks it.
+ */
+export function completeP6PostcommitReviewedPreBatch(handoff,scope,reviews){
+ const d=handoff?.privateOriginalDossier, entries=handoff?.privateReviewEntries,
+  raw=handoff?.privateSourceRegistryBytes,path=handoff?.privateSourceRegistryPath;
+ if(handoff?.status!=="UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED"||
+    handoff.independentReviewStillRequired!==true||handoff.signedPrePacketsIssued!==0||
+    handoff.providerCalls!==0||handoff.databaseWrites!==0||handoff.phase6PaidGo!==false||
+    !sealed(handoff,"privateOriginalDossier")||!sealed(handoff,"privateOriginalDossierSha256")||
+    !sealed(handoff,"privateReviewEntries")||!sealed(handoff,"privateMaximumSourceAgeSeconds")||
+    !sealed(handoff,"privateSourceRegistryBytes")||!sealed(handoff,"privateSourceRegistryPath")||
+    !Array.isArray(entries)||entries.length!==handoff.reviewEntryCount||
+    !scope||scope.expectedDossierSha256!==handoff.privateOriginalDossierSha256||
+    digestP5UnsignedNativePreDossier(d)!==scope.expectedDossierSha256||
+    !iso(scope.observedDbClockUtc)||Date.parse(scope.observedDbClockUtc)<Date.parse(d.sourceObservedDbClockUtc)||
+    handoff.horizon!==d.horizon||handoff.runDayIndex!==d.runDayIndex||
+    !Number.isSafeInteger(handoff.privateMaximumSourceAgeSeconds)||handoff.privateMaximumSourceAgeSeconds<1||
+    handoff.privateMaximumSourceAgeSeconds>86400||
+    !Buffer.isBuffer(raw)||hash(raw)!==d.sourceDayRegistrySha256||!REG.test(path??"")||
+    !Array.isArray(reviews)||reviews.length>96)
+  fail("REVIEW_BATCH_SCOPE_OR_SOURCE_DRIFT");
+ const byId=new Map();
+ for(const e of entries){
+  const id=e.source.flightInstanceId;
+  if(byId.has(id)||!d.entries.some(x=>JSON.stringify(x)===JSON.stringify(e)))
+   fail("REVIEW_BATCH_PENDING_ENTRY_DRIFT");
+  byId.set(id,e);
+ }
+ const completed=[],seen=new Set();
+ let late=0;
+ for(const item of reviews){
+  if(!Buffer.isBuffer(item?.reviewBytes)||item.reviewBytes.length<100||item.reviewBytes.length>200000||
+     !item.pins||hash(item.reviewBytes)!==item.pins.expectedReviewArtifactSha256||
+     item.pins.expectedDossierSha256!==scope.expectedDossierSha256)
+   fail("REVIEW_BATCH_UNPINNED_ARTIFACT");
+  const v=JSON.parse(item.reviewBytes.toString("utf8")),id=v.reviewedFlightInstanceId,e=byId.get(id);
+  if(!e||seen.has(id)||v.maxPopulationStalenessSeconds!==handoff.privateMaximumSourceAgeSeconds||
+     !iso(v.reviewedAtUtc)||Date.parse(v.reviewedAtUtc)>Date.parse(scope.observedDbClockUtc))
+   fail("REVIEW_BATCH_UNSELECTED_DUPLICATE_OR_POLICY_DRIFT");
+  seen.add(id);
+  const packet=d.horizon==="T-24h"?
+   completeP5NativeT24PrePacketForIndependentSigning(d,e,item.reviewBytes,v,item.pins):
+   completeP5NativeLaterPrePacketForIndependentSigning(d,e,item.reviewBytes,v,item.pins);
+  if(Date.parse(e.source.ownPreCutoffUtc)<=Date.parse(scope.observedDbClockUtc)+900000){late++;continue;}
+  completed.push({proposedFilePath:item.proposedFilePath,
+   expectedExternallyPinnedReviewArtifactSha256:item.pins.expectedReviewArtifactSha256,completed:packet});
+ }
+ let plan=null;
+ if(d.horizon!=="T-24h"&&completed.length){
+  plan=proposeP5ReviewedLaterPacketsAsUnsignedDayShard(raw,JSON.parse(raw.toString("utf8")),{
+   expectedExternallyApprovedSourceRegistrySha256:d.sourceDayRegistrySha256,sourceRegistryFilePath:path,
+   proposedLaterRegistryFilePath:scope.proposedLaterRegistryFilePath,reviewedMainCodeSha:d.reviewedMainCodeSha,
+   expectedManifestSha256:d.manifestSha256,expectedReviewedReleaseSha256:scope.expectedReviewedReleaseSha256,
+   expectedReviewedSourceRightsSha256:scope.expectedReviewedSourceRightsSha256,
+   runDayIndex:d.runDayIndex,shardIndex:scope.shardIndex},completed);
+ }
+ const out={status:"REVIEWED_PRE_BATCH_BYTES_AWAIT_EXISTING_PUBLICATION_APPROVAL",
+  runDayIndex:d.runDayIndex,horizon:d.horizon,selectedCount:entries.length,
+  suppliedReviewCount:reviews.length,unreviewedCount:entries.length-seen.size,
+  lateReviewedCount:late,completedPacketCount:completed.length,laterRegistryProposed:plan!==null,
+  independentlySignedRegistry:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ Object.defineProperties(out,{privateCompletedPackets:{value:completed,enumerable:false},
+  privateLaterRegistryPlan:{value:plan,enumerable:false}});
  return Object.freeze(out);
 }
