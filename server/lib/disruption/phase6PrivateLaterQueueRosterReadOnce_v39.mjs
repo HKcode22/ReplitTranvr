@@ -101,7 +101,7 @@ export function projectP6VerifiedLaterQueueRoster({index,hydrated,selector,trust
  let nearCutoffCount=0,expiredCutoffCount=0,standaloneCount=0;
  for(const {permit} of packets.values()){
   preflightP5Stage14ReviewedPermitV39(permit,policy.independentlyApprovedStandaloneProtocolSha256);
-  const cutoff=utc(permit.selectedTNativeTUtc)-(permit.horizon==="T-6h"?21600000:5400000);
+  const cutoff=utc(permit.selectedTNativeUtc)-(permit.horizon==="T-6h"?21600000:5400000);
   if(cutoff>utc(later.hardLatestUtc)||cutoff<=utc(later.notBeforeUtc))
    hold("NATIVE_CUTOFF_OUTSIDE_SIGNED_SHARD_WINDOW");
   if(cutoff<=now+2000)expiredCutoffCount++;
