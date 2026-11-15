@@ -54,7 +54,8 @@ export function readP6StableSourceTrust(env){
 // Only the original real SOURCE due-queue observer can supply these rows.
 // Select the earliest cutoff days; disclose remaining due days, never
 // silently substitute a guessed calendar day or an old packet.
-export function selectP6DueSourceDays(scan){
+export function selectP6DueSourceDays(scan,maxLeadMinutes=105){
+ if(![35,105].includes(maxLeadMinutes))fail("UNREVIEWED_SOURCE_LOOKAHEAD");
  if(scan?.schema!=="v39.phase5.github-upcoming-source-queue-observer.v1"||
     scan.providerCalls!==0||scan.databaseWrites!==0||
     scan.externalGithubDispatches!==0||scan.signedDaySourceBatch!==null||
@@ -75,6 +76,7 @@ export function selectP6DueSourceDays(scan){
   if(!Number.isFinite(planned)||!Number.isFinite(latest)||planned-now<900000||
     planned-now>6300000||planned>=latest)
    fail("ORIGINAL_DUE_WINDOW_DRIFT");
+  if(planned-now>maxLeadMinutes*60000)continue;
   due.set(row.runDayIndex,Math.min(due.get(row.runDayIndex)??Infinity,latest));
  }
  const all=[...due.entries()].sort((a,b)=>a[1]-b[1]||a[0]-b[0]).map(x=>x[0]);

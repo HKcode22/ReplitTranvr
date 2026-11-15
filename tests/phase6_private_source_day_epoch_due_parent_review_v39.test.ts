@@ -132,6 +132,16 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
   expect(selected[0].queryDigestSha256).toBe(f.secrets.q5);
   expect(r.redactedSummary.githubDispatches).toBe(0);
  });
+ it("stored capacity admits five exact proposals while static retains four, and waits on over-35m work",()=>{
+  const f=fixture();f.history.total_count=0;f.history.workflow_runs=[];
+  const early=reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true});
+  expect(early.redactedSummary.candidateCount).toBe(5);
+  f.sourceObserver.candidates[4].plannedDispatchUtc="2026-11-14T06:36:00.000Z";
+  const later=reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true});
+  expect(later.redactedSummary.candidateCount).toBe(4);
+  expect(later.redactedSummary.notYetDueOrPrearmed).toBe(1);
+  expect(later.redactedSummary.providerCalls).toBe(0);
+ });
  it("honestly skips source registry queries outside the observed rolling DB queue window",()=>{
   const f=fixture();
   f.sourceObserver.candidates=f.sourceObserver.candidates.filter(
