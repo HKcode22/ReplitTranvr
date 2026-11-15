@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
+import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
  p6DayEpochReviewPreimage,publishP6DayEpochIndexRevisionOnce,
@@ -345,6 +346,24 @@ try{
  const liveNext=await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:31}});
  assert.equal(liveNext.pins.expectedRunDayIndex,31);
  console.log("P6_CURRENT_DAY_VERIFIED_EXPIRED_HEAD_LOCAL_SKIP_NO_PREVIOUS_FALLBACK_REAL_PG16_PASS");
+ // Redacted exact expiry scope: expired head of day3 must retire both
+ // revisions together; day31 and its unexpired packet must survive.
+ const plan=await reviewPrivateExpiry(dbOwner);
+ assert.equal(plan.closedDays,1);
+ assert.equal(plan.indexRevisions,2);
+ assert.equal(plan.earlierLiveIndexRevisionsRetired,1);
+ assert.equal(plan.expiredPackets,0);
+ assert.equal(plan.applied,false);
+ await assert.rejects(reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:"0".repeat(64),approval:expiryApproval}),/REVIEWED_SCOPE_DRIFT/);
+ await assert.rejects(reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:plan.scopeSha256}),/EXPLICIT_SCOPE_APPROVAL/);
+ const applied=await reviewPrivateExpiry(dbOwner,{apply:true,cutoff:plan.cutoff,expectedScopeSha256:plan.scopeSha256,approval:expiryApproval});
+ assert.equal(applied.indexRevisions,2);assert.equal(applied.claimDeletes,0);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:3}}),/CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED/);
+ await assert.rejects(publishP6DayEpochIndexRevisionOnce({client:pub,pins:sa.pins,wire:sa.wire,publicKeyPem:pem,indexBytes:sa.bytes,scope:sa.scope}),/DAY_GENESIS_ALREADY_CLAIMED_NO_REPLAY/);
+ assert.equal((await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:31}})).pins.expectedRunDayIndex,31);
+ const afterExpiry=await reviewPrivateExpiry(dbOwner,{cutoff:plan.cutoff});
+ assert.equal(afterExpiry.indexRevisions,0);assert.equal(afterExpiry.claimsPreserved,plan.claimsPreserved);
+ console.log("P6_EXPIRED_HEAD_ATOMIC_CLOSE_NO_FALLBACK_EXACT_REVIEWED_SCOPE_PG16_PASS");
  // An immutable day1 owner deletion removes its bytes without affecting
  // day31: this proof still requires a separate proper expiry reviewer.
  const removed=await dbOwner.query(
