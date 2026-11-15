@@ -242,8 +242,11 @@ export async function recoverP6ReviewedPreparedSourceDayFromCommittedPackets(arg
  readerClient:{query:(sql:string,values?:any[])=>Promise<any>};
  expectedReaderSessionLogin:string;
  }){
- if(args.pins.independentRegistryRecoveryApproved!==true)
+ if(args?.pins?.independentRegistryRecoveryApproved!==true)
   hold("RESTART_RECOVERY_NOT_INDEPENDENTLY_APPROVED");
+ if(!args.readerClient||typeof args.readerClient.query!=="function"||
+    !/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(args.expectedReaderSessionLogin??""))
+  hold("RESTART_SEPARATE_PRIVATE_READER_REQUIRED");
  const fresh=await signP6ReviewedPreparedSourceDay(args);
  const p=parse<Policy>(args.policyBytes,20000,args.pins.expectedPolicySha256);
  const qPem=keyInfo(args.queryKey,p.queryReviewerFingerprintSha256);
@@ -316,7 +319,8 @@ export async function recoverP6ReviewedPreparedSourceDayFromCommittedPackets(arg
      hold("RESTART_ORIGINAL_QUERY_WIRE_CLOCK_DRIFT");
     minExpiry=Math.min(minExpiry,utc(wire.review.validUntilUtc));
     row.verifiedOriginalWire=wire;reused++;
-   }
+   }else if(row.review_wire_bytes!==null)
+    hold("RESTART_UNEXPECTED_REGISTRY_WIRE");
    rows.set(row.logical_path,row);
   }
   if(fresh.privateSignedShards.some(sh=>utc(sh.hardLatestUtc)>=minExpiry))
