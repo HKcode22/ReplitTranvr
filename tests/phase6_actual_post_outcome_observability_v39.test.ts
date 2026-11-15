@@ -55,7 +55,7 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(a).toMatchObject({uniqueRetainedPreFlights:1,actualGateOutNumericCandidates:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
    fullStudyDenominatorCertified:false,providerCalls:0,databaseWrites:0});
   expect(a.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:1,matchedNativePost:1,reportedRevisedTime:1,
-   reportedRunwayTime:1,labelEvidenceUnverified:1,actualGateOutNumericCandidates:0});
+   reportedRunwayTime:1,reportedDistinctGateRunwayTimes:1,reportedGateBeforeRunway:1,reportedGateAfterRunway:0,labelEvidenceUnverified:1,actualGateOutNumericCandidates:0});
   expect(a.byHorizon["T-90m"].matchedNativePost).toBe(1);
   expect(a.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:1,retainedT6UniquePre:1,retainedT90UniquePre:1,retainedConsistentT6T90Pairs:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1,actualPhysicalLabelPairsCertified:0,fullStudyDenominatorCertified:false});
   expect(a.privateDecisions[0].draft.scheduled).toMatchObject({milestone:"GENERAL_SCHEDULED_DEPARTURE",externallyVerifiedGateOutMeaning:false});
@@ -116,6 +116,19 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(run([{...flight,status:"Canceled"}]).byHorizon["T-6h"].idlessServiceReportedCancelled).toBe(1);
   expect(exact.actualGateOutNumericCandidates).toBe(0);expect(exact.confirmedCancellationLabels).toBe(0);
   expect(exact.privateDecisions).toHaveLength(0);expect(JSON.stringify(exact)).not.toContain("leg:synthetic");
+ });
+ it("measures distinct reported gate/runway field values but never promotes them to actual",()=>{
+  const f=fixture(),run=(dep:unknown)=>{
+   const original=f.original([{...f.flight,departure:dep}]);
+   return auditP6ActualPostOutcomeObservability(original.s,original.row,[f.pre()],f.clock);
+  };
+  const equal=run({...f.flight.departure,runwayTime:f.flight.departure.revisedTime});
+  expect(equal.byHorizon["T-6h"]).toMatchObject({reportedDistinctGateRunwayTimes:0,reportedRevisedWithoutDistinctRunway:1,actualGateOutNumericCandidates:0});
+  const absent=run({...f.flight.departure,runwayTime:null});
+  expect(absent.byHorizon["T-6h"].reportedRevisedWithoutDistinctRunway).toBe(1);
+  const reversed=run({...f.flight.departure,runwayTime:{utc:"2027-02-02T10:25:00.000Z"}});
+  expect(reversed.byHorizon["T-6h"]).toMatchObject({reportedDistinctGateRunwayTimes:1,reportedGateAfterRunway:1,reportedGateBeforeRunway:0,actualGateOutNumericCandidates:0});
+  expect(reversed.physicalGateOutLabels).toBe(0);
  });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);

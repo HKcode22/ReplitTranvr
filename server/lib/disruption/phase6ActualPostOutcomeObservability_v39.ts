@@ -57,9 +57,11 @@ export interface P6PostOriginalReadback{
 type Row=Record<string,unknown>;
 const empty=()=>({retainedCutoffSafePre:0,matchedNativePost:0,missingNativeId:0,postAbsent:0,ambiguousIdentity:0,
  reportedCancelled:0,reportedRevisedTime:0,reportedRunwayTime:0,changedGenericSchedule:0,duplicatePre:0,
+ reportedDistinctGateRunwayTimes:0,reportedGateBeforeRunway:0,reportedGateAfterRunway:0,reportedRevisedWithoutDistinctRunway:0,
  labelEvidenceUnverified:0,actualGateOutNumericCandidates:0,
  idlessExactReportedService:0,idlessDepartureQueryContextService:0,idlessServiceAmbiguous:0,idlessServiceNotObserved:0,
- idlessServiceReportedRevised:0,idlessServiceReportedRunway:0,idlessServiceReportedCancelled:0});
+ idlessServiceReportedRevised:0,idlessServiceReportedRunway:0,idlessServiceReportedCancelled:0,
+ idlessServiceReportedGateBeforeRunway:0,idlessServiceReportedGateAfterRunway:0});
 /** Existing raw-body integrity, exact V0083 observation scope, then native
  * ID + operator + explicit route and number match. Never substitute latest
  * POST schedule for frozen PRE native T. No supplied truth booleans. */
@@ -133,8 +135,16 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   const m=hits[0],dep=obj(m.departure),origin=obj(dep.airport).icao;
   if(origin===p.airportIcao)c.idlessExactReportedService++;
   else c.idlessDepartureQueryContextService++;
-  if(atField(dep.revisedTime)!==null)c.idlessServiceReportedRevised++;
-  if(atField(dep.runwayTime)!==null)c.idlessServiceReportedRunway++;
+  const revised=atField(dep.revisedTime),runway=atField(dep.runwayTime);
+  if(revised!==null)c.idlessServiceReportedRevised++;
+  if(runway!==null)c.idlessServiceReportedRunway++;
+  // OpenAPI distinguishes gate from runway when both are present and
+  // different, but explicitly permits estimated values. This is only a
+  // structural diagnostic, not independent actual event certification.
+  if(revised!==null&&runway!==null){
+   if(revised<runway)c.idlessServiceReportedGateBeforeRunway++;
+   if(revised>runway)c.idlessServiceReportedGateAfterRunway++;
+  }
   if(m.status==="Canceled"||m.status===10)c.idlessServiceReportedCancelled++;
  }
  const preIdsByProvider=new Map<string,Set<string>>();
@@ -168,6 +178,14 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   if(cancellation)c.reportedCancelled++;
   if(revised!==null)c.reportedRevisedTime++;
   if(runway!==null)c.reportedRunwayTime++;
+  if(revised!==null){
+   if(runway===null||revised===runway)c.reportedRevisedWithoutDistinctRunway++;
+   else{
+    c.reportedDistinctGateRunwayTimes++;
+    if(revised<runway)c.reportedGateBeforeRunway++;
+    else c.reportedGateAfterRunway++;
+   }
+  }
   const draft:P5EGateOutFirstCycleInput={schema:"v39.phase5.amendment-e-gateout-first-cycle-candidate.v1",
    frozenSourceOriginalSha256:String(x.fids_response_hash),flightInstanceId:String(x.flight_instance_id),horizon:h,
    selectedNativeTUtc:iso(t),preIssuedAtUtc:iso(reqDate(x.created_at)),originalSourceAvailableAtUtc:iso(reqDate(x.original_available_at)),
