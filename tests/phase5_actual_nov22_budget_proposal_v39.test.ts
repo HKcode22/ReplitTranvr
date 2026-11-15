@@ -1,4 +1,7 @@
-import {readFileSync} from "node:fs";
+import {readFileSync,mkdtempSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {compileP6ActualCandidateExport,writeP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
@@ -140,6 +143,22 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.unsignedStageInput.calendarDays.filter(d=>d.pairAirportSet===null)).toHaveLength(21);
   expect(x.independentReleaseStillRequired).toBe(true);
   expect(x.phase6PaidGo).toBe(false);
+ });
+ it("exports original reviewed-input candidates with exact byte pins, no overwrite and no release authority",()=>{
+  const f=reviewFixture(),externalBytes=Buffer.from(JSON.stringify(f.external,null,2)),timingBytes=Buffer.from(JSON.stringify(f.timing));
+  const input={externalBytes,expectedExternalFileSha256:hash(externalBytes),timingBytes,expectedTimingFileSha256:hash(timingBytes)};
+  const a=compileP6ActualCandidateExport(input);
+  const direct=assembleP6ActualFirstSeedReleaseCandidate(f);
+  expect(a.summary.dayPlanSha256s).toEqual(direct.dayPlans.dayPlanSha256s);
+  expect(a.summary.unsignedStageInputSha256).toBe(direct.unsignedStageInputSha256);
+  expect(a.files).toHaveLength(32);
+  expect(a.summary).toMatchObject({sourceQueries:6144,totalReservedUnits:41960,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false});
+  expect(()=>compileP6ActualCandidateExport({...input,expectedExternalFileSha256:"0".repeat(64)})).toThrow("EXACT_REVIEW_INPUT_FILE_BYTES_REQUIRED");
+  expect(()=>writeP6ActualCandidateExport(a,join(process.cwd(),"no-export-here"))).toThrow("OUTPUT_MUST_BE_OUTSIDE_REPOSITORY");
+  const dest=join(mkdtempSync(join(tmpdir(),"p6-actual-candidate-ci-")),"review");
+  writeP6ActualCandidateExport(a,dest);
+  expect(a.files.every(x=>hash(readFileSync(join(dest,x.path)))===x.sha256)).toBe(true);
+  expect(()=>writeP6ActualCandidateExport(a,dest)).toThrow();
  });
  it("does not replace missing review hashes or silently alter the proposed budget",()=>{
   const f=reviewFixture();
