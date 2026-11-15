@@ -5,12 +5,16 @@ on:
     paths:
       - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
       - 'tests/phase5_early_adaptive_draw_real_pg_v39.test.ts'
+      - 'scripts/v39_phase5_early_draw_credential_owner_once.ts'
+      - 'scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts'
       - '.github/workflows/phase5-early-adaptive-draw-real-pg16-offline.yml'
   push:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts'
       - 'tests/phase5_early_adaptive_draw_real_pg_v39.test.ts'
+      - 'scripts/v39_phase5_early_draw_credential_owner_once.ts'
+      - 'scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts'
 permissions:
   contents: read
 env:

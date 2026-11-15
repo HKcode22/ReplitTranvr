@@ -1,3 +1,4 @@
+import {commissionP5EarlyDrawOnce,EARLY_DRAW_COMMISSION_APPROVAL} from "../scripts/v39_phase5_early_draw_credential_owner_once";
 import {verifyP5EarlyDrawReadonlyAcl} from "../scripts/v39_phase5_github_six_slot_early_draw_owner_v39";
 /**
  * Disposable CI PostgreSQL16 only. Never run against an owner/live database.
@@ -33,18 +34,32 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
        process.env.V39_P5_PG16_INTEGRATION!=="1")
       throw Error("REFUSED_NON_DISPOSABLE_REAL_PG16");
     db=new Pool({connectionString:URL,max:3});
-    // Dedicated disposable actor: no owner, source or PRE privileges.
-    await db.query("CREATE ROLE p5_early_draw_ci LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD 'ci_only_draw'");
-    await db.query("GRANT USAGE ON SCHEMA clean TO p5_early_draw_ci");
-    await db.query("GRANT SELECT ON clean.adb_phase6_authorization,clean.adb_phase6_calendar_day,clean.adb_sampling_frame_registry,clean.adb_sampling_frame,clean.adb_airport_sampling_state,clean.adb_sampling_draw TO p5_early_draw_ci");
-    await db.query("GRANT INSERT (run_day_index,slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,adaptive_state_hash,probability_vector,airport_layer_design_probability,selected_at_utc) ON clean.adb_sampling_draw TO p5_early_draw_ci");
-    await db.query("GRANT INSERT (icao,last_selected_at,last_selected_run_day), UPDATE (last_selected_at,last_selected_run_day,updated_at_utc) ON clean.adb_airport_sampling_state TO p5_early_draw_ci");
-    const sequence=(await db.query("SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') AS name")).rows[0].name;
-    if(sequence!==null){
-      expect(sequence).toMatch(/^clean\.adb_sampling_draw_[a-z0-9_]+$/);
-      await db.query("GRANT USAGE ON SEQUENCE "+sequence+" TO p5_early_draw_ci");
-    }
-    drawDb=new Pool({connectionString:"postgresql://p5_early_draw_ci:ci_only_draw@localhost:5432/v39_ci?sslmode=disable",max:2});
+    // Real PG16 owner + in-memory secret driver. Never use GitHub secrets in CI.
+    const main="a".repeat(40),secrets=new Map<string,string>();
+    const env={GITHUB_ACTIONS:"true",DATABASE_URL:URL,P5_EARLY_DRAW_COMMISSION_DISPOSABLE:"1",
+      P5_EARLY_DRAW_COMMISSION_APPROVAL:EARLY_DRAW_COMMISSION_APPROVAL,P5_EARLY_DRAW_COMMISSION_MAIN:main,
+      ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
+    const driver={mainSha:async()=>main,names:async()=>[...secrets.keys()],
+      set:async(n:string,v:string)=>{secrets.set(n,v);},remove:async(n:string)=>{secrets.delete(n);}};
+    const verify=async(url:string,role:string,database:string)=>{
+      const scoped=new Pool({connectionString:url,max:1});
+      try{return await verifyP5EarlyDrawReadonlyAcl(scoped,role,database);}finally{await scoped.end();}
+    };
+    let writes=0;
+    await expect(commissionP5EarlyDrawOnce(db,{...driver,set:async(n,v)=>{
+      await driver.set(n,v);if(++writes===2)throw Error("CI_SECOND_SECRET_FAILURE");
+    }},env,verify)).rejects.toThrow("CI_SECOND_SECRET_FAILURE");
+    expect(secrets.size).toBe(0);
+    expect((await db.query("SELECT count(*)::int n FROM pg_roles WHERE rolname='phase5_early_draw_prod20261115'")).rows[0].n).toBe(0);
+    const commissioned=await commissionP5EarlyDrawOnce(db,driver,env,verify);
+    expect(commissioned).toMatchObject({status:"EARLY_DRAW_LOGIN_AND_TWO_SECRETS_COMMISSIONED_NO_GO",
+      newLoginCount:1,authenticatedScopedLogin:true,drawRowsWritten:0,providerCalls:0,phase6PaidGo:false});
+    expect(secrets.size).toBe(2);
+    expect((await db.query("SELECT count(*)::int n FROM clean.adb_sampling_draw")).rows[0].n).toBe(0);
+    await expect(commissionP5EarlyDrawOnce(db,driver,env,verify)).rejects.toThrow("SECRET_ALREADY_EXISTS");
+    await expect(commissionP5EarlyDrawOnce(db,{...driver,names:async()=>[]},env,verify)).rejects.toThrow("EXISTING_DRAW_LOGIN");
+    drawDb=new Pool({connectionString:secrets.get("V39_P5_EARLY_DRAW_DATABASE_URL"),max:2});
+    console.log("P5_EARLY_DRAW_REAL_PG16_CREDENTIAL_ONLY_ROLLBACK_DUPLICATE_ACL_PASS");
     const today=await db.query("SELECT clock_timestamp() AS now");
     serviceStart=new Date(new Date(today.rows[0].now).getTime()+28*3_600_000)
       .toISOString();
@@ -101,16 +116,16 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
   afterAll(async()=>{if(drawDb)await drawDb.end();if(db)await db.end();});
 
   it("read-only preflight confirms exact narrow existing grants and refuses overbroad update",async()=>{
-    const result=await verifyP5EarlyDrawReadonlyAcl(drawDb,"p5_early_draw_ci","v39_ci");
+    const result=await verifyP5EarlyDrawReadonlyAcl(drawDb,"phase5_early_draw_prod20261115","v39_ci");
     expect(result).toMatchObject({status:"EXISTING_EARLY_DRAW_LOGIN_READONLY_ACL_PASS_NO_GO",verifiedTableCount:8,databaseWrites:0,providerCalls:0,phase6PaidGo:false});
-    await db.query("GRANT UPDATE (selected_icao) ON clean.adb_sampling_draw TO p5_early_draw_ci");
-    try{await expect(verifyP5EarlyDrawReadonlyAcl(drawDb,"p5_early_draw_ci","v39_ci")).rejects.toThrow("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");}
-    finally{await db.query("REVOKE UPDATE (selected_icao) ON clean.adb_sampling_draw FROM p5_early_draw_ci");}
+    await db.query("GRANT UPDATE (selected_icao) ON clean.adb_sampling_draw TO phase5_early_draw_prod20261115");
+    try{await expect(verifyP5EarlyDrawReadonlyAcl(drawDb,"phase5_early_draw_prod20261115","v39_ci")).rejects.toThrow("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");}
+    finally{await db.query("REVOKE UPDATE (selected_icao) ON clean.adb_sampling_draw FROM phase5_early_draw_prod20261115");}
   });
 
   it("commits real atomic four-row selections and advances historical washout state",async()=>{
     const acl=(await drawDb.query("SELECT current_user actor,session_user login,has_any_column_privilege(current_user,'clean.adb_sampling_draw','UPDATE') draw_update,has_table_privilege(current_user,'clean.adb_sampling_draw','DELETE') draw_delete,has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') auth_update,has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') pre_insert,has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') source_insert")).rows[0];
-    expect(acl).toMatchObject({actor:"p5_early_draw_ci",login:"p5_early_draw_ci",draw_update:false,draw_delete:false,auth_update:false,pre_insert:false,source_insert:false});
+    expect(acl).toMatchObject({actor:"phase5_early_draw_prod20261115",login:"phase5_early_draw_prod20261115",draw_update:false,draw_delete:false,auth_update:false,pre_insert:false,source_insert:false});
     const output=await commitEarlyPhase5Draw(drawDb,pins);
     expect(output.status).toBe("EARLY_DRAW_COMMITTED");
     expect(output.selectedAirportCount).toBe(4);
