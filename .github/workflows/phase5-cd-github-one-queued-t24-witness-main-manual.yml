@@ -17,6 +17,11 @@ on:
     paths:
       - '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml'
       - 'scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts'
+      - 'scripts/v39_phase6_private_current_t24_pre_schedule_v39.ts'
+      - 'server/lib/disruption/phase6CurrentPrivateT24Scope_v39.mjs'
+      - 'tests/phase6_private_current_t24_worker_v39.test.mjs'
+      - 'scripts/v39_phase6_committed_t24_witness_custody_v39.mjs'
+      - 'tests/phase6_committed_t24_witness_custody_v39.test.mjs'
       - 'server/lib/disruption/phase5CdGithubDbClockLookahead_v39.ts'
       - 'tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts'
       - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
@@ -62,6 +67,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           npx --no-install vitest run             tests/phase5_cd_github_queued_t24_offline_v39.test.ts             tests/phase5_t24_pre_independent_witness_chain_v39.test.ts             tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts
+          npx --no-install tsx --test tests/phase6_committed_t24_witness_custody_v39.test.mjs tests/phase6_private_t24_routing_v39.test.mjs
           echo P5_CD_T24_SEPARATE_WITNESS_OFFLINE_STOP_NO_PROVIDER_PASS
   one-approved-queued-native-t24:
     if: >-
@@ -70,7 +76,8 @@ jobs:
                && vars.P5_CD_GH_QUEUED_T24_ENABLED == '1'
                && inputs.confirm == 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER')
               || (github.event_name == 'schedule'
-               && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1'
+               && ((vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1' && vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED != '1')
+                  || (vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED == '1' && vars.P5_CD_GH_T24_SCHEDULE_ENABLED != '1'))
                && vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 16
@@ -87,9 +94,10 @@ jobs:
       P5_CD_GH_QUEUED_T24_EXECUTE: '1'
       P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ${{ github.event_name == 'schedule' && 'ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER' || inputs.confirm }}
       P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+      P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED: ${{ github.event_name == 'schedule' && vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED || '' }}
       # Legacy Stage24 source-dispatch automation and queued V0092 T24 must not compete.
       P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
-      P5_CD_GH_ROSTER_PATH: ${{ github.event_name == 'schedule' && vars.P5_CD_GH_T24_SCHEDULE_ROSTER_PATH || inputs.frozen_roster }}
+      P5_CD_GH_ROSTER_PATH: ${{ github.event_name == 'schedule' && vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED != '1' && vars.P5_CD_GH_T24_SCHEDULE_ROSTER_PATH || inputs.frozen_roster }}
       P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
       P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
       P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
@@ -98,7 +106,7 @@ jobs:
       P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
       # Independent signed T24 singleton: do not overwrite the concurrent T6/T90 roster secret.
-      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_T24_ROSTER_SHA256 }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ (github.event_name != 'schedule' || vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED != '1') && secrets.P5_CD_GH_T24_ROSTER_SHA256 || '' }}
       P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
       P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
@@ -122,7 +130,11 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           case "$GITHUB_EVENT_NAME" in
             schedule)
-              test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1
+              if test "$P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED" = 1; then
+                test "$P5_CD_GH_T24_SCHEDULE_ENABLED" != 1
+              else
+                test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1
+              fi
               test "$P5_T24_AUTO_DISPATCH_ENABLED" != true
               ;;
             workflow_dispatch)
@@ -145,7 +157,12 @@ jobs:
           test -z "$V39_P5_SOURCE_DATABASE_URL"
           test -n "$P5_V39_PRE_DATABASE_URL"
           test -n "$P5_V39_T24_WITNESS_DATABASE_URL"
-          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          if test "$P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED" = 1; then
+            test -z "$P5_CD_GH_PRE_ROSTER_SHA256$P5_CD_GH_ROSTER_PATH"
+            test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
+          else
+            test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          fi
           case "$P5_CD_GH_PRE_MODE" in
             PHASE5_CANARY)
               test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
@@ -162,17 +179,56 @@ jobs:
               exit 2
               ;;
           esac
-          [[ "$P5_CD_GH_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
-          test -f "$P5_CD_GH_ROSTER_PATH"
+          if test "$P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED" != 1; then
+            [[ "$P5_CD_GH_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+            test -f "$P5_CD_GH_ROSTER_PATH"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
       - name: One already-registered T24 through original Stage14 and V0081
+        if: ${{ github.event_name != 'schedule' || vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED != '1' }}
+        # Optional post-ACK custody; these keys/credentials are not
+        # supplied to any paid provider job. STOP when not commissioned.
+        env:
+          P6_T24_CUSTODY_ENABLED: ${{ vars.P6_T24_CUSTODY_ENABLED }}
+          P6_T24_CUSTODY_APPROVED: ${{ secrets.P6_T24_CUSTODY_APPROVED }}
+          P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64 }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+          P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
         shell: bash
         run: |
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts
           echo P5_CD_QUEUED_T24_PRE_V0081_SEPARATE_WITNESS_ATTEMPT_NO_PAID
+      - name: Bounded current private T24 through original Stage14 and V0081
+        if: ${{ github.event_name == 'schedule' && vars.P6_PRIVATE_CURRENT_T24_SCHEDULE_ENABLED == '1' }}
+        env:
+          P5_CD_GH_QUEUED_T24_EXECUTE: '0'
+          P6_PRIVATE_CURRENT_T24_EXECUTE: '1'
+          P5_CD_GH_PRIVATE_T24_MODE: PRIVATE_CURRENT_T24_SCHEDULE
+          P5_CD_GH_PRIVATE_CURRENT_T24_APPROVED: ${{ secrets.P5_CD_GH_PRIVATE_CURRENT_T24_APPROVED }}
+          P6_PRIVATE_T24_ENROLL_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_ENABLED }}
+          P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
+          P6_T24_WORKER_LANES: ${{ vars.P6_T24_WORKER_LANES }}
+          P6_T24_WORKER_TICKS_PER_LANE: ${{ vars.P6_T24_WORKER_TICKS_PER_LANE }}
+          P6_T24_WORKER_BOUNDED_PARALLEL_APPROVED: ${{ secrets.P6_T24_WORKER_BOUNDED_PARALLEL_APPROVED }}
+          P6_T24_CUSTODY_ENABLED: ${{ vars.P6_T24_CUSTODY_ENABLED }}
+          P6_T24_CUSTODY_APPROVED: ${{ secrets.P6_T24_CUSTODY_APPROVED }}
+          P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64 }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+          P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+        run: npx --no-install tsx scripts/v39_phase6_private_current_t24_pre_schedule_v39.ts
