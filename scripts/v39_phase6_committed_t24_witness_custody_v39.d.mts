@@ -1,0 +1,11 @@
+import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
+import type {P5IndependentT24WitnessReview} from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
+import type {P5CdT24QueuedResult} from "../server/lib/disruption/phase5CdGithubQueuedT24Witness_v39";
+import type {P6T24CustodyTrust,P6T24CustodyScope} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
+import type {KeyObject} from "node:crypto";
+type Context={trust:P6T24CustodyTrust;privateKey:KeyObject;readerUrl:string;publisherUrl:string;
+ pre:P5Stage14SingleFlightPrePermit;witness:P5IndependentT24WitnessReview;readerScope:P6T24CustodyScope;publisherScope:P6T24CustodyScope};
+export function admitP6CommittedT24Custody(env:NodeJS.ProcessEnv,pre:P5Stage14SingleFlightPrePermit,witness:P5IndependentT24WitnessReview):Context|null;
+export function buildP6ActualT24CustodyWire(ctx:Context,result:P5CdT24QueuedResult,observedDbClockUtc:string):{wire:unknown;packetBytes:Buffer};
+export type P6CommittedT24CustodyReport={privateT24CustodyCommittedAndReadBack:true;receiptSha256:string;independentScientificReviewCompleted:false;providerCalls:0;phase6PaidGo:false};
+export function openP6CommittedT24Custody(ctx:Context|null):Promise<null|{close:()=>Promise<void>;publish:(result:P5CdT24QueuedResult)=>Promise<P6CommittedT24CustodyReport>}>;
