@@ -38,8 +38,7 @@ function bytes(file:string):Buffer{
 }
 export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  verifyP5CdGithubFrozenCodeLineage(env);
- const released=requireP5CdGithubPreRelease(env,
-  {allowReviewedT24Witness:true});
+ requireP5CdGithubPreRelease(env,{allowReviewedT24Witness:true});
  requireP5CdT24DispatchEvent(env);
  if(!FILE.test(env.P5_CD_GH_ROSTER_PATH??""))
   hold("SIGNED_T24_SINGLETON_ROSTER_REQUIRED");
@@ -50,11 +49,21 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  if(!Array.isArray(roster.entries)||roster.entries.length!==1)
   hold("EXACT_ONE_T24_PACKET_PER_MANUAL_TICK");
  const p=roster.entries[0],packetBytes=bytes(p.filePath);
+ return runP5CdOneQueuedT24VerifiedBytes(env,rosterBytes,roster,[{filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes}]);
+}
+/** Reuse the exact original singleton writer for authenticated in-memory
+ * registry packets. No file dump of private provider contents. Caller must
+ * reauthenticate its registry after waiting; original scoped claim still
+ * owns durable write authority. */
+export async function runP5CdOneQueuedT24VerifiedBytes(env:NodeJS.ProcessEnv,rosterBytes:Buffer,roster:P5CdFrozenRoster,
+ files:{filePath:string;packetSha256:string;bytes:Buffer}[],afterWait?:()=>Promise<void>){
+ const released=requireP5CdGithubPreRelease(env,{allowReviewedT24Witness:true});
+ requireP5CdT24DispatchEvent(env);
+ if(!Array.isArray(roster.entries)||roster.entries.length!==1||files.length!==1)
+  hold("EXACT_ONE_T24_PACKET_PER_TICK");
  // Verify the entire immutable packet + independent witness contract
  // before opening either restricted PostgreSQL connection.
- const packets=verifyP5CdFrozenRoster(rosterBytes,roster,[{
-  filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes
- }],released,"T24_WITH_SEPARATE_WITNESS");
+ const packets=verifyP5CdFrozenRoster(rosterBytes,roster,files,released,"T24_WITH_SEPARATE_WITNESS");
  if(packets.size!==1)hold("NOT_ONE_INDEPENDENT_T24_PACKET");
  const expected=[...packets.values()][0];
  if(expected.permit.horizon!=="T-24h"||!expected.witnessReview)
@@ -89,11 +98,10 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
    env,pre,packets,undefined,{allowReviewedT24Witness:true});
   if(clock.status==="MAX_REVIEWED_LOOKAHEAD_EXHAUSTED")
    hold("T24_DB_CLOCK_LOOKAHEAD_EXHAUSTED_NO_REPLAY");
+  if(afterWait&&clock.status==="DUE_WINDOW")await afterWait();
   const result=await runP5CdOneQueuedT24Witness(env,{
    preDb:pre,prePool:pre,witnessPool:witness,
-   rosterBytes,roster,files:[{
-    filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes
-   }]
+   rosterBytes,roster,files
   });
   return{...result,dbClockDueWindow:clock};
  }finally{
