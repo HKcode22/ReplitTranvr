@@ -201,3 +201,63 @@ describe("actual SOURCE → UNSIGNED future PRE reviewer dossier",()=>{
   expect(docket.phase5FreezeGranted).toBe(false);
  });
 });
+
+import {readP6LaterT24EvidencePage,P6_LATER_T24_SNAPSHOTS_BATCH_SQL,P6_LATER_T24_WITNESSES_BATCH_SQL} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
+import {P5_STAGE28_GROUPS} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
+import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
+describe("bounded actual-role T24 evidence intake for existing later SOURCE dossiers",()=>{
+ function fixture(){
+  const {audit,pins}=actual(4),d=buildP5UnsignedNativePreReviewDossier(audit,pins);
+  const id=(i:number)=>d.entries[i].source.flightInstanceId;
+  const base:Omit<P5Stage24ReviewedT24Receipt,"receiptSha256">={schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1",
+   snapshotId:"1001",flightInstanceId:id(0),selectedTNativeUtc:selectedT,frozenT24CutoffUtc:"2027-02-09T12:00:00.000Z",
+   expectedSelectedTVersion:"departure.scheduledTime.utc:v1:"+H("6"),t24OriginalFidsSha256:H("7"),t24SourceQueryDigestSha256:H("8"),
+   t24FrameSha256:H("9"),t24ConfigSha256:H("0"),witnessDbObservedAtUtc:"2027-02-09T11:58:00.000Z",stage17PostCommitReadbackAtUtc:"2027-02-09T11:58:30.000Z"};
+  const receipt={...base,receiptSha256:digestP5Stage24ReviewedReceipt(base)};
+  const scope={independentDossierReviewPinned:true as const,independentT24EvidenceReadApproved:true as const,existingPaidDispatchApproved:false as const,
+   expectedDossierSha256:digestP5UnsignedNativePreDossier(d),expectedManifestSha256:pins.expectedManifestSha256,
+   expectedRightsSha256:pins.expectedReviewedSourceRightsSha256,expectedReleaseSha256:pins.expectedReviewedReleaseSha256,
+   expectedFrameSha256:base.t24FrameSha256,expectedConfigSha256:base.t24ConfigSha256,expectedSelectedTVersion:base.expectedSelectedTVersion,pageIndex:1,
+   reviewedReceipts:[{receipt,expectedReceiptSha256:receipt.receiptSha256}]};
+  const row={flight_instance_id:id(0),snapshot_id:"1001",joined_snapshot_id:"1001",
+   selected_t_version:base.expectedSelectedTVersion,fids_response_hash:base.t24OriginalFidsSha256,source_query_digest:base.t24SourceQueryDigestSha256,
+   frame_hash:base.t24FrameSha256,config_hash:base.t24ConfigSha256,source_t24_population_query_id:UUID,snapshot_prediction_state:"PRE_DEPARTURE",snapshot_horizon:"T-24h",
+   selected_t_native_utc:base.selectedTNativeUtc,t24_cutoff_utc:base.frozenT24CutoffUtc,post_pre_commit_db_observed_at_utc:base.witnessDbObservedAtUtc};
+  const calls:string[]=[];let closed=0;
+  let identity={db:"neondb",actor:P5_STAGE28_GROUPS.pre,login:"phase5_p30_pre_login_20261107",version:160016,ro:"on",replica:false,now:"2027-02-10T05:01:00.000Z"};
+  const pool:any={connect:async()=>({query:async(sql:string,args?:any[])=>{
+   calls.push(sql);
+   let rows:any[]=[];
+   if(sql.startsWith("SELECT current_database"))rows=[identity];
+   if(sql===P6_LATER_T24_SNAPSHOTS_BATCH_SQL){expect(args).toEqual([d.entries.map(e=>e.source.flightInstanceId),9]);
+    rows=[{flight_instance_id:id(0),snapshot_id:"1001"},{flight_instance_id:id(1),snapshot_id:"1002"},{flight_instance_id:id(2),snapshot_id:"1003"}];}
+   if(sql===P6_LATER_T24_WITNESSES_BATCH_SQL)rows=[row,{...row,flight_instance_id:id(1),snapshot_id:"1002",joined_snapshot_id:"1002"}];
+   return{rows,rowCount:rows.length};},release:()=>{closed++;}})};
+  return {audit,pins,d,scope,pool,calls,row,identity,closed:()=>closed};
+ }
+ it("uses 2 bounded SQL evidence reads, preserves missing receipt/partial/absent distinctions and never logs identity",async()=>{
+  const f=fixture(),r=await readP6LaterT24EvidencePage(f.pool,f.d,f.scope);
+  expect(r.privateDecisions.map(x=>x.status)).toEqual([
+   "T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED","T24_EXISTS_PRIVATE_RECEIPT_UNAVAILABLE",
+   "T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY","T24_ABSENT_AFTER_CUTOFF_SEPARATE_MISSINGNESS_REVIEW_REQUIRED"]);
+  expect(r.candidateCount).toBe(4);expect(r.reviewedPacketsIssued).toBe(0);expect(r.databaseWrites).toBe(0);
+  expect(JSON.stringify(r)).not.toContain("leg:future:");expect(f.calls.filter(s=>s.includes("ANY($1::text[])"))).toHaveLength(2);
+  expect(f.calls.at(-1)).toBe("ROLLBACK");expect(f.closed()).toBe(1);
+ });
+ it("treats changed frozen T as per-flight mismatch; refuses wrong role before flight rows",async()=>{
+  const f=fixture();f.row.selected_t_native_utc="2027-02-10T12:01:00.000Z";
+  const r=await readP6LaterT24EvidencePage(f.pool,f.d,f.scope);
+  expect(r.privateDecisions[0].status).toBe("T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH");
+  const g=fixture();g.identity.login="wrong";
+  await expect(readP6LaterT24EvidencePage(g.pool,g.d,g.scope)).rejects.toThrow("ACTUAL_COMMISSIONED");
+  expect(g.calls.some(s=>s.includes("ANY($1::text[])"))).toBe(false);
+ });
+ it("rejects wrong exact dossier and source run binding",async()=>{
+  const f=fixture();
+  await expect(readP6LaterT24EvidencePage(f.pool,f.d,{...f.scope,expectedDossierSha256:H("e")})).rejects.toThrow("NO_EXACT");
+  expect(f.calls).toHaveLength(0);
+  const changed={...f.audit,sourceGithubRunId:"123456789"};
+  expect(()=>buildP5UnsignedNativePreReviewDossier(changed,{...f.pins,expectedActualCandidateAuditSha256:digestP5ActualSourceCandidateAudit(changed)}))
+   .toThrow("CANDIDATE_AUDIT_UNAUTHENTICATED_OR_SCOPE_CHANGED");
+ });
+});
