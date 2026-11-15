@@ -330,7 +330,7 @@ describe("stored signed SOURCE registry provenance for POST PRE audit",()=>{
   const sqls:string[]=[];
   const pool={connect:async()=>({query:async(sql:string)=>{
    sqls.push(sql);
-   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",db:"neondb",ro:"on"}]};
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:stamp("2027-02-02T11:00:00.000Z")}]};
    if(sql.includes("FROM clean.flight_snapshots"))return {rowCount:rows.length,rows};
    return{rowCount:0,rows:[]};
   },release:()=>{}})};
@@ -353,6 +353,16 @@ describe("stored signed SOURCE registry provenance for POST PRE audit",()=>{
   expect(legacy.boundSourceRegistryValidHorizonCount).toBeUndefined();
   f.rows.splice(0);
   await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")])).rejects.toThrow("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
+ });
+ it("only an unexpired source at the actual child DB clock may qualify",async()=>{
+  const f=fake();
+  f.rows[0].source_expires_at_utc=stamp("2027-02-02T11:00:00.000Z");
+  const result=await auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("2")]);
+  expect(result.observedValidHorizons).toEqual(["T-6h"]);
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p,[sh("1")])).rejects.toThrow("NO_VALID_PRE_FROM_EXACT_SIGNED_SOURCE_REGISTRY");
+  f.rows[1].source_expires_at_utc=stamp("2027-02-02T10:59:59.999Z");
+  await expect(auditP5FuturePostActualPriorPre(f.pool as any,f.p)).rejects.toThrow("NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST");
+  expect(f.sqls.some(s=>s.includes("b.source_expires_at_utc>transaction_timestamp()")&&s.includes("r.raw_expired_at_utc IS NULL"))).toBe(true);
  });
  it("rejects malformed or duplicate digest list before DB and rejects ambiguous query provenance",async()=>{
   const f=fake();
