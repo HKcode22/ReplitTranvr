@@ -449,7 +449,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    providerApiVersion:"1.15.4",fidsProtocolVersion:"v39",
    airportFrames:sourceReview.localFrames.map(f=>({icao:f.icao,ianaTimezone:f.ianaTimezone})),
    dayPlanSha256s:Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:i===0?
-    createHash("sha256").update(raw).digest("hex"):sha("d")})),
+    createHash("sha256").update(raw).digest("hex"):digest({testOnlyFutureDay:i+1})})),
    delegatedDailyPacketProductionApproved:true};
   const policyBytes=Buffer.from(JSON.stringify(policy));
   const args={readPool:writer,policyBytes,dayPlanBytes:raw,pins:{

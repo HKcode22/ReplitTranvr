@@ -89,6 +89,7 @@ export async function produceP6DelegatedDailySourceReview({
     !/^[a-zA-Z0-9._-]{2,50}$/.test(p.fidsProtocolVersion??"")||
     !Array.isArray(p.dayPlanSha256s)||p.dayPlanSha256s.length!==31||
     p.dayPlanSha256s.some((d,i)=>d?.runDayIndex!==i+1||!SHA.test(d.sha256??""))||
+    new Set(p.dayPlanSha256s.map(d=>d.sha256)).size!==31||
     !Array.isArray(p.airportFrames)||p.airportFrames.length<4||p.airportFrames.length>2000||
     p.airportFrames.some(f=>!f||! /^[A-Z]{4}$/.test(f.icao??"")||
       typeof f.ianaTimezone!=="string"||f.ianaTimezone.length>80)||
@@ -105,6 +106,8 @@ export async function produceP6DelegatedDailySourceReview({
       SLOTS.some(s=>! /^[A-Z]{4}$/.test(plan.pairedIcaos![s]??""))||
       new Set(SLOTS.map(s=>plan.pairedIcaos![s])).size!==4))
   hold("UNAPPROVED_DAILY_PLAN_OR_WASHOUT_SCOPE");
+ const segmented=plan.reviewedSegmentedSource??hold("MISSING_APPROVED_SEGMENTED_SOURCE");
+ const timing=plan.reviewedRefreshTiming??hold("MISSING_APPROVED_REFRESH_TIMING");
  const from=at(p.validFromUtc),until=at(p.validUntilUtc);
  if(from!==p.validFromUtc||until!==p.validUntilUtc||until<=from||
     at(plan.expectedServiceStartUtc)!==plan.expectedServiceStartUtc)
@@ -136,7 +139,7 @@ export async function produceP6DelegatedDailySourceReview({
   if(c.rowCount!==1||at(x.scheduled_start_utc)!==plan.expectedServiceStartUtc||
      x.draw_type!==plan.expectedDrawType||x.calendar_hash!==p.calendarSha256||
      x.config_hash!==p.configSha256||x.frame_hash!==p.frameSha256||
-     x.window_shape!==plan.reviewedSegmentedSource.windowShape)
+     x.window_shape!==segmented.windowShape)
    hold("ACTUAL_CALENDAR_NOT_APPROVED_DAY_PLAN");
   const day:PreparedDayForReadback={runDayIndex:plan.runDayIndex,
    scheduledStartUtc:new Date(x.scheduled_start_utc),frozenDrawSeed:x.frozen_draw_seed,
@@ -161,8 +164,8 @@ export async function produceP6DelegatedDailySourceReview({
   const l=release.rows[0];
   if(release.rowCount!==1||l.reviewed_source_request_grid_sha256!==p.reviewed31DaySourceRequestGridSha256||
      l.reviewed_category_budget_sha256!==p.reviewedCategoryBudgetSha256||
-     l.reviewed_provider_range_sha256!==plan.reviewedSegmentedSource.reviewedProviderRangeEvidenceSha256||
-     Number(l.verified_provider_max_range_minutes)!==plan.reviewedSegmentedSource.verifiedProviderMaxRangeMinutes||
+     l.reviewed_provider_range_sha256!==segmented.reviewedProviderRangeEvidenceSha256||
+     Number(l.verified_provider_max_range_minutes)!==segmented.verifiedProviderMaxRangeMinutes||
      at(l.frozen_at_utc)>=observed)
    hold("FROZEN_RELEASE_NOT_REVIEWED_POLICY");
   const cycle=await client.query("SELECT cycle_api_ceiling,other_category_reserved_units,protected_api_floor_units,"+
@@ -202,8 +205,8 @@ export async function produceP6DelegatedDailySourceReview({
    expectedConfigSha256:p.configSha256,expectedFrameSha256:p.frameSha256,
    expectedProviderContractSha256:p.providerContractSha256,expectedEarlyDrawSha256:actual.stateHash,
    expectedRestrictedReaderRole:p.expectedPrepareRole,runDayIndex:plan.runDayIndex,
-   templates:plan.templates,reviewedRefreshTiming:plan.reviewedRefreshTiming,
-   reviewedSegmentedSource:plan.reviewedSegmentedSource,
+   templates:plan.templates,reviewedRefreshTiming:timing,
+   reviewedSegmentedSource:segmented,
    ...(plan.reviewedOrdinaryDayEnvelope?{reviewedOrdinaryDayEnvelope:plan.reviewedOrdinaryDayEnvelope}:{})};
   sourceReview={manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,
    frameSha256:p.frameSha256,providerContractSha256:p.providerContractSha256,reviewedReleaseSha256:p.releaseSha256,
