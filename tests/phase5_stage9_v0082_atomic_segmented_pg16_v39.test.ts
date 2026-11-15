@@ -63,6 +63,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  let sourceReview:P5Stage8SourceReviewWithoutCopiedDraw;
  let selectedAt:string,serviceStart:string;
  let runtimeProducer:Parameters<typeof produceP6DelegatedDailySourceReview>[0];
+ let originalDurableDayBytes:Buffer|undefined;
  const manifest=sha("e"),range=sha("8"),budgetHash=sha("6"),gridHash=sha("7");
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
@@ -516,6 +517,9 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
     expect(resumed.insertedDailyReviewRow).toBe(0);
     expect(resumed.preparedLedgerInserts).toBe(0);
     expect(resumed.privateDailyPreparePacketBytes).toEqual(result.privateDailyPreparePacketBytes);
+    originalDurableDayBytes=Buffer.from(resumed.privateDailyPreparePacketBytes);
+    await expect(runP6DurableDailySourcePreparation({...args,trust:{...trust,policyValidUntilUtc:iso(Date.parse(trust.policyValidUntilUtc)+H)}}))
+     .rejects.toThrow("APPROVED_POLICY_AND_STORAGE_TRUST_DRIFT");
     expect(JSON.stringify(resumed)).not.toContain("reviewedPrepareInput");
     expect(JSON.stringify(resumed)).not.toContain("privateDailyPreparePacketBytes");
    }finally{await reader.end();await publisher.end();}
@@ -624,7 +628,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    maximumReviewRetentionHours:96,maxQueriesPerDay:384,
    queryReviewerFingerprintSha256:fp(query.publicKey),registryReviewerFingerprintSha256:fp(registry.publicKey),
    delegatedAutomatedSourceSigningApproved:true};
-  const bytes=Buffer.from(JSON.stringify(policy)),daily=Buffer.from(JSON.stringify(day));
+  const bytes=Buffer.from(JSON.stringify(policy)),daily=originalDurableDayBytes??Buffer.from(JSON.stringify(day));
   const args={readPool:writer,policyBytes:bytes,dailyPreparePacketBytes:daily,
    pins:{independentExactPolicyAndDailyReviewApproved:true as const,
     expectedPolicySha256:createHash("sha256").update(bytes).digest("hex"),

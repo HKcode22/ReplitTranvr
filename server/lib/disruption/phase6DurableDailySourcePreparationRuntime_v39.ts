@@ -41,6 +41,21 @@ export async function runP6DurableDailySourcePreparation({
     producer.pins.expectedRunDayIndex!==trust.runDayIndex||
     producer.pins.expectedReviewedMainSha!==trust.reviewedCodeSha)
   hold("UNAPPROVED_DURABLE_REVIEW_RUNTIME");
+ // A resumed runner still checks the exact approved policy, rather
+ // than letting stored bytes or a caller's widened trust extend its scope.
+ let policy;
+ try{policy=JSON.parse(producer.policyBytes.toString("utf8"));}catch{return hold("INVALID_APPROVED_POLICY");}
+ if(policy?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||
+    policy.delegatedDailyPacketProductionApproved!==true||
+    policy.approvedCodeSha!==trust.reviewedCodeSha||
+    policy.validFromUtc!==trust.policyValidFromUtc||policy.validUntilUtc!==trust.policyValidUntilUtc||
+    !["manifestSha256","calendarSha256","configSha256","frameSha256","releaseSha256","rightsSha256",
+      "providerContractSha256","reviewed31DaySourceRequestGridSha256","reviewedCategoryBudgetSha256"]
+     .every(k=>policy[k]===trust[k as keyof Trust])||
+    !Array.isArray(policy.dayPlanSha256s)||policy.dayPlanSha256s.length!==31||
+    policy.dayPlanSha256s[trust.runDayIndex-1]?.runDayIndex!==trust.runDayIndex||
+    policy.dayPlanSha256s[trust.runDayIndex-1]?.sha256!==trust.dayPlanSha256)
+  hold("APPROVED_POLICY_AND_STORAGE_TRUST_DRIFT");
  const common={privateDailyReviewTransportApproved:true,existingPaidDispatchApproved:false,
   adbAutoCollect:"0",phase6ProcessArmed:"0"};
  const read=()=>readP6DailyPrepareReviewOnce({client:readerClient,trust,
