@@ -416,6 +416,22 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "(manifest_sha256,charge_day_utc,category,planned_units) "+
    "VALUES ($1,$2::date,'DIAGNOSTIC_UNIT_BUDGET',0)",[manifest,day]);
  });
+ it("refuses changed approved UTC cap and unmapped reservation increments before preparation",async()=>{
+  const day=review.proposal.actualUtcChargeBudgets[0].day;
+  await admin.query("UPDATE clean.phase5_fids_utc_charge_budget_v39 SET daily_api_ceiling=1898 WHERE manifest_sha256=$1 AND charge_day_utc=$2::date",[manifest,day]);
+  try{
+   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
+    .rejects.toThrow("REAL_UTC_CHARGE_DAY_BUDGET_MISMATCH");
+   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  }finally{await admin.query("UPDATE clean.phase5_fids_utc_charge_budget_v39 SET daily_api_ceiling=1900 WHERE manifest_sha256=$1 AND charge_day_utc=$2::date",[manifest,day]);}
+  // Test-only inconsistent counter, not an authentic reservation. Must HOLD.
+  await admin.query("UPDATE clean.phase5_fids_utc_charge_budget_v39 SET physically_reserved_units=2 WHERE manifest_sha256=$1 AND charge_day_utc=$2::date",[manifest,day]);
+  try{
+   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
+    .rejects.toThrow("SOURCE_UTC_RESERVATION_CATEGORY_COUNTER_DRIFT");
+   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  }finally{await admin.query("UPDATE clean.phase5_fids_utc_charge_budget_v39 SET physically_reserved_units=0 WHERE manifest_sha256=$1 AND charge_day_utc=$2::date",[manifest,day]);}
+ });
  it("rolls back BOTH table inserts on an injected 2nd partition failure",async()=>{
   await admin.query(`CREATE FUNCTION clean.ci_v0082_bomb() RETURNS trigger
     LANGUAGE plpgsql AS $$
