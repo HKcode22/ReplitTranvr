@@ -135,3 +135,59 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
   value:drafts,enumerable:false,writable:false,configurable:false
  }) as typeof result & {readonly privateUnsignedSourceDraftPlan:typeof drafts};
 }
+
+/**
+ * Resume one already independently verified exact durable daily packet.
+ * This is deliberately a nonpaid library port, not the authorization
+ * boundary. A protected caller must verify the persisted signature first.
+ * A fresh authenticated empty snapshot may enter original Stage9 once.
+ * Complete existing ledger is independently verified, not inserted again.
+ * Unknown commit propagates; the NEXT invocation must re-read, never
+ * retry in this call. Original serializable lock/PK still own races.
+ */
+export async function resumeP5ReviewedSourceDayPreparation(
+ readOnlyPool:Pick<Pool,"connect">,
+ insertOnlyPool:Pick<Pool,"connect">,
+ input:P5ReviewedDaySourcePreparationInput,
+ scope:{authenticatedExactDurableReviewReadbackApproved:true;
+  existingPaidDispatchApproved:false;separatePreparationScopeApproved:true}
+){
+ if(scope?.authenticatedExactDurableReviewReadbackApproved!==true||
+    scope.existingPaidDispatchApproved!==false||
+    scope.separatePreparationScopeApproved!==true)
+  hold("NO_DURABLE_REVIEW_AND_NONPAID_PREPARATION_SCOPE");
+ const r=input?.readScope,p=input?.sourceReview,z=input?.stage9Review;
+ if(!r||!p||!z)hold("INCOMPLETE_DURABLE_REVIEW");
+ const saved=await readCommittedP5DayCandidateGrid(readOnlyPool,r);
+ const proposal=planP5Stage8FromCommittedDayReadback(saved,p);
+ if(proposal.dayProposalSha256!==z.expectedProposalSha256||
+    saved.selectedDayCandidateGrid.sourceCandidateDigestSha256!==z.expectedSourceCandidateDigestSha256)
+  hold("DURABLE_REVIEW_PROPOSAL_DRIFT");
+ let proof;
+ try{
+  proof=await readBackP5Stage9PreparedDayOnce(insertOnlyPool,{...z,proposal},
+   {distinguishConfirmedEmptyDay:true});
+ }catch(e){
+  if(!(e instanceof Error)||
+     e.message!=="REFUSED_P5_V0082_ATOMIC_DAY_PREPARE_READBACK_CONFIRMED_EMPTY_DAY")
+   throw e;
+  const inserted=await prepareP5ReviewedSourceDayFromSavedDraw(readOnlyPool,insertOnlyPool,
+   {...input,preparePrivateUnsignedSourceDraftShards:true});
+  const freshProof=inserted.preparedDayReadback??hold("COMMITTED_READBACK_REQUIRED_NO_REPLAY");
+  return Object.freeze({
+   status:"INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK" as const,
+   runDayIndex:inserted.runDayIndex,
+   preparedProposalSha256:inserted.preparedProposalSha256,
+   verifiedQueryCount:freshProof.verifiedQueryCount,
+   verifiedPartitionCount:freshProof.verifiedPartitionCount,
+   databaseInserts:inserted.databaseInserts,providerCalls:0 as const,
+   phase6PaidGo:false as const
+  });
+ }
+ return Object.freeze({
+  status:"EXISTING_EXACT_PREPARED_DAY_READBACK_NO_REPLAY" as const,
+  runDayIndex:proof.runDayIndex,preparedProposalSha256:proof.sourceProposalSha256,
+  verifiedQueryCount:proof.verifiedQueryCount,verifiedPartitionCount:proof.verifiedPartitionCount,
+  databaseInserts:0,providerCalls:0 as const,phase6PaidGo:false as const
+ });
+}

@@ -20,7 +20,7 @@ import {readCommittedP5DayCandidateGrid,
 import {planP5Stage8FromCommittedDayReadback,
  type P5Stage8SourceReviewWithoutCopiedDraw}
  from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
-import {prepareP5ReviewedSourceDayFromSavedDraw}
+import {prepareP5ReviewedSourceDayFromSavedDraw,resumeP5ReviewedSourceDayPreparation}
  from "../server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39";
 import {planP6StoredSourceDraftShards} from "../server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39";
 import {draftP5OneGetFromActualPreparedSource}
@@ -365,6 +365,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    .toThrow("PREPARED_QUERY_OR_PARTITION_NOT_SAME_SAVED_SOURCE");
   await expect(readBackP5Stage9PreparedDayOnce(writer,review))
    .rejects.toThrow("READBACK_INCOMPLETE_OR_EXTRA_PREPARED_DAY");
+  await expect(readBackP5Stage9PreparedDayOnce(writer,review,{distinguishConfirmedEmptyDay:true}))
+   .rejects.toThrow("READBACK_CONFIRMED_EMPTY_DAY");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
  it("refuses production owner role and tampered reviewer source digest",async()=>{
@@ -476,23 +478,15 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
   const {proposal:unusedProposal,...reviewPins}=review;
   void unusedProposal;
-  const result=await prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
-   readScope,sourceReview,stage9Review:reviewPins,
-   preparePrivateUnsignedSourceDraftShards:true
-  });
-  expect(result.preparedDayReadback?.verifiedQueryCount).toBe(96);
-  expect(result.preparedDayReadback?.verifiedPartitionCount).toBe(96);
-  expect(result.preparedDayReadback?.separateReadOnlySnapshot).toBe(true);
-  expect(result.unsignedSourceDraftSummary?.queryCount).toBe(96);
-  expect(result.privateUnsignedSourceDraftPlan?.privateDraftShards.flatMap(s=>s.entries).length).toBe(96);
-  expect(JSON.stringify(result)).not.toContain("privateUnsignedSourceDraftPlan");
-  expect(JSON.stringify(result)).not.toContain("unsignedDraft");
-  expect(result.preparedQueryRows).toBe(96);
-  expect(result.preparedPartitionRows).toBe(96);
+  const result=await resumeP5ReviewedSourceDayPreparation(admin,writer,{
+   readScope,sourceReview,stage9Review:reviewPins
+  },{authenticatedExactDurableReviewReadbackApproved:true,
+   existingPaidDispatchApproved:false,separatePreparationScopeApproved:true});
+  expect(result.status).toBe("INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK");
+  expect(result.verifiedQueryCount).toBe(96);
+  expect(result.verifiedPartitionCount).toBe(96);
   expect(result.databaseInserts).toBe(192);
   expect(result.providerCalls).toBe(0);
-  expect(result.paidSourceAttempts).toBe(0);
-  expect(result.frozenCategoryBudgetWritten).toBe(false);
   expect(result.phase6PaidGo).toBe(false);
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
   const category=(await admin.query(
@@ -510,6 +504,24 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "FROM clean.phase5_fids_allowed_query_v39"
   )).rows[0];
   expect(meta.prepared).toBe(96);
+ });
+ it("resumes an exact existing daily preparation without any repeated INSERT",async()=>{
+  const {proposal,...stage9Review}=review;void proposal;
+  const input={readScope,sourceReview,stage9Review};
+  const scope={authenticatedExactDurableReviewReadbackApproved:true as const,
+   existingPaidDispatchApproved:false as const,separatePreparationScopeApproved:true as const};
+  const result=await resumeP5ReviewedSourceDayPreparation(admin,writer,input,scope);
+  expect(result.status).toBe("EXISTING_EXACT_PREPARED_DAY_READBACK_NO_REPLAY");
+  expect(result.verifiedQueryCount).toBe(96);
+  expect(result.verifiedPartitionCount).toBe(96);
+  expect(result.databaseInserts).toBe(0);
+  expect(result.phase6PaidGo).toBe(false);
+  await expect(resumeP5ReviewedSourceDayPreparation(admin,writer,{...input,
+   stage9Review:{...stage9Review,expectedProposalSha256:sha("b")}},scope))
+   .rejects.toThrow("DURABLE_REVIEW_PROPOSAL_DRIFT");
+  await expect(resumeP5ReviewedSourceDayPreparation(admin,admin,input,scope))
+   .rejects.toThrow("READBACK_WRONG_RESTRICTED_ROLE_OR_DATABASE");
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
  });
  it("observes actual 96 PREPARED queries via V0080 aware READ-ONLY queue SQL, without prearm or provider",async()=>{
   const planned=Math.min(...review.proposal.queries.map(x=>
