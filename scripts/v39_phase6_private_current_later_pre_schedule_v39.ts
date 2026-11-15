@@ -5,7 +5,7 @@
  */
 import {Client,Pool} from "pg";
 import {requireP5CdGithubCurrentPrivatePreScope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
-import {assertP6CurrentPrivatePreMode,withP6AuthenticatedCurrentPrivateRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
+import {assertP6CurrentPrivatePreMode,withP6AuthenticatedCurrentPrivateRoster,readP6UnchangedCurrentPreRoster} from "../server/lib/disruption/phase6CurrentPrivatePreScope_v39.mjs";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
@@ -86,13 +86,18 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
  const base=new Pool({connectionString:env.P5_V39_PRE_DATABASE_URL,max:8,connectionTimeoutMillis:8000,
   idleTimeoutMillis:2000,statement_timeout:15000,application_name:"phase6_bounded_current_later_pre"});
  let stopped=false;
+ const confirmed=planned.rosters.map(()=>({claimed:0,verified:0,ticks:0}));
  const pre=makeP5Stage28DedicatedRolePool(base,{group:"pre",reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
   forbiddenApplicationLogin:"phase5_runtime_application_login"});
  try{
   const result=await Promise.allSettled(planned.rosters.map(async(p,i)=>{
-   const s=selector(p);
+   let s=selector(p);
+   const originalDigest=p.derivedCompatibilityRosterSha256;
    const authenticated=<T>(work:(projection:Projection)=>Promise<T>)=>read(c=>
-    withP6AuthenticatedCurrentPrivateRoster({client:c,env,selector:s,policy:ctx.policy},work));
+    withP6AuthenticatedCurrentPrivateRoster({client:c,env,selector:s,policy:ctx.policy,
+     expectedUnchangedRosterDigest:originalDigest},async(x:Projection)=>{
+      s=selector(x);return work(x);
+    }));
    try{
     // The original DB-clock waiter uses the same real PRE role, not UTC
     // wall clock. Scope expires after lookahead and is freshly re-read.
@@ -106,8 +111,17 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
       // Other already-started lanes can finish; do not start another tick
       // after any lane observes an uncertain result.
       if(stopped)hold("PEER_LANE_STOPPED");
+      // No source shard substitution or stale day revision after lookahead.
+      // Same exact bytes may be reauthenticated under an appended index.
+      const fresh=await read(c=>readP6UnchangedCurrentPreRoster({client:c,env,selector:s,policy:ctx.policy,
+       expectedUnchangedRosterDigest:originalDigest}));
+      s=fresh.selector;
+      if(stopped)hold("PEER_LANE_STOPPED");
       const z=await runP5CdGithubPreTick(env,{db:pre,pool:pre,packets},{
        owner:"cd-gh-"+env.GITHUB_RUN_ID+"-lane"+(i+1),limit:2,leaseSeconds:120});
+      // Preserve confirmed prior tick counts if a later DB read or peer
+      // STOP causes this lane's microburst to reject.
+      confirmed[i].claimed+=z.claimed;confirmed[i].verified+=z.verified;confirmed[i].ticks++;
       if(z.status==="HOLD_UNSIGNED_OR_UNCERTAIN_SNAPSHOT_NO_REPLAY")stopped=true;
       return z;
      });
@@ -115,11 +129,14 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
     });
    }catch(e){stopped=true;throw e;}
   }));
-  let claimed=0,verified=0,held=0,skipped=0;
-  for(const r of result){if(r.status==="rejected"){held++;continue;}
-   claimed+=r.value.claimed;verified+=r.value.verified;held+=Number(r.value.hold);skipped+=Number(r.value.skipped);}
+  let claimed=0,verified=0,held=0,skipped=0,incompleteLanes=0;
+  for(const [i,r] of result.entries()){
+   if(r.status==="rejected"){held++;incompleteLanes++;claimed+=confirmed[i].claimed;verified+=confirmed[i].verified;continue;}
+   claimed+=r.value.claimed;verified+=r.value.verified;held+=Number(r.value.hold);skipped+=Number(r.value.skipped);
+  }
   return {status:held?"HOLD_CURRENT_PRIVATE_LATER_PRE_NO_REPLAY":"BOUNDED_CURRENT_PRIVATE_LATER_PRE_COMPLETE",
-   lanes:planned.rosters.length,claimed,verified,held,skipped,deferredDays:planned.deferredDays,
+   lanes:planned.rosters.length,claimed,verified,held,skipped,incompleteLanes,
+   aggregateCountsMayExcludeUnknownCommits:incompleteLanes>0,phase6PaidGoGrantedByWorker:false,deferredDays:planned.deferredDays,
    deferredShards:planned.deferredShards,providerCalls:0,phase6PaidGo:false};
  }finally{await base.end();}
 }

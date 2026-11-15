@@ -7,6 +7,7 @@ import {AsyncLocalStorage} from "node:async_hooks";
 import {createHash} from "node:crypto";
 import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6PrivateLaterQueueRoster} from "./phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
 const storage=new AsyncLocalStorage();
 const fail=s=>{throw Error("REFUSED_P5_CD_GH_CURRENT_PRIVATE_SCOPE_"+s);};
 const HASH=/^[a-f0-9]{64}$/;
@@ -49,7 +50,7 @@ export function readP6ScopedCurrentPrivateRosterDigest(env){
  * The caller must still invoke the old code-lineage/release/role/claim/
  * writer guards. A callback cannot retain the context after it returns.
  */
-export async function withP6AuthenticatedCurrentPrivateRoster({client,env,selector,policy},work){
+export async function withP6AuthenticatedCurrentPrivateRoster({client,env,selector,policy,expectedUnchangedRosterDigest},work){
  const trust=assertP6CurrentPrivatePreMode(env);
  if(typeof work!=="function"||storage.getStore()?.active)fail("NESTED_OR_MISSING_WORK");
  const originalTrust=env.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64,
@@ -59,11 +60,14 @@ export async function withP6AuthenticatedCurrentPrivateRoster({client,env,select
  if(policy?.independentlyApprovedStandaloneProtocolSha256!==(protocolEnabled==="1"?protocol:undefined))
   fail("STANDALONE_PROTOCOL_DRIFT");
  // Imported function is called only here, after module initialization.
- const p=await readP6PrivateLaterQueueRoster({client,trust,selector,policy});
+ const fresh=expectedUnchangedRosterDigest===undefined?null:
+  await readP6UnchangedCurrentPreRoster({client,env,selector,policy,expectedUnchangedRosterDigest});
+ const actualSelector=fresh?.selector??selector;
+ const p=fresh?.projection??await readP6PrivateLaterQueueRoster({client,trust,selector:actualSelector,policy});
  if(p.status!=="VERIFIED_PRIVATE_LATER_QUEUE_ROSTER_PROJECTION_NO_GO"||
-    p.day!==selector.runDayIndex||p.revision!==selector.indexRevision||
-    p.shard!==selector.shardIndex||p.signedIndexSha256!==selector.indexSha256||
-    p.signedLaterRegistrySha256!==selector.laterRegistrySha256||
+    p.day!==actualSelector.runDayIndex||p.revision!==actualSelector.indexRevision||
+    p.shard!==actualSelector.shardIndex||p.signedIndexSha256!==actualSelector.indexSha256||
+    p.signedLaterRegistrySha256!==actualSelector.laterRegistrySha256||
     !Buffer.isBuffer(p.privateRosterBytes)||
     createHash("sha256").update(p.privateRosterBytes).digest("hex")!==p.derivedCompatibilityRosterSha256||
     p.providerCalls!==0||p.databaseWrites!==0||p.phase6PaidGo!==false)
@@ -74,4 +78,37 @@ export async function withP6AuthenticatedCurrentPrivateRoster({client,env,select
   try{readP6ScopedCurrentPrivateRosterDigest(env);return await work(p);}
   finally{ctx.active=false;}
  });
+}
+
+/** Re-read the current independently signed day, not a guessed next
+ * revision. A prior authenticated shard can remain unchanged across new
+ * append-only revisions. The original full registry reader verifies actual
+ * current revision, exact registry and packet bytes, study, window and ACL.
+ * The expected digest is only an additional equality constraint.
+ */
+export async function readP6UnchangedCurrentPreRoster({client,env,selector,policy,expectedUnchangedRosterDigest}){
+ const trust=assertP6CurrentPrivatePreMode(env);
+ if(!selector||!Number.isSafeInteger(selector.runDayIndex)||selector.runDayIndex<1||selector.runDayIndex>31||
+    !Number.isSafeInteger(selector.indexRevision)||selector.indexRevision<1||selector.indexRevision>1024||
+    !Number.isSafeInteger(selector.shardIndex)||selector.shardIndex<1||selector.shardIndex>100000||
+    ![selector.indexSha256,selector.laterRegistrySha256,expectedUnchangedRosterDigest].every(x=>typeof x==="string"&&HASH.test(x)))
+  fail("ORIGINAL_AUTHENTICATED_SHARD_AND_DIGEST_REQUIRED");
+ const current=await readP6StoredPrivateReviewOnce({client,trust,scope:{
+  privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
+  selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
+ const pins=current.pins,rev=pins.expectedIndexRevision,sha=pins.expectedIndexSha256;
+ if(pins.expectedRunDayIndex!==selector.runDayIndex||!Number.isSafeInteger(rev)||rev<selector.indexRevision||
+    rev>1024||!HASH.test(sha??"")||(rev===selector.indexRevision&&sha!==selector.indexSha256))
+  fail("CURRENT_SIGNED_DAY_ROLLBACK_OR_IDENTITY_DRIFT");
+ const selected={...selector,indexRevision:rev,indexSha256:sha};
+ const projection=await readP6PrivateLaterQueueRoster({client,trust,selector:selected,policy});
+ if(projection.status!=="VERIFIED_PRIVATE_LATER_QUEUE_ROSTER_PROJECTION_NO_GO"||
+    projection.day!==selected.runDayIndex||projection.revision!==rev||projection.shard!==selected.shardIndex||
+    projection.signedIndexSha256!==sha||projection.signedLaterRegistrySha256!==selector.laterRegistrySha256||
+    projection.providerCalls!==0||projection.databaseWrites!==0||projection.phase6PaidGo!==false||
+    !Buffer.isBuffer(projection.privateRosterBytes)||
+    createHash("sha256").update(projection.privateRosterBytes).digest("hex")!==projection.derivedCompatibilityRosterSha256||
+    projection.derivedCompatibilityRosterSha256!==expectedUnchangedRosterDigest)
+  fail("ORIGINAL_ROSTER_CHANGED_OR_CURRENT_READ_UNVERIFIED");
+ return {selector:Object.freeze(selected),projection};
 }
