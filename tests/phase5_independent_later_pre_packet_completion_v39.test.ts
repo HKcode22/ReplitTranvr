@@ -337,3 +337,46 @@ describe("same reviewed source dossier to original T24 PRE + distinct V0081 witn
   expect(()=>completeP5NativeT24PrePacketForIndependentSigning(later.dossier,later.entry,f.bytes,f.review,f.pins)).toThrow();
  });
 });
+
+import type {P5EReviewedSupplementalBundle} from "../server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39";
+describe("existing optional FIDS feature bundle remains inside independently reviewed native PRE packet bytes",()=>{
+ function supplement(f:ReturnType<typeof fixture>|ReturnType<typeof nativeT24Fixture>){
+  const s=f.entry.source;
+  const observations:P5EReviewedSupplementalBundle["observations"]=[{
+   flightInstanceId:s.flightInstanceId,field:"provider_revised_departure_utc",value:"2027-02-10T12:15:00.000Z",
+   source:"AERODATABOX_FIDS",sourceRecordId:s.expectedSourceResponseSha256,observedAtUtc:s.sourceMemberAvailableAtUtc,
+   availableAtUtc:s.sourceMemberAvailableAtUtc,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"}];
+  const bundle:P5EReviewedSupplementalBundle={schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:s.flightInstanceId,
+   populationQueryId:s.expectedSourcePopulationQueryId,originalResponseSha256:s.expectedSourceResponseSha256,
+   observationsSha256:sha(Buffer.from(JSON.stringify(observations))),externalSourceAndContentsReviewReceiptSha256:H("c"),
+   fields:["provider_revised_departure_utc","reported_pre_departure_status"],observations};
+  return bundle;
+ }
+ it("includes original reviewed values only when both independent feature and Contents receipt pins match",()=>{
+  const f=fixture(),bundle=supplement(f),r={...f.review,reviewedSupplementalFeatureBundle:bundle};
+  const bytes=Buffer.from(JSON.stringify(r)),pins={...f.pins,expectedReviewArtifactSha256:sha(bytes),
+   expectedReviewedSupplementalFeatureBundleSha256:sha(Buffer.from(JSON.stringify(bundle))),expectedExternalSupplementalContentUseReviewSha256:H("c")};
+  const x=completeP5NativeLaterPrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,pins);
+  expect(x.packet.prePermit.reviewedSupplementalFeatureBundle).toEqual(bundle);
+  expect(x.packetSha256).toBe(sha(x.packetBytes));expect(x.phase6PaidGoGranted).toBe(false);
+  expect(()=>completeP5NativeLaterPrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,{...pins,
+   expectedReviewedSupplementalFeatureBundleSha256:undefined})).toThrow("SUPPLEMENTAL_ORIGINAL_FEATURE_REVIEW_NOT_PINNED");
+  expect(()=>completeP5NativeLaterPrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,{...pins,
+   expectedExternalSupplementalContentUseReviewSha256:H("d")})).toThrow("SUPPLEMENTAL_ORIGINAL_FEATURE_REVIEW_NOT_PINNED");
+ });
+ it("keeps identical optional feature support for T24 without creating a T24 witness",()=>{
+  const f=nativeT24Fixture(),bundle=supplement(f),r={...f.review,reviewedSupplementalFeatureBundle:bundle};
+  const bytes=Buffer.from(JSON.stringify(r)),pins={...f.pins,expectedReviewArtifactSha256:sha(bytes),
+   expectedReviewedSupplementalFeatureBundleSha256:sha(Buffer.from(JSON.stringify(bundle))),expectedExternalSupplementalContentUseReviewSha256:H("c")};
+  const x=completeP5NativeT24PrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,pins);
+  expect(x.packet.prePermit.reviewedSupplementalFeatureBundle).toEqual(bundle);expect(x.actualT24WitnessReceiptIssued).toBe(false);
+ });
+ it("rejects feature observations available after SOURCE member even when review and bundle bytes were rehashed",()=>{
+  const f=fixture(),b=supplement(f);
+  b.observations[0].availableAtUtc="2027-02-10T05:20:00.000Z";b.observationsSha256=sha(Buffer.from(JSON.stringify(b.observations)));
+  const r={...f.review,reviewedSupplementalFeatureBundle:b},bytes=Buffer.from(JSON.stringify(r));
+  expect(()=>completeP5NativeLaterPrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,{...f.pins,
+   expectedReviewArtifactSha256:sha(bytes),expectedReviewedSupplementalFeatureBundleSha256:sha(Buffer.from(JSON.stringify(b))),
+   expectedExternalSupplementalContentUseReviewSha256:H("c")})).toThrow("FIDS_SUPPLEMENT_NOT_SAME_BOUND_ORIGINAL");
+ });
+});
