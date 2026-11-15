@@ -5,6 +5,7 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,Client} from "pg";
+import {runP6DurableDailySourcePreparation} from "../server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39";
 import {produceP6DelegatedDailySourceReview} from "../server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39";
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {publishP6StoredSourceShardOnce} from "../server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs";
@@ -61,6 +62,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  let readScope:P5CommittedDayReadonlyScope;
  let sourceReview:P5Stage8SourceReviewWithoutCopiedDraw;
  let selectedAt:string,serviceStart:string;
+ let runtimeProducer:Parameters<typeof produceP6DelegatedDailySourceReview>[0];
+ let originalDurableDayBytes:Buffer|undefined;
  const manifest=sha("e"),range=sha("8"),budgetHash=sha("6"),gridHash=sha("7");
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
@@ -459,6 +462,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    expectedPolicySha256:createHash("sha256").update(policyBytes).digest("hex"),
    expectedReviewedMainSha:policy.approvedCodeSha,expectedRunDayIndex:1,
    noProviderCredentialsInReviewer:true as const,existingPaidDispatchApproved:false as const}};
+  runtimeProducer=args;
   const produced=await produceP6DelegatedDailySourceReview(args);
   expect(produced.queryCount).toBe(96);
   expect(produced.privatePacket.reviewedPrepareInput.readScope.expectedEarlyDrawSha256)
@@ -478,16 +482,57 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
   const {proposal:unusedProposal,...reviewPins}=review;
   void unusedProposal;
-  const result=await resumeP5ReviewedSourceDayPreparation(admin,writer,{
-   readScope,sourceReview,stage9Review:reviewPins
-  },{authenticatedExactDurableReviewReadbackApproved:true,
-   existingPaidDispatchApproved:false,separatePreparationScopeApproved:true});
-  expect(result.status).toBe("INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK");
-  expect(result.verifiedQueryCount).toBe(96);
-  expect(result.verifiedPartitionCount).toBe(96);
-  expect(result.databaseInserts).toBe(192);
-  expect(result.providerCalls).toBe(0);
-  expect(result.phase6PaidGo).toBe(false);
+  if(process.env.P6_SOURCE_SIGNER_PIPELINE_DISPOSABLE_ONLY==="1"){
+   const scope={independentlyApprovedDurableDailyPrepareRuntime:true as const,
+    existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const,
+    expectedReaderSessionLogin:"phase6_private_reader_login_ci_pipeline",
+    expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_pipeline"};
+   const key=generateKeyPairSync("ed25519"),p=JSON.parse(runtimeProducer.policyBytes.toString("utf8"));
+   const reader=new Client({connectionString:"postgresql://phase6_private_reader_login_ci_pipeline:ci-only-source-reader@localhost:5432/neondb?sslmode=disable"});
+   const publisher=new Client({connectionString:"postgresql://phase6_private_publisher_login_ci_pipeline:ci-only-source-publisher@localhost:5432/neondb?sslmode=disable"});
+   await reader.connect();await publisher.connect();
+   try{
+    await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+    await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+    const trust={independentDailyReviewerTrustApproved:true as const,runDayIndex:1,reviewedCodeSha:p.approvedCodeSha,
+     manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,frameSha256:p.frameSha256,
+     releaseSha256:p.releaseSha256,rightsSha256:p.rightsSha256,providerContractSha256:p.providerContractSha256,
+     policySha256:runtimeProducer.pins.expectedPolicySha256,dayPlanSha256:createHash("sha256").update(runtimeProducer.dayPlanBytes).digest("hex"),
+     reviewed31DaySourceRequestGridSha256:p.reviewed31DaySourceRequestGridSha256,reviewedCategoryBudgetSha256:p.reviewedCategoryBudgetSha256,
+     reviewerFingerprintSha256:createHash("sha256").update(key.publicKey.export({format:"der",type:"spki"})).digest("hex"),
+     reviewerPublicKeyPem:key.publicKey.export({format:"pem",type:"spki"}).toString(),maximumRetentionHours:96,
+     policyValidFromUtc:p.validFromUtc,policyValidUntilUtc:p.validUntilUtc};
+    const args={producer:runtimeProducer,preparePool:writer,readerClient:reader,publisherClient:publisher,
+     dailyReviewerKey:key.privateKey,trust,scope};
+    const result=await runP6DurableDailySourcePreparation(args);
+    expect(result.preparationStatus).toBe("INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK");
+    expect(result.insertedDailyReviewRow).toBe(1);
+    expect(result.preparedLedgerInserts).toBe(192);
+    expect(result.verifiedQueryCount).toBe(96);
+    expect(result.verifiedPartitionCount).toBe(96);
+    expect(result.providerCalls).toBe(0);
+    expect(result.phase6PaidGo).toBe(false);
+    const resumed=await runP6DurableDailySourcePreparation(args);
+    expect(resumed.preparationStatus).toBe("EXISTING_EXACT_PREPARED_DAY_READBACK_NO_REPLAY");
+    expect(resumed.insertedDailyReviewRow).toBe(0);
+    expect(resumed.preparedLedgerInserts).toBe(0);
+    expect(resumed.privateDailyPreparePacketBytes).toEqual(result.privateDailyPreparePacketBytes);
+    originalDurableDayBytes=Buffer.from(resumed.privateDailyPreparePacketBytes);
+    await expect(runP6DurableDailySourcePreparation({...args,trust:{...trust,policyValidUntilUtc:iso(Date.parse(trust.policyValidUntilUtc)+H)}}))
+     .rejects.toThrow("APPROVED_POLICY_AND_STORAGE_TRUST_DRIFT");
+    expect(JSON.stringify(resumed)).not.toContain("reviewedPrepareInput");
+    expect(JSON.stringify(resumed)).not.toContain("privateDailyPreparePacketBytes");
+   }finally{await reader.end();await publisher.end();}
+  }else{
+   const result=await resumeP5ReviewedSourceDayPreparation(admin,writer,{
+    readScope,sourceReview,stage9Review:reviewPins
+   },{authenticatedExactDurableReviewReadbackApproved:true,
+    existingPaidDispatchApproved:false,separatePreparationScopeApproved:true});
+   expect(result.status).toBe("INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK");
+   expect(result.verifiedQueryCount).toBe(96);
+   expect(result.verifiedPartitionCount).toBe(96);
+   expect(result.databaseInserts).toBe(192);
+  }
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
   const category=(await admin.query(
    "SELECT rest_category,COUNT(*)::int n "+
@@ -583,7 +628,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    maximumReviewRetentionHours:96,maxQueriesPerDay:384,
    queryReviewerFingerprintSha256:fp(query.publicKey),registryReviewerFingerprintSha256:fp(registry.publicKey),
    delegatedAutomatedSourceSigningApproved:true};
-  const bytes=Buffer.from(JSON.stringify(policy)),daily=Buffer.from(JSON.stringify(day));
+  const bytes=Buffer.from(JSON.stringify(policy)),daily=originalDurableDayBytes??Buffer.from(JSON.stringify(day));
   const args={readPool:writer,policyBytes:bytes,dailyPreparePacketBytes:daily,
    pins:{independentExactPolicyAndDailyReviewApproved:true as const,
     expectedPolicySha256:createHash("sha256").update(bytes).digest("hex"),
@@ -705,7 +750,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
      .rejects.toThrow("INDEX_GENESIS_ALREADY_CLAIMED_NO_REPLAY");
     const rows=(await admin.query("SELECT kind,count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 GROUP BY kind")).rows;
     expect(Object.fromEntries(rows.map(x=>[x.kind,x.n]))).toEqual({
-     SOURCE_QUERY_PACKET:96,SOURCE_DAY_REGISTRY:result.shardCount});
+     SOURCE_QUERY_PACKET:96,SOURCE_DAY_REGISTRY:result.shardCount,SOURCE_DAY_PREPARE_REVIEW:1});
    }finally{await publisher.end();await reader.end();}
   }
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});

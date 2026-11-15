@@ -6,6 +6,9 @@ on:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
+      - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
+      - 'server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs'
+      - 'migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql'
       - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
@@ -26,6 +29,9 @@ on:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
+      - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
+      - 'server/lib/disruption/phase6PrivateDailyPrepareReviewTransport_v39.mjs'
+      - 'migrations/staged/V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql'
       - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
       - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
@@ -110,7 +116,8 @@ jobs:
             V0094__phase6_private_frozen_packet_transport_inert_v39.sql \
             V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql \
             V0097__phase6_private_run_day_epoch_index_inert_v39.sql \
-            V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql
+            V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql \
+            V0099__phase6_private_daily_prepare_review_packet_inert_v39.sql
           do
             psql "$LOCAL" -X -v ON_ERROR_STOP=1 -f "migrations/staged/$sql"
           done
