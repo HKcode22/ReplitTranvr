@@ -307,6 +307,44 @@ try{
  });
  assert.equal(day31Bytes.redactedSummary.runDayIndex,31);
  assert.deepEqual(day31Bytes.getFrozen(d31.path),d31.payload);
+ // Two short-lived test-only day epochs, published through the genuine
+ // publisher. Expire the current head while a previous revision is live.
+ // The planner must never select that old live revision while the expired
+ // head still exists. A separately admitted exact child may still read it.
+ const shortA=registry(3,1),shortB=registry(3,2),shortC=registry(4,1);
+ for(const x of [shortA,shortB,shortC]){
+  x.entry.notBeforeUtc=t(-14000);x.entry.hardLatestUtc=t(-11000);
+  await insertRegistry(x);
+ }
+ const sa=indexPacket(3,1,[shortA.entry],null);
+ await publishP6DayEpochIndexRevisionOnce({client:pub,pins:sa.pins,wire:sa.wire,publicKeyPem:pem,indexBytes:sa.bytes,scope:sa.scope});
+ const sb=indexPacket(3,2,[shortA.entry,shortB.entry],sa.bytes),sc=indexPacket(4,1,[shortC.entry],null);
+ const localClock=new Date((await dbOwner.query("SELECT clock_timestamp() AS t")).rows[0].t).getTime();
+ const shortValid=new Date(localClock+2500).toISOString(),shortRetention=new Date(localClock+4500).toISOString();
+ for(const [x,ttl] of [[sb,shortRetention],[sc,expire]]){
+  x.review.validUntilUtc=shortValid;x.review.retentionNotAfterUtc=ttl;
+  x.wire.signatureBase64=sign(null,p6DayEpochReviewPreimage(x.review),key.privateKey).toString("base64");
+  x.scope.approvedRetentionNotAfterUtc=ttl;
+  await publishP6DayEpochIndexRevisionOnce({client:pub,pins:x.pins,wire:x.wire,publicKeyPem:pem,indexBytes:x.bytes,scope:x.scope});
+ }
+ await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(shortValid)-Date.now()+100)));
+ // Independently verified signature expiry is a localized unavailable day,
+ // even while its physical storage lifetime remains live.
+ for(const day of [3,4])await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{kind:"CURRENT_DAY",runDayIndex:day}}),/CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED/);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"EXACT_DAY",runDayIndex:3,
+  indexRevision:2,indexSha256:sb.review.indexSha256}}),/RESTRICTED_READ_OR_SIGNATURE_HOLD_REDACTED/);
+ await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(shortRetention)-Date.now()+100)));
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:3}}),
+  /CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED/);
+ const retainedPrior=await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"EXACT_DAY",runDayIndex:3,
+  indexRevision:1,indexSha256:sa.review.indexSha256}});
+ assert.equal(retainedPrior.pins.expectedIndexRevision,1);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust:{...trust,rightsSha256:six("0")},scope,
+  selector:{kind:"CURRENT_DAY",runDayIndex:3}}),/DAY_REVISION_OR_STUDY_SELECTOR_DRIFT/);
+ const liveNext=await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:{kind:"CURRENT_DAY",runDayIndex:31}});
+ assert.equal(liveNext.pins.expectedRunDayIndex,31);
+ console.log("P6_CURRENT_DAY_VERIFIED_EXPIRED_HEAD_LOCAL_SKIP_NO_PREVIOUS_FALLBACK_REAL_PG16_PASS");
  // An immutable day1 owner deletion removes its bytes without affecting
  // day31: this proof still requires a separate proper expiry reviewer.
  const removed=await dbOwner.query(
