@@ -1,0 +1,100 @@
+name: Phase6 private transport credentials — main-only real READ ONLY (No Provider)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        type: string
+        required: true
+      approved_main_sha:
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: phase6-private-transport-readonly-commission
+  cancel-in-progress: false
+jobs:
+  verify-reader:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Actual independent restricted reader login and empty ACL readback
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "$P6_PRIVATE_READER_DATABASE_URL"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_PUBLISHER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node --input-type=module <<'JS'
+          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
+          try{
+            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_READER_DATABASE_URL,ENTRIES[0]);
+            console.log(JSON.stringify({status:"P6_PRIVATE_READER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
+          }catch(e){
+            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_READER_SESSION_OR_DATABASE";
+            console.error(code);process.exitCode=2;
+          }
+          JS
+  verify-publisher:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Actual independent restricted publisher login and empty ACL readback
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "$P6_PRIVATE_PUBLISHER_DATABASE_URL"
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_READER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node --input-type=module <<'JS'
+          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
+          try{
+            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_PUBLISHER_DATABASE_URL,ENTRIES[1]);
+            console.log(JSON.stringify({status:"P6_PRIVATE_PUBLISHER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
+          }catch(e){
+            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_PUBLISHER_SESSION_OR_DATABASE";
+            console.error(code);process.exitCode=2;
+          }
+          JS
