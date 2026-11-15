@@ -20,7 +20,7 @@ import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 import {readP5CompleteGithubWorkflowHistory}
  from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39.ts";
-import {reviewP6PrivateDaySourceDueParentNoDispatch}
+import {reviewP6PrivateDaySourceDueParentNoDispatch,P6_STORED_SOURCE_CAPACITY}
  from "../server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts";
 
 export const P6_PRIVATE_SOURCE_REAL_RO_SCHEMA=
@@ -228,6 +228,8 @@ export async function runP6RealPrivateSourceParentReadOnly(
  env,options={}
 ){
  const ctx=admitP6RealPrivateSourceParentReadOnly(env);
+ const storedCapacityProfile=options.storedCapacityProfile===true;
+ if(storedCapacityProfile&&ctx.reviewMode!=="stored")fail("CAPACITY_PROFILE_REQUIRES_STORED_MODE");
  const readSource=options.readSource??(async()=>{
   const pool=new pg.Pool({
    connectionString:ctx.sourceUrl,max:1,
@@ -293,7 +295,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
  try{
   // Two different unprivileged PG16 sessions. No provider key is present.
   const scan=await readSource(ctx);
-  const selection=ctx.reviewMode==="stored"?selectP6DueSourceDays(scan):null;
+  const selection=ctx.reviewMode==="stored"?selectP6DueSourceDays(scan,storedCapacityProfile?P6_STORED_SOURCE_CAPACITY.maxLeadMinutes:105):null;
   if(selection&&scan.manifestSha256!==ctx.scope.expectedManifestSha256)
    fail("ORIGINAL_SOURCE_MANIFEST_DRIFT");
   if(selection&&selection.dayIndices.length===0)
@@ -327,7 +329,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
    expectedManifestSha256:ctx.scope.expectedManifestSha256,
-   expectedMainSha:ctx.mainSha
+   expectedMainSha:ctx.mainSha,storedCapacityProfile
   });
   if(planned.redactedSummary.providerCalls!==0||
      planned.redactedSummary.databaseWrites!==0||
