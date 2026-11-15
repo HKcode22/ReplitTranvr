@@ -6,6 +6,7 @@
  * separately by the owner/independent reviewer. Default is STOP.
  */
 import {assertP6CurrentPrivatePreMode,readP6ScopedCurrentPrivateRosterDigest} from "./phase6CurrentPrivatePreScope_v39.mjs";
+import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
 const SHA=/^[a-f0-9]{40}$/;
 const SHA256=/^[a-f0-9]{64}$/;
 const HOLDER="ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER";
@@ -39,7 +40,7 @@ export interface P5CdGithubPreRelease{
 }
 function requireP5CdGithubPreScopeInternal(
  env:NodeJS.ProcessEnv,
- options?:{allowReviewedT24Witness?:true;privateT24Routing?:true}
+ options?:{allowReviewedT24Witness?:true;privateT24Routing?:true;leaseRecoveryOnly?:true}
 ):Omit<P5CdGithubPreRelease,"rosterSha256">{
  const current=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE";
  if(current){if(options?.allowReviewedT24Witness)hold("CURRENT_LATER_NEVER_T24");assertP6CurrentPrivatePreMode(env);}
@@ -79,7 +80,7 @@ function requireP5CdGithubPreScopeInternal(
      options?.allowReviewedT24Witness!==true)||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
-    (!current&&!options?.privateT24Routing&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
+    (!current&&!options?.privateT24Routing&&!options?.leaseRecoveryOnly&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
     !SHA256.test(env.V39_P5_RIGHTS_SHA256??"")||
     !SHA256.test(env.V39_P5_MANIFEST_SHA256??""))
   hold("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
@@ -143,6 +144,23 @@ export function requireP5CdGithubCurrentPrivateT24Scope(env:NodeJS.ProcessEnv){
     env.P5_CD_GH_QUEUED_T24_EXECUTE==="1"||env.P5_CD_GH_PRE_MODE!=="PHASE6_APPROVED")
   hold("NO_SEPARATE_CURRENT_PRIVATE_T24_SCOPE");
  return requireP5CdGithubPreScopeInternal(env,{allowReviewedT24Witness:true,privateT24Routing:true});
+}
+/** Recovery has no roster/flight claim capability. Keep the same stable
+ * reviewed study, STOP, lineage, and restricted PRE actor; a changing
+ * daily roster hash is NOT a prerequisite for the existing reaper. */
+export function requireP5CdGithubCurrentLeaseRecoveryScope(env:NodeJS.ProcessEnv){
+ if(env.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED!=="1"||
+    env.P5_CD_GH_WATCHDOG_ENABLED!=="1"||env.P5_CD_GH_WATCHDOG_EXECUTE!=="1"||
+    env.P5_CD_GH_WATCHDOG_CONFIRM!=="REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER"||
+    env.P5_CD_GH_PRE_MODE!=="PHASE6_APPROVED"||
+    env.P5_CD_GH_PRIVATE_LATER_MODE||env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1"||
+    env.P5_CD_GH_PRE_ROSTER_SHA256||env.P5_CD_GH_PRE_ROSTER_PATH||env.P5_CD_GH_ROSTER_PATH||
+    env.RAPIDAPI_KEY||env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
+    env.GITHUB_SHA!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA)
+  hold("NO_SEPARATE_CURRENT_LEASE_RECOVERY_SCOPE");
+ const base=requireP5CdGithubPreScopeInternal(env,{leaseRecoveryOnly:true});
+ readP6StableSourceTrust(env);
+ return base;
 }
 export function requireP5CdGithubPreRelease(
  env:NodeJS.ProcessEnv,options?:{allowReviewedT24Witness?:true}
