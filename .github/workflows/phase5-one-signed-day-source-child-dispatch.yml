@@ -265,3 +265,22 @@ jobs:
           set +x
           npx --no-install tsx scripts/v39_phase6_private_source_one_original_child_github_v39.mjs
           echo 'P6_SIGNED_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_RETURNED_NOT_PROVIDER_RECEIPT_NO_PRE_POST_CLAIM'
+      - name: Independently read actual committed native candidates (NONPAID, no signing)
+        if: ${{ success() && inputs.private_transport == 'stored' && vars.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED == '1' }}
+        # Same runner, new process, blank provider/app/write-role credentials.
+        # This step cannot re-execute the paid child or make a new GET.
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED: ${{ vars.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED }}
+          V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED }}
+          V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL"
+          npx --no-install tsx scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs
