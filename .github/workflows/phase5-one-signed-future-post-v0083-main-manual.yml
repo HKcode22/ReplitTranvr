@@ -270,6 +270,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY$V39_P5_SOURCE_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real'"
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA clean TO neondb_owner"
           owner='postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable'
           psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
           psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
