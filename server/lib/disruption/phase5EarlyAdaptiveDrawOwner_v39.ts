@@ -232,7 +232,7 @@ export async function commitEarlyPhase5Draw(
               airport_layer_design_probability
          FROM clean.adb_sampling_draw
         WHERE run_day_index=$1
-        ORDER BY slot_id FOR UPDATE`,
+        ORDER BY slot_id`,
       [pins.runDayIndex],
     );
     if(existing.rowCount!==0) {
