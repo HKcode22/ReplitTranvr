@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {projectP6VerifiedLaterQueueRoster,readP6PrivateLaterQueueRoster} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+import {projectP6VerifiedLaterQueueRoster,readP6PrivateLaterQueueRoster,selectP6DueLaterQueueSelectors,readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {verifyP5SignedLaterPreDayRegistry} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
 const sha=(x:string)=>x.repeat(64),hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const code="a".repeat(40),native="2035-11-25T12:00:00.000Z",qid="c23e4567-e89b-42d3-a456-426614174013";
@@ -117,6 +117,36 @@ describe("authenticated private later registry to existing queue roster",()=>{
   await expect(readP6PrivateLaterQueueRoster({client:{query:async()=>{queries++;throw Error("unexpected");}},
     trust:f.trust,selector:f.selector,policy:{...f.policy,independentLaterQueueTransportProjectionApproved:false}}))
    .rejects.toThrow("NO_EXACT_INDEPENDENT_PROJECTION_SCOPE");
+  expect(queries).toBe(0);
+ });
+});
+
+describe("dynamic current-day later queue routing",()=>{
+ it("selects the exact due later shard rather than SOURCE and keeps selectors private",()=>{
+  const f=fixture(),out=selectP6DueLaterQueueSelectors(f.index,f.trust,f.policy);
+  expect(out.due).toBe(1);expect(out.proposed).toBe(1);
+  expect(out.privateSelectors[0]).toMatchObject(f.selector);
+  expect(JSON.stringify(out)).not.toContain(f.selector.laterRegistrySha256);
+  expect(out.phase6PaidGo).toBe(false);
+ });
+ it("does not select a shard before its window or after expiry",()=>{
+  const f=fixture();
+  f.index.redactedSummary.observedDbClockUtc="2035-11-25T05:04:00.000Z";
+  expect(selectP6DueLaterQueueSelectors(f.index,f.trust,f.policy).proposed).toBe(0);
+  f.index.redactedSummary.observedDbClockUtc="2035-11-25T06:00:00.000Z";
+  expect(selectP6DueLaterQueueSelectors(f.index,f.trust,f.policy).proposed).toBe(0);
+ });
+ it("checks independently approved study hashes even when no shard is due",()=>{
+  const f=fixture();f.index.redactedSummary.observedDbClockUtc="2035-11-25T05:04:00.000Z";
+  expect(()=>selectP6DueLaterQueueSelectors(f.index,{...f.trust,calendarSha256:sha("1")},f.policy))
+   .toThrow("WRONG_AUTHENTICATED_DAY_STUDY");
+ });
+ it("rejects unbounded, duplicate and invalid study days before any query",async()=>{
+  const f=fixture();let queries=0;
+  const client={query:async()=>{queries++;throw Error("unexpected");}};
+  for(const runDayIndices of [[],[1,1],[1,2,3],[0],[32]])
+   await expect(readP6CurrentLaterQueueRosters({client,trust:f.trust,policy:f.policy,runDayIndices}))
+    .rejects.toThrow("INVALID_BOUNDED_STUDY_DAY_SELECTION");
   expect(queries).toBe(0);
  });
 });

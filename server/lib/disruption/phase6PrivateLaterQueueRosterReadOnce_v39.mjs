@@ -20,15 +20,19 @@ const utc=x=>{
  if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_CLOCK");
  return Date.parse(x);
 };
-function selectorCheck(s,trust,policy){
+function trustPolicyCheck(trust,policy){
  if(policy?.independentLaterQueueTransportProjectionApproved!==true||
     policy.existingPaidDispatchApproved!==false||
     trust?.independentStudyTrustPinsApproved!==true||
     !CODE.test(trust.reviewedCodeSha??"")||
     ![trust.manifestSha256,trust.rightsSha256,trust.calendarSha256,trust.releaseSha256].every(x=>SHA.test(x??""))||
     (policy.independentlyApprovedStandaloneProtocolSha256!==undefined&&
-     !SHA.test(policy.independentlyApprovedStandaloneProtocolSha256))||
-    !Number.isSafeInteger(s?.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||
+     !SHA.test(policy.independentlyApprovedStandaloneProtocolSha256)))
+  hold("NO_EXACT_INDEPENDENT_PROJECTION_SCOPE");
+}
+function selectorCheck(s,trust,policy){
+ trustPolicyCheck(trust,policy);
+ if(!Number.isSafeInteger(s?.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||
     !Number.isSafeInteger(s.indexRevision)||s.indexRevision<1||s.indexRevision>1024||
     !Number.isSafeInteger(s.shardIndex)||s.shardIndex<1||s.shardIndex>100000||
     !SHA.test(s.indexSha256??"")||!SHA.test(s.laterRegistrySha256??""))
@@ -141,4 +145,81 @@ export async function readP6PrivateLaterQueueRoster({client,trust,selector,polic
     utc(hydrated.observedDbClockUtc)>=utc(review.wire.review.retentionNotAfterUtc))
   hold("DAY_SIGNATURE_EXPIRED_DURING_HYDRATION");
  return projectP6VerifiedLaterQueueRoster({index,hydrated,selector,trust,policy});
+}
+
+/** Pure scheduling proposal only. The runtime below independently retrieves
+ * and verifies the current signed index; do not use this as write admission. */
+export function selectP6DueLaterQueueSelectors(index,trust,policy){
+ trustPolicyCheck(trust,policy);
+ const routed=inspectP6DayEpochExistingShardSemanticsNoGo(index);
+ const signed=index.privateParsedIndex,sum=index.redactedSummary;
+ if(signed.reviewedCodeSha!==trust.reviewedCodeSha||
+    signed.manifestSha256!==trust.manifestSha256||
+    signed.calendarSha256!==trust.calendarSha256||
+    signed.reviewedReleaseSha256!==trust.releaseSha256||
+    signed.reviewedRightsSha256!==trust.rightsSha256)
+  hold("WRONG_AUTHENTICATED_DAY_STUDY");
+ const lane=routed.redactedSummary.lanes.find(x=>x.lane==="LATER_PRE");
+ const selectors=routed.privateRoutingCandidates.filter(x=>x.lane==="LATER_PRE").map(x=>{
+  const selector={runDayIndex:x.runDayIndex,indexRevision:sum.indexRevision,
+   indexSha256:sum.indexSha256,shardIndex:x.shardIndex,
+   laterRegistrySha256:x.signedFrozenSha256,hardLatestUtc:x.hardLatestUtc};
+  selectorCheck(selector,trust,policy);
+  return Object.freeze(selector);
+ });
+ if(!lane||selectors.length!==lane.proposed||selectors.length>4)
+  hold("DUE_LANE_COUNT_DRIFT");
+ const out={due:lane.due,proposed:lane.proposed,deferred:lane.deferred,
+  missed:lane.missed,notYetDue:lane.notYetDue,phase6PaidGo:false};
+ Object.defineProperty(out,"privateSelectors",{value:Object.freeze(selectors),enumerable:false});
+ return Object.freeze(out);
+}
+
+/** Read at most two independently selected study days and four due shards
+ * per invocation. No wall-clock inference of the study day, no GH checkout,
+ * no queue writes, no paid dispatch. A revision change during re-read holds
+ * rather than allowing the superseded route to execute. */
+export async function readP6CurrentLaterQueueRosters({client,trust,policy,runDayIndices}){
+ trustPolicyCheck(trust,policy);
+ if(!Array.isArray(runDayIndices)||runDayIndices.length<1||runDayIndices.length>2||
+    new Set(runDayIndices).size!==runDayIndices.length||
+    runDayIndices.some(d=>!Number.isSafeInteger(d)||d<1||d>31))
+  hold("INVALID_BOUNDED_STUDY_DAY_SELECTION");
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const selectors=[],unavailable=[];
+ let due=0,missed=0,notYetDue=0;
+ for(const day of runDayIndices){
+  let review;
+  try{
+   review=await readP6StoredPrivateReviewOnce({client,trust,scope,
+    selector:{kind:"CURRENT_DAY",runDayIndex:day}});
+  }catch(e){
+   if(e?.message!=="HOLD_P6_STORED_REVIEW_CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED")throw e;
+   unavailable.push(day);continue;
+  }
+  const index=await hydrateP6DayEpochFullRegistriesReadOnly({client,pins:review.pins,
+   wire:review.wire,publicKeyPem:review.publicKeyPem,
+   scope:{privateDayRegistryReadOnlyApproved:true,
+    existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:true}});
+  if(index.redactedSummary.runDayIndex!==day||
+     utc(index.redactedSummary.observedDbClockUtc)>=utc(review.wire.review.validUntilUtc)||
+     utc(index.redactedSummary.observedDbClockUtc)>=utc(review.wire.review.retentionNotAfterUtc))
+   hold("CURRENT_DAY_OR_REVIEW_EXPIRY_DRIFT");
+  const plan=selectP6DueLaterQueueSelectors(index,trust,policy);
+  due+=plan.due;missed+=plan.missed;notYetDue+=plan.notYetDue;
+  selectors.push(...plan.privateSelectors);
+ }
+ selectors.sort((a,b)=>utc(a.hardLatestUtc)-utc(b.hardLatestUtc)||
+  a.runDayIndex-b.runDayIndex||a.shardIndex-b.shardIndex);
+ const rosters=[];
+ // Reauthenticate exact current revision and all native permit bytes.
+ // Serial reads avoid overlapping transactions on the restricted client.
+ for(const selector of selectors.slice(0,4))
+  rosters.push(await readP6PrivateLaterQueueRoster({client,trust,selector,policy}));
+ const out={status:"CURRENT_SIGNED_LATER_QUEUE_ROSTERS_READONLY_NO_GO",
+  requestedDayCount:runDayIndices.length,unavailableDayCount:unavailable.length,
+  due,missed,notYetDue,hydratedShardCount:rosters.length,deferredDueShardCount:due-rosters.length,
+  providerCalls:0,databaseWrites:0,queueClaims:0,tasksEnqueued:0,phase6PaidGo:false};
+ Object.defineProperty(out,"privateRosters",{value:Object.freeze(rosters),enumerable:false});
+ return Object.freeze(out);
 }
