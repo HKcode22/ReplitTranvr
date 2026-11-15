@@ -1,0 +1,409 @@
+{
+  "schema": "v39.phase5.date-only-review-candidate.v1",
+  "status": "PROPOSED_NOT_SIGNED_NOT_APPROVED_NO_GO",
+  "firstRunDateUtc": "2026-11-22",
+  "basisOwnerPairBlobSha": "12ce1415a268660aa1b65d82807230e171ad8741",
+  "days": [
+    {
+      "runDayIndex": 1,
+      "dateUtc": "2026-11-22",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2026-11-22T00:00:00.000Z",
+      "conservativeEndUtc": "2026-11-22T06:00:00.000Z",
+      "pairId": "pair-1",
+      "crossoverPeriod": 1,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": {
+        "HUB": "OMAA",
+        "MID_A": "OMSJ",
+        "MID_B": "SPJC",
+        "REGIONAL": "KDEC"
+      }
+    },
+    {
+      "runDayIndex": 2,
+      "dateUtc": "2026-11-23",
+      "utcSlot": "04:00",
+      "conservativeStartUtc": "2026-11-23T04:00:00.000Z",
+      "conservativeEndUtc": "2026-11-23T10:00:00.000Z",
+      "pairId": "pair-2",
+      "crossoverPeriod": 1,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "WSSS",
+        "MID_A": "SBFL",
+        "MID_B": "TJSJ",
+        "REGIONAL": "LSZB"
+      }
+    },
+    {
+      "runDayIndex": 3,
+      "dateUtc": "2026-11-24",
+      "utcSlot": "08:00",
+      "conservativeStartUtc": "2026-11-24T08:00:00.000Z",
+      "conservativeEndUtc": "2026-11-24T14:00:00.000Z",
+      "pairId": "pair-3",
+      "crossoverPeriod": 1,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "YSSY",
+        "MID_A": "KBUF",
+        "MID_B": "LFQQ",
+        "REGIONAL": "NZNP"
+      }
+    },
+    {
+      "runDayIndex": 4,
+      "dateUtc": "2026-11-25",
+      "utcSlot": "12:00",
+      "conservativeStartUtc": "2026-11-25T12:00:00.000Z",
+      "conservativeEndUtc": "2026-11-25T18:00:00.000Z",
+      "pairId": "pair-4",
+      "crossoverPeriod": 1,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "SKBO",
+        "MID_A": "EBAW",
+        "MID_B": "NZNS",
+        "REGIONAL": "RJNK"
+      }
+    },
+    {
+      "runDayIndex": 5,
+      "dateUtc": "2026-11-27",
+      "utcSlot": "16:00",
+      "conservativeStartUtc": "2026-11-27T16:00:00.000Z",
+      "conservativeEndUtc": "2026-11-27T22:00:00.000Z",
+      "pairId": "pair-5",
+      "crossoverPeriod": 1,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "SKBO",
+        "MID_A": "YBUD",
+        "MID_B": "RKTU",
+        "REGIONAL": "FAKM"
+      }
+    },
+    {
+      "runDayIndex": 6,
+      "dateUtc": "2026-11-28",
+      "utcSlot": "20:00",
+      "conservativeStartUtc": "2026-11-28T20:00:00.000Z",
+      "conservativeEndUtc": "2026-11-29T02:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 7,
+      "dateUtc": "2026-12-05",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2026-12-05T00:00:00.000Z",
+      "conservativeEndUtc": "2026-12-05T06:00:00.000Z",
+      "pairId": "pair-1",
+      "crossoverPeriod": 2,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": {
+        "HUB": "OMAA",
+        "MID_A": "OMSJ",
+        "MID_B": "SPJC",
+        "REGIONAL": "KDEC"
+      }
+    },
+    {
+      "runDayIndex": 8,
+      "dateUtc": "2026-12-07",
+      "utcSlot": "04:00",
+      "conservativeStartUtc": "2026-12-07T04:00:00.000Z",
+      "conservativeEndUtc": "2026-12-07T10:00:00.000Z",
+      "pairId": "pair-2",
+      "crossoverPeriod": 2,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "WSSS",
+        "MID_A": "SBFL",
+        "MID_B": "TJSJ",
+        "REGIONAL": "LSZB"
+      }
+    },
+    {
+      "runDayIndex": 9,
+      "dateUtc": "2026-12-08",
+      "utcSlot": "08:00",
+      "conservativeStartUtc": "2026-12-08T08:00:00.000Z",
+      "conservativeEndUtc": "2026-12-08T14:00:00.000Z",
+      "pairId": "pair-3",
+      "crossoverPeriod": 2,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "YSSY",
+        "MID_A": "KBUF",
+        "MID_B": "LFQQ",
+        "REGIONAL": "NZNP"
+      }
+    },
+    {
+      "runDayIndex": 10,
+      "dateUtc": "2026-12-09",
+      "utcSlot": "12:00",
+      "conservativeStartUtc": "2026-12-09T12:00:00.000Z",
+      "conservativeEndUtc": "2026-12-09T18:00:00.000Z",
+      "pairId": "pair-4",
+      "crossoverPeriod": 2,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "SKBO",
+        "MID_A": "EBAW",
+        "MID_B": "NZNS",
+        "REGIONAL": "RJNK"
+      }
+    },
+    {
+      "runDayIndex": 11,
+      "dateUtc": "2026-12-11",
+      "utcSlot": "16:00",
+      "conservativeStartUtc": "2026-12-11T16:00:00.000Z",
+      "conservativeEndUtc": "2026-12-11T22:00:00.000Z",
+      "pairId": "pair-5",
+      "crossoverPeriod": 2,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": {
+        "HUB": "SKBO",
+        "MID_A": "YBUD",
+        "MID_B": "RKTU",
+        "REGIONAL": "FAKM"
+      }
+    },
+    {
+      "runDayIndex": 12,
+      "dateUtc": "2026-12-12",
+      "utcSlot": "20:00",
+      "conservativeStartUtc": "2026-12-12T20:00:00.000Z",
+      "conservativeEndUtc": "2026-12-13T02:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 13,
+      "dateUtc": "2026-12-14",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2026-12-14T00:00:00.000Z",
+      "conservativeEndUtc": "2026-12-14T06:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 14,
+      "dateUtc": "2026-12-15",
+      "utcSlot": "04:00",
+      "conservativeStartUtc": "2026-12-15T04:00:00.000Z",
+      "conservativeEndUtc": "2026-12-15T10:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 15,
+      "dateUtc": "2026-12-16",
+      "utcSlot": "08:00",
+      "conservativeStartUtc": "2026-12-16T08:00:00.000Z",
+      "conservativeEndUtc": "2026-12-16T14:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 16,
+      "dateUtc": "2026-12-17",
+      "utcSlot": "12:00",
+      "conservativeStartUtc": "2026-12-17T12:00:00.000Z",
+      "conservativeEndUtc": "2026-12-17T18:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 17,
+      "dateUtc": "2026-12-18",
+      "utcSlot": "16:00",
+      "conservativeStartUtc": "2026-12-18T16:00:00.000Z",
+      "conservativeEndUtc": "2026-12-18T22:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 18,
+      "dateUtc": "2026-12-19",
+      "utcSlot": "20:00",
+      "conservativeStartUtc": "2026-12-19T20:00:00.000Z",
+      "conservativeEndUtc": "2026-12-20T02:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 19,
+      "dateUtc": "2026-12-21",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2026-12-21T00:00:00.000Z",
+      "conservativeEndUtc": "2026-12-21T06:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 20,
+      "dateUtc": "2026-12-22",
+      "utcSlot": "04:00",
+      "conservativeStartUtc": "2026-12-22T04:00:00.000Z",
+      "conservativeEndUtc": "2026-12-22T10:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 21,
+      "dateUtc": "2026-12-23",
+      "utcSlot": "08:00",
+      "conservativeStartUtc": "2026-12-23T08:00:00.000Z",
+      "conservativeEndUtc": "2026-12-23T14:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 22,
+      "dateUtc": "2026-12-24",
+      "utcSlot": "12:00",
+      "conservativeStartUtc": "2026-12-24T12:00:00.000Z",
+      "conservativeEndUtc": "2026-12-24T18:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 23,
+      "dateUtc": "2026-12-25",
+      "utcSlot": "16:00",
+      "conservativeStartUtc": "2026-12-25T16:00:00.000Z",
+      "conservativeEndUtc": "2026-12-25T22:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 24,
+      "dateUtc": "2026-12-26",
+      "utcSlot": "20:00",
+      "conservativeStartUtc": "2026-12-26T20:00:00.000Z",
+      "conservativeEndUtc": "2026-12-27T02:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 25,
+      "dateUtc": "2026-12-28",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2026-12-28T00:00:00.000Z",
+      "conservativeEndUtc": "2026-12-28T06:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 26,
+      "dateUtc": "2026-12-29",
+      "utcSlot": "04:00",
+      "conservativeStartUtc": "2026-12-29T04:00:00.000Z",
+      "conservativeEndUtc": "2026-12-29T10:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 27,
+      "dateUtc": "2026-12-30",
+      "utcSlot": "08:00",
+      "conservativeStartUtc": "2026-12-30T08:00:00.000Z",
+      "conservativeEndUtc": "2026-12-30T14:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 28,
+      "dateUtc": "2026-12-31",
+      "utcSlot": "12:00",
+      "conservativeStartUtc": "2026-12-31T12:00:00.000Z",
+      "conservativeEndUtc": "2026-12-31T18:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 29,
+      "dateUtc": "2027-01-01",
+      "utcSlot": "16:00",
+      "conservativeStartUtc": "2027-01-01T16:00:00.000Z",
+      "conservativeEndUtc": "2027-01-01T22:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 30,
+      "dateUtc": "2027-01-02",
+      "utcSlot": "20:00",
+      "conservativeStartUtc": "2027-01-02T20:00:00.000Z",
+      "conservativeEndUtc": "2027-01-03T02:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekend",
+      "airportsIfKnown": null
+    },
+    {
+      "runDayIndex": 31,
+      "dateUtc": "2027-01-04",
+      "utcSlot": "00:00",
+      "conservativeStartUtc": "2027-01-04T00:00:00.000Z",
+      "conservativeEndUtc": "2027-01-04T06:00:00.000Z",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "weekdayClass": "weekday",
+      "airportsIfKnown": null
+    }
+  ],
+  "skippedDatesByReason": {
+    "KNOWN_AIRPORT_END_TO_START_WASHOUT_LT24H": 2,
+    "PARENT_WINDOW_OVERLAP": 5,
+    "PAIRED_WEEKDAY_CLASS_MISMATCH": 6
+  },
+  "ordinaryAirportSelectionsCreated": 0,
+  "treatmentAssigned": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
