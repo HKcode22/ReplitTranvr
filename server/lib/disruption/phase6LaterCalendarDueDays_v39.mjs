@@ -10,10 +10,32 @@ const h=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_LATER_CALENDAR_"+s);};
 const offsets={"T-6h":21600000,"T-90m":5400000};
 const utc=x=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("BAD_UTC");return Date.parse(x);};
+export const P6_CURRENT_PRE_DISPATCH_CONFIRM="RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER";
+export function isP6CurrentPreTrigger(env){
+ if(env.GITHUB_EVENT_NAME==="schedule")return !env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM;
+ return env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+  env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM===P6_CURRENT_PRE_DISPATCH_CONFIRM&&
+  env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE"&&
+  env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1"&&
+  env.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED==="1";
+}
+/** The original enrollment and T24 callers remain schedule-only. */
 export function loadP6LaterCalendarWindows(env,trust,read=readFileSync,horizonMode="LATER"){
+ return loadCalendar(env,trust,read,horizonMode,false);
+}
+/** Only the existing current signed later PRE execution route can opt in to
+ * the explicit dispatch trigger. It does not authorize a roster or write. */
+export function loadP6CurrentPreCalendarWindows(env,trust,read=readFileSync){
+ if(env.P5_CD_GH_PRIVATE_LATER_MODE!=="PRIVATE_CURRENT_SCHEDULE"||
+    env.P5_CD_GH_PRIVATE_CURRENT_APPROVED!=="1"||
+    env.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED!=="1")
+  hold("CURRENT_PRE_SCOPE_REQUIRED");
+ return loadCalendar(env,trust,read,"LATER",true);
+}
+function loadCalendar(env,trust,read,horizonMode,currentPre){
  if(!["LATER","T24"].includes(horizonMode))hold("INVALID_CALENDAR_HORIZON");
  const selectedOffsets=horizonMode==="T24"?{"T-24h":86400000}:offsets;
- if((horizonMode==="T24"?env.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED)!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
+ if((horizonMode==="T24"?env.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED)!=="1"||(currentPre?!isP6CurrentPreTrigger(env):env.GITHUB_EVENT_NAME!=="schedule"||!!env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM)||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="1"||
     (horizonMode==="T24"?env.P6_PRIVATE_T24_RUN_DAYS:env.P6_PRIVATE_LATER_RUN_DAYS)||env.P6_NONPAID_DAILY_POLICY_BASE64?.length>50000)
   hold("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
