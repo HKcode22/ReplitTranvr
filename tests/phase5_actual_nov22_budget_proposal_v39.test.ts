@@ -33,6 +33,22 @@ describe("original actual first randomization and seven-category cap PROPOSAL",(
   expect(b.alert.currentUnbufferedHeadroom).toBe(830);expect(b.phase6PaidGo).toBe(false);
   expect(b.providerCalls).toBe(0);expect(b.databaseWrites).toBe(0);
  });
+ it("quantifies real-calendar timing geometry with no changed cap, lead, or invented flight yield",()=>{
+  const b=proposeP5ActualNov22Budget(actual()),d=b.nativeLeadDiagnostic;
+  expect(d.templateCount).toBe(6144);expect(d.timingScenarios).toHaveLength(12);
+  expect(d.actualLatencyMeasured).toBe(false);expect(d.policyChanged).toBe(false);
+  const s=d.timingScenarios.find(x=>x.timing.maxPopulationStalenessSeconds===2700&&x.timing.maxSchedulerSlipSeconds===120&&x.additionalAuditDelaySeconds===0)!;
+  const tighter=d.timingScenarios.find(x=>x.timing.maxPopulationStalenessSeconds===1800&&x.timing.maxSchedulerSlipSeconds===120&&x.additionalAuditDelaySeconds===0)!;
+  for(const x of s.coverage.byHorizon){
+   expect(x.exposedCutoffSeconds).toBe(1843200);
+   expect(x.modeledUncoveredCutoffSeconds).toBe(43200);
+   expect(x.modeledEligibleCutoffSeconds).toBe(1800000);
+  }
+  for(const x of tighter.coverage.byHorizon)expect(x.modeledEligibleCutoffSeconds).toBe(1228800);
+  for(const s of d.timingScenarios)for(const x of s.coverage.byHorizon)
+   expect(x.modeledEligibleCutoffSeconds+x.modeledUncoveredCutoffSeconds).toBe(x.exposedCutoffSeconds);
+  expect(b.totalReservedUnits).toBe(41960);expect(b.phase6PaidGo).toBe(false);
+ });
  it("refuses a revised calendar rather than silently redrawing",()=>{
   const d=actual();d.calendarDays[0].startUtc="2026-11-23T00:00:00.000Z";
   expect(()=>proposeP5ActualNov22Budget(d)).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
