@@ -1,0 +1,205 @@
+{
+  "schema": "v39.phase5.github-observed-scheduled-interarrival-evidence.v1",
+  "scope": "first 100 repository schedule-event workflow runs, main branch, latest up to eight occurrences per named lane, cutoff 2026-11-15T23:37:27Z",
+  "source": "https://github.com/HKcode22/ReplitTranvr/actions",
+  "actualWorkerLatencyMeasured": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false,
+  "lanes": [
+    {
+      "lane": "SOURCE",
+      "rows": [
+        {
+          "id": 43775605006,
+          "createdAtUtc": "2026-11-15T23:35:06Z",
+          "conclusion": "skipped",
+          "headSha": "95559fc38402ca74f9749e5bdac2417123ee4fa0"
+        },
+        {
+          "id": 43754276444,
+          "createdAtUtc": "2026-11-15T19:46:21Z",
+          "conclusion": "skipped",
+          "headSha": "050c4a8bc8ea3036ac7b9acefa476b1e92dedbd7"
+        },
+        {
+          "id": 43722601877,
+          "createdAtUtc": "2026-11-15T14:07:18Z",
+          "conclusion": "skipped",
+          "headSha": "208ed04f4b45a60a1ca8015523676672c2a8c860"
+        },
+        {
+          "id": 43684514511,
+          "createdAtUtc": "2026-11-15T06:14:13Z",
+          "conclusion": "skipped",
+          "headSha": "06339f73d7e41f0653c4affeb1dd16c52a5b778c"
+        },
+        {
+          "id": 43655884744,
+          "createdAtUtc": "2026-11-14T23:58:52Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43636029037,
+          "createdAtUtc": "2026-11-14T20:10:06Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43611531072,
+          "createdAtUtc": "2026-11-14T15:41:31Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43577698219,
+          "createdAtUtc": "2026-11-14T08:50:23Z",
+          "conclusion": "skipped",
+          "headSha": "63200b2472b88ea0d875db6aea4189e3485c0494"
+        }
+      ]
+    },
+    {
+      "lane": "PRE",
+      "rows": [
+        {
+          "id": 43757525617,
+          "createdAtUtc": "2026-11-15T20:20:33Z",
+          "conclusion": "skipped",
+          "headSha": "050c4a8bc8ea3036ac7b9acefa476b1e92dedbd7"
+        },
+        {
+          "id": 43727399932,
+          "createdAtUtc": "2026-11-15T15:00:13Z",
+          "conclusion": "skipped",
+          "headSha": "050c4a8bc8ea3036ac7b9acefa476b1e92dedbd7"
+        },
+        {
+          "id": 43691344593,
+          "createdAtUtc": "2026-11-15T07:45:19Z",
+          "conclusion": "skipped",
+          "headSha": "0340309421fd1779ea59be7054f5c39a8bb33dc9"
+        },
+        {
+          "id": 43660681980,
+          "createdAtUtc": "2026-11-15T00:56:36Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43640093167,
+          "createdAtUtc": "2026-11-14T20:56:06Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43616339503,
+          "createdAtUtc": "2026-11-14T16:34:25Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43583318020,
+          "createdAtUtc": "2026-11-14T10:02:01Z",
+          "conclusion": "skipped",
+          "headSha": "46969ceb3b7050e034008bd99bb7b5d5f68778a6"
+        },
+        {
+          "id": 43548915876,
+          "createdAtUtc": "2026-11-14T02:55:35Z",
+          "conclusion": "skipped",
+          "headSha": "58dfbfd800fb007c1e9ba7b4e296e7f8a5316cd2"
+        }
+      ]
+    },
+    {
+      "lane": "RETENTION",
+      "rows": [
+        {
+          "id": 43772157163,
+          "createdAtUtc": "2026-11-15T22:57:46Z",
+          "conclusion": "skipped",
+          "headSha": "4e893d1d116b6556177f6fd449d12c22dcb91953"
+        },
+        {
+          "id": 43743284111,
+          "createdAtUtc": "2026-11-15T17:49:43Z",
+          "conclusion": "skipped",
+          "headSha": "050c4a8bc8ea3036ac7b9acefa476b1e92dedbd7"
+        },
+        {
+          "id": 43707831010,
+          "createdAtUtc": "2026-11-15T11:12:53Z",
+          "conclusion": "skipped",
+          "headSha": "391fa45a47f2028512471c95b0dfef5940ea2a7d"
+        },
+        {
+          "id": 43669495323,
+          "createdAtUtc": "2026-11-15T02:48:40Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43651388170,
+          "createdAtUtc": "2026-11-14T23:04:47Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43631021856,
+          "createdAtUtc": "2026-11-14T19:14:42Z",
+          "conclusion": "skipped",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        }
+      ]
+    },
+    {
+      "lane": "HEARTBEAT",
+      "rows": [
+        {
+          "id": 43757287498,
+          "createdAtUtc": "2026-11-15T20:18:07Z",
+          "conclusion": "success",
+          "headSha": "050c4a8bc8ea3036ac7b9acefa476b1e92dedbd7"
+        },
+        {
+          "id": 43725640074,
+          "createdAtUtc": "2026-11-15T14:40:32Z",
+          "conclusion": "success",
+          "headSha": "ffe24af347065d40e3e6ed74766bba431f7a891e"
+        },
+        {
+          "id": 43688242545,
+          "createdAtUtc": "2026-11-15T07:03:55Z",
+          "conclusion": "success",
+          "headSha": "524710724fbe3151e8b6ef84940b8d802c146bff"
+        },
+        {
+          "id": 43657019888,
+          "createdAtUtc": "2026-11-15T00:12:28Z",
+          "conclusion": "success",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43638298638,
+          "createdAtUtc": "2026-11-14T20:35:27Z",
+          "conclusion": "success",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43613129032,
+          "createdAtUtc": "2026-11-14T15:59:41Z",
+          "conclusion": "success",
+          "headSha": "8e2b1a016d86b390ba2dd2f10afe1374aa57948b"
+        },
+        {
+          "id": 43579980960,
+          "createdAtUtc": "2026-11-14T09:19:08Z",
+          "conclusion": "success",
+          "headSha": "aff9086ba168116b5f14acf463ec062e928ea12b"
+        }
+      ]
+    }
+  ]
+}
