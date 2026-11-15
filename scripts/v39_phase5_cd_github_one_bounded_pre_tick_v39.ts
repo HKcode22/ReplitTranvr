@@ -6,7 +6,9 @@
  * registration, or paid action. Genuine signed roster is required.
  */
 import {readFileSync,lstatSync} from "node:fs";
-import {Pool} from "pg";
+import {Client,Pool} from "pg";
+import {readP6PrivateLaterQueueRoster} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {waitP5CdGithubSignedDueWindow}
  from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
@@ -34,24 +36,108 @@ function bytes(path:string):Buffer{
   fail("UNREVIEWED_FROZEN_PACKET_BYTES_OR_SYMLINK");
  return readFileSync(path);
 }
-export async function runP5CdGithubPreController(
- env:NodeJS.ProcessEnv
+/** Private exact-shard execution is an explicit alternative to checkout data.
+ * The independent protected compatibility roster pin remains mandatory.
+ * The day-index signature and underlying native packet bytes are rechecked;
+ * the original later reviewer wire is not stored/reverified by #703.
+ */
+export function admitP5PrivateLaterWorker(env:NodeJS.ProcessEnv){
+ const gate=requireP5CdGithubPreRelease(env);
+ if(env.P5_CD_GH_PRIVATE_LATER_MODE!=="PRIVATE_EXACT_SHARD"||
+    env.P5_CD_GH_PRIVATE_LATER_APPROVED!=="1"||
+    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
+    env.P5_CD_GH_PRE_ROSTER_PATH||
+    (env.P5_CD_GH_BURST_TICKS||"1")!=="1"||
+    env.GITHUB_SHA!==gate.approvedCodeSha||env.RAPIDAPI_KEY)
+  fail("PRIVATE_EXACT_SHARD_RELEASE_REQUIRED");
+ const number=(v:string|undefined,max:number)=>{
+  if(!/^[1-9][0-9]{0,5}$/.test(v??"")||Number(v)>max)
+   return fail("INVALID_PRIVATE_SHARD_SELECTOR");
+  return Number(v);
+ };
+ const selector={runDayIndex:number(env.P5_CD_GH_PRIVATE_DAY,31),
+  indexRevision:number(env.P5_CD_GH_PRIVATE_REVISION,1024),
+  shardIndex:number(env.P5_CD_GH_PRIVATE_SHARD,100000),
+  indexSha256:env.P5_CD_GH_PRIVATE_INDEX_SHA??"",
+  laterRegistrySha256:env.P5_CD_GH_PRIVATE_REGISTRY_SHA??""};
+ if(![selector.indexSha256,selector.laterRegistrySha256].every(x=>/^[0-9a-f]{64}$/.test(x)))
+  fail("INVALID_PRIVATE_SHARD_SELECTOR");
+ const trust=readP6StableSourceTrust(env);
+ let reader:URL,pre:URL;
+ try{reader=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");
+  pre=new URL(env.P5_V39_PRE_DATABASE_URL??"");}
+ catch{return fail("PRIVATE_READER_URL_MISSING");}
+ if(!["postgres:","postgresql:"].includes(reader.protocol)||
+    decodeURIComponent(reader.username)!==trust.expectedReaderSessionLogin||
+    decodeURIComponent(reader.username)===decodeURIComponent(pre.username)||
+    !reader.password||reader.pathname!=="/neondb"||reader.hash||
+    !reader.hostname.endsWith(".neon.tech")||reader.host!==pre.host||
+    reader.searchParams.getAll("sslmode").length!==1||
+    reader.searchParams.get("sslmode")!=="require"||
+    [...reader.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+    (reader.searchParams.has("channel_binding")&&
+     (reader.searchParams.getAll("channel_binding").length!==1||
+      reader.searchParams.get("channel_binding")!=="require")))
+  fail("PRIVATE_READER_MUST_BE_SEPARATE_RESTRICTED_TLS_LOGIN");
+ return {selector,trust,gate,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
+  policy:{independentLaterQueueTransportProjectionApproved:true,
+   existingPaidDispatchApproved:false,
+   independentlyApprovedStandaloneProtocolSha256:gate.independentlyApprovedStandaloneProtocolSha256}};
+}
+export function bindP5PrivateProjectionToWorker(
+ projection:Awaited<ReturnType<typeof readP6PrivateLaterQueueRoster>>,
+ ctx:ReturnType<typeof admitP5PrivateLaterWorker>
 ){
+ const s=ctx.selector;
+ if(projection.status!=="VERIFIED_PRIVATE_LATER_QUEUE_ROSTER_PROJECTION_NO_GO"||
+    projection.day!==s.runDayIndex||projection.revision!==s.indexRevision||
+    projection.shard!==s.shardIndex||projection.signedIndexSha256!==s.indexSha256||
+    projection.signedLaterRegistrySha256!==s.laterRegistrySha256||
+    projection.derivedCompatibilityRosterSha256!==ctx.gate.rosterSha256||
+    projection.providerCalls!==0||projection.databaseWrites!==0||
+    projection.phase6PaidGo!==false)
+  fail("PRIVATE_PROJECTION_NOT_MATCHED_TO_PROTECTED_ROSTER_PIN");
+ const raw:Buffer=projection.privateRosterBytes;
+ const roster=JSON.parse(raw.toString("utf8")) as P5CdFrozenRoster;
+ return verifyP5CdFrozenRoster(raw,roster,projection.privateEntries,ctx.gate);
+}
+async function loadPrivatePackets(env:NodeJS.ProcessEnv){
+ const ctx=admitP5PrivateLaterWorker(env);
+ const c=new Client({connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,
+  query_timeout:20000,application_name:"phase6_private_later_pre_readonly"});
+ await c.connect();
+ try{
+  await c.query("SET ROLE phase6_private_frozen_reader_v39");
+  const projection=await readP6PrivateLaterQueueRoster({client:c,trust:ctx.trust,
+   selector:ctx.selector,policy:ctx.policy});
+  return bindP5PrivateProjectionToWorker(projection,ctx);
+ }finally{await c.end();}
+}
+export async function runP5CdGithubPreController(env:NodeJS.ProcessEnv){
  verifyP5CdGithubFrozenCodeLineage(env);
  const gate=requireP5CdGithubPreRelease(env);
- if(!ROSTER.test(env.P5_CD_GH_ROSTER_PATH??"")||
-    !/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??""))
+ if(!/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??""))
   fail("ROSTER_PATH_OR_GH_RUN_ID_NOT_FROZEN");
- const rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
- let roster:P5CdFrozenRoster;
- try{roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;}
- catch{fail("ROSTER_JSON_NOT_VALID");}
- const entries:P5CdFrozenRosterEntry[]=(roster.entries??[]).map(x=>({
-  filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)
- }));
- // ALL signed packets verified BEFORE any session is opened or queue
- // is claimed; no source, weather or provider API call.
- const packets=verifyP5CdFrozenRoster(rosterBytes,roster,entries,gate);
+ const mode=env.P5_CD_GH_PRIVATE_LATER_MODE||"CHECKOUT";
+ if(!["CHECKOUT","PRIVATE_EXACT_SHARD"].includes(mode))
+  fail("UNKNOWN_PRE_TRANSPORT_MODE");
+ const privateMode=mode==="PRIVATE_EXACT_SHARD";
+ let packets:ReturnType<typeof verifyP5CdFrozenRoster>;
+ if(privateMode)packets=await loadPrivatePackets(env);
+ else{
+  if(env.P6_PRIVATE_READER_DATABASE_URL||env.P5_CD_GH_PRIVATE_DAY||
+     env.P5_CD_GH_PRIVATE_REVISION||env.P5_CD_GH_PRIVATE_SHARD||
+     env.P5_CD_GH_PRIVATE_INDEX_SHA||env.P5_CD_GH_PRIVATE_REGISTRY_SHA||
+     !ROSTER.test(env.P5_CD_GH_ROSTER_PATH??""))
+   fail("ROSTER_PATH_OR_GH_RUN_ID_NOT_FROZEN");
+  const rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
+  const roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;
+  const entries:P5CdFrozenRosterEntry[]=(roster.entries??[]).map(x=>({
+   filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)
+  }));
+  packets=verifyP5CdFrozenRoster(rosterBytes,roster,entries,gate);
+ }
+ // Native packet scope is verified before opening the PRE writer session.
  const base=new Pool({
   connectionString:env.P5_V39_PRE_DATABASE_URL,
   max:3,connectionTimeoutMillis:8000,idleTimeoutMillis:2000,
@@ -71,6 +157,10 @@ export async function runP5CdGithubPreController(
   // The opt-in capacity wrapper REUSES the original per-flight Stage14
   // V0092 claim -> WRITE_STARTED -> postcommit readback -> ACK. Default is
   // exactly one existing two-task tick; no additional SQL privileges.
+  // The signed day revision and retention validity may change while waiting.
+  // Re-read exact current shard through the private reader immediately before
+  // invoking the original worker. The independent roster pin must still match.
+  if(privateMode)packets=await loadPrivatePackets(env);
   const report=await runP5CdGithubStage14Microburst(env,()=>
    runP5CdGithubPreTick(env,{
     db:pre,pool:pre,packets
@@ -83,6 +173,7 @@ export async function runP5CdGithubPreController(
    earlyDbClockDueWindow:early,
    githubRunId:env.GITHUB_RUN_ID,
    signedRosterVerified:true,
+   privateExactShardTransport:privateMode,
    immutableExistingDatabaseQueue:true,
    noNewTaskEnrollment:true
   };
