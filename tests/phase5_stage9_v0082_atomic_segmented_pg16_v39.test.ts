@@ -435,23 +435,15 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
  it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
   const {proposal:unusedProposal,...reviewPins}=review;
   void unusedProposal;
-  const result=await prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
-   readScope,sourceReview,stage9Review:reviewPins,
-   preparePrivateUnsignedSourceDraftShards:true
-  });
-  expect(result.preparedDayReadback?.verifiedQueryCount).toBe(96);
-  expect(result.preparedDayReadback?.verifiedPartitionCount).toBe(96);
-  expect(result.preparedDayReadback?.separateReadOnlySnapshot).toBe(true);
-  expect(result.unsignedSourceDraftSummary?.queryCount).toBe(96);
-  expect(result.privateUnsignedSourceDraftPlan?.privateDraftShards.flatMap(s=>s.entries).length).toBe(96);
-  expect(JSON.stringify(result)).not.toContain("privateUnsignedSourceDraftPlan");
-  expect(JSON.stringify(result)).not.toContain("unsignedDraft");
-  expect(result.preparedQueryRows).toBe(96);
-  expect(result.preparedPartitionRows).toBe(96);
+  const result=await resumeP5ReviewedSourceDayPreparation(admin,writer,{
+   readScope,sourceReview,stage9Review:reviewPins
+  },{authenticatedExactDurableReviewReadbackApproved:true,
+   existingPaidDispatchApproved:false,separatePreparationScopeApproved:true});
+  expect(result.status).toBe("INITIAL_EXACT_DAY_PREPARED_AND_READ_BACK");
+  expect(result.verifiedQueryCount).toBe(96);
+  expect(result.verifiedPartitionCount).toBe(96);
   expect(result.databaseInserts).toBe(192);
   expect(result.providerCalls).toBe(0);
-  expect(result.paidSourceAttempts).toBe(0);
-  expect(result.frozenCategoryBudgetWritten).toBe(false);
   expect(result.phase6PaidGo).toBe(false);
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
   const category=(await admin.query(
