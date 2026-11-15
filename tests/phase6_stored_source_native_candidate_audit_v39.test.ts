@@ -339,3 +339,31 @@ describe("private native T24 registry",()=>{
   expect(buildP6DelegatedT24PrivateRegistry(f)).toMatchObject({status:"NO_ELIGIBLE_NEW_NATIVE_T24_PACKET",candidateCount:0});
  });
 });
+
+
+import {selectP6PostNativePreCandidatePage,readP6ActualNativePostPreCandidatePage}
+ from "../server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs";
+describe("native POST candidate pages require exact signed SOURCE and later PRE scope",()=>{
+ it("projects signed permit candidates only, never counts them as actual PRE or leaks flight IDs",()=>{
+  const f=pendingFixture();
+  const args={index:f.index,selector:f.selector,trust:f.trust,sourceScope:f.a.privateSourceScope};
+  const p=selectP6PostNativePreCandidatePage(args);
+  expect(p).toMatchObject({status:"SIGNED_LATER_NATIVE_POST_CANDIDATE_PAGE_NOT_ACTUAL_PRE",totalCandidateCount:1,pageCandidateCount:1,remainingAfterPageCount:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(p.privateCandidates).toEqual([{flightInstanceId:"flight_existing",
+   expectedSelectedTNativeUtc:"2027-02-10T11:20:00.000Z",boundSourceQueryDigests:[f.selector.queryDigestSha256]}]);
+  expect(JSON.stringify(p)).not.toContain("flight_existing");
+  const next=selectP6PostNativePreCandidatePage({...args,afterFlightId:"flight_existing",pageSize:1});
+  expect(next.privateCandidates).toHaveLength(0);
+  expect(()=>selectP6PostNativePreCandidatePage({...args,pageSize:385})).toThrow("UNBOUND_PAGE_SCOPE");
+  expect(()=>selectP6PostNativePreCandidatePage({...args,sourceScope:{...args.sourceScope,horizon:"T-90m"}})).toThrow("CROSS_SOURCE_OR_HORIZON");
+  expect(()=>selectP6PostNativePreCandidatePage({...args,sourceScope:{...args.sourceScope,expectedServiceWindowEndUtc:"2027-02-10T11:05:00.000Z"}})).toThrow("NATIVE_T_OUTSIDE_SIGNED_SOURCE");
+  expect(()=>selectP6PostNativePreCandidatePage({...args,selector:{...f.selector,queryDigestSha256:H("9")}})).toThrow("SOURCE_QUERY_NOT_UNIQUE");
+ });
+ it("refuses unapproved runtime before a restricted SQL read",async()=>{
+  const f=pendingFixture();let calls=0;
+  await expect(readP6ActualNativePostPreCandidatePage({
+   readerClient:{query:async()=>{calls++;throw Error("NO")}},sourcePool:{},
+   trust:f.trust,selector:f.selector,policy:{}})).rejects.toThrow("NO_EXACT_NONPAID_SCOPE");
+  expect(calls).toBe(0);
+ });
+});
