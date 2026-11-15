@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {proposeP6LaterDayAppendBytes,prepareP6ReviewedLaterShardAppend,commitP6ExternallyReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39";
+import {proposeP6LaterDayAppendBytes,prepareP6ReviewedLaterShardAppend,commitP6ExternallyReviewedLaterAppend,runP6DelegatedReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39";
 const h=(s:string)=>s.repeat(64),sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const t="2026-11-22T00:00:00.000Z",end="2026-11-22T04:00:00.000Z";
 const source={lane:"SOURCE" as const,runDayIndex:1,shardIndex:1,filePath:"data-collection/phase5/frozen/source_fixture_0001.json",
@@ -30,10 +30,17 @@ describe("reviewed later shard to exact unsigned current day append",()=>{
   expect(()=>propose({...registry,sourceDayRegistrySha256:h("f")})).toThrow("WRONG_HEAD");
   expect(()=>propose(registry,t,"2026-11-22T00:30:00.000Z")).toThrow("LATE_OR_OVERWIDE");
  });
+ it("does not shorten validity below an existing still-pending route",()=>{
+  const long={...source,hardLatestUtc:"2026-11-22T02:00:00.000Z"};
+  const h2={...head,entries:[long]};
+  expect(()=>proposeP6LaterDayAppendBytes(Buffer.from(JSON.stringify(h2)),h2,long,registry,path,digest,ev,t,end,
+    "2026-11-22T01:30:00.000Z",end)).toThrow("APPEND_WOULD_STRAND_EXISTING_ROUTE");
+ });
  it("both operational entrypoints default to HOLD without explicit independent authority, no DB access",async()=>{
   const fake={query:async()=>{throw Error("SHOULD_NOT_QUERY");}};
   const input:any={readerClient:fake,publisherClient:fake};
   await expect(prepareP6ReviewedLaterShardAppend(input)).rejects.toThrow("NO_DISTINCT");
   await expect(commitP6ExternallyReviewedLaterAppend(input,{} as any)).rejects.toThrow("NO_DISTINCT");
+  await expect(runP6DelegatedReviewedLaterAppend(input,{} as any)).rejects.toThrow("NO_DISTINCT");
  });
 });
