@@ -8,6 +8,7 @@
  * are SHA/count-only. Unknown COMMIT is a NO RETRY incident.
  */
 import {createHash,createPublicKey,verify} from "node:crypto";
+import {resolveP6DynamicSourceQueryReview} from "./phase6DynamicSourceReviewSelection_v39.mjs";
 
 export const P6_PRIVATE_SOURCE_REGISTRY_REVIEW_SCHEMA=
  "v39.phase6.external-source-day-registry-review-ed25519.v1";
@@ -132,6 +133,18 @@ export async function publishP6SourceDayRegistryLastOnce({
     scope.approvedReleaseSha256!==r.releaseSha256||
     scope.approvedRightsSha256!==r.rightsSha256)
   fail("CROSS_SCOPE_REVIEW_NOT_INDEPENDENTLY_APPROVED");
+ const stored=scope.requireStoredQueryReviews===true;
+ const trust=scope.storedQueryReviewTrust;
+ if((scope.requireStoredQueryReviews!==undefined&&
+      typeof scope.requireStoredQueryReviews!=="boolean")||
+    (!stored&&trust!==undefined)||
+    (stored&&(!trust||trust.independentStudyTrustPinsApproved!==true||
+      trust.reviewedCodeSha!==r.reviewedCodeSha||
+      trust.manifestSha256!==r.manifestSha256||
+      trust.calendarSha256!==r.calendarSha256||
+      trust.releaseSha256!==r.releaseSha256||
+      trust.rightsSha256!==r.rightsSha256)))
+  fail("STORED_QUERY_REVIEW_TRUST_NOT_INDEPENDENTLY_MATCHED");
  let p;
  try{p=JSON.parse(registryBytes.toString("utf8"));}
  catch{fail("UNPARSEABLE_SOURCE_REGISTRY_JSON");}
@@ -214,6 +227,7 @@ export async function publishP6SourceDayRegistryLastOnce({
    "SELECT logical_path,run_day_index,kind,content_sha256,"+
    "reviewed_code_sha,manifest_sha256,rights_sha256,"+
    "retention_not_after_utc,committed_at_utc"+
+   (stored?",shard_index,external_review_sha256,externally_reviewed_at_utc,review_wire_bytes":"")+
    " FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",
    [p.entries.map(x=>x.filePath)]
   );
@@ -234,6 +248,32 @@ export async function publishP6SourceDayRegistryLastOnce({
       pgClock(v.committed_at_utc)>now||
       pgClock(v.retention_not_after_utc)<external.expiresMs)
     fail("SOURCE_PACKET_NOT_EXACT_APPROVED_UTC_DAY_OR_RIGHTS");
+   if(stored){
+    // Mirror the exact selector used by the stored-mode child. Do not
+    // publish a registry whose constituent query lacks a usable signature.
+    // Legacy statically reviewed registry publication remains unchanged.
+    const bytes=v.review_wire_bytes;
+    if(v.shard_index!==r.shardIndex||
+       !Buffer.isBuffer(bytes)||bytes.length<100||bytes.length>4096)
+     fail("SOURCE_PACKET_STORED_WIRE_OR_SHARD_MISSING");
+    let wire,checked;
+    try{
+     wire=JSON.parse(bytes.toString("utf8"));
+     if(!Buffer.from(JSON.stringify(wire),"utf8").equals(bytes))
+      fail("NONEXACT_STORED_REVIEW_BYTES");
+     checked=resolveP6DynamicSourceQueryReview({trust,wires:[wire],
+      observedDbClockUtc:new Date(now).toISOString(),
+      selector:{runDayIndex:r.runDayIndex,shardIndex:r.shardIndex,
+       logicalPath:e.filePath,contentSha256:e.expectedPacketSha256,
+       externalReviewEvidenceSha256:v.external_review_sha256}});
+    }catch{fail("SOURCE_PACKET_STORED_SIGNATURE_NOT_USABLE");}
+    const rev=checked.wire.review;
+    if(pgClock(v.externally_reviewed_at_utc)!==utc(rev.reviewedAtUtc)||
+       pgClock(v.retention_not_after_utc)!==utc(rev.retentionNotAfterUtc)||
+       pgClock(v.committed_at_utc)<utc(rev.reviewedAtUtc)||
+       utc(rev.validUntilUtc)<external.validUntilMs)
+     fail("SOURCE_PACKET_STORED_REVIEW_CLOCK_OR_WINDOW_DRIFT");
+   }
   }
   const put=await client.query(
    "INSERT INTO "+TABLE+
@@ -265,6 +305,7 @@ export async function publishP6SourceDayRegistryLastOnce({
    runDayIndex:r.runDayIndex,shardIndex:r.shardIndex,
    boundSourceQueryPacketCount:p.entries.length,
    appendOnlyRegistryInsertedLast:true,
+   storedConstituentReviewsVerified:stored,
    independentPostCommitReadbackRequired:true,
    paidSourceChildOrOriginalGETDispatched:false,
    contentsRightsOrExternalReviewerIndependenceCertifiedHere:false,
