@@ -541,7 +541,11 @@ export async function auditP5FuturePostActualPriorPreBatch(pool:Pick<Pool,"conne
    try{
     const pre=classifyP5PostPreRows({...p,manifestSha256:scope.manifestSha256,runDayIndex:scope.runDayIndex},
       retained,new Set(p.boundSourceQueryDigests));
-    return {flightInstanceId:p.flightInstanceId,status:"VALID_ACTUAL_PRE_FOR_POST_REVIEW" as const,pre};
+    const validBoundRows=retained.filter(x=>pre.actualSourcePREReferenceIds.includes(String(x.snapshot_id))&&
+      p.boundSourceQueryDigests.includes(String(x.query_digest)));
+    if(!validBoundRows.length)fail("BATCH_VALID_BOUND_PRE_RETENTION_UNKNOWN");
+    const boundPreRetentionNotAfterUtc=new Date(Math.max(...validBoundRows.map(x=>Date.parse(sqlClock(x.source_expires_at_utc))))).toISOString();
+    return {flightInstanceId:p.flightInstanceId,status:"VALID_ACTUAL_PRE_FOR_POST_REVIEW" as const,pre,boundPreRetentionNotAfterUtc};
    }catch(e){
     const s=e instanceof Error?e.message:"";
     if(s=== "REFUSED_P5_FUTURE_POST_V0083_NO_VALID_NATIVE_T_SOURCE_PRE_FOR_THIS_POST"||
