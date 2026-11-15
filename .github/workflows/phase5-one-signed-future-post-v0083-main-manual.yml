@@ -50,6 +50,9 @@ on:
       - 'server/lib/disruption/phase6ActualPostOutcomeObservability_v39.ts'
       - 'tests/phase6_actual_post_outcome_observability_v39.test.ts'
       - 'tests/phase6_actual_post_outcome_real_pg16_v39.test.ts'
+      - 'tests/phase6_native_post_real_publication_fixture_v39.ts'
+      - 'server/lib/disruption/phase6NativePostSignedPublication_v39.mjs'
+      - 'server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs'
       - 'server/lib/disruption/phase5V0083RestDedicatedRolePool_v39.ts'
       - 'server/lib/disruption/fidsCensus_v3.ts'
       - 'tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts'
@@ -258,6 +261,30 @@ jobs:
           test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$V39_P5_SOURCE_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
           npx --no-install tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
-      - name: Actual restricted SOURCE-role PRE partition and POST original SQL
+      - name: Commission existing private transport on disposable localhost only
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = true
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY$V39_P5_SOURCE_DATABASE_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real'"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "ALTER DATABASE neondb OWNER TO neondb_owner"
+          owner='postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable'
+          psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {runEmptyOwnerChain,emptyOwnerConnectionConfig} from "./scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs";
+          const open=async()=>{const c=new pg.Client(emptyOwnerConnectionConfig("postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable"));await c.connect();return c;};
+          assert.deepEqual((await runEmptyOwnerChain({open,installAllowed:true})).installed,["V0097","V0098","V0099"]);
+          JS
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE phase6_private_publisher_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-pub'"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE phase6_private_reader_login_ci_epoch LOGIN NOINHERIT PASSWORD 'ci-only-day-read'"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_epoch WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_epoch WITH ADMIN FALSE, INHERIT FALSE, SET TRUE"
+          psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql
+      - name: Actual restricted SOURCE-role PRE partition, POST original SQL and signed publication recovery
         run: |
           npx --no-install vitest run tests/phase6_actual_post_outcome_real_pg16_v39.test.ts
