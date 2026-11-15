@@ -9,6 +9,9 @@
  * original credit/STOP and exact private SOURCE packet verification.
  */
 import pg from "pg";
+import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
+import {readP6StableSourceTrust,selectP6DueSourceDays,makeP6StoredSourceChildInputs}
+ from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly}
  from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {auditP5UpcomingSourceQueue}
@@ -87,6 +90,29 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
   fail("NOT_MAIN_OWNER_STOP_NO_PROVIDER_REVIEW_ONLY");
  const source=scopedURL(env.V39_P5_SOURCE_DATABASE_URL,
     "phase5_p5_source_login_20261108","ORIGINAL_SOURCE");
+ const mode=env.P6_PRIVATE_SOURCE_REVIEW_MODE||"static";
+ if(!["static","stored"].includes(mode))fail("UNKNOWN_REVIEW_MODE");
+ if(mode==="stored"){
+  if(env.P6_PRIVATE_SOURCE_PARENT_RO_DAY_REVIEWS_BASE64)
+   fail("STORED_AND_STATIC_REVIEW_MUST_NOT_MIX");
+  const trust=readP6StableSourceTrust(env);
+  const reader=scopedURL(env.P6_PRIVATE_READER_DATABASE_URL,
+   trust.expectedReaderSessionLogin,"PRIVATE_READONLY");
+  const receipt={schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,mainSha:env.GITHUB_SHA,
+   reviewMode:"stored",reviewedSignedDayCount:0,
+   scope:{expectedManifestSha256:env.V39_P5_MANIFEST_SHA256,
+    expectedReleaseSha256:env.V39_P5_RELEASE_SHA256,
+    expectedRightsSha256:env.V39_P5_RIGHTS_SHA256,
+    expectedProviderContractSha256:env.V39_P5_PROVIDER_CONTRACT_SHA256,
+    expectedSourceRole:P5_STAGE28_GROUPS.source}};
+  Object.defineProperties(receipt,{
+   sourceUrl:{enumerable:false,value:source},readerUrl:{enumerable:false,value:reader},
+   trust:{enumerable:false,value:trust},ghToken:{enumerable:false,value:env.GITHUB_TOKEN}
+  });
+  return Object.freeze(receipt);
+ }
+ if(env.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64)
+  fail("STORED_AND_STATIC_REVIEW_MUST_NOT_MIX");
  const bundleRaw=utf8(
   env.P6_PRIVATE_SOURCE_PARENT_RO_DAY_REVIEWS_BASE64,
   60000,"INDEPENDENT_DAY_REVIEWS");
@@ -199,7 +225,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
    };
   }finally{await pool.end();}
  });
- const readDays=options.readDays??(async()=>{
+ const readDays=options.readDays??(async(_ctx,selection)=>{
   const c=new pg.Client({
    connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,
    query_timeout:25000
@@ -208,7 +234,16 @@ export async function runP6RealPrivateSourceParentReadOnly(
   try{
    await c.query("SET ROLE phase6_private_frozen_reader_v39");
    const all=[];
-   for(const b of ctx.reviews)
+   const reviews=ctx.reviewMode==="stored"?
+    await Promise.resolve().then(async()=>{
+     const resolved=[];
+     for(const day of selection.dayIndices)
+      resolved.push(await readP6StoredPrivateReviewOnce({client:c,trust:ctx.trust,
+       scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
+       selector:{kind:"CURRENT_DAY",runDayIndex:day}}));
+     return resolved;
+    }):ctx.reviews;
+   for(const b of reviews)
     all.push(await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
      client:c,pins:b.pins,wire:b.wire,publicKeyPem:b.publicKeyPem,
      scope:{privateDayRegistryReadOnlyApproved:true,
@@ -236,7 +271,19 @@ export async function runP6RealPrivateSourceParentReadOnly(
  try{
   // Two different unprivileged PG16 sessions. No provider key is present.
   const scan=await readSource(ctx);
-  const days=await readDays(ctx);
+  const selection=ctx.reviewMode==="stored"?selectP6DueSourceDays(scan):null;
+  if(selection&&scan.manifestSha256!==ctx.scope.expectedManifestSha256)
+   fail("ORIGINAL_SOURCE_MANIFEST_DRIFT");
+  if(selection&&selection.dayIndices.length===0)
+   return Object.freeze({schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,
+    status:"NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH",
+    observedActualSourceQueueQueries:scan.observedQueries,
+    candidateCount:0,deferredDueDayCount:0,providerCalls:0,databaseWrites:0,
+    githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
+  const days=await readDays(ctx,selection);
+  if(selection&&(days.length!==selection.dayIndices.length||
+    selection.dayIndices.some(d=>days.filter(x=>x.redactedSummary.runDayIndex===d).length!==1)))
+   fail("NOT_EXACT_SELECTED_DUE_DAYS");
   const history=await readHistory(scan,ctx);
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
@@ -248,14 +295,20 @@ export async function runP6RealPrivateSourceParentReadOnly(
      planned.redactedSummary.githubDispatches!==0||
      planned.redactedSummary.phase6PaidGo!==false)
    fail("UNSAFE_PRIVATE_SOURCE_PARENT_PLANNER");
-  return Object.freeze({...planned.redactedSummary,
+  const out={...planned.redactedSummary,
+   ...(selection?{storedReviewMode:true,deferredDueDayCount:selection.deferredDueDayCount}:{}),
    realPgQueriesReadWithOriginalSourceLogin:true,
    protectedDayEpochsReadWithSeparateReaderLogin:true,
    completeGHChildRunHistoryConsulted:true,
    actualGithubChildDispatch:false,
    privateSourceQueryContentsNotPrinted:true,
    paidPhase6Go:false
+  };
+  if(selection)Object.defineProperty(out,"privateStoredChildInputProposals",{
+   enumerable:false,writable:false,value:Object.freeze(planned.privateChildProposals.map(p=>
+    makeP6StoredSourceChildInputs(p,days.find(d=>d.redactedSummary.runDayIndex===p.runDayIndex))))
   });
+  return Object.freeze(out);
  }catch{
   // Never print private path/query/provider JSON, DB credentials or failed
   // external fetch responses; fail closed on missing GitHub or PG evidence.

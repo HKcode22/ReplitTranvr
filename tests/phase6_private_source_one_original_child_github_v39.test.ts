@@ -1,4 +1,5 @@
 import {describe,it,expect} from "vitest";
+import {createHash,generateKeyPairSync} from "node:crypto";
 import {
  admitP6PrivateSourceExistingChildRuntime,
  runP6OnePrivateSourceOriginalGHChild,
@@ -281,5 +282,73 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
    readSourceQuery:async()=>({privateLogicalPath:PACK}),
    runExistingAdmission:async()=>{throw Error("original paid unknown COMMIT");}
   })).rejects.toThrow("ORIGINAL_PHASE5_PAID_GATES_OR_EPHEMERAL_CLEANUP_HOLD_NO_RETRY");
+ });
+});
+
+describe("stored SOURCE child keeps private paths, fixed trust and original gate",()=>{
+ function dynamic(){
+  const f=fixture(),{publicKey}=generateKeyPairSync("ed25519");
+  const pem=publicKey.export({format:"pem",type:"spki"}).toString(),
+   fp=createHash("sha256").update(publicKey.export({format:"der",type:"spki"})).digest("hex");
+  for(const k of Object.keys(f.env))
+   if(k.startsWith("P6_PRIVATE_DAY_EPOCH_REVIEW_")||k.startsWith("P6_PRIVATE_SOURCE_QUERY_REVIEW_"))
+    delete f.env[k];
+  Object.assign(f.env,{
+   P6_PRIVATE_SOURCE_TRANSPORT_INPUT:"stored",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",
+   P6_PRIVATE_DAY_INDEX_REVISION:"1",P6_PRIVATE_DAY_INDEX_SHA256:H("1"),
+   P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH:"PRIVATE_STORED",
+   P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH:"PRIVATE_STORED",
+   V39_P5_SOURCE_BATCH_REGISTRY_SHA256:"",
+   P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:b64({
+    independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:LOGIN,
+    reviewedCodeSha:CODE,manifestSha256:H("2"),calendarSha256:H("3"),
+    releaseSha256:H("4"),rightsSha256:H("5"),
+    dayReviewerPublicKeyPem:pem,dayReviewerFingerprintSha256:fp,
+    queryReviewerPublicKeyPem:pem,queryReviewerFingerprintSha256:fp})
+  });
+  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",
+   runDayIndex:1,manifestSha256:H("2"),entries:[{
+    expectedQueryDigestSha256:Q,expectedPacketSha256:H("8"),filePath:PACK}]}));
+  const regSha=createHash("sha256").update(bytes).digest("hex");
+  const index={...authenticatedDayRoute(),privateRoutingCandidates:[{
+   ...authenticatedDayRoute().privateRoutingCandidates[0],shardIndex:2,signedFrozenSha256:regSha}],
+   getFrozen:(path:string)=>{expect(path).toBe(REG);return bytes;}};
+  return {...f,index,regSha};
+ }
+ it("uses exact day, resolves registry entry, passes local hash only to original gate",async()=>{
+  const f=dynamic(),events:string[]=[];
+  expect(gate(f.env).stored).toBe(true);
+  await runP6OnePrivateSourceOriginalGHChild(f.env,{
+   openRestrictedReader:async()=>({async query(){events.push("SET_ROLE");},async end(){events.push("CLOSE");}}),
+   readStoredReview:async (args:any)=>{
+    if(args.selector.kind==="EXACT_DAY"){
+     expect(args.selector).toEqual({kind:"EXACT_DAY",runDayIndex:1,indexRevision:1,indexSha256:H("1")});
+     events.push("DAY");return{pins:f.indexPins,wire:f.indexWire,publicKeyPem:f.pem};
+    }
+    expect(args.selector).toEqual({kind:"SOURCE_QUERY",runDayIndex:1,shardIndex:2,logicalPath:PACK,contentSha256:H("8")});
+    events.push("QUERY");return{pins:f.packetPins,wire:f.packetWire,publicKeyPem:f.pem};
+   },
+   hydrateIndex:async()=>f.index,
+   readSourceQuery:async()=>({privateLogicalPath:PACK}),
+   runExistingAdmission:async(args:any)=>{
+    expect(events.at(-1)).toBe("CLOSE");
+    expect(args.env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).toBe(f.regSha);
+    expect(f.env.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).toBe("");
+    expect(args.expectedQueryDigestSha256).toBe(Q);
+    events.push("ORIGINAL_GATE");
+    return {runDayIndex:1,queryDigestSha256:Q,queryPacketSha256:H("8"),privateSourceQueryAndRegistryCleaned:true};
+   }
+  });
+  expect(events).toEqual(["SET_ROLE","DAY","QUERY","CLOSE","ORIGINAL_GATE"]);
+ });
+ it("rejects mode mixing, unapproved stored mode, fake digest and private public path",()=>{
+  const f=dynamic();
+  for(const changes of [
+   {P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"0"},
+   {P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH:REG},
+   {V39_P5_SOURCE_BATCH_REGISTRY_SHA256:REG_SHA},
+   {P6_PRIVATE_DAY_INDEX_REVISION:"1025"},
+   {P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64:"OLD_STATIC"}
+  ])expect(()=>gate({...f.env,...changes})).toThrow(/HOLD_P6_/);
  });
 });
