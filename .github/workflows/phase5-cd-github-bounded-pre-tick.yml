@@ -3,6 +3,26 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      private_transport:
+        type: choice
+        options: [CHECKOUT, PRIVATE_EXACT_SHARD]
+        default: CHECKOUT
+      run_day:
+        type: string
+        required: false
+      index_revision:
+        type: string
+        required: false
+      shard_index:
+        type: string
+        required: false
+      index_sha256:
+        type: string
+        required: false
+      registry_sha256:
+        type: string
+        required: false
   pull_request:
     branches: [main]
     paths:
@@ -29,6 +49,7 @@ on:
       - 'tests/phase5_cd_github_pre_release_gate_v39.test.ts'
       - 'tests/phase5_cd_github_code_lineage_v39.test.ts'
       - 'tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts'
+      - 'tests/phase6_private_later_worker_v39.test.ts'
       - 'tests/phase6_private_later_queue_roster_v39.test.ts'
       - 'server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs'
 permissions:
@@ -62,7 +83,7 @@ jobs:
       - name: Prove signed roster, STOP and bounded claim state machine without DB/provider
         run: |
           set -Eeuo pipefail
-          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts tests/phase6_private_later_queue_roster_v39.test.ts             tests/phase5_cd_github_bounded_stage14_microburst_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase5_amendment_e_existing_noaa_history_receipt_compiler_v39.test.ts
+          npx --no-install vitest run             tests/phase5_cd_github_pre_release_gate_v39.test.ts             tests/phase5_cd_github_bounded_pre_tick_offline_v39.test.ts tests/phase6_private_later_queue_roster_v39.test.ts tests/phase6_private_later_worker_v39.test.ts             tests/phase5_cd_github_bounded_stage14_microburst_v39.test.ts             tests/phase5_cd_durable_queue_client_offline_v39.test.ts tests/phase5_cd_github_code_lineage_v39.test.ts tests/phase5_cd_github_dbclock_lookahead_offline_v39.test.ts tests/phase5_amendment_e_signed_supplemental_features_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase5_amendment_e_existing_noaa_history_receipt_compiler_v39.test.ts
           echo 'P5_CD_GH_PRE_TICK_OFFLINE_NO_DB_NO_PROVIDER_STOP_PASS'
   bounded-reviewed-real-pre:
     # OFF unless owner separately sets repo variable to '1'. Other
@@ -98,7 +119,18 @@ jobs:
       P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
       P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
-      P5_CD_GH_PRE_ROSTER_PATH: ${{ vars.P5_CD_GH_ROSTER_PATH }}
+      P5_CD_GH_PRIVATE_LATER_MODE: ${{ inputs.private_transport || 'CHECKOUT' }}
+      P5_CD_GH_PRIVATE_LATER_APPROVED: ${{ inputs.private_transport == 'PRIVATE_EXACT_SHARD' && secrets.P5_CD_GH_PRIVATE_LATER_APPROVED || '' }}
+      P5_CD_GH_PRIVATE_DAY: ${{ inputs.run_day }}
+      P5_CD_GH_PRIVATE_REVISION: ${{ inputs.index_revision }}
+      P5_CD_GH_PRIVATE_SHARD: ${{ inputs.shard_index }}
+      P5_CD_GH_PRIVATE_INDEX_SHA: ${{ inputs.index_sha256 }}
+      P5_CD_GH_PRIVATE_REGISTRY_SHA: ${{ inputs.registry_sha256 }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ inputs.private_transport == 'PRIVATE_EXACT_SHARD' && secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ inputs.private_transport == 'PRIVATE_EXACT_SHARD' && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ inputs.private_transport == 'PRIVATE_EXACT_SHARD' && secrets.P6_PRIVATE_READER_DATABASE_URL || '' }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      P5_CD_GH_PRE_ROSTER_PATH: ${{ inputs.private_transport != 'PRIVATE_EXACT_SHARD' && vars.P5_CD_GH_ROSTER_PATH || '' }}
       P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
@@ -160,8 +192,21 @@ jobs:
           test -z "$V39_DATABASE_RUNTIME_URL"
           test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
           test -n "$P5_V39_PRE_DATABASE_URL"
-          [[ "$P5_CD_GH_PRE_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
-          test -f "$P5_CD_GH_PRE_ROSTER_PATH"
+          case "$P5_CD_GH_PRIVATE_LATER_MODE" in
+            CHECKOUT)
+              [[ "$P5_CD_GH_PRE_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+              test -f "$P5_CD_GH_PRE_ROSTER_PATH"
+              test -z "$P6_PRIVATE_READER_DATABASE_URL"
+              ;;
+            PRIVATE_EXACT_SHARD)
+              test "$GITHUB_EVENT_NAME" = workflow_dispatch
+              test "$P5_CD_GH_PRIVATE_LATER_APPROVED" = 1
+              test -z "$P5_CD_GH_PRE_ROSTER_PATH"
+              test -n "$P6_PRIVATE_READER_DATABASE_URL"
+              test "${P5_CD_GH_BURST_TICKS:-1}" = 1
+              ;;
+            *) exit 2 ;;
+          esac
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
