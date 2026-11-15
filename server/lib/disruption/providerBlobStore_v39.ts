@@ -58,7 +58,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 export function providerBlobObjectNameV39(contentClass: HardRetentionClass, uuid?: string): string {
-  if (!(contentClass in HARD_RETENTION_LIMIT_HOURS)) throw new Error(`PROVIDER_BLOB_CLASS_INVALID:${contentClass}`);
+  if (!Object.prototype.hasOwnProperty.call(HARD_RETENTION_LIMIT_HOURS,contentClass)) throw new Error(`PROVIDER_BLOB_CLASS_INVALID:${contentClass}`);
   const resolvedUuid = uuid ?? randomUUID();
   if (!UUID.test(resolvedUuid)) throw new Error("PROVIDER_BLOB_UUID_INVALID");
   const normalized = resolvedUuid.toLowerCase();
@@ -70,13 +70,13 @@ export function validateProviderBlobRefV39(ref: ProviderBlobRefV39): void {
   if (ref.contractVersion !== PROVIDER_BLOB_CONTRACT_VERSION_V39) throw new Error("PROVIDER_BLOB_CONTRACT_VERSION_INVALID");
   if (ref.storageKind !== PROVIDER_BLOB_STORAGE_KIND_V39) throw new Error("PROVIDER_BLOB_STORAGE_KIND_INVALID");
   if (!OBJECT_NAME.test(ref.objectName)) throw new Error("PROVIDER_BLOB_OBJECT_NAME_NOT_OPAQUE");
-  if (!ref.objectName.endsWith(`/${ref.blobRefId.toLowerCase()}.blob`)) throw new Error("PROVIDER_BLOB_REF_OBJECT_MISMATCH");
+  if (!Object.prototype.hasOwnProperty.call(HARD_RETENTION_LIMIT_HOURS,ref.contentClass)||ref.objectName!==providerBlobObjectNameV39(ref.contentClass,ref.blobRefId)) throw new Error("PROVIDER_BLOB_REF_OBJECT_MISMATCH");
   if (!SHA.test(ref.contentSha256)) throw new Error("PROVIDER_BLOB_SHA256_INVALID");
   if (!Number.isInteger(ref.contentBytes) || ref.contentBytes < 0) throw new Error("PROVIDER_BLOB_SIZE_INVALID");
   if (!Number.isFinite(Date.parse(ref.persistedAtUtc)) || !Number.isFinite(Date.parse(ref.expiresAtUtc))) {
     throw new Error("PROVIDER_BLOB_TIME_INVALID");
   }
-  if (!Number.isFinite(ref.retentionHours) || ref.retentionHours <= 0) throw new Error("PROVIDER_BLOB_RETENTION_INVALID");
+  if (!Number.isInteger(ref.retentionHours) || ref.retentionHours <= 0) throw new Error("PROVIDER_BLOB_RETENTION_INVALID");
   const hard = HARD_RETENTION_LIMIT_HOURS[ref.contentClass];
   if (ref.retentionHours > hard) throw new Error(`PROVIDER_BLOB_RETENTION_OVER_HARD_LIMIT:${ref.contentClass}`);
   const expectedExpiry = Date.parse(ref.persistedAtUtc) + ref.retentionHours * 3_600_000;
@@ -106,7 +106,7 @@ export async function persistProviderBlobBeforeAckV39(input: {
   if (!Number.isFinite(input.now.getTime())) throw new Error("PROVIDER_BLOB_NOW_INVALID");
   if (!(input.bytes instanceof Uint8Array)) throw new Error("PROVIDER_BLOB_BYTES_INVALID");
   const hard = HARD_RETENTION_LIMIT_HOURS[input.contentClass];
-  if (!Number.isFinite(input.retentionHours) || input.retentionHours <= 0 || input.retentionHours > hard) {
+  if (!Object.prototype.hasOwnProperty.call(HARD_RETENTION_LIMIT_HOURS,input.contentClass) || !Number.isInteger(input.retentionHours) || input.retentionHours <= 0 || input.retentionHours > hard) {
     throw new Error(`PROVIDER_BLOB_RETENTION_OVER_HARD_LIMIT:${input.contentClass}`);
   }
   const blobRefId = (input.uuid ?? randomUUID()).toLowerCase();

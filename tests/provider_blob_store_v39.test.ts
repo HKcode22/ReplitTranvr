@@ -4,6 +4,7 @@ import {
   persistProviderBlobBeforeAckV39,
   providerBlobObjectNameV39,
   verifyProviderBlobStorageEvidenceV39,
+  validateProviderBlobRefV39,
   type ProviderBlobStoreV39,
 } from "../server/lib/disruption/providerBlobStore_v39";
 
@@ -122,4 +123,19 @@ describe("V3.9 provider-blob storage boundary", () => {
       "provider-plaintext-still-in-postgres",
     ]));
   });
+  it("requires the complete canonical class, shard and UUID object path before remote deletion",async()=>{
+    const store=new MemoryBlobStore();
+    const ref=await persistProviderBlobBeforeAckV39({store,bytes:new Uint8Array([1]),contentClass:"raw_provider_content",retentionHours:168,now:new Date("2026-09-12T12:00:00Z"),uuid:UUID});
+    for(const bad of [
+      {...ref,objectName:ref.objectName.replace("raw_provider_content","live_fids_cache")},
+      {...ref,objectName:ref.objectName.replace("/12/","/ab/")},
+      {...ref,contentClass:"toString" as typeof ref.contentClass},
+      {...ref,retentionHours:1.5,expiresAtUtc:"2026-09-12T13:30:00.000Z"}
+    ]){
+      expect(()=>validateProviderBlobRefV39(bad)).toThrow();
+      await expect(deleteProviderBlobAtExpiryV39({store,ref:bad,now:new Date("2026-09-20T12:00:00Z")})).rejects.toThrow();
+    }
+    expect(await store.exists(ref.objectName)).toBe(true);
+  });
+
 });
