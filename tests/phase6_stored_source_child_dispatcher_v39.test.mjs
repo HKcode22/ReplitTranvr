@@ -98,3 +98,12 @@ test("separate release, no legacy dispatcher or provider credential, cap and sta
  assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,now:()=>Date.parse(clock)+121000,fetchImpl:stale.fetchImpl})).status,"HOLD_PRE_DISPATCH_NO_POST");
  assert.equal(stale.posts.length,0);
 });
+
+test("successful rerun cannot hide a previous ambiguous dispatch attempt",async()=>{
+ const f=fixture(),prior=f.run(12344,"completed","parent","success");
+ const job={name:"separately-authorized-stored-source-children",status:"completed",conclusion:"failure",
+  steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"failure"}]};
+ const m=f.mock({previous:[prior],jobs:[job,{...job,conclusion:"success",steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"success"}]}]});
+ assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl})).status,"HOLD_PRE_DISPATCH_NO_POST");
+ assert.equal(m.posts.length,0);
+});

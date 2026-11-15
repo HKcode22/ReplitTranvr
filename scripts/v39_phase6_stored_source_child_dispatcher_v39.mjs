@@ -70,8 +70,9 @@ export async function proveNoPriorUncertainStoredDispatch({history,currentRunId,
  if(!history.workflow_runs.some(x=>x.id===currentRunId))
   fail("CURRENT_SCHEDULE_NOT_VISIBLE_IN_COMPLETE_HISTORY");
  for(const run of history.workflow_runs){
-  if(run.id===currentRunId||(run.status==="completed"&&run.conclusion==="success"))
-   continue;
+  // A successful latest workflow attempt can hide an earlier uncertain
+  // dispatch step after a manual rerun. Inspect all attempts even on success.
+  if(run.id===currentRunId)continue;
   const rr=await fetcher(ROOT+"/actions/runs/"+run.id+"/jobs?per_page=100&filter=all",{method:"GET",headers});
   if(!rr.ok)fail("PRIOR_PARENT_JOBS_UNAVAILABLE");
   const data=await rr.json();
