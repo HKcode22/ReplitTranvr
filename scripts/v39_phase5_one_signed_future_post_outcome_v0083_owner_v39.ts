@@ -12,6 +12,7 @@ import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createHash} from "node:crypto";
 import {Pool} from "pg";
+import {readP6CommittedPostOutcomeObservability} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 import {fetchFidsAirport} from
  "../server/lib/disruption/aerodataboxLimiter_v3";
 import {fetchFidsPopulation,persistFidsObservation,
@@ -226,6 +227,18 @@ export async function runP5SignedFuturePost(
     reservedApiUnits:2,providerOriginalCommitted:false,
     actualPhysicalEventCertified:false,phase6DataCollectionComplete:false
    };
+  // Use the already committed original, not another provider fetch.
+  // A readback/label audit failure must not change a confirmed capture into
+  // an invitation to spend again. Log aggregates (or a redacted HOLD) only.
+  const outcomeObservability=await readP6CommittedPostOutcomeObservability(source,{
+   packet:p,populationQueryId:result.populationQueryId,responseSha256:result.responseHash,
+   normalizedMembers:result.persistedPopulationRows,reservationSha256:attempt.reservationSha256
+  }).then(({privateDecisions:_,...aggregate})=>aggregate).catch(e=>{
+   const msg=e instanceof Error?e.message:"";
+   return {status:"POST_CAPTURE_COMMITTED_OUTCOME_AUDIT_UNAVAILABLE_NO_REPLAY",
+    reason:/^HOLD_P6_ACTUAL_POST_OBSERVABILITY_[A-Z0-9_]+$/.test(msg)?msg:"POST_OUTCOME_AUDIT_REDACTED",
+    physicalGateOutLabels:0,physicalRunwayLabels:0,providerCalls:0,databaseWrites:0};
+  });
   return{
    schema:"v39.phase5.github-one-future-post-result.v1" as const,
    status:"ONE_FUTURE_POST_SOURCE_ORIGINAL_DURABLE_NOT_PHYSICAL_LABEL" as const,
@@ -234,6 +247,7 @@ export async function runP5SignedFuturePost(
    missingPreHorizonCount:pre.missingPreHorizons.length,
    reservedApiUnits:2,providerOriginalCommitted:true,
    normalizedPopulationRows:result.persistedPopulationRows,
+   outcomeObservability,
    actualPhysicalEventCertified:false,phase6DataCollectionComplete:false
   };
  }finally{
