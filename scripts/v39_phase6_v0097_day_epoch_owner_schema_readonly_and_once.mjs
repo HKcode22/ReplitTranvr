@@ -79,11 +79,11 @@ export async function readV0097OwnerInventory(client){
     " (SELECT count(*)::int FROM pg_constraint k WHERE k.conrelid=c.oid AND k.contype='p') AS pks,"+
     " (SELECT count(*)::int FROM pg_trigger t WHERE t.tgrelid=c.oid AND NOT t.tgisinternal AND t.tgenabled='O') AS triggers,"+
     " EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS public_acl,"+
-    " has_table_privilege($1,c.oid,'SELECT') AS reader_select,"+
-    " has_table_privilege($1,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS reader_write,"+
-    " has_table_privilege($2,c.oid,'SELECT') AS publisher_select,"+
-    " has_table_privilege($2,c.oid,'INSERT') AS publisher_insert,"+
-    " has_table_privilege($2,c.oid,'UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS publisher_other_write"+
+    " has_table_privilege($1::text,c.oid,'SELECT') AS reader_select,"+
+    " has_table_privilege($1::text,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS reader_write,"+
+    " has_table_privilege($2::text,c.oid,'SELECT') AS publisher_select,"+
+    " has_table_privilege($2::text,c.oid,'INSERT') AS publisher_insert,"+
+    " has_table_privilege($2::text,c.oid,'UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS publisher_other_write"+
     " FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace"+
     " WHERE c.oid=ANY(ARRAY[$3::regclass,$4::regclass])",
     [READER,PUBLISHER,CLAIM,INDEX])).rows;
