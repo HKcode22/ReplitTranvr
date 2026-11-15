@@ -24,6 +24,7 @@ import {
  commitStage9P5V0082AtomicSegmentedDay,
  type P5V0082AtomicDayReview
 } from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
+import {planP6StoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
 const SHA=/^[a-f0-9]{64}$/;
 const hold=(m:string):never=>{
  throw Error("REFUSED_P5_SOURCE_DAY_REVIEWED_PIPELINE_"+m);
@@ -38,6 +39,8 @@ export interface P5ReviewedDaySourcePreparationInput{
   * No permission can be inferred from a caller's boolean or SHA alone.
   */
  stage9Review:Omit<P5V0082AtomicDayReview,"proposal">;
+ /** Opt-in for a protected SAME-process publisher handoff. Never stdout. */
+ preparePrivateUnsignedSourceDraftShards?:true;
 }
 export async function prepareP5ReviewedSourceDayFromSavedDraw(
  readOnlyPool:Pick<Pool,"connect">,
@@ -83,9 +86,17 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
     stage7.selectedDayCandidateGrid.sourceCandidateDigestSha256!==
       z.expectedSourceCandidateDigestSha256)
   hold("DYNAMIC_DAY_PROPOSAL_NOT_EXTERNALLY_REVIEWED");
+ // Validate all draft packets before the atomic commit, so a failing draft
+ // constructor cannot masquerade as a failed/uncommitted Stage9 write.
+ const drafts=input.preparePrivateUnsignedSourceDraftShards===true?
+  planP6StoredSourceDraftShards(stage7,proposal,{
+   expectedDayProposalSha256:z.expectedProposalSha256,
+   expectedCandidateGridSha256:z.expectedSourceCandidateDigestSha256,
+   expectedManifestSha256:z.expectedManifestSha256
+  }):undefined;
  const stage9=await commitStage9P5V0082AtomicSegmentedDay(
    insertOnlyPool,{...z,proposal});
- return {
+ const result={
   schema:"v39.phase5.same-snapshot-source-day-to-atomic-prepared.v1" as const,
   status:"REAL_SAVED_FOUR_AIRPORT_DAY_PREPARED_UNARMED" as const,
   runDayIndex:proposal.runDayIndex,
@@ -103,6 +114,18 @@ export async function prepareP5ReviewedSourceDayFromSavedDraw(
   physicalGetReservations:0 as const,
   providerCalls:0 as const,
   phase5ScientificFreezePassed:false as const,
-  phase6PaidGoGrantedByThisFunction:false as const
+  phase6PaidGoGrantedByThisFunction:false as const,
+  ...(drafts?{unsignedSourceDraftSummary:{
+    queryCount:drafts.queryCount,shardCount:drafts.shardCount,
+    alreadyTooCloseAtReadCount:drafts.alreadyTooCloseAtReadCount,
+    peakConcurrentDraftShards:drafts.peakConcurrentDraftShards,
+    independentlySigned:false as const,publicationProven:false as const
+  }}:{})
  };
+ // Naked unsigned drafts cannot be serialized into GitHub logs or receipts.
+ // A prospective protected caller still needs a fresh independent role,
+ // rights/budget/clock verification and exact separately signed packet bytes.
+ return Object.defineProperty(result,"privateUnsignedSourceDraftPlan",{
+  value:drafts,enumerable:false,writable:false,configurable:false
+ }) as typeof result & {readonly privateUnsignedSourceDraftPlan:typeof drafts};
 }

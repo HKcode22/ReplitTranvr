@@ -427,8 +427,13 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   const {proposal:unusedProposal,...reviewPins}=review;
   void unusedProposal;
   const result=await prepareP5ReviewedSourceDayFromSavedDraw(admin,writer,{
-   readScope,sourceReview,stage9Review:reviewPins
+   readScope,sourceReview,stage9Review:reviewPins,
+   preparePrivateUnsignedSourceDraftShards:true
   });
+  expect(result.unsignedSourceDraftSummary?.queryCount).toBe(96);
+  expect(result.privateUnsignedSourceDraftPlan?.privateDraftShards.flatMap(s=>s.entries).length).toBe(96);
+  expect(JSON.stringify(result)).not.toContain("privateUnsignedSourceDraftPlan");
+  expect(JSON.stringify(result)).not.toContain("unsignedDraft");
   expect(result.preparedQueryRows).toBe(96);
   expect(result.preparedPartitionRows).toBe(96);
   expect(result.databaseInserts).toBe(192);
