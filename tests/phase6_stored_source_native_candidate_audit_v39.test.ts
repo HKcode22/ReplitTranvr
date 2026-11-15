@@ -339,3 +339,38 @@ describe("private native T24 registry",()=>{
   expect(buildP6DelegatedT24PrivateRegistry(f)).toMatchObject({status:"NO_ELIGIBLE_NEW_NATIVE_T24_PACKET",candidateCount:0});
  });
 });
+
+import {deriveP6T24QueueTrust,chooseP6T24QueueRegistries,projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
+describe("current private T24 registry routing into the existing queue",()=>{
+ function fixture(){
+  const f=t24RegistryFixture(),p=buildP6DelegatedT24PrivateRegistry(f),reg=JSON.parse(p.privateRegistryBytes.toString("utf8")),review=p.privateWire.review;
+  const set=Object.defineProperty({status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:1,
+   observedDbClockUtc:f.current.observedDbClockUtc,registryCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   "privateRegistries",{value:[{reg,review}]});
+  const got=(at:string,files=p.privateFiles)=>Object.defineProperties({status:"EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO",runDayIndex:1,
+   registrySha256:review.registrySha256,observedDbClockUtc:at,packetCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   {privateRegistry:{value:reg},privateFiles:{value:files}});
+  return {...f,p,set,got};
+ }
+ it("reuses exact singleton T24 worker roster at native cutoff, enrollment earlier than execution",()=>{
+  const f=fixture();
+  expect(chooseP6T24QueueRegistries([f.set],f.trust,"ENROLLMENT").selectors).toHaveLength(1);
+  expect(chooseP6T24QueueRegistries([f.set],f.trust,"PRE_EXECUTION").selectors).toHaveLength(0);
+  const x=projectP6T24QueuePackets(f.got("2027-02-10T04:42:00.000Z"),f.trust,"ENROLLMENT");
+  expect(x).toHaveLength(1);expect(x[0].entry.permit.horizon).toBe("T-24h");
+  expect(x[0].entry.witnessReview).toBeDefined();expect(x[0].rosterSha256).toBe(h(x[0].rosterBytes));
+  expect(projectP6T24QueuePackets(f.got("2027-02-10T04:55:00.000Z"),f.trust,"PRE_EXECUTION")).toHaveLength(1);
+  expect(projectP6T24QueuePackets(f.got("2027-02-10T05:05:00.000Z"),f.trust,"PRE_EXECUTION")).toHaveLength(0);
+  expect(()=>projectP6T24QueuePackets(f.got("2027-02-10T04:55:00.000Z",[{...f.p.privateFiles[0],bytes:Buffer.from("bad")}]),f.trust,"PRE_EXECUTION")).toThrow("EXACT_PACKET_BYTES_DRIFT");
+  expect(()=>chooseP6T24QueueRegistries([f.set,f.set],f.trust,"ENROLLMENT")).toThrow("DUPLICATE_DAY");
+ });
+ it("derives the same public-key-only trust from protected policy and rejects wrong key or hash",()=>{
+  const f=fixture(),p=JSON.parse(f.authority.policyBytes.toString());
+  p.frameSha256=p.nativeLaterReview.frameSha256;p.configSha256=p.nativeLaterReview.configSha256;
+  p.nativeLaterReview.maximumPrivateRetentionHours=12;
+  const b=Buffer.from(JSON.stringify(p)),a={trust:f.authority.trust,policyBytes:b,expectedPolicySha256:h(b),reviewerPublicKeyPem:f.trust.t24ReviewerPublicKeyPem};
+  expect(deriveP6T24QueueTrust(a)).toMatchObject({expectedSelectedTVersion:f.trust.expectedSelectedTVersion,expectedT24ReviewerFingerprintSha256:f.trust.expectedT24ReviewerFingerprintSha256});
+  expect(()=>deriveP6T24QueueTrust({...a,expectedPolicySha256:H("8")})).toThrow("UNPINNED_POLICY");
+  expect(()=>deriveP6T24QueueTrust({...a,reviewerPublicKeyPem:generateKeyPairSync("ed25519").publicKey.export({type:"spki",format:"pem"})})).toThrow("WRONG_REVIEWER_KEY");
+ });
+});
