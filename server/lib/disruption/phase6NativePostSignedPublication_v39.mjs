@@ -264,3 +264,128 @@ export async function runP6NativePostPublication({readerClient,publisherClient,s
  return noGo("NATIVE_POST_PACKET_AND_DAY_APPEND_VERIFIED_NO_GO",{runDayIndex:r.runDayIndex,revision:next.revision,
   requestSha256:d.requestSha256,independentPaidChildAdmissionStillRequired:true});
 }
+
+
+/** Bounded scheduler hints from actual committed PRE metadata. This does
+ * NOT qualify a flight or authorize a request; it narrows the expensive
+ * original exact-source review to queries that actually have observations.
+ * No new queue, no read of raw bodies, no duplicate per-horizon requests.
+ */
+export async function readP6PostSourceQueryHints({sourcePool,trust,runDayIndex,queryDigests,frameSha256}){
+ if(!sourcePool||typeof sourcePool.connect!=="function"||!Number.isSafeInteger(runDayIndex)||runDayIndex<1||runDayIndex>31||
+    !H.test(trust?.manifestSha256??"")||!H.test(frameSha256??"")||!Array.isArray(queryDigests)||queryDigests.length<1||
+    queryDigests.length>384||new Set(queryDigests).size!==queryDigests.length||queryDigests.some(x=>!H.test(x??"")))
+  hold("UNBOUND_POST_HINT_SCOPE");
+ const conn=await sourcePool.connect();let tx=false;
+ try{
+  await conn.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await conn.query("SET LOCAL statement_timeout='12000ms'");await conn.query("SET LOCAL lock_timeout='2000ms'");
+  const w=await conn.query("SELECT current_user AS role,session_user AS login,current_database() AS db,"+
+   "current_setting('transaction_read_only') AS ro,current_setting('server_version_num')::int AS version,"+
+   "pg_is_in_recovery() AS replica,clock_timestamp() AS now");
+  const id=w.rows[0];
+  if(w.rowCount!==1||id?.role!=="phase5_fids_source_prod_20261107"||id.login!=="phase5_p5_source_login_20261108"||
+     id.db!=="neondb"||id.ro!=="on"||Number(id.version)<160000||Number(id.version)>=170000||id.replica!==false)
+   hold("POST_HINT_NOT_RESTRICTED_SOURCE_READONLY");
+  const timestamp=x=>{const d=new Date(x instanceof Date?x.getTime():String(x));if(!Number.isFinite(d.getTime()))hold("POST_HINT_CLOCK");return d.toISOString();};
+  const clock=timestamp(id.now);
+  const result=await conn.query("SELECT q.query_digest,q.horizon,q.airport_icao,q.service_window_start_utc,q.service_window_end_utc,"+
+   "count(DISTINCT s.id)::int AS n FROM clean.phase5_fids_allowed_query_v39 q "+
+   "JOIN clean.phase5_fids_original_binding_v39 b ON b.query_digest=q.query_digest AND b.manifest_sha256=q.manifest_sha256 "+
+   "JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id::text AND s.fids_response_hash=b.response_hash "+
+   "WHERE q.manifest_sha256=$1 AND q.run_day_index=$2 AND q.query_digest=ANY($3::text[]) AND s.frame_hash=$4 "+
+   "AND s.prediction_state='PRE_DEPARTURE' AND s.horizon=q.horizon AND s.created_at<=s.prediction_cutoff_utc "+
+   "AND s.created_at<=$5::timestamptz AND b.source_expires_at_utc>$5::timestamptz "+
+   "GROUP BY q.query_digest,q.horizon,q.airport_icao,q.service_window_start_utc,q.service_window_end_utc LIMIT 385",
+   [trust.manifestSha256,runDayIndex,queryDigests,frameSha256,clock]);
+  if(!Array.isArray(result.rows)||result.rowCount!==result.rows.length||result.rows.length>queryDigests.length)
+    hold("POST_HINT_ROW_BOUND");
+  const seen=new Set(),allowed=new Set(queryDigests),hints=[];
+  for(const x of result.rows){
+   const n=Number(x.n),from=timestamp(x.service_window_start_utc),to=timestamp(x.service_window_end_utc);
+   if(!allowed.has(x.query_digest)||seen.has(x.query_digest)||!["T-24h","T-6h","T-90m"].includes(x.horizon)||
+      !/^[A-Z]{4}$/.test(x.airport_icao??"")||!Number.isSafeInteger(n)||n<1||utc(from)>=utc(to)||utc(to)-utc(from)>21600000)
+    hold("POST_HINT_OUTSIDE_SIGNED_DAY");
+   seen.add(x.query_digest);hints.push({runDayIndex,queryDigestSha256:x.query_digest,horizon:x.horizon,airportIcao:x.airport_icao,
+    fromUtc:from,toUtc:to,committedPreHintCount:n});
+  }
+  await conn.query("ROLLBACK");tx=false;
+  return Object.freeze(Object.defineProperty({status:"ACTUAL_POST_QUERY_HINTS_NOT_ADMISSION",runDayIndex,observedDbClockUtc:clock,
+   hintCount:hints.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false},"privateHints",{value:Object.freeze(hints)}));
+ }finally{if(tx)await conn.query("ROLLBACK").catch(()=>{});conn.release();}
+}
+/** Plan one airport+service-window at a time. Use actual DB time and
+ * already indexed requests to avoid starvation from completed windows.
+ * Within each window prefer more recent horizons and rotate refreshes
+ * across ticks so a missing/expired candidate cannot block valid others.
+ */
+export function chooseP6NativePostWindowHints(hints,indexed,policy,clock){
+ if(!Array.isArray(hints)||hints.length>1536||!Array.isArray(indexed)||indexed.length>4096||
+    !Number.isSafeInteger(policy?.followupAfterPartitionEndSeconds)||!Number.isSafeInteger(policy?.dispatchWindowSeconds))
+  hold("POST_HINT_SELECTION_BOUND");
+ const now=utc(clock),key=x=>[x.airportIcao,x.fromUtc,x.toUtc].join("|"),used=new Set(indexed.map(key)),groups=new Map();
+ let late=0,notYet=0,already=0,crossUtc=0;
+ for(const h of hints){
+  if(!h||!H.test(h.queryDigestSha256??"")||!["T-24h","T-6h","T-90m"].includes(h.horizon)||
+     !/^[A-Z]{4}$/.test(h.airportIcao??"")||!Number.isSafeInteger(h.committedPreHintCount)||h.committedPreHintCount<1||
+     utc(h.fromUtc)>=utc(h.toUtc))hold("INVALID_POST_HINT");
+  const k=key(h);
+  if(used.has(k)){already++;continue;}
+  const start=utc(h.toUtc)+policy.followupAfterPartitionEndSeconds*1000,end=start+policy.dispatchWindowSeconds*1000;
+  if(iso(start).slice(0,10)!==iso(end).slice(0,10)){crossUtc++;continue;}
+  if(start<=now+120000){late++;continue;}
+  if(start>now+10800000){notYet++;continue;}
+  const g=groups.get(k)??{k,start,end,hints:[]};g.hints.push(h);groups.set(k,g);
+ }
+ const priority={"T-90m":0,"T-6h":1,"T-24h":2},tick=Math.floor(now/600000);
+ const ordered=[...groups.values()].sort((a,b)=>a.start-b.start||a.k.localeCompare(b.k));
+ const privateWindows=ordered.map(g=>{
+  const hs=g.hints.slice().sort((a,b)=>priority[a.horizon]-priority[b.horizon]||
+   b.committedPreHintCount-a.committedPreHintCount||a.queryDigestSha256.localeCompare(b.queryDigestSha256));
+  // Always try best available hint first; rotate fallback across *all*
+  // other refreshes/horizons. Limit to three per physical window per tick.
+  const other=hs.slice(1),offset=other.length?tick%other.length:0;
+  const rotated=other.slice(offset).concat(other.slice(0,offset));
+  return {...g,hints:[hs[0],...rotated.slice(0,2)]};
+ });
+ return Object.freeze(Object.defineProperty({status:"BOUNDED_POST_WINDOW_HINT_SELECTION",dueWindowCount:ordered.length,
+  deferredWindowCount:Math.max(0,ordered.length-4),late,notYet,already,crossUtc,providerCalls:0,phase6PaidGo:false},
+  "privateWindows",{value:Object.freeze(privateWindows.slice(0,4))}));
+}
+export async function scanP6CurrentPostWindowHints({readerClient,sourcePool,trust,authority,runDayIndices,clock}){
+ const p=verifyP6NativePostDelegation(trust,authority),at=utc(clock);
+ if(at<utc(p.validFromUtc)||at>=utc(p.validUntilUtc)||!Array.isArray(runDayIndices)||runDayIndices.length>4||
+    new Set(runDayIndices).size!==runDayIndices.length||runDayIndices.some(x=>!Number.isSafeInteger(x)||x<1||x>31))
+  hold("POST_SCHEDULER_DAY_SCOPE");
+ const hints=[],indexed=[];let missingDays=0;
+ for(const n of runDayIndices){
+  let x;try{x=await current(readerClient,trust,n);}
+  catch(e){if(e?.message==="HOLD_P6_STORED_REVIEW_CURRENT_DAY_NOT_PUBLISHED_OR_RETAINED"){missingDays++;continue;}throw e;}
+  const h=checkCurrent(x,trust,n),digests=new Set();
+  for(const e of h.entries){
+   const b=x.index.getFrozen(e.filePath);
+   if(!Buffer.isBuffer(b)||hash(b)!==e.fileSha256)hold("SCHEDULER_INDEX_BYTES_DRIFT");
+   if(e.lane==="SOURCE"){
+    const q=JSON.parse(b.toString("utf8"));
+    if(q.schema!=="v39.phase5.signed-per-day-source-batch-readonly.v1"||!Array.isArray(q.entries))hold("SCHEDULER_SOURCE_REGISTRY_DRIFT");
+    for(const s of q.entries){
+     const d=s.expectedQueryDigestSha256;
+     if(!H.test(d??"")||digests.has(d))hold("SCHEDULER_DUPLICATE_SOURCE_DIGEST");
+     digests.add(d);
+    }
+   }else if(e.lane==="POST"){
+    const d=JSON.parse(b.toString("utf8")).reviewed;
+    if(!d||!H.test(d.requestSha256??""))hold("SCHEDULER_POST_REGISTRY_DRIFT");
+    indexed.push({airportIcao:d.airportIcao,fromUtc:d.plannedSourceFromUtc,toUtc:d.plannedSourceToUtc});
+   }
+  }
+  if(digests.size){
+   const read=await readP6PostSourceQueryHints({sourcePool,trust,runDayIndex:n,queryDigests:[...digests],frameSha256:p.reviewedFrameSha256});
+   if(utc(read.observedDbClockUtc)<at||utc(read.observedDbClockUtc)-at>120000)
+    hold("POST_SCHEDULER_SCAN_CLOCK_DRIFT");
+   hints.push(...read.privateHints);
+  }
+ }
+ const out=chooseP6NativePostWindowHints(hints,indexed,p,clock);
+ return Object.freeze(Object.defineProperty({...out,missingDays},"privateWindows",{value:out.privateWindows}));
+}
