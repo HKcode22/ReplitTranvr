@@ -66,3 +66,68 @@ test("feature readback is not called without approved purpose; mismatched privat
   rightsSha256:hash,externalContentUseReviewSha256:"c".repeat(64)}}),/EXACT_FEATURE_REVIEW_HANDOFF_REQUIRED/);
  assert.equal(connections,0);
 });
+
+
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+function runtimeFixture(){
+ const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
+ const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
+  priv=k=>Buffer.from(k.privateKey.export({type:"pkcs8",format:"pem"})).toString("base64");
+ const base=env(),t=JSON.parse(Buffer.from(base.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64,"base64").toString());
+ Object.assign(t,{dayReviewerFingerprintSha256:fp(dayKey),dayReviewerPublicKeyPem:pem(dayKey),
+  queryReviewerFingerprintSha256:fp(queryKey),queryReviewerPublicKeyPem:pem(queryKey)});
+ const p=JSON.parse(policy.toString()),from="2026-11-20T00:00:00.000Z",until="2026-11-25T00:00:00.000Z";
+ p.frameSha256=hash;p.configSha256=hash;
+ p.nativePreFeatureReview={approved:true,rightsSha256:hash,externalContentUseReviewSha256:hash};
+ p.nativeLaterReview={approved:true,privatePublicationApproved:true,expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_native",
+  laterReviewerFingerprintSha256:fp(laterKey),frameSha256:hash,configSha256:hash,builderSha256:hash,runAndRetentionEvidenceSha256:hash,
+  validFromUtc:from,validUntilUtc:until,maximumPrivateRetentionHours:72,
+  selectedTConfig:{verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:hash},
+  t24Custody:{independentT24CustodyTrustApproved:true,policySha256:hash,reviewerFingerprintSha256:fp(custodyKey),reviewerPublicKeyPem:pem(custodyKey),
+   maximumRetentionHours:48,policyValidFromUtc:from,policyValidUntilUtc:until},
+  dayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,
+   approvedCodeSha:code,manifestSha256:hash,calendarSha256:hash,releaseSha256:hash,rightsSha256:hash,
+   laterReviewerFingerprintSha256:fp(laterKey),dayReviewerFingerprintSha256:fp(dayKey),queryReviewerFingerprintSha256:fp(queryKey),
+   maximumIndexRevision:1024,validFromUtc:from,validUntilUtc:until}};
+ const withPolicy=(p2=p)=>{
+  const b=Buffer.from(JSON.stringify(p2));return {...base,P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(t)).toString("base64"),
+   P6_NONPAID_DAILY_POLICY_BASE64:b.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:sha(b),
+   P6_NATIVE_LATER_RUNTIME_ENABLED:"1",P6_NATIVE_LATER_RUNTIME_APPROVED:"1",
+   P6_PRIVATE_PUBLISHER_DATABASE_URL:"postgresql://phase6_private_publisher_login_ci_native:test@ep-a.us-east-2.aws.neon.tech/neondb?sslmode=require",
+   P5_V39_PRE_DATABASE_URL:"postgresql://phase5_p30_pre_login_20261107:test@ep-a-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+   P6_PRIVATE_LATER_REVIEWER_KEY_BASE64:priv(laterKey),P6_PRIVATE_DAY_REVIEWER_KEY_BASE64:priv(dayKey)};
+ };
+ return {p,withPolicy};
+}
+test("runtime requires independently approved publication policy, distinct pinned keys and existing direct publisher endpoint",()=>{
+ const f=runtimeFixture(),e=f.withPolicy(),x=admitP6NativeLaterRuntime(e,()=>plan);
+ assert.equal(x.auditEnv.P5_V39_PRE_DATABASE_URL,undefined);
+ assert.equal(x.auditEnv.P6_PRIVATE_PUBLISHER_DATABASE_URL,undefined);
+ assert.equal(x.auditEnv.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,undefined);
+ assert.equal(x.appendApproval.expectedPolicySha256,sha(Buffer.from(JSON.stringify(f.p.nativeLaterReview.dayAppendPolicy))));
+ for(const d of [{P6_NATIVE_LATER_RUNTIME_ENABLED:"0"},{P6_NATIVE_LATER_RUNTIME_APPROVED:"0"},
+  {AERODATABOX_API_KEY:"no"},{P6_PRIVATE_PUBLISHER_DATABASE_URL:e.P6_PRIVATE_PUBLISHER_DATABASE_URL.replace("ep-a.","ep-a-pooler.")},
+  {P5_V39_PRE_DATABASE_URL:e.P5_V39_PRE_DATABASE_URL.replace("ep-a-pooler.","ep-other-pooler.")},
+  {P6_PRIVATE_LATER_REVIEWER_KEY_BASE64:e.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64}])
+  assert.throws(()=>admitP6NativeLaterRuntime({...e,...d},()=>plan));
+ assert.throws(()=>admitP6NativeLaterRuntime(f.withPolicy({...f.p,nativeLaterReview:{...f.p.nativeLaterReview,privatePublicationApproved:false}}),()=>plan));
+});
+test("later append takes original signed-source evidence and next shard; does not extend retention or strand existing route",()=>{
+ const f=runtimeFixture(),x=admitP6NativeLaterRuntime(f.withPolicy(),()=>plan),now="2026-11-22T00:00:00.000Z";
+ const src={lane:"SOURCE",fileSha256:hash,filePath:"data-collection/phase5/frozen/source_ci_original.json",
+  reviewEvidenceSha256:"c".repeat(64),hardLatestUtc:"2026-11-22T01:00:00.000Z",shardIndex:1};
+ const handoff={privateOriginalDossier:{runDayIndex:1,manifestSha256:hash,sourceDayRegistrySha256:hash,sourceAuditSha256:"d".repeat(64),
+  entries:[{source:{expectedReviewedReleaseSha256:hash,expectedReviewedSourceRightsSha256:hash}}]},
+  privateSourceRegistryPath:src.filePath,privateOriginalDossierSha256:hash};
+ const current={day:{wire:{review:{retentionNotAfterUtc:"2026-11-23T00:00:00.000Z",validUntilUtc:"2026-11-22T12:00:00.000Z"}}},
+  index:{redactedSummary:{runDayIndex:1,observedDbClockUtc:now},privateParsedIndex:{runDayIndex:1,manifestSha256:hash,revision:2,
+   entries:[src,{lane:"LATER_PRE",shardIndex:3,hardLatestUtc:"2026-11-22T02:00:00.000Z"}]}}};
+ const planned=planP6NativeLaterAppendScope(handoff,current,x,1);
+ assert.equal(planned.scope.shardIndex,4);assert.equal(planned.expectedSourceReviewEvidenceSha256,src.reviewEvidenceSha256);
+ assert.equal(planned.scope.retentionNotAfterUtc,"2026-11-23T00:00:00.000Z");
+ assert.equal(planned.scope.reviewValidUntilUtc,"2026-11-22T12:00:00.000Z");
+ assert.match(planned.scope.proposedLaterRegistryFilePath,/later_[a-f0-9]{64}\.json$/);
+ current.index.privateParsedIndex.entries[1].hardLatestUtc="2026-11-22T13:00:00.000Z";
+ assert.equal(planP6NativeLaterAppendScope(handoff,current,x,1),null);
+ assert.throws(()=>planP6NativeLaterAppendScope({...handoff,privateSourceRegistryPath:"unrelated"},current,x,1),/ORIGINAL_SOURCE_NOT_CURRENTLY_INDEXED/);
+});
