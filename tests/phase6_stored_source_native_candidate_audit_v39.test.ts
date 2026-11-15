@@ -1,4 +1,4 @@
-import {createHash,generateKeyPairSync} from "node:crypto";
+import {createHash,generateKeyPairSync,createPublicKey} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
@@ -286,5 +286,56 @@ describe("protected delegated native later review reuses exact original packet a
    laterReviewerKey:generateKeyPairSync("ed25519").privateKey}})).toThrow("WRONG_KEY");
   expect(signP6DelegatedNativeLaterReviewPage({...f.args,scope:{...f.args.scope,observedDbClockUtc:"2027-02-10T04:50:00.000Z"}}))
    .toMatchObject({signatureIssued:false,lateOrRetention:1});
+ });
+});
+
+
+import {buildP6DelegatedT24PrivateRegistry,verifyP6T24PrivateRegistry} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+function t24RegistryFixture(){
+ const f=pendingFixture(),base=delegatedNativeFixture(),raw=f.a.privateAuditBytes,sourceScope={...f.a.privateSourceScope,horizon:"T-24h"};
+ const id="leg:synthetic-t24-001",c={...f.audit.candidates[1],flightInstanceId:id,horizon:"T-24h",
+  selectedTNativeUtc:"2027-02-11T05:05:00.000Z",ownCutoffUtc:"2027-02-10T05:05:00.000Z"};
+ const audit={...JSON.parse(raw.toString()),observedMemberCount:1,candidateCount:1,candidates:[c],
+  classifications:{...f.audit.classifications,ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED:1}};
+ const ab=Buffer.from(JSON.stringify(audit)),a={...f.a,horizon:"T-24h",observedMemberCount:1,candidateCount:1,candidateAuditSha256:h(ab)};
+ Object.defineProperties(a,{privateAuditBytes:{value:ab},privateSourceScope:{value:sourceScope},
+  privateSourceRegistrySha256:{value:f.a.privateSourceRegistrySha256},privateSourceRegistryPath:{value:f.a.privateSourceRegistryPath},
+  privateSourceRegistryBytes:{value:f.a.privateSourceRegistryBytes}});
+ const handoff=buildP6PostcommitUnsignedPreReview(a,f.trust);
+ const obs=base.bundle.observations.map(x=>({...x,flightInstanceId:id}));
+ const bundle={...base.bundle,flightInstanceId:id,observations:obs,observationsSha256:h(JSON.stringify(obs))};
+ const features=Object.defineProperty({status:"EXACT_BOUND_ORIGINAL_NATIVE_FEATURE_BATCH_NOT_SIGNED",runDayIndex:1,horizon:"T-24h",
+  observedDbClockUtc:"2027-02-10T04:41:00.000Z",providerCalls:0,dbWrites:0,phase6PaidGo:false,matchedCount:1},"privateDecisions",
+  {value:[{flightInstanceId:id,status:"MATCHED_NATIVE_ORIGINAL",compiled:{bundle,sourceBodyAndCanonicalEnvelopeIntegrityVerified:true,
+   sameOriginalNativeOperatingLegBoundOnly:true,physicalGateOutCertified:false,sourceRightsIndependentlyCertifiedByThisFunction:false}}]});
+ const v={...base.policy.nativeLaterReview,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
+  reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107"};
+ const authority=base.authorityFor({...base.policy,nativeLaterReview:v});
+ const trust={...authority.trust,independentNativeT24RegistryApproved:true,expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,
+  expectedT24PolicySha256:authority.expectedPolicySha256,expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
+  expectedSelectedTVersion:v.selectedTConfig.milestone+":"+v.selectedTConfig.version+":"+v.selectedTConfig.artifactHash,
+  maximumPrivateRetentionHours:12,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,
+  t24ReviewerPublicKeyPem:createPublicKey(authority.laterReviewerKey).export({type:"spki",format:"pem"})};
+ const current=Object.defineProperties({status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:1,
+  observedDbClockUtc:"2027-02-10T04:42:00.000Z",nextShardIndex:1},{privateIndex:{value:f.index},privateExistingFlightIds:{value:new Set()}});
+ return{handoff,features,authority,trust,current:current as any,id};
+}
+describe("private native T24 registry",()=>{
+ it("signs the existing T24 PRE and separate witness permit, never a fabricated receipt, and rejects tampering",()=>{
+  const f=t24RegistryFixture(),p=buildP6DelegatedT24PrivateRegistry(f);
+  expect(p).toMatchObject({status:"SIGNED_NATIVE_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION",packetCount:1,phase6PaidGo:false});
+  const args={trust:f.trust,index:f.current.privateIndex,registryBytes:p.privateRegistryBytes,wire:p.privateWire,
+   observedDbClockUtc:f.current.observedDbClockUtc,files:p.privateFiles};
+  const verified=verifyP6T24PrivateRegistry(args);
+  expect(verified.reg.entries[0].flightInstanceId).toBe(f.id);
+  const packet=JSON.parse(p.privateFiles[0].bytes.toString());
+  expect(packet.schema).toBe("v39.phase5.github-native-t24-pre-witness-reviewed.v1");
+  expect(packet.prePermit.reviewedSupplementalFeatureBundle).toBeDefined();
+  expect(packet.witnessReview).toBeDefined();
+  expect(packet.prePermit.reviewedT24WitnessReceipt).toBeUndefined();
+  expect(JSON.stringify(p)).not.toContain(f.id);
+  expect(()=>verifyP6T24PrivateRegistry({...args,wire:{...p.privateWire,signatureBase64:Buffer.alloc(64).toString("base64")}})).toThrow("REGISTRY_SIGNATURE_INVALID");
+  f.current.privateExistingFlightIds.add(f.id);
+  expect(buildP6DelegatedT24PrivateRegistry(f)).toMatchObject({status:"NO_ELIGIBLE_NEW_NATIVE_T24_PACKET",candidateCount:0});
  });
 });

@@ -5,6 +5,7 @@
  * All publication uses independently approved protected policies and
  * existing restricted logins; STOP default. */
 import pg from "pg";
+import {readP6T24CurrentRegistrySet,buildP6DelegatedT24PrivateRegistry,publishP6T24PrivateRegistryOnce} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {createHash,createPrivateKey,createPublicKey} from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {admitP6PostcommitNativeAudit,runP6PostcommitNativeAudit} from "./v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
@@ -150,9 +151,33 @@ export async function runP6NativeLaterRuntime(env){
   const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
    candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
    missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false};
-  if(handoff.horizon==="T-24h"||!handoff.reviewEntryCount||!features?.matchedCount)
+  if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
    return {...report,sourceAuditOnly:true};
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+  if(handoff.horizon==="T-24h"){
+   if(v.independentT24WitnessProtocolReviewed!==true||v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107")hold("T24_WITNESS_PROTOCOL_NOT_APPROVED");
+   const trust={...t,independentNativeT24RegistryApproved:true,
+    expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:x.authority.expectedPolicySha256,
+    expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
+    expectedSelectedTVersion:v.selectedTConfig.milestone+":"+v.selectedTConfig.version+":"+v.selectedTConfig.artifactHash,
+    maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,
+    t24ReviewerPublicKeyPem:createPublicKey(x.authority.laterReviewerKey).export({type:"spki",format:"pem"})};
+   const maxPages=Math.ceil(handoff.reviewEntryCount/96);
+   for(let i=0;i<maxPages;i++){
+    const current=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});
+    const proposal=buildP6DelegatedT24PrivateRegistry({handoff,features,authority:x.authority,current,trust});
+    if(!proposal.packetCount){
+     report.heldPages+=Number(proposal.censored>0);break;
+    }
+    const committed=await publishP6T24PrivateRegistryOnce({readerClient:reader,publisherClient:publisher,trust,proposal,
+     expectedPublisherSessionLogin:v.expectedPublisherSessionLogin});
+    report.reviewedCount+=committed.packetCount;
+    report.committedShardCount++;
+    report.insertedPrivateRows+=committed.insertedPrivateRows;
+    if(!proposal.deferredCount)break;
+   }
+   return {...report,status:"ACTUAL_SOURCE_TO_NATIVE_T24_REGISTRY_NO_PAID_GO"};
+  }
   const pool=makeP5Stage28DedicatedRolePool(pre,{group:"pre",reviewedDedicatedLogin:preLogin,forbiddenApplicationLogin:"phase5_runtime_application_login"});
   const selected=new Set(handoff.privateReviewEntries.map(e=>e.source.flightInstanceId));
   const pages=pageP5UnsignedNativePreReviewDossier(handoff.privateOriginalDossier).filter(p=>p.entries.some(e=>selected.has(e.source.flightInstanceId)));
