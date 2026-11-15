@@ -13,6 +13,7 @@ on:
     paths:
       - '.github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml'
       - 'server/lib/disruption/phase5CdGithubLeaseWatchdog_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
       - 'scripts/v39_phase5_cd_github_lease_watchdog_once_v39.ts'
       - 'tests/phase5_cd_github_lease_watchdog_offline_v39.test.ts'
 permissions:
@@ -76,7 +77,11 @@ jobs:
       P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
       P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
       P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
-      P5_CD_GH_PRE_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}
+      P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED }}
+      P5_CD_GH_PRE_ROSTER_SHA256: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED != '1' && secrets.P5_CD_GH_PRE_ROSTER_SHA256 || '' }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1' && secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1' && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
+      V39_P5_RELEASE_SHA256: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1' && secrets.V39_P5_RELEASE_SHA256 || '' }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
       V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
@@ -102,7 +107,16 @@ jobs:
           test "$P5_CD_GH_PRE_ARMED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
-          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          if [[ "$P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED" == 1 ]]; then
+            test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
+            test -z "$P5_CD_GH_PRE_ROSTER_SHA256"
+            test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+            test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
+            test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64"
+            test -n "$V39_P5_RELEASE_SHA256"
+          else
+            test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          fi
           test -n "$P5_V39_PRE_DATABASE_URL"
           test "$ADB_AUTO_COLLECT" = 0
           test -z "$AERODATABOX_API_KEY"
