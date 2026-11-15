@@ -36,7 +36,15 @@ describe("bounded original registration exact restart",()=>{
    if(sql.startsWith("SELECT clock"))return {rows:[{now:new Date(now)}]};
    calls++;return {rows:[{task_id:"1",newly_registered:false}],rowCount:1};
   }},[pkt,{...pkt,cutoff:now}]);
-  expect(result).toEqual({newlyRegistered:0,alreadyRegistered:1,expiredBeforeEnrollment:1});expect(calls).toBe(1);
+  expect(result).toEqual({newlyRegistered:0,alreadyRegistered:1,expiredBeforeEnrollment:1,timeBoundDeferred:0});expect(calls).toBe(1);
+ });
+ it("can reach the second 96-member shard without truncating exact replays",async()=>{
+  let calls=0;
+  const out=await executeP6PrivateEnrollmentBatch({query:async(sql)=>{
+   if(sql.startsWith("SELECT clock"))return {rows:[{now:new Date(now)}]};
+   calls++;return {rows:[{task_id:String(calls),newly_registered:calls>96}],rowCount:1};
+  }},Array.from({length:97},()=>pkt));
+  expect(calls).toBe(97);expect(out.newlyRegistered).toBe(1);expect(out.alreadyRegistered).toBe(96);
  });
  it("stops entire batch immediately on unknown ACK rather than blindly continuing",async()=>{
   let writes=0;
