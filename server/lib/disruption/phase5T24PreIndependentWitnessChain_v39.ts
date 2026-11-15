@@ -212,3 +212,25 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
   phase6PaidGo:false as const
  };
 }
+
+/** Public GitHub output may contain aggregate status and a SHA only. The
+ * native receipt is a private flight record, including identity and exact
+ * source/snapshot/cutoff fields. Keep the actual return for a future
+ * authorized private reviewer transport; no public log or artifact fallback.
+ * A digest does NOT prove the receipt has been independently reviewed. */
+export function summarizeP5T24PrivateReceiptForPublicLog(
+ candidate:ReturnType<typeof draftP5UnsignedStage24ReceiptFromCommittedChain>|null
+){
+ if(candidate===null)return {unsignedReceiptAvailableInPrivateMemory:false,
+  unsignedReceiptSha256:null,independentReviewCompleted:false,privateReceiptPersistedByLogger:false};
+ if(!candidate||candidate.schema!=="v39.phase5.unsigned-t24-stage24-handoff.v1"||
+    candidate.status!=="DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW"||
+    candidate.reviewedByIndependentAuthority!==false||candidate.mayLaunchLaterPreAutomatically!==false||
+    candidate.providerCalls!==0||!candidate.receipt||
+    !/^[a-f0-9]{64}$/.test(candidate.receipt.receiptSha256??"")||
+    digestP5Stage24ReviewedReceipt(candidate.receipt)!==candidate.receipt.receiptSha256)
+  HOLD("UNVERIFIED_PRIVATE_RECEIPT_PUBLIC_SUMMARY");
+ return {unsignedReceiptAvailableInPrivateMemory:true,
+  unsignedReceiptSha256:candidate.receipt.receiptSha256,independentReviewCompleted:false,
+  privateReceiptPersistedByLogger:false};
+}

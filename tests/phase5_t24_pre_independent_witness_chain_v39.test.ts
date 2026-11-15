@@ -4,7 +4,7 @@ import {digestP5Stage24ReviewedReceipt}
 import {
  verifyP5T24PreWitnessCrossReview,
  persistP5ReviewedT24PreAndIndependentWitness,
- draftP5UnsignedStage24ReceiptFromCommittedChain
+ summarizeP5T24PrivateReceiptForPublicLog,draftP5UnsignedStage24ReceiptFromCommittedChain
 } from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 import type {P5Stage14SingleFlightPrePermit}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
@@ -170,6 +170,13 @@ describe("genuine Stage17 T24 witness → later horizon unsigned review receipt"
    f.pre,f.review,f.saved as any,f.witness as any);
  it("derives the exact immutable Stage24 receipt from TWO genuine postcommit readbacks",()=>{
   const f=committed(),got=build(f);
+  const summary=summarizeP5T24PrivateReceiptForPublicLog(got);
+  expect(summary.unsignedReceiptSha256).toBe(got.receipt.receiptSha256);
+  expect(summary.privateReceiptPersistedByLogger).toBe(false);
+  expect(summary.independentReviewCompleted).toBe(false);
+  for(const key of ["flightInstanceId","snapshotId","t24OriginalFidsSha256","frozenT24CutoffUtc","stage17PostCommitReadbackAtUtc","receipt"])expect(Object.hasOwn(summary,key)).toBe(false);
+  expect(()=>summarizeP5T24PrivateReceiptForPublicLog({...got,receipt:{...got.receipt,flightInstanceId:"different_private_flight"}})).toThrow("UNVERIFIED_PRIVATE_RECEIPT_PUBLIC_SUMMARY");
+  expect(summarizeP5T24PrivateReceiptForPublicLog(null).unsignedReceiptAvailableInPrivateMemory).toBe(false);
   expect(got.status).toBe(
    "DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW");
   expect(got.receipt.snapshotId).toBe(f.saved.committedSnapshotId);
