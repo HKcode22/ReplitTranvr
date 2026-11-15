@@ -76,6 +76,26 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(a.byHorizon["T-90m"].duplicatePre).toBe(1);expect(a.invalidPreRows).toBe(2);
   expect(a.confirmedCancellationLabels).toBe(0);
  });
+ it("reports documented ID-less scheduled services separately from native-ID and physical labels",()=>{
+  const f=fixture(),{id:_id,...flight}=f.flight,pre=f.pre("T-6h",1,"fidsrec:provisional");
+  const run=(movements:unknown[],rows=[pre])=>{
+   const original=f.original(movements);
+   return auditP6ActualPostOutcomeObservability(original.s,original.row,rows,f.clock);
+  };
+  const exact=run([flight]);
+  expect(exact.byHorizon["T-6h"]).toMatchObject({missingNativeId:1,matchedNativePost:0,idlessExactReportedService:1,
+   idlessDepartureQueryContextService:0,idlessServiceReportedRevised:1,idlessServiceReportedRunway:1});
+  const context=run([{...flight,departure:{...flight.departure,airport:null}}]);
+  expect(context.byHorizon["T-6h"]).toMatchObject({idlessExactReportedService:0,idlessDepartureQueryContextService:1,matchedNativePost:0});
+  expect(run([flight,flight]).byHorizon["T-6h"].idlessServiceAmbiguous).toBe(1);
+  expect(run([{...flight,codeshareStatus:"IsCodeshared"}]).byHorizon["T-6h"].idlessServiceAmbiguous).toBe(1);
+  expect(run([flight],[pre,{...pre,flight_instance_id:"leg:synthetic:002",snapshot_id:"2"}]).byHorizon["T-6h"].idlessServiceAmbiguous).toBe(2);
+  expect(run([{...flight,departure:{...flight.departure,airport:{icao:"YSSY"}}}]).byHorizon["T-6h"].idlessServiceNotObserved).toBe(1);
+  expect(run([{...flight,departure:{...flight.departure,scheduledTime:{utc:"2027-02-02T10:01:00.000Z"}}}]).byHorizon["T-6h"].idlessServiceNotObserved).toBe(1);
+  expect(run([{...flight,status:"Canceled"}]).byHorizon["T-6h"].idlessServiceReportedCancelled).toBe(1);
+  expect(exact.actualGateOutNumericCandidates).toBe(0);expect(exact.confirmedCancellationLabels).toBe(0);
+  expect(exact.privateDecisions).toHaveLength(0);expect(JSON.stringify(exact)).not.toContain("leg:synthetic");
+ });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);
   const a=auditP6ActualPostOutcomeObservability(r.s,r.row,[f.pre()],f.clock);
