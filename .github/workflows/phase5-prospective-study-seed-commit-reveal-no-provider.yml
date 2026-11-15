@@ -1,0 +1,98 @@
+name: Phase5 prospective study seed commitment and reveal (metadata only, no provider)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: string
+      approved_main_sha:
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs'
+      - 'tests/phase5_prospective_study_seed_commit_reveal_v39.test.ts'
+      - '.github/workflows/phase5-prospective-study-seed-commit-reveal-no-provider.yml'
+permissions:
+  contents: read
+concurrency:
+  group: phase5-prospective-seed-ceremony-${{ github.event_name == 'pull_request' && format('pr-{0}',github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  P5_SEED_CONFIRM: ${{ inputs.confirm }}
+  P5_SEED_APPROVED_MAIN: ${{ inputs.approved_main_sha }}
+jobs:
+  offline-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx --no-install vitest run tests/phase5_prospective_study_seed_commit_reveal_v39.test.ts
+  commit:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    outputs:
+      commitment: ${{ steps.seed.outputs.commitment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - id: seed
+        name: Generate exactly one candidate seed bundle and record commitment
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$P5_SEED_APPROVED_MAIN"
+          test "$(git hash-object data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json)" = 12ce1415a268660aa1b65d82807230e171ad8741
+          node scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs generate "$RUNNER_TEMP/study-seeds.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prospective-study-seed-reveal
+          path: ${{ runner.temp }}/study-seeds.json
+          retention-days: 7
+          if-no-files-found: error
+  reveal:
+    needs: commit
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      P5_SEED_EXPECTED_COMMITMENT: ${{ needs.commit.outputs.commitment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@v4
+        with:
+          name: prospective-study-seed-reveal
+          path: ${{ runner.temp }}/seed-reveal
+      - name: Verify independently hosted reveal bytes against the earlier job output
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$P5_SEED_APPROVED_MAIN"
+          node scripts/v39_phase5_prospective_study_seed_commit_reveal_v39.mjs reveal "$RUNNER_TEMP/seed-reveal/study-seeds.json"
