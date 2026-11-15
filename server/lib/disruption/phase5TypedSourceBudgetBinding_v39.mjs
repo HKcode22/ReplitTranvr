@@ -4,7 +4,7 @@ const SHA=/^[a-f0-9]{64}$/;
 const sha=s=>typeof s==="string"&&SHA.test(s);
 export function normalizeP5TypedSourceBudgetBinding(x){
  if(!x||typeof x!=="object")return null;
- const mode=x.budgetReleaseMode??"EXACT_SOURCE_GRID";
+ const mode=x.budgetReleaseMode===undefined?"EXACT_SOURCE_GRID":x.budgetReleaseMode;
  if(mode==="EXACT_SOURCE_GRID"&&sha(x.reviewed31DaySourceRequestGridSha256)&&
     (x.reviewedCostEnvelopeSha256===null||x.reviewedCostEnvelopeSha256===undefined))
   return {budgetReleaseMode:mode,reviewed31DaySourceRequestGridSha256:x.reviewed31DaySourceRequestGridSha256,reviewedCostEnvelopeSha256:null};

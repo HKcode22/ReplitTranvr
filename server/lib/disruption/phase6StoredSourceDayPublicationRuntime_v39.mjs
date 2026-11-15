@@ -13,6 +13,7 @@ import {publishP6StoredSourceShardOnce} from "./phase6StoredSourceShardPublicati
 import {publishP6DayEpochIndexRevisionOnce} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
+import {sameP5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const h=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_SOURCE_DAY_PUBLICATION_RUNTIME_"+s);};
@@ -40,7 +41,8 @@ export async function runP6StoredSourceDayPublication({
     policy.delegatedAutomatedSourceSigningApproved!==true||
     policy.approvedCodeSha!==sourceTrust.reviewedCodeSha||
     !["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>policy[k]===sourceTrust[k])||
-    !["configSha256","frameSha256","providerContractSha256","reviewed31DaySourceRequestGridSha256","reviewedCategoryBudgetSha256"].every(k=>policy[k]===dailyTrust[k])||
+    !["configSha256","frameSha256","providerContractSha256","reviewedCategoryBudgetSha256"].every(k=>policy[k]===dailyTrust[k])||
+    !sameP5TypedSourceBudgetBinding(policy,dailyTrust)||
     policy.queryReviewerFingerprintSha256!==sourceTrust.queryReviewerFingerprintSha256||
     policy.registryReviewerFingerprintSha256!==sourceTrust.registryReviewerFingerprintSha256||
     policy.registryReviewerFingerprintSha256!==sourceTrust.dayReviewerFingerprintSha256||

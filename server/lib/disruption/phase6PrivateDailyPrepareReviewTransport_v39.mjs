@@ -7,6 +7,7 @@
 import {createHash,createPublicKey,verify} from "node:crypto";
 import {readP6DayEpochRestrictedReaderClock,readP6DayEpochRestrictedPublisherClock}
  from "./phase6DayEpochSignedIndexOnce_v39.mjs";
+import {normalizeP5TypedSourceBudgetBinding,sameP5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 export const P6_DAILY_PREPARE_REVIEW_SCHEMA="v39.phase6.external-daily-prepare-review-ed25519.v1";
 const AUD="HKcode22/ReplitTranvr:PHASE6_DAILY_PREPARE_REVIEW_ONLY";
 const DOMAIN="HKcode22/ReplitTranvr:PHASE6_DAILY_PREPARE_REVIEW:v1\n";
@@ -30,7 +31,8 @@ function validateTrust(t){
   !CODE.test(t.reviewedCodeSha??"")||
   ![t.manifestSha256,t.calendarSha256,t.configSha256,t.frameSha256,t.releaseSha256,t.rightsSha256,
     t.providerContractSha256,t.policySha256,t.dayPlanSha256,t.reviewerFingerprintSha256,
-    t.reviewed31DaySourceRequestGridSha256,t.reviewedCategoryBudgetSha256].every(x=>SHA.test(x??""))||
+    t.reviewedCategoryBudgetSha256].every(x=>SHA.test(x??""))||
+  !normalizeP5TypedSourceBudgetBinding(t)||
   typeof t.reviewerPublicKeyPem!=="string"||t.reviewerPublicKeyPem.length>4096||
   !Number.isSafeInteger(t.maximumRetentionHours)||t.maximumRetentionHours<1||t.maximumRetentionHours>168||
   utc(t.policyValidUntilUtc)<=utc(t.policyValidFromUtc))
@@ -72,7 +74,7 @@ export function verifyP6DailyPrepareReview({trust,wire,packetBytes,observedDbClo
   z.expectedConfigSha256!==trust.configSha256||z.expectedFrameSha256!==trust.frameSha256||
   z.expectedReleaseSha256!==trust.releaseSha256||z.expectedRightsReviewSha256!==trust.rightsSha256||
   z.expectedProviderContractSha256!==trust.providerContractSha256||
-  z.reviewed31DaySourceRequestGridSha256!==trust.reviewed31DaySourceRequestGridSha256||
+  !sameP5TypedSourceBudgetBinding(z,trust)||
   z.reviewedCategoryBudgetSha256!==trust.reviewedCategoryBudgetSha256||
   z.independentFreezeApproved!==true||z.independentRightsReviewApproved!==true||
   z.githubOnlyProspectiveOwnerApproved!==true||!Array.isArray(g.templates)||
