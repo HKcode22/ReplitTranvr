@@ -1,3 +1,4 @@
+import {verifyP5EarlyDrawReadonlyAcl} from "../scripts/v39_phase5_github_six_slot_early_draw_owner_v39";
 /**
  * Disposable CI PostgreSQL16 only. Never run against an owner/live database.
  * Sets up a minimal authentic B0062 calendar/frame/authorization, then uses
@@ -98,6 +99,14 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     );
   });
   afterAll(async()=>{if(drawDb)await drawDb.end();if(db)await db.end();});
+
+  it("read-only preflight confirms exact narrow existing grants and refuses overbroad update",async()=>{
+    const result=await verifyP5EarlyDrawReadonlyAcl(drawDb,"p5_early_draw_ci","v39_ci");
+    expect(result).toMatchObject({status:"EXISTING_EARLY_DRAW_LOGIN_READONLY_ACL_PASS_NO_GO",verifiedTableCount:8,databaseWrites:0,providerCalls:0,phase6PaidGo:false});
+    await db.query("GRANT UPDATE (selected_icao) ON clean.adb_sampling_draw TO p5_early_draw_ci");
+    try{await expect(verifyP5EarlyDrawReadonlyAcl(drawDb,"p5_early_draw_ci","v39_ci")).rejects.toThrow("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");}
+    finally{await db.query("REVOKE UPDATE (selected_icao) ON clean.adb_sampling_draw FROM p5_early_draw_ci");}
+  });
 
   it("commits real atomic four-row selections and advances historical washout state",async()=>{
     const acl=(await drawDb.query("SELECT current_user actor,session_user login,has_any_column_privilege(current_user,'clean.adb_sampling_draw','UPDATE') draw_update,has_table_privilege(current_user,'clean.adb_sampling_draw','DELETE') draw_delete,has_any_column_privilege(current_user,'clean.adb_phase6_authorization','UPDATE') auth_update,has_any_column_privilege(current_user,'clean.flight_snapshots','INSERT') pre_insert,has_any_column_privilege(current_user,'clean.fids_query_response','INSERT') source_insert")).rows[0];

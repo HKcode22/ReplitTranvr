@@ -9,6 +9,8 @@ import {fileURLToPath} from "node:url";
 import {resolve} from "node:path";
 const REPO="HKcode22/ReplitTranvr";
 export const lanes=[
+ ["inert_release_stage","phase5-exact-inert-release-stage-manual.yml","existing-restricted-inert-stage"],
+ ["early_draw_readonly","phase5-six-slot-approved-early-four-airport-draw.yml","existing-early-draw-login-readonly"],
  ["early_draw","phase5-six-slot-approved-early-four-airport-draw.yml","gated-exact-early-parent"],
  ["daily","phase6-nonpaid-source-day-prepare-publish.yml","protected-main-one-day-nonpaid"],
  ["source_parent","phase5-source-upcoming-queue-main-scheduled-readonly.yml","separately-authorized-stored-source-children"],

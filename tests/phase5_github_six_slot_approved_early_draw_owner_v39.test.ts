@@ -4,7 +4,7 @@ import {
  selectP5GitHubNextEarlyDraw,type P5SchedulerDayRow
 } from "../server/lib/disruption/phase5GithubClockEarlyDrawSelector_v39";
 import {
- parseP5GitHubApprovedEarlyDrawContext,
+ parseP5GitHubApprovedEarlyDrawContext,parseP5EarlyDrawReadonlyContext,P5_EARLY_DRAW_READONLY_CONFIRM,
  runP5GitHubAutonomousEarlyDraw
 } from "../scripts/v39_phase5_github_six_slot_early_draw_owner_v39";
 
@@ -40,6 +40,16 @@ const env=()=>({
   "postgresql://phase5_fids_early_draw_ci:dummy@ep-ci.neon.tech:5432/neondb?sslmode=require"
 });
 describe("one real-time GitHub clock owner reuses existing early selector",()=>{
+ it("admits only exact explicit read-only credential inspection and never the drawing branch",()=>{
+  const v={...env(),GITHUB_EVENT_NAME:"workflow_dispatch",P5_EARLY_DRAW_MANUAL_CONFIRM:P5_EARLY_DRAW_READONLY_CONFIRM,
+   P5_EARLY_DRAW_READONLY_MAIN:"e".repeat(40),V39_PHASE6_OWNER_APPROVED:"0",V39_PHASE6_PROCESS_ARMED:"0"};
+  expect(parseP5EarlyDrawReadonlyContext(v).expectedRole).toBe("phase5_fids_early_draw_ci");
+  expect(()=>parseP5GitHubApprovedEarlyDrawContext(v)).toThrow();
+  for(const bad of [{V39_PHASE6_PROCESS_ARMED:"1"},{P5_EARLY_DRAW_READONLY_MAIN:"f".repeat(40)},
+   {GITHUB_EVENT_NAME:"schedule"},{DATABASE_URL:"forbidden"},{GITHUB_RUN_ATTEMPT:"2"},
+   {P5_EARLY_DRAW_MANUAL_CONFIRM:"ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO"}])
+   expect(()=>parseP5EarlyDrawReadonlyContext({...v,...bad})).toThrow();
+ });
  it("selects day1 48h early without fabricating airport identities or provider calls",()=>{
   const out=selectP5GitHubNextEarlyDraw(args());
   expect(out).toMatchObject({

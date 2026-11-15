@@ -19,6 +19,97 @@ const ROLE=/^phase(?:5|6)_[a-z0-9_]{6,64}$/;
 const HOLD=(reason:string):never=>{
  throw Error("REFUSED_P5_GH_AUTONOMOUS_EARLY_DRAW_"+reason);
 };
+function parseEarlyDrawLogin(env:Env){
+ const expectedRole=env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE;
+ let u:URL;
+ try{u=new URL(env.V39_P5_EARLY_DRAW_DATABASE_URL??"");}
+ catch{return HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");}
+ if(!ROLE.test(expectedRole??"")||
+    !["postgresql:","postgres:"].includes(u.protocol)||decodeURIComponent(u.username)!==expectedRole||
+    !u.password||!u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hash||
+    (u.port!==""&&u.port!=="5432")||u.searchParams.getAll("sslmode").length!==1||
+    !["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
+    [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+    (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||
+     u.searchParams.get("channel_binding")!=="require")))
+  HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");
+ return {expectedRole:expectedRole!,url:env.V39_P5_EARLY_DRAW_DATABASE_URL!};
+}
+
+export const P5_EARLY_DRAW_READONLY_CONFIRM="VERIFY_EXISTING_EARLY_DRAW_LOGIN_READONLY_NO_GO";
+export function parseP5EarlyDrawReadonlyContext(env:Env){
+ if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
+    env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
+    env.GITHUB_RUN_ATTEMPT!=="1"||!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
+    env.P5_EARLY_DRAW_READONLY_MAIN!==env.GITHUB_SHA||env.P5_EARLY_DRAW_MANUAL_CONFIRM!==P5_EARLY_DRAW_READONLY_CONFIRM||
+    env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_OWNER_APPROVED!=="0"||
+    !["","0"].includes(env.V39_PHASE6_PROCESS_ARMED??"")||
+    env.AERODATABOX_API_KEY||env.AERODATABOX_WEBHOOK_SECRET||env.RAPIDAPI_KEY||
+    env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
+  HOLD("NO_EXACT_READONLY_INSPECTION");
+ return parseEarlyDrawLogin(env);
+}
+
+// The same live narrow credential used by the existing writer, but no
+// calendar or flight records are selected, and no writes are attempted.
+// Expected database is injectable only for disposable real-PG tests.
+export async function verifyP5EarlyDrawReadonlyAcl(pool:Pick<Pool,"connect">,expectedRole:string,expectedDb="neondb"){
+ const c=await pool.connect();
+ let tx=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await c.query("SET LOCAL statement_timeout='10000ms'");
+  const who=(await c.query(`SELECT current_database() db,current_user actor,session_user login,
+    current_setting('server_version_num')::int version,current_setting('transaction_read_only') ro,
+    pg_is_in_recovery() replica,
+    (SELECT rolcanlogin AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)
+      FROM pg_roles WHERE rolname=current_user) restricted,
+    has_schema_privilege(current_user,'clean','USAGE') schema_usage,
+    has_schema_privilege(current_user,'clean','CREATE') schema_create`)).rows[0];
+  if(who?.db!==expectedDb||who.actor!==expectedRole||who.login!==expectedRole||who.ro!=="on"||
+     who.replica!==false||who.restricted!==true||who.schema_usage!==true||who.schema_create!==false||
+     !Number.isInteger(who.version)||who.version<160000||who.version>=170000)
+   HOLD("WRONG_READONLY_ACL_IDENTITY");
+  const reads=["adb_phase6_authorization","adb_phase6_calendar_day","adb_sampling_frame_registry","adb_sampling_frame",
+     "adb_airport_sampling_state","adb_sampling_draw"];
+  const other=["fids_query_response","flight_snapshots"];
+  const allowedInsert:Record<string,string[]>={
+   adb_sampling_draw:["run_day_index","slot_id","target_region","draw_type","selected_icao","frozen_draw_seed","adaptive_state_hash","probability_vector","airport_layer_design_probability","selected_at_utc"],
+   adb_airport_sampling_state:["icao","last_selected_at","last_selected_run_day"]
+  };
+  const allowedUpdate:Record<string,string[]>={adb_airport_sampling_state:["last_selected_at","last_selected_run_day","updated_at_utc"]};
+  for(const table of [...reads,...other]){
+   const relation="clean."+table;
+   const columns=(await c.query(`SELECT attname,
+    has_column_privilege(current_user,attrelid,attnum,'SELECT') AS sel,
+    has_column_privilege(current_user,attrelid,attnum,'INSERT') AS ins,
+    has_column_privilege(current_user,attrelid,attnum,'UPDATE') AS upd
+    FROM pg_attribute WHERE attrelid=to_regclass($1) AND attnum>0 AND NOT attisdropped ORDER BY attname`,[relation])).rows;
+   if(!columns.length)HOLD("ACL_REQUIRED_TABLE_MISSING");
+   const actual=(key:"ins"|"upd")=>columns.filter(x=>x[key]===true).map(x=>String(x.attname)).sort().join(",");
+   if(actual("ins")!==(allowedInsert[table]??[]).slice().sort().join(",")||
+      actual("upd")!==(allowedUpdate[table]??[]).slice().sort().join(",")||
+      (reads.includes(table)&&columns.some(x=>x.sel!==true)))
+    HOLD("ACL_REQUIRED_OR_EXCESS_COLUMN_GRANTS");
+   const broad=(await c.query(`SELECT has_table_privilege(current_user,$1,'DELETE') OR
+      has_table_privilege(current_user,$1,'TRUNCATE') OR has_table_privilege(current_user,$1,'TRIGGER') bad`,[relation])).rows[0];
+   if(broad?.bad!==false)HOLD("ACL_EXCESS_TABLE_GRANTS");
+  }
+  const seq=(await c.query(`SELECT pg_get_serial_sequence('clean.adb_sampling_draw','draw_id') name`)).rows[0]?.name;
+  if(seq){
+   const s=(await c.query(`SELECT has_sequence_privilege(current_user,$1,'USAGE') allowed,
+     has_sequence_privilege(current_user,$1,'UPDATE') excess`,[seq])).rows[0];
+   if(s?.allowed!==true||s.excess!==false)HOLD("ACL_DRAW_SEQUENCE_GRANTS");
+  }
+  await c.query("ROLLBACK");tx=false;
+  return {status:"EXISTING_EARLY_DRAW_LOGIN_READONLY_ACL_PASS_NO_GO",actor:expectedRole,database:expectedDb,
+   pgVersion:who.version,verifiedTableCount:reads.length+other.length,databaseWrites:0,providerCalls:0,phase6PaidGo:false};
+ }finally{
+  if(tx)await c.query("ROLLBACK").catch(()=>{});
+  c.release();
+ }
+}
+
 export function parseP5GitHubApprovedEarlyDrawContext(env:Env){
  if(env.GITHUB_ACTIONS!=="true"||
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
@@ -41,23 +132,10 @@ export function parseP5GitHubApprovedEarlyDrawContext(env:Env){
   env.V39_P5_CONFIG_HASH,env.V39_P5_FRAME_HASH];
  if(!keys.every(x=>typeof x==="string"&&SHA.test(x)))
   HOLD("UNPINNED_SCENE_HASHES");
- const expectedRole=env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE;
- let u:URL;
- try{u=new URL(env.V39_P5_EARLY_DRAW_DATABASE_URL??"");}
- catch{return HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");}
- if(!ROLE.test(expectedRole??"")||
-    !["postgresql:","postgres:"].includes(u.protocol)||decodeURIComponent(u.username)!==expectedRole||
-    !u.password||!u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hash||
-    (u.port!==""&&u.port!=="5432")||u.searchParams.getAll("sslmode").length!==1||
-    !["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
-    [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
-    (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||
-     u.searchParams.get("channel_binding")!=="require")))
-  HOLD("UNREVIEWED_EARLY_DRAW_DATABASE_ROLE_OR_URL");
+ const {expectedRole,url}=parseEarlyDrawLogin(env);
  return {
   manifest:keys[0]!,calendar:keys[1]!,config:keys[2]!,
-  frame:keys[3]!,expectedRole:expectedRole!,
-  url:env.V39_P5_EARLY_DRAW_DATABASE_URL!
+  frame:keys[3]!,expectedRole,url
  };
 }
 export async function runP5GitHubAutonomousEarlyDraw(
@@ -163,7 +241,18 @@ export async function runP5GitHubAutonomousEarlyDraw(
   await pool.end().catch(()=>{});
  }
 }
-if(process.env.P5_GITHUB_AUTONOMOUS_EARLY_DRAW_MAIN_ENTRYPOINT==="1"){
+if(process.env.P5_EARLY_DRAW_READONLY_ENTRYPOINT==="1"){
+ (async()=>{
+  const ctx=parseP5EarlyDrawReadonlyContext(process.env);
+  const pool=new Pool({connectionString:ctx.url,max:1,connectionTimeoutMillis:8000,query_timeout:15000});
+  try{console.log(JSON.stringify(await verifyP5EarlyDrawReadonlyAcl(pool,ctx.expectedRole)));}
+  finally{await pool.end();}
+ })().catch(e=>{
+  const s=String(e?.message??"");
+  console.error(/^REFUSED_P5_GH_AUTONOMOUS_EARLY_DRAW_[A-Z0-9_]+$/.test(s)?s:"REFUSED_P5_GH_AUTONOMOUS_EARLY_DRAW_READONLY_DB_OR_UNEXPECTED");
+  process.exitCode=2;
+ });
+}else if(process.env.P5_GITHUB_AUTONOMOUS_EARLY_DRAW_MAIN_ENTRYPOINT==="1"){
  runP5GitHubAutonomousEarlyDraw(process.env).then(v=>{
   console.log(JSON.stringify(v));
  }).catch(e=>{
