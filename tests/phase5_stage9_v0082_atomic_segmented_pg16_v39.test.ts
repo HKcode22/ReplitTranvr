@@ -4,9 +4,13 @@
  * Verifies atomic two-table prepared rows under SELECT+INSERT-only owner.
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
-import {Pool} from "pg";
+import {Pool,Client} from "pg";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {signP6ReviewedPreparedSourceDay} from "../server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39";
+import {publishP6StoredSourceShardOnce} from "../server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs";
+import {publishP6DayEpochIndexRevisionOnce} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
+import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
+import {hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly} from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
+import {signP6ReviewedPreparedSourceDay,signP6InitialSourceIndexAfterRegistryReadback} from "../server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39";
 import {commitEarlyPhase5Draw} from
  "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
 import {readCommittedP5DayCandidateGrid,
@@ -547,7 +551,68 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   await expect(signP6ReviewedPreparedSourceDay({...args,pins:{...args.pins,expectedDailyPreparePacketSha256:sha("0")}}))
    .rejects.toThrow("UNPINNED_EXACT_APPROVAL_BYTES");
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
- });
+  if(process.env.P6_SOURCE_SIGNER_PIPELINE_DISPOSABLE_ONLY==="1"){
+   const readerLogin="phase6_private_reader_login_ci_pipeline",publisherLogin="phase6_private_publisher_login_ci_pipeline";
+   const reader=new Client({connectionString:"postgresql://"+readerLogin+":ci-only-source-reader@localhost:5432/neondb?sslmode=disable"});
+   const publisher=new Client({connectionString:"postgresql://"+publisherLogin+":ci-only-source-publisher@localhost:5432/neondb?sslmode=disable"});
+   await reader.connect();await publisher.connect();
+   try{
+    await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+    await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+    const pem=(key:typeof query.publicKey)=>key.export({format:"pem",type:"spki"}).toString();
+    const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:readerLogin,
+     reviewedCodeSha:policy.approvedCodeSha,manifestSha256:policy.manifestSha256,
+     calendarSha256:policy.calendarSha256,releaseSha256:policy.releaseSha256,rightsSha256:policy.rightsSha256,
+     dayReviewerFingerprintSha256:fp(registry.publicKey),dayReviewerPublicKeyPem:pem(registry.publicKey),
+     queryReviewerFingerprintSha256:fp(query.publicKey),queryReviewerPublicKeyPem:pem(query.publicKey),
+     registryReviewerFingerprintSha256:fp(registry.publicKey),registryReviewerPublicKeyPem:pem(registry.publicKey)};
+    const idxArgs={readerClient:reader,expectedReaderSessionLogin:readerLogin,policyBytes:bytes,
+     pins:args.pins,signedDay:result,registryKey:registry.privateKey,queryPublicKeyPem:pem(query.publicKey)};
+    await expect(signP6InitialSourceIndexAfterRegistryReadback(idxArgs))
+     .rejects.toThrow("INDEX_REGISTRY_OR_QUERY_NOT_FULLY_COMMITTED");
+    let published=0;
+    for(const sh of result.privateSignedShards){
+     const v=sh.registryReviewWire.review;
+     const receipt=await publishP6StoredSourceShardOnce({publisherClient:publisher,readerClient:reader,trust,
+      registryBytes:sh.registryBytes,registryReviewWire:sh.registryReviewWire,queryPackets:sh.queryPackets,
+      scope:{privateSourceShardPublicationApproved:true,separateProviderContentRightsReviewApproved:true,
+       existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
+       resumeFromIndependentReadbackApproved:false,expectedPublisherSessionLogin:publisherLogin,
+       expectedProviderContractSha256:policy.providerContractSha256,approvedRetentionNotAfterUtc:result.retentionNotAfterUtc,
+       expectedRunDayIndex:1,expectedShardIndex:sh.shardIndex,expectedRegistryPath:v.logicalPath,
+       expectedRegistrySha256:v.registrySha256}});
+     expect(receipt.insertedRegistryCount).toBe(1);
+     published+=receipt.insertedQueryCount;
+    }
+    expect(published).toBe(96);
+    const idx=await signP6InitialSourceIndexAfterRegistryReadback(idxArgs);
+    expect(idx.registryCount).toBe(result.shardCount);
+    expect(idx.expiredShardCount).toBe(0);
+    expect(JSON.stringify(idx)).not.toContain("signatureBase64");
+    const put=await publishP6DayEpochIndexRevisionOnce({client:publisher,...idx.privateSignedIndex,
+     scope:{privateDayIndexStorageApproved:true,independentProviderContentsReviewApproved:true,
+      existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
+      expectedPublisherSessionLogin:publisherLogin,approvedCodeSha:policy.approvedCodeSha,
+      approvedCalendarSha256:policy.calendarSha256,approvedRightsSha256:policy.rightsSha256,
+      approvedRetentionNotAfterUtc:result.retentionNotAfterUtc,persistVerifiedReviewWire:true}});
+    expect(put.indexSha256).toBe(idx.indexSha256);
+    const stored=await readP6StoredPrivateReviewOnce({client:reader,trust,
+     scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
+     selector:{kind:"CURRENT_DAY",runDayIndex:1}});
+    const semantic=await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({
+     client:reader,pins:stored.pins,wire:stored.wire,publicKeyPem:stored.publicKeyPem,
+     scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:true}});
+    expect(semantic.redactedSummary.externallySignedDayEpochIndexSha256).toBe(idx.indexSha256);
+    expect(semantic.redactedSummary.phase6PaidGo).toBe(false);
+    await expect(signP6InitialSourceIndexAfterRegistryReadback(idxArgs))
+     .rejects.toThrow("INDEX_GENESIS_ALREADY_CLAIMED_NO_REPLAY");
+    const rows=(await admin.query("SELECT kind,count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 GROUP BY kind")).rows;
+    expect(Object.fromEntries(rows.map(x=>[x.kind,x.n]))).toEqual({
+     SOURCE_QUERY_PACKET:96,SOURCE_DAY_REGISTRY:result.shardCount});
+   }finally{await publisher.end();await reader.end();}
+  }
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
+ },60_000);
  it("refuses replay after commit, no duplicates or excess permissions",async()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
     .rejects.toThrow("SOURCE_DAY_ALREADY_PARTIALLY_PREPARED_NO_REPLAY");

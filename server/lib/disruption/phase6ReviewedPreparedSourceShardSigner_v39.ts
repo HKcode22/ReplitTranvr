@@ -268,7 +268,7 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
   hold("INDEX_UNAPPROVED_SIGNED_DAY_OR_POLICY");
  const rPem=keyInfo(registryKey,p.registryReviewerFingerprintSha256);
  const paths=new Set<string>(),queries=new Set<string>();
- const allExpected=new Map<string,{bytes:Buffer;review:any;kind:string}>();
+ const allExpected=new Map<string,{bytes:Buffer;review:any;kind:string;wireBytes?:Buffer}>();
  const routeDrafts=d.privateSignedShards.map((sh,i)=>{
   const r=sh.registryReviewWire?.review;
   if(sh.shardIndex!==i+1||!r||r.runDayIndex!==d.runDayIndex||
@@ -293,7 +293,7 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
    expectedRunDayIndex:d.runDayIndex,expectedShardIndex:sh.shardIndex
   });
   paths.add(r.logicalPath);allExpected.set(r.logicalPath,{bytes:sh.registryBytes,review:r,kind:"SOURCE_DAY_REGISTRY"});
-  const starts:number[]=[],ends:number[]=[];
+  const starts:number[]=[],ends:number[]=[],queryPaths:string[]=[];
   for(let n=0;n<reg.entries.length;n++){
    const e=reg.entries[n],q=sh.queryPackets[n],v=q?.wire?.review;
    if(!v||!Buffer.isBuffer(q.bytes)||q.bytes.length>200000||
@@ -325,10 +325,12 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
    if(latest<=planned)hold("INDEX_INVALID_NATIVE_SOURCE_CUTOFF");
    starts.push(planned);ends.push(latest);
    paths.add(e.filePath);queries.add(e.expectedQueryDigestSha256);
-   allExpected.set(e.filePath,{bytes:q.bytes,review:v,kind:"SOURCE_QUERY_PACKET"});
+   queryPaths.push(e.filePath);
+   allExpected.set(e.filePath,{bytes:q.bytes,review:v,kind:"SOURCE_QUERY_PACKET",
+    wireBytes:Buffer.from(JSON.stringify(q.wire),"utf8")});
   }
   const first=Math.min(...starts),last=Math.max(...ends);
-  return {r,first,last,starts};
+  return {r,first,last,starts,queryPaths};
  });
  if(queries.size!==d.queryCount||[...allExpected.values()].reduce((n,v)=>n+v.bytes.length,0)>16*1024*1024)
   hold("INDEX_DAY_QUERY_DENOMINATOR_OR_PRIVATE_BYTES_BOUND");
@@ -351,7 +353,7 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
   const res=await readerClient.query(
    "SELECT logical_path,kind,run_day_index,shard_index,content_sha256,reviewed_code_sha,"+
    "manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,"+
-   "retention_not_after_utc,committed_at_utc,payload_bytes "+
+   "retention_not_after_utc,committed_at_utc,payload_bytes,review_wire_bytes "+
    "FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=ANY($1::text[])",
    [[...paths]]);
   if(res.rowCount!==paths.size||res.rows.length!==paths.size)
@@ -368,15 +370,17 @@ export async function signP6InitialSourceIndexAfterRegistryReadback({
       at(row.externally_reviewed_at_utc)!==v.reviewedAtUtc||
       at(row.retention_not_after_utc)!==v.retentionNotAfterUtc||
       utc(v.retentionNotAfterUtc)<expiry||utc(v.validUntilUtc)<=now||
-      !Buffer.isBuffer(row.payload_bytes)||!row.payload_bytes.equals(x.bytes))
+      !Buffer.isBuffer(row.payload_bytes)||!row.payload_bytes.equals(x.bytes)||
+      (x.wireBytes&&(!Buffer.isBuffer(row.review_wire_bytes)||!row.review_wire_bytes.equals(x.wireBytes))))
     hold("INDEX_ACTUAL_COMMITTED_PACKET_DRIFT");
    const when=utc(at(row.committed_at_utc));
    if(when>now||when<utc(v.reviewedAtUtc))hold("INDEX_UNTRUSTED_COMMIT_CLOCK");
    committed.set(row.logical_path,when);
   }
-  const entries=routeDrafts.map(({r,first,last,starts})=>{
+  const entries=routeDrafts.map(({r,first,last,starts,queryPaths})=>{
    const published=committed.get(r.logicalPath);
-   if(published===undefined)hold("INDEX_MISSING_REGISTRY_COMMIT_CLOCK");
+   if(published===undefined||queryPaths.some(path=>!committed.has(path)||committed.get(path)!>published))
+    hold("INDEX_REGISTRY_WAS_NOT_COMMITTED_LAST");
    // Do not change actual query clocks. The routing window is derived
    // solely from signed query times and the observed real registry commit.
    const open=Math.max(published,now,first-105*60000);
