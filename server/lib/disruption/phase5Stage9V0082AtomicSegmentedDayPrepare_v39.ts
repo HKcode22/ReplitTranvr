@@ -620,7 +620,7 @@ export async function readBackP5Stage9PreparedDayOnce(
   );
   const a=who.rows[0];
   if(who.rowCount!==1||a?.db!=="neondb"||a.role!==review.expectedRestrictedWriterRole||
-     Number(a.ver)<160000||a.ro!=="on"||a.replica!==false||
+     Number(a.ver)<160000||Number(a.ver)>=170000||a.ro!=="on"||a.replica!==false||
      a.paid!==false||a.qu!==false||a.pu!==false)
    hold("READBACK_WRONG_RESTRICTED_ROLE_OR_DATABASE");
   const now=dt(a.at);
@@ -635,7 +635,7 @@ export async function readBackP5Stage9PreparedDayOnce(
      ar.config_hash!==review.expectedConfigSha256)
    hold("READBACK_AUTHORIZATION_DRIFT");
   const selected=await client.query("SELECT "+COLS.map(c=>c==="planned_charge_utc_date"?
-   c+"::text AS "+c:c).join(",")+" FROM clean.phase5_fids_allowed_query_v39 "+
+   c+"::text AS "+c:c).join(",")+",last_reserved_attempt,created_at_utc FROM clean.phase5_fids_allowed_query_v39 "+
    "WHERE manifest_sha256=$1 AND run_day_index=$2 ORDER BY query_digest LIMIT 385",
    [review.expectedManifestSha256,review.proposal.runDayIndex]);
   const parts=await client.query(
@@ -658,6 +658,8 @@ export async function readBackP5Stage9PreparedDayOnce(
   for(const q of validated.queries){
    const actual=rows.get(q.query_digest);
    if(!actual)hold("READBACK_QUERY_MISSING");
+   if(!integral(actual.last_reserved_attempt,0,0)||dt(actual.created_at_utc)>now)
+    hold("READBACK_PREVIOUS_RESERVATION_OR_FUTURE_CREATION");
    for(const c of COLS){
     const v=actual[c],expected=q[c];
     if(times.has(c)?dt(v)!==dt(expected):

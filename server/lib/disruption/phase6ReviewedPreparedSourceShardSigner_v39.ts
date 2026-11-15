@@ -73,7 +73,7 @@ export async function signP6ReviewedPreparedSourceDay({
     pins.existingPaidDispatchApproved!==false||pins.noProviderCredentialsInSigner!==true||
     !CODE.test(pins.expectedReviewedMainSha??""))hold("NO_SEPARATE_SIGNER_AUTHORITY");
  const p=parse<Policy>(policyBytes,20000,pins.expectedPolicySha256);
- const day=parse<P5SignedOneDayPreparePacket>(dailyPreparePacketBytes,36000,
+ const day=parse<P5SignedOneDayPreparePacket>(dailyPreparePacketBytes,500000,
   pins.expectedDailyPreparePacketSha256);
  const input=day?.reviewedPrepareInput,r=input?.readScope,z=input?.stage9Review,
   s=input?.sourceReview;
