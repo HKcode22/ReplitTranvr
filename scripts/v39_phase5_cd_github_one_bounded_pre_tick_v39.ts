@@ -46,7 +46,7 @@ export function admitP5PrivateLaterWorker(env:NodeJS.ProcessEnv){
  if(env.P5_CD_GH_PRIVATE_LATER_MODE!=="PRIVATE_EXACT_SHARD"||
     env.P5_CD_GH_PRIVATE_LATER_APPROVED!=="1"||
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
-    env.P5_CD_GH_PRE_ROSTER_PATH||
+    (env.P5_CD_GH_PRE_ROSTER_PATH||env.P5_CD_GH_ROSTER_PATH)||
     (env.P5_CD_GH_BURST_TICKS||"1")!=="1"||
     env.GITHUB_SHA!==gate.approvedCodeSha||env.RAPIDAPI_KEY)
   fail("PRIVATE_EXACT_SHARD_RELEASE_REQUIRED");
@@ -113,6 +113,15 @@ async function loadPrivatePackets(env:NodeJS.ProcessEnv){
   return bindP5PrivateProjectionToWorker(projection,ctx);
  }finally{await c.end();}
 }
+/** Canonical workflow env is P5_CD_GH_PRE_ROSTER_PATH.
+ * Accept legacy direct caller alias only when it cannot conflict. */
+export function readP5CdCheckoutRosterPath(env:NodeJS.ProcessEnv){
+ const primary=env.P5_CD_GH_PRE_ROSTER_PATH,legacy=env.P5_CD_GH_ROSTER_PATH;
+ if(primary&&legacy&&primary!==legacy)fail("CONFLICTING_LEGACY_ROSTER_PATH");
+ const p=primary||legacy||"";
+ if(!ROSTER.test(p))fail("ROSTER_PATH_OR_GH_RUN_ID_NOT_FROZEN");
+ return p;
+}
 export async function runP5CdGithubPreController(env:NodeJS.ProcessEnv){
  verifyP5CdGithubFrozenCodeLineage(env);
  const gate=requireP5CdGithubPreRelease(env);
@@ -128,9 +137,9 @@ export async function runP5CdGithubPreController(env:NodeJS.ProcessEnv){
   if(env.P6_PRIVATE_READER_DATABASE_URL||env.P5_CD_GH_PRIVATE_DAY||
      env.P5_CD_GH_PRIVATE_REVISION||env.P5_CD_GH_PRIVATE_SHARD||
      env.P5_CD_GH_PRIVATE_INDEX_SHA||env.P5_CD_GH_PRIVATE_REGISTRY_SHA||
-     !ROSTER.test(env.P5_CD_GH_ROSTER_PATH??""))
+     env.P5_CD_GH_PRIVATE_LATER_APPROVED==="1")
    fail("ROSTER_PATH_OR_GH_RUN_ID_NOT_FROZEN");
-  const rosterBytes=bytes(env.P5_CD_GH_ROSTER_PATH!);
+  const rosterBytes=bytes(readP5CdCheckoutRosterPath(env));
   const roster=JSON.parse(rosterBytes.toString("utf8")) as P5CdFrozenRoster;
   const entries:P5CdFrozenRosterEntry[]=(roster.entries??[]).map(x=>({
    filePath:x.filePath,packetSha256:x.packetSha256,bytes:bytes(x.filePath)
