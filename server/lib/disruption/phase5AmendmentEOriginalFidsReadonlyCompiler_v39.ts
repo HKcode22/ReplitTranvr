@@ -244,7 +244,7 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
     scope.rightsReviewSha256,scope.providerContractSha256,scope.earlyDrawSha256,s.expectedResponseSha256,
     s.externalContentUseReviewSha256].every(x=>SHA.test(x??""))||
     !UUID.test(s.expectedPopulationQueryId??"")||!["T-24h","T-6h","T-90m"].includes(scope.horizon)||
-    !Array.isArray(s.selected)||s.selected.length<1||s.selected.length>96||
+    !Array.isArray(s.selected)||s.selected.length<1||s.selected.length>2500||
     typeof pool?.connect!=="function")hold("UNREVIEWED_OR_UNBOUNDED_BATCH_SCOPE");
  const ids=new Set<string>();
  const offset=scope.horizon==="T-24h"?86400000:scope.horizon==="T-6h"?21600000:5400000;
@@ -277,11 +277,18 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
   const candidateById=new Map(audit.candidates.map(a=>[a.flightInstanceId,a]));
   const memberById=new Map(members.map(m=>[String(m.analytic_identity_id),m]));
   const inputs:P5EOriginalFidsCompilerInput[]=[];
+  const nativeCounts=new Map<string,number>();
+  for(const a of audit.candidates){
+   if(a.status!=="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED")continue;
+   const key=String(memberById.get(a.flightInstanceId)?.provider_record_key??"");
+   if(key)nativeCounts.set(key,(nativeCounts.get(key)??0)+1);
+  }
   const selected=s.selected.filter(sel=>{
    const a=candidateById.get(sel.flightInstanceId);
    return a?.status==="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED"&&
     a.selectedTNativeUtc===sel.expectedSelectedNativeTUtc&&a.ownCutoffUtc===sel.expectedForecastCutoffUtc&&
-    a.actualMemberAvailableUtc===sel.expectedMemberAvailableUtc;
+    a.actualMemberAvailableUtc===sel.expectedMemberAvailableUtc&&
+    (nativeCounts.get(String(memberById.get(sel.flightInstanceId)?.provider_record_key??""))??0)<=1;
   });
   const rejected=s.selected.length-selected.length;
   if(selected.length){
