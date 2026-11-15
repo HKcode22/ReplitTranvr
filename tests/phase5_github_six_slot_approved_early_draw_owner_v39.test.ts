@@ -140,7 +140,7 @@ describe("one real-time GitHub clock owner reuses existing early selector",()=>{
      calls.push(sql);
      if(sql.includes("current_database()"))return {rows:[{
       db:"neondb",role:"phase5_fids_early_draw_ci",
-      login:"phase5_fids_early_draw_ci",version:160016,restricted_login:true,auth_update:false,source_insert:false,pre_insert:false,
+      login:"phase5_fids_early_draw_ci",version:160016,restricted_login:true,auth_update:false,source_insert:false,pre_insert:false,draw_immutable:true,
       ro:"on",replica:false,now:new Date(FIRST-80*3600000)
      }]};
      if(sql.includes("FROM clean.adb_phase6_authorization"))return{
