@@ -182,3 +182,31 @@ describe("committed normalized member cardinality",()=>{
   expect(()=>audit({...f,original:{...f.original,normalized_members_count:2}})).toThrow("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
  });
 });
+
+describe("measurement of existing committed source clocks; diagnostic only",()=>{
+ it("measures actual database source age, stage durations, and audit lead independently of nominal schedule",()=>{
+  const f=fixture(),r=audit(f,{...scope,plannedRequestUtc:"2027-02-10T04:27:00.000Z"}),x=r.sourceTimingDiagnostics!;
+  expect(x).toMatchObject({reservationToRetrievalMs:15000,retrievalToRawPersistMs:5000,rawPersistToSourceAvailableMs:40000,
+   sourceAvailableToBindingMs:60000,bindingToAuditTransactionClockMs:1740000,plannedToReservationMs:120000,
+   plannedToSourceAvailableMs:180000,sourceAgeAndLeadSampleCount:3,sourceAgeAtCutoffMs:{p50:5400000},
+   auditLeadToCutoffMs:{p50:3600000},policyChanged:false});
+  expect(x.timingOnlyCountsByReviewLeadSeconds).toEqual([{leadSeconds:900,eligible:3},{leadSeconds:600,eligible:3},{leadSeconds:300,eligible:3}]);
+  expect(JSON.stringify(x)).not.toContain("leg:source:");
+ });
+ it("reports possible lead-only recovery without changing any candidate classification or authorizing late PRE",()=>{
+  const f=fixture();f.clock=utc("2027-02-10T05:48:00.000Z");
+  f.members[1]={...f.members[1],dep_scheduled_utc:null};
+  const r=audit(f),x=r.sourceTimingDiagnostics!;
+  expect(r.candidateCount).toBe(0);expect(r.censoredCount).toBe(3);
+  expect(x.sourceAgeAndLeadSampleCount).toBe(2);
+  expect(x.timingOnlyCountsByReviewLeadSeconds).toEqual([{leadSeconds:900,eligible:0},{leadSeconds:600,eligible:2},{leadSeconds:300,eligible:2}]);
+  expect(r.signedPrePacketsCreated).toBe(0);expect(r.phase6PaidGoGranted).toBe(false);
+  expect(x.plannedToReservationMs).toBe(null);
+  const late=audit({...f,clock:utc("2027-02-10T06:01:00.000Z")});
+  expect(late.sourceTimingDiagnostics!.timingOnlyCountsByReviewLeadSeconds.every(v=>v.eligible===0)).toBe(true);
+ });
+ it("zero-member response has zero samples, not fake percentile measurements",()=>{
+  const f=fixture(),r=audit({...f,original:{...f.original,normalized_members_count:0},members:[]});
+  expect(r.sourceTimingDiagnostics).toMatchObject({sourceAgeAndLeadSampleCount:0,sourceAgeAtCutoffMs:null,auditLeadToCutoffMs:null,policyChanged:false});
+ });
+});
