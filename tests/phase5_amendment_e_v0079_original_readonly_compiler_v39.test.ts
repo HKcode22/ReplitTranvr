@@ -3,7 +3,7 @@ import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39}
  from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {
- compileP5EOneBoundOriginalReadonly,
+ compileP5EOneBoundOriginalReadonly,compileP5EBoundOriginalBatchReadonly,P5_E_BATCH_ALL_MEMBERS_SQL,P5_E_BATCH_ORIGINAL_SQL,type P5EOriginalBatchReadScope,
  P5_E_READONLY_ORIGINAL_MEMBER_SQL,
  type P5EV0079BoundFeatureReadScope
 } from "../server/lib/disruption/phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
@@ -197,5 +197,63 @@ describe("Phase5 reuse Stage14/V0079 read-only authenticated feature compiler",(
   const y=fixture();y.source.original_response_hash=h("e");
   await expect(compileP5EOneBoundOriginalReadonly(y.db,y.scope))
    .rejects.toThrow("V0079_ORIGINAL_NORMALIZED_IDENTITY_OR_LICENSE_DRIFT");
+ });
+});
+
+describe("Amendment E shared original batch under existing restricted SOURCE session",()=>{
+ function batch(){
+  const f=fixture(),missingId="leg:ci:original:missing";
+  const source={...f.source,run_day_index:1,slot_id:"HUB",horizon:"T-6h",airport_icao:"WSSS",
+   github_run_id:"1234567",attempt_run_id:"1234567",early_draw_sha256:h("e"),reviewed_release_sha256:h("f"),
+   provider_contract_sha256:h("1"),service_window_start_utc:"2035-11-25T11:00:00.000Z",
+   service_window_end_utc:"2035-11-25T13:00:00.000Z",reserved_at:"2035-11-25T05:00:00.000Z",
+   fids_retrieval_utc:"2035-11-25T05:01:00.000Z",raw_persisted_at_utc:available,
+   bound_at_utc:"2035-11-25T05:03:00.000Z",normalized_members_count:2};
+  const member={...f.member,source_airport_icao:"WSSS",provider_content_expired_at_utc:null,population_member_id:"m1",
+   flight_number:"SQ12",arr_airport_icao:"YSSY",query_direction:"Departure",provider_record_key:"operating-flight-01"};
+  const members=[member,{...member,analytic_identity_id:missingId,canonical_flight_instance_id:missingId,
+   population_member_id:"m2",provider_record_key:"missing-native-record"}];
+  const scope:P5EOriginalBatchReadScope={source:{manifestSha256:manifest,queryDigestSha256:query,rightsReviewSha256:rights,
+   reviewedReleaseSha256:h("f"),providerContractSha256:h("1"),earlyDrawSha256:h("e"),runDayIndex:1,slot:"HUB",horizon:"T-6h",
+   airportIcao:"WSSS",expectedSourceGithubRunId:"1234567",maxPopulationStalenessSeconds:3600},
+   expectedPopulationQueryId:qid,expectedResponseSha256:source.original_response_hash,
+   externalContentUseReviewSha256:h("d"),selected:[id,missingId].map(flightInstanceId=>({flightInstanceId,
+    expectedSelectedNativeTUtc:native,expectedForecastCutoffUtc:cutoff,expectedMemberAvailableUtc:available}))};
+  const calls:string[]=[];let released=0;
+  const db={async connect(){return{async query(sql:string,args?:unknown[]){
+   calls.push(sql);let rows:Record<string,unknown>[]=[];
+   if(sql.startsWith("SELECT current_user AS actor"))rows=[{actor:"phase5_fids_source_prod_20261107",
+    session_login:"phase5_p5_source_login_20261108",db:"neondb",version:160016,ro:"on",replica:false,now}];
+   else if(sql===P5_STAGE14_BOUND_SOURCE_SQL){expect(args).toEqual([manifest,query]);rows=[source];}
+   else if(sql===P5_E_BATCH_ALL_MEMBERS_SQL){expect(args).toEqual([qid]);rows=members;}
+   else if(sql===P5_E_BATCH_ORIGINAL_SQL){expect(args).toEqual([manifest,query,qid]);rows=[f.original];}
+   else if(!/^(BEGIN|SET LOCAL|ROLLBACK)/.test(sql))throw Error("UNEXPECTED_SQL");
+   return {rows,rowCount:rows.length};},release(){released++;}}}};
+  return {db,source,members,scope,calls,original:f.original,released:()=>released};
+ }
+ it("reads body once, verifies native operator and feature values, censors missing native key without rewriting other member",async()=>{
+  const f=batch(),x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(x).toMatchObject({selectedCount:2,noLongerEligibleOrChangedCount:0,matchedCount:1,nativeOriginalCensoredCount:1,
+   originalBodyReadCount:1,sourceRightsAuthenticatedHere:false,physicalGateOutCertified:false,providerCalls:0,dbWrites:0,phase6PaidGo:false});
+  expect(x.privateDecisions[0]).toMatchObject({status:"MATCHED_NATIVE_ORIGINAL",compiled:{evidencedFidsFields:4}});
+  expect(x.privateDecisions[1].status).toBe("CENSORED_NATIVE_ORIGINAL_MEMBER");
+  expect(f.calls.filter(q=>q===P5_E_BATCH_ORIGINAL_SQL)).toHaveLength(1);
+  expect(f.calls.filter(q=>q===P5_E_BATCH_ALL_MEMBERS_SQL)).toHaveLength(1);
+  expect(f.calls.at(-1)).toBe("ROLLBACK");expect(f.released()).toBe(1);
+  expect(JSON.stringify(x)).not.toMatch(/leg:ci|operating-flight|observations/);
+ });
+ it("does not transfer original if pending selections are stale or changed",async()=>{
+  const f=batch();f.scope.source.maxPopulationStalenessSeconds=1800;
+  const x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(x).toMatchObject({selectedCount:2,noLongerEligibleOrChangedCount:2,matchedCount:0,originalBodyReadCount:0});
+  expect(f.calls).not.toContain(P5_E_BATCH_ORIGINAL_SQL);
+ });
+ it("holds structural original drift and duplicate selection, not an ordinary missing member",async()=>{
+  const f=batch();f.original.stored_response_hash=h("e");
+  await expect(compileP5EBoundOriginalBatchReadonly(f.db,f.scope)).rejects.toThrow("BATCH_BODY_OR_RIGHTS_DRIFT");
+  expect(f.calls.at(-1)).toBe("ROLLBACK");
+  const g=batch();g.scope.selected=[g.scope.selected[0],g.scope.selected[0]];
+  await expect(compileP5EBoundOriginalBatchReadonly(g.db,g.scope)).rejects.toThrow("BATCH_MEMBER_SCOPE_OR_CUTOFF_DRIFT");
+  expect(g.calls).toHaveLength(0);
  });
 });
