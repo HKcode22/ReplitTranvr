@@ -6,6 +6,7 @@
  * separately by the owner/independent reviewer. Default is STOP.
  */
 import {assertP6CurrentPrivatePreMode,readP6ScopedCurrentPrivateRosterDigest} from "./phase6CurrentPrivatePreScope_v39.mjs";
+import {assertP6CurrentPrivateT24Mode,readP6ScopedCurrentT24RosterDigest} from "./phase6CurrentPrivateT24Scope_v39.mjs";
 const SHA=/^[a-f0-9]{40}$/;
 const SHA256=/^[a-f0-9]{64}$/;
 const HOLDER="ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER";
@@ -42,6 +43,9 @@ function requireP5CdGithubPreScopeInternal(
  options?:{allowReviewedT24Witness?:true}
 ):Omit<P5CdGithubPreRelease,"rosterSha256">{
  const current=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE";
+ const currentT24=env.P5_CD_GH_PRIVATE_T24_MODE==="PRIVATE_CURRENT_T24_SCHEDULE";
+ if(currentT24){if(current||options?.allowReviewedT24Witness!==true)hold("CURRENT_T24_SEPARATE_WITNESS_ONLY");assertP6CurrentPrivateT24Mode(env);}
+ else if(env.P5_CD_GH_PRIVATE_CURRENT_T24_APPROVED==="1"||env.P5_CD_GH_PRIVATE_T24_MODE)hold("MIXED_CURRENT_T24_MODE");
  if(current){if(options?.allowReviewedT24Witness)hold("CURRENT_LATER_NEVER_T24");assertP6CurrentPrivatePreMode(env);}
  else if(env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1")hold("MIXED_CURRENT_PRIVATE_MODE");
  // A small, no-provider Phase5 PRE pilot can furnish prospective
@@ -79,7 +83,7 @@ function requireP5CdGithubPreScopeInternal(
      options?.allowReviewedT24Witness!==true)||
     env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
     env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||
-    (!current&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
+    (!current&&!currentT24&&!SHA256.test(env.P5_CD_GH_PRE_ROSTER_SHA256??""))||
     !SHA256.test(env.V39_P5_RIGHTS_SHA256??"")||
     !SHA256.test(env.V39_P5_MANIFEST_SHA256??""))
   hold("NO_REVIEWED_MAIN_SOURCE_RIGHTS_FROZEN_GO_OR_STOP_ACTIVE");
@@ -132,12 +136,17 @@ export function requireP5CdGithubCurrentPrivatePreScope(env:NodeJS.ProcessEnv){
  assertP6CurrentPrivatePreMode(env);
  return requireP5CdGithubPreScopeInternal(env);
 }
+export function requireP5CdGithubCurrentPrivateT24Scope(env:NodeJS.ProcessEnv){
+ assertP6CurrentPrivateT24Mode(env);
+ return requireP5CdGithubPreScopeInternal(env,{allowReviewedT24Witness:true});
+}
 export function requireP5CdGithubPreRelease(
  env:NodeJS.ProcessEnv,options?:{allowReviewedT24Witness?:true}
 ):P5CdGithubPreRelease{
  const base=requireP5CdGithubPreScopeInternal(env,options);
  const rosterSha256=env.P5_CD_GH_PRIVATE_LATER_MODE==="PRIVATE_CURRENT_SCHEDULE"?
-  readP6ScopedCurrentPrivateRosterDigest(env):env.P5_CD_GH_PRE_ROSTER_SHA256!;
+  readP6ScopedCurrentPrivateRosterDigest(env):env.P5_CD_GH_PRIVATE_T24_MODE==="PRIVATE_CURRENT_T24_SCHEDULE"?
+  readP6ScopedCurrentT24RosterDigest(env):env.P5_CD_GH_PRE_ROSTER_SHA256!;
  return {...base,rosterSha256};
 }
 export function requireP5CdGithubEFeatures(
