@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       private_transport:
-        description: "Default false. Only use true for externally reviewed signed PG16 private SOURCE packet transport."
+        description: "false=legacy, true=static private review, stored=bounded signed review lookup; separate approval required."
         required: false
         default: 'false'
         type: string
@@ -34,6 +34,14 @@ on:
         type: string
       routing_intent_sha256:
         description: "New day-epoch Ed25519-backed immutable SOURCE route digest, not user-created new query"
+        required: false
+        type: string
+      day_index_revision:
+        description: "Stored mode exact independently signed day-index revision"
+        required: false
+        type: string
+      day_index_sha256:
+        description: "Stored mode exact independently signed original day-index digest"
         required: false
         type: string
 permissions:
@@ -131,7 +139,7 @@ jobs:
   exact-private-source-existing-one-get-child:
     # Strictly distinct from the checkout-local legacy child: no private
     # SOURCE request can run both original paid jobs.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && (inputs.private_transport == 'true' || inputs.private_transport == 'stored') }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
@@ -148,7 +156,7 @@ jobs:
       V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
       V39_P5_AUTO_SOURCE_DISPATCH_APPROVED: ${{ secrets.V39_P5_AUTO_SOURCE_DISPATCH_APPROVED }}
       V39_P5_SIGNED_DAY_REGISTRY_RELEASE: ${{ secrets.V39_P5_SIGNED_DAY_REGISTRY_RELEASE }}
-      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 }}
+      V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ${{ inputs.private_transport == 'true' && secrets.V39_P5_SOURCE_BATCH_REGISTRY_SHA256 || '' }}
       V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
       V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
       V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
@@ -171,12 +179,16 @@ jobs:
       P6_PRIVATE_SOURCE_EXPECTED_REGISTRY_PATH: ${{ inputs.signed_registry_file }}
       P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH: ${{ inputs.frozen_release_file }}
       P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
-      P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64: ${{ secrets.P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64 }}
-      P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64: ${{ secrets.P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64 }}
-      P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ secrets.P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64 }}
-      P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64 }}
-      P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64 }}
-      P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64 }}
+      P6_PRIVATE_DAY_INDEX_REVISION: ${{ inputs.day_index_revision }}
+      P6_PRIVATE_DAY_INDEX_SHA256: ${{ inputs.day_index_sha256 }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
+      P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64 || '' }}
+      P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64 || '' }}
+      P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64 || '' }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64 || '' }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64 || '' }}
+      P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64: ${{ inputs.private_transport == 'true' && secrets.P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64 || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -197,19 +209,36 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
-          test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = 'true'
+          if [[ "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" == stored ]]; then
+            test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
+            test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64"
+            test "$REGISTRY_FILE" = PRIVATE_STORED
+            test "$RELEASE_FILE" = PRIVATE_STORED
+            [[ "$P6_PRIVATE_DAY_INDEX_REVISION" =~ ^[1-9][0-9]{0,3}$ ]]
+            test "$P6_PRIVATE_DAY_INDEX_REVISION" -le 1024
+            [[ "$P6_PRIVATE_DAY_INDEX_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            test -z "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
+            test -z "$P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64$P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64$P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+            test -z "$P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64$P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64$P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+          else
+            test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = 'true'
+            test -z "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64$P6_PRIVATE_DAY_INDEX_REVISION$P6_PRIVATE_DAY_INDEX_SHA256"
+            test -n "$P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64"
+            test -n "$P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64"
+            test -n "$P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+            test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64"
+            test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64"
+            test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64"
+            test -n "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
+            [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+            [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
+          fi
           test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
           test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT" = 1
           test "$P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT" = 0
           test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_CONFIRM" = 'ONE_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_SAME_JOB_ONE_GET'
           test "$P6_PRIVATE_SOURCE_TRANSPORT_APPROVED" = 1
           test -n "$P6_PRIVATE_READER_DATABASE_URL"
-          test -n "$P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64"
-          test -n "$P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64"
-          test -n "$P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64"
-          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64"
-          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64"
-          test -n "$P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64"
           [[ "$P6_PRIVATE_SOURCE_ROUTING_INTENT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
@@ -217,11 +246,8 @@ jobs:
           test "$V39_P5_AUTO_SOURCE_DISPATCH_APPROVED" = '1'
           test "$V39_P5_SIGNED_DAY_REGISTRY_RELEASE" = '1'
           test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = '1'
-          test -n "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256"
           test -n "$V39_P5_SOURCE_DATABASE_URL"
           test -n "$AERODATABOX_API_KEY"
-          [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
-          [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
           [[ "$P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST" =~ ^[0-9a-f]{64}$ ]]
           [[ "$P5_SOURCE_BATCH_RUN_DAY_INDEX" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
       - uses: actions/setup-node@v4
