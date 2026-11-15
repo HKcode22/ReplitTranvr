@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
-import {admitP5SignedDayGitHubPrepare,loadP5PrivatePrepareReviewPacket,P5_PRIVATE_PREPARE_CONFIRM,
+import {admitP5SignedDayGitHubPrepare,loadP5PrivatePrepareReviewPacket,P5_PRIVATE_PREPARE_CONFIRM,P5_PRIVATE_PREARM_PREPARE_CONFIRM,
  type P5SignedOneDayPreparePacket}
  from "../scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39";
 import {P5_STAGE28_GROUPS}
@@ -188,5 +188,32 @@ describe("private bounded one-day preparation handoff",()=>{
    {AERODATABOX_WEBHOOK_SECRET:"ci-forbidden"}
   ])expect(()=>admitP5SignedDayGitHubPrepare({...env,...bad},p.bytes,p.packet,p.logicalPath))
    .toThrow("UNSIGNED_GITHUB_MAIN_OR_SEPARATE_PHASE6_GO");
+ });
+});
+
+describe("separate pre-arm preparation of exact authorized future day",()=>{
+ function prearm(){
+  const {env,packet,raw}=fixture();
+  return {packet,raw,env:{...env,P5_DAY_PREPARE_PRIVATE_MODE:"1",
+   P5_DAY_PREPARE_PRIVATE_CONFIRM:P5_PRIVATE_PREARM_PREPARE_CONFIRM,
+   P5_DAY_PREPARE_EXPECTED_DAY:"1",P5_SOURCE_PREPARE_PRIVATE_PACKET_B64:raw.toString("base64"),
+   V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0",
+   V39_P5_PREPARE_PREARM_APPROVED:"1"}};
+ }
+ it("permits metadata/ledger preparation while paid process is stopped, without manufacturing freeze or rights",()=>{
+  const f=prearm(),p=loadP5PrivatePrepareReviewPacket(f.env);
+  expect(admitP5SignedDayGitHubPrepare(f.env,p.bytes,p.packet,p.logicalPath).preparationMode)
+   .toBe("PREARM_NONPAID");
+ });
+ it("never treats pre-arm confirmation as paid approval or bypasses any existing SHA/rights/role checks",()=>{
+  const f=prearm(),p=loadP5PrivatePrepareReviewPacket(f.env);
+  for(const bad of [
+   {V39_P5_PREPARE_PREARM_APPROVED:"0"},{V39_PHASE6_PROCESS_ARMED:"1"},
+   {V39_PHASE6_OWNER_APPROVED:"1"},{P5_DAY_PREPARE_PRIVATE_MODE:"0"},
+   {V39_PHASE5_FREEZE_SIGNED:"0"},{V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},
+   {GITHUB_SHA:"e".repeat(40)},{AERODATABOX_API_KEY:"NOT_ALLOWED"},
+   {P5_DAY_PREPARE_PRIVATE_CONFIRM:P5_PRIVATE_PREPARE_CONFIRM}
+  ])expect(()=>admitP5SignedDayGitHubPrepare({...f.env,...bad},p.bytes,p.packet,p.logicalPath))
+   .toThrow(/REFUSED_P5_SIGNED_DAY_PREPARE_/);
  });
 });

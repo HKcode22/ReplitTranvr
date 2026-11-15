@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase6PrivateSourceRegistryLastPublisher_v39.mjs'
+      - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
+      - 'tests/phase6_stored_source_shard_publication_real_pg16_v39.mjs'
       - 'tests/phase6_private_source_registry_last_publisher_v39.test.mjs'
       - '.github/workflows/phase6-private-source-registry-last-pg16-no-provider.yml'
 permissions:
@@ -65,7 +67,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Install V0094 then V0095 only in throwaway non-superuser PG16
+      - name: Install V0094 V0095 V0097 V0098 only in throwaway non-superuser PG16
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -83,9 +85,17 @@ jobs:
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0097__phase6_private_run_day_epoch_index_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE phase6_private_publisher_login_ci_checks LOGIN NOINHERIT PASSWORD 'ci-only-publisher-not-production'"
           psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
             -c 'GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_checks WITH INHERIT FALSE, SET TRUE'
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_reader_login_ci_checks LOGIN NOINHERIT PASSWORD 'ci-only-reader-not-production'"
+          psql -U neondb_owner -X -v ON_ERROR_STOP=1 \
+            -c 'GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_checks WITH INHERIT FALSE, SET TRUE'
       - name: Publish two synthetic query packets then exact externally signed registry LAST
         shell: bash
         run: |
@@ -211,3 +221,14 @@ jobs:
             }));
           }finally{await client.end();await owner.end();}
           JS
+      - name: Actual stored SOURCE query-first registry-last publication and unknown commit recovery in disposable PG16
+        shell: bash
+        env:
+          P6_STORED_SOURCE_SHARD_DISPOSABLE_ONLY: '1'
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          node tests/phase6_stored_source_shard_publication_real_pg16_v39.mjs

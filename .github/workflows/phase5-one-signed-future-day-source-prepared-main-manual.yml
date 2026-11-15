@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       confirm:
-        description: "Type ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
+        description: "Armed prep: ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET; STOP prep: ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_BEFORE_PAID_ARM"
         required: true
         type: string
   pull_request:
@@ -49,7 +49,7 @@ jobs:
           npx vitest run tests/phase5_one_signed_day_source_prepare_github_owner_v39.test.ts
           echo 'P5_SIGNED_DAY_PREPARE_CI_ONLY_NO_DB_NO_PROVIDER_NO_RELEASE'
   exact-signed-one-day-prepared:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (inputs.confirm == 'ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET' || inputs.confirm == 'ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_BEFORE_PAID_ARM') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -69,6 +69,8 @@ jobs:
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
       V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_PHASE6_OWNER_APPROVED: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+      V39_P5_PREPARE_PREARM_APPROVED: ${{ secrets.V39_P5_PREPARE_PREARM_APPROVED }}
       V39_P5_PREPARE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_PREPARE_APPROVED_CODE_SHA }}
       V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256: ${{ secrets.V39_P5_SIGNED_PREPARE_DAY_PACKET_SHA256 }}
       V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
@@ -96,10 +98,16 @@ jobs:
           test "$V39_P5_PREPARE_OWNER_APPROVED" = "1"
           test "$V39_PHASE5_FREEZE_SIGNED" = "1"
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = "1"
-          test "$V39_PHASE6_PROCESS_ARMED" = "1"
+          if [[ "$P5_DAY_PREPARE_PRIVATE_CONFIRM" == ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_BEFORE_PAID_ARM ]]; then
+            test "$V39_PHASE6_PROCESS_ARMED" = 0
+            test "$V39_PHASE6_OWNER_APPROVED" = 0
+            test "$V39_P5_PREPARE_PREARM_APPROVED" = 1
+          else
+            test "$P5_DAY_PREPARE_PRIVATE_CONFIRM" = ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET
+            test "$V39_PHASE6_PROCESS_ARMED" = 1
+          fi
           test "$V39_P5_PREPARE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
           [[ "$P5_DAY_PREPARE_EXPECTED_DAY" =~ ^([1-9]|[12][0-9]|3[01])$ ]]
-          test "$P5_DAY_PREPARE_PRIVATE_CONFIRM" = "ONE_PRIVATE_SIGNED_FUTURE_DAY_PREPARED_NO_PROVIDER_GET"
           test "$P5_DAY_PREPARE_PRIVATE_MODE" = 1
           test -z "$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"

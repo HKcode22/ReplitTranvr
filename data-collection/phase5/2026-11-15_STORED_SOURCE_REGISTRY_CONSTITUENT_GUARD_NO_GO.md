@@ -1,0 +1,5 @@
+# Stored SOURCE registry constituent guard — no GO
+
+A registry published for V0098 stored transport now has an explicit `requireStoredQueryReviews: true` mode. Before INSERT, the existing publisher checks every committed constituent's matching shard, exact canonical signature wire, independently approved stable study and query-signer trust, committed metadata clocks, and validity at least through the registry review window. Reuses the existing dynamic resolver, no schema, new signer, HTTP, or paid dispatch. Old static publication remains separate. A caller must choose stored mode explicitly; it must be required by the eventual rolling publisher entrypoint. This is not proof of provider rights, runtime release or production commissioning.
+
+Regression: legitimate Ed25519 wires, missing wire, forged signature, wrong shard, mismatched clock, noncanonical bytes, insufficient validity, drifted trust. All failures before INSERT. CI uses synthetic review evidence only. Original child still independently hydrates and validates exact bytes and original paid reservation. Unknown COMMIT remains readback only.
