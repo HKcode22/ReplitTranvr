@@ -271,6 +271,8 @@ export async function runP6NativePostPublication({readerClient,publisherClient,s
     existingPaidDispatchApproved:false,noProviderCredentialsInAudit:true,reviewedFrameSha256:p.reviewedFrameSha256,
     providerContractSha256:p.reviewedProviderContractSha256,maximumPopulationStalenessSeconds:p.maximumPopulationStalenessSeconds},
    afterFlightId:cursor,pageSize:384});
+  if(page.privateSourceScope.airportIcao!==selector.airportIcao||page.privateSourceScope.expectedServiceWindowStartUtc!==selector.fromUtc||
+     page.privateSourceScope.expectedServiceWindowEndUtc!==selector.toUtc)hold("SOURCE_HINT_AND_SIGNED_WINDOW_DRIFT");
   proposal=proposeP6NativePostPhysicalWindow({page,policyBytes:authority.policyBytes,expectedPolicySha256:authority.expectedPolicySha256,
    trust,existingRequestSha256s:existing});
   cursor=page.privateNextCursor;
