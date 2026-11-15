@@ -90,7 +90,11 @@ export function bindP6PostPrivateDayRoute(handoff:any,ctx:ReturnType<typeof admi
     z.providerCalls!==0||z.databaseWrites!==0||z.phase6PaidGo!==false||
     !Array.isArray(handoff.privateRoutingCandidates)||typeof handoff.getFrozen!=="function")
   hold("UNAUTHENTICATED_CURRENT_SIGNED_DAY");
- const hits=handoff.privateRoutingCandidates.filter((r:any)=>r.lane==="POST"&&
+ const routes=ctx.dynamic?handoff.privateAllDuePostRoutingCandidates:handoff.privateRoutingCandidates;
+ if(!Array.isArray(routes)||routes.length>1024||
+    (ctx.dynamic&&Object.getOwnPropertyDescriptor(handoff,"privateAllDuePostRoutingCandidates")?.enumerable!==false))
+  hold("MISSING_PRIVATE_ALL_DUE_POST_AUDIT");
+ const hits=routes.filter((r:any)=>r.lane==="POST"&&
   r.runDayIndex===s.runDayIndex&&r.shardIndex===s.shardIndex&&
   r.routingIntentSha256===s.routingIntentSha256&&r.signedFrozenSha256===s.packetSha256);
  if(hits.length!==1)hold("EXACT_DUE_POST_ROUTE_MISSING");
