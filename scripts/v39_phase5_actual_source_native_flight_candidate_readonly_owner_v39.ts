@@ -167,7 +167,7 @@ export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
    members.rows as unknown as P5ActualFlightPopulationRow[],
    who.rows[0].now as Date|string);
   await client.query("ROLLBACK");tx=false;
-  return report;
+  return dynamic?{...report,sourceGithubRunId:exactScope.expectedSourceGithubRunId}:report;
  }catch(e){
   if(tx)await client.query("ROLLBACK").catch(()=>{});
   throw e;

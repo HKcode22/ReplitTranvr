@@ -107,6 +107,8 @@ export interface P5ActualFlightCandidateReview{
 export interface P5ActualSourceCandidateAudit{
  schema:"v39.phase5.actual-source-native-flight-candidates-readonly.v1";
  status:"ACTUAL_SOURCE_CANDIDATE_REVIEW_NOT_PACKET_SIGNING";
+ /** Present for dynamically verified committed-query scope only. */
+ sourceGithubRunId?:string;
  actualDbClockUtc:string;sourcePopulationQueryId:string;
  sourceResponseSha256:string;queryDigestSha256:string;
  observedMemberCount:number;candidateCount:number;
