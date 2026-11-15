@@ -1,6 +1,6 @@
 name: Phase5 one signed future POST (V0083, PAID ONLY AFTER PHASE6 GO)
 # Distinct path identity for signed GH no-replay POST child history.
-run-name: P5 POST ${{ inputs.frozen_future_post_packet }}
+run-name: P5 POST ${{ inputs.private_transport == 'stored' && inputs.post_packet_sha256 || inputs.frozen_future_post_packet }}
 on:
   workflow_dispatch:
     inputs:
@@ -8,6 +8,31 @@ on:
         description: "Pre-reviewed future data-collection/phase5/frozen/*.json for ONE V0083 POST"
         required: true
         type: string
+      private_transport:
+        type: choice
+        options: [checkout, stored]
+        default: checkout
+      private_confirm:
+        type: string
+        required: false
+      run_day:
+        type: string
+        required: false
+      index_revision:
+        type: string
+        required: false
+      index_sha256:
+        type: string
+        required: false
+      shard_index:
+        type: string
+        required: false
+      post_packet_sha256:
+        type: string
+        required: false
+      route_sha256:
+        type: string
+        required: false
       confirm:
         description: "Type ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY"
         required: true
@@ -17,6 +42,9 @@ on:
     paths:
       - '.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml'
       - 'scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts'
+      - 'scripts/v39_phase6_private_post_existing_v0083_child_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs'
+      - 'tests/phase6_private_post_actual_child_transport_v39.test.ts'
       - 'server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts'
       - 'server/lib/disruption/phase5V0083RestDedicatedRolePool_v39.ts'
       - 'server/lib/disruption/fidsCensus_v3.ts'
@@ -56,7 +84,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts
+          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts
           echo P5_V0083_POST_SIGNED_OWNER_OFFLINE_CI_NO_SOURCE_USE_RIGHTS_OR_PAID_GO
   exact-signed-one-v0083-future-post:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY' }}
@@ -66,6 +94,22 @@ jobs:
       ADB_AUTO_COLLECT: '0'
       GITHUB_ACTIONS: 'true'
       P5_FUTURE_POST_CONFIRM: ${{ inputs.confirm }}
+      P6_PRIVATE_POST_CHILD_MODE: ${{ inputs.private_transport || 'checkout' }}
+      P6_PRIVATE_POST_CHILD_CONFIRM: ${{ inputs.private_confirm }}
+      P6_PRIVATE_POST_CHILD_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_CHILD_APPROVED || '' }}
+      P6_PRIVATE_POST_LEGACY_PATH: ${{ inputs.frozen_future_post_packet }}
+      P6_PRIVATE_POST_DAY: ${{ inputs.run_day }}
+      P6_PRIVATE_POST_REVISION: ${{ inputs.index_revision }}
+      P6_PRIVATE_POST_INDEX_SHA: ${{ inputs.index_sha256 }}
+      P6_PRIVATE_POST_SHARD: ${{ inputs.shard_index }}
+      P6_PRIVATE_POST_PACKET_SHA: ${{ inputs.post_packet_sha256 }}
+      P6_PRIVATE_POST_ROUTE_SHA: ${{ inputs.route_sha256 }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 || '' }}
+      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED || '' }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 || '' }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ inputs.private_transport == 'stored' && secrets.P6_PRIVATE_READER_DATABASE_URL || '' }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
       V39_P5_POST_OWNER_APPROVED: ${{ secrets.V39_P5_POST_OWNER_APPROVED }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
@@ -111,8 +155,23 @@ jobs:
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED" = 1
           test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
-          [[ "$PACKET" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
-          test -f "$PACKET"
+          case "$P6_PRIVATE_POST_CHILD_MODE" in
+            checkout)
+              [[ "$PACKET" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
+              test -f "$PACKET"
+              test -z "$P6_PRIVATE_READER_DATABASE_URL"
+              test -z "$P6_PRIVATE_POST_INDEX_SHA"
+              test -z "$P6_PRIVATE_POST_PACKET_SHA"
+              ;;
+            stored)
+              test "$PACKET" = PRIVATE_STORED
+              test "$P6_PRIVATE_POST_CHILD_APPROVED" = 1
+              test "$P6_PRIVATE_POST_CHILD_CONFIRM" = ONE_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS
+              test -n "$P6_PRIVATE_READER_DATABASE_URL"
+              test "$P6_PRIVATE_POST_PACKET_SHA" = "$V39_P5_POST_SIGNED_PACKET_SHA256"
+              ;;
+            *) exit 2 ;;
+          esac
           test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
           test -n "$P5_V39_OTHER_REST_REVIEW_DATABASE_URL"
           test -n "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
@@ -130,5 +189,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          npx tsx scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts "$RELEASE_FILE"
+          if [ "$P6_PRIVATE_POST_CHILD_MODE" = stored ]; then
+            P6_PRIVATE_POST_CHILD_ENTRYPOINT=1 npx tsx scripts/v39_phase6_private_post_existing_v0083_child_v39.ts
+          else
+            npx tsx scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts "$RELEASE_FILE"
+          fi
           echo 'ONE_FUTURE_POST_ORIGINAL_NO_MODEL_LABEL_AND_NO_AUTOMATIC_RETRY'

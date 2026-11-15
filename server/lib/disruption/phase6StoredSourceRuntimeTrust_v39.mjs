@@ -101,3 +101,37 @@ export function makeP6StoredSourceChildInputs(proposal,day){
   day_index_revision:String(s.indexRevision),day_index_sha256:s.externallySignedDayEpochIndexSha256
  });
 }
+
+/** POST uses a separate protected reviewer pin; never let the day or SOURCE
+ * reviewer stand in for the independent POST review. */
+export function readP6StablePostTrust(env){
+ const source=readP6StableSourceTrust(env);
+ if(env.P6_PRIVATE_POST_STORED_REVIEW_APPROVED!=="1")
+  fail("SEPARATE_POST_REVIEW_APPROVAL_REQUIRED");
+ const raw=env.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64;
+ if(typeof raw!=="string"||raw.length<16||raw.length>8192||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(raw))
+  fail("POST_REVIEW_TRUST_MISSING");
+ let t;
+ try{
+  const b=Buffer.from(raw,"base64");
+  if(b.toString("base64")!==raw||b.length>6000)fail("POST_REVIEW_TRUST_NONCANONICAL");
+  t=JSON.parse(b.toString("utf8"));
+ }catch{fail("INVALID_POST_TRUST_JSON");}
+ if(!t||Array.isArray(t)||Object.keys(t).sort().join("|")!==
+    ["independentPostReviewerPinsApproved","postReviewerFingerprintSha256","postReviewerPublicKeyPem"].sort().join("|")||
+    t.independentPostReviewerPinsApproved!==true||
+    !SHA.test(t.postReviewerFingerprintSha256??"")||
+    [source.dayReviewerFingerprintSha256,source.queryReviewerFingerprintSha256].includes(t.postReviewerFingerprintSha256))
+  fail("DISTINCT_POST_REVIEWER_PINS_REQUIRED");
+ try{
+  const pem=t.postReviewerPublicKeyPem;
+  if(typeof pem!=="string"||pem.length>4096||!pem.startsWith("-----BEGIN PUBLIC KEY-----"))
+   fail("POST_PUBLIC_KEY_ONLY");
+  const pub=createPublicKey(pem);
+  if(pub.asymmetricKeyType!=="ed25519"||
+     createHash("sha256").update(pub.export({format:"der",type:"spki"})).digest("hex")!==t.postReviewerFingerprintSha256)
+   fail("WRONG_POST_SIGNER");
+ }catch{fail("INVALID_POST_PUBLIC_KEY");}
+ return Object.freeze({...source,...t});
+}
