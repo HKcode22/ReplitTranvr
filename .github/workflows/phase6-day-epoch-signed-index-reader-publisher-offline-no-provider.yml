@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase6_private_epoch_retention_owner_v39.mjs'
       - 'migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql'
       - 'scripts/v39_phase6_v0101_owner_schema_once_v39.mjs'
       - 'server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs'
