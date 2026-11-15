@@ -72,7 +72,7 @@ export function proposeP6LaterDayAppendBytes(priorBytes:Buffer,prior:Day,source:
  const cutoffs=registry.entries.map(e=>utc(e.expectedSelectedTNativeUtc)-
   (e.expectedHorizon==="T-6h"?21600000:e.expectedHorizon==="T-90m"?5400000:NaN));
  const earliest=Math.min(...cutoffs),latest=Math.max(...cutoffs);
- if(!Number.isFinite(earliest)||earliest<=now+900000||latest>now+180*60000||latest>=retention||
+ if(!Number.isFinite(earliest)||earliest<=now+900000||latest>now+180*60000||latest>=retention||latest>utc(reviewValidUntilUtc)||
     utc(prior.entries.at(-1)!.publishedAtUtc)>now)
   hold("LATE_OR_OVERWIDE_SHARD_NEEDS_CENSOR_OR_PROSPECTIVE_SPLIT");
  const next:Day={...prior,revision:prior.revision+1,previousIndexSha256:hash(priorBytes),
@@ -138,8 +138,10 @@ export async function prepareP6ReviewedLaterShardAppend(x:Input){
  const initial=await current(x),before=sourceAndDuplicates(initial.index,x);
  verifyP5ExternalEd25519ReviewOfLaterShard(x.plan,x.wire,x.reviewerPublicKeyPem,x.reviewerPins,initial.index.redactedSummary.observedDbClockUtc);
  const bound=initial.day.wire.review.retentionNotAfterUtc;
- if(utc(x.publisherScope.approvedRetentionNotAfterUtc)<utc(bound))
-  hold("NEW_SHARD_RETENTION_CANNOT_COVER_ORIGINAL_SIGNED_DAY");
+ // The next index may have a shorter lifetime than its predecessor. Never
+ // force longer retention of a newly derived shard to match old metadata.
+ if(utc(x.publisherScope.approvedRetentionNotAfterUtc)<=utc(initial.index.redactedSummary.observedDbClockUtc))
+  hold("NEW_SHARD_RETENTION_EXPIRED");
  // A preflight proposal ensures complete shard window fits BEFORE any write.
  if(!before.already)proposeP6LaterDayAppendBytes(initial.index.privateCurrentIndexBytes,before.head,before.source,
   x.plan.registryProposal,x.plan.proposedRegistryFilePath,x.plan.proposedRegistrySha256,
