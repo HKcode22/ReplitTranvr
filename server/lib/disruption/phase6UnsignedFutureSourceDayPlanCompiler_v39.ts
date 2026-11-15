@@ -61,10 +61,10 @@ export function compileP6UnsignedFutureSourceDayPlans(input:{
   const row=stage.calendarDays[i],slotDay=b.calendarDays[i];
   if(d.runDayIndex!==i+1||row.runDayIndex!==i+1||slotDay.runDayIndex!==i+1||
     d.startUtc!==row.startUtc||d.startUtc!==slotDay.startUtc||
-    d.utcSlot!==row.utcSlot||d.utcSlot!==slotDay.utcSlot||
+    d.utcSlot!==row.timeClass||d.utcSlot.slice(0,2)!==row.utcSlot||row.utcSlot!==slotDay.utcSlot||
     d.partition!==row.partition||d.partition!==slotDay.partition||
     d.windowShape!==row.windowShape||d.windowShape!==slotDay.windowShape||
-    d.pairId!==row.pairId||d.crossoverPeriod!==row.crossoverPeriod||
+    (d.pairId===null?null:"pair_00"+d.pairId.slice(5))!==row.pairId||d.crossoverPeriod!==row.crossoverPeriod||d.pairRole!==row.pairRole||
     row.drawType!==(d.crossoverPeriod===2?"PAIR_REPLAY":"NEW_TEMPLATE")||
     (d.pairedAirportCandidates===null)!==(row.pairAirportSet===null)||
     (d.pairedAirportCandidates!==null&&SLOTS.some(s=>row.pairAirportSet?.[s].icao!==d.pairedAirportCandidates?.[s])))
