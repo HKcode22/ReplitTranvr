@@ -5,6 +5,7 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,Client} from "pg";
+import {produceP6DelegatedDailySourceReview} from "../server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39";
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {publishP6StoredSourceShardOnce} from "../server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs";
 import {publishP6DayEpochIndexRevisionOnce} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
@@ -429,6 +430,48 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
   await admin.query("DROP TRIGGER ci_v0082_atomic_fail ON clean.phase5_fids_exact_query_partition_v39");
   await admin.query("DROP FUNCTION clean.ci_v0082_bomb()");
+ });
+ it("delegated reviewer derives exact daily packet from actual saved four-slot draw and physical UTC budget",async()=>{
+  const dayPlan={schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex:1,
+   expectedServiceStartUtc:serviceStart,expectedDrawType:"NEW_TEMPLATE",
+   pairedIcaos:Object.fromEntries(sourceReview.localFrames.map(f=>[f.slot,f.icao])),
+   templates:readScope.templates,reviewedRefreshTiming:readScope.reviewedRefreshTiming,
+   reviewedSegmentedSource:readScope.reviewedSegmentedSource};
+  const raw=Buffer.from(JSON.stringify(dayPlan)),now=Date.now();
+  const policy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",
+   approvedCodeSha:"f".repeat(40),manifestSha256:manifest,
+   calendarSha256:review.expectedCalendarSha256,configSha256:review.expectedConfigSha256,
+   frameSha256:review.expectedFrameSha256,releaseSha256:review.expectedReleaseSha256,
+   rightsSha256:review.expectedRightsReviewSha256,providerContractSha256:review.expectedProviderContractSha256,
+   reviewed31DaySourceRequestGridSha256:gridHash,reviewedCategoryBudgetSha256:budgetHash,
+   expectedPrepareRole:USER,validFromUtc:iso(now-H),validUntilUtc:iso(now+6*24*H),
+   maxQueriesPerDay:384,dailyRestCeiling:1900,cycleRestCeiling:50000,minimumProtectedFloor:100,
+   providerApiVersion:"1.15.4",fidsProtocolVersion:"v39",
+   airportFrames:sourceReview.localFrames.map(f=>({icao:f.icao,ianaTimezone:f.ianaTimezone})),
+   dayPlanSha256s:Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:i===0?
+    createHash("sha256").update(raw).digest("hex"):digest({testOnlyFutureDay:i+1})})),
+   delegatedDailyPacketProductionApproved:true};
+  const policyBytes=Buffer.from(JSON.stringify(policy));
+  const args={readPool:writer,policyBytes,dayPlanBytes:raw,pins:{
+   independent31DayDelegationPolicyApproved:true as const,
+   expectedPolicySha256:createHash("sha256").update(policyBytes).digest("hex"),
+   expectedReviewedMainSha:policy.approvedCodeSha,expectedRunDayIndex:1,
+   noProviderCredentialsInReviewer:true as const,existingPaidDispatchApproved:false as const}};
+  const produced=await produceP6DelegatedDailySourceReview(args);
+  expect(produced.queryCount).toBe(96);
+  expect(produced.privatePacket.reviewedPrepareInput.readScope.expectedEarlyDrawSha256)
+   .toBe(readScope.expectedEarlyDrawSha256);
+  expect(produced.privatePacket.reviewedPrepareInput.sourceReview.cycleUnitsAvailable).toBe(49900);
+  expect(produced.delegatedAutomatedReviewNotHumanReview).toBe(true);
+  expect(JSON.stringify(produced)).not.toContain("reviewedPrepareInput");
+  expect(produced.phase6PaidGo).toBe(false);
+  expect(produced.exactDailyPacketSha256).toBe(createHash("sha256").update(produced.privatePacketBytes).digest("hex"));
+  expect((await produceP6DelegatedDailySourceReview(args)).exactDailyPacketSha256).toBe(produced.exactDailyPacketSha256);
+  await expect(produceP6DelegatedDailySourceReview({...args,dayPlanBytes:Buffer.from(JSON.stringify({...dayPlan,runDayIndex:2}))}))
+   .rejects.toThrow("EXACT_APPROVAL_BYTES_MISMATCH");
+  await expect(produceP6DelegatedDailySourceReview({...args,readPool:admin}))
+   .rejects.toThrow("RESTRICTED_REVIEWER_OR_POLICY_CLOCK");
+  expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
  });
  it("prepares exact 96 queries + 96 V0082 BASE/SPLIT partitions atomically",async()=>{
   const {proposal:unusedProposal,...reviewPins}=review;
