@@ -10,6 +10,7 @@ import {hydrateP6DayEpochFullRegistriesReadOnly} from "./phase6DayEpochFullRegis
 import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
 import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope} from "./phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {readP6T24CurrentRegistrySet} from "./phase6PrivateT24RegistryTransport_v39.mjs";
 import {auditP5FuturePostActualPriorPreBatch} from "./phase5V0083FuturePostOriginalDb_v39.ts";
 const H=/^[a-f0-9]{64}$/;
 const ID=/^[-A-Za-z0-9_.:|]{5,200}$/;
@@ -20,15 +21,15 @@ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApprov
 const privateResult=(summary,privateCandidates)=>Object.freeze(Object.defineProperty(summary,"privateCandidates",
  {value:Object.freeze(privateCandidates),enumerable:false,writable:false}));
 /** Pure projection of one already authenticated index and exact query scope.
- * Explicitly limited to the later PRE registry lane; T24 witness receipt
- * retention does not independently extend original SOURCE use rights.
+ * T24 candidates use the existing independent private registry readback.
+ * A witness receipt does not extend original SOURCE use rights.
  * No inference of physical flight completion. */
-export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceScope,afterFlightId=null,pageSize=96}){
+export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceScope,t24Current=null,afterFlightId=null,pageSize=96}){
  const selected=selectP6CommittedNativeSourceQuery(index,selector,trust);
  if(!sourceScope||sourceScope.queryDigestSha256!==selector.queryDigestSha256||
     sourceScope.manifestSha256!==trust.manifestSha256||sourceScope.runDayIndex!==selector.runDayIndex||
     sourceScope.reviewedReleaseSha256!==trust.releaseSha256||sourceScope.rightsReviewSha256!==trust.rightsSha256||
-    !["T-6h","T-90m"].includes(sourceScope.horizon)||!/^[A-Z]{4}$/.test(sourceScope.airportIcao??"")||
+    !["T-24h","T-6h","T-90m"].includes(sourceScope.horizon)||!/^[A-Z]{4}$/.test(sourceScope.airportIcao??"")||
     !Number.isSafeInteger(pageSize)||pageSize<1||pageSize>384||
     (afterFlightId!==null&&!ID.test(afterFlightId)))hold("UNBOUND_PAGE_SCOPE");
  const begin=utc(sourceScope.expectedServiceWindowStartUtc),end=utc(sourceScope.expectedServiceWindowEndUtc);
@@ -59,6 +60,30 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
     expectedSelectedTNativeUtc:f.expectedSelectedTNativeUtc,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256])}));
   }
  }
+ if(sourceScope.horizon==="T-24h"){
+  const seal=(x,k)=>{const d=Object.getOwnPropertyDescriptor(x??{},k);return d&&!d.enumerable&&!d.writable;};
+  if(t24Current?.status!=="CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO"||t24Current.providerCalls!==0||
+     t24Current.databaseWrites!==0||t24Current.phase6PaidGo!==false||t24Current.runDayIndex!==selector.runDayIndex||
+     !seal(t24Current,"privateIndex")||!seal(t24Current,"privateRegistries")||
+     t24Current.privateIndex.redactedSummary.indexSha256!==selector.indexSha256||
+     !Array.isArray(t24Current.privateRegistries)||t24Current.privateRegistries.length!==t24Current.registryCount||
+     t24Current.registryCount>1024)hold("NO_CURRENT_AUTHENTICATED_T24_REGISTRY");
+  for(const {reg,review,registryBytes} of t24Current.privateRegistries){
+   if(reg?.schema!=="v39.phase6.native-t24-private-registry.v1"||reg.manifestSha256!==trust.manifestSha256||
+      reg.runDayIndex!==selector.runDayIndex||!Buffer.isBuffer(registryBytes)||hash(registryBytes)!==review.registrySha256||
+      !registryBytes.equals(Buffer.from(JSON.stringify(reg)))||!Array.isArray(reg.entries)||reg.entries.length>96)
+    hold("T24_REGISTRY_SCOPE_DRIFT");
+   for(const e of reg.entries){
+    if(e.queryDigestSha256!==selector.queryDigestSha256)continue;
+    const t=utc(e.selectedTNativeUtc);
+    if(reg.sourceRegistryPath!==selected.entry.filePath||reg.sourceRegistrySha256!==selected.entry.fileSha256||
+       !ID.test(e.flightInstanceId??"")||by.has(e.flightInstanceId)||t<begin||t>=end||t-utc(e.cutoffUtc)!==86400000)
+     hold("T24_POST_CANDIDATE_SCOPE_DRIFT");
+    by.set(e.flightInstanceId,Object.freeze({flightInstanceId:e.flightInstanceId,
+     expectedSelectedTNativeUtc:e.selectedTNativeUtc,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256])}));
+   }
+  }
+ }
  const ordered=[...by.values()].sort((a,b)=>a.flightInstanceId<b.flightInstanceId?-1:a.flightInstanceId>b.flightInstanceId?1:0);
  const rest=ordered.filter(x=>afterFlightId===null||x.flightInstanceId>afterFlightId),page=rest.slice(0,pageSize);
  return privateResult({status:"SIGNED_LATER_NATIVE_POST_CANDIDATE_PAGE_NOT_ACTUAL_PRE",runDayIndex:selector.runDayIndex,
@@ -68,12 +93,12 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
 /** Actual restricted clients, current independently signed day + source query,
  * original native source partition validator, then actual V0083 DB read.
  * The cursor and all flight/native/permit material stay private. */
-export async function readP6ActualNativePostPreCandidatePage({readerClient,sourcePool,trust,selector,policy,afterFlightId=null,pageSize=96}){
+export async function readP6ActualNativePostPreCandidatePage({readerClient,sourcePool,trust,selector,policy,t24Trust=null,afterFlightId=null,pageSize=96}){
  if(trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentPostCandidateReadOnlyApproved!==true||
     policy.independentNativeCandidateReadOnlyApproved!==true||
     policy.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true||
-    !H.test(policy.reviewedFrameSha256??"")||!["T-6h","T-90m"].includes(policy.horizon)||
+    !H.test(policy.reviewedFrameSha256??"")||!["T-24h","T-6h","T-90m"].includes(policy.horizon)||
     !Number.isSafeInteger(selector?.runDayIndex)||selector.runDayIndex<1||selector.runDayIndex>31||
     !H.test(selector.queryDigestSha256??""))hold("NO_EXACT_NONPAID_SCOPE");
  const day=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
@@ -89,7 +114,11 @@ export async function readP6ActualNativePostPreCandidatePage({readerClient,sourc
  const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
  const sourceScope=deriveP6CommittedNativeQueryScope(receipt,selected,exact,trust,policy);
  if(sourceScope.horizon!==policy.horizon)hold("SIGNED_HORIZON_DRIFT");
- const page=selectP6PostNativePreCandidatePage({index,selector:exact,trust,sourceScope,afterFlightId,pageSize});
+ if(policy.horizon==="T-24h"&&(!t24Trust||t24Trust.expectedFrameSha256!==policy.reviewedFrameSha256||
+    !["manifestSha256","calendarSha256","releaseSha256","rightsSha256","reviewedCodeSha","expectedReaderSessionLogin"].every(k=>t24Trust[k]===trust[k])))
+  hold("T24_POST_TRUST_DRIFT");
+ const t24Current=policy.horizon==="T-24h"?await readP6T24CurrentRegistrySet({client:readerClient,trust:t24Trust,runDayIndex:exact.runDayIndex}):null;
+ const page=selectP6PostNativePreCandidatePage({index,selector:exact,trust,sourceScope,t24Current,afterFlightId,pageSize});
  const observed=receipt.redactedSummary.observedDatabaseClockUtc;
  const result=page.pageCandidateCount?await auditP5FuturePostActualPriorPreBatch(sourcePool,{
   manifestSha256:trust.manifestSha256,runDayIndex:exact.runDayIndex,airportIcao:sourceScope.airportIcao,
@@ -106,6 +135,7 @@ export async function readP6ActualNativePostPreCandidatePage({readerClient,sourc
   privateDecisions:{value:result?.privateDecisions??Object.freeze([]),enumerable:false},
   privateSourceScope:{value:sourceScope,enumerable:false},
   privateReviewedFrameSha256:{value:policy.reviewedFrameSha256,enumerable:false},
+  privateSourceQueryRetentionNotAfterUtc:{value:signed.wire.review.retentionNotAfterUtc,enumerable:false},
   privateSourceQueryBytes:{value:Buffer.from(receipt.privateBytes),enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
