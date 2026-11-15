@@ -29,6 +29,8 @@ const PACK=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.jso
 const CONFIRM="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET";
 const PRIVATE_CONFIRM="ONE_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_SAME_JOB_ONE_GET";
 const LIMIT=4;
+// Exact first-seed capacity candidate; original individual paid gates unchanged.
+export const P6_STORED_SOURCE_CAPACITY=Object.freeze({perTickCap:8,inFlightCap:24,maxLeadMinutes:35});
 const hold=(x:string):never=>{
  throw Error("HOLD_P6_PRIVATE_SOURCE_PARENT_"+x);
 };
@@ -92,13 +94,14 @@ export interface ReviewedPrivateSourceIntent{
 
 export function reviewP6PrivateDaySourceDueParentNoDispatch({
  days,sourceObserver,history,expectedManifestSha256,
- expectedMainSha
+ expectedMainSha,storedCapacityProfile=false
 }:{
  days:readonly PrivateReviewedDay[];
  sourceObserver:ExistingSourceObserver;
  history:P5CompleteGithubWorkflowHistory;
  expectedManifestSha256:string;
  expectedMainSha:string;
+ storedCapacityProfile?:boolean;
 }){
  if(!Array.isArray(days)||days.length<1||days.length>2||
     !SHA.test(expectedManifestSha256??"")||
@@ -236,6 +239,7 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
     if(planned-now<15*60000||planned-now>105*60000||
        latest<=now||planned>=latest)
      hold("REAL_DB_LEAD_OR_CUTOFF_CHANGED");
+    if(storedCapacityProfile&&planned-now>P6_STORED_SOURCE_CAPACITY.maxLeadMinutes*60000){notYetDue++;continue;}
     activeDue++;
     // Preserve all genuinely due, signed original candidate intents until
     // a final deadline-first deterministic selection. Registry insertion
@@ -271,7 +275,7 @@ export function reviewP6PrivateDaySourceDueParentNoDispatch({
   a.plannedDispatchUtc.localeCompare(b.plannedDispatchUtc)||
   a.runDayIndex-b.runDayIndex||
   a.queryDigestSha256.localeCompare(b.queryDigestSha256));
- const candidates=dueCandidates.slice(0,LIMIT);
+ const candidates=dueCandidates.slice(0,storedCapacityProfile?P6_STORED_SOURCE_CAPACITY.perTickCap:LIMIT);
  deferredDue=dueCandidates.length-candidates.length;
  const result={redactedSummary:Object.freeze({
   schema:P6_PRIVATE_SOURCE_PARENT_REVIEW_SCHEMA,
