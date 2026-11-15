@@ -154,6 +154,8 @@ export function inspectP6DayEpochExistingShardSemanticsNoGo(verified){
  Object.defineProperties(output,{
   privateRoutingCandidates:{enumerable:false,
    value:routed.privateRoutingCandidates},
+  privateAllDuePostRoutingCandidates:{enumerable:false,
+   value:routed.privateAllDuePostRoutingCandidates},
   getFrozen:{enumerable:false,value:verified.getFrozen}
  });
  return Object.freeze(output);
