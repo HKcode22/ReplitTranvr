@@ -3,6 +3,9 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql'
+      - 'server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs'
+      - 'tests/phase6_private_t24_witness_transport_real_pg16_v39.mts'
       - 'server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts'
       - 'tests/phase6_reviewed_later_shard_append_real_pg16_v39.mts'
       - 'server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs'
@@ -152,6 +155,11 @@ jobs:
           set -Eeuo pipefail
           set +x
           test -z "$DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          PGPASSWORD=ci-only-day-real psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql
+          if PGPASSWORD=ci-only-day-real psql -U neondb_owner -X -v ON_ERROR_STOP=1 -f migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql; then
+            echo 'V0101 unexpected replay success'; exit 1
+          fi
+          npx tsx tests/phase6_private_t24_witness_transport_real_pg16_v39.mts
           node tests/phase6_private_daily_prepare_review_real_pg16_v39.mjs
           node tests/phase6_day_epoch_signed_index_real_pg16_v39.mjs
           npx tsx tests/phase6_reviewed_later_shard_append_real_pg16_v39.mts
