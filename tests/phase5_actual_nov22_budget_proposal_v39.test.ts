@@ -1,7 +1,7 @@
 import {readFileSync,mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {compileP6ActualCandidateExport,writeP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -200,4 +200,25 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(()=>assembleP6ActualFirstSeedReleaseCandidate({...f,external,
    expectedExternalInputSha256:hash(Buffer.from(JSON.stringify(external)))})).toThrow("EXACT_PROPOSED_PHYSICAL_CAPS_CHANGED");
  });
+ it("prefills only known original-seed frame/calendar and exact 47 charge dates without invented external review",()=>{
+  const code="09b80926caae24ba07a1f8a20c819090d8f2528c";
+  const x=prepareP6ActualReviewInput(code),p=x.externalCandidate;
+  expect(x.originalPreviewSha256).toBe("003885e93f3a3daa1098f648502c5a7dd3beb6e317e906ffe281760aaba763af");
+  expect(x.calendarDraft.calendarDays).toHaveLength(31);
+  expect(x.calendarDraft.calendarDays.filter(d=>d.pairAirportSet===null)).toHaveLength(21);
+  expect(p.frameSha256).toBe("02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94");
+  expect(p.restOtherByUtcDate).toHaveLength(47);
+  expect(x.proposedTotalReservedUnits).toBe(41960);
+  expect(x.proposedSourceQueries).toBe(6144);
+  expect(x.proposedPeakDailyUnits).toBe(1228);
+  expect(x.missingExternalFields).toEqual(["manifestSha256","calendarSha256","configSha256","phase6AuthorizationId","predecessorEvidenceIds","alertSafety","providerRangeEvidenceSha256","timingEvidenceSha256"]);
+  expect(x.timingCandidate.timingEvidenceSha256).toBeNull();
+  expect(x.phase6PaidGo).toBe(false);
+  expect(x.sourceRightsApproved).toBe(false);
+  expect(prepareP6ActualReviewInput(code)).toEqual(x);
+  expect(()=>prepareP6ActualReviewInput("fake")).toThrow();
+  const ext=Buffer.from(JSON.stringify(p)),timing=Buffer.from(JSON.stringify(x.timingCandidate));
+  expect(()=>compileP6ActualCandidateExport({externalBytes:ext,expectedExternalFileSha256:hash(ext),timingBytes:timing,expectedTimingFileSha256:hash(timing)})).toThrow();
+ });
+
 });
