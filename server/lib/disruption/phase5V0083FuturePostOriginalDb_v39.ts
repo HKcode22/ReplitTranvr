@@ -509,7 +509,7 @@ export async function auditP5FuturePostActualPriorPreBatch(pool:Pick<Pool,"conne
   if(!p||!/^[-A-Za-z0-9_.:|]{5,200}$/.test(p.flightInstanceId??"")||ids.has(p.flightInstanceId)||
      !Array.isArray(p.boundSourceQueryDigests)||p.boundSourceQueryDigests.length<1||p.boundSourceQueryDigests.length>96||
      new Set(p.boundSourceQueryDigests).size!==p.boundSourceQueryDigests.length||
-     p.boundSourceQueryDigests.some(x=>!H.test(x??"")))fail("UNBOUND_OR_DUPLICATE_POST_PRE_BATCH_CANDIDATE");
+     p.boundSourceQueryDigests.some((x:unknown)=>typeof x!=="string"||!H.test(x)))fail("UNBOUND_OR_DUPLICATE_POST_PRE_BATCH_CANDIDATE");
   utc(p.expectedSelectedTNativeUtc);ids.add(p.flightInstanceId);
  }
  const db=await pool.connect();let tx=false;
