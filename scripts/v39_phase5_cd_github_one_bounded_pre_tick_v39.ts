@@ -7,6 +7,7 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Client,Pool} from "pg";
+import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {readP6PrivateLaterQueueRoster} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
@@ -71,7 +72,7 @@ export function admitP5PrivateLaterWorker(env:NodeJS.ProcessEnv){
     decodeURIComponent(reader.username)!==trust.expectedReaderSessionLogin||
     decodeURIComponent(reader.username)===decodeURIComponent(pre.username)||
     !reader.password||reader.pathname!=="/neondb"||reader.hash||
-    !reader.hostname.endsWith(".neon.tech")||reader.host!==pre.host||
+    !reader.hostname.endsWith(".neon.tech")||!sameP6NeonDatabaseEndpoint(reader,pre)||
     reader.searchParams.getAll("sslmode").length!==1||
     reader.searchParams.get("sslmode")!=="require"||
     [...reader.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
