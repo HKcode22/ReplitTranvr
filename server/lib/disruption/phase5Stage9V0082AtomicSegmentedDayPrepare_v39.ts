@@ -588,3 +588,109 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
   throw err;
  }finally{client.release();}
 }
+
+/**
+ * Fresh restricted readback of the COMPLETE initial Stage9 preparation.
+ * No INSERT, no replay and no provider. Exact rows must match the prior
+ * independently reviewed Stage8 bytes, including every partition and
+ * physical UTC charge date. Use before first dispatch; changed ACTIVE or
+ * STOPPED rows cannot be passed off as untouched preparation.
+ * The existing PREPARE group is reused; a separate connection/snapshot
+ * is not a separate reviewer identity or a source-use authorization.
+ */
+export async function readBackP5Stage9PreparedDayOnce(
+ pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview
+){
+ const validated=checkedProposal(review);
+ if(!pool||typeof pool.connect!=="function")hold("READBACK_NO_RESTRICTED_POOL");
+ const client=await pool.connect();
+ let tx=false;
+ try{
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await client.query("SET LOCAL statement_timeout='12000ms'");
+  await client.query("SET LOCAL lock_timeout='2000ms'");
+  const who=await client.query(
+   "SELECT current_database() AS db,current_user AS role,"+
+   "current_setting('server_version_num')::int AS ver,"+
+   "current_setting('transaction_read_only') AS ro,"+
+   "clock_timestamp() AS at,pg_is_in_recovery() AS replica,"+
+   "has_table_privilege(current_user,'clean.phase5_fids_physical_attempt_v39','INSERT') AS paid,"+
+   "has_table_privilege(current_user,'clean.phase5_fids_allowed_query_v39','UPDATE') AS qu,"+
+   "has_table_privilege(current_user,'clean.phase5_fids_exact_query_partition_v39','UPDATE') AS pu"
+  );
+  const a=who.rows[0];
+  if(who.rowCount!==1||a?.db!=="neondb"||a.role!==review.expectedRestrictedWriterRole||
+     Number(a.ver)<160000||Number(a.ver)>=170000||a.ro!=="on"||a.replica!==false||
+     a.paid!==false||a.qu!==false||a.pu!==false)
+   hold("READBACK_WRONG_RESTRICTED_ROLE_OR_DATABASE");
+  const now=dt(a.at);
+  if(now>=validated.firstDispatch)
+   hold("READBACK_AFTER_FIRST_PROSPECTIVE_REQUEST");
+  const auth=await client.query("SELECT manifest_sha256,calendar_hash,config_hash,enabled,revoked_at_utc "+
+   "FROM clean.adb_phase6_authorization WHERE singleton_key=true");
+  const ar=auth.rows[0];
+  if(auth.rowCount!==1||ar?.enabled!==true||ar.revoked_at_utc!==null||
+     ar.manifest_sha256!==review.expectedManifestSha256||
+     ar.calendar_hash!==review.expectedCalendarSha256||
+     ar.config_hash!==review.expectedConfigSha256)
+   hold("READBACK_AUTHORIZATION_DRIFT");
+  const selected=await client.query("SELECT "+COLS.map(c=>c==="planned_charge_utc_date"?
+   c+"::text AS "+c:c).join(",")+",last_reserved_attempt,created_at_utc FROM clean.phase5_fids_allowed_query_v39 "+
+   "WHERE manifest_sha256=$1 AND run_day_index=$2 ORDER BY query_digest LIMIT 385",
+   [review.expectedManifestSha256,review.proposal.runDayIndex]);
+  const parts=await client.query(
+   "SELECT p.query_digest,p.manifest_sha256,p.segment_index,p.partition_index,p.window_shape,"+
+   "p.rest_category,p.reviewed_provider_range_sha256 "+
+   "FROM clean.phase5_fids_exact_query_partition_v39 p "+
+   "JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=p.query_digest "+
+   "WHERE q.manifest_sha256=$1 AND q.run_day_index=$2 ORDER BY p.query_digest LIMIT 385",
+   [review.expectedManifestSha256,review.proposal.runDayIndex]);
+  if(selected.rowCount!==validated.queries.length||selected.rows.length!==validated.queries.length||
+     parts.rowCount!==validated.pins.length||parts.rows.length!==validated.pins.length)
+   hold("READBACK_INCOMPLETE_OR_EXTRA_PREPARED_DAY");
+  const rows=new Map(selected.rows.map(q=>[q.query_digest,q]));
+  const pins=new Map(parts.rows.map(q=>[q.query_digest,q]));
+  if(rows.size!==selected.rows.length||pins.size!==parts.rows.length)
+   hold("READBACK_DUPLICATE_QUERY_OR_PARTITION");
+  const times=new Set<string>(["service_window_start_utc","service_window_end_utc",
+    "planned_dispatch_utc","hard_latest_dispatch_utc","prediction_cutoff_utc"]);
+  const ints=new Set<string>(["run_day_index","api_units_per_attempt","max_physical_attempts"]);
+  for(const q of validated.queries){
+   const actual=rows.get(q.query_digest);
+   if(!actual)hold("READBACK_QUERY_MISSING");
+   if(!integral(actual.last_reserved_attempt,0,0)||dt(actual.created_at_utc)>now)
+    hold("READBACK_PREVIOUS_RESERVATION_OR_FUTURE_CREATION");
+   for(const c of COLS){
+    const v=actual[c],expected=q[c];
+    if(times.has(c)?dt(v)!==dt(expected):
+       ints.has(c)?!integral(v,1,384)||Number(v)!==expected:v!==expected)
+     hold("READBACK_QUERY_BYTES_OR_STATE_DRIFT");
+   }
+  }
+  for(const p of validated.pins){
+   const actual=pins.get(p.queryDigest);
+   if(!actual||actual.manifest_sha256!==review.expectedManifestSha256||
+      !integral(actual.segment_index,1,360)||Number(actual.segment_index)!==p.segmentIndex||
+      !integral(actual.partition_index,1,360)||Number(actual.partition_index)!==p.partitionIndex||
+      actual.window_shape!==p.windowShape||actual.rest_category!==p.restCategory||
+      actual.reviewed_provider_range_sha256!==p.reviewedProviderRangeEvidenceSha256)
+    hold("READBACK_PARTITION_DRIFT");
+  }
+  await client.query("ROLLBACK");tx=false;
+  return Object.freeze({
+   schema:"v39.phase5.v0082.exact-initial-prepared-day-readback.v1" as const,
+   status:"EXACT_COMMITTED_PREPARED_QUERY_AND_PARTITION_DAY_NO_PAID_GO" as const,
+   runDayIndex:review.proposal.runDayIndex,manifestSha256:review.expectedManifestSha256,
+   sourceProposalSha256:review.expectedProposalSha256,
+   verifiedQueryCount:rows.size,verifiedPartitionCount:pins.size,
+   observedDatabaseClockUtc:new Date(now).toISOString(),
+   separateReadOnlySnapshot:true as const,
+   independentReviewerAuthorityEstablishedHere:false as const,
+   sourceRightsOrCurrentSpendPermissionGrantedHere:false as const,
+   providerCalls:0 as const,databaseWrites:0 as const,phase6PaidGo:false as const
+  });
+ }finally{
+  if(tx)await client.query("ROLLBACK").catch(()=>{});
+  client.release();
+ }
+}

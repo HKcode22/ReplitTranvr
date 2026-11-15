@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
@@ -20,6 +23,9 @@ on:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
+      - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39.ts'
+      - 'server/lib/disruption/phase6StoredSourceShardPublication_v39.mjs'
       - 'server/lib/disruption/phase5CommittedDayGridReadonly_v39.ts'
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'server/lib/disruption/phase5ReviewedSourceDayPrepareOrchestrator_v39.ts'
@@ -41,6 +47,7 @@ env:
   V39_PHASE6_OWNER_APPROVED: '0'
   V39_P5_SOURCE_OWNER_APPROVED: '0'
   V39_P5_V0082_ATOMIC_PG16: '1'
+  P6_SOURCE_SIGNER_PIPELINE_DISPOSABLE_ONLY: '1'
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
   V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
 jobs:
@@ -84,7 +91,33 @@ jobs:
             -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
             -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
-      - name: Typecheck and prove two-table atomicity, forbidden role escalation, real saved draw
+      - name: Install exact private transport only on same disposable PostgreSQL16
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$P6_SOURCE_SIGNER_PIPELINE_DISPOSABLE_ONLY" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-source-owner'"
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+            -c 'ALTER DATABASE neondb OWNER TO neondb_owner'
+          LOCAL='postgresql://neondb_owner:ci-only-source-owner@localhost:5432/neondb?sslmode=disable'
+          for sql in \
+            V0094__phase6_private_frozen_packet_transport_inert_v39.sql \
+            V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql \
+            V0097__phase6_private_run_day_epoch_index_inert_v39.sql \
+            V0098__phase6_atomic_private_review_wire_transport_inert_v39.sql
+          do
+            psql "$LOCAL" -X -v ON_ERROR_STOP=1 -f "migrations/staged/$sql"
+          done
+          psql "$LOCAL" -X -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE phase6_private_publisher_login_ci_pipeline LOGIN NOINHERIT PASSWORD 'ci-only-source-publisher'" \
+            -c "CREATE ROLE phase6_private_reader_login_ci_pipeline LOGIN NOINHERIT PASSWORD 'ci-only-source-reader'" \
+            -c 'GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_pipeline WITH INHERIT FALSE, SET TRUE' \
+            -c 'GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_pipeline WITH INHERIT FALSE, SET TRUE'
+      - name: Typecheck and prove two-table atomicity, actual signer and private index handoff
         run: |
           set -Eeuo pipefail
           test -z "${AERODATABOX_API_KEY:-}"
