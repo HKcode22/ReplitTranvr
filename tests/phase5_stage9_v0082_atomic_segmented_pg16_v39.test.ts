@@ -5,7 +5,8 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool} from "pg";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
+import {signP6ReviewedPreparedSourceDay} from "../server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39";
 import {commitEarlyPhase5Draw} from
  "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
 import {readCommittedP5DayCandidateGrid,
@@ -500,6 +501,51 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   await expect(readBackP5Stage9PreparedDayOnce(writer,{...review,
    expectedSourceCandidateDigestSha256:sha("0")}))
    .rejects.toThrow("ALTERED_V3_PROPOSAL_OR_SOURCE_DIGEST");
+  expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
+ });
+ it("delegated policy signer independently rederives all 96 prepared queries from actual PG before exact signatures",async()=>{
+  const {proposal:discard,...stage9Review}=review;void discard;
+  const day={schema:"v39.phase5.github-signed-one-day-source-preparation.v1",
+   approvedCodeSha:"f".repeat(40),manifestSha256:manifest,runDayIndex:1,
+   independentlyReviewedExactDaySourcePacket:true,reviewedPrepareInput:{
+    readScope:{...readScope,expectedRestrictedReaderRole:USER},sourceReview,stage9Review
+   }};
+  const query=generateKeyPairSync("ed25519"),registry=generateKeyPairSync("ed25519");
+  const fp=(key:typeof query.publicKey)=>createHash("sha256").update(key.export({format:"der",type:"spki"})).digest("hex");
+  const now=Date.now(),policy={schema:"v39.phase6.delegated-source-review-policy.v1",
+   approvedCodeSha:day.approvedCodeSha,manifestSha256:manifest,
+   calendarSha256:review.expectedCalendarSha256,configSha256:review.expectedConfigSha256,
+   frameSha256:review.expectedFrameSha256,releaseSha256:review.expectedReleaseSha256,
+   rightsSha256:review.expectedRightsReviewSha256,providerContractSha256:review.expectedProviderContractSha256,
+   reviewed31DaySourceRequestGridSha256:review.reviewed31DaySourceRequestGridSha256,
+   reviewedCategoryBudgetSha256:review.reviewedCategoryBudgetSha256,
+   expectedPrepareRole:USER,validFromUtc:new Date(now-3600000).toISOString(),
+   validUntilUtc:new Date(now+6*86400000).toISOString(),
+   maximumReviewRetentionHours:96,maxQueriesPerDay:384,
+   queryReviewerFingerprintSha256:fp(query.publicKey),registryReviewerFingerprintSha256:fp(registry.publicKey),
+   delegatedAutomatedSourceSigningApproved:true};
+  const bytes=Buffer.from(JSON.stringify(policy)),daily=Buffer.from(JSON.stringify(day));
+  const args={readPool:writer,policyBytes:bytes,dailyPreparePacketBytes:daily,
+   pins:{independentExactPolicyAndDailyReviewApproved:true as const,
+    expectedPolicySha256:createHash("sha256").update(bytes).digest("hex"),
+    expectedDailyPreparePacketSha256:createHash("sha256").update(daily).digest("hex"),
+    expectedReviewedMainSha:day.approvedCodeSha,existingPaidDispatchApproved:false as const,
+    noProviderCredentialsInSigner:true as const},queryKey:query.privateKey,registryKey:registry.privateKey};
+  const result=await signP6ReviewedPreparedSourceDay(args);
+  expect(result.queryCount).toBe(96);
+  expect(result.actualPreparedLedgerVerified).toBe(true);
+  expect(result.automatedDelegatedSignatureNotHumanReview).toBe(true);
+  const all=result.privateSignedShards.flatMap(x=>x.queryPackets);
+  expect(all).toHaveLength(96);
+  expect(new Set(all.map(x=>JSON.parse(x.bytes.toString("utf8")).queryDigestSha256)))
+   .toEqual(new Set(review.proposal.queries.map(x=>x.query_digest)));
+  expect(all.every(x=>JSON.parse(x.bytes.toString("utf8")).plan.githubOnlyOwnerApproved===true)).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("signatureBase64");
+  expect(result.phase6PaidGo).toBe(false);
+  await expect(signP6ReviewedPreparedSourceDay({...args,queryKey:registry.privateKey}))
+   .rejects.toThrow("SIGNER_KEY_NOT_APPROVED_BY_POLICY");
+  await expect(signP6ReviewedPreparedSourceDay({...args,pins:{...args.pins,expectedDailyPreparePacketSha256:sha("0")}}))
+   .rejects.toThrow("UNPINNED_EXACT_APPROVAL_BYTES");
   expect(await counts()).toEqual({q:96,p:96,a:0,o:0});
  });
  it("refuses replay after commit, no duplicates or excess permissions",async()=>{
