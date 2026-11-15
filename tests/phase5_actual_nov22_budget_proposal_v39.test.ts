@@ -50,6 +50,30 @@ describe("original actual first randomization and seven-category cap PROPOSAL",(
    expect(x.modeledEligibleCutoffSeconds+x.modeledUncoveredCutoffSeconds).toBe(x.exposedCutoffSeconds);
   expect(b.totalReservedUnits).toBe(41960);expect(b.phase6PaidGo).toBe(false);
  });
+ it("bounds actual first-seed native POST physical cost without assuming any actual flight or retention",()=>{
+  const b=proposeP5ActualNov22Budget(actual()),d=b.postGeometryDiagnostic;
+  expect(d.scenarios).toHaveLength(21);
+  expect(d.actualAnchorAvailabilityMeasured).toBe(false);
+  expect(d.actualOutcomeCoverageMeasured).toBe(false);
+  expect(d.policyChanged).toBe(false);
+  for(const s of d.scenarios){
+   expect(s.partitionSlotUpperBound).toBe(144);
+   expect(s.midnightCrossingGroups+s.geometryEligibleGroups).toBe(144);
+   expect(s.maximumOneGetPerPartitionSlotUnits).toBe(2*s.geometryEligibleGroups);
+   expect(s.maximumOneGetPerPartitionSlotUnits).toBeLessThanOrEqual(288);
+   expect(s.everyGeometryEligibleChargeDateWithinProposedOutcomeCap).toBe(true);
+   expect(s.byHorizon.map(x=>x.totalTemplates)).toEqual([2048,2048,2048]);
+   expect(s.byHorizon[0].modeledRetainedTemplates).toBe(0);
+  }
+  const early=d.scenarios.find(x=>x.followupMinutes===60&&x.dispatchWindowMinutes===20)!;
+  expect(early.geometryEligibleGroups).toBe(144);
+  expect(early.modeledAnyAnchorGroups).toBe(144);
+  expect(early.byHorizon.map(x=>x.modeledRetainedTemplates)).toEqual([0,2048,2048]);
+  const late=d.scenarios.find(x=>x.followupMinutes===1440&&x.dispatchWindowMinutes===20)!;
+  expect(late.modeledAnyAnchorGroups).toBe(0);
+  expect(b.totals.OUTCOME_REST_UNIT_BUDGET).toBe(27520);
+  expect(b.totalReservedUnits).toBe(41960);expect(b.phase6PaidGo).toBe(false);
+ });
  it("refuses a revised calendar rather than silently redrawing",()=>{
   const d=actual();d.calendarDays[0].startUtc="2026-11-23T00:00:00.000Z";
   expect(()=>proposeP5ActualNov22Budget(d)).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
