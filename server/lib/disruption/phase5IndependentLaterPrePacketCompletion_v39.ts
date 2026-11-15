@@ -18,8 +18,10 @@ import type {P5UnsignedNativePreDossier,
  from "./phase5SourceBoundUnsignedPreDossier_v39";
 import {digestP5UnsignedNativePreDossier}
  from "./phase5SourceBoundUnsignedPreDossier_v39";
-import type {P5Stage14SingleFlightPrePermit}
+import {preflightP5Stage14ReviewedPermitV39,type P5Stage14SingleFlightPrePermit}
  from "./phase5V0079SingleBoundFlightPreWriter_v39";
+import {verifyP5T24PreWitnessCrossReview,type P5IndependentT24WitnessReview} from "./phase5T24PreIndependentWitnessChain_v39";
+import type {P5NativeT24SignedReleasePacket} from "../../../scripts/v39_phase5_one_signed_native_t24_pre_witness_github_owner_v39";
 import {P5_STAGE28_GROUPS}
  from "./phase5Stage28DedicatedRolePool_v39";
 import {digestP5Stage24ReviewedReceipt,
@@ -109,17 +111,24 @@ export interface P5ReviewReadyLaterPrePacketBytes{
  databaseWrites:0;
  githubDispatches:0;
 }
-/** Does not grant source-use permissions. It verifies a separately pinned
- * REVIEW ARTIFACT exact byte digest, then assembles bytes which *still*
- * require an independently pinned signed production registry and all
- * downstream active-GO gates before any Stage14 write. */
-export function completeP5NativeLaterPrePacketForIndependentSigning(
- dossier:P5UnsignedNativePreDossier,
- entry:P5UnsignedPreReviewEntry,
- reviewBytes:Buffer,
- review:P5ExternalNativeLaterPreReviewArtifact,
- pins:P5ExternalNativeLaterPacketPins
-):P5ReviewReadyLaterPrePacketBytes{
+
+/** Same exact detached SOURCE dossier validation for every native horizon.
+ * T24 produces the already-supported independent witness permit, never
+ * a pre-existing witness receipt. LATER uses the original evidence tiers. */
+export interface P5ExternalNativeT24PreReviewArtifact extends Omit<P5ExternalNativeLaterPreReviewArtifact,
+ "schema"|"reviewedHorizon"|"reviewedT24WitnessReceipt"|"reviewedStandaloneLaterNoT24">{
+ schema:"v39.phase5.external-native-t24-pre-packet-review.v1";
+ reviewedHorizon:"T-24h";
+ independentT24WitnessProtocolReviewed:true;
+ reviewedWitnessOnlyRole:string;
+}
+export type P5ExternalNativeT24PacketPins=Omit<P5ExternalNativeLaterPacketPins,
+ "expectedT24ReceiptSha256"|"separatelyApprovedNoT24ProtocolSha256">;
+type NativeReview=P5ExternalNativeLaterPreReviewArtifact|P5ExternalNativeT24PreReviewArtifact;
+function validateCommonNativeReview(
+ dossier:P5UnsignedNativePreDossier,entry:P5UnsignedPreReviewEntry,
+ reviewBytes:Buffer,review:NativeReview,pins:P5ExternalNativeT24PacketPins,kind:"T24"|"LATER"
+){
  if(!pins||!
     [pins.expectedDossierSha256,pins.expectedReviewArtifactSha256,
      pins.expectedReviewedReleaseSha256,
@@ -131,9 +140,9 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
     reviewBytes.length>200000||
     digest(reviewBytes)!==pins.expectedReviewArtifactSha256)
   hold("INDEPENDENT_REVIEW_BYTES_OR_PROTECTED_PINS_MISSING");
- let parsed:P5ExternalNativeLaterPreReviewArtifact;
+ let parsed:NativeReview;
  try{parsed=JSON.parse(reviewBytes.toString("utf8")) as
-    P5ExternalNativeLaterPreReviewArtifact;}
+    NativeReview;}
  catch{return hold("REVIEW_ARTIFACT_NOT_JSON");}
  if(JSON.stringify(parsed)!==JSON.stringify(review)||
     !dossier||dossier.schema!==
@@ -155,8 +164,8 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
     !dossier.entries.some(e=>JSON.stringify(e)===JSON.stringify(entry)))
   hold("DOSSIER_BYTES_NOT_INDEPENDENTLY_REVIEWED_OR_ENTRY_AMBIGUOUS");
  const s=entry.source;
- if(!s||!["T-6h","T-90m"].includes(s.horizon)||
-    review?.schema!=="v39.phase5.external-native-later-pre-packet-review.v1"||
+ if(!s||!(kind==="T24"?s.horizon==="T-24h":["T-6h","T-90m"].includes(s.horizon))||
+    review?.schema!==(kind==="T24"?"v39.phase5.external-native-t24-pre-packet-review.v1":"v39.phase5.external-native-later-pre-packet-review.v1")||
     review.reviewedCodeSha!==pins.expectedApprovedMainCodeSha||
     review.reviewedCodeSha!==dossier.reviewedMainCodeSha||
     review.reviewedSourceDossierSha256!==pins.expectedDossierSha256||
@@ -195,7 +204,7 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
  const builderFrozen=time(review.builderFrozenAtUtc);
  const memberAvailable=time(s.sourceMemberAvailableAtUtc);
  const audited=time(dossier.sourceObservedDbClockUtc);
- if(selected-cutoff!==(s.horizon==="T-6h"?21600_000:5400_000)||
+ if(selected-cutoff!==(s.horizon==="T-24h"?86400_000:s.horizon==="T-6h"?21600_000:5400_000)||
     reviewed<audited||reviewed>=cutoff-15*60000||
     memberAvailable>audited||memberAvailable>cutoff||
     builderFrozen>reviewed||builderFrozen>cutoff)
@@ -208,6 +217,52 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
     cfg.semanticsEvidenceSha256!==
      review.independentlyReviewedNativeTEvidenceSha256)
   hold("REVIEWED_SELECTED_NATIVE_T_SEMANTICS_NOT_BINDING");
+
+ const prePermit:P5Stage14SingleFlightPrePermit={
+  manifestSha256:s.manifestSha256,
+  queryDigestSha256:s.queryDigestSha256,
+  expectedSourcePopulationQueryId:s.expectedSourcePopulationQueryId,
+  expectedSourceResponseSha256:s.expectedSourceResponseSha256,
+  runDayIndex:s.runDayIndex,slot:s.slot,horizon:s.horizon,
+  airportIcao:s.airportIcao,
+  flightInstanceId:s.flightInstanceId,
+  expectedGithubSourceRunId:s.expectedGithubSourceRunId,
+  expectedReviewedReleaseSha256:s.expectedReviewedReleaseSha256,
+  expectedReviewedSourceRightsSha256:s.expectedReviewedSourceRightsSha256,
+  expectedProviderContractSha256:s.expectedProviderContractSha256,
+  expectedEarlyDrawSha256:s.expectedEarlyDrawSha256,
+  reviewedFrameSha256:review.reviewedFrameSha256,
+  reviewedConfigSha256:review.reviewedConfigSha256,
+  independentlyReviewedOperatingLegEvidenceSha256:
+   review.independentlyReviewedOperatingLegEvidenceSha256,
+  independentlyReviewedNativeTEvidenceSha256:
+   review.independentlyReviewedNativeTEvidenceSha256,
+  independentlyReviewedRunAndRetentionEvidenceSha256:
+   review.independentlyReviewedRunAndRetentionEvidenceSha256,
+  frozenBuilderSha256:review.frozenBuilderSha256,
+  builderFrozenAtUtc:review.builderFrozenAtUtc,
+  selectedTConfig:review.selectedTConfig,
+  selectedTNativeUtc:s.selectedTNativeUtc,
+  maxPopulationStalenessSeconds:review.maxPopulationStalenessSeconds,
+  expectedRestrictedPreWriterRole:P5_STAGE28_GROUPS.pre,
+  externalNativeTPhysicalLegAndSourceUseReviewed:true,
+  identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"
+ };
+
+ return {prePermit,s,selected,cutoff,cfg};
+}
+/** Does not grant source-use permissions. It verifies a separately pinned
+ * REVIEW ARTIFACT exact byte digest, then assembles bytes which *still*
+ * require an independently pinned signed production registry and all
+ * downstream active-GO gates before any Stage14 write. */
+export function completeP5NativeLaterPrePacketForIndependentSigning(
+ dossier:P5UnsignedNativePreDossier,
+ entry:P5UnsignedPreReviewEntry,
+ reviewBytes:Buffer,
+ review:P5ExternalNativeLaterPreReviewArtifact,
+ pins:P5ExternalNativeLaterPacketPins
+):P5ReviewReadyLaterPrePacketBytes{
+ const {prePermit:basePermit,s,selected,cfg}=validateCommonNativeReview(dossier,entry,reviewBytes,review,pins,"LATER");
  const witness=review.reviewedT24WitnessReceipt;
  const standalone=review.reviewedStandaloneLaterNoT24;
  if(Boolean(witness)===Boolean(standalone))
@@ -251,38 +306,8 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
   schema="v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
   evidenceTier="SEPARATELY_REVIEWED_T24_MISSING_NO_BACKFILL";
  }
- const prePermit:P5Stage14SingleFlightPrePermit={
-  manifestSha256:s.manifestSha256,
-  queryDigestSha256:s.queryDigestSha256,
-  expectedSourcePopulationQueryId:s.expectedSourcePopulationQueryId,
-  expectedSourceResponseSha256:s.expectedSourceResponseSha256,
-  runDayIndex:s.runDayIndex,slot:s.slot,horizon:s.horizon,
-  airportIcao:s.airportIcao,
-  flightInstanceId:s.flightInstanceId,
-  expectedGithubSourceRunId:s.expectedGithubSourceRunId,
-  expectedReviewedReleaseSha256:s.expectedReviewedReleaseSha256,
-  expectedReviewedSourceRightsSha256:s.expectedReviewedSourceRightsSha256,
-  expectedProviderContractSha256:s.expectedProviderContractSha256,
-  expectedEarlyDrawSha256:s.expectedEarlyDrawSha256,
-  reviewedFrameSha256:review.reviewedFrameSha256,
-  reviewedConfigSha256:review.reviewedConfigSha256,
-  independentlyReviewedOperatingLegEvidenceSha256:
-   review.independentlyReviewedOperatingLegEvidenceSha256,
-  independentlyReviewedNativeTEvidenceSha256:
-   review.independentlyReviewedNativeTEvidenceSha256,
-  independentlyReviewedRunAndRetentionEvidenceSha256:
-   review.independentlyReviewedRunAndRetentionEvidenceSha256,
-  frozenBuilderSha256:review.frozenBuilderSha256,
-  builderFrozenAtUtc:review.builderFrozenAtUtc,
-  selectedTConfig:review.selectedTConfig,
-  selectedTNativeUtc:s.selectedTNativeUtc,
-  maxPopulationStalenessSeconds:review.maxPopulationStalenessSeconds,
-  expectedRestrictedPreWriterRole:P5_STAGE28_GROUPS.pre,
-  externalNativeTPhysicalLegAndSourceUseReviewed:true,
-  identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG",
-  ...(witness?{reviewedT24WitnessReceipt:witness}:
-              {reviewedStandaloneLaterNoT24:standalone})
- };
+ const prePermit:P5Stage14SingleFlightPrePermit={...basePermit,
+  ...(witness?{reviewedT24WitnessReceipt:witness}:{reviewedStandaloneLaterNoT24:standalone})};
  const packet:P5SignedWitnessedLaterPrePacket={
   schema,
   reviewedCodeSha:pins.expectedApprovedMainCodeSha,
@@ -309,4 +334,49 @@ export function completeP5NativeLaterPrePacketForIndependentSigning(
   phase5ScientificFreezeGranted:false,phase6PaidGoGranted:false,
   providerCalls:0,databaseWrites:0,githubDispatches:0
  };
+}
+
+/** T−24h comparator: complete existing Stage14+Stage17 packet bytes from a
+ * separately reviewed real native source dossier. No snapshot ID, fabricated
+ * receipt, actual signature, DB operation, registration or paid release. */
+export function completeP5NativeT24PrePacketForIndependentSigning(
+ dossier:P5UnsignedNativePreDossier,
+ entry:P5UnsignedPreReviewEntry,
+ reviewBytes:Buffer,
+ review:P5ExternalNativeT24PreReviewArtifact,
+ pins:P5ExternalNativeT24PacketPins
+){
+ const {prePermit,s,cutoff,cfg}=validateCommonNativeReview(dossier,entry,reviewBytes,review,pins,"T24");
+ if(review.independentT24WitnessProtocolReviewed!==true||
+    review.reviewedWitnessOnlyRole!==P5_STAGE28_GROUPS.witness||
+    Object.hasOwn(review,"reviewedT24WitnessReceipt")||Object.hasOwn(review,"reviewedStandaloneLaterNoT24")||
+    Object.hasOwn(pins,"expectedT24ReceiptSha256")||Object.hasOwn(pins,"separatelyApprovedNoT24ProtocolSha256"))
+  hold("T24_SEPARATE_WITNESS_PROTOCOL_REQUIRED_NO_EXISTING_RECEIPT");
+ const witnessReview:P5IndependentT24WitnessReview={
+  flightInstanceId:s.flightInstanceId,sourcePopulationQueryId:s.expectedSourcePopulationQueryId,
+  expectedSourceResponseSha256:s.expectedSourceResponseSha256,expectedSourceQueryDigestSha256:s.queryDigestSha256,
+  expectedFrameSha256:review.reviewedFrameSha256,expectedConfigSha256:review.reviewedConfigSha256,
+  selectedTNativeUtc:s.selectedTNativeUtc,expectedT24CutoffUtc:new Date(cutoff).toISOString(),
+  expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash,
+  expectedWitnessOnlyRole:P5_STAGE28_GROUPS.witness
+ };
+ if(preflightP5Stage14ReviewedPermitV39(prePermit)!==s.selectedTNativeUtc)
+  hold("T24_ORIGINAL_STAGE14_NATIVE_T_CHANGED");
+ verifyP5T24PreWitnessCrossReview(prePermit,witnessReview);
+ const packet:P5NativeT24SignedReleasePacket={schema:"v39.phase5.github-native-t24-pre-witness-reviewed.v1",
+  reviewedCodeSha:pins.expectedApprovedMainCodeSha,independentNativeT24AndSourceReviewAttested:true,
+  prePermit,witnessReview};
+ const packetBytes=Buffer.from(JSON.stringify(packet),"utf8");
+ if(packetBytes.length<100||packetBytes.length>200000)hold("UNBOUNDED_COMPLETED_T24_PACKET");
+ const out={schema:"v39.phase5.review-ready-native-t24-pre-packet-unsigned.v1" as const,
+  status:"T24_PRE_AND_SEPARATE_WITNESS_PACKET_BYTES_NEED_EXTERNAL_SIGNATURE" as const,
+  packetSha256:digest(packetBytes),reviewArtifactSha256:pins.expectedReviewArtifactSha256,
+  sourceDossierSha256:pins.expectedDossierSha256,sourceAuditSha256:dossier.sourceAuditSha256,
+  sourceDayRegistrySha256:dossier.sourceDayRegistrySha256,reviewedCodeSha:pins.expectedApprovedMainCodeSha,
+  horizon:"T-24h" as const,actualT24WitnessReceiptIssued:false as const,
+  signedProductionRegistryPublished:false as const,sourceContentsLawfulUseCertifiedByThisFunction:false as const,
+  nativePhysicalFlightCertifiedByThisFunction:false as const,phase5ScientificFreezeGranted:false as const,
+  phase6PaidGoGranted:false as const,providerCalls:0 as const,databaseWrites:0 as const,githubDispatches:0 as const};
+ return Object.defineProperties(out,{packetBytes:{value:packetBytes,enumerable:false},
+  packet:{value:packet,enumerable:false}}) as typeof out&{readonly packetBytes:Buffer;readonly packet:P5NativeT24SignedReleasePacket};
 }

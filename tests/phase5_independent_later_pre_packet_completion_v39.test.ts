@@ -9,7 +9,8 @@ import type {P5UnsignedNativePreDossier,
 import {digestP5UnsignedNativePreDossier}
  from "../server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39";
 import {
- completeP5NativeLaterPrePacketForIndependentSigning,
+ completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning,
+ type P5ExternalNativeT24PreReviewArtifact,type P5ExternalNativeT24PacketPins,
  type P5ExternalNativeLaterPreReviewArtifact,
  type P5ExternalNativeLaterPacketPins}
  from "../server/lib/disruption/phase5IndependentLaterPrePacketCompletion_v39";
@@ -278,5 +279,61 @@ describe("externally pinned SOURCE review → exact unsigned Stage14 later PRE b
    f.dossier,f.entry,badBytes,bad,{
     ...f.pins,expectedReviewArtifactSha256:sha(badBytes)
    })).toThrow("INDEPENDENT_T24_RECEIPT_UNBOUND_OR_CHANGED");
+ });
+});
+
+import {verifyP5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+function nativeT24Fixture(){
+ const f=fixture();
+ const own="2027-02-09T12:00:00.000Z";
+ const entry:P5UnsignedPreReviewEntry={...f.entry,source:{...f.entry.source,horizon:"T-24h",ownPreCutoffUtc:own,
+  sourceMemberAvailableAtUtc:"2027-02-09T10:30:00.000Z"}};
+ const dossier:P5UnsignedNativePreDossier={...f.dossier,horizon:"T-24h",sourceObservedDbClockUtc:"2027-02-09T11:00:00.000Z",entries:[entry]};
+ const {reviewedT24WitnessReceipt,reviewedStandaloneLaterNoT24,...common}=f.review;
+ const review:P5ExternalNativeT24PreReviewArtifact={...common,schema:"v39.phase5.external-native-t24-pre-packet-review.v1",
+  reviewedSourceDossierSha256:digestP5UnsignedNativePreDossier(dossier),reviewedHorizon:"T-24h",reviewedOwnCutoffUtc:own,
+  reviewedAtUtc:"2027-02-09T11:10:00.000Z",builderFrozenAtUtc:"2027-02-09T04:00:00.000Z",
+  independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:P5_STAGE28_GROUPS.witness};
+ const bytes=Buffer.from(JSON.stringify(review));
+ const {expectedT24ReceiptSha256,separatelyApprovedNoT24ProtocolSha256,...p}=f.pins;
+ const pins:P5ExternalNativeT24PacketPins={...p,expectedDossierSha256:digestP5UnsignedNativePreDossier(dossier),expectedReviewArtifactSha256:sha(bytes)};
+ return {dossier,entry,review,bytes,pins};
+}
+describe("same reviewed source dossier to original T24 PRE + distinct V0081 witness packet",()=>{
+ it("produces original genuine T24 packet format; never an already committed receipt",()=>{
+  const f=nativeT24Fixture(),x=completeP5NativeT24PrePacketForIndependentSigning(f.dossier,f.entry,f.bytes,f.review,f.pins);
+  expect(x.packet.schema).toBe("v39.phase5.github-native-t24-pre-witness-reviewed.v1");
+  expect(x.packet.prePermit.horizon).toBe("T-24h");
+  expect(x.packet.witnessReview.expectedT24CutoffUtc).toBe(f.entry.source.ownPreCutoffUtc);
+  expect(x.packet.witnessReview.expectedWitnessOnlyRole).toBe(P5_STAGE28_GROUPS.witness);
+  expect(x.packet.witnessReview.expectedWitnessOnlyRole).not.toBe(x.packet.prePermit.expectedRestrictedPreWriterRole);
+  expect(x.packet.prePermit.reviewedT24WitnessReceipt).toBeUndefined();
+  expect(x.packet.prePermit.reviewedStandaloneLaterNoT24).toBeUndefined();
+  expect(x.packet.witnessReview).not.toHaveProperty("expectedSnapshotId");
+  expect(x.packetSha256).toBe(sha(x.packetBytes));
+  expect(x.actualT24WitnessReceiptIssued).toBe(false);expect(x.phase6PaidGoGranted).toBe(false);
+  expect(Object.keys(x)).not.toContain("packetBytes");expect(JSON.stringify(x)).not.toContain(flight);
+  const filePath="data-collection/phase5/frozen/t24_review_fixture0001.json";
+  const roster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1" as const,reviewedCodeSha:code,
+   manifestSha256:H("1"),rightsSha256:H("4"),entries:[{filePath,packetSha256:x.packetSha256}]};
+  const raw=Buffer.from(JSON.stringify(roster)),files=[{filePath,packetSha256:x.packetSha256,bytes:x.packetBytes}];
+  const gate={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:code,manifestSha256:H("1"),rightsSha256:H("4"),rosterSha256:sha(raw),stop:false as const,providerCalls:0 as const,scientificFreezeEstablishedByThisFunction:false as const};
+  expect(verifyP5CdFrozenRoster(raw,roster,files,gate,"T24_WITH_SEPARATE_WITNESS").size).toBe(1);
+  expect(()=>verifyP5CdFrozenRoster(raw,roster,files,gate)).toThrow("T24_WITNESS_OR_STANDALONE");
+ });
+ it("rejects independently rehashed late/changed T24, shared witness role or fabricated preexisting receipt",()=>{
+  const f=nativeT24Fixture();
+  for(const r of [{...f.review,reviewedAtUtc:"2027-02-09T11:50:00.000Z"},
+   {...f.review,reviewedNativeScheduledTUtc:"2027-02-10T12:01:00.000Z"},
+   {...f.review,reviewedWitnessOnlyRole:P5_STAGE28_GROUPS.pre},
+   {...f.review,reviewedT24WitnessReceipt:{fake:true}}]){
+   const bytes=Buffer.from(JSON.stringify(r));
+   expect(()=>completeP5NativeT24PrePacketForIndependentSigning(f.dossier,f.entry,bytes,r,
+    {...f.pins,expectedReviewArtifactSha256:sha(bytes)})).toThrow();
+  }
+ });
+ it("does not reinterpret T6/T90 source audit as T24",()=>{
+  const f=nativeT24Fixture(),later=fixture();
+  expect(()=>completeP5NativeT24PrePacketForIndependentSigning(later.dossier,later.entry,f.bytes,f.review,f.pins)).toThrow();
  });
 });
