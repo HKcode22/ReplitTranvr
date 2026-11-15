@@ -4,6 +4,7 @@
  */
 import {describe,it,expect} from "vitest";
 import {Pool} from "pg";
+import {exerciseNativePostPublication} from "./phase6_native_post_real_publication_fixture_v39";
 import {createHash} from "node:crypto";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {p5V0083FuturePostReservationSha256,auditP5FuturePostActualPriorPre,auditP5FuturePostActualPriorPreBatch,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
@@ -82,7 +83,7 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
     await q("INSERT INTO clean.flight_population(batch_id,source_airport_icao,dep_airport_icao,arr_airport_icao,dep_scheduled_utc,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,provider_record_key,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS','WSSS','YSSY',$2,$3,$4,$5,'fids',$6,$7,$7,'requested_airport_primary','confirmed_core',$8,$9,$10,$11,'Departure',$12,$13,'Asia/Singapore','confirmed_operating_leg',$14,'ci','ci',$15)",
      [batch,iso(t),p.plannedSourceFromUtc,p.plannedSourceToUtc,iso(cutoff),qid,flight,at,hash,num,key,p.fromLocal,p.toLocal,fetch,p.reviewedProviderContractSha256]);
    await q("INSERT INTO clean.phase5_fids_original_binding_v39(population_query_id,reservation_sha256,query_digest,manifest_sha256,response_hash,decoded_original_body_sha256,rights_review_sha256,normalized_members_count,source_expires_at_utc) VALUES($1,$2,$3,$4,$5,$6,$7,2,$8)",
-    [preId,preReservation,query,p.manifestSha256,preHash,preRaw.originalDecodedEntityBodyEvidence.bodySha256,rights,iso(now+3600000)]);
+    [preId,preReservation,query,p.manifestSha256,preHash,preRaw.originalDecodedEntityBodyEvidence.bodySha256,rights,iso(now+3*3600000)]);
    for(const fid of [p.flightInstanceId,"leg:ci:post:002"])
     await q("INSERT INTO clean.flight_snapshots(flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,selected_t_milestone_utc,selected_t_version,population_query_id,fids_response_hash,schedule_version,frame_hash,config_hash,features_json,missingness_flags,builder_version,provenance_json,created_at) VALUES($1,'PRE_DEPARTURE','T-6h',$2,$3,'ci-native',$4,$5,NULL,$6,$7,'[]'::jsonb,'{}'::jsonb,'ci','{}'::jsonb,$8)",
      [fid,iso(cutoff),iso(t),preId,preHash,p.reviewedFrameSha256,h("4"),issued]);
@@ -115,6 +116,7 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    console.log("P6_POST_ACTUAL_SINGLETON_AND_BATCH_SOURCE_ADMISSION_PG16_PASS");
    expect(report.providerCalls).toBe(0);expect(report.databaseWrites).toBe(0);
    console.log("P6_POST_ACTUAL_PARTITION_RESTRICTED_PG16=PASS SYNTHETIC_ONLY PROVIDER_CALLS=0");
+   await exerciseNativePostPublication(p,restricted,query);
   }finally{await Promise.allSettled([db.end(),login?.end()]);}
  },60000);
 });
