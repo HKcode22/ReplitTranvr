@@ -30,11 +30,12 @@ const integer=(x:number,a:number,b:number)=>Number.isSafeInteger(x)&&x>=a&&x<=b;
  * an observed yield. Assumes no early GET; no extra hard release gate. */
 const NATIVE_CANDIDATE_AUDIT_LEAD_SECONDS=900;
 export function summarizeP6CandidateLeadCoverage(
- templates:readonly P5DynamicDayGridInput["templates"][number][],
+ templates:readonly Pick<P5DynamicDayGridInput["templates"][number],"runDayIndex"|"slot"|"horizon"|"serviceWindowStartUtc"|"serviceWindowEndUtc"|"scheduledRequestUtc">[],
  timing:Pick<Timing,"maxPopulationStalenessSeconds"|"maxSchedulerSlipSeconds"|"maxResponseAndPersistSeconds">,
  additionalAuditDelaySeconds:number
 ){
- if(!integer(additionalAuditDelaySeconds,0,3600))hold("INVALID_DIAGNOSTIC_AUDIT_DELAY");
+ if(!integer(additionalAuditDelaySeconds,0,3600)||!integer(timing.maxPopulationStalenessSeconds,1,86400)||
+    !integer(timing.maxSchedulerSlipSeconds,0,3600)||!integer(timing.maxResponseAndPersistSeconds,0,3600))hold("INVALID_DIAGNOSTIC_AUDIT_DELAY_OR_TIMING");
  const groups=new Map<string,{horizon:typeof HORIZONS[number][0];start:number;end:number;intervals:[number,number][]}>();
  for(const q of templates){
   const h=HORIZONS.find(([name])=>name===q.horizon);

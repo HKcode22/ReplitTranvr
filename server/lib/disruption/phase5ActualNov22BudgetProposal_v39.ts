@@ -4,6 +4,7 @@
  */
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
+import {summarizeP6CandidateLeadCoverage} from "./phase6UnsignedFutureSourceDayPlanCompiler_v39";
 import {buildP5PrelaunchSlotBudgetEnvelope} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {P5PrelaunchSlotBudgetInput,P5PrelaunchSlotChargeDayInput} from "./phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs";
 import type {buildP5ActualFivePairB0062CalendarOnlyDraft} from "./phase5RealFivePairB0062CalendarOnlyDraft_v39";
@@ -30,6 +31,9 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   hold("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
  const physicalSource=new Map<string,{base:number;split:number}>();
  const activeDates=new Set<string>(),outcomeDates=new Set<string>();
+ const timingTemplates:Parameters<typeof summarizeP6CandidateLeadCoverage>[0][number][]=[];
+ const horizons=[["T-24h",24*H],["T-6h",6*H],["T-90m",90*M]] as const;
+ const slots=["HUB","MID_A","MID_B","REGIONAL"] as const;
  let sourceBeforeReset=0,sourceAfterReset=0;
  const dates=(a:number,b:number,set:Set<string>)=>{
   for(let t=Date.parse(day(a)+"T00:00:00.000Z");t<=b;t+=D)set.add(day(t));
@@ -46,9 +50,11 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   const range=settings.providerMaxRangeMinutes*M;
   for(const [a,b] of segments)for(let p=a;p<b;p+=range){
    const end=Math.min(p+range,b);
-   for(const offset of [24*H,6*H,90*M]){
+   for(const [horizon,offset] of horizons){
     for(let t=p-offset-settings.getLeadSeconds*1000;
         t<end-offset-settings.getLeadSeconds*1000;t+=settings.refreshEveryMinutes*M){
+     for(const slot of slots)timingTemplates.push({runDayIndex:d.runDayIndex,slot,horizon,
+      serviceWindowStartUtc:new Date(p).toISOString(),serviceWindowEndUtc:new Date(end).toISOString(),scheduledRequestUtc:new Date(t).toISOString()});
      const date=day(t),r=physicalSource.get(date)??{base:0,split:0};
      r[p===a?"base":"split"]+=8;physicalSource.set(date,r);
      if(t<reset)sourceBeforeReset+=8;else sourceAfterReset+=8;
@@ -97,9 +103,22 @@ export function proposeP5ActualNov22Budget(draft:Draft){
  if(evidence.observedAtUtc!==asOf||evidence.apiUnitsRemaining!==59968||evidence.apiUnitsLimit!==60000||
     evidence.alertCreditsRemaining!==1830||Date.parse(evidence.apiUnitsResetAtUtc)!==reset||
     evidence.paidProviderCalls!==0||evidence.phase6PaidGo!==false)hold("EXACT_OWNER_QUOTA_OBSERVATION_REQUIRED");
+ // Same actual first-seed dates, partitions, horizons, refreshes and cost
+ // calculation above. Latencies are explicitly illustrative, NOT observed.
+ // Retain original 900s candidate lead and existing 900s GET lead bounds.
+ if(timingTemplates.length!==6144||timingTemplates.length*2!==budget.cycleSourceUnits)
+  hold("ACTUAL_TIMING_TEMPLATE_COST_DRIFT");
+ const timingScenarios=[1800,2700,3600].flatMap(maxPopulationStalenessSeconds=>
+  [[0,0,0],[120,180,0],[120,180,300],[300,300,300]].map(([maxSchedulerSlipSeconds,maxResponseAndPersistSeconds,additionalAuditDelaySeconds])=>{
+   const timing={maxPopulationStalenessSeconds,maxSchedulerSlipSeconds,maxResponseAndPersistSeconds};
+   const coverage=summarizeP6CandidateLeadCoverage(timingTemplates,timing,additionalAuditDelaySeconds);
+   return {timing,additionalAuditDelaySeconds,coverage};
+  }));
  return {schema:"v39.phase5.actual-first-seed-budget-proposal-not-stage-input.v1",
   status:"ACTUAL_CALENDAR_PROPOSED_CAPS_NOT_AUTHORIZED",calendarDraftJsonSha256:expectedDraft,calendarRowsSha256:expectedRows,
   settings,totals,physicalUtcRows:rows,explicitOtherOnlyChargeDates,
+  nativeLeadDiagnostic:{status:"ILLUSTRATIVE_EXACT_FIRST_CALENDAR_CUTOFF_TIME_ONLY",templateCount:timingTemplates.length,
+   actualLatencyMeasured:false,actualFlightYieldMeasured:false,policyChanged:false,timingScenarios},
   sourceChargeDates:physicalSource.size,outcomeChargeDates:outcomeDates.size,
   totalReservedUnits:total,protectedFloorUnits:1000,unallocatedUnits:unallocated,
   peakDailyUnits:Math.max(...rows.map(r=>r.totalReservedUnits)),
