@@ -20,6 +20,8 @@ import {phase5Stage9ExactWholeUnit} from "./phase5Stage9V0082AtomicSegmentedDayP
 import type {P5SignedOneDayPreparePacket}
  from "../../../scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39";
 
+import {normalizeP5TypedSourceBudgetBinding,matchesP5TypedSourceBudgetReleaseRow,
+ P5_TYPED_RELEASE_SELECT_COLUMNS,type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_DAILY_REVIEW_PRODUCER_"+s);};
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
@@ -38,11 +40,11 @@ type DayPlan=Template&{
   * Ordinary days instead require the existing independent shape/washout guard. */
  pairedIcaos:Record<"HUB"|"MID_A"|"MID_B"|"REGIONAL",string>|null;
 };
-type Policy={
+type Policy=P5TypedSourceBudgetBinding&{
  schema:"v39.phase6.delegated-daily-source-review-policy.v1";
  approvedCodeSha:string;manifestSha256:string;calendarSha256:string;configSha256:string;
  frameSha256:string;releaseSha256:string;rightsSha256:string;providerContractSha256:string;
- reviewed31DaySourceRequestGridSha256:string;reviewedCategoryBudgetSha256:string;
+ reviewedCategoryBudgetSha256:string;
  expectedPrepareRole:string;validFromUtc:string;validUntilUtc:string;
  maxQueriesPerDay:number;dailyRestCeiling:number;cycleRestCeiling:number;
  minimumProtectedFloor:number;providerApiVersion:string;fidsProtocolVersion:string;
@@ -80,8 +82,8 @@ export async function produceP6DelegatedDailySourceReview({
  if(p?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||
     p.delegatedDailyPacketProductionApproved!==true||p.approvedCodeSha!==pins.expectedReviewedMainSha||
     ![p.manifestSha256,p.calendarSha256,p.configSha256,p.frameSha256,p.releaseSha256,
-      p.rightsSha256,p.providerContractSha256,p.reviewed31DaySourceRequestGridSha256,
-      p.reviewedCategoryBudgetSha256].every(x=>SHA.test(x??""))||
+      p.rightsSha256,p.providerContractSha256,p.reviewedCategoryBudgetSha256].every(x=>SHA.test(x??""))||
+    !normalizeP5TypedSourceBudgetBinding(p)||
     !/^phase5_fids_prepare_[a-z0-9_]{6,42}$/.test(p.expectedPrepareRole??"")||
     !int(p.maxQueriesPerDay,12,384)||!int(p.dailyRestCeiling,2,1900)||
     !int(p.cycleRestCeiling,2,50000)||!int(p.minimumProtectedFloor,0,p.cycleRestCeiling)||
@@ -158,11 +160,11 @@ export async function produceP6DelegatedDailySourceReview({
    return {slot:s.slotId,icao:s.icao,ianaTimezone:zone,
     providerApiVersion:p.providerApiVersion,fidsProtocolVersion:p.fidsProtocolVersion};
   });
-  const release=await client.query("SELECT reviewed_source_request_grid_sha256,reviewed_provider_range_sha256,"+
+  const release=await client.query("SELECT "+P5_TYPED_RELEASE_SELECT_COLUMNS+"reviewed_provider_range_sha256,"+
    "verified_provider_max_range_minutes,reviewed_category_budget_sha256,frozen_at_utc "+
-   "FROM clean.phase5_fids_seven_rest_release_v39 WHERE manifest_sha256=$1",[p.manifestSha256]);
+   "FROM clean.phase5_fids_seven_rest_release_v39 rel WHERE manifest_sha256=$1",[p.manifestSha256]);
   const l=release.rows[0];
-  if(release.rowCount!==1||l.reviewed_source_request_grid_sha256!==p.reviewed31DaySourceRequestGridSha256||
+  if(release.rowCount!==1||!matchesP5TypedSourceBudgetReleaseRow(p,l)||
      l.reviewed_category_budget_sha256!==p.reviewedCategoryBudgetSha256||
      l.reviewed_provider_range_sha256!==segmented.reviewedProviderRangeEvidenceSha256||
      Number(l.verified_provider_max_range_minutes)!==segmented.verifiedProviderMaxRangeMinutes||
@@ -233,7 +235,7 @@ export async function produceP6DelegatedDailySourceReview({
    expectedProviderContractSha256:p.providerContractSha256,expectedRightsReviewSha256:p.rightsSha256,
    expectedReleaseSha256:p.releaseSha256,expectedRestrictedWriterRole:p.expectedPrepareRole,
    expectedChargeDayBudgetHashSha256:digest(proposal.actualUtcChargeBudgets),
-   reviewed31DaySourceRequestGridSha256:p.reviewed31DaySourceRequestGridSha256,
+   ...normalizeP5TypedSourceBudgetBinding(p)!,
    reviewedCategoryBudgetSha256:p.reviewedCategoryBudgetSha256,independentFreezeApproved:true,
    independentRightsReviewApproved:true,githubOnlyProspectiveOwnerApproved:true
   }}

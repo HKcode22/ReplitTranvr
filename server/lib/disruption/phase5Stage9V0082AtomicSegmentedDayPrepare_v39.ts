@@ -20,6 +20,8 @@ import {verifyPreparedDailyDraw,type PreparedDayForReadback,
 import type {Stage8DayProposalResult,Stage8V0079PreparedProposal}
  from "./phase5V0079DailyPreparedQueryProposals_v39";
 
+import {normalizeP5TypedSourceBudgetBinding,matchesP5TypedSourceBudgetReleaseRow,
+ P5_TYPED_RELEASE_SELECT_COLUMNS,type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const ROLE=/^phase5_fids_prepare_[a-z0-9_]{6,42}$/;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
@@ -75,7 +77,7 @@ const PART_INSERT="INSERT INTO clean.phase5_fids_exact_query_partition_v39 ("+
  "VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING query_digest";
 
 type P=NonNullable<Stage8DayProposalResult["sourcePartitionPins"]>[number];
-export interface P5V0082AtomicDayReview {
+export interface P5V0082AtomicDayReview extends P5TypedSourceBudgetBinding {
  proposal:Stage8DayProposalResult;
  expectedProposalSha256:string;
  /** The independently READ-ONLY reconstructed Stage6 source evidence digest. */
@@ -89,8 +91,7 @@ export interface P5V0082AtomicDayReview {
  expectedReleaseSha256:string;
  expectedRestrictedWriterRole:string;
  expectedChargeDayBudgetHashSha256:string;
- /** External complete 31-day source/budget review pins, not calculated in writer. */
- reviewed31DaySourceRequestGridSha256:string;
+ /** External typed 31-day budget provenance, not calculated in writer. */
  reviewedCategoryBudgetSha256:string;
  /** These booleans are admission inputs; NOT actual licensing evidence. */
  independentFreezeApproved:true;
@@ -155,9 +156,9 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
   p.expectedConfigSha256,p.expectedFrameSha256,
   p.expectedProviderContractSha256,p.expectedRightsReviewSha256,
   p.expectedReleaseSha256,p.expectedChargeDayBudgetHashSha256,
-  p.reviewed31DaySourceRequestGridSha256,p.reviewedCategoryBudgetSha256
+  p.reviewedCategoryBudgetSha256
  ];
- if(hashes.some(v=>typeof v!=="string"||!SHA.test(v))||
+ if(!normalizeP5TypedSourceBudgetBinding(p)||hashes.some(v=>typeof v!=="string"||!SHA.test(v))||
     !ROLE.test(p.expectedRestrictedWriterRole??"")||
     p.independentFreezeApproved!==true||
     p.independentRightsReviewApproved!==true||
@@ -412,15 +413,14 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
      hold("SAVED_SOURCE_AIRPORT_OR_EXPOSED_PARTITION_CHANGED");
   }
   const release=(await client.query(
-   "SELECT manifest_sha256,reviewed_source_request_grid_sha256,"+
+   "SELECT manifest_sha256,"+P5_TYPED_RELEASE_SELECT_COLUMNS+
    "reviewed_provider_range_sha256,verified_provider_max_range_minutes,"+
    "reviewed_category_budget_sha256,frozen_at_utc "+
-   "FROM clean.phase5_fids_seven_rest_release_v39 "+
+   "FROM clean.phase5_fids_seven_rest_release_v39 rel "+
    "WHERE manifest_sha256=$1",[review.expectedManifestSha256]
   )).rows;
   if(release.length!==1||
-     release[0].reviewed_source_request_grid_sha256!==
-       review.reviewed31DaySourceRequestGridSha256||
+     !matchesP5TypedSourceBudgetReleaseRow(review,release[0])||
      release[0].reviewed_provider_range_sha256!==
        x.reviewedSegmentedSource!.reviewedProviderRangeEvidenceSha256||
      Number(release[0].verified_provider_max_range_minutes)!==reviewed.range||
@@ -635,6 +635,15 @@ export async function readBackP5Stage9PreparedDayOnce(
      ar.calendar_hash!==review.expectedCalendarSha256||
      ar.config_hash!==review.expectedConfigSha256)
    hold("READBACK_AUTHORIZATION_DRIFT");
+  const release=await client.query("SELECT "+P5_TYPED_RELEASE_SELECT_COLUMNS+
+   "reviewed_provider_range_sha256,verified_provider_max_range_minutes,reviewed_category_budget_sha256,frozen_at_utc "+
+   "FROM clean.phase5_fids_seven_rest_release_v39 rel WHERE manifest_sha256=$1",[review.expectedManifestSha256]);
+  const rel=release.rows[0];
+  if(release.rowCount!==1||!matchesP5TypedSourceBudgetReleaseRow(review,rel)||
+     rel.reviewed_category_budget_sha256!==review.reviewedCategoryBudgetSha256||
+     rel.reviewed_provider_range_sha256!==review.proposal.reviewedSegmentedSource!.reviewedProviderRangeEvidenceSha256||
+     Number(rel.verified_provider_max_range_minutes)!==validated.range||dt(rel.frozen_at_utc)>=now)
+    hold("READBACK_TYPED_RELEASE_DRIFT");
   const selected=await client.query("SELECT "+COLS.map(c=>c==="planned_charge_utc_date"?
    c+"::text AS "+c:c).join(",")+",last_reserved_attempt,created_at_utc FROM clean.phase5_fids_allowed_query_v39 "+
    "WHERE manifest_sha256=$1 AND run_day_index=$2 ORDER BY query_digest LIMIT 385",

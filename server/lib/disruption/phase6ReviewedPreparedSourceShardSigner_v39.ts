@@ -27,6 +27,8 @@ import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,p6DayEpochReviewPreimage,
  verifyP6DayEpochExternalReview,validateP6DayEpochIndexBytes,readP6DayEpochRestrictedReaderClock
 } from "./phase6DayEpochSignedIndexOnce_v39.mjs";
+import {normalizeP5TypedSourceBudgetBinding,sameP5TypedSourceBudgetBinding,
+ type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const ROLE=/^phase5_fids_prepare_[a-z0-9_]{6,42}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_REVIEWED_SOURCE_SIGNER_"+s);};
@@ -36,11 +38,11 @@ const utc=(s:string)=>{
  if(!Number.isFinite(n)||new Date(n).toISOString()!==s)hold("INVALID_POLICY_CLOCK");
  return n;
 };
-type Policy={
+type Policy=P5TypedSourceBudgetBinding&{
  schema:"v39.phase6.delegated-source-review-policy.v1";
  approvedCodeSha:string;manifestSha256:string;calendarSha256:string;configSha256:string;
  frameSha256:string;releaseSha256:string;rightsSha256:string;providerContractSha256:string;
- reviewed31DaySourceRequestGridSha256:string;reviewedCategoryBudgetSha256:string;
+ reviewedCategoryBudgetSha256:string;
  expectedPrepareRole:string;validFromUtc:string;validUntilUtc:string;
  maximumReviewRetentionHours:number;maxQueriesPerDay:number;
  queryReviewerFingerprintSha256:string;registryReviewerFingerprintSha256:string;
@@ -88,9 +90,10 @@ export async function signP6ReviewedPreparedSourceDay({
     p.delegatedAutomatedSourceSigningApproved!==true||
     p.approvedCodeSha!==pins.expectedReviewedMainSha||
     ![p.manifestSha256,p.calendarSha256,p.configSha256,p.frameSha256,p.releaseSha256,
-      p.rightsSha256,p.providerContractSha256,p.reviewed31DaySourceRequestGridSha256,
+      p.rightsSha256,p.providerContractSha256,
       p.reviewedCategoryBudgetSha256,p.queryReviewerFingerprintSha256,
       p.registryReviewerFingerprintSha256].every(x=>SHA.test(x??""))||
+    !normalizeP5TypedSourceBudgetBinding(p)||
     !ROLE.test(p.expectedPrepareRole??"")||
     p.queryReviewerFingerprintSha256===p.registryReviewerFingerprintSha256||
     !Number.isSafeInteger(p.maximumReviewRetentionHours)||p.maximumReviewRetentionHours<1||
@@ -118,7 +121,7 @@ export async function signP6ReviewedPreparedSourceDay({
     s.providerContractSha256!==p.providerContractSha256||
     z.expectedReleaseSha256!==p.releaseSha256||s.reviewedReleaseSha256!==p.releaseSha256||
     z.expectedRightsReviewSha256!==p.rightsSha256||s.rightsReviewSha256!==p.rightsSha256||
-    z.reviewed31DaySourceRequestGridSha256!==p.reviewed31DaySourceRequestGridSha256||
+    !sameP5TypedSourceBudgetBinding(z,p)||
     z.reviewedCategoryBudgetSha256!==p.reviewedCategoryBudgetSha256)
   hold("APPROVED_STUDY_OR_DAILY_REVIEW_DRIFT");
  const qPem=keyInfo(queryKey,p.queryReviewerFingerprintSha256);
