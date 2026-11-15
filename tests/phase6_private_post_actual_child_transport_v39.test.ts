@@ -99,3 +99,46 @@ describe("separate dynamic private POST authority without per-flight secrets",()
   expect(()=>deriveP6PostOriginalLocalEnv(e,c,raw,{...packet,reviewed:{...packet.reviewed,requestSha256:h}})).toThrow();
  });
 });
+
+describe("signed due POST backlog",()=>{
+ it("preserves all authenticated due POST routes privately while preview stays at four",async()=>{
+  const {planP6ThirtyOneDaySignedShardHandoffs}=await import("../server/lib/disruption/phase6SignedThirtyOneDayShardHandoff_v39");
+  const sha=(x:Buffer)=>createHash("sha256").update(x).digest("hex");
+  const bytes=new Map<string,Buffer>();
+  const add=(path:string,p:object)=>{const raw=Buffer.from(JSON.stringify(p));bytes.set(path,raw);return sha(raw);};
+  const source="data-collection/phase5/frozen/source-test.json";
+  const sourceHash=add(source,{schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:h,runDayIndex:1,
+   entries:[{filePath:"data-collection/phase5/frozen/source-query-test.json",expectedPacketSha256:h,expectedQueryDigestSha256:h}]});
+  const at="2026-11-22T00:00:00.000Z",end="2026-11-22T00:30:00.000Z";
+  const common={runDayIndex:1,publishedAtUtc:"2026-11-21T23:59:00.000Z",notBeforeUtc:at,hardLatestUtc:end,reviewEvidenceSha256:h};
+  const entries:any[]=[{...common,lane:"SOURCE",shardIndex:1,filePath:source,fileSha256:sourceHash,
+   sourceRegistryFilePath:null,sourceRegistrySha256:null}];
+  for(let i=1;i<=6;i++){
+   const path="data-collection/phase5/frozen/post_dispatch_"+i+".json";
+   const digest=add(path,{schema:"v39.phase5.github-future-post-reviewed-release.v1",approvedCodeSha:code,
+    independentSourceContentsUseAndRESTReleaseAttested:true,reviewed:{manifestSha256:h,runDayIndex:1,
+     requestSha256:i.toString(16).padStart(64,"0"),independentFuturePostRequestAndRightsReview:true}});
+   entries.push({...common,lane:"POST",shardIndex:i,filePath:path,fileSha256:digest,
+    sourceRegistryFilePath:source,sourceRegistrySha256:sourceHash});
+  }
+  const index:any={schema:"v39.phase5.phase6-append-only-day-shard-index.v1",manifestSha256:h,calendarSha256:h,
+   reviewedCodeSha:code,reviewedReleaseSha256:h,reviewedRightsSha256:h,revision:1,previousIndexSha256:null,entries};
+  const raw=Buffer.from(JSON.stringify(index)),digest=sha(raw);
+  const result=planP6ThirtyOneDaySignedShardHandoffs(raw,index,{expectedIndexSha256:digest,
+   exactExternallyReviewedIndexSha256:digest,expectedManifestSha256:h,expectedCalendarSha256:h,expectedCodeSha:code,
+   expectedReleaseSha256:h,expectedRightsSha256:h,observedDbClockUtc:at},path=>bytes.get(path)!);
+  expect(result.privateRoutingCandidates.filter(r=>r.lane==="POST")).toHaveLength(4);
+  expect(result.privateAllDuePostRoutingCandidates.map(r=>r.shardIndex)).toEqual([1,2,3,4,5,6]);
+  expect(Object.keys(result)).not.toContain("privateAllDuePostRoutingCandidates");
+  const last=result.privateAllDuePostRoutingCandidates[5];
+  const ctx={...admitP6PrivatePostChildTransport(env()),dynamic:true,
+   selector:{runDayIndex:1,indexRevision:1,indexSha256:digest,shardIndex:6,packetSha256:last.signedFrozenSha256,
+    routingIntentSha256:last.routingIntentSha256}};
+  const handoff={redactedSummary:{status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",
+   runDayIndex:1,indexRevision:1,externallySignedDayEpochIndexSha256:digest,
+   reviewedEd25519SourceWasOriginalDayBytes:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   privateRoutingCandidates:result.privateRoutingCandidates,getFrozen:(path:string)=>bytes.get(path)!};
+  Object.defineProperty(handoff,"privateAllDuePostRoutingCandidates",{value:result.privateAllDuePostRoutingCandidates,enumerable:false});
+  expect(bindP6PostPrivateDayRoute(handoff,ctx).route.shardIndex).toBe(6);
+ });
+});
