@@ -177,3 +177,32 @@ describe("bounded EDF bands and rotating same-band enrollment",()=>{
   expect(JSON.stringify(out)).not.toContain("privateAllDueSelectors");
  });
 });
+
+import {chooseP6BoundedNativePreSelectors} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+describe("actual PRE execution prioritizes remaining native cutoffs, not shard ends",()=>{
+ const now="2035-11-25T05:58:00.000Z",n=Date.parse(now);
+ const item=(shardIndex:number,hardEnd:number,cutoffs:number[])=>({
+  selector:{runDayIndex:1,shardIndex,hardLatestUtc:new Date(n+hardEnd).toISOString()},
+  cutoffs:cutoffs.map(x=>n+x)});
+ it("priority input comes from the exact authenticated registry, never serialized",()=>{
+  const f=fixture(),x=selectP6DueLaterQueueSelectors(f.index,f.trust,f.policy);
+  expect(x.privateNativePreCandidates).toHaveLength(1);
+  expect(x.privateNativePreCandidates[0].cutoffs).toEqual([Date.parse("2035-11-25T06:00:00.000Z")]);
+  expect(JSON.stringify(x)).not.toContain("privateNativePreCandidates");
+ });
+ it("keeps urgent members of long shards ahead of later members of short shards",()=>{
+  const items=[item(1,3600000,[60000,3600000]),item(2,500000,[300000]),
+   item(3,240000,[200000]),item(4,300000,[250000]),item(5,200000,[150000])];
+  expect(chooseP6BoundedNativePreSelectors(items,now).map(x=>x.shardIndex)).toEqual([1,5,3,4]);
+ });
+ it("ignores expired and too-far future members, including within the same shard",()=>{
+  const items=[item(1,3600000,[-10000,2000,660001]),item(2,3600000,[-5,600000]),
+   item(3,300000,[3000]),item(4,3600000,[660000])];
+  expect(chooseP6BoundedNativePreSelectors(items,now).map(x=>x.shardIndex)).toEqual([3,2,4]);
+ });
+ it("rejects duplicate shards or native cutoff outside signed end",()=>{
+  const x=item(1,100000,[55000]);
+  expect(()=>chooseP6BoundedNativePreSelectors([x,x],now)).toThrow("INVALID_OR_DUPLICATE");
+  expect(()=>chooseP6BoundedNativePreSelectors([item(1,50000,[55000])],now)).toThrow("INVALID_OR_DUPLICATE");
+ });
+});
