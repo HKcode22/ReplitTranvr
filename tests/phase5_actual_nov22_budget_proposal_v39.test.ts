@@ -50,6 +50,16 @@ describe("original actual first randomization and seven-category cap PROPOSAL",(
    expect(x.modeledEligibleCutoffSeconds+x.modeledUncoveredCutoffSeconds).toBe(x.exposedCutoffSeconds);
   expect(b.totalReservedUnits).toBe(41960);expect(b.phase6PaidGo).toBe(false);
  });
+ it("reproduces exact calendar capacity misses and bounded stored-parent correction without changing cost or requests",()=>{
+  const b=proposeP5ActualNov22Budget(actual()),d=b.sourceDispatcherCapacityDiagnostic;
+  expect(d.templateCount).toBe(6144);expect(d.actualJitterMeasured).toBe(false);expect(d.actualChildCompletionMeasured).toBe(false);
+  const old=d.results.find(x=>x.profile.name==="CURRENT"&&x.completionTailMinutes===15)!;
+  const next=d.results.find(x=>x.profile.name==="CANDIDATE"&&x.completionTailMinutes===15)!;
+  expect(old.phaseZero.missed).toBe(1584);expect(old.worstMissed).toBe(1956);
+  expect(next.phaseZero.submitted).toBe(6144);expect(next.worstMissed).toBe(0);expect(next.peakActive).toBeLessThanOrEqual(24);
+  expect(d.results.find(x=>x.profile.name==="CANDIDATE"&&x.completionTailMinutes===25)!.worstMissed).toBe(16);
+  expect(b.totalReservedUnits).toBe(41960);expect(b.phase6PaidGo).toBe(false);
+ });
  it("bounds actual first-seed native POST physical cost without assuming any actual flight or retention",()=>{
   const b=proposeP5ActualNov22Budget(actual()),d=b.postGeometryDiagnostic;
   expect(d.scenarios).toHaveLength(21);
