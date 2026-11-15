@@ -228,25 +228,46 @@ export async function runP6StoredPostParent(env,options={}){
  const trust=admitP6StoredPostParent(env),windows=loadP6PostWindows(env,trust,options.readPlan??readFileSync);
  const fetcher=(url,init)=>(options.fetchImpl??fetch)(url,{...init,signal:AbortSignal.timeout(12000),redirect:"error"});
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
- const scan=await (options.observe??observe)(env,trust,windows),now=options.now??Date.now;
- const at=utc(scan.clock);
+ const now=options.now??Date.now,accepted=[],prepared=[];
+ let scan,at,choice,oldIds,examined=0,unavailablePreOrLate=0;
+ try{
+ scan=await (options.observe??observe)(env,trust,windows);
+ at=utc(scan.clock);
  if(Math.abs(now()-at)>120000)hold("STALE_REAL_DB_CLOCK");
  if(!scan.routes.length)return summary("NO_SIGNED_DUE_POST",{acknowledgedGithubChildCount:0,unavailableDays:scan.unavailable});
  const prior=await readP5CompleteGithubWorkflowHistory(historyUrl(PARENT,"schedule",at),fetcher,headers);
  await proveP6NoUncertainPostParent(prior,Number(env.GITHUB_RUN_ID),fetcher,headers);
  const history=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",at),fetcher,headers);
- const choice=chooseP6PostRoutes(scan.routes,history,scan.clock);
- const accepted=[],oldIds=new Set(history.workflow_runs.map(x=>x.id));let examined=0,unavailablePreOrLate=0;
+ choice=chooseP6PostRoutes(scan.routes,history,scan.clock);
+ oldIds=new Set(history.workflow_runs.map(x=>x.id));
  // All candidate verification before first dispatch. No parent ambiguity for
  // ordinary failed preflight. A later dispatch ambiguity remains a hard HOLD.
- const prepared=[];
  for(const r of choice.pending){
   if(prepared.length>=choice.capacity||Math.abs(now()-at)>120000)break;
   examined++;
   const p=await (options.verify??verifyCandidate)(env,trust,r,scan.byDay.get(r.runDayIndex));
   if(p===null){unavailablePreOrLate++;continue;}
-  if(p.inputs.post_packet_sha256!==r.signedFrozenSha256||Math.abs(now()-utc(p.clock))>120000)hold("CANDIDATE_CLOCK_OR_ID_DRIFT");
+  if(p.inputs.post_packet_sha256!==r.signedFrozenSha256||Math.abs(now()-utc(p.clock))>120000||
+     p.inputs.frozen_future_post_packet!=="PRIVATE_STORED"||p.inputs.private_transport!=="stored-current"||
+     p.inputs.private_confirm!=="ONE_CURRENT_PRIVATE_POST_ORIGINAL_V0083_MAX_TWO_UNITS"||
+     p.inputs.confirm!=="ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY"||
+     p.inputs.run_day!==String(r.runDayIndex)||p.inputs.shard_index!==String(r.shardIndex)||
+     p.inputs.route_sha256!==r.routingIntentSha256||
+     !SHA.test(p.inputs.index_sha256??"")||!/^[1-9][0-9]{0,3}$/.test(p.inputs.index_revision??"")||
+     Number(p.inputs.index_revision)>1024||
+     Object.keys(p.inputs).sort().join("|")!==["frozen_future_post_packet","private_transport","private_confirm","confirm",
+      "run_day","index_revision","index_sha256","shard_index","post_packet_sha256","route_sha256"].sort().join("|"))
+   hold("CANDIDATE_CLOCK_OR_ID_DRIFT");
   prepared.push(p);
+ }
+
+ }catch(e){
+  // No dispatch HTTP POST has been attempted. Mark this as a preflight
+  // HOLD rather than an ambiguous dispatch failure; otherwise each
+  // subsequent tick would extend the previous three-hour quarantine.
+  const m=String(e?.message??"");
+  return summary("HOLD_POST_PREFLIGHT_NO_DISPATCH",{
+   acknowledgedGithubChildCount:0,reason:/^HOLD_P6_STORED_POST_PARENT_[A-Z0-9_]+$/.test(m)?m:"REDACTED_PREFLIGHT_FAILURE"});
  }
  for(const p of prepared){
   if(Math.abs(now()-at)>120000)break;
