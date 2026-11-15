@@ -223,6 +223,19 @@ describe("metadata-only daily plan compiler reuses frozen cost formula",()=>{
   const result=compileP6UnsignedFutureSourceDayPlans(input);
   expect(result.files).toHaveLength(31);
   expect(result.totalPlannedQueries*2).toBe(handoff.slotOnlyBudget.cycleSourceUnits);
+  const [immediate,audit5m]=result.candidateLeadCoverageScenarios;
+  expect(immediate.candidateAuditMinimumLeadSeconds).toBe(900);
+  expect(immediate.additionalAuditDelaySeconds).toBe(0);
+  expect(audit5m.additionalAuditDelaySeconds).toBe(300);
+  expect(immediate.actualFlightYieldMeasured).toBe(false);
+  expect(immediate.scientificReleaseBlockedByDiagnostic).toBe(false);
+  for(let i=0;i<3;i++){
+   const x=immediate.byHorizon[i],y=audit5m.byHorizon[i];
+   expect(x.exposedCutoffSeconds).toBe(128*4*3600);
+   expect(x.modeledEligibleCutoffSeconds+x.modeledUncoveredCutoffSeconds).toBe(x.exposedCutoffSeconds);
+   expect(x.modeledUncoveredCutoffSeconds).toBeGreaterThan(0);
+   expect(y.modeledUncoveredCutoffSeconds).toBeGreaterThan(x.modeledUncoveredCutoffSeconds);
+  }
   expect(result.dayPlanSha256s).toEqual(compileP6UnsignedFutureSourceDayPlans(input).dayPlanSha256s);
   const plans=result.files.map(f=>JSON.parse(f.bytes));
   expect(plans.filter(p=>p.pairedIcaos===null)).toHaveLength(21);
