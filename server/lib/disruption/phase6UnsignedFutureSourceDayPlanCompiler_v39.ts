@@ -157,9 +157,11 @@ export function compileP6UnsignedFutureSourceDayPlans(input:{
    hold("LATEST_DRAW_LEAVES_INSUFFICIENT_PREPARATION_LEAD");
   return {d,row,templates};
  });
- if(charge.size!==budget.utcCategoryRows.length||budget.utcCategoryRows.some(r=>{
+ const sourceRows=budget.utcCategoryRows.filter(r=>r.logicalRefreshSlots>0);
+ if(charge.size!==sourceRows.length||budget.utcCategoryRows.some(r=>{
   const x=charge.get(r.chargeDayUtc);
-  return !x||x.count!==r.logicalRefreshSlots||x.base*b.physicalGetsPerRefreshUpperBound!==r.fidsBaseUnits||
+  if(!x)return r.logicalRefreshSlots!==0||r.physicalGetUpperBound!==0||r.fidsBaseUnits!==0||r.fidsSplitUnits!==0;
+  return x.count!==r.logicalRefreshSlots||x.base*b.physicalGetsPerRefreshUpperBound!==r.fidsBaseUnits||
     x.split*b.physicalGetsPerRefreshUpperBound!==r.fidsSplitUnits;
  }))hold("UTC_CATEGORY_TEMPLATE_COST_MISMATCH");
  const coverageGridSha256=sha(perDay.map(x=>({runDayIndex:x.d.runDayIndex,templates:x.templates})));

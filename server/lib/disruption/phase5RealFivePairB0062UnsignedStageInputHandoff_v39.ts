@@ -51,6 +51,8 @@ export interface P5B0062ExternallyClaimedSlotCostInput{
  apiUnitsPerPhysicalGet:2;
  cycleRestCeilingUnits:number;
  protectedRestFloorUnits:number;
+ /** Explicit non-FIDS charge dates, e.g. tail outcome-only days, separately reviewed. */
+ explicitOtherOnlyChargeDates?:string[];
  restOtherByUtcDate:Array<{
   chargeDayUtc:string;dailyRestCeilingUnits:number;
   categories:Record<ChargeCategory,number>;
@@ -143,6 +145,7 @@ export function assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(
    runDayIndex:d.runDayIndex,startUtc:d.startUtc,
    utcSlot:d.utcSlot,windowShape:d.windowShape,partition:d.partition
   })),
+  ...(external.explicitOtherOnlyChargeDates===undefined?{}:{explicitOtherOnlyChargeDates:external.explicitOtherOnlyChargeDates}),
   restOtherByUtcDate:external.restOtherByUtcDate
  };
  // Only the ORIGINAL existing physical UTC category/range cost formula.

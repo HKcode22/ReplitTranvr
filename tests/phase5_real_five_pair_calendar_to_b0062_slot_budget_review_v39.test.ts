@@ -254,3 +254,36 @@ describe("metadata-only daily plan compiler reuses frozen cost formula",()=>{
   expect(()=>compileP6UnsignedFutureSourceDayPlans({...input,timing:late,expectedTimingJsonSha256:digest(late)})).toThrow("INSUFFICIENT_PREPARATION_LEAD");
  });
 });
+
+import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
+describe("explicit prospective outcome-only physical UTC dates",()=>{
+ it("includes positive outcome-only cap with zero FIDS templates and exact seven categories",()=>{
+  const {draft,ext,envelope}=fixture(60,300);
+  const last=ext.restOtherByUtcDate.at(-1)!.chargeDayUtc;
+  const d=new Date(Date.parse(last+"T00:00:00Z")+ONE_DAY).toISOString().slice(0,10);
+  const additional={chargeDayUtc:d,dailyRestCeilingUnits:1900,
+   categories:{...ext.restOtherByUtcDate[0].categories,OUTCOME_REST_UNIT_BUDGET:80}};
+  const revised={...ext,explicitOtherOnlyChargeDates:[d],restOtherByUtcDate:[...ext.restOtherByUtcDate,additional]};
+  const x=assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,revised);
+  const row=x.slotOnlyBudget.utcCategoryRows.find((r:any)=>r.chargeDayUtc===d);
+  expect(row).toMatchObject({fidsBaseUnits:0,fidsSplitUnits:0,logicalRefreshSlots:0,physicalGetUpperBound:0,dailyOtherReservedUnits:80});
+  expect(Object.keys(row.categories)).toHaveLength(7);
+  const old=assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,ext);
+  expect(x.slotOnlyBudget.cycleSourceUnits).toBe(old.slotOnlyBudget.cycleSourceUnits);
+  expect(x.slotOnlyBudget.cycleOtherUnits).toBe(old.slotOnlyBudget.cycleOtherUnits+80);
+  const cost=buildP5V0082UnknownAirportSevenCostOnlyDraft({schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",
+   slotBudgetInput:x.unsignedStageInput.slotBudgetInput,expectedReviewerSlotEnvelopeSha256:x.unsignedStageInput.expectedSignedSlotEnvelopeSha256});
+  expect(cost.days.find((r:any)=>r.chargeDayUtc===d)).toMatchObject({fidsBaseUnits:0,fidsSplitUnits:0,dailyOtherReservedUnits:80});
+  const timing={timingEvidenceSha256:ext.timingEvidenceSha256,maxPopulationStalenessSeconds:4200,maxSchedulerSlipSeconds:60,
+   maxResponseAndPersistSeconds:60,minimumPreCommitMarginSeconds:120,minimumPreparationLeadMinutes:20};
+  const plans=compileP6UnsignedFutureSourceDayPlans({stage:x.unsignedStageInput,expectedStageInputSha256:x.unsignedStageInputSha256,
+   envelope,expectedShapeEnvelopeSha256:envelope.shapeEnvelopeSha256,timing,expectedTimingJsonSha256:digest(timing)});
+  expect(plans.files).toHaveLength(31);
+  expect(plans.files.flatMap(f=>JSON.parse(f.bytes).templates).some((q:any)=>q.physicalChargeDayUtc===d)).toBe(false);
+  expect(plans.totalPlannedQueries*2).toBe(x.slotOnlyBudget.cycleSourceUnits);
+  expect(x.phase6PaidGo).toBe(false);
+  expect(()=>assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,{...revised,explicitOtherOnlyChargeDates:[]})).toThrow("SOURCE_AND_OTHER_UTC_CHARGE_DATES_NOT_EXACT");
+  expect(()=>assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,{...revised,explicitOtherOnlyChargeDates:[last]})).toThrow("INVALID_EXPLICIT_OTHER_ONLY_CHARGE_DATES");
+  expect(()=>assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,{...revised,restOtherByUtcDate:[...ext.restOtherByUtcDate,{...additional,dailyRestCeilingUnits:2}]})).toThrow("PHYSICAL_UTC_REST_BUDGET_OVERSPENT");
+ });
+});

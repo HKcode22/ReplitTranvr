@@ -129,11 +129,27 @@ export function buildP5PrelaunchSlotBudgetEnvelope(p){
    hold("UNSIGNED_OR_INCOMPLETE_FIVE_OTHER_REST_CATEGORIES");
   others.set(d.chargeDayUtc,d);
  }
- if(others.size!==sourceByUtcDate.length||
-    sourceByUtcDate.some(d=>!others.has(d.chargeDayUtc)))
+ // Extra dates are allowed ONLY if explicitly predeclared in the exact
+ // separately reviewed input and associated with positive other-category
+ // caps. They do not create a FIDS template, GET, source attempt or grant.
+ // Original callers without this optional list retain strict exact equality.
+ const declared=p.explicitOtherOnlyChargeDates??[];
+ if(!Array.isArray(declared)||declared.length>31||
+    new Set(declared).size!==declared.length||
+    declared.some(d=>!canonicalDate(d)||d<new Date(asOf).toISOString().slice(0,10)||byDate.has(d))||
+    sourceByUtcDate.length+declared.length>100)
+  hold("INVALID_EXPLICIT_OTHER_ONLY_CHARGE_DATES");
+ const declaredSet=new Set(declared);
+ if(others.size!==sourceByUtcDate.length+declared.length||
+    sourceByUtcDate.some(d=>!others.has(d.chargeDayUtc))||
+    declared.some(d=>!others.has(d)||OTHER.every(k=>others.get(d).categories[k]===0))||
+    [...others.keys()].some(d=>!byDate.has(d)&&!declaredSet.has(d)))
   hold("SOURCE_AND_OTHER_UTC_CHARGE_DATES_NOT_EXACT");
+ const allChargeRows=[...sourceByUtcDate,...declared.map(chargeDayUtc=>({
+  chargeDayUtc,fidsBaseUnits:0,fidsSplitUnits:0,logicalRefreshSlots:0,physicalGetUpperBound:0
+ }))].sort((a,b)=>a.chargeDayUtc.localeCompare(b.chargeDayUtc));
  let cycleSourceUnits=0,cycleOtherUnits=0;
- const utcCategoryRows=sourceByUtcDate.map(d=>{
+ const utcCategoryRows=allChargeRows.map(d=>{
   const other=others.get(d.chargeDayUtc);
   const extra=OTHER.reduce((s,k)=>s+other.categories[k],0);
   const source=d.fidsBaseUnits+d.fidsSplitUnits;
