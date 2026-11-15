@@ -112,6 +112,22 @@ export function bindP6PostPrivateDayRoute(handoff:any,ctx:ReturnType<typeof admi
  if(sourceDigests.some((x:any)=>typeof x!=="string"||!SHA.test(x))||
     new Set(sourceDigests).size!==sourceDigests.length)
   hold("BAD_SOURCE_QUERY_DIGEST_SCOPE");
+ // Delegated native POST retains the exact original anchor query for
+ // recovery and subsequent actual PRE verification. Legacy reviewed
+ // packets without this optional transport binding keep their old scope.
+ const packet=JSON.parse(post.toString("utf8")),binding=packet.nativePostSourceBinding;
+ if(binding!==undefined){
+  if(!binding||binding.schema!=="v39.phase6.native-post-source-binding.v1"||
+     binding.sourceRegistryPath!==r.boundSourceRegistryPath||binding.sourceRegistrySha256!==r.boundSourceRegistrySha256||
+     !sourceDigests.includes(binding.queryDigestSha256)||!SHA.test(binding.policySha256??"")||
+     !SHA.test(packet.reviewed?.requestSha256??"")||
+     r.signedFrozenPath!=="data-collection/phase5/frozen/post_"+packet.reviewed.requestSha256+".json"||
+     typeof binding.anchorBoundPreRetentionNotAfterUtc!=="string"||
+     !Number.isFinite(Date.parse(binding.anchorBoundPreRetentionNotAfterUtc))||
+     Date.parse(binding.anchorBoundPreRetentionNotAfterUtc)<=Date.parse(r.hardLatestUtc))
+   hold("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
+  return {route:r,post,sourceDigests:[binding.queryDigestSha256] as string[],observedDbClockUtc:z.observedRealPgClockUtc};
+ }
  return {route:r,post,sourceDigests:sourceDigests as string[],observedDbClockUtc:z.observedRealPgClockUtc};
 }
 export async function readP6ExactPrivatePostOriginal(ctx:ReturnType<typeof admitP6PrivatePostChildTransport>,requireCurrentRevisionForPlanning:boolean){
