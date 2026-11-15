@@ -12,6 +12,13 @@ import {
 } from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly}
  from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
+import {publishP6PrivateSourcePostOnce}
+ from "../server/lib/disruption/phase6PrivateSourcePostPublisherOnce_v39.mjs";
+import {P6_SOURCE_POST_REVIEW_SCHEMA,P6_SOURCE_POST_REVIEW_AUDIENCE,
+ signedP6PrivateSourcePostReviewBytes,readP6PrivateSourcePostOnce}
+ from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
+import {readP6StoredPrivateReviewOnce}
+ from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 const p="postgresql://phase6_private_publisher_login_ci_epoch:ci-only-day-pub@127.0.0.1:5432/neondb?sslmode=disable";
 const r="postgresql://phase6_private_reader_login_ci_epoch:ci-only-day-read@127.0.0.1:5432/neondb?sslmode=disable";
 const owner="postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable";
@@ -107,7 +114,7 @@ function indexPacket(day,revision,entries,previousBytes){
   phase6ProcessArmed:"0",expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_epoch",
   approvedCodeSha:code,approvedCalendarSha256:calendar,
   approvedRightsSha256:rights,
-  approvedRetentionNotAfterUtc:expire
+  approvedRetentionNotAfterUtc:expire,persistVerifiedReviewWire:true
  };
  return{bytes,wire,pins,scope,review};
 }
@@ -142,6 +149,67 @@ try{
  assert.deepEqual(secondRead.currentIndexBytes,second.bytes);
  assert.deepEqual(secondRead.previousIndexBytes,first.bytes);
  assert.equal(secondRead.redactedSummary.entryCount,2);
+ const trust={independentStudyTrustPinsApproved:true,
+  expectedReaderSessionLogin:"phase6_private_reader_login_ci_epoch",
+  reviewedCodeSha:code,manifestSha256:manifest,calendarSha256:calendar,
+  releaseSha256:release,rightsSha256:rights,
+  dayReviewerFingerprintSha256:fp,dayReviewerPublicKeyPem:pem,
+  queryReviewerFingerprintSha256:fp,queryReviewerPublicKeyPem:pem};
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const stored=await readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{kind:"CURRENT_DAY",runDayIndex:1}});
+ assert.equal(stored.pins.expectedIndexRevision,2);
+ assert.deepEqual(stored.wire,second.wire);
+ const old=await readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:1,indexRevision:1,indexSha256:first.review.indexSha256}});
+ assert.deepEqual(old.wire,first.wire);
+ const again=await readP6DayEpochIndexCurrentPriorOnce({
+  client:read,pins:stored.pins,wire:stored.wire,publicKeyPem:stored.publicKeyPem});
+ assert.deepEqual(again.currentIndexBytes,second.bytes);
+ assert.equal(JSON.stringify(stored).includes(second.wire.signatureBase64),false);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:1,indexRevision:1,indexSha256:six("9")}}),
+  /DAY_REVISION_OR_STUDY_SELECTOR_DRIFT/);
+ // Atomic signed query publication and dynamic lookup use the original
+ // publisher and reader, with private detached review stored on same row.
+ const qPath="data-collection/phase5/frozen/sourceq_synthetic_day01.json";
+ const qBytes=Buffer.from(JSON.stringify({synthetic:true,filler:"q".repeat(200)}));
+ const qReview={schema:P6_SOURCE_POST_REVIEW_SCHEMA,audience:P6_SOURCE_POST_REVIEW_AUDIENCE,
+  kind:"SOURCE_QUERY_PACKET",logicalPath:qPath,contentSha256:hash(qBytes),
+  reviewedCodeSha:code,manifestSha256:manifest,rightsSha256:rights,
+  runDayIndex:1,shardIndex:1,externalReviewEvidenceSha256:evidence,
+  reviewedAtUtc:reviewed,retentionNotAfterUtc:expire,validUntilUtc:valid,
+  reviewerPublicKeyFingerprintSha256:fp};
+ const qWire={review:qReview,signatureBase64:sign(null,
+  signedP6PrivateSourcePostReviewBytes(qReview),key.privateKey).toString("base64")};
+ const qPins={independentExternalReviewerSignaturePinsApproved:true,
+  privateSourcePostPublishApproved:true,expectedKind:"SOURCE_QUERY_PACKET",
+  expectedLogicalPath:qPath,expectedContentSha256:hash(qBytes),
+  expectedReviewedMainSha:code,expectedManifestSha256:manifest,
+  expectedRightsSha256:rights,expectedExternalReviewEvidenceSha256:evidence,
+  expectedReviewerPublicKeyFingerprintSha256:fp,expectedRunDayIndex:1,expectedShardIndex:1};
+ await publishP6PrivateSourcePostOnce({client:pub,pins:qPins,wire:qWire,
+  reviewerPublicKeyPem:pem,packetBytes:qBytes,scope:{
+   privateStoragePublicationApproved:true,separateProviderContentRightsReviewApproved:true,
+   existingChildOrPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
+   approvedMainCodeSha:code,expectedPublisherSessionLogin:"phase6_private_publisher_login_ci_epoch",
+   approvedRetentionNotAfterUtc:expire,reviewedRightsSha256:rights,
+   externalReviewEvidenceSha256:evidence,expectedSourceDayRegistryLogicalPath:null,
+   expectedSourceDayRegistrySha256:null,persistVerifiedReviewWire:true
+ }});
+ const qSelector={kind:"SOURCE_QUERY",runDayIndex:1,shardIndex:1,
+  logicalPath:qPath,contentSha256:hash(qBytes)};
+ const qStored=await readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:qSelector});
+ assert.deepEqual(qStored.wire,qWire);
+ const verified=await readP6PrivateSourcePostOnce(read,qStored.pins,qStored.wire,qStored.publicKeyPem);
+ assert.deepEqual(verified.privateBytes,qBytes);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,
+  selector:{...qSelector,shardIndex:2}}),/QUERY_REGISTRY_SELECTOR_DRIFT/);
+ await assert.rejects(pub.query("UPDATE phase6_private.frozen_native_packet_v39 SET review_wire_bytes=NULL WHERE logical_path=$1",[qPath]));
+ const removedQuery=await dbOwner.query("DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[qPath]);
+ assert.equal(removedQuery.rowCount,1);
+ await assert.rejects(readP6StoredPrivateReviewOnce({client:read,trust,scope,selector:qSelector}),
+  /EXACT_COMMITTED_REVIEW_NOT_FOUND/);
  // After publishing r2, the r1 signature is still cryptographically valid.
  // A planner must refuse it; an already-admitted, exact immutable child
  // may still read r1, so new publication does not strand in-flight work.

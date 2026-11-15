@@ -52,6 +52,10 @@ export async function publishP6PrivateSourcePostOnce({
  const external=verifyP6ExternalSourcePostReview(
   wire,reviewerPublicKeyPem,pins);
  const rev=external.review;
+ const storedWire=scope.persistVerifiedReviewWire===true?
+  Buffer.from(JSON.stringify(wire),"utf8"):null;
+ if(storedWire&&(storedWire.length<100||storedWire.length>4096))
+  fail("STORED_REVIEW_WIRE_SIZE");
  if(scope.approvedRetentionNotAfterUtc!==rev.retentionNotAfterUtc||
     scope.approvedMainCodeSha!==rev.reviewedCodeSha||
     scope.reviewedRightsSha256!==rev.rightsSha256||
@@ -156,12 +160,15 @@ export async function publishP6PrivateSourcePostOnce({
    " (logical_path,run_day_index,shard_index,kind,content_sha256,"+
    "reviewed_code_sha,manifest_sha256,rights_sha256,"+
    "external_review_sha256,externally_reviewed_at_utc,"+
-   "retention_not_after_utc,payload_bytes)"+
-   " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+   "retention_not_after_utc,payload_bytes"+
+   (storedWire?",review_wire_bytes)":" )")+
+   " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12"+
+   (storedWire?",$13)":")"),
    [rev.logicalPath,rev.runDayIndex,rev.shardIndex,rev.kind,
     rev.contentSha256,rev.reviewedCodeSha,rev.manifestSha256,
     rev.rightsSha256,rev.externalReviewEvidenceSha256,
-    rev.reviewedAtUtc,rev.retentionNotAfterUtc,packetBytes]
+    rev.reviewedAtUtc,rev.retentionNotAfterUtc,packetBytes,
+    ...(storedWire?[storedWire]:[])]
   );
   if(ins?.rowCount!==1)
    fail("PRIVATE_ONE_PACKET_INSERT_NOT_CONFIRMED");

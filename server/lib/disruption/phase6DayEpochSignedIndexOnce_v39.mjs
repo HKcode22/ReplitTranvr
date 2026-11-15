@@ -235,6 +235,14 @@ const identitySQL=
  "grp.rolbypassrls AS group_bypassrls"+
  " FROM pg_catalog.pg_roles login_role,pg_catalog.pg_roles grp"+
  " WHERE login_role.rolname=session_user AND grp.rolname=current_user";
+// Must be called within an explicit READ ONLY transaction. Reuse the
+// original exact-role/ACL checks for the stored-review metadata reader.
+export async function readP6DayEpochRestrictedReaderClock(client,login){
+ const ident=await client.query(identitySQL);
+ if(ident?.rowCount!==1)err("NO_ACTUAL_POSTGRESQL_READER_IDENTITY");
+ validPgId(ident.rows[0],"reader",login);
+ return new Date(clock(ident.rows[0].db_now)).toISOString();
+}
 const indexSQL=
  "SELECT run_day_index,revision,previous_index_sha256,content_sha256,"+
  "reviewed_code_sha,manifest_sha256,calendar_sha256,"+
@@ -367,6 +375,10 @@ export async function publishP6DayEpochIndexRevisionOnce({
   err("NO_APPROVED_DAY_EPOCH_OR_UNREVIEWED_INDEX_BYTES");
  const signed=verifyP6DayEpochExternalReview({wire,publicKeyPem,pins});
  const current=validateP6DayEpochIndexBytes(indexBytes,signed.review);
+ const storedWire=scope.persistVerifiedReviewWire===true?
+  Buffer.from(JSON.stringify(wire),"utf8"):null;
+ if(storedWire&&(storedWire.length<100||storedWire.length>4096))
+  err("STORED_REVIEW_WIRE_SIZE");
  let begun=false,commitAttempted=false;
  try{
   await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");
@@ -438,15 +450,17 @@ export async function publishP6DayEpochIndexRevisionOnce({
    " (run_day_index,revision,previous_index_sha256,content_sha256,"+
    "reviewed_code_sha,manifest_sha256,calendar_sha256,release_sha256,"+
    "rights_sha256,external_review_sha256,externally_reviewed_at_utc,"+
-   "retention_not_after_utc,payload_bytes)"+
-   " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+   "retention_not_after_utc,payload_bytes"+
+   (storedWire?",review_wire_bytes)":" )")+
+   " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13"+
+   (storedWire?",$14)":")"),
    [signed.review.runDayIndex,rev,signed.review.previousIndexSha256,
     signed.review.indexSha256,signed.review.reviewedCodeSha,
     signed.review.manifestSha256,signed.review.calendarSha256,
     signed.review.releaseSha256,signed.review.rightsSha256,
     signed.review.externalReviewEvidenceSha256,
     signed.review.reviewedAtUtc,signed.review.retentionNotAfterUtc,
-    indexBytes]);
+    indexBytes,...(storedWire?[storedWire]:[])]);
   if(ins?.rowCount!==1)err("INDEX_INSERT_NOT_CONFIRMED");
   const end=await client.query("SELECT clock_timestamp() AS db_now");
   const endMs=clock(end?.rows?.[0]?.db_now);
