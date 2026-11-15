@@ -530,8 +530,8 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });
- (QUEUED_T24?it.skip:it)("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
-  if(STAGE29)return; // Stage29 tests exercise original witnessed route.
+ it("writes genuine later-only T6 in disposable PG16 with no T24 and independent source-as-of approval",async()=>{
+  if(STAGE29&&!QUEUED_T24)return; // Exercise the actual queue in the queued variant.
   const hasV0081=(await admin.query(
    "SELECT to_regclass('clean.phase5_t24_postcommit_witness_v39') AS obj"
   )).rows[0]?.obj;
@@ -540,7 +540,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   if(!hasV0081)return;
   // The test's synthetic Stage14 login was originally commissioned before
   // V0081. This extra SELECT is for disposable Stage17 CI only, never PROD.
-  await admin.query(
+  if(!STAGE29)await admin.query(
    "GRANT SELECT ON clean.phase5_t24_postcommit_witness_v39 TO "+ROLE);
   const dbNow=new Date((await admin.query(
    "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
@@ -565,6 +565,17 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
    [q2,manifest,h("4"),h("5"),rights,contract,t,end,dispatch,
     dispatch.toISOString().slice(0,10),
     new Date(dbNow-10*60_000),new Date(ownCutoff)]);
+  if(STAGE29){
+   const prearmSha=createHash("sha256").update([
+    "phase5-v0080",manifest,q2,"42363348763",h("4"),rights
+   ].join("|")).digest("hex");
+   await admin.query(
+    "INSERT INTO clean.phase5_fids_github_prearm_v39("+
+    "query_digest,manifest_sha256,github_run_id,early_draw_sha256,"+
+    "rights_review_sha256,prearm_sha256) "+
+    "VALUES($1,$2,'42363348763',$3,$4,$5)",
+    [q2,manifest,h("4"),rights,prearmSha]);
+  }
   await admin.query(
    "INSERT INTO clean.phase5_fids_physical_attempt_v39"+
    "(reservation_sha256,query_digest,manifest_sha256,github_run_id,"+
@@ -629,13 +640,40 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     independentLaterAsOfAndMissingnessReviewAttested:true
    }
   };
-  await expect(persistP5V0079SingleBoundFlightPre(writer,signed))
+  let fence:Parameters<typeof persistP5V0079SingleBoundFlightPre>[2]={};
+  if(QUEUED_T24){
+   // Admin fixture only: real V0087 task + V0088/89 fence and ACK, not a
+   // newly commissioned production V0091 or signed GH runtime.
+   const packet=createHash("sha256").update(JSON.stringify(signed)).digest("hex");
+   await admin.query(
+    "INSERT INTO clean.phase5_cd_pre_task_v39("+
+    "manifest_sha256,flight_instance_id,horizon,selected_native_t_utc,"+
+    "prediction_cutoff_utc,packet_sha256,source_population_query_id,"+
+    "source_response_sha256,reviewed_source_rights_sha256,source_expires_at_utc)"+
+    " SELECT $1,$2,'T-6h',$3,$4,$5,population_query_id::text,$7,$8,source_expires_at_utc"+
+    " FROM clean.phase5_fids_original_binding_v39 WHERE population_query_id=$6::uuid",
+    [manifest,flight,signed.selectedTNativeUtc,iso(ownCutoff),packet,qid2,response,rights]);
+   const rows=(await admin.query(
+    "SELECT task_id::text,lease_owner,lease_generation::text,packet_sha256,state"+
+    " FROM clean.phase5_cd_claim_due_v39('cd-later-ci-owner',1,100)"
+   )).rows;
+   expect(rows).toHaveLength(1);
+   expect(rows[0].state).toBe("CLAIMED");
+   expect(rows[0].packet_sha256).toBe(packet);
+   const x=rows[0];
+   expect((await admin.query(
+    "SELECT clean.phase5_cd_mark_write_started_v39($1::bigint,$2,$3::bigint) AS ok",
+    [x.task_id,x.lease_owner,x.lease_generation])).rows[0].ok).toBe(true);
+   fence={realV0088QueueFenceCi:{taskId:x.task_id,owner:x.lease_owner,
+    generation:x.lease_generation,packetSha256:x.packet_sha256}};
+  }
+  await expect(persistP5V0079SingleBoundFlightPre(writer,signed,fence))
    .rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
   await expect(persistP5V0079SingleBoundFlightPre(writer,signed,{
-    independentlyApprovedStandaloneProtocolSha256:h("f")
+    ...fence,independentlyApprovedStandaloneProtocolSha256:h("f")
    })).rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
   const result=await persistP5V0079SingleBoundFlightPre(writer,signed,{
-    independentlyApprovedStandaloneProtocolSha256:protocol
+    ...fence,independentlyApprovedStandaloneProtocolSha256:protocol
    });
   expect(result.horizon).toBe("T-6h");
   expect(result.laterPreEvidenceTier).toBe(
@@ -648,9 +686,25 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
    "SELECT horizon FROM clean.flight_snapshots"+
    " WHERE flight_instance_id=$1",[flight])).rows;
   expect(exists.map(x=>x.horizon)).toEqual(["T-6h"]);
-  await expect(persistP5V0079SingleBoundFlightPre(writer,signed,{
+  expect((await admin.query(
+   "SELECT count(*)::integer AS n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",
+   [flight])).rows[0].n).toBe(0);
+  if(QUEUED_T24){
+   const x=fence.realV0088QueueFenceCi!;
+   const receipt=createHash("sha256").update("real-later-no-t24-v0088-ci-receipt").digest("hex");
+   expect((await admin.query(
+    "SELECT clean.phase5_cd_ack_verified_v39($1::bigint,$2,$3::bigint,$4::bigint,$5) AS ok",
+    [x.taskId,x.owner,x.generation,result.committedSnapshotId,receipt])).rows[0].ok).toBe(true);
+   const done=(await admin.query(
+    "SELECT state,verified_snapshot_id::text id FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",
+    [x.taskId])).rows[0];
+   expect(done).toEqual({state:"VERIFIED_ON_TIME",id:result.committedSnapshotId});
+   console.log("P5_REAL_V0087_QUEUED_STANDALONE_LATER_WITHOUT_T24_STAGE14_ACK_PASS");
+  }else{
+   await expect(persistP5V0079SingleBoundFlightPre(writer,signed,{
     independentlyApprovedStandaloneProtocolSha256:protocol
    })).rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
+  }
  });
 
 });

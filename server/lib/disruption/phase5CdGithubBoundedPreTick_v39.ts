@@ -6,6 +6,7 @@
  * and provenance/rights roster before touching the queue.
  */
 import {createHash} from "node:crypto";
+import {decideP5LaterPreEvidencePath} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 import type {Pool} from "pg";
 import {
  verifyP5T24PreWitnessCrossReview,
@@ -96,14 +97,13 @@ export function verifyP5CdFrozenRoster(
   const t24=schema==="v39.phase5.github-native-t24-pre-witness-reviewed.v1";
   const later=schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1";
   const fallback=schema==="v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
-  // FIRST controller only executes witnessed T6/T90. T24 must use the
-  // existing separate V0081 witness writer, and standalone-later requires
-  // a separately approved as-of protocol. Never mark WRITE_STARTED for
-  // either incomplete branch.
-  if(fallback||(t24&&acceptedHorizon!=="T24_WITH_SEPARATE_WITNESS")||
-     (later&&acceptedHorizon!=="LATER_ONLY"))
+  // T24 always uses its separate V0081 witness writer. Later missing-T24
+  // is allowed ONLY by an independently pinned protected release protocol.
+  if((fallback&&!gate.independentlyApprovedStandaloneProtocolSha256)||
+     (t24&&acceptedHorizon!=="T24_WITH_SEPARATE_WITNESS")||
+     ((later||fallback)&&acceptedHorizon!=="LATER_ONLY"))
    hold("T24_WITNESS_OR_STANDALONE_LATER_CHAIN_NOT_YET_CONNECTED");
-  if(!t24&&!later||
+  if(!t24&&!later&&!fallback||
      packet.reviewedCodeSha!==gate.approvedCodeSha||
      (t24&&packet.independentNativeT24AndSourceReviewAttested!==true)||
      (later&&packet.independentLaterHorizonAndT24ReviewAttested!==true)||
@@ -121,6 +121,11 @@ export function verifyP5CdFrozenRoster(
      !SHA256.test(pre.reviewedFrameSha256??"")||
      !CODE.test(packet.reviewedCodeSha??""))
    hold("FROZEN_PERMIT_SOURCE_RIGHTS_OR_NATIVE_T_UNREVIEWED");
+  if((!fallback&&pre.reviewedStandaloneLaterNoT24)||
+     (fallback&&decideP5LaterPreEvidencePath(pre,gate.independentlyApprovedStandaloneProtocolSha256)!=="STANDALONE_ASOF_LATER_MISSING_T24"))
+   hold("STANDALONE_PACKET_SCHEMA_OR_PROTOCOL_DRIFT");
+  // Full native scope is checked before registration and WRITE_STARTED.
+  if(fallback)preflightP5Stage14ReviewedPermitV39(pre,gate.independentlyApprovedStandaloneProtocolSha256);
   let witnessReview:P5IndependentT24WitnessReview|undefined;
   if(t24){
    if(pre.horizon!=="T-24h"||
@@ -235,7 +240,7 @@ export async function runP5CdGithubPreTick(
  env:NodeJS.ProcessEnv,deps:P5CdTickDeps,
  opts:{owner:string;limit?:number;leaseSeconds?:number}):
  Promise<P5CdTickReport>{
- requireP5CdGithubPreRelease(env);
+ const release=requireP5CdGithubPreRelease(env);
  if(!deps||!deps.db||!deps.pool||!(deps.packets instanceof Map)||
     deps.packets.size<1||
     !/^[a-zA-Z0-9_.:-]{5,96}$/.test(opts?.owner??""))
@@ -244,6 +249,12 @@ export async function runP5CdGithubPreTick(
  if(!Number.isInteger(limit)||limit<1||limit>2||
    !Number.isInteger(seconds)||seconds<30||seconds>120)
   hold("UNBOUNDED_QUEUE_WORKER_CAPACITY");
+ // Defend the worker boundary even if an internal caller supplies a
+ // prebuilt map. Never claim a task under a disabled missing-T24 policy.
+ for(const {permit} of deps.packets.values()){
+  if(permit.reviewedStandaloneLaterNoT24)
+   preflightP5Stage14ReviewedPermitV39(permit,release.independentlyApprovedStandaloneProtocolSha256);
+ }
  const reap=await reapP5CdExpiredLeasesOnceV39(deps.db,64);
  const tasks=await claimP5CdSignedRosterDueTasksV39(
   deps.db,opts.owner,[...deps.packets.keys()],
@@ -252,7 +263,7 @@ export async function runP5CdGithubPreTick(
  for(const task of tasks){
   // STOP/rights may have been revoked between tasks in this process;
   // avoid any further writes when the reviewed process gate is absent.
-  requireP5CdGithubPreRelease(env);
+  const liveRelease=requireP5CdGithubPreRelease(env);
   let permit:P5Stage14SingleFlightPrePermit;
   try{
    permit=bindP5CdTaskToFrozenPermit(task,deps.packets);
@@ -265,7 +276,7 @@ export async function runP5CdGithubPreTick(
    // The exact original Stage14 native-T, frozen-builder, identity,
    // T24-witness and scientific-permit shape is checked BEFORE the
    // un-retriable UNKNOWN state is entered, not after it.
-   if(preflightP5Stage14ReviewedPermitV39(permit)!==
+   if(preflightP5Stage14ReviewedPermitV39(permit,liveRelease.independentlyApprovedStandaloneProtocolSha256)!==
       task.selectedNativeTUtc)
     hold("ORIGINAL_STAGE14_REVIEWED_NATIVE_T_CHANGED");
   }catch{
@@ -285,6 +296,8 @@ export async function runP5CdGithubPreTick(
   try{
    const saved=await persistP5V0079SingleBoundFlightPre(
     deps.pool,permit,{
+     ...(permit.reviewedStandaloneLaterNoT24?{
+      independentlyApprovedStandaloneProtocolSha256:liveRelease.independentlyApprovedStandaloneProtocolSha256}:{}),
      realV0088QueueFenceGh:{
       taskId:task.taskId,owner:task.leaseOwner,
       generation:task.leaseGeneration,packetSha256:task.packetSha256

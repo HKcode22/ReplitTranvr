@@ -60,6 +60,17 @@ export function makeP5CdV0091RegisterArgs(
  * external Stage17/V0081 receipt digest and native-T witness scope.
  * Stage14 still independently joins a genuine persisted witness in PG.
  */
+export function requireP5CdLaterEvidenceForEnrollment(
+ p:P5Stage14SingleFlightPrePermit,independentlyApprovedStandaloneProtocolSha256?:string
+):void{
+ if(p?.reviewedStandaloneLaterNoT24){
+  // Reuse the original Stage14 exact missing-T24 checks; the writer later
+  // independently checks zero T24 snapshots AND witnesses in its own tx.
+  if(p.horizon!=="T-6h"&&p.horizon!=="T-90m")
+   hold("STANDALONE_LATER_WRONG_HORIZON");
+  preflightP5Stage14ReviewedPermitV39(p,independentlyApprovedStandaloneProtocolSha256);
+ }else requireP5CdFrozenStage17WitnessForEnrollment(p);
+}
 export function requireP5CdFrozenStage17WitnessForEnrollment(
  p:P5Stage14SingleFlightPrePermit
 ):void{
@@ -118,7 +129,7 @@ export async function runP5CdGithubOneSourceEnrollment(
   hold("T24_ENROLLMENT_REQUIRES_SEPARATE_REVIEW");
  const permit=packets.get(frozen.packetSha256)?.permit;
  if(!permit)hold("SIGNED_SOURCE_PACKET_NOT_BOUND");
- if(preflightP5Stage14ReviewedPermitV39(permit)!==
+ if(preflightP5Stage14ReviewedPermitV39(permit,approved.gate.independentlyApprovedStandaloneProtocolSha256)!==
     permit.selectedTNativeUtc)
   hold("ORIGINAL_STAGE14_FIRST_NATIVE_T_NOT_FROZEN");
  if(permit.horizon==="T-24h"){
@@ -130,7 +141,7 @@ export async function runP5CdGithubOneSourceEnrollment(
      !packets.get(frozen.packetSha256)?.witnessReview)
    hold("T24_REQUIRES_SEPARATE_V0081_WITNESS_CONTROLLER");
  }else{
-  requireP5CdFrozenStage17WitnessForEnrollment(permit);
+  requireP5CdLaterEvidenceForEnrollment(permit,approved.gate.independentlyApprovedStandaloneProtocolSha256);
   if(permit.horizon!=="T-6h"&&permit.horizon!=="T-90m")
    hold("T24_OR_STANDALONE_PROTOCOL_UNAPPROVED");
  }

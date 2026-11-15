@@ -225,3 +225,46 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
   expect(seen).toHaveLength(3);
  });
 });
+
+describe("explicit missing-T24 later queue policy",()=>{
+ function standalone(){
+  const f=fixture(),protocol=sha("b");
+  const permit={...f.permit,reviewedT24WitnessReceipt:undefined,
+   reviewedStandaloneLaterNoT24:{
+    schema:"v39.phase5.standalone-later-asof-no-t24.v1",
+    reviewedProtocolSha256:protocol,
+    reviewedOriginalResponseSha256:f.permit.expectedSourceResponseSha256,
+    reviewedNativeTSemanticsSha256:f.permit.independentlyReviewedNativeTEvidenceSha256,
+    missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",
+    independentLaterAsOfAndMissingnessReviewAttested:true
+   }};
+  const packetBytes=Buffer.from(JSON.stringify({
+   schema:"v39.phase5.github-standalone-later-pre-asof-reviewed.v2",reviewedCodeSha:code,
+   independentlyReviewedLaterWithoutT24AsOfAttested:true,prePermit:permit}));
+  const packetSha256=createHash("sha256").update(packetBytes).digest("hex");
+  const entries=[{filePath:file,packetSha256,bytes:packetBytes}];
+  const roster={...f.roster,entries:[{filePath:file,packetSha256}]};
+  const bytes=Buffer.from(JSON.stringify(roster));
+  const release={...f.release,rosterSha256:createHash("sha256").update(bytes).digest("hex")};
+  return {permit,protocol,entries,roster,bytes,release};
+ }
+ it("defaults to witnessed only; separately pinned protocol admits exact standalone packet",()=>{
+  const f=standalone();
+  expect(()=>verifyP5CdFrozenRoster(f.bytes,f.roster,f.entries,f.release)).toThrow("T24_WITNESS_OR_STANDALONE");
+  expect(()=>verifyP5CdFrozenRoster(f.bytes,f.roster,f.entries,{...f.release,independentlyApprovedStandaloneProtocolSha256:sha("f")})).toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+  const packets=verifyP5CdFrozenRoster(f.bytes,f.roster,f.entries,{...f.release,independentlyApprovedStandaloneProtocolSha256:f.protocol});
+  expect(packets.size).toBe(1);
+ });
+ it("worker must refuse an already assembled standalone map before any SQL unless separate approval exists",async()=>{
+  const f=standalone(),packets=verifyP5CdFrozenRoster(f.bytes,f.roster,f.entries,{...f.release,independentlyApprovedStandaloneProtocolSha256:f.protocol});
+  let count=0;
+  const deps={db:{query:async()=>{count++;return{rows:[]}}},pool:{connect:async()=>{throw Error("MUST_NOT_CONNECT")}} as any,packets};
+  await expect(runP5CdGithubPreTick(env(),deps,{owner:"ci-gh-worker-12"})).rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+  expect(count).toBe(0);
+  expect(()=>requireP5CdGithubPreRelease({...env(),P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256:f.protocol})).toThrow("STANDALONE_PROTOCOL_PRESENT_WITHOUT_APPROVAL");
+  const report=await runP5CdGithubPreTick({...env(),P5_CD_GH_STANDALONE_LATER_APPROVED:"1",P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256:f.protocol},deps,{owner:"ci-gh-worker-12"});
+  expect(report.claimed).toBe(0);
+  expect(report.paidProviderCalls).toBe(0);
+  expect(count).toBe(2);
+ });
+});

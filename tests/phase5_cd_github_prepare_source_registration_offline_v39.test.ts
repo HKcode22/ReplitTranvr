@@ -171,3 +171,11 @@ describe("Phase5 C+D one GH-only PREPARE FIDS original → V0091 queue admission
   expect(yaml).not.toContain("P5_CD_GH_T24_ROSTER_SHA256: ${{ secrets.P5_CD_GH_PRE_ROSTER_SHA256 }}");
  });
 });
+
+describe("protected standalone protocol on original V0091 PREPARE admission",()=>{
+ it("is optional and never reads a protocol digest from the flight permit",()=>{
+  expect(requireP5CdGithubPrepareAdmission(env()).gate.independentlyApprovedStandaloneProtocolSha256).toBeUndefined();
+  expect(()=>requireP5CdGithubPrepareAdmission({...env(),P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256:hash})).toThrow("STANDALONE_PROTOCOL_PRESENT_WITHOUT_APPROVAL");
+  expect(requireP5CdGithubPrepareAdmission({...env(),P5_CD_GH_STANDALONE_LATER_APPROVED:"1",P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256:hash}).gate.independentlyApprovedStandaloneProtocolSha256).toBe(hash);
+ });
+});

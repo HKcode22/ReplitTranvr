@@ -11,11 +11,25 @@ const HOLDER="ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER";
 function hold(reason:string):never{
  throw Error("REFUSED_P5_CD_GITHUB_PRE_"+reason);
 }
+/** Stable separate approval, never derive this from a flight packet.
+ * Empty/disabled is the original witnessed-only default. */
+export function readP5CdStandaloneLaterProtocol(env:NodeJS.ProcessEnv):string|undefined{
+ const enabled=env.P5_CD_GH_STANDALONE_LATER_APPROVED??"";
+ const digest=env.P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256??"";
+ if(enabled===""||enabled==="0"){
+  if(digest)hold("STANDALONE_PROTOCOL_PRESENT_WITHOUT_APPROVAL");
+  return undefined;
+ }
+ if(enabled!=="1"||!SHA256.test(digest))
+  hold("INVALID_SEPARATE_STANDALONE_LATER_APPROVAL");
+ return digest;
+}
 export interface P5CdGithubPreRelease{
  schema:"v39.phase5.cd-gh-pre-explicit-release.v1";
  releaseMode:"PHASE5_CANARY"|"PHASE6_APPROVED";
  approvedCodeSha:string;
  rosterSha256:string;
+ independentlyApprovedStandaloneProtocolSha256?:string;
  rightsSha256:string;
  manifestSha256:string;
  stop:false;
@@ -95,8 +109,10 @@ export function requireP5CdGithubPreRelease(
     !url.hostname||
     ["localhost","127.0.0.1","::1"].includes(url.hostname))
   hold("NOT_REAL_EXISTING_RESTRICTED_PRE_LOGIN");
+ const standalone=readP5CdStandaloneLaterProtocol(env);
  return{
   schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
+  ...(standalone?{independentlyApprovedStandaloneProtocolSha256:standalone}:{}),
   releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
   approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
   rosterSha256:env.P5_CD_GH_PRE_ROSTER_SHA256!,
