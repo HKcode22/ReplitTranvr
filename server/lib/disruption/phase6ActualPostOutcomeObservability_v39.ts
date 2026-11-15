@@ -220,7 +220,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   if(z?.length===1)coverage.retainedT24UniquePre++;
   if(x?.length===1&&hs.size===1)coverage.t6OnlyAmongRetainedHorizons++;
   for(const [h,a] of singles)
-   if(matched.has(JSON.stringify([k,h]))&&available<reqDate(a[0].selected_t_milestone_utc))
+   if(matched.has(JSON.stringify([k,h]))&&retrieved<reqDate(a[0].selected_t_milestone_utc))
     coverage.matchedHorizonObservationsBeforeScheduledT++;
   const valid=(a:Row[]|undefined,b:Row[]|undefined)=>a?.length===1&&b?.length===1&&pair(a[0],b[0]);
   const xy=valid(x,y),xz=valid(x,z);
@@ -228,9 +228,9 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   if(xz)coverage.retainedConsistentT6T24Pairs++;
   if(xy&&xz&&valid(y,z))coverage.retainedConsistentAllThree++;
   const both=(a:Horizon,b:Horizon)=>matched.has(JSON.stringify([k,a]))&&matched.has(JSON.stringify([k,b]));
-  if(xy&&both("T-6h","T-90m")&&available>=reqDate(x![0].selected_t_milestone_utc))
+  if(xy&&both("T-6h","T-90m")&&retrieved>=reqDate(x![0].selected_t_milestone_utc))
    coverage.sameNativeReportedPostT6T90PairsAfterScheduledT++;
-  if(xz&&both("T-6h","T-24h")&&available>=reqDate(x![0].selected_t_milestone_utc))
+  if(xz&&both("T-6h","T-24h")&&retrieved>=reqDate(x![0].selected_t_milestone_utc))
    coverage.sameNativeReportedPostT6T24PairsAfterScheduledT++;
  }
  const out={schema:"v39.phase6.actual-post-outcome-observability.v1",status:"COMMITTED_POST_MATCHED_PRE_FIELD_OBSERVABILITY_NOT_ACTUAL_LABEL",
