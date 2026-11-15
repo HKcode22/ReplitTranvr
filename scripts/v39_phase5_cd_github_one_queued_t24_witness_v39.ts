@@ -5,6 +5,7 @@
  */
 import {readFileSync,lstatSync} from "node:fs";
 import {Pool} from "pg";
+import {admitP6CommittedT24Custody,openP6CommittedT24Custody} from "./v39_phase6_committed_t24_witness_custody_v39.mjs";
 import {waitP5CdGithubSignedDueWindow}
  from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
 import {verifyP5CdFrozenRoster}
@@ -62,6 +63,7 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
  verifyP5T24PreWitnessCrossReview(
   expected.permit,expected.witnessReview);
  preflightP5Stage14ReviewedPermitV39(expected.permit);
+ const custodyCtx=admitP6CommittedT24Custody(env,expected.permit,expected.witnessReview);
  const preRaw=new Pool({
   connectionString:env.P5_V39_PRE_DATABASE_URL,
   max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:1400,
@@ -72,7 +74,9 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
   max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:1400,
   application_name:"p5_cd_t24_separate_v0081_witness_only"
  });
+ let custody:Awaited<ReturnType<typeof openP6CommittedT24Custody>>=null;
  try{
+  custody=await openP6CommittedT24Custody(custodyCtx);
   const pre=makeP5Stage28DedicatedRolePool(preRaw,{
    group:"pre",
    reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
@@ -95,8 +99,13 @@ export async function runP5CdOneQueuedT24GithubMain(env:NodeJS.ProcessEnv){
     filePath:p.filePath,packetSha256:p.packetSha256,bytes:packetBytes
    }]
   });
-  return{...result,dbClockDueWindow:clock};
+  // Preserve the exact in-memory original receipt after actual ACK; a
+  // storage failure is not permission to repeat Stage14 or Stage17.
+  const custodyReport=custody&&result.status==="T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE"?
+   await custody.publish(result):null;
+  return{...result,dbClockDueWindow:clock,privateCustodyCommittedAndReadBack:custodyReport?.privateT24CustodyCommittedAndReadBack??false};
  }finally{
+  await custody?.close();
   await Promise.all([preRaw.end().catch(()=>{}),
    witnessRaw.end().catch(()=>{})]);
  }
@@ -109,6 +118,7 @@ if(process.env.P5_CD_GH_QUEUED_T24_EXECUTE==="1"){
    registeredTaskWasSourceBound:report.registeredTaskWasSourceBound,
    stage17WitnessCommittedAndReadBack:report.stage17WitnessCommittedAndReadBack,
    ...summarizeP5T24PrivateReceiptForPublicLog(report.unsignedStage24ReceiptCandidate),
+   privateCustodyCommittedAndReadBack:report.privateCustodyCommittedAndReadBack,
    providerCalls:report.providerCalls,paidProviderCalls:report.paidProviderCalls,
    phase5ScientificFreezePassed:report.phase5ScientificFreezePassed,phase6PaidGo:report.phase6PaidGo}));
   if(report.status!==
