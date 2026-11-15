@@ -233,13 +233,13 @@ export function compileP5AmendmentEFidsOriginalFeaturesV39(input:P5EOriginalFids
  return compileP5EFromVerifiedOriginal(input,verifyP5EOriginalForBatch(input));
 }
 
-/** One exact original, at most one existing 96-flight review shard.
+/** One exact original, bounded by the existing 2500-member SOURCE audit.
  * Original envelope/body integrity checked once, provider ID lookup indexed
  * once. Per-flight native-ID or schedule ambiguity is counted, not allowed
  * to invalidate unrelated flights. Never use this to certify physical
  * gate-out, external rights or independent packet signing. */
 export function compileP5AmendmentEFidsOriginalFeatureBatchV39(inputs:readonly P5EOriginalFidsCompilerInput[]){
- if(!Array.isArray(inputs)||inputs.length<1||inputs.length>96)hold("UNBOUNDED_OR_EMPTY_ORIGINAL_BATCH");
+ if(!Array.isArray(inputs)||inputs.length<1||inputs.length>2500)hold("UNBOUNDED_OR_EMPTY_ORIGINAL_BATCH");
  const first=inputs[0],verified=verifyP5EOriginalForBatch(first),seen=new Set<string>();
  for(const x of inputs){
   if(!x||x.rawPayload!==first.rawPayload||x.persistedResponseHash!==first.persistedResponseHash||
@@ -250,7 +250,11 @@ export function compileP5AmendmentEFidsOriginalFeatureBatchV39(inputs:readonly P
     seen.has(x.flightInstanceId))hold("CROSS_ORIGINAL_OR_DUPLICATE_BATCH_MEMBER");
   seen.add(x.flightInstanceId);
  }
+ const nativeCounts=new Map<string,number>();
+ for(const x of inputs)nativeCounts.set(x.providerRecordKey,(nativeCounts.get(x.providerRecordKey)??0)+1);
  const decisions=inputs.map(input=>{
+  if((nativeCounts.get(input.providerRecordKey)??0)>1)return {flightInstanceId:input.flightInstanceId,
+   status:"CENSORED_NATIVE_ORIGINAL_MEMBER" as const,reason:"REFUSED_P5_E_FIDS_ORIGINAL_COMPILER_NATIVE_ID_SHARED_BY_NORMALIZED_MEMBERS"};
   try{return {flightInstanceId:input.flightInstanceId,status:"MATCHED_NATIVE_ORIGINAL" as const,
    compiled:compileP5EFromVerifiedOriginal(input,verified)};}
   catch(e){
