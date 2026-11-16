@@ -261,6 +261,15 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.phase6PaidGo).toBe(false);
   expect(x.sourceRightsApproved).toBe(false);
   expect(prepareP6ActualReviewInput(code)).toEqual(x);
+  const noRefill=prepareP6ActualReviewInput(code,0);
+  expect(noRefill.concreteReviewRecommendation).toMatchObject({
+   netRestCeilingUnits:49468,jointBudgetReview:{authorizedFutureRefillApiUnits:0,authorizedFutureRefillAlertCredits:0},
+   proposedAlertSafety:{alertRunSpendCeilingCredits:680},independentReviewerApproved:false,stageAuthorizationGranted:false});
+  expect(noRefill.calendarDraft).toEqual(x.calendarDraft);
+  expect(noRefill.externalCandidate).toEqual(x.externalCandidate);
+  expect(noRefill.missingExternalFields).toEqual(x.missingExternalFields);
+  expect(noRefill).toMatchObject({phase6PaidGo:false,sourceRightsApproved:false,actualBudgetReviewApproved:false});
+  expect(()=>prepareP6ActualReviewInput(code,1 as any)).toThrow("EXPLICIT_REVIEW_REFILL_CHOICE_REQUIRED");
   expect(()=>prepareP6ActualReviewInput("fake")).toThrow();
   const ext=Buffer.from(JSON.stringify(p)),timing=Buffer.from(JSON.stringify(x.timingCandidate));
   expect(()=>compileP6ActualCandidateExport({externalBytes:ext,expectedExternalFileSha256:hash(ext),timingBytes:timing,expectedTimingFileSha256:hash(timing)})).toThrow();
@@ -294,6 +303,22 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(JSON.stringify(x)).not.toContain("REVIEW-ONLY-NOT-AN-AUTHORIZATION");
   expect(JSON.stringify(x)).not.toContain('"unsignedStageInput"');
   expect(()=>inspectP6ExactReviewCheckout("0".repeat(40))).toThrow("REVIEW_CHECKOUT_NOT_EXACT");
+  const noRefill=prepareP6ActualReleaseIdentityReview(code,0);
+  expect(noRefill.configCandidate.content.source.cycleRestCeilingUnits).toBe(49468);
+  expect(noRefill.configCandidate.content.jointBudgetReviewCandidate.authorizedFutureRefillApiUnits).toBe(0);
+  expect(noRefill.configCandidate.content.alertSafetyCandidate.alertRunSpendCeilingCredits).toBe(680);
+  expect(noRefill.configCandidate.sha256).toBe(digest(noRefill.configCandidate.content));
+  expect(noRefill.manifestCandidate.sha256).toBe(digest(noRefill.manifestCandidate.content));
+  expect(noRefill.manifestCandidate.content.configCandidateSha256).toBe(noRefill.configCandidate.sha256);
+  expect(noRefill.configCandidate.sha256).not.toBe(x.configCandidate.sha256);
+  expect(noRefill.manifestCandidate.sha256).not.toBe(x.manifestCandidate.sha256);
+  expect(noRefill.geometry).toEqual(x.geometry);
+  expect(noRefill.sourceInventory).toEqual(x.sourceInventory);
+  expect(noRefill.rangeEvidenceCandidate).toEqual(x.rangeEvidenceCandidate);
+  expect(noRefill.timingEvidenceCandidate).toEqual(x.timingEvidenceCandidate);
+  expect(noRefill).toMatchObject({actualAuthorizationId:null,finalPredecessorEvidenceIds:null,
+   stagePacketExported:false,candidateDigestsApproved:false,sourceRightsApproved:false,
+   scientificFreezeApproved:false,phase6PaidGo:false});
  },20000);
 
 });

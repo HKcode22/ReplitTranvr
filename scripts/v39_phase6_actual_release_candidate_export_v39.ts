@@ -34,7 +34,9 @@ export function replayP6OriginalSeed(){
  * evidence and original compiler. Explicit nulls prevent this review-only
  * input from being mistaken for a runnable stage packet. No false pins.
  */
-export function prepareP6ActualReviewInput(codeSha:string){
+export type P6ReviewRefillChoice=0|3000|6000;
+export function prepareP6ActualReviewInput(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
+ if(![0,3000,6000].includes(reviewRefillChoice))hold("EXPLICIT_REVIEW_REFILL_CHOICE_REQUIRED");
  if(!/^[a-f0-9]{40}$/.test(codeSha))hold("EXACT_REVIEW_CODE_SHA_REQUIRED");
  const preview=replayP6OriginalSeed();
  const draft=preview.result.calendarDraft,proposal=proposeP5ActualNov22Budget(draft);
@@ -114,9 +116,10 @@ export function prepareP6ActualReviewInput(codeSha:string){
     smoke.settlementStableReadCount!==3||smoke.settlementTimeoutSeconds!==600||
     smoke.watchdogPollMs!==5000||smoke.exactExternalInternalReconciliation!==true)
   hold("HISTORICAL_SAFETY_SMOKE_DRIFT");
- // Concrete recommendation for the final review, not approved stage input.
- // 3k reserve is a future planning allocation, not assumed to be refillable.
- const recommendedFinancial=jointBudgetScenarios[1];
+ // Explicit review scenario, not approved stage input. The historical 3k
+ // default preserves exact prior review receipts; the no-refill option is
+ // the current minimum-release proposal. Neither grants Alert spend.
+ const recommendedFinancial=jointBudgetScenarios[reviewRefillChoice===0?0:reviewRefillChoice===3000?1:2];
  const proposedAlertSafety={
   unsettledBurstMarginCredits:smoke.unsettledBurstMarginCredits as number,
   protectedAlertFloorCredits:smoke.protectedAlertFloor as number,
@@ -222,9 +225,9 @@ const docEvidence=(paths:string[])=>paths.map(fileEvidence);
  * deliberately NOT-AUTH identity and historical references, never a claimed
  * authorization. Only counts and digests are returned; stage bytes and
  * runnable day-plan bytes are not emitted here. */
-export function prepareP6ActualReleaseIdentityReview(codeSha:string){
+export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
  const checkout=inspectP6ExactReviewCheckout(codeSha);
- const review=prepareP6ActualReviewInput(codeSha),r=review.concreteReviewRecommendation;
+ const review=prepareP6ActualReviewInput(codeSha,reviewRefillChoice),r=review.concreteReviewRecommendation;
  const seedPath="data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json";
  const seed=JSON.parse(readFileSync(seedPath,"utf8")),preview=replayP6OriginalSeed();
  const {timingEvidenceSha256:_unknownTiming,...timingLimits}=review.timingCandidate;
@@ -385,9 +388,10 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if(process.argv[2]==="--review-only"&&process.argv.length===4){
-   const review=prepareP6ActualReviewInput(process.argv[3]);
-   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3])},null,2));
+  if((process.argv[2]==="--review-only"||process.argv[2]==="--review-only-no-refill")&&process.argv.length===4){
+   const refillChoice=process.argv[2]==="--review-only-no-refill"?0:3000;
+   const review=prepareP6ActualReviewInput(process.argv[3],refillChoice);
+   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice)},null,2));
   }else{
   if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==7)hold("OWNER_LOCAL_EXACT_ARGUMENTS");
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(2);
