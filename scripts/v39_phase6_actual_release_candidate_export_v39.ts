@@ -7,7 +7,7 @@ import {readFileSync,writeFileSync,mkdirSync,realpathSync} from "node:fs";
 import {resolve,dirname,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
 import {buildP5ProspectiveSeedCalendarPreview} from "./v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget,reconcileP6ActualJointBudget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const H=/^[a-f0-9]{64}$/;
@@ -64,6 +64,7 @@ export function prepareP6ActualReviewInput(codeSha:string){
   cycleRestCeilingUnits:settings.cycleRestCeilingUnits,
   protectedRestFloorUnits:settings.protectedRestFloorUnits,
   explicitOtherOnlyChargeDates:proposal.explicitOtherOnlyChargeDates,
+  jointBudgetReview:null,
   restOtherByUtcDate:proposal.physicalUtcRows.map(r=>({chargeDayUtc:r.chargeDayUtc,
    dailyRestCeilingUnits:settings.dailyRestCeilingUnits,categories:{
     FIDS_RETRY_UNIT_BUDGET:r.categories.FIDS_RETRY_UNIT_BUDGET,
@@ -72,6 +73,23 @@ export function prepareP6ActualReviewInput(codeSha:string){
     HISTORY_BOOTSTRAP_UNIT_BUDGET:r.categories.HISTORY_BOOTSTRAP_UNIT_BUDGET,
     DIAGNOSTIC_UNIT_BUDGET:r.categories.DIAGNOSTIC_UNIT_BUDGET}}))
  };
+ // Concrete choices for owner review, using the dated actual account only.
+ // 500 REST / 150 Alert ending margins are proposals, NOT measured or
+ // approved. No current refill permission, balance, or live GO inferred.
+ const jointBudgetScenarios=[0,3000,6000].map(refill=>{
+  const candidate={
+   accountEvidenceSha256:hash(quotaBytes),observedAtUtc:quota.observedAtUtc as string,
+   apiUnitsLimit:quota.apiUnitsLimit as number,apiUnitsRemaining:quota.apiUnitsRemaining as number,
+   apiUnitsResetAtUtc:quota.apiUnitsResetAtUtc as string,alertCreditsRemaining:quota.alertCreditsRemaining as number,
+   preFreezeProjectApiUnits:quota.apiUnitsLimit-quota.apiUnitsRemaining,
+   authorizedFutureRefillApiUnits:refill,authorizedFutureRefillAlertCredits:refill,
+   endingApiMarginUnits:500,preRunAlertSpendCeilingCredits:0,endingAlertMarginCredits:150
+  };
+  const alertRunCeiling=candidate.alertCreditsRemaining+refill-1000-candidate.endingAlertMarginCredits;
+  return {status:"DATED_ACCOUNT_BUDGET_SCENARIO_NOT_APPROVED",candidate,
+   proposedAlertRunCeiling:alertRunCeiling,
+   reviewed:false,arithmetic:reconcileP6ActualJointBudget(candidate,proposal,alertRunCeiling)};
+ });
  const timingCandidate={
   timingEvidenceSha256:null,
   // Demonstrated geometry scenario, NOT measured runtime or approval.
@@ -89,7 +107,7 @@ export function prepareP6ActualReviewInput(codeSha:string){
    unitsRemaining:quota.apiUnitsRemaining,unitsLimit:quota.apiUnitsLimit,alertCredits:quota.alertCreditsRemaining,
    resetAtUtc:quota.apiUnitsResetAtUtc,currentBalanceRevalidated:false},
   calendarDraft:draft,shapeEnvelope:preview.result.shapeEnvelope,
-  externalCandidate,timingCandidate,
+  externalCandidate,timingCandidate,jointBudgetScenarios,
   missingExternalFields:Object.entries(externalCandidate).filter(([,v])=>v===null).map(([k])=>k),
   sourceRightsApproved:false,rangePriceAccountSpecificVerified:false,timingBoundsMeasured:false,
   reviewedMetadataOnly:false,actualBudgetReviewApproved:false,
@@ -126,6 +144,7 @@ export function compileP6ActualCandidateExport(input:{
   originalPreviewSha256:preview.sha256,inputExternalFileSha256:input.expectedExternalFileSha256,inputTimingFileSha256:input.expectedTimingFileSha256,
   unsignedStageInputSha256:assembled.unsignedStageInputSha256,dayPlanSha256s:assembled.dayPlans.dayPlanSha256s,
   sourceQueries:assembled.dayPlans.totalPlannedQueries,totalReservedUnits:assembled.totalReservedUnits,peakDailyUnits:assembled.peakDailyUnits,
+  jointBudget:assembled.jointBudget,
   independentReleaseStillRequired:true,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
  return {summary,files};
 }

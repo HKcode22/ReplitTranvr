@@ -7,7 +7,7 @@ import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate,reconcileP6ActualJointBudget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 const seedBytes=readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json");
 const seedBundle=JSON.parse(seedBytes.toString("utf8"));
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
@@ -111,7 +111,7 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
    predecessorEvidenceIds:["CI-ONLY-NOT-EVIDENCE"],
    alertSafety:{
     unsettledBurstMarginCredits:10,protectedAlertFloorCredits:1000,
-    alertRunSpendCeilingCredits:830,dailySoftStopMarginCredits:10,
+    alertRunSpendCeilingCredits:680,dailySoftStopMarginCredits:10,
     productionReconcileToleranceCredits:0,startAdmissionToleranceSeconds:120,
     safetyWatchdogPollMs:10000,settlementInitialWaitSeconds:60,settlementPollIntervalSeconds:30,
     settlementStableReadCount:3,settlementTimeoutSeconds:300
@@ -119,8 +119,13 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
    providerRangeEvidenceSha256:h("e"),timingEvidenceSha256:h("f"),
    asOfUtc:"2026-11-15T09:37:44.000Z",
    providerMaxRangeMinutes:240,refreshEveryMinutes:15,physicalGetsPerRefreshUpperBound:1,
-   getLeadSeconds:900,apiUnitsPerPhysicalGet:2,cycleRestCeilingUnits:50000,
+   getLeadSeconds:900,apiUnitsPerPhysicalGet:2,cycleRestCeilingUnits:49468,
    protectedRestFloorUnits:1000,explicitOtherOnlyChargeDates:b.explicitOtherOnlyChargeDates,
+   jointBudgetReview:{accountEvidenceSha256:hash(readFileSync("data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json")),
+    observedAtUtc:"2026-11-15T09:37:44.000Z",apiUnitsLimit:60000,apiUnitsRemaining:59968,
+    apiUnitsResetAtUtc:"2026-12-04T02:21:21.000Z",alertCreditsRemaining:1830,preFreezeProjectApiUnits:32,
+    authorizedFutureRefillApiUnits:0,authorizedFutureRefillAlertCredits:0,endingApiMarginUnits:500,
+    preRunAlertSpendCeilingCredits:0,endingAlertMarginCredits:150},
    restOtherByUtcDate:b.physicalUtcRows.map(r=>({chargeDayUtc:r.chargeDayUtc,dailyRestCeilingUnits:1900,
     categories:{FIDS_RETRY_UNIT_BUDGET:r.categories.FIDS_RETRY_UNIT_BUDGET,
      VALIDATION_UNIT_BUDGET:r.categories.VALIDATION_UNIT_BUDGET,
@@ -192,6 +197,27 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(a.files.every(x=>hash(readFileSync(join(dest,x.path)))===x.sha256)).toBe(true);
   expect(()=>writeP6ActualCandidateExport(a,dest)).toThrow();
  });
+ it("binds the original dual-ledger tree without reallocating REST categories or overspending",()=>{
+  const f=reviewFixture(),b=proposeP5ActualNov22Budget(f.draft),j=f.external.jointBudgetReview;
+  const a=assembleP6ActualFirstSeedReleaseCandidate(f);
+  expect(a.jointBudget.netRestCeiling).toBe(49468);
+  expect(a.jointBudget.restUnallocated).toBe(6508);
+  expect(a.unsignedStageInput.slotBudgetInput.cycleRestCeilingUnits).toBe(49468);
+  expect(a.jointBudget.alertUnallocated).toBe(0);
+  const funded={...j,authorizedFutureRefillApiUnits:6000,authorizedFutureRefillAlertCredits:6000};
+  expect(reconcileP6ActualJointBudget(funded,b,6680)).toMatchObject({netRestCeiling:43468,restUnallocated:508,alertUnallocated:0,refillPerformed:false});
+  for(const [bad,cap] of [
+   [{...j,preFreezeProjectApiUnits:0},680],
+   [{...j,authorizedFutureRefillApiUnits:1},680],
+   [{...j,alertCreditsRemaining:1831},680],
+   [{...j,accountEvidenceSha256:"0".repeat(64)},680],
+   [{...j,endingApiMarginUnits:6509+500},680],
+   [{...j},681],
+   [{...funded,authorizedFutureRefillApiUnits:7000,authorizedFutureRefillAlertCredits:7000},6680]
+  ] as const)expect(()=>reconcileP6ActualJointBudget(bad,b,cap)).toThrow();
+  const external={...f.external,cycleRestCeilingUnits:50000};
+  expect(()=>assembleP6ActualFirstSeedReleaseCandidate({...f,external,expectedExternalInputSha256:hash(Buffer.from(JSON.stringify(external)))})).toThrow("EXACT_PROPOSAL_SETTINGS_CHANGED");
+ });
  it("does not replace missing review hashes or silently alter the proposed budget",()=>{
   const f=reviewFixture();
   expect(()=>assembleP6ActualFirstSeedReleaseCandidate({...f,expectedExternalInputSha256:"0".repeat(64)})).toThrow("EXACT_EXTERNAL_INPUT");
@@ -211,7 +237,9 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.proposedTotalReservedUnits).toBe(41960);
   expect(x.proposedSourceQueries).toBe(6144);
   expect(x.proposedPeakDailyUnits).toBe(1228);
-  expect(x.missingExternalFields).toEqual(["manifestSha256","calendarSha256","configSha256","phase6AuthorizationId","predecessorEvidenceIds","alertSafety","providerRangeEvidenceSha256","timingEvidenceSha256"]);
+  expect(x.missingExternalFields).toEqual(["manifestSha256","calendarSha256","configSha256","phase6AuthorizationId","predecessorEvidenceIds","alertSafety","providerRangeEvidenceSha256","timingEvidenceSha256","jointBudgetReview"]);
+  expect(x.jointBudgetScenarios.map(s=>[s.candidate.authorizedFutureRefillApiUnits,s.arithmetic.netRestCeiling,s.arithmetic.restUnallocated,s.proposedAlertRunCeiling])).toEqual([[0,49468,6508,680],[3000,46468,3508,3680],[6000,43468,508,6680]]);
+  expect(x.jointBudgetScenarios.every(s=>!s.reviewed&&!s.arithmetic.refillPerformed&&!s.arithmetic.phase6PaidGo)).toBe(true);
   expect(x.timingCandidate.timingEvidenceSha256).toBeNull();
   expect(x.phase6PaidGo).toBe(false);
   expect(x.sourceRightsApproved).toBe(false);
