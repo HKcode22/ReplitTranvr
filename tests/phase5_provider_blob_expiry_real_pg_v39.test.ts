@@ -136,9 +136,9 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   const writerRole="p5_expiry_ci_writer",readerRole="p5_expiry_ci_reader";
   let writer:Pool|undefined,reader:Pool|undefined;
   try{
-   const before=await db.connect();
-   try{expect(await inventoryP5ExpiryActors(before,false)).toMatchObject({namedActorsPresent:0,potentialReusableNarrowActors:0,ownerVerified:true});}
-   finally{before.release();}
+   const beforeCatalog=await db.connect();
+   try{expect(await inventoryP5ExpiryActors(beforeCatalog,false)).toMatchObject({namedActorsPresent:0,potentialReusableNarrowActors:0,ownerVerified:true});}
+   finally{beforeCatalog.release();}
    await db.query("CREATE ROLE "+writerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_writer'");
    await db.query("CREATE ROLE "+readerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_reader'");
    for(const sql of p5RecurringExpiryGrants(writerRole,"writer"))await db.query(sql);
