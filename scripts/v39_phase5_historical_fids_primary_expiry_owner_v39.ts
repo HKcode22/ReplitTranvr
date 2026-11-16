@@ -33,9 +33,10 @@ async function main(){
    hold("EXPLICIT_REMEDIATION_REVIEW_REQUIRED");
  const u=new URL(env.DATABASE_URL);
  if(!["postgres:","postgresql:"].includes(u.protocol)||!u.username||!u.password||
-    !u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hostname.includes("-pooler")||
+    !u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||
     !["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
-    u.searchParams.has("uselibpqcompat"))hold("EXISTING_DIRECT_TLS_DATABASE_REQUIRED");
+    u.searchParams.has("uselibpqcompat"))hold("EXISTING_TLS_DATABASE_REQUIRED");
+ // Transaction-local locks work on the existing direct or pooled endpoint.
  // Explicit full TLS verification; keep existing DB identity and password.
  u.searchParams.set("sslmode","verify-full");
  const pool=new Pool({connectionString:u.toString(),connectionTimeoutMillis:8000,
