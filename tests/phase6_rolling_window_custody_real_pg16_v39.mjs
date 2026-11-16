@@ -128,7 +128,13 @@ try {
  await assert.rejects(claimP6RollingWindowOnce(input(1001),{claimClient:fakeClaim,readbackClient:neverRead}),/COMMIT_UNKNOWN_NO_REPLAY/);
  assert.equal(noReplayCalls.length,4);
  await assert.rejects(claimP6RollingWindowOnce({...input(1001),expectedPolicySha256:h("0")},{claimClient:neverRead,readbackClient:fakeClaim}),/MISSING_EXACT_REVIEWED_POLICY/);
- const narrowInput=root=>({...input(root),expectedClaimantSessionLogin:login,separateRestrictedWindowCustodyReviewApproved:true});
+ const narrowInput=root=>({...input(root),expectedClaimantSessionLogin:login,separateRestrictedWindowCustodyReviewApproved:true,
+  sessionEpochUtc:iso(clock),chainDeadlineUtc:iso(clock+30*60000),chainMode:"SINGLE"});
+ // A valid policy but out-of-window controller deadline must roll back
+ // the new root before COMMIT, leaving no ownership row to reconcile.
+ await assert.rejects(claimP6RollingWindowOnce({...narrowInput(1000),chainMode:"FOUR",chainDeadlineUtc:iso(clock+120*60000)},
+  {claimClient:claim1,readbackClient:read1}),/CHAIN_OUTSIDE_COMMITTED_WINDOW/);
+ assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,1);
  const concurrent=await Promise.allSettled([
   claimP6RollingWindowOnce(narrowInput(1001),{claimClient:claim1,readbackClient:read1}),
   claimP6RollingWindowOnce(narrowInput(1002),{claimClient:claim2,readbackClient:read2})
@@ -160,7 +166,12 @@ try {
  await assert.rejects(readP6KnownRollingWindowOnce({...successor,sessionEpochUtc:iso(clock+60000),chainDeadlineUtc:iso(clock+31*60000)},{readbackClient:read2}),/CHAIN_OUTSIDE_COMMITTED_WINDOW/);
  await assert.rejects(readP6KnownRollingWindowOnce({...successor,chainDeadlineUtc:iso(clock+120*60000),chainMode:"FOUR"},{readbackClient:read2}),/CHAIN_OUTSIDE_COMMITTED_WINDOW/);
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,2);
- console.log("V0102_SCOPED_SUCCESSOR_EXACT_OPEN_ROOT_READ_ONLY_NO_SECOND_CLAIM_NO_CLOCK_EXTENSION=PASS");
+ // Revocation is effective for further active-window readbacks without
+ // granting the claimant any closure capability.
+ await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=false,revoked_at_utc=clock_timestamp()");
+ await assert.rejects(readP6KnownRollingWindowOnce(successor,{readbackClient:read1}),/READBACK_CARDINALITY/);
+ await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=true,revoked_at_utc=NULL");
+ console.log("V0102_SCOPED_SUCCESSOR_EXACT_OPEN_ROOT_READ_ONLY_NO_SECOND_CLAIM_NO_CLOCK_EXTENSION_STOP_READBACK=PASS");
  console.log("V0102_EXACT_POLICY_REAL_COMMIT_DISTINCT_CONNECTION_READBACK_AND_UNKNOWN_COMMIT_NO_REPLAY=PASS");
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table+" WHERE closed_at_utc IS NULL")).rows[0].n,1);
  await assert.rejects(other.query(query,args(accepted)),/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/);

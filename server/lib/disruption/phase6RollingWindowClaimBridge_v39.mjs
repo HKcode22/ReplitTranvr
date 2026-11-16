@@ -22,6 +22,15 @@ function exactScope(input){
  const sessionLogin=input.expectedClaimantSessionLogin??null;
  if(sessionLogin!==null&&(!/^phase6_rolling_claim_[a-z0-9_]{5,40}$/.test(sessionLogin)||
    input.separateRestrictedWindowCustodyReviewApproved!==true))hold("RESTRICTED_REVIEW_SCOPE");
+ let chain=null;
+ if(sessionLogin!==null){
+  const epoch=clock(input.sessionEpochUtc),deadline=clock(input.chainDeadlineUtc),mode=input.chainMode;
+  const bound=mode==="SINGLE"?30*60000:mode==="FOUR"?120*60000:0;
+  const minimum=mode==="SINGLE"?15*60000:90*60000;
+  if(!bound||epoch%1000||deadline%1000||deadline-epoch<minimum||deadline-epoch>bound)
+   hold("EXACT_CHAIN_CLOCK_SCOPE");
+  chain={epoch,deadline,mode};
+ }
  const trust={reviewedCodeSha:input.trust.reviewedCodeSha,manifestSha256:input.trust.manifestSha256,
   calendarSha256:input.trust.calendarSha256,releaseSha256:input.trust.releaseSha256,rightsSha256:input.trust.rightsSha256};
  // Independently read/hash the exact existing signed 31-day plan policy.
@@ -31,7 +40,7 @@ function exactScope(input){
  if(calendar.from%1000||calendar.until%1000||calendar.until-calendar.from>1440*3600000)hold("POLICY_WINDOW_GEOMETRY");
  const commitment=hash(JSON.stringify({policySha256:input.expectedPolicySha256,...trust}));
  return {trust,calendar,commitment,rootRunId:input.rootRunId,authorizationId:input.authorizationId,
-  configSha256:input.configSha256,policySha256:input.expectedPolicySha256,sessionLogin};
+  configSha256:input.configSha256,policySha256:input.expectedPolicySha256,sessionLogin,chain};
 }
 async function identity(client,readOnly,scope){
  const q=await client.query(`SELECT current_database() db,current_user actor,session_user session_actor,
@@ -81,6 +90,12 @@ const readSql=`SELECT window_index,window_start_utc,window_end_utc,claimed_at_ut
  authorization_id,manifest_sha256,calendar_sha256,config_sha256,release_code_sha,policy_sha256,
  policy_from_utc,policy_until_utc,root_run_id::text,closed_at_utc
  FROM clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2`;
+function checkChainWindow(seen,a,dbClock){
+ if(a.chain&&(
+   a.chain.epoch<clock(seen.startUtc)||a.chain.epoch>clock(seen.claimedUtc)||
+   a.chain.deadline>clock(seen.endUtc)||clock(seen.claimedUtc)>=a.chain.deadline||dbClock>=a.chain.deadline))
+  hold("CHAIN_OUTSIDE_COMMITTED_WINDOW");
+}
 function readFor(a){
  return a.sessionLogin===null?readSql:
   readSql.replace("clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2","clean.phase6_read_bound_rolling_window_v39($1,$2)");
@@ -114,6 +129,7 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
   committed=shape(result.rows[0],a);
   if(typeof committed.exactClaimedAt!=="string"||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(committed.exactClaimedAt)||
     clock(committed.claimedUtc)<claimIdentity.dbClock)hold("CLAIM_CLOCK");
+  checkChainWindow(committed,a,clock(committed.claimedUtc));
   attemptedCommit=true;
   await claimClient.query("COMMIT");opened=false;
  }catch(e){
@@ -132,6 +148,7 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
   const q=await readbackClient.query(readFor(a),[a.rootRunId,a.trust.manifestSha256]);
   seen=exactOpenRow(q,a,ident);
   if(JSON.stringify(seen)!==JSON.stringify(committed))hold("COMMITTED_SCOPE_DRIFT");
+  checkChainWindow(seen,a,ident.dbClock);
   await readbackClient.query("COMMIT");readOpen=false;
  }catch{
   if(readOpen)await rollback(readbackClient);
@@ -153,19 +170,14 @@ export async function readP6KnownRollingWindowOnce(input,{readbackClient}={}){
  const a=exactScope(input);
  if(a.sessionLogin===null||!readbackClient||typeof readbackClient.query!=="function")
   hold("RESTRICTED_KNOWN_ROOT_READ_ONLY_REQUIRED");
- const epoch=clock(input.sessionEpochUtc),deadline=clock(input.chainDeadlineUtc),mode=input.chainMode;
- const bound=mode==="SINGLE"?30*60000:mode==="FOUR"?120*60000:0;
- const minimum=mode==="SINGLE"?15*60000:90*60000;
- if(!bound||epoch%1000!==0||deadline%1000!==0||deadline-epoch<minimum||deadline-epoch>bound)
-  hold("EXACT_CHAIN_CLOCK_SCOPE");
+ const {epoch,deadline,mode}=a.chain;
  let opened=false;
  try{
   await readbackClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");opened=true;
   const ident=await identity(readbackClient,true,a);
   const q=await readbackClient.query(readFor(a),[a.rootRunId,a.trust.manifestSha256]);
   const seen=exactOpenRow(q,a,ident);
-  if(epoch<clock(seen.startUtc)||epoch>clock(seen.claimedUtc)||deadline>clock(seen.endUtc)||
-    clock(seen.claimedUtc)>=deadline||ident.dbClock>=deadline)hold("CHAIN_OUTSIDE_COMMITTED_WINDOW");
+  checkChainWindow(seen,a,ident.dbClock);
   await readbackClient.query("COMMIT");opened=false;
   return {status:"EXACT_OPEN_ROOT_READBACK_NO_NEW_CLAIM_NOT_DISPATCH_AUTHORITY",
    rootRunId:a.rootRunId,windowIndex:seen.index,windowStartUtc:seen.startUtc,windowEndUtc:seen.endUtc,

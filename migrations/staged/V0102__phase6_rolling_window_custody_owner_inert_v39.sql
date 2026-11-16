@@ -197,6 +197,9 @@ BEGIN
  ON b.manifest_sha256=w.manifest_sha256 AND b.authorization_id=w.authorization_id
  AND b.calendar_sha256=w.calendar_sha256 AND b.config_sha256=w.config_sha256 AND b.code_sha=w.release_code_sha
  AND b.policy_sha256=w.policy_sha256 AND b.policy_from_utc=w.policy_from_utc AND b.policy_until_utc=w.policy_until_utc
+ JOIN clean.adb_phase6_authorization a ON a.singleton_key AND a.enabled AND a.revoked_at_utc IS NULL
+ AND a.authorization_id=w.authorization_id AND a.manifest_sha256=w.manifest_sha256
+ AND a.calendar_hash=w.calendar_sha256 AND a.config_hash=w.config_sha256 AND a.code_sha=w.release_code_sha
  WHERE b.expected_session_login=session_user AND w.root_run_id=p_root AND w.manifest_sha256=p_manifest;
 END $read$;
 REVOKE ALL ON FUNCTION clean.phase6_read_bound_rolling_window_v39(bigint,text) FROM PUBLIC;
