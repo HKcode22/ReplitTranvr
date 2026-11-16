@@ -44,6 +44,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -53,6 +54,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
           npx vitest run \
             tests/phase5_reviewed_callback_only_build_v39.test.ts \
             tests/phase5_callback_release_v2_reviewed_build_v39.test.ts \
