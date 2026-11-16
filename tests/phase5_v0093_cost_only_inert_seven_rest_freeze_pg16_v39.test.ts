@@ -482,8 +482,7 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   const tamper=[
    ["phase6_alert_spend_ceiling",27001,input.alertSafety.alertRunSpendCeilingCredits],
    ["production_reconcile_tolerance_credits",null,input.alertSafety.productionReconcileToleranceCredits],
-   ["schema_version","0047","v39"],
-   ["alert_cap_per_parent_day",1901,1900]
+   ["schema_version","0047","v39"]
   ];
   for(const [column,bad,original] of tamper){
    await admin.query("UPDATE clean.adb_phase6_authorization SET "+column+"=$1",[bad]);
@@ -494,6 +493,9 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
     await admin.query("UPDATE clean.adb_phase6_authorization SET "+column+"=$1",[original]);
    }
   }
+  // The existing database itself prevents a changed daily hard cap.
+  await expect(admin.query("UPDATE clean.adb_phase6_authorization SET alert_cap_per_parent_day=1901"))
+   .rejects.toMatchObject({code:"23514",constraint:"adb_phase6_authorization_base_cap_1900"});
   await expect(inspectP5V0093IndependentExactPostStage(writer,input,review,r.permit))
    .rejects.toThrow("READBACK_MUST_USE_DISTINCT_ACTOR");
   expect((await inspectP5V0093IndependentExactPostStage(admin,input,review,r.permit)).alertSafetyValuesExact).toBe(true);
