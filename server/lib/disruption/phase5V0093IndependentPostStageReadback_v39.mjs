@@ -85,6 +85,8 @@ export async function inspectP5V0093IndependentExactPostStage(
   if(sys.db!=="neondb"||sys.actor!==sys.session_actor||
      sys.ro!=="on"||i(sys.ver)<160000||sys.replica!==false)
    deny("WRONG_DB_OR_NOT_READONLY_PRIMARY_PG16");
+  if([stagingReview.expectedExactWriterRole,freezeReview.expectedExactBudgetWriterRole].includes(sys.actor))
+   deny("READBACK_MUST_USE_DISTINCT_ACTOR");
   const auth=await one(
    "SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,"+
    "code_sha,phase6_start_date,predecessor_evidence_ids,enabled,"+
