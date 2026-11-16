@@ -3,9 +3,23 @@
 import {describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {randomUUID} from "node:crypto";
-import {reviewOrExpireP5HistoricalFidsPrimary,P5_HISTORICAL_FIDS_EXPIRY_APPROVAL} from "../server/lib/disruption/retentionExpiry_v39";
+import {reviewOrExpireP5HistoricalFidsPrimary,P5_HISTORICAL_FIDS_EXPIRY_APPROVAL,P5_HISTORICAL_FIDS_SCOPE_20261116} from "../server/lib/disruption/retentionExpiry_v39";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const suite=process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16==="1"?describe:describe.skip;
+it("refuses arbitrary production scope before any database connection",async()=>{
+ const v=process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16;
+ delete process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16;
+ try{
+  let calls=0;
+  const pool={connect:async()=>{calls++;throw Error("must not connect");}};
+  await expect(reviewOrExpireP5HistoricalFidsPrimary(pool as unknown as Pick<Pool,"connect">,
+    {...P5_HISTORICAL_FIDS_SCOPE_20261116,expectedOriginals:18},{mode:"review"})).rejects.toThrow("NOT_EXACT_NOV16_OWNER_SCOPE");
+  expect(calls).toBe(0);
+ }finally{
+  if(v===undefined)delete process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16;
+  else process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16=v;
+ }
+});
 suite("exact historical FIDS remediation using installed B0062 triggers",()=>{
  it("reviews the exact old cohort, rejects changed scope, clears only due content and preserves its research membership",async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==URL||
