@@ -98,7 +98,6 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
  // A run missed by the independent active sweep is a refusal, not permission.
  const activeIds=new Set(active.map(x=>x.id));
  if(rows.some(x=>ACTIVE.has(x.status)&&!activeIds.has(x.id)))return {lane:route.lane,state:"HOLD_HISTORY_CHANGED"};
- if(active.length)return {lane:route.lane,state:"ACTIVE_NO_OVERLAP",activeCount:active.length};
  const proofs=snapshot.inertScheduleProofs??[];
  if(!Array.isArray(proofs)||proofs.length>100||new Set(proofs.map(p=>p?.runId)).size!==proofs.length||
     proofs.some(p=>!rows.some(row=>row.created>=epoch&&isSkippedSchedule(row,sha)&&exactInertProof(p,row,route))))
@@ -107,8 +106,10 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
  const attempts=rows.filter(x=>x.created>=epoch&&!inertIds.has(x.id)).sort((a,b)=>b.created-a.created||b.id-a.id);
  // Every unsuccessful attempt after release start must be reviewed; a later
  // green run cannot silently erase an older unknown outcome.
- const bad=attempts.find(x=>x.head_sha!==sha||x.run_attempt!==1||x.status!=="completed"||x.conclusion!=="success");
+ const bad=attempts.find(x=>x.head_sha!==sha||x.run_attempt!==1||(x.status==="completed"&&x.conclusion!=="success"));
  if(bad)return {lane:route.lane,state:"HOLD_UNSUCCESSFUL_OR_DRIFTED_ATTEMPT",runId:bad.id};
+ // A busy route cannot conceal an earlier failed or drifted attempt.
+ if(active.length)return {lane:route.lane,state:"ACTIVE_NO_OVERLAP",activeCount:active.length};
  const last=attempts[0];
  if(last){
   if(snapshot.jobRunId!==last.id||!Array.isArray(snapshot.jobs)||snapshot.jobs.length>100)

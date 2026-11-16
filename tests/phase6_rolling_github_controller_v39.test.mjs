@@ -180,3 +180,14 @@ test("no-op scheduled attempts do not consume cadence; mixed executed jobs or ma
   assert.equal(jobReads,["proven","mixed","empty"].includes(kind)?1:0);
  }
 });
+
+test("active same-head run cannot conceal earlier failed or drifted attempt",()=>{
+ const x=snaps(),r=P6_ROLLING_ROUTES[0];
+ const active=row(r,{id:601,status:"in_progress",conclusion:null});
+ x[0].active=[active];x[0].runs=[active];
+ assert.equal(planP6RollingTick(x,context).assessments[0].state,"ACTIVE_NO_OVERLAP");
+ for(const delta of [{conclusion:"failure"},{conclusion:"cancelled"},{head_sha:"b".repeat(40)},{run_attempt:2}]){
+  x[0].runs=[active,row(r,{id:600,created_at:new Date(clock-120000).toISOString(),...delta})];
+  const p=planP6RollingTick(x,context);assert.equal(p.assessments[0].state,"HOLD_UNSUCCESSFUL_OR_DRIFTED_ATTEMPT");assert.equal(p.due.length,0);
+ }
+});
