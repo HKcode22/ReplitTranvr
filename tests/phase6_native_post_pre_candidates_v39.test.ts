@@ -118,7 +118,7 @@ describe("native POST candidate pages require exact signed SOURCE and later PRE 
 
 import {buildP6DelegatedNativePostPacket,buildP6PostDayAppend,chooseP6NativePostWindowHints,readP6PostSourceQueryHints}
  from "../server/lib/disruption/phase6NativePostSignedPublication_v39.mjs";
-import {executeP6PostProducerTick,admitP6NativePostProducer} from "../scripts/v39_phase6_native_post_producer_v39.mjs";
+import {executeP6PostProducerTick,admitP6NativePostProducer,isP6NativePostProducerTrigger} from "../scripts/v39_phase6_native_post_producer_v39.mjs";
 describe("prospective native POST physical request drafts",()=>{
  function draftFixture(horizon="T-6h",id="flight_synthetic_anchor"){
   const f=fixture(),q=JSON.parse(f.receipt.privateBytes.toString("utf8"));
@@ -291,5 +291,31 @@ describe("bounded actual PRE metadata scheduler",()=>{
   expect(await readP6PostSourceQueryHints(args)).toMatchObject({hintCount:1,providerCalls:0,databaseWrites:0});
   expect(calls).toContain("ROLLBACK");row.query_digest=h("2");
   await expect(readP6PostSourceQueryHints(args)).rejects.toThrow("POST_HINT_OUTSIDE_SIGNED_DAY");
+ });
+});
+
+describe("nonpaid POST producer explicit handoff",()=>{
+ it("admits only its own trigger and never treats it as paid POST dispatch approval",()=>{
+  const scheduled={GITHUB_EVENT_NAME:"schedule"};
+  const dispatched={GITHUB_EVENT_NAME:"workflow_dispatch",P6_NATIVE_POST_PRODUCER_CONFIRM:"PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER"};
+  expect(isP6NativePostProducerTrigger(scheduled)).toBe(true);
+  expect(isP6NativePostProducerTrigger(dispatched)).toBe(true);
+  for(const delta of [{P6_NATIVE_POST_PRODUCER_CONFIRM:"RUN_CURRENT_SIGNED_POST_PARENT"},
+   {P6_NATIVE_POST_PRODUCER_CONFIRM:"RUN_CURRENT_SIGNED_SOURCE_PARENT"},{P6_NATIVE_POST_PRODUCER_CONFIRM:""},
+   {GITHUB_EVENT_NAME:"schedule"},{GITHUB_EVENT_NAME:"pull_request"}])
+   expect(isP6NativePostProducerTrigger({...dispatched,...delta})).toBe(false);
+  expect(()=>admitP6NativePostProducer(dispatched)).toThrow("SEPARATE_NONPAID_PRODUCER_APPROVAL_REQUIRED");
+  const released={...dispatched,GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",
+   GITHUB_RUN_ATTEMPT:"1",GITHUB_RUN_ID:"12345",GITHUB_SHA:"a".repeat(40),V39_P5_POST_APPROVED_CODE_SHA:"a".repeat(40),
+   P6_NATIVE_POST_PRODUCER_ENABLED:"1",P6_NATIVE_POST_PRODUCER_APPROVED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+   P6_PRIVATE_POST_OUTCOME_TAIL_HOURS:"48",V39_PHASE5_FREEZE_SIGNED:"1",V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
+   V39_P5_SEVEN_REST_BUDGET_SIGNED:"1",V39_P5_POST_OWNER_APPROVED:"1",V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED:"1"};
+  // Both a valid trigger and all original flags are necessary, never sufficient:
+  // real signed trust/policy/role material is still required.
+  expect(()=>admitP6NativePostProducer(released)).toThrow();
+  for(const delta of [{P6_NATIVE_POST_PRODUCER_APPROVED:"0"},{V39_PHASE6_PROCESS_ARMED:"1"},{V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},
+   {P6_NATIVE_POST_PRODUCER_ENABLED:"0"},{GITHUB_TOKEN:"forbidden"},{AERODATABOX_API_KEY:"forbidden"},
+   {P5_POST_AUTO_DISPATCH_ENABLED:"true"}])
+   expect(()=>admitP6NativePostProducer({...released,...delta})).toThrow("SEPARATE_NONPAID_PRODUCER_APPROVAL_REQUIRED");
  });
 });
