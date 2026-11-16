@@ -6,7 +6,7 @@
 import pg from "pg";
 import {pathToFileURL} from "node:url";
 import {readP6T24ProtectedQueueTrust,checkedP6T24TlsUrl,readP6T24RoutingClock} from "./v39_phase6_private_t24_restartable_enrollment_v39.mjs";
-import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {loadP6CurrentT24CalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6CurrentT24QueuePackets,projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
 import {readP6T24PrivateRegistryPackets} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {requireP5CdGithubCurrentPrivateT24Scope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts";
@@ -38,7 +38,7 @@ export function admitP6CurrentT24Worker(env){
  const pre=checkedP6T24TlsUrl(env.P5_V39_PRE_DATABASE_URL,"phase5_p30_pre_login_20261107");
  checkedP6T24TlsUrl(env.P5_V39_T24_WITNESS_DATABASE_URL,"phase5_p30_witness_login_20261107",pre);
  checkedP6T24TlsUrl(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin,pre);
- return {trust,lanes,calendar:loadP6LaterCalendarWindows(env,trust,undefined,"T24")};
+ return {trust,lanes,calendar:loadP6CurrentT24CalendarWindows(env,trust)};
 }
 /** Do not manufacture a legacy roster authorization from workflow inputs.
  * This local copy is only used after the real current private reader's
