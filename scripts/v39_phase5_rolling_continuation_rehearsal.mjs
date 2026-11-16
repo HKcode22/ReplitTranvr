@@ -2,7 +2,10 @@
  * rolling preview and existing canary workflow. It is deliberately not a
  * production session, signer, queue owner, or collection release authority.
  */
-import {resolve} from "node:path";
+import {resolve,join} from "node:path";
+import {mkdtempSync,readFileSync,readdirSync,rmSync,statSync,writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {runP6RollingPreview} from "./v39_phase6_rolling_github_preview_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
@@ -10,6 +13,8 @@ const WF="phase5-autonomous-clock-canary-no-provider.yml",PATH=".github/workflow
 const CONFIRM="REHEARSE_THREE_ROLLING_SESSIONS_NO_PROVIDER_NO_DB";
 const JOB="rolling-no-provider-rehearsal";
 const STEP="Observe two real read-only rolling waves and admit at most one rehearsal successor";
+const RECEIPT_STEP="Publish exact non-sensitive rehearsal successor receipt";
+const RECEIPT_FILE="p5-rolling-rehearsal-receipt.json";
 const fail=s=>{throw Error("HOLD_P5_ROLLING_REHEARSAL_"+s);};
 const idok=x=>typeof x==="string"&&/^[1-9][0-9]{0,14}$/.test(x);
 const stamp=x=>typeof x==="string"&&Number.isFinite(Date.parse(x))&&new Date(x).toISOString()===x?Date.parse(x):fail("UTC");
@@ -40,9 +45,24 @@ export function admitP5RollingRehearsal(e,now){
  }
  return {id:e.GITHUB_RUN_ID,sha:e.GITHUB_SHA,chain:e.P5_ROLLING_REHEARSAL_CHAIN,hop,parent,epoch,deadline,sent};
 }
-export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,emit=()=>{}}={}){
+// Only the fixed metadata artifact on the independently verified predecessor
+// may be downloaded. The artifact contains no provider or DB values.
+function downloadReceipt({parent,name,token}){
+ const dir=mkdtempSync(join(tmpdir(),"p5-rolling-receipt-"));
+ try{
+  execFileSync("gh",["run","download",parent,"--repo",REPO,"--name",name,"--dir",dir],{
+   env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},
+   timeout:30000,stdio:"ignore"});
+  if(readdirSync(dir).length!==1||readdirSync(dir)[0]!==RECEIPT_FILE)fail("RECEIPT_FILES");
+  const path=join(dir,RECEIPT_FILE),info=statSync(path);
+  if(!info.isFile()||info.size<30||info.size>16384)fail("RECEIPT_SIZE");
+  return JSON.parse(readFileSync(path,"utf8"));
+ }catch{fail("RECEIPT_UNAVAILABLE");}
+ finally{rmSync(dir,{recursive:true,force:true});}
+}
+export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,emit=()=>{},readReceipt=downloadReceipt}={}){
  const a=admitP5RollingRehearsal(env,now());
- let gets=0,posts=0;
+ let gets=0,posts=0,parentReceiptVerified=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  async function read(url,init){
   const u=new URL(url);
@@ -90,8 +110,32 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
     if(!Number.isSafeInteger(j?.total_count)||j.total_count<1||j.total_count>100||!Array.isArray(j.jobs)||j.jobs.length!==j.total_count)fail("PARENT_JOBS_INCOMPLETE");
     const jobs=j.jobs.filter(x=>x.name===JOB);
     if(jobs.length!==1||jobs[0].status!=="completed"||jobs[0].conclusion!=="success")fail("PARENT_JOB");
-    const steps=jobs[0].steps?.filter(x=>x.name===STEP)??[];
-    if(steps.length!==1||steps[0].status!=="completed"||steps[0].conclusion!=="success")fail("PARENT_STEP");
+    for(const step of [STEP,RECEIPT_STEP]){
+     const steps=jobs[0].steps?.filter(x=>x.name===step)??[];
+     if(steps.length!==1||steps[0].status!=="completed"||steps[0].conclusion!=="success")fail("PARENT_STEP");
+    }
+    if(!parentReceiptVerified){
+     const name="phase5-rolling-rehearsal-"+a.parent;
+     const artifacts=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
+     if(artifacts?.total_count!==1||!Array.isArray(artifacts.artifacts)||artifacts.artifacts.length!==1)fail("PARENT_RECEIPT_HISTORY");
+     const artifact=artifacts.artifacts[0];
+     if(artifact.name!==name||!Number.isSafeInteger(artifact.id)||artifact.id<1||artifact.expired!==false||
+        !Number.isSafeInteger(artifact.size_in_bytes)||artifact.size_in_bytes<1||artifact.size_in_bytes>32768||
+        (artifact.workflow_run&&String(artifact.workflow_run.id)!==a.parent))fail("PARENT_RECEIPT_IDENTITY");
+     const receipt=await readReceipt({parent:a.parent,name,token:env.GITHUB_TOKEN});
+     if(receipt?.schema!=="v39.phase5.rolling-continuation-rehearsal.v1"||
+        receipt.status!=="ONE_REHEARSAL_SUCCESSOR_ACKNOWLEDGED"||
+        receipt.chainId!==a.chain||receipt.hop!==a.hop-1||receipt.runId!==a.parent||
+        receipt.parentRunId!==previous||receipt.reviewedMainSha!==a.sha||
+        receipt.deadlineUtc!==new Date(a.deadline).toISOString()||
+        receipt.nextDispatchAtUtc!==new Date(a.sent).toISOString()||
+        receipt.nextRunId!==a.id||receipt.rehearsalDispatches!==1||
+        receipt.collectionDispatches!==0||receipt.providerCalls!==0||receipt.databaseReads!==0||
+        receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
+        !Array.isArray(receipt.waves)||receipt.waves.length!==2||
+        receipt.waves.some((w,i)=>w.wave!==i+1||w.lanes!==8))fail("PARENT_RECEIPT_ACK_MISMATCH");
+     parentReceiptVerified=true;
+    }
    }
    previous=String(row.id);lastCreated=created;
   }
@@ -132,10 +176,16 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
   const b=await res.json(),id=b?.workflow_run_id;
   if(!Number.isSafeInteger(id)||id<1||String(id)===a.id||String(id)===a.parent||
      b.run_url!==ROOT+"/actions/runs/"+id||b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)fail("ACK");
-  return {...base,status:"ONE_REHEARSAL_SUCCESSOR_ACKNOWLEDGED",rehearsalDispatches:1,nextRunId:String(id)};
+  return {...base,status:"ONE_REHEARSAL_SUCCESSOR_ACKNOWLEDGED",rehearsalDispatches:1,nextRunId:String(id),nextDispatchAtUtc:new Date(sent).toISOString()};
  }catch{fail("UNKNOWN_ACK_NO_RETRY");}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- try{console.log(JSON.stringify(await runP5RollingRehearsal(process.env,{emit:e=>console.log(JSON.stringify(e))})));}
+ try{
+  const result=await runP5RollingRehearsal(process.env,{emit:e=>console.log(JSON.stringify(e))});
+  const out=JSON.stringify(result);
+  if(!process.env.RUNNER_TEMP)fail("RUNNER_TEMP_REQUIRED");
+  writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),out,{flag:"wx",mode:0o600});
+  console.log(out);
+ }
  catch(e){console.error(/^HOLD_P5_ROLLING_REHEARSAL_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P5_ROLLING_REHEARSAL_REDACTED_NO_RETRY");process.exitCode=2;}
 }

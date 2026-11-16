@@ -210,3 +210,10 @@ jobs:
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/v39_phase5_rolling_continuation_rehearsal.mjs
+      - name: Publish exact non-sensitive rehearsal successor receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-rolling-rehearsal-${{ github.run_id }}
+          path: ${{ runner.temp }}/p5-rolling-rehearsal-receipt.json
+          retention-days: 7
+          if-no-files-found: error

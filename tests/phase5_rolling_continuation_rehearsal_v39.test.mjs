@@ -17,7 +17,12 @@ function fixture(hop=0,fault=""){
   P5_ROLLING_REHEARSAL_CONFIRM:"REHEARSE_THREE_ROLLING_SESSIONS_NO_PROVIDER_NO_DB",P5_ROLLING_REHEARSAL_SHA:SHA,
   P5_ROLLING_REHEARSAL_CHAIN:CHAIN,P5_ROLLING_REHEARSAL_HOP:String(hop),P5_ROLLING_REHEARSAL_PARENT:hop?String(99+hop):"0",
   P5_ROLLING_REHEARSAL_DEADLINE:iso(START+30*60000),P5_ROLLING_REHEARSAL_SENT:hop?iso(START+(hop+1)*10000-5000):""};
- const options={now:()=>t,sleep:async ms=>{t+=ms;},emit:e=>events.push(e),fetcher:async(url,init)=>{
+ const options={now:()=>t,sleep:async ms=>{t+=ms;},emit:e=>events.push(e),
+ readReceipt:async()=>({schema:"v39.phase5.rolling-continuation-rehearsal.v1",status:"ONE_REHEARSAL_SUCCESSOR_ACKNOWLEDGED",
+  chainId:CHAIN,hop:hop-1,runId:String(99+hop),parentRunId:hop===1?"0":String(98+hop),reviewedMainSha:SHA,
+  deadlineUtc:env.P5_ROLLING_REHEARSAL_DEADLINE,nextDispatchAtUtc:env.P5_ROLLING_REHEARSAL_SENT,
+  nextRunId:fault==="receipt"?"999":env.GITHUB_RUN_ID,rehearsalDispatches:1,collectionDispatches:0,providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false,
+  waves:[{wave:1,lanes:8},{wave:2,lanes:8}]}),fetcher:async(url,init)=>{
   const u=new URL(url);
   assert.equal(u.origin,"https://api.github.com");
   if(init.method==="POST"){
@@ -31,10 +36,11 @@ function fixture(hop=0,fault=""){
   gets++;assert.equal(init.method,"GET");
   if(u.pathname.endsWith("/git/ref/heads/main"))return reply({object:{sha:fault==="main"?"c".repeat(40):SHA}});
   if(u.pathname.endsWith("/workflows/"+WF+"/runs"))return reply({total_count:rows.length,workflow_runs:rows});
+  if(u.pathname.endsWith("/artifacts"))return reply({total_count:1,artifacts:[{id:555,name:"phase5-rolling-rehearsal-"+env.P5_ROLLING_REHEARSAL_PARENT,expired:false,size_in_bytes:512}]});
   const match=/\/actions\/runs\/(\d+)(\/jobs)?$/.exec(u.pathname);
   if(match){
    if(match[2])return reply({total_count:1,jobs:[{name:"rolling-no-provider-rehearsal",status:"completed",conclusion:"success",
-    steps:[{name:"Observe two real read-only rolling waves and admit at most one rehearsal successor",status:"completed",conclusion:fault==="step"?"skipped":"success"}]}]});
+    steps:[{name:"Observe two real read-only rolling waves and admit at most one rehearsal successor",status:"completed",conclusion:fault==="step"?"skipped":"success"},{name:"Publish exact non-sensitive rehearsal successor receipt",status:"completed",conclusion:"success"}]}]});
    return reply(rows.find(x=>x.id===Number(match[1])));
   }
   return reply({total_count:0,workflow_runs:[]});
@@ -50,7 +56,7 @@ test("each session uses two existing real-shaped read-only previews, fixed deadl
  }
 });
 test("failed predecessor, missing parent step, duplicate chain and moved main prevent dispatch",async()=>{
- for(const [hop,fault] of [[1,"parent"],[1,"step"],[0,"duplicate"],[0,"main"]]){
+ for(const [hop,fault] of [[1,"parent"],[1,"step"],[1,"receipt"],[0,"duplicate"],[0,"main"]]){
   const f=fixture(hop,fault);await assert.rejects(runP5RollingRehearsal(f.env,f.options),/HOLD_P5_ROLLING_REHEARSAL_/);assert.equal(f.posts(),0);
  }
 });
