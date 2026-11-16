@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
-import {P6_ROLLING_ROUTES} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {P6_ROLLING_ROUTES,readP6RollingGithubSnapshot} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const t=Date.parse("2030-01-01T00:00:00.500Z"),sha="a".repeat(40),route=P6_ROLLING_ROUTES.find(x=>x.lane==="LATER_PRE"),id=12345;
 function setup(){
  let clock=t;const events=[];
@@ -138,4 +138,71 @@ test("known active transfer requires direct ACK plus exact normal and active his
  assert.throws(f.attempt,/DUPLICATE_OR_UNRESOLVED/);
  await f.ledger.reconcile({token,fetcher:async()=>({ok:true,json:async()=>row})});
  assert.throws(f.ledger.continuationAcknowledgements,/CONTINUATION_RECEIPT_NOT_ADMITTED/);
+});
+
+
+function rolloverFixture({retainedSentAcrossCut=false,missingOld=false}={}){
+ const now=t+30*60000,epoch=now-60*60000,deadline=now+20*60000;
+ const oldTime=now-45*60000,pendingTime=now-2*60000;
+ const old={id:31001,path:".github/workflows/"+route.workflow,head_sha:sha,head_branch:"main",event:"workflow_dispatch",
+  run_attempt:1,status:"completed",conclusion:"success",created_at:new Date(oldTime).toISOString()};
+ const pending={...old,id:31002,status:"in_progress",conclusion:null,created_at:new Date(pendingTime).toISOString()};
+ const prior=[{lane:route.lane,runId:old.id,sentAtUtc:new Date(oldTime-500).toISOString()},
+  {lane:route.lane,runId:pending.id,sentAtUtc:new Date(retainedSentAcrossCut?now-11*60000:pendingTime-500).toISOString()}];
+ const jobs=route.jobs.map((x,i)=>({id:old.id*10+i+1,run_id:old.id,head_sha:sha,run_attempt:1,
+  name:x.name,status:"completed",conclusion:"success",steps:x.step?[{name:x.step,status:"completed",conclusion:"success"}]:[]}));
+ const fetcher=async(url,opt)=>{
+  assert.equal(opt.method,"GET");const u=new URL(url);
+  if(u.pathname.endsWith("/runs/"+old.id))return {ok:true,json:async()=>old};
+  if(u.pathname.endsWith("/runs/"+pending.id))return {ok:true,json:async()=>pending};
+  let key="workflow_runs",items=[];
+  if(u.pathname.endsWith("/runs/"+old.id+"/jobs")){key="jobs";items=jobs;}
+  else if(u.searchParams.get("status")==="in_progress")items=[pending];
+  else if(u.pathname.includes("/workflows/"+route.workflow+"/runs")&&u.searchParams.get("event")==="workflow_dispatch")
+   items=[...(missingOld?[]:[old]),pending];
+  return {ok:true,json:async()=>({total_count:items.length,[key]:items})};
+ };
+ const ledger=createP6SessionAckLedger({sha,epoch,deadline,now:()=>now,priorAcknowledgements:prior});
+ return {now,epoch,deadline,ledger,fetcher,old,pending,prior,
+  snapshot:async(capture=()=>{})=>readP6RollingGithubSnapshot({sha,epoch,now:()=>now,token,fetcher,verifySnapshot:capture})};
+}
+test("independent prefix permits only terminal ACK retirement and preserves pending exact custody without mutating old ledger",async()=>{
+ const f=rolloverFixture();
+ await f.ledger.reconcile({token,fetcher:f.fetcher});
+ const earlier=await f.snapshot(),receipt=await earlier.reviewHistoryRetirement();
+ const closing=[],fresh=await f.snapshot((_r,s)=>closing.push(s));
+ f.ledger.verifyContinuationHistory(closing);
+ assert.throws(()=>f.ledger.reviewRolloverPartition(receipt),/RETIREMENT_PROOF_NOT_INDEPENDENT/);
+ const proof=await fresh.reviewHistoryRetirement({previousReceipt:receipt});
+ assert.throws(()=>f.ledger.reviewRolloverPartition({...proof}),/RETIREMENT_PROOF_NOT_INDEPENDENT/);
+ const part=f.ledger.reviewRolloverPartition(proof);
+ assert.equal(part.status,"REVIEWED_ACK_ROLLOVER_PARTITION_NO_GO");
+ assert.deepEqual(part.retiredAcknowledgements,[f.prior[0]]);
+ assert.deepEqual(part.carriedPendingAcknowledgements,[f.prior[1]]);
+ assert.deepEqual(part.carriedTerminalAcknowledgements,[]);
+ assert.equal(part.projectedRemainingDispatchCapacity,P6_ROLLING_ACK_CAPACITY-1);
+ assert.equal(f.ledger.remainingDispatchCapacity(),P6_ROLLING_ACK_CAPACITY-2);
+ const next=createP6SessionAckLedger({sha,epoch:Date.parse(part.proposedEpochUtc),deadline:f.deadline,now:()=>f.now,
+  priorAcknowledgements:part.carriedPendingAcknowledgements});
+ assert.deepEqual(next.status().pending,[{lane:route.lane,runId:f.pending.id}]);
+ assert.equal(next.status().verifiedTerminal,0);
+});
+test("rollover refuses a retained ACK whose send clock would be lost at the proposed boundary",async()=>{
+ const f=rolloverFixture({retainedSentAcrossCut:true});
+ await f.ledger.reconcile({token,fetcher:f.fetcher});
+ const a=await f.snapshot(),receipt=await a.reviewHistoryRetirement();
+ const closing=[],fresh=await f.snapshot((_r,s)=>closing.push(s));
+ f.ledger.verifyContinuationHistory(closing);
+ const proof=await fresh.reviewHistoryRetirement({previousReceipt:receipt});
+ await assert.rejects(async()=>f.ledger.reviewRolloverPartition(proof),/ROLLOVER_RETAINED_ACK_CROSSES_BOUNDARY/);
+ assert.equal(f.ledger.status().acknowledged,2);
+});
+test("missing prior ACK never becomes rollover evidence even if new history independently appears safe",async()=>{
+ const f=rolloverFixture({missingOld:true});
+ await f.ledger.reconcile({token,fetcher:f.fetcher});
+ const closing=[],fresh=await f.snapshot((_r,s)=>closing.push(s));
+ assert.throws(()=>f.ledger.verifyContinuationHistory(closing),/ACK_NOT_VISIBLE/);
+ const receipt=await fresh.reviewHistoryRetirement();
+ const second=await f.snapshot(),proof=await second.reviewHistoryRetirement({previousReceipt:receipt});
+ assert.throws(()=>f.ledger.reviewRolloverPartition(proof),/ROLLOVER_LEDGER_NOT_RECONCILED/);
 });

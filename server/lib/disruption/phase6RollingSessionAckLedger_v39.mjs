@@ -3,7 +3,7 @@
  * the actual workflow history and job metadata. No retry of a POST here.
  * A terminal receipt is a GitHub worker outcome, NEVER a paid/flight receipt.
  */
-import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "./phase6RollingGithubController_v39.mjs";
+import {P6_ROLLING_ROUTES,assessP6RollingRoute,inspectP6RollingRetirementProof} from "./phase6RollingGithubController_v39.mjs";
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const active=new Set(["queued","in_progress","waiting","requested","pending"]);
 const fail=s=>{throw Error("HOLD_P6_ROLLING_SESSION_"+s);};
@@ -139,11 +139,51 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
    fail("TERMINAL_RECEIPT_NOT_ADMITTED");
   return project(true);
  }
+ /** Do not mutate the current ledger. A future successor may import the
+  * carried partition ONLY after its authenticated predecessor and release
+  * custody checks. Independently reproduced prefix + exact ledger closing
+  * proof is mandatory; pending/unknown ACKs cannot disappear to free slots.
+  */
+ function reviewRolloverPartition(proof){
+  if(!(finalHistoryChecked||continuationHistoryChecked)||attempts.size||
+     now()>=deadline-12000)fail("ROLLOVER_LEDGER_NOT_RECONCILED");
+  const p=inspectP6RollingRetirementProof(proof,{sha,epoch,now:now()});
+  if(p.cut>=deadline)fail("ROLLOVER_EPOCH_OUTSIDE_SESSION");
+  const retired=[],carriedTerminal=[],carriedPending=[];
+  for(const item of [...rows.values()].sort((a,b)=>a.runId-b.runId)){
+   const evidence=p.evidence.filter(x=>x.runId===item.runId);
+   if(evidence.length!==1)fail("ROLLOVER_ACK_NOT_IN_EXACT_HISTORY");
+   const row=evidence[0];
+   if(row.lane!==item.lane||row.event!=="workflow_dispatch"||row.created<item.sent-1000||
+      (item.terminal?(row.status!=="completed"||row.conclusion!=="success"):
+       (!active.has(row.status)||row.conclusion!==null)))
+    fail("ROLLOVER_ACK_IDENTITY_OR_STATUS_DRIFT");
+   const projected=Object.freeze({lane:item.lane,runId:item.runId,sentAtUtc:new Date(item.sent).toISOString()});
+   if(row.retired){
+    if(!item.terminal||row.created>=p.cut)fail("ROLLOVER_PENDING_OR_INVALID_RETIREMENT");
+    retired.push(projected);
+   }else{
+    // A kept ACK may have been sent before its GitHub creation timestamp.
+    // Do not reset past its send clock or import a truncated pending identity.
+    if(row.created<p.cut||item.sent<p.cut)fail("ROLLOVER_RETAINED_ACK_CROSSES_BOUNDARY");
+    (item.terminal?carriedTerminal:carriedPending).push(projected);
+   }
+  }
+  if(retired.length+carriedTerminal.length+carriedPending.length!==rows.size)
+   fail("ROLLOVER_ACK_PARTITION");
+  return Object.freeze({status:"REVIEWED_ACK_ROLLOVER_PARTITION_NO_GO",reviewedMainSha:sha,
+   priorEpochUtc:new Date(epoch).toISOString(),proposedEpochUtc:new Date(p.cut).toISOString(),
+   retiredHistorySha256:p.retiredHistorySha256,
+   retiredAcknowledgements:Object.freeze(retired),carriedTerminalAcknowledgements:Object.freeze(carriedTerminal),
+   carriedPendingAcknowledgements:Object.freeze(carriedPending),
+   projectedRemainingDispatchCapacity:P6_ROLLING_ACK_CAPACITY-carriedTerminal.length-carriedPending.length,
+   existingLedgerUnchanged:true,unknownAttempts:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+ }
  function status(){
   return {acknowledged:rows.size,verifiedTerminal:[...rows.values()].filter(x=>x.terminal).length,
    pending:[...rows.values()].filter(x=>!x.terminal).map(x=>({lane:x.lane,runId:x.runId})),
    unknownAttempts:attempts.size,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  }
  return Object.freeze({evidence,assertVisible,reconcile,status,verifyTerminalHistory,terminalAcknowledgements,
-  verifyContinuationHistory,continuationAcknowledgements,remainingDispatchCapacity});
+  verifyContinuationHistory,continuationAcknowledgements,reviewRolloverPartition,remainingDispatchCapacity});
 }

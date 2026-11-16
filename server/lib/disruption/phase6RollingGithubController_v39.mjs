@@ -9,6 +9,7 @@ const CODE=/^[a-f0-9]{40}$/;
 const ACTIVE=new Set(["queued","in_progress","waiting","requested","pending"]);
 const issued=new WeakMap();
 const inertCaches=new WeakMap(),inertProofs=new WeakMap();
+const independentlyReproducedRetirements=new WeakMap();
 const ACK_ID=x=>Number.isSafeInteger(x)&&x>0;
 const hold=s=>{throw Error("HOLD_P6_ROLLING_CONTROLLER_"+s);};
 const instant=s=>{
@@ -221,6 +222,18 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
   providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false};
 }
 
+/** Operational proof capability, held in memory only after an independent
+ * successor readback. A deserialized/hash-shaped receipt is not a capability.
+ * It cannot authorize an epoch reset or a collection POST by itself.
+ */
+export function inspectP6RollingRetirementProof(proof,{sha,epoch,now}){
+ const p=independentlyReproducedRetirements.get(proof);
+ if(!p||p.sha!==sha||p.epoch!==epoch||!Number.isSafeInteger(now)||
+    now<p.clock||now-p.clock>120000||p.cut<=epoch)
+  hold("RETIREMENT_PROOF_NOT_INDEPENDENT_OR_FRESH");
+ return p;
+}
+
 /** Complete current-session history, bounded at 6h. Independently read ALL
  * nonterminal main runs, including older queued runs, once per wave. Fresh
  * per-route recheck reuses that conservative old-active observation and
@@ -429,12 +442,24 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
      previousReceipt.retiredRunCount!==proof.length||
      JSON.stringify(previousReceipt.laneCounts)!==JSON.stringify(laneCounts)))
    hold("RETIREMENT_PREFIX_CHANGED_NO_REPLAY");
-  return Object.freeze({schema:receiptSchema,
+  const result=Object.freeze({schema:receiptSchema,
    status:previousReceipt?"INDEPENDENT_RETIREMENT_PREFIX_MATCH_NO_GO":"REVIEWED_RETIREMENT_CANDIDATE_NO_GO",
    reviewedMainSha:sha,priorEpochUtc:iso(epoch),proposedEpochUtc:iso(cut),
    observedAtUtc:iso(context.clock),retiredHistorySha256:digest,retiredRunCount:proof.length,
    laneCounts:Object.freeze(laneCounts),requiresIndependentSuccessorReadback:!previousReceipt,
    dispatchCount:0,providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false});
+  if(previousReceipt){
+   const removed=new Set(proof.map(x=>x.id));
+   const evidence=families.flatMap(({route,rows})=>rows.map(row=>Object.freeze({
+    lane:route.lane,runId:row.id,created:row.created,event:row.event,
+    status:row.status,conclusion:row.conclusion,retired:removed.has(row.id)
+   })));
+   // Only this freshly reproduced snapshot can be used for the ledger's
+   // read-only partition review. Caller receives immutable narrow metadata.
+   independentlyReproducedRetirements.set(result,Object.freeze({sha,epoch,clock:context.clock,cut,
+    evidence:Object.freeze(evidence),retiredHistorySha256:digest}));
+  }
+  return result;
  }
  return {plan,recheckRoute,context,reviewHistoryRetirement};
 }
