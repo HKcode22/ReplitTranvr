@@ -213,6 +213,76 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   physicalReservations:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }
 
+/** The original f.8 §3.2 budget has two ledgers. A provider refill
+ * consumes the same API units that fund the seven REST categories. Do
+ * not count it twice, or stage the gross 50k as spendable after refill.
+ * These are separately reviewed facts/limits, not provider authentication.
+ * All planned refills here occur before the first Dec4 account reset.
+ */
+export interface P6ActualJointBudgetReview {
+ accountEvidenceSha256:string;
+ observedAtUtc:string;
+ apiUnitsLimit:number;
+ apiUnitsRemaining:number;
+ apiUnitsResetAtUtc:string;
+ alertCreditsRemaining:number;
+ preFreezeProjectApiUnits:number;
+ authorizedFutureRefillApiUnits:number;
+ authorizedFutureRefillAlertCredits:number;
+ endingApiMarginUnits:number;
+ preRunAlertSpendCeilingCredits:number;
+ endingAlertMarginCredits:number;
+}
+export type P6ActualExternalReview=P5B0062ExternallyClaimedSlotCostInput&{
+ jointBudgetReview:P6ActualJointBudgetReview;
+};
+export function reconcileP6ActualJointBudget(
+ j:P6ActualJointBudgetReview,
+ proposal:ReturnType<typeof proposeP5ActualNov22Budget>,
+ plannedAlertRunCeiling:number
+){
+ const whole=(n:number)=>Number.isSafeInteger(n)&&n>=0&&n<=60000;
+ const at=Date.parse(j?.observedAtUtc??"");
+ if(!j||!/^[a-f0-9]{64}$/.test(j.accountEvidenceSha256??"")||
+    !Number.isFinite(at)||new Date(at).toISOString()!==j.observedAtUtc||
+    at<Date.parse(asOf)||at>=Date.parse("2026-11-20T23:45:00.000Z")||
+    j.apiUnitsResetAtUtc!==new Date(reset).toISOString()||j.apiUnitsLimit!==60000||
+    ![j.apiUnitsRemaining,j.alertCreditsRemaining,j.preFreezeProjectApiUnits,
+      j.authorizedFutureRefillApiUnits,j.authorizedFutureRefillAlertCredits,j.endingApiMarginUnits,
+      j.preRunAlertSpendCeilingCredits,j.endingAlertMarginCredits,plannedAlertRunCeiling].every(whole)||
+    j.apiUnitsRemaining>j.apiUnitsLimit||plannedAlertRunCeiling<1||plannedAlertRunCeiling>57900||
+    // Conservatively include all observed current-cycle account use unless
+    // a new separately reviewed allocation design explicitly changes that.
+    j.preFreezeProjectApiUnits<j.apiUnitsLimit-j.apiUnitsRemaining||
+    j.authorizedFutureRefillApiUnits!==j.authorizedFutureRefillAlertCredits)
+  hold("MISSING_OR_INCONSISTENT_JOINT_BUDGET_REVIEW");
+ const netRestCeiling=proposal.settings.cycleRestCeilingUnits-j.preFreezeProjectApiUnits-
+  j.authorizedFutureRefillApiUnits-j.endingApiMarginUnits;
+ const restUnallocated=netRestCeiling-proposal.totalReservedUnits-proposal.protectedFloorUnits;
+ const alertUnallocated=j.alertCreditsRemaining+j.authorizedFutureRefillAlertCredits-
+  j.preRunAlertSpendCeilingCredits-plannedAlertRunCeiling-1000-j.endingAlertMarginCredits;
+ const priorCycleRequired=proposal.renewal.conservativePriorCycleMax+j.authorizedFutureRefillApiUnits+
+  proposal.protectedFloorUnits+j.endingApiMarginUnits;
+ if(restUnallocated<0||alertUnallocated<0||priorCycleRequired>j.apiUnitsRemaining)
+  hold("JOINT_BUDGET_OVERSUBSCRIBED_OR_FLOOR_BREACHED");
+ return {
+  status:"JOINT_REST_ALERT_ARITHMETIC_RECONCILED_NOT_PROVIDER_OR_SPEND_AUTHORIZATION" as const,
+  accountEvidenceSha256:j.accountEvidenceSha256,observedAtUtc:j.observedAtUtc,
+  grossProjectApiCeiling:proposal.settings.cycleRestCeilingUnits,
+  preFreezeProjectApiUnits:j.preFreezeProjectApiUnits,
+  authorizedFutureRefillApiUnits:j.authorizedFutureRefillApiUnits,
+  authorizedFutureRefillAlertCredits:j.authorizedFutureRefillAlertCredits,
+  endingApiMarginUnits:j.endingApiMarginUnits,netRestCeiling,
+  sevenRestCategoryAllocation:proposal.totalReservedUnits,protectedRestFloor:proposal.protectedFloorUnits,
+  restUnallocated,openingObservedAlertCredits:j.alertCreditsRemaining,
+  preRunAlertSpendCeilingCredits:j.preRunAlertSpendCeilingCredits,
+  plannedAlertRunCeiling,protectedAlertFloor:1000,endingAlertMarginCredits:j.endingAlertMarginCredits,
+  alertUnallocated,priorCycleRequired,
+  nextCycleRenewalIndependentlyRequired:true,refillAvailabilityIndependentlyRequired:j.authorizedFutureRefillApiUnits>0,
+  accountEvidenceAuthenticatedHere:false,refillPerformed:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false
+ };
+}
+
 /** Assemble the actual first-seed candidate using the EXISTING two compilers.
  * No evidence hashes synthesized, no new draw, no signature or live writes.
  * The caller supplies the complete separately reviewed input; the proposal
@@ -222,7 +292,7 @@ export function proposeP5ActualNov22Budget(draft:Draft){
 export function assembleP6ActualFirstSeedReleaseCandidate(input:{
  draft:Draft;
  envelope:P5Adaptive31ShapeEnvelope;
- external:P5B0062ExternallyClaimedSlotCostInput;
+ external:P6ActualExternalReview;
  expectedExternalInputSha256:string;
  timing:Parameters<typeof compileP6UnsignedFutureSourceDayPlans>[0]["timing"];
  expectedTimingJsonSha256:string;
@@ -236,12 +306,19 @@ export function assembleP6ActualFirstSeedReleaseCandidate(input:{
     !timing||sha(timing)!==input.expectedTimingJsonSha256)
   hold("EXACT_EXTERNAL_INPUT_SHAPE_OR_TIMING_REQUIRED");
  const s=proposal.settings;
+ if(external.asOfUtc!==external.jointBudgetReview?.observedAtUtc||
+    external.alertSafety?.protectedAlertFloorCredits!==1000||
+    !Number.isSafeInteger(external.alertSafety?.unsettledBurstMarginCredits)||
+    external.alertSafety.unsettledBurstMarginCredits<0||
+    (external.jointBudgetReview?.endingAlertMarginCredits??-1)<external.alertSafety.unsettledBurstMarginCredits)
+  hold("JOINT_BUDGET_ACCOUNT_CLOCK_OR_ALERT_RESERVE_DRIFT");
+ const jointBudget=reconcileP6ActualJointBudget(external.jointBudgetReview,proposal,external.alertSafety.alertRunSpendCeilingCredits);
  if(external.providerMaxRangeMinutes!==s.providerMaxRangeMinutes||
     external.refreshEveryMinutes!==s.refreshEveryMinutes||
     external.physicalGetsPerRefreshUpperBound!==s.physicalGetsPerRefreshUpperBound||
     external.getLeadSeconds!==s.getLeadSeconds||
     external.apiUnitsPerPhysicalGet!==s.apiUnitsPerPhysicalGet||
-    external.cycleRestCeilingUnits!==s.cycleRestCeilingUnits||
+    external.cycleRestCeilingUnits!==jointBudget.netRestCeiling||
     external.protectedRestFloorUnits!==s.protectedRestFloorUnits||
     external.restOtherByUtcDate.some(r=>r.dailyRestCeilingUnits!==s.dailyRestCeilingUnits))
   hold("EXACT_PROPOSAL_SETTINGS_CHANGED");
@@ -274,6 +351,7 @@ export function assembleP6ActualFirstSeedReleaseCandidate(input:{
   unsignedStageInputSha256:review.unsignedStageInputSha256,
   unsignedStageInput:review.unsignedStageInput,
   dayPlans:plans,
+  jointBudget,
   totalReservedUnits:proposal.totalReservedUnits,
   peakDailyUnits:proposal.peakDailyUnits,
   independentReleaseStillRequired:true,
