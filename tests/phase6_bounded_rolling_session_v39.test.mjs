@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
+import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
@@ -452,4 +453,61 @@ test("combined fresh closing recovery plus journal/readback keeps exact worker a
   assert.equal(out.permitNewRoot,false);assert.equal(out.permitReplay,false);
   assert.equal(f.calls.filter(x=>x.method==="POST"&&x.url.includes("/workflows/"+WF+"/dispatches")).length,1);
  }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+async function actualShapedClosedWindow({multi=true,carryActive=false}={}){
+ const f=setup({chain:multi,multi,carryActive}),receipts=new Map();
+ if(!multi)f.root.display_title="Phase6 initial bounded rolling controller session (STOP default)";
+ for(let hop=0;hop<(multi?4:1);hop++){
+  const x=await runP6RollingSession(f.env,f.options);receipts.set(x.runId,x);
+  if(x.successorDispatches===1)f.startSuccessor(x);
+  else {
+   const row=f.controllerRuns.find(y=>y.id===x.runId);row.status="completed";row.conclusion="success";break;
+  }
+ }
+ const first=receipts.get(12345);
+ const expected={rootRunId:12345,reviewedMainSha:sha,policyCommitment:first.policyCommitment,
+  mode:multi?"FOUR":"SINGLE",windowStartUtc:iso(start),windowEndUtc:iso(start+120*MIN),
+  epochUtc:first.epochUtc,chainDeadlineUtc:first.chainDeadlineUtc};
+ const controlJobs=id=>[{id:id*10+1,name:"one-protected-bounded-session",run_id:id,head_sha:sha,run_attempt:1,
+  status:"completed",conclusion:"success",steps:["Execute one protected rolling session and reconcile accepted workers before terminal",
+   "Preserve terminal operational receipt for independently reviewed continuation"].map(name=>({name,status:"completed",conclusion:"success"}))}];
+ const adapter={now:f.options.now,
+  readRun:async id=>structuredClone([...f.runs,...f.controllerRuns].find(y=>y.id===id)),
+  readJobs:async id=>{
+   if(receipts.has(id))return structuredClone(controlJobs(id));
+   const row=f.runs.find(y=>y.id===id),route=P6_ROLLING_ROUTES.find(y=>row?.path?.endsWith("/"+y.workflow));assert(route);
+   return route.jobs.map((j,i)=>({id:id*10+i+1,run_id:id,run_attempt:1,head_sha:sha,name:j.name,status:"completed",conclusion:"success",
+    steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x==="NO_DUE_WORK"?"success":"skipped"})):[]}));
+  },
+  readReceipt:async id=>({artifactId:id+90000,runId:id,name:"p6-rolling-terminal-"+id,bytes:Buffer.from(JSON.stringify(receipts.get(id)))}),
+  listControllers:async()=>structuredClone(f.controllerRuns)};
+ return {f,expected,adapter,receipts};
+}
+test("complete actual-shaped four-session window independently accounts for all worker IDs including retired history",async()=>{
+ const {f,expected,adapter,receipts}=await actualShapedClosedWindow();
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
+ assert.equal(out.controllerRunIds.length,4);assert.equal(out.independentlyVerifiedWorkerJobs,f.runs.length);
+ assert.equal(out.uniqueWorkerAcknowledgements,f.runs.length);assert(out.retiredWorkerAcknowledgements>0);
+ assert.equal(out.terminalReceiptSha256,digest(Buffer.from(JSON.stringify([...receipts.values()].at(-1)))));
+ assert.equal(out.permitClose,false);assert.equal(out.permitNewRoot,false);assert.equal(out.providerSettlementVerified,false);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+test("standalone root verifies terminal operational evidence without granting next window",async()=>{
+ const {f,expected,adapter}=await actualShapedClosedWindow({multi:false});
+ const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
+ assert.equal(out.controllerRunIds.length,1);assert.equal(out.uniqueWorkerAcknowledgements,f.runs.length);
+ assert.equal(out.permitClose,false);assert.equal(out.permitReplay,false);
+});
+test("window reconciliation refuses lost receipt, unknown attempt, foreign job, extra root and wrong release policy",async()=>{
+ const {expected,adapter,receipts}=await actualShapedClosedWindow();
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence({...expected,policyCommitment:"0".repeat(64)},adapter),/RECEIPT_IDENTITY/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,readReceipt:async()=>null}),/ARTIFACT_SCOPE/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,readJobs:async id=>(await adapter.readJobs(id)).map(y=>({...y,run_id:99999}))}),/JOB_IDENTITY/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,listControllers:async()=>[...await adapter.listControllers(),{id:99999}]}),/CONTROLLER_CHAIN_HISTORY/);
+ const last=[...receipts.values()].at(-1);last.unknownAttempts=1;
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/RECEIPT_IDENTITY/);last.unknownAttempts=0;
+ const original=last.terminalAcknowledgements;last.terminalAcknowledgements=original.slice(1);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/ACK_AGGREGATE/);last.terminalAcknowledgements=original;
 });
