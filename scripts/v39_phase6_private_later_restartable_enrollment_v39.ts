@@ -7,7 +7,7 @@
  */
 import {Client,Pool} from "pg";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
-import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays,isP6CurrentEnrollmentDispatch,loadP6CurrentEnrollmentCalendarWindows} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
@@ -22,19 +22,21 @@ const SHA=/^[a-f0-9]{64}$/;
 const QUERY="SELECT * FROM clean.phase5_cd_ensure_exact_source_flight_v39($1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10)";
 export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  const scoped=requireP5CdGithubPreparePrivateDayScope(env);
+ const currentDispatch=isP6CurrentEnrollmentDispatch(env,"LATER");
  const trust=readP6StableSourceTrust(env);
  if(trust.reviewedCodeSha!==scoped.gate.approvedCodeSha||
     env.P5_CD_GH_PREPARE_EXECUTE==="1"||
     env.P5_CD_GH_REGISTER_HORIZON==="T-24h"||
     env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
-    env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER")
+    (!currentDispatch&&env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER")||
+    env.P6_PRIVATE_T24_RUN_DAYS)
   hold("WRONG_STABLE_PRIVATE_RELEASE_OR_LEGACY_MODE");
  const raw=env.P6_PRIVATE_LATER_RUN_DAYS??"";
- const scheduled=env.GITHUB_EVENT_NAME==="schedule";
- if(scheduled?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))
+ const scheduled=env.GITHUB_EVENT_NAME==="schedule",current=scheduled||currentDispatch;
+ if(current?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))
   hold("ONE_OR_TWO_EXPLICIT_REVIEWED_RUN_DAYS_OR_SCHEDULE_ONLY");
- const runDayIndices=scheduled?[]:raw.split(",").map(Number);
- const calendar=scheduled?loadP6LaterCalendarWindows(env,trust):null;
+ const runDayIndices=current?[]:raw.split(",").map(Number);
+ const calendar=scheduled?loadP6LaterCalendarWindows(env,trust):currentDispatch?loadP6CurrentEnrollmentCalendarWindows(env,trust):null;
  if(new Set(runDayIndices).size!==runDayIndices.length)hold("DUPLICATE_DAY");
  let u:URL,p:URL;
  try{u=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"");p=new URL(scoped.databaseUrl);}
