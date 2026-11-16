@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {P6_ROLLING_ROUTES,planP6RollingTick,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {P6_ROLLING_ROUTES,planP6RollingTick,dispatchP6ReviewedRollingWave,readP6RollingGithubSnapshot} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),clock=Date.parse("2030-01-01T00:30:00.000Z"),epoch=clock-3600000;
 const context={sha,clock,epoch};
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
@@ -91,4 +91,27 @@ test("unknown ACK stops wave; exact prior ACK remains in sanitized evidence",asy
  assert.equal(posts,2);assert.equal(f.events.length,3);assert.equal(f.events[1].status,"EXACT_ACK_NOT_EXECUTION_PROOF");
  assert.equal(f.events[2].status,"DISPATCH_ATTEMPT_BEFORE_ACK");
  await assert.rejects(dispatchP6ReviewedRollingWave(f.plan,f.options),/NO_EXACT/);
+});
+
+test("real API-shaped read-only snapshot covers both events plus all old active states and exact job readback",async()=>{
+ const a=P6_ROLLING_ROUTES[0],b=P6_ROLLING_ROUTES[1],calls=[];
+ const active=row(b,{id:777,status:"queued",conclusion:null,created_at:new Date(epoch-7200000).toISOString()});
+ const fetcher=async(url,opt)=>{
+  assert.equal(opt.method,"GET");calls.push(url);
+  const u=new URL(url);let items=[],key="workflow_runs";
+  if(u.pathname.endsWith("/runs/123/jobs")){items=jobs(a);key="jobs";}
+  else if(u.searchParams.get("status")==="queued")items=[active];
+  else if(u.pathname.includes("/workflows/"+a.workflow+"/runs")&&u.searchParams.get("event")==="workflow_dispatch")items=[row(a)];
+  return {ok:true,json:async()=>({total_count:items.length,[key]:items})};
+ };
+ const {plan,recheckRoute}=await readP6RollingGithubSnapshot({sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,fetcher});
+ assert.equal(plan.assessments[0].state,"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF");
+ assert.equal(plan.assessments[1].state,"ACTIVE_NO_OVERLAP");
+ assert.equal(plan.due.length,6);assert.equal(calls.length,22);
+ const fresh=await recheckRoute(b);assert.equal(fresh.active[0].id,777);assert.equal(calls.length,24);
+});
+test("bounded read fails closed on truncated API totals or history filter drift",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock};
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>({ok:true,json:async()=>({total_count:101,workflow_runs:[]})})}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE/);
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,epoch:clock-7*3600000,fetcher:async()=>{throw Error("must not call")}}),/NO_BOUNDED_SESSION_HISTORY_SCOPE/);
 });
