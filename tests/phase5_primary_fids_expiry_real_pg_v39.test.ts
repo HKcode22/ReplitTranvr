@@ -10,11 +10,11 @@ const F="clean.phase5_primary_fids_expiry_";
 const suite=process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16==="1"?describe:describe.skip;
 const h=(s:string)=>createHash("sha256").update(s).digest("hex");
 const planHash="abdb28da60e38a1c9c031bc4f931d3b8b09dd87be4ed0d686e18efe1991b4fd9";
-it("pins the exact existing canonical Buffer plan hash and revokes all three PUBLIC functions",()=>{
+it("pins the exact existing canonical Buffer plan hash and revokes all four PUBLIC functions",()=>{
  expect(sha256(readFileSync("data-collection/plans/V3.9_DataCollectPlan_f.8.md"))).toBe(planHash);
  const sql=readFileSync(SQL,"utf8");
  expect(sql).toContain(planHash);
- for(const [name,args] of [["status",""],["sweep","integer"],["receipt","text"]]){
+ for(const [name,args] of [["status",""],["sweep","integer"],["receipt","text"],["stop","text"]]){
   expect(sql).toContain("REVOKE ALL ON FUNCTION "+F+name+"_v39("+args+") FROM PUBLIC;");
  }
 });
@@ -67,11 +67,11 @@ suite("bounded primary expiry actual PG16",()=>{
   await db.query("CREATE ROLE "+writer+" NOLOGIN NOINHERIT; CREATE ROLE "+reader+" NOLOGIN NOINHERIT");
   for(const role of [writer,reader]){
    await db.query("GRANT USAGE ON SCHEMA clean TO "+role);
-   const a=(await db.query("SELECT has_function_privilege($1,$2,'EXECUTE') AS s,has_function_privilege($1,$3,'EXECUTE') AS w,has_function_privilege($1,$4,'EXECUTE') AS r",[role,F+"status_v39()",F+"sweep_v39(integer)",F+"receipt_v39(text)"])).rows[0];
-   expect(a).toEqual({s:false,w:false,r:false});
+   const a=(await db.query("SELECT has_function_privilege($1,$2,'EXECUTE') AS s,has_function_privilege($1,$3,'EXECUTE') AS w,has_function_privilege($1,$4,'EXECUTE') AS r,has_function_privilege($1,$5,'EXECUTE') AS stop",[role,F+"status_v39()",F+"sweep_v39(integer)",F+"receipt_v39(text)",F+"stop_v39(text)"])).rows[0];
+   expect(a).toEqual({s:false,w:false,r:false,stop:false});
   }
   // Disposable role grants only. Production migration grants nobody.
-  await db.query("GRANT EXECUTE ON FUNCTION "+F+"sweep_v39(integer) TO "+writer);
+  await db.query("GRANT EXECUTE ON FUNCTION "+F+"sweep_v39(integer),"+F+"stop_v39(text) TO "+writer);
   await db.query("GRANT EXECUTE ON FUNCTION "+F+"status_v39(),"+F+"receipt_v39(text) TO "+reader);
   await asRole(reader,async c=>{
    expect((await c.query("SELECT "+F+"status_v39() r")).rows[0].r.liveOriginals).toBe(0);
@@ -121,11 +121,17 @@ suite("bounded primary expiry actual PG16",()=>{
   finally{await db.query("ALTER TABLE clean.fids_query_response ENABLE TRIGGER trg_fids_response_expire_population");}
   expect(await cleared(old.pid)).toBe(false);
   expect((await db.query("SELECT count(*)::int n FROM clean.retention_tombstone WHERE record_id=$1",["fids_query_response:"+old.pid+":raw_payload"])).rows[0].n).toBe(0);
-  const incident=(await db.query("INSERT INTO clean.adb_incident_stop(cause,detail,resolved) VALUES('deletion','{}'::jsonb,false) RETURNING id")).rows[0].id;
+  const runId="P5-PRIMARY-FIDS-SWEEP-"+randomUUID();
+  await asRole(writer,async c=>{
+   expect((await c.query("SELECT "+F+"stop_v39($1) r",[runId])).rows[0].r).toBe(true);
+   expect((await c.query("SELECT "+F+"stop_v39($1) r",[runId])).rows[0].r).toBe(true);
+  });
+  const incidents=(await db.query("SELECT id FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved")).rows;
+  expect(incidents).toHaveLength(1);
   await expect(sweep(1)).rejects.toThrow("DELETION_STOP");
   expect(await cleared(old.pid)).toBe(false);
   // Resolve only the synthetic disposable record, never a live incident.
-  await db.query("UPDATE clean.adb_incident_stop SET resolved=true WHERE id=$1",[incident]);
+  await db.query("UPDATE clean.adb_incident_stop SET resolved=true WHERE id=$1",[incidents[0].id]);
   expect((await sweep(1)).originalsCleared).toBe(1);
  });
 });
