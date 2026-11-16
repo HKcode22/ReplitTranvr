@@ -23,3 +23,30 @@ Existing `resolveRetentionMatrix` spread untyped JSON over an immutable-intended
 Existing production owner DATABASE_URL only, no new Neon API, role, login or provider key. One repeatable-read read-only PG16 primary snapshot counts non-null raw bodies beyond 24h, missing clocks/contradictory markers, selected normalized fields in parent-linked due rows and marked rows, V0079 access expiry count (not incorrectly called a physical TTL violation), due private packet/index rows, current PRE and V0081 witness counts. No payloads, sample records, individual IDs, credential output, object downloads, DELETE, migration or SQL writes. It checks selected fields only, not every field or orphan without retained parent; no full field-level proof claimed. Excludes prior object sentinel and existing stage inventory to avoid redundant steps. Diagnostic counts cannot establish ongoing automated deletion or backup/PITR/IAM or rights. Inspect actual result, do not run generic APPLY or repeat deployment automatically.
 
 **Release still requires** source-specific rights, explicit scientific and operational scope, actual reviewed retention policy and physical recurrence, final reviewed manifest and scoped approval, exact disabled-stage/readbacks and distinct paid activation. No new optional stage or replay of prior production operations. 
+
+
+## Actual owner readback and one-time primary remediation candidate (continuation)
+
+Actual owner execution of the exact reviewed helper: database observation `2026-11-16T13:47:34.388Z`, status SQL_RETENTION_COUNTS_NEED_REVIEW. 17 raw originals / 17 payload present / 17 due 24h / 0 clock unknown or contradictory marked payload. All 1,574 parent-linked FIDS population rows overdue without markers and with selected provider fields present; marked population rows 0. V0079 bindings, private packet/index, V0081 witness counts all zero; historical PRE 36, T24 12. These are exact snapshot counts, not unique flight count or current entitlement. No provider calls or writes. Prior 838/838 object-reference metadata review does not cover these tables.
+
+#852 has merged after 5/5 exact-head checks (full 43877679082: 4296 passed/210 skipped; 621 files passed/41 skipped) at main `9b17a13457e4f1a8de27211e0dd9c49ebdab3795`. #853 latest head `5fce5bdd31783d8d1fda52bb0a7fe9956b92c89f` implements exactly this historical scope, not a generic apply gate bypass or a production recurring scheduler. Reuse existing expireOne and B0062 parent->child trigger; original generic deployment guard unchanged. Initial real disposable test failed; binding plan actually moved from SEPmd to data-collection/plans, corrected original planHash file location with digest convention unchanged. Latest real PG16 job 133345225613 / run 43880628663 passed both targeted tests, including changed scope/approval rejection, deliberately broken child trigger rollback, original trigger success, preserved membership, outside-cutoff row untouched and refusal to replay, then 13+3 existing integration tests. TypeScript/full tests in full safety are being verified separately. Independently compared all 25 cleared child fields against B0062 actual UPDATE and tombstone field list; identical. No production cleanup applied. User's continuing work and spending permission is not a blanket deletion authorization.
+
+Exact primary cutoff `2026-11-15T13:47:34.388Z`, 17 parent bodies/hashes and 1,574 linked child provider fields; expected 1,591 primary tombstones. Existing immutable project membership and retained row context, 36 PRE/12 T24 counts preserved. Actual removal of provider values means prior source bodies cannot be reread for historical evidence; retain already documented aggregate observations only, no copied backup for research. No PRE classification approval, physical outcome qualification, private/backup/object/log certification, or recurring guarantee. The historical correction is separately approved, only after exact reviewed scope digest and owner confirmation; no automatic replay after ambiguous COMMIT. Actual primary cleanup under existing threshold is distinct from entitlement or complete retention deployment.
+
+### Nominal recurrence workload (independent reconstruction)
+
+From the already verified review-only plan JSON SHA256 `97a7492cfc1c098a20ee06eb56002662f2d8efa025e241bcb84d52aedbd4805e`, calendar rows SHA256 `45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c`, independently reconstructed 6,144 nominal SOURCE times, shifted +24h for the existing primary deadline. Assumptions: one committed original per successful nominal template, persistence at planned GET instant; no retries, POST/other surfaces or actual response volume or latency. Half-open rolling window maximum across all 31 days. Nominal first/last due 2026-11-21T23:45Z, 2027-01-05T02:00Z. Peak eight at one instant, 256 on UTC Nov28, 42 UTC dates with due SOURCE work.
+
+| Elapsed sweep gap | Max nominal SOURCE originals becoming due |
+| --- | ---: |
+| 15 minutes | 8 |
+| 1 hour | 32 |
+| 2 hours | 56 |
+| 4 hours | 88 |
+| 6 hours | 128 |
+| 8 hours | 160 |
+| 532 minutes (rounded longest observed retention sentinel gap) | 176 |
+| 12 hours | 224 |
+| 24 hours | 256 |
+
+The generic existing expiry CLI defaults to 100 TOTAL candidates across multiple classes, so even one source-only backlog at the observed gap can exceed one default sweep. This is nominal hypothetical workload, not an estimate of paid success, not an actual cleanup delay SLA. A sweep that starts only at/after hard expiry can violate the threshold before deletion: require pre-expiry scheduling margin and verified bounded physical latency, separate raw and private transport cleanup, actual backup/PITR rights, and independently reviewed recurrence. Do not raise TTL, pretend the readonly sentinel deletes, simply increase batch size without timing evidence, or introduce a new scheduler just to claim GO. No recovered authorized future source scope or new observation. Original calendar, seven-category budget, target/horizon and amendments unchanged.
