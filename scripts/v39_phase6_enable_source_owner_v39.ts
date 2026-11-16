@@ -11,14 +11,15 @@ import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
-import {verifyAuthFile,type VerifiedAuthFile} from "./v39_paid_guard_v39";
+import type {VerifiedAuthFile} from "./v39_paid_guard_v39";
+import {verifyP6SourceEnableAuthFile,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE} from "./v39_phase6_source_enable_approval_ledger_v39";
 import {admitP6InertOwnerReadback} from "./v39_phase6_inert_release_stage_manual_v39.mjs";
 import {compileP5V0093CostOnlySevenRestReview} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 
 const H=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
-const PHASE="Phase 6 (separate authorization)";
-export const P6_SOURCE_AUTH_SCOPE="C_D_GITHUB_SOURCE_PRE_POST_EXISTING_CALENDAR_NO_LEGACY_ALERT_START";
+const PHASE=P6_SOURCE_AUTH_PHASE;
+export {P6_SOURCE_AUTH_SCOPE};
 const hold=(s:string):never=>{throw Error("HOLD_P6_EXACT_SOURCE_AUTH_"+s);};
 const digest=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const at=(s:unknown)=>{
@@ -33,7 +34,7 @@ const requiredEvidence=["scientificFreezeEvidenceSha256","sourceRightsEvidenceSh
  "providerAccountAndBudgetEvidenceSha256","publishedAndGithubStopEvidenceSha256","operationalReleaseEvidenceSha256"] as const;
 
 /** AUTH content pin excludes ONLY final Git SHA, to avoid a circular hash
- * when the existing approval ledger is committed. Exact final executable
+ * when the scoped continuation approval ledger is committed. Exact final executable
  * main is separately verified and already bound to the canonical stage input.
  */
 export function p6SourceAuthorizationStageContentSha(input:any){
@@ -186,8 +187,8 @@ async function main(){
  const s=admitP6InertOwnerReadback(process.env,readFileSync(stagePath,"utf8"),stageSha,costSha,head) as unknown as OwnerContext;
  if(process.env.V39_DATABASE_RUNTIME_URL&&process.env.V39_DATABASE_RUNTIME_URL===s.url)
   hold("OWNER_DB_MUST_NOT_BE_RUNTIME_LOGIN");
- const a=verifyAuthFile(authPath,PHASE);
- if("error" in a||a.verdict.verified!==true||a.artifactHash!==authSha)
+ const a=verifyP6SourceEnableAuthFile(authPath,head);
+ if(a.verdict.verified!==true||a.artifactHash!==authSha)
   hold("EXACT_APPROVED_EXISTING_LEDGER_AUTH_REQUIRED");
  verifyP6SourceActivationReview(s,a as Verify,new Date());
  if(head!==remote())hold("MAIN_CHANGED_BEFORE_TRANSITION");
