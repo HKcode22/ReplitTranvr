@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import path from "path";
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { v39Pool } from "./db_v39";
 import {
   parseRetentionMatrixEvidence,
@@ -671,4 +671,176 @@ export async function runRetentionExpiry(opts: {
     expiredCount,
   };
   return { ...resultBase, evidenceHash: sha256(resultBase) };
+}
+
+/** Narrow historical FIDS remediation only.
+ * This reuses expireOne and the installed B0062 trigger. The generic
+ * runRetentionExpiry APPLY gate above is unchanged. A reviewed overdue
+ * primary cleanup is NOT a declaration that the deployment or paid data
+ * retention is compliant. No other provider class is mutable here.
+ */
+export const P5_HISTORICAL_FIDS_EXPIRY_APPROVAL =
+  "CLEAR_EXACT_REVIEWED_OVERDUE_FIDS_PRIMARY_CONTENT_ONLY_NO_GO";
+const P5_CLEARED_CHILD_FIELDS=[
+  "flight_number","carrier_iata","carrier_icao","call_sign","dep_airport_icao","dep_airport_iata",
+  "arr_airport_icao","arr_airport_iata","dep_scheduled_utc","arr_scheduled_utc","provider_record_key",
+  "raw_payload_sha256","coverage_state","population_query_id","from_local","to_local","airport_iana_timezone",
+  "scope_classification","codeshare_resolution_status","fids_retrieval_utc","available_at","response_hash",
+  "canonical_flight_instance_id","analytic_identity_id","provider_api_version",
+] as const;
+const P5_KEEP_EXCLUDE=[...P5_CLEARED_CHILD_FIELDS,"provider_content_expired_at_utc"];
+const P5_PARENT_EXCLUDE=["raw_payload","raw_expired_at_utc","response_hash"];
+const p5Hold=(s:string):never=>{throw Error("HOLD_P5_HISTORICAL_FIDS_EXPIRY_"+s);};
+const isSha=(x:unknown):x is string=>typeof x==="string"&&/^[a-f0-9]{64}$/.test(x);
+type P5HistoricalScope={
+  observedAtUtc:string;expectedOriginals:number;expectedPopulation:number;
+  expectedPre:number;expectedT24:number;
+};
+type P5HistoricalParent={id:string;age:string;full_sha:string;keep_sha:string;response_hash:string|null};
+type P5HistoricalChild={id:string;parent_id:string;full_sha:string;keep_sha:string;member_sha:string;unexpired:boolean;is_fids:boolean};
+const p5ParentKeep="encode(sha256(convert_to((to_jsonb(r)-$2::text[])::text,'UTF8')),'hex')";
+const p5ChildKeep="encode(sha256(convert_to((to_jsonb(p)-$2::text[])::text,'UTF8')),'hex')";
+const p5MemberSha="CASE WHEN m.population_member_id IS NULL THEN NULL ELSE encode(sha256(convert_to(to_jsonb(m)::text,'UTF8')),'hex') END";
+const p5Full=(alias:"r"|"p")=>"encode(sha256(convert_to(to_jsonb("+alias+")::text,'UTF8')),'hex')";
+const P5_STOP_TABLES="clean.adb_phase6_authorization, clean.adb_collection_batches, clean.adb_collection_segments, clean.adb_anchor_probe, clean.phase5_cd_pre_task_v39, clean.phase5_fids_original_binding_v39";
+const P5_PRE_COUNTS="SELECT count(*)::int AS pre,count(*) FILTER(WHERE horizon='T-24h')::int AS t24 FROM clean.flight_snapshots WHERE prediction_state='PRE_DEPARTURE'";
+function p5Scope(s:P5HistoricalScope){
+  if(!s||typeof s.observedAtUtc!=="string"||!Number.isFinite(Date.parse(s.observedAtUtc))||
+     new Date(s.observedAtUtc).toISOString()!==s.observedAtUtc||
+     !Number.isSafeInteger(s.expectedOriginals)||s.expectedOriginals<1||s.expectedOriginals>50||
+     !Number.isSafeInteger(s.expectedPopulation)||s.expectedPopulation<1||s.expectedPopulation>10000||
+     !Number.isSafeInteger(s.expectedPre)||s.expectedPre<0||
+     !Number.isSafeInteger(s.expectedT24)||s.expectedT24<0||s.expectedT24>s.expectedPre)
+    p5Hold("INVALID_EXACT_SCOPE");
+  return new Date(Date.parse(s.observedAtUtc)-24*3600000).toISOString();
+}
+async function p5Session(c:PoolClient,ro:boolean){
+  await c.query("SET LOCAL statement_timeout='20000ms'");
+  await c.query("SET LOCAL lock_timeout='3000ms'");
+  await c.query("SET LOCAL TIME ZONE 'UTC'");
+  const q=await c.query("SELECT current_database() db,current_user actor,session_user login,current_setting('server_version_num')::int ver,current_setting('transaction_read_only') ro,pg_is_in_recovery() replica,current_setting('session_replication_role') repl,clock_timestamp() AS db_now");
+  const a=q.rows[0];
+  if(q.rowCount!==1||a.db!=="neondb"||a.actor!==a.login||a.ver<160000||a.ver>=170000||
+     a.ro!==(ro?"on":"off")||a.replica!==false||a.repl!=="origin"||!Number.isFinite(new Date(a.db_now).getTime()))
+    p5Hold("NOT_EXPECTED_PG16_PRIMARY_SESSION");
+  return new Date(a.db_now).toISOString();
+}
+async function p5Stopped(c:PoolClient){
+  const q=await c.query("SELECT "+
+    "(SELECT count(*) FROM clean.adb_phase6_authorization WHERE enabled=true AND revoked_at_utc IS NULL)::int AS auth,"+
+    "(SELECT count(*) FROM clean.adb_collection_batches WHERE upper(status) IN ('ACTIVE','SETTLING'))::int AS batches,"+
+    "(SELECT count(*) FROM clean.adb_collection_segments WHERE status='ACTIVE')::int AS segments,"+
+    "(SELECT count(*) FROM clean.adb_anchor_probe WHERE status IN ('probing','settling'))::int AS probes,"+
+    "(SELECT count(*) FROM clean.phase5_cd_pre_task_v39 WHERE state IN ('READY','CLAIMED','WRITE_STARTED_UNKNOWN'))::int AS tasks,"+
+    "(SELECT count(*) FROM clean.phase5_fids_original_binding_v39)::int AS phase5_bindings");
+  if(q.rowCount!==1||Object.values(q.rows[0]).some(n=>n!==0))p5Hold("NOT_STOPPED_HISTORICAL_ONLY");
+}
+async function p5ReadScope(c:PoolClient,s:P5HistoricalScope,cutoff:string){
+  const parent=await c.query<P5HistoricalParent>(
+    "SELECT r.population_query_id::text AS id,r.raw_persisted_at_utc::text AS age,"+
+    p5Full("r")+" AS full_sha,"+p5ParentKeep+" AS keep_sha,r.response_hash "+
+    "FROM clean.fids_query_response r WHERE r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL "+
+    "AND r.raw_persisted_at_utc<=$1::timestamptz ORDER BY r.population_query_id LIMIT "+(s.expectedOriginals+1),
+    [cutoff,P5_PARENT_EXCLUDE]);
+  if(parent.rows.length!==s.expectedOriginals||parent.rows.some(x=>!isSha(x.full_sha)||!isSha(x.keep_sha)))p5Hold("SOURCE_COUNT_OR_IDENTITY_DRIFT");
+  const ids=parent.rows.map(x=>x.id);
+  const children=await c.query<P5HistoricalChild>(
+    "SELECT p.id::text AS id,p.population_query_id::text AS parent_id,"+p5Full("p")+" AS full_sha,"+p5ChildKeep+" AS keep_sha,"+
+    p5MemberSha+" AS member_sha,p.provider_content_expired_at_utc IS NULL AS unexpired,p.source_type='fids' AS is_fids "+
+    "FROM clean.flight_population p LEFT JOIN clean.population_research_membership m ON m.population_member_id=p.population_member_id "+
+    "WHERE p.population_query_id=ANY($1::uuid[]) ORDER BY p.id LIMIT "+(s.expectedPopulation+1),
+    [ids,P5_KEEP_EXCLUDE]);
+  if(children.rows.length!==s.expectedPopulation||children.rows.some(x=>!x.unexpired||!x.is_fids||
+      !isSha(x.full_sha)||!isSha(x.keep_sha)||!isSha(x.member_sha)))p5Hold("POPULATION_OR_MEMBERSHIP_DRIFT");
+  const pre=(await c.query(P5_PRE_COUNTS)).rows[0];
+  if(pre?.pre!==s.expectedPre||pre?.t24!==s.expectedT24)p5Hold("PRE_COUNT_DRIFT");
+  const records=[...parent.rows.map(p=>"fids_query_response:"+p.id+":raw_payload"),
+    ...children.rows.map(p=>"flight_population:"+p.id+":fids_provider_scope_v1")];
+  const prior=(await c.query("SELECT count(*)::int AS n FROM clean.retention_tombstone WHERE surface='primary' AND record_id=ANY($1::text[])",[records])).rows[0];
+  if(prior?.n!==0)p5Hold("EXISTING_TOMBSTONE_NO_REPLAY");
+  const pHash=planHash();
+  const scopeSha256=sha256({schema:"v39.phase5.historical-fids-primary-expiry-scope.v1",s,cutoff,pHash,parent:parent.rows,children:children.rows});
+  return {parent:parent.rows,children:children.rows,records,pHash,scopeSha256};
+}
+type P5ReadScope=Awaited<ReturnType<typeof p5ReadScope>>;
+async function p5VerifyCleared(c:PoolClient,s:P5HistoricalScope,x:P5ReadScope,runId:string){
+  const a=await c.query("SELECT r.population_query_id::text AS id,"+p5ParentKeep+" AS keep_sha, (r.raw_payload IS NULL AND r.response_hash IS NULL AND r.raw_expired_at_utc IS NOT NULL) AS cleared FROM clean.fids_query_response r WHERE r.population_query_id=ANY($1::uuid[])",
+    [x.parent.map(p=>p.id), P5_PARENT_EXCLUDE]);
+  const b=await c.query("SELECT p.id::text AS id,"+p5ChildKeep+" AS keep_sha,"+p5MemberSha+" AS member_sha,(p.provider_content_expired_at_utc IS NOT NULL AND "+P5_CLEARED_CHILD_FIELDS.map(k=>"p."+k+" IS NULL").join(" AND ")+") AS cleared "+
+    "FROM clean.flight_population p LEFT JOIN clean.population_research_membership m ON m.population_member_id=p.population_member_id "+
+    "WHERE p.id=ANY($1::bigint[])",[x.children.map(p=>p.id),P5_KEEP_EXCLUDE]);
+  const am=new Map(a.rows.map(q=>[q.id,q])),bm=new Map(b.rows.map(q=>[q.id,q]));
+  if(a.rows.length!==x.parent.length||b.rows.length!==x.children.length||
+    x.parent.some(p=>am.get(p.id)?.cleared!==true||am.get(p.id)?.keep_sha!==p.keep_sha)||
+    x.children.some(p=>bm.get(p.id)?.cleared!==true||bm.get(p.id)?.keep_sha!==p.keep_sha||bm.get(p.id)?.member_sha!==p.member_sha))
+    p5Hold("PRIMARY_CLEAR_OR_PRESERVED_METADATA_READBACK");
+  const ts=await c.query("SELECT record_id,content_hash,source_table,content_class FROM clean.retention_tombstone "+
+    "WHERE surface='primary' AND expiry_run_id=$1 AND plan_hash=$2 AND retention_rule='max-24h/provider-content' AND deletion_mode='content-nullification'",[runId,x.pHash]);
+  const by=new Map(ts.rows.map(t=>[t.record_id,t]));
+  if(ts.rows.length!==x.records.length||x.records.some(k=>!by.has(k)))p5Hold("TOMBSTONE_COUNT_OR_SCOPE_DRIFT");
+  for(const p of x.parent){
+    const t=by.get("fids_query_response:"+p.id+":raw_payload");
+    if(!isSha(t?.content_hash)||t.source_table!=="clean.fids_query_response"||t.content_class!=="fids_population")p5Hold("PARENT_TOMBSTONE_DRIFT");
+  }
+  for(const p of x.children){
+    const t=by.get("flight_population:"+p.id+":fids_provider_scope_v1"),parent=by.get("fids_query_response:"+p.parent_id+":raw_payload");
+    if(!t||t.content_hash!==parent?.content_hash||t.source_table!=="clean.flight_population"||t.content_class!=="fids_population_normalized")p5Hold("CHILD_TOMBSTONE_DRIFT");
+  }
+  const pre=(await c.query(P5_PRE_COUNTS)).rows[0];
+  if(pre?.pre!==s.expectedPre||pre?.t24!==s.expectedT24)p5Hold("PRE_COUNT_DRIFT_AFTER");
+}
+/** Exact reviewed owner-local repair. A separate connection verifies the
+ * committed primary rows. Never retry an ambiguous COMMIT. */
+export async function reviewOrExpireP5HistoricalFidsPrimary(pool:Pick<Pool,"connect">,s:P5HistoricalScope,
+  action:{mode:"review"}|{mode:"apply";expectedScopeSha256:string;approval:string}){
+  const cutoff=p5Scope(s),apply=action?.mode==="apply";
+  if(!pool||typeof pool.connect!=="function"||(!apply&&action?.mode!=="review")||
+    (apply&&(action.approval!==P5_HISTORICAL_FIDS_EXPIRY_APPROVAL||!isSha(action.expectedScopeSha256))))
+    p5Hold("EXPLICIT_REMEDIATION_REVIEW_REQUIRED");
+  let c=await pool.connect(),began=false,unknown=false,committed=false;
+  try{
+    await c.query(apply?"BEGIN ISOLATION LEVEL SERIALIZABLE":"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
+    const dbNow=await p5Session(c,!apply);
+    if(Date.parse(dbNow)<Date.parse(s.observedAtUtc))p5Hold("OBSERVATION_NOT_YET_DUE");
+    if(apply)await c.query("LOCK TABLE "+P5_STOP_TABLES+", clean.fids_query_response, clean.flight_population, clean.population_research_membership, clean.flight_snapshots, clean.retention_tombstone IN SHARE ROW EXCLUSIVE MODE");
+    await p5Stopped(c);
+    const x=await p5ReadScope(c,s,cutoff);
+    const runId="RETEXP-P5-FIDS-"+x.scopeSha256;
+    const summary={scopeSha256:x.scopeSha256,cutoffUtc:cutoff,originals:x.parent.length,population:x.children.length,
+      preservedPre:s.expectedPre,preservedT24:s.expectedT24,runId,providerCalls:0,backupOrPitrVerified:false,accountRightsVerified:false,
+      completeRetentionDeploymentVerified:false,phase6PaidGo:false};
+    if(!apply){
+      await c.query("ROLLBACK");began=false;
+      return {status:"EXACT_HISTORICAL_FIDS_SCOPE_REVIEW_ONLY_NO_GO",...summary,databaseWrites:0};
+    }
+    if(x.scopeSha256!==action.expectedScopeSha256)p5Hold("REVIEW_SCOPE_HASH_DRIFT");
+    for(const p of x.parent){
+      // Original existing expiry tombstone convention: canonical payload
+      // digest computed only in this owner process. No values in output.
+      const v=await c.query("SELECT raw_payload FROM clean.fids_query_response WHERE population_query_id=$1::uuid AND raw_expired_at_utc IS NULL AND raw_persisted_at_utc<=$2::timestamptz",[p.id,cutoff]);
+      if(v.rowCount!==1||v.rows[0].raw_payload==null)p5Hold("ORIGINAL_DRIFT");
+      await expireOne(c,candidate({sourceTable:"clean.fids_query_response",recordId:"fids_query_response:"+p.id+":raw_payload",
+        contentClass:"fids_population",contentColumns:["raw_payload"],ageTimestampUtc:utc(p.age),retentionHours:24,
+        contentHash:sha256(v.rows[0].raw_payload),payloadHash:p.response_hash??undefined,kind:"fids_query_response",key:p.id}),runId,x.pHash);
+    }
+    await p5VerifyCleared(c,s,x,runId);
+    unknown=true;await c.query("COMMIT");unknown=false;began=false;committed=true;
+    c.release(true);
+    // Fresh connection, new read-only transaction; not an independent actor.
+    c=await pool.connect();await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
+    await p5Session(c,true);await p5VerifyCleared(c,s,x,runId);
+    await c.query("ROLLBACK");began=false;
+    return {status:"HISTORICAL_FIDS_PRIMARY_CLEAR_COMMITTED_FRESH_READBACK_NO_GO",...summary,
+      originalsCleared:x.parent.length,populationCleared:x.children.length,preservedProjectMembership:x.children.length,
+      tombstones:x.records.length,freshConnectionReadback:true,independentActorVerified:false};
+  }catch(e){
+    if(unknown)p5Hold("COMMIT_UNKNOWN_READBACK_ONLY_NO_REPLAY");
+    if(committed)p5Hold("COMMITTED_FRESH_READBACK_UNRESOLVED_NO_REPLAY");
+    if(e instanceof Error&&/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[A-Z_]+$/.test(e.message))throw e;
+    p5Hold("SQL_OR_SCOPE_FAILURE_REDACTED");
+  }finally{
+    if(began&&!unknown)await c.query("ROLLBACK").catch(()=>undefined);
+    // A release can already have occurred if the second connection failed.
+    try{c.release(true);}catch{/* no replay */}
+  }
 }
