@@ -195,6 +195,35 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({recoveredReadbackCount:1,verifiedNowCount:0});
    expect(await incidentCount()).toBe(before+1);
    expect(s.deletes).toBe(2);
+   // Do not let the ordinary time budget split a delete from its receipt.
+   const n1=await make(),n2=await make();
+   s.objects.add(n1.objectName);s.objects.add(n2.objectName);
+   let ticks=0;
+   const partial=await executeP5RecurringExpiryRuntime({...conf,limit:2,apply:true,workStartBudgetMs:100,
+    monotonicNow:()=>ticks++<2?0:100});
+   expect(partial).toMatchObject({status:"BACKLOG_REMAINS_AT_CUTOFF",selectedCount:2,
+    independentlyReadBackCount:1,remainingAtCutoff:1,stoppedAtWorkBoundary:true});
+   expect(s.deletes).toBe(3);
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({status:"DUE_AT_CUTOFF_CLEARED",verifiedNowCount:1});
+   expect(s.deletes).toBe(4);
+   // Simulate a remote DELETE that completes AFTER the local deadline.
+   // No marker can be written from the timed-out invocation.
+   const late=await make();s.objects.add(late.objectName);
+   let finish:()=>void=()=>{throw Error("DELETE_WAS_NOT_STARTED");};
+   let attempted=0;
+   const delayed={exists:s.exists,delete:async(name:string)=>{
+    attempted++;
+    await new Promise<void>(resolve=>{finish=()=>{s.objects.delete(name);resolve();};});
+   }};
+   await expect(executeP5RecurringExpiryRuntime({...conf,apply:true,operationTimeoutMs:25,
+    stores:{writer:delayed,reader:s}})).rejects.toThrow("BATCH_UNCERTAIN_DELETION_STOP_RECORDED_NO_RETRY");
+   expect(attempted).toBe(1);expect((await marker(late)).deletion_run_id).toBeNull();
+   expect(await s.exists(late.objectName)).toBe(true);expect(await incidentCount()).toBe(before+2);
+   finish();
+   expect(await s.exists(late.objectName)).toBe(false);
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({
+    status:"DUE_AT_CUTOFF_CLEARED",verifiedNowCount:1,independentlyReadBackCount:1});
+   expect(s.deletes).toBe(4);expect(await incidentCount()).toBe(before+2);
   }finally{
    await writer?.end();await reader?.end();
    for(const role of [writerRole,readerRole]){

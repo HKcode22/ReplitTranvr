@@ -6,6 +6,7 @@ import {Pool,type PoolClient} from "pg";
 import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
 import {createHash,randomUUID} from "node:crypto";
+import {performance} from "node:perf_hooks";
 import {runBoundedProviderBlobExpiryBatchV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {createRequiredProviderBlobStoreV39,normalizeProviderBlobBucketIdV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {providerBlobObjectNameV39,type ProviderBlobStoreV39} from "../server/lib/disruption/providerBlobStore_v39";
@@ -144,17 +145,51 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
   await client.query("ROLLBACK");active=false;
  }finally{if(active)await client.query("ROLLBACK").catch(()=>{});client.release();}
 }
-export async function executeP5RecurringExpiryRuntime({writer,reader,stores,apply,limit,writerRole,readerRole,verifyActor=verifyP5RecurringExpiryActor}:{
+// The storage SDK does not expose a reliable cancellation acknowledgement.
+// Deadline means the result is UNKNOWN, not that the remote request was
+// cancelled. Poison this invocation so it cannot issue another storage
+// operation; an admitted recovery independently checks actual absence.
+export function boundP5RecurringExpiryStorage(stores:Stores,timeoutMs=8000):Stores{
+ if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>8000)HOLD("STORAGE_TIMEOUT_BOUND");
+ let poisoned=false;
+ async function call<T>(fn:()=>Promise<T>):Promise<T>{
+  if(poisoned)HOLD("STORAGE_INVOCATION_POISONED_NO_RETRY");
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+   return await Promise.race([Promise.resolve().then(fn),new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>{poisoned=true;reject(Error("HOLD_P5_RECURRING_EXPIRY_STORAGE_OUTCOME_UNKNOWN_NO_RETRY"));},timeoutMs);
+   })]);
+  }finally{if(timer!==undefined)clearTimeout(timer);}
+ }
+ // The optional injected adapter is still restricted to existence/delete.
+ // Enforce strict boolean actual existence, never truthy/falsy coercion.
+ async function exists(store:Pick<ProviderBlobStoreV39,"exists">,name:string){
+  const v=await call(()=>store.exists(name));
+  if(typeof v!=="boolean"){poisoned=true;HOLD("STORAGE_PRESENCE_UNKNOWN_NO_RETRY");}
+  return v;
+ }
+ return {
+  writer:{exists:name=>exists(stores.writer,name),delete:name=>call(()=>stores.writer.delete(name))},
+  reader:{exists:name=>exists(stores.reader,name)}
+ };
+}
+export async function executeP5RecurringExpiryRuntime({writer,reader,stores,apply,limit,writerRole,readerRole,verifyActor=verifyP5RecurringExpiryActor,
+ operationTimeoutMs=8000,workStartBudgetMs=75000,monotonicNow=()=>performance.now()}:{
+
  writer:Db;reader:Db;stores:Stores;apply:boolean;limit:number;writerRole:string;readerRole:string;
  verifyActor?:typeof verifyP5RecurringExpiryActor;
+ // Test injection only; production CLI does not expose these options.
+ operationTimeoutMs?:number;workStartBudgetMs?:number;monotonicNow?:()=>number;
 }){
- if(writer===reader||writerRole===readerRole||!Number.isSafeInteger(limit)||limit<1||limit>25)HOLD("EXECUTION_SCOPE");
+ if(writer===reader||writerRole===readerRole||!Number.isSafeInteger(limit)||limit<1||limit>25||
+    !Number.isSafeInteger(workStartBudgetMs)||workStartBudgetMs<1||workStartBudgetMs>75000)HOLD("EXECUTION_SCOPE");
  await verifyActor(writer,writerRole,"writer");await verifyActor(reader,readerRole,"reader");
+ const guarded=boundP5RecurringExpiryStorage(stores,operationTimeoutMs);
  // A randomly generated opaque nonexisting key is only a connectivity probe;
  // no uploaded fixture/raw bytes/listing and no deletion. Two fresh SDK
  // clients may share Replit runtime credentials: never claim distinct IAM.
  const key=providerBlobObjectNameV39("raw_provider_content",randomUUID());
- if(await stores.writer.exists(key)!==false||await stores.reader.exists(key)!==false)
+ if(await guarded.writer.exists(key)!==false||await guarded.reader.exists(key)!==false)
   HOLD("PRIMARY_STORAGE_PROBE_UNEXPECTED");
  const base={providerCalls:0,objectDownloads:0,distinctDbActorsVerified:true,
   separateStorageReadRequests:true,independentStorageIamVerified:false,backupRetentionVerified:false,phase6PaidGo:false};
@@ -167,8 +202,19 @@ export async function executeP5RecurringExpiryRuntime({writer,reader,stores,appl
   if(got.rows[0]?.owned!==true)HOLD("RECURRING_BATCH_ALREADY_ACTIVE");
   owned=true;
   try{
-   const result=await runBoundedProviderBlobExpiryBatchV39(writer,stores.writer,reader,stores.reader,limit);
+   const start=monotonicNow();let last=start;
+   if(!Number.isFinite(start))HOLD("WORK_CLOCK_INVALID");
+   let stoppedAtWorkBoundary=false;
+   const canBeginCandidate=()=>{
+    const now=monotonicNow();
+    if(!Number.isFinite(now)||now<last)HOLD("WORK_CLOCK_INVALID");
+    last=now;
+    if(now-start>=workStartBudgetMs){stoppedAtWorkBoundary=true;return false;}
+    return true;
+   };
+   const result=await runBoundedProviderBlobExpiryBatchV39(writer,guarded.writer,reader,guarded.reader,limit,canBeginCandidate);
    return {...base,...result,status:result.status,declaredExpiryOnly:true,
+    stoppedAtWorkBoundary,storageOperationTimeoutMs:operationTimeoutMs,
     databaseWritesPossible:true,objectDeletionsPossible:true};
   }catch{
    // A failure can occur after physical delete or COMMIT. Preserve a

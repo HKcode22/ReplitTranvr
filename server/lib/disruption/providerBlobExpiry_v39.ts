@@ -183,13 +183,14 @@ export async function runBoundedProviderBlobExpiryBatchV39(
   readback: Pick<Pool,"query">,
   readbackStore: Pick<ProviderBlobStoreV39,"exists">,
   limit: number,
+  canBeginCandidate:()=>boolean=()=>true,
 ): Promise<{
   status:"DUE_AT_CUTOFF_CLEARED"|"BACKLOG_REMAINS_AT_CUTOFF";
   selectedCount:number; verifiedNowCount:number; alreadyVerifiedCount:number;
   independentlyReadBackCount:number; recoveredReadbackCount:number;
   remainingAtCutoff:number; remainingUnwitnessedMarkersAtCutoff:number;
 }> {
-  if(!Number.isSafeInteger(limit)||limit<1||limit>100)
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100||typeof canBeginCandidate!=="function")
     throw Error("PROVIDER_BLOB_RECURRING_BATCH_LIMIT_INVALID");
   const clock=await db.query("SELECT clock_timestamp()::text AS cutoff");
   const cutoff=clock.rows[0]?.cutoff;
@@ -215,6 +216,12 @@ export async function runBoundedProviderBlobExpiryBatchV39(
   const runId=RECURRING_RUN_PREFIX+randomUUID();
   let verifiedNowCount=0,alreadyVerifiedCount=0,independentlyReadBackCount=0,recoveredReadbackCount=0;
   for(const {candidate,recoverReadback} of candidates){
+    // Only stop between complete candidates. Never interrupt a successful
+    // delete before its marker/readback merely because the ordinary work
+    // start budget has elapsed. Backlog is counted from actual DB state.
+    const begin=canBeginCandidate();
+    if(begin===false)break;
+    if(begin!==true)throw Error("PROVIDER_BLOB_RECURRING_WORK_BOUND_INVALID");
     // A pending marker is immutable. Never issue another physical delete
     // on a readback recovery (an unexpected present object is HOLD).
     const result=recoverReadback?"ALREADY_VERIFIED":
