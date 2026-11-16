@@ -5,6 +5,7 @@ vi.mock("../server/lib/disruption/phase5ExpiryReceiverTransport_v39",()=>({
 }));
 import {P5_EXPIRY_BUCKET,P5_EXPIRY_DB_ENDPOINT,sealP5ExpiryValues,openP5ExpiryValues,loadP5ExpirySealedConfig,p5ExpirySealKey,loadP5ExpiryReceiverPair} from "../server/lib/disruption/phase5ExpirySealedHandoff_v39";
 import {makeP5ExpiryHandoffValues} from "../scripts/v39_phase5_expiry_sealed_handoff_v39";
+import {makeP5ExpiryPairValues} from "../scripts/v39_phase5_expiry_pair_sealed_owner_v39";
 const sha="a".repeat(40);
 const env={V39_DATABASE_RUNTIME_URL:"postgresql://runtime:synthetic@same.invalid/neondb",
  AERODATABOX_WEBHOOK_SECRET:"fictional".repeat(4),V39_PROVIDER_BLOB_MODE:"required",
@@ -28,6 +29,12 @@ describe("actual AES-GCM with mocked transport DB admission (no production host 
    P5_RECURRING_EXPIRY_READER_URL:v.P5_RECURRING_EXPIRY_READER_URL
   };
   const values=makeP5ExpiryHandoffValues(file,sha,token);
+  const pair=makeP5ExpiryPairValues(file,sha,token,"c".repeat(64));
+  expect(pair.verify).toEqual(values);
+  expect(pair.apply.P5_RECURRING_EXPIRY_MODE).toBe("APPLY_DUE_ONLY");
+  expect(pair.apply.P5_RECURRING_EXPIRY_LIMIT).toBe("10");
+  expect(pair.apply.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256).not.toBe(pair.verify.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256);
+  expect(()=>makeP5ExpiryPairValues(file,sha,token,token)).toThrow();
   expect(values.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256).toBe(createHash("sha256").update(token).digest("hex"));
   expect(values.P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA).toBe(sha);
   expect(values.P5_RECURRING_EXPIRY_WRITER_URL).toBe(file.P5_RECURRING_EXPIRY_WRITER_URL);
