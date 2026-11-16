@@ -90,3 +90,17 @@ test("manual day exactly bounded; does not implicitly enable recurring schedule"
  assert.equal(selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,iso(now)).selected.runDayIndex,2);
  assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_NONPAID_SOURCE_REQUESTED_DAY:"2"}),/NO_EXACT_MANUAL_OR_SCHEDULE_APPROVAL/);
 });
+
+test("current SOURCE handoff uses exact prospective calendar, not a caller-selected day",()=>{
+ const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",
+  P6_NONPAID_SOURCE_CONFIRM:"PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER"};
+ const a=admitP6NonpaidSourceDayGithub(e),b=admitP6NonpaidSourceDayGithub(f.env);
+ assert.equal(a.mode,"current_dispatch");assert.equal(a.requestedDay,null);
+ assert.equal(a.phase6PaidGo,false);
+ assert.deepEqual(selectP6NonpaidSourceDay(a,loadP6ReviewedDayPlans(a,f.read),f.calendar,f.indexes,iso(now)),
+  selectP6NonpaidSourceDay(b,loadP6ReviewedDayPlans(b,f.read),f.calendar,f.indexes,iso(now)));
+ for(const delta of [{P6_NONPAID_SOURCE_REQUESTED_DAY:"2"},{P6_NONPAID_SOURCE_SCHEDULE_ENABLED:"false"},
+  {P6_NONPAID_SOURCE_CONFIRM:"invalid"},{GITHUB_EVENT_NAME:"schedule"},{V39_PHASE5_FREEZE_SIGNED:"0"},
+  {V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},{V39_PHASE6_PROCESS_ARMED:"1"},{AERODATABOX_API_KEY:"forbidden"}])
+  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,...delta}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
+});

@@ -19,6 +19,7 @@ import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6St
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
+const CURRENT_CONFIRM="PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER";
 const hold=s=>{throw Error("HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_"+s);};
 const h=b=>createHash("sha256").update(b).digest("hex");
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -52,7 +53,8 @@ function url(raw,login){
   return {raw,endpoint:u.hostname.replace(/-pooler(?=\.)/,"")};
  }catch{hold("RESTRICTED_TLS_DATABASE_URL_REQUIRED");}
 }
-const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":"manual";
+const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
+ env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":"manual";
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||
@@ -66,7 +68,8 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
- if(mode==="schedule"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY):
+ if(mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
+    (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
     env.P6_NONPAID_SOURCE_CONFIRM!==CONFIRM||!/^([1-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""))
   hold("NO_EXACT_MANUAL_OR_SCHEDULE_APPROVAL");
  const trust=readP6StableSourceTrust(env);

@@ -5,11 +5,12 @@ on:
   workflow_dispatch:
     inputs:
       run_day_index:
-        description: 'One actual reviewed prospective study day (1-31)'
-        required: true
+        description: 'One reviewed prospective study day (1-31), or empty for current-calendar handoff'
+        required: false
+        default: ''
         type: string
       confirm:
-        description: 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH'
+        description: 'Confirm exact reviewed day or PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER'
         required: true
         type: string
   pull_request:
@@ -62,7 +63,8 @@ jobs:
     if: >-
       ${{ github.ref == 'refs/heads/main' &&
         ((github.event_name == 'schedule' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true') ||
-         (github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH')) }}
+         (github.event_name == 'workflow_dispatch' && (inputs.confirm == 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH' ||
+          (inputs.confirm == 'PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER' && inputs.run_day_index == '' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true')))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
