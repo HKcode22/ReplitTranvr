@@ -40,6 +40,7 @@ AS $status$
       JOIN clean.fids_query_response r USING(population_query_id)
       WHERE p.source_type='fids' AND p.provider_content_expired_at_utc IS NULL
         AND (r.raw_payload IS NULL OR r.raw_expired_at_utc IS NOT NULL)),
+    'deletionStopUnresolved',EXISTS(SELECT 1 FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved),
     'providerCalls',0,'databaseWrites',0,'objectPresenceChecked',false,
     'backupOrPitrVerified',false,'completeRetentionDeploymentVerified',false,'phase6PaidGo',false)
   FROM t LEFT JOIN live l ON true GROUP BY t.at
