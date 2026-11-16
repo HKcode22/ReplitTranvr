@@ -27,10 +27,27 @@ try {
  const meta=(await owner.query("SELECT current_database() db,current_setting('server_version_num')::int n,inet_server_addr()::text addr")).rows[0];
  assert.equal(meta.db,"neondb");assert.equal(Math.floor(meta.n/10000),16);
  assert(["127.0.0.1/32","127.0.0.1","::1/128","::1"].includes(meta.addr)||/^172\./.test(meta.addr),"not local CI service");
- await owner.query("CREATE ROLE neondb_owner NOLOGIN; CREATE ROLE p6_window_restricted_ci NOLOGIN; CREATE SCHEMA clean AUTHORIZATION neondb_owner; GRANT USAGE ON SCHEMA clean TO p6_window_restricted_ci");
+ await owner.query("CREATE ROLE neondb_owner NOLOGIN CREATEROLE; CREATE ROLE p6_window_restricted_ci NOLOGIN; CREATE SCHEMA clean AUTHORIZATION neondb_owner; GRANT USAGE ON SCHEMA clean TO p6_window_restricted_ci");
  await owner.query("SET ROLE neondb_owner");await other.query("SET ROLE neondb_owner");
  await owner.query(ddl+" ALTER TABLE clean.adb_phase6_authorization ADD CONSTRAINT adb_phase6_authorization_pkey PRIMARY KEY(singleton_key)");
  await owner.query(migration);
+ // Real non-superuser test logins only in disposable CI. The migration
+ // itself installed no member or live policy binding. No production URL.
+ await owner.query("RESET ROLE");
+ await owner.query("CREATE ROLE phase6_rolling_claim_ci_test LOGIN INHERIT PASSWORD 'ci-only-window'; CREATE ROLE phase6_rolling_claim_ci_wrong LOGIN INHERIT PASSWORD 'ci-only-wrong'; GRANT phase6_rolling_window_claimant_v39 TO phase6_rolling_claim_ci_test,phase6_rolling_claim_ci_wrong WITH ADMIN FALSE, INHERIT TRUE, SET FALSE");
+ await owner.query("ALTER ROLE neondb_owner NOCREATEROLE; SET ROLE neondb_owner");
+ const login="phase6_rolling_claim_ci_test",wrongLogin="phase6_rolling_claim_ci_wrong";
+ async function loginClient(name,password){
+  const u=new URL(URL);u.username=name;u.password=password;
+  const x=new pg.Client({connectionString:u.href,connectionTimeoutMillis:5000,query_timeout:15000});
+  await x.connect();clients.push(x);return x;
+ }
+ const [claim1,claim2,read1,read2,wrong]=await Promise.all([
+  loginClient(login,"ci-only-window"),loginClient(login,"ci-only-window"),
+  loginClient(login,"ci-only-window"),loginClient(login,"ci-only-window"),
+  loginClient(wrongLogin,"ci-only-wrong")]);
+ const boundQuery=query.replace("phase6_claim_rolling_window_v39","phase6_claim_bound_rolling_window_v39");
+ const readBound="SELECT * FROM clean.phase6_read_bound_rolling_window_v39($1,$2)";
  const clock=Math.floor(new Date((await owner.query("SELECT clock_timestamp() n")).rows[0].n).getTime()/1000)*1000;
  const from=new Date(clock-3*3600000),until=new Date(clock+45*86400000);
  const iso=n=>new Date(n).toISOString(),hash=b=>createHash("sha256").update(b).digest("hex");
@@ -59,6 +76,18 @@ try {
  VALUES('AUTH-CI',$1,$2,$3,$4,'CI',current_date,1900,0,1000,'["synthetic"]')`,[manifest,calendar,config,code]);
  await assert.rejects(owner.query(query,args(1001)),/EXISTING_AUTHORIZATION_HOLD/);
  await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=true");
+ await assert.rejects(claim1.query(boundQuery,args(1001)),/EXACT_OWNER_POLICY_BINDING_REQUIRED/);
+ await owner.query(`INSERT INTO clean.phase6_rolling_policy_binding_v39
+ (manifest_sha256,authorization_id,calendar_sha256,config_sha256,code_sha,policy_sha256,policy_from_utc,policy_until_utc,expected_session_login,independent_review_sha256)
+ VALUES($1,'AUTH-CI',$2,$3,$4,$5,$6,$7,$8,$9)`,[manifest,calendar,config,code,policy,from,until,login,h("9")]);
+ await assert.rejects(wrong.query(boundQuery,args(1001)),/EXACT_OWNER_POLICY_BINDING_REQUIRED/);
+ await assert.rejects(claim1.query(boundQuery,["AUTH-CI",manifest,calendar,config,code,h("0"),from,until,1001]),/EXACT_OWNER_POLICY_BINDING_REQUIRED/);
+ await assert.rejects(claim1.query(readBound,[1001,manifest]),/RESTRICTED_READONLY_SESSION_HOLD/);
+ for(const q of [()=>claim1.query(query,args(1001)),()=>claim1.query("SELECT * FROM "+table),
+  ()=>claim1.query("SELECT * FROM clean.phase6_rolling_policy_binding_v39"),
+  ()=>claim1.query("UPDATE clean.adb_phase6_authorization SET enabled=false"),
+  ()=>claim1.query("DELETE FROM "+table),()=>claim1.query(close,[manifest,1,1001,1001,h("1"),h("2")])])
+  await assert.rejects(q(),/permission denied/);
  await assert.rejects(owner.query(query,[...args(1001).slice(0,4),"0".repeat(40),...args(1001).slice(5)]),/EXISTING_AUTHORIZATION_HOLD/);
  await assert.rejects(owner.query(query,["AUTH-CI",manifest,calendar,config,code,policy,new Date(clock+10000),until,1001]),/OUTSIDE_POLICY/);
  await assert.rejects(owner.query(query,["AUTH-CI",manifest,calendar,config,code,policy,new Date(clock-110*60000),until,1001]),/TOO_LATE_NO_BACKFILL/);
@@ -99,11 +128,10 @@ try {
  await assert.rejects(claimP6RollingWindowOnce(input(1001),{claimClient:fakeClaim,readbackClient:neverRead}),/COMMIT_UNKNOWN_NO_REPLAY/);
  assert.equal(noReplayCalls.length,4);
  await assert.rejects(claimP6RollingWindowOnce({...input(1001),expectedPolicySha256:h("0")},{claimClient:neverRead,readbackClient:fakeClaim}),/MISSING_EXACT_REVIEWED_POLICY/);
- await restricted.query("RESET ROLE; SET ROLE neondb_owner");
- await readbackAnother.query("SET ROLE neondb_owner");
+ const narrowInput=root=>({...input(root),expectedClaimantSessionLogin:login,separateRestrictedWindowCustodyReviewApproved:true});
  const concurrent=await Promise.allSettled([
-  claimP6RollingWindowOnce(input(1001),{claimClient:owner,readbackClient:restricted}),
-  claimP6RollingWindowOnce(input(1002),{claimClient:other,readbackClient:readbackAnother})
+  claimP6RollingWindowOnce(narrowInput(1001),{claimClient:claim1,readbackClient:read1}),
+  claimP6RollingWindowOnce(narrowInput(1002),{claimClient:claim2,readbackClient:read2})
  ]);
  assert.equal(concurrent.filter(x=>x.status==="fulfilled").length,1);
  assert.equal(concurrent.filter(x=>x.status==="rejected"&&/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/.test(x.reason.message)).length,1);
@@ -112,6 +140,14 @@ try {
  assert.equal(new Date(winner.windowStartUtc).getTime(),from.getTime()+2*3600000);
  assert.equal(new Date(winner.windowEndUtc).getTime(),from.getTime()+4*3600000);
  assert.equal(winner.rootRunId,accepted);assert.equal(winner.actualDbClock,true);assert.equal(winner.independentConnection,true);
+ assert.equal(winner.restrictedFunctionOnly,true);
+ await wrong.query("BEGIN READ ONLY");
+ assert.equal((await wrong.query(readBound,[accepted,manifest])).rowCount,0);
+ await wrong.query("ROLLBACK");
+ await read1.query("BEGIN READ ONLY");
+ assert.equal((await read1.query(readBound,[accepted,h("0")])).rowCount,0);
+ await read1.query("ROLLBACK");
+ console.log("V0102_ACTUAL_SCOPED_LOGIN_POLICY_PIN_FUNCTION_ONLY_NO_CLOSE_CROSS_LOGIN_READ_DENIED=PASS");
  assert.equal(winner.operationalCustodyWrites,1);assert.equal(winner.permitDispatch,false);assert.equal(winner.phase6PaidGo,false);
  assert.equal(winner.policyCommitment,hash(JSON.stringify({policySha256:policy,...trust})));
  console.log("V0102_EXACT_POLICY_REAL_COMMIT_DISTINCT_CONNECTION_READBACK_AND_UNKNOWN_COMMIT_NO_REPLAY=PASS");
