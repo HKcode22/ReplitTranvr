@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {createHash} from "node:crypto";
+import {loadP6CurrentT24CalendarWindows,loadP6LaterCalendarWindows,isP6CurrentPreTrigger,P6_CURRENT_T24_DISPATCH_CONFIRM} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {runP6BoundedT24Packets,localP6T24SingletonEnv,admitP6CurrentT24Worker} from "../scripts/v39_phase6_private_current_t24_worker_v39.mjs";
 import {requireP5CdGithubCurrentPrivateT24Scope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts";
 const code="a".repeat(40),h="b".repeat(64);
@@ -46,4 +48,39 @@ test("unknown PRE stops next attempts and bounds or duplicate packets are refuse
  let calls=0;
  const bound=await runP6BoundedT24Packets(p,1,async()=> "NO_DUE",()=>calls++===0?0:720001);
  assert.equal(bound.attemptedCount,0);assert.equal(bound.deferredCount,3);
+});
+
+test("explicit current T24 execution has same scoped release; no legacy roster or later PRE bypass",()=>{
+ const e={...env(),GITHUB_EVENT_NAME:"workflow_dispatch",P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:P6_CURRENT_T24_DISPATCH_CONFIRM};
+ assert.equal(requireP5CdGithubCurrentPrivateT24Scope(e).rosterSha256,undefined);
+ assert.throws(()=>requireP5CdGithubPreRelease(e,{allowReviewedT24Witness:true}));
+ assert.throws(()=>admitP6CurrentT24Worker(e),/PROTECTED_CUSTODY_AND_ENROLLMENT/);
+ assert.equal(isP6CurrentPreTrigger(e),false);
+ for(const d of [{P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:"wrong"},{P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:""},
+  {GITHUB_EVENT_NAME:"schedule"},{P6_PRIVATE_T24_EXECUTION_ENABLED:"0"},{P5_T24_AUTO_DISPATCH_ENABLED:"true"},
+  {P5_CD_GH_PRE_STOP:"1"},{V39_PHASE5_FREEZE_SIGNED:"0"},{P5_CD_GH_ROSTER_PATH:"legacy"},
+  {P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER"}])
+  assert.throws(()=>requireP5CdGithubCurrentPrivateT24Scope({...e,...d}));
+});
+test("current T24 exact calendar parity; explicit dispatch cannot authorize enrollment",()=>{
+ const trust={reviewedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h};
+ const plans=new Map(),hash=b=>createHash("sha256").update(b).digest("hex");
+ const dayPlanSha256s=Array.from({length:31},(_,i)=>{
+  const runDayIndex=i+1,bytes=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex,
+   templates:Array.from({length:12},()=>({runDayIndex,horizon:"T-24h",
+    scheduledRequestUtc:"2030-01-01T00:00:00.000Z",earliestPlannedCutoffUtc:"2030-01-01T00:15:00.000Z",
+    serviceWindowEndUtc:"2030-01-02T04:00:00.000Z"}))}));
+  plans.set("data-collection/phase5/planning/phase6-source-day-"+String(runDayIndex).padStart(2,"0")+".json",bytes);
+  return {runDayIndex,sha256:hash(bytes)};
+ });
+ const policy=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",
+  delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h,
+  dayPlanSha256s,validFromUtc:"2030-01-01T00:00:00.000Z",validUntilUtc:"2030-03-01T00:00:00.000Z"}));
+ const scheduled={...env(),P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),
+  P6_NONPAID_DAILY_POLICY_SHA256:hash(policy)};
+ const manual={...scheduled,GITHUB_EVENT_NAME:"workflow_dispatch",P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:P6_CURRENT_T24_DISPATCH_CONFIRM};
+ const read=path=>plans.get(path);
+ assert.deepEqual(loadP6CurrentT24CalendarWindows(manual,trust,read),loadP6CurrentT24CalendarWindows(scheduled,trust,read));
+ assert.throws(()=>loadP6LaterCalendarWindows(manual,trust,read,"T24"),/EXPLICIT_SCHEDULE_SCOPE_REQUIRED/);
+ assert.throws(()=>loadP6CurrentT24CalendarWindows({...manual,P6_PRIVATE_T24_RUN_DAYS:"1"},trust,read),/EXPLICIT_SCHEDULE_SCOPE_REQUIRED/);
 });
