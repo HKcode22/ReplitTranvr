@@ -37,6 +37,16 @@ suite("exact historical FIDS remediation using installed B0062 triggers",()=>{
    expect(await counts()).toEqual({live:3,expired:0});
    // No new provider or source record is added between review and apply.
    expect((await reviewOrExpireP5HistoricalFidsPrimary(db,scope,{mode:"review"})).scopeSha256).toBe(preview.scopeSha256);
+   // Deliberately disable ONLY the disposable test's cascade trigger.
+   // Parent updates and tombstones must roll back if child verification fails.
+   await db.query("ALTER TABLE clean.fids_query_response DISABLE TRIGGER trg_fids_response_expire_population");
+   try{
+    await expect(reviewOrExpireP5HistoricalFidsPrimary(db,scope,{mode:"apply",approval:P5_HISTORICAL_FIDS_EXPIRY_APPROVAL,expectedScopeSha256:preview.scopeSha256})).rejects.toThrow("PRIMARY_CLEAR_OR_PRESERVED_METADATA_READBACK");
+   }finally{
+    await db.query("ALTER TABLE clean.fids_query_response ENABLE TRIGGER trg_fids_response_expire_population");
+   }
+   expect(await counts()).toEqual({live:3,expired:0});
+   expect((await db.query("SELECT count(*)::int AS n FROM clean.retention_tombstone WHERE expiry_run_id=$1",[preview.runId])).rows[0].n).toBe(0);
    const result=await reviewOrExpireP5HistoricalFidsPrimary(db,scope,{mode:"apply",approval:P5_HISTORICAL_FIDS_EXPIRY_APPROVAL,expectedScopeSha256:preview.scopeSha256});
    expect(result).toMatchObject({status:"HISTORICAL_FIDS_PRIMARY_CLEAR_COMMITTED_FRESH_READBACK_NO_GO",originalsCleared:2,populationCleared:3,preservedProjectMembership:3,tombstones:5,freshConnectionReadback:true,phase6PaidGo:false,backupOrPitrVerified:false,accountRightsVerified:false});
    expect(await counts()).toEqual({live:1,expired:2});
