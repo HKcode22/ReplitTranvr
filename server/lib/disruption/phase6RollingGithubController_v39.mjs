@@ -153,3 +153,78 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  return {status:"ROLLING_WAVE_ACKNOWLEDGED_NOT_EXECUTION_PROOF",acknowledged,deferred,dispatchCount:acknowledged.length,
   providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false};
 }
+
+/** Complete current-session history, bounded at 6h. Independently read ALL
+ * nonterminal main runs, including older queued runs, once per wave. Fresh
+ * per-route recheck reuses that conservative old-active observation and
+ * includes all new active session rows. No hidden pagination or fallback.
+ * An unexplained failure from an earlier session needs reviewed restart;
+ * caller must NOT reset epoch autonomously to hide prior uncertainty.
+ */
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch}){
+ const started=now();
+ if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
+    started-epoch>6*3600000||typeof token!=="string"||token.length<16)
+  hold("NO_BOUNDED_SESSION_HISTORY_SCOPE");
+ const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
+ async function get(path,key){
+  try{
+   const res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
+   if(!res.ok)hold("GITHUB_HISTORY_UNAVAILABLE");
+   const v=await res.json();
+   if(!Number.isSafeInteger(v?.total_count)||v.total_count<0||v.total_count>100||
+      !Array.isArray(v[key])||v[key].length!==v.total_count)
+    hold("GITHUB_HISTORY_INCOMPLETE");
+   return v[key];
+  }catch{hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE");}
+ }
+ async function history(route){
+  const out=[];
+  for(const event of ["schedule","workflow_dispatch"]){
+   const created=encodeURIComponent(new Date(epoch).toISOString()+".."+new Date(now()+60000).toISOString());
+   const list=await get("/actions/workflows/"+route.workflow+"/runs?branch=main&event="+event+"&per_page=100&created="+created,"workflow_runs");
+   if(list.some(r=>r.event!==event))hold("GITHUB_EVENT_FILTER_DRIFT");
+   out.push(...list);
+  }
+  if(out.length>100||new Set(out.map(x=>x.id)).size!==out.length||
+     out.some(x=>exactRun(x).created<epoch||x.path!==".github/workflows/"+route.workflow))
+   hold("GITHUB_SESSION_HISTORY_DRIFT");
+  return out;
+ }
+ async function jobsFor(route,runs){
+  const last=runs.slice().sort((a,b)=>instant(b.created_at)-instant(a.created_at)||b.id-a.id)[0];
+  if(!last||last.status!=="completed"||last.conclusion!=="success")
+   return {jobRunId:null,jobs:[]};
+  return {jobRunId:last.id,jobs:await get("/actions/runs/"+last.id+"/jobs?filter=latest&per_page=100","jobs")};
+ }
+ const histories=await Promise.all(P6_ROLLING_ROUTES.map(history));
+ // One bounded repo-wide active sweep, rather than five status queries
+ // for each individual lane. All statuses must be accounted for.
+ const activeById=new Map();
+ for(const status of ACTIVE){
+  const list=await get("/actions/runs?branch=main&status="+status+"&per_page=100","workflow_runs");
+  for(const row of list){
+   if(!P6_ROLLING_ROUTES.some(r=>row.path===".github/workflows/"+r.workflow))continue;
+   const checked=exactRun(row);
+   if(checked.status!==status||activeById.has(checked.id))hold("GITHUB_ACTIVE_SWEEP_CHANGED");
+   activeById.set(checked.id,row);
+  }
+ }
+ const activeFor=route=>[...activeById.values()].filter(x=>x.path===".github/workflows/"+route.workflow);
+ const snapshots=await Promise.all(P6_ROLLING_ROUTES.map(async(route,i)=>({
+  workflow:route.workflow,complete:true,runs:histories[i],active:activeFor(route),
+  ...await jobsFor(route,histories[i])
+ })));
+ const context={sha,epoch,clock:now()};
+ // No stale or inverted monotonic wall-clock snapshots may dispatch.
+ if(context.clock<started||context.clock-started>120000)hold("GITHUB_SNAPSHOT_TOO_SLOW");
+ const plan=planP6RollingTick(snapshots,context);
+ async function recheckRoute(route){
+  if(!P6_ROLLING_ROUTES.includes(route)||now()-context.clock>600000)hold("GITHUB_FRESH_RECHECK_EXPIRED");
+  const runs=await history(route),active=new Map(activeFor(route).map(x=>[x.id,x]));
+  // New active rows cannot predate the already observed epoch.
+  for(const row of runs.filter(x=>ACTIVE.has(x.status)))active.set(row.id,row);
+  return {workflow:route.workflow,complete:true,runs,active:[...active.values()],...await jobsFor(route,runs)};
+ }
+ return {plan,recheckRoute,context};
+}
