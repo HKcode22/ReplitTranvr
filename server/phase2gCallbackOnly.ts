@@ -4,8 +4,8 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
-import {P5_EXPIRY_RECEIVER_PATH,createP5ExpiryReceiverHandler} from "./lib/disruption/phase5ExpiryReceiverTransport_v39";
-import {loadP5ExpirySealedConfig} from "./lib/disruption/phase5ExpirySealedHandoff_v39";
+import {P5_EXPIRY_RECEIVER_PATH,createP5ExpiryReceiverPairHandler} from "./lib/disruption/phase5ExpiryReceiverTransport_v39";
+import {loadP5ExpiryReceiverPair} from "./lib/disruption/phase5ExpirySealedHandoff_v39";
 import {subscribePrepaidStageTimingV39} from "./lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
@@ -116,10 +116,10 @@ const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
 // Optional retention route: a bad or absent declaration leaves the existing
 // callback receiver available. No expiry work is performed at process boot.
-let expiryHandler:ReturnType<typeof createP5ExpiryReceiverHandler>=null;
+let expiryHandler:ReturnType<typeof createP5ExpiryReceiverPairHandler>=null;
 try{
-  const expiryEnv=published?await loadP5ExpirySealedConfig(process.env,configSource):process.env;
-  expiryHandler=createP5ExpiryReceiverHandler(expiryEnv,configSource);
+  const pair=published?await loadP5ExpiryReceiverPair(process.env,configSource):{primary:process.env,apply:null};
+  expiryHandler=createP5ExpiryReceiverPairHandler(pair.primary,pair.apply,configSource);
 }
 catch{console.error("P5_EXPIRY_RECEIVER_CONFIG_HOLD_DISABLED");}
 const app = express();
