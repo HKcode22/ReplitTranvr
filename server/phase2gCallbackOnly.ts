@@ -4,7 +4,7 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
-import {P5_EXPIRY_RECEIVER_PATH,createP5ExpiryReceiverHandler} from "./lib/disruption/phase5ExpiryReceiverTransport_v39";
+import {P5_EXPIRY_RECEIVER_PATH,createP5ExpiryReceiverPairHandler} from "./lib/disruption/phase5ExpiryReceiverTransport_v39";
 import {loadP5ExpiryReceiverPair} from "./lib/disruption/phase5ExpirySealedHandoff_v39";
 import {subscribePrepaidStageTimingV39} from "./lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
@@ -116,14 +116,10 @@ const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
 // Optional retention route: a bad or absent declaration leaves the existing
 // callback receiver available. No expiry work is performed at process boot.
-let expiryHandler:ReturnType<typeof createP5ExpiryReceiverHandler>=null;
+let expiryHandler:ReturnType<typeof createP5ExpiryReceiverPairHandler>=null;
 try{
   const pair=published?await loadP5ExpiryReceiverPair(process.env,configSource):{primary:process.env,apply:null};
-  const primary=createP5ExpiryReceiverHandler(pair.primary,configSource);
-  const apply=pair.apply?createP5ExpiryReceiverHandler(pair.apply,configSource):null;
-  // Mode-specific handlers independently authenticate the fixed endpoint.
-  expiryHandler=primary&&apply?((req,res,next)=>
-    req.get("x-p5-expiry-mode")==="APPLY_DUE_ONLY"?apply(req,res,next):primary(req,res,next)):primary;
+  expiryHandler=createP5ExpiryReceiverPairHandler(pair.primary,pair.apply,configSource);
 }
 catch{console.error("P5_EXPIRY_RECEIVER_CONFIG_HOLD_DISABLED");}
 const app = express();
