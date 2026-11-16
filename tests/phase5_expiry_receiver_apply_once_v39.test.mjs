@@ -69,7 +69,8 @@ test("wrong verify identity, step, receipt or live source prevents APPLY POST; u
 });
 test("exact aggregate apply receipt rejects false cleared, wrong counts, storage/IAM claims and arbitrary fields",()=>{
  assert.equal(checkP5ApplyReceipt(result,source).remainingAtCutoff,1);
- for(const patch of [{status:"DUE_AT_CUTOFF_CLEARED"},{selectedCount:26},{independentlyReadBackCount:0},
+ assert.equal(checkP5ApplyReceipt({...result,selectedCount:10,verifiedNowCount:9,alreadyVerifiedCount:1,independentlyReadBackCount:10},source).selectedCount,10);
+ for(const patch of [{status:"DUE_AT_CUTOFF_CLEARED"},{selectedCount:11},{selectedCount:25},{selectedCount:26},{independentlyReadBackCount:0},
   {backupRetentionVerified:true},{extra:"raw"},{providerCalls:1},{mode:"VERIFY_ONLY"}])
   assert.throws(()=>checkP5ApplyReceipt({...result,...patch},source),/RECEIPT/);
 });
