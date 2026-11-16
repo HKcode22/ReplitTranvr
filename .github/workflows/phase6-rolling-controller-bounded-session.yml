@@ -1,0 +1,122 @@
+name: Phase6 initial bounded rolling controller session (STOP default)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO'
+        required: true
+        type: string
+      approved_main_sha:
+        description: 'Exact reviewed main SHA'
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-rolling-controller-bounded-session.yml'
+      - 'scripts/v39_phase6_bounded_rolling_session_v39.mjs'
+      - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
+      - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
+      - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
+      - 'tests/phase6_rolling_session_ack_ledger_v39.test.mjs'
+      - 'tests/phase6_bounded_rolling_session_v39.test.mjs'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p6-rolling-controller-session-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  P5_V39_PREPARE_DATABASE_URL: ''
+  P5_V39_T24_WITNESS_DATABASE_URL: ''
+  P6_PRIVATE_READER_DATABASE_URL: ''
+  P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+  P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+  P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+jobs:
+  offline-bounded-session-reconciliation:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITHUB_TOKEN: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      P6_ROLLING_SESSION_APPROVED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify bounded session and exact ACK reconciliation without network or production credentials
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$GITHUB_TOKEN$DATABASE_URL$AERODATABOX_API_KEY"
+          node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs
+  one-protected-bounded-session:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.confirm == 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO' &&
+          inputs.approved_main_sha == github.sha &&
+          vars.P6_ROLLING_CONTROLLER_ENABLED == '1' }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      P6_ROLLING_SESSION_CONFIRM: ${{ inputs.confirm }}
+      P6_ROLLING_REQUESTED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+      P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
+      P6_ROLLING_SESSION_APPROVED: ${{ secrets.P6_ROLLING_SESSION_APPROVED }}
+      P6_ROLLING_SESSION_EPOCH_UTC: ${{ secrets.P6_ROLLING_SESSION_EPOCH_UTC }}
+      P6_ROLLING_SESSION_DEADLINE_UTC: ${{ secrets.P6_ROLLING_SESSION_DEADLINE_UTC }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_PHASE6_OWNER_APPROVED: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+      P5_CD_GH_PRE_STOP: ${{ vars.P5_CD_GH_PRE_STOP }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Execute one protected rolling session and reconcile accepted workers before terminal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          test "$P6_ROLLING_SESSION_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 1
+          test "$V39_PHASE6_OWNER_APPROVED" = 1
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_P5_SEVEN_REST_BUDGET_SIGNED" = 1
+          test "$P5_CD_GH_PRE_STOP" = 0
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node scripts/v39_phase6_bounded_rolling_session_v39.mjs
+          echo 'P6_BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF'
