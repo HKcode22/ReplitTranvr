@@ -50,7 +50,7 @@ try {
  // never use this procedure to invent prior live collection evidence.
  await owner.query(`INSERT INTO ${table}(manifest_sha256,authorization_id,calendar_sha256,config_sha256,
  release_code_sha,policy_sha256,policy_from_utc,policy_until_utc,window_index,window_start_utc,window_end_utc,root_run_id,claimed_at_utc)
- VALUES($1,'AUTH-CI',$2,$3,$4,$5,$6,$7,0,$6,$6+interval '2 hours',999,$6+interval '1 minute')`,
+ VALUES($1,'AUTH-CI',$2,$3,$4,$5,$6,$7,0,$6::timestamptz,$6::timestamptz+interval '2 hours',999,$6::timestamptz+interval '1 minute')`,
  [manifest,calendar,config,code,policy,from,until]);
  await assert.rejects(owner.query(query,args(1001)),/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/);
  await assert.rejects(owner.query(close,[manifest,0,998,999,h("1"),h("2")]),/NO_EXACT_OPEN_ROOT/);
