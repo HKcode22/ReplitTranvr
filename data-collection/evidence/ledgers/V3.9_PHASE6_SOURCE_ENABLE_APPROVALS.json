@@ -2,6 +2,32 @@
   "schema": "v39.phase6.source-enable-approval-ledger.v1",
   "phaseGate": "Phase 6 (separate authorization)",
   "scope": "C_D_GITHUB_SOURCE_PRE_POST_EXISTING_CALENDAR_NO_LEGACY_ALERT_START",
-  "evidence": [],
+  "evidence": [
+    {
+      "evidenceId": "RUN-20261116-OWNERREVIEW112557",
+      "path": "data-collection/phase5/evidence/2026-11-16_actual_owner_review_timezone_success.json",
+      "sha256": "22a74bc311ef978f80d2d48df45f85f12e4cce913323dd928c37695f7b79141d"
+    },
+    {
+      "evidenceId": "RUN-20261116-PREARMCLOCK43832469501",
+      "path": "data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json",
+      "sha256": "765983f453da2470c9847fc50ece1150e37bffcd2d2dfc79b7977d256eceb7f6"
+    },
+    {
+      "evidenceId": "RUN-20261116-QUOTA091844",
+      "path": "data-collection/phase5/evidence/2026-11-16_owner_actual_free_quota_59968.json",
+      "sha256": "7c0a0a1f70cf7a7822249a263ae88c61c7ad2f45a9be4d35589419978bdc1fa8"
+    },
+    {
+      "evidenceId": "RUN-20261116-BTSOVERLAP14198898471",
+      "path": "data-collection/phase5/evidence/2026-11-16_bts_first_seed_reference_overlap_14198898471.json",
+      "sha256": "6dd4706e0cd105255fc7f6cb15993bc5fd70fa31b43ee8d3dd1badd88cd59ab8"
+    },
+    {
+      "evidenceId": "RUN-20261116-SOURCEGAPSENSITIVITY",
+      "path": "data-collection/phase5/evidence/2026-11-16_actual_first_seed_source_gap_sensitivity.json",
+      "sha256": "976a19fd07d618e27586d6c71b663118f3e26013b3b43a4c4c575d914086d2f2"
+    }
+  ],
   "approvals": []
 }
