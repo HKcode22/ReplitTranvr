@@ -23,8 +23,8 @@ const proof={status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",providerCalls:0,objec
  separateStorageReadRequests:true,independentStorageIamVerified:false,backupRetentionVerified:false,phase6PaidGo:false,
  databaseWrites:0,objectDeletions:0};
 const headers={authorization:"Bearer "+token,"x-p5-expiry-reviewed-sha":sha,"x-p5-expiry-mode":"VERIFY_ONLY"};
-async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[1],fn:(url:string)=>Promise<void>){
- const app=express(),handler=createP5ExpiryReceiverHandler(base,run);
+async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[1],fn:(url:string)=>Promise<void>,env:NodeJS.ProcessEnv=base){
+ const app=express(),handler=createP5ExpiryReceiverHandler(env,run);
  if(!handler)throw Error("test handler absent");
  app.post(P5_EXPIRY_RECEIVER_PATH,handler);
  const server=app.listen(0,"127.0.0.1");
@@ -72,6 +72,39 @@ describe("opt-in published expiry transport",()=>{
   });
   await withServer(async()=>({...proof,providerCalls:1}),async url=>{
    expect((await fetch(url,{method:"POST",headers})).status).toBe(503);
+  });
+ });
+ it("fixed apply mode returns only checked aggregate counts and explicitly reports bounded backlog",async()=>{
+  const env={...base,P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY",P5_RECURRING_EXPIRY_APPROVAL:"APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER"};
+  const h={...headers,"x-p5-expiry-mode":"APPLY_DUE_ONLY"};
+  const counts={selectedCount:2,verifiedNowCount:1,alreadyVerifiedCount:0,independentlyReadBackCount:1,
+   recoveredReadbackCount:0,remainingAtCutoff:1,remainingUnwitnessedMarkersAtCutoff:0};
+  const result={...proof,status:"BACKLOG_REMAINS_AT_CUTOFF",declaredExpiryOnly:true,...counts,internalObjectName:"fictional-sensitive"};
+  await withServer(async()=>result,async url=>{
+   expect((await fetch(url,{method:"POST",headers})).status).toBe(400);
+   const response=await fetch(url,{method:"POST",headers:h});
+   expect(response.status).toBe(200);
+   const body=await response.json();
+   expect(body).toMatchObject({status:"BACKLOG_REMAINS_AT_CUTOFF",mode:"APPLY_DUE_ONLY",...counts});
+   expect(body).not.toHaveProperty("internalObjectName");
+  },env);
+  await withServer(async()=>({...result,status:"DUE_AT_CUTOFF_CLEARED"}),async url=>{
+   expect((await fetch(url,{method:"POST",headers:h})).status).toBe(503);
+  },env);
+ });
+ it("does not begin a second worker while a request is in progress",async()=>{
+  let complete:()=>void=()=>{},entered:()=>void=()=>{};
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  const run=vi.fn(async()=>{entered();await new Promise<void>(resolve=>{complete=resolve;});return proof;});
+  await withServer(run,async url=>{
+   const first=fetch(url,{method:"POST",headers});
+   await started;
+   try{
+    const second=await fetch(url,{method:"POST",headers});
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({status:"EXPIRY_RECEIVER_BUSY_NO_NEW_WORK"});
+    expect(run).toHaveBeenCalledTimes(1);
+   }finally{complete();await first;}
   });
  });
  it("under the real worker's advisory-lock path, unattended apply stops before mutations at unresolved deletion incident",async()=>{
