@@ -9,6 +9,8 @@ on:
       - 'tests/phase5_expiry_v4_apply_handoff_owner_v39.test.mjs'
       - 'tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs'
       - 'tests/phase5_expiry_receiver_verify_once_v39.test.mjs'
+      - 'scripts/v39_phase5_expiry_apply_receipt_readonly_v39.mjs'
+      - 'tests/phase5_expiry_apply_receipt_readonly_v39.test.mjs'
       - 'scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs'
       - 'tests/phase5_expiry_receiver_apply_once_v39.test.mjs'
       - 'server/lib/disruption/phase5ExpiryReceiverTransport_v39.ts'
@@ -83,6 +85,8 @@ jobs:
           set -Eeuo pipefail
           node --check scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
           node --check scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs
+          node --check scripts/v39_phase5_expiry_apply_receipt_readonly_v39.mjs
+          node --test tests/phase5_expiry_apply_receipt_readonly_v39.test.mjs
           node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs tests/phase5_expiry_v4_apply_handoff_owner_v39.test.mjs
           npx vitest run tests/phase5_expiry_receiver_transport_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts tests/phase5_expiry_sealed_handoff_v39.test.ts tests/phase5_expiry_sealed_crypto_v39.test.ts
   actual-verify-only:
