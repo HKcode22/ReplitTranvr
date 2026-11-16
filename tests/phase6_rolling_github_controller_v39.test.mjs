@@ -191,3 +191,79 @@ test("active same-head run cannot conceal earlier failed or drifted attempt",()=
   const p=planP6RollingTick(x,context);assert.equal(p.assessments[0].state,"HOLD_UNSUCCESSFUL_OR_DRIFTED_ATTEMPT");assert.equal(p.due.length,0);
  }
 });
+
+
+function retirementFixture({olderGated=false,changed=false,activeOlder=false,recentEarly=false,lateMissing=false}={}){
+ const r=P6_ROLLING_ROUTES[0],early=P6_ROLLING_ROUTES.find(x=>x.lane==="EARLY_DRAW");
+ const old=row(r,{id:800,created_at:new Date(clock-50*60000).toISOString()});
+ const skipped=row(r,{id:801,event:"schedule",conclusion:"skipped",created_at:new Date(clock-45*60000).toISOString()});
+ const newer=row(r,{id:802,created_at:new Date(clock-2*60000).toISOString()});
+ const ed=row(early,{id:803,created_at:new Date(clock-55*60000).toISOString()});
+ const active=row(r,{id:804,status:"queued",conclusion:null,created_at:new Date(epoch-60000).toISOString()});
+ const late=row(r,{id:805,created_at:new Date(clock-42*60000).toISOString()});
+ const calls=[];
+ function withIdentity(xs,run){
+  return xs.map((j,i)=>({...j,id:run.id*10+i+1,run_id:run.id,head_sha:sha,run_attempt:1}));
+ }
+ const fetcher=async(url,opt)=>{
+  assert.equal(opt.method,"GET");calls.push(url);const u=new URL(url);
+  let items=[],key="workflow_runs";
+  const m=u.pathname.match(/\/runs\/(\d+)\/jobs$/);
+  if(m){
+   key="jobs";
+   switch(+m[1]){
+    case 800:items=withIdentity(jobs(r),old);if(olderGated)items[0].conclusion="skipped";
+     if(changed)items[0].steps=markers("MISSING_EVIDENCE");break;
+    case 801:items=withIdentity([{name:"inert",status:"completed",conclusion:"skipped",steps:[]}],skipped);break;
+    case 802:items=withIdentity(jobs(r),newer);break;
+    case 803:items=withIdentity(jobs(early),ed);break;
+    case 805:items=withIdentity(jobs(r),late);break;
+    default:assert.fail("unexpected job read");
+   }
+  }else if(u.searchParams.get("status")==="queued"&&activeOlder)items=[active];
+  else if(u.pathname.includes("/workflows/"+r.workflow+"/runs")){
+   if(u.searchParams.get("event")==="schedule")items=[skipped];
+   if(u.searchParams.get("event")==="workflow_dispatch")items=[old,newer,...(lateMissing?[late]:[])];
+  }else if(recentEarly&&u.pathname.includes("/workflows/"+early.workflow+"/runs")&&
+   u.searchParams.get("event")==="workflow_dispatch")items=[ed];
+  return {ok:true,json:async()=>({total_count:items.length,[key]:items})};
+ };
+ return {calls,fetcher};
+}
+const retireConfig=f=>({sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,fetcher:f.fetcher});
+test("bounded retirement re-reads every removed run and independently matches the exact predecessor prefix",async()=>{
+ const first=retirementFixture(),before=await readP6RollingGithubSnapshot(retireConfig(first));
+ const p=await before.reviewHistoryRetirement();
+ assert.equal(p.status,"REVIEWED_RETIREMENT_CANDIDATE_NO_GO");
+ assert.equal(p.proposedEpochUtc,new Date(clock-600000).toISOString());
+ assert.equal(p.retiredRunCount,2);assert.equal(p.laneCounts[0].inertCount,1);
+ assert.equal(p.phase6PaidGo,false);assert.equal(p.requiresIndependentSuccessorReadback,true);
+ assert(first.calls.some(x=>x.includes("/runs/800/jobs")));
+ assert.equal(first.calls.filter(x=>x.includes("/runs/801/jobs")).length,2);
+ const second=retirementFixture(),after=await readP6RollingGithubSnapshot(retireConfig(second));
+ const verified=await after.reviewHistoryRetirement({previousReceipt:JSON.parse(JSON.stringify(p))});
+ assert.equal(verified.status,"INDEPENDENT_RETIREMENT_PREFIX_MATCH_NO_GO");
+ assert.equal(verified.retiredHistorySha256,p.retiredHistorySha256);
+ assert.equal(verified.requiresIndependentSuccessorReadback,false);
+ await assert.rejects(after.reviewHistoryRetirement(),/RETIREMENT_ALREADY_REVIEWED/);
+});
+test("a green older run with a gated required job cannot be retired behind newer success",async()=>{
+ const f=retirementFixture({olderGated:true}),o=await readP6RollingGithubSnapshot(retireConfig(f));
+ assert.equal(o.plan.status,"REVIEWED_ROLLING_WAVE_PLAN_NO_GO");
+ await assert.rejects(o.reviewHistoryRetirement(),/RETIREMENT_REQUIRED_JOB_HOLD/);
+});
+test("late-visible run or changed outcome blocks independent successor prefix confirmation",async()=>{
+ const f=retirementFixture(),o=await readP6RollingGithubSnapshot(retireConfig(f));
+ const p=await o.reviewHistoryRetirement();
+ for(const opts of [{changed:true},{lateMissing:true}]){
+  const n=await readP6RollingGithubSnapshot(retireConfig(retirementFixture(opts)));
+  await assert.rejects(n.reviewHistoryRetirement({previousReceipt:p}),/RETIREMENT_PREFIX_CHANGED/);
+ }
+});
+test("older active custody prevents retirement; four-hour early draw cooldown is retained",async()=>{
+ const a=await readP6RollingGithubSnapshot(retireConfig(retirementFixture({activeOlder:true})));
+ assert.equal((await a.reviewHistoryRetirement()).status,"RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH");
+ const b=await readP6RollingGithubSnapshot(retireConfig(retirementFixture({recentEarly:true})));
+ const p=await b.reviewHistoryRetirement();
+ assert.equal(p.proposedEpochUtc,new Date(clock-55*60000).toISOString());assert.equal(p.retiredRunCount,0);
+});

@@ -3,6 +3,7 @@
  * Not a release authority: individual workflows still verify signed policy,
  * actual DB clock, rights, STOP, and budget. No live entrypoint in this PR.
  */
+import {createHash} from "node:crypto";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const CODE=/^[a-f0-9]{40}$/;
 const ACTIVE=new Set(["queued","in_progress","waiting","requested","pending"]);
@@ -309,5 +310,131 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   for(const row of runs.filter(x=>ACTIVE.has(x.status)))active.set(row.id,row);
   return {workflow:route.workflow,complete:true,runs,active:[...active.values()],...await jobsFor(route,runs)};
  }
- return {plan,recheckRoute,context};
+ // Review a bounded prefix that a future separately admitted successor may
+ // retire from its working GitHub history. This method NEVER admits a
+ // dispatch, forgets an ACK, resolves a DB task, or advances an epoch itself.
+ // A successor must independently reproduce the predecessor's exact prefix
+ // from the OLD epoch before it can consider adopting the proposed cut.
+ let retirementUsed=false;
+ async function reviewHistoryRetirement({previousReceipt}={}){
+  if(retirementUsed)hold("RETIREMENT_ALREADY_REVIEWED");
+  retirementUsed=true;
+  const overlap=600000,limit=64,receiptSchema="v39.phase6.rolling-history-retirement.v1";
+  if(plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO"||
+     now()<context.clock||now()-context.clock>120000)
+   hold("RETIREMENT_HISTORY_HOLD");
+  const families=[],all=[],ids=new Set();
+  // Keep recent cooldown evidence, all active rows, and an overlap
+  // against delayed GitHub listing visibility. Never move past an old
+  // outstanding active run just because it disappeared from new history.
+  let safeCut=Math.max(epoch,Math.floor((context.clock-overlap)/1000)*1000);
+  for(let i=0;i<P6_ROLLING_ROUTES.length;i++){
+   const route=P6_ROLLING_ROUTES[i],snap=snapshots[i];
+   if(snap.workflow!==route.workflow||snap.complete!==true)hold("RETIREMENT_ROUTE_SCOPE");
+   const rows=snap.runs.map(exactRun);
+   const inert=new Set((snap.inertScheduleProofs??[]).map(p=>p.runId));
+   const latest=rows.filter(row=>!inert.has(row.id))
+    .sort((a,b)=>b.created-a.created||b.id-a.id)[0];
+   if(latest&&context.clock-latest.created<route.minutes*60000)
+    safeCut=Math.min(safeCut,Math.max(epoch,Math.floor(latest.created/1000)*1000));
+   for(const x of snap.active.map(exactRun)){
+    safeCut=Math.min(safeCut,Math.max(epoch,Math.floor(x.created/1000)*1000));
+   }
+   for(const row of rows){
+    if(ids.has(row.id))hold("RETIREMENT_DUPLICATE_RUN");
+    ids.add(row.id);all.push(row);
+   }
+   families.push({route,rows,inert});
+  }
+  const candidates=all.filter(row=>row.created<safeCut)
+   .sort((a,b)=>a.created-b.created||a.id-b.id);
+  // Shrink, rather than silently truncate the hash or erase tied rows.
+  if(candidates.length>limit)
+   safeCut=Math.min(safeCut,Math.max(epoch,Math.floor(candidates[limit].created/1000)*1000));
+  let cut=safeCut;
+  const iso=t=>new Date(t).toISOString();
+  if(previousReceipt!==undefined){
+   const p=previousReceipt;
+   if(!p||typeof p!=="object"||Array.isArray(p)||
+      p.schema!==receiptSchema||p.status!=="REVIEWED_RETIREMENT_CANDIDATE_NO_GO"||
+      p.reviewedMainSha!==sha||p.priorEpochUtc!==iso(epoch)||
+      p.phase6PaidGo!==false||p.dispatchCount!==0||p.providerCalls!==0||
+      p.databaseWrites!==0||p.databaseReads!==0||
+      p.requiresIndependentSuccessorReadback!==true||
+      !/^[a-f0-9]{64}$/.test(p.retiredHistorySha256??"")||
+      !Number.isSafeInteger(p.retiredRunCount)||p.retiredRunCount<0||p.retiredRunCount>limit)
+    hold("RETIREMENT_PREDECESSOR_RECEIPT");
+   const observed=instant(p.observedAtUtc),proposed=instant(p.proposedEpochUtc);
+   if(observed>context.clock||context.clock-observed>3600000||
+      proposed<=epoch||proposed>observed-overlap||proposed>safeCut||
+      new Date(proposed).toISOString()!==p.proposedEpochUtc)
+    hold("RETIREMENT_PREDECESSOR_CLOCK_OR_COOLDOWN");
+   cut=proposed;
+  }
+  if(cut<=epoch){
+   return Object.freeze({schema:receiptSchema,status:"RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH",
+    reviewedMainSha:sha,priorEpochUtc:iso(epoch),proposedEpochUtc:iso(epoch),
+    observedAtUtc:iso(context.clock),retiredRunCount:0,dispatchCount:0,
+    providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false});
+  }
+  const proof=[],laneCounts=[];
+  for(const {route,rows,inert} of families){
+   let retiredRunCount=0,inertCount=0,safeHoldCount=0,missingEvidenceCount=0;
+   for(const row of rows.filter(x=>x.created<cut).sort((a,b)=>a.created-b.created||a.id-b.id)){
+    if(now()<context.clock||now()-context.clock>120000||
+       row.head_sha!==sha||row.run_attempt!==1||row.status!=="completed"||
+       proof.length>=limit)hold("RETIREMENT_UNSAFE_PREFIX");
+    // Every removed successful run, not merely the latest, gets a fresh
+    // jobs read. Green older wrappers with skipped required jobs cannot
+    // disappear behind a more recent green run.
+    const jobs=await get("/actions/runs/"+row.id+"/jobs?filter=latest&per_page=100","jobs");
+    if(jobs.length<1||new Set(jobs.map(j=>j.id)).size!==jobs.length||
+       new Set(jobs.map(j=>j.name)).size!==jobs.length||
+       jobs.some(j=>!ACK_ID(j.id)||j.run_id!==row.id||j.run_attempt!==1||
+        j.head_sha!==sha||typeof j.name!=="string"||j.status!=="completed"||
+        typeof j.conclusion!=="string"||!Array.isArray(j.steps)))
+     hold("RETIREMENT_JOB_IDENTITY");
+    let disposition="ACTUAL_REQUIRED_JOBS_TERMINAL";
+    if(inert.has(row.id)){
+     if(!isSkippedSchedule(row,sha)||!exactSkippedJobs(row,jobs))
+      hold("RETIREMENT_INERT_PROOF_DRIFT");
+     disposition="INDEPENDENTLY_INERT_SCHEDULE";inertCount++;
+    }else{
+     const assessment=assessP6RollingRoute(route,{workflow:route.workflow,complete:true,
+      runs:[row],active:[],jobRunId:row.id,jobs},{sha,epoch,clock:context.clock});
+     if(assessment.state.startsWith("HOLD_")||assessment.state==="ACTIVE_NO_OVERLAP")
+      hold("RETIREMENT_REQUIRED_JOB_HOLD");
+     const ps=route.jobs.filter(j=>j.parentOutcome).map(j=>
+      readP6ParentOutcomeSteps(jobs.find(x=>x.name===j.name)?.steps));
+     if(ps.some(x=>x===null))hold("RETIREMENT_PARENT_OUTCOME_HOLD");
+     if(ps.includes("SAFE_PREFLIGHT_HOLD"))safeHoldCount++;
+     if(ps.includes("MISSING_EVIDENCE"))missingEvidenceCount++;
+     disposition=ps.length?ps.join("|"):disposition;
+    }
+    // Digest only narrow operational identity/evidence, no raw job
+    // payload, step output, source data, or provider contents.
+    proof.push({lane:route.lane,id:row.id,createdUtc:iso(row.created),event:row.event,
+     runAttempt:row.run_attempt,headSha:row.head_sha,conclusion:row.conclusion,disposition,
+     jobs:jobs.map(j=>({id:j.id,name:j.name,conclusion:j.conclusion,
+      requiredStepConclusions:route.jobs.filter(q=>q.name===j.name&&q.step)
+       .map(q=>j.steps.find(t=>t.name===q.step)?.conclusion??null)}))
+      .sort((a,b)=>a.id-b.id)});
+    retiredRunCount++;
+   }
+   laneCounts.push(Object.freeze({lane:route.lane,retiredRunCount,inertCount,safeHoldCount,missingEvidenceCount}));
+  }
+  if(now()<context.clock||now()-context.clock>120000)hold("RETIREMENT_READBACK_TOO_SLOW");
+  const digest=createHash("sha256").update(JSON.stringify(proof)).digest("hex");
+  if(previousReceipt&&(previousReceipt.retiredHistorySha256!==digest||
+     previousReceipt.retiredRunCount!==proof.length||
+     JSON.stringify(previousReceipt.laneCounts)!==JSON.stringify(laneCounts)))
+   hold("RETIREMENT_PREFIX_CHANGED_NO_REPLAY");
+  return Object.freeze({schema:receiptSchema,
+   status:previousReceipt?"INDEPENDENT_RETIREMENT_PREFIX_MATCH_NO_GO":"REVIEWED_RETIREMENT_CANDIDATE_NO_GO",
+   reviewedMainSha:sha,priorEpochUtc:iso(epoch),proposedEpochUtc:iso(cut),
+   observedAtUtc:iso(context.clock),retiredHistorySha256:digest,retiredRunCount:proof.length,
+   laneCounts:Object.freeze(laneCounts),requiresIndependentSuccessorReadback:!previousReceipt,
+   dispatchCount:0,providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false});
+ }
+ return {plan,recheckRoute,context,reviewHistoryRetirement};
 }
