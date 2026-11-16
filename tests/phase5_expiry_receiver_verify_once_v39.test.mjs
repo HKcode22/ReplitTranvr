@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {admitExpiryReceiverVerify,verifyExpiryReceiverOnce} from "../scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs";
+import {admitExpiryReceiverVerify,verifyExpiryReceiverOnce,buildP5ExpiryVerificationArtifact,checkP5ExpiryVerificationArtifact} from "../scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs";
 const sha="a".repeat(40),source="b".repeat(40),token="c".repeat(64);
 const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_EVENT_NAME:"workflow_dispatch",
  GITHUB_REF:"refs/heads/main",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:sha,P5_EXPIRY_RECEIVER_APPROVED_MAIN_SHA:sha,
@@ -58,4 +58,16 @@ test("unbounded body, wrong content type and redirect evidence refused before to
   await assert.rejects(verifyExpiryReceiverOnce({source,token},async()=>{calls++;return response;}),/HOLD_P5_EXPIRY_RECEIVER_VERIFY_/);
   assert.equal(calls,1);
  }
+});
+
+test("verified operational receipt bound to exact source, main and run, with no secret or false rights claims",async()=>{
+ let i=0;const result=await verifyExpiryReceiverOnce({source,token},async()=>json(++i===1?health:receipt));
+ const scope={source,mainSha:sha,runId:123,verifiedAtUtc:"2030-01-01T00:00:00.000Z"};
+ const artifact=buildP5ExpiryVerificationArtifact(result,scope);
+ assert.deepEqual(checkP5ExpiryVerificationArtifact(JSON.parse(JSON.stringify(artifact)),scope),artifact);
+ assert(!JSON.stringify(artifact).includes(token));
+ for(const changed of [{...artifact,runId:124},{...artifact,reviewedSourceSha:sha},
+  {...artifact,verification:{...artifact.verification,objectDeletions:1}},
+  {...artifact,verification:{...artifact.verification,verification:{...receipt,backupRetentionVerified:true}}}])
+   assert.throws(()=>checkP5ExpiryVerificationArtifact(changed,scope),/ARTIFACT/);
 });
