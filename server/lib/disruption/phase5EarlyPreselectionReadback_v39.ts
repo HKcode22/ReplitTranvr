@@ -12,7 +12,7 @@ import {
  P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS,
  p5EarlyDrawLeadTimeEligible
 } from "./phase5ProspectiveEarlyDrawClockContract_v39";
-import type { SamplingSelection, SlotId } from "./phase6SamplingDecision_v39";
+import { excludedFromProspectiveScheduledPassengerScope, type SamplingSelection, type SlotId } from "./phase6SamplingDecision_v39";
 
 const SLOTS: SlotId[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
 const ICAO = /^[A-Z]{4}$/;
@@ -82,6 +82,8 @@ export function verifyPreparedDailyDraw(
     const airport = norm(x.selected_icao);
     if (!ICAO.test(airport) || airports.has(airport))
       refuse("INVALID_OR_DUPLICATE_AIRPORT");
+    if (excludedFromProspectiveScheduledPassengerScope(airport))
+      refuse("SCHEDULED_PASSENGER_SCOPE_EXCLUDED_AIRPORT");
     airports.add(airport);
     const selectedAt = dateMs(x.selected_at_utc, "SELECTED");
     times.add(selectedAt);
@@ -135,6 +137,8 @@ export function verifyPreparedDailyDraw(
             typeof v.drawScore !== "number" ||
             !Number.isFinite(v.drawScore) || v.drawScore <= 0))
         refuse("INVALID_REGIONAL_PROBABILITY_VECTOR");
+      if (vec.some(v=>excludedFromProspectiveScheduledPassengerScope(v.icao as string)))
+        refuse("SCHEDULED_PASSENGER_SCOPE_EXCLUDED_VECTOR_AIRPORT");
       if (new Set(vec.map(v=>norm(v.icao as string))).size !== vec.length)
         refuse("DUPLICATE_REGIONAL_PROBABILITY_AIRPORT");
       const total = vec.reduce((n, v)=>n+Number(v.probability),0);
