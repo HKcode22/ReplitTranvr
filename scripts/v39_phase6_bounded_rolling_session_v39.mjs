@@ -1,5 +1,6 @@
 /** Initial bounded rolling runtime using the original worker workflows.
- * Direct provider calls and DB connections are forbidden in this controller.
+ * Direct provider calls and flight-data DB connections are forbidden.
+ * Optional restricted operational window custody is separately scoped.
  * It CAN cause separately approved paid children, so global release and
  * one exact protected session or separately approved two-session chain.
  */
@@ -13,6 +14,7 @@ import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRoll
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
+import {admitP6RuntimeWindowConfig,createP6RuntimeWindowCustody,exactP6RuntimeWindowReceipt,compareP6WindowCustody} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -106,11 +108,25 @@ function downloadReceipt({parent,name,token}){
  }catch{hold("CHAIN_RECEIPT_UNAVAILABLE");}
  finally{rmSync(dir,{recursive:true,force:true});}
 }
-export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt}={}){
+export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt,windowCustodyCheck}={}){
  const started=now(),a=admitP6RollingSession(env,started);
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
+ const windowConfig=admitP6RuntimeWindowConfig(env);
+ if(!windowConfig&&windowCustodyCheck!==undefined)hold("UNEXPECTED_WINDOW_CHECK");
+ const checkWindow=windowConfig?(windowCustodyCheck??createP6RuntimeWindowCustody(windowConfig)):null;
+ let windowCustody=null,previousCustody=null,verifiedRootId=null,rootClaimWrites=0;
+ async function guardWindow(kind){
+  if(!checkWindow)return;
+  if(!verifiedRootId)hold("WINDOW_ROOT_NOT_AUTHENTICATED");
+  const fresh=exactP6RuntimeWindowReceipt(await checkWindow({scope:a,rootId:verifiedRootId,kind,readPlan}),
+   {scope:a,rootId:verifiedRootId,policyCommitment,clock:now(),kind});
+  if(windowCustody)compareP6WindowCustody(windowCustody,fresh);
+  if(previousCustody)compareP6WindowCustody(previousCustody,fresh);
+  windowCustody=fresh;
+  if(kind==="CLAIM")rootClaimWrites=1;
+ }
  let ledger,prior=null,priorTerminalIds=new Set(),priorRetirement=null;
  // Keep origin/chain deadline immutable for protected root admission. Only
  // the working history epoch can move after authenticated independent proof.
@@ -158,9 +174,9 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      (a.chain&&row.display_title!==chainTitle(a.hop,a.parent))||
      (a.hop>0&&Date.parse(row.created_at)<a.sent-1000))
    hold("SESSION_ROOT_IDENTITY_DRIFT");
-  if(a.hop===0)return;
+  if(a.hop===0){verifiedRootId=a.id;return;}
   const parent=exact(h.workflow_runs.find(x=>x.id===a.parent),a.parent);
-  let predecessorParent=0;
+  let predecessorParent=0,foundRoot=a.parent;
   if(a.multi){
    // Earlier controller runs must form one exact linear chain.
    let previousId=0,previousClock=a.epoch;
@@ -172,6 +188,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
        (hop<a.hop-1&&(ancestor.status!=="completed"||ancestor.conclusion!=="success"))||
        (hop===a.hop-1&&ancestor.id!==a.parent)||(hop===a.hop&&ancestor.id!==a.id))
      hold("CHAIN_ANCESTOR_IDENTITY");
+    if(hop===0)foundRoot=ancestor.id;
     if(hop===a.hop-1)predecessorParent=previousId;
     previousId=ancestor.id;previousClock=createdAt;
    }
@@ -196,6 +213,8 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    if(actual.length!==1||actual[0].status!=="completed"||actual[0].conclusion!=="success")
     hold("CHAIN_PARENT_STEP");
   }
+  if(verifiedRootId!==null&&verifiedRootId!==foundRoot)hold("WINDOW_ROOT_DRIFT");
+  verifiedRootId=foundRoot;
   if(prior!==null)return;
   const name="p6-rolling-terminal-"+a.parent,art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
   if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
@@ -215,7 +234,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.chainDeadlineUtc!==new Date(a.chainDeadline).toISOString()||
      receipt.policyCommitment!==policyCommitment||receipt.successorDispatches!==1||
      receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||!Array.isArray(receipt.pendingAcknowledgements)||
-     receipt.providerCalls!==0||receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
+     receipt.providerCalls!==0||receipt.databaseWrites!==(checkWindow&&a.hop===1?1:0)||receipt.phase6PaidGo!==false||
      !Number.isSafeInteger(receipt.acknowledged)||receipt.acknowledged<0||receipt.acknowledged>P6_ROLLING_ACK_CAPACITY||
      !Number.isSafeInteger(receipt.verifiedTerminal)||receipt.verifiedTerminal<0||!Array.isArray(receipt.terminalAcknowledgements)||
      receipt.terminalAcknowledgements.length!==receipt.verifiedTerminal||
@@ -223,6 +242,11 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.verifiedTerminal+receipt.pending.length!==receipt.acknowledged||
      receipt.ackCapacityExhausted!==false||receipt.remainingDispatchCapacity!==P6_ROLLING_ACK_CAPACITY-receipt.acknowledged)
     hold("CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH");
+  if(checkWindow){
+   if(!receipt.windowCustody||receipt.windowCustody.rootRunId!==foundRoot||receipt.windowCustody.policyCommitment!==policyCommitment)
+    hold("WINDOW_PARENT_CUSTODY_MISSING");
+   previousCustody=receipt.windowCustody;
+  }else if(receipt.windowCustody!==undefined)hold("UNEXPECTED_WINDOW_PARENT_CUSTODY");
   if(a.multi&&(receipt.maxSessionHops!==a.maxHops||receipt.chainMode!=="PROTECTED_FOUR_SESSION_BOUND"))hold("CHAIN_MULTI_RECEIPT_SCOPE");
   const all=[...receipt.terminalAcknowledgements,...receipt.pendingAcknowledgements];
   if(new Set(all.map(x=>x?.runId)).size!==all.length||
@@ -264,6 +288,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   try{await uniqueRoot();break;}
   catch(e){if(e?.message!=="HOLD_P6_ROLLING_RUNTIME_CHAIN_PARENT_NOT_TERMINAL"||i>=5)throw e;await pause(5000);}
  }
+ await guardWindow(a.hop===0?"CLAIM":"READ");
  ledger=createP6SessionAckLedger({...a,epoch:historyEpoch,now,emit,priorAcknowledgements:prior??[]});
  if(a.hop>0){
   const inherited=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
@@ -335,6 +360,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   const deferredByCapacity=calendarPlan.due.length-narrowed.due.length;
   capacityDeferred+=deferredByCapacity;
   if(narrowed.due.length){
+   await guardWindow("READ");
    const dispatchDeadline=Math.min(a.deadline-12*MIN,now()+5*MIN);
    if(dispatchDeadline-now()<60000)break;
    const waveResult=await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
@@ -411,11 +437,13 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
     waves,calendarDeferred,capacityDeferred,requestBudgetDeferred,requestBudgetStop,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
     successorDispatches:0,nextRunId:null,...state,
+     ...(windowCustody?{windowCustody,databaseWrites:rootClaimWrites}:{}),
     ...(a.multi?{chainMode:"PROTECTED_FOUR_SESSION_BOUND",maxSessionHops:a.maxHops}:{}),
     ...(a.rollover?{historyRetirementMode:a.multi?"PROTECTED_FOUR_SESSION_BOUND":"PROTECTED_TWO_SESSION_REHEARSAL",historyEpochUtc:new Date(historyEpoch).toISOString(),
       ...(retirementCandidate?{historyRetirementCandidate:retirementCandidate}:{}),
       ...(retirementAudit?{historyRetirementAudit:retirementAudit}:{})}:{} )};
    if(!hasSuccessor||ackCapacityExhausted)return result;
+   await guardWindow("READ");
    const sent=now();
    // This single POST is to the same controller, not a collection route.
    // The successor can only start after the root publishes its exact ACK
