@@ -121,7 +121,7 @@ async function main(){
   const result=await executeP5RecurringExpiryRuntime({...runtime,writer,reader,stores:{writer:createRequiredProviderBlobStoreV39(),reader:createRequiredProviderBlobStoreV39()}});
   if(result.status!=="SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES")HOLD("POSTCOMMIT_VERIFY_ONLY");
   console.log(JSON.stringify({...result,status:"TWO_SCOPED_EXPIRY_LOGINS_COMMISSIONED_VERIFY_ONLY",roleCreates:2,privateConfigSavedOutsideRepo:true,
-   existingMonitorChanged:false,objectDeletions:0,providerCalls:0,schedulerEnabled:false,phase6PaidGo:false}));
+   databaseWrites:"ROLE_AND_ACL_CATALOG_ONLY",applicationDataWrites:0,existingMonitorChanged:false,objectDeletions:0,providerCalls:0,schedulerEnabled:false,phase6PaidGo:false}));
  }catch(e){
   const msg=e instanceof Error?e.message:"";
   console.error(roleCommit?"HOLD_P5_EXPIRY_COMMISSION_ROLES_COMMITTED_KEEP_PRIVATE_FILE_RECONCILE_NO_RETRY":
