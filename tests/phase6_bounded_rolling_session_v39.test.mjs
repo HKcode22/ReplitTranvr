@@ -456,7 +456,7 @@ test("combined fresh closing recovery plus journal/readback keeps exact worker a
 });
 
 async function actualShapedClosedWindow({multi=true,carryActive=false}={}){
- const f=setup({chain:multi,multi,carryActive}),receipts=new Map();
+ const f=setup({chain:multi,multi,carryActive,delayedRetention:multi}),receipts=new Map();
  if(!multi)f.root.display_title="Phase6 initial bounded rolling controller session (STOP default)";
  for(let hop=0;hop<(multi?4:1);hop++){
   const x=await runP6RollingSession(f.env,f.options);receipts.set(x.runId,x);
@@ -488,8 +488,9 @@ test("complete actual-shaped four-session window independently accounts for all 
  const {f,expected,adapter,receipts}=await actualShapedClosedWindow();
  const posts=f.calls.filter(x=>x.method==="POST").length;
  const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
- assert.equal(out.controllerRunIds.length,4);assert.equal(out.independentlyVerifiedWorkerJobs,f.runs.length);
- assert.equal(out.uniqueWorkerAcknowledgements,f.runs.length);assert(out.retiredWorkerAcknowledgements>0);
+ const dispatched=f.runs.filter(x=>x.id!==900); // preexisting active route is not this controller's ACK
+ assert.equal(out.controllerRunIds.length,4);assert.equal(out.independentlyVerifiedWorkerJobs,dispatched.length);
+ assert.equal(out.uniqueWorkerAcknowledgements,dispatched.length);assert(out.retiredWorkerAcknowledgements>0);
  assert.equal(out.terminalReceiptSha256,digest(Buffer.from(JSON.stringify([...receipts.values()].at(-1)))));
  assert.equal(out.permitClose,false);assert.equal(out.permitNewRoot,false);assert.equal(out.providerSettlementVerified,false);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
