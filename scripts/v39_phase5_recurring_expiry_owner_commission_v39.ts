@@ -4,13 +4,12 @@
  */
 import {Pool,type PoolClient} from "pg";
 import {randomBytes} from "node:crypto";
-import {TLSSocket,checkServerIdentity} from "node:tls";
 import {execFileSync} from "node:child_process";
 import {homedir} from "node:os";
 import {resolve,relative,isAbsolute,join} from "node:path";
 import {realpathSync,mkdirSync,openSync,writeFileSync,fsyncSync,closeSync} from "node:fs";
 import {pathToFileURL} from "node:url";
-import {admitP5ExpiryOwnerInventory,P5_EXPIRY_ACTORS} from "./v39_phase5_recurring_expiry_owner_inventory_v39";
+import {admitP5ExpiryOwnerInventory,P5_EXPIRY_ACTORS,ownerInventoryClientTls} from "./v39_phase5_recurring_expiry_owner_inventory_v39";
 import {p5RecurringExpiryGrants,admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime} from "./v39_phase5_recurring_blob_expiry_runtime_v39";
 import {createRequiredProviderBlobStoreV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 const HOLD=(s:string):never=>{throw Error("HOLD_P5_EXPIRY_COMMISSION_"+s);};
@@ -26,12 +25,6 @@ export function admitP5ExpiryCommission(env:NodeJS.ProcessEnv,sha:string,remote:
   HOLD("ACTUAL_REVIEWED_ENDPOINT_BUCKET_APPROVAL_REQUIRED");
  const url=new URL(cfg.url);url.searchParams.set("sslmode","verify-full");
  return {...cfg,url:url.toString(),hostname:url.hostname};
-}
-function actualOwnerTls(c:PoolClient,hostname:string){
- const s=(c as unknown as {connection?:{stream?:unknown}}).connection?.stream;
- if(!(s instanceof TLSSocket)||s.authorized!==true||s.encrypted!==true||
-    !["TLSv1.2","TLSv1.3"].includes(s.getProtocol()??"")||
-    checkServerIdentity(hostname,s.getPeerCertificate())!==undefined)HOLD("OWNER_CLIENT_TLS");
 }
 /** New roles only, in one transaction; callback persists private credentials
  * before either CREATE ROLE. No rollback/drop automation on unknown COMMIT.
@@ -81,8 +74,8 @@ function outside(parent:string,path:string){
  const rel=relative(parent,path);
  return rel===".."||rel.startsWith(".."+"/")||isAbsolute(rel);
 }
-function privateFile(env:Record<string,string>,repoRoot:string,commonDir:string){
- const dir=join(realpathSync(homedir()),".travnr-phase5-expiry");
+export function persistP5ExpiryPrivateConfig(env:Record<string,string>,repoRoot:string,commonDir:string,home=homedir()){
+ const dir=join(realpathSync(home),".travnr-phase5-expiry");
  if(!outside(realpathSync(repoRoot),dir)||!outside(realpathSync(resolve(commonDir,"..")),dir))
   HOLD("PRIVATE_FILE_OUTSIDE_WORKSPACE_REQUIRED");
  // No overwrite or symlink reuse. fsync before SQL to preserve recovery
@@ -91,7 +84,7 @@ function privateFile(env:Record<string,string>,repoRoot:string,commonDir:string)
  const fd=openSync(join(dir,"runtime-private.json"),"wx",0o600);
  try{writeFileSync(fd,JSON.stringify(env));fsyncSync(fd);}finally{closeSync(fd);}
  const d=openSync(dir,"r");try{fsyncSync(d);}finally{closeSync(d);}
- const parent=openSync(realpathSync(homedir()),"r");try{fsyncSync(parent);}finally{closeSync(parent);}
+ const parent=openSync(realpathSync(home),"r");try{fsyncSync(parent);}finally{closeSync(parent);}
 }
 async function main(){
  let owner:Pool|undefined,c:PoolClient|undefined,writer:Pool|undefined,reader:Pool|undefined;
@@ -113,8 +106,8 @@ async function main(){
    P5_RECURRING_EXPIRY_READER_ROLE:P5_EXPIRY_ACTORS.reader,P5_RECURRING_EXPIRY_WRITER_URL:scoped("writer"),P5_RECURRING_EXPIRY_READER_URL:scoped("reader")};
   const runtime=admitP5RecurringExpiryRuntime(env,sha);
   owner=new Pool({connectionString:cfg.url,max:1,connectionTimeoutMillis:8000,query_timeout:15000});
-  c=await owner.connect();actualOwnerTls(c,cfg.hostname);
-  await commissionP5ExpiryActorPair(c,passwords,()=>privateFile(env,root,common));roleCommit=true;
+  c=await owner.connect();if(!ownerInventoryClientTls(c,cfg.hostname))HOLD("OWNER_CLIENT_TLS");
+  await commissionP5ExpiryActorPair(c,passwords,()=>persistP5ExpiryPrivateConfig(env,root,common));roleCommit=true;
   c.release();c=undefined;await owner.end();owner=undefined;
   writer=new Pool({connectionString:runtime.writerUrl,max:2,connectionTimeoutMillis:8000,query_timeout:15000});
   reader=new Pool({connectionString:runtime.readerUrl,max:1,connectionTimeoutMillis:8000,query_timeout:15000,options:"-c default_transaction_read_only=on"});
@@ -126,6 +119,7 @@ async function main(){
   const msg=e instanceof Error?e.message:"";
   console.error(roleCommit?"HOLD_P5_EXPIRY_COMMISSION_ROLES_COMMITTED_KEEP_PRIVATE_FILE_RECONCILE_NO_RETRY":
    /^HOLD_P5_EXPIRY_COMMISSION_[A-Z0-9_]+$/.test(msg)?msg:"HOLD_P5_EXPIRY_COMMISSION_REDACTED_KEEP_PRIVATE_FILE_NO_RETRY");
+  if(roleCommit&&/^HOLD_P5_RECURRING_EXPIRY_[A-Z0-9_]+$/.test(msg))console.error(msg);
   process.exitCode=2;
  }finally{c?.release();await owner?.end().catch(()=>{});await writer?.end().catch(()=>{});await reader?.end().catch(()=>{});}
 }

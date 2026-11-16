@@ -6,6 +6,7 @@ import {Pool,type PoolClient} from "pg";
 import {createHash,randomUUID} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
+import {TLSSocket,checkServerIdentity} from "node:tls";
 import {p5RecurringExpiryGrants,boundP5RecurringExpiryStorage} from "./v39_phase5_recurring_blob_expiry_runtime_v39";
 import {createRequiredProviderBlobStoreV39,normalizeProviderBlobBucketIdV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {providerBlobObjectNameV39} from "../server/lib/disruption/providerBlobStore_v39";
@@ -36,11 +37,40 @@ export function admitP5ExpiryOwnerInventory(env:NodeJS.ProcessEnv,sha:string,rem
   hold("DIRECT_ENDPOINT_DRIFT");
  if(env.V39_PROVIDER_BLOB_MODE!=="required"||!env.V39_PROVIDER_BLOB_BUCKET_ID)hold("EXISTING_DEDICATED_BUCKET");
  const bucket=normalizeProviderBlobBucketIdV39(env.V39_PROVIDER_BLOB_BUCKET_ID);
- return {url:direct.toString(),directEndpointAvailable:!direct.hostname.includes("-pooler"),
+ // Make the stricter current driver behavior explicit for future pg versions.
+ direct.searchParams.set("sslmode","verify-full");
+ return {url:direct.toString(),hostname:direct.hostname,directEndpointAvailable:!direct.hostname.includes("-pooler"),
   endpointSha256:createHash("sha256").update(direct.host.toLowerCase()+direct.pathname).digest("hex"),
   bucketSha256:createHash("sha256").update(bucket).digest("hex")};
 }
-export async function inventoryP5ExpiryActors(c:PoolClient,requireProductionOwner=true){
+/** pg_stat_ssl describes the database backend, not necessarily the external
+ * client-to-proxy connection. Require the actual authorized TLS socket and
+ * certificate hostname on this read-only Neon owner path. Never infer TLS
+ * from the hostname, URL, or a backend boolean alone. No mutation admission.
+ */
+export function ownerInventoryClientTls(c:PoolClient,hostname:string):boolean{
+ const stream=(c as unknown as {connection?:{stream?:unknown}}).connection?.stream;
+ if(!(stream instanceof TLSSocket)||stream.encrypted!==true||stream.authorized!==true||
+    !["TLSv1.2","TLSv1.3"].includes(stream.getProtocol()??""))return false;
+ const cert=stream.getPeerCertificate();
+ return !!cert&&Object.keys(cert).length>0&&checkServerIdentity(hostname,cert)===undefined;
+}
+export function ownerInventoryIdentityFailures(who:Record<string,unknown>|undefined,requireProductionOwner:boolean,clientTlsVerified:boolean){
+ if(!who)return ["CATALOG_ROW"];
+ const version=who.ver;
+ const tests:Record<string,boolean>={
+  DATABASE:who.db==="neondb",SESSION_ACTOR:typeof who.actor==="string"&&who.actor===who.login,
+  PG16:typeof version==="number"&&Number.isInteger(version)&&version>=160000&&version<170000,
+  PRIMARY:who.replica===false,READ_ONLY:who.ro==="on",CREATEROLE:who.rolcreaterole===true,
+  BACKEND_TLS_METADATA:typeof who.tls==="boolean"
+ };
+ if(requireProductionOwner){
+  tests.OWNER=who.actor==="neondb_owner";tests.NON_SUPERUSER=who.rolsuper===false;
+  tests.CLIENT_TLS=clientTlsVerified===true;
+ }
+ return Object.entries(tests).filter(([,ok])=>!ok).map(([name])=>name);
+}
+export async function inventoryP5ExpiryActors(c:PoolClient,requireProductionOwner=true,clientTlsVerified=false){
  let tx=false;
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
@@ -49,9 +79,9 @@ export async function inventoryP5ExpiryActors(c:PoolClient,requireProductionOwne
    "current_setting('server_version_num')::int ver,pg_is_in_recovery() replica,current_setting('transaction_read_only') ro,"+
    "r.rolcreaterole,r.rolsuper,coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),false) tls "+
    "FROM pg_roles r WHERE rolname=current_user")).rows[0];
-  if(!who||who.db!=="neondb"||who.actor!==who.login||who.ver<160000||who.ver>=170000||who.replica!==false||
-    who.ro!=="on"||who.rolcreaterole!==true||
-    requireProductionOwner&&(who.actor!=="neondb_owner"||who.rolsuper!==false||who.tls!==true))hold("OWNER_IDENTITY");
+  const failures=ownerInventoryIdentityFailures(who,requireProductionOwner,clientTlsVerified);
+  // Only fixed predicate identifiers: never print role/host/credential values.
+  if(failures.length)hold("OWNER_IDENTITY_"+failures.join("_"));
   const named=(await c.query("SELECT count(*)::int n FROM pg_roles WHERE rolname=ANY($1::text[])",[Object.values(P5_EXPIRY_ACTORS)])).rows[0]?.n;
   // Potential replacement actors, not proof of exact permissions. Names
   // and account details stay in PostgreSQL; only a count is emitted.
@@ -73,7 +103,8 @@ export async function inventoryP5ExpiryActors(c:PoolClient,requireProductionOwne
   if(![named,candidates,stats?.due,stats?.due_next_hour].every(x=>Number.isSafeInteger(x)&&x>=0))hold("SCHEMA_METADATA_SHAPE");
   await c.query("ROLLBACK");tx=false;
   return {namedActorsPresent:named,potentialReusableNarrowActors:candidates,due:stats.due,dueNextHour:stats.due_next_hour,
-   ownerVerified:true,expectedGrantStatements:p5RecurringExpiryGrants(P5_EXPIRY_ACTORS.writer,"writer").length+
+   ownerVerified:true,backendReportsTls:who.tls,clientTlsVerified:requireProductionOwner&&clientTlsVerified,
+   expectedGrantStatements:p5RecurringExpiryGrants(P5_EXPIRY_ACTORS.writer,"writer").length+
    p5RecurringExpiryGrants(P5_EXPIRY_ACTORS.reader,"reader").length};
  }finally{if(tx)await c.query("ROLLBACK").catch(()=>{});}
 }
@@ -88,7 +119,7 @@ async function main(){
   const cfg=admitP5ExpiryOwnerInventory(process.env,sha,remote);
   pool=new Pool({connectionString:cfg.url,max:1,connectionTimeoutMillis:8000,query_timeout:15000});
   client=await pool.connect();
-  const inventory=await inventoryP5ExpiryActors(client);
+  const inventory=await inventoryP5ExpiryActors(client,true,ownerInventoryClientTls(client,cfg.hostname));
   client.release();client=undefined;await pool.end();pool=undefined;
   const stores=boundP5RecurringExpiryStorage({writer:createRequiredProviderBlobStoreV39(),reader:createRequiredProviderBlobStoreV39()});
   const object=providerBlobObjectNameV39("raw_provider_content",randomUUID());

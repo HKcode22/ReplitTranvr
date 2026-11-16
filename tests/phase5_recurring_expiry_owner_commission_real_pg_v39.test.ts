@@ -1,6 +1,9 @@
 import {describe,it,expect} from "vitest";
 import {Pool,type PoolClient} from "pg";
-import {commissionP5ExpiryActorPair,admitP5ExpiryCommission} from "../scripts/v39_phase5_recurring_expiry_owner_commission_v39";
+import {mkdtempSync,mkdirSync,lstatSync,readFileSync,rmSync} from "node:fs";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
+import {commissionP5ExpiryActorPair,admitP5ExpiryCommission,persistP5ExpiryPrivateConfig} from "../scripts/v39_phase5_recurring_expiry_owner_commission_v39";
 import {P5_EXPIRY_ACTORS} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {verifyP5RecurringExpiryActor} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const url="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -45,5 +48,24 @@ suite("actual disposable PG16 atomic role pair",()=>{
    }
    c.release();await db.end();
   }
+ });
+});
+
+describe("private commissioning file custody",()=>{
+ it("writes one private file outside git and refuses overwrite or repo-local custody",()=>{
+  const home=mkdtempSync(join(tmpdir(),"p5-expiry-custody-"));
+  try{
+   const repo=join(home,"repo"),git=join(repo,".git");
+   mkdirSync(repo);mkdirSync(git);
+   const cfg={P5_RECURRING_EXPIRY_MODE:"VERIFY_ONLY",P5_RECURRING_EXPIRY_WRITER_URL:"CI_ONLY_NOT_A_SECRET"};
+   persistP5ExpiryPrivateConfig(cfg,repo,git,home);
+   const dir=join(home,".travnr-phase5-expiry"),file=join(dir,"runtime-private.json");
+   expect(lstatSync(dir).mode&0o077).toBe(0);
+   expect(lstatSync(file).mode&0o077).toBe(0);
+   expect(JSON.parse(readFileSync(file,"utf8"))).toEqual(cfg);
+   expect(()=>persistP5ExpiryPrivateConfig({other:"NO_OVERWRITE"},repo,git,home)).toThrow();
+   expect(JSON.parse(readFileSync(file,"utf8"))).toEqual(cfg);
+   expect(()=>persistP5ExpiryPrivateConfig(cfg,repo,git,repo)).toThrow("PRIVATE_FILE_OUTSIDE_WORKSPACE_REQUIRED");
+  }finally{rmSync(home,{recursive:true,force:true});}
  });
 });

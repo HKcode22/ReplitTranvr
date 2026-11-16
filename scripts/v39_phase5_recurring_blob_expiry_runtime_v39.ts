@@ -7,6 +7,7 @@ import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
 import {createHash,randomUUID} from "node:crypto";
 import {performance} from "node:perf_hooks";
+import {TLSSocket,checkServerIdentity} from "node:tls";
 import {runBoundedProviderBlobExpiryBatchV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {createRequiredProviderBlobStoreV39,normalizeProviderBlobBucketIdV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {providerBlobObjectNameV39,type ProviderBlobStoreV39} from "../server/lib/disruption/providerBlobStore_v39";
@@ -43,7 +44,9 @@ function parseConnection(value:string|undefined,role:string){
      !["require","verify-ca","verify-full"].includes(u.searchParams.get("sslmode")??"")||
      [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k)))
    HOLD("SCOPED_CONNECTION_REQUIRED");
-  return {url:value!,endpoint:u.host.toLowerCase()+u.pathname};
+  // Explicit certificate and hostname verification for every pool connection.
+  u.searchParams.set("sslmode","verify-full");
+  return {url:u.toString(),endpoint:u.host.toLowerCase()+u.pathname};
  }catch{HOLD("SCOPED_CONNECTION_REQUIRED");}
 }
 export function admitP5RecurringExpiryRuntime(env:NodeJS.ProcessEnv,sha:string){
@@ -97,6 +100,17 @@ export function p5RecurringExpiryGrants(role:string,actor:Actor):string[]{
   "GRANT USAGE ON SEQUENCE "+SEQS.join(",")+" TO "+role);
  return grants;
 }
+/** Verify the actual external application-to-Neon TLS socket, not the
+ * backend observation beyond the provider proxy. */
+export function scopedExpiryClientTlsVerified(client:PoolClient):boolean{
+ const c=client as unknown as {connection?:{stream?:unknown};connectionParameters?:{host?:unknown}};
+ const stream=c.connection?.stream,host=c.connectionParameters?.host;
+ if(typeof host!=="string"||!host||!(stream instanceof TLSSocket)||
+    stream.encrypted!==true||stream.authorized!==true||
+    !["TLSv1.2","TLSv1.3"].includes(stream.getProtocol()??""))return false;
+ const cert=stream.getPeerCertificate();
+ return !!cert&&Object.keys(cert).length>0&&checkServerIdentity(host,cert)===undefined;
+}
 /** Verify exact existing-schema privileges before any use of the object SDK.
  * TLS may be disabled only inside the separately gated disposable-PG test
  * invocation of this helper. Production CLI never disables it.
@@ -106,6 +120,7 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
  const client:PoolClient=await db.connect();
  let active=false;
  try{
+  if(requireTls&&!scopedExpiryClientTlsVerified(client))HOLD("ACTOR_CLIENT_TLS_UNVERIFIED");
   await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");active=true;
   await client.query("SET LOCAL statement_timeout='10000ms'");
   const identity=(await client.query(`SELECT current_database() AS db,current_user AS actor,session_user AS login_actor,
@@ -121,7 +136,7 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
   if(!identity||identity.db!=="neondb"||identity.actor!==role||identity.login_actor!==role||
      identity.version<160000||identity.version>=170000||identity.replica!==false||
      identity.tx_ro!=="on"||identity.default_ro!==(actor==="reader"?"on":"off")||
-     requireTls&&identity.tls!==true||identity.rolcanlogin!==true||
+     typeof identity.tls!=="boolean"||identity.rolcanlogin!==true||
      [identity.rolsuper,identity.rolcreatedb,identity.rolcreaterole,identity.rolreplication,identity.rolbypassrls,
       identity.rolinherit,identity.membership,identity.schema_create,identity.db_create].some(x=>x!==false)||
      identity.schema_usage!==true)HOLD("ACTOR_IDENTITY_OR_FLAGS");
