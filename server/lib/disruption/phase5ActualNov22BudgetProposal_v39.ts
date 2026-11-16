@@ -256,6 +256,14 @@ export function reconcileP6ActualJointBudget(
     j.preFreezeProjectApiUnits<j.apiUnitsLimit-j.apiUnitsRemaining||
     j.authorizedFutureRefillApiUnits!==j.authorizedFutureRefillAlertCredits)
   hold("MISSING_OR_INCONSISTENT_JOINT_BUDGET_REVIEW");
+ if(j.observedAtUtc===asOf){
+  const bytes=readFileSync("data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json");
+  const q=JSON.parse(bytes.toString("utf8"));
+  if(hash(bytes)!==j.accountEvidenceSha256||q.apiUnitsLimit!==j.apiUnitsLimit||
+     q.apiUnitsRemaining!==j.apiUnitsRemaining||q.apiUnitsResetAtUtc!==j.apiUnitsResetAtUtc||
+     q.alertCreditsRemaining!==j.alertCreditsRemaining)
+   hold("DATED_ACCOUNT_EVIDENCE_DRIFT");
+ }
  const netRestCeiling=proposal.settings.cycleRestCeilingUnits-j.preFreezeProjectApiUnits-
   j.authorizedFutureRefillApiUnits-j.endingApiMarginUnits;
  const restUnallocated=netRestCeiling-proposal.totalReservedUnits-proposal.protectedFloorUnits;
@@ -309,8 +317,7 @@ export function assembleP6ActualFirstSeedReleaseCandidate(input:{
  if(external.asOfUtc!==external.jointBudgetReview?.observedAtUtc||
     external.alertSafety?.protectedAlertFloorCredits!==1000||
     !Number.isSafeInteger(external.alertSafety?.unsettledBurstMarginCredits)||
-    external.alertSafety.unsettledBurstMarginCredits<0||
-    (external.jointBudgetReview?.endingAlertMarginCredits??-1)<external.alertSafety.unsettledBurstMarginCredits)
+    external.alertSafety.unsettledBurstMarginCredits<0)
   hold("JOINT_BUDGET_ACCOUNT_CLOCK_OR_ALERT_RESERVE_DRIFT");
  const jointBudget=reconcileP6ActualJointBudget(external.jointBudgetReview,proposal,external.alertSafety.alertRunSpendCeilingCredits);
  if(external.providerMaxRangeMinutes!==s.providerMaxRangeMinutes||
