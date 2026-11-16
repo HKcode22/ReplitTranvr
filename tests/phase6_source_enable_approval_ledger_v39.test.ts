@@ -24,7 +24,7 @@ const entry={authorizationId:record.authorizationId,artifactSha256:sha(authBytes
 const ledger={schema:P6_SOURCE_AUTH_LEDGER_SCHEMA,phaseGate:P6_SOURCE_AUTH_PHASE,
  scope:P6_SOURCE_AUTH_SCOPE,evidence:[{evidenceId:NEW,path,sha256:sha(evidence)}],approvals:[entry]};
 const read=(p:string)=>{if(p!==path)throw Error("UNEXPECTED_FIXTURE_PATH");return evidence;};
-const verify=(a=authBytes,l=bytes(ledger),h=history,r=read,t=now)=>verifyP6SourceEnableAuthBytes(a,l,h,r,t);
+const verify=(a:Buffer=authBytes,l:Buffer=bytes(ledger),h:Buffer=history,r:(p:string)=>Buffer=read,t:Date=now)=>verifyP6SourceEnableAuthBytes(a,l,h,r,t);
 
 describe("exact Phase6 source enable approval continuation, no provider or DB",()=>{
  it("accepts only a synthetic exact reviewed record with bound predecessor bytes",()=>{
