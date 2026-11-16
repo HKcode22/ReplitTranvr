@@ -1,6 +1,7 @@
-/** Owner-only staged V0102 reference bridge; never place an owner URL in
- * GitHub. No new login/runtime dispatch here. Future restricted adapter
- * must preserve this independently checked commit/readback boundary.
+/** Staged V0102 owner/reference and function-only runtime bridges.
+ * Never place an owner URL in GitHub. Restricted mode requires exact
+ * commissioned login, owner-reviewed DB policy binding and separate scope.
+ * No provider, workflow dispatch, production installation or closure here.
  */
 import {createHash} from "node:crypto";
 import {loadP6RollingCalendarHints} from "./phase6RollingCalendarHints_v39.mjs";
@@ -18,6 +19,9 @@ function exactScope(input){
    !H.test(input.configSha256??"")||!C.test(input.trust?.reviewedCodeSha??"")||
    !["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>H.test(input.trust?.[k]??""))||
    !H.test(input.expectedPolicySha256??"")||!Buffer.isBuffer(input.policyBytes))hold("REVIEWED_SCOPE");
+ const sessionLogin=input.expectedClaimantSessionLogin??null;
+ if(sessionLogin!==null&&(!/^phase6_rolling_claim_[a-z0-9_]{5,40}$/.test(sessionLogin)||
+   input.separateRestrictedWindowCustodyReviewApproved!==true))hold("RESTRICTED_REVIEW_SCOPE");
  const trust={reviewedCodeSha:input.trust.reviewedCodeSha,manifestSha256:input.trust.manifestSha256,
   calendarSha256:input.trust.calendarSha256,releaseSha256:input.trust.releaseSha256,rightsSha256:input.trust.rightsSha256};
  // Independently read/hash the exact existing signed 31-day plan policy.
@@ -27,18 +31,37 @@ function exactScope(input){
  if(calendar.from%1000||calendar.until%1000||calendar.until-calendar.from>1440*3600000)hold("POLICY_WINDOW_GEOMETRY");
  const commitment=hash(JSON.stringify({policySha256:input.expectedPolicySha256,...trust}));
  return {trust,calendar,commitment,rootRunId:input.rootRunId,authorizationId:input.authorizationId,
-  configSha256:input.configSha256,policySha256:input.expectedPolicySha256};
+  configSha256:input.configSha256,policySha256:input.expectedPolicySha256,sessionLogin};
 }
-async function identity(client,readOnly){
+async function identity(client,readOnly,scope){
  const q=await client.query(`SELECT current_database() db,current_user actor,session_user session_actor,
  current_setting('server_version_num')::int version,pg_is_in_recovery() replica,
  current_setting('transaction_read_only') ro,current_setting('transaction_isolation') isolation,
  pg_backend_pid() pid,clock_timestamp() db_clock`);
  const row=q.rows?.[0];
- if(q.rowCount!==1||row?.db!=="neondb"||row.actor!=="neondb_owner"||
+ if(q.rowCount!==1||row?.db!=="neondb"||row.actor!==(scope.sessionLogin??"neondb_owner")||
+   (scope.sessionLogin!==null&&row.session_actor!==scope.sessionLogin)||
    !Number.isSafeInteger(row.version)||Math.floor(row.version/10000)!==16||row.replica!==false||
    row.ro!==(readOnly?"on":"off")||row.isolation!=="read committed"||
    !Number.isSafeInteger(row.pid)||row.pid<1)hold("EXACT_OWNER_PG16_TRANSACTION");
+ if(scope.sessionLogin!==null){
+  const acl=await client.query(`SELECT
+   pg_has_role(current_user,'phase6_rolling_window_claimant_v39','USAGE') member_usage,
+   has_function_privilege(current_user,'clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)','EXECUTE') claim_ok,
+   has_function_privilege(current_user,'clean.phase6_read_bound_rolling_window_v39(bigint,text)','EXECUTE') read_ok,
+   has_schema_privilege(current_user,'clean','CREATE') schema_create,
+   has_table_privilege(current_user,'clean.phase6_rolling_window_custody_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') custody_access,
+   has_table_privilege(current_user,'clean.phase6_rolling_policy_binding_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') policy_access,
+   has_table_privilege(current_user,'clean.adb_phase6_authorization','SELECT,INSERT,UPDATE,DELETE,TRUNCATE') authorization_access,
+   has_function_privilege(current_user,'clean.phase6_close_rolling_window_v39(text,integer,bigint,bigint,text,text)','EXECUTE') close_access,
+   has_function_privilege(current_user,'clean.phase6_claim_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)','EXECUTE') owner_claim_access,
+   EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
+     AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls) login_scoped`);
+  const v=acl.rows?.[0];
+  if(acl.rowCount!==1||!["member_usage","claim_ok","read_ok","login_scoped"].every(k=>v?.[k]===true)||
+    !["schema_create","custody_access","policy_access","authorization_access","close_access","owner_claim_access"].every(k=>v?.[k]===false))
+   hold("RESTRICTED_ACL_DRIFT");
+ }
  return {...row,dbClock:clock(row.db_clock)};
 }
 function shape(row,a){
@@ -66,8 +89,9 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
  let claimIdentity,committed,attemptedCommit=false,opened=false;
  try{
   await claimClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE");opened=true;
-  claimIdentity=await identity(claimClient,false);
-  const p=a.trust,result=await claimClient.query(claimSql,[a.authorizationId,p.manifestSha256,p.calendarSha256,
+  claimIdentity=await identity(claimClient,false,a);
+  const p=a.trust,result=await claimClient.query(a.sessionLogin===null?claimSql:
+   claimSql.replace("clean.phase6_claim_rolling_window_v39","clean.phase6_claim_bound_rolling_window_v39"),[a.authorizationId,p.manifestSha256,p.calendarSha256,
    a.configSha256,p.reviewedCodeSha,a.policySha256,stamp(a.calendar.from),stamp(a.calendar.until),a.rootRunId]);
   if(result.rowCount!==1)hold("CLAIM_CARDINALITY");
   committed=shape(result.rows[0],a);
@@ -86,9 +110,11 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
  let seen,readOpen=false;
  try{
   await readbackClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");readOpen=true;
-  const ident=await identity(readbackClient,true);
+  const ident=await identity(readbackClient,true,a);
   if(ident.pid===claimIdentity.pid||ident.session_actor!==claimIdentity.session_actor)hold("NOT_INDEPENDENT_CONNECTION");
-  const q=await readbackClient.query(readSql,[a.rootRunId,a.trust.manifestSha256]);
+  const q=await readbackClient.query(a.sessionLogin===null?readSql:
+   readSql.replace("clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2","clean.phase6_read_bound_rolling_window_v39($1,$2)"),
+   [a.rootRunId,a.trust.manifestSha256]);
   if(q.rowCount!==1)hold("READBACK_CARDINALITY");
   const row=q.rows[0];seen=shape(row,a);
   if(JSON.stringify(seen)!==JSON.stringify(committed)||row.closed_at_utc!==null||
@@ -106,5 +132,5 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
  return {status:"DURABLE_WINDOW_CLAIM_COMMITTED_AND_INDEPENDENTLY_READ_BACK_NOT_DISPATCH_AUTHORITY",
   rootRunId:a.rootRunId,windowIndex:seen.index,windowStartUtc:seen.startUtc,windowEndUtc:seen.endUtc,claimedAtUtc:seen.claimedUtc,
   reviewedMainSha:a.trust.reviewedCodeSha,policyCommitment:a.commitment,actualDbClock:true,independentConnection:true,
-  providerCalls:0,flightWrites:0,operationalCustodyWrites:1,dispatchCount:0,permitDispatch:false,phase6PaidGo:false};
+  restrictedFunctionOnly:a.sessionLogin!==null,providerCalls:0,flightWrites:0,operationalCustodyWrites:1,dispatchCount:0,permitDispatch:false,phase6PaidGo:false};
 }
