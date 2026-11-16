@@ -13,6 +13,8 @@ on:
       - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
       - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
       - 'scripts/v39_phase5_recurring_expiry_owner_inventory_v39.ts'
+      - 'scripts/v39_phase5_recurring_expiry_owner_commission_v39.ts'
+      - 'tests/phase5_recurring_expiry_owner_commission_real_pg_v39.test.ts'
       - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
       - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
   push:
@@ -94,4 +96,5 @@ jobs:
         run: |
           set -Eeuo pipefail
           npx vitest run tests/phase5_day_source_quality_real_pg_v39.test.ts tests/phase5_provider_blob_expiry_real_pg_v39.test.ts
+          npx vitest run tests/phase5_recurring_expiry_owner_commission_real_pg_v39.test.ts
           echo 'P5_DAILY_PRE_LINEAGE_REAL_PG16_PASS=1 PROVIDER_CALLS=0 PRODUCTION_DB_WRITES=0 PHASE6_GO=0'
