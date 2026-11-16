@@ -41,6 +41,8 @@ on:
       - 'server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs'
       - 'server/lib/disruption/phase6RollingChildCustody_v39.mjs'
       - 'tests/phase6_rolling_child_custody_v39.test.mjs'
+      - 'tests/phase6_rolling_rest_settlement_readback_v39.test.mjs'
+      - 'server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs'
       - 'tests/phase6_rolling_window_terminal_readback_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs'
       - 'tests/phase6_rolling_failure_readback_v39.test.mjs'
@@ -89,7 +91,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY$DATABASE_URL$RAPIDAPI_KEY$GITHUB_TOKEN"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs tests/phase6_rolling_github_preview_v39.test.mjs tests/phase6_rolling_failure_readback_v39.test.mjs tests/phase6_rolling_window_terminal_readback_v39.test.mjs tests/phase6_rolling_child_custody_v39.test.mjs
+          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs tests/phase6_rolling_github_preview_v39.test.mjs tests/phase6_rolling_failure_readback_v39.test.mjs tests/phase6_rolling_window_terminal_readback_v39.test.mjs tests/phase6_rolling_child_custody_v39.test.mjs tests/phase6_rolling_rest_settlement_readback_v39.test.mjs
           echo 'GH_AUTO_HEARTBEAT_OFFLINE_PASS_NO_PROVIDER_NO_DB_NO_PAID'
 
   actual-main-nonpaid-controller-heartbeat:
