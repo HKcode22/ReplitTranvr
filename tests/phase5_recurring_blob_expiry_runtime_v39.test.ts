@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
-import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
+import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime,boundP5RecurringExpiryStorage} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const sha="a".repeat(40),base={
  P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
  V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-synthetic",P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-synthetic",
@@ -34,6 +34,23 @@ describe("fixed recurring Replit expiry runtime admission",()=>{
    reader:{exists:async()=>{calls.push("reader.exists");return false;}}}});
   expect(calls).toEqual(["expiry_writer","expiry_reader","writer.exists","reader.exists"]);
   expect(result).toMatchObject({status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",databaseWrites:0,objectDeletions:0,independentStorageIamVerified:false,backupRetentionVerified:false});
+ });
+ it("a timed-out SDK call poisons both adapters without pretending to cancel the remote operation",async()=>{
+  let attempted=0;
+  let finish:(v:boolean)=>void=()=>{};
+  const guarded=boundP5RecurringExpiryStorage({writer:{exists:async()=>{attempted++;return new Promise<boolean>(r=>{finish=r;});},
+   delete:async()=>{attempted++;}},reader:{exists:async()=>{attempted++;return false;}}},10);
+  await expect(guarded.writer.exists("synthetic")).rejects.toThrow("STORAGE_OUTCOME_UNKNOWN_NO_RETRY");
+  await expect(guarded.writer.delete("synthetic")).rejects.toThrow("STORAGE_INVOCATION_POISONED");
+  await expect(guarded.reader.exists("synthetic")).rejects.toThrow("STORAGE_INVOCATION_POISONED");
+  finish(true);
+  expect(attempted).toBe(1);
+ });
+ it("refuses nonboolean presence rather than falsely certifying absence",async()=>{
+  const guarded=boundP5RecurringExpiryStorage({writer:{exists:async()=>undefined as any,delete:async()=>{}},
+   reader:{exists:async()=>false}});
+  await expect(guarded.writer.exists("synthetic")).rejects.toThrow("STORAGE_PRESENCE_UNKNOWN");
+  await expect(guarded.reader.exists("synthetic")).rejects.toThrow("STORAGE_INVOCATION_POISONED");
  });
  it("a readback ACL failure prevents any storage request",async()=>{
   const forbidden=async()=>{throw Error("FORBIDDEN_STORAGE_OR_SQL");};
