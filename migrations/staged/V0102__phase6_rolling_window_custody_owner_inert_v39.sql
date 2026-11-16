@@ -36,7 +36,7 @@ CREATE TABLE clean.phase6_rolling_window_custody_v39 (
  independent_review_sha256 text CHECK (independent_review_sha256 ~ '^[a-f0-9]{64}$'),
  PRIMARY KEY(manifest_sha256,window_index),
  CHECK (isfinite(policy_from_utc) AND isfinite(policy_until_utc) AND
-   policy_until_utc>policy_from_utc AND policy_until_utc-policy_from_utc<=interval '60 days'),
+   policy_until_utc>policy_from_utc AND policy_until_utc-policy_from_utc<=interval '1440 hours'),
  CHECK (window_start_utc=policy_from_utc+window_index*interval '2 hours' AND
    window_end_utc=least(policy_until_utc,window_start_utc+interval '2 hours') AND
    claimed_at_utc>=window_start_utc AND claimed_at_utc<=window_end_utc-interval '15 minutes'),
@@ -68,7 +68,7 @@ BEGIN
  OR p_policy IS NULL OR p_policy !~ '^[a-f0-9]{64}$'
  OR p_from IS NULL OR p_until IS NULL OR NOT isfinite(p_from) OR NOT isfinite(p_until)
  OR date_trunc('second',p_from)<>p_from OR date_trunc('second',p_until)<>p_until
- OR p_until<=p_from OR p_until-p_from>interval '60 days'
+ OR p_until<=p_from OR p_until-p_from>interval '1440 hours'
  OR p_root IS NULL OR p_root NOT BETWEEN 1 AND 999999999999999
  THEN RAISE EXCEPTION 'P6_V0102_BAD_WINDOW_SCOPE'; END IF;
  PERFORM pg_advisory_xact_lock(392602,102);
