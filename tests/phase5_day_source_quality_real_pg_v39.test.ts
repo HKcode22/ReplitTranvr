@@ -1,3 +1,4 @@
+import {P6_SOURCE_RESERVATION_SQL} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 /**
  * Phase5 daily PRE denominator regression against authentic disposable
  * B0062 + staged V0079 PostgreSQL16. All bodies/IDs synthetic CI fixtures;
@@ -178,6 +179,9 @@ suite("Phase5 authentic PG16 PRE quality / exact bound original flight lineage",
   expect(meta).toEqual({hash_cleared:true,expired:true});
   const members=(await db.query("SELECT COUNT(*)::int n FROM clean.flight_population WHERE population_query_id=$1",[pid])).rows[0].n;
   expect(members).toBe(0);
+  const settlement=(await db.query(P6_SOURCE_RESERVATION_SQL,[manifest,["42360764143"]])).rows;
+  expect(settlement).toHaveLength(1);
+  expect(settlement[0]).toMatchObject({units:2,original_state:"EXPIRED_SOURCE_BINDING_METADATA_ONLY"});
   const audit=await auditPhase5SourceDay(db,manifest,1);
   expect(audit.sourceQueryGroups[0]).toMatchObject({boundOriginals:1,populationObservationRows:1,currentlyLinkedPopulationRows:0});
   expect(audit.preCandidateSnapshots).toEqual([{horizon:"T-24h",rowsSeen:3,clockOrderCandidates:0,

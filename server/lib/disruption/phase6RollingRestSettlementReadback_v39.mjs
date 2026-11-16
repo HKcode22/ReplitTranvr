@@ -32,8 +32,13 @@ SELECT a.github_run_id run_id,a.charged_reserved_units::int units,
  CASE WHEN b.reservation_sha256 IS NULL THEN 'NO_ORIGINAL_METADATA'
  WHEN b.manifest_sha256 IS DISTINCT FROM a.manifest_sha256
  OR b.query_digest IS DISTINCT FROM a.query_digest
- OR q.population_query_id IS NULL OR q.response_hash IS DISTINCT FROM b.response_hash
+ OR q.population_query_id IS NULL
  OR q.fids_retrieval_utc<a.committed_at_utc OR b.bound_at_utc<a.committed_at_utc
+ THEN 'ORIGINAL_METADATA_DRIFT'
+ WHEN q.raw_expired_at_utc IS NOT NULL AND q.response_hash IS NULL AND q.raw_payload IS NULL
+ AND q.raw_expired_at_utc>=q.fids_retrieval_utc
+ THEN 'EXPIRED_SOURCE_BINDING_METADATA_ONLY'
+ WHEN q.raw_expired_at_utc IS NOT NULL OR q.response_hash IS DISTINCT FROM b.response_hash
  THEN 'ORIGINAL_METADATA_DRIFT'
  ELSE 'COMMITTED_SOURCE_BINDING_METADATA' END original_state
  FROM clean.phase5_fids_physical_attempt_v39 a
@@ -94,7 +99,7 @@ export function summarizeP6RestLedger(input,{sourceRows,otherRows,categoryRows,o
   for(const row of rows){
    if(!known.has(row.run_id)||count(row.units)<1||row.units>100||dbtime(row.reserved_at)>clock||
       !["NO_ORIGINAL_METADATA","ORIGINAL_METADATA_DRIFT",kind==="SOURCE"?"COMMITTED_SOURCE_BINDING_METADATA":"COMMITTED_POST_MARKER_METADATA",
-      ...(kind==="OTHER"?["NOT_POST_CATEGORY"]:[])].includes(row.original_state)||
+      ...(kind==="OTHER"?["NOT_POST_CATEGORY"]:["EXPIRED_SOURCE_BINDING_METADATA_ONLY"])].includes(row.original_state)||
       (kind==="SOURCE"&&row.units!==2)||(kind==="OTHER"&&!CAT.slice(2).includes(row.category)))hold("RESERVATION_METADATA");
    known.get(row.run_id).push({...row,kind,at:dbtime(row.reserved_at)});
   }
@@ -109,7 +114,7 @@ export function summarizeP6RestLedger(input,{sourceRows,otherRows,categoryRows,o
   else if(r.at<a.from)disposition="RESERVATION_BEFORE_ROOT_SCOPE";
   else disposition=r.original_state;
   children.push({...child,reservationCount:rows.length,reservedUnits:sum(rows,"units"),
-   committedOriginalMetadataCount:rows.filter(x=>x.original_state.startsWith("COMMITTED_")).length,
+   committedOriginalMetadataCount:rows.filter(x=>x.original_state.startsWith("COMMITTED_")||x.original_state==="EXPIRED_SOURCE_BINDING_METADATA_ONLY").length,
    reservationsAtOrAfterChainDeadline:rows.filter(x=>x.at>=a.until).length,disposition});
  }
  const days=new Map(),seen=new Set();let mismatches=0,ledgerUnits=0,budgetReservedUnits=0;
@@ -123,11 +128,13 @@ export function summarizeP6RestLedger(input,{sourceRows,otherRows,categoryRows,o
     count(row.reserved_units)!==row.ledger_units||row.reserved_units>count(row.planned_units))mismatches++;
  }
  const incompleteDays=[...days.values()].filter(x=>x.size!==7||CAT.some(k=>!x.has(k))).length;
- const committed=children.filter(x=>["COMMITTED_SOURCE_BINDING_METADATA","COMMITTED_POST_MARKER_METADATA"].includes(x.disposition)).length;
+ const expiredBindings=children.filter(x=>x.disposition==="EXPIRED_SOURCE_BINDING_METADATA_ONLY").length;
+ const committed=children.filter(x=>["COMMITTED_SOURCE_BINDING_METADATA","COMMITTED_POST_MARKER_METADATA"].includes(x.disposition)).length+expiredBindings;
  return {schema:"v39.phase6.rest-settlement-readonly-inventory.v1",
   status:"READONLY_RESERVATION_AND_ORIGINAL_METADATA_NOT_PROVIDER_SETTLEMENT",
   observedDbUtc:new Date(clock).toISOString(),windowElapsed:clock>=a.until,requestedChildCount:children.length,children,
   knownChildReservedUnits:sum(children,"reservedUnits"),knownChildCommittedOriginalMetadataCount:committed,
+  knownChildExpiredSourceBindingMetadataCount:expiredBindings,
   knownChildWithoutMatchedOriginalMetadata:children.length-committed,unattributedReservationCountInWindow:count(unattributedReservationCount),
   manifestCategoryAccounting:{chargeDays:days.size,incompleteDays,categoryCountMismatches:mismatches,ledgerUnits,budgetReservedUnits,
    completeAndConsistent:days.size>0&&incompleteDays===0&&mismatches===0&&ledgerUnits===budgetReservedUnits},

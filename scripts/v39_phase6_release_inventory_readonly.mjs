@@ -60,6 +60,28 @@ function jobSource(yaml,job){
  return lines.slice(start,end).join("\n");
 }
 const refs=(s,kind)=>[...new Set([...s.matchAll(new RegExp("\\b"+kind+"\\.([A-Z0-9_]+)","g"))].map(x=>x[1]))].sort();
+// The existing inert stage has two mutually exclusive modes. Name-only
+// diagnostics for the first nonpaid release action, NOT another gate.
+const stageCommon=["V39_PHASE6_PROCESS_ARMED","V39_P5_APPROVED_CODE_SHA","P6_INERT_CALENDAR_REVIEW_APPROVED",
+ "V39_P5_MANIFEST_SHA256","P6_INERT_STAGE_INPUT_JSON","P6_INERT_STAGE_INPUT_SHA256"];
+const stageModes=Object.freeze({
+ calendar:Object.freeze([...stageCommon,"P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL"]),
+ cost:Object.freeze([...stageCommon,"P6_INERT_COST_REVIEW_APPROVED","P6_INERT_COST_ENVELOPE_SHA256",
+  "V39_PHASE5_SOURCE_RIGHTS_APPROVED","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"])
+});
+function firstInertStageInventory(readWorkflow,present){
+ const references=refs(jobSource(readWorkflow("phase5-exact-inert-release-stage-manual.yml"),"existing-restricted-inert-stage"),"secrets");
+ const expected=[...new Set(Object.values(stageModes).flat())].sort();
+ if(JSON.stringify(references)!==JSON.stringify(expected))
+  return {status:"STAGE_NAME_MAP_DRIFT_REVIEW_YAML",actualSecretAuthenticationVerified:false,phase6PaidGo:false};
+ return {status:"EXACT_CURRENT_STAGE_SECRET_NAME_MAP_NOT_APPROVAL",calendarFirst:true,
+  modes:Object.entries(stageModes).map(([mode,names])=>({mode,requiredRepositorySecretNameReferences:names.length,
+   presentRepositorySecretNames:names.filter(x=>present.has(x)).sort(),
+   absentRepositorySecretNames:names.filter(x=>!present.has(x)).sort(),
+   scopedCredentialName:names.at(-1),otherStageCredentialNotRequiredHere:true,
+   valuesAndAuthenticityVerified:false})),
+  actualSecretAuthenticationVerified:false,approvalOrPacketCertified:false,phase6PaidGo:false};
+}
 export function summarizeInventory({readWorkflow,secretNames,variables,head}){
  if(!/^[a-f0-9]{40}$/.test(head)||!Array.isArray(secretNames)||!Array.isArray(variables))throw Error("HOLD_INVENTORY_SCOPE");
  const present=new Set(secretNames),flags=new Map(variables.map(x=>[x.name,x.value]));
@@ -70,6 +92,7 @@ export function summarizeInventory({readWorkflow,secretNames,variables,head}){
  });
  const known=(spec)=>Object.entries(spec).map(([name,value])=>({name,state:!flags.has(name)?"UNSET":flags.get(name)===value?"MATCHES_REFERENCE_VALUE":"OTHER_VALUE"}));
  return {status:"P6_RELEASE_METADATA_INVENTORY_ONLY_NO_GO",head,repository:REPO,lanes:reports,
+  initialInertStageConfiguration:firstInertStageInventory(readWorkflow,present),
   intendedFutureModeFlags:known(intended),legacyCompetingFlags:known(legacy),
   retentionMonitorEnabled:flags.get("P5_RETENTION_READONLY_MONITOR_ENABLED")==="true",
   secretValuesRead:false,actualSecretAuthenticationVerifiedHere:false,approvalValuesVerifiedHere:false,

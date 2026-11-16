@@ -39,3 +39,11 @@ test("owner reader uses repeatable-read READ ONLY and exact manifest/run IDs, al
  const bad={query:async(s,args)=>{if(s===P6_OTHER_RESERVATION_SQL)throw Error("injected db failure");return client.query(s,args);}};
  await assert.rejects(readP6RestLedgerAccounting(input,bad),/injected/);assert.equal(calls.at(-1).s,"ROLLBACK");
 });
+
+test("historical expired source binding is separate from missing/drift and cannot be used as retained byte or billing evidence",()=>{
+ const o=summarizeP6RestLedger(input,{...fixtures,sourceRows:[{...sourceRows[0],original_state:"EXPIRED_SOURCE_BINDING_METADATA_ONLY"}]});
+ assert.equal(o.children[0].disposition,"EXPIRED_SOURCE_BINDING_METADATA_ONLY");
+ assert.equal(o.knownChildCommittedOriginalMetadataCount,1);
+ assert.equal(o.knownChildExpiredSourceBindingMetadataCount,1);
+ assert.equal(o.sourceOriginalBytesIndependentlyVerified,false);assert.equal(o.permitClose,false);
+});

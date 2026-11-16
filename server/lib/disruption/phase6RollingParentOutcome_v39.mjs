@@ -67,3 +67,15 @@ export function preserveP6ParentChildCustody(lane,r,env=process.env,write=writeF
  write(join(env.RUNNER_TEMP,file),raw,{flag:"wx",mode:0o600});
  return disposition;
 }
+
+// Only an explicitly combined rolling-controller dispatch must produce the
+// optional child custody artifact. Native baseline capture must not depend
+// on artifact-upload infrastructure or optional V0102 commissioning.
+export function writeP6ParentOutcomeWithOptionalCustody(lane,r,env=process.env,{write=writeFileSync,append=appendFileSync,now=Date.now}={}){
+ const required=env.P6_PARENT_CHILD_CUSTODY_REQUIRED;
+ if(required==="1"){
+  if(env.GITHUB_EVENT_NAME!=="workflow_dispatch")hold();
+  preserveP6ParentChildCustody(lane,r,env,write,now);
+ }else if(required!==undefined&&required!==""&&required!=="0")hold();
+ return writeP6ParentOutcome(lane,r,env,append);
+}

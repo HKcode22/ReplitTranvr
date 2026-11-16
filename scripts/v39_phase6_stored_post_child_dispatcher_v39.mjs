@@ -2,7 +2,7 @@
  * Existing ten-minute schedule; no provider key, SQL mutation, reviewer/reserve
  * credentials, new POST signature, or approval. Existing V0083 child alone spends.
  */
-import {writeP6ParentOutcome,preserveP6ParentChildCustody} from "../server/lib/disruption/phase6RollingParentOutcome_v39.mjs";
+import {writeP6ParentOutcomeWithOptionalCustody} from "../server/lib/disruption/phase6RollingParentOutcome_v39.mjs";
 import pg from "pg";
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
@@ -287,5 +287,5 @@ export async function runP6StoredPostParent(env,options={}){
   unsubmittedDueCount:choice.pendingCount,unavailableDays:scan.unavailable,perTickCap:4,inFlightCap:8});
 }
 if(process.env.P6_PRIVATE_POST_PARENT_ENTRYPOINT==="1")
- runP6StoredPostParent(process.env).then(x=>{preserveP6ParentChildCustody("POST",x);writeP6ParentOutcome("POST",x);console.log(JSON.stringify(x));})
+ runP6StoredPostParent(process.env).then(x=>{writeP6ParentOutcomeWithOptionalCustody("POST",x);console.log(JSON.stringify(x));})
  .catch(()=>{console.error("HOLD_P6_STORED_POST_PARENT_REDACTED_NO_REPLAY");process.exitCode=2;});
