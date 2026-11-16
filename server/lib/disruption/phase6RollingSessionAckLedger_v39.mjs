@@ -11,7 +11,7 @@ const idOk=x=>Number.isSafeInteger(x)&&x>0;
 export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{}}){
  if(!/^[a-f0-9]{40}$/.test(sha??"")||!Number.isSafeInteger(epoch)||!Number.isSafeInteger(deadline)||
     epoch>now()||deadline<=now()||deadline-epoch>6*3600000||typeof emit!=="function")fail("BAD_SESSION_SCOPE");
- const rows=new Map(),seen=new Set(),attempts=new Map();
+ const rows=new Map(),seen=new Set(),attempts=new Map(),observed=new Map();
  const routeByLane=lane=>P6_ROLLING_ROUTES.find(x=>x.lane===lane);
  function evidence(e){
   const route=routeByLane(e?.lane);
@@ -22,7 +22,7 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
    emit(Object.freeze({lane:e.lane,status:e.status,atUtc:new Date(now()).toISOString()}));return;
   }
   if(e.status!=="EXACT_ACK_NOT_EXECUTION_PROOF"||!attempts.has(e.lane)||!idOk(e.runId)||
-     seen.has(e.runId)||seen.size>=96)fail("BAD_OR_DUPLICATE_ACK");
+     seen.has(e.runId)||observed.get(e.lane)?.has(e.runId)||seen.size>=96)fail("BAD_OR_DUPLICATE_ACK");
   const sent=attempts.get(e.lane);attempts.delete(e.lane);
   seen.add(e.runId);rows.set(e.runId,{lane:e.lane,runId:e.runId,sent,terminal:false});
   emit(Object.freeze({lane:e.lane,status:e.status,runId:e.runId,atUtc:new Date(now()).toISOString()}));
@@ -31,6 +31,7 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
   if(!P6_ROLLING_ROUTES.includes(route)||snapshot?.complete!==true||snapshot.workflow!==route.workflow||
      !Array.isArray(snapshot.runs)||!Array.isArray(snapshot.active))fail("INCOMPLETE_RECHECK");
   const list=[...snapshot.runs,...snapshot.active];
+  observed.set(route.lane,new Set([...(observed.get(route.lane)??[]),...list.map(x=>x.id)]));
   // Required even after a terminal ack: a delayed/filtered listing must
   // never authorize a replay. Epoch is fixed for entire session.
   for(const item of rows.values()){
