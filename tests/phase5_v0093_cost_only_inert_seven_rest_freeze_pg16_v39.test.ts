@@ -17,6 +17,7 @@ import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from
 import {
  compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce
 } from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from
  "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 
@@ -447,6 +448,8 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   expect(independent.status).toBe(
    "INDEPENDENT_EXACT_B0062_V0093_POST_STAGE_READONLY_MATCH_NO_GO");
   expect(independent.verifiedReadOnly).toBe(true);
+  expect(independent.alertSafetyValuesExact).toBe(true);
+  expect(independent.authorizationSchemaVersion).toBe("v39");
   expect(independent.calendarRows).toBe(31);
   expect(independent.pairedAirportDays).toBe(10);
   expect(independent.ordinaryAirportDaysUnselected).toBe(21);
@@ -473,6 +476,45 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   expect((await admin.query(
    "SELECT COUNT(*)::int n FROM clean.adb_phase6_authorization WHERE enabled"
   )).rows[0].n).toBe(0);
+ });
+ it("independent poststage rejects altered Alert cap, NULL tolerance, and wrong schema marker",async()=>{
+  const r=budgetReview();
+  const tamper=[
+   ["phase6_alert_spend_ceiling",27001,input.alertSafety.alertRunSpendCeilingCredits],
+   ["production_reconcile_tolerance_credits",null,input.alertSafety.productionReconcileToleranceCredits],
+   ["schema_version","0047","v39"]
+  ];
+  for(const [column,bad,original] of tamper){
+   await admin.query("UPDATE clean.adb_phase6_authorization SET "+column+"=$1",[bad]);
+   try{
+    await expect(inspectP5V0093IndependentExactPostStage(admin,input,review,r.permit))
+     .rejects.toThrow(/ALERT_SAFETY_VALUES_NOT_IDENTICAL|DISABLED_B0062_AUTH_OR_MANIFEST_NOT_IDENTICAL/);
+   }finally{
+    await admin.query("UPDATE clean.adb_phase6_authorization SET "+column+"=$1",[original]);
+   }
+  }
+  // The existing database itself prevents a changed daily hard cap.
+  await expect(admin.query("UPDATE clean.adb_phase6_authorization SET alert_cap_per_parent_day=1901"))
+   .rejects.toMatchObject({code:"23514",constraint:"adb_phase6_authorization_base_cap_1900"});
+  await expect(inspectP5V0093IndependentExactPostStage(writer,input,review,r.permit))
+   .rejects.toThrow("READBACK_MUST_USE_DISTINCT_ACTOR");
+  expect((await inspectP5V0093IndependentExactPostStage(admin,input,review,r.permit)).alertSafetyValuesExact).toBe(true);
+ });
+ it("owner readback admission checks exact review bytes and refuses writer credentials, armed or provider scope",()=>{
+  const r=budgetReview(),raw=JSON.stringify(input),head=input.codeSha40;
+  const env={V39_P5_APPROVED_CODE_SHA:head,ADB_AUTO_COLLECT:"0",
+   V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0",
+   DATABASE_URL:"postgresql://owner:CI_ONLY@ep-ci.neon.tech/neondb?sslmode=require"};
+  const args=[raw,digest(input),r.c.costOnlyCategoryDraftSha256,head] as const;
+  const got=admitP6InertOwnerReadback(env,...args);
+  expect(got.phase6PaidGo).toBe(false);
+  expect(JSON.stringify(got)).not.toContain("CI_ONLY");
+  for(const patch of [{GITHUB_ACTIONS:"true"},{V39_PHASE6_PROCESS_ARMED:"1"},{AERODATABOX_API_KEY:"forbidden"},
+   {DATABASE_URL:"postgresql://phase5_b0062_prelaunch_stage_prod20261113:CI_ONLY@ep-ci.neon.tech/neondb?sslmode=require"},
+   {DATABASE_URL:"postgresql://owner:CI_ONLY@ep-ci.neon.tech/neondb?sslmode=disable"}])
+   expect(()=>admitP6InertOwnerReadback({...env,...patch},...args)).toThrow();
+  expect(()=>admitP6InertOwnerReadback(env,raw,"0".repeat(64),args[2],head)).toThrow();
+  expect(()=>admitP6InertOwnerReadback(env,raw,args[1],"0".repeat(64),head)).toThrow();
  });
  it("rejects replay, and cannot alter signed release or reserve source",async()=>{
   const r=budgetReview();
