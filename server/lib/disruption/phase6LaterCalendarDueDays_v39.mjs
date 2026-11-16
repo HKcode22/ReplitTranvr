@@ -30,7 +30,20 @@ export function isP6CurrentT24Trigger(env){
   env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1"&&
   env.P5_T24_AUTO_DISPATCH_ENABLED!=="true";
 }
-/** Original enrollment callers remain schedule-only. */
+export const P6_CURRENT_LATER_ENROLL_CONFIRM="ENROLL_DUE_CURRENT_SIGNED_LATER_NO_PROVIDER";
+export const P6_CURRENT_T24_ENROLL_CONFIRM="ENROLL_DUE_CURRENT_SIGNED_T24_NO_PROVIDER";
+export function isP6CurrentEnrollmentDispatch(env,horizonMode){
+ if(!["T24","LATER"].includes(horizonMode))return false;
+ const t24=horizonMode==="T24";
+ return env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+  env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM===(t24?P6_CURRENT_T24_ENROLL_CONFIRM:P6_CURRENT_LATER_ENROLL_CONFIRM)&&
+  env[t24?"P6_PRIVATE_T24_ENROLL_ENABLED":"P6_PRIVATE_LATER_ENROLL_ENABLED"]==="1"&&
+  env[t24?"P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED":"P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED"]==="1"&&
+  !env.P6_PRIVATE_T24_RUN_DAYS&&!env.P6_PRIVATE_LATER_RUN_DAYS&&
+  !env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM&&!env.P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM&&
+  env.P5_CD_GH_PRE_MODE==="PHASE6_APPROVED";
+}
+/** Original scheduled enrollment and explicitly signed one/two day paths stay separate. */
 export function loadP6LaterCalendarWindows(env,trust,read=readFileSync,horizonMode="LATER"){
  return loadCalendar(env,trust,read,horizonMode,null);
 }
@@ -51,10 +64,15 @@ export function loadP6CurrentT24CalendarWindows(env,trust,read=readFileSync){
   hold("CURRENT_T24_SCOPE_REQUIRED");
  return loadCalendar(env,trust,read,"T24","T24");
 }
+/** Exact current-calendar enrollment dispatch, no arbitrary day selector. */
+export function loadP6CurrentEnrollmentCalendarWindows(env,trust,read=readFileSync,horizonMode="LATER"){
+ if(!isP6CurrentEnrollmentDispatch(env,horizonMode))hold("CURRENT_ENROLLMENT_DISPATCH_REQUIRED");
+ return loadCalendar(env,trust,read,horizonMode,"ENROLL");
+}
 function loadCalendar(env,trust,read,horizonMode,executionMode){
  if(!["LATER","T24"].includes(horizonMode))hold("INVALID_CALENDAR_HORIZON");
  const selectedOffsets=horizonMode==="T24"?{"T-24h":86400000}:offsets;
- if((horizonMode==="T24"?env.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED)!=="1"||(executionMode==="LATER"?!isP6CurrentPreTrigger(env):executionMode==="T24"?!isP6CurrentT24Trigger(env):env.GITHUB_EVENT_NAME!=="schedule"||!!env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM||!!env.P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM)||
+ if((horizonMode==="T24"?env.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:env.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED)!=="1"||(executionMode==="LATER"?!isP6CurrentPreTrigger(env):executionMode==="T24"?!isP6CurrentT24Trigger(env):executionMode==="ENROLL"?!isP6CurrentEnrollmentDispatch(env,horizonMode):env.GITHUB_EVENT_NAME!=="schedule"||!!env.P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM||!!env.P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM)||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="1"||
     (horizonMode==="T24"?env.P6_PRIVATE_T24_RUN_DAYS:env.P6_PRIVATE_LATER_RUN_DAYS)||env.P6_NONPAID_DAILY_POLICY_BASE64?.length>50000)
   hold("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");

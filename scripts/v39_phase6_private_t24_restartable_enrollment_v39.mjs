@@ -5,7 +5,7 @@ import pg from "pg";
 import {pathToFileURL} from "node:url";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {deriveP6T24QueueTrust,readP6CurrentT24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
-import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {loadP6LaterCalendarWindows,selectP6LaterCalendarDueDays,isP6CurrentEnrollmentDispatch,loadP6CurrentEnrollmentCalendarWindows} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39.ts";
@@ -35,8 +35,9 @@ export function checkedP6T24TlsUrl(raw,expectedLogin,base){
 }
 export function admitP6T24Enrollment(env){
  const scoped=requireP5CdGithubPreparePrivateDayScope(env);
+ const currentDispatch=isP6CurrentEnrollmentDispatch(env,"T24");
  if(env.P6_PRIVATE_T24_ENROLL_ENABLED!=="1"||env.P5_CD_GH_T24_PREPARE_APPROVED!=="1"||
-    env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER"||
+    env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||(!currentDispatch&&env.P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM!=="REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER")||
     env.P6_PRIVATE_LATER_ENROLL_ENTRYPOINT==="1"||env.P5_CD_GH_PREPARE_EXECUTE==="1"||env.P6_PRIVATE_LATER_RUN_DAYS||
     env.P5_CD_GH_REGISTER_HORIZON!=="T-24h"||env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
     env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64||env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64||env.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64||
@@ -48,11 +49,11 @@ export function admitP6T24Enrollment(env){
   hold("REVIEWED_PREPARE_TRUST_DRIFT");
  const p=checkedP6T24TlsUrl(scoped.databaseUrl,"phase5_p30_prepare_login_20261107");
  checkedP6T24TlsUrl(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin,p);
- const raw=env.P6_PRIVATE_T24_RUN_DAYS??"",scheduled=env.GITHUB_EVENT_NAME==="schedule";
- if(scheduled?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))hold("INVALID_DAY_SCOPE");
- const days=scheduled?[]:raw.split(",").map(Number);
+ const raw=env.P6_PRIVATE_T24_RUN_DAYS??"",scheduled=env.GITHUB_EVENT_NAME==="schedule",current=scheduled||currentDispatch;
+ if(current?Boolean(raw):!/^(?:[1-9]|[12][0-9]|3[01])(?:,(?:[1-9]|[12][0-9]|3[01]))?$/.test(raw))hold("INVALID_DAY_SCOPE");
+ const days=current?[]:raw.split(",").map(Number);
  if(new Set(days).size!==days.length)hold("DUPLICATE_DAY_SCOPE");
- return {trust,scoped,days,calendar:scheduled?loadP6LaterCalendarWindows(env,trust,undefined,"T24"):null,
+ return {trust,scoped,days,calendar:scheduled?loadP6LaterCalendarWindows(env,trust,undefined,"T24"):currentDispatch?loadP6CurrentEnrollmentCalendarWindows(env,trust,undefined,"T24"):null,
   readerUrl:env.P6_PRIVATE_READER_DATABASE_URL};
 }
 export async function readP6T24RoutingClock(client,trust){

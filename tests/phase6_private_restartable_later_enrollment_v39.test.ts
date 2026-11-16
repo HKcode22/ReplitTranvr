@@ -1,4 +1,5 @@
 import {describe,it,expect} from "vitest";
+import {createHash} from "node:crypto";
 import {requireP5CdGithubPreparePrivateDayScope,requireP5CdGithubPrepareAdmission} from "../server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39";
 import {executeP6PrivateEnrollmentBatch} from "../scripts/v39_phase6_private_later_restartable_enrollment_v39";
 const code="a".repeat(40),h="b".repeat(64);
@@ -56,7 +57,7 @@ describe("bounded original registration exact restart",()=>{
  });
 });
 
-import {selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
+import {selectP6LaterCalendarDueDays,loadP6LaterCalendarWindows,loadP6CurrentEnrollmentCalendarWindows,isP6CurrentEnrollmentDispatch,P6_CURRENT_LATER_ENROLL_CONFIRM,P6_CURRENT_T24_ENROLL_CONFIRM,isP6CurrentPreTrigger,isP6CurrentT24Trigger} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 describe("bounded reviewed calendar scheduling",()=>{
  it("selects earliest closing relevant days using DB clock, not today's UTC day number",()=>{
   const now=Date.parse("2035-01-01T00:00:00.000Z"),ms=[{day:1,children:[{start:now-1,end:now+100}]},
@@ -82,5 +83,49 @@ describe("same Neon physical endpoint, not same hostname spelling",()=>{
  });
  it("rejects a different database on the same endpoint",()=>{
   expect(sameP6NeonDatabaseEndpoint(url("ep-test.neon.tech"),url("ep-test-pooler.neon.tech","other"))).toBe(false);
+ });
+});
+
+describe("exact current enrollment handoff retains the original signed calendar",()=>{
+ const trust={reviewedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h};
+ const plans=new Map<string,Buffer>(),hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+ const dayPlanSha256s=Array.from({length:31},(_,i)=>{
+  const runDayIndex=i+1;
+  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex,
+   templates:Array.from({length:12},(_,j)=>({runDayIndex,horizon:j<4?"T-24h":j<8?"T-6h":"T-90m",
+    scheduledRequestUtc:"2035-01-01T00:00:00.000Z",earliestPlannedCutoffUtc:"2035-01-01T00:15:00.000Z",
+    serviceWindowEndUtc:"2035-01-02T04:00:00.000Z"}))}));
+  plans.set("data-collection/phase5/planning/phase6-source-day-"+String(runDayIndex).padStart(2,"0")+".json",bytes);
+  return {runDayIndex,sha256:hash(bytes)};
+ });
+ const policy=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",
+  delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h,
+  dayPlanSha256s,validFromUtc:"2035-01-01T00:00:00.000Z",validUntilUtc:"2035-03-01T00:00:00.000Z"}));
+ const scheduled:NodeJS.ProcessEnv={...env(),GITHUB_EVENT_NAME:"schedule",P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",P5_CD_GH_PHASE5_CANARY_APPROVED:"0",
+  V39_PHASE5_FREEZE_SIGNED:"1",V39_PHASE6_PROCESS_ARMED:"1",
+  P6_PRIVATE_LATER_ENROLL_ENABLED:"1",P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED:"1",
+  P6_PRIVATE_T24_ENROLL_ENABLED:"1",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",
+  P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:hash(policy)};
+ const read=(path:string)=>plans.get(path)!;
+ it.each([["LATER",P6_CURRENT_LATER_ENROLL_CONFIRM],["T24",P6_CURRENT_T24_ENROLL_CONFIRM]] as const)("uses exact original %s calendar and DB-clock selection", (horizon,confirm)=>{
+  const manual={...scheduled,GITHUB_EVENT_NAME:"workflow_dispatch",P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM:confirm};
+  expect(isP6CurrentEnrollmentDispatch(manual,horizon)).toBe(true);
+  expect(isP6CurrentEnrollmentDispatch(manual,horizon==="LATER"?"T24":"LATER")).toBe(false);
+  expect(isP6CurrentPreTrigger(manual)).toBe(false);
+  expect(isP6CurrentT24Trigger(manual)).toBe(false);
+  expect(loadP6CurrentEnrollmentCalendarWindows(manual,trust,read,horizon)).toEqual(loadP6LaterCalendarWindows(scheduled,trust,read,horizon));
+  expect(()=>loadP6LaterCalendarWindows(manual,trust,read,horizon)).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
+  for(const delta of [{P6_PRIVATE_LATER_RUN_DAYS:"1"},{P6_PRIVATE_T24_RUN_DAYS:"1"},{P5_CD_GH_PRE_MODE:"PHASE5_CANARY"},
+   {P5_CD_GH_PREPARE_PRIVATE_DAY_CONFIRM:"REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER"},
+   {P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER"},
+   {P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER"},
+   {[horizon==="LATER"?"P6_PRIVATE_LATER_ENROLL_ENABLED":"P6_PRIVATE_T24_ENROLL_ENABLED"]:"0"},
+   {[horizon==="LATER"?"P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED":"P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED"]:"0"}]){
+   expect(isP6CurrentEnrollmentDispatch({...manual,...delta},horizon)).toBe(false);
+   expect(()=>loadP6CurrentEnrollmentCalendarWindows({...manual,...delta},trust,read,horizon)).toThrow("CURRENT_ENROLLMENT_DISPATCH_REQUIRED");
+  }
+  expect(()=>loadP6CurrentEnrollmentCalendarWindows({...manual,V39_PHASE5_FREEZE_SIGNED:"0"},trust,read,horizon)).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
+  expect(()=>loadP6CurrentEnrollmentCalendarWindows({...manual,P6_NONPAID_DAILY_POLICY_SHA256:"d".repeat(64)},trust,read,horizon)).toThrow("POLICY_HASH_DRIFT");
+  expect(()=>requireP5CdGithubPreparePrivateDayScope({...manual,P5_CD_GH_PRE_STOP:"1"})).toThrow();
  });
 });
