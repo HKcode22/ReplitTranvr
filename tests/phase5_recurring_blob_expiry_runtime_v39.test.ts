@@ -1,5 +1,10 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
+import {build} from "esbuild";
+import {mkdtempSync,symlinkSync,writeFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {spawnSync} from "node:child_process";
 import {admitP5ExpiryOwnerInventory,ownerInventoryIdentityFailures,ownerInventoryClientTls} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime,boundP5RecurringExpiryStorage} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const sha="a".repeat(40),base={
@@ -97,5 +102,31 @@ describe("Neon owner read-only actual transport vs backend TLS metadata",()=>{
   expect(new URL(cfg.url).searchParams.get("sslmode")).toBe("verify-full");
   expect(env.DATABASE_URL).toContain("sslmode=require");
   expect(cfg.directEndpointAvailable).toBe(false);
+ });
+});
+
+describe("server-safe expiry module for existing published receiver build",()=>{
+ it("the CLI and reusable module expose the same exact existing functions",async()=>{
+  const core=await import("../server/lib/disruption/phase5RecurringExpiryRuntime_v39");
+  const cli=await import("../scripts/v39_phase5_recurring_blob_expiry_runtime_v39");
+  for(const name of ["admitP5RecurringExpiryRuntime","executeP5RecurringExpiryRuntime","verifyP5RecurringExpiryActor",
+   "p5RecurringExpiryGrants","boundP5RecurringExpiryStorage","scopedExpiryClientTlsVerified"] as const)
+   expect(cli[name]).toBe(core[name]);
+ });
+ it("bundles a real executable ESM entry with imported core and never starts its shell launcher",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"p5-expiry-core-ci-"));
+  try{
+   symlinkSync(join(process.cwd(),"node_modules"),join(dir,"node_modules"),"dir");
+   const out=await build({stdin:{
+    contents:'import {executeP5RecurringExpiryRuntime} from "./server/lib/disruption/phase5RecurringExpiryRuntime_v39.ts"; console.log(typeof executeP5RecurringExpiryRuntime);',
+    resolveDir:process.cwd(),sourcefile:"p5-expiry-receiver-import-ci.ts",loader:"ts"},
+    bundle:true,platform:"node",format:"esm",packages:"external",write:false});
+   const entry=join(dir,"receiver-import.mjs");writeFileSync(entry,out.outputFiles[0].contents);
+   const ran=spawnSync(process.execPath,[entry],{encoding:"utf8",timeout:15000,
+    env:{...process.env,DATABASE_URL:"",V39_DATABASE_RUNTIME_URL:"",AERODATABOX_API_KEY:"",
+     AERODATABOX_WEBHOOK_SECRET:"",RAPIDAPI_KEY:"",P5_RECURRING_EXPIRY_WRITER_URL:"",
+     P5_RECURRING_EXPIRY_READER_URL:"",P5_RECURRING_EXPIRY_APPROVAL:""}});
+   expect(ran.status).toBe(0);expect(ran.stdout.trim()).toBe("function");expect(ran.stderr).not.toContain("HOLD_P5_RECURRING_EXPIRY");
+  }finally{rmSync(dir,{recursive:true,force:true});}
  });
 });
