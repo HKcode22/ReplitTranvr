@@ -87,8 +87,18 @@ function stateFor(map: ReadonlyMap<string, AirportSamplingState>, icao: string):
     providerFailure: false, coverageFailed: false, stateVersion: 0,
   };
 }
+/** Apply the documented November 9 pre-outcome scheduled-passenger scope
+ * adjudication consistently to future ordinary selection as well as paired
+ * templates. The archived original B0062 frame and original KTEB draw remain
+ * unchanged. This is not a general low-yield or charter exclusion policy.
+ * Evidence: data-collection/phase5/2026-11-09_REAL_FIVE_PAIR_SCOPE_ADJUDICATION_KTEB.md
+ */
+export function excludedFromProspectiveScheduledPassengerScope(icao: string): boolean {
+  return norm(icao) === "KTEB";
+}
 function candidateEligible(c: FrameSamplingCandidate): boolean {
-  return c.inFrame && c.preEligible && c.postEligible && !c.exclusionReason && c.region !== "UNMAPPED";
+  return c.inFrame && c.preEligible && c.postEligible && !c.exclusionReason &&
+    c.region !== "UNMAPPED" && !excludedFromProspectiveScheduledPassengerScope(c.icao);
 }
 function assertFrozenHash(label: string, h: string): void {
   if (!/^[0-9a-f]{64}$/i.test(h)) throw new Error(`REFUSED_${label.toUpperCase()}_HASH: invalid frozen hash`);
