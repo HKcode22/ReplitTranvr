@@ -8,6 +8,8 @@ on:
       - '.github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml'
       - 'data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json'
       - 'data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json'
+      - 'data-collection/phase5/evidence/2026-11-16_owner_actual_free_quota_59968.json'
+      - 'data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json'
       - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
       - 'scripts/v39_phase6_actual_release_candidate_export_v39.ts'
 permissions:

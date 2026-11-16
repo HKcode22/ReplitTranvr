@@ -7,7 +7,7 @@ import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 import {buildP5ProspectiveSeedCalendarPreview} from "../scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate,reconcileP6ActualJointBudget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {proposeP5ActualNov22Budget,assembleP6ActualFirstSeedReleaseCandidate,reconcileP6ActualJointBudget,P6_CURRENT_QUOTA_EVIDENCE_PATH} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 const seedBytes=readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json");
 const seedBundle=JSON.parse(seedBytes.toString("utf8"));
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
@@ -240,6 +240,22 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.missingExternalFields).toEqual(["manifestSha256","calendarSha256","configSha256","phase6AuthorizationId","predecessorEvidenceIds","alertSafety","providerRangeEvidenceSha256","timingEvidenceSha256","jointBudgetReview"]);
   expect(x.jointBudgetScenarios.map(s=>[s.candidate.authorizedFutureRefillApiUnits,s.arithmetic.netRestCeiling,s.arithmetic.restUnallocated,s.proposedAlertRunCeiling])).toEqual([[0,49468,6508,680],[3000,46468,3508,3680],[6000,43468,508,6680]]);
   expect(x.jointBudgetScenarios.every(s=>!s.reviewed&&!s.arithmetic.refillPerformed&&!s.arithmetic.phase6PaidGo)).toBe(true);
+  expect(x.quotaEvidence).toMatchObject({path:P6_CURRENT_QUOTA_EVIDENCE_PATH,
+   observedAtUtc:"2026-11-16T09:18:44.000Z",unitsRemaining:59968,alertCredits:1830});
+  expect(x.quotaEvidence.sha256).toBe(hash(readFileSync(P6_CURRENT_QUOTA_EVIDENCE_PATH)));
+  expect(x.concreteReviewRecommendation).toMatchObject({
+   status:"REVIEW_PROPOSAL_ONLY_NOT_SIGNED_NOT_APPROVED",calendarRowsDigestCandidate:p.expectedCalendarRowsSha256,
+   netRestCeilingUnits:46468,proposedAlertSafety:{unsettledBurstMarginCredits:50,protectedAlertFloorCredits:1000,
+   alertRunSpendCeilingCredits:3680,dailySoftStopMarginCredits:150,productionReconcileToleranceCredits:0,
+   startAdmissionToleranceSeconds:120,safetyWatchdogPollMs:5000,settlementInitialWaitSeconds:30,
+   settlementPollIntervalSeconds:10,settlementStableReadCount:3,settlementTimeoutSeconds:600},
+   historicalSmoke:{observedMaximumUnsettledGap:0,singleAirportHistoricalOnly:true},
+   actualClock:{runId:43832469501,receiptCount:8,observedReadyMsRange:[38114,70132],observedReleaseSlipMsRange:[3,7]},
+   futureRefillConfirmed:false,fullScopeAlertSafetyMeasured:false,independentReviewerApproved:false,stageAuthorizationGranted:false});
+  const current=x.concreteReviewRecommendation.jointBudgetReview,b=proposeP5ActualNov22Budget(x.calendarDraft);
+  expect(reconcileP6ActualJointBudget(current,b,3680)).toMatchObject({netRestCeiling:46468,restUnallocated:3508,phase6PaidGo:false});
+  for(const tamper of [{accountEvidenceSha256:"0".repeat(64)},{alertCreditsRemaining:1831},{apiUnitsRemaining:59969}])
+   expect(()=>reconcileP6ActualJointBudget({...current,...tamper},b,3680)).toThrow("DATED_ACCOUNT_EVIDENCE_DRIFT");
   expect(x.timingCandidate.timingEvidenceSha256).toBeNull();
   expect(x.phase6PaidGo).toBe(false);
   expect(x.sourceRightsApproved).toBe(false);
