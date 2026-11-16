@@ -146,6 +146,35 @@ export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:Review
   throw e;
  }finally{c.release(commitAttempted&&began?new Error("P6_COMMIT_OUTCOME_UNKNOWN"):undefined);}
 }
+/** Fresh independent metadata-only confirmation after acknowledged commit.
+ * Failure is not permission to re-enable or change any workflow switch.
+ */
+export async function verifyP6EnabledSourceAuthorizationReceipt(pool:Pool,receipt:Awaited<ReturnType<typeof commitP6ExistingSourceAuthorizationOnce>>){
+ const c=await pool.connect();let began=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  const who=(await c.query("SELECT current_database() db,current_user actor,session_user session_actor,"+
+   "current_setting('transaction_read_only') ro,clock_timestamp() t")).rows[0];
+  if(who?.db!=="neondb"||who.actor!==who.session_actor||who.ro!=="on")hold("POST_ENABLE_READBACK_SCOPE");
+  const rows=(await c.query("SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,enabled,revoked_at_utc "+
+   "FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
+  const a=rows[0];
+  const markers=(await c.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
+   ["phase6_source_authorization_enabled:"+receipt.authorizationId])).rows;
+  if(rows.length!==1||a.authorization_id!==receipt.authorizationId||a.manifest_sha256!==receipt.manifestSha256||
+     a.calendar_hash!==receipt.calendarSha256||a.config_hash!==receipt.configSha256||a.code_sha!==receipt.codeSha||
+     a.schema_version!=="v39"||a.enabled!==true||a.revoked_at_utc!==null||markers.length!==1||
+     markers[0].value!==JSON.stringify(receipt))
+   hold("POST_ENABLE_ROW_OR_MARKER_NOT_IDENTICAL");
+  await c.query("ROLLBACK");began=false;
+  return {verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,observedAtUtc:new Date(who.t).toISOString(),
+   providerCalls:0,databaseWrites:0,githubFlagsChanged:0,phase6PaidGoGrantedByThisTransition:false};
+ }finally{
+  if(began)await c.query("ROLLBACK").catch(()=>{});
+  c.release();
+ }
+}
 async function main(){
  if(process.argv.length!==8||process.argv[2]!=="--enable-exact-existing-source-auth")
   hold("EXACT_OWNER_ARGUMENTS");
@@ -165,8 +194,15 @@ async function main(){
  // One writing owner session + separate independent READ ONLY session.
  const pool=new Pool({connectionString:s.url,max:2,connectionTimeoutMillis:8000,query_timeout:20000,
   application_name:"p6_exact_existing_source_authorization"});
- try{console.log(JSON.stringify(await commitP6ExistingSourceAuthorizationOnce(pool,s,a as Verify)));}
- finally{await pool.end();}
+ try{
+  const receipt=await commitP6ExistingSourceAuthorizationOnce(pool,s,a as Verify);
+  // Emit the actual acknowledged transition before the fresh readback. An
+  // uncertain second read must never lead the owner to replay the first.
+  console.log(JSON.stringify(receipt));
+  const fresh=await verifyP6EnabledSourceAuthorizationReceipt(pool,receipt);
+  if(head!==remote())hold("MAIN_CHANGED_AFTER_COMMIT_DO_NOT_REPLAY");
+  console.log(JSON.stringify({status:"P6_SOURCE_AUTH_ENABLED_INDEPENDENT_READBACK_NO_PAID_DISPATCH",...fresh}));
+ }finally{await pool.end();}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  main().catch(e=>{
