@@ -1,15 +1,27 @@
 name: Phase6 initial bounded rolling controller session (STOP default)
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' &&
+      format('P6 ROLLING CHAIN {0} {1}', inputs.chain_hop, inputs.parent_run_id) || 'Phase6 initial bounded rolling controller session (STOP default)' }}
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO'
+        description: 'Exact single session or separately approved two-session chain confirmation'
         required: true
         type: string
       approved_main_sha:
         description: 'Exact reviewed main SHA'
         required: true
         type: string
+      chain_hop:
+        type: string
+        default: '0'
+      parent_run_id:
+        type: string
+        default: '0'
+      sent_at_utc:
+        type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -67,7 +79,8 @@ jobs:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
-          inputs.confirm == 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO' &&
+          (inputs.confirm == 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO' ||
+           inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO') &&
           inputs.approved_main_sha == github.sha &&
           vars.P6_ROLLING_CONTROLLER_ENABLED == '1' }}
     permissions:
@@ -81,6 +94,10 @@ jobs:
       P6_ROLLING_REQUESTED_MAIN_SHA: ${{ inputs.approved_main_sha }}
       P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
       P6_ROLLING_SESSION_APPROVED: ${{ secrets.P6_ROLLING_SESSION_APPROVED }}
+      P6_ROLLING_CHAIN_APPROVED: ${{ secrets.P6_ROLLING_CHAIN_APPROVED }}
+      P6_ROLLING_CHAIN_HOP: ${{ inputs.chain_hop }}
+      P6_ROLLING_PARENT_RUN_ID: ${{ inputs.parent_run_id }}
+      P6_ROLLING_SENT_AT_UTC: ${{ inputs.sent_at_utc }}
       P6_ROLLING_SESSION_EPOCH_UTC: ${{ secrets.P6_ROLLING_SESSION_EPOCH_UTC }}
       P6_ROLLING_SESSION_DEADLINE_UTC: ${{ secrets.P6_ROLLING_SESSION_DEADLINE_UTC }}
       V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
@@ -119,7 +136,7 @@ jobs:
           test "$P5_CD_GH_PRE_STOP" = 0
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node scripts/v39_phase6_bounded_rolling_session_v39.mjs
-          echo 'P6_BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF'
+          echo 'P6_BOUNDED_SESSION_RECEIPT_READY_NOT_COLLECTION_PROOF'
       - name: Preserve terminal operational receipt for independently reviewed continuation
         uses: actions/upload-artifact@v4
         with:
