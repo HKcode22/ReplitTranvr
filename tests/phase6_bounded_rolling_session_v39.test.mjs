@@ -7,7 +7,7 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6Revi
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
@@ -45,6 +45,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   root.display_title="P6 ROLLING CHAIN 0 0";
   if(rollover)Object.assign(env,{P6_ROLLING_SESSION_CONFIRM:"RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO",
    P6_ROLLING_HISTORY_RETIREMENT_APPROVED:"1"});
+  if(multi)Object.assign(env,{P6_ROLLING_SESSION_CONFIRM:"RUN_UP_TO_FOUR_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO",P6_ROLLING_HISTORY_RETIREMENT_APPROVED:"1",P6_ROLLING_FOUR_SESSION_APPROVED:"1",P6_ROLLING_SESSION_DEADLINE_UTC:iso(start+120*MIN)});
  }
  const response=(data,status=200)=>({ok:status===200,status,json:async()=>data});
  const options={now:()=>clock,sleep:async m=>{
@@ -58,18 +59,20 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
    if(u.pathname.endsWith("/workflows/"+WF+"/runs"))return response({total_count:duplicate?2:controllerRuns.length,workflow_runs:duplicate?[root,{...root,id:22222}]:controllerRuns});
    if(u.pathname.endsWith("/workflows/"+WF+"/dispatches")){
     assert.equal(opt.method,"POST");const input=JSON.parse(opt.body).inputs;
-    assert.equal(input.chain_hop,"1");assert.equal(input.parent_run_id,"12345");
+    const hop=Number(env.P6_ROLLING_CHAIN_HOP)+1,parentId=Number(env.GITHUB_RUN_ID),nextId=parentId+1;
+    assert.equal(input.chain_hop,String(hop));assert.equal(input.parent_run_id,String(parentId));
     assert.equal(input.confirm,env.P6_ROLLING_SESSION_CONFIRM);
     if(failSuccessor)return response({},204);
-    controllerRuns.push({...root,id:12346,status:"queued",created_at:iso(clock),display_title:"P6 ROLLING CHAIN 1 12345"});
-    return response({workflow_run_id:12346,run_url:"https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/12346",
-     html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/12346"});
+    controllerRuns.push({...root,id:nextId,status:"queued",conclusion:null,created_at:iso(clock),display_title:"P6 ROLLING CHAIN "+hop+" "+parentId});
+    return response({workflow_run_id:nextId,run_url:"https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/"+nextId,
+     html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+nextId});
    }
-   if(u.pathname.endsWith("/actions/runs/12345"))return response(root);
-   if(u.pathname.endsWith("/actions/runs/12345/jobs"))return response({total_count:1,jobs:[{name:"one-protected-bounded-session",
+   const pred=Number(env.P6_ROLLING_PARENT_RUN_ID??"0");
+   if(pred&&u.pathname.endsWith("/actions/runs/"+pred))return response(controllerRuns.find(x=>x.id===pred));
+   if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/jobs"))return response({total_count:1,jobs:[{id:pred*10+1,run_id:pred,head_sha:sha,run_attempt:1,name:"one-protected-bounded-session",
     status:"completed",conclusion:"success",steps:["Execute one protected rolling session and reconcile accepted workers before terminal",
      "Preserve terminal operational receipt for independently reviewed continuation"].map(name=>({name,status:"completed",conclusion:"success"}))}]});
-   if(u.pathname.endsWith("/actions/runs/12345/artifacts"))return response({total_count:1,artifacts:[{id:444,name:"p6-rolling-terminal-12345",
+   if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/artifacts"))return response({total_count:1,artifacts:[{id:444,name:"p6-rolling-terminal-"+pred,
     expired:false,size_in_bytes:512}]});
    if(opt.method==="POST"){
     if(failAck)return response({},204);
@@ -103,8 +106,10 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   }};
  return {env,options,runs,calls,events,controllerRuns,root,get finishAt(){return finishAt;},startSuccessor(receipt){savedReceipt=receipt;clock+=30000;
   if(carryActive)finishAt=clock+8*MIN;
-  root.status="completed";root.conclusion="success";controllerRuns[1].status="in_progress";
-  Object.assign(env,{GITHUB_RUN_ID:"12346",P6_ROLLING_CHAIN_HOP:"1",P6_ROLLING_PARENT_RUN_ID:"12345",
+  const predecessor=controllerRuns.find(x=>x.id===Number(env.GITHUB_RUN_ID));
+  const successor=controllerRuns.find(x=>x.id===receipt.nextRunId);
+  predecessor.status="completed";predecessor.conclusion="success";successor.status="in_progress";
+  Object.assign(env,{GITHUB_RUN_ID:String(successor.id),P6_ROLLING_CHAIN_HOP:String(Number(env.P6_ROLLING_CHAIN_HOP)+1),P6_ROLLING_PARENT_RUN_ID:String(predecessor.id),
    P6_ROLLING_SENT_AT_UTC:receipt.nextDispatchAtUtc});
  }};
 }
@@ -303,4 +308,46 @@ test("request-budget admission can defer after a fresh route read without writin
   onEvidence:()=>attempts++,mayStartAttempt:()=>++checks===1,fetcher:async(_url,opt)=>{calls++;assert.equal(opt.method,"GET");return{ok:true,json:async()=>({object:{sha}})};}});
  assert.equal(attempts,0);assert.equal(calls,1);assert.equal(result.dispatchCount,0);
  assert.deepEqual(result.requestBudgetDeferred,["PRE_RECOVERY"]);
+});
+
+
+test("separately approved four-session chain keeps fixed policy and root with independently checked working history",async()=>{
+ const f=setup({chain:true,multi:true,delayedRetention:true});
+ await assert.rejects(runP6RollingSession({...f.env,P6_ROLLING_FOUR_SESSION_APPROVED:"0"},f.options),/NO_PROTECTED_FOUR_SESSION_APPROVAL/);
+ assert.equal(f.calls.length,0);
+ const receipts=[];
+ for(let i=0;i<4;i++){
+   const out=await runP6RollingSession(f.env,f.options);receipts.push(out);
+   assert.equal(out.sessionHop,i);assert.equal(out.maxSessionHops,4);assert.equal(out.epochUtc,iso(start));
+   assert.equal(out.chainDeadlineUtc,iso(start+120*MIN));assert.equal(out.policyCommitment,receipts[0].policyCommitment);
+   assert.equal(out.unknownAttempts,0);
+   if(i<3){assert.equal(out.successorDispatches,1);f.startSuccessor(out);}
+   else assert.equal(out.successorDispatches,0);
+ }
+ assert.equal(f.calls.filter(x=>x.method==="POST"&&x.url.includes("/workflows/"+WF+"/dispatches")).length,3);
+ assert(receipts.slice(1).every((x,i)=>Date.parse(x.historyEpochUtc)>=Date.parse(receipts[i].historyEpochUtc)));
+ assert(Date.parse(receipts[3].historyEpochUtc)>Date.parse(receipts[0].historyEpochUtc));
+ assert.equal(receipts[3].pending.length,0);
+});
+
+test("third session rejects a broken earlier ancestor chain before new dispatch",async()=>{
+ const f=setup({chain:true,multi:true});const one=await runP6RollingSession(f.env,f.options);f.startSuccessor(one);
+ const two=await runP6RollingSession(f.env,f.options);f.startSuccessor(two);
+ f.root.display_title="P6 ROLLING CHAIN 0 99999";
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_ANCESTOR_IDENTITY/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+
+test("successor rejects predecessor job evidence from a different run before new dispatch",async()=>{
+ const f=setup({chain:true,multi:true}),first=await runP6RollingSession(f.env,f.options);f.startSuccessor(first);
+ const upstream=f.options.fetcher,posts=f.calls.filter(x=>x.method==="POST").length;
+ f.options.fetcher=async(url,opt)=>{
+  const res=await upstream(url,opt);
+  if(url.includes("/actions/runs/12345/jobs?")){const body=await res.json();body.jobs[0].run_id=99999;return {...res,json:async()=>body};}
+  return res;
+ };
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_PARENT_JOB/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
 });
