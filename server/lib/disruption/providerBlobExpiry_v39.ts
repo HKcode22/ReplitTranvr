@@ -81,7 +81,7 @@ export async function verifyOneExpiredProviderBlobV39(
      candidate.contentClass!==candidate.ref.contentClass||
      candidate.contentSha256!==candidate.ref.contentSha256||
      candidate.expiresAtUtc!==candidate.ref.expiresAtUtc||
-     !/^provider-blob-expiry-[a-f0-9-]{36}$/.test(runId))
+     !/^provider-blob-expiry-(?:recurring-v39-)?[a-f0-9-]{36}$/.test(runId))
     throw Error("PROVIDER_BLOB_EXPIRY_CANDIDATE_SCOPE_MISMATCH");
   const client=await db.connect();
   let tx=false,commitAttempted=false,destroy=false;
@@ -146,16 +146,36 @@ export async function verifyOneExpiredProviderBlobV39(
   }
 }
 
+/** Use the EXISTING append-only object-surface retention tombstone ledger
+ * as durable post-commit readback evidence. Historic one-time markers have
+ * a different run ID and are not swept/re-deleted by this recurring protocol.
+ * The hash is a deterministic receipt identity, NOT a policy signature.
+ */
+const RECURRING_RUN_PREFIX="provider-blob-expiry-recurring-v39-";
+const RECURRING_WITNESS_HASH_SQL=
+  "encode(sha256(convert_to('v39.provider-blob-recurring-primary-readback.v1|'||b.blob_ref_id::text||'|'||b.content_sha256||'|'||b.deletion_run_id,'UTF8')),'hex')";
+const RECURRING_WITNESS_MATCH_SQL=`
+  t.surface='object' AND t.record_id='provider_content_blob_ref:'||b.blob_ref_id::text
+  AND t.content_hash=b.content_sha256 AND t.expired_at=b.expires_at_utc
+  AND t.plan_hash=${RECURRING_WITNESS_HASH_SQL}
+  AND t.content_class=b.content_class AND t.source_table='clean.provider_content_blob_ref'
+  AND t.retention_rule='provider_blob_declared_expiry'
+  AND t.expiry_run_id=b.deletion_run_id
+  AND t.deletion_mode='independent-primary-object-absence'
+  AND t.tombstoned_at_utc>=b.deletion_verified_at_utc`;
+const RECURRING_UNWITNESSED_SQL=`
+  b.deletion_verified_at_utc IS NOT NULL
+  AND b.deletion_run_id LIKE 'provider-blob-expiry-recurring-v39-%'
+  AND NOT EXISTS(SELECT 1 FROM clean.retention_tombstone t
+    WHERE ${RECURRING_WITNESS_MATCH_SQL})`;
+
 /**
- * One bounded recurring expiry batch, using the same immutable reference and
- * deletion primitive as the existing owners. The caller must separately admit
- * the exact runtime, dedicated bucket, scoped credentials and retention policy.
- * This core has no scheduler, production entrypoint or provider client.
- *
- * The cutoff is sampled from PostgreSQL and retained at database precision.
- * A fresh metadata query plus primary-store existence check is required after
- * each committed marker. The readback interfaces may be separately scoped; a
- * passing batch alone does not certify those credentials or backup disposal.
+ * One bounded recurring expiry batch, using the existing immutable ref,
+ * original row-lock deletion primitive, and existing object-surface ledger.
+ * A marker committed before an interrupted independent readback is a
+ * durable recovery obligation. Recover it FIRST without issuing DELETE.
+ * Historic one-off cleanup is not replayed. No new table or production
+ * role/scheduler/owner authority is granted here.
  */
 export async function runBoundedProviderBlobExpiryBatchV39(
   db: Pick<Pool,"query"|"connect">,
@@ -166,7 +186,8 @@ export async function runBoundedProviderBlobExpiryBatchV39(
 ): Promise<{
   status:"DUE_AT_CUTOFF_CLEARED"|"BACKLOG_REMAINS_AT_CUTOFF";
   selectedCount:number; verifiedNowCount:number; alreadyVerifiedCount:number;
-  independentlyReadBackCount:number; remainingAtCutoff:number;
+  independentlyReadBackCount:number; recoveredReadbackCount:number;
+  remainingAtCutoff:number; remainingUnwitnessedMarkersAtCutoff:number;
 }> {
   if(!Number.isSafeInteger(limit)||limit<1||limit>100)
     throw Error("PROVIDER_BLOB_RECURRING_BATCH_LIMIT_INVALID");
@@ -175,24 +196,29 @@ export async function runBoundedProviderBlobExpiryBatchV39(
   if(typeof cutoff!=="string"||!Number.isFinite(Date.parse(cutoff)))
     throw Error("PROVIDER_BLOB_RECURRING_DB_CLOCK_INVALID");
   const due=await db.query(
-    `SELECT blob_ref_id,storage_kind,contract_version,object_name,content_class,
-            content_sha256,content_bytes,persisted_at_utc,expires_at_utc,retention_hours
-       FROM clean.provider_content_blob_ref
-      WHERE deletion_verified_at_utc IS NULL AND expires_at_utc <= $1::timestamptz
-      ORDER BY expires_at_utc,blob_ref_id LIMIT $2`,[cutoff,limit]);
-  const candidates:ProviderBlobExpiryCandidateV39[]=due.rows.map(row=>{
+    `SELECT b.blob_ref_id,b.storage_kind,b.contract_version,b.object_name,b.content_class,
+            b.content_sha256,b.content_bytes,b.persisted_at_utc,b.expires_at_utc,b.retention_hours,
+            (b.deletion_verified_at_utc IS NOT NULL) AS recover_readback
+       FROM clean.provider_content_blob_ref b
+      WHERE b.expires_at_utc <= $1::timestamptz
+        AND (b.deletion_verified_at_utc IS NULL OR (${RECURRING_UNWITNESSED_SQL}))
+      ORDER BY (b.deletion_verified_at_utc IS NULL),b.expires_at_utc,b.blob_ref_id LIMIT $2`,[cutoff,limit]);
+  const candidates=due.rows.map(row=>{
     const ref=rowToRef(row);validateProviderBlobRefV39(ref);
-    return {blobRefId:ref.blobRefId,objectName:ref.objectName,contentClass:ref.contentClass,
-      contentSha256:ref.contentSha256,expiresAtUtc:ref.expiresAtUtc,ref};
+    if(typeof row.recover_readback!=="boolean")throw Error("PROVIDER_BLOB_RECURRING_SCOPE_INVALID");
+    const candidate:ProviderBlobExpiryCandidateV39={blobRefId:ref.blobRefId,objectName:ref.objectName,
+      contentClass:ref.contentClass,contentSha256:ref.contentSha256,expiresAtUtc:ref.expiresAtUtc,ref};
+    return {candidate,recoverReadback:row.recover_readback as boolean};
   });
-  if(candidates.length>limit||new Set(candidates.map(c=>c.blobRefId)).size!==candidates.length)
+  if(candidates.length>limit||new Set(candidates.map(c=>c.candidate.blobRefId)).size!==candidates.length)
     throw Error("PROVIDER_BLOB_RECURRING_SCOPE_INVALID");
-  const runId=`provider-blob-expiry-${randomUUID()}`;
-  let verifiedNowCount=0,alreadyVerifiedCount=0,independentlyReadBackCount=0;
-  // No automatic retry of an ambiguous delete/COMMIT. A later admitted batch
-  // must reconcile under the original row lock, not replay an old authorization.
-  for(const candidate of candidates){
-    const result=await verifyOneExpiredProviderBlobV39(db,store,candidate,runId);
+  const runId=RECURRING_RUN_PREFIX+randomUUID();
+  let verifiedNowCount=0,alreadyVerifiedCount=0,independentlyReadBackCount=0,recoveredReadbackCount=0;
+  for(const {candidate,recoverReadback} of candidates){
+    // A pending marker is immutable. Never issue another physical delete
+    // on a readback recovery (an unexpected present object is HOLD).
+    const result=recoverReadback?"ALREADY_VERIFIED":
+      await verifyOneExpiredProviderBlobV39(db,store,candidate,runId);
     if(result==="VERIFIED_NOW")verifiedNowCount++;else alreadyVerifiedCount++;
     const proof=await readback.query(
       `SELECT blob_ref_id,storage_kind,contract_version,object_name,content_class,
@@ -203,22 +229,51 @@ export async function runBoundedProviderBlobExpiryBatchV39(
          FROM clean.provider_content_blob_ref WHERE blob_ref_id=$1`,[candidate.blobRefId]);
     const row=proof.rows[0];
     if(proof.rowCount!==1||row?.marker_valid!==true||
+       typeof row.deletion_run_id!=="string"||
+       !/^provider-blob-expiry-recurring-v39-[a-f0-9-]{36}$/.test(row.deletion_run_id)||
        (result==="VERIFIED_NOW"&&row.deletion_run_id!==runId))
       throw Error("PROVIDER_BLOB_RECURRING_MARKER_READBACK_FAILED");
     const actual=rowToRef(row);
     if((Object.keys(actual) as (keyof ProviderBlobRefV39)[]).some(k=>actual[k]!==candidate.ref[k])||
        await readbackStore.exists(candidate.objectName))
       throw Error("PROVIDER_BLOB_RECURRING_PRIMARY_READBACK_FAILED");
+    // A durable receipt is written ONLY after the independent marker and
+    // primary absence checks. This reuses the old append-only tombstone
+    // table; no raw bytes or backup-surface claims. Unknown insert/COMMIT
+    // stops this run; a subsequent admission reads the actual durable row.
+    await db.query(
+      `INSERT INTO clean.retention_tombstone
+        (surface,record_id,content_hash,expired_at,tombstoned_at_utc,plan_hash,
+         content_class,source_table,retention_rule,expiry_run_id,deletion_mode)
+       SELECT 'object','provider_content_blob_ref:'||b.blob_ref_id::text,b.content_sha256,
+         b.expires_at_utc,clock_timestamp(),${RECURRING_WITNESS_HASH_SQL},b.content_class,
+         'clean.provider_content_blob_ref','provider_blob_declared_expiry',b.deletion_run_id,
+         'independent-primary-object-absence'
+       FROM clean.provider_content_blob_ref b
+       WHERE b.blob_ref_id=$1 AND b.deletion_run_id=$2
+         AND b.deleted_at_utc>=b.expires_at_utc AND b.deletion_verified_at_utc>=b.deleted_at_utc
+       ON CONFLICT(surface,record_id) DO NOTHING`,[candidate.blobRefId,row.deletion_run_id]);
+    const witness=await readback.query(
+      `SELECT EXISTS(SELECT 1 FROM clean.retention_tombstone t WHERE ${RECURRING_WITNESS_MATCH_SQL}) AS exact
+       FROM clean.provider_content_blob_ref b WHERE b.blob_ref_id=$1 AND b.deletion_run_id=$2`,
+      [candidate.blobRefId,row.deletion_run_id]);
+    if(witness.rowCount!==1||witness.rows[0]?.exact!==true)
+      throw Error("PROVIDER_BLOB_RECURRING_WITNESS_READBACK_FAILED");
     independentlyReadBackCount++;
+    if(recoverReadback)recoveredReadbackCount++;
   }
   const remaining=await readback.query(
-    "SELECT count(*)::text AS n FROM clean.provider_content_blob_ref WHERE deletion_verified_at_utc IS NULL AND expires_at_utc <= $1::timestamptz",
-    [cutoff]);
-  const remainingAtCutoff=Number(remaining.rows[0]?.n);
-  if(remaining.rowCount!==1||!Number.isSafeInteger(remainingAtCutoff)||remainingAtCutoff<0)
+    `SELECT count(*) FILTER(WHERE b.deletion_verified_at_utc IS NULL)::text AS n,
+        count(*) FILTER(WHERE ${RECURRING_UNWITNESSED_SQL})::text AS pending
+       FROM clean.provider_content_blob_ref b WHERE b.expires_at_utc <= $1::timestamptz`,[cutoff]);
+  const remainingAtCutoff=Number(remaining.rows[0]?.n),
+    remainingUnwitnessedMarkersAtCutoff=Number(remaining.rows[0]?.pending);
+  if(remaining.rowCount!==1||![remainingAtCutoff,remainingUnwitnessedMarkersAtCutoff].every(n=>Number.isSafeInteger(n)&&n>=0))
     throw Error("PROVIDER_BLOB_RECURRING_BACKLOG_READBACK_FAILED");
-  return {status:remainingAtCutoff===0?"DUE_AT_CUTOFF_CLEARED":"BACKLOG_REMAINS_AT_CUTOFF",
-    selectedCount:candidates.length,verifiedNowCount,alreadyVerifiedCount,independentlyReadBackCount,remainingAtCutoff};
+  return {status:remainingAtCutoff===0&&remainingUnwitnessedMarkersAtCutoff===0?
+      "DUE_AT_CUTOFF_CLEARED":"BACKLOG_REMAINS_AT_CUTOFF",
+    selectedCount:candidates.length,verifiedNowCount,alreadyVerifiedCount,independentlyReadBackCount,
+    recoveredReadbackCount,remainingAtCutoff,remainingUnwitnessedMarkersAtCutoff};
 }
 
 export async function applyExpiredProviderBlobsV39(
