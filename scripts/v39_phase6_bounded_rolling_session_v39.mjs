@@ -98,7 +98,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
- let ledger,prior=null;
+ let ledger,prior=null,priorTerminalIds=new Set();
  const scheduleEvidenceCache=createP6RollingScheduleEvidenceCache();
  let requests=0,waves=0,calendarDeferred=0,capacityDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
@@ -177,14 +177,24 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.deadlineUtc!==new Date(a.epoch+30*MIN).toISOString()||
      receipt.chainDeadlineUtc!==new Date(a.chainDeadline).toISOString()||
      receipt.policyCommitment!==policyCommitment||receipt.successorDispatches!==1||
-     receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||receipt.pending.length!==0||
+     receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||!Array.isArray(receipt.pendingAcknowledgements)||
      receipt.providerCalls!==0||receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
      !Number.isSafeInteger(receipt.acknowledged)||receipt.acknowledged<0||receipt.acknowledged>P6_ROLLING_ACK_CAPACITY||
-     receipt.verifiedTerminal!==receipt.acknowledged||!Array.isArray(receipt.terminalAcknowledgements)||
-     receipt.terminalAcknowledgements.length!==receipt.acknowledged||
-     receipt.terminalAcknowledgements.some(x=>!Number.isFinite(Date.parse(x?.sentAtUtc))||Date.parse(x.sentAtUtc)>a.sent))
+     !Number.isSafeInteger(receipt.verifiedTerminal)||receipt.verifiedTerminal<0||!Array.isArray(receipt.terminalAcknowledgements)||
+     receipt.terminalAcknowledgements.length!==receipt.verifiedTerminal||
+     receipt.pendingAcknowledgements.length!==receipt.pending.length||
+     receipt.verifiedTerminal+receipt.pending.length!==receipt.acknowledged||
+     receipt.ackCapacityExhausted!==false||receipt.remainingDispatchCapacity!==P6_ROLLING_ACK_CAPACITY-receipt.acknowledged)
     hold("CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH");
-  prior=receipt.terminalAcknowledgements;
+  const all=[...receipt.terminalAcknowledgements,...receipt.pendingAcknowledgements];
+  if(new Set(all.map(x=>x?.runId)).size!==all.length||
+     new Set(receipt.pendingAcknowledgements.map(x=>x?.lane)).size!==receipt.pendingAcknowledgements.length||
+     all.some(x=>!x||!Number.isFinite(Date.parse(x.sentAtUtc))||Date.parse(x.sentAtUtc)>a.sent)||
+     receipt.pending.some(x=>!x||Object.keys(x).sort().join(",")!=="lane,runId"||
+       !receipt.pendingAcknowledgements.some(y=>y?.lane===x.lane&&y?.runId===x.runId))||
+     new Set(receipt.pending.map(x=>x.runId)).size!==receipt.pending.length)
+    hold("CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH");
+  prior=all;priorTerminalIds=new Set(receipt.terminalAcknowledgements.map(x=>x.runId));
  }
  async function pause(ms){
   const prior=now();
@@ -199,7 +209,10 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  ledger=createP6SessionAckLedger({...a,now,emit,priorAcknowledgements:prior??[]});
  if(a.hop===1){
   const inherited=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
-  if(inherited.pending.length||inherited.unknownAttempts)hold("CHAIN_PRIOR_ACK_NOT_TERMINAL");
+  // Re-read every inherited ACK, including the ones still running in the
+  // predecessor. A predecessor terminal claim may never regress to active.
+  if(inherited.unknownAttempts||inherited.pending.some(x=>priorTerminalIds.has(x.runId)))
+   hold("CHAIN_PRIOR_TERMINAL_ACK_REGRESSED");
  }
  // Allow a maximum of 8 waves under the first 30-minute protected window.
  // 2 minutes polling cadence is provisional; actual timing must be measured.
@@ -245,12 +258,13 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(ledger.remainingDispatchCapacity()===0)break;
   if(waves<8&&now()+2*MIN<a.deadline-12*MIN-60000)await pause(2*MIN);else break;
  }
- // No subsequent wave until accepted IDs are really reconciled.
- // All accepted parents drain to exact terminal job outcomes before this
- // root reports success. Paid child receipts remain independent.
+ // A first approved chain session can transfer EXACT known active ACK
+ // custody; no unknown dispatch, no fresh epoch, no extra paid permission.
+ // Final session (and standalone session) must still drain every ACK.
  for(let i=0;i<24;i++){
   const state=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
-  if(!state.pending.length){
+  const transferKnownActive=a.chain&&a.hop===0&&ledger.remainingDispatchCapacity()>0&&state.pending.length>0;
+  if(!state.pending.length||transferKnownActive){
    if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
    // The final dispatch can occur after the last ordinary visibility
    // check. Do not export terminal custody until a fresh complete snapshot
@@ -258,17 +272,30 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    const closing=[];
    const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
     verifySnapshot:(route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
+   // Known active ACK may become terminal between direct read and history.
+   // Retry only independent GETs, not the worker or successor POST.
+   if(transferKnownActive){
+    try{ledger.verifyContinuationHistory(closing);}
+    catch(e){
+     if(!["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY",
+      "HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
+      "HOLD_P6_ROLLING_SESSION_ACK_CONTINUATION_ACTIVE_HISTORY_DRIFT"].includes(e?.message)||
+        i>=23||now()+5000>=a.deadline-30000)throw e;
+     emit({status:"CHAIN_KNOWN_ACK_HANDOFF_READBACK_DEFERRED_NO_POST",...state});
+     await pause(5000);continue;
+    }
+   }else ledger.verifyTerminalHistory(closing);
    if(final.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("FINAL_HISTORY_HOLD_NO_SUCCESSOR");
-   ledger.verifyTerminalHistory(closing);
    await uniqueRoot();await main();
-   const terminalAcknowledgements=ledger.terminalAcknowledgements();
+   const {terminalAcknowledgements,pendingAcknowledgements}=transferKnownActive?ledger.continuationAcknowledgements():
+    {terminalAcknowledgements:ledger.terminalAcknowledgements(),pendingAcknowledgements:Object.freeze([])};
    const ackCapacityExhausted=ledger.remainingDispatchCapacity()===0;
    const result={schema:"v39.phase6.bounded-rolling-session.v1",
     status:ackCapacityExhausted?"BOUNDED_ACK_CAPACITY_EXHAUSTED_NO_SUCCESSOR_NOT_COLLECTION_PROOF":
      a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
-    waves,calendarDeferred,capacityDeferred,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,
+    waves,calendarDeferred,capacityDeferred,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
     successorDispatches:0,nextRunId:null,...state};
    if(!a.chain||a.hop===1||ackCapacityExhausted)return result;
    const sent=now();
@@ -286,7 +313,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      }})});
     if(res.status!==200)hold("CHAIN_ACK");
     const b=await res.json(),id=b?.workflow_run_id;
-    if(!Number.isSafeInteger(id)||id<1||id===a.id||terminalAcknowledgements.some(x=>x.runId===id)||
+    if(!Number.isSafeInteger(id)||id<1||id===a.id||[...terminalAcknowledgements,...pendingAcknowledgements].some(x=>x.runId===id)||
        b.run_url!==ROOT+"/actions/runs/"+id||b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)
      hold("CHAIN_ACK");
     return {...result,status:"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF",
