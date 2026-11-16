@@ -6,6 +6,7 @@
  * separately by the owner/independent reviewer. Default is STOP.
  */
 import {assertP6CurrentPrivatePreMode,readP6ScopedCurrentPrivateRosterDigest} from "./phase6CurrentPrivatePreScope_v39.mjs";
+import {isP6CurrentT24Trigger} from "./phase6LaterCalendarDueDays_v39.mjs";
 import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
 const SHA=/^[a-f0-9]{40}$/;
 const SHA256=/^[a-f0-9]{64}$/;
@@ -137,7 +138,7 @@ export function requireP5CdGithubCurrentPrivatePreScope(env:NodeJS.ProcessEnv){
  * NOT supply a roster SHA. Original singleton worker still requires its
  * exact independently authenticated private packet digest in a local copy. */
 export function requireP5CdGithubCurrentPrivateT24Scope(env:NodeJS.ProcessEnv){
- if(env.P6_PRIVATE_T24_EXECUTION_ENABLED!=="1"||env.GITHUB_EVENT_NAME!=="schedule"||
+ if(env.P6_PRIVATE_T24_EXECUTION_ENABLED!=="1"||!isP6CurrentT24Trigger(env)||
     env.P5_CD_GH_T24_SCHEDULE_ENABLED!=="1"||env.P5_T24_AUTO_DISPATCH_ENABLED==="true"||
     env.P5_CD_GH_PRIVATE_LATER_MODE||env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1"||
     env.P5_CD_GH_PRE_ROSTER_SHA256||env.P5_CD_GH_ROSTER_PATH||env.RAPIDAPI_KEY||
