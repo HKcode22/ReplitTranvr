@@ -16,6 +16,8 @@ on:
       - 'server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs'
       - 'scripts/v39_phase6_github_controller_heartbeat_v39.mjs'
       - 'tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs'
+      - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
+      - 'tests/phase6_rolling_github_controller_v39.test.mjs'
       - '.github/workflows/phase6-autonomous-gh-controller-heartbeat-no-provider.yml'
 permissions:
   contents: read
@@ -57,7 +59,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY$DATABASE_URL$RAPIDAPI_KEY$GITHUB_TOKEN"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs
+          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs
           echo 'GH_AUTO_HEARTBEAT_OFFLINE_PASS_NO_PROVIDER_NO_DB_NO_PAID'
 
   actual-main-nonpaid-controller-heartbeat:
