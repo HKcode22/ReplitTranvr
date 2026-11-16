@@ -67,12 +67,12 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   expect(s.deletes).toBe(0);
   const first=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1);
   expect(first).toEqual({status:"BACKLOG_REMAINS_AT_CUTOFF",selectedCount:1,verifiedNowCount:1,
-   alreadyVerifiedCount:0,independentlyReadBackCount:1,remainingAtCutoff:1});
+   alreadyVerifiedCount:0,independentlyReadBackCount:1,recoveredReadbackCount:0,remainingAtCutoff:1,remainingUnwitnessedMarkersAtCutoff:0});
   expect(s.deletes).toBe(1);expect(await s.exists(future.objectName)).toBe(true);
   expect([await marker(a),await marker(b)].filter(x=>x.deletion_run_id!==null)).toHaveLength(1);
   const second=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,2);
   expect(second).toEqual({status:"DUE_AT_CUTOFF_CLEARED",selectedCount:1,verifiedNowCount:1,
-   alreadyVerifiedCount:0,independentlyReadBackCount:1,remainingAtCutoff:0});
+   alreadyVerifiedCount:0,independentlyReadBackCount:1,recoveredReadbackCount:0,remainingAtCutoff:0,remainingUnwitnessedMarkersAtCutoff:0});
   expect(s.deletes).toBe(2);expect(await s.exists(future.objectName)).toBe(true);
   expect(await marker(future)).toMatchObject({deletion_run_id:null});
   expect(await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1)).toMatchObject({
@@ -85,8 +85,47 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    .rejects.toThrow("RECURRING_PRIMARY_READBACK_FAILED");
   expect(s.deletes).toBe(1);expect(await s.exists(c.objectName)).toBe(false);
   expect((await marker(c)).deletion_run_id).not.toBeNull();
-  // Caller must durably hold the incident; a later empty batch is not proof
-  // that this contradictory post-readback has been resolved.
+  const next=await make();s.objects.add(next.objectName);
+  // A fresh run cannot hide the first marker behind a zero-pending scan;
+  // even with other due work, recover the previous proof first. Do not
+  // delete again if the independent reader says the object is present.
+  await expect(runBoundedProviderBlobExpiryBatchV39(db,s,readback,{exists:async()=>true},1))
+   .rejects.toThrow("RECURRING_PRIMARY_READBACK_FAILED");
+  expect(s.deletes).toBe(1);expect(await s.exists(next.objectName)).toBe(true);
+  const witness=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1);
+  expect(witness).toEqual({status:"BACKLOG_REMAINS_AT_CUTOFF",selectedCount:1,verifiedNowCount:0,
+   alreadyVerifiedCount:1,independentlyReadBackCount:1,recoveredReadbackCount:1,
+   remainingAtCutoff:1,remainingUnwitnessedMarkersAtCutoff:0});
+  expect(s.deletes).toBe(1);
+  const proof=(await readback.query("SELECT surface,content_hash,source_table,expiry_run_id,deletion_mode FROM clean.retention_tombstone WHERE record_id=$1",
+   ["provider_content_blob_ref:"+c.blobRefId])).rows;
+  expect(proof).toEqual([{surface:"object",content_hash:c.contentSha256,
+   source_table:"clean.provider_content_blob_ref",expiry_run_id:(await marker(c)).deletion_run_id,
+   deletion_mode:"independent-primary-object-absence"}]);
+  expect(await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1)).toMatchObject({
+   status:"DUE_AT_CUTOFF_CLEARED",verifiedNowCount:1,remainingAtCutoff:0,remainingUnwitnessedMarkersAtCutoff:0});
+  expect(s.deletes).toBe(2);
+ });
+
+ it("recovers an interruption after marker COMMIT, bounded independently witnessed backlog, without new DELETE",async()=>{
+  const a=await make(),b=await make(),legacy=await make(),s=makeStore();
+  for(const c of [a,b,legacy])s.objects.add(c.objectName);
+  const recurring=()=> "provider-blob-expiry-recurring-v39-"+randomUUID();
+  await verifyOneExpiredProviderBlobV39(db,s,a,recurring());
+  await verifyOneExpiredProviderBlobV39(db,s,b,recurring());
+  await verifyOneExpiredProviderBlobV39(db,s,legacy,run());
+  expect(s.deletes).toBe(3);
+  const one=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1);
+  expect(one).toMatchObject({status:"BACKLOG_REMAINS_AT_CUTOFF",selectedCount:1,
+   recoveredReadbackCount:1,verifiedNowCount:0,remainingAtCutoff:0,remainingUnwitnessedMarkersAtCutoff:1});
+  const two=await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1);
+  expect(two).toMatchObject({status:"DUE_AT_CUTOFF_CLEARED",selectedCount:1,
+   recoveredReadbackCount:1,verifiedNowCount:0,remainingAtCutoff:0,remainingUnwitnessedMarkersAtCutoff:0});
+  const old=await readback.query("SELECT 1 FROM clean.retention_tombstone WHERE surface='object' AND record_id=$1",
+   ["provider_content_blob_ref:"+legacy.blobRefId]);
+  expect(old.rowCount).toBe(0);expect(s.deletes).toBe(3);
+  expect(await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1)).toMatchObject({
+   status:"DUE_AT_CUTOFF_CLEARED",selectedCount:0,remainingUnwitnessedMarkersAtCutoff:0});
  });
 
 });
