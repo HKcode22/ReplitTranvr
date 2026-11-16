@@ -19,6 +19,13 @@ const expectedDraft="46a4d2cd3f0da28365f43a66e3dfcb740a3393434425299b6c22e383229
 const expectedRows="45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c";
 const reset=Date.parse("2026-12-04T02:21:21.000Z");
 const asOf="2026-11-15T09:37:44.000Z";
+// Keep the original historical proposal reproducible; use the newly
+// supplied live observation for current review, never overwrite history.
+export const P6_CURRENT_QUOTA_EVIDENCE_PATH="data-collection/phase5/evidence/2026-11-16_owner_actual_free_quota_59968.json";
+const recordedQuotaPaths:Record<string,string>={
+ [asOf]:"data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json",
+ "2026-11-16T09:18:44.000Z":P6_CURRENT_QUOTA_EVIDENCE_PATH
+};
 const day=(x:number)=>new Date(x).toISOString().slice(0,10);
 const settings=Object.freeze({providerMaxRangeMinutes:240,refreshEveryMinutes:15,
  physicalGetsPerRefreshUpperBound:1,getLeadSeconds:900,apiUnitsPerPhysicalGet:2 as const,
@@ -256,10 +263,11 @@ export function reconcileP6ActualJointBudget(
     j.preFreezeProjectApiUnits<j.apiUnitsLimit-j.apiUnitsRemaining||
     j.authorizedFutureRefillApiUnits!==j.authorizedFutureRefillAlertCredits)
   hold("MISSING_OR_INCONSISTENT_JOINT_BUDGET_REVIEW");
- if(j.observedAtUtc===asOf){
-  const bytes=readFileSync("data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json");
+ const recordedPath=recordedQuotaPaths[j.observedAtUtc];
+ if(recordedPath){
+  const bytes=readFileSync(recordedPath);
   const q=JSON.parse(bytes.toString("utf8"));
-  if(hash(bytes)!==j.accountEvidenceSha256||q.apiUnitsLimit!==j.apiUnitsLimit||
+  if(hash(bytes)!==j.accountEvidenceSha256||q.observedAtUtc!==j.observedAtUtc||q.paidProviderCalls!==0||q.databaseWrites!==0||q.sourceRightsCertified!==false||q.phase6PaidGo!==false||q.apiUnitsLimit!==j.apiUnitsLimit||
      q.apiUnitsRemaining!==j.apiUnitsRemaining||q.apiUnitsResetAtUtc!==j.apiUnitsResetAtUtc||
      q.alertCreditsRemaining!==j.alertCreditsRemaining)
    hold("DATED_ACCOUNT_EVIDENCE_DRIFT");
