@@ -81,6 +81,7 @@ def analyze(rows,expected_count=None):
    c["cancelled"]+=1;c["cancelledWithReportedGateDelay"]+=delay is not None
    continue
   c["nonCancelled"]+=1
+  c["phase4NonCancelledWheelsOffExcluding2400"]+=wheel is not None and row["actual_wheels_off_local_hhmm"]!="2400"
   c["divertedNonCancelled"]+=row["diverted"]=="1"
   if delay is None:c["nonCancelledMissingGateDelay"]+=1
   else:
@@ -139,13 +140,14 @@ def actual(root):
   out=analyze(reader,EXPECTED_ROWS)
  c=out["counts"]
  # Original Phase4 parse_hhmm excludes the official 2400 midnight marker;
- # the Phase5 normalizer explicitly preserves it. Compare each same
+ # the Phase5 normalizer explicitly preserves it. Phase4 also excludes
+ # canceled rows even when they have a reported wheels-off. Compare each same
  # definition against original evidence, not a weaker count tolerance.
  if (c["allReportedGateDelayRows"]!=597734 or c["cancelled"]!=11313 or
     a.get("signedGateDelayLabels")!=c["allReportedGateDelayRows"] or
     a.get("canceled")!=c["cancelled"] or
     a.get("missingWheelsOff")!=EXPECTED_ROWS-c["allReportedWheelsOffRows"] or
-    c["allReportedWheelsOffRows"]-c["allReportedWheelsOff2400Rows"]!=596974):
+    c["phase4NonCancelledWheelsOffExcluding2400"]!=596974):
   raise ValueError("INDEPENDENT_HISTORICAL_COUNTS")
  return {**out,"normalizedCsvGzipSha256":GZIP_SHA,"originalSourceZipSha256HistoricalProvenance":RAW_SHA,
   "preservedArtifactId":14198898471}
