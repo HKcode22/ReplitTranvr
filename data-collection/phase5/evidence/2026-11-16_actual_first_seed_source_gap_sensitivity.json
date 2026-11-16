@@ -1,0 +1,218 @@
+{
+  "allPlannedQueries": 6144,
+  "assumptions": [
+    "Single gap at worst alignment, not a reconstruction of historical cron timestamps",
+    "Parent available at both gap endpoints, no alternate parent dispatch within",
+    "Any template with its entire 20-minute parent admission interval inside gap has no admissible parent start",
+    "Only planned query templates counted; not measured missing flights, GO, SLA, or actual allowed yield",
+    "No model of existing child in-flight workload, capacity saturation, producer signing, or live provider latency"
+  ],
+  "calendarRowsSha256": "45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",
+  "databaseWrites": 0,
+  "existingStoredParent": {
+    "codeSha": "4dfbc758c8fb1596d6650f4ca071c607006605d5",
+    "inFlightCap": 24,
+    "maximumLeadMinutes": 35,
+    "minimumLeadMinutes": 15,
+    "perTickCap": 8
+  },
+  "firstDayPlannedQueries": 192,
+  "observedHistoricalSourceCadence": {
+    "intervalsExceedingExpectedMax": 14,
+    "jobId": 133146603674,
+    "maxObservedGapMinutes": 492,
+    "medianObservedGapMinutes": 349.9,
+    "notLivePaidWorkerTiming": true,
+    "observedAtUtc": "2026-11-16T07:10:22.639Z",
+    "observedIntervals": 14,
+    "recentSkipped": 15,
+    "runId": 43821884521
+  },
+  "observedProductionSourceMisses": null,
+  "phase6PaidGo": false,
+  "providerCalls": 0,
+  "reviewArtifactId": 14212961986,
+  "schema": "v39.phase5.actual-first-seed-source-schedule-gap-sensitivity.v1",
+  "status": "HYPOTHETICAL_ALIGNMENT_STRESS_NOT_OBSERVED_MISSES",
+  "stressAllDays": [
+    {
+      "gapMinutes": 10.0,
+      "maxFullyUncoveredQueryTemplates": 0,
+      "maxUncoveredByHorizon": {},
+      "witnessAffectedRunDays": [],
+      "witnessGapUtc": null
+    },
+    {
+      "gapMinutes": 20.0,
+      "maxFullyUncoveredQueryTemplates": 0,
+      "maxUncoveredByHorizon": {},
+      "witnessAffectedRunDays": [],
+      "witnessGapUtc": null
+    },
+    {
+      "gapMinutes": 30.0,
+      "maxFullyUncoveredQueryTemplates": 8,
+      "maxUncoveredByHorizon": {
+        "T-6h": 4,
+        "T-90m": 4
+      },
+      "witnessAffectedRunDays": [
+        3
+      ],
+      "witnessGapUtc": [
+        "2026-11-24T05:39:59Z",
+        "2026-11-24T06:09:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 60.0,
+      "maxFullyUncoveredQueryTemplates": 24,
+      "maxUncoveredByHorizon": {
+        "T-6h": 12,
+        "T-90m": 12
+      },
+      "witnessAffectedRunDays": [
+        5
+      ],
+      "witnessGapUtc": [
+        "2026-11-27T13:39:59Z",
+        "2026-11-27T14:39:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 120.0,
+      "maxFullyUncoveredQueryTemplates": 52,
+      "maxUncoveredByHorizon": {
+        "T-6h": 28,
+        "T-90m": 24
+      },
+      "witnessAffectedRunDays": [
+        5
+      ],
+      "witnessGapUtc": [
+        "2026-11-27T13:24:59Z",
+        "2026-11-27T15:24:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 349.9,
+      "maxFullyUncoveredQueryTemplates": 112,
+      "maxUncoveredByHorizon": {
+        "T-6h": 88,
+        "T-90m": 24
+      },
+      "witnessAffectedRunDays": [
+        5
+      ],
+      "witnessGapUtc": [
+        "2026-11-27T09:39:59Z",
+        "2026-11-27T15:29:53Z"
+      ]
+    },
+    {
+      "gapMinutes": 492.0,
+      "maxFullyUncoveredQueryTemplates": 160,
+      "maxUncoveredByHorizon": {
+        "T-24h": 8,
+        "T-6h": 56,
+        "T-90m": 96
+      },
+      "witnessAffectedRunDays": [
+        5,
+        6
+      ],
+      "witnessGapUtc": [
+        "2026-11-27T11:39:59Z",
+        "2026-11-27T19:51:59Z"
+      ]
+    }
+  ],
+  "stressFirstDay": [
+    {
+      "gapMinutes": 10.0,
+      "maxFullyUncoveredQueryTemplates": 0,
+      "maxUncoveredByHorizon": {},
+      "witnessAffectedRunDays": [],
+      "witnessGapUtc": null
+    },
+    {
+      "gapMinutes": 20.0,
+      "maxFullyUncoveredQueryTemplates": 0,
+      "maxUncoveredByHorizon": {},
+      "witnessAffectedRunDays": [],
+      "witnessGapUtc": null
+    },
+    {
+      "gapMinutes": 30.0,
+      "maxFullyUncoveredQueryTemplates": 4,
+      "maxUncoveredByHorizon": {
+        "T-24h": 4
+      },
+      "witnessAffectedRunDays": [
+        1
+      ],
+      "witnessGapUtc": [
+        "2026-11-20T23:09:59Z",
+        "2026-11-20T23:39:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 60.0,
+      "maxFullyUncoveredQueryTemplates": 12,
+      "maxUncoveredByHorizon": {
+        "T-24h": 12
+      },
+      "witnessAffectedRunDays": [
+        1
+      ],
+      "witnessGapUtc": [
+        "2026-11-20T23:09:59Z",
+        "2026-11-21T00:09:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 120.0,
+      "maxFullyUncoveredQueryTemplates": 28,
+      "maxUncoveredByHorizon": {
+        "T-24h": 28
+      },
+      "witnessAffectedRunDays": [
+        1
+      ],
+      "witnessGapUtc": [
+        "2026-11-20T23:09:59Z",
+        "2026-11-21T01:09:59Z"
+      ]
+    },
+    {
+      "gapMinutes": 349.9,
+      "maxFullyUncoveredQueryTemplates": 80,
+      "maxUncoveredByHorizon": {
+        "T-6h": 64,
+        "T-90m": 16
+      },
+      "witnessAffectedRunDays": [
+        1
+      ],
+      "witnessGapUtc": [
+        "2026-11-21T17:09:59Z",
+        "2026-11-21T22:59:53Z"
+      ]
+    },
+    {
+      "gapMinutes": 492.0,
+      "maxFullyUncoveredQueryTemplates": 120,
+      "maxUncoveredByHorizon": {
+        "T-6h": 64,
+        "T-90m": 56
+      },
+      "witnessAffectedRunDays": [
+        1
+      ],
+      "witnessGapUtc": [
+        "2026-11-21T17:09:59Z",
+        "2026-11-22T01:21:59Z"
+      ]
+    }
+  ]
+}
