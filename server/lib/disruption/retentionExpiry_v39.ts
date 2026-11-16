@@ -718,6 +718,9 @@ async function p5Session(c:PoolClient,ro:boolean){
   await c.query("SET LOCAL statement_timeout='20000ms'");
   await c.query("SET LOCAL lock_timeout='3000ms'");
   await c.query("SET LOCAL TIME ZONE 'UTC'");
+  // Acquire the stopped-scope fence before the first SERIALIZABLE
+  // snapshot, not after reading a potentially stale status snapshot.
+  if(!ro)await c.query("LOCK TABLE "+P5_STOP_TABLES+", clean.fids_query_response, clean.flight_population, clean.population_research_membership, clean.flight_snapshots, clean.retention_tombstone IN SHARE ROW EXCLUSIVE MODE");
   const q=await c.query("SELECT current_database() db,current_user actor,session_user login,current_setting('server_version_num')::int ver,current_setting('transaction_read_only') ro,pg_is_in_recovery() replica,current_setting('session_replication_role') repl,clock_timestamp() AS db_now");
   const a=q.rows[0];
   if(q.rowCount!==1||a.db!=="neondb"||a.actor!==a.login||a.ver<160000||a.ver>=170000||
@@ -802,7 +805,6 @@ export async function reviewOrExpireP5HistoricalFidsPrimary(pool:Pick<Pool,"conn
     await c.query(apply?"BEGIN ISOLATION LEVEL SERIALIZABLE":"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
     const dbNow=await p5Session(c,!apply);
     if(Date.parse(dbNow)<Date.parse(s.observedAtUtc))p5Hold("OBSERVATION_NOT_YET_DUE");
-    if(apply)await c.query("LOCK TABLE "+P5_STOP_TABLES+", clean.fids_query_response, clean.flight_population, clean.population_research_membership, clean.flight_snapshots, clean.retention_tombstone IN SHARE ROW EXCLUSIVE MODE");
     await p5Stopped(c);
     const x=await p5ReadScope(c,s,cutoff);
     const runId="RETEXP-P5-FIDS-"+x.scopeSha256;
