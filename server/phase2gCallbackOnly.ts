@@ -4,6 +4,7 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
+import {P5_EXPIRY_RECEIVER_PATH,createP5ExpiryReceiverHandler} from "./lib/disruption/phase5ExpiryReceiverTransport_v39";
 import {subscribePrepaidStageTimingV39} from "./lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
@@ -112,6 +113,11 @@ const gate4ConfigEnv=published
 const gate4Config=gate4PrebindAdditiveConfigV39(gate4ConfigEnv);
 const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
+// Optional retention route: a bad or absent declaration leaves the existing
+// callback receiver available. No expiry work is performed at process boot.
+let expiryHandler:ReturnType<typeof createP5ExpiryReceiverHandler>=null;
+try{expiryHandler=createP5ExpiryReceiverHandler(process.env);}
+catch{console.error("P5_EXPIRY_RECEIVER_CONFIG_HOLD_DISABLED");}
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -150,6 +156,10 @@ app.use((req, res, next) => {
     (
       req.method === "POST" &&
       controlRoutes.has(req.path)
+    ) ||
+    (
+      req.method === "POST" &&
+      expiryHandler!==null && req.path===P5_EXPIRY_RECEIVER_PATH
     ) ||
     (
       req.method === "POST" &&
@@ -195,6 +205,10 @@ if(gate4Config){
   mountGate4PrebindAdditiveRouteV39(
     app,gate4Config.scope,gate4Config.secret,bridge);
 }
+
+// Fixed no-body endpoint, mounted before the general JSON parser. The
+// handler independently verifies the exact path, source, mode and token.
+if(expiryHandler)app.post(P5_EXPIRY_RECEIVER_PATH,expiryHandler);
 
 const ordinaryJson = express.json({
   limit: "2mb",
