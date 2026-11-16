@@ -7,14 +7,21 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO'
+        description: 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO or PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH'
         required: true
         type: string
+      approved_main_sha:
+        description: 'Required exact main only for rolling preview'
+        required: false
+        type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
       - 'server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs'
       - 'scripts/v39_phase6_github_controller_heartbeat_v39.mjs'
+      - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
+      - 'tests/phase6_rolling_github_preview_v39.test.mjs'
       - 'tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'tests/phase6_rolling_github_controller_v39.test.mjs'
@@ -59,7 +66,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY$DATABASE_URL$RAPIDAPI_KEY$GITHUB_TOKEN"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs
+          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs tests/phase6_rolling_github_preview_v39.test.mjs
           echo 'GH_AUTO_HEARTBEAT_OFFLINE_PASS_NO_PROVIDER_NO_DB_NO_PAID'
 
   actual-main-nonpaid-controller-heartbeat:
@@ -67,12 +74,15 @@ jobs:
       ${{ github.ref == 'refs/heads/main' &&
           (github.event_name == 'schedule' ||
            (github.event_name == 'workflow_dispatch' &&
-            inputs.confirm == 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO')) }}
+            (inputs.confirm == 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO' ||
+            (inputs.confirm == 'PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH' && inputs.approved_main_sha == github.sha)))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       P6_CONTROLLER_HEARTBEAT_EXECUTE: '1'
       P6_CONTROLLER_HEARTBEAT_CONFIRM: ${{ inputs.confirm }}
+      P6_ROLLING_PREVIEW_APPROVED_MAIN: ${{ inputs.approved_main_sha }}
+      P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -101,5 +111,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          node scripts/v39_phase6_github_controller_heartbeat_v39.mjs
+          if [ "$P6_CONTROLLER_HEARTBEAT_CONFIRM" = PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH ]; then
+            node scripts/v39_phase6_rolling_github_preview_v39.mjs
+          else
+            node scripts/v39_phase6_github_controller_heartbeat_v39.mjs
+          fi
           echo 'PHASE6_GITHUB_AUTO_HEARTBEAT_OBSERVED_NO_PROVIDER_NO_DB_NO_GO'
