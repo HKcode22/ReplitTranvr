@@ -1,8 +1,10 @@
 import {describe,it,expect} from "vitest";
+import {createHash} from "node:crypto";
 import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const sha="a".repeat(40),base={
  P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
  V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-synthetic",P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-synthetic",
+ P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:createHash("sha256").update("same.invalid/neondb").digest("hex"),
  P5_RECURRING_EXPIRY_WRITER_ROLE:"expiry_writer",P5_RECURRING_EXPIRY_READER_ROLE:"expiry_reader",
  P5_RECURRING_EXPIRY_WRITER_URL:"postgresql://expiry_writer:fictional@same.invalid/neondb?sslmode=require",
  P5_RECURRING_EXPIRY_READER_URL:"postgresql://expiry_reader:fictional@same.invalid/neondb?sslmode=require"
@@ -15,6 +17,8 @@ describe("fixed recurring Replit expiry runtime admission",()=>{
     {P5_RECURRING_EXPIRY_READER_ROLE:"phase5_retention_reader_prod20261114"},
     {P5_RECURRING_EXPIRY_READER_URL:base.P5_RECURRING_EXPIRY_READER_URL.replace("same.invalid","other.invalid")},
     {P5_RECURRING_EXPIRY_WRITER_URL:base.P5_RECURRING_EXPIRY_WRITER_URL.replace("require","disable")},
+    {P5_RECURRING_EXPIRY_WRITER_URL:base.P5_RECURRING_EXPIRY_WRITER_URL.replace("same.invalid","same-pooler.invalid")},
+    {P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:"c".repeat(64)},
     {P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY"},{P5_RECURRING_EXPIRY_LIMIT:"26"},
     {P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-different"}])
    expect(()=>admitP5RecurringExpiryRuntime({...base,...patch},sha)).toThrow("HOLD_P5_RECURRING_EXPIRY_");

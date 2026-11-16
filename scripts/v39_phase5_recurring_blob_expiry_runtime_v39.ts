@@ -5,12 +5,12 @@
 import {Pool,type PoolClient} from "pg";
 import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
-import {randomUUID} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {runBoundedProviderBlobExpiryBatchV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {createRequiredProviderBlobStoreV39,normalizeProviderBlobBucketIdV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {providerBlobObjectNameV39,type ProviderBlobStoreV39} from "../server/lib/disruption/providerBlobStore_v39";
 
-const HOLD=(x:string):never=>{throw Error("HOLD_P5_RECURRING_EXPIRY_"+x);};
+function HOLD(x:string):never{throw Error("HOLD_P5_RECURRING_EXPIRY_"+x); }
 const TABLE="clean.provider_content_blob_ref",TOMB="clean.retention_tombstone",INCIDENT="clean.adb_incident_stop";
 const BLOB_READ=["blob_ref_id","storage_kind","contract_version","object_name","content_class","content_sha256","content_bytes",
  "persisted_at_utc","expires_at_utc","retention_hours","deleted_at_utc","deletion_verified_at_utc","deletion_run_id"];
@@ -31,7 +31,7 @@ function parseConnection(value:string|undefined,role:string){
  try{
   const u=new URL(value??"");
   if(!["postgres:","postgresql:"].includes(u.protocol)||decodeURIComponent(u.username)!==role||!u.password||
-     u.pathname!=="/neondb"||!u.hostname||u.hash||
+     u.pathname!=="/neondb"||!u.hostname||u.hostname.includes("-pooler")||u.hash||
      !["require","verify-ca","verify-full"].includes(u.searchParams.get("sslmode")??"")||
      [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k)))
    HOLD("SCOPED_CONNECTION_REQUIRED");
@@ -56,7 +56,8 @@ export function admitP5RecurringExpiryRuntime(env:NodeJS.ProcessEnv,sha:string){
   HOLD("DISTINCT_SCOPED_ACTORS_REQUIRED");
  const writer=parseConnection(env.P5_RECURRING_EXPIRY_WRITER_URL,writerRole);
  const reader=parseConnection(env.P5_RECURRING_EXPIRY_READER_URL,readerRole);
- if(writer.endpoint!==reader.endpoint)HOLD("SAME_DATABASE_ENDPOINT_REQUIRED");
+ if(writer.endpoint!==reader.endpoint||createHash("sha256").update(writer.endpoint).digest("hex")!==env.P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256)
+  HOLD("SAME_REVIEWED_DIRECT_DATABASE_ENDPOINT_REQUIRED");
  if(mode==="APPLY_DUE_ONLY"&&env.P5_RECURRING_EXPIRY_APPROVAL!=="APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER")
   HOLD("EXPLICIT_RECURRING_EXPIRY_APPROVAL_REQUIRED");
  const limitText=env.P5_RECURRING_EXPIRY_LIMIT??"10",limit=Number(limitText);
@@ -100,12 +101,12 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
      [identity.rolsuper,identity.rolcreatedb,identity.rolcreaterole,identity.rolreplication,identity.rolbypassrls,
       identity.rolinherit,identity.membership,identity.schema_create,identity.db_create].some(x=>x!==false)||
      identity.schema_usage!==true)HOLD("ACTOR_IDENTITY_OR_FLAGS");
-  const cols=await client.query(`SELECT c.oid::regclass::text AS relation,a.attname AS col,
+  const cols=await client.query(`SELECT n.nspname||'.'||c.relname AS relation,a.attname AS col,
     has_column_privilege(current_user,c.oid,a.attnum,'SELECT') AS sel,
     has_column_privilege(current_user,c.oid,a.attnum,'INSERT') AS ins,
     has_column_privilege(current_user,c.oid,a.attnum,'UPDATE') AS upd,
     has_column_privilege(current_user,c.oid,a.attnum,'REFERENCES') AS ref
-   FROM pg_class c JOIN pg_attribute a ON a.attrelid=c.oid
+   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
    WHERE c.oid=ANY($1::regclass[]) AND a.attnum>0 AND NOT a.attisdropped`,[[TABLE,TOMB,INCIDENT]]);
   const seen=new Set<string>();
   for(const row of cols.rows){
@@ -123,7 +124,7 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
     OR (NOT(c.oid=ANY($1::regclass[])) AND has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))`,
    [[TABLE,TOMB,INCIDENT]])).rows[0];
   if(broad?.n!==0)HOLD("BROAD_OR_UNRELATED_TABLE_ACL");
-  const sequences=await client.query(`SELECT c.oid::regclass::text AS relation,
+  const sequences=await client.query(`SELECT n.nspname||'.'||c.relname AS relation,
    has_sequence_privilege(current_user,c.oid,'USAGE') AS usage,
    has_sequence_privilege(current_user,c.oid,'SELECT,UPDATE') AS excess
    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -184,8 +185,10 @@ export async function executeP5RecurringExpiryRuntime({writer,reader,stores,appl
 async function main(){
  let writer:Pool|undefined,reader:Pool|undefined;
  try{
-  const sha=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8",timeout:5000}).trim();
-  const remote=execFileSync("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha"],{encoding:"utf8",timeout:10000}).trim();
+  const sha=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8",timeout:5000,stdio:["ignore","pipe","ignore"]}).trim();
+  const status=execFileSync("git",["status","--porcelain","--untracked-files=normal"],{encoding:"utf8",timeout:5000,stdio:["ignore","pipe","ignore"]}).trim();
+  if(status)HOLD("REVIEWED_CHECKOUT_NOT_CLEAN");
+  const remote=execFileSync("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha"],{encoding:"utf8",timeout:10000,stdio:["ignore","pipe","ignore"]}).trim();
   if(sha!==remote)HOLD("MAIN_CHANGED");
   const config=admitP5RecurringExpiryRuntime(process.env,sha);
   // No broad runtime pool and no fallback to DATABASE_URL. Two scoped logins

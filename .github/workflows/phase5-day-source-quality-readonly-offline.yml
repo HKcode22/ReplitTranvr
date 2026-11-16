@@ -11,6 +11,8 @@ on:
       - 'server/lib/disruption/providerBlobStore_v39.ts'
       - 'tests/provider_blob_store_v39.test.ts'
       - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
+      - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
+      - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
       - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
   push:
     branches: [main]
@@ -43,7 +45,7 @@ jobs:
       - name: Check planned/attempted/bound/late denominators, zero provider and DB
         run: |
           set -Eeuo pipefail
-          npx vitest run tests/phase5_day_source_quality_readonly_v39.test.ts tests/provider_blob_store_v39.test.ts
+          npx vitest run tests/phase5_day_source_quality_readonly_v39.test.ts tests/provider_blob_store_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts
           echo 'SOURCE_METADATA_ONLY=1 READONLY_TX=1 PAID_CALLS=0 PHASE6_GO=0'
 
   authentic-pre-denominator-pg16:
