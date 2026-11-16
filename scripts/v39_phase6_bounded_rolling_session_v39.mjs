@@ -12,6 +12,7 @@ import {fileURLToPath} from "node:url";
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -409,7 +410,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // receipt and finishes; failure or unknown acceptance is never retried.
    if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>REQUEST_CAP)
     hold("CHAIN_SUCCESSOR_DEADLINE");
-   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id});
+   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id,sentAtUtc:new Date(sent).toISOString()});
    try{
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
@@ -421,6 +422,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     if(!Number.isSafeInteger(id)||id<1||id===a.id||[...terminalAcknowledgements,...pendingAcknowledgements].some(x=>x.runId===id)||
        b.run_url!==ROOT+"/actions/runs/"+id||b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)
      hold("CHAIN_ACK");
+    emit({status:"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF",runId:a.id,nextRunId:id,sentAtUtc:new Date(sent).toISOString()});
     return {...result,status:"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF",
      successorDispatches:1,nextRunId:id,nextDispatchAtUtc:new Date(sent).toISOString(),githubRequests:requests};
    }catch{hold("CHAIN_UNKNOWN_SUCCESSOR_ACK_NO_REPLAY");}
@@ -431,10 +433,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  hold("BOUND_EXHAUSTED_PENDING_ACCEPTED_WORKERS");
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ let journal;
  try{
-  const out=await runP6RollingSession(process.env,{emit:e=>console.log(JSON.stringify(e))});
+  // Refuse before any POST if the terminal receipt destination or local
+  // custody file cannot be initialized. No new remote write path.
   if(!process.env.RUNNER_TEMP)hold("RUNNER_TEMP_REQUIRED");
+  const scope=admitP6RollingSession(process.env);
+  journal=createP6RollingFailureJournal(join(process.env.RUNNER_TEMP,P6_ROLLING_FAILURE_JOURNAL_FILE),scope);
+  const out=await runP6RollingSession(process.env,{emit:e=>{
+   journal.record(e); // Sync finite attempt/ACK evidence before returning.
+   console.log(JSON.stringify(e));
+  }});
   writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),JSON.stringify(out),{flag:"wx",mode:0o600});
   console.log(JSON.stringify(out));
  }catch(e){const m=e?.message??"";console.error(/^HOLD_P6_ROLLING_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
+ finally{if(journal)journal.close();}
 }
