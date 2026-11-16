@@ -176,4 +176,60 @@ BEGIN
 END
 $sweep$;
 REVOKE ALL ON FUNCTION clean.phase5_primary_fids_expiry_sweep_v39(integer) FROM PUBLIC;
+
+-- Independent fresh-transaction receipt; only aggregate evidence for a
+-- generated sweep ID, not arbitrary source/flight lookup. Zero rows do not
+-- establish a commit proof, and source bodies/keys never leave the DB.
+CREATE FUNCTION clean.phase5_primary_fids_expiry_receipt_v39(p_run_id text)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path=pg_catalog,pg_temp
+AS $receipt$
+DECLARE
+  v_parent bigint; v_child bigint; v_total bigint;
+  v_verified_parent bigint; v_verified_child bigint;
+BEGIN
+  IF p_run_id IS NULL OR p_run_id !~ '^P5-PRIMARY-FIDS-SWEEP-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' THEN
+    RAISE EXCEPTION 'P5_PRIMARY_FIDS_SWEEP_RECEIPT_ID_INVALID';
+  END IF;
+  SELECT count(*),
+    count(*) FILTER(WHERE source_table='clean.fids_query_response' AND content_class='fids_population'
+      AND record_id ~ '^fids_query_response:[a-f0-9-]{36}:raw_payload$'),
+    count(*) FILTER(WHERE source_table='clean.flight_population' AND content_class='fids_population_normalized'
+      AND record_id ~ '^flight_population:[0-9]+:fids_provider_scope_v1$')
+  INTO v_total,v_parent,v_child
+  FROM clean.retention_tombstone
+  WHERE surface='primary' AND expiry_run_id=p_run_id
+    AND plan_hash='abdb28da60e38a1c9c031bc4f931d3b8b09dd87be4ed0d686e18efe1991b4fd9'
+    AND retention_rule='v39-phase5-access-deadline-or-max-24h/jsonb-utf8-sha256-v1'
+    AND deletion_mode='content-nullification';
+  IF v_total<>v_parent+v_child THEN RAISE EXCEPTION 'P5_PRIMARY_FIDS_SWEEP_RECEIPT_SCOPE_DRIFT'; END IF;
+  SELECT count(*) INTO v_verified_parent
+  FROM clean.retention_tombstone t JOIN clean.fids_query_response q
+    ON ('fids_query_response:'||q.population_query_id::text||':raw_payload')=t.record_id
+  WHERE t.surface='primary' AND t.expiry_run_id=p_run_id
+    AND t.source_table='clean.fids_query_response' AND t.content_class='fids_population'
+    AND q.raw_payload IS NULL AND q.response_hash IS NULL AND q.raw_expired_at_utc=t.expired_at;
+  SELECT count(*) INTO v_verified_child
+  FROM clean.retention_tombstone t JOIN clean.flight_population p
+    ON ('flight_population:'||p.id::text||':fids_provider_scope_v1')=t.record_id
+  JOIN clean.population_research_membership m USING(population_member_id)
+  WHERE t.surface='primary' AND t.expiry_run_id=p_run_id
+    AND t.source_table='clean.flight_population' AND t.content_class='fids_population_normalized'
+    AND p.provider_content_expired_at_utc=t.expired_at
+    AND num_nonnulls(p.flight_number,p.carrier_iata,p.carrier_icao,p.call_sign,
+      p.dep_airport_icao,p.dep_airport_iata,p.arr_airport_icao,p.arr_airport_iata,
+      p.dep_scheduled_utc,p.arr_scheduled_utc,p.provider_record_key,p.raw_payload_sha256,
+      p.coverage_state,p.population_query_id,p.from_local,p.to_local,p.airport_iana_timezone,
+      p.scope_classification,p.codeshare_resolution_status,p.fids_retrieval_utc,p.available_at,
+      p.response_hash,p.canonical_flight_instance_id,p.analytic_identity_id,p.provider_api_version)=0;
+  IF v_verified_parent<>v_parent OR v_verified_child<>v_child THEN
+    RAISE EXCEPTION 'P5_PRIMARY_FIDS_SWEEP_RECEIPT_READBACK_DRIFT';
+  END IF;
+  RETURN jsonb_build_object('schema','v39.phase5.primary-fids-expiry-receipt.v1',
+    'runId',p_run_id,'originalsCleared',v_verified_parent,'populationCleared',v_verified_child,'tombstones',v_total,
+    'nonemptyPrimaryReceiptVerified',v_total>0,'providerCalls',0,'databaseWrites',0,
+    'backupOrPitrVerified',false,'completeRetentionDeploymentVerified',false,'phase6PaidGo',false);
+END
+$receipt$;
+REVOKE ALL ON FUNCTION clean.phase5_primary_fids_expiry_receipt_v39(text) FROM PUBLIC;
 COMMIT;
