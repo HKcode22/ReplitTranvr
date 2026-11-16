@@ -1,6 +1,7 @@
 /** Disposable real B0062 row lock/expiry tests; in-memory object store ONLY. */
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {Pool} from "pg";
+import {verifyP5RecurringExpiryActor,executeP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 import {randomUUID} from "node:crypto";
 import {verifyOneExpiredProviderBlobV39,runBoundedProviderBlobExpiryBatchV39,type ProviderBlobExpiryCandidateV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {providerBlobObjectNameV39,type ProviderBlobRefV39} from "../server/lib/disruption/providerBlobStore_v39";
@@ -126,6 +127,81 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   expect(old.rowCount).toBe(0);expect(s.deletes).toBe(3);
   expect(await runBoundedProviderBlobExpiryBatchV39(db,s,readback,s,1)).toMatchObject({
    status:"DUE_AT_CUTOFF_CLEARED",selectedCount:0,remainingUnwitnessedMarkersAtCutoff:0});
+ });
+
+ it("actual PG16 scoped actor permissions, read-only preflight, due-only apply and durable deletion STOP",async()=>{
+  // This test is in the existing sequential expiry suite; no parallel
+  // synthetic due rows can race the fixture. Only disposable local roles.
+  const writerRole="p5_expiry_ci_writer",readerRole="p5_expiry_ci_reader";
+  const refs="blob_ref_id,storage_kind,contract_version,object_name,content_class,content_sha256,content_bytes,persisted_at_utc,expires_at_utc,retention_hours,deleted_at_utc,deletion_verified_at_utc,deletion_run_id";
+  const witness="surface,record_id,content_hash,expired_at,tombstoned_at_utc,plan_hash,content_class,source_table,retention_rule,expiry_run_id,deletion_mode";
+  let writer:Pool|undefined,reader:Pool|undefined;
+  try{
+   await db.query("CREATE ROLE "+writerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_writer'");
+   await db.query("CREATE ROLE "+readerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_reader'");
+   for(const role of [writerRole,readerRole]){
+    await db.query("GRANT USAGE ON SCHEMA clean TO "+role);
+    await db.query("GRANT SELECT ("+refs+") ON clean.provider_content_blob_ref TO "+role);
+    await db.query("GRANT SELECT ("+witness+") ON clean.retention_tombstone TO "+role);
+    await db.query("GRANT SELECT (id,cause,resolved) ON clean.adb_incident_stop TO "+role);
+   }
+   await db.query("GRANT UPDATE (deleted_at_utc,deletion_verified_at_utc,deletion_run_id) ON clean.provider_content_blob_ref TO "+writerRole);
+   await db.query("GRANT INSERT ("+witness+") ON clean.retention_tombstone TO "+writerRole);
+   await db.query("GRANT INSERT (cause,occurred_at_utc,detail,resolved) ON clean.adb_incident_stop TO "+writerRole);
+   await db.query("GRANT SELECT (batch_id,run_day_index,status) ON clean.adb_collection_batches TO "+writerRole);
+   await db.query("GRANT INSERT (batch_id,notification_items,delivery_failure,error) ON clean.adb_ingest_events TO "+writerRole);
+   await db.query("GRANT USAGE ON SEQUENCE clean.retention_tombstone_id_seq,clean.adb_incident_stop_id_seq,clean.adb_ingest_events_id_seq TO "+writerRole);
+   writer=new Pool({connectionString:URL.replace("postgres:postgres@",writerRole+":ci_disposable_writer@"),max:2});
+   reader=new Pool({connectionString:URL.replace("postgres:postgres@",readerRole+":ci_disposable_reader@"),max:1,options:"-c default_transaction_read_only=on"});
+   const verifyActor:typeof verifyP5RecurringExpiryActor=async(d,r,a)=>verifyP5RecurringExpiryActor(d,r,a,false);
+   await verifyActor(writer,writerRole,"writer");await verifyActor(reader,readerRole,"reader");
+   await db.query("GRANT SELECT (source_record_id) ON clean.provider_content_blob_ref TO "+readerRole);
+   await expect(verifyActor(reader,readerRole,"reader")).rejects.toThrow("COLUMN_ACL_DRIFT");
+   await db.query("REVOKE SELECT (source_record_id) ON clean.provider_content_blob_ref FROM "+readerRole);
+   await db.query("GRANT UPDATE (source_record_id) ON clean.provider_content_blob_ref TO "+writerRole);
+   await expect(verifyActor(writer,writerRole,"writer")).rejects.toThrow("COLUMN_ACL_DRIFT");
+   await db.query("REVOKE UPDATE (source_record_id) ON clean.provider_content_blob_ref FROM "+writerRole);
+   await expect(reader.query("UPDATE clean.provider_content_blob_ref SET deletion_run_id='forbidden' WHERE false")).rejects.toThrow();
+   const c=await make(),s=makeStore();s.objects.add(c.objectName);
+   const conf={writer,reader,writerRole,readerRole,limit:1,verifyActor,stores:{writer:s,reader:s}};
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:false})).toMatchObject({status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",objectDeletions:0});
+   expect(s.deletes).toBe(0);
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({status:"DUE_AT_CUTOFF_CLEARED",verifiedNowCount:1,independentlyReadBackCount:1});
+   expect(s.deletes).toBe(1);
+   // Seed a synthetic active parent WITHOUT authorizing Phase6 in this
+   // disposable database. Only fixture insertion bypasses unrelated
+   // phase6 admission triggers, using an owner-local transaction. The
+   // actual subsequent restricted incident insertion runs all triggers.
+   const syntheticBatch="expiry-ci-active-"+randomUUID();
+   const fixture=await db.connect();
+   try{
+    await fixture.query("BEGIN");
+    await fixture.query("SET LOCAL session_replication_role='replica'");
+    await fixture.query(`INSERT INTO clean.adb_collection_batches(batch_id,batch_seq,random_seed,status,
+     window_start,window_end,credit_budget,tier_mix,airports,run_day_index)
+     VALUES($1,999991,7,'ACTIVE',now()-interval '1 hour',now()+interval '1 hour',100,'{}'::jsonb,ARRAY['WSSS'],31)`,[syntheticBatch]);
+    await fixture.query("COMMIT");
+   }catch(e){await fixture.query("ROLLBACK").catch(()=>{});throw e;}finally{fixture.release();}
+   const b=await make();s.objects.add(b.objectName);
+   const incidentCount=async()=>Number((await db.query("SELECT count(*)::int AS n FROM clean.adb_incident_stop WHERE cause='deletion' AND detail->>'kind'='recurring_provider_blob_expiry_uncertain' AND resolved=false")).rows[0].n);
+   const before=await incidentCount();
+   await expect(executeP5RecurringExpiryRuntime({...conf,apply:true,stores:{writer:s,reader:{exists:async name=>name===b.objectName||s.exists(name)}}}))
+    .rejects.toThrow("BATCH_UNCERTAIN_DELETION_STOP_RECORDED_NO_RETRY");
+   expect(await incidentCount()).toBe(before+1);
+   expect((await db.query("SELECT count(*)::int AS n FROM clean.adb_ingest_events WHERE batch_id=$1 AND notification_items=0 AND delivery_failure=true AND error='incident-stop:deletion' AND raw_payload IS NULL",[syntheticBatch])).rows[0].n).toBe(1);
+   expect(s.deletes).toBe(2);
+   // Recover independent proof only, not a second physical delete and
+   // never automatically clear the incident.
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({recoveredReadbackCount:1,verifiedNowCount:0});
+   expect(await incidentCount()).toBe(before+1);
+   expect(s.deletes).toBe(2);
+  }finally{
+   await writer?.end();await reader?.end();
+   for(const role of [writerRole,readerRole]){
+    await db.query("DROP OWNED BY "+role).catch(()=>{});
+    await db.query("DROP ROLE IF EXISTS "+role);
+   }
+  }
  });
 
 });

@@ -1,0 +1,44 @@
+import {describe,it,expect} from "vitest";
+import {createHash} from "node:crypto";
+import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
+const sha="a".repeat(40),base={
+ P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
+ V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-synthetic",P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-synthetic",
+ P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:createHash("sha256").update("same.invalid/neondb").digest("hex"),
+ P5_RECURRING_EXPIRY_WRITER_ROLE:"expiry_writer",P5_RECURRING_EXPIRY_READER_ROLE:"expiry_reader",
+ P5_RECURRING_EXPIRY_WRITER_URL:"postgresql://expiry_writer:fictional@same.invalid/neondb?sslmode=require",
+ P5_RECURRING_EXPIRY_READER_URL:"postgresql://expiry_reader:fictional@same.invalid/neondb?sslmode=require"
+};
+describe("fixed recurring Replit expiry runtime admission",()=>{
+ it("defaults to verification, refuses broad, wrong, unencrypted, cross-endpoint or same actor URLs",()=>{
+  expect(admitP5RecurringExpiryRuntime(base,sha)).toMatchObject({apply:false,limit:10});
+  for(const patch of [{DATABASE_URL:"owner"},{V39_DATABASE_RUNTIME_URL:"owner"},{AERODATABOX_API_KEY:"forbidden"},
+    {GITHUB_ACTIONS:"true"},{P5_RECURRING_EXPIRY_READER_ROLE:"expiry_writer"},
+    {P5_RECURRING_EXPIRY_READER_ROLE:"phase5_retention_reader_prod20261114"},
+    {P5_RECURRING_EXPIRY_READER_URL:base.P5_RECURRING_EXPIRY_READER_URL.replace("same.invalid","other.invalid")},
+    {P5_RECURRING_EXPIRY_WRITER_URL:base.P5_RECURRING_EXPIRY_WRITER_URL.replace("require","disable")},
+    {P5_RECURRING_EXPIRY_WRITER_URL:base.P5_RECURRING_EXPIRY_WRITER_URL.replace("same.invalid","same-pooler.invalid")},
+    {P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:"c".repeat(64)},
+    {P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY"},{P5_RECURRING_EXPIRY_LIMIT:"26"},
+    {P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-different"}])
+   expect(()=>admitP5RecurringExpiryRuntime({...base,...patch},sha)).toThrow("HOLD_P5_RECURRING_EXPIRY_");
+  expect(admitP5RecurringExpiryRuntime({...base,P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY",
+   P5_RECURRING_EXPIRY_APPROVAL:"APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER"},sha)).toMatchObject({apply:true});
+ });
+ it("verification never uses DELETE/query or implies independent IAM or backup proof",async()=>{
+  const calls:string[]=[];
+  const forbidden=async()=>{throw Error("FORBIDDEN");};
+  const writer={query:forbidden,connect:forbidden} as any,reader={query:forbidden,connect:forbidden} as any;
+  const result=await executeP5RecurringExpiryRuntime({writer,reader,writerRole:"expiry_writer",readerRole:"expiry_reader",limit:10,apply:false,
+   verifyActor:async(_db,role)=>{calls.push(role);},stores:{writer:{exists:async()=>{calls.push("writer.exists");return false;},delete:forbidden},
+   reader:{exists:async()=>{calls.push("reader.exists");return false;}}}});
+  expect(calls).toEqual(["expiry_writer","expiry_reader","writer.exists","reader.exists"]);
+  expect(result).toMatchObject({status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",databaseWrites:0,objectDeletions:0,independentStorageIamVerified:false,backupRetentionVerified:false});
+ });
+ it("a readback ACL failure prevents any storage request",async()=>{
+  const forbidden=async()=>{throw Error("FORBIDDEN_STORAGE_OR_SQL");};
+  const writer={query:forbidden,connect:forbidden} as any,reader={query:forbidden,connect:forbidden} as any;
+  await expect(executeP5RecurringExpiryRuntime({writer,reader,writerRole:"expiry_writer",readerRole:"expiry_reader",limit:10,apply:true,
+   verifyActor:async(_db,_role,actor)=>{if(actor==="reader")throw Error("READER_ACL");},stores:{writer:{exists:forbidden,delete:forbidden},reader:{exists:forbidden}}})).rejects.toThrow("READER_ACL");
+ });
+});
