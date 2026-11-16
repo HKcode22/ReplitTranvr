@@ -14,7 +14,8 @@ describe("Phase5 V4 reviewed callback receiver / mode-separated expiry release",
   expect(source).toContain('git diff --cached --quiet');
   expect(source).toContain('git show "$PIN:.replit"');
   expect(source).toContain('cmp -s - .replit');
-  expect(source).toContain('V49_CALLBACK_ONLY_BUILD=1 V49_BUILD_GIT_HEAD="$PIN" npm run build');
+  expect(source).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
+  expect(source).not.toContain('V49_');
   expect(source).toContain('phase6_paid_launch_authorized:false');
   expect(source).toContain('phase5_freeze_passed:false');
   expect(cfg).toContain('build = ["bash", "'+FILE+'"]');

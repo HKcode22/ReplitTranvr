@@ -56,7 +56,7 @@ git show "$PIN:.replit" | awk -v old="$OLD_BUILD" -v new="$NEW_BUILD" '
 ' | cmp -s - .replit || hold
 
 # No unreviewed environment override can spoof the publicly reported code.
-OVERRIDE="$(printenv V49_BUILD_GIT_HEAD 2>/dev/null || true)"
+OVERRIDE="$(printenv V39_BUILD_GIT_HEAD 2>/dev/null || true)"
 test -z "$OVERRIDE" || test "$OVERRIDE" = "$PIN" || hold
 
 SNAPSHOT="$(git rev-parse HEAD)"
@@ -66,7 +66,7 @@ if test "$#" -eq 1; then
 fi
 
 # Replit's build only: no database, provider or deployment action inside here.
-V49_CALLBACK_ONLY_BUILD=1 V49_BUILD_GIT_HEAD="$PIN" npm run build
+V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build
 node --input-type=module - "$PIN" "$SNAPSHOT" <<'NODE'
 import {readFileSync,writeFileSync} from 'node:fs';
 const [reviewed,snapshot]=process.argv.slice(2);
