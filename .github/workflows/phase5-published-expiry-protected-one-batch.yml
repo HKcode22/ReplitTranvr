@@ -79,5 +79,5 @@ jobs:
         with:
           name: p5-expiry-apply-${{ github.run_id }}
           path: ${{ runner.temp }}/p5-published-expiry-apply-receipt.json
-          retention-days: 7
+          retention-days: 90 # sanitized operational receipt only; never provider content
           if-no-files-found: error

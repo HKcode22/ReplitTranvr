@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs'
+      - 'scripts/v39_phase5_expiry_v4_verify_handoff_owner_v39.mjs'
+      - 'tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs'
       - 'tests/phase5_expiry_receiver_verify_once_v39.test.mjs'
       - 'scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs'
       - 'tests/phase5_expiry_receiver_apply_once_v39.test.mjs'
@@ -63,7 +65,7 @@ jobs:
           set -Eeuo pipefail
           node --check scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
           node --check scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs
-          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs
+          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs
           npx vitest run tests/phase5_expiry_receiver_transport_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts tests/phase5_expiry_sealed_handoff_v39.test.ts tests/phase5_expiry_sealed_crypto_v39.test.ts
   actual-verify-only:
     if: >-
@@ -97,5 +99,5 @@ jobs:
         with:
           name: p5-expiry-verify-${{ github.run_id }}
           path: ${{ runner.temp }}/p5-published-expiry-verify-receipt.json
-          retention-days: 7
+          retention-days: 90 # sanitized operational receipt only; never provider content
           if-no-files-found: error
