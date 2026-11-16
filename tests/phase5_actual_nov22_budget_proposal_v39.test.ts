@@ -1,7 +1,8 @@
 import {readFileSync,mkdtempSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -264,5 +265,35 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   const ext=Buffer.from(JSON.stringify(p)),timing=Buffer.from(JSON.stringify(x.timingCandidate));
   expect(()=>compileP6ActualCandidateExport({externalBytes:ext,expectedExternalFileSha256:hash(ext),timingBytes:timing,expectedTimingFileSha256:hash(timing)})).toThrow();
  });
+
+ it("builds actual content-bound release identity candidates and all 31 plan digests, but no runnable authorization",()=>{
+  const code=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
+  const x=prepareP6ActualReleaseIdentityReview(code);
+  expect(x.checkout).toEqual(inspectP6ExactReviewCheckout(code));
+  const digest=(v:unknown)=>hash(Buffer.from(JSON.stringify(v)));
+  for(const a of [x.manifestCandidate,x.configCandidate,x.rangeEvidenceCandidate,x.timingEvidenceCandidate])
+   expect(a.sha256).toBe(digest(a.content));
+  expect(x.manifestCandidate.content.sourceInventorySha256).toBe(digest(x.sourceInventory));
+  expect(x.manifestCandidate.content.executableFileCount).toBe(x.sourceInventory.length);
+  expect(x.manifestCandidate.content.configCandidateSha256).toBe(x.configCandidate.sha256);
+  expect(x.manifestCandidate.content.calendarRowsSha256).toBe("45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c");
+  expect(x.manifestCandidate.content.bindingDocuments).toHaveLength(8);
+  expect(x.manifestCandidate.content.bindingDocuments.every(a=>hash(readFileSync(a.path))===a.sha256)).toBe(true);
+  expect(x.sourceInventory.some(a=>a.path==="scripts/v39_phase6_enable_source_owner_v39.ts")).toBe(true);
+  expect(x.sourceInventory.every(a=>!a.path.startsWith("data-collection/")&&!a.path.includes(".env"))).toBe(true);
+  expect(JSON.stringify(x.manifestCandidate.content)).not.toContain(code);
+  expect(x.configCandidate.content.splitRule).toMatchObject({train:[1,20],validation:[21,25],test:[26,31],
+   groupBy:"flight_instance_id",concreteTestRowsMaterialized:false});
+  expect(x.configCandidate.content.source.cycleRestCeilingUnits).toBe(46468);
+  expect(x.geometry).toMatchObject({dayPlanCount:31,totalQueries:6144,totalReservedUnits:41960});
+  expect(x.geometry.dayPlanSha256s).toHaveLength(31);
+  expect(x.geometry.dayPlanSha256s.every((v,i)=>v.runDayIndex===i+1&&/^[a-f0-9]{64}$/.test(v.sha256))).toBe(true);
+  expect(x).toMatchObject({actualAuthorizationId:null,finalPredecessorEvidenceIds:null,
+   stagePacketExported:false,candidateDigestsApproved:false,sourceRightsApproved:false,
+   scientificFreezeApproved:false,phase6PaidGo:false});
+  expect(JSON.stringify(x)).not.toContain("REVIEW-ONLY-NOT-AN-AUTHORIZATION");
+  expect(JSON.stringify(x)).not.toContain('"unsignedStageInput"');
+  expect(()=>inspectP6ExactReviewCheckout("0".repeat(40))).toThrow("REVIEW_CHECKOUT_NOT_EXACT");
+ },20000);
 
 });
