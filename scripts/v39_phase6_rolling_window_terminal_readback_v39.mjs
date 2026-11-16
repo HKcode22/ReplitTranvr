@@ -53,10 +53,10 @@ export function unpackP6WindowReceiptArchive(bytes,meta){
  return unpackP6ControllerArtifactArchive(bytes,meta,"TERMINAL");
 }
 export function unpackP6ControllerArtifactArchive(bytes,meta,kind){
- if(!["TERMINAL","FAILURE","SOURCE","POST"].includes(kind))hold("ARCHIVE_FILE_SCOPE");
+ if(!["TERMINAL","FAILURE","SOURCE","POST","INDEPENDENT"].includes(kind))hold("ARCHIVE_FILE_SCOPE");
  const parent=P6_PAID_CHILD_ROUTES[kind];
- const name=parent?parent.file:kind==="TERMINAL"?FILE:"p6-rolling-failure-custody.jsonl",
-  maxArchive=parent?16384:kind==="TERMINAL"?65536:131072,maxFile=parent?4096:kind==="TERMINAL"?32768:65536;
+ const name=parent?parent.file:kind==="INDEPENDENT"?"p6-independent-window-readback.json":kind==="TERMINAL"?FILE:"p6-rolling-failure-custody.jsonl",
+  maxArchive=kind==="INDEPENDENT"?262144:parent?16384:kind==="TERMINAL"?65536:131072,maxFile=kind==="INDEPENDENT"?262144:parent?4096:kind==="TERMINAL"?32768:65536;
  if(!Buffer.isBuffer(bytes)||bytes.length!==meta.size||bytes.length<1||bytes.length>maxArchive||
    "sha256:"+hash(bytes)!==meta.digest)hold("ARCHIVE_SIZE_OR_DIGEST");
  const dir=mkdtempSync(join(tmpdir(),"p6-terminal-readback-")),path=join(dir,"receipt.zip");

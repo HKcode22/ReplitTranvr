@@ -135,7 +135,41 @@ export function summarizeP6RestLedger(input,{sourceRows,otherRows,categoryRows,o
   actualProviderBilledUnitsVerified:false,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
   providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }
-export async function readP6RestLedgerAccounting(input,client,{expectedActor="neondb_owner"}={}){
+
+/** Match the runtime's committed ownership metadata to the owner database.
+ * No policy signature inference, no lock, no closure, works after STOP.
+ * The caller's transaction MUST be read-only; the owner audit creates it.
+ */
+export async function verifyP6RecordedDbRootMetadata(input,evidence,client){
+ const a=scope(input),w=evidence?.recordedWindowCustody;
+ if(!w||!ID(evidence.rootRunId)||w.rootRunId!==evidence.rootRunId||!ID(evidence.terminalRunId)||
+   !/^[a-f0-9]{40}$/.test(evidence.reviewedMainSha??"")||!SHA.test(evidence.policyCommitment??"")||
+   w.policyCommitment!==evidence.policyCommitment||!SHA.test(evidence.terminalReceiptSha256??"")||
+   evidence.epochUtc!==input.epochUtc||evidence.chainDeadlineUtc!==input.chainDeadlineUtc||
+   w.windowStartUtc!==evidence.windowStartUtc||w.windowEndUtc!==evidence.windowEndUtc||
+   !Number.isSafeInteger(w.windowIndex)||w.windowIndex<0||w.windowIndex>719)hold("ROOT_SCOPE");
+ const start=utc(w.windowStartUtc),end=utc(w.windowEndUtc),claimed=utc(w.claimedAtUtc);
+ if(start>=end||a.from<start||a.until>end||claimed<a.from||claimed>=a.until)hold("ROOT_CLOCK");
+ const out=await client.query(`
+ SELECT w.root_run_id::text root_run_id,w.window_index,w.window_start_utc,w.window_end_utc,w.claimed_at_utc,
+ w.release_code_sha,w.closed_at_utc,w.terminal_run_id::text terminal_run_id,w.terminal_receipt_sha256,
+ EXISTS(SELECT 1 FROM clean.adb_phase6_authorization a WHERE a.singleton_key
+ AND a.authorization_id=w.authorization_id AND a.manifest_sha256=w.manifest_sha256
+ AND a.calendar_hash=w.calendar_sha256 AND a.config_hash=w.config_sha256 AND a.code_sha=w.release_code_sha) AS current_authorization_matches
+ FROM clean.phase6_rolling_window_custody_v39 w
+ WHERE w.root_run_id=$1::bigint AND w.manifest_sha256=$2 AND current_setting('transaction_read_only')='on'`,[String(w.rootRunId),a.manifest]);
+ const row=out.rows?.[0];
+ if(out.rowCount!==1||row?.root_run_id!==String(w.rootRunId)||row.window_index!==w.windowIndex||
+   row.release_code_sha!==evidence.reviewedMainSha||dbtime(row.window_start_utc)!==start||
+   dbtime(row.window_end_utc)!==end||dbtime(row.claimed_at_utc)!==claimed||
+   typeof row.current_authorization_matches!=="boolean")hold("ROOT_DB_DRIFT");
+ const alreadyClosed=row.closed_at_utc!==null;
+ if(alreadyClosed&&(row.terminal_run_id!==String(evidence.terminalRunId)||row.terminal_receipt_sha256!==evidence.terminalReceiptSha256))hold("ROOT_EXISTING_CLOSURE_DRIFT");
+ return {rootRunId:w.rootRunId,windowIndex:w.windowIndex,actualDbOwnershipMetadataMatched:true,rootAlreadyClosed:alreadyClosed,
+  currentAuthorizationIdentityMatches:row.current_authorization_matches,policyCommitmentIndependentlyRecomputed:false,permitClose:false};
+}
+
+export async function readP6RestLedgerAccounting(input,client,{expectedActor="neondb_owner",rootEvidence}={}){
  const a=scope(input);
  if(!client||typeof client.query!=="function"||!["neondb_owner","postgres"].includes(expectedActor))hold("READONLY_CLIENT");
  let open=false;
@@ -146,12 +180,14 @@ export async function readP6RestLedgerAccounting(input,client,{expectedActor="ne
   const ident=(await client.query("SELECT current_database() db,current_user actor,session_user login,current_setting('server_version_num')::int ver,pg_is_in_recovery() replica,current_setting('transaction_read_only') ro,current_setting('transaction_isolation') isolation,clock_timestamp() at")).rows[0];
   if(!ident||ident.db!=="neondb"||ident.actor!==expectedActor||ident.login!==expectedActor||
     Math.floor(ident.ver/10000)!==16||ident.replica!==false||ident.ro!=="on"||ident.isolation!=="repeatable read")hold("DB_IDENTITY");
+  const root=rootEvidence===undefined?null:await verifyP6RecordedDbRootMetadata(input,rootEvidence,client);
   const sourceRows=(await client.query(P6_SOURCE_RESERVATION_SQL,[a.manifest,a.ids])).rows;
   const otherRows=(await client.query(P6_OTHER_RESERVATION_SQL,[a.manifest,a.ids])).rows;
   const categoryRows=(await client.query(P6_CATEGORY_ACCOUNTING_SQL,[a.manifest])).rows;
   const unmatched=(await client.query(P6_UNATTRIBUTED_SQL,[a.manifest,a.ids,new Date(a.from).toISOString(),new Date(a.until).toISOString()])).rows[0]?.n;
   const out=summarizeP6RestLedger(input,{sourceRows,otherRows,categoryRows,observedAt:ident.at,unattributedReservationCount:unmatched});
   await client.query("ROLLBACK");open=false;
-  return {...out,actualDbClock:true,readOnlyRepeatableRead:true,actualDbOwnershipVerified:false};
+  return {...out,actualDbClock:true,readOnlyRepeatableRead:true,actualDbOwnershipVerified:false,
+   ...(root?{rootCustody:root}:{})};
  }finally{if(open)await client.query("ROLLBACK").catch(()=>{});}
 }

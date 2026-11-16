@@ -3,6 +3,7 @@
 import pg from "pg";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
+import {verifyP6RecordedDbRootMetadata} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce,readP6RollingRootPreflight} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
 import assert from "node:assert/strict";
 const URL="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
@@ -158,6 +159,16 @@ try {
  assert.equal(new Date(winner.windowEndUtc).getTime(),from.getTime()+4*3600000);
  assert.equal(winner.rootRunId,accepted);assert.equal(winner.actualDbClock,true);assert.equal(winner.independentConnection,true);
  assert.equal(winner.restrictedFunctionOnly,true);
+ const rootInput={manifestSha256:manifest,epochUtc:iso(clock),chainDeadlineUtc:iso(clock+30*60000),paidCapableChildRuns:[]};
+ const rootEvidence={rootRunId:accepted,terminalRunId:accepted,reviewedMainSha:code,policyCommitment:winner.policyCommitment,
+  terminalReceiptSha256:h("7"),epochUtc:rootInput.epochUtc,chainDeadlineUtc:rootInput.chainDeadlineUtc,
+  windowStartUtc:winner.windowStartUtc,windowEndUtc:winner.windowEndUtc,recordedWindowCustody:{rootRunId:accepted,windowIndex:winner.windowIndex,
+   windowStartUtc:winner.windowStartUtc,windowEndUtc:winner.windowEndUtc,claimedAtUtc:winner.claimedAtUtc,policyCommitment:winner.policyCommitment}};
+ await owner.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+ const rootMeta=await verifyP6RecordedDbRootMetadata(rootInput,rootEvidence,owner);
+ assert.equal(rootMeta.actualDbOwnershipMetadataMatched,true);assert.equal(rootMeta.rootAlreadyClosed,false);assert.equal(rootMeta.permitClose,false);
+ await assert.rejects(verifyP6RecordedDbRootMetadata(rootInput,{...rootEvidence,reviewedMainSha:"0".repeat(40)},owner),/ROOT_DB_DRIFT/);
+ await owner.query("ROLLBACK");
  assert.equal((await readPlan()).reason,"PRIOR_ROOT_UNRESOLVED");
  await wrong.query("BEGIN READ ONLY");
  assert.equal((await wrong.query(readBound,[accepted,manifest])).rowCount,0);

@@ -6,6 +6,7 @@ on:
       - 'migrations/staged/V0102__phase6_rolling_window_custody_owner_inert_v39.sql'
       - 'tests/phase6_rolling_window_custody_real_pg16_v39.mjs'
       - 'server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs'
+      - 'server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
       - '.github/workflows/phase6-rolling-window-custody-disposable-pg16.yml'
 permissions:
