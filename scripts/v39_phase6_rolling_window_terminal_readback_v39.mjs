@@ -143,6 +143,11 @@ export async function runP6WindowTerminalReadback(env,{fetcher=fetch,readArchive
   archiveDigestIndependentlyVerified:true,artifactMetadataBeforeAfterBound:true,actualDbOwnershipVerified:false};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- try{console.log(JSON.stringify(await runP6WindowTerminalReadback(process.env)));}
+ try{
+  const out=await runP6WindowTerminalReadback(process.env),raw=JSON.stringify(out);
+  if(typeof process.env.RUNNER_TEMP!=="string"||!process.env.RUNNER_TEMP.startsWith("/")||Buffer.byteLength(raw)>262144)hold("INDEPENDENT_RECEIPT_DESTINATION");
+  writeFileSync(join(process.env.RUNNER_TEMP,"p6-independent-window-readback.json"),raw,{flag:"wx",mode:0o600});
+  console.log(raw);
+ }
  catch(e){const m=e?.message??"";console.error(/^HOLD_P6_WINDOW_(READBACK|TERMINAL)_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_WINDOW_READBACK_REDACTED_NO_GO");process.exitCode=2;}
 }

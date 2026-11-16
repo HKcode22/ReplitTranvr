@@ -149,3 +149,11 @@ jobs:
             node scripts/v39_phase6_github_controller_heartbeat_v39.mjs
           fi
           echo 'PHASE6_GITHUB_AUTO_HEARTBEAT_OBSERVED_NO_PROVIDER_NO_DB_NO_GO'
+      - name: Preserve independent exact window readback (operational metadata only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'READONLY_TERMINAL_ROLLING_WINDOW_CUSTODY_NO_PROVIDER_NO_GO' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-independent-window-readback-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-independent-window-readback.json
+          if-no-files-found: error
+          retention-days: 90

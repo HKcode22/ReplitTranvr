@@ -6,6 +6,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {admitP6WindowTerminalReadback,unpackP6WindowReceiptArchive,runP6WindowTerminalReadback} from "../scripts/v39_phase6_rolling_window_terminal_readback_v39.mjs";
+import {P6_PAID_CHILD_ROUTES} from "../server/lib/disruption/phase6RollingChildCustody_v39.mjs";
 import {P6_ROLLING_ROUTES} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const main="a".repeat(40),old="b".repeat(40),policy="c".repeat(64),time=Date.parse("2030-01-01T00:00:00.000Z"),MIN=60000;
 const iso=x=>new Date(time+x*MIN).toISOString(),digest=b=>"sha256:"+createHash("sha256").update(b).digest("hex");
@@ -25,8 +26,8 @@ const j=(id,run_id,name,steps=[])=>({id,run_id,name,head_sha:old,run_attempt:1,s
  steps:steps.map(name=>({name,status:"completed",conclusion:"success"}))});
 const rootJobs=[j(1234,123,"one-protected-bounded-session",["Execute one protected rolling session and reconcile accepted workers before terminal","Preserve terminal operational receipt for independently reviewed continuation"])];
 const workerJobs=route.jobs.map((x,i)=>j(4560+i,456,x.name,x.step?[x.step]:[]));
-function pack(value=receipt,extra=false){
- const dir=mkdtempSync(join(tmpdir(),"p6-window-archive-fixture-")),out=join(dir,"artifact.zip"),file=join(dir,"p6-rolling-terminal-receipt.json");
+function pack(value=receipt,extra=false,filename="p6-rolling-terminal-receipt.json"){
+ const dir=mkdtempSync(join(tmpdir(),"p6-window-archive-fixture-")),out=join(dir,"artifact.zip"),file=join(dir,filename);
  try{
   writeFileSync(file,JSON.stringify(value),{mode:0o600});
   let files=[file];if(extra){const x=join(dir,"extra.txt");writeFileSync(x,"unexpected");files.push(x);}
@@ -80,5 +81,53 @@ test("archive drift/malformed history/fake job or main/production credentials ca
  for(const args of [{GITHUB_EVENT_NAME:"schedule"},{GITHUB_RUN_ATTEMPT:"2"},{GITHUB_SHA:old},{P6_PRIVATE_READER_DATABASE_URL:"forbidden"},
   {V39_PHASE6_PROCESS_ARMED:"1"},{P6_ROLLING_WINDOW_SCOPE_JSON:JSON.stringify({...expected,secret:"forbidden"})}]){
   assert.throws(()=>admitP6WindowTerminalReadback({...e,...args}),/HOLD_P6_WINDOW_READBACK/);
+ }
+});
+
+function parentFixture({badDigest=false,drift=false,childActive=false,childWrongStep=false}={}){
+ const group=P6_ROLLING_ROUTES.find(x=>x.lane==="SOURCE_POST"),parent={...worker,path:".github/workflows/"+group.workflow};
+ const routes=Object.values(P6_PAID_CHILD_ROUTES),paid=routes.map((r,i)=>({...worker,id:567+i,path:".github/workflows/"+r.workflow,created_at:iso(2),
+  ...(childActive&&i===0?{status:"in_progress",conclusion:null}:{})}));
+ const paidJobs=new Map(routes.map((r,i)=>[paid[i].id,[{...j(5000+i,paid[i].id,r.job,[r.step]),
+  ...(childWrongStep&&i===0?{steps:[{name:r.step,status:"completed",conclusion:"skipped"}]}:{})}]]));
+ const pjobs=group.jobs.map((x,i)=>{
+  const child=routes.find(y=>y.parentJob===x.name);
+  const result={...j(4560+i,456,x.name),started_at:iso(1),completed_at:iso(3)};
+  if(child)result.steps=[...["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(name=>({name:"Parent outcome "+name,status:"completed",conclusion:name==="ACKNOWLEDGED_NOT_PAID_RECEIPT"?"success":"skipped"})),{name:child.uploadStep,status:"completed",conclusion:"success"}];
+  return result;
+ });
+ const rootZip=pack({...receipt,terminalAcknowledgements:[{lane:"SOURCE_POST",runId:456,sentAtUtc:iso(1)}]}),
+  childZips=routes.map((r,i)=>pack({schema:"v39.phase6.parent-child-custody.v1",parentRunId:456,reviewedMainSha:old,lane:r.lane,disposition:"ACKNOWLEDGED_NOT_PAID_RECEIPT",childRunIds:[567+i],recordedAtUtc:iso(2),providerCallsByParent:0,paidGetsCertifiedByParent:0,permitReplay:false,phase6PaidGo:false},false,r.file));
+ const meta=(id,name,bytes,runId)=>({id,name,size_in_bytes:bytes.length,digest:digest(bytes),expired:false,workflow_run:{id:runId}});
+ const rm=meta(777,"p6-rolling-terminal-123",rootZip,123),pm=routes.map((r,i)=>meta(778+i,r.artifactPrefix+456,childZips[i],456));
+ if(badDigest)pm[0].digest="sha256:"+"0".repeat(64);
+ let reads=0;const calls=[],downloadIds=[];
+ const fetcher=async(url,opt)=>{
+  const u=new URL(url);assert.equal(opt.method,"GET");calls.push(url);let x;
+  if(u.pathname.endsWith("/git/ref/heads/main"))x={object:{sha:main}};
+  else if(u.pathname.endsWith("/workflows/phase6-rolling-controller-bounded-session.yml/runs"))x={total_count:1,workflow_runs:[root]};
+  else if(u.pathname.endsWith("/actions/runs/123"))x=root;
+  else if(u.pathname.endsWith("/actions/runs/456"))x=parent;
+  else if(u.pathname.endsWith("/actions/runs/123/jobs"))x={total_count:rootJobs.length,jobs:rootJobs};
+  else if(u.pathname.endsWith("/actions/runs/456/jobs"))x={total_count:pjobs.length,jobs:pjobs};
+  else if(u.pathname.endsWith("/actions/runs/123/artifacts"))x={total_count:1,artifacts:[rm]};
+  else if(u.pathname.endsWith("/actions/runs/456/artifacts")){reads++;x={total_count:2,artifacts:pm.map((y,i)=>drift&&reads>1&&i===0?{...y,id:9999}:y)};}
+  else if(/\/actions\/runs\/(567|568)$/.test(u.pathname))x=paid.find(y=>u.pathname.endsWith("/"+y.id));
+  else if(/\/actions\/runs\/(567|568)\/jobs$/.test(u.pathname)){const id=Number(u.pathname.split("/").at(-2)),jobs=paidJobs.get(id);x={total_count:jobs.length,jobs};}
+  else assert.fail("unexpected URL");
+  return {ok:true,json:async()=>structuredClone(x),headers:{get:()=>"1000"}};
+ };
+ return {calls,downloadIds,options:{fetcher,now:()=>time+40*MIN,readArchive:async({artifactId})=>{downloadIds.push(artifactId);return artifactId===777?rootZip:childZips[artifactId-778];}}};
+}
+test("complete terminal readback downloads exact parent ZIPs and independently accounts for actual-shaped SOURCE/POST child jobs",async()=>{
+ const f=parentFixture(),out=await runP6WindowTerminalReadback(e,f.options);
+ assert.deepEqual(f.downloadIds,[777,778,779]);
+ assert.equal(out.parentCustodyArchiveDownloads,2);assert.equal(out.independentlyVerifiedPaidCapableChildJobs,2);
+ assert.deepEqual(out.paidCapableChildRuns,[{parentRunId:456,lane:"SOURCE",runId:567},{parentRunId:456,lane:"POST",runId:568}]);
+ assert.equal(out.independentScheduledOrManualChildrenCovered,false);assert.equal(out.providerSettlementVerified,false);assert.equal(out.permitClose,false);
+});
+test("real ZIP parent digest/metadata drift or nonterminal descendant cannot certify the controller chain",async()=>{
+ for(const patch of [{badDigest:true},{drift:true},{childActive:true},{childWrongStep:true}]){
+  await assert.rejects(runP6WindowTerminalReadback(e,parentFixture(patch).options),/HOLD_P6_(WINDOW_READBACK|CHILD_CUSTODY)/);
  }
 });
