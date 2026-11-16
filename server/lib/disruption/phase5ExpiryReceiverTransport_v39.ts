@@ -120,3 +120,22 @@ export function createP5ExpiryReceiverHandler(env:NodeJS.ProcessEnv,deployedSour
   }finally{busy=false;}
  };
 }
+
+/** Enforce separation at the HTTP boundary as well as in sealed custody.
+ * A malformed secondary configuration never removes the proven primary.
+ */
+export function createP5ExpiryReceiverPairHandler(primaryEnv:NodeJS.ProcessEnv,applyEnv:NodeJS.ProcessEnv|null,
+ deployedSource:string,run:typeof execute=execute):RequestHandler|null{
+ const primary=createP5ExpiryReceiverHandler(primaryEnv,deployedSource,run);
+ if(!primary||!applyEnv)return primary;
+ try{
+  const first=admitP5ExpiryReceiver(primaryEnv,deployedSource),second=admitP5ExpiryReceiver(applyEnv,deployedSource);
+  if(!first||!second||first.scope.apply||!second.scope.apply||first.authSha256===second.authSha256||
+     first.scope.writerUrl!==second.scope.writerUrl||first.scope.readerUrl!==second.scope.readerUrl||
+     first.bucketEnv.V39_PROVIDER_BLOB_BUCKET_ID!==second.bucketEnv.V39_PROVIDER_BLOB_BUCKET_ID||
+     second.scope.limit!==10)return primary;
+  const apply=createP5ExpiryReceiverHandler(applyEnv,deployedSource,run);
+  if(!apply)return primary;
+  return (req,res,next)=>req.get("x-p5-expiry-mode")==="APPLY_DUE_ONLY"?apply(req,res,next):primary(req,res,next);
+ }catch{return primary;}
+}

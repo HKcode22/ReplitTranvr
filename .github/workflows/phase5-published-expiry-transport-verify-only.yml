@@ -10,6 +10,7 @@ on:
       - 'server/lib/disruption/phase5ExpiryReceiverTransport_v39.ts'
       - 'server/lib/disruption/phase5ExpirySealedHandoff_v39.ts'
       - 'scripts/v39_phase5_expiry_sealed_handoff_v39.ts'
+      - 'scripts/v39_phase5_expiry_pair_sealed_owner_v39.ts'
       - 'tests/phase5_expiry_sealed_handoff_v39.test.ts'
       - 'tests/phase5_expiry_sealed_crypto_v39.test.ts'
       - 'server/lib/disruption/phase5RecurringExpiryRuntime_v39.ts'

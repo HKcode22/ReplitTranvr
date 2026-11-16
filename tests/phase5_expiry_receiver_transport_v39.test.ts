@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import express from "express";
 import type {AddressInfo} from "node:net";
-import {P5_EXPIRY_RECEIVER_PATH,admitP5ExpiryReceiver,createP5ExpiryReceiverHandler} from "../server/lib/disruption/phase5ExpiryReceiverTransport_v39";
+import {P5_EXPIRY_RECEIVER_PATH,admitP5ExpiryReceiver,createP5ExpiryReceiverHandler,createP5ExpiryReceiverPairHandler} from "../server/lib/disruption/phase5ExpiryReceiverTransport_v39";
 import {executeP5RecurringExpiryRuntime} from "../server/lib/disruption/phase5RecurringExpiryRuntime_v39";
 const sha="a".repeat(40),token="b".repeat(64),hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const base={
@@ -23,8 +23,8 @@ const proof={status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",providerCalls:0,objec
  separateStorageReadRequests:true,independentStorageIamVerified:false,backupRetentionVerified:false,phase6PaidGo:false,
  databaseWrites:0,objectDeletions:0};
 const headers={authorization:"Bearer "+token,"x-p5-expiry-reviewed-sha":sha,"x-p5-expiry-mode":"VERIFY_ONLY"};
-async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[2],fn:(url:string)=>Promise<void>,env:NodeJS.ProcessEnv=base){
- const app=express(),handler=createP5ExpiryReceiverHandler(env,sha,run);
+async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[2],fn:(url:string)=>Promise<void>,env:NodeJS.ProcessEnv=base,secondary?:NodeJS.ProcessEnv){
+ const app=express(),handler=secondary?createP5ExpiryReceiverPairHandler(env,secondary,sha,run):createP5ExpiryReceiverHandler(env,sha,run);
  if(!handler)throw Error("test handler absent");
  app.post(P5_EXPIRY_RECEIVER_PATH,handler);
  const server=app.listen(0,"127.0.0.1");
@@ -119,5 +119,35 @@ describe("opt-in published expiry transport",()=>{
    stores:{writer:{exists:async()=>false,delete:forbidden},reader:{exists:async()=>false}}})).rejects.toThrow("AUTOMATIC_DELETION_STOP_UNRESOLVED");
   expect(lock.query).toHaveBeenCalledTimes(2);expect(lock.release).toHaveBeenCalled();
   expect(reader.query).toHaveBeenCalledTimes(1);expect(forbidden).not.toHaveBeenCalled();
+ });
+});
+
+
+describe("two separately authenticated expiry modes on one fixed route",()=>{
+ it("real HTTP admits only the mode-specific token; malformed secondary retains VERIFY",async()=>{
+  const applyToken="d".repeat(64),applyEnv={...base,P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256:hash(applyToken),
+   P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY",P5_RECURRING_EXPIRY_LIMIT:"10",
+   P5_RECURRING_EXPIRY_APPROVAL:"APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER"};
+  const run=vi.fn(async(c:Parameters<NonNullable<Parameters<typeof createP5ExpiryReceiverHandler>[2]>>[0])=>
+    c.scope.apply?{...proof,status:"DUE_AT_CUTOFF_CLEARED",declaredExpiryOnly:true,
+     selectedCount:0,verifiedNowCount:0,alreadyVerifiedCount:0,independentlyReadBackCount:0,
+     recoveredReadbackCount:0,remainingAtCutoff:0,remainingUnwitnessedMarkersAtCutoff:0}:proof);
+  const h={...headers,authorization:"Bearer "+applyToken,"x-p5-expiry-mode":"APPLY_DUE_ONLY"};
+  await withServer(run,async url=>{
+   expect((await fetch(url,{method:"POST",headers:{...h,authorization:headers.authorization}})).status).toBe(404);
+   expect((await fetch(url,{method:"POST",headers:{...headers,authorization:h.authorization}})).status).toBe(404);
+   expect(run).not.toHaveBeenCalled();
+   expect((await fetch(url,{method:"POST",headers})).status).toBe(200);
+   expect((await fetch(url,{method:"POST",headers:h})).status).toBe(200);
+   expect(run.mock.calls.map(([c])=>c.scope.apply)).toEqual([false,true]);
+  },base,applyEnv);
+  run.mockClear();
+  for(const broken of [{...applyEnv,P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256:hash(token)},{...applyEnv,P5_RECURRING_EXPIRY_LIMIT:"25"}]){
+   await withServer(run,async url=>{
+    expect((await fetch(url,{method:"POST",headers})).status).toBe(200);
+    expect((await fetch(url,{method:"POST",headers:h})).status).toBe(404);
+   },base,broken);
+  }
+  expect(run.mock.calls.every(([c])=>!c.scope.apply)).toBe(true);
  });
 });
