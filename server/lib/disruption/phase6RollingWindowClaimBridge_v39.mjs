@@ -81,6 +81,23 @@ const readSql=`SELECT window_index,window_start_utc,window_end_utc,claimed_at_ut
  authorization_id,manifest_sha256,calendar_sha256,config_sha256,release_code_sha,policy_sha256,
  policy_from_utc,policy_until_utc,root_run_id::text,closed_at_utc
  FROM clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2`;
+function readFor(a){
+ return a.sessionLogin===null?readSql:
+  readSql.replace("clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2","clean.phase6_read_bound_rolling_window_v39($1,$2)");
+}
+function exactOpenRow(q,a,ident) {
+ if(q.rowCount!==1)hold("READBACK_CARDINALITY");
+ const row=q.rows[0],seen=shape(row,a);
+ if(row.closed_at_utc!==null||
+   row.root_run_id!==String(a.rootRunId)||row.authorization_id!==a.authorizationId||
+   row.manifest_sha256!==a.trust.manifestSha256||row.calendar_sha256!==a.trust.calendarSha256||
+   row.config_sha256!==a.configSha256||row.release_code_sha!==a.trust.reviewedCodeSha||row.policy_sha256!==a.policySha256||
+   clock(row.policy_from_utc)!==a.calendar.from||clock(row.policy_until_utc)!==a.calendar.until||
+   typeof seen.exactClaimedAt!=="string"||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(seen.exactClaimedAt)||
+   ident.dbClock<clock(seen.claimedUtc)||ident.dbClock>=clock(seen.endUtc))
+  hold("COMMITTED_SCOPE_DRIFT");
+ return seen;
+}
 async function rollback(client){try{await client.query("ROLLBACK");}catch{}}
 export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient}={}){
  const a=exactScope(input);
@@ -112,18 +129,9 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
   await readbackClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");readOpen=true;
   const ident=await identity(readbackClient,true,a);
   if(ident.pid===claimIdentity.pid||ident.session_actor!==claimIdentity.session_actor)hold("NOT_INDEPENDENT_CONNECTION");
-  const q=await readbackClient.query(a.sessionLogin===null?readSql:
-   readSql.replace("clean.phase6_rolling_window_custody_v39 WHERE root_run_id=$1 AND manifest_sha256=$2","clean.phase6_read_bound_rolling_window_v39($1,$2)"),
-   [a.rootRunId,a.trust.manifestSha256]);
-  if(q.rowCount!==1)hold("READBACK_CARDINALITY");
-  const row=q.rows[0];seen=shape(row,a);
-  if(JSON.stringify(seen)!==JSON.stringify(committed)||row.closed_at_utc!==null||
-    row.root_run_id!==String(a.rootRunId)||row.authorization_id!==a.authorizationId||
-    row.manifest_sha256!==a.trust.manifestSha256||row.calendar_sha256!==a.trust.calendarSha256||
-    row.config_sha256!==a.configSha256||row.release_code_sha!==a.trust.reviewedCodeSha||row.policy_sha256!==a.policySha256||
-    clock(row.policy_from_utc)!==a.calendar.from||clock(row.policy_until_utc)!==a.calendar.until||
-    ident.dbClock<clock(seen.claimedUtc)||ident.dbClock>=clock(seen.endUtc))
-   hold("COMMITTED_SCOPE_DRIFT");
+  const q=await readbackClient.query(readFor(a),[a.rootRunId,a.trust.manifestSha256]);
+  seen=exactOpenRow(q,a,ident);
+  if(JSON.stringify(seen)!==JSON.stringify(committed))hold("COMMITTED_SCOPE_DRIFT");
   await readbackClient.query("COMMIT");readOpen=false;
  }catch{
   if(readOpen)await rollback(readbackClient);
@@ -133,4 +141,37 @@ export async function claimP6RollingWindowOnce(input,{claimClient,readbackClient
   rootRunId:a.rootRunId,windowIndex:seen.index,windowStartUtc:seen.startUtc,windowEndUtc:seen.endUtc,claimedAtUtc:seen.claimedUtc,
   reviewedMainSha:a.trust.reviewedCodeSha,policyCommitment:a.commitment,actualDbClock:true,independentConnection:true,
   restrictedFunctionOnly:a.sessionLogin!==null,providerCalls:0,flightWrites:0,operationalCustodyWrites:1,dispatchCount:0,permitDispatch:false,phase6PaidGo:false};
+}
+
+/** Attach a successor to a previously committed root without a second
+ * claim. Expected epoch/deadline are independently authenticated controller
+ * chain inputs, NOT a caller-selected new policy/authorization. Native
+ * worker admission, root history, predecessor receipt and credit gates
+ * remain mandatory. This function cannot authorize dispatch.
+ */
+export async function readP6KnownRollingWindowOnce(input,{readbackClient}={}){
+ const a=exactScope(input);
+ if(a.sessionLogin===null||!readbackClient||typeof readbackClient.query!=="function")
+  hold("RESTRICTED_KNOWN_ROOT_READ_ONLY_REQUIRED");
+ const epoch=clock(input.sessionEpochUtc),deadline=clock(input.chainDeadlineUtc),mode=input.chainMode;
+ const bound=mode==="SINGLE"?30*60000:mode==="FOUR"?120*60000:0;
+ const minimum=mode==="SINGLE"?15*60000:90*60000;
+ if(!bound||epoch%1000!==0||deadline%1000!==0||deadline-epoch<minimum||deadline-epoch>bound)
+  hold("EXACT_CHAIN_CLOCK_SCOPE");
+ let opened=false;
+ try{
+  await readbackClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");opened=true;
+  const ident=await identity(readbackClient,true,a);
+  const q=await readbackClient.query(readFor(a),[a.rootRunId,a.trust.manifestSha256]);
+  const seen=exactOpenRow(q,a,ident);
+  if(epoch<clock(seen.startUtc)||epoch>clock(seen.claimedUtc)||deadline>clock(seen.endUtc)||
+    clock(seen.claimedUtc)>=deadline||ident.dbClock>=deadline)hold("CHAIN_OUTSIDE_COMMITTED_WINDOW");
+  await readbackClient.query("COMMIT");opened=false;
+  return {status:"EXACT_OPEN_ROOT_READBACK_NO_NEW_CLAIM_NOT_DISPATCH_AUTHORITY",
+   rootRunId:a.rootRunId,windowIndex:seen.index,windowStartUtc:seen.startUtc,windowEndUtc:seen.endUtc,
+   claimedAtUtc:seen.claimedUtc,epochUtc:stamp(epoch),chainDeadlineUtc:stamp(deadline),chainMode:mode,
+   policyCommitment:a.commitment,reviewedMainSha:a.trust.reviewedCodeSha,actualDbClock:true,
+   restrictedFunctionOnly:true,providerCalls:0,flightWrites:0,operationalCustodyWrites:0,dispatchCount:0,
+   permitDispatch:false,phase6PaidGo:false};
+ }catch(e){if(opened)await rollback(readbackClient);throw e;}
 }
