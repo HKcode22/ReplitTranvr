@@ -117,6 +117,23 @@ export function planP6RollingTick(snapshots,context){
   assessments:Object.freeze(assessments.map(Object.freeze)),due:Object.freeze(due),providerCalls:0,databaseReads:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false});
  issued.set(plan,{...context,used:false});return plan;
 }
+/** Narrow a genuine issued wave to independently reviewed calendar wake hints.
+ * Never adds a route, erases a HOLD or extends the original observation clock.
+ * The original plan is consumed, even if the narrowed plan is empty.
+ */
+export function restrictP6RollingWave(plan,eligibleLanes){
+ const stamp=issued.get(plan);
+ if(!stamp||stamp.used||!Array.isArray(eligibleLanes)||
+    eligibleLanes.length>P6_ROLLING_ROUTES.length||
+    new Set(eligibleLanes).size!==eligibleLanes.length||
+    eligibleLanes.some(l=>!P6_ROLLING_ROUTES.some(r=>r.lane===l)))
+  hold("UNREVIEWED_CALENDAR_WAVE_SCOPE");
+ const restricted=Object.freeze({...plan,
+  due:Object.freeze(plan.due.filter(l=>eligibleLanes.includes(l))),
+  calendarDeferred:Object.freeze(plan.due.filter(l=>!eligibleLanes.includes(l)))});
+ stamp.used=true;issued.set(restricted,{...stamp,used:false});
+ return restricted;
+}
 /** Exact fixed allowlist dispatch; caller must still supply reviewed admission
  * from a real protected workflow. In this PR no production caller exists.
  * An unknown ACK stops immediately; no retry or alternate dispatch API.
