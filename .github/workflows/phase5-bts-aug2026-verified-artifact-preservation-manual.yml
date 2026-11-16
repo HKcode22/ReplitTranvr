@@ -15,6 +15,7 @@ on:
         options:
           - HOLD_NO_COPY
           - COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS
+          - COPY_VERIFIED_NORMALIZED_BTS_ONLY_TO_90_DAY_ARTIFACT
 
 permissions:
   contents: read
@@ -62,11 +63,15 @@ jobs:
       github.repository == 'HKcode22/ReplitTranvr' &&
       github.ref == 'refs/heads/main' &&
       github.run_attempt == 1 &&
-      inputs.confirm == 'COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS'
+      (inputs.confirm == 'COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS' ||
+       inputs.confirm == 'COPY_VERIFIED_NORMALIZED_BTS_ONLY_TO_90_DAY_ARTIFACT')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      BTS_PRESERVATION_MODE: ${{ inputs.confirm }}
     steps:
       - name: Download only original already-verified November 12 source artifact
+        if: inputs.confirm == 'COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS'
         uses: actions/download-artifact@v4
         with:
           name: v39-gate5-bts-aug2026-official-public-source
@@ -82,7 +87,7 @@ jobs:
           github-token: ${{ github.token }}
           repository: HKcode22/ReplitTranvr
           path: /tmp/v39_bts_preserve/normalized/
-      - name: Independently verify both exact original file hashes and strict provenance
+      - name: Independently verify requested exact original file hashes and strict provenance
         run: |
           set -Eeuo pipefail
           set +x
@@ -90,7 +95,7 @@ jobs:
           test "${V39_PHASE6_PROCESS_ARMED}" = 0
           test "${V39_PHASE6_OWNER_APPROVED}" = 0
           python3 - <<'PY'
-          import gzip, hashlib, json
+          import csv, gzip, hashlib, json, os
           from pathlib import Path
           base=Path("/tmp/v39_bts_preserve")
           raw=base/"source/official_bts_reporting_carrier_2026_8.zip"
@@ -99,7 +104,12 @@ jobs:
           normalized_json=base/"normalized/bts_aug2026_historical_manifest.json"
           expected_raw="203509350f574f81728ca51175a17360d0413aa990512f8e0c8f1342f5baf23a"
           expected_norm="406587471b44794ea1f574fad2400fc0bafdd85f6898faa8f41b6706294a4614"
-          for p,expected in ((raw,expected_raw),(normalized,expected_norm)):
+          mode=os.environ['BTS_PRESERVATION_MODE']
+          if mode not in ('COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS','COPY_VERIFIED_NORMALIZED_BTS_ONLY_TO_90_DAY_ARTIFACT'):
+              raise SystemExit('HOLD_BTS_PRESERVATION_MODE')
+          both=mode=='COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS'
+          targets=[(normalized,expected_norm)]+([(raw,expected_raw)] if both else [])
+          for p,expected in targets:
               if not p.is_file() or not (1_000_000 < p.stat().st_size < 50_000_000):
                   raise SystemExit("HOLD_BTS_PRESERVATION_MISSING_OR_WRONG_SIZE")
               h=hashlib.sha256()
@@ -107,12 +117,13 @@ jobs:
                   for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
               if h.hexdigest()!=expected:
                   raise SystemExit("HOLD_BTS_PRESERVATION_ORIGINAL_SHA_CHANGED")
-          a=json.loads(raw_json.read_text(encoding="utf-8"))
           b=json.loads(normalized_json.read_text(encoding="utf-8"))
-          assert a.get("sourceZipSha256")==expected_raw
-          assert a.get("sourceMonth")=="2026-08"
-          assert a.get("phase5FreezeAuthorized") is False
-          assert a.get("phase6Authorized") is False
+          if both:
+              a=json.loads(raw_json.read_text(encoding="utf-8"))
+              assert a.get("sourceZipSha256")==expected_raw
+              assert a.get("sourceMonth")=="2026-08"
+              assert a.get("phase5FreezeAuthorized") is False
+              assert a.get("phase6Authorized") is False
           assert b.get("sourceOfficialZipSha256")==expected_raw
           assert b.get("normalizedCsvGzipSha256")==expected_norm
           assert b.get("totalRows")==608389
@@ -131,9 +142,15 @@ jobs:
                       raise SystemExit("HOLD_BTS_PRESERVATION_GZIP_UNBOUNDED")
           if count<1_000_000:
               raise SystemExit("HOLD_BTS_PRESERVATION_GZIP_TRUNCATED")
-          print("BTS_AUG2026_TWO_ORIGINAL_SHA_MANIFEST_AND_GZIP_VERIFIED_NO_PROVIDER_NO_DB")
+          with gzip.open(normalized,'rt',encoding='utf-8',newline='') as f:
+              rows=csv.reader(f)
+              header=next(rows,None)
+              if not header or sum(1 for _ in rows)!=608389:
+                  raise SystemExit('HOLD_BTS_PRESERVATION_ROW_COUNT')
+          print('BTS_AUG2026_'+('TWO_ORIGINAL' if both else 'NORMALIZED_ONLY_ORIGINAL_RAW_NOT_REVERIFIED')+'_SHA_MANIFEST_AND_GZIP_VERIFIED_NO_PROVIDER_NO_DB')
           PY
       - name: Preserve exact public BTS source and verification summary in Actions only
+        if: inputs.confirm == 'COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS'
         uses: actions/upload-artifact@v4
         with:
           name: v39-bts-aug2026-official-source-sha-preserved-20261113
@@ -144,12 +161,17 @@ jobs:
       - name: Preserve exact normalized history and manifest in separate Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: v39-bts-aug2026-normalized-sha-preserved-20261113
+          name: ${{ inputs.confirm == 'COPY_VERIFIED_NORMALIZED_BTS_ONLY_TO_90_DAY_ARTIFACT' && 'v39-bts-aug2026-normalized-only-sha-preserved-20261115' || 'v39-bts-aug2026-normalized-sha-preserved-20261113' }}
           path: /tmp/v39_bts_preserve/normalized/
           retention-days: 90
           compression-level: 0
           if-no-files-found: error
       - name: Explicitly retain historical-only and nonpermanent status
         run: |
-          echo 'Exact old-source original ZIP and normalized BTS 2026-08 hashes independently passed. Requested 90-day Actions retention (actual expiry subject to repository policy).' >> "$GITHUB_STEP_SUMMARY"
+          if test "$BTS_PRESERVATION_MODE" = COPY_VERIFIED_BTS_TO_90_DAY_ARTIFACTS; then
+            echo 'Original ZIP and normalized BTS 2026-08 hashes independently passed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Only normalized BTS 2026-08 hash, provenance manifest and row count independently passed. Original raw ZIP NOT reverified or preserved by this run.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'Requested 90-day Actions retention (actual expiry subject to repository policy).' >> "$GITHUB_STEP_SUMMARY"
           echo 'These are temporary same-repo GitHub artifacts, NOT durable Phase7 object storage or AeroDataBox PRE. No provider API GET, no Neon writes, no Phase5 FREEZE or paid Phase6 GO.' >> "$GITHUB_STEP_SUMMARY"
