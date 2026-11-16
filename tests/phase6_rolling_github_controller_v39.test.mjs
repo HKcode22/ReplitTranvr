@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {P6_ROLLING_ROUTES,planP6RollingTick,dispatchP6ReviewedRollingWave,readP6RollingGithubSnapshot} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {P6_ROLLING_ROUTES,planP6RollingTick,dispatchP6ReviewedRollingWave,readP6RollingGithubSnapshot,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),clock=Date.parse("2030-01-01T00:30:00.000Z"),epoch=clock-3600000;
 const context={sha,clock,epoch};
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
@@ -129,4 +129,54 @@ test("green parent with explicit safe HOLD or missing evidence remains distinct 
  x[0].jobs[0].steps=markers("SAFE_PREFLIGHT_HOLD");
  x[0].runs=[row(r,{created_at:new Date(clock-600000).toISOString()})];
  assert.equal(planP6RollingTick(x,context).assessments[0].state,"DUE_REVIEWED_ROUTE");
+});
+
+test("only independently proved all-skipped exact scheduled runs are inert; do not erase real attempt cooldown",async()=>{
+ const r=P6_ROLLING_ROUTES[0],skip=row(r,{id:124,event:"schedule",conclusion:"skipped",created_at:new Date(clock-10000).toISOString()});
+ const prior=row(r,{id:123,created_at:new Date(clock-120000).toISOString()});
+ const cache=createP6RollingScheduleEvidenceCache();let skipReads=0,mutated=false;
+ const skippedJobs=[{id:1111,run_id:124,run_attempt:1,head_sha:sha,name:"real-job",status:"completed",conclusion:"skipped",steps:[]}];
+ const fetcher=async(url,opt)=>{
+  const u=new URL(url);assert.equal(opt.method,"GET");
+  let items=[],key="workflow_runs";
+  if(u.pathname.endsWith("/runs/124/jobs")){skipReads++;items=skippedJobs;key="jobs";}
+  else if(u.pathname.endsWith("/runs/123/jobs")){items=jobs(r);key="jobs";}
+  else if(u.pathname.includes("/workflows/"+r.workflow+"/runs")){
+   if(u.searchParams.get("event")==="schedule")items=[mutated?{...skip,run_attempt:2}:skip];
+   if(u.searchParams.get("event")==="workflow_dispatch")items=[prior];
+  }
+  return {ok:true,json:async()=>({total_count:items.length,[key]:items})};
+ };
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,fetcher,scheduleEvidenceCache:cache};
+ const one=await readP6RollingGithubSnapshot(cfg);
+ assert.equal(one.plan.assessments[0].state,"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF");
+ assert.equal(one.plan.assessments[0].runId,123);
+ const fresh=await one.recheckRoute(r);
+ assert.equal(fresh.inertScheduleProofs.length,1);assert.equal(fresh.jobRunId,123);
+ await readP6RollingGithubSnapshot(cfg);assert.equal(skipReads,1);
+ const forged=snaps();forged[0].runs=[skip];forged[0].inertScheduleProofs=[{runId:124,workflow:r.workflow}];
+ assert.throws(()=>planP6RollingTick(forged,context),/INVALID_INERT_SCHEDULE_PROOF/);
+ mutated=true;
+ assert.equal((await readP6RollingGithubSnapshot(cfg)).plan.status,"HOLD_ROLLING_WAVE_NO_DISPATCH");
+});
+test("no-op scheduled attempts do not consume cadence; mixed executed jobs or manual skips still HOLD",async()=>{
+ const r=P6_ROLLING_ROUTES[0];
+ for(const kind of ["proven","mixed","empty","manual","old","rerun"]){
+  const skip=row(r,{id:201,event:kind==="manual"?"workflow_dispatch":"schedule",conclusion:"skipped",
+   head_sha:kind==="old"?"b".repeat(40):sha,run_attempt:kind==="rerun"?2:1});
+  let jobReads=0;
+  const fetcher=async(url,opt)=>{
+   const u=new URL(url);assert.equal(opt.method,"GET");let items=[],key="workflow_runs";
+   if(u.pathname.endsWith("/runs/201/jobs")){
+    jobReads++;key="jobs";
+    if(kind!=="empty")items=[{id:111,run_id:201,run_attempt:1,head_sha:sha,name:"one",status:"completed",
+     conclusion:kind==="mixed"?"success":"skipped",steps:[]}];
+   }else if(u.pathname.includes("/workflows/"+r.workflow+"/runs")&&u.searchParams.get("event")===skip.event)items=[skip];
+   return {ok:true,json:async()=>({total_count:items.length,[key]:items})};
+  };
+  const p=(await readP6RollingGithubSnapshot({sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,fetcher})).plan;
+  if(kind==="proven"){assert.equal(p.assessments[0].state,"DUE_REVIEWED_ROUTE");assert.equal(p.assessments[0].inertScheduledRuns,1);}
+  else assert.equal(p.status,"HOLD_ROLLING_WAVE_NO_DISPATCH");
+  assert.equal(jobReads,["proven","mixed","empty"].includes(kind)?1:0);
+ }
 });

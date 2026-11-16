@@ -7,6 +7,7 @@ const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const CODE=/^[a-f0-9]{40}$/;
 const ACTIVE=new Set(["queued","in_progress","waiting","requested","pending"]);
 const issued=new WeakMap();
+const inertCaches=new WeakMap(),inertProofs=new WeakMap();
 const ACK_ID=x=>Number.isSafeInteger(x)&&x>0;
 const hold=s=>{throw Error("HOLD_P6_ROLLING_CONTROLLER_"+s);};
 const instant=s=>{
@@ -56,6 +57,32 @@ function exactRun(row){
   hold("UNTRUSTED_RUN");
  return {...row,created:instant(row.created_at)};
 }
+// Purely inert schedules may exist even with explicit collection STOP.
+// They are never successful work or cooldown evidence. Only an exact
+// independent all-jobs-skipped readback can exclude one from attempts.
+const isSkippedSchedule=(row,sha)=>row.event==="schedule"&&row.head_sha===sha&&
+ row.run_attempt===1&&row.status==="completed"&&row.conclusion==="skipped";
+function exactSkippedJobs(row,jobs){
+ return Array.isArray(jobs)&&jobs.length>0&&jobs.length<=100&&
+  new Set(jobs.map(j=>j.id)).size===jobs.length&&new Set(jobs.map(j=>j.name)).size===jobs.length&&
+  jobs.every(j=>ACK_ID(j.id)&&j.run_id===row.id&&j.run_attempt===1&&j.head_sha===row.head_sha&&
+   typeof j.name==="string"&&j.name.length>0&&j.status==="completed"&&j.conclusion==="skipped"&&
+   Array.isArray(j.steps)&&j.steps.every(s=>s.status==="completed"&&s.conclusion==="skipped"));
+}
+export function createP6RollingScheduleEvidenceCache(){
+ const handle=Object.freeze({});inertCaches.set(handle,new Map());return handle;
+}
+function inertProof(row,route,jobs){
+ if(!exactSkippedJobs(row,jobs))return null;
+ const proof=Object.freeze({runId:row.id,workflow:route.workflow});
+ inertProofs.set(proof,{id:row.id,sha:row.head_sha,path:row.path,created:row.created_at});
+ return proof;
+}
+function exactInertProof(proof,row,route){
+ const stamp=inertProofs.get(proof);
+ return !!stamp&&proof.runId===row.id&&proof.workflow===route.workflow&&stamp.id===row.id&&
+  stamp.sha===row.head_sha&&stamp.path===row.path&&stamp.created===row.created_at;
+}
 export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
  if(!P6_ROLLING_ROUTES.includes(route)||!CODE.test(sha??"")||!Number.isFinite(epoch)||!Number.isFinite(clock)||epoch>clock)
   hold("UNREVIEWED_ROUTE_OR_CLOCK");
@@ -72,7 +99,12 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
  const activeIds=new Set(active.map(x=>x.id));
  if(rows.some(x=>ACTIVE.has(x.status)&&!activeIds.has(x.id)))return {lane:route.lane,state:"HOLD_HISTORY_CHANGED"};
  if(active.length)return {lane:route.lane,state:"ACTIVE_NO_OVERLAP",activeCount:active.length};
- const attempts=rows.filter(x=>x.created>=epoch).sort((a,b)=>b.created-a.created||b.id-a.id);
+ const proofs=snapshot.inertScheduleProofs??[];
+ if(!Array.isArray(proofs)||proofs.length>100||new Set(proofs.map(p=>p?.runId)).size!==proofs.length||
+    proofs.some(p=>!rows.some(row=>row.created>=epoch&&isSkippedSchedule(row,sha)&&exactInertProof(p,row,route))))
+   hold("INVALID_INERT_SCHEDULE_PROOF");
+ const inertIds=new Set(proofs.map(p=>p.runId));
+ const attempts=rows.filter(x=>x.created>=epoch&&!inertIds.has(x.id)).sort((a,b)=>b.created-a.created||b.id-a.id);
  // Every unsuccessful attempt after release start must be reviewed; a later
  // green run cannot silently erase an older unknown outcome.
  const bad=attempts.find(x=>x.head_sha!==sha||x.run_attempt!==1||x.status!=="completed"||x.conclusion!=="success");
@@ -99,7 +131,7 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
   }
   if(clock-last.created<route.minutes*60000)return {lane:route.lane,state:parentDispositions.includes("SAFE_PREFLIGHT_HOLD")?"RECENT_SAFE_PREFLIGHT_HOLD":parentDispositions.includes("MISSING_EVIDENCE")?"RECENT_MISSING_EVIDENCE":"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF",runId:last.id,parentDispositions};
  }
- return {lane:route.lane,state:"DUE_REVIEWED_ROUTE",lastRunId:last?.id??null};
+ return {lane:route.lane,state:"DUE_REVIEWED_ROUTE",lastRunId:last?.id??null,inertScheduledRuns:inertIds.size};
 }
 export function planP6RollingTick(snapshots,context){
  if(!Array.isArray(snapshots)||snapshots.length!==P6_ROLLING_ROUTES.length)
@@ -194,8 +226,9 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{}}){
- const started=now();
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache()}){
+ const started=now(),cache=inertCaches.get(scheduleEvidenceCache);
+ if(!cache)hold("INVALID_INERT_SCHEDULE_CACHE");
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
     started-epoch>6*3600000||typeof token!=="string"||token.length<16)
   hold("NO_BOUNDED_SESSION_HISTORY_SCOPE");
@@ -225,10 +258,24 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   return out;
  }
  async function jobsFor(route,runs){
-  const last=runs.slice().sort((a,b)=>instant(b.created_at)-instant(a.created_at)||b.id-a.id)[0];
+  const proofs=[];
+  // Proof cache is per controller process/session. Current history still
+  // has to contain the exact attempt-1 run; reruns never reuse proof.
+  for(const row of runs.filter(r=>isSkippedSchedule(r,sha))){
+   let proof=cache.get(row.id);
+   if(proof&&!exactInertProof(proof,row,route))hold("INERT_SCHEDULE_IDENTITY_DRIFT");
+   if(!proof){
+    const list=await get("/actions/runs/"+row.id+"/jobs?filter=latest&per_page=100","jobs");
+    proof=inertProof(row,route,list);
+    if(proof){if(cache.size>=800)hold("INERT_SCHEDULE_CACHE_BOUND");cache.set(row.id,proof);}
+   }
+   if(proof)proofs.push(proof);
+  }
+  const inert=new Set(proofs.map(p=>p.runId));
+  const last=runs.filter(r=>!inert.has(r.id)).sort((a,b)=>instant(b.created_at)-instant(a.created_at)||b.id-a.id)[0];
   if(!last||last.status!=="completed"||last.conclusion!=="success")
-   return {jobRunId:null,jobs:[]};
-  return {jobRunId:last.id,jobs:await get("/actions/runs/"+last.id+"/jobs?filter=latest&per_page=100","jobs")};
+   return {jobRunId:null,jobs:[],inertScheduleProofs:proofs};
+  return {jobRunId:last.id,jobs:await get("/actions/runs/"+last.id+"/jobs?filter=latest&per_page=100","jobs"),inertScheduleProofs:proofs};
  }
  const histories=await Promise.all(P6_ROLLING_ROUTES.map(history));
  // One bounded repo-wide active sweep, rather than five status queries
