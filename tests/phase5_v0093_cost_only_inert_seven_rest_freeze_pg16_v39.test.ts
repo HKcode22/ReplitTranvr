@@ -17,7 +17,7 @@ import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from
 import {
  compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce
 } from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
-import {commitP6ExistingSourceAuthorizationOnce,verifyP6SourceActivationReview,p6SourceAuthorizationStageContentSha,P6_SOURCE_AUTH_SCOPE} from "../scripts/v39_phase6_enable_source_owner_v39";
+import {commitP6ExistingSourceAuthorizationOnce,verifyP6EnabledSourceAuthorizationReceipt,verifyP6SourceActivationReview,p6SourceAuthorizationStageContentSha,P6_SOURCE_AUTH_SCOPE} from "../scripts/v39_phase6_enable_source_owner_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from
  "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
@@ -576,11 +576,13 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   const m=(await admin.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
    ["phase6_source_authorization_enabled:"+record.authorizationId])).rows;
   expect(m).toHaveLength(1);expect(JSON.parse(m[0].value)).toEqual(out);
+  expect(await verifyP6EnabledSourceAuthorizationReceipt(admin,out)).toMatchObject({verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,databaseWrites:0});
   expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(true);
   expect(await categoryCounts()).toEqual({release:1,caps:7,days:7*r.c.days.length,source:0,attempt:0});
   await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record))).rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
   // Even if later disabled by owner, the one-use marker forbids replay.
   await admin.query("UPDATE clean.adb_phase6_authorization SET enabled=false");
+  await expect(verifyP6EnabledSourceAuthorizationReceipt(admin,out)).rejects.toThrow("POST_ENABLE_ROW_OR_MARKER_NOT_IDENTICAL");
   await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record))).rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
  });
 });
