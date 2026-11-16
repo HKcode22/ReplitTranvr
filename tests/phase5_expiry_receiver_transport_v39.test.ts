@@ -6,7 +6,7 @@ import {P5_EXPIRY_RECEIVER_PATH,admitP5ExpiryReceiver,createP5ExpiryReceiverHand
 import {executeP5RecurringExpiryRuntime} from "../server/lib/disruption/phase5RecurringExpiryRuntime_v39";
 const sha="a".repeat(40),token="b".repeat(64),hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const base={
- P5_RECURRING_EXPIRY_HTTP_ENABLED:"1",V39_DEPLOYED_GIT_HEAD:sha,V39_CALLBACK_ONLY_RUNTIME:"1",
+ P5_RECURRING_EXPIRY_HTTP_ENABLED:"1",V39_CALLBACK_ONLY_RUNTIME:"1",
  V39_WORKSPACE_RUNTIME_OWNER_MODE:"replit-published-deployment",ADB_AUTO_COLLECT:"false",
  P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256:hash(token),P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,
  P5_RECURRING_EXPIRY_MODE:"VERIFY_ONLY",V39_PROVIDER_BLOB_MODE:"required",
@@ -23,8 +23,8 @@ const proof={status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",providerCalls:0,objec
  separateStorageReadRequests:true,independentStorageIamVerified:false,backupRetentionVerified:false,phase6PaidGo:false,
  databaseWrites:0,objectDeletions:0};
 const headers={authorization:"Bearer "+token,"x-p5-expiry-reviewed-sha":sha,"x-p5-expiry-mode":"VERIFY_ONLY"};
-async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[1],fn:(url:string)=>Promise<void>,env:NodeJS.ProcessEnv=base){
- const app=express(),handler=createP5ExpiryReceiverHandler(env,run);
+async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[2],fn:(url:string)=>Promise<void>,env:NodeJS.ProcessEnv=base){
+ const app=express(),handler=createP5ExpiryReceiverHandler(env,sha,run);
  if(!handler)throw Error("test handler absent");
  app.post(P5_EXPIRY_RECEIVER_PATH,handler);
  const server=app.listen(0,"127.0.0.1");
@@ -35,16 +35,18 @@ async function withServer(run:Parameters<typeof createP5ExpiryReceiverHandler>[1
 }
 describe("opt-in published expiry transport",()=>{
  it("defaults off, binds source and scoped actors, and cannot use request/ambient owner credentials",()=>{
-  expect(admitP5ExpiryReceiver({...base,P5_RECURRING_EXPIRY_HTTP_ENABLED:"0"})).toBeNull();
-  const cfg=admitP5ExpiryReceiver(base);
+  expect(admitP5ExpiryReceiver({...base,P5_RECURRING_EXPIRY_HTTP_ENABLED:"0"},sha)).toBeNull();
+  const cfg=admitP5ExpiryReceiver(base,sha);
+  expect(()=>admitP5ExpiryReceiver(base,"c".repeat(40))).toThrow();
+  expect(()=>admitP5ExpiryReceiver({...base,V39_DEPLOYED_GIT_HEAD:sha},"c".repeat(40))).toThrow();
   expect(cfg?.scope.apply).toBe(false);
   expect(JSON.stringify(cfg)).not.toContain("not-projected");
   for(const patch of [{V39_DEPLOYED_GIT_HEAD:"c".repeat(40)},{ADB_AUTO_COLLECT:"true"},
     {V39_WORKSPACE_RUNTIME_OWNER_MODE:"replit-managed-project"},{NODE_TLS_REJECT_UNAUTHORIZED:"0"},
     {P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY"},{P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256:"bad"},
     {P5_RECURRING_EXPIRY_WRITER_ROLE:"other_actor"}])
-   expect(()=>admitP5ExpiryReceiver({...base,...patch})).toThrow();
-  expect(admitP5ExpiryReceiver({...base,P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY",P5_RECURRING_EXPIRY_APPROVAL:"APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER"})?.scope.apply).toBe(true);
+   expect(()=>admitP5ExpiryReceiver({...base,...patch},sha)).toThrow();
+  expect(admitP5ExpiryReceiver({...base,P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY",P5_RECURRING_EXPIRY_APPROVAL:"APPLY_BOUNDED_DECLARED_EXPIRY_ONLY_NO_PROVIDER"},sha)?.scope.apply).toBe(true);
  });
  it("real HTTP: rejects missing/wrong token, source, mode, query and body before calling worker",async()=>{
   const run=vi.fn(async()=>({...proof,extra:"must-not-leak"}));

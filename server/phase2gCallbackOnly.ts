@@ -116,7 +116,7 @@ let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
 // Optional retention route: a bad or absent declaration leaves the existing
 // callback receiver available. No expiry work is performed at process boot.
 let expiryHandler:ReturnType<typeof createP5ExpiryReceiverHandler>=null;
-try{expiryHandler=createP5ExpiryReceiverHandler(process.env);}
+try{expiryHandler=createP5ExpiryReceiverHandler(process.env,configSource);}
 catch{console.error("P5_EXPIRY_RECEIVER_CONFIG_HOLD_DISABLED");}
 const app = express();
 app.disable("x-powered-by");

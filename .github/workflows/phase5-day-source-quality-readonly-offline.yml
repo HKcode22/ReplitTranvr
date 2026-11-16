@@ -12,6 +12,7 @@ on:
       - 'tests/provider_blob_store_v39.test.ts'
       - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
       - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
+      - 'server/lib/disruption/phase5RecurringExpiryRuntime_v39.ts'
       - 'scripts/v39_phase5_recurring_expiry_owner_inventory_v39.ts'
       - 'scripts/v39_phase5_recurring_expiry_owner_commission_v39.ts'
       - 'tests/phase5_recurring_expiry_owner_commission_real_pg_v39.test.ts'
@@ -23,6 +24,12 @@ on:
       - 'server/lib/disruption/phase5DaySourceQualityReadonly_v39.ts'
       - 'scripts/v39_phase5_day_source_quality_readonly_v39.ts'
       - 'tests/phase5_day_source_quality_readonly_v39.test.ts'
+      - 'server/lib/disruption/phase5RecurringExpiryRuntime_v39.ts'
+      - 'server/lib/disruption/providerBlobExpiry_v39.ts'
+      - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
+      - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
+      - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
+      - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
 permissions:
   contents: read
 jobs:

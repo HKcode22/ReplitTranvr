@@ -21,15 +21,18 @@ const PROJECT_KEYS=[
  "P5_RECURRING_EXPIRY_READER_ROLE","P5_RECURRING_EXPIRY_WRITER_URL","P5_RECURRING_EXPIRY_READER_URL",
  "V39_PROVIDER_BLOB_MODE","V39_PROVIDER_BLOB_BUCKET_ID"
 ] as const;
-export function admitP5ExpiryReceiver(env:NodeJS.ProcessEnv):Receiver|null{
+export function admitP5ExpiryReceiver(env:NodeJS.ProcessEnv,deployedSource:string):Receiver|null{
  if(env.P5_RECURRING_EXPIRY_HTTP_ENABLED===undefined||env.P5_RECURRING_EXPIRY_HTTP_ENABLED==="0")return null;
- const sha=env.V39_DEPLOYED_GIT_HEAD,mode=env.P5_RECURRING_EXPIRY_MODE,auth=env.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256;
+ // The callback entry passes the actual build-embedded source identity.
+ // Passing process.env alone would bypass esbuild's direct-property define.
+ const sha=deployedSource,mode=env.P5_RECURRING_EXPIRY_MODE,auth=env.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256;
  if(env.P5_RECURRING_EXPIRY_HTTP_ENABLED!=="1"||
     env.V39_CALLBACK_ONLY_RUNTIME!=="1"||
     env.V39_WORKSPACE_RUNTIME_OWNER_MODE!=="replit-published-deployment"||
     env.ADB_AUTO_COLLECT!=="false"||env.GITHUB_ACTIONS==="true"||
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
-    !sha||!SHA.test(sha)||!auth||!HEX.test(auth)||
+    !sha||!SHA.test(sha)||
+    (env.V39_DEPLOYED_GIT_HEAD!==undefined&&env.V39_DEPLOYED_GIT_HEAD!==sha)||!auth||!HEX.test(auth)||
     (mode!=="VERIFY_ONLY"&&mode!=="APPLY_DUE_ONLY")||
     env.P5_RECURRING_EXPIRY_WRITER_ROLE!=="phase5_recurring_expiry_writer_prod"||
     env.P5_RECURRING_EXPIRY_READER_ROLE!=="phase5_recurring_expiry_reader_prod")return hold();
@@ -88,8 +91,8 @@ function receipt(value:unknown,config:Receiver):Record<string,unknown>{
  * the reviewed deployment. The worker owns cross-instance locking; local
  * busy rejection avoids unnecessary concurrent probes within this process.
  */
-export function createP5ExpiryReceiverHandler(env:NodeJS.ProcessEnv,run:typeof execute=execute):RequestHandler|null{
- const config=admitP5ExpiryReceiver(env);
+export function createP5ExpiryReceiverHandler(env:NodeJS.ProcessEnv,deployedSource:string,run:typeof execute=execute):RequestHandler|null{
+ const config=admitP5ExpiryReceiver(env,deployedSource);
  if(!config)return null;
  let busy=false;
  return async(req,res)=>{
