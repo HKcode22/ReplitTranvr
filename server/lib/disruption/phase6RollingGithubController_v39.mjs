@@ -6,6 +6,7 @@
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const CODE=/^[a-f0-9]{40}$/;
 const ACTIVE=new Set(["queued","in_progress","waiting","requested","pending"]);
+const issued=new WeakMap();
 const ACK_ID=x=>Number.isSafeInteger(x)&&x>0;
 const hold=s=>{throw Error("HOLD_P6_ROLLING_CONTROLLER_"+s);};
 const instant=s=>{
@@ -32,7 +33,7 @@ export const P6_ROLLING_ROUTES=Object.freeze([
  // Actual early draw job returns green even when inert; its execution step
  // must be independently observed. Never equate workflow green to actual draw.
  route("EARLY_DRAW","phase5-six-slot-approved-early-four-airport-draw.yml",240,{confirm:"ONE_FUTURE_EARLY_DRAW_AFTER_SEPARATE_PHASE6_GO"},
-  [{name:"gated-exact-early-parent",step:"One actual prospective four-slot draw"}]),
+  [{name:"gated-exact-early-parent",step:"Select max ONE genuinely due future parent under actual DB clock and existing serializable owner"}]),
  route("RETENTION_MONITOR","phase5-private-blob-retention-readonly-sentinel-no-provider.yml",60,{confirm:"READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE"},
   [{name:"private-main-restricted-metadata-sentinel"}])
 ]);
@@ -96,15 +97,19 @@ export function planP6RollingTick(snapshots,context){
  // defer locally; actual failed or gated attempts stop the whole next wave.
  const blocked=assessments.some(x=>x.state.startsWith("HOLD_"));
  const due=blocked?[]:assessments.filter(x=>x.state==="DUE_REVIEWED_ROUTE").map(x=>x.lane);
- return {status:blocked?"HOLD_ROLLING_WAVE_NO_DISPATCH":"REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
-  assessments,due,providerCalls:0,databaseReads:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false};
+ const plan=Object.freeze({status:blocked?"HOLD_ROLLING_WAVE_NO_DISPATCH":"REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+  assessments:Object.freeze(assessments.map(Object.freeze)),due:Object.freeze(due),providerCalls:0,databaseReads:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false});
+ issued.set(plan,{...context,used:false});return plan;
 }
 /** Exact fixed allowlist dispatch; caller must still supply reviewed admission
  * from a real protected workflow. In this PR no production caller exists.
  * An unknown ACK stops immediately; no retry or alternate dispatch API.
  */
-export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releaseApproved,token,deadline,now=()=>Date.now(),fetcher=fetch}){
- if(!CODE.test(sha??"")||sha!==approvedSha||releaseApproved!==true||
+export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releaseApproved,token,deadline,recheckRoute,onEvidence,now=()=>Date.now(),fetcher=fetch}){
+ const stamp=issued.get(plan),started=now();
+ if(!stamp||stamp.used||stamp.sha!==sha||started<stamp.clock||started-stamp.clock>60000||
+    typeof recheckRoute!=="function"||typeof onEvidence!=="function"||
+    !CODE.test(sha??"")||sha!==approvedSha||releaseApproved!==true||
     typeof token!=="string"||token.length<16||!Number.isFinite(deadline)||
     deadline<=now()||deadline-now()>600000||
     plan?.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO"||plan.providerCalls!==0||
@@ -114,19 +119,25 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
     new Set(plan.due).size!==plan.due.length||
     plan.due.some(l=>!P6_ROLLING_ROUTES.some(r=>r.lane===l)||!plan.assessments.some(x=>x.lane===l&&x.state==="DUE_REVIEWED_ROUTE")))
   hold("NO_EXACT_ROLLING_WAVE_APPROVAL");
+ stamp.used=true;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
- const acknowledged=[];
+ const acknowledged=[],deferred=[];
  for(const route of P6_ROLLING_ROUTES.filter(r=>plan.due.includes(r.lane))){
   if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
+  const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now()});
+  if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state==="RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF"){deferred.push(route.lane);continue;}
+  if(fresh.state!=="DUE_REVIEWED_ROUTE")hold("FRESH_ROUTE_HISTORY_NO_REPLAY");
   let live;
   try{
    const res=await fetcher(ROOT+"/git/ref/heads/main",{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
    if(!res.ok)hold("MAIN_UNAVAILABLE");live=await res.json();
   }catch{hold("MAIN_UNAVAILABLE");}
   if(live?.object?.sha!==sha)hold("MAIN_CHANGED");
+  if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
   const inputs={...route.inputs,...(route.lane==="RETENTION_MONITOR"?{approved_main_sha:sha}:{})};
   // No arbitrary URL, workflow names, day, roster, scope, budget or provider
   // arguments from the runtime caller.
+  onEvidence(Object.freeze({lane:route.lane,status:"DISPATCH_ATTEMPT_BEFORE_ACK"}));
   try{
    const res=await fetcher(ROOT+"/actions/workflows/"+route.workflow+"/dispatches",{
     method:"POST",headers:{...headers,"Content-Type":"application/json"},redirect:"error",
@@ -136,8 +147,9 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
    if(!ACK_ID(id)||acknowledged.some(x=>x.runId===id)||b.run_url!==ROOT+"/actions/runs/"+id||
       b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)hold("DISPATCH_ACK_NOT_EXACT");
    acknowledged.push({lane:route.lane,runId:id});
+   onEvidence(Object.freeze({lane:route.lane,status:"EXACT_ACK_NOT_EXECUTION_PROOF",runId:id}));
   }catch{hold("UNKNOWN_DISPATCH_STOP_NO_RETRY");}
  }
- return {status:"ROLLING_WAVE_ACKNOWLEDGED_NOT_EXECUTION_PROOF",acknowledged,dispatchCount:acknowledged.length,
+ return {status:"ROLLING_WAVE_ACKNOWLEDGED_NOT_EXECUTION_PROOF",acknowledged,deferred,dispatchCount:acknowledged.length,
   providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false};
 }
