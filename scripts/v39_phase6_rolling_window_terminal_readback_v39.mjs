@@ -102,8 +102,14 @@ export async function runP6WindowTerminalReadback(env,{fetcher=fetch,readArchive
    return {artifactId:before.id,runId,name:before.name,bytes};
   },
   listControllers:async({fromUtc,untilUtc})=>{
-   const q=new URLSearchParams({branch:"main",event:"workflow_dispatch",per_page:"100",created:fromUtc+".."+new Date(time(untilUtc)-1).toISOString()});
-   return complete(await get("/actions/workflows/"+WF+"/runs?"+q),"workflow_runs",100);
+   const q=new URLSearchParams({branch:"main",event:"workflow_dispatch",per_page:"100",created:fromUtc+".."+untilUtc});
+   const rows=complete(await get("/actions/workflows/"+WF+"/runs?"+q),"workflow_runs",100);
+   // GitHub's range is inclusive; admit only exact timestamps in the
+   // half-open reviewed window. Reject out-of-range rows except the
+   // exact upper boundary (a different window), never hide a partial page.
+   const from=time(fromUtc),until=time(untilUtc);
+   if(rows.some(x=>!Number.isFinite(Date.parse(x?.created_at))||Date.parse(x.created_at)<from||Date.parse(x.created_at)>until))hold("CHAIN_LIST_CLOCK_SCOPE");
+   return rows.filter(x=>Date.parse(x.created_at)<until);
   }
  });
  await main();
