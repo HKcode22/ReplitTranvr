@@ -17,6 +17,7 @@ import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from
 import {
  compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce
 } from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {commitP6ExistingSourceAuthorizationOnce,verifyP6SourceActivationReview,p6SourceAuthorizationStageContentSha,P6_SOURCE_AUTH_SCOPE} from "../scripts/v39_phase6_enable_source_owner_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from
  "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
@@ -106,7 +107,7 @@ function fixture(){
   schema:"v39.phase5.b0062-inert-utc-stage-input.v1",
   manifestSha256:sha("a"),calendarSha256:sha("b"),
   configSha256:sha("c"),frameSha256:sha("d"),codeSha40:"f".repeat(40),
-  phase6AuthorizationId:"CI-INERT-STAGING-20261112",
+  phase6AuthorizationId:"AUTH-20261112-CIINERTSTAGING",
   phase6StartDateUtc:calendarDays[0].startUtc.slice(0,10),
   predecessorEvidenceIds:["CI-SYNTHETIC-NO-PROVIDER-NO-GO"],
   calendarDays,expectedSignedCalendarRowsSha256:digest(calendarDays),
@@ -534,5 +535,52 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    .rejects.toThrow("NOT_AN_EMPTY_PHASE6_COLD_START_NEVER_OVERWRITE_OR_RETRY");
   expect((await counts()).auth).toBe(1);
   expect((await counts()).v82).toBe(1);
+ });
+ it("enables the exact approved existing authorization once with a durable marker but no source or Alert call",async()=>{
+  const r=budgetReview(),ctx={input,review,freezeReview:r.permit};
+  const now=Date.now();
+  const record:any={authorizationId:input.phase6AuthorizationId,phaseGate:"Phase 6 (separate authorization)",
+   airportFilterWindow:P6_SOURCE_AUTH_SCOPE,maxAlertCredits:input.alertSafety.alertRunSpendCeilingCredits,
+   maxRestUnitsByCategory:Object.fromEntries(r.c.categoryCaps.map(c=>[c.category,c.ceilingUnits])),
+   startNotBeforeUtc:iso(now-M),expiresAtUtc:iso(now+H),cleanupOwner:"CI-only independent STOP",
+   predecessorEvidenceIds:input.predecessorEvidenceIds,
+   releaseActivation:{schema:"v39.phase6.exact-source-activation-review.v1",
+    stageContentSha256:p6SourceAuthorizationStageContentSha(input),costEnvelopeSha256:r.c.costOnlyCategoryDraftSha256,
+    independentScientificFreezeApproved:true,independentSourceUseApproved:true,
+    independentOperationalReleaseApproved:true,currentAccountAndBudgetApproved:true,
+    legacyPublishedAutoCollectVerifiedOff:true,githubPaidDispatchFlagsVerifiedOff:true,
+    activeBillableSubscriptionsVerifiedZero:true,separatePaidDispatchStillRequired:true,legacyAlertStartApproved:false,
+    scientificFreezeEvidenceSha256:sha("1"),sourceRightsEvidenceSha256:sha("2"),
+    providerAccountAndBudgetEvidenceSha256:sha("3"),publishedAndGithubStopEvidenceSha256:sha("4"),
+    operationalReleaseEvidenceSha256:sha("5"),accountObservedAtUtc:iso(now-M),accountEvidenceValidUntilUtc:iso(now+H)}};
+  const approved=(record:any)=>({record,artifactHash:sha("8"),verdict:{verified:true as const,record}});
+  expect(verifyP6SourceActivationReview(ctx,approved(record),new Date(now)).authId).toBe(record.authorizationId);
+  expect(p6SourceAuthorizationStageContentSha({...input,codeSha40:"e".repeat(40)}))
+   .toBe(record.releaseActivation.stageContentSha256);
+  for(const change of [{independentSourceUseApproved:false},{githubPaidDispatchFlagsVerifiedOff:false},
+    {stageContentSha256:sha("0")},{costEnvelopeSha256:sha("0")},{legacyAlertStartApproved:true},
+    {accountEvidenceValidUntilUtc:iso(now-M/2)}]){
+   const bad={...record,releaseActivation:{...record.releaseActivation,...change}};
+   expect(()=>verifyP6SourceActivationReview(ctx,approved(bad),new Date(now))).toThrow();
+  }
+  expect(()=>verifyP6SourceActivationReview(ctx,approved({...record,maxAlertCredits:record.maxAlertCredits+1}),new Date(now))).toThrow();
+  const incident=(await admin.query("INSERT INTO clean.adb_incident_stop(cause,detail) VALUES('reconciliation','{}'::jsonb) RETURNING id")).rows[0].id;
+  try{
+   await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record)))
+    .rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
+  }finally{await admin.query("DELETE FROM clean.adb_incident_stop WHERE id=$1",[incident]);}
+  expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(false);
+  const out=await commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record));
+  expect(out).toMatchObject({databaseAuthorizationEnabled:true,independentStagedValuesMatch:true,
+   providerCalls:0,databaseWrites:2,githubFlagsChanged:0,legacyAlertStarted:false,phase6PaidGoGrantedByThisTransition:false});
+  const m=(await admin.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
+   ["phase6_source_authorization_enabled:"+record.authorizationId])).rows;
+  expect(m).toHaveLength(1);expect(JSON.parse(m[0].value)).toEqual(out);
+  expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(true);
+  expect(await categoryCounts()).toEqual({release:1,caps:7,days:7*r.c.days.length,source:0,attempt:0});
+  await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record))).rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
+  // Even if later disabled by owner, the one-use marker forbids replay.
+  await admin.query("UPDATE clean.adb_phase6_authorization SET enabled=false");
+  await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record))).rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
  });
 });
