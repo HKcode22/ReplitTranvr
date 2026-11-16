@@ -84,6 +84,60 @@ describe("prerequisite-P retention matrix", () => {
     expect(verifyRetentionMatrix(rows).pass).toBe(false);
   });
 
+  it("does not let a JSON evidence overlay replace committed FIDS classification or table scope", () => {
+    const complete: RetentionMatrixEvidence = {};
+    for (const row of RETENTION_MATRIX) complete[row.contentClass] = validEvidenceFor(row);
+    const source = RETENTION_MATRIX.find(r => r.contentClass === "fids_population")!;
+    const forged = {
+      ...complete,
+      fids_population: {
+        ...validEvidenceFor({contentClass: "fids_population",contentClassification: "non_aerodatabox_metadata"}),
+        contentClassification: "non_aerodatabox_metadata",
+        contentClass: "fids_population",
+        tables: ["clean.unrelated_metadata"],
+      },
+    };
+    const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(JSON.stringify(forged)));
+    const fids = rows.find(r => r.contentClass === "fids_population")!;
+    expect(failures).toContain("invalid-retention-evidence-fields:fids_population");
+    expect(fids).toEqual(source);
+    expect(verifyRetentionMatrix(rows).pass).toBe(false);
+    expect(Object.isFrozen(source)).toBe(true);
+    expect(Object.isFrozen(source.tables)).toBe(true);
+  });
+
+  it("rejects direct rows with a changed classification, table substitution or duplicated class", () => {
+    const filled = () => RETENTION_MATRIX.map(r => ({ ...r, ...validEvidenceFor(r) }));
+    const raw = filled();
+    const i = raw.findIndex(r => r.contentClass === "fids_population");
+    raw[i] = {...raw[i], contentClassification: "non_aerodatabox_metadata",
+      ...validEvidenceFor({contentClass: "fids_population",contentClassification: "non_aerodatabox_metadata"})};
+    expect(verifyRetentionMatrix(raw).failures).toContain("classification-differs-from-committed-matrix:fids_population");
+    const tables = filled();
+    tables[i] = {...tables[i], tables: ["clean.unrelated_metadata"]};
+    expect(verifyRetentionMatrix(tables).failures).toContain("tables-differ-from-committed-matrix:fids_population");
+    const dup = filled();
+    dup[i] = {...dup[0]};
+    const verdict = verifyRetentionMatrix(dup);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toContain("duplicate-content-class:webhook_ingress");
+    expect(verdict.failures).toContain("missing-content-class:fids_population");
+  });
+
+  it("fails closed on malformed evidence values without treating parseable JSON as trusted strings", () => {
+    const evidence: RetentionMatrixEvidence = {};
+    for (const row of RETENTION_MATRIX) evidence[row.contentClass] = validEvidenceFor(row);
+    for (const malformed of [null, [], 42, "unreviewed", {...evidence.fids_population, expiryAction: {no: "delete"}}]) {
+      const {rows, failures} = resolveRetentionMatrix(parseRetentionMatrixEvidence(JSON.stringify({...evidence, fids_population: malformed})));
+      expect(failures.length).toBeGreaterThan(0);
+      expect(verifyRetentionMatrix(rows).pass).toBe(false);
+    }
+    const direct = RETENTION_MATRIX.map(r => ({...r, ...validEvidenceFor(r)}));
+    const bad = direct as unknown as Array<Record<string, unknown>>;
+    bad[0].retentionSource = 42;
+    expect(verifyRetentionMatrix(direct).failures).toContain("unverified:webhook_ingress:retentionSource");
+  });
+
   it("rejects blanket 30-day evidence for raw provider content", () => {
     const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
     const raw = filled.find((r) => r.contentClass === "webhook_ingress")!;
