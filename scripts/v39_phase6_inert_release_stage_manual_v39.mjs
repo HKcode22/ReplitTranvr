@@ -4,11 +4,14 @@
  */
 import pg from "pg";
 import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
+import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {P5_TWO_STAGE_ROLES,verifyP5TwoStageOneLiveSession} from "./v39_phase5_two_stage_logins_independent_live_readonly_once.mjs";
 import {compileP5InertB0062UtcStagePacket,commitP5InertB0062UtcStageOnce} from "../server/lib/disruption/phase5B0062InertCalendarUtcBudgetStage_v39.mjs";
 import {compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const hold=s=>{throw Error("HOLD_P6_INERT_RELEASE_"+s);};
 const confirm={calendar:"STAGE_EXACT_31_DAY_CALENDAR_DISABLED_AUTH_NO_PROVIDER",cost:"STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER"};
@@ -76,7 +79,68 @@ export async function runP6InertReleaseStage(env){
   return {...out,mode:ctx.mode,independentPostStageOwnerReadbackStillRequired:true,phase6PaidGo:false};
  }finally{await pool.end().catch(()=>{});}
 }
+/** Owner-local independent comparison of exact already reviewed bytes with
+ * existing committed rows. No stage writer, provider, secret change or GO.
+ * The two expected hashes must come from the actual independent review,
+ * not from the live DB. The booleans below are compiler comparison context
+ * ONLY; this read-only operation does not authenticate approval or rights.
+ */
+export function admitP6InertOwnerReadback(env,raw,stageSha,costSha,head){
+ if(env.GITHUB_ACTIONS==="true"||!C.test(head??"")||
+    env.V39_P5_APPROVED_CODE_SHA!==head||env.ADB_AUTO_COLLECT!=="0"||
+    env.V39_PHASE6_PROCESS_ARMED!=="0"||env.V39_PHASE6_OWNER_APPROVED!=="0"||
+    env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
+    [env.AERODATABOX_API_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.RAPIDAPI_KEY].some(Boolean))
+  hold("OWNER_READBACK_NONPAID_SCOPE");
+ if(typeof raw!=="string"||Buffer.byteLength(raw)<100||Buffer.byteLength(raw)>48000||
+    !H.test(stageSha??"")||hash(raw)!==stageSha||!H.test(costSha??""))
+  hold("OWNER_READBACK_EXACT_REVIEW_BYTES_REQUIRED");
+ let input;try{input=JSON.parse(raw);}catch{hold("OWNER_READBACK_INVALID_JSON");}
+ if(JSON.stringify(input)!==raw||input.codeSha40!==head)
+  hold("OWNER_READBACK_MAIN_OR_CANONICAL_BYTES_DRIFT");
+ let u;try{u=new URL(env.DATABASE_URL);}catch{hold("OWNER_READBACK_EXISTING_DB_REQUIRED");}
+ if(!["postgresql:","postgres:"].includes(u.protocol)||!u.username||!u.password||
+    !u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hash||
+    (u.port!==""&&u.port!=="5432")||
+    u.searchParams.getAll("sslmode").length!==1||
+    !["require","verify-full"].includes(u.searchParams.get("sslmode"))||
+    [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+    (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||
+      u.searchParams.get("channel_binding")!=="require"))||
+    P5_TWO_STAGE_ROLES.some(spec=>decodeURIComponent(u.username)===spec.role))
+  hold("OWNER_READBACK_DISTINCT_EXISTING_TLS_DB_REQUIRED");
+ const review={expectedSignedStagePacketSha256:stageSha,
+  expectedExactWriterRole:P5_TWO_STAGE_ROLES[0].role,independentCalendarTreatmentReviewApproved:true,
+  independentProviderAccountAndRestBudgetReviewApproved:true,narrowPrelaunchOwnerApproved:true};
+ const freezeReview={expectedStagedB0062PacketSha256:stageSha,
+  expectedSignedSevenCategoryCostSha256:costSha,expectedExactBudgetWriterRole:P5_TWO_STAGE_ROLES[1].role,
+  independentProspectiveCalendarAndTreatmentApproved:true,independentRealProviderRangeAndRestBudgetApproved:true,
+  independentSourceContentsRightsForIntendedUseApproved:true,exactRestrictedNoProviderBudgetFreezeApproved:true};
+ compileP5V0093CostOnlySevenRestReview(input,review,freezeReview);
+ const out={stageSha,costSha,codeSha:head,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ Object.defineProperties(out,Object.fromEntries(Object.entries({input,review,freezeReview,url:env.DATABASE_URL}).map(([k,value])=>[k,{value,enumerable:false}])));
+ return Object.freeze(out);
+}
+async function runP6InertOwnerReadback(env,argv){
+ if(argv.length!==3)hold("OWNER_READBACK_EXACT_ARGUMENTS");
+ const [path,stageSha,costSha]=argv;
+ // Compare an exact detached checkout with authenticated remote main.
+ const cmd=(c,a)=>execFileSync(c,a,{encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000}).trim();
+ const head=cmd("git",["rev-parse","HEAD"]);
+ const remote=()=>cmd("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha"]);
+ if(head!==remote())hold("OWNER_READBACK_NOT_EXACT_MAIN");
+ const ctx=admitP6InertOwnerReadback(env,readFileSync(path,"utf8"),stageSha,costSha,head);
+ const pool=new pg.Pool({connectionString:ctx.url,max:1,connectionTimeoutMillis:8000,query_timeout:20000,
+  options:"-c default_transaction_read_only=on",application_name:"p6_independent_poststage_readback"});
+ try{
+  const out=await inspectP5V0093IndependentExactPostStage(pool,ctx.input,ctx.review,ctx.freezeReview);
+  if(head!==remote())hold("OWNER_READBACK_MAIN_MOVED");
+  return {...out,codeSha:head,independentOwnerReadback:true,phase6PaidGo:false};
+ }finally{await pool.end();}
+}
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- try{console.log(JSON.stringify(await runP6InertReleaseStage(process.env)));}
- catch(e){const s=String(e?.message??"");console.error(/^(?:HOLD_P6_INERT_RELEASE|HOLD_P5_TWO_STAGE_INDEPENDENT_READONLY|REFUSED_P5)_[A-Z0-9_]+$/.test(s)?s:"HOLD_P6_INERT_RELEASE_UNKNOWN_REVIEW_BEFORE_ANY_RETRY");process.exitCode=2;}
+ try{console.log(JSON.stringify(process.argv[2]==="--readback"?
+  await runP6InertOwnerReadback(process.env,process.argv.slice(3)):
+  await runP6InertReleaseStage(process.env)));}
+ catch(e){const s=String(e?.message??"");console.error(/^(?:HOLD_P6_INERT_RELEASE|HOLD_P5_V0093_INDEPENDENT_EXACT_RO|HOLD_P5_TWO_STAGE_INDEPENDENT_READONLY|REFUSED_P5)_[A-Z0-9_]+$/.test(s)?s:"HOLD_P6_INERT_RELEASE_UNKNOWN_REVIEW_BEFORE_ANY_RETRY");process.exitCode=2;}
 }
