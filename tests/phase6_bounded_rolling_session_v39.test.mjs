@@ -271,3 +271,13 @@ test("tampered retired prefix stops protected successor before any new POST",asy
  await assert.rejects(runP6RollingSession(f.env,f.options),/RETIREMENT_PREFIX_CHANGED_NO_REPLAY/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
 });
+
+test("retirement mode mismatch or malformed no-advance receipt refuses continuation without POST",async()=>{
+ const f=setup({chain:true,rollover:true}),first=await runP6RollingSession(f.env,f.options);
+ assert.equal(first.historyRetirementCandidate.status,"RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH");
+ f.startSuccessor({...first,historyRetirementCandidate:{...first.historyRetirementCandidate,
+  proposedEpochUtc:iso(start+MIN)}});
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RETIREMENT_RECEIPT_SCOPE/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});

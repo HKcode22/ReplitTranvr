@@ -347,6 +347,9 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // No advance is a valid outcome, not a reason to force a reset.
    const retirementCandidate=a.rollover&&a.hop===0&&!ackCapacityExhausted?
     await final.reviewHistoryRetirement():null;
+   // Retirement review may take additional GETs. Do not dispatch a successor
+   // against an earlier main/root observation after such a review.
+   if(retirementCandidate){await uniqueRoot();await main();}
    const result={schema:"v39.phase6.bounded-rolling-session.v1",
     status:ackCapacityExhausted?"BOUNDED_ACK_CAPACITY_EXHAUSTED_NO_SUCCESSOR_NOT_COLLECTION_PROOF":
      a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
