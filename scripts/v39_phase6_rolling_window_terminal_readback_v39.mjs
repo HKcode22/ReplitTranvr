@@ -49,15 +49,20 @@ function downloadArchive({artifactId,token}){
  catch{hold("ARCHIVE_DOWNLOAD");}
 }
 export function unpackP6WindowReceiptArchive(bytes,meta){
- if(!Buffer.isBuffer(bytes)||bytes.length!==meta.size||bytes.length<1||bytes.length>65536||
+ return unpackP6ControllerArtifactArchive(bytes,meta,"TERMINAL");
+}
+export function unpackP6ControllerArtifactArchive(bytes,meta,kind){
+ if(!["TERMINAL","FAILURE"].includes(kind))hold("ARCHIVE_FILE_SCOPE");
+ const name=kind==="TERMINAL"?FILE:"p6-rolling-failure-custody.jsonl",maxArchive=kind==="TERMINAL"?65536:131072,maxFile=kind==="TERMINAL"?32768:65536;
+ if(!Buffer.isBuffer(bytes)||bytes.length!==meta.size||bytes.length<1||bytes.length>maxArchive||
    "sha256:"+hash(bytes)!==meta.digest)hold("ARCHIVE_SIZE_OR_DIGEST");
  const dir=mkdtempSync(join(tmpdir(),"p6-terminal-readback-")),path=join(dir,"receipt.zip");
  try{
   writeFileSync(path,bytes,{flag:"wx",mode:0o600});
   const list=execFileSync("unzip",["-Z1",path],{timeout:10000,maxBuffer:4096,stdio:["ignore","pipe","ignore"],encoding:"utf8"});
-  if(list!==FILE+"\n"&&list!==FILE+"\r\n")hold("ARCHIVE_FILE_SCOPE");
-  const raw=execFileSync("unzip",["-p",path,FILE],{timeout:10000,maxBuffer:32768,stdio:["ignore","pipe","ignore"]});
-  if(raw.length<100||raw.length>32768)hold("RECEIPT_SIZE");
+  if(list!==name+"\n"&&list!==name+"\r\n")hold("ARCHIVE_FILE_SCOPE");
+  const raw=execFileSync("unzip",["-p",path,name],{timeout:10000,maxBuffer:maxFile,stdio:["ignore","pipe","ignore"]});
+  if(raw.length<100||raw.length>maxFile)hold("RECEIPT_SIZE");
   return raw;
  }catch(e){if(/^HOLD_P6_WINDOW_READBACK_/.test(e?.message??""))throw e;hold("ARCHIVE_UNPACK");}
  finally{rmSync(dir,{recursive:true,force:true});}
