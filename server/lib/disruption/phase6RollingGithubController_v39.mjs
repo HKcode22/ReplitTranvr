@@ -117,6 +117,23 @@ export function planP6RollingTick(snapshots,context){
   assessments:Object.freeze(assessments.map(Object.freeze)),due:Object.freeze(due),providerCalls:0,databaseReads:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false});
  issued.set(plan,{...context,used:false});return plan;
 }
+/** Narrow a genuine issued wave to independently reviewed calendar wake hints.
+ * Never adds a route, erases a HOLD or extends the original observation clock.
+ * The original plan is consumed, even if the narrowed plan is empty.
+ */
+export function restrictP6RollingWave(plan,eligibleLanes){
+ const stamp=issued.get(plan);
+ if(!stamp||stamp.used||!Array.isArray(eligibleLanes)||
+    eligibleLanes.length>P6_ROLLING_ROUTES.length||
+    new Set(eligibleLanes).size!==eligibleLanes.length||
+    eligibleLanes.some(l=>!P6_ROLLING_ROUTES.some(r=>r.lane===l)))
+  hold("UNREVIEWED_CALENDAR_WAVE_SCOPE");
+ const restricted=Object.freeze({...plan,
+  due:Object.freeze(plan.due.filter(l=>eligibleLanes.includes(l))),
+  calendarDeferred:Object.freeze(plan.due.filter(l=>!eligibleLanes.includes(l)))});
+ stamp.used=true;issued.set(restricted,{...stamp,used:false});
+ return restricted;
+}
 /** Exact fixed allowlist dispatch; caller must still supply reviewed admission
  * from a real protected workflow. In this PR no production caller exists.
  * An unknown ACK stops immediately; no retry or alternate dispatch API.
@@ -177,7 +194,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch}){
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{}}){
  const started=now();
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
     started-epoch>6*3600000||typeof token!=="string"||token.length<16)
@@ -234,6 +251,8 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
  const context={sha,epoch,clock:now()};
  // No stale or inverted monotonic wall-clock snapshots may dispatch.
  if(context.clock<started||context.clock-started>120000)hold("GITHUB_SNAPSHOT_TOO_SLOW");
+ // Verify every lane's accepted-run history before issuing any new wave.
+ for(let i=0;i<P6_ROLLING_ROUTES.length;i++)verifySnapshot(P6_ROLLING_ROUTES[i],snapshots[i]);
  const plan=planP6RollingTick(snapshots,context);
  async function recheckRoute(route){
   if(!P6_ROLLING_ROUTES.includes(route)||now()-context.clock>600000)hold("GITHUB_FRESH_RECHECK_EXPIRED");
