@@ -7,14 +7,16 @@ import {join} from "node:path";
 import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
 import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
-import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
+import {runP6RollingSession,decodeP6PredecessorReceipt} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
+import {execFileSync} from "node:child_process";
+import {writeFileSync} from "node:fs";
 import {admitP6RuntimeWindowConfig} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false,artifactDigestMissing=false,artifactMetadataDrifts=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
@@ -38,7 +40,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   V39_P5_RELEASE_SHA256:hash,V39_P5_RIGHTS_SHA256:hash,P6_NONPAID_DAILY_POLICY_BASE64:b.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(b)};
  const root={id:12345,path:".github/workflows/"+WF,head_sha:sha,head_branch:"main",event:"workflow_dispatch",
   run_attempt:1,status:"in_progress",conclusion:null,created_at:iso(start)};
- const controllerRuns=[root];let savedReceipt;
+ const controllerRuns=[root];let savedReceipt,artifactReads=0;
  if(delayedRetention){
   const route=P6_ROLLING_ROUTES.find(r=>r.lane==="RETENTION_MONITOR");
   runs.push({id:900,path:".github/workflows/"+route.workflow,head_branch:"main",head_sha:sha,event:"workflow_dispatch",
@@ -80,7 +82,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
     status:"completed",conclusion:"success",steps:["Execute one protected rolling session and reconcile accepted workers before terminal",
      "Preserve terminal operational receipt for independently reviewed continuation"].map(name=>({name,status:"completed",conclusion:"success"}))}]});
    if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/artifacts"))return response({total_count:1,artifacts:[{id:444,name:"p6-rolling-terminal-"+pred,
-    expired:false,size_in_bytes:512}]});
+    expired:false,size_in_bytes:512,digest:artifactDigestMissing?undefined:"sha256:"+((++artifactReads>1&&artifactMetadataDrifts)?"c": "b").repeat(64)}]});
    if(opt.method==="POST"){
     if(failAck)return response({},204);
     const route=P6_ROLLING_ROUTES.find(r=>u.pathname.endsWith("/workflows/"+r.workflow+"/dispatches"));
@@ -573,4 +575,29 @@ test("opt-in controller refuses missing credential, root ambiguity, unknown clai
  const cfg=admitP6RuntimeWindowConfig(f.env);
  assert.equal(cfg.connection.ssl.rejectUnauthorized,true);assert.equal(cfg.connection.database,"neondb");
  assert(!("connectionString" in cfg.connection));
+});
+
+test("successor refuses missing digest or changed artifact metadata before dispatch",async()=>{
+ for(const opt of [{artifactDigestMissing:true},{artifactMetadataDrifts:true}]){
+  const f=setup({chain:true,...opt}),first=await runP6RollingSession(f.env,f.options);
+  f.startSuccessor(first);
+  const posts=f.calls.filter(x=>x.method==="POST").length;
+  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RECEIPT_(IDENTITY|METADATA_CHANGED)/);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+ }
+});
+test("production predecessor decoder binds exact ZIP digest and single expected entry",()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p6-predecessor-test-"));
+ try{
+  const file="p6-rolling-terminal-receipt.json",payload={status:"fixture-only",runId:12345,pad:"x".repeat(120)};
+  writeFileSync(join(dir,file),JSON.stringify(payload));
+  execFileSync("zip",["-q","receipt.zip",file],{cwd:dir});
+  const archive=readFileSync(join(dir,"receipt.zip")),meta={size:archive.length,digest:"sha256:"+digest(archive)};
+  assert.deepEqual(decodeP6PredecessorReceipt(archive,meta),payload);
+  assert.throws(()=>decodeP6PredecessorReceipt(archive,{...meta,digest:"sha256:"+"0".repeat(64)}),/CHAIN_RECEIPT_ARCHIVE_INVALID/);
+  writeFileSync(join(dir,"extra.txt"),"extra");
+  execFileSync("zip",["-q","receipt.zip","extra.txt"],{cwd:dir});
+  const extra=readFileSync(join(dir,"receipt.zip"));
+  assert.throws(()=>decodeP6PredecessorReceipt(extra,{size:extra.length,digest:"sha256:"+digest(extra)}),/CHAIN_RECEIPT_ARCHIVE_INVALID/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

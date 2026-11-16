@@ -5,8 +5,7 @@
  * one exact protected session or separately approved two-session chain.
  */
 import {resolve,join} from "node:path";
-import {writeFileSync,mkdtempSync,readFileSync,readdirSync,rmSync,lstatSync} from "node:fs";
-import {tmpdir} from "node:os";
+import {writeFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
@@ -14,6 +13,7 @@ import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRoll
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
+import {unpackP6WindowReceiptArchive} from "./v39_phase6_rolling_window_terminal_readback_v39.mjs";
 import {admitP6RuntimeWindowConfig,createP6RuntimeWindowCustody,exactP6RuntimeWindowReceipt,compareP6WindowCustody} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
@@ -94,21 +94,21 @@ export function admitP6RollingSession(env,now=Date.now()){
  return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,multi,maxHops,hop:Number(hop),parent:Number(parent),sent,policyBytes,
   expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,trust};
 }
-function downloadReceipt({parent,name,token}){
- const dir=mkdtempSync(join(tmpdir(),"p6-rolling-receipt-"));
+// Bind the actual ZIP bytes, not merely a mutable artifact name. Reuse
+// the independent terminal readback decoder (exact single file, size, SHA256).
+function downloadReceipt({meta,token}){
  try{
-  execFileSync("gh",["run","download",String(parent),"--repo",REPO,"--name",name,"--dir",dir],{
+  const archive=execFileSync("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+meta.id+"/zip"],{
    env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},
-   timeout:30000,stdio:"ignore"});
-  const files=readdirSync(dir);
-  if(files.length!==1||files[0]!==RECEIPT_FILE)hold("CHAIN_RECEIPT_FILES");
-  const path=join(dir,RECEIPT_FILE),info=lstatSync(path);
-  if(!info.isFile()||info.size<30||info.size>32768)hold("CHAIN_RECEIPT_SIZE");
-  return JSON.parse(readFileSync(path,"utf8"));
+   timeout:30000,maxBuffer:131072,stdio:["ignore","pipe","ignore"]});
+  return archive;
  }catch{hold("CHAIN_RECEIPT_UNAVAILABLE");}
- finally{rmSync(dir,{recursive:true,force:true});}
 }
-export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt,windowCustodyCheck}={}){
+export function decodeP6PredecessorReceipt(archive,meta){
+ try{return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(unpackP6WindowReceiptArchive(archive,meta)));}
+ catch{hold("CHAIN_RECEIPT_ARCHIVE_INVALID");}
+}
+export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt,readArchive=downloadReceipt,windowCustodyCheck}={}){
  const started=now(),a=admitP6RollingSession(env,started);
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
@@ -216,13 +216,23 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(verifiedRootId!==null&&verifiedRootId!==foundRoot)hold("WINDOW_ROOT_DRIFT");
   verifiedRootId=foundRoot;
   if(prior!==null)return;
-  const name="p6-rolling-terminal-"+a.parent,art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
-  if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
-  const meta=art.artifacts[0];
-  if(meta.name!==name||meta.expired!==false||!Number.isSafeInteger(meta.id)||meta.id<1||
-     !Number.isSafeInteger(meta.size_in_bytes)||meta.size_in_bytes<1||meta.size_in_bytes>65536||
-     (meta.workflow_run&&Number(meta.workflow_run.id)!==a.parent))hold("CHAIN_RECEIPT_IDENTITY");
-  const receipt=await readReceipt({parent:a.parent,name,token:env.GITHUB_TOKEN});
+  const name="p6-rolling-terminal-"+a.parent;
+  async function receiptMetadata(){
+   const art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
+   if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
+   const meta=art.artifacts[0];
+   if(meta.name!==name||meta.expired!==false||!Number.isSafeInteger(meta.id)||meta.id<1||
+      !Number.isSafeInteger(meta.size_in_bytes)||meta.size_in_bytes<1||meta.size_in_bytes>65536||
+      (meta.workflow_run&&Number(meta.workflow_run.id)!==a.parent)||
+      !/^sha256:[a-f0-9]{64}$/.test(meta.digest??""))hold("CHAIN_RECEIPT_IDENTITY");
+   return {id:meta.id,name,size:meta.size_in_bytes,digest:meta.digest};
+  }
+  const meta=await receiptMetadata();
+  // readReceipt is only a dependency-injected test seam; production always
+  // downloads the immutable artifact ID and validates archive bytes.
+  const receipt=readReceipt?await readReceipt({parent:a.parent,name,meta,token:env.GITHUB_TOKEN}):
+   decodeP6PredecessorReceipt(await readArchive({meta,token:env.GITHUB_TOKEN}),meta);
+  if(JSON.stringify(meta)!==JSON.stringify(await receiptMetadata()))hold("CHAIN_RECEIPT_METADATA_CHANGED");
   if(receipt?.schema!=="v39.phase6.bounded-rolling-session.v1"||
      receipt.status!=="BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF"||
      receipt.sessionHop!==a.hop-1||receipt.parentRunId!==predecessorParent||receipt.runId!==a.parent||

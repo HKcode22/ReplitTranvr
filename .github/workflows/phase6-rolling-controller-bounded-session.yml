@@ -28,6 +28,7 @@ on:
       - '.github/workflows/phase6-rolling-controller-bounded-session.yml'
       - 'scripts/v39_phase6_bounded_rolling_session_v39.mjs'
       - 'scripts/v39_phase6_rolling_failure_journal_v39.mjs'
+      - 'scripts/v39_phase6_rolling_window_terminal_readback_v39.mjs'
       - 'tests/phase6_rolling_failure_journal_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
