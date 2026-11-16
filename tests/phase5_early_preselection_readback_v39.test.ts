@@ -60,6 +60,23 @@ describe("Phase5 early source preselection admission, zero provider / DB calls",
     expect(result.stateHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("refuses an excluded scheduled-passenger airport in any saved prospective slot", () => {
+    for (const icao of ["KTEB","kteb"," KTEB "]) {
+      expect(guarded(f=>{f.rows[1].selected_icao=icao;}))
+        .toThrow("SCHEDULED_PASSENGER_SCOPE_EXCLUDED_AIRPORT");
+    }
+  });
+
+  it("does not allow the excluded airport into a saved probability vector", () => {
+    expect(guarded(f=>{
+      f.rows[3].airport_layer_design_probability=0.5;
+      f.rows[3].probability_vector=[
+        {icao:"KGPT",probability:0.5,drawScore:1},
+        {icao:"KTEB",probability:0.5,drawScore:1},
+      ];
+    })).toThrow("SCHEDULED_PASSENGER_SCOPE_EXCLUDED_VECTOR_AIRPORT");
+  });
+
   it("matches the real early writer strict 24h45m lower and 72h upper boundary", () => {
     // Fixture service start is 2026-11-08T14:00Z.
     // The real database owner requires >24h45m before service, <=72h.
