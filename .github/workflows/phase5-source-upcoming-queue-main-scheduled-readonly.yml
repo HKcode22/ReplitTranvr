@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Exact read-only confirmation or RUN_CURRENT_SIGNED_SOURCE_PARENT / RUN_CURRENT_SIGNED_POST_PARENT (separate release required)'
+        description: 'Exact read-only confirmation or RUN_CURRENT_SIGNED_SOURCE_PARENT / RUN_CURRENT_SIGNED_POST_PARENT / PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER (separate release required)'
         required: true
         type: string
   pull_request:
@@ -955,7 +955,7 @@ jobs:
     # Original ten-minute scheduler, one bounded producer.
     # This does NOT dispatch a paid child. Existing POST parent and V0083
     # one-shot reservation remain separately gated. No provider key here.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P6_NATIVE_POST_PRODUCER_ENABLED == '1' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER')) && vars.P6_NATIVE_POST_PRODUCER_ENABLED == '1' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -976,6 +976,7 @@ jobs:
       P5_V39_T24_WITNESS_DATABASE_URL: ''
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P6_NATIVE_POST_PRODUCER_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm || '' }}
       P6_NATIVE_POST_PRODUCER_ENABLED: ${{ vars.P6_NATIVE_POST_PRODUCER_ENABLED }}
       P6_NATIVE_POST_PRODUCER_APPROVED: ${{ secrets.P6_NATIVE_POST_PRODUCER_APPROVED }}
       P5_POST_AUTO_DISPATCH_ENABLED: ${{ vars.P5_POST_AUTO_DISPATCH_ENABLED }}
@@ -1009,6 +1010,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
+          case "$GITHUB_EVENT_NAME" in
+            schedule) test -z "$P6_NATIVE_POST_PRODUCER_CONFIRM" ;;
+            workflow_dispatch) test "$P6_NATIVE_POST_PRODUCER_CONFIRM" = PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER ;;
+            *) exit 2 ;;
+          esac
           test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$P6_NATIVE_POST_PRODUCER_APPROVED" = 1
