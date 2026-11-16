@@ -55,6 +55,7 @@ jobs:
           test "${V39_PHASE6_OWNER_APPROVED}" = '0'
           test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${GATE05_AUTOMATION_DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
           python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py --self-test
+          python3 scripts/v39_phase5_bts_gate_wheelsoff_contrast.py --self-test
           echo 'BTS_PRESERVATION_OFFLINE_CONTRACT_PASS_NO_PAID_NO_NEON' >> "$GITHUB_STEP_SUMMARY"
 
   preserve-exact-existing-aug2026:
@@ -177,48 +178,3 @@ jobs:
           echo 'Requested 90-day Actions retention (actual expiry subject to repository policy).' >> "$GITHUB_STEP_SUMMARY"
           echo 'These are temporary same-repo GitHub artifacts, NOT durable Phase7 object storage or AeroDataBox PRE. No provider API GET, no Neon writes, no Phase5 FREEZE or paid Phase6 GO.' >> "$GITHUB_STEP_SUMMARY"
 
-  actual-existing-historical-gate-wheelsoff-contrast:
-    # Named PR-only historical analysis, no provider re-download or paid GO.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'HKcode22/ReplitTranvr' && github.head_ref == 'phase5/bts-actual-gate-wheelsoff-contrast-20261115'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Offline contrast regression plus verify preserved artifact metadata
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -Eeuo pipefail
-          test "$ADB_AUTO_COLLECT$V39_PHASE6_PROCESS_ARMED$V39_PHASE6_OWNER_APPROVED" = 000
-          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$RAPIDAPI_KEY$AERODATABOX_API_KEY"
-          python3 scripts/v39_phase5_bts_gate_wheelsoff_contrast.py --self-test
-          gh api --method GET repos/HKcode22/ReplitTranvr/actions/artifacts/14198898471 | jq -e '
-            .id==14198898471 and .expired==false and .size_in_bytes==41376820 and
-            .name=="v39-bts-aug2026-normalized-only-sha-preserved-20261115" and
-            .digest=="sha256:5440085391a80db26e44b060472ab4e69b63263549a8b38af0252dba670d37a0"' >/dev/null
-      - uses: actions/download-artifact@v4
-        with:
-          name: v39-bts-aug2026-normalized-only-sha-preserved-20261115
-          run-id: 43808240282
-          github-token: ${{ github.token }}
-          repository: HKcode22/ReplitTranvr
-          path: ${{ runner.temp }}/bts-actual-history
-      - name: Analyze all original normalized records, aggregate only and preserve evidence
-        run: |
-          set -Eeuo pipefail
-          set +x
-          mkdir -p "$RUNNER_TEMP/bts-contrast-aggregate"
-          python3 scripts/v39_phase5_bts_gate_wheelsoff_contrast.py --actual-preserved "$RUNNER_TEMP/bts-actual-history" > "$RUNNER_TEMP/bts-contrast-aggregate/contrast.json"
-          cat "$RUNNER_TEMP/bts-contrast-aggregate/contrast.json"
-          sha256sum "$RUNNER_TEMP/bts-contrast-aggregate/contrast.json"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bts-aug2026-gate-wheelsoff-historical-contrast-aggregate
-          path: ${{ runner.temp }}/bts-contrast-aggregate/contrast.json
-          retention-days: 90
-          if-no-files-found: error
