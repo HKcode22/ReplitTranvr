@@ -16,16 +16,16 @@ export interface RetentionMatrixRow {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function row(contentClass: string, tables: readonly string[], contentClassification: ContentClassification): RetentionMatrixRow {
-  return {
+  return Object.freeze({
     contentClass,
-    tables,
+    tables: Object.freeze([...tables]),
     contentClassification,
     retentionVerifiedDate: "UNVERIFIED",
     retentionSource: "UNVERIFIED",
     retentionLegalBasis: "UNVERIFIED",
     retentionPeriodDaysOrCondition: "UNVERIFIED",
     expiryAction: "UNVERIFIED",
-  };
+  });
 }
 
 /**
@@ -214,7 +214,7 @@ export function verifyRetentionMatrix(rows: readonly RetentionMatrixRow[] = RETE
     if (seen.has(r.contentClass)) failures.push(`duplicate-content-class:${r.contentClass}`);
     seen.add(r.contentClass);
     if (!Array.isArray(r.tables) || r.tables.length === 0) failures.push(`tables-missing:${r.contentClass}`);
-    else if (r.tables.length !== original.tables.length || r.tables.some((t, i) => t !== original.tables[i])) {
+    else if (r.tables.length !== original.tables.length || r.tables.some((t: unknown, i: number) => t !== original.tables[i])) {
       failures.push(`tables-differ-from-committed-matrix:${r.contentClass}`);
     }
     if (!["raw_api_content", "derived_work", "non_aerodatabox_metadata"].includes(r.contentClassification)) {
