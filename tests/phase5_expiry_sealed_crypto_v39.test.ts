@@ -4,6 +4,7 @@ vi.mock("../server/lib/disruption/phase5ExpiryReceiverTransport_v39",()=>({
  admitP5ExpiryReceiver:vi.fn(()=>({scope:{apply:false}}))
 }));
 import {P5_EXPIRY_BUCKET,P5_EXPIRY_DB_ENDPOINT,sealP5ExpiryValues,openP5ExpiryValues,loadP5ExpirySealedConfig} from "../server/lib/disruption/phase5ExpirySealedHandoff_v39";
+import {makeP5ExpiryHandoffValues} from "../scripts/v39_phase5_expiry_sealed_handoff_v39";
 const sha="a".repeat(40);
 const env={V39_DATABASE_RUNTIME_URL:"postgresql://runtime:synthetic@same.invalid/neondb",
  AERODATABOX_WEBHOOK_SECRET:"fictional".repeat(4),V39_PROVIDER_BLOB_MODE:"required",
@@ -15,6 +16,26 @@ const v={P5_RECURRING_EXPIRY_HTTP_ENABLED:"1",P5_RECURRING_EXPIRY_HTTP_AUTH_SHA2
  P5_RECURRING_EXPIRY_WRITER_URL:"postgresql://writer:fictional@same.invalid/neondb",
  P5_RECURRING_EXPIRY_READER_URL:"postgresql://reader:fictional@same.invalid/neondb"};
 describe("actual AES-GCM with mocked transport DB admission (no production host or credentials)",()=>{
+ it("reuses exact commissioned file shape but transfers only scoped URLs and a distinct token digest",()=>{
+  const token="b".repeat(64),file={
+   P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:"335e77398f3a326721186014c2903ef729e64c03",
+   ADB_AUTO_COLLECT:"0",P5_RECURRING_EXPIRY_MODE:"VERIFY_ONLY",V39_PROVIDER_BLOB_MODE:"required",
+   V39_PROVIDER_BLOB_BUCKET_ID:P5_EXPIRY_BUCKET,
+   P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:P5_EXPIRY_BUCKET,P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:P5_EXPIRY_DB_ENDPOINT,
+   P5_RECURRING_EXPIRY_WRITER_ROLE:v.P5_RECURRING_EXPIRY_WRITER_ROLE,
+   P5_RECURRING_EXPIRY_READER_ROLE:v.P5_RECURRING_EXPIRY_READER_ROLE,
+   P5_RECURRING_EXPIRY_WRITER_URL:v.P5_RECURRING_EXPIRY_WRITER_URL,
+   P5_RECURRING_EXPIRY_READER_URL:v.P5_RECURRING_EXPIRY_READER_URL
+  };
+  const values=makeP5ExpiryHandoffValues(file,sha,token);
+  expect(values.P5_RECURRING_EXPIRY_HTTP_AUTH_SHA256).toBe(createHash("sha256").update(token).digest("hex"));
+  expect(values.P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA).toBe(sha);
+  expect(values.P5_RECURRING_EXPIRY_WRITER_URL).toBe(file.P5_RECURRING_EXPIRY_WRITER_URL);
+  expect(JSON.stringify(values)).not.toContain(token);
+  expect(file.P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA).not.toBe(sha);
+  for(const patch of [{DATABASE_URL:"owner"},{P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha},{P5_RECURRING_EXPIRY_MODE:"APPLY_DUE_ONLY"}])
+   expect(()=>makeP5ExpiryHandoffValues({...file,...patch},sha,token)).toThrow();
+ });
  it("round trips, uses fresh salt/IV, binds source and both custody secrets, refuses tamper",()=>{
   const b=sealP5ExpiryValues(v,sha,env);
   expect(openP5ExpiryValues(b,sha,env)).toEqual(v);

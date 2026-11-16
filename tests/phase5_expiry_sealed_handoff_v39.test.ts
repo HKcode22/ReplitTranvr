@@ -1,13 +1,9 @@
 import {describe,it,expect,vi} from "vitest";
-import {createHash} from "node:crypto";
 import {makeP5ExpiryHandoffValues} from "../scripts/v39_phase5_expiry_sealed_handoff_v39";
 import {P5_EXPIRY_BUCKET,P5_EXPIRY_DB_ENDPOINT,p5ExpirySealKey,sealP5ExpiryValues,openP5ExpiryValues,loadP5ExpirySealedConfig} from "../server/lib/disruption/phase5ExpirySealedHandoff_v39";
-// Use real known endpoint fingerprint only via synthetic URL fixture below:
-// actual host is not a public GitHub value. Use a validated synthetic
-// fixture via mocked hash-bound endpoint? No: production fingerprint
-// cannot be satisfied by an invented host. Test exact rejection and
-// derive independent encryption fixture using actual project host only
-// when explicitly available in a private operator check.
+// The actual endpoint is private. This file checks real production
+// admission refusal. Separate crypto tests mock only that admission
+// predicate to exercise real authenticated encryption with synthetic keys.
 const sha="a".repeat(40),token="b".repeat(64);
 const env={V39_DATABASE_RUNTIME_URL:"postgresql://runtime:synthetic@same.invalid/neondb",
  AERODATABOX_WEBHOOK_SECRET:"fictional".repeat(4),V39_PROVIDER_BLOB_MODE:"required",

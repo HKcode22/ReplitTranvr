@@ -13,6 +13,7 @@ import {createRequiredProviderBlobStoreV39} from "../server/lib/disruption/repli
 const REPO="HKcode22/ReplitTranvr",COMMISSION_SHA="335e77398f3a326721186014c2903ef729e64c03";
 const TOKEN_NAME="P5_EXPIRY_RECEIVER_AUTH_TOKEN",VAR_NAME="P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA";
 const ROOT=join(homedir(),".travnr-phase5-expiry");
+const BUILD_WRAPPER="scripts/v39_phase5_callback_release_v3_reviewed_build_v39.sh";
 const SHA=/^[a-f0-9]{40}$/,HEX=/^[a-f0-9]{64}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P5_EXPIRY_HANDOFF_"+s);};
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -59,6 +60,13 @@ function source(){
  git(["merge-base","--is-ancestor",sha,main]);
  git(["diff","--quiet",sha,main,"--","client","server","shared","package.json","package-lock.json","scripts/build.ts",
   "vite.config.ts","tsconfig.json","postcss.config.js","tailwind.config.ts","components.json","drizzle.config.ts"]);
+ // This command cannot run until the independently reviewed v3 wrapper
+ // actually exists on main and verifies the exact deployed build source.
+ const wrapper=git(["show",main+":"+BUILD_WRAPPER]);
+ if(wrapper.split("\n").filter(x=>x==="PIN="+sha).length!==1)hold("REVIEWED_BUILD_PIN");
+ const verified=execFileSync("bash",[BUILD_WRAPPER,"--verify-only"],{
+  encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000}).trim();
+ if(verified!=="PHASE5_V3_CALLBACK_SOURCE_EQUIVALENCE_VERIFIED_NOT_PUBLISHED")hold("REVIEWED_BUILD_PIN");
  return sha;
 }
 type Custody={source:string;token:string;neverReplay:true};
@@ -91,6 +99,14 @@ function custody(sha:string):Custody{
     x.source!==sha||!HEX.test(x.token??"")||x.neverReplay!==true)return hold("TOKEN_CUSTODY");
  return x;
 }
+// An SDK timeout does not cancel a remote upload. Preserve the prior
+// exclusive intent and reconcile by readback; never issue another upload.
+async function bounded<T>(fn:()=>Promise<T>):Promise<T>{
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error("HOLD_P5_EXPIRY_HANDOFF_STORAGE_UNKNOWN_NO_RETRY")),15000);});
+ try{return await Promise.race([timeout,fn()]);}
+ finally{if(timer)clearTimeout(timer);}
+}
 async function main(){
  let stage="INIT";
  try{
@@ -100,17 +116,17 @@ async function main(){
   const input=privateRead("runtime-private.json"),store=createRequiredProviderBlobStoreV39();
   if(mode==="--seal-once"){
    stage="SEALED_INTENT";
-   if(await store.exists(object)!==false)hold("EXISTING_SEALED_OBJECT");
+   if(await bounded(()=>store.exists(object))!==false)hold("EXISTING_SEALED_OBJECT");
    const token=randomBytes(32).toString("hex");
    const values=makeP5ExpiryHandoffValues(input,sha,token),bytes=sealP5ExpiryValues(values,sha,process.env);
    privateWrite(name,{source:sha,token,neverReplay:true});
    stage="SEALED_WRITE_UNKNOWN_NO_RETRY";
-   if(await store.exists(object)!==false)hold("EXISTING_SEALED_OBJECT");
-   await store.uploadBytes(object,bytes);
+   if(await bounded(()=>store.exists(object))!==false)hold("EXISTING_SEALED_OBJECT");
+   await bounded(()=>store.uploadBytes(object,bytes));
   }
   stage="SEALED_READBACK";
   const state=custody(sha),expected=makeP5ExpiryHandoffValues(input,sha,state.token);
-  if(await store.exists(object)!==true||!same(openP5ExpiryValues(await store.downloadBytes(object),sha,process.env),expected))hold("SEALED_READBACK");
+  if(await bounded(()=>store.exists(object))!==true||!same(openP5ExpiryValues(await bounded(()=>store.downloadBytes(object)),sha,process.env),expected))hold("SEALED_READBACK");
   if(mode==="--register-token-once"){
    stage="REGISTER_SCOPE";
    const names=command(["api","repos/"+REPO+"/actions/secrets","--paginate","--jq",".secrets[].name"]).split("\n");
