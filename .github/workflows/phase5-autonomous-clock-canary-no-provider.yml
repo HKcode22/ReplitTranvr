@@ -1,6 +1,8 @@
 name: Phase5 Autonomous Six-Slot Clock Canary (NO provider)
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'BOUNDED_HANDOFF' &&
+  ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' &&
+      format('P5 ROLLING {0} {1} {2}', inputs.chain_id, inputs.hop, inputs.parent_run_id) ||
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'BOUNDED_HANDOFF' &&
       format('P5 HANDOFF {0} {1} {2}', inputs.chain_id, inputs.hop, inputs.parent_run_id) ||
       'Phase5 Autonomous Six-Slot Clock Canary (NO provider)' }}
 on:
@@ -10,7 +12,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [OBSERVE, BOUNDED_HANDOFF]
+        options: [OBSERVE, BOUNDED_HANDOFF, ROLLING_REHEARSAL]
         default: OBSERVE
       handoff_confirm:
         type: string
@@ -40,6 +42,10 @@ on:
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
       - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
       - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
+      - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
+      - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
+      - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
+      - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
@@ -52,6 +58,10 @@ on:
       - 'scripts/v39_phase5_github_autonomous_clock_canary.mjs'
       - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
       - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
+      - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
+      - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
+      - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
+      - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'tests/phase5_github_autonomous_clock_canary_v39.test.mjs'
       - 'scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh'
       - 'tests/phase5_synthetic_webhook_readonly_preflight.test.mjs'
@@ -70,7 +80,7 @@ env:
   V39_DATABASE_RUNTIME_URL: ''
 jobs:
   six-slot-cron-observation-only:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'BOUNDED_HANDOFF' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'OBSERVE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -86,6 +96,7 @@ jobs:
           node --check scripts/v39_phase5_github_autonomous_clock_canary.mjs
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
           node --test tests/phase5_github_bounded_handoff_canary_v39.test.mjs
+          node --test tests/phase5_rolling_continuation_rehearsal_v39.test.mjs
           bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
           node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
           node --test tests/phase5_github_six_slot_coverage_v39.test.mjs
@@ -156,3 +167,53 @@ jobs:
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/v39_phase5_github_bounded_handoff_canary.mjs
+
+  rolling-no-provider-rehearsal:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      group: p5-rolling-rehearsal-${{ inputs.chain_id }}
+      cancel-in-progress: false
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      P5_ROLLING_REHEARSAL_CONFIRM: ${{ inputs.handoff_confirm }}
+      P5_ROLLING_REHEARSAL_SHA: ${{ inputs.approved_main_sha }}
+      P5_ROLLING_REHEARSAL_CHAIN: ${{ inputs.chain_id }}
+      P5_ROLLING_REHEARSAL_HOP: ${{ inputs.hop }}
+      P5_ROLLING_REHEARSAL_PARENT: ${{ inputs.parent_run_id }}
+      P5_ROLLING_REHEARSAL_DEADLINE: ${{ inputs.deadline_utc }}
+      P5_ROLLING_REHEARSAL_SENT: ${{ inputs.sent_at_utc }}
+      RAPIDAPI_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+      P5_RETENTION_READER_DATABASE_URL: ''
+      P6_ROLLING_CONTROLLER_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Observe two real read-only rolling waves and admit at most one rehearsal successor
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase5_rolling_continuation_rehearsal.mjs
+      - name: Publish exact non-sensitive rehearsal successor receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-rolling-rehearsal-${{ github.run_id }}
+          path: ${{ runner.temp }}/p5-rolling-rehearsal-receipt.json
+          retention-days: 7
+          if-no-files-found: error
