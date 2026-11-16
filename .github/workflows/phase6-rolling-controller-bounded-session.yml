@@ -22,6 +22,14 @@ on:
       sent_at_utc:
         type: string
         default: ''
+      window_epoch_utc:
+        description: 'Exact per-window root epoch; only opt-in durable custody mode'
+        type: string
+        default: ''
+      window_deadline_utc:
+        description: 'Exact immutable root deadline; only opt-in durable custody mode'
+        type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -32,6 +40,7 @@ on:
       - 'tests/phase6_rolling_failure_journal_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
+      - 'tests/phase6_rolling_calendar_hints_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
       - 'server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs'
       - 'server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs'
@@ -80,7 +89,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           test -z "$GITHUB_TOKEN$DATABASE_URL$AERODATABOX_API_KEY"
-          node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs tests/phase6_rolling_failure_journal_v39.test.mjs
+          node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs tests/phase6_rolling_failure_journal_v39.test.mjs tests/phase6_rolling_calendar_hints_v39.test.mjs
   one-protected-bounded-session:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
@@ -107,8 +116,11 @@ jobs:
       P6_ROLLING_CHAIN_HOP: ${{ inputs.chain_hop }}
       P6_ROLLING_PARENT_RUN_ID: ${{ inputs.parent_run_id }}
       P6_ROLLING_SENT_AT_UTC: ${{ inputs.sent_at_utc }}
-      P6_ROLLING_SESSION_EPOCH_UTC: ${{ secrets.P6_ROLLING_SESSION_EPOCH_UTC }}
-      P6_ROLLING_SESSION_DEADLINE_UTC: ${{ secrets.P6_ROLLING_SESSION_DEADLINE_UTC }}
+      P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED: ${{ vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED }}
+      P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC: ${{ inputs.window_epoch_utc }}
+      P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC: ${{ inputs.window_deadline_utc }}
+      P6_ROLLING_SESSION_EPOCH_UTC: ${{ vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED != '1' && secrets.P6_ROLLING_SESSION_EPOCH_UTC || '' }}
+      P6_ROLLING_SESSION_DEADLINE_UTC: ${{ vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED != '1' && secrets.P6_ROLLING_SESSION_DEADLINE_UTC || '' }}
       V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
       V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
       V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}

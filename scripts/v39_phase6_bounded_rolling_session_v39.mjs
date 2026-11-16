@@ -56,8 +56,24 @@ export function admitP6RollingSession(env,now=Date.now()){
      "P5_V39_T24_WITNESS_DATABASE_URL","P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL",
      "P5_V39_OTHER_REST_REVIEW_DATABASE_URL","P5_V39_OTHER_REST_RESERVE_DATABASE_URL"].some(k=>env[k]))
   hold("NO_PROTECTED_REAL_SESSION_APPROVAL");
- const epoch=time(env.P6_ROLLING_SESSION_EPOCH_UTC),chainDeadline=time(env.P6_ROLLING_SESSION_DEADLINE_UTC);
  const multi=env.P6_ROLLING_SESSION_CONFIRM===MULTI_CONFIRM;
+ // The old one-window rehearsal used fixed repository secrets.
+ // Per-window scope is available only with exact durable DB custody.
+ // No original paid, policy, predecessor or worker admission is relaxed.
+ const dynamicFlag=env.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED??"0";
+ const dynamic=dynamicFlag==="1";
+ const dynamicEpoch=env.P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC??"";
+ const dynamicDeadline=env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC??"";
+ if(dynamic){
+  if(env.P6_ROLLING_WINDOW_CUSTODY_ENABLED!=="1"||env.P6_ROLLING_WINDOW_CUSTODY_APPROVED!=="1"||
+     (!multi&&env.P6_ROLLING_SESSION_CONFIRM!==CONFIRM)||
+     env.P6_ROLLING_SESSION_EPOCH_UTC||env.P6_ROLLING_SESSION_DEADLINE_UTC)
+   hold("DYNAMIC_SCOPE_REQUIRES_DURABLE_CUSTODY");
+ }else if(!["","0"].includes(dynamicFlag)||dynamicEpoch||dynamicDeadline)
+  hold("UNAPPROVED_DYNAMIC_WINDOW_SCOPE");
+ const epoch=time(dynamic?dynamicEpoch:env.P6_ROLLING_SESSION_EPOCH_UTC),
+  chainDeadline=time(dynamic?dynamicDeadline:env.P6_ROLLING_SESSION_DEADLINE_UTC);
+ if(dynamic&&(epoch%1000||chainDeadline%1000))hold("DYNAMIC_SCOPE_CLOCK_PRECISION");
  const rollover=multi||env.P6_ROLLING_SESSION_CONFIRM===ROLLOVER_CONFIRM;
  const maxHops=multi?4:2;
  const chain=rollover||env.P6_ROLLING_SESSION_CONFIRM===CHAIN_CONFIRM;
@@ -91,7 +107,7 @@ export function admitP6RollingSession(env,now=Date.now()){
  if(policyBytes.toString("base64")!==wire)hold("NONCANONICAL_POLICY");
  const trust={reviewedCodeSha:env.GITHUB_SHA,manifestSha256:env.V39_P5_MANIFEST_SHA256,
   calendarSha256:env.V39_P5_CALENDAR_HASH,releaseSha256:env.V39_P5_RELEASE_SHA256,rightsSha256:env.V39_P5_RIGHTS_SHA256};
- return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,multi,maxHops,hop:Number(hop),parent:Number(parent),sent,policyBytes,
+ return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,multi,maxHops,hop:Number(hop),parent:Number(parent),sent,policyBytes,dynamic,
   expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,trust};
 }
 // Bind the actual ZIP bytes, not merely a mutable artifact name. Reuse
@@ -112,6 +128,11 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  const started=now(),a=admitP6RollingSession(env,started);
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
+ if(a.dynamic){
+  const index=Math.floor((a.epoch-calendar.from)/7200000),end=Math.min(calendar.until,calendar.from+(index+1)*7200000);
+  if(index<0||index>719||calendar.until-calendar.from>1440*3600000||calendar.from%1000||calendar.until%1000||a.chainDeadline>end)
+   hold("DYNAMIC_SCOPE_CROSSES_DURABLE_WINDOW");
+ }
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
  const windowConfig=admitP6RuntimeWindowConfig(env);
  if(!windowConfig&&windowCustodyCheck!==undefined)hold("UNEXPECTED_WINDOW_CHECK");
@@ -465,7 +486,8 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
      body:JSON.stringify({ref:"main",return_run_details:true,inputs:{
-      confirm:a.multi?MULTI_CONFIRM:a.rollover?ROLLOVER_CONFIRM:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:String(a.hop+1),parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString()
+      confirm:a.multi?MULTI_CONFIRM:a.rollover?ROLLOVER_CONFIRM:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:String(a.hop+1),parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString(),
+      ...(a.dynamic?{window_epoch_utc:new Date(a.epoch).toISOString(),window_deadline_utc:new Date(a.chainDeadline).toISOString()}:{})
      }})});
     if(res.status!==200)hold("CHAIN_ACK");
     const b=await res.json(),id=b?.workflow_run_id;

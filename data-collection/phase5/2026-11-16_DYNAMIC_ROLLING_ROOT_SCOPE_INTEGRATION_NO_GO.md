@@ -1,0 +1,9 @@
+# Dynamic per-window rolling controller scope — November 15 Pacific
+
+The existing controller uses fixed repository epoch/deadline secrets. Those prevent natural succession between different durable 120-minute V0102 policy windows without manual secret edits. Reuse the current protected controller and original delegated policy; no new worker architecture.
+
+Add two optional content-free workflow inputs (window_epoch_utc, window_deadline_utc). Disabled by default; enabled only with the existing separately approved durable custody mode, exact policy, signed freeze, budget, rights and owner approvals. Static legacy secrets are not loaded into this mode. Each successor transmits exact original epoch/deadline and independently checks predecessor receipt and DB root. Dynamic scope cannot cross a signed policy window. Existing single and four-session confirmations only; no two-session dynamic mode. No extra paid authorization.
+
+The pure prospective root planner uses verified policy geometry and a caller-supplied trusted clock observation. At least 90 minutes left allows four-session scope; otherwise use single up to 30m, skip if less than 20 minutes remains. This five-minute planning cushion over existing 15m admission minimum is a proposed design, not a measured SLA or new runtime gate. It emits no dispatch/close authority. A future caller must read actual PG clock, verify closed prior window/settlement and avoid duplicate roots. Current actual scheduler and independent closure still not wired. V0102 remains optional, staged; no live login, DDL, new secret, schedule change, provider calls, or data deletion.
+
+Original #832 artifact digest correction remains part of same candidate; exact previous candidate 32e52b639ae21a3ba87b92f977fe1375e0d8f5aa had all six CI runs pass, including focused 50/50. Re-run combined tests on updated head. Existing main fa0e9430 preserved for pending protected retention handoff. No emails or new scientific amendment.

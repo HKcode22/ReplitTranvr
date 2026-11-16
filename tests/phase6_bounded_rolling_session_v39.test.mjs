@@ -16,10 +16,10 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6Revi
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false,artifactDigestMissing=false,artifactMetadataDrifts=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false,artifactDigestMissing=false,artifactMetadataDrifts=false,dynamicFixture=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
-  const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
+  const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*(dynamicFixture?1:4))*24*H),templates=[];
   for(const [horizon,off] of [["T-24h",24*H],["T-6h",6*H],["T-90m",90*MIN]])for(let slot=0;slot<4;slot++)
    templates.push({queryKey:"d"+i+"."+horizon+"."+slot,runDayIndex:i+1,horizon,serviceWindowStartUtc:iso(service),
     serviceWindowEndUtc:iso(service+4*H),earliestPlannedCutoffUtc:iso(service-off),scheduledRequestUtc:iso(service-off-15*MIN)});
@@ -29,7 +29,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
  });
  const b=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,
   approvedCodeSha:sha,manifestSha256:hash,calendarSha256:hash,releaseSha256:hash,rightsSha256:hash,dayPlanSha256s:pins,
-  validFromUtc:iso(start-24*H),validUntilUtc:iso(start+140*24*H)}));
+  validFromUtc:iso(start-24*H),validUntilUtc:iso(start+(dynamicFixture?40:140)*24*H)}));
  const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",
   GITHUB_RUN_ATTEMPT:"1",GITHUB_RUN_ID:"12345",GITHUB_SHA:sha,P6_ROLLING_REQUESTED_MAIN_SHA:sha,V39_P5_APPROVED_CODE_SHA:sha,
   P6_ROLLING_SESSION_CONFIRM:"RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO",
@@ -69,6 +69,10 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
    if(u.pathname.endsWith("/workflows/"+WF+"/dispatches")){
     assert.equal(opt.method,"POST");const input=JSON.parse(opt.body).inputs;
     const hop=Number(env.P6_ROLLING_CHAIN_HOP)+1,parentId=Number(env.GITHUB_RUN_ID),nextId=parentId+1;
+    if(env.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED==="1"){
+     assert.equal(input.window_epoch_utc,env.P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC);
+     assert.equal(input.window_deadline_utc,env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC);
+    }else assert(!Object.hasOwn(input,"window_epoch_utc"));
     assert.equal(input.chain_hop,String(hop));assert.equal(input.parent_run_id,String(parentId));
     assert.equal(input.confirm,env.P6_ROLLING_SESSION_CONFIRM);
     if(failSuccessor)return response({},204);
@@ -600,4 +604,41 @@ test("production predecessor decoder binds exact ZIP digest and single expected 
   const extra=readFileSync(join(dir,"receipt.zip"));
   assert.throws(()=>decodeP6PredecessorReceipt(extra,{size:extra.length,digest:"sha256:"+digest(extra)}),/CHAIN_RECEIPT_ARCHIVE_INVALID/);
  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+function enableDynamicScope(f){
+ const checks=enableSyntheticCustody(f);
+ Object.assign(f.env,{P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED:"1",
+  P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC:f.env.P6_ROLLING_SESSION_EPOCH_UTC,
+  P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC:f.env.P6_ROLLING_SESSION_DEADLINE_UTC,
+  P6_ROLLING_SESSION_EPOCH_UTC:"",P6_ROLLING_SESSION_DEADLINE_UTC:""});
+ return checks;
+}
+test("per-window root inputs replace static epoch secrets only with durable custody; all successors carry same exact scope",async()=>{
+ const f=setup({chain:true,multi:true,delayedRetention:true,dynamicFixture:true}),checks=enableDynamicScope(f),receipts=[];
+ for(let hop=0;hop<4;hop++){
+  const out=await runP6RollingSession(f.env,f.options);receipts.push(out);
+  assert.equal(out.epochUtc,iso(start));assert.equal(out.chainDeadlineUtc,iso(start+120*MIN));
+  if(hop<3){assert.equal(out.successorDispatches,1);f.startSuccessor(out);}
+  else assert.equal(out.successorDispatches,0);
+ }
+ assert.equal(checks.filter(x=>x.kind==="CLAIM").length,1);
+ assert(receipts.every(x=>x.windowCustody.rootRunId===12345));
+});
+test("per-window scope cannot bypass custody, static separation, calendar geometry or predecessor agreement",async()=>{
+ const f=setup({chain:true,multi:true,dynamicFixture:true});enableDynamicScope(f);
+ for(const patch of [
+  {P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED:"0"},
+  {P6_ROLLING_WINDOW_CUSTODY_ENABLED:"0"},
+  {P6_ROLLING_WINDOW_CUSTODY_APPROVED:"0"},
+  {P6_ROLLING_SESSION_EPOCH_UTC:iso(start)},
+  {P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC:iso(start+120*MIN+1)},
+  {P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC:iso(start-MIN),P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC:iso(start+119*MIN)}
+ ])await assert.rejects(runP6RollingSession({...f.env,...patch},f.options),/HOLD_P6_ROLLING_RUNTIME/);
+ assert.equal(f.calls.length,0);
+ const first=await runP6RollingSession(f.env,f.options);f.startSuccessor(first);
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ f.env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC=iso(start+119*MIN);
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
 });
