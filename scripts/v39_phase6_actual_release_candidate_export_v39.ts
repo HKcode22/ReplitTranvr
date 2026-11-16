@@ -369,6 +369,51 @@ export function compileP6ActualCandidateExport(input:{
   independentReleaseStillRequired:true,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
  return {summary,files};
 }
+/** Compare regenerated release plans to the exact committed runtime inputs.
+ * The ordinary unsigned exporter is still used to prepare/review files,
+ * including a legitimate change of evidence hash before those files are
+ * committed. This separate final-check mode never writes or signs anything.
+ */
+export function verifyP6ActualCommittedPlanParity(
+ result:ReturnType<typeof compileP6ActualCandidateExport>,
+ readCommitted:(path:string)=>Buffer,
+ readWorktree:(path:string)=>Buffer,
+){
+ const plans=result.files.slice(0,31),stage=result.files[31];
+ if(result.files.length!==32||result.summary.dayPlanSha256s.length!==31||
+    stage?.path!=="unsigned-stage-input.json"||
+    hash(stage.bytes)!==stage.sha256||stage.sha256!==result.summary.unsignedStageInputSha256)
+  hold("FINAL_EXPORT_STRUCTURE_DRIFT");
+ for(let i=0;i<31;i++){
+  const f=plans[i],d=result.summary.dayPlanSha256s[i];
+  if(f.path!=="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"||
+     d.runDayIndex!==i+1||d.sha256!==f.sha256||hash(f.bytes)!==f.sha256)
+   hold("FINAL_COMPILED_PLAN_IDENTITY_DRIFT");
+  let committed:Buffer,working:Buffer;
+  try{committed=readCommitted(f.path);working=readWorktree(f.path);}
+  catch{return hold("FINAL_COMMITTED_PLAN_MISSING");}
+  if(!Buffer.isBuffer(committed)||!Buffer.isBuffer(working)||
+     hash(committed)!==f.sha256||!working.equals(committed)||!committed.equals(Buffer.from(f.bytes)))
+   hold("FINAL_COMMITTED_PLAN_BYTES_DIFFER");
+ }
+ return {verifiedPlanCount:31,dayPlanSha256s:result.summary.dayPlanSha256s};
+}
+export function verifyP6ActualCommittedCheckout(result:ReturnType<typeof compileP6ActualCandidateExport>){
+ const stage=result.files.find(f=>f.path==="unsigned-stage-input.json");
+ if(!stage||hash(stage.bytes)!==result.summary.unsignedStageInputSha256)hold("FINAL_EXPORT_STRUCTURE_DRIFT");
+ let codeSha:string;
+ try{codeSha=JSON.parse(stage!.bytes).codeSha40;}catch{return hold("FINAL_STAGE_CODE_INVALID");}
+ const checkout=inspectP6ExactReviewCheckout(codeSha);
+ const verified=verifyP6ActualCommittedPlanParity(result,path=>execFileSync("git",["show",codeSha+":"+path],{
+  stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:600000}),path=>readFileSync(path));
+ const after=inspectP6ExactReviewCheckout(codeSha);
+ if(after.treeSha!==checkout.treeSha)hold("REVIEW_CHECKOUT_CHANGED");
+ return {status:"EXACT_COMMITTED_DAY_PLANS_MATCH_UNSIGNED_EXPORT_NO_GO",checkout,...verified,
+  unsignedStageInputSha256:result.summary.unsignedStageInputSha256,
+  unsignedCostOnlyEnvelopeSha256:result.summary.unsignedCostOnlyEnvelopeSha256,
+  providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false,
+  independentApprovalAndRemoteMainCheckStillRequired:true};
+}
 export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6ActualCandidateExport>,destination:string){
  const root=realpathSync(process.cwd()),out=resolve(destination),parent=realpathSync(dirname(out));
  const verifiedOut=resolve(parent,out.slice(dirname(out).length+1));
@@ -397,7 +442,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(2);
   const result=compileP6ActualCandidateExport({externalBytes:readFileSync(externalPath),expectedExternalFileSha256:externalSha,
    timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha});
-  console.log(JSON.stringify(writeP6ActualCandidateExport(result,out)));
+  console.log(JSON.stringify(out==="--verify-committed-plans"?verifyP6ActualCommittedCheckout(result):writeP6ActualCandidateExport(result,out)));
   }
  }catch(e){const msg=String((e as Error)?.message??"");console.error(/^HOLD_P6_ACTUAL_RELEASE_EXPORT_[A-Z0-9_]+$/.test(msg)?msg:"HOLD_P6_ACTUAL_RELEASE_EXPORT_REDACTED_NO_RELEASE");process.exitCode=2;}
 }
