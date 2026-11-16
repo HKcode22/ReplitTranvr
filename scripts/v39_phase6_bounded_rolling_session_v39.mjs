@@ -12,6 +12,7 @@ import {fileURLToPath} from "node:url";
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -359,26 +360,38 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   const hasSuccessor=a.chain&&a.hop+1<a.maxHops&&(!a.multi||a.chainDeadline-now()>=18*MIN);
   const transferKnownActive=hasSuccessor&&ledger.remainingDispatchCapacity()>0&&state.pending.length>0;
   if(!state.pending.length||transferKnownActive){
-   if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
    // The final dispatch can occur after the last ordinary visibility
    // check. Do not export terminal custody until a fresh complete snapshot
    // contains every independently reconciled ACK in normal history.
    const closing=[];
    const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:historyEpoch,token:env.GITHUB_TOKEN,now,fetcher:api,
     verifySnapshot:(route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
-   // Known active ACK may become terminal between direct read and history.
-   // Retry only independent GETs, not the worker or successor POST.
-   if(transferKnownActive){
-    try{ledger.verifyContinuationHistory(closing);}
-    catch(e){
-     if(!["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY",
-      "HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
-      "HOLD_P6_ROLLING_SESSION_ACK_CONTINUATION_ACTIVE_HISTORY_DRIFT"].includes(e?.message)||
-        i>=23||now()+5000>=a.deadline-30000)throw e;
-     emit({status:"CHAIN_KNOWN_ACK_HANDOFF_READBACK_DEFERRED_NO_POST",...state});
-     await pause(5000);continue;
+   // A stale ordinary-wave visibility flag is not fresh closing evidence.
+   // Reconcile once more after a transient listing omission. Never dispatch
+   // new workers in this drain loop, and never retry a POST. Preserve the
+   // shared request/time caps and stop on identity or terminal regression.
+   try{
+    if(transferKnownActive)ledger.verifyContinuationHistory(closing);
+    else ledger.verifyTerminalHistory(closing);
+   }catch(e){
+    const transient=["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY",
+     "HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
+     ...(transferKnownActive?["HOLD_P6_ROLLING_SESSION_ACK_CONTINUATION_ACTIVE_HISTORY_DRIFT"]:[])].includes(e?.message);
+    if(!transient)throw e;
+    // At most two closing GET retries, only with conservative API and time
+    // headroom. Exhaustion remains HOLD rather than an incomplete receipt.
+    if(i>=2||requests>=360||now()+5000>=a.deadline-30000){
+     if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
+     throw e;
     }
-   }else ledger.verifyTerminalHistory(closing);
+    emit({status:transferKnownActive?"CHAIN_KNOWN_ACK_HANDOFF_READBACK_DEFERRED_NO_POST":
+     "CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST",...state});
+    await pause(5000);continue;
+   }
+   if(visibilityUnresolved){
+    emit({status:"CLOSING_ACK_VISIBILITY_RECOVERED_NO_NEW_WORKER_POST",...state});
+    visibilityUnresolved=false;
+   }
    if(final.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("FINAL_HISTORY_HOLD_NO_SUCCESSOR");
    await uniqueRoot();await main();
    const {terminalAcknowledgements,pendingAcknowledgements}=transferKnownActive?ledger.continuationAcknowledgements():
@@ -409,7 +422,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // receipt and finishes; failure or unknown acceptance is never retried.
    if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>REQUEST_CAP)
     hold("CHAIN_SUCCESSOR_DEADLINE");
-   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id});
+   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id,sentAtUtc:new Date(sent).toISOString()});
    try{
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
@@ -421,6 +434,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     if(!Number.isSafeInteger(id)||id<1||id===a.id||[...terminalAcknowledgements,...pendingAcknowledgements].some(x=>x.runId===id)||
        b.run_url!==ROOT+"/actions/runs/"+id||b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)
      hold("CHAIN_ACK");
+    emit({status:"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF",runId:a.id,nextRunId:id,sentAtUtc:new Date(sent).toISOString()});
     return {...result,status:"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF",
      successorDispatches:1,nextRunId:id,nextDispatchAtUtc:new Date(sent).toISOString(),githubRequests:requests};
    }catch{hold("CHAIN_UNKNOWN_SUCCESSOR_ACK_NO_REPLAY");}
@@ -431,10 +445,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  hold("BOUND_EXHAUSTED_PENDING_ACCEPTED_WORKERS");
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ let journal;
  try{
-  const out=await runP6RollingSession(process.env,{emit:e=>console.log(JSON.stringify(e))});
+  // Refuse before any POST if the terminal receipt destination or local
+  // custody file cannot be initialized. No new remote write path.
   if(!process.env.RUNNER_TEMP)hold("RUNNER_TEMP_REQUIRED");
+  const scope=admitP6RollingSession(process.env);
+  journal=createP6RollingFailureJournal(join(process.env.RUNNER_TEMP,P6_ROLLING_FAILURE_JOURNAL_FILE),scope);
+  const out=await runP6RollingSession(process.env,{emit:e=>{
+   journal.record(e); // Sync finite attempt/ACK evidence before returning.
+   console.log(JSON.stringify(e));
+  }});
   writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),JSON.stringify(out),{flag:"wx",mode:0o600});
   console.log(JSON.stringify(out));
  }catch(e){const m=e?.message??"";console.error(/^HOLD_P6_ROLLING_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
+ finally{if(journal)journal.close();}
 }

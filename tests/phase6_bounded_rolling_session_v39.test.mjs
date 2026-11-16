@@ -1,13 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
@@ -101,7 +105,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
    const boundary=u.searchParams.get("created");
    const from=boundary?.split("..")[0];
    const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&
-    (!from||Date.parse(x.created_at)>=Date.parse(from))&&!((hideAccepted||(hideFinal&&snapshots>=9))&&route.lane==="PRE_RECOVERY"));
+    (!from||Date.parse(x.created_at)>=Date.parse(from))&&!((hideAccepted||(hideFinal&&snapshots>=9)||(hideFinalOnce&&snapshots===9)||(hideOrdinaryUntilClosing&&snapshots>=2&&snapshots<=8))&&route.lane==="PRE_RECOVERY"));
    return response({total_count:selected.length,workflow_runs:selected});
   }};
  return {env,options,runs,calls,events,controllerRuns,root,get finishAt(){return finishAt;},startSuccessor(receipt){savedReceipt=receipt;clock+=30000;
@@ -165,6 +169,39 @@ test("final history omission after ordinary waves prevents continuation receipt"
  const f=setup({hideFinal:true});
  await assert.rejects(runP6RollingSession(f.env,f.options),/ACK_NOT_VISIBLE_IN_EXACT_HISTORY/);
  assert(f.calls.filter(x=>x.method==="POST").length>=2);
+});
+
+test("ordinary visibility HOLD clears only after fresh complete closing history without any new worker POST",async()=>{
+ const f=setup({hideOrdinaryUntilClosing:true,chain:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF");
+ assert(out.visibilityDeferrals>0);
+ assert(f.events.some(e=>e.status==="CLOSING_ACK_VISIBILITY_RECOVERED_NO_NEW_WORKER_POST"));
+ assert.equal(out.acknowledged,2);
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,3);
+ assert.equal(out.successorDispatches,1);
+});
+test("transient final terminal ACK omission recovers with GET-only closing readback",async()=>{
+ const f=setup({hideFinalOnce:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF");
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert.equal(out.pending.length,0);
+ assert.equal(out.unknownAttempts,0);
+ assert(f.events.some(e=>e.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,out.acknowledged);
+ assert(f.calls.length<=450);
+});
+test("transient final omission in protected chain restores exact ACK custody before successor",async()=>{
+ const f=setup({hideFinalOnce:true,chain:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF");
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert(f.events.some(e=>e.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,out.acknowledged+1);
+ assert.equal(out.successorDispatches,1);
+ assert(f.calls.length<=450);
 });
 
 test("two protected sessions preserve original epoch and independently replay only prior ACK readback",async()=>{
@@ -350,4 +387,37 @@ test("successor rejects predecessor job evidence from a different run before new
  };
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_PARENT_JOB/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+test("integrated worker failure custody is written before the real-shaped POST and no unknown ACK is manufactured",async()=>{
+ const f=setup({failAck:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+30*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST")assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  await assert.rejects(runP6RollingSession(f.env,f.options),/UNKNOWN_DISPATCH_STOP_NO_RETRY/);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,1);
+  assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("integrated successful successor request preserves exact acceptance before terminal receipt is returned",async()=>{
+ const f=setup({chain:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+60*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST"&&url.includes("/workflows/"+WF+"/dispatches"))
+    assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  const out=await runP6RollingSession(f.env,f.options);
+  const last=JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1));
+  assert.equal(last.status,"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF");assert.equal(last.nextRunId,out.nextRunId);
+  assert.equal(out.successorDispatches,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
 });

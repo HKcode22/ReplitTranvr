@@ -83,6 +83,9 @@ export async function independentlyReadP5VerifyProof(scope,{fetcher=fetch,readPr
  if((await get("/git/ref/heads/main"))?.object?.sha!==scope.mainSha)hold("MAIN_CHANGED");
  return proof;
 }
+// Published V4 paired receiver and sealed APPLY config both require 10.
+// The generic standalone runtime may allow 25, but not this protected HTTP batch.
+export const P5_PUBLISHED_EXPIRY_APPLY_LIMIT=10;
 const COUNTS=["selectedCount","verifiedNowCount","alreadyVerifiedCount","independentlyReadBackCount",
  "recoveredReadbackCount","remainingAtCutoff","remainingUnwitnessedMarkersAtCutoff"];
 export function checkP5ApplyReceipt(got,source){
@@ -92,7 +95,7 @@ export function checkP5ApplyReceipt(got,source){
  if(!got||typeof got!=="object"||Array.isArray(got)||
     Object.keys(got).sort().join(",")!==[...Object.keys(base),"status",...COUNTS].sort().join(",")||
     !Object.entries(base).every(([k,v])=>got[k]===v)||!["DUE_AT_CUTOFF_CLEARED","BACKLOG_REMAINS_AT_CUTOFF"].includes(got.status)||
-    !COUNTS.every(k=>Number.isSafeInteger(got[k])&&got[k]>=0)||got.selectedCount>25||
+    !COUNTS.every(k=>Number.isSafeInteger(got[k])&&got[k]>=0)||got.selectedCount>P5_PUBLISHED_EXPIRY_APPLY_LIMIT||
     got.verifiedNowCount+got.alreadyVerifiedCount>got.selectedCount||
     got.independentlyReadBackCount!==got.verifiedNowCount+got.alreadyVerifiedCount||
     got.recoveredReadbackCount>got.alreadyVerifiedCount||

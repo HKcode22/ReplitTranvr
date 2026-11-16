@@ -1,0 +1,3 @@
+# Integrated Phase5 engineering fixes, Nov15 Pacific
+
+One integration candidate for #822–#825, while main remains at 20dc5a31 for reviewed V4 publication. All exact nonoverlapping blobs retained. #822 exact closing recovery and tests applied to #824 runtime and tests. Full combined CI necessary; original drafts preserved as provenance. Do not merge individual candidates separately after integration. No new production authority, source migration, provider calls, DB writes, deletion, or paid GO. Original sampling and Amendment E unchanged. Failure readback remains diagnostic only; a lost runner may lose its local journal. This is not complete sustained autonomy.

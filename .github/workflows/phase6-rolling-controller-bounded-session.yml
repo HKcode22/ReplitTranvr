@@ -27,6 +27,8 @@ on:
     paths:
       - '.github/workflows/phase6-rolling-controller-bounded-session.yml'
       - 'scripts/v39_phase6_bounded_rolling_session_v39.mjs'
+      - 'scripts/v39_phase6_rolling_failure_journal_v39.mjs'
+      - 'tests/phase6_rolling_failure_journal_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
       - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
@@ -74,7 +76,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           test -z "$GITHUB_TOKEN$DATABASE_URL$AERODATABOX_API_KEY"
-          node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs
+          node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs tests/phase6_rolling_failure_journal_v39.test.mjs
   one-protected-bounded-session:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
@@ -145,5 +147,13 @@ jobs:
         with:
           name: p6-rolling-terminal-${{ github.run_id }}
           path: ${{ runner.temp }}/p6-rolling-terminal-receipt.json
-          retention-days: 7
+          retention-days: 90 # sanitized operational receipt, no provider content
           if-no-files-found: error
+      - name: Preserve failure-only operational attempt custody (never replay permission)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-rolling-failure-custody-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-rolling-failure-custody.jsonl
+          retention-days: 90
+          if-no-files-found: ignore
