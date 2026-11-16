@@ -697,6 +697,11 @@ type P5HistoricalScope={
   observedAtUtc:string;expectedOriginals:number;expectedPopulation:number;
   expectedPre:number;expectedT24:number;
 };
+export const P5_HISTORICAL_FIDS_SCOPE_20261116=Object.freeze({
+  observedAtUtc:"2026-11-16T13:47:34.388Z",expectedOriginals:17,expectedPopulation:1574,expectedPre:36,expectedT24:12,
+});
+const p5DisposableFixture=()=>process.env.GITHUB_ACTIONS==="true"&&process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16==="1"&&
+ process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 type P5HistoricalParent={id:string;age:string;full_sha:string;keep_sha:string;response_hash:string|null};
 type P5HistoricalChild={id:string;parent_id:string;full_sha:string;keep_sha:string;member_sha:string;unexpired:boolean;is_fids:boolean};
 const p5ParentKeep="encode(sha256(convert_to((to_jsonb(r)-$2::text[])::text,'UTF8')),'hex')";
@@ -713,6 +718,8 @@ function p5Scope(s:P5HistoricalScope){
      !Number.isSafeInteger(s.expectedPre)||s.expectedPre<0||
      !Number.isSafeInteger(s.expectedT24)||s.expectedT24<0||s.expectedT24>s.expectedPre)
     p5Hold("INVALID_EXACT_SCOPE");
+  if(sha256(s)!==sha256(P5_HISTORICAL_FIDS_SCOPE_20261116)&&!p5DisposableFixture())
+    p5Hold("NOT_EXACT_NOV16_OWNER_SCOPE");
   return new Date(Date.parse(s.observedAtUtc)-24*3600000).toISOString();
 }
 async function p5Session(c:PoolClient,ro:boolean){
@@ -839,11 +846,9 @@ export async function reviewOrExpireP5HistoricalFidsPrimary(pool:Pick<Pool,"conn
   }catch(e){
     if(unknown)p5Hold("COMMIT_UNKNOWN_READBACK_ONLY_NO_REPLAY");
     if(committed)p5Hold("COMMITTED_FRESH_READBACK_UNRESOLVED_NO_REPLAY");
-    if(e instanceof Error&&/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[A-Z_]+$/.test(e.message))throw e;
-    // Only the test fixture's hard-coded disposable loopback database may
-    // expose a synthetic failure stack; production errors stay redacted.
-    if(process.env.GITHUB_ACTIONS==="true"&&process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16==="1"&&
-       process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable")throw e;
+    if(e instanceof Error&&/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[0-9A-Z_]+$/.test(e.message))throw e;
+    const code=(e as {code?:unknown}|null)?.code;
+    if(typeof code==="string"&&/^[0-9A-Z]{5}$/.test(code))p5Hold("SQLSTATE_"+code);
     p5Hold("SQL_OR_SCOPE_FAILURE_REDACTED");
   }finally{
     if(began&&!unknown)await c.query("ROLLBACK").catch(()=>undefined);
