@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
+import {admitP5ExpiryOwnerInventory} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime,boundP5RecurringExpiryStorage} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const sha="a".repeat(40),base={
  P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
@@ -57,5 +58,20 @@ describe("fixed recurring Replit expiry runtime admission",()=>{
   const writer={query:forbidden,connect:forbidden} as any,reader={query:forbidden,connect:forbidden} as any;
   await expect(executeP5RecurringExpiryRuntime({writer,reader,writerRole:"expiry_writer",readerRole:"expiry_reader",limit:10,apply:true,
    verifyActor:async(_db,_role,actor)=>{if(actor==="reader")throw Error("READER_ACL");},stores:{writer:{exists:forbidden,delete:forbidden},reader:{exists:forbidden}}})).rejects.toThrow("READER_ACL");
+ });
+});
+
+describe("existing owner inventory admission",()=>{
+ const ownerEnv={P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+  V39_PHASE6_OWNER_APPROVED:"0",DATABASE_URL:"postgresql://neondb_owner:synthetic@ep-test-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+  V39_PROVIDER_BLOB_MODE:"required",V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-synthetic"};
+ it("inventories an existing pooler but refuses cross-endpoint or non-STOP state",()=>{
+  expect(admitP5ExpiryOwnerInventory(ownerEnv,sha,sha).directEndpointAvailable).toBe(false);
+  for(const patch of [{P5_RECURRING_EXPIRY_DIRECT_OWNER_URL:ownerEnv.DATABASE_URL.replace("ep-test-pooler","ep-other")},
+   {P5_RECURRING_EXPIRY_DIRECT_OWNER_URL:ownerEnv.DATABASE_URL},
+   {AERODATABOX_API_KEY:"forbidden"},{V39_PHASE6_PROCESS_ARMED:"1"}])
+   expect(()=>admitP5ExpiryOwnerInventory({...ownerEnv,...patch},sha,sha)).toThrow("HOLD_P5_EXPIRY_OWNER_INVENTORY_");
+  const direct=ownerEnv.DATABASE_URL.replace("-pooler","");
+  expect(admitP5ExpiryOwnerInventory({...ownerEnv,P5_RECURRING_EXPIRY_DIRECT_OWNER_URL:direct},sha,sha).directEndpointAvailable).toBe(true);
  });
 });

@@ -83,6 +83,20 @@ function expectedColumn(actor:Actor,table:string,column:string,permission:Permis
  if(table===DIAGNOSTIC)return actor==="writer"&&permission==="INSERT"&&DIAGNOSTIC_INSERT.includes(column);
  return false;
 }
+/** Canonical fixed grants for a separately reviewed new narrow expiry actor.
+ * This function produces SQL only; it never executes it or provisions roles.
+ */
+export function p5RecurringExpiryGrants(role:string,actor:Actor):string[]{
+ if(!validRole(role)||!["writer","reader"].includes(actor)||
+    role==="phase5_retention_reader_prod20261114")HOLD("INVALID_COMMISSIONING_ACTOR");
+ const column=(permission:string,table:string,cols:readonly string[])=>"GRANT "+permission+" ("+cols.join(",")+") ON "+table+" TO "+role;
+ const grants=["GRANT CONNECT ON DATABASE neondb TO "+role,"GRANT USAGE ON SCHEMA clean TO "+role,
+  column("SELECT",TABLE,BLOB_READ),column("SELECT",TOMB,WITNESS),column("SELECT",INCIDENT,INCIDENT_READ)];
+ if(actor==="writer")grants.push(column("UPDATE",TABLE,MARKER),column("INSERT",TOMB,WITNESS),
+  column("INSERT",INCIDENT,INCIDENT_INSERT),column("SELECT",BATCH,BATCH_READ),column("INSERT",DIAGNOSTIC,DIAGNOSTIC_INSERT),
+  "GRANT USAGE ON SEQUENCE "+SEQS.join(",")+" TO "+role);
+ return grants;
+}
 /** Verify exact existing-schema privileges before any use of the object SDK.
  * TLS may be disabled only inside the separately gated disposable-PG test
  * invocation of this helper. Production CLI never disables it.

@@ -1,8 +1,9 @@
 /** Disposable real B0062 row lock/expiry tests; in-memory object store ONLY. */
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {Pool} from "pg";
-import {verifyP5RecurringExpiryActor,executeP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
+import {verifyP5RecurringExpiryActor,executeP5RecurringExpiryRuntime,p5RecurringExpiryGrants} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 import {randomUUID} from "node:crypto";
+import {inventoryP5ExpiryActors} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {verifyOneExpiredProviderBlobV39,runBoundedProviderBlobExpiryBatchV39,type ProviderBlobExpiryCandidateV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {providerBlobObjectNameV39,type ProviderBlobRefV39} from "../server/lib/disruption/providerBlobStore_v39";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -133,24 +134,18 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   // This test is in the existing sequential expiry suite; no parallel
   // synthetic due rows can race the fixture. Only disposable local roles.
   const writerRole="p5_expiry_ci_writer",readerRole="p5_expiry_ci_reader";
-  const refs="blob_ref_id,storage_kind,contract_version,object_name,content_class,content_sha256,content_bytes,persisted_at_utc,expires_at_utc,retention_hours,deleted_at_utc,deletion_verified_at_utc,deletion_run_id";
-  const witness="surface,record_id,content_hash,expired_at,tombstoned_at_utc,plan_hash,content_class,source_table,retention_rule,expiry_run_id,deletion_mode";
   let writer:Pool|undefined,reader:Pool|undefined;
   try{
+   const beforeCatalog=await db.connect();
+   try{expect(await inventoryP5ExpiryActors(beforeCatalog,false)).toMatchObject({namedActorsPresent:0,potentialReusableNarrowActors:0,ownerVerified:true});}
+   finally{beforeCatalog.release();}
    await db.query("CREATE ROLE "+writerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_writer'");
    await db.query("CREATE ROLE "+readerRole+" LOGIN NOINHERIT PASSWORD 'ci_disposable_reader'");
-   for(const role of [writerRole,readerRole]){
-    await db.query("GRANT USAGE ON SCHEMA clean TO "+role);
-    await db.query("GRANT SELECT ("+refs+") ON clean.provider_content_blob_ref TO "+role);
-    await db.query("GRANT SELECT ("+witness+") ON clean.retention_tombstone TO "+role);
-    await db.query("GRANT SELECT (id,cause,resolved) ON clean.adb_incident_stop TO "+role);
-   }
-   await db.query("GRANT UPDATE (deleted_at_utc,deletion_verified_at_utc,deletion_run_id) ON clean.provider_content_blob_ref TO "+writerRole);
-   await db.query("GRANT INSERT ("+witness+") ON clean.retention_tombstone TO "+writerRole);
-   await db.query("GRANT INSERT (cause,occurred_at_utc,detail,resolved) ON clean.adb_incident_stop TO "+writerRole);
-   await db.query("GRANT SELECT (batch_id,run_day_index,status) ON clean.adb_collection_batches TO "+writerRole);
-   await db.query("GRANT INSERT (batch_id,notification_items,delivery_failure,error) ON clean.adb_ingest_events TO "+writerRole);
-   await db.query("GRANT USAGE ON SEQUENCE clean.retention_tombstone_id_seq,clean.adb_incident_stop_id_seq,clean.adb_ingest_events_id_seq TO "+writerRole);
+   for(const sql of p5RecurringExpiryGrants(writerRole,"writer"))await db.query(sql);
+   for(const sql of p5RecurringExpiryGrants(readerRole,"reader"))await db.query(sql);
+   const after=await db.connect();
+   try{expect(await inventoryP5ExpiryActors(after,false)).toMatchObject({namedActorsPresent:0,potentialReusableNarrowActors:2,ownerVerified:true});}
+   finally{after.release();}
    writer=new Pool({connectionString:URL.replace("postgres:postgres@",writerRole+":ci_disposable_writer@"),max:2});
    reader=new Pool({connectionString:URL.replace("postgres:postgres@",readerRole+":ci_disposable_reader@"),max:1,options:"-c default_transaction_read_only=on"});
    const verifyActor:typeof verifyP5RecurringExpiryActor=async(d,r,a)=>verifyP5RecurringExpiryActor(d,r,a,false);
