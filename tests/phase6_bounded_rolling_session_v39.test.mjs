@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
@@ -350,4 +354,37 @@ test("successor rejects predecessor job evidence from a different run before new
  };
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_PARENT_JOB/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+test("integrated worker failure custody is written before the real-shaped POST and no unknown ACK is manufactured",async()=>{
+ const f=setup({failAck:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+30*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST")assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  await assert.rejects(runP6RollingSession(f.env,f.options),/UNKNOWN_DISPATCH_STOP_NO_RETRY/);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,1);
+  assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("integrated successful successor request preserves exact acceptance before terminal receipt is returned",async()=>{
+ const f=setup({chain:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+60*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST"&&url.includes("/workflows/"+WF+"/dispatches"))
+    assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  const out=await runP6RollingSession(f.env,f.options);
+  const last=JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1));
+  assert.equal(last.status,"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF");assert.equal(last.nextRunId,out.nextRunId);
+  assert.equal(out.successorDispatches,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
 });
