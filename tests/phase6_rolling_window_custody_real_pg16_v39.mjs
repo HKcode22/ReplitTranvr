@@ -2,6 +2,8 @@
  * No production DB, secrets, GitHub dispatch or provider requests. */
 import pg from "pg";
 import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {claimP6RollingWindowOnce} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
 import assert from "node:assert/strict";
 const URL="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 if(process.env.GITHUB_ACTIONS!=="true"||process.env.P6_WINDOW_DISPOSABLE_PG16!=="1"||
@@ -9,11 +11,11 @@ if(process.env.GITHUB_ACTIONS!=="true"||process.env.P6_WINDOW_DISPOSABLE_PG16!==
  process.env.V39_PHASE6_PROCESS_ARMED!=="0"||process.env.V39_PHASE6_OWNER_APPROVED!=="0"||
  process.env.AERODATABOX_API_KEY||process.env.RAPIDAPI_KEY||process.env.GITHUB_TOKEN)
  throw Error("HOLD_P6_WINDOW_NOT_LOCAL_DISPOSABLE_NO_PROVIDER");
-const clients=await Promise.all(Array.from({length:3},async()=>{
+const clients=await Promise.all(Array.from({length:4},async()=>{
  const c=new pg.Client({connectionString:URL,connectionTimeoutMillis:5000,query_timeout:15000});await c.connect();return c;
 }));
-const [owner,other,restricted]=clients;
-const h=x=>x.repeat(64),code="d".repeat(40),manifest=h("a"),calendar=h("b"),config=h("c"),policy=h("e");
+const [owner,other,restricted,readbackAnother]=clients;
+const h=x=>x.repeat(64),code="d".repeat(40),manifest=h("a"),calendar=h("b"),config=h("c");
 const migration=readFileSync("migrations/staged/V0102__phase6_rolling_window_custody_owner_inert_v39.sql","utf8");
 const base=readFileSync("migrations/baseline/B0062__v39_schema_baseline_20261001.sql","utf8");
 const ddl=/CREATE TABLE clean\.adb_phase6_authorization \([\s\S]*?\n\);/.exec(base)?.[0];
@@ -31,7 +33,26 @@ try {
  await owner.query(migration);
  const clock=Math.floor(new Date((await owner.query("SELECT clock_timestamp() n")).rows[0].n).getTime()/1000)*1000;
  const from=new Date(clock-3*3600000),until=new Date(clock+45*86400000);
- const args=root=>["AUTH-CI",manifest,calendar,config,code,policy,from,until,root];
+ const iso=n=>new Date(n).toISOString(),hash=b=>createHash("sha256").update(b).digest("hex");
+ const plans=new Map(),dayPins=[];
+ const trust={reviewedCodeSha:code,manifestSha256:manifest,calendarSha256:calendar,releaseSha256:h("e"),rightsSha256:h("f")};
+ for(let i=1;i<=31;i++){
+  const start=clock+i*86400000,templates=[];
+  for(const [horizon,off] of [["T-24h",86400000],["T-6h",21600000],["T-90m",5400000]])for(let slot=0;slot<4;slot++)
+   templates.push({queryKey:"d"+i+"."+horizon+"."+slot,runDayIndex:i,horizon,serviceWindowStartUtc:iso(start),
+    serviceWindowEndUtc:iso(start+14400000),earliestPlannedCutoffUtc:iso(start-off),scheduledRequestUtc:iso(start-off-900000)});
+  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex:i,
+   expectedServiceStartUtc:iso(start),templates}));
+  plans.set("data-collection/phase5/planning/phase6-source-day-"+String(i).padStart(2,"0")+".json",bytes);
+  dayPins.push({runDayIndex:i,sha256:hash(bytes)});
+ }
+ const policyBytes=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,
+  approvedCodeSha:code,manifestSha256:manifest,calendarSha256:calendar,releaseSha256:trust.releaseSha256,rightsSha256:trust.rightsSha256,
+  dayPlanSha256s:dayPins,validFromUtc:from.toISOString(),validUntilUtc:until.toISOString()}));
+ const policy=hash(policyBytes),args=root=>["AUTH-CI",manifest,calendar,config,code,policy,from,until,root];
+ const input=root=>({separateOwnerWindowCustodyReviewApproved:true,authorizationId:"AUTH-CI",rootRunId:root,configSha256:config,
+  trust,policyBytes,expectedPolicySha256:policy,readPlan:p=>plans.get(p)});
+
  await owner.query(`INSERT INTO clean.adb_phase6_authorization
  (authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,
  alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,predecessor_evidence_ids)
@@ -61,13 +82,39 @@ try {
  await assert.rejects(owner.query(query,args(1001)),/EXISTING_AUTHORIZATION_HOLD/);
  await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=true,revoked_at_utc=NULL");
  await assert.rejects(owner.query(query,["AUTH-CI",manifest,calendar,config,code,h("f"),from,until,1001]),/IMMUTABLE_STUDY_SCOPE_DRIFT/);
- const concurrent=await Promise.allSettled([owner.query(query,args(1001)),other.query(query,args(1002))]);
+ // A simulated lost COMMIT acknowledgment must not query a second
+ // writer or re-enter the claim. The following actual race separately
+ // exercises real PostgreSQL transactions and four distinct backends.
+ const noReplayCalls=[],neverRead={query:async()=>assert.fail("readback must not mint dispatch after unknown COMMIT")};
+ const fakeClaim={query:async(s)=>{
+  noReplayCalls.push(s);
+  if(s.startsWith("BEGIN"))return {};
+  if(s.startsWith("SELECT current_database"))return {rowCount:1,rows:[{db:"neondb",actor:"neondb_owner",session_actor:"neondb_owner",
+   version:160016,replica:false,ro:"off",isolation:"read committed",pid:999,db_clock:new Date(clock)}]};
+  if(s.startsWith("SELECT window_index"))return {rowCount:1,rows:[{window_index:1,window_start_utc:new Date(from.getTime()+7200000),
+   window_end_utc:new Date(from.getTime()+14400000),claimed_at_utc:new Date(clock+1),claimed_at_exact:iso(clock+1).replace(".001Z",".001000Z")}]};
+  if(s==="COMMIT")throw Error("synthetic lost acknowledgment");
+  assert.fail("unexpected retry or rollback");
+ }};
+ await assert.rejects(claimP6RollingWindowOnce(input(1001),{claimClient:fakeClaim,readbackClient:neverRead}),/COMMIT_UNKNOWN_NO_REPLAY/);
+ assert.equal(noReplayCalls.length,4);
+ await assert.rejects(claimP6RollingWindowOnce({...input(1001),expectedPolicySha256:h("0")},{claimClient:neverRead,readbackClient:fakeClaim}),/MISSING_EXACT_REVIEWED_POLICY/);
+ await restricted.query("RESET ROLE; SET ROLE neondb_owner");
+ await readbackAnother.query("SET ROLE neondb_owner");
+ const concurrent=await Promise.allSettled([
+  claimP6RollingWindowOnce(input(1001),{claimClient:owner,readbackClient:restricted}),
+  claimP6RollingWindowOnce(input(1002),{claimClient:other,readbackClient:readbackAnother})
+ ]);
  assert.equal(concurrent.filter(x=>x.status==="fulfilled").length,1);
  assert.equal(concurrent.filter(x=>x.status==="rejected"&&/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/.test(x.reason.message)).length,1);
  const accepted=concurrent[0].status==="fulfilled"?1001:1002;
- const winner=concurrent.find(x=>x.status==="fulfilled").value.rows[0];assert.equal(winner.window_index,1);
- assert.equal(new Date(winner.window_start_utc).getTime(),from.getTime()+2*3600000);
- assert.equal(new Date(winner.window_end_utc).getTime(),from.getTime()+4*3600000);
+ const winner=concurrent.find(x=>x.status==="fulfilled").value;assert.equal(winner.windowIndex,1);
+ assert.equal(new Date(winner.windowStartUtc).getTime(),from.getTime()+2*3600000);
+ assert.equal(new Date(winner.windowEndUtc).getTime(),from.getTime()+4*3600000);
+ assert.equal(winner.rootRunId,accepted);assert.equal(winner.actualDbClock,true);assert.equal(winner.independentConnection,true);
+ assert.equal(winner.operationalCustodyWrites,1);assert.equal(winner.permitDispatch,false);assert.equal(winner.phase6PaidGo,false);
+ assert.equal(winner.policyCommitment,hash(JSON.stringify({policySha256:policy,...trust})));
+ console.log("V0102_EXACT_POLICY_REAL_COMMIT_DISTINCT_CONNECTION_READBACK_AND_UNKNOWN_COMMIT_NO_REPLAY=PASS");
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table+" WHERE closed_at_utc IS NULL")).rows[0].n,1);
  await assert.rejects(other.query(query,args(accepted)),/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/);
  assert.equal((await owner.query(close,[manifest,1,accepted,accepted,h("3"),h("4")])).rows[0].ok,true);

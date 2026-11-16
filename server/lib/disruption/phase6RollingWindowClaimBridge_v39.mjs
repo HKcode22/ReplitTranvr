@@ -11,7 +11,6 @@ const clock=x=>{
  const n=new Date(x).getTime();if(!Number.isSafeInteger(n))hold("CLOCK");return n;
 };
 const stamp=n=>new Date(n).toISOString(),hash=s=>createHash("sha256").update(s).digest("hex");
-const ISO_FIELDS=["window_start_utc","window_end_utc","claimed_at_utc"];
 function exactScope(input){
  if(!input||input.separateOwnerWindowCustodyReviewApproved!==true||
    typeof input.authorizationId!=="string"||input.authorizationId.length<1||input.authorizationId.length>128||
