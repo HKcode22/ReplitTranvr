@@ -18,8 +18,8 @@ import {
  compileP5V0093CostOnlySevenRestReview,commitP5V0093CostOnlySevenRestOnce
 } from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 import {commitP6ExistingSourceAuthorizationOnce,verifyP6EnabledSourceAuthorizationReceipt,verifyP6SourceActivationReview,p6SourceAuthorizationStageContentSha,P6_SOURCE_AUTH_SCOPE} from "../scripts/v39_phase6_enable_source_owner_v39";
-import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
-import {inspectP5V0093IndependentExactPostStage} from
+import {admitP6InertOwnerReadback,admitP6InertOwnerCalendarReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
+import {inspectP5V0093IndependentExactPostStage,inspectP5B0062IndependentCalendarStage} from
  "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -346,6 +346,27 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   )).rows[0].n;
   expect(ordinary).toBe(21);
  });
+ it("independently verifies only B0062 without a V0093 or source rights assertion",async()=>{
+  const check=()=>inspectP5B0062IndependentCalendarStage(admin,input,review,BUDGET_ROLE);
+  const r=await check();
+  expect(r).toMatchObject({
+   status:"INDEPENDENT_EXACT_B0062_CALENDAR_ONLY_READONLY_MATCH_NO_GO",
+   calendarRows:31,restPhysicalChargeDates:input.slotBudgetInput.restOtherByUtcDate.length,
+   categoryCycleCaps:0,categoryUtcBudgetRows:0,costStageCommitted:false,
+   verifiedReadOnly:true,authorizationEnabled:false,alertSafetyValuesExact:true,
+   independentHumanSignatureOrRightsAuthenticatedByThisCode:false,
+   providerCalls:0,databaseWrites:0,phase5ScientificFreeze:false,phase6PaidGo:false
+  });
+  await expect(inspectP5B0062IndependentCalendarStage(writer,input,review,BUDGET_ROLE))
+   .rejects.toThrow("READBACK_MUST_USE_DISTINCT_ACTOR");
+  await expect(inspectP5B0062IndependentCalendarStage(budgetWriter,input,review,BUDGET_ROLE))
+   .rejects.toThrow("READBACK_MUST_USE_DISTINCT_ACTOR");
+  await admin.query("UPDATE clean.adb_phase6_authorization SET phase6_alert_spend_ceiling=27001");
+  try{await expect(check()).rejects.toThrow("ALERT_SAFETY_VALUES_NOT_IDENTICAL");}
+  finally{await admin.query("UPDATE clean.adb_phase6_authorization SET phase6_alert_spend_ceiling=$1",
+   [input.alertSafety.alertRunSpendCeilingCredits]);}
+  expect((await check()).authorizationEnabled).toBe(false);
+ });
  function budgetReview(){
   const staged=compileP5InertB0062UtcStagePacket(input,review);
   const c=buildP5V0082UnknownAirportSevenCostOnlyDraft({
@@ -443,6 +464,8 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   });
   // Distinct fresh PostgreSQL client/READ ONLY transaction: rederive every
   // signed row + true UTC budget; owner writer's commit claim is not enough.
+  await expect(inspectP5B0062IndependentCalendarStage(admin,input,review,BUDGET_ROLE))
+   .rejects.toThrow("CALENDAR_ONLY_STATE_HAS_COST_OR_SOURCE_ROWS_NO_REPLAY");
   const independent=await inspectP5V0093IndependentExactPostStage(
    admin,input,review,r.permit
   );
@@ -507,6 +530,11 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0",
    DATABASE_URL:"postgresql://owner:CI_ONLY@ep-ci.neon.tech/neondb?sslmode=require"};
   const args=[raw,digest(input),r.c.costOnlyCategoryDraftSha256,head] as const;
+  const calendar=admitP6InertOwnerCalendarReadback(env,raw,digest(input),head);
+  expect(calendar).toMatchObject({calendarOnly:true,costSha:null,phase6PaidGo:false,databaseWrites:0});
+  expect(JSON.stringify(calendar)).not.toContain("CI_ONLY");
+  expect(()=>admitP6InertOwnerCalendarReadback(env,raw,sha("0"),head)).toThrow();
+  expect(()=>admitP6InertOwnerCalendarReadback({...env,V39_PHASE6_PROCESS_ARMED:"1"},raw,digest(input),head)).toThrow();
   const got=admitP6InertOwnerReadback(env,...args);
   expect(got.phase6PaidGo).toBe(false);
   expect(JSON.stringify(got)).not.toContain("CI_ONLY");
