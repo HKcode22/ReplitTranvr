@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 const PIN='6c187d58e2b1339aace71079e27767523d8ca3ce';
 const FILE='scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh';
-const ACTIVE='scripts/v39_phase5_callback_release_v3_reviewed_build_v39.sh';
+const ACTIVE='scripts/v39_phase5_callback_release_v4_reviewed_build_v39.sh';
 const H1='scripts/v39_phase5_reviewed_source_build_v39.sh';
 const H0='scripts/v39_gate4_reviewed_source_build_v39.sh';
 const source=readFileSync(FILE,'utf8');

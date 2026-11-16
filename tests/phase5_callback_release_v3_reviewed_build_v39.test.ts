@@ -17,7 +17,8 @@ describe("Phase5 V3 reviewed callback receiver / expiry VERIFY_ONLY release",()=
   expect(source).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(source).toContain('phase6_paid_launch_authorized:false');
   expect(source).toContain('phase5_freeze_passed:false');
-  expect(cfg).toContain('build = ["bash", "'+FILE+'"]');
+  expect(cfg).toContain('build = ["bash", "scripts/v39_phase5_callback_release_v4_reviewed_build_v39.sh"]');
+  expect(cfg).not.toContain('build = ["bash", "'+FILE+'"]');
   expect(cfg).not.toContain('P5_RECURRING_EXPIRY_HTTP_ENABLED');
   for(const bad of ["AERODATABOX_API_KEY","DATABASE_URL","gh workflow run","db:push","replit publish"])
    expect(source).not.toContain(bad);
@@ -26,14 +27,8 @@ describe("Phase5 V3 reviewed callback receiver / expiry VERIFY_ONLY release",()=
   expect(spawnSync("bash",["-n",FILE],{encoding:"utf8",timeout:10000}).status).toBe(0);
   expect(spawnSync("bash",[FILE,"--publish"],{encoding:"utf8",timeout:10000}).status).not.toBe(0);
  });
- it("actual source-equivalence when the pinned ancestry is present; otherwise fails closed",()=>{
-  const ancestor=spawnSync("git",["merge-base","--is-ancestor",PIN,"HEAD"],{encoding:"utf8",timeout:10000});
+ it("retired V3 refuses current V4 even when original ancestry is available",()=>{
   const result=spawnSync("bash",[FILE,"--verify-only"],{encoding:"utf8",timeout:10000});
-  if(ancestor.status!==0){
-   expect(result.status).not.toBe(0);
-  }else{
-   expect(result.status).toBe(0);
-   expect(result.stdout.trim()).toBe("PHASE5_V3_CALLBACK_SOURCE_EQUIVALENCE_VERIFIED_NOT_PUBLISHED");
-  }
+  expect(result.status).not.toBe(0);
  });
 });
