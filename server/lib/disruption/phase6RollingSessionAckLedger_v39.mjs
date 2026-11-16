@@ -8,6 +8,7 @@ const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const active=new Set(["queued","in_progress","waiting","requested","pending"]);
 const fail=s=>{throw Error("HOLD_P6_ROLLING_SESSION_"+s);};
 const idOk=x=>Number.isSafeInteger(x)&&x>0;
+export const P6_ROLLING_ACK_CAPACITY=96;
 export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{},priorAcknowledgements=[]}){
  if(!/^[a-f0-9]{40}$/.test(sha??"")||!Number.isSafeInteger(epoch)||!Number.isSafeInteger(deadline)||
     epoch>now()||deadline<=now()||deadline-epoch>6*3600000||typeof emit!=="function")fail("BAD_SESSION_SCOPE");
@@ -16,7 +17,7 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
  // Imported operational receipts are NOT treated as already verified.
  // A trusted predecessor admission must bind the receipt to this release
  // and epoch. Reconcile every exact ID afresh before any new dispatch.
- if(!Array.isArray(priorAcknowledgements)||priorAcknowledgements.length>96)fail("INVALID_PRIOR_ACK_SET");
+ if(!Array.isArray(priorAcknowledgements)||priorAcknowledgements.length>P6_ROLLING_ACK_CAPACITY)fail("INVALID_PRIOR_ACK_SET");
  for(const item of priorAcknowledgements){
   const sent=Date.parse(item?.sentAtUtc);
   if(!item||Object.keys(item).sort().join(",")!=="lane,runId,sentAtUtc"||
@@ -26,16 +27,20 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
   seen.add(item.runId);rows.set(item.runId,{lane:item.lane,runId:item.runId,sent,terminal:false});
  }
  let finalHistoryChecked=false;
+ // Reserve tracking space BEFORE the POST. A rejected new attempt must
+ // not become an accepted but untrackable external worker.
+ const remainingDispatchCapacity=()=>P6_ROLLING_ACK_CAPACITY-seen.size-attempts.size;
  function evidence(e){
   const route=routeByLane(e?.lane);
   if(!route||now()>=deadline)fail("OUTSIDE_SESSION_EVIDENCE");
   if(e.status==="DISPATCH_ATTEMPT_BEFORE_ACK"){
+   if(remainingDispatchCapacity()<=0)fail("ACK_CAPACITY_EXHAUSTED_BEFORE_POST");
    if(attempts.has(e.lane)||[...rows.values()].some(x=>x.lane===e.lane&&!x.terminal))fail("DUPLICATE_OR_UNRESOLVED_ATTEMPT");
    finalHistoryChecked=false;attempts.set(e.lane,now());
    emit(Object.freeze({lane:e.lane,status:e.status,atUtc:new Date(now()).toISOString()}));return;
   }
   if(e.status!=="EXACT_ACK_NOT_EXECUTION_PROOF"||!attempts.has(e.lane)||!idOk(e.runId)||
-     seen.has(e.runId)||observed.get(e.lane)?.has(e.runId)||seen.size>=96)fail("BAD_OR_DUPLICATE_ACK");
+     seen.has(e.runId)||observed.get(e.lane)?.has(e.runId)||seen.size>=P6_ROLLING_ACK_CAPACITY)fail("BAD_OR_DUPLICATE_ACK");
   const sent=attempts.get(e.lane);attempts.delete(e.lane);
   seen.add(e.runId);rows.set(e.runId,{lane:e.lane,runId:e.runId,sent,terminal:false});
   emit(Object.freeze({lane:e.lane,status:e.status,runId:e.runId,atUtc:new Date(now()).toISOString()}));
@@ -121,5 +126,5 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
    pending:[...rows.values()].filter(x=>!x.terminal).map(x=>({lane:x.lane,runId:x.runId})),
    unknownAttempts:attempts.size,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  }
- return Object.freeze({evidence,assertVisible,reconcile,status,verifyTerminalHistory,terminalAcknowledgements});
+ return Object.freeze({evidence,assertVisible,reconcile,status,verifyTerminalHistory,terminalAcknowledgements,remainingDispatchCapacity});
 }

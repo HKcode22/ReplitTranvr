@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
-import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
@@ -92,6 +93,8 @@ test("protected bounded session uses calendar to defer six idle lanes and reconc
  assert.equal(out.status,"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF");
  assert.equal(out.waves,8);
  assert.equal(out.acknowledged,out.verifiedTerminal);assert.equal(out.pending.length,0);
+ assert.equal(out.capacityDeferred,0);assert.equal(out.ackCapacityExhausted,false);
+ assert.equal(out.remainingDispatchCapacity,P6_ROLLING_ACK_CAPACITY-out.acknowledged);
  assert(out.acknowledged>=2);assert(out.calendarDeferred>0);
  assert(f.runs.every(x=>x.path.includes("lease-watchdog")||x.path.includes("retention-readonly")));
  assert.equal(out.providerCalls,0);assert.equal(out.databaseWrites,0);
@@ -166,4 +169,19 @@ test("unapproved chain, unknown successor ACK and mismatched predecessor receipt
  const before=z.calls.filter(x=>x.method==="POST").length;
  await assert.rejects(runP6RollingSession(z.env,z.options),/CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH/);
  assert.equal(z.calls.filter(x=>x.method==="POST").length,before);
+});
+
+test("dispatch core cannot POST when ledger tracking capacity is exhausted, even if an unbounded plan was passed",async()=>{
+ const prior=Array.from({length:P6_ROLLING_ACK_CAPACITY},(_,i)=>({
+  lane:"LATER_PRE",runId:30000+i,sentAtUtc:iso(start-1000)}));
+ const ledger=createP6SessionAckLedger({sha,epoch:start-2000,deadline:start+10*MIN,now:()=>start,priorAcknowledgements:prior});
+ const snapshots=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:[],active:[],jobs:[]}));
+ const p=restrictP6RollingWave(planP6RollingTick(snapshots,{sha,epoch:start-2000,clock:start}),["PRE_RECOVERY"]);
+ let posts=0;
+ await assert.rejects(dispatchP6ReviewedRollingWave(p,{sha,approvedSha:sha,releaseApproved:true,
+  token:"synthetic-test-token-no-access",deadline:start+2*MIN,now:()=>start,
+  recheckRoute:async r=>snapshots.find(x=>x.workflow===r.workflow),onEvidence:ledger.evidence,
+  fetcher:async(_u,o)=>{if(o.method==="POST")posts++;return {ok:true,json:async()=>({object:{sha}})};}
+ }),/ACK_CAPACITY_EXHAUSTED_BEFORE_POST/);
+ assert.equal(posts,0);assert.equal(ledger.status().unknownAttempts,0);
 });

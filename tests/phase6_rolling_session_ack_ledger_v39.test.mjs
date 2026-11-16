@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createP6SessionAckLedger} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const t=Date.parse("2030-01-01T00:00:00.500Z"),sha="a".repeat(40),route=P6_ROLLING_ROUTES.find(x=>x.lane==="LATER_PRE"),id=12345;
 function setup(){
@@ -93,4 +93,29 @@ test("prior ACK receipt is imported as unresolved and requires new direct readba
  const all=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:r===route?[row]:[],active:[]}));
  ledger.verifyTerminalHistory(all);
  assert.deepEqual(ledger.terminalAcknowledgements(),[prior]);
+});
+
+test("full inherited ACK ledger refuses a new attempt BEFORE any external POST or unknown attempt",()=>{
+ const prior=Array.from({length:P6_ROLLING_ACK_CAPACITY},(_,i)=>({
+  lane:route.lane,runId:20000+i,sentAtUtc:new Date(t-1000).toISOString()}));
+ const events=[];
+ const ledger=createP6SessionAckLedger({sha,epoch:t-2000,deadline:t+600000,now:()=>t,
+  emit:e=>events.push(e),priorAcknowledgements:prior});
+ assert.equal(ledger.remainingDispatchCapacity(),0);
+ assert.throws(()=>ledger.evidence({lane:"PRE_RECOVERY",status:"DISPATCH_ATTEMPT_BEFORE_ACK"}),/ACK_CAPACITY_EXHAUSTED_BEFORE_POST/);
+ assert.equal(ledger.status().unknownAttempts,0);assert.equal(events.length,0);
+});
+test("the last tracking slot is reserved before dispatch and consumed only by its exact ACK",()=>{
+ const prior=Array.from({length:P6_ROLLING_ACK_CAPACITY-1},(_,i)=>({
+  lane:route.lane,runId:20000+i,sentAtUtc:new Date(t-1000).toISOString()}));
+ const ledger=createP6SessionAckLedger({sha,epoch:t-2000,deadline:t+600000,now:()=>t,priorAcknowledgements:prior});
+ assert.equal(ledger.remainingDispatchCapacity(),1);
+ ledger.evidence({lane:"PRE_RECOVERY",status:"DISPATCH_ATTEMPT_BEFORE_ACK"});
+ assert.equal(ledger.remainingDispatchCapacity(),0);
+ assert.throws(()=>ledger.evidence({lane:"RETENTION_MONITOR",status:"DISPATCH_ATTEMPT_BEFORE_ACK"}),/ACK_CAPACITY_EXHAUSTED_BEFORE_POST/);
+ assert.equal(ledger.status().unknownAttempts,1);
+ ledger.evidence({lane:"PRE_RECOVERY",status:"EXACT_ACK_NOT_EXECUTION_PROOF",runId:99999});
+ assert.equal(ledger.status().acknowledged,P6_ROLLING_ACK_CAPACITY);
+ assert.equal(ledger.status().unknownAttempts,0);
+ assert.equal(ledger.remainingDispatchCapacity(),0);
 });
