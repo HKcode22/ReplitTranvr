@@ -69,7 +69,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
    }
    const pred=Number(env.P6_ROLLING_PARENT_RUN_ID??"0");
    if(pred&&u.pathname.endsWith("/actions/runs/"+pred))return response(controllerRuns.find(x=>x.id===pred));
-   if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/jobs"))return response({total_count:1,jobs:[{name:"one-protected-bounded-session",
+   if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/jobs"))return response({total_count:1,jobs:[{id:pred*10+1,run_id:pred,head_sha:sha,run_attempt:1,name:"one-protected-bounded-session",
     status:"completed",conclusion:"success",steps:["Execute one protected rolling session and reconcile accepted workers before terminal",
      "Preserve terminal operational receipt for independently reviewed continuation"].map(name=>({name,status:"completed",conclusion:"success"}))}]});
    if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/artifacts"))return response({total_count:1,artifacts:[{id:444,name:"p6-rolling-terminal-"+pred,
@@ -336,5 +336,18 @@ test("third session rejects a broken earlier ancestor chain before new dispatch"
  f.root.display_title="P6 ROLLING CHAIN 0 99999";
  const posts=f.calls.filter(x=>x.method==="POST").length;
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_ANCESTOR_IDENTITY/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+
+test("successor rejects predecessor job evidence from a different run before new dispatch",async()=>{
+ const f=setup({chain:true,multi:true}),first=await runP6RollingSession(f.env,f.options);f.startSuccessor(first);
+ const upstream=f.options.fetcher,posts=f.calls.filter(x=>x.method==="POST").length;
+ f.options.fetcher=async(url,opt)=>{
+  const res=await upstream(url,opt);
+  if(url.includes("/actions/runs/12345/jobs?")){const body=await res.json();body.jobs[0].run_id=99999;return {...res,json:async()=>body};}
+  return res;
+ };
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_PARENT_JOB/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
 });

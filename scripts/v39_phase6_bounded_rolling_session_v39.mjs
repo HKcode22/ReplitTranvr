@@ -180,13 +180,15 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(parent.status!=="completed")hold("CHAIN_PARENT_NOT_TERMINAL");
   if(parent.conclusion!=="success")hold("CHAIN_PARENT_FAILED");
   const direct=exact(await get("/actions/runs/"+a.parent),a.parent);
-  if(direct.display_title!==parent.display_title||direct.status!=="completed"||direct.conclusion!=="success")
+  if(direct.display_title!==parent.display_title||direct.created_at!==parent.created_at||direct.status!=="completed"||direct.conclusion!=="success")
    hold("CHAIN_PARENT_READBACK");
   const jobs=await get("/actions/runs/"+a.parent+"/jobs?filter=latest&per_page=100");
   if(!Number.isSafeInteger(jobs?.total_count)||jobs.total_count<1||jobs.total_count>100||
      !Array.isArray(jobs.jobs)||jobs.jobs.length!==jobs.total_count)hold("CHAIN_PARENT_JOB_HISTORY");
   const required=jobs.jobs.filter(j=>j.name===JOB);
-  if(required.length!==1||required[0].status!=="completed"||required[0].conclusion!=="success")
+  if(required.length!==1||!Number.isSafeInteger(required[0].id)||required[0].id<1||
+     required[0].run_id!==a.parent||required[0].head_sha!==a.sha||required[0].run_attempt!==1||
+     required[0].status!=="completed"||required[0].conclusion!=="success")
    hold("CHAIN_PARENT_JOB");
   for(const step of STEPS){
    const actual=required[0].steps?.filter(s=>s.name===step)??[];
