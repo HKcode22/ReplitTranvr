@@ -118,6 +118,44 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    expect(report.providerCalls).toBe(0);expect(report.databaseWrites).toBe(0);
    console.log("P6_POST_ACTUAL_PARTITION_RESTRICTED_PG16=PASS SYNTHETIC_ONLY PROVIDER_CALLS=0");
    await exerciseNativePostPublication(p,restricted,query);
+   // Extend the same real schema and scoped SOURCE connection to the
+   // preferred primary/update comparison. No T24 fabrication after the
+   // original 23h source binding expires. Explicitly separate historical
+   // committed cutoff evidence from currently retained observation.
+   const cutoff90=t-90*60000,source90=iso(cutoff90-120000),member90=iso(cutoff90-110000),issued90=iso(cutoff90-1000),
+    pre90Id="c23e4567-e89b-42d3-a456-426614174010",query90=h("7"),reservation90=h("0"),
+    raw90=envelope([f1],source90,false),hash90=sha(JSON.stringify(raw90)),charge90=iso(cutoff90-900000).slice(0,10);
+   await q("INSERT INTO clean.phase5_fids_utc_charge_budget_v39(manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units) VALUES($1,$2::date,1900,100) ON CONFLICT(manifest_sha256,charge_day_utc) DO NOTHING",[p.manifestSha256,charge90]);
+   await q("INSERT INTO clean.phase5_fids_allowed_query_v39(query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,airport_icao,early_draw_sha256,reviewed_release_sha256,rights_review_sha256,provider_contract_sha256,github_run_id,service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,provider_api_version,fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,prediction_cutoff_utc,api_units_per_attempt,max_physical_attempts,state) VALUES($1,$2,1,'synthetic_post_ci_t90','HUB','T-90m','WSSS',$3,$4,$5,$6,'1234567890',$7,$8,$9,$10,'Asia/Singapore','ci','ci',$11,$12::date,$13,$14,2,1,'ACTIVE')",
+    [query90,p.manifestSha256,h("5"),h("6"),rights,p.reviewedProviderContractSha256,p.plannedSourceFromUtc,p.plannedSourceToUtc,p.fromLocal,p.toLocal,
+     iso(cutoff90-900000),charge90,iso(cutoff90-180000),iso(cutoff90)]);
+   await q("INSERT INTO clean.phase5_fids_physical_attempt_v39(reservation_sha256,query_digest,manifest_sha256,github_run_id,observed_selected_at_utc,charged_utc_date,committed_at_utc) VALUES($1,$2,$3,'1234567890',$4,$5::date,$6)",
+    [reservation90,query90,p.manifestSha256,iso(cutoff90-1800000),charge90,iso(cutoff90-180000)]);
+   await q("INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS','Departure',$2,$3,$4,$5,'Asia/Singapore',$6,$6,$6,$7,$8::jsonb,'ci','ci',$9)",
+    [pre90Id,p.plannedSourceFromUtc,p.plannedSourceToUtc,p.fromLocal,p.toLocal,source90,hash90,JSON.stringify(raw90),p.reviewedProviderContractSha256]);
+   await q("INSERT INTO clean.flight_population(batch_id,source_airport_icao,dep_airport_icao,arr_airport_icao,dep_scheduled_utc,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,provider_record_key,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS','WSSS','YSSY',$2,$3,$4,$5,'fids',$6,$7,$7,'requested_airport_primary','confirmed_core',$8,$9,'SQ78',$10,'Departure',$11,$12,'Asia/Singapore','confirmed_operating_leg',$13,'ci','ci',$14)",
+    [reservation90,iso(t),p.plannedSourceFromUtc,p.plannedSourceToUtc,iso(cutoff90),pre90Id,p.flightInstanceId,member90,hash90,f1.id,p.fromLocal,p.toLocal,source90,p.reviewedProviderContractSha256]);
+   // An already expired raw source is refused by V0079; don't fake a
+   // historical successful binding or extend its technical lifetime.
+   const bind90="INSERT INTO clean.phase5_fids_original_binding_v39(population_query_id,reservation_sha256,query_digest,manifest_sha256,response_hash,decoded_original_body_sha256,rights_review_sha256,normalized_members_count,source_expires_at_utc) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8)";
+   const bindScope=[pre90Id,reservation90,query90,p.manifestSha256,hash90,raw90.originalDecodedEntityBodyEvidence.bodySha256,rights];
+   await expect(q(bind90,[...bindScope,iso(now-1000)])).rejects.toThrow("P5_ORIGINAL_SOURCE_FRAME_CLOCK_RIGHTS_HOLD");
+   await q(bind90,[...bindScope,iso(now+3*3600000)]);
+   await q("INSERT INTO clean.flight_snapshots(flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,selected_t_milestone_utc,selected_t_version,population_query_id,fids_response_hash,schedule_version,frame_hash,config_hash,features_json,missingness_flags,builder_version,provenance_json,created_at) VALUES($1,'PRE_DEPARTURE','T-90m',$2,$3,'ci-native',$4,$5,NULL,$6,$7,'[]'::jsonb,'{}'::jsonb,'ci','{}'::jsonb,$8)",
+    [p.flightInstanceId,iso(cutoff90),iso(t),pre90Id,hash90,p.reviewedFrameSha256,h("4"),issued90]);
+   const paired=await readP6CommittedPostOutcomeObservability(restricted as any,scope);
+   expect(paired.byHorizon["T-90m"]).toMatchObject({retainedCutoffSafePre:1,matchedNativePost:1,actualGateOutNumericCandidates:0});
+   expect(paired.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:2,retainedT6UniquePre:2,retainedT90UniquePre:1,retainedT24UniquePre:0,
+    retainedConsistentT6T90Pairs:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1,t6OnlyAmongRetainedHorizons:1,
+    retainedConsistentT6T24Pairs:0,actualPhysicalLabelPairsCertified:0,fullStudyDenominatorCertified:false});
+   const priorPaired=await auditP5FuturePostActualPriorPre(restricted as any,p,[query,query90]);
+   expect(priorPaired.observedValidHorizons).toEqual(["T-6h","T-90m"]);
+   expect(priorPaired.missingPreHorizons).toEqual(["T-24h"]);
+   expect(priorPaired.boundSourceRegistryValidHorizonCount).toBe(2);
+   expect(paired.physicalGateOutLabels).toBe(0);
+   expect(paired.providerCalls).toBe(0);expect(paired.databaseWrites).toBe(0);
+   console.log("P6_ACTUAL_SCHEMA_PAIRED_T6_T90_WITH_MISSING_T24_AND_EXPIRED_BINDING_REFUSAL_PASS_NO_PROVIDER_NO_PHYSICAL_LABEL");
+
   }finally{await Promise.allSettled([db.end(),login?.end()]);}
  },60000);
 });
