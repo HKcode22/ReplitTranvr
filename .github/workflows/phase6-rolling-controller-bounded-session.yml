@@ -1,10 +1,16 @@
 name: Phase6 initial bounded rolling controller session (STOP default)
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && (inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_UP_TO_FOUR_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO') &&
+  ${{ github.event_name == 'schedule' && 'P6 ROLLING SCHEDULED ROOT' || github.event_name == 'workflow_dispatch' && (inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_UP_TO_FOUR_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO') &&
       format('P6 ROLLING CHAIN {0} {1}', inputs.chain_hop, inputs.parent_run_id) || 'Phase6 initial bounded rolling controller session (STOP default)' }}
 on:
+  schedule:
+    - cron: '13 */2 * * *'
   workflow_dispatch:
     inputs:
+      scheduled_root_run_id:
+        description: 'Exact scheduled root ID for authenticated successor only'
+        type: string
+        default: ''
       confirm:
         description: 'Exact single session, separately approved two-session chain, or explicitly approved two-session history retirement rehearsal'
         required: true
@@ -51,7 +57,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: p6-rolling-controller-session-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  group: p6-rolling-controller-session-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'schedule' && 'scheduled-root' || 'main' }}
   cancel-in-progress: false
 env:
   ADB_AUTO_COLLECT: '0'
@@ -92,13 +98,15 @@ jobs:
           node --test tests/phase6_rolling_session_ack_ledger_v39.test.mjs tests/phase6_bounded_rolling_session_v39.test.mjs tests/phase6_rolling_failure_journal_v39.test.mjs tests/phase6_rolling_calendar_hints_v39.test.mjs
   one-protected-bounded-session:
     if: >-
-      ${{ github.event_name == 'workflow_dispatch' &&
-          github.ref == 'refs/heads/main' &&
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.P6_ROLLING_CONTROLLER_ENABLED == '1' &&
+          ((github.event_name == 'schedule' && vars.P6_ROLLING_SCHEDULED_ROOT_ENABLED == '1' &&
+            vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED == '1' && vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1') ||
+           (github.event_name == 'workflow_dispatch' &&
           (inputs.confirm == 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO' ||
            inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' ||
            inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_UP_TO_FOUR_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO') &&
-          inputs.approved_main_sha == github.sha &&
-          vars.P6_ROLLING_CONTROLLER_ENABLED == '1' }}
+          inputs.approved_main_sha == github.sha)) }}
     permissions:
       contents: read
       actions: write
@@ -106,6 +114,8 @@ jobs:
     timeout-minutes: 32
     env:
       GITHUB_TOKEN: ${{ github.token }}
+      P6_ROLLING_SCHEDULED_ROOT_ENABLED: ${{ vars.P6_ROLLING_SCHEDULED_ROOT_ENABLED }}
+      P6_ROLLING_SCHEDULED_ROOT_RUN_ID: ${{ inputs.scheduled_root_run_id }}
       P6_ROLLING_SESSION_CONFIRM: ${{ inputs.confirm }}
       P6_ROLLING_REQUESTED_MAIN_SHA: ${{ inputs.approved_main_sha }}
       P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
@@ -145,6 +155,7 @@ jobs:
         if: vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1'
         run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
       - name: Execute one protected rolling session and reconcile accepted workers before terminal
+        id: execute
         env:
           P6_ROLLING_WINDOW_CUSTODY_ENABLED: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED }}
           P6_ROLLING_WINDOW_CUSTODY_APPROVED: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.P6_ROLLING_WINDOW_CUSTODY_APPROVED || '' }}
@@ -167,8 +178,14 @@ jobs:
           test "$P5_CD_GH_PRE_STOP" = 0
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node scripts/v39_phase6_bounded_rolling_session_v39.mjs
-          echo 'P6_BOUNDED_SESSION_RECEIPT_READY_NOT_COLLECTION_PROOF'
+          if test -f "$RUNNER_TEMP/p6-rolling-terminal-receipt.json"; then
+            echo 'P6_BOUNDED_SESSION_RECEIPT_READY_NOT_COLLECTION_PROOF'
+          else
+            test "$GITHUB_EVENT_NAME" = schedule
+            echo 'P6_SCHEDULED_ROOT_DEFERRED_NO_TERMINAL_RECEIPT'
+          fi
       - name: Preserve terminal operational receipt for independently reviewed continuation
+        if: steps.execute.outputs.receipt_ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: p6-rolling-terminal-${{ github.run_id }}

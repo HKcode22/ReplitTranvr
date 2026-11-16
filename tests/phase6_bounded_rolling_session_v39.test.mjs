@@ -7,7 +7,7 @@ import {join} from "node:path";
 import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
 import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
-import {runP6RollingSession,decodeP6PredecessorReceipt} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
+import {runP6RollingSession,decodeP6PredecessorReceipt,prepareP6ScheduledRoot} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {execFileSync} from "node:child_process";
 import {writeFileSync} from "node:fs";
 import {admitP6RuntimeWindowConfig} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
@@ -65,7 +65,10 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   fetcher:async(url,opt)=>{
    const u=new URL(url);calls.push({url,method:opt.method});
    if(u.pathname.endsWith("/git/ref/heads/main"))return response({object:{sha}});
-   if(u.pathname.endsWith("/workflows/"+WF+"/runs"))return response({total_count:duplicate?2:controllerRuns.length,workflow_runs:duplicate?[root,{...root,id:22222}]:controllerRuns});
+   if(u.pathname.endsWith("/workflows/"+WF+"/runs")){
+    const rows=controllerRuns.filter(x=>x.event===u.searchParams.get("event"));
+    return response({total_count:duplicate?2:rows.length,workflow_runs:duplicate?[root,{...root,id:22222}]:rows});
+   }
    if(u.pathname.endsWith("/workflows/"+WF+"/dispatches")){
     assert.equal(opt.method,"POST");const input=JSON.parse(opt.body).inputs;
     const hop=Number(env.P6_ROLLING_CHAIN_HOP)+1,parentId=Number(env.GITHUB_RUN_ID),nextId=parentId+1;
@@ -76,10 +79,11 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
     assert.equal(input.chain_hop,String(hop));assert.equal(input.parent_run_id,String(parentId));
     assert.equal(input.confirm,env.P6_ROLLING_SESSION_CONFIRM);
     if(failSuccessor)return response({},204);
-    controllerRuns.push({...root,id:nextId,status:"queued",conclusion:null,created_at:iso(clock),display_title:"P6 ROLLING CHAIN "+hop+" "+parentId});
+    controllerRuns.push({...root,event:"workflow_dispatch",id:nextId,status:"queued",conclusion:null,created_at:iso(clock),display_title:"P6 ROLLING CHAIN "+hop+" "+parentId});
     return response({workflow_run_id:nextId,run_url:"https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/"+nextId,
      html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+nextId});
    }
+   if(root.event==="schedule"&&u.pathname.endsWith("/actions/runs/"+root.id))return response(root);
    const pred=Number(env.P6_ROLLING_PARENT_RUN_ID??"0");
    if(pred&&u.pathname.endsWith("/actions/runs/"+pred))return response(controllerRuns.find(x=>x.id===pred));
    if(pred&&u.pathname.endsWith("/actions/runs/"+pred+"/jobs"))return response({total_count:1,jobs:[{id:pred*10+1,run_id:pred,head_sha:sha,run_attempt:1,name:"one-protected-bounded-session",
@@ -122,7 +126,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   const predecessor=controllerRuns.find(x=>x.id===Number(env.GITHUB_RUN_ID));
   const successor=controllerRuns.find(x=>x.id===receipt.nextRunId);
   predecessor.status="completed";predecessor.conclusion="success";successor.status="in_progress";
-  Object.assign(env,{GITHUB_RUN_ID:String(successor.id),P6_ROLLING_CHAIN_HOP:String(Number(env.P6_ROLLING_CHAIN_HOP)+1),P6_ROLLING_PARENT_RUN_ID:String(predecessor.id),
+  Object.assign(env,{GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ID:String(successor.id),P6_ROLLING_CHAIN_HOP:String(Number(env.P6_ROLLING_CHAIN_HOP)+1),P6_ROLLING_PARENT_RUN_ID:String(predecessor.id),
    P6_ROLLING_SENT_AT_UTC:receipt.nextDispatchAtUtc});
  }};
 }
@@ -484,10 +488,14 @@ function enableSyntheticCustody(f){
  return checks;
 }
 
-async function actualShapedClosedWindow({multi=true,carryActive=false,durable=false}={}){
- const f=setup({chain:multi,multi,carryActive,delayedRetention:multi}),receipts=new Map();
- const custodyChecks=durable?enableSyntheticCustody(f):[];
- if(!multi)f.root.display_title="Phase6 initial bounded rolling controller session (STOP default)";
+async function actualShapedClosedWindow({multi=true,carryActive=false,durable=false,scheduled=false}={}){
+ const f=setup({chain:multi,multi,carryActive,delayedRetention:multi,dynamicFixture:scheduled}),receipts=new Map();
+ const custodyChecks=scheduled?enableDynamicScope(f):durable?enableSyntheticCustody(f):[];
+ if(scheduled){
+  f.root.event="schedule";f.root.display_title="P6 ROLLING SCHEDULED ROOT";
+  Object.assign(f.env,{GITHUB_EVENT_NAME:"schedule",P6_ROLLING_SCHEDULED_ROOT_ENABLED:"1",P6_ROLLING_SCHEDULED_ROOT_RUN_ID:String(f.root.id)});
+ }
+ if(!multi&&!scheduled)f.root.display_title="Phase6 initial bounded rolling controller session (STOP default)";
  for(let hop=0;hop<(multi?4:1);hop++){
   const x=await runP6RollingSession(f.env,f.options);receipts.set(x.runId,x);
   if(x.successorDispatches===1)f.startSuccessor(x);
@@ -641,4 +649,35 @@ test("per-window scope cannot bypass custody, static separation, calendar geomet
  f.env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC=iso(start+119*MIN);
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+test("actual-shaped scheduled root hands off one durable claim through four sessions and independent terminal verifier",async()=>{
+ const {f,expected,adapter,receipts,custodyChecks}=await actualShapedClosedWindow({scheduled:true,durable:true});
+ assert.equal(receipts.size,4);assert.equal(custodyChecks.filter(x=>x.kind==="CLAIM").length,1);
+ assert([...receipts.values()].every(x=>x.scheduledRootRunId===12345));
+ assert.equal(f.controllerRuns[0].event,"schedule");
+ assert(f.controllerRuns.slice(1).every(x=>x.event==="workflow_dispatch"));
+ assert.equal((await verifyP6RollingWindowTerminalEvidence(expected,adapter)).completeOperationalChainVerified,true);
+ const last=[...receipts.values()].at(-1);last.scheduledRootRunId=999;
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/RECEIPT_IDENTITY/);
+});
+test("scheduled root derives time from exact GitHub run and actual-shaped read-only DB plan; defers unresolved root before claim",async()=>{
+ const f=setup({chain:true,multi:true,dynamicFixture:true});enableDynamicScope(f);
+ f.root.event="schedule";f.root.display_title="P6 ROLLING SCHEDULED ROOT";
+ const env={...f.env,GITHUB_EVENT_NAME:"schedule",P6_ROLLING_SCHEDULED_ROOT_ENABLED:"1"};
+ for(const k of ["P6_ROLLING_SESSION_CONFIRM","P6_ROLLING_REQUESTED_MAIN_SHA","P6_ROLLING_CHAIN_HOP","P6_ROLLING_PARENT_RUN_ID","P6_ROLLING_SENT_AT_UTC","P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC","P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC"])env[k]="";
+ const plan={actualDbClock:true,restrictedReadOnly:true,priorRecordedClosureChecked:true,independentProviderSettlementVerified:false,databaseWrites:0,providerCalls:0,dispatchCount:0,permitDispatch:false,permitClose:false,phase6PaidGo:false,reviewedMainSha:sha,
+ policyCommitment:digest(JSON.stringify({policySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,reviewedCodeSha:sha,manifestSha256:hash,calendarSha256:hash,releaseSha256:hash,rightsSha256:hash})),
+ observedAtDbUtc:iso(start),status:"PROSPECTIVE_ROOT_SCOPE_METADATA_ONLY",windowIndex:12,windowStartUtc:iso(start),windowEndUtc:iso(start+120*MIN),mode:"FOUR"};
+ const opt={...f.options,readRootPlan:async()=>plan};
+ const out=await prepareP6ScheduledRoot(env,opt);
+ assert.equal(out.env.P6_ROLLING_SCHEDULED_ROOT_RUN_ID,"12345");
+ assert.equal(out.env.P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC,iso(start));
+ assert.equal(out.env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC,iso(start+120*MIN));
+ const held=await prepareP6ScheduledRoot(env,{...opt,readRootPlan:async()=>({...plan,status:"NO_ROOT_SCOPE_CANDIDATE",reason:"PRIOR_ROOT_UNRESOLVED"})});
+ assert.equal(held.reason,"PRIOR_ROOT_UNRESOLVED");assert(!held.env);
+ await assert.rejects(prepareP6ScheduledRoot({...env,P6_ROLLING_SCHEDULED_ROOT_ENABLED:"0"},opt),/SCHEDULED_ROOT_INPUT/);
+ f.root.created_at=iso(start-31*MIN);
+ const late=await prepareP6ScheduledRoot(env,opt);assert.equal(late.reason,"QUEUED_ROOT_TOO_LATE_OR_PRIOR_WINDOW");assert(!late.env);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,0);
 });

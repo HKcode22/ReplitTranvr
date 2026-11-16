@@ -63,7 +63,8 @@ export async function runP6FailureReadback(env,{fetcher=fetch,readArtifact=downl
  await main();
  const run=await get("/actions/runs/"+a.runId);
  if(run?.id!==a.runId||run.path!==".github/workflows/"+P6_ROLLING_CONTROLLER_WORKFLOW||
-    run.head_sha!==a.failedMain||run.head_branch!=="main"||run.event!=="workflow_dispatch"||
+    run.head_sha!==a.failedMain||run.head_branch!=="main"||
+    !(run.event==="workflow_dispatch"||(run.event==="schedule"&&run.display_title==="P6 ROLLING SCHEDULED ROOT"))||
     run.run_attempt!==1||run.status!=="completed"||!failStates.has(run.conclusion))hold("FAILED_RUN_IDENTITY");
  const jr=await get("/actions/runs/"+a.runId+"/jobs?filter=latest&per_page=100");
  if(!Number.isSafeInteger(jr?.total_count)||jr.total_count<1||jr.total_count>100||
@@ -90,7 +91,8 @@ export async function runP6FailureReadback(env,{fetcher=fetch,readArtifact=downl
  if(before.id!==after.id||before.size!==after.size||before.digest!==after.digest)hold("ARTIFACT_CHANGED");
  const parsed=parseP6RollingFailureCustody(bytes,{runId:a.runId,mainSha:a.failedMain});
  const created=Date.parse(run.created_at);
- if(!Number.isFinite(created)||created<Date.parse(parsed.scope.epochUtc)-1000||
+ if(!Number.isFinite(created)||(run.event==="schedule"&&(parsed.scope.sessionHop!==0||created!==Date.parse(parsed.scope.epochUtc)))||
+    created<Date.parse(parsed.scope.epochUtc)-1000||
     created>=Date.parse(parsed.scope.chainDeadlineUtc))hold("FAILED_RUN_CLOCK");
  const diagnosis=await reconcileP6FailureCustody(parsed,{readRun:id=>get("/actions/runs/"+id)});
  await main();
