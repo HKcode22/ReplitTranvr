@@ -63,19 +63,19 @@ SELECT a.github_run_id run_id,a.approved_api_units::int units,a.reserved_at_utc 
  ORDER BY a.github_run_id,a.reservation_sha256`;
 export const P6_CATEGORY_ACCOUNTING_SQL=`
 WITH charges AS (
- SELECT a.charged_utc_date day,p.rest_category category,a.charged_reserved_units units
+ SELECT a.charged_utc_date AS charge_day,p.rest_category category,a.charged_reserved_units units
  FROM clean.phase5_fids_physical_attempt_v39 a
  LEFT JOIN clean.phase5_fids_exact_query_partition_v39 p ON p.query_digest=a.query_digest AND p.manifest_sha256=a.manifest_sha256
  WHERE a.manifest_sha256=$1
  UNION ALL
- SELECT a.charged_utc_date day,a.rest_category category,a.approved_api_units units
+ SELECT a.charged_utc_date AS charge_day,a.rest_category category,a.approved_api_units units
  FROM clean.phase5_other_rest_physical_reservation_v39 a WHERE a.manifest_sha256=$1
- ), actual AS (SELECT day,coalesce(category,'UNCLASSIFIED') category,sum(units)::int units FROM charges GROUP BY 1,2),
- budget AS (SELECT charge_day_utc day,category,planned_units,physically_reserved_units
+ ), actual AS (SELECT charge_day,coalesce(category,'UNCLASSIFIED') category,sum(units)::int units FROM charges GROUP BY 1,2),
+ budget AS (SELECT charge_day_utc AS charge_day,category,planned_units,physically_reserved_units
  FROM clean.phase5_fids_utc_rest_category_budget_v39 WHERE manifest_sha256=$1)
- SELECT coalesce(b.day,a.day)::text day,coalesce(b.category,a.category) category,
+ SELECT coalesce(b.charge_day,a.charge_day)::text AS "day",coalesce(b.category,a.category) category,
  b.planned_units planned_units,b.physically_reserved_units reserved_units,coalesce(a.units,0)::int ledger_units
- FROM budget b FULL JOIN actual a ON a.day=b.day AND a.category=b.category
+ FROM budget b FULL JOIN actual a ON a.charge_day=b.charge_day AND a.category=b.category
  ORDER BY 1,2`;
 const P6_UNATTRIBUTED_SQL=`
  SELECT count(*)::int n FROM (
