@@ -12,6 +12,8 @@ import {providerBlobObjectNameV39,type ProviderBlobStoreV39} from "../server/lib
 
 function HOLD(x:string):never{throw Error("HOLD_P5_RECURRING_EXPIRY_"+x); }
 const TABLE="clean.provider_content_blob_ref",TOMB="clean.retention_tombstone",INCIDENT="clean.adb_incident_stop";
+const BATCH="clean.adb_collection_batches",DIAGNOSTIC="clean.adb_ingest_events";
+const SCOPED_TABLES=[TABLE,TOMB,INCIDENT,BATCH,DIAGNOSTIC];
 const BLOB_READ=["blob_ref_id","storage_kind","contract_version","object_name","content_class","content_sha256","content_bytes",
  "persisted_at_utc","expires_at_utc","retention_hours","deleted_at_utc","deletion_verified_at_utc","deletion_run_id"];
 const MARKER=["deleted_at_utc","deletion_verified_at_utc","deletion_run_id"];
@@ -19,7 +21,12 @@ const WITNESS=["surface","record_id","content_hash","expired_at","tombstoned_at_
  "retention_rule","expiry_run_id","deletion_mode"];
 const INCIDENT_INSERT=["cause","occurred_at_utc","detail","resolved"];
 const INCIDENT_READ=["id","cause","resolved"];
-const SEQS=["clean.retention_tombstone_id_seq","clean.adb_incident_stop_id_seq"];
+// B0062 propagate_incident_to_phase6_failure is invoker-rights and
+// reads only these active-batch columns and appends these diagnostic
+// fields. It must not gain access to raw_payload or account fields.
+const BATCH_READ=["batch_id","run_day_index","status"];
+const DIAGNOSTIC_INSERT=["batch_id","notification_items","delivery_failure","error"];
+const SEQS=["clean.retention_tombstone_id_seq","clean.adb_incident_stop_id_seq","clean.adb_ingest_events_id_seq"];
 const ROLE=/^[a-z][a-z0-9_]{2,62}$/;
 const SHA=/^[a-f0-9]{40}$/;
 type Actor="writer"|"reader";
@@ -71,6 +78,8 @@ function expectedColumn(actor:Actor,table:string,column:string,permission:Permis
    actor==="writer"&&permission==="INSERT"&&WITNESS.includes(column);
  if(table===INCIDENT)return permission==="SELECT"&&INCIDENT_READ.includes(column)||
    actor==="writer"&&permission==="INSERT"&&INCIDENT_INSERT.includes(column);
+ if(table===BATCH)return actor==="writer"&&permission==="SELECT"&&BATCH_READ.includes(column);
+ if(table===DIAGNOSTIC)return actor==="writer"&&permission==="INSERT"&&DIAGNOSTIC_INSERT.includes(column);
  return false;
 }
 /** Verify exact existing-schema privileges before any use of the object SDK.
@@ -107,22 +116,22 @@ export async function verifyP5RecurringExpiryActor(db:Db,role:string,actor:Actor
     has_column_privilege(current_user,c.oid,a.attnum,'UPDATE') AS upd,
     has_column_privilege(current_user,c.oid,a.attnum,'REFERENCES') AS ref
    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
-   WHERE c.oid=ANY($1::regclass[]) AND a.attnum>0 AND NOT a.attisdropped`,[[TABLE,TOMB,INCIDENT]]);
+   WHERE c.oid=ANY($1::regclass[]) AND a.attnum>0 AND NOT a.attisdropped`,[SCOPED_TABLES]);
   const seen=new Set<string>();
   for(const row of cols.rows){
    const key=row.relation+"."+row.col;
-   if(seen.has(key)||![TABLE,TOMB,INCIDENT].includes(row.relation))HOLD("COLUMN_CATALOG");
+   if(seen.has(key)||!SCOPED_TABLES.includes(row.relation))HOLD("COLUMN_CATALOG");
    seen.add(key);
    for(const [field,perm] of [["sel","SELECT"],["ins","INSERT"],["upd","UPDATE"],["ref","REFERENCES"]] as const)
     if(row[field]!==expectedColumn(actor,row.relation,row.col,perm))HOLD("COLUMN_ACL_DRIFT");
   }
-  for(const [table,needed] of [[TABLE,BLOB_READ],[TOMB,WITNESS],[INCIDENT,[...INCIDENT_READ,...INCIDENT_INSERT]]] as const)
+  for(const [table,needed] of [[TABLE,BLOB_READ],[TOMB,WITNESS],[INCIDENT,[...INCIDENT_READ,...INCIDENT_INSERT]],[BATCH,BATCH_READ],[DIAGNOSTIC,DIAGNOSTIC_INSERT]] as const)
    for(const column of needed)if(!seen.has(table+"."+column))HOLD("COLUMN_CATALOG");
   const broad=(await client.query(`SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
    WHERE c.relkind IN ('r','p','v','m','f') AND n.nspname IN ('clean','phase6_private','public')
    AND (has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     OR (NOT(c.oid=ANY($1::regclass[])) AND has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))`,
-   [[TABLE,TOMB,INCIDENT]])).rows[0];
+   [SCOPED_TABLES])).rows[0];
   if(broad?.n!==0)HOLD("BROAD_OR_UNRELATED_TABLE_ACL");
   const sequences=await client.query(`SELECT n.nspname||'.'||c.relname AS relation,
    has_sequence_privilege(current_user,c.oid,'USAGE') AS usage,

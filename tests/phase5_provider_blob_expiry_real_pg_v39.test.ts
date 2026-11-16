@@ -148,7 +148,9 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    await db.query("GRANT UPDATE (deleted_at_utc,deletion_verified_at_utc,deletion_run_id) ON clean.provider_content_blob_ref TO "+writerRole);
    await db.query("GRANT INSERT ("+witness+") ON clean.retention_tombstone TO "+writerRole);
    await db.query("GRANT INSERT (cause,occurred_at_utc,detail,resolved) ON clean.adb_incident_stop TO "+writerRole);
-   await db.query("GRANT USAGE ON SEQUENCE clean.retention_tombstone_id_seq,clean.adb_incident_stop_id_seq TO "+writerRole);
+   await db.query("GRANT SELECT (batch_id,run_day_index,status) ON clean.adb_collection_batches TO "+writerRole);
+   await db.query("GRANT INSERT (batch_id,notification_items,delivery_failure,error) ON clean.adb_ingest_events TO "+writerRole);
+   await db.query("GRANT USAGE ON SEQUENCE clean.retention_tombstone_id_seq,clean.adb_incident_stop_id_seq,clean.adb_ingest_events_id_seq TO "+writerRole);
    writer=new Pool({connectionString:URL.replace("postgres:postgres@",writerRole+":ci_disposable_writer@"),max:2});
    reader=new Pool({connectionString:URL.replace("postgres:postgres@",readerRole+":ci_disposable_reader@"),max:1,options:"-c default_transaction_read_only=on"});
    const verifyActor:typeof verifyP5RecurringExpiryActor=async(d,r,a)=>verifyP5RecurringExpiryActor(d,r,a,false);
@@ -166,12 +168,27 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    expect(s.deletes).toBe(0);
    expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({status:"DUE_AT_CUTOFF_CLEARED",verifiedNowCount:1,independentlyReadBackCount:1});
    expect(s.deletes).toBe(1);
+   // Seed a synthetic active parent WITHOUT authorizing Phase6 in this
+   // disposable database. Only fixture insertion bypasses unrelated
+   // phase6 admission triggers, using an owner-local transaction. The
+   // actual subsequent restricted incident insertion runs all triggers.
+   const syntheticBatch="expiry-ci-active-"+randomUUID();
+   const fixture=await db.connect();
+   try{
+    await fixture.query("BEGIN");
+    await fixture.query("SET LOCAL session_replication_role='replica'");
+    await fixture.query(`INSERT INTO clean.adb_collection_batches(batch_id,batch_seq,random_seed,status,
+     window_start,window_end,credit_budget,tier_mix,airports,run_day_index)
+     VALUES($1,999991,7,'ACTIVE',now()-interval '1 hour',now()+interval '1 hour',100,'{}'::jsonb,ARRAY['WSSS'],31)`,[syntheticBatch]);
+    await fixture.query("COMMIT");
+   }catch(e){await fixture.query("ROLLBACK").catch(()=>{});throw e;}finally{fixture.release();}
    const b=await make();s.objects.add(b.objectName);
    const incidentCount=async()=>Number((await db.query("SELECT count(*)::int AS n FROM clean.adb_incident_stop WHERE cause='deletion' AND detail->>'kind'='recurring_provider_blob_expiry_uncertain' AND resolved=false")).rows[0].n);
    const before=await incidentCount();
    await expect(executeP5RecurringExpiryRuntime({...conf,apply:true,stores:{writer:s,reader:{exists:async name=>name===b.objectName||s.exists(name)}}}))
     .rejects.toThrow("BATCH_UNCERTAIN_DELETION_STOP_RECORDED_NO_RETRY");
    expect(await incidentCount()).toBe(before+1);
+   expect((await db.query("SELECT count(*)::int AS n FROM clean.adb_ingest_events WHERE batch_id=$1 AND notification_items=0 AND delivery_failure=true AND error='incident-stop:deletion' AND raw_payload IS NULL",[syntheticBatch])).rows[0].n).toBe(1);
    expect(s.deletes).toBe(2);
    // Recover independent proof only, not a second physical delete and
    // never automatically clear the incident.
