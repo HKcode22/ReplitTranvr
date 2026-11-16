@@ -6,6 +6,7 @@ on:
       - 'migrations/staged/V0083__phase5_nonfids_five_category_physical_rest_reservation_v39.sql'
       - 'tests/phase5_v0083_five_other_rest_atomic_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0083-five-rest-category-atomic-pg16-no-provider.yml'
+      - 'server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs'
       - 'data-collection/phase5/2026-11-08_V0083_FIVE_OTHER_REST_RESERVATION_SAFETY_CHECKPOINT.md'
   push:
     branches: [main]

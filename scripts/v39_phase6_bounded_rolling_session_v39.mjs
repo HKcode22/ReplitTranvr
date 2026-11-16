@@ -5,8 +5,7 @@
  * one exact protected session or separately approved two-session chain.
  */
 import {resolve,join} from "node:path";
-import {writeFileSync,mkdtempSync,readFileSync,readdirSync,rmSync,lstatSync} from "node:fs";
-import {tmpdir} from "node:os";
+import {writeFileSync,appendFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
@@ -14,7 +13,8 @@ import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRoll
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
-import {admitP6RuntimeWindowConfig,createP6RuntimeWindowCustody,exactP6RuntimeWindowReceipt,compareP6WindowCustody} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
+import {unpackP6WindowReceiptArchive} from "./v39_phase6_rolling_window_terminal_readback_v39.mjs";
+import {admitP6RuntimeWindowConfig,createP6RuntimeWindowCustody,exactP6RuntimeWindowReceipt,compareP6WindowCustody,readP6RuntimeRootPlan} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -26,6 +26,7 @@ const JOB="one-protected-bounded-session",STEPS=["Execute one protected rolling 
  "Preserve terminal operational receipt for independently reviewed continuation"];
 const idok=x=>typeof x==="string"&&/^[1-9][0-9]{0,14}$/.test(x);
 const chainTitle=(hop,parent)=>"P6 ROLLING CHAIN "+hop+" "+parent;
+const SCHEDULE_ROOT_TITLE="P6 ROLLING SCHEDULED ROOT";
 const MIN=60000;
 // Keep the original hard ceiling. Reserve capacity for final history, up to
 // eight known active ACKs, optional retirement prefix proof, root and main.
@@ -38,9 +39,9 @@ const time=x=>{
  return Date.parse(x);
 };
 const sleepDefault=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export function admitP6RollingSession(env,now=Date.now()){
+function admitRelease(env){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
-    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||
+    !["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||env.GITHUB_RUN_ATTEMPT!=="1"||
     !/^[1-9][0-9]{0,14}$/.test(env.GITHUB_RUN_ID??"")||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
     env.GITHUB_SHA!==env.P6_ROLLING_REQUESTED_MAIN_SHA||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
@@ -56,8 +57,35 @@ export function admitP6RollingSession(env,now=Date.now()){
      "P5_V39_T24_WITNESS_DATABASE_URL","P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL",
      "P5_V39_OTHER_REST_REVIEW_DATABASE_URL","P5_V39_OTHER_REST_RESERVE_DATABASE_URL"].some(k=>env[k]))
   hold("NO_PROTECTED_REAL_SESSION_APPROVAL");
- const epoch=time(env.P6_ROLLING_SESSION_EPOCH_UTC),chainDeadline=time(env.P6_ROLLING_SESSION_DEADLINE_UTC);
+}
+function policyInput(env){
+ const wire=env.P6_NONPAID_DAILY_POLICY_BASE64;
+ if(typeof wire!=="string"||wire.length>46668||!/^[A-Za-z0-9+/]+={0,2}$/.test(wire))hold("MISSING_REVIEWED_CALENDAR");
+ const policyBytes=Buffer.from(wire,"base64");
+ if(policyBytes.toString("base64")!==wire)hold("NONCANONICAL_POLICY");
+ return {policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,trust:{reviewedCodeSha:env.GITHUB_SHA,
+  manifestSha256:env.V39_P5_MANIFEST_SHA256,calendarSha256:env.V39_P5_CALENDAR_HASH,releaseSha256:env.V39_P5_RELEASE_SHA256,rightsSha256:env.V39_P5_RIGHTS_SHA256}};
+}
+export function admitP6RollingSession(env,now=Date.now()){
+ admitRelease(env);
  const multi=env.P6_ROLLING_SESSION_CONFIRM===MULTI_CONFIRM;
+ // The old one-window rehearsal used fixed repository secrets.
+ // Per-window scope is available only with exact durable DB custody.
+ // No original paid, policy, predecessor or worker admission is relaxed.
+ const dynamicFlag=env.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED??"0";
+ const dynamic=dynamicFlag==="1";
+ const dynamicEpoch=env.P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC??"";
+ const dynamicDeadline=env.P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC??"";
+ if(dynamic){
+  if(env.P6_ROLLING_WINDOW_CUSTODY_ENABLED!=="1"||env.P6_ROLLING_WINDOW_CUSTODY_APPROVED!=="1"||
+     (!multi&&env.P6_ROLLING_SESSION_CONFIRM!==CONFIRM)||
+     env.P6_ROLLING_SESSION_EPOCH_UTC||env.P6_ROLLING_SESSION_DEADLINE_UTC)
+   hold("DYNAMIC_SCOPE_REQUIRES_DURABLE_CUSTODY");
+ }else if(!["","0"].includes(dynamicFlag)||dynamicEpoch||dynamicDeadline)
+  hold("UNAPPROVED_DYNAMIC_WINDOW_SCOPE");
+ const epoch=time(dynamic?dynamicEpoch:env.P6_ROLLING_SESSION_EPOCH_UTC),
+  chainDeadline=time(dynamic?dynamicDeadline:env.P6_ROLLING_SESSION_DEADLINE_UTC);
+ if(dynamic&&(epoch%1000||chainDeadline%1000))hold("DYNAMIC_SCOPE_CLOCK_PRECISION");
  const rollover=multi||env.P6_ROLLING_SESSION_CONFIRM===ROLLOVER_CONFIRM;
  const maxHops=multi?4:2;
  const chain=rollover||env.P6_ROLLING_SESSION_CONFIRM===CHAIN_CONFIRM;
@@ -65,6 +93,12 @@ export function admitP6RollingSession(env,now=Date.now()){
  if(rollover&&env.P6_ROLLING_HISTORY_RETIREMENT_APPROVED!=="1")hold("NO_PROTECTED_RETIREMENT_APPROVAL");
  const hop=env.P6_ROLLING_CHAIN_HOP??"0",parent=env.P6_ROLLING_PARENT_RUN_ID??"0";
  const sentText=env.P6_ROLLING_SENT_AT_UTC??"";
+ const scheduleId=env.P6_ROLLING_SCHEDULED_ROOT_RUN_ID??"";
+ const scheduledRoot=scheduleId?Number(scheduleId):null;
+ if(scheduleId&&(!idok(scheduleId)||!dynamic||env.P6_ROLLING_SCHEDULED_ROOT_ENABLED!=="1"||
+   (hop==="0"?env.GITHUB_EVENT_NAME!=="schedule"||scheduleId!==env.GITHUB_RUN_ID:
+    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||!multi||scheduleId===env.GITHUB_RUN_ID)))hold("SCHEDULED_ROOT_SCOPE");
+ if(env.GITHUB_EVENT_NAME==="schedule"&&!scheduledRoot)hold("SCHEDULED_ROOT_SCOPE");
  // Keep the original protected epoch across the entire chain. The
  // separately approved two-hop commissioning envelope cannot autoextend.
  if(epoch%1000!==0||epoch>now||chainDeadline<=now)hold("OUTSIDE_INITIAL_BOUNDED_SESSION");
@@ -84,34 +118,83 @@ export function admitP6RollingSession(env,now=Date.now()){
  }else if(hop!=="0"||parent!=="0"||sentText!==""||chainDeadline-epoch>30*MIN)
   hold("OUTSIDE_INITIAL_BOUNDED_SESSION");
  if(deadline-now<15*MIN)hold("OUTSIDE_INITIAL_BOUNDED_SESSION");
- const wire=env.P6_NONPAID_DAILY_POLICY_BASE64;
- if(typeof wire!=="string"||wire.length>46668||!/^[A-Za-z0-9+/]+={0,2}$/.test(wire))
-  hold("MISSING_REVIEWED_CALENDAR");
- const policyBytes=Buffer.from(wire,"base64");
- if(policyBytes.toString("base64")!==wire)hold("NONCANONICAL_POLICY");
- const trust={reviewedCodeSha:env.GITHUB_SHA,manifestSha256:env.V39_P5_MANIFEST_SHA256,
-  calendarSha256:env.V39_P5_CALENDAR_HASH,releaseSha256:env.V39_P5_RELEASE_SHA256,rightsSha256:env.V39_P5_RIGHTS_SHA256};
- return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,multi,maxHops,hop:Number(hop),parent:Number(parent),sent,policyBytes,
-  expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,trust};
+ return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,multi,maxHops,hop:Number(hop),parent:Number(parent),sent,dynamic,scheduledRoot,...policyInput(env)};
 }
-function downloadReceipt({parent,name,token}){
- const dir=mkdtempSync(join(tmpdir(),"p6-rolling-receipt-"));
+// A scheduled run IS the root; no extra scheduler POST or uncertain launch ACK.
+// Bind actual GitHub creation time, not cron time, to a fresh read-only DB
+// clock and immutable policy. This is planning only, never claim/settlement.
+export async function prepareP6ScheduledRoot(env,{now=Date.now,fetcher=fetch,readPlan,readRootPlan=readP6RuntimeRootPlan}={}){
+ if(env.GITHUB_EVENT_NAME!=="schedule"||env.P6_ROLLING_SCHEDULED_ROOT_ENABLED!=="1"||
+   env.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED!=="1"||env.P6_ROLLING_WINDOW_CUSTODY_ENABLED!=="1"||
+   ["P6_ROLLING_SESSION_CONFIRM","P6_ROLLING_REQUESTED_MAIN_SHA","P6_ROLLING_CHAIN_HOP","P6_ROLLING_PARENT_RUN_ID","P6_ROLLING_SENT_AT_UTC",
+    "P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC","P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC","P6_ROLLING_SCHEDULED_ROOT_RUN_ID",
+    "P6_ROLLING_SESSION_EPOCH_UTC","P6_ROLLING_SESSION_DEADLINE_UTC"].some(k=>env[k]))hold("SCHEDULED_ROOT_INPUT");
+ const approved={...env,P6_ROLLING_SESSION_CONFIRM:CONFIRM,P6_ROLLING_REQUESTED_MAIN_SHA:env.GITHUB_SHA};
+ admitRelease(approved);
+ const config=admitP6RuntimeWindowConfig(approved),policy=policyInput(approved),calendar=loadP6RollingCalendarHints({...policy,read:readPlan});
+ const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
+ const get=async p=>{
+  const res=await fetcher(ROOT+p,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
+  if(!res.ok)hold("SCHEDULED_ROOT_GITHUB_READ");
+  return res.json();
+ };
+ if((await get("/git/ref/heads/main"))?.object?.sha!==env.GITHUB_SHA)hold("MAIN_CHANGED");
+ const root=await get("/actions/runs/"+env.GITHUB_RUN_ID),epoch=Date.parse(root?.created_at);
+ if(root?.id!==Number(env.GITHUB_RUN_ID)||root.path!==".github/workflows/"+WF||root.head_sha!==env.GITHUB_SHA||
+  root.head_branch!=="main"||root.event!=="schedule"||root.display_title!==SCHEDULE_ROOT_TITLE||
+  root.run_attempt!==1||root.status!=="in_progress"||root.conclusion!==null||
+  !Number.isSafeInteger(epoch)||epoch%1000||epoch>now())hold("SCHEDULED_ROOT_IDENTITY");
+ const plan=await readRootPlan(config,policy,{readPlan});
+ const commitment=createHash("sha256").update(JSON.stringify({policySha256:policy.expectedPolicySha256,...policy.trust})).digest("hex");
+ if(!plan||plan.actualDbClock!==true||plan.restrictedReadOnly!==true||plan.priorRecordedClosureChecked!==true||
+   plan.independentProviderSettlementVerified!==false||plan.databaseWrites!==0||plan.providerCalls!==0||plan.dispatchCount!==0||
+   plan.permitDispatch!==false||plan.permitClose!==false||plan.phase6PaidGo!==false||
+   plan.reviewedMainSha!==env.GITHUB_SHA||plan.policyCommitment!==commitment)hold("SCHEDULED_ROOT_PREFLIGHT_IDENTITY");
+ const observed=time(plan.observedAtDbUtc),clock=now();
+ if(Math.abs(observed-clock)>15000||observed<epoch)hold("SCHEDULED_ROOT_DB_CLOCK");
+ const skip=reason=>({status:"SCHEDULED_ROOT_DEFERRED_NO_CLAIM_NO_DISPATCH",reason,providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false});
+ if(plan.status==="NO_ROOT_SCOPE_CANDIDATE"){
+  if(!["AUTHORIZATION_HOLD","OUTSIDE_POLICY","IMMUTABLE_STUDY_SCOPE_DRIFT","PRIOR_ROOT_UNRESOLVED","WINDOW_ALREADY_OWNED_OR_OVERLAP","INSUFFICIENT_REMAINING_WINDOW"].includes(plan.reason))hold("SCHEDULED_ROOT_PREFLIGHT_STATUS");
+  return skip(plan.reason);
+ }
+ if(plan.status!=="PROSPECTIVE_ROOT_SCOPE_METADATA_ONLY")hold("SCHEDULED_ROOT_PREFLIGHT_STATUS");
+ const index=Math.floor((observed-calendar.from)/(120*MIN)),start=calendar.from+index*120*MIN,end=Math.min(calendar.until,start+120*MIN);
+ if(plan.windowIndex!==index||time(plan.windowStartUtc)!==start||time(plan.windowEndUtc)!==end||
+   observed<start||observed>=end||index<0||index>719)hold("SCHEDULED_ROOT_WINDOW_DRIFT");
+ if(epoch<start||epoch>=end||Math.min(end,epoch+30*MIN)-Math.max(clock,observed)<15*MIN)return skip("QUEUED_ROOT_TOO_LATE_OR_PRIOR_WINDOW");
+ const multi=plan.mode==="FOUR"&&end-epoch>=90*MIN&&env.P6_ROLLING_CHAIN_APPROVED==="1"&&
+   env.P6_ROLLING_FOUR_SESSION_APPROVED==="1"&&env.P6_ROLLING_HISTORY_RETIREMENT_APPROVED==="1";
+ const scoped={...approved,P6_ROLLING_SESSION_CONFIRM:multi?MULTI_CONFIRM:CONFIRM,
+  P6_ROLLING_CHAIN_HOP:"0",P6_ROLLING_PARENT_RUN_ID:"0",P6_ROLLING_SENT_AT_UTC:"",
+  P6_ROLLING_SCHEDULED_ROOT_RUN_ID:env.GITHUB_RUN_ID,
+  P6_ROLLING_DYNAMIC_WINDOW_EPOCH_UTC:new Date(epoch).toISOString(),
+  P6_ROLLING_DYNAMIC_WINDOW_DEADLINE_UTC:new Date(multi?end:Math.min(end,epoch+30*MIN)).toISOString()};
+ admitP6RollingSession(scoped,now());
+ return {status:"SCHEDULED_ROOT_SCOPE_PREPARED_NOT_CLAIM_OR_DISPATCH",env:scoped};
+}
+// Bind the actual ZIP bytes, not merely a mutable artifact name. Reuse
+// the independent terminal readback decoder (exact single file, size, SHA256).
+function downloadReceipt({meta,token}){
  try{
-  execFileSync("gh",["run","download",String(parent),"--repo",REPO,"--name",name,"--dir",dir],{
+  const archive=execFileSync("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+meta.id+"/zip"],{
    env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},
-   timeout:30000,stdio:"ignore"});
-  const files=readdirSync(dir);
-  if(files.length!==1||files[0]!==RECEIPT_FILE)hold("CHAIN_RECEIPT_FILES");
-  const path=join(dir,RECEIPT_FILE),info=lstatSync(path);
-  if(!info.isFile()||info.size<30||info.size>32768)hold("CHAIN_RECEIPT_SIZE");
-  return JSON.parse(readFileSync(path,"utf8"));
+   timeout:30000,maxBuffer:131072,stdio:["ignore","pipe","ignore"]});
+  return archive;
  }catch{hold("CHAIN_RECEIPT_UNAVAILABLE");}
- finally{rmSync(dir,{recursive:true,force:true});}
 }
-export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt,windowCustodyCheck}={}){
+export function decodeP6PredecessorReceipt(archive,meta){
+ try{return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(unpackP6WindowReceiptArchive(archive,meta)));}
+ catch{hold("CHAIN_RECEIPT_ARCHIVE_INVALID");}
+}
+export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt,readArchive=downloadReceipt,windowCustodyCheck}={}){
  const started=now(),a=admitP6RollingSession(env,started);
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
+ if(a.dynamic){
+  const index=Math.floor((a.epoch-calendar.from)/7200000),end=Math.min(calendar.until,calendar.from+(index+1)*7200000);
+  if(index<0||index>719||calendar.until-calendar.from>1440*3600000||calendar.from%1000||calendar.until%1000||a.chainDeadline>end)
+   hold("DYNAMIC_SCOPE_CROSSES_DURABLE_WINDOW");
+ }
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
  const windowConfig=admitP6RuntimeWindowConfig(env);
  if(!windowConfig&&windowCustodyCheck!==undefined)hold("UNEXPECTED_WINDOW_CHECK");
@@ -158,20 +241,26 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  async function uniqueRoot(){
   const path=".github/workflows/"+WF,created=encodeURIComponent(">="+new Date(a.epoch).toISOString());
   const h=await get("/actions/workflows/"+WF+"/runs?branch=main&event=workflow_dispatch&per_page=100&created="+created);
-  const expected=a.chain?a.hop+1:1;
+  const expected=(a.chain?a.hop+1:1)-(a.scheduledRoot?1:0);
   if(h?.total_count!==expected||!Array.isArray(h.workflow_runs)||h.workflow_runs.length!==expected||
      new Set(h.workflow_runs.map(x=>x.id)).size!==expected)hold("PREVIOUS_OR_DUPLICATE_SESSION_NO_REPLAY");
   function exact(row,id){
-   const createdAt=Date.parse(row?.created_at);
+   const createdAt=Date.parse(row?.created_at),scheduled=id===a.scheduledRoot;
    if(row?.id!==id||row.path!==path||row.head_sha!==a.sha||row.head_branch!=="main"||
-      row.event!=="workflow_dispatch"||row.run_attempt!==1||
-      !Number.isFinite(createdAt)||createdAt<a.epoch||createdAt>now()+5000)
+      row.event!==(scheduled?"schedule":"workflow_dispatch")||row.run_attempt!==1||
+      !Number.isFinite(createdAt)||createdAt<a.epoch||createdAt>now()+5000||
+      (scheduled&&(createdAt!==a.epoch||row.display_title!==SCHEDULE_ROOT_TITLE)))
     hold("SESSION_ROOT_IDENTITY_DRIFT");
    return row;
   }
+  if(a.scheduledRoot){
+   if(h.workflow_runs.some(x=>x.id===a.scheduledRoot))hold("PREVIOUS_OR_DUPLICATE_SESSION_NO_REPLAY");
+   h.workflow_runs.push(exact(await get("/actions/runs/"+a.scheduledRoot),a.scheduledRoot));
+  }
+  const title=(hop,parent)=>a.scheduledRoot&&hop===0?SCHEDULE_ROOT_TITLE:chainTitle(hop,parent);
   const row=exact(h.workflow_runs.find(x=>x.id===a.id),a.id);
   if(row.status!=="in_progress"||row.conclusion!==null||
-     (a.chain&&row.display_title!==chainTitle(a.hop,a.parent))||
+     (a.chain&&row.display_title!==title(a.hop,a.parent))||
      (a.hop>0&&Date.parse(row.created_at)<a.sent-1000))
    hold("SESSION_ROOT_IDENTITY_DRIFT");
   if(a.hop===0){verifiedRootId=a.id;return;}
@@ -181,7 +270,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // Earlier controller runs must form one exact linear chain.
    let previousId=0,previousClock=a.epoch;
    for(let hop=0;hop<=a.hop;hop++){
-    const matches=h.workflow_runs.filter(x=>x.display_title===chainTitle(hop,previousId));
+    const matches=h.workflow_runs.filter(x=>x.display_title===title(hop,previousId));
     if(matches.length!==1)hold("CHAIN_ANCESTOR_IDENTITY");
     const ancestor=exact(matches[0],matches[0].id),createdAt=Date.parse(ancestor.created_at);
     if(!idok(String(ancestor.id))||createdAt<previousClock||
@@ -193,7 +282,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     previousId=ancestor.id;previousClock=createdAt;
    }
   }
-  if(parent.display_title!==chainTitle(a.hop-1,predecessorParent)||Date.parse(parent.created_at)>a.sent)
+  if(parent.display_title!==title(a.hop-1,predecessorParent)||Date.parse(parent.created_at)>a.sent)
    hold("CHAIN_PARENT_IDENTITY");
   if(parent.status!=="completed")hold("CHAIN_PARENT_NOT_TERMINAL");
   if(parent.conclusion!=="success")hold("CHAIN_PARENT_FAILED");
@@ -216,13 +305,23 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(verifiedRootId!==null&&verifiedRootId!==foundRoot)hold("WINDOW_ROOT_DRIFT");
   verifiedRootId=foundRoot;
   if(prior!==null)return;
-  const name="p6-rolling-terminal-"+a.parent,art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
-  if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
-  const meta=art.artifacts[0];
-  if(meta.name!==name||meta.expired!==false||!Number.isSafeInteger(meta.id)||meta.id<1||
-     !Number.isSafeInteger(meta.size_in_bytes)||meta.size_in_bytes<1||meta.size_in_bytes>65536||
-     (meta.workflow_run&&Number(meta.workflow_run.id)!==a.parent))hold("CHAIN_RECEIPT_IDENTITY");
-  const receipt=await readReceipt({parent:a.parent,name,token:env.GITHUB_TOKEN});
+  const name="p6-rolling-terminal-"+a.parent;
+  async function receiptMetadata(){
+   const art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
+   if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
+   const meta=art.artifacts[0];
+   if(meta.name!==name||meta.expired!==false||!Number.isSafeInteger(meta.id)||meta.id<1||
+      !Number.isSafeInteger(meta.size_in_bytes)||meta.size_in_bytes<1||meta.size_in_bytes>65536||
+      (meta.workflow_run&&Number(meta.workflow_run.id)!==a.parent)||
+      !/^sha256:[a-f0-9]{64}$/.test(meta.digest??""))hold("CHAIN_RECEIPT_IDENTITY");
+   return {id:meta.id,name,size:meta.size_in_bytes,digest:meta.digest};
+  }
+  const meta=await receiptMetadata();
+  // readReceipt is only a dependency-injected test seam; production always
+  // downloads the immutable artifact ID and validates archive bytes.
+  const receipt=readReceipt?await readReceipt({parent:a.parent,name,meta,token:env.GITHUB_TOKEN}):
+   decodeP6PredecessorReceipt(await readArchive({meta,token:env.GITHUB_TOKEN}),meta);
+  if(JSON.stringify(meta)!==JSON.stringify(await receiptMetadata()))hold("CHAIN_RECEIPT_METADATA_CHANGED");
   if(receipt?.schema!=="v39.phase6.bounded-rolling-session.v1"||
      receipt.status!=="BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF"||
      receipt.sessionHop!==a.hop-1||receipt.parentRunId!==predecessorParent||receipt.runId!==a.parent||
@@ -232,6 +331,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
       (time(receipt.deadlineUtc)<=a.sent||time(receipt.deadlineUtc)>a.chainDeadline||
        time(receipt.deadlineUtc)>Date.parse(parent.created_at)+35*MIN))||
      receipt.chainDeadlineUtc!==new Date(a.chainDeadline).toISOString()||
+     (receipt.scheduledRootRunId??null)!==a.scheduledRoot||
      receipt.policyCommitment!==policyCommitment||receipt.successorDispatches!==1||
      receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||!Array.isArray(receipt.pendingAcknowledgements)||
      receipt.providerCalls!==0||receipt.databaseWrites!==(checkWindow&&a.hop===1?1:0)||receipt.phase6PaidGo!==false||
@@ -286,7 +386,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  await main();
  for(let i=0;;i++){
   try{await uniqueRoot();break;}
-  catch(e){if(e?.message!=="HOLD_P6_ROLLING_RUNTIME_CHAIN_PARENT_NOT_TERMINAL"||i>=5)throw e;await pause(5000);}
+  catch(e){if(e?.message!=="HOLD_P6_ROLLING_RUNTIME_CHAIN_PARENT_NOT_TERMINAL"||i>=(a.scheduledRoot?18:5))throw e;await pause(5000);}
  }
  await guardWindow(a.hop===0?"CLAIM":"READ");
  ledger=createP6SessionAckLedger({...a,epoch:historyEpoch,now,emit,priorAcknowledgements:prior??[]});
@@ -438,6 +538,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     waves,calendarDeferred,capacityDeferred,requestBudgetDeferred,requestBudgetStop,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
     successorDispatches:0,nextRunId:null,...state,
      ...(windowCustody?{windowCustody,databaseWrites:rootClaimWrites}:{}),
+    ...(a.scheduledRoot?{scheduledRootRunId:a.scheduledRoot}:{}),
     ...(a.multi?{chainMode:"PROTECTED_FOUR_SESSION_BOUND",maxSessionHops:a.maxHops}:{}),
     ...(a.rollover?{historyRetirementMode:a.multi?"PROTECTED_FOUR_SESSION_BOUND":"PROTECTED_TWO_SESSION_REHEARSAL",historyEpochUtc:new Date(historyEpoch).toISOString(),
       ...(retirementCandidate?{historyRetirementCandidate:retirementCandidate}:{}),
@@ -455,7 +556,9 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
      body:JSON.stringify({ref:"main",return_run_details:true,inputs:{
-      confirm:a.multi?MULTI_CONFIRM:a.rollover?ROLLOVER_CONFIRM:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:String(a.hop+1),parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString()
+      confirm:a.multi?MULTI_CONFIRM:a.rollover?ROLLOVER_CONFIRM:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:String(a.hop+1),parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString(),
+      ...(a.dynamic?{window_epoch_utc:new Date(a.epoch).toISOString(),window_deadline_utc:new Date(a.chainDeadline).toISOString()}:{}) ,
+      ...(a.scheduledRoot?{scheduled_root_run_id:String(a.scheduledRoot)}:{})
      }})});
     if(res.status!==200)hold("CHAIN_ACK");
     const b=await res.json(),id=b?.workflow_run_id;
@@ -478,14 +581,21 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   // Refuse before any POST if the terminal receipt destination or local
   // custody file cannot be initialized. No new remote write path.
   if(!process.env.RUNNER_TEMP)hold("RUNNER_TEMP_REQUIRED");
-  const scope=admitP6RollingSession(process.env);
+  let env=process.env;
+  if(env.GITHUB_EVENT_NAME==="schedule"){
+   const planned=await prepareP6ScheduledRoot(env);
+   if(!planned.env){console.log(JSON.stringify(planned));process.exit(0);}
+   env=planned.env;
+  }
+  const scope=admitP6RollingSession(env);
   journal=createP6RollingFailureJournal(join(process.env.RUNNER_TEMP,P6_ROLLING_FAILURE_JOURNAL_FILE),scope);
-  const out=await runP6RollingSession(process.env,{emit:e=>{
+  const out=await runP6RollingSession(env,{emit:e=>{
    journal.record(e); // Sync finite attempt/ACK evidence before returning.
    console.log(JSON.stringify(e));
   }});
   writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),JSON.stringify(out),{flag:"wx",mode:0o600});
   console.log(JSON.stringify(out));
+  if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,"receipt_ready=true\n");
  }catch(e){const m=e?.message??"";console.error(/^HOLD_P6_ROLLING_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
  finally{if(journal)journal.close();}
 }

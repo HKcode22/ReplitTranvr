@@ -3,7 +3,8 @@
  * An ACK is never a paid receipt. A no-POST preflight HOLD is not an
  * ambiguous dispatch: expose it without failing the old history guard.
  */
-import {appendFileSync} from "node:fs";
+import {appendFileSync,writeFileSync} from "node:fs";
+import {join} from "node:path";
 const hold=()=>{throw Error("HOLD_P6_PARENT_OUTCOME_INVALID_NO_REPLAY");};
 const rules={
  SOURCE:{
@@ -45,4 +46,36 @@ export function writeP6ParentOutcome(lane,r,env=process.env,append=appendFileSyn
   append(env.GITHUB_OUTPUT,"parent_disposition="+disposition+"\n","utf8");
  }
  return disposition;
+}
+
+export const P6_PARENT_CHILD_CUSTODY_FILES=Object.freeze({SOURCE:"p6-parent-source-custody.json",POST:"p6-parent-post-custody.json"});
+// Only public GitHub run IDs and operational metadata, never request
+// identifiers, packet hashes, provider content, or arbitrary diagnostics.
+export function preserveP6ParentChildCustody(lane,r,env=process.env,write=writeFileSync,now=Date.now){
+ const disposition=classifyP6ParentOutcome(lane,r),file=P6_PARENT_CHILD_CUSTODY_FILES[lane];
+ if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
+  env.GITHUB_REF!=="refs/heads/main"||!["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME)||
+  env.GITHUB_RUN_ATTEMPT!=="1"||!/^\d{5,15}$/.test(env.GITHUB_RUN_ID??"")||!Number.isSafeInteger(Number(env.GITHUB_RUN_ID))||
+  !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
+  typeof env.RUNNER_TEMP!=="string"||!env.RUNNER_TEMP.startsWith("/")||env.RUNNER_TEMP.includes("\n"))hold();
+ const ids=r.acknowledgedGithubRunIds??[];
+ if(!Array.isArray(ids)||ids.length!==r.acknowledgedGithubChildCount||ids.length>rules[lane].cap||
+  new Set(ids).size!==ids.length||ids.some(x=>!Number.isSafeInteger(x)||x<1||x>=1e15||x===Number(env.GITHUB_RUN_ID)))hold();
+ const raw=Buffer.from(JSON.stringify({schema:"v39.phase6.parent-child-custody.v1",parentRunId:Number(env.GITHUB_RUN_ID),
+ reviewedMainSha:env.GITHUB_SHA,lane,disposition,childRunIds:ids,recordedAtUtc:new Date(now()).toISOString(),
+ providerCallsByParent:0,paidGetsCertifiedByParent:0,permitReplay:false,phase6PaidGo:false}));
+ write(join(env.RUNNER_TEMP,file),raw,{flag:"wx",mode:0o600});
+ return disposition;
+}
+
+// Only an explicitly combined rolling-controller dispatch must produce the
+// optional child custody artifact. Native baseline capture must not depend
+// on artifact-upload infrastructure or optional V0102 commissioning.
+export function writeP6ParentOutcomeWithOptionalCustody(lane,r,env=process.env,{write=writeFileSync,append=appendFileSync,now=Date.now}={}){
+ const required=env.P6_PARENT_CHILD_CUSTODY_REQUIRED;
+ if(required==="1"){
+  if(env.GITHUB_EVENT_NAME!=="workflow_dispatch")hold();
+  preserveP6ParentChildCustody(lane,r,env,write,now);
+ }else if(required!==undefined&&required!==""&&required!=="0")hold();
+ return writeP6ParentOutcome(lane,r,env,append);
 }

@@ -104,3 +104,25 @@ export function assessP6RollingCalendarHints(reviewed,clock){
  return {status:live?"REVIEWED_CALENDAR_WAKE_HINT_ONLY_NO_GO":"OUTSIDE_POLICY_NO_IDLE_INFERENCE",
   hints,actualDbClock:false,providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false};
 }
+
+/** Prospective root input from a trusted clock and unchanged reviewed policy.
+ * A scheduler MUST obtain actual PG clock and verify prior closure. No
+ * DB claim, authentication or dispatch here. Never backdate a missed root.
+ */
+export function planP6RollingRootScope(reviewed,dbClockMs){
+ if(!issued.has(reviewed)||!Number.isSafeInteger(dbClockMs)||reviewed.from%1000||reviewed.until%1000||
+    reviewed.until-reviewed.from>1440*HOUR)hold("UNREVIEWED_ROOT_SCOPE");
+ const none=(reason)=>({status:"NO_ROOT_SCOPE_CANDIDATE",reason,permitDispatch:false,phase6PaidGo:false});
+ if(dbClockMs<reviewed.from||dbClockMs>=reviewed.until)return none("OUTSIDE_POLICY");
+ const index=Math.floor((dbClockMs-reviewed.from)/(2*HOUR)),start=reviewed.from+index*2*HOUR,
+  end=Math.min(reviewed.until,start+2*HOUR),epoch=Math.floor(dbClockMs/1000)*1000;
+ // Five minutes headroom above the original 15m admission minimum; a
+ // planning heuristic, not a new runtime gate or actual GitHub SLA.
+ if(end-dbClockMs<20*MIN)return none("INSUFFICIENT_REMAINING_WINDOW");
+ const four=end-epoch>=90*MIN;
+ const deadline=four?end:Math.min(end,epoch+30*MIN);
+ return {status:"PROSPECTIVE_ROOT_SCOPE_METADATA_ONLY",mode:four?"FOUR":"SINGLE",
+  windowIndex:index,windowStartUtc:new Date(start).toISOString(),windowEndUtc:new Date(end).toISOString(),
+  windowEpochUtc:new Date(epoch).toISOString(),windowDeadlineUtc:new Date(deadline).toISOString(),
+  requiresActualDbClockAndIndependentPriorClosure:true,permitDispatch:false,phase6PaidGo:false};
+}

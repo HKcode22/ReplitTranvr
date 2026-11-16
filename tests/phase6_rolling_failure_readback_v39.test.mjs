@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
-import {runP6FailureReadback,admitP6FailureReadback} from "../scripts/v39_phase6_rolling_failure_readback_v39.mjs";
+import {runP6FailureReadback,admitP6FailureReadback,decodeP6FailureArchive} from "../scripts/v39_phase6_rolling_failure_readback_v39.mjs";
 import {P6_ROLLING_ROUTES} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
+import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 const main="a".repeat(40),old="b".repeat(40),epoch="2030-01-01T00:00:00.000Z",deadline="2030-01-01T02:00:00.000Z",
  t1="2030-01-01T00:01:00.000Z",t2="2030-01-01T00:01:01.000Z",t3="2030-01-01T00:02:00.000Z",now=()=>Date.parse(t3);
 const scope={schema:"v39.phase6.rolling-failure-custody.v1",status:"SESSION_SCOPE_NOT_AUTHORIZATION",
@@ -47,6 +52,17 @@ test("malformed, truncated, foreign, duplicate or out-of-order custody files rej
  assert.throws(()=>parseP6RollingFailureCustody(file().subarray(0,-1),{runId:123,mainSha:old}),/FILE_SCOPE/);
  assert.throws(()=>parse([],{...scope,reviewedMainSha:main}),/JOURNAL_SCOPE/);
 });
+function makeArchive(raw,extra=false){
+ const dir=mkdtempSync(join(tmpdir(),"p6-failure-zip-"));
+ try{
+  const name="p6-rolling-failure-custody.jsonl";writeFileSync(join(dir,name),raw);
+  execFileSync("zip",["-q","receipt.zip",name],{cwd:dir});
+  if(extra){writeFileSync(join(dir,"extra.txt"),"extra");execFileSync("zip",["-q","receipt.zip","extra.txt"],{cwd:dir});}
+  return readFileSync(join(dir,"receipt.zip"));
+ }finally{rmSync(dir,{recursive:true,force:true});}
+}
+const bytes=file([attempt("T24"),ack("T24",456),attempt("SOURCE_POST",t3)]),archive=makeArchive(bytes);
+const sha256=b=>"sha256:"+createHash("sha256").update(b).digest("hex");
 function fixture({runPatch={},jobPatch={},artifactPatch={},changeArtifact=false,wrongMain=false}={}){
  const calls=[];let artifactReads=0;
  const fetcher=async(url,opt)=>{
@@ -56,16 +72,16 @@ function fixture({runPatch={},jobPatch={},artifactPatch={},changeArtifact=false,
   else if(url.endsWith("/actions/runs/123"))x={id:123,path:".github/workflows/phase6-rolling-controller-bounded-session.yml",head_sha:old,head_branch:"main",event:"workflow_dispatch",run_attempt:1,status:"completed",conclusion:"failure",created_at:epoch,...runPatch};
   else if(url.includes("/actions/runs/123/jobs?"))x={total_count:1,jobs:[{name:"one-protected-bounded-session",run_id:123,head_sha:old,run_attempt:1,status:"completed",conclusion:"failure",steps:[{name:"Preserve failure-only operational attempt custody (never replay permission)",status:"completed",conclusion:"success"}],...jobPatch}]};
   else if(url.includes("/actions/runs/123/artifacts?")){
-   artifactReads++;x={total_count:1,artifacts:[{id:changeArtifact&&artifactReads===2?99:98,name:"p6-rolling-failure-custody-123",size_in_bytes:888,digest:"sha256:"+"c".repeat(64),expired:false,workflow_run:{id:123},...artifactPatch}]};
+   artifactReads++;x={total_count:1,artifacts:[{id:changeArtifact&&artifactReads===2?99:98,name:"p6-rolling-failure-custody-123",size_in_bytes:archive.length,digest:sha256(archive),expired:false,workflow_run:{id:123},...artifactPatch}]};
   }else if(url.endsWith("/actions/runs/456"))x=worker("T24",456);
   else assert.fail("Unexpected API URL");
   return {ok:true,json:async()=>x};
  };
- return {calls,options:{fetcher,now,readArtifact:async({runId,name})=>{assert.equal(runId,123);assert.equal(name,"p6-rolling-failure-custody-123");return file([attempt("T24"),ack("T24",456),attempt("SOURCE_POST",t3)]);}}};
+ return {calls,options:{fetcher,now,readArchive:async({artifactId})=>{assert.equal(artifactId,98);return archive;}}};
 }
 test("existing heartbeat exact failed-session inspection reads fixed artifact and only known run IDs",async()=>{
  const f=fixture(),out=await runP6FailureReadback(env,f.options);
- assert.equal(out.githubReadRequests,7);assert.equal(f.calls.length,7);assert.equal(out.artifactId,98);assert.equal(out.artifactDownloads,1);
+ assert.equal(out.githubReadRequests,7);assert.equal(f.calls.length,7);assert.equal(out.artifactId,98);assert.equal(out.artifactDownloads,1);assert.equal(out.artifactZipDigestIndependentlyVerified,true);
  assert.equal(out.unknownWorkerAttempts.length,1);assert.equal(out.workers.length,1);assert.equal(out.permitReplay,false);assert.equal(out.phase6PaidGo,false);
  assert(!JSON.stringify(out).includes(env.GITHUB_TOKEN));
 });
@@ -75,4 +91,20 @@ test("no successful parent, wrong code, missing upload, changed artifact, or pro
  }
  for(const p of [{GITHUB_EVENT_NAME:"schedule"},{GITHUB_RUN_ATTEMPT:"2"},{P6_ROLLING_FAILED_RUN_ID:"../x"},{P6_PRIVATE_READER_DATABASE_URL:"forbidden"},{V39_PHASE6_PROCESS_ARMED:"1"},{P6_ROLLING_PREVIEW_APPROVED_MAIN:old}])
   assert.throws(()=>admitP6FailureReadback({...env,...p}),/NOT_EXACT_READONLY_SCOPE/);
+});
+
+test("failed journal requires byte-exact ZIP metadata and a single expected entry",async()=>{
+ assert.deepEqual(decodeP6FailureArchive(archive,{size:archive.length,digest:sha256(archive)}),bytes);
+ const wrong=fixture({artifactPatch:{digest:"sha256:"+"0".repeat(64)}});
+ await assert.rejects(runP6FailureReadback(env,wrong.options),/ARTIFACT_ARCHIVE_INVALID/);
+ const extra=makeArchive(bytes,true);
+ assert.throws(()=>decodeP6FailureArchive(extra,{size:extra.length,digest:sha256(extra)}),/ARTIFACT_ARCHIVE_INVALID/);
+});
+test("failed scheduled root requires actual root identity and exact initial clock; never grants replay",async()=>{
+ const root=fixture({runPatch:{event:"schedule",display_title:"P6 ROLLING SCHEDULED ROOT"}});
+ const out=await runP6FailureReadback(env,root.options);
+ assert.equal(out.permitReplay,false);assert.equal(out.permitNewRoot,false);
+ for(const patch of [{event:"schedule",display_title:"foreign"},{event:"schedule",display_title:"P6 ROLLING SCHEDULED ROOT",created_at:t1}]){
+  await assert.rejects(runP6FailureReadback(env,fixture({runPatch:patch}).options),/FAILED_RUN_(IDENTITY|CLOCK)/);
+ }
 });

@@ -3,14 +3,13 @@
  * the finite sanitized journal; known run GETs cannot certify settlement.
  */
 import {execFileSync} from "node:child_process";
-import {mkdtempSync,readdirSync,lstatSync,readFileSync,rmSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join,resolve} from "node:path";
+import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {P6_ROLLING_CONTROLLER_WORKFLOW,parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
+import {unpackP6ControllerArtifactArchive} from "./v39_phase6_rolling_window_terminal_readback_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const CONFIRM="READONLY_FAILED_ROLLING_CUSTODY_NO_REPLAY_NO_PROVIDER";
-const FILE="p6-rolling-failure-custody.jsonl",JOB="one-protected-bounded-session";
+const JOB="one-protected-bounded-session";
 const STEP="Preserve failure-only operational attempt custody (never replay permission)";
 const hold=s=>{throw Error("HOLD_P6_ROLLING_FAILURE_READBACK_"+s);};
 const code=s=>typeof s==="string"&&/^[a-f0-9]{40}$/.test(s);
@@ -32,21 +31,16 @@ export function admitP6FailureReadback(env){
     typeof env.GITHUB_TOKEN!=="string"||env.GITHUB_TOKEN.length<16)hold("NOT_EXACT_READONLY_SCOPE");
  return {main:env.GITHUB_SHA,failedMain:env.P6_ROLLING_FAILED_MAIN_SHA,runId:Number(env.P6_ROLLING_FAILED_RUN_ID),token:env.GITHUB_TOKEN};
 }
-function download({runId,name,token}){
- const dir=mkdtempSync(join(tmpdir(),"p6-failure-readback-"));
- try{
-  execFileSync("gh",["run","download",String(runId),"--repo",REPO,"--name",name,"--dir",dir],{
-    env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},
-    timeout:30000,stdio:"ignore"});
-  const files=readdirSync(dir),p=join(dir,FILE);
-  if(files.length!==1||files[0]!==FILE)hold("ARTIFACT_FILE");
-  const s=lstatSync(p);
-  if(!s.isFile()||s.size<100||s.size>65536)hold("ARTIFACT_FILE");
-  return readFileSync(p);
- }catch{hold("ARTIFACT_DOWNLOAD_OR_FILE");}
- finally{rmSync(dir,{recursive:true,force:true});}
+function download({artifactId,token}){
+ try{return execFileSync("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+artifactId+"/zip"],{
+  env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},timeout:30000,maxBuffer:262144,stdio:["ignore","pipe","ignore"]});}
+ catch{hold("ARTIFACT_DOWNLOAD");}
 }
-export async function runP6FailureReadback(env,{fetcher=fetch,readArtifact=download,now=Date.now}={}){
+export function decodeP6FailureArchive(bytes,meta){
+ try{return unpackP6ControllerArtifactArchive(bytes,meta,"FAILURE");}
+ catch{hold("ARTIFACT_ARCHIVE_INVALID");}
+}
+export async function runP6FailureReadback(env,{fetcher=fetch,readArchive=download,now=Date.now}={}){
  const a=admitP6FailureReadback(env),started=now();
  if(!Number.isSafeInteger(started))hold("CLOCK");
  let requests=0;
@@ -63,7 +57,8 @@ export async function runP6FailureReadback(env,{fetcher=fetch,readArtifact=downl
  await main();
  const run=await get("/actions/runs/"+a.runId);
  if(run?.id!==a.runId||run.path!==".github/workflows/"+P6_ROLLING_CONTROLLER_WORKFLOW||
-    run.head_sha!==a.failedMain||run.head_branch!=="main"||run.event!=="workflow_dispatch"||
+    run.head_sha!==a.failedMain||run.head_branch!=="main"||
+    !(run.event==="workflow_dispatch"||(run.event==="schedule"&&run.display_title==="P6 ROLLING SCHEDULED ROOT"))||
     run.run_attempt!==1||run.status!=="completed"||!failStates.has(run.conclusion))hold("FAILED_RUN_IDENTITY");
  const jr=await get("/actions/runs/"+a.runId+"/jobs?filter=latest&per_page=100");
  if(!Number.isSafeInteger(jr?.total_count)||jr.total_count<1||jr.total_count>100||
@@ -86,16 +81,18 @@ export async function runP6FailureReadback(env,{fetcher=fetch,readArtifact=downl
   return {id:m[0].id,size:m[0].size_in_bytes,digest:m[0].digest};
  }
  const before=await artifact();
- const bytes=await readArtifact({runId:a.runId,name,token:a.token}),after=await artifact();
+ const archive=await readArchive({artifactId:before.id,token:a.token});
+ const bytes=decodeP6FailureArchive(archive,before),after=await artifact();
  if(before.id!==after.id||before.size!==after.size||before.digest!==after.digest)hold("ARTIFACT_CHANGED");
  const parsed=parseP6RollingFailureCustody(bytes,{runId:a.runId,mainSha:a.failedMain});
  const created=Date.parse(run.created_at);
- if(!Number.isFinite(created)||created<Date.parse(parsed.scope.epochUtc)-1000||
+ if(!Number.isFinite(created)||(run.event==="schedule"&&(parsed.scope.sessionHop!==0||created!==Date.parse(parsed.scope.epochUtc)))||
+    created<Date.parse(parsed.scope.epochUtc)-1000||
     created>=Date.parse(parsed.scope.chainDeadlineUtc))hold("FAILED_RUN_CLOCK");
  const diagnosis=await reconcileP6FailureCustody(parsed,{readRun:id=>get("/actions/runs/"+id)});
  await main();
  return {...diagnosis,reviewedReaderMainSha:a.main,artifactId:before.id,githubReadRequests:requests,
-  artifactDownloads:1,artifactMetadataBound:true,artifactZipDigestIndependentlyVerified:false};
+  artifactDownloads:1,artifactMetadataBound:true,artifactZipDigestIndependentlyVerified:true};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{console.log(JSON.stringify(await runP6FailureReadback(process.env)));}

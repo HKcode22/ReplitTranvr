@@ -7,6 +7,7 @@
 import {Pool,type PoolClient} from "pg";
 import {createHash} from "node:crypto";
 import {afterAll,beforeAll,describe,it,expect} from "vitest";
+import {readP6RestLedgerAccounting} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const enabled=process.env.V39_P5_V0083_NONFIDS_REAL_PG16==="1";
@@ -329,6 +330,25 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
    await client.query("ROLLBACK");client.release();
   }
   expect((await read()).attempts).toBe(4);
+ });
+ it("independently reads actual ledger reservations and per-category counters without certifying absent POST original or bills",async()=>{
+  const c=await admin.connect();
+  try{
+   const out=await readP6RestLedgerAccounting({manifestSha256:manifest,epochUtc:dispatch,chainDeadlineUtc:latest,
+    paidCapableChildRuns:[{parentRunId:12345678911,runId:Number(run),lane:"POST"},{parentRunId:12345678911,runId:12345678912,lane:"SOURCE"}]},c,{expectedActor:"postgres"});
+   expect(out.readOnlyRepeatableRead).toBe(true);
+   expect(out.knownChildReservedUnits).toBe(13);
+   expect(out.children[0].reservationCount).toBe(4);
+   expect(out.children[0].disposition).toBe("MULTIPLE_OR_WRONG_RESERVATION_SCOPE");
+   expect(out.children[1].disposition).toBe("NO_RESERVATION_ROW_FOUND_NOT_BILL_PROOF");
+   expect(out.manifestCategoryAccounting.completeAndConsistent).toBe(true);
+   expect(out.manifestCategoryAccounting.ledgerUnits).toBe(13);
+   expect(out.actualProviderBilledUnitsVerified).toBe(false);
+   expect(out.permitClose).toBe(false);
+   const separate=await readP6RestLedgerAccounting({manifestSha256:manifest,epochUtc:dispatch,chainDeadlineUtc:latest,paidCapableChildRuns:[]},c,{expectedActor:"postgres"});
+   expect(separate.unattributedReservationCountInWindow).toBe(4);
+   expect(separate.knownChildReservedUnits).toBe(0);
+  }finally{c.release();}
  });
 });
 const sourceCats=new Set(["FIDS_BASE_UNITS","FIDS_SPLIT_UNITS"]);

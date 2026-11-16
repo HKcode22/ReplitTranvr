@@ -2,7 +2,7 @@
  * No owner URL, source contents, provider HTTP, release authority or
  * dispatch. Existing B0062 and native worker admission stay mandatory.
  */
-import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce} from "./phase6RollingWindowClaimBridge_v39.mjs";
+import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce,readP6RollingRootPreflight} from "./phase6RollingWindowClaimBridge_v39.mjs";
 const H=/^[a-f0-9]{64}$/,LOGIN=/^phase6_rolling_claim_[a-z0-9_]{5,40}$/;
 const hold=x=>{throw Error("HOLD_P6_ROLLING_RUNTIME_WINDOW_"+x);};
 const keys=["P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL","P6_ROLLING_WINDOW_CUSTODY_APPROVED","P6_ROLLING_WINDOW_AUTHORIZATION_ID","P6_ROLLING_WINDOW_EXPECTED_LOGIN"];
@@ -64,13 +64,24 @@ export function compareP6WindowCustody(a,b){
  Object.keys(a).some(k=>a[k]!==b[k]))hold("CUSTODY_CHANGED");
  return true;
 }
+async function defaultConnect({connection}){
+ const pg=(await import("pg")).default,client=new pg.Client(connection);
+ try{await client.connect();return client;}catch(e){await client.end().catch(()=>{});throw e;}
+}
+export async function readP6RuntimeRootPlan(config,scope,{connect=defaultConnect,readPlan}={}){
+ if(!config)hold("MISSING_CONFIG");
+ let client;
+ try{
+  client=await connect(config);
+  return await readP6RollingRootPreflight({separateOwnerWindowCustodyReviewApproved:true,separateRestrictedWindowCustodyReviewApproved:true,
+   authorizationId:config.authorizationId,configSha256:config.configSha256,expectedClaimantSessionLogin:config.login,
+   trust:scope.trust,policyBytes:scope.policyBytes,expectedPolicySha256:scope.expectedPolicySha256,readPlan},{readbackClient:client});
+ }catch(e){const m=e?.message??"";throw Error(/^HOLD_P6_WINDOW_CLAIM_BRIDGE_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_WINDOW_ROOT_PLAN_DB_READ_REFUSED");}
+ finally{if(client)await Promise.allSettled([client.end()]);}
+}
 export function createP6RuntimeWindowCustody(config,{connect}={}){
  if(!config)hold("MISSING_CONFIG");
  let usedClaim=false;
- const defaultConnect=async({connection})=>{
-  const pg=(await import("pg")).default,client=new pg.Client(connection);
-  try{await client.connect();return client;}catch(e){await client.end().catch(()=>{});throw e;}
- };
  const open=connect??defaultConnect;
  return async ({scope,rootId,kind,readPlan})=>{
   if(!["CLAIM","READ"].includes(kind)||!Number.isSafeInteger(rootId)||rootId<1||

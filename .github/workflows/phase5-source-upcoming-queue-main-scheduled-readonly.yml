@@ -807,6 +807,7 @@ jobs:
       V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ''
       P6_PRIVATE_STORED_SOURCE_DISPATCH_ENTRYPOINT: '1'
       P6_CURRENT_PARENT_DISPATCH_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && 'RUN_CURRENT_SIGNED_SOURCE_PARENT' || '' }}
+      P6_PARENT_CHILD_CUSTODY_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_POST_CYCLE' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1' && '1' || '0' }}
       P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED: ${{ vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED }}
       P6_PRIVATE_SOURCE_REVIEW_MODE: ${{ vars.P6_PRIVATE_SOURCE_REVIEW_MODE }}
       P5_AUTO_SOURCE_DISPATCH_ENABLED: ${{ vars.P5_AUTO_SOURCE_DISPATCH_ENABLED }}
@@ -873,6 +874,14 @@ jobs:
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs
+      - name: Preserve exact SOURCE child ACK custody (no provider content)
+        if: ${{ env.P6_PARENT_CHILD_CUSTODY_REQUIRED == '1' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-parent-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-parent-source-custody.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Parent outcome SAFE_PREFLIGHT_HOLD
         if: ${{ steps.parent_tick_outcome.outputs.parent_disposition == 'SAFE_PREFLIGHT_HOLD' }}
         run: echo 'SAFE_PREFLIGHT_HOLD'
@@ -909,6 +918,7 @@ jobs:
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
       P6_PRIVATE_POST_PARENT_ENTRYPOINT: '1'
       P6_CURRENT_PARENT_DISPATCH_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && 'RUN_CURRENT_SIGNED_POST_PARENT' || '' }}
+      P6_PARENT_CHILD_CUSTODY_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_POST_CYCLE' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1' && '1' || '0' }}
       P6_PRIVATE_POST_PARENT_ENABLED: ${{ vars.P6_PRIVATE_POST_PARENT_ENABLED }}
       P5_POST_AUTO_DISPATCH_ENABLED: ${{ vars.P5_POST_AUTO_DISPATCH_ENABLED }}
       GITHUB_TOKEN: ${{ github.token }}
@@ -971,6 +981,14 @@ jobs:
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase6_stored_post_child_dispatcher_v39.mjs
+      - name: Preserve exact POST child ACK custody (no provider content)
+        if: ${{ env.P6_PARENT_CHILD_CUSTODY_REQUIRED == '1' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-parent-post-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-parent-post-custody.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Parent outcome SAFE_PREFLIGHT_HOLD
         if: ${{ steps.parent_tick_outcome.outputs.parent_disposition == 'SAFE_PREFLIGHT_HOLD' }}
         run: echo 'SAFE_PREFLIGHT_HOLD'

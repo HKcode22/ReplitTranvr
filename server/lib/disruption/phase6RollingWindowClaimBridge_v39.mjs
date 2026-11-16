@@ -4,7 +4,7 @@
  * No provider, workflow dispatch, production installation or closure here.
  */
 import {createHash} from "node:crypto";
-import {loadP6RollingCalendarHints} from "./phase6RollingCalendarHints_v39.mjs";
+import {loadP6RollingCalendarHints,planP6RollingRootScope} from "./phase6RollingCalendarHints_v39.mjs";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const hold=s=>{throw Error("HOLD_P6_WINDOW_CLAIM_BRIDGE_"+s);};
 const clock=x=>{
@@ -12,16 +12,29 @@ const clock=x=>{
  const n=new Date(x).getTime();if(!Number.isSafeInteger(n))hold("CLOCK");return n;
 };
 const stamp=n=>new Date(n).toISOString(),hash=s=>createHash("sha256").update(s).digest("hex");
-function exactScope(input){
+function exactPolicy(input){
  if(!input||input.separateOwnerWindowCustodyReviewApproved!==true||
    typeof input.authorizationId!=="string"||input.authorizationId.length<1||input.authorizationId.length>128||
-   !Number.isSafeInteger(input.rootRunId)||input.rootRunId<1||input.rootRunId>=1e15||
    !H.test(input.configSha256??"")||!C.test(input.trust?.reviewedCodeSha??"")||
    !["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>H.test(input.trust?.[k]??""))||
    !H.test(input.expectedPolicySha256??"")||!Buffer.isBuffer(input.policyBytes))hold("REVIEWED_SCOPE");
  const sessionLogin=input.expectedClaimantSessionLogin??null;
  if(sessionLogin!==null&&(!/^phase6_rolling_claim_[a-z0-9_]{5,40}$/.test(sessionLogin)||
    input.separateRestrictedWindowCustodyReviewApproved!==true))hold("RESTRICTED_REVIEW_SCOPE");
+ const trust={reviewedCodeSha:input.trust.reviewedCodeSha,manifestSha256:input.trust.manifestSha256,
+  calendarSha256:input.trust.calendarSha256,releaseSha256:input.trust.releaseSha256,rightsSha256:input.trust.rightsSha256};
+ // Independently read/hash the exact existing signed 31-day plan policy.
+ // No user-supplied replacement epoch, deadline or calendar bytes.
+ const calendar=loadP6RollingCalendarHints({policyBytes:input.policyBytes,expectedPolicySha256:input.expectedPolicySha256,
+  trust,read:input.readPlan});
+ if(calendar.from%1000||calendar.until%1000||calendar.until-calendar.from>1440*3600000)hold("POLICY_WINDOW_GEOMETRY");
+ const commitment=hash(JSON.stringify({policySha256:input.expectedPolicySha256,...trust}));
+ return {trust,calendar,commitment,authorizationId:input.authorizationId,
+  configSha256:input.configSha256,policySha256:input.expectedPolicySha256,sessionLogin};
+}
+function exactScope(input){
+ const a=exactPolicy(input),sessionLogin=a.sessionLogin;
+ if(!Number.isSafeInteger(input.rootRunId)||input.rootRunId<1||input.rootRunId>=1e15)hold("REVIEWED_SCOPE");
  let chain=null;
  if(sessionLogin!==null){
   const epoch=clock(input.sessionEpochUtc),deadline=clock(input.chainDeadlineUtc),mode=input.chainMode;
@@ -31,16 +44,7 @@ function exactScope(input){
    hold("EXACT_CHAIN_CLOCK_SCOPE");
   chain={epoch,deadline,mode};
  }
- const trust={reviewedCodeSha:input.trust.reviewedCodeSha,manifestSha256:input.trust.manifestSha256,
-  calendarSha256:input.trust.calendarSha256,releaseSha256:input.trust.releaseSha256,rightsSha256:input.trust.rightsSha256};
- // Independently read/hash the exact existing signed 31-day plan policy.
- // No user-supplied replacement epoch, deadline or calendar bytes.
- const calendar=loadP6RollingCalendarHints({policyBytes:input.policyBytes,expectedPolicySha256:input.expectedPolicySha256,
-  trust,read:input.readPlan});
- if(calendar.from%1000||calendar.until%1000||calendar.until-calendar.from>1440*3600000)hold("POLICY_WINDOW_GEOMETRY");
- const commitment=hash(JSON.stringify({policySha256:input.expectedPolicySha256,...trust}));
- return {trust,calendar,commitment,rootRunId:input.rootRunId,authorizationId:input.authorizationId,
-  configSha256:input.configSha256,policySha256:input.expectedPolicySha256,sessionLogin,chain};
+ return {...a,rootRunId:input.rootRunId,chain};
 }
 async function identity(client,readOnly,scope){
  const q=await client.query(`SELECT current_database() db,current_user actor,session_user session_actor,
@@ -58,6 +62,7 @@ async function identity(client,readOnly,scope){
    pg_has_role(current_user,'phase6_rolling_window_claimant_v39','USAGE') member_usage,
    has_function_privilege(current_user,'clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)','EXECUTE') claim_ok,
    has_function_privilege(current_user,'clean.phase6_read_bound_rolling_window_v39(bigint,text)','EXECUTE') read_ok,
+   has_function_privilege(current_user,'clean.phase6_plan_bound_rolling_root_v39(text,text,text,text,text,text,timestamptz,timestamptz)','EXECUTE') plan_ok,
    has_schema_privilege(current_user,'clean','CREATE') schema_create,
    has_table_privilege(current_user,'clean.phase6_rolling_window_custody_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') custody_access,
    has_table_privilege(current_user,'clean.phase6_rolling_policy_binding_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') policy_access,
@@ -67,7 +72,7 @@ async function identity(client,readOnly,scope){
    EXISTS(SELECT 1 FROM pg_roles WHERE rolname=current_user AND rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
      AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls) login_scoped`);
   const v=acl.rows?.[0];
-  if(acl.rowCount!==1||!["member_usage","claim_ok","read_ok","login_scoped"].every(k=>v?.[k]===true)||
+  if(acl.rowCount!==1||!["member_usage","claim_ok","read_ok","plan_ok","login_scoped"].every(k=>v?.[k]===true)||
     !["schema_create","custody_access","policy_access","authorization_access","close_access","owner_claim_access"].every(k=>v?.[k]===false))
    hold("RESTRICTED_ACL_DRIFT");
  }
@@ -185,5 +190,35 @@ export async function readP6KnownRollingWindowOnce(input,{readbackClient}={}){
    policyCommitment:a.commitment,reviewedMainSha:a.trust.reviewedCodeSha,actualDbClock:true,
    restrictedFunctionOnly:true,providerCalls:0,flightWrites:0,operationalCustodyWrites:0,dispatchCount:0,
    permitDispatch:false,phase6PaidGo:false};
+ }catch(e){if(opened)await rollback(readbackClient);throw e;}
+}
+
+/** Actual restricted read-only DB-clock planning. No claim or new-root
+ * permission. A later root MUST perform the existing atomic claim/readback
+ * and original worker settlement/authorization checks. No retry of a
+ * previous controller or use of a fabricated root ID.
+ */
+export async function readP6RollingRootPreflight(input,{readbackClient}={}){
+ const a=exactPolicy(input);
+ if(a.sessionLogin===null||input.rootRunId!==undefined||input.sessionEpochUtc!==undefined||
+   input.chainDeadlineUtc!==undefined||!readbackClient||typeof readbackClient.query!=="function")
+  hold("RESTRICTED_ROOT_PLANNING_READ_ONLY_REQUIRED");
+ let opened=false;
+ try{
+  await readbackClient.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");opened=true;
+  const ident=await identity(readbackClient,true,a),p=a.trust;
+  const q=await readbackClient.query("SELECT observed_at_utc,disposition FROM clean.phase6_plan_bound_rolling_root_v39($1,$2,$3,$4,$5,$6,$7,$8)",
+   [a.authorizationId,p.manifestSha256,p.calendarSha256,a.configSha256,p.reviewedCodeSha,a.policySha256,stamp(a.calendar.from),stamp(a.calendar.until)]);
+  const row=q.rows?.[0],observed=clock(row?.observed_at_utc);
+  if(q.rowCount!==1||observed<ident.dbClock||observed-ident.dbClock>15000||
+   !["AUTHORIZATION_HOLD","OUTSIDE_POLICY","IMMUTABLE_STUDY_SCOPE_DRIFT","PRIOR_ROOT_UNRESOLVED",
+    "WINDOW_ALREADY_OWNED_OR_OVERLAP","CURRENT_WINDOW_UNCLAIMED_METADATA_ONLY"].includes(row.disposition))
+   hold("ROOT_PREFLIGHT_READBACK");
+  const scope=row.disposition==="CURRENT_WINDOW_UNCLAIMED_METADATA_ONLY"?planP6RollingRootScope(a.calendar,observed):
+   {status:"NO_ROOT_SCOPE_CANDIDATE",reason:row.disposition,permitDispatch:false,phase6PaidGo:false};
+  await readbackClient.query("COMMIT");opened=false;
+  return {...scope,observedAtDbUtc:stamp(observed),reviewedMainSha:p.reviewedCodeSha,policyCommitment:a.commitment,
+   actualDbClock:true,restrictedReadOnly:true,priorRecordedClosureChecked:true,independentProviderSettlementVerified:false,
+   providerCalls:0,databaseWrites:0,dispatchCount:0,permitDispatch:false,permitClose:false,phase6PaidGo:false};
  }catch(e){if(opened)await rollback(readbackClient);throw e;}
 }

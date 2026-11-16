@@ -24,6 +24,21 @@ describe("Phase6 release metadata inventory no GO",()=>{
   expect(JSON.stringify(a)).not.toContain("DO_NOT_PRINT");
   expect(a).toMatchObject({secretValuesRead:false,githubMutations:0,providerCalls:0,phase6PaidGo:false});
  });
+ it("separates first calendar and later cost stage secret names without demanding paid or optional controller variables",()=>{
+  const a=summarizeInventory({readWorkflow:(x:string)=>readFileSync(".github/workflows/"+x,"utf8"),head:"a".repeat(40),
+   secretNames:["P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL","V39_PHASE6_PROCESS_ARMED"],variables:[]});
+  expect(a.initialInertStageConfiguration.status).toBe("EXACT_CURRENT_STAGE_SECRET_NAME_MAP_NOT_APPROVAL");
+  expect(a.initialInertStageConfiguration.modes?.[0]).toMatchObject({mode:"calendar",requiredRepositorySecretNameReferences:7,
+   presentRepositorySecretNames:["P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","V39_PHASE6_PROCESS_ARMED"]});
+  expect(a.initialInertStageConfiguration.modes?.[1]).toMatchObject({mode:"cost",requiredRepositorySecretNameReferences:10});
+  expect(a.initialInertStageConfiguration.modes?.[0].absentRepositorySecretNames).not.toContain("V39_PHASE5_SOURCE_RIGHTS_APPROVED");
+  expect(a.initialInertStageConfiguration.modes?.[0].presentRepositorySecretNames).not.toContain("P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL");
+  expect(JSON.stringify(a.initialInertStageConfiguration)).not.toContain("AERODATABOX_API_KEY");
+  expect(a.initialInertStageConfiguration.phase6PaidGo).toBe(false);
+  const drift=summarizeInventory({readWorkflow:(x:string)=>readFileSync(".github/workflows/"+x,"utf8").replace("secrets.P6_INERT_CALENDAR_REVIEW_APPROVED","secrets.CI_DIFFERENT_NAME"),
+   head:"a".repeat(40),secretNames:[],variables:[]});
+  expect(drift.initialInertStageConfiguration.status).toBe("STAGE_NAME_MAP_DRIFT_REVIEW_YAML");
+ });
  it("refuses a changed job layout instead of certifying an incomplete inventory",()=>{
   expect(()=>summarizeInventory({readWorkflow:()=>"",head:"a".repeat(40),secretNames:[],variables:[]})).toThrow("HOLD_P6_INVENTORY_JOB_CHANGED");
   expect(Object.keys(intended).some(x=>Object.hasOwn(legacy,x))).toBe(false);

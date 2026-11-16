@@ -4,6 +4,7 @@
  * I/O adapters must authenticate the exact run/receipt artifact from GitHub.
  */
 import {createHash} from "node:crypto";
+import {verifyP6ParentChildCustody} from "./phase6RollingChildCustody_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "./phase6RollingGithubController_v39.mjs";
 const WF=".github/workflows/phase6-rolling-controller-bounded-session.yml";
 const JOB="one-protected-bounded-session";
@@ -31,10 +32,10 @@ function jobsExact(jobs,run,required){
   }
  }
 }
-function exactRun(row,id,path,sha,from,to,clock){
+function exactRun(row,id,path,sha,from,to,clock,event="workflow_dispatch"){
  const created=Date.parse(row?.created_at);
  if(row?.id!==id||row.path!==path||row.head_sha!==sha||row.head_branch!=="main"||
-    row.event!=="workflow_dispatch"||row.run_attempt!==1||row.status!=="completed"||row.conclusion!=="success"||
+    row.event!==event||row.run_attempt!==1||row.status!=="completed"||row.conclusion!=="success"||
     !Number.isFinite(created)||created<from-1000||created>=to||created>clock+5000)HOLD("RUN_IDENTITY_OR_NOT_SUCCESS");
  return created;
 }
@@ -48,7 +49,7 @@ function entries(xs){
  }
  return m;
 }
-export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,readJobs,readReceipt,listControllers,now=Date.now}={}){
+export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,readJobs,readReceipt,listControllers,readParentArtifact,now=Date.now}={}){
  if(!expected||!ID(expected.rootRunId)||!C.test(expected.reviewedMainSha??"")||!H.test(expected.policyCommitment??"")||
     !["SINGLE","FOUR"].includes(expected.mode)||[readRun,readJobs,readReceipt,listControllers].some(x=>typeof x!=="function"))
   HOLD("EXPECTED_SCOPE");
@@ -58,14 +59,18 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
     (max===1?deadline-epoch>30*60000:deadline-epoch<90*60000||deadline-epoch>120*60000)||clock<epoch)
   HOLD("EXPECTED_CLOCK");
  const runIds=[],controllerRows=new Map(),receipts=[],all=new Map(),retired=new Set();
+ let scheduledRoot=null;
  let parent=0,id=expected.rootRunId,prior=null,priorTerminal=new Map(),priorPending=new Map(),priorHistoryEpoch=epoch,recordedWindowCustody=null;
  for(let hop=0;hop<max;hop++){
   if(runIds.includes(id)||all.has(id))HOLD("DUPLICATE_CONTROLLER");
-  const run=await readRun(id),created=exactRun(run,id,WF,sha,epoch,deadline,clock);
-  if(max===4?run.display_title!=="P6 ROLLING CHAIN "+hop+" "+parent:
+  const run=await readRun(id);
+  if(hop===0&&run?.event==="schedule")scheduledRoot=id;
+  const created=exactRun(run,id,WF,sha,epoch,deadline,clock,id===scheduledRoot?"schedule":"workflow_dispatch");
+  if(id===scheduledRoot?(run.display_title!=="P6 ROLLING SCHEDULED ROOT"||created!==epoch):
+     max===4?run.display_title!=="P6 ROLLING CHAIN "+hop+" "+parent:
      run.display_title!=="Phase6 initial bounded rolling controller session (STOP default)")HOLD("CHAIN_TITLE");
   if(created<epoch||(prior&&created<utc(prior.nextDispatchAtUtc)-1000))HOLD("SUCCESSOR_CLOCK");
-  controllerRows.set(id,{createdAt:run.created_at,title:run.display_title});
+  controllerRows.set(id,{createdAt:run.created_at,title:run.display_title,event:run.event});
   jobsExact(await readJobs(id),run,[{name:JOB,steps:STEPS}]);
   const artifact=await readReceipt(id);
   if(!artifact||!ID(artifact.artifactId)||artifact.name!=="p6-rolling-terminal-"+id||
@@ -75,6 +80,7 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
   const d=utc(x.deadlineUtc);
   if(x.schema!=="v39.phase6.bounded-rolling-session.v1"||x.runId!==id||x.parentRunId!==parent||x.sessionHop!==hop||
     x.reviewedMainSha!==sha||x.policyCommitment!==expected.policyCommitment||x.epochUtc!==expected.epochUtc||
+    (x.scheduledRootRunId??null)!==scheduledRoot||(scheduledRoot&&!x.windowCustody)||
     x.chainDeadlineUtc!==expected.chainDeadlineUtc||d>deadline||d<=created||d-created>35*60000||
     (hop===0&&d!==Math.min(deadline,epoch+30*60000))||
     x.unknownAttempts!==0||x.providerCalls!==0||x.databaseWrites!==(hop===0&&x.windowCustody!==undefined?1:0)||x.phase6PaidGo!==false||
@@ -146,11 +152,12 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
   if(x.status!==final||x.successorDispatches!==0||x.nextRunId!==null||x.nextDispatchAtUtc!==undefined||pending.size!==0)
    HOLD("FINAL_NOT_DRAINED");
   // No extra controller root/successor may disappear outside this chain.
-  const listed=await listControllers({fromUtc:expected.epochUtc,untilUtc:expected.chainDeadlineUtc});
+  const listed=await listControllers({fromUtc:expected.epochUtc,untilUtc:expected.chainDeadlineUtc,scheduledRootRunId:scheduledRoot});
   if(!Array.isArray(listed)||listed.length!==runIds.length||new Set(listed.map(y=>y?.id)).size!==runIds.length||
-     listed.some(y=>!runIds.includes(y.id)||y.path!==WF||y.head_sha!==sha||y.event!=="workflow_dispatch"||
+     listed.some(y=>!runIds.includes(y.id)||y.path!==WF||y.head_sha!==sha||y.event!==controllerRows.get(y.id)?.event||
        y.head_branch!=="main"||y.run_attempt!==1||y.status!=="completed"||y.conclusion!=="success"||
        y.created_at!==controllerRows.get(y.id)?.createdAt||y.display_title!==controllerRows.get(y.id)?.title))HOLD("CONTROLLER_CHAIN_HISTORY");
+  const childRuns=[],parentChildReceipts=[],childIds=new Set();
   for(const item of all.values()){
    if(runIds.includes(item.runId))HOLD("WORKER_CONTROLLER_ID_COLLISION");
    const route=ROUTES.get(item.lane),worker=await readRun(item.runId),sent=utc(item.sentAtUtc);
@@ -160,13 +167,20 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
    const outcome=assessP6RollingRoute(route,{complete:true,workflow:route.workflow,runs:[worker],active:[],jobRunId:item.runId,jobs},
     {sha,epoch:Math.min(createdAt,sent),clock});
    if(outcome.state.startsWith("HOLD_")||outcome.state==="ACTIVE_NO_OVERLAP")HOLD("WORKER_JOB_EVIDENCE");
+   if(item.lane==="SOURCE_POST"){
+    if(typeof readParentArtifact!=="function")HOLD("MISSING_PARENT_CHILD_READER");
+    const expanded=await verifyP6ParentChildCustody({parent:worker,parentJobs:jobs,sha,clock,readArtifact:readParentArtifact,readRun,readJobs});
+    parentChildReceipts.push(...expanded.receipts);
+    for(const c of expanded.children){if(all.has(c.runId)||runIds.includes(c.runId)||childIds.has(c.runId))HOLD("DUPLICATE_OR_FOREIGN_CHILD");childIds.add(c.runId);childRuns.push(c);}
+   }
   }
   return {status:"INDEPENDENT_WINDOW_OPERATIONAL_CHAIN_VERIFIED_NOT_SETTLEMENT_NOT_GO",
    rootRunId:expected.rootRunId,terminalRunId:id,reviewedMainSha:sha,policyCommitment:expected.policyCommitment,
    windowStartUtc:expected.windowStartUtc,windowEndUtc:expected.windowEndUtc,epochUtc:expected.epochUtc,chainDeadlineUtc:expected.chainDeadlineUtc,
    controllerRunIds:runIds,uniqueWorkerAcknowledgements:all.size,independentlyVerifiedWorkerJobs:all.size,
    retiredWorkerAcknowledgements:retired.size,receiptArtifacts:receipts,terminalReceiptSha256:receipts.at(-1).receiptSha256,
-   completeOperationalChainVerified:true,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
+   completeOperationalChainVerified:true,controllerOwnedChildJobsVerified:true,paidCapableChildRuns:childRuns,parentChildReceipts,
+   independentlyVerifiedPaidCapableChildJobs:childRuns.length,independentScheduledOrManualChildrenCovered:false,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
    ...(recordedWindowCustody?{recordedWindowCustody,actualDbOwnershipVerified:false}:{}),
    providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false};
  }

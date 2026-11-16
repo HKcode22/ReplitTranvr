@@ -3,7 +3,7 @@
  * one-GET child. Never a provider client or DB writer. Original paid
  * admission, atomic V0079/V0080/V0082 reservation and STOP remain in child.
  */
-import {writeP6ParentOutcome} from "../server/lib/disruption/phase6RollingParentOutcome_v39.mjs";
+import {writeP6ParentOutcomeWithOptionalCustody} from "../server/lib/disruption/phase6RollingParentOutcome_v39.mjs";
 import {runP6RealPrivateSourceParentReadOnly}
  from "./v39_phase6_private_source_parent_readonly_v39.mjs";
 import {readP5CompleteGithubWorkflowHistory,readP5CompleteCurrentParentHistory}
@@ -188,5 +188,5 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   unavailableSelectedDayCount:unavailableDays,unavailableSelectedDueQueryCount:unavailableQueries});
 }
 if(process.env.P6_PRIVATE_STORED_SOURCE_DISPATCH_ENTRYPOINT==="1")
- runP6StoredSourceDispatcher(process.env).then(out=>{writeP6ParentOutcome("SOURCE",out);console.log(JSON.stringify(out));})
+ runP6StoredSourceDispatcher(process.env).then(out=>{writeP6ParentOutcomeWithOptionalCustody("SOURCE",out);console.log(JSON.stringify(out));})
  .catch(()=>{console.error("HOLD_P6_STORED_SOURCE_DISPATCH_UNKNOWN_OR_RELEASE_NO_REPLAY");process.exitCode=2;});
