@@ -3,6 +3,10 @@
  * no raw response/header output. No automatic expiry or production activation.
  */
 import {pathToFileURL} from "node:url";
+import {writeFileSync} from "node:fs";
+import {join} from "node:path";
+export const P5_EXPIRY_VERIFY_ARTIFACT_FILE="p5-published-expiry-verify-receipt.json";
+export const P5_EXPIRY_VERIFY_WORKFLOW="phase5-published-expiry-transport-verify-only.yml";
 const ORIGIN="https://replit-tranvr--hk84164.replit.app";
 const HEALTH=ORIGIN+"/__v39/workspace-runtime";
 const ENDPOINT=ORIGIN+"/__v39/phase5/recurring-expiry";
@@ -23,7 +27,7 @@ export function admitExpiryReceiverVerify(env){
   HOLD("ADMISSION");
  return {source,token};
 }
-async function readBoundedJson(response){
+export async function readBoundedJson(response){
  if(!response||response.status!==200||response.redirected||!response.body||
     !/^application\/json(?:;|$)/i.test(response.headers.get("content-type")??""))HOLD("HTTP_OR_CONTENT_HOLD");
  const declared=response.headers.get("content-length");
@@ -40,7 +44,7 @@ async function readBoundedJson(response){
  }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
  try{return JSON.parse(Buffer.concat(parts).toString("utf8"));}catch{HOLD("JSON");}
 }
-function verifyPublicIdentity(h,source){
+export function verifyPublicIdentity(h,source){
  if(h?.schema!=="v39.phase2f-workspace-runtime.v1"||h?.status!=="PASS"||h?.git_head!==source||
     h?.prepaid_route_registered!==true||h?.provider_mutation!==false||
     h?.runtime_owner_mode!=="replit-published-deployment"||h?.managed_replit_workflow!==false||
@@ -73,10 +77,45 @@ export async function verifyExpiryReceiverOnce(config,fetchImpl=fetch){
  return {status:"P5_PUBLISHED_EXPIRY_VERIFY_ONLY_PASS",reviewedSourceSha:config.source,
   verification:expected,actualHttpsRequests:2,providerCalls:0,objectDeletions:0,databaseWrites:0,phase6PaidGo:false};
 }
+// Only aggregate operational evidence, never provider content, credentials
+// or a claim of independent IAM/backup compliance.
+export function buildP5ExpiryVerificationArtifact(result,{source,mainSha,runId,verifiedAtUtc}){
+ const expected={status:"P5_PUBLISHED_EXPIRY_VERIFY_ONLY_PASS",reviewedSourceSha:source,
+  verification:{...RECEIPT,reviewedSourceSha:source},actualHttpsRequests:2,
+  providerCalls:0,objectDeletions:0,databaseWrites:0,phase6PaidGo:false};
+ if(!SHA.test(source??"")||!SHA.test(mainSha??"")||!Number.isSafeInteger(runId)||runId<1||
+    typeof verifiedAtUtc!=="string"||!Number.isFinite(Date.parse(verifiedAtUtc))||
+    new Date(verifiedAtUtc).toISOString()!==verifiedAtUtc||
+    !result||typeof result!=="object"||Array.isArray(result)||
+    Object.keys(result).length!==Object.keys(expected).length||
+    Object.entries(expected).some(([k,x])=>k!=="verification"&&result[k]!==x)||
+    !result.verification||Array.isArray(result.verification)||
+    Object.keys(result.verification).length!==Object.keys(expected.verification).length||
+    Object.entries(expected.verification).some(([k,x])=>result.verification[k]!==x))
+  HOLD("ARTIFACT_RECEIPT");
+ return {schema:"v39.phase5.published-expiry-verify-receipt.v1",runId,reviewedMainSha:mainSha,
+  reviewedSourceSha:source,verifiedAtUtc,verification:expected};
+}
+export function checkP5ExpiryVerificationArtifact(artifact,scope){
+ if(!artifact||typeof artifact!=="object"||Array.isArray(artifact)||
+    Object.keys(artifact).sort().join(",")!=="reviewedMainSha,reviewedSourceSha,runId,schema,verification,verifiedAtUtc"||
+    artifact.schema!=="v39.phase5.published-expiry-verify-receipt.v1"||
+    artifact.reviewedMainSha!==scope.mainSha||artifact.reviewedSourceSha!==scope.source||artifact.runId!==scope.runId)
+  HOLD("ARTIFACT_IDENTITY");
+ const proof=buildP5ExpiryVerificationArtifact(artifact.verification,{...scope,verifiedAtUtc:artifact.verifiedAtUtc});
+ return proof;
+}
 async function main(){
  try{
   if(process.argv.length!==2)HOLD("NO_ARGUMENTS");
-  console.log(JSON.stringify(await verifyExpiryReceiverOnce(admitExpiryReceiverVerify(process.env))));
+  const scope=admitExpiryReceiverVerify(process.env),runId=Number(process.env.GITHUB_RUN_ID);
+  if(!/^[1-9][0-9]{0,14}$/.test(process.env.GITHUB_RUN_ID??"")||
+     !Number.isSafeInteger(runId)||!process.env.RUNNER_TEMP)HOLD("ARTIFACT_RUN_ID");
+  const result=await verifyExpiryReceiverOnce(scope);
+  const artifact=buildP5ExpiryVerificationArtifact(result,{source:scope.source,
+   mainSha:process.env.GITHUB_SHA,runId,verifiedAtUtc:new Date().toISOString()});
+  writeFileSync(join(process.env.RUNNER_TEMP,P5_EXPIRY_VERIFY_ARTIFACT_FILE),JSON.stringify(artifact),{flag:"wx",mode:0o600});
+  console.log(JSON.stringify(result));
  }catch(error){
   const message=error instanceof Error?error.message:"";
   console.error(/^HOLD_P5_EXPIRY_RECEIVER_VERIFY_[A-Z0-9_]+$/.test(message)?message:"HOLD_P5_EXPIRY_RECEIVER_VERIFY_UNKNOWN_NO_RETRY");
