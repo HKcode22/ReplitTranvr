@@ -32,6 +32,7 @@ on:
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
       - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
+      - 'server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs'
       - 'tests/phase6_rolling_session_ack_ledger_v39.test.mjs'
       - 'tests/phase6_bounded_rolling_session_v39.test.mjs'
 permissions:
