@@ -35,6 +35,7 @@ function mockDb(opts:{
   wrongCalendar?:boolean; beforeNow?:string;
   partial?:boolean; failAfterInsert?:boolean;
   expireAtCommit?:boolean; mutableReadback?:boolean;
+  frameRows?:typeof frame; midARegion?:string;
 }={}){
  const queries:string[]=[];
  const initial:Row[]=opts.partial ? [{
@@ -68,7 +69,7 @@ function mockDb(opts:{
        date_utc:new Date("2026-11-10T00:00:00Z"),
        frozen_draw_seed:"early-owner-test-seed",
        draw_type:"NEW_TEMPLATE",anchor_icao:"WSSS",
-       slot_regions:{HUB:"ASIA",MID_A:"MIDDLE_EAST",
+       slot_regions:{HUB:"ASIA",MID_A:opts.midARegion??"MIDDLE_EAST",
          MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"},
        pair_airport_set:null,
        calendar_hash:opts.wrongCalendar?H("e"):pins.expectedCalendarHash,
@@ -91,7 +92,7 @@ function mockDb(opts:{
    if(sql.includes("FROM clean.adb_airport_sampling_state") && sql.includes("FOR UPDATE"))
      return {rowCount:0,rows:[]};
    if(sql.includes("FROM clean.adb_sampling_frame f"))
-     return {rowCount:frame.length,rows:frame};
+     return {rowCount:(opts.frameRows??frame).length,rows:opts.frameRows??frame};
    if(sql.includes("INSERT INTO clean.adb_sampling_draw")){
      if(opts.failAfterInsert && txDraws.length===1)throw Error("SIMULATED_DB_WRITE_FAILURE");
      txDraws.push({
@@ -133,6 +134,27 @@ describe("Phase5 early adaptive DB owner (mock transaction, no provider)",()=>{
   expect(m.queries[0]).toBe("BEGIN ISOLATION LEVEL SERIALIZABLE");
   expect(m.queries.some(s=>s.includes("pg_advisory_xact_lock"))).toBe(true);
   expect(m.getClockReads()).toBe(2);
+ });
+ it("excludes only documented KTEB scope before an ordinary North America MID choice",async()=>{
+  const template=frame[1];
+  const kteb={...template,icao:"KTEB",region:"NORTH_AMERICA"};
+  const kbuf={...template,icao:"KBUF",region:"NORTH_AMERICA",
+    last_direct_observation_at:"2026-11-01T00:00:00.000Z"} as unknown as typeof template;
+  const m=mockDb({frameRows:[frame[0],kteb,kbuf,frame[2],frame[3]],
+    midARegion:"NORTH_AMERICA"});
+  const r=await commitEarlyPhase5Draw(m.pool,pins);
+  expect(r.status).toBe("EARLY_DRAW_COMMITTED");
+  expect(m.db.draws.map(x=>x.selected_icao)).toEqual(["WSSS","KBUF","SKBO","KGPT"]);
+  expect(m.db.updates.some(x=>x.icao==="KTEB")).toBe(false);
+ });
+ it("does not relax region or silently draw excluded KTEB if no eligible MID remains",async()=>{
+  const kteb={...frame[1],icao:"KTEB",region:"NORTH_AMERICA"};
+  const m=mockDb({frameRows:[frame[0],kteb,frame[2],frame[3]],
+    midARegion:"NORTH_AMERICA"});
+  await expect(commitEarlyPhase5Draw(m.pool,pins)).rejects.toThrow("REFUSED_CELL_EMPTY");
+  expect(m.db.draws).toHaveLength(0);
+  expect(m.db.updates).toHaveLength(0);
+  expect(m.queries).toContain("ROLLBACK");
  });
  it("idempotently readbacks earlier draw instead of updating selection or adaptive state",async()=>{
   const m=mockDb();
