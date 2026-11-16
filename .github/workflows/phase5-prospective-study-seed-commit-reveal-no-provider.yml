@@ -113,3 +113,78 @@ jobs:
           path: ${{ runner.temp }}/calendar-preview.json
           retention-days: 7
           if-no-files-found: error
+
+
+  preserve-exact-original-archives-once:
+    # PR-only maintenance on one named branch. Do not merge this job.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'HKcode22/ReplitTranvr' && github.head_ref == 'phase5/preserve-original-seed-archives-20261115'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independently preserve original two metadata ZIPs and raw-byte identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          umask 077
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = pull_request
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT$V39_PHASE6_PROCESS_ARMED$V39_PHASE6_OWNER_APPROVED" = 000
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          repo=HKcode22/ReplitTranvr
+          run=43700154416
+          out="$RUNNER_TEMP/original-seed-archive-custody"
+          mkdir -m 700 "$out"
+          gh api --method GET "repos/$repo/actions/runs/$run" > "$out/run.tmp"
+          jq -e --argjson id "$run" '
+           .id==$id and .head_sha=="09b80926caae24ba07a1f8a20c819090d8f2528c"
+           and .head_branch=="main" and .event=="workflow_dispatch" and .run_attempt==1
+           and .status=="completed" and .conclusion=="success"
+           and .path==".github/workflows/phase5-prospective-study-seed-commit-reveal-no-provider.yml"' "$out/run.tmp" >/dev/null
+          read_meta() {
+            gh api --method GET "repos/$repo/actions/runs/$run/artifacts?per_page=100" |
+            jq -ce '. as $r | select(.total_count==2 and (.artifacts|length)==2) |
+             [.artifacts[] | {id,name,size_in_bytes,digest,expired,created_at,expires_at}] | sort_by(.id)'
+          }
+          read_meta > "$out/before.tmp"
+          get_exact() {
+            local id="$1" name="$2" size="$3" digest="$4" member="$5" archive="$6"
+            jq -e --argjson id "$id" --arg name "$name" --argjson size "$size" --arg digest "sha256:$digest" '
+              any(.[]; .id==$id and .name==$name and .size_in_bytes==$size and .digest==$digest and .expired==false)
+            ' "$out/before.tmp" >/dev/null
+            gh api --method GET "repos/$repo/actions/artifacts/$id/zip" > "$out/$archive"
+            test "$(wc -c < "$out/$archive" | tr -d ' ')" = "$size"
+            printf '%s  %s\n' "$digest" "$out/$archive" | sha256sum -c --status
+            test "$(unzip -Z1 "$out/$archive")" = "$member"
+            unzip -p "$out/$archive" "$member" > "$out/$member.tmp"
+            test "$(wc -c < "$out/$member.tmp")" -lt 1000000
+          }
+          get_exact 14156097406 prospective-study-seed-reveal 2072 aa2351ad8cd555659998c5cb7069af369c2be216bb1d603cee63528a9c2dba10 study-seeds.json original-seed-reveal.zip
+          get_exact 14156057606 prospective-31-day-calendar-preview 7099 5ce750b9badad3135fac09c5efceb863e99a3249dbb4f00d23ae2cae37f8f396 calendar-preview.json original-calendar-preview.zip
+          cmp -s "$out/study-seeds.json.tmp" data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json
+          printf '%s  %s\n' 003885e93f3a3daa1098f648502c5a7dd3beb6e317e906ffe281760aaba763af "$out/calendar-preview.json.tmp" | sha256sum -c --status
+          read_meta > "$out/after.tmp"
+          cmp -s "$out/before.tmp" "$out/after.tmp"
+          jq -n --slurpfile metadata "$out/before.tmp" --arg run "$run" --arg sha "$GITHUB_SHA" '
+            {schema:"v39.phase5.original-seed-archive-preservation.v1",originalRunId:$run,readerCommit:$sha,
+             originalArtifactMetadata:$metadata[0],archiveDigestsVerified:true,canonicalSeedCopyMatches:true,
+             calendarRawSha256:"003885e93f3a3daa1098f648502c5a7dd3beb6e317e906ffe281760aaba763af",
+             independentHumanWitnessVerified:false,seedRegenerated:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}
+          ' > "$out/archive-manifest.json"
+          rm "$out/"*.tmp
+          echo 'ORIGINAL_FIRST_SEED_AND_CALENDAR_TWO_EXACT_ZIPS_VERIFIED_NOT_REGENERATED_NO_PROVIDER_NO_GO'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-first-seed-43700154416-two-exact-archives-preserved-20261115
+          path: ${{ runner.temp }}/original-seed-archive-custody/
+          retention-days: 90
+          if-no-files-found: error
