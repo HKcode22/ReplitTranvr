@@ -109,7 +109,8 @@ export function resolveRetentionPrimaryPolicy(env: NodeJS.ProcessEnv = process.e
 }
 
 function planHash(): string {
-  const file = path.resolve(process.cwd(), "SEPmd", "V3.9_DataCollectPlan_f.8.md");
+  // Binding f.8 was relocated; keep the original digest convention.
+  const file = path.resolve(process.cwd(), "data-collection", "plans", "V3.9_DataCollectPlan_f.8.md");
   return sha256(readFileSync(file));
 }
 
@@ -839,6 +840,10 @@ export async function reviewOrExpireP5HistoricalFidsPrimary(pool:Pick<Pool,"conn
     if(unknown)p5Hold("COMMIT_UNKNOWN_READBACK_ONLY_NO_REPLAY");
     if(committed)p5Hold("COMMITTED_FRESH_READBACK_UNRESOLVED_NO_REPLAY");
     if(e instanceof Error&&/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[A-Z_]+$/.test(e.message))throw e;
+    // Only the test fixture's hard-coded disposable loopback database may
+    // expose a synthetic failure stack; production errors stay redacted.
+    if(process.env.GITHUB_ACTIONS==="true"&&process.env.V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16==="1"&&
+       process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable")throw e;
     p5Hold("SQL_OR_SCOPE_FAILURE_REDACTED");
   }finally{
     if(began&&!unknown)await c.query("ROLLBACK").catch(()=>undefined);
