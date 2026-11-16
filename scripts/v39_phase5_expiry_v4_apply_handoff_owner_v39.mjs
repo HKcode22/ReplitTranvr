@@ -130,7 +130,7 @@ function privateWrite(name,v){
  * never swap the existing Replit workspace or make its current server
  * tree falsely claim source equivalence to V4.
  */
-export function checkP5V4HistoricalRelease(a,{gitRead=git,verifyHistoricalBuild}={}){
+export function checkP5V4HistoricalRelease(a,{gitRead=git,verifyHistoricalBuild=verifyP5V4HistoricalBuild}={}){
  if(gitRead(["rev-parse","HEAD"])!==a.main||gitRead(["status","--porcelain","--untracked-files=normal"]))hold("EXACT_LOCAL_MAIN");
  if(a.verifiedMain!==VERIFIED_V4_MAIN)hold("UNEXPECTED_FIRST_V4_VERIFY_MAIN");
  gitRead(["merge-base","--is-ancestor",V4,a.verifiedMain]);
@@ -139,7 +139,7 @@ export function checkP5V4HistoricalRelease(a,{gitRead=git,verifyHistoricalBuild}
  if(typeof verifyHistoricalBuild!=="function")hold("HISTORICAL_BUILD_CHECK_REQUIRED");
  if(verifyHistoricalBuild(a.verifiedMain)!=="PHASE5_V4_CALLBACK_SOURCE_EQUIVALENCE_VERIFIED_NOT_PUBLISHED")hold("HISTORICAL_SOURCE_EQUIVALENCE");
 }
-function verifyHistoricalBuild(main){
+function verifyP5V4HistoricalBuild(main){
  const dir=mkdtempSync(join(tmpdir(),"p5-v4-reviewed-history-")),checkout=join(dir,"reviewed");
  let attached=false;
  try{
@@ -154,7 +154,7 @@ function verifyHistoricalBuild(main){
 function ownerIO(){
  return {
   localReview:a=>{
-   checkP5V4HistoricalRelease(a,{verifyHistoricalBuild});
+   checkP5V4HistoricalRelease(a);
    const pair=privateRead("pair-handoff-"+V4+".json"),old=privateRead("handoff-"+V3+".json");
    if(Object.keys(pair).sort().join(",")!=="applyToken,neverReplay,previousSource,source"||
       pair.source!==V4||pair.previousSource!==V3||pair.neverReplay!==true||
