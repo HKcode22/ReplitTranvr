@@ -188,6 +188,16 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    expect(await incidentCount()).toBe(before+1);
    expect((await db.query("SELECT count(*)::int AS n FROM clean.adb_ingest_events WHERE batch_id=$1 AND notification_items=0 AND delivery_failure=true AND error='incident-stop:deletion' AND raw_payload IS NULL",[syntheticBatch])).rows[0].n).toBe(1);
    expect(s.deletes).toBe(2);
+   // An unattended future transport cannot advance past an unresolved
+   // deletion incident, even with both actual restricted actors. Explicit
+   // manual recovery remains available under the same existing DB lock.
+   await expect(executeP5RecurringExpiryRuntime({...conf,apply:true,automatic:true}))
+    .rejects.toThrow("AUTOMATIC_DELETION_STOP_UNRESOLVED");
+   expect(await incidentCount()).toBe(before+1);
+   expect(s.deletes).toBe(2);
+   // Verify-only remains available even with the incident.
+   expect(await executeP5RecurringExpiryRuntime({...conf,apply:false,automatic:true}))
+    .toMatchObject({status:"SCOPED_RUNTIME_VERIFY_ONLY_NO_WRITES",objectDeletions:0});
    // Recover independent proof only, not a second physical delete and
    // never automatically clear the incident.
    expect(await executeP5RecurringExpiryRuntime({...conf,apply:true})).toMatchObject({recoveredReadbackCount:1,verifiedNowCount:0});

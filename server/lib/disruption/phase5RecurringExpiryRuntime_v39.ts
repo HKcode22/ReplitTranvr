@@ -203,10 +203,13 @@ export function boundP5RecurringExpiryStorage(stores:Stores,timeoutMs=8000):Stor
  };
 }
 export async function executeP5RecurringExpiryRuntime({writer,reader,stores,apply,limit,writerRole,readerRole,verifyActor=verifyP5RecurringExpiryActor,
- operationTimeoutMs=8000,workStartBudgetMs=75000,monotonicNow=()=>performance.now()}:{
+ operationTimeoutMs=8000,workStartBudgetMs=75000,monotonicNow=()=>performance.now(),automatic=false}:{
 
  writer:Db;reader:Db;stores:Stores;apply:boolean;limit:number;writerRole:string;readerRole:string;
  verifyActor?:typeof verifyP5RecurringExpiryActor;
+ // Unattended transport may not retry past an unresolved deletion incident.
+ // Existing explicitly admitted CLI recovery remains available.
+ automatic?:boolean;
  // Test injection only; production CLI does not expose these options.
  operationTimeoutMs?:number;workStartBudgetMs?:number;monotonicNow?:()=>number;
 }){
@@ -230,6 +233,15 @@ export async function executeP5RecurringExpiryRuntime({writer,reader,stores,appl
   const got=await lock.query("SELECT pg_try_advisory_lock(390015,788) AS owned");
   if(got.rows[0]?.owned!==true)HOLD("RECURRING_BATCH_ALREADY_ACTIVE");
   owned=true;
+  if(automatic){
+   // Check under the same cross-instance advisory lock, before entering the
+   // mutation block. A failed read or pending incident never opens another
+   // deletion incident and never issues a physical DELETE.
+   let blocked:unknown;
+   try{blocked=(await reader.query("SELECT EXISTS(SELECT 1 FROM clean.adb_incident_stop WHERE cause='deletion' AND resolved=false) AS blocked")).rows[0]?.blocked;}
+   catch{HOLD("AUTOMATIC_DELETION_STOP_READBACK_UNAVAILABLE");}
+   if(blocked!==false)HOLD("AUTOMATIC_DELETION_STOP_UNRESOLVED");
+  }
   try{
    const start=monotonicNow();let last=start;
    if(!Number.isFinite(start))HOLD("WORK_CLOCK_INVALID");
