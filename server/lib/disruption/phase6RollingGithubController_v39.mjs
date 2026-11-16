@@ -194,7 +194,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch}){
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{}}){
  const started=now();
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
     started-epoch>6*3600000||typeof token!=="string"||token.length<16)
@@ -251,6 +251,8 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
  const context={sha,epoch,clock:now()};
  // No stale or inverted monotonic wall-clock snapshots may dispatch.
  if(context.clock<started||context.clock-started>120000)hold("GITHUB_SNAPSHOT_TOO_SLOW");
+ // Verify every lane's accepted-run history before issuing any new wave.
+ for(let i=0;i<P6_ROLLING_ROUTES.length;i++)verifySnapshot(P6_ROLLING_ROUTES[i],snapshots[i]);
  const plan=planP6RollingTick(snapshots,context);
  async function recheckRoute(route){
   if(!P6_ROLLING_ROUTES.includes(route)||now()-context.clock>600000)hold("GITHUB_FRESH_RECHECK_EXPIRED");

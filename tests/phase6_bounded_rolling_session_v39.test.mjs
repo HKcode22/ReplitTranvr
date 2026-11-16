@@ -6,7 +6,7 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave} from "../serv
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false}={}){
  let clock=start,seq=1000;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(4+i*4)*24*H,templates=[];
@@ -55,7 +55,7 @@ function setup({failAck=false,duplicate=false}={}){
    }
    if(u.pathname.endsWith("/actions/runs"))return response({total_count:0,workflow_runs:[]});
    const route=P6_ROLLING_ROUTES.find(r=>u.pathname.endsWith("/workflows/"+r.workflow+"/runs"));assert(route);
-   const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event"));
+   const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&!(hideAccepted&&route.lane==="PRE_RECOVERY"));
    return response({total_count:selected.length,workflow_runs:selected});
   }};
  return {env,options,runs,calls,events};
@@ -93,4 +93,12 @@ test("calendar narrowing can't add a lane or erase blocked status",()=>{
  assert.deepEqual(n.due,["T24"]);assert.equal(n.calendarDeferred.length,7);
  assert.throws(()=>restrictP6RollingWave(plan,["SOURCE_POST"]),/UNREVIEWED/);
  assert.throws(()=>restrictP6RollingWave(n,["UNKNOWN"]),/UNREVIEWED/);
+});
+
+test("a known ACK absent from one lane's listing defers every new wave without another POST",async()=>{
+ const f=setup({hideAccepted:true});
+ await assert.rejects(runP6RollingSession(f.env,f.options),/ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,2);
+ assert(f.events.some(e=>e.status==="ROLLING_WAVE_DEFERRED_ACK_VISIBILITY_NO_DISPATCH"));
+ assert.equal(f.events.filter(e=>e.status==="DISPATCH_ATTEMPT_BEFORE_ACK").length,2);
 });

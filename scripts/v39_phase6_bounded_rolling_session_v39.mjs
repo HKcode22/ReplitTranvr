@@ -56,7 +56,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.deadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const ledger=createP6SessionAckLedger({...a,now,emit});
- let requests=0,waves=0,calendarDeferred=0;
+ let requests=0,waves=0,calendarDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  const api=async(url,init)=>{
   const u=new URL(url);
@@ -99,7 +99,22 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  // 2 minutes polling cadence is provisional; actual timing must be measured.
  while(waves<8&&now()<a.deadline-12*MIN-60000){
   await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
-  const {plan,recheckRoute}=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api});
+  let observation;
+  try{
+   observation=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
+    verifySnapshot:ledger.assertVisible});
+  }catch(e){
+   // A known ACK may be temporarily absent from GitHub's list or become
+   // terminal between direct readback and the list. Retry GETs only, never
+   // POSTs; other identity/authorization failures remain immediate HOLDs.
+   if(!["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY","HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED"].includes(e?.message))throw e;
+   visibilityUnresolved=true;visibilityDeferrals++;waves++;
+   emit({status:"ROLLING_WAVE_DEFERRED_ACK_VISIBILITY_NO_DISPATCH",wave:waves,...ledger.status()});
+   if(waves<8&&now()+2*MIN<a.deadline-12*MIN-60000){await pause(2*MIN);continue;}
+   break;
+  }
+  visibilityUnresolved=false;
+  const {plan,recheckRoute}=observation;
   if(plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CURRENT_HISTORY_HOLD");
   const hint=assessP6RollingCalendarHints(calendar,now());
   if(hint.status!=="REVIEWED_CALENDAR_WAKE_HINT_ONLY_NO_GO")hold("CALENDAR_WINDOW_UNKNOWN");
@@ -123,10 +138,11 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  for(let i=0;i<24;i++){
   const state=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
   if(!state.pending.length){
+   if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
    await uniqueRoot();await main();
    return {schema:"v39.phase6.bounded-rolling-session.v1",status:"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
-    waves,calendarDeferred,githubRequests:requests,...state};
+    waves,calendarDeferred,visibilityDeferrals,githubRequests:requests,...state};
   }
   if(now()+30000>=a.deadline-12000)hold("PENDING_ACCEPTED_WORKERS_AT_DEADLINE");
   await pause(30000);
