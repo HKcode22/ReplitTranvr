@@ -17,6 +17,9 @@ on:
       - 'scripts/v39_phase5_recurring_expiry_owner_commission_v39.ts'
       - 'tests/phase5_recurring_expiry_owner_commission_real_pg_v39.test.ts'
       - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
+      - 'server/lib/disruption/retentionExpiry_v39.ts'
+      - 'scripts/v39_phase5_historical_fids_primary_expiry_owner_v39.ts'
+      - 'tests/phase5_historical_fids_primary_expiry_real_pg_v39.test.ts'
       - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
   push:
     branches: [main]
@@ -29,6 +32,9 @@ on:
       - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
       - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
       - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
+      - 'server/lib/disruption/retentionExpiry_v39.ts'
+      - 'scripts/v39_phase5_historical_fids_primary_expiry_owner_v39.ts'
+      - 'tests/phase5_historical_fids_primary_expiry_real_pg_v39.test.ts'
       - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
 permissions:
   contents: read
@@ -99,6 +105,11 @@ jobs:
           test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
           npx tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+      - name: Verify historical primary expiry against real B0062 before other disposable fixtures
+        run: |
+          set -Eeuo pipefail
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
+          V39_P5_HISTORICAL_FIDS_DISPOSABLE_PG16=1 npx vitest run tests/phase5_historical_fids_primary_expiry_real_pg_v39.test.ts
       - name: Test true PRE_DEPARTURE/UUID-text lineage and source/flight denominators
         run: |
           set -Eeuo pipefail
