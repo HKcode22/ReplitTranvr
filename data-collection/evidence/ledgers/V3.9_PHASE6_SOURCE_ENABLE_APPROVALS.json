@@ -1,0 +1,7 @@
+{
+  "schema": "v39.phase6.source-enable-approval-ledger.v1",
+  "phaseGate": "Phase 6 (separate authorization)",
+  "scope": "C_D_GITHUB_SOURCE_PRE_POST_EXISTING_CALENDAR_NO_LEGACY_ALERT_START",
+  "evidence": [],
+  "approvals": []
+}
