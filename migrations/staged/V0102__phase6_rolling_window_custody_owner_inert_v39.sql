@@ -1,4 +1,5 @@
--- V0102 STAGED ONLY. Existing neondb, PG16, no new database or roles,
+-- V0102 STAGED ONLY. Existing neondb, PG16, no new database or live login,
+-- one dormant function-only claimant group; no service member at install,
 -- no provider contents, no auto-install, no provider or paid authorization.
 -- Durable operational window owner. The DB clock, NOT cron arrival, picks
 -- a fixed 120-minute slot of the reviewed policy. An unresolved owner
@@ -14,6 +15,8 @@ BEGIN
  OR (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='clean') IS DISTINCT FROM current_user
  OR to_regclass('clean.adb_phase6_authorization') IS NULL
  OR to_regclass('clean.phase6_rolling_window_custody_v39') IS NOT NULL
+ OR to_regclass('clean.phase6_rolling_policy_binding_v39') IS NOT NULL
+ OR to_regrole('phase6_rolling_window_claimant_v39') IS NOT NULL
  THEN RAISE EXCEPTION 'P6_V0102_WRONG_OWNER_OR_PREREQUISITE_OR_ALREADY_INSTALLED'; END IF;
 END $pre$;
 CREATE TABLE clean.phase6_rolling_window_custody_v39 (
@@ -130,6 +133,99 @@ BEGIN
  RETURN true;
 END $close$;
 REVOKE ALL ON FUNCTION clean.phase6_close_rolling_window_v39(text,integer,bigint,bigint,text,text) FROM PUBLIC;
+
+-- Optional accelerator-only scoped runtime authority. No login or live
+-- binding at installation. Neither the claimant nor its future login can
+-- close an unresolved root or change the existing study authorization.
+CREATE ROLE phase6_rolling_window_claimant_v39
+ NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT USAGE ON SCHEMA clean TO phase6_rolling_window_claimant_v39;
+CREATE TABLE clean.phase6_rolling_policy_binding_v39 (
+ manifest_sha256 text PRIMARY KEY CHECK (manifest_sha256 ~ '^[a-f0-9]{64}$'),
+ authorization_id text NOT NULL CHECK (length(authorization_id) BETWEEN 1 AND 128),
+ calendar_sha256 text NOT NULL CHECK (calendar_sha256 ~ '^[a-f0-9]{64}$'),
+ config_sha256 text NOT NULL CHECK (config_sha256 ~ '^[a-f0-9]{64}$'),
+ code_sha text NOT NULL CHECK (code_sha ~ '^[a-f0-9]{40}$'),
+ policy_sha256 text NOT NULL CHECK (policy_sha256 ~ '^[a-f0-9]{64}$'),
+ policy_from_utc timestamptz NOT NULL,
+ policy_until_utc timestamptz NOT NULL,
+ expected_session_login name NOT NULL CHECK (expected_session_login::text ~ '^phase6_rolling_claim_[a-z0-9_]{5,40}$'),
+ independent_review_sha256 text NOT NULL CHECK (independent_review_sha256 ~ '^[a-f0-9]{64}$'),
+ CHECK (isfinite(policy_from_utc) AND isfinite(policy_until_utc)
+ AND date_trunc('second',policy_from_utc)=policy_from_utc AND date_trunc('second',policy_until_utc)=policy_until_utc
+ AND policy_until_utc>policy_from_utc AND policy_until_utc-policy_from_utc<=interval '1440 hours')
+);
+REVOKE ALL ON TABLE clean.phase6_rolling_policy_binding_v39 FROM PUBLIC;
+
+CREATE FUNCTION clean.phase6_claim_bound_rolling_window_v39(
+ p_authorization text,p_manifest text,p_calendar text,p_config text,p_code text,p_policy text,
+ p_from timestamptz,p_until timestamptz,p_root bigint
+) RETURNS TABLE(window_index integer,window_start_utc timestamptz,window_end_utc timestamptz,claimed_at_utc timestamptz)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $bound$
+BEGIN
+ IF current_user<>'neondb_owner' OR NOT pg_has_role(session_user,'phase6_rolling_window_claimant_v39','MEMBER')
+ OR NOT EXISTS(SELECT 1 FROM pg_roles x WHERE x.rolname=session_user AND x.rolcanlogin
+  AND NOT x.rolsuper AND NOT x.rolcreatedb AND NOT x.rolcreaterole AND NOT x.rolreplication AND NOT x.rolbypassrls)
+ THEN RAISE EXCEPTION 'P6_V0102_RESTRICTED_SESSION_HOLD'; END IF;
+ PERFORM 1 FROM clean.phase6_rolling_policy_binding_v39 b WHERE b.manifest_sha256=p_manifest
+  AND b.expected_session_login=session_user AND b.authorization_id=p_authorization
+  AND b.calendar_sha256=p_calendar AND b.config_sha256=p_config AND b.code_sha=p_code
+  AND b.policy_sha256=p_policy AND b.policy_from_utc=p_from AND b.policy_until_utc=p_until FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'P6_V0102_EXACT_OWNER_POLICY_BINDING_REQUIRED'; END IF;
+ RETURN QUERY SELECT q.* FROM clean.phase6_claim_rolling_window_v39(
+  p_authorization,p_manifest,p_calendar,p_config,p_code,p_policy,p_from,p_until,p_root) q;
+END $bound$;
+REVOKE ALL ON FUNCTION clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)
+ TO phase6_rolling_window_claimant_v39;
+
+CREATE FUNCTION clean.phase6_read_bound_rolling_window_v39(p_root bigint,p_manifest text)
+ RETURNS TABLE(window_index integer,window_start_utc timestamptz,window_end_utc timestamptz,claimed_at_utc timestamptz,
+ authorization_id text,manifest_sha256 text,calendar_sha256 text,config_sha256 text,release_code_sha text,policy_sha256 text,
+ policy_from_utc timestamptz,policy_until_utc timestamptz,root_run_id text,closed_at_utc timestamptz)
+ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $read$
+BEGIN
+ IF current_user<>'neondb_owner' OR current_setting('transaction_read_only')<>'on'
+ OR NOT pg_has_role(session_user,'phase6_rolling_window_claimant_v39','MEMBER')
+ OR NOT EXISTS(SELECT 1 FROM pg_roles x WHERE x.rolname=session_user AND x.rolcanlogin
+  AND NOT x.rolsuper AND NOT x.rolcreatedb AND NOT x.rolcreaterole AND NOT x.rolreplication AND NOT x.rolbypassrls)
+ THEN RAISE EXCEPTION 'P6_V0102_RESTRICTED_READONLY_SESSION_HOLD'; END IF;
+ RETURN QUERY SELECT w.window_index,w.window_start_utc,w.window_end_utc,w.claimed_at_utc,
+  w.authorization_id,w.manifest_sha256,w.calendar_sha256,w.config_sha256,w.release_code_sha,w.policy_sha256,
+  w.policy_from_utc,w.policy_until_utc,w.root_run_id::text,w.closed_at_utc
+ FROM clean.phase6_rolling_window_custody_v39 w JOIN clean.phase6_rolling_policy_binding_v39 b
+ ON b.manifest_sha256=w.manifest_sha256 AND b.authorization_id=w.authorization_id
+ AND b.calendar_sha256=w.calendar_sha256 AND b.config_sha256=w.config_sha256 AND b.code_sha=w.release_code_sha
+ AND b.policy_sha256=w.policy_sha256 AND b.policy_from_utc=w.policy_from_utc AND b.policy_until_utc=w.policy_until_utc
+ WHERE b.expected_session_login=session_user AND w.root_run_id=p_root AND w.manifest_sha256=p_manifest;
+END $read$;
+REVOKE ALL ON FUNCTION clean.phase6_read_bound_rolling_window_v39(bigint,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION clean.phase6_read_bound_rolling_window_v39(bigint,text) TO phase6_rolling_window_claimant_v39;
+
+DO $restricted_post$
+BEGIN
+ IF EXISTS(SELECT 1 FROM clean.phase6_rolling_policy_binding_v39)
+ OR EXISTS(SELECT 1 FROM pg_roles WHERE rolname='phase6_rolling_window_claimant_v39'
+   AND (rolcanlogin OR rolinherit OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls))
+ OR EXISTS(SELECT 1 FROM pg_auth_members m JOIN pg_roles g ON g.oid=m.roleid
+   JOIN pg_roles member ON member.oid=m.member JOIN pg_roles grantor ON grantor.oid=m.grantor
+   WHERE g.rolname='phase6_rolling_window_claimant_v39' AND NOT
+   (member.rolname=current_user AND grantor.rolsuper AND m.admin_option AND NOT m.inherit_option AND NOT m.set_option))
+ OR EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member='phase6_rolling_window_claimant_v39'::regrole)
+ OR has_table_privilege('phase6_rolling_window_claimant_v39','clean.phase6_rolling_window_custody_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR has_table_privilege('phase6_rolling_window_claimant_v39','clean.phase6_rolling_policy_binding_v39','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR has_table_privilege('phase6_rolling_window_claimant_v39','clean.adb_phase6_authorization','SELECT,INSERT,UPDATE,DELETE,TRUNCATE')
+ OR has_schema_privilege('phase6_rolling_window_claimant_v39','clean','CREATE')
+ OR has_function_privilege('phase6_rolling_window_claimant_v39','clean.phase6_close_rolling_window_v39(text,integer,bigint,bigint,text,text)','EXECUTE')
+ OR has_function_privilege('phase6_rolling_window_claimant_v39','clean.phase6_claim_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)','EXECUTE')
+ OR EXISTS(SELECT 1 FROM pg_class c,LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
+ WHERE c.oid='clean.phase6_rolling_policy_binding_v39'::regclass AND a.grantee<>c.relowner)
+ OR EXISTS(SELECT 1 FROM pg_proc p,LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+  WHERE p.oid IN ('clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)'::regprocedure,
+   'clean.phase6_read_bound_rolling_window_v39(bigint,text)'::regprocedure)
+  AND a.grantee<>p.proowner AND (a.grantee<>'phase6_rolling_window_claimant_v39'::regrole OR a.privilege_type<>'EXECUTE' OR a.is_grantable))
+ THEN RAISE EXCEPTION 'P6_V0102_RESTRICTED_EMPTY_ACL_HOLD'; END IF;
+END $restricted_post$;
 
 DO $post$
 BEGIN
