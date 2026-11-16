@@ -19,9 +19,13 @@ function decoded(raw,max){
  if(b.length>max||b.toString("base64")!==raw)hold("NONCANONICAL_PROTECTED_BYTES");return b;
 }
 function key(raw){const b=decoded(raw,8192);try{return createPrivateKey(b);}finally{b.fill(0);}}
+export function isP6NativePostProducerTrigger(env){
+ return env.GITHUB_EVENT_NAME==="schedule"? !env.P6_NATIVE_POST_PRODUCER_CONFIRM:
+  env.GITHUB_EVENT_NAME==="workflow_dispatch"&&env.P6_NATIVE_POST_PRODUCER_CONFIRM==="PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER";
+}
 export function admitP6NativePostProducer(env,read){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
-    env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="schedule"||env.GITHUB_RUN_ATTEMPT!=="1"||
+    env.GITHUB_REF!=="refs/heads/main"||!isP6NativePostProducerTrigger(env)||env.GITHUB_RUN_ATTEMPT!=="1"||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
     !/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??"")||
     env.P6_NATIVE_POST_PRODUCER_ENABLED!=="1"||env.P6_NATIVE_POST_PRODUCER_APPROVED!=="1"||
