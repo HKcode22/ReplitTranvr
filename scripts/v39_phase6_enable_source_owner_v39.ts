@@ -144,7 +144,7 @@ export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:Review
   if(began&&!commitAttempted)await c.query("ROLLBACK").catch(()=>{});
   if(commitAttempted)hold("UNKNOWN_COMMIT_DO_NOT_REPLAY_INDEPENDENT_READBACK");
   throw e;
- }finally{c.release();}
+ }finally{c.release(commitAttempted&&began?new Error("P6_COMMIT_OUTCOME_UNKNOWN"):undefined);}
 }
 async function main(){
  if(process.argv.length!==8||process.argv[2]!=="--enable-exact-existing-source-auth")
