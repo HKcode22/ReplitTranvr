@@ -7,8 +7,8 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6Revi
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false}={}){
- let clock=start,seq=1000,snapshots=0;const plans=new Map(),runs=[],calls=[],events=[];
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false}={}){
+ let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(4+i*4)*24*H,templates=[];
   for(const [horizon,off] of [["T-24h",24*H],["T-6h",6*H],["T-90m",90*MIN]])for(let slot=0;slot<4;slot++)
@@ -39,7 +39,10 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
   root.display_title="P6 ROLLING CHAIN 0 0";
  }
  const response=(data,status=200)=>({ok:status===200,status,json:async()=>data});
- const options={now:()=>clock,sleep:async m=>{clock+=m;},readPlan:p=>plans.get(p),emit:e=>events.push(e),
+ const options={now:()=>clock,sleep:async m=>{
+  clock+=m;
+  if(clock>=finishAt)for(const row of runs.filter(x=>x.status==="in_progress")){row.status="completed";row.conclusion="success";}
+ },readPlan:p=>plans.get(p),emit:e=>events.push(e),
   readReceipt:async()=>savedReceipt,
   fetcher:async(url,opt)=>{
    const u=new URL(url);calls.push({url,method:opt.method});
@@ -63,8 +66,9 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
     if(failAck)return response({},204);
     const route=P6_ROLLING_ROUTES.find(r=>u.pathname.endsWith("/workflows/"+r.workflow+"/dispatches"));
     assert(route);const id=++seq;
+    const busy=carryActive&&route.lane==="RETENTION_MONITOR";
     runs.push({id,path:".github/workflows/"+route.workflow,head_branch:"main",head_sha:sha,event:"workflow_dispatch",
-     run_attempt:1,status:"completed",conclusion:"success",created_at:iso(clock)});
+     run_attempt:1,status:busy?"in_progress":"completed",conclusion:busy?null:"success",created_at:iso(clock)});
     return response({workflow_run_id:id,run_url:"https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/"+id,
      html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+id});
    }
@@ -76,13 +80,17 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
     const jobs=route.jobs.map(j=>({name:j.name,status:"completed",conclusion:"success",steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:[]}));
     return response({total_count:jobs.length,jobs});
    }
-   if(u.pathname.endsWith("/actions/runs"))return response({total_count:0,workflow_runs:[]});
+   if(u.pathname.endsWith("/actions/runs")){
+    const selected=runs.filter(x=>x.status===u.searchParams.get("status"));
+    return response({total_count:selected.length,workflow_runs:selected});
+   }
    const route=P6_ROLLING_ROUTES.find(r=>u.pathname.endsWith("/workflows/"+r.workflow+"/runs"));assert(route);
    if(route.lane==="SOURCE_POST"&&u.searchParams.get("event")==="schedule")snapshots++;
    const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&!((hideAccepted||(hideFinal&&snapshots>=9))&&route.lane==="PRE_RECOVERY"));
    return response({total_count:selected.length,workflow_runs:selected});
   }};
- return {env,options,runs,calls,events,controllerRuns,root,startSuccessor(receipt){savedReceipt=receipt;clock+=30000;
+ return {env,options,runs,calls,events,controllerRuns,root,get finishAt(){return finishAt;},startSuccessor(receipt){savedReceipt=receipt;clock+=30000;
+  if(carryActive)finishAt=clock+8*MIN;
   root.status="completed";root.conclusion="success";controllerRuns[1].status="in_progress";
   Object.assign(env,{GITHUB_RUN_ID:"12346",P6_ROLLING_CHAIN_HOP:"1",P6_ROLLING_PARENT_RUN_ID:"12345",
    P6_ROLLING_SENT_AT_UTC:receipt.nextDispatchAtUtc});
@@ -184,4 +192,32 @@ test("dispatch core cannot POST when ledger tracking capacity is exhausted, even
   fetcher:async(_u,o)=>{if(o.method==="POST")posts++;return {ok:true,json:async()=>({object:{sha}})};}
  }),/ACK_CAPACITY_EXHAUSTED_BEFORE_POST/);
  assert.equal(posts,0);assert.equal(ledger.status().unknownAttempts,0);
+});
+
+test("approved first chain session carries a known active worker while unrelated work continues, then final drains",async()=>{
+ const f=setup({chain:true,carryActive:true}),first=await runP6RollingSession(f.env,f.options);
+ assert.equal(first.status,"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF");
+ assert.equal(first.pending.length,1);
+ assert.equal(first.pendingAcknowledgements.length,1);
+ assert.equal(first.pendingAcknowledgements[0].lane,"RETENTION_MONITOR");
+ assert.equal(first.verifiedTerminal+1,first.acknowledged);
+ const pendingId=first.pendingAcknowledgements[0].runId;
+ const priorIds=new Set(f.runs.map(x=>x.id));
+ f.startSuccessor(first);
+ const second=await runP6RollingSession(f.env,f.options);
+ assert.equal(second.status,"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF");
+ assert.equal(second.epochUtc,first.epochUtc);
+ assert.equal(second.pending.length,0);
+ assert.equal(second.pendingAcknowledgements.length,0);
+ assert(second.terminalAcknowledgements.some(x=>x.runId===pendingId));
+ assert.equal(f.runs.filter(x=>x.path.includes("retention-readonly")).length,1);
+ assert(f.runs.some(x=>!priorIds.has(x.id)&&x.path.includes("lease-watchdog")&&Date.parse(x.created_at)<f.finishAt));
+ assert.equal(second.acknowledged,second.verifiedTerminal);
+});
+test("pending receipt partition drift refuses successor before any new worker dispatch",async()=>{
+ const f=setup({chain:true,carryActive:true}),first=await runP6RollingSession(f.env,f.options);
+ f.startSuccessor({...first,pendingAcknowledgements:[{...first.pendingAcknowledgements[0],lane:"LATER_PRE"}]});
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH/);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
 });

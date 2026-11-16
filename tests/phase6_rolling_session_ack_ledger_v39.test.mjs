@@ -10,7 +10,7 @@ function setup(){
  const ack=()=>ledger.evidence({lane:route.lane,status:"EXACT_ACK_NOT_EXECUTION_PROOF",runId:id});
  const row=(d={})=>({id,head_sha:sha,path:".github/workflows/"+route.workflow,head_branch:"main",event:"workflow_dispatch",
   run_attempt:1,status:"queued",conclusion:null,created_at:new Date(Math.floor(t/1000)*1000).toISOString(),...d});
- const snapshot=(x=[])=>({workflow:route.workflow,complete:true,runs:x,active:[]});
+ const snapshot=(x=[])=>({workflow:route.workflow,complete:true,runs:x,active:x.filter(v=>v.status!=="completed")});
  return{ledger,events,attempt,ack,row,snapshot,advance:m=>clock+=m};
 }
 const token="synthetic-test-token-no-access";
@@ -118,4 +118,24 @@ test("the last tracking slot is reserved before dispatch and consumed only by it
  assert.equal(ledger.status().acknowledged,P6_ROLLING_ACK_CAPACITY);
  assert.equal(ledger.status().unknownAttempts,0);
  assert.equal(ledger.remainingDispatchCapacity(),0);
+});
+
+test("known active transfer requires direct ACK plus exact normal and active history, never terminal evidence",async()=>{
+ const f=setup();f.attempt();f.ack();
+ const row=f.row();
+ await f.ledger.reconcile({token,fetcher:async()=>({ok:true,json:async()=>row})});
+ const all=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:r===route?[row]:[],active:r===route?[row]:[]}));
+ assert.throws(()=>f.ledger.verifyTerminalHistory(all),/TERMINAL_HISTORY_NOT_READY/);
+ assert.throws(f.ledger.continuationAcknowledgements,/CONTINUATION_RECEIPT_NOT_ADMITTED/);
+ const missingNormal=all.map(x=>({...x,runs:[]}));
+ assert.throws(()=>f.ledger.verifyContinuationHistory(missingNormal),/ACK_NOT_VISIBLE/);
+ const missingActive=all.map(x=>({...x,active:[]}));
+ assert.throws(()=>f.ledger.verifyContinuationHistory(missingActive),/ACK_TERMINAL_NOT_YET_RECONCILED/);
+ f.ledger.verifyContinuationHistory(all);
+ const receipt=f.ledger.continuationAcknowledgements();
+ assert.deepEqual(receipt,{terminalAcknowledgements:[],pendingAcknowledgements:[{lane:route.lane,runId:id,sentAtUtc:new Date(t).toISOString()}]});
+ assert.throws(f.ledger.terminalAcknowledgements,/TERMINAL_RECEIPT_NOT_ADMITTED/);
+ assert.throws(f.attempt,/DUPLICATE_OR_UNRESOLVED/);
+ await f.ledger.reconcile({token,fetcher:async()=>({ok:true,json:async()=>row})});
+ assert.throws(f.ledger.continuationAcknowledgements,/CONTINUATION_RECEIPT_NOT_ADMITTED/);
 });
