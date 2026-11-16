@@ -5,11 +5,10 @@
 import {Pool} from "pg";
 import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
-import {reviewOrExpireP5HistoricalFidsPrimary,P5_HISTORICAL_FIDS_EXPIRY_APPROVAL}
+import {reviewOrExpireP5HistoricalFidsPrimary,P5_HISTORICAL_FIDS_EXPIRY_APPROVAL,P5_HISTORICAL_FIDS_SCOPE_20261116}
  from "../server/lib/disruption/retentionExpiry_v39";
 const REPO="HKcode22/ReplitTranvr";
-const SCOPE={observedAtUtc:"2026-11-16T13:47:34.388Z",expectedOriginals:17,
- expectedPopulation:1574,expectedPre:36,expectedT24:12};
+const SCOPE=P5_HISTORICAL_FIDS_SCOPE_20261116;
 const hold=(s:string):never=>{throw Error("HOLD_P5_HISTORICAL_FIDS_EXPIRY_"+s);};
 const run=(cmd:string,args:string[])=>execFileSync(cmd,args,{encoding:"utf8",timeout:15000,stdio:["ignore","pipe","ignore"],maxBuffer:1024*1024}).trim();
 function assertExactCheckout(env:NodeJS.ProcessEnv){
@@ -55,4 +54,4 @@ async function main(){
 }
 if(import.meta.url===pathToFileURL(process.argv[1]??"").href)
  void main().catch(e=>{const m=String(e?.message??"");
-  console.error(/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[A-Z_]+$/.test(m)?m:"HOLD_P5_HISTORICAL_FIDS_EXPIRY_REDACTED");process.exitCode=2;});
+  console.error(/^HOLD_P5_HISTORICAL_FIDS_EXPIRY_[0-9A-Z_]+$/.test(m)?m:"HOLD_P5_HISTORICAL_FIDS_EXPIRY_REDACTED");process.exitCode=2;});
