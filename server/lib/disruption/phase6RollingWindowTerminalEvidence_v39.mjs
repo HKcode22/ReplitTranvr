@@ -57,14 +57,15 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
  if(!Number.isSafeInteger(clock)||ws>=we||we-ws>120*60000||epoch<ws||epoch>=deadline||deadline>we||
     (max===1?deadline-epoch>30*60000:deadline-epoch<90*60000||deadline-epoch>120*60000)||clock<epoch)
   HOLD("EXPECTED_CLOCK");
- const runIds=[],receipts=[],all=new Map(),retired=new Set();
+ const runIds=[],controllerRows=new Map(),receipts=[],all=new Map(),retired=new Set();
  let parent=0,id=expected.rootRunId,prior=null,priorTerminal=new Map(),priorPending=new Map(),priorHistoryEpoch=epoch;
  for(let hop=0;hop<max;hop++){
   if(runIds.includes(id)||all.has(id))HOLD("DUPLICATE_CONTROLLER");
   const run=await readRun(id),created=exactRun(run,id,WF,sha,epoch,deadline,clock);
   if(max===4?run.display_title!=="P6 ROLLING CHAIN "+hop+" "+parent:
      run.display_title!=="Phase6 initial bounded rolling controller session (STOP default)")HOLD("CHAIN_TITLE");
-  if(prior&&created<utc(prior.nextDispatchAtUtc)-1000)HOLD("SUCCESSOR_CLOCK");
+  if(created<epoch||(prior&&created<utc(prior.nextDispatchAtUtc)-1000))HOLD("SUCCESSOR_CLOCK");
+  controllerRows.set(id,{createdAt:run.created_at,title:run.display_title});
   jobsExact(await readJobs(id),run,[{name:JOB,steps:STEPS}]);
   const artifact=await readReceipt(id);
   if(!artifact||!ID(artifact.artifactId)||artifact.name!=="p6-rolling-terminal-"+id||
@@ -137,7 +138,8 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
   const listed=await listControllers({fromUtc:expected.epochUtc,untilUtc:expected.chainDeadlineUtc});
   if(!Array.isArray(listed)||listed.length!==runIds.length||new Set(listed.map(y=>y?.id)).size!==runIds.length||
      listed.some(y=>!runIds.includes(y.id)||y.path!==WF||y.head_sha!==sha||y.event!=="workflow_dispatch"||
-       y.head_branch!=="main"||y.run_attempt!==1||y.status!=="completed"||y.conclusion!=="success"))HOLD("CONTROLLER_CHAIN_HISTORY");
+       y.head_branch!=="main"||y.run_attempt!==1||y.status!=="completed"||y.conclusion!=="success"||
+       y.created_at!==controllerRows.get(y.id)?.createdAt||y.display_title!==controllerRows.get(y.id)?.title))HOLD("CONTROLLER_CHAIN_HISTORY");
   for(const item of all.values()){
    if(runIds.includes(item.runId))HOLD("WORKER_CONTROLLER_ID_COLLISION");
    const route=ROUTES.get(item.lane),worker=await readRun(item.runId),sent=utc(item.sentAtUtc);
