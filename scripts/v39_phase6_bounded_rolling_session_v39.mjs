@@ -3,7 +3,9 @@
  * It CAN cause separately approved paid children, so global release and
  * one exact protected session are required. No automatic successor yet.
  */
-import {resolve} from "node:path";
+import {resolve,join} from "node:path";
+import {writeFileSync} from "node:fs";
+import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
@@ -139,10 +141,22 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   const state=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
   if(!state.pending.length){
    if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
+   // The final dispatch can occur after the last ordinary visibility
+   // check. Do not export terminal custody until a fresh complete snapshot
+   // contains every independently reconciled ACK in normal history.
+   const closing=[];
+   const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
+    verifySnapshot:(route,snapshot)=>closing.push(snapshot)});
+   if(final.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("FINAL_HISTORY_HOLD_NO_SUCCESSOR");
+   ledger.verifyTerminalHistory(closing);
    await uniqueRoot();await main();
+   const terminalAcknowledgements=ledger.terminalAcknowledgements();
+   const policyCommitment=createHash("sha256").update(JSON.stringify({
+    policySha256:a.expectedPolicySha256,...a.trust
+   })).digest("hex");
    return {schema:"v39.phase6.bounded-rolling-session.v1",status:"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
-    waves,calendarDeferred,visibilityDeferrals,githubRequests:requests,...state};
+    waves,calendarDeferred,visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,...state};
   }
   if(now()+30000>=a.deadline-12000)hold("PENDING_ACCEPTED_WORKERS_AT_DEADLINE");
   await pause(30000);
@@ -152,6 +166,8 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   const out=await runP6RollingSession(process.env,{emit:e=>console.log(JSON.stringify(e))});
+  if(!process.env.RUNNER_TEMP)hold("RUNNER_TEMP_REQUIRED");
+  writeFileSync(join(process.env.RUNNER_TEMP,"p6-rolling-terminal-receipt.json"),JSON.stringify(out),{flag:"wx",mode:0o600});
   console.log(JSON.stringify(out));
  }catch(e){const m=e?.message??"";console.error(/^HOLD_P6_ROLLING_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
 }

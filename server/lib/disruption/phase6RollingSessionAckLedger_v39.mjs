@@ -8,17 +8,30 @@ const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const active=new Set(["queued","in_progress","waiting","requested","pending"]);
 const fail=s=>{throw Error("HOLD_P6_ROLLING_SESSION_"+s);};
 const idOk=x=>Number.isSafeInteger(x)&&x>0;
-export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{}}){
+export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{},priorAcknowledgements=[]}){
  if(!/^[a-f0-9]{40}$/.test(sha??"")||!Number.isSafeInteger(epoch)||!Number.isSafeInteger(deadline)||
     epoch>now()||deadline<=now()||deadline-epoch>6*3600000||typeof emit!=="function")fail("BAD_SESSION_SCOPE");
  const rows=new Map(),seen=new Set(),attempts=new Map(),observed=new Map();
  const routeByLane=lane=>P6_ROLLING_ROUTES.find(x=>x.lane===lane);
+ // Imported operational receipts are NOT treated as already verified.
+ // A trusted predecessor admission must bind the receipt to this release
+ // and epoch. Reconcile every exact ID afresh before any new dispatch.
+ if(!Array.isArray(priorAcknowledgements)||priorAcknowledgements.length>96)fail("INVALID_PRIOR_ACK_SET");
+ for(const item of priorAcknowledgements){
+  const sent=Date.parse(item?.sentAtUtc);
+  if(!item||Object.keys(item).sort().join(",")!=="lane,runId,sentAtUtc"||
+     !routeByLane(item.lane)||!idOk(item.runId)||seen.has(item.runId)||
+     !Number.isSafeInteger(sent)||new Date(sent).toISOString()!==item.sentAtUtc||
+     sent<epoch||sent>now()||sent>=deadline)fail("INVALID_PRIOR_ACK_SET");
+  seen.add(item.runId);rows.set(item.runId,{lane:item.lane,runId:item.runId,sent,terminal:false});
+ }
+ let finalHistoryChecked=false;
  function evidence(e){
   const route=routeByLane(e?.lane);
   if(!route||now()>=deadline)fail("OUTSIDE_SESSION_EVIDENCE");
   if(e.status==="DISPATCH_ATTEMPT_BEFORE_ACK"){
    if(attempts.has(e.lane)||[...rows.values()].some(x=>x.lane===e.lane&&!x.terminal))fail("DUPLICATE_OR_UNRESOLVED_ATTEMPT");
-   attempts.set(e.lane,now());
+   finalHistoryChecked=false;attempts.set(e.lane,now());
    emit(Object.freeze({lane:e.lane,status:e.status,atUtc:new Date(now()).toISOString()}));return;
   }
   if(e.status!=="EXACT_ACK_NOT_EXECUTION_PROOF"||!attempts.has(e.lane)||!idOk(e.runId)||
@@ -74,10 +87,39 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
   }
   return status();
  }
+ // Closing verification deliberately requires each ACK in the normal
+ // session history, not only in the independently queried active list.
+ // Validate all lanes together; a partial check cannot mint a receipt.
+ function verifyTerminalHistory(snapshots){
+  finalHistoryChecked=false;
+  if(attempts.size||[...rows.values()].some(x=>!x.terminal)||
+     !Array.isArray(snapshots)||snapshots.length!==P6_ROLLING_ROUTES.length)
+   fail("TERMINAL_HISTORY_NOT_READY");
+  for(const route of P6_ROLLING_ROUTES){
+   const found=snapshots.filter(s=>s?.workflow===route.workflow);
+   if(found.length!==1)fail("TERMINAL_HISTORY_NOT_READY");
+   const snapshot=assertVisible(route,found[0]);
+   for(const item of rows.values()){
+    if(item.lane!==route.lane)continue;
+    const matching=snapshot.runs.filter(x=>x.id===item.runId);
+    if(matching.length!==1||matching[0].status!=="completed"||matching[0].conclusion!=="success"||
+       snapshot.active.some(x=>x.id===item.runId))
+     fail("ACK_TERMINAL_HISTORY_DRIFT");
+   }
+  }
+  if(now()>=deadline-12000)fail("READBACK_DEADLINE");
+  finalHistoryChecked=true;
+ }
+ function terminalAcknowledgements(){
+  if(!finalHistoryChecked||attempts.size||[...rows.values()].some(x=>!x.terminal)||now()>=deadline-12000)
+   fail("TERMINAL_RECEIPT_NOT_ADMITTED");
+  return Object.freeze([...rows.values()].sort((a,b)=>a.runId-b.runId)
+   .map(x=>Object.freeze({lane:x.lane,runId:x.runId,sentAtUtc:new Date(x.sent).toISOString()})));
+ }
  function status(){
   return {acknowledged:rows.size,verifiedTerminal:[...rows.values()].filter(x=>x.terminal).length,
    pending:[...rows.values()].filter(x=>!x.terminal).map(x=>({lane:x.lane,runId:x.runId})),
    unknownAttempts:attempts.size,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  }
- return Object.freeze({evidence,assertVisible,reconcile,status});
+ return Object.freeze({evidence,assertVisible,reconcile,status,verifyTerminalHistory,terminalAcknowledgements});
 }

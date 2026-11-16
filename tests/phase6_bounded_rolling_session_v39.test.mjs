@@ -6,8 +6,8 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave} from "../serv
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false}={}){
- let clock=start,seq=1000;const plans=new Map(),runs=[],calls=[],events=[];
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false}={}){
+ let clock=start,seq=1000,snapshots=0;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(4+i*4)*24*H,templates=[];
   for(const [horizon,off] of [["T-24h",24*H],["T-6h",6*H],["T-90m",90*MIN]])for(let slot=0;slot<4;slot++)
@@ -55,7 +55,8 @@ function setup({failAck=false,duplicate=false,hideAccepted=false}={}){
    }
    if(u.pathname.endsWith("/actions/runs"))return response({total_count:0,workflow_runs:[]});
    const route=P6_ROLLING_ROUTES.find(r=>u.pathname.endsWith("/workflows/"+r.workflow+"/runs"));assert(route);
-   const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&!(hideAccepted&&route.lane==="PRE_RECOVERY"));
+   if(route.lane==="SOURCE_POST"&&u.searchParams.get("event")==="schedule")snapshots++;
+   const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&!((hideAccepted||(hideFinal&&snapshots>=9))&&route.lane==="PRE_RECOVERY"));
    return response({total_count:selected.length,workflow_runs:selected});
   }};
  return {env,options,runs,calls,events};
@@ -69,6 +70,9 @@ test("protected bounded session uses calendar to defer six idle lanes and reconc
  assert(f.runs.every(x=>x.path.includes("lease-watchdog")||x.path.includes("retention-readonly")));
  assert.equal(out.providerCalls,0);assert.equal(out.databaseWrites,0);
  assert(f.calls.length<=450);
+ assert.match(out.policyCommitment,/^[a-f0-9]{64}$/);
+ assert.equal(out.terminalAcknowledgements.length,out.acknowledged);
+ assert.deepEqual(out.terminalAcknowledgements.map(x=>x.runId),f.runs.map(x=>x.id).sort((a,b)=>a-b));
 });
 test("no GO, wrong SHA, unknown previous root or missing policy refuses before dispatch",async()=>{
  const f=setup();
@@ -101,4 +105,10 @@ test("a known ACK absent from one lane's listing defers every new wave without a
  assert.equal(f.calls.filter(x=>x.method==="POST").length,2);
  assert(f.events.some(e=>e.status==="ROLLING_WAVE_DEFERRED_ACK_VISIBILITY_NO_DISPATCH"));
  assert.equal(f.events.filter(e=>e.status==="DISPATCH_ATTEMPT_BEFORE_ACK").length,2);
+});
+
+test("final history omission after ordinary waves prevents continuation receipt",async()=>{
+ const f=setup({hideFinal:true});
+ await assert.rejects(runP6RollingSession(f.env,f.options),/ACK_NOT_VISIBLE_IN_EXACT_HISTORY/);
+ assert(f.calls.filter(x=>x.method==="POST").length>=2);
 });

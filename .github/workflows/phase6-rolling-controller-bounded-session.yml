@@ -120,3 +120,10 @@ jobs:
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node scripts/v39_phase6_bounded_rolling_session_v39.mjs
           echo 'P6_BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF'
+      - name: Preserve terminal operational receipt for independently reviewed continuation
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-rolling-terminal-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-rolling-terminal-receipt.json
+          retention-days: 7
+          if-no-files-found: error

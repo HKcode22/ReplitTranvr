@@ -60,3 +60,37 @@ test("green but incomplete or skipped job evidence is not a terminal receipt",as
  }
  assert.equal(f.ledger.status().verifiedTerminal,0);
 });
+
+test("closing receipt is impossible until all exact terminal IDs are visible in complete normal history",async()=>{
+ const f=setup();f.attempt();f.ack();
+ const row=f.row({status:"completed",conclusion:"success"});
+ const jobs=route.jobs.map(j=>({name:j.name,status:"completed",conclusion:"success",steps:[]}));
+ await f.ledger.reconcile({token,fetcher:async u=>({ok:true,json:async()=>u.includes("/jobs?")?{total_count:jobs.length,jobs}:row})});
+ assert.throws(f.ledger.terminalAcknowledgements,/TERMINAL_RECEIPT_NOT_ADMITTED/);
+ const all=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:r===route?[row]:[],active:[]}));
+ assert.throws(()=>f.ledger.verifyTerminalHistory(all.slice(1)),/TERMINAL_HISTORY_NOT_READY/);
+ const missing=all.map(s=>({...s,runs:[]}));
+ assert.throws(()=>f.ledger.verifyTerminalHistory(missing),/ACK_NOT_VISIBLE/);
+ f.ledger.verifyTerminalHistory(all);
+ assert.deepEqual(f.ledger.terminalAcknowledgements(),[{lane:route.lane,runId:id,sentAtUtc:new Date(t).toISOString()}]);
+ const lag=all.map(s=>s.workflow===route.workflow?{...s,active:[f.row()]}:s);
+ assert.throws(()=>f.ledger.verifyTerminalHistory(lag),/ACK_TERMINAL_HISTORY_DRIFT/);
+ assert.throws(f.ledger.terminalAcknowledgements,/TERMINAL_RECEIPT_NOT_ADMITTED/);
+});
+test("prior ACK receipt is imported as unresolved and requires new direct readback before terminal export",async()=>{
+ const prior={lane:route.lane,runId:id,sentAtUtc:new Date(t-1000).toISOString()};
+ const cfg={sha,epoch:t-2000,deadline:t+600000,now:()=>t};
+ for(const bad of [[prior,prior],[{...prior,lane:"OTHER"}],[{...prior,sentAtUtc:new Date(t+1000).toISOString()}],[{...prior,terminal:true}]]){
+  assert.throws(()=>createP6SessionAckLedger({...cfg,priorAcknowledgements:bad}),/INVALID_PRIOR_ACK_SET/);
+ }
+ const ledger=createP6SessionAckLedger({...cfg,priorAcknowledgements:[prior]});
+ assert.equal(ledger.status().verifiedTerminal,0);
+ assert.deepEqual(ledger.status().pending,[{lane:route.lane,runId:id}]);
+ assert.throws(()=>ledger.evidence({lane:route.lane,status:"DISPATCH_ATTEMPT_BEFORE_ACK"}),/DUPLICATE_OR_UNRESOLVED/);
+ const f=setup(),row=f.row({status:"completed",conclusion:"success"});
+ const jobs=route.jobs.map(j=>({name:j.name,status:"completed",conclusion:"success",steps:[]}));
+ await ledger.reconcile({token,fetcher:async u=>({ok:true,json:async()=>u.includes("/jobs?")?{total_count:jobs.length,jobs}:row})});
+ const all=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:r===route?[row]:[],active:[]}));
+ ledger.verifyTerminalHistory(all);
+ assert.deepEqual(ledger.terminalAcknowledgements(),[prior]);
+});
