@@ -7,7 +7,7 @@ import {readFileSync,writeFileSync,mkdirSync,realpathSync} from "node:fs";
 import {resolve,dirname,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
 import {buildP5ProspectiveSeedCalendarPreview} from "./v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget,reconcileP6ActualJointBudget} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget,reconcileP6ActualJointBudget,P6_CURRENT_QUOTA_EVIDENCE_PATH} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const H=/^[a-f0-9]{64}$/;
@@ -39,11 +39,11 @@ export function prepareP6ActualReviewInput(codeSha:string){
  const ownerEvidencePath="data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json";
  const ownerEvidenceBytes=readFileSync(ownerEvidencePath);
  const owner=JSON.parse(ownerEvidenceBytes.toString("utf8"));
- const quotaPath="data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json";
+ const quotaPath=P6_CURRENT_QUOTA_EVIDENCE_PATH;
  const quotaBytes=readFileSync(quotaPath),quota=JSON.parse(quotaBytes.toString("utf8"));
  if(owner.frozenFrameHash!=="02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94"||
     owner.selectedAirportIcaosSha256!==draft.actualCorrectedPairSelectionSha256||
-    quota.apiUnitsRemaining!==59968||quota.apiUnitsLimit!==60000||quota.alertCreditsRemaining!==1830||
+    quota.observedAtUtc!=="2026-11-16T09:18:44.000Z"||quota.apiUnitsRemaining!==59968||quota.apiUnitsLimit!==60000||quota.alertCreditsRemaining!==1830||quota.requestsRemaining!==239973||quota.paidProviderCalls!==0||quota.databaseWrites!==0||
     quota.sourceRightsCertified!==false||quota.phase6PaidGo!==false)
   hold("ORIGINAL_FRAME_OR_ACCOUNT_EVIDENCE_CHANGED");
  const settings=proposal.settings;
@@ -90,6 +90,45 @@ export function prepareP6ActualReviewInput(codeSha:string){
    proposedAlertRunCeiling:alertRunCeiling,
    reviewed:false,arithmetic:reconcileP6ActualJointBudget(candidate,proposal,alertRunCeiling)};
  });
+ // Preserve the actually completed clock run and earlier measured safety
+ // baseline; neither provides a new account-specific terms or throughput SLA.
+ const clockPath="data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json";
+ const clockBytes=readFileSync(clockPath),clock=JSON.parse(clockBytes.toString("utf8"));
+ if(clock.workflowRunId!==43832469501||clock.ownedReceiptCount!==8||
+    clock.reviewedMainSha!=="bb7b6d12f194cdf4c4379be41d2cab5ecc84934a"||
+    clock.rows?.length!==8||clock.rows.some((x:any,i:number)=>
+     x.receipt.wave!==Math.floor(i/4)+1||x.receipt.slot!==i%4+1||
+     x.receipt.status!=="OBSERVED_READY_AND_TIMELY_NO_PROVIDER"||
+     x.receipt.runId!==43832469501||x.receipt.providerCalls!==0||
+     x.receipt.productionDatabaseWrites!==0||
+     !Number.isFinite(x.receipt.releaseSlipMs)||x.receipt.releaseSlipMs<0||x.receipt.releaseSlipMs>7)||
+    clock.productionNeonOrProviderLatencyCertified!==false||clock.phase6PaidGo!==false)
+  hold("ACTUAL_CLOCK_RECEIPT_DRIFT");
+ const smokePath="data-collection/evidence/original-artifacts/other/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json";
+ const smokeBytes=readFileSync(smokePath),smoke=JSON.parse(smokeBytes.toString("utf8"));
+ if(smoke.status!=="PASS"||smoke.authorizationId!=="AUTH-20260915-P2F095554"||
+    smoke.unsettledBurstMarginCredits!==50||smoke.protectedAlertFloor!==1000||
+    smoke.settlementInitialWaitSeconds!==30||smoke.settlementPollIntervalSeconds!==10||
+    smoke.settlementStableReadCount!==3||smoke.settlementTimeoutSeconds!==600||
+    smoke.watchdogPollMs!==5000||smoke.exactExternalInternalReconciliation!==true)
+  hold("HISTORICAL_SAFETY_SMOKE_DRIFT");
+ // Concrete recommendation for the final review, not approved stage input.
+ // 3k reserve is a future planning allocation, not assumed to be refillable.
+ const recommendedFinancial=jointBudgetScenarios[1];
+ const proposedAlertSafety={
+  unsettledBurstMarginCredits:smoke.unsettledBurstMarginCredits as number,
+  protectedAlertFloorCredits:smoke.protectedAlertFloor as number,
+  alertRunSpendCeilingCredits:recommendedFinancial.proposedAlertRunCeiling,
+  // Higher conservative proposal following the later Gate05 observation;
+  // the 4-airport SEND burst and latency remain independently unproved.
+  dailySoftStopMarginCredits:150,productionReconcileToleranceCredits:0,
+  startAdmissionToleranceSeconds:120,
+  safetyWatchdogPollMs:smoke.watchdogPollMs as number,
+  settlementInitialWaitSeconds:smoke.settlementInitialWaitSeconds as number,
+  settlementPollIntervalSeconds:smoke.settlementPollIntervalSeconds as number,
+  settlementStableReadCount:smoke.settlementStableReadCount as number,
+  settlementTimeoutSeconds:smoke.settlementTimeoutSeconds as number
+ };
  const timingCandidate={
   timingEvidenceSha256:null,
   // Demonstrated geometry scenario, NOT measured runtime or approval.
@@ -108,6 +147,23 @@ export function prepareP6ActualReviewInput(codeSha:string){
    resetAtUtc:quota.apiUnitsResetAtUtc,currentBalanceRevalidated:false},
   calendarDraft:draft,shapeEnvelope:preview.result.shapeEnvelope,
   externalCandidate,timingCandidate,jointBudgetScenarios,
+  concreteReviewRecommendation:{
+   status:"REVIEW_PROPOSAL_ONLY_NOT_SIGNED_NOT_APPROVED",
+   calendarRowsDigestCandidate:proposal.calendarRowsSha256,
+   jointBudgetReview:recommendedFinancial.candidate,
+   netRestCeilingUnits:recommendedFinancial.arithmetic.netRestCeiling,
+   proposedAlertSafety,
+   historicalSmoke:{path:smokePath,sha256:hash(smokeBytes),
+    evidenceId:"RUN-20260915-D61659402642563B6FEDF2AAA981474838BF088B67526528426F9702509C9D1B",
+    observedMaximumUnsettledGap:smoke.measuredMaxUnsettledCreditGap,
+    singleAirportHistoricalOnly:true},
+   actualClock:{path:clockPath,sha256:hash(clockBytes),runId:clock.workflowRunId,
+    receiptCount:clock.ownedReceiptCount,observedReadyMsRange:clock.observedReadyMsRange,
+    observedReleaseSlipMsRange:clock.observedReleaseSlipMsRange},
+   futureRefillConfirmed:false,fullScopeAlertSafetyMeasured:false,
+   liveProviderRangeAndProductionTimingCertified:false,
+   independentReviewerApproved:false,stageAuthorizationGranted:false
+  },
   missingExternalFields:Object.entries(externalCandidate).filter(([,v])=>v===null).map(([k])=>k),
   sourceRightsApproved:false,rangePriceAccountSpecificVerified:false,timingBoundsMeasured:false,
   reviewedMetadataOnly:false,actualBudgetReviewApproved:false,
