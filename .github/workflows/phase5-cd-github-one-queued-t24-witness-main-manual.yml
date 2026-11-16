@@ -5,13 +5,14 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER'
+        description: 'Exact singleton confirmation or RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER'
         required: true
         type: string
       frozen_roster:
-        description: 'Reviewed singleton roster path under data-collection/phase5/frozen/'
-        required: true
+        description: 'Singleton only: reviewed roster path; leave empty for current private mode'
+        required: false
         type: string
+        default: ''
   pull_request:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - 'scripts/v39_phase5_cd_github_one_queued_t24_witness_v39.ts'
       - 'scripts/v39_phase6_private_current_t24_worker_v39.mjs'
       - 'server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs'
+      - 'server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs'
       - 'tests/phase6_private_current_t24_worker_v39.test.mjs'
       - 'scripts/v39_phase6_committed_t24_witness_custody_v39.mjs'
       - 'tests/phase6_committed_t24_witness_custody_v39.test.mjs'
@@ -199,7 +201,7 @@ jobs:
           echo P5_CD_QUEUED_T24_PRE_V0081_SEPARATE_WITNESS_ATTEMPT_NO_PAID
 
   current-private-native-t24:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P6_PRIVATE_T24_EXECUTION_ENABLED == '1' && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1' && vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER' && inputs.frozen_roster == '')) && vars.P6_PRIVATE_T24_EXECUTION_ENABLED == '1' && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1' && vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 16
     env:
@@ -212,6 +214,7 @@ jobs:
       P5_V39_PREPARE_DATABASE_URL: ''
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm || '' }}
       P6_PRIVATE_T24_EXECUTION_ENABLED: ${{ vars.P6_PRIVATE_T24_EXECUTION_ENABLED }}
       P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER
       P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
@@ -244,6 +247,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
+          case "$GITHUB_EVENT_NAME" in
+            schedule) test -z "$P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM" ;;
+            workflow_dispatch) test "$P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER ;;
+            *) exit 2 ;;
+          esac
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$P6_PRIVATE_T24_EXECUTION_ENABLED" = 1
           test "$P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED" = 1
