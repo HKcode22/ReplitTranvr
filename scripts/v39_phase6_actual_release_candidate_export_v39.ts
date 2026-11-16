@@ -3,6 +3,8 @@
  * secret changes, database, network, fresh randomness or approval inference.
  */
 import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
+import {splitRuleHash} from "../server/lib/disruption/manifest_v3";
 import {readFileSync,writeFileSync,mkdirSync,realpathSync} from "node:fs";
 import {resolve,dirname,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -172,6 +174,166 @@ export function prepareP6ActualReviewInput(codeSha:string){
   proposedProtectedFloorUnits:proposal.protectedFloorUnits,proposedUnallocatedUnits:proposal.unallocatedUnits,
   providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
 }
+/** Bind review-only identity bytes to actual checked-out code and real evidence.
+ * This is not a new release gate. Git commit/tree is recorded separately from
+ * the content manifest, so committing only an approval/ledger or metadata
+ * day-plan cannot create a self-referential AUTH/manifest/code SHA cycle.
+ * No private env, provider Contents, signing keys or approved stage packet. */
+const reviewGit=(argv:string[])=>execFileSync("git",argv,{
+ encoding:"utf8",stdio:["ignore","pipe","ignore"],maxBuffer:12*1024*1024,timeout:20000
+});
+export function inspectP6ExactReviewCheckout(codeSha:string){
+ if(!/^[a-f0-9]{40}$/.test(codeSha)||
+    realpathSync(reviewGit(["rev-parse","--show-toplevel"]).trim())!==realpathSync(process.cwd())||
+    reviewGit(["rev-parse","HEAD"]).trim()!==codeSha||
+    reviewGit(["status","--porcelain","--untracked-files=no"]).trim()!=="")
+  hold("REVIEW_CHECKOUT_NOT_EXACT_CLEAN_TRACKED_CODE");
+ const treeSha=reviewGit(["rev-parse","HEAD^{tree}"]).trim();
+ if(!/^[a-f0-9]{40}$/.test(treeSha))hold("REVIEW_TREE_IDENTITY");
+ return {codeSha,treeSha};
+}
+const inExecutableScope=(p:string)=>/^(?:server|scripts|migrations|tests|shared|client|patches|\.github\/(?:workflows|actions))\//.test(p)||
+ /^(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|tsconfig(?:\.[\w-]+)?\.json|[\w-]+\.config\.[cm]?[jt]s|\.npmrc|\.nvmrc|\.node-version)$/.test(p);
+function readReleaseSourceInventory(){
+ const rows=reviewGit(["ls-tree","-r","-z","--full-tree","HEAD"]).split("\0").filter(Boolean)
+  .map(entry=>{
+   const tab=entry.indexOf("\t"),metadata=entry.slice(0,tab).split(" "),path=entry.slice(tab+1);
+   return {mode:metadata[0],type:metadata[1],gitBlob:metadata[2],path};
+  }).filter(x=>inExecutableScope(x.path)).sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+ if(rows.length<100||rows.some(x=>!["100644","100755"].includes(x.mode)||x.type!=="blob"||!/^[a-f0-9]{40}$/.test(x.gitBlob)))
+  hold("RELEASE_SOURCE_INVENTORY_SCOPE");
+ // Verify raw bytes against the tracked Git blob, not only the stat cache.
+ const sources=rows.map(x=>{
+  const raw=readFileSync(x.path);
+  const blob=createHash("sha1").update(Buffer.from("blob "+raw.length+"\0")).update(raw).digest("hex");
+  if(blob!==x.gitBlob)hold("REVIEW_TRACKED_SOURCE_BYTES_DRIFT");
+  return {path:x.path,mode:x.mode,sha256:hash(raw)};
+ });
+ for(const path of ["package.json","package-lock.json","scripts/v39_phase6_actual_release_candidate_export_v39.ts",
+  "scripts/v39_phase6_inert_release_stage_manual_v39.mjs","scripts/v39_phase6_enable_source_owner_v39.ts",
+  ".github/workflows/phase5-exact-inert-release-stage-manual.yml","server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39.ts"])
+  if(!sources.some(x=>x.path===path))hold("RELEASE_SOURCE_INVENTORY_REQUIRED_OWNER_MISSING");
+ return sources;
+}
+const fileEvidence=(path:string)=>({path,sha256:hash(readFileSync(path))});
+const docEvidence=(paths:string[])=>paths.map(fileEvidence);
+/** Uses the exact actual seed and latest retained account/timing evidence.
+ * The returned geometry is compiled by the original assembler with a
+ * deliberately NOT-AUTH identity and historical references, never a claimed
+ * authorization. Only counts and digests are returned; stage bytes and
+ * runnable day-plan bytes are not emitted here. */
+export function prepareP6ActualReleaseIdentityReview(codeSha:string){
+ const checkout=inspectP6ExactReviewCheckout(codeSha);
+ const review=prepareP6ActualReviewInput(codeSha),r=review.concreteReviewRecommendation;
+ const seedPath="data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json";
+ const seed=JSON.parse(readFileSync(seedPath,"utf8")),preview=replayP6OriginalSeed();
+ const {timingEvidenceSha256:_unknownTiming,...timingLimits}=review.timingCandidate;
+ const timingEvidence={
+  schema:"v39.phase6.prearm-timing-policy-evidence-candidate.v1",
+  clock: r.actualClock,
+  historicalSourceAndPost:docEvidence([
+   "data-collection/phase4/2026-11-05_G5A_NOV06_1400Z_NEW_PROSPECTIVE_RELEASE_GATE.md",
+   "data-collection/phase5/2026-11-16_EXACT_POSTSTAGE_COMMISSIONING_READBACK.md",
+   "data-collection/phase5/2026-11-16_PREARM_CLOCK_TWO_WAVE_VALIDATION_NO_GO.md"]),
+  proposedLimits:timingLimits,
+  liveNeonAndProviderBoundsCertified:false,sustainedCronCertified:false,independentReviewApproved:false
+ };
+ const timingSha=hash(JSON.stringify(timingEvidence));
+ const rangeEvidence={
+  schema:"v39.phase6.provider-range-price-evidence-candidate.v1",
+  originalHistoricalAccount:fileEvidence("data-collection/evidence/early-gates/V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json"),
+  currentQuota:review.quotaEvidence,
+  historicalPaidSource:docEvidence([
+   "data-collection/phase3/2026-10-27_GATE05C_FIDS_WITHLEG_PAID_SCHEMA_RETEST_PROTOCOL.md",
+   "data-collection/phase4/2026-11-01_GATE5_REAL_PAID_FIDS_ONE_NONRETAINED_SEMANTIC_CHECK.md",
+   "data-collection/phase5/2026-11-16_FINAL_DUAL_LEDGER_REVIEW_AND_COMMISSIONING.md"]),
+  proposedProviderRangeMinutes:review.externalCandidate.providerMaxRangeMinutes,
+  proposedApiUnitsPerPhysicalGet:review.externalCandidate.apiUnitsPerPhysicalGet,
+  publicContractRangeBasis:"September 7 provider announcement summarized in cited repository checkpoint; prior 12h documented range, not measured today",
+  currentAccountRangePriceCertified:false,sourceRightsApproved:false,independentReviewApproved:false
+ };
+ const rangeSha=hash(JSON.stringify(rangeEvidence));
+ const proposal=proposeP5ActualNov22Budget(review.calendarDraft);
+ const config={
+  schema:"v39.phase6.actual-first-seed-config-candidate.v1",
+  status:"PROPOSED_NOT_FROZEN",
+  frameSha256:review.frameEvidence.frameHash,
+  calendarRowsSha256:review.externalCandidate.expectedCalendarRowsSha256,
+  originalSeedSha256:hash(readFileSync(seedPath)),
+  // Existing split helper; reuse the original revealed treatment seed as
+  // the explicit split-rule fingerprint input, never draw another seed.
+  splitRule:{sha256:splitRuleHash(seed.treatmentSeedHex),seedBasis:"original treatmentSeedHex",
+   train:[1,20],validation:[21,25],test:[26,31],groupBy:"flight_instance_id",
+   concreteTestRowsMaterialized:false},
+  selectedT:"PROVIDER_NATIVE_SCHEDULE_CANDIDATE_NOT_CERTIFIED_GATE_OUT",
+  primary:"T-6h_actual_gate_out_delay_minutes_conditional",
+  pairedUpdate:"T-90m",comparator:"T-24h",airborneEtaSeparate:true,
+  actualOnlyGateOutCertified:false,sourceRightsApproved:false,
+  source:{...proposal.settings,cycleRestCeilingUnits:r.netRestCeilingUnits,
+   preHorizons:["T-24h","T-6h","T-90m"],timing:timingLimits},
+  physicalUtcCategoryRowsSha256:hash(JSON.stringify(proposal.physicalUtcRows)),
+  jointBudgetReviewCandidate:r.jointBudgetReview,alertSafetyCandidate:r.proposedAlertSafety,
+  timingEvidenceCandidateSha256:timingSha,rangeEvidenceCandidateSha256:rangeSha,
+  legacyAlertStartApproved:false,reviewApproved:false,phase6PaidGo:false
+ };
+ const configSha=hash(JSON.stringify(config));
+ const sources=readReleaseSourceInventory(),sourceInventorySha256=hash(JSON.stringify(sources));
+ const historicalRefs=[
+  "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+  r.historicalSmoke.evidenceId
+ ];
+ const ledger=readFileSync("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md","utf8");
+ if(historicalRefs.some(id=>!ledger.includes(id)))hold("HISTORICAL_LEDGER_REFERENCE_MISSING");
+ const manifest={
+  schema:"v39.phase6.actual-first-seed-release-manifest-candidate.v1",
+  status:"UNSIGNED_REVIEW_CANDIDATE_NOT_SCIENTIFIC_FREEZE",
+  sourceInventorySha256,executableFileCount:sources.length,
+  scope:"tracked source, scripts, tests, migrations, workflows and runtime dependency/config files; exact checkout separately identified",
+  bindingDocuments:docEvidence([
+   "data-collection/plans/V3.9_DataCollectPlan_f.8.md",
+   "data-collection/plans/V3.9_f.8_Gate5_Expedited_Collection_Amendment_A_20261102.md",
+   "data-collection/plans/V3.9_f.8_Gate5_Amendment_B_20261102_Restore_Scientific_Acceptance.md",
+   "data-collection/plans/V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md",
+   "data-collection/plans/V3.9_DataCollectPlan_f.8_Amendment_D_20261107_Prospective_Schedule_Revision_Primary.md",
+   "data-collection/plans/V3.9_DataCollectPlan_f.8_Amendment_D_20261108_Four_HUB_Prospective_Scope.md",
+   "data-collection/phase5/2026-11-11_AMENDMENT_E_CANONICAL_TRAVELER_PREDICTIONS_C_D_FREE_ADSB.md",
+   "data-collection/phase5/2026-11-10_ADR_PHASE6_AUTONOMOUS_C_PLUS_D_HYBRID_DESIGN.md"]),
+  originalSeed:fileEvidence(seedPath),originalPreviewSha256:review.originalPreviewSha256,
+  frameEvidence:review.frameEvidence,
+  calendarRowsSha256:config.calendarRowsSha256,configCandidateSha256:configSha,
+  timingEvidenceCandidateSha256:timingSha,rangeEvidenceCandidateSha256:rangeSha,
+  historicalRefs,finalPredecessorsApproved:false,scientificFreezeApproved:false,phase6PaidGo:false
+ };
+ const manifestSha=hash(JSON.stringify(manifest));
+ const proposed={...review.externalCandidate,manifestSha256:manifestSha,calendarSha256:config.calendarRowsSha256,
+  configSha256:configSha,phase6AuthorizationId:"REVIEW-ONLY-NOT-AN-AUTHORIZATION",
+  predecessorEvidenceIds:historicalRefs,alertSafety:r.proposedAlertSafety,
+  providerRangeEvidenceSha256:rangeSha,timingEvidenceSha256:timingSha,
+  cycleRestCeilingUnits:r.netRestCeilingUnits,jointBudgetReview:r.jointBudgetReview};
+ const timing={...timingLimits,timingEvidenceSha256:timingSha};
+ const geometry=assembleP6ActualFirstSeedReleaseCandidate({
+  draft:preview.result.calendarDraft,envelope:preview.result.shapeEnvelope,external:proposed,
+  expectedExternalInputSha256:hash(JSON.stringify(proposed)),timing,expectedTimingJsonSha256:hash(JSON.stringify(timing))});
+ if(geometry.dayPlans.files.length!==31||geometry.dayPlans.totalPlannedQueries!==6144||geometry.totalReservedUnits!==41960)
+  hold("ACTUAL_REVIEW_GEOMETRY_DRIFT");
+ const after=inspectP6ExactReviewCheckout(codeSha);
+ if(after.treeSha!==checkout.treeSha)hold("REVIEW_CHECKOUT_CHANGED");
+ return {schema:"v39.phase6.actual-first-seed-identity-review-only.v1",
+  status:"EXACT_CONTENT_DIGESTS_AND_GEOMETRY_REVIEW_ONLY_NOT_RELEASE",
+  checkout,manifestCandidate:{sha256:manifestSha,content:manifest},
+  configCandidate:{sha256:configSha,content:config},
+  timingEvidenceCandidate:{sha256:timingSha,content:timingEvidence},
+  rangeEvidenceCandidate:{sha256:rangeSha,content:rangeEvidence},
+  calendarRowsDigestCandidate:config.calendarRowsSha256,sourceInventory:sources,
+  geometry:{dayPlanCount:geometry.dayPlans.files.length,totalQueries:geometry.dayPlans.totalPlannedQueries,
+   totalReservedUnits:geometry.totalReservedUnits,dayPlanSha256s:geometry.dayPlans.dayPlanSha256s,
+   coverageGridSha256:geometry.dayPlans.coverageGridSha256},
+  // Do not return the non-AUTH stage packet or its hash: reviewer approval
+  // and actual predecessor IDs must replace the review-only context.
+  actualAuthorizationId:null,finalPredecessorEvidenceIds:null,
+  candidateDigestsApproved:false,stagePacketExported:false,
+  sourceRightsApproved:false,scientificFreezeApproved:false,phase6PaidGo:false};
+}
 export function compileP6ActualCandidateExport(input:{
  externalBytes:Buffer;expectedExternalFileSha256:string;
  timingBytes:Buffer;expectedTimingFileSha256:string;
@@ -224,7 +386,8 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
   if(process.argv[2]==="--review-only"&&process.argv.length===4){
-   console.log(JSON.stringify(prepareP6ActualReviewInput(process.argv[3]),null,2));
+   const review=prepareP6ActualReviewInput(process.argv[3]);
+   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3])},null,2));
   }else{
   if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==7)hold("OWNER_LOCAL_EXACT_ARGUMENTS");
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(2);
