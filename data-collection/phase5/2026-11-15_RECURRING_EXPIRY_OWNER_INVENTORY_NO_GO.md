@@ -1,0 +1,7 @@
+# November 15 Pacific — actual existing owner expiry inventory
+
+#801 and #802 merged after six exact-head workflows each. Main b138c2478bedc6aae386508dc4368a2145d40b39. Actual three-hop rehearsal already passed; do not repeat.
+
+Prepare owner-local metadata-only inventory on existing Replit-attached neondb: exact reviewed current main and clean checkout, STOP, owner PG16/TLS identity, due and next-hour counts, candidate reusable narrow scoped logins, two real object SDK existence-only checks on an opaque nonexistent key. No raw download/list/upload/delete. Report endpoint/bucket fingerprints only. Optional independently obtained direct owner connection must match existing pooled endpoint host mapping. No separate Neon account, new database, new role or migration.
+
+Consolidate the existing scoped ACL test grants into one fixed grant specification for future reviewed role commissioning; actual disposable PG16 test uses that exact specification and verifies candidate discovery before and after grants, plus independent restricted runtime checks. Inventory is not an apply or credential setup. If scoped actors already exist, reconcile and reuse rather than creating more. A successful SDK existence check is not evidence of independent storage IAM, backup/PITR or deletion. No public deletion endpoint added. Actual GitHub-to-Replit scheduling/transport still needs its own verified bounded operation; do not assume GitHub can access the Replit SDK. Phase5 freeze HOLD / Phase6 paid NO-GO.

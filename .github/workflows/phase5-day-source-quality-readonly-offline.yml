@@ -12,6 +12,7 @@ on:
       - 'tests/provider_blob_store_v39.test.ts'
       - 'tests/phase5_provider_blob_expiry_real_pg_v39.test.ts'
       - 'scripts/v39_phase5_recurring_blob_expiry_runtime_v39.ts'
+      - 'scripts/v39_phase5_recurring_expiry_owner_inventory_v39.ts'
       - 'tests/phase5_recurring_blob_expiry_runtime_v39.test.ts'
       - '.github/workflows/phase5-day-source-quality-readonly-offline.yml'
   push:
