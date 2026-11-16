@@ -1,8 +1,8 @@
 /** Disposable real B0062 row lock/expiry tests; in-memory object store ONLY. */
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
 import {Pool} from "pg";
-import {verifyP5RecurringExpiryActor,executeP5RecurringExpiryRuntime,p5RecurringExpiryGrants} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
-import {randomUUID} from "node:crypto";
+import {verifyP5RecurringExpiryActor,executeP5RecurringExpiryRuntime,p5RecurringExpiryGrants,scopedExpiryClientTlsVerified,admitP5RecurringExpiryRuntime} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
+import {randomUUID,createHash} from "node:crypto";
 import {inventoryP5ExpiryActors} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {verifyOneExpiredProviderBlobV39,runBoundedProviderBlobExpiryBatchV39,type ProviderBlobExpiryCandidateV39} from "../server/lib/disruption/providerBlobExpiry_v39";
 import {providerBlobObjectNameV39,type ProviderBlobRefV39} from "../server/lib/disruption/providerBlobStore_v39";
@@ -149,6 +149,9 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
    writer=new Pool({connectionString:URL.replace("postgres:postgres@",writerRole+":ci_disposable_writer@"),max:2});
    reader=new Pool({connectionString:URL.replace("postgres:postgres@",readerRole+":ci_disposable_reader@"),max:1,options:"-c default_transaction_read_only=on"});
    const verifyActor:typeof verifyP5RecurringExpiryActor=async(d,r,a)=>verifyP5RecurringExpiryActor(d,r,a,false);
+   // Actual unencrypted disposable PG connections must fail production admission.
+   await expect(verifyP5RecurringExpiryActor(writer,writerRole,"writer")).rejects.toThrow("ACTOR_CLIENT_TLS_UNVERIFIED");
+   await expect(verifyP5RecurringExpiryActor(reader,readerRole,"reader")).rejects.toThrow("ACTOR_CLIENT_TLS_UNVERIFIED");
    await verifyActor(writer,writerRole,"writer");await verifyActor(reader,readerRole,"reader");
    await db.query("GRANT SELECT (source_record_id) ON clean.provider_content_blob_ref TO "+readerRole);
    await expect(verifyActor(reader,readerRole,"reader")).rejects.toThrow("COLUMN_ACL_DRIFT");
@@ -228,4 +231,25 @@ suite("existing B0062 serialized blob expiry and absence reconciliation",()=>{
   }
  });
 
+});
+
+describe("expiry runtime certificate verification contract",()=>{
+ it("requires a real authenticated TLS socket, not a duck-typed fake",()=>{
+  expect(scopedExpiryClientTlsVerified({connectionParameters:{host:"ep-example.neon.tech"},connection:{stream:{
+   encrypted:true,authorized:true,getProtocol:()=>"TLSv1.3",getPeerCertificate:()=>({subject:{CN:"ep-example.neon.tech"}})}}} as any)).toBe(false);
+ });
+ it("normalizes both pool URLs to verify-full and refuses weakened SSL options",()=>{
+  const pin="a".repeat(40),host="ep-example.neon.tech";
+  const env={P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:pin,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
+   V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-ci",P5_RECURRING_EXPIRY_EXPECTED_BUCKET_ID:"replit-objstore-ci",
+   P5_RECURRING_EXPIRY_EXPECTED_DB_ENDPOINT_SHA256:createHash("sha256").update(host+"/neondb").digest("hex"),
+   P5_RECURRING_EXPIRY_WRITER_ROLE:"ci_expiry_writer",P5_RECURRING_EXPIRY_READER_ROLE:"ci_expiry_reader",
+   P5_RECURRING_EXPIRY_WRITER_URL:"postgresql://ci_expiry_writer:synthetic@"+host+"/neondb?sslmode=require",
+   P5_RECURRING_EXPIRY_READER_URL:"postgresql://ci_expiry_reader:synthetic@"+host+"/neondb?sslmode=verify-ca"};
+  const cfg=admitP5RecurringExpiryRuntime(env,pin);
+  expect(new globalThis.URL(cfg.writerUrl).searchParams.get("sslmode")).toBe("verify-full");
+  expect(new globalThis.URL(cfg.readerUrl).searchParams.get("sslmode")).toBe("verify-full");
+  expect(env.P5_RECURRING_EXPIRY_WRITER_URL).toContain("sslmode=require");
+  expect(()=>admitP5RecurringExpiryRuntime({...env,P5_RECURRING_EXPIRY_WRITER_URL:env.P5_RECURRING_EXPIRY_WRITER_URL+"&uselibpqcompat=true"},pin)).toThrow();
+ });
 });
