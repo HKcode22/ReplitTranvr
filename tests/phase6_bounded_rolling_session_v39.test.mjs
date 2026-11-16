@@ -5,6 +5,7 @@ import {mkdtempSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
+import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
@@ -419,5 +420,36 @@ test("integrated successful successor request preserves exact acceptance before 
   const last=JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1));
   assert.equal(last.status,"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF");assert.equal(last.nextRunId,out.nextRunId);
   assert.equal(out.successorDispatches,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("combined writer/readback contract retains real-shaped unknown worker attempt without a manufactured ACK",async()=>{
+ const f=setup({failAck:true}),dir=mkdtempSync(join(tmpdir(),"p6-combined-custody-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+30*MIN,hop:0,parent:0});
+ try{
+  f.options.emit=e=>j.record(e);
+  await assert.rejects(runP6RollingSession(f.env,f.options),/UNKNOWN_DISPATCH_STOP_NO_RETRY/);
+  const parsed=parseP6RollingFailureCustody(readFileSync(p),{runId:12345,mainSha:sha});
+  const out=await reconcileP6FailureCustody(parsed,{readRun:async()=>assert.fail("unknown ACK must not be guessed")});
+  assert.equal(out.unknownWorkerAttempts.length,1);assert.equal(out.workers.length,0);
+  assert.equal(out.permitReplay,false);assert.equal(out.permitNewRoot,false);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("combined fresh closing recovery plus journal/readback keeps exact worker and unknown successor custody",async()=>{
+ const f=setup({chain:true,hideFinalOnce:true,failSuccessor:true}),dir=mkdtempSync(join(tmpdir(),"p6-combined-custody-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+60*MIN,hop:0,parent:0});
+ try{
+  f.options.emit=e=>{f.events.push(e);j.record(e);};
+  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_UNKNOWN_SUCCESSOR_ACK_NO_REPLAY/);
+  assert(f.events.some(x=>x.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+  const parsed=parseP6RollingFailureCustody(readFileSync(p),{runId:12345,mainSha:sha});
+  const seen=[];
+  const out=await reconcileP6FailureCustody(parsed,{readRun:async id=>{seen.push(id);return f.runs.find(x=>x.id===id);}});
+  assert.equal(out.unknownWorkerAttempts.length,0);assert.equal(out.workers.length,f.runs.length);
+  assert.equal(seen.length,f.runs.length);assert(out.workers.every(x=>x.githubState==="KNOWN_GITHUB_SUCCESS_NOT_COLLECTION_PROOF"));
+  assert.equal(out.successor.githubState,"UNKNOWN_SUCCESSOR_ACK_NO_REPLAY");
+  assert.equal(out.permitNewRoot,false);assert.equal(out.permitReplay,false);
+  assert.equal(f.calls.filter(x=>x.method==="POST"&&x.url.includes("/workflows/"+WF+"/dispatches")).length,1);
  }finally{j.close();rmSync(dir,{recursive:true,force:true});}
 });
