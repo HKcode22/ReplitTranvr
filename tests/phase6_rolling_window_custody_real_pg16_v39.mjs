@@ -38,7 +38,7 @@ try {
  await owner.query("ALTER ROLE neondb_owner NOCREATEROLE; SET ROLE neondb_owner");
  const login="phase6_rolling_claim_ci_test",wrongLogin="phase6_rolling_claim_ci_wrong";
  async function loginClient(name,password){
-  const u=new URL(URL);u.username=name;u.password=password;
+  const u=new globalThis.URL(URL);u.username=name;u.password=password;
   const x=new pg.Client({connectionString:u.href,connectionTimeoutMillis:5000,query_timeout:15000});
   await x.connect();clients.push(x);return x;
  }
