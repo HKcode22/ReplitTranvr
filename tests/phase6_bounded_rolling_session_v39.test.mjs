@@ -7,10 +7,10 @@ import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6Revi
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
-  const service=start+(4+i*4)*24*H,templates=[];
+  const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
   for(const [horizon,off] of [["T-24h",24*H],["T-6h",6*H],["T-90m",90*MIN]])for(let slot=0;slot<4;slot++)
    templates.push({queryKey:"d"+i+"."+horizon+"."+slot,runDayIndex:i+1,horizon,serviceWindowStartUtc:iso(service),
     serviceWindowEndUtc:iso(service+4*H),earliestPlannedCutoffUtc:iso(service-off),scheduledRequestUtc:iso(service-off-15*MIN)});
@@ -86,7 +86,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
     const row=runs.find(x=>x.id===Number(direct[1]));assert(row);
     if(!direct[2])return response(row);
     const route=P6_ROLLING_ROUTES.find(x=>row.path.endsWith("/"+x.workflow));
-    const jobs=route.jobs.map((j,i)=>({id:row.id*10+i+1,run_id:row.id,run_attempt:1,head_sha:sha,name:j.name,status:"completed",conclusion:"success",steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:[]}));
+    const jobs=route.jobs.map((j,i)=>({id:row.id*10+i+1,run_id:row.id,run_attempt:1,head_sha:sha,name:j.name,status:"completed",conclusion:"success",steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x==="NO_DUE_WORK"?"success":"skipped"})):[]}));
     return response({total_count:jobs.length,jobs});
    }
    if(u.pathname.endsWith("/actions/runs")){
@@ -280,4 +280,27 @@ test("retirement mode mismatch or malformed no-advance receipt refuses continuat
  const posts=f.calls.filter(x=>x.method==="POST").length;
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_RETIREMENT_RECEIPT_SCOPE/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+
+test("busy eight-lane calendar preserves readback headroom and emits terminal ACKs rather than exhausting the hard cap",async()=>{
+ const f=setup({busyCalendar:true}),out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF");
+ assert.equal(out.requestBudgetStop,true);assert(out.waves<8);
+ assert.equal(out.pending.length+out.unknownAttempts,0);
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert.equal(out.terminalAcknowledgements.length,f.runs.length);
+ assert.equal(new Set(f.runs.map(x=>x.path)).size,8);
+ assert(f.calls.length<=450);
+});
+
+test("request-budget admission can defer after a fresh route read without writing an attempt marker or POST",async()=>{
+ const snaps=P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,runs:[],active:[],jobs:[]}));
+ const p=restrictP6RollingWave(planP6RollingTick(snaps,{sha,epoch:start,clock:start}),["PRE_RECOVERY"]);
+ let calls=0,checks=0,attempts=0;
+ const result=await dispatchP6ReviewedRollingWave(p,{sha,approvedSha:sha,releaseApproved:true,token:"synthetic-test-token-no-access",
+  deadline:start+2*MIN,now:()=>start,recheckRoute:async r=>snaps.find(x=>x.workflow===r.workflow),
+  onEvidence:()=>attempts++,mayStartAttempt:()=>++checks===1,fetcher:async(_url,opt)=>{calls++;assert.equal(opt.method,"GET");return{ok:true,json:async()=>({object:{sha}})};}});
+ assert.equal(attempts,0);assert.equal(calls,1);assert.equal(result.dispatchCount,0);
+ assert.deepEqual(result.requestBudgetDeferred,["PRE_RECOVERY"]);
 });

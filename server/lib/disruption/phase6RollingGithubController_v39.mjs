@@ -173,10 +173,10 @@ export function restrictP6RollingWave(plan,eligibleLanes){
  * from a real protected workflow. In this PR no production caller exists.
  * An unknown ACK stops immediately; no retry or alternate dispatch API.
  */
-export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releaseApproved,token,deadline,recheckRoute,onEvidence,now=()=>Date.now(),fetcher=fetch}){
+export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releaseApproved,token,deadline,recheckRoute,onEvidence,mayStartAttempt=()=>true,now=()=>Date.now(),fetcher=fetch}){
  const stamp=issued.get(plan),started=now();
  if(!stamp||stamp.used||stamp.sha!==sha||started<stamp.clock||started-stamp.clock>60000||
-    typeof recheckRoute!=="function"||typeof onEvidence!=="function"||
+    typeof recheckRoute!=="function"||typeof onEvidence!=="function"||typeof mayStartAttempt!=="function"||
     !CODE.test(sha??"")||sha!==approvedSha||releaseApproved!==true||
     typeof token!=="string"||token.length<16||!Number.isFinite(deadline)||
     deadline<=now()||deadline-now()>600000||
@@ -189,8 +189,9 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
   hold("NO_EXACT_ROLLING_WAVE_APPROVAL");
  stamp.used=true;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
- const acknowledged=[],deferred=[];
+ const acknowledged=[],deferred=[],requestBudgetDeferred=[];
  for(const route of P6_ROLLING_ROUTES.filter(r=>plan.due.includes(r.lane))){
+  if(mayStartAttempt()!==true){requestBudgetDeferred.push(route.lane);continue;}
   if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
   const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now()});
   if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state.startsWith("RECENT_")){deferred.push(route.lane);continue;}
@@ -205,6 +206,9 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
   const inputs={...route.inputs,...(route.lane==="RETENTION_MONITOR"?{approved_main_sha:sha}:{})};
   // No arbitrary URL, workflow names, day, roster, scope, budget or provider
   // arguments from the runtime caller.
+  // The caller can reserve readback capacity after the last GET. This is
+  // a normal deferral before the attempt marker, never an unknown POST.
+  if(mayStartAttempt()!==true){requestBudgetDeferred.push(route.lane);continue;}
   onEvidence(Object.freeze({lane:route.lane,status:"DISPATCH_ATTEMPT_BEFORE_ACK"}));
   try{
    const res=await fetcher(ROOT+"/actions/workflows/"+route.workflow+"/dispatches",{
@@ -218,7 +222,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
    onEvidence(Object.freeze({lane:route.lane,status:"EXACT_ACK_NOT_EXECUTION_PROOF",runId:id}));
   }catch{hold("UNKNOWN_DISPATCH_STOP_NO_RETRY");}
  }
- return {status:"ROLLING_WAVE_ACKNOWLEDGED_NOT_EXECUTION_PROOF",acknowledged,deferred,dispatchCount:acknowledged.length,
+ return {status:"ROLLING_WAVE_ACKNOWLEDGED_NOT_EXECUTION_PROOF",acknowledged,deferred,requestBudgetDeferred,dispatchCount:acknowledged.length,
   providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:false};
 }
 

@@ -23,6 +23,11 @@ const JOB="one-protected-bounded-session",STEPS=["Execute one protected rolling 
 const idok=x=>typeof x==="string"&&/^[1-9][0-9]{0,14}$/.test(x);
 const chainTitle=(hop,parent)=>"P6 ROLLING CHAIN "+hop+" "+parent;
 const MIN=60000;
+// Keep the original hard ceiling. Reserve capacity for final history, up to
+// eight known active ACKs, optional retirement prefix proof, root and main.
+// This is a conservative soft admission boundary, not a guarantee against
+// unusually large concurrent GitHub histories or prolonged pending work.
+const REQUEST_CAP=450,DISPATCH_REQUEST_BOUND=300,WAVE_START_BOUND=260;
 const hold=s=>{throw Error("HOLD_P6_ROLLING_RUNTIME_"+s);};
 const time=x=>{
  if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_PROTECTED_UTC");
@@ -107,12 +112,13 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  let historyEpoch=a.epoch,retirementAudit=null;
  const scheduleEvidenceCache=createP6RollingScheduleEvidenceCache();
  let requests=0,waves=0,calendarDeferred=0,capacityDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
+ let requestBudgetDeferred=0,requestBudgetStop=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  const api=async(url,init)=>{
   const u=new URL(url);
   if(u.origin!=="https://api.github.com"||!u.pathname.startsWith("/repos/"+REPO+"/")||
      u.username||u.password||u.hash||!["GET","POST"].includes(init?.method)||
-     now()>=a.deadline-12000||++requests>450)hold("API_SCOPE_OR_SESSION_REQUEST_BOUND");
+     now()>=a.deadline-12000||++requests>REQUEST_CAP)hold("API_SCOPE_OR_SESSION_REQUEST_BOUND");
   // Every write originates only in the imported fixed-route dispatch core.
   // Refuse a call if it cannot leave a separate reconciliation window.
   if(init.method==="POST"&&now()>=a.deadline-12*MIN)hold("DISPATCH_DRAIN_BOUND");
@@ -270,6 +276,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  // Allow a maximum of 8 waves under the first 30-minute protected window.
  // 2 minutes polling cadence is provisional; actual timing must be measured.
  while(waves<8&&now()<a.deadline-12*MIN-60000){
+  if(requests>=WAVE_START_BOUND){requestBudgetStop=true;break;}
   await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
   let observation;
   try{
@@ -301,14 +308,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(narrowed.due.length){
    const dispatchDeadline=Math.min(a.deadline-12*MIN,now()+5*MIN);
    if(dispatchDeadline-now()<60000)break;
-   await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
+   const waveResult=await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
     deadline:dispatchDeadline,now,fetcher:api,recheckRoute:async route=>ledger.assertVisible(route,await recheckRoute(route)),
-    onEvidence:ledger.evidence});
+    mayStartAttempt:()=>requests<DISPATCH_REQUEST_BOUND,onEvidence:ledger.evidence});
+   requestBudgetDeferred+=waveResult.requestBudgetDeferred.length;
+   if(waveResult.requestBudgetDeferred.length)requestBudgetStop=true;
   }
   waves++;
   emit({status:"ROLLING_WAVE_OBSERVED_NOT_COLLECTION_PROOF",wave:waves,calendarDeferred:calendarPlan.calendarDeferred.length,
-   capacityDeferred:deferredByCapacity,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),...ledger.status()});
-  if(ledger.remainingDispatchCapacity()===0)break;
+   capacityDeferred:deferredByCapacity,requestBudgetDeferred,requestBudgetStop,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),...ledger.status()});
+  if(ledger.remainingDispatchCapacity()===0||requestBudgetStop||requests>=WAVE_START_BOUND){
+   if(requests>=WAVE_START_BOUND)requestBudgetStop=true;
+   break;
+  }
   if(waves<8&&now()+2*MIN<a.deadline-12*MIN-60000)await pause(2*MIN);else break;
  }
  // A first approved chain session can transfer EXACT known active ACK
@@ -355,7 +367,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
-    waves,calendarDeferred,capacityDeferred,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
+    waves,calendarDeferred,capacityDeferred,requestBudgetDeferred,requestBudgetStop,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
     successorDispatches:0,nextRunId:null,...state,
     ...(a.rollover?{historyRetirementMode:"PROTECTED_TWO_SESSION_REHEARSAL",historyEpochUtc:new Date(historyEpoch).toISOString(),
       ...(retirementCandidate?{historyRetirementCandidate:retirementCandidate}:{}),
@@ -365,7 +377,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // This single POST is to the same controller, not a collection route.
    // The successor can only start after the root publishes its exact ACK
    // receipt and finishes; failure or unknown acceptance is never retried.
-   if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>450)
+   if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>REQUEST_CAP)
     hold("CHAIN_SUCCESSOR_DEADLINE");
    emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id});
    try{
