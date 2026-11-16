@@ -3,7 +3,7 @@
 import pg from "pg";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
-import {claimP6RollingWindowOnce} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
+import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
 import assert from "node:assert/strict";
 const URL="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 if(process.env.GITHUB_ACTIONS!=="true"||process.env.P6_WINDOW_DISPOSABLE_PG16!=="1"||
@@ -150,10 +150,22 @@ try {
  console.log("V0102_ACTUAL_SCOPED_LOGIN_POLICY_PIN_FUNCTION_ONLY_NO_CLOSE_CROSS_LOGIN_READ_DENIED=PASS");
  assert.equal(winner.operationalCustodyWrites,1);assert.equal(winner.permitDispatch,false);assert.equal(winner.phase6PaidGo,false);
  assert.equal(winner.policyCommitment,hash(JSON.stringify({policySha256:policy,...trust})));
+ const successor={...narrowInput(accepted),sessionEpochUtc:iso(clock),chainDeadlineUtc:iso(clock+30*60000),chainMode:"SINGLE"};
+ const again=await readP6KnownRollingWindowOnce(successor,{readbackClient:read1});
+ assert.equal(again.rootRunId,accepted);assert.equal(again.windowIndex,winner.windowIndex);
+ assert.equal(again.policyCommitment,winner.policyCommitment);assert.equal(again.operationalCustodyWrites,0);
+ assert.equal(again.permitDispatch,false);assert.equal(again.phase6PaidGo,false);
+ assert.equal(again.claimedAtUtc,winner.claimedAtUtc);
+ await assert.rejects(readP6KnownRollingWindowOnce({...successor,rootRunId:99999},{readbackClient:read2}),/READBACK_CARDINALITY/);
+ await assert.rejects(readP6KnownRollingWindowOnce({...successor,sessionEpochUtc:iso(clock+60000),chainDeadlineUtc:iso(clock+31*60000)},{readbackClient:read2}),/CHAIN_OUTSIDE_COMMITTED_WINDOW/);
+ await assert.rejects(readP6KnownRollingWindowOnce({...successor,chainDeadlineUtc:iso(clock+120*60000),chainMode:"FOUR"},{readbackClient:read2}),/CHAIN_OUTSIDE_COMMITTED_WINDOW/);
+ assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,2);
+ console.log("V0102_SCOPED_SUCCESSOR_EXACT_OPEN_ROOT_READ_ONLY_NO_SECOND_CLAIM_NO_CLOCK_EXTENSION=PASS");
  console.log("V0102_EXACT_POLICY_REAL_COMMIT_DISTINCT_CONNECTION_READBACK_AND_UNKNOWN_COMMIT_NO_REPLAY=PASS");
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table+" WHERE closed_at_utc IS NULL")).rows[0].n,1);
  await assert.rejects(other.query(query,args(accepted)),/PRIOR_ROOT_UNRESOLVED_NO_REPLAY/);
  assert.equal((await owner.query(close,[manifest,1,accepted,accepted,h("3"),h("4")])).rows[0].ok,true);
+ await assert.rejects(readP6KnownRollingWindowOnce(successor,{readbackClient:read1}),/COMMITTED_SCOPE_DRIFT/);
  await assert.rejects(other.query(query,args(1003)),/WINDOW_ALREADY_OWNED_OR_OVERLAP/);
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,2);
  await owner.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
