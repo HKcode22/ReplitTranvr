@@ -17,7 +17,7 @@ const SEVEN=[
  "HISTORY_BOOTSTRAP_UNIT_BUDGET","DIAGNOSTIC_UNIT_BUDGET"
 ];
 const deny=code=>{throw Error("HOLD_P5_V0093_INDEPENDENT_EXACT_RO_"+code);};
-const i=(x)=>Number.isSafeInteger(Number(x))?Number(x):NaN;
+const i=(x)=>x!==null&&x!==undefined&&x!==""&&typeof x!=="boolean"&&Number.isSafeInteger(Number(x))?Number(x):NaN;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const stamp=x=>{
  const date=new Date(x);
@@ -88,7 +88,11 @@ export async function inspectP5V0093IndependentExactPostStage(
   const auth=await one(
    "SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,"+
    "code_sha,phase6_start_date,predecessor_evidence_ids,enabled,"+
-   "revoked_at_utc FROM clean.adb_phase6_authorization"
+   "revoked_at_utc,singleton_key,schema_version,alert_cap_per_parent_day,"+
+   "unsettled_burst_margin_credits,protected_alert_floor,start_admission_tolerance_seconds,"+
+   "phase6_alert_spend_ceiling,daily_soft_stop_margin_credits,production_reconcile_tolerance_credits,"+
+   "safety_watchdog_poll_ms,settlement_initial_wait_seconds,settlement_poll_interval_seconds,"+
+   "settlement_stable_read_count,settlement_timeout_seconds FROM clean.adb_phase6_authorization"
   );
   if(auth.authorization_id!==p.authorizationId||
      auth.manifest_sha256!==c.manifestSha256||
@@ -97,8 +101,24 @@ export async function inspectP5V0093IndependentExactPostStage(
      auth.code_sha!==p.codeSha40||
      utcDate(auth.phase6_start_date)!==p.phase6StartDateUtc||
      !same(auth.predecessor_evidence_ids,p.predecessorEvidenceIds)||
-     auth.enabled!==false||auth.revoked_at_utc!==null)
+     auth.enabled!==false||auth.revoked_at_utc!==null||auth.singleton_key!==true||auth.schema_version!=="v39")
    deny("DISABLED_B0062_AUTH_OR_MANIFEST_NOT_IDENTICAL");
+  const safetyFields=[
+   ["unsettled_burst_margin_credits","unsettledBurstMarginCredits"],
+   ["protected_alert_floor","protectedAlertFloorCredits"],
+   ["start_admission_tolerance_seconds","startAdmissionToleranceSeconds"],
+   ["phase6_alert_spend_ceiling","alertRunSpendCeilingCredits"],
+   ["daily_soft_stop_margin_credits","dailySoftStopMarginCredits"],
+   ["production_reconcile_tolerance_credits","productionReconcileToleranceCredits"],
+   ["safety_watchdog_poll_ms","safetyWatchdogPollMs"],
+   ["settlement_initial_wait_seconds","settlementInitialWaitSeconds"],
+   ["settlement_poll_interval_seconds","settlementPollIntervalSeconds"],
+   ["settlement_stable_read_count","settlementStableReadCount"],
+   ["settlement_timeout_seconds","settlementTimeoutSeconds"]
+  ];
+  if(!equalNum(auth.alert_cap_per_parent_day,1900)||
+     safetyFields.some(([column,field])=>!equalNum(auth[column],p.alertSafety[field])))
+   deny("ALERT_SAFETY_VALUES_NOT_IDENTICAL");
   const days=await fetch(
    "SELECT run_day_index,budget_day_id,calendar_hash,config_hash,frame_hash,"+
    "scheduled_start_utc,date_utc,utc_slot,time_class,window_shape,"+
@@ -223,6 +243,7 @@ export async function inspectP5V0093IndependentExactPostStage(
    sourceQueriesAndPhysicalAttemptsZero:true,
    independentHumanSignatureOrRightsAuthenticatedByThisCode:false,
    originalFlightPreOrPostProven:false,
+   alertSafetyValuesExact:true,authorizationSchemaVersion:"v39",
    authorizationEnabled:false,
    providerCalls:0,databaseWrites:0,
    phase5ScientificFreeze:false,phase6PaidGo:false
