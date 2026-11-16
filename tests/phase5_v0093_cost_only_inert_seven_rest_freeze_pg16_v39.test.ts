@@ -33,6 +33,10 @@ const suite=enabled?describe:describe.skip;
 const H=3600000,M=60000,D=86400000;
 const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const sha=c=>c.repeat(64);
+// Synthetic test fixture only; a production manifest requires independent review.
+const manifestFixture={schema:"v39.phase6.final-ci-test-only.v1",scientificFreezeApproved:true,
+ sourceRightsApproved:true,phase6PaidGo:false,calendarRowsSha256:sha("b"),configSha256:sha("c")};
+const manifestRaw=JSON.stringify(manifestFixture),manifestHash=digest(manifestFixture);
 const iso=n=>new Date(n).toISOString();
 const SLOTS=[0,4,8,12,16,20];
 const HUBS=["OMAA","WSSS","SKBO","YSSY"];
@@ -105,7 +109,7 @@ function fixture(){
  }
  const input:any={
   schema:"v39.phase5.b0062-inert-utc-stage-input.v1",
-  manifestSha256:sha("a"),calendarSha256:sha("b"),
+  manifestSha256:manifestHash,calendarSha256:sha("b"),
   configSha256:sha("c"),frameSha256:sha("d"),codeSha40:"f".repeat(40),
   phase6AuthorizationId:"AUTH-20261112-CIINERTSTAGING",
   phase6StartDateUtc:calendarDays[0].startUtc.slice(0,10),
@@ -121,7 +125,7 @@ function fixture(){
   },
   slotBudgetInput:{
    schema:"v39.phase5.prelaunch-slot-budget-input.v1",
-   manifestSha256:sha("a"),calendarSha256:sha("b"),
+   manifestSha256:manifestHash,calendarSha256:sha("b"),
    configSha256:sha("c"),frameSha256:sha("d"),
    providerRangeEvidenceSha256:sha("e"),timingEvidenceSha256:sha("f"),
    asOfUtc:"2026-10-01T00:00:00.000Z",providerMaxRangeMinutes:240,
@@ -598,13 +602,24 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
     .rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
   }finally{await admin.query("DELETE FROM clean.adb_incident_stop WHERE id=$1",[incident]);}
   expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(false);
+  const manifestKey="phase5_frozen_manifest:"+input.manifestSha256;
+  await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record)))
+   .rejects.toThrow("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
+  await admin.query("INSERT INTO clean.adb_collection_meta(key,value) VALUES($1,$2)",[manifestKey,manifestRaw+" "]);
+  await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record)))
+   .rejects.toThrow("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
+  expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(false);
+  await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw]);
   const out=await commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record));
   expect(out).toMatchObject({databaseAuthorizationEnabled:true,independentStagedValuesMatch:true,
    providerCalls:0,databaseWrites:2,githubFlagsChanged:0,legacyAlertStarted:false,phase6PaidGoGrantedByThisTransition:false});
   const m=(await admin.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
    ["phase6_source_authorization_enabled:"+record.authorizationId])).rows;
   expect(m).toHaveLength(1);expect(JSON.parse(m[0].value)).toEqual(out);
-  expect(await verifyP6EnabledSourceAuthorizationReceipt(admin,out)).toMatchObject({verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,databaseWrites:0});
+  expect(await verifyP6EnabledSourceAuthorizationReceipt(admin,out)).toMatchObject({verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,databaseWrites:0});
+  await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw+" "]);
+  await expect(verifyP6EnabledSourceAuthorizationReceipt(admin,out)).rejects.toThrow("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
+  await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw]);
   expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(true);
   expect(await categoryCounts()).toEqual({release:1,caps:7,days:7*r.c.days.length,source:0,attempt:0});
   await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record))).rejects.toThrow("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");

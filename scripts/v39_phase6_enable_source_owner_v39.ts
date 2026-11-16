@@ -77,6 +77,26 @@ export function verifyP6SourceActivationReview(s:ReviewedStage,auth:Verify,now:D
  return {packet:p,authId:a.authorizationId,artifactSha256:auth.artifactHash};
 }
 
+/** Verify the already-reviewed immutable bytes, not a newly generated approval.
+ * Same key and byte contract as the existing owner-local manifest store.
+ * Independent approval of manifest completeness remains outside this function.
+ */
+async function requireStoredReviewedManifest(c:import("pg").PoolClient,p:{manifestSha256:string;calendarSha256:string;configSha256:string}){
+ const rows=(await c.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
+  ["phase5_frozen_manifest:"+p.manifestSha256])).rows;
+ const raw=rows[0]?.value;
+ if(rows.length!==1||typeof raw!=="string"||Buffer.byteLength(raw)<100||
+    Buffer.byteLength(raw)>2*1024*1024||
+    createHash("sha256").update(raw,"utf8").digest("hex")!==p.manifestSha256)
+  hold("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
+ let m:any;try{m=JSON.parse(raw);}catch{hold("STORED_REVIEWED_MANIFEST_INVALID_JSON");}
+ if(!m||typeof m!=="object"||Array.isArray(m)||typeof m.schema!=="string"||
+    !m.schema.startsWith("v39.")||m.scientificFreezeApproved!==true||
+    m.sourceRightsApproved!==true||m.phase6PaidGo!==false||
+    m.calendarRowsSha256!==p.calendarSha256||m.configSha256!==p.configSha256)
+  hold("STORED_MANIFEST_NOT_FINAL_REVIEWED");
+}
+
 // The existing independent reader opens a separate read-only connection.
 // Lock its exact calendar/cost tables against other writes first, so a
 // concurrent mutation cannot invalidate the comparison before the single
@@ -116,6 +136,7 @@ export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:Review
    "(SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) subscriptions,"+
    "(SELECT count(*)::int FROM clean.adb_collection_meta WHERE key=$1) prior_enable",[markerKey])).rows[0];
   if(!blockers||Object.values(blockers).some(n=>n!==0))hold("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
+  await requireStoredReviewedManifest(c,p);
   const readback=await inspectP5V0093IndependentExactPostStage(pool,s.input,s.review,s.freezeReview);
   if(readback.status!=="INDEPENDENT_EXACT_B0062_V0093_POST_STAGE_READONLY_MATCH_NO_GO"||
      readback.alertSafetyValuesExact!==true||readback.authorizationEnabled!==false||
@@ -168,8 +189,9 @@ export async function verifyP6EnabledSourceAuthorizationReceipt(pool:Pool,receip
      a.schema_version!=="v39"||a.enabled!==true||a.revoked_at_utc!==null||markers.length!==1||
      markers[0].value!==JSON.stringify(receipt))
    hold("POST_ENABLE_ROW_OR_MARKER_NOT_IDENTICAL");
+  await requireStoredReviewedManifest(c,receipt);
   await c.query("ROLLBACK");began=false;
-  return {verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,observedAtUtc:new Date(who.t).toISOString(),
+  return {verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,observedAtUtc:new Date(who.t).toISOString(),
    providerCalls:0,databaseWrites:0,githubFlagsChanged:0,phase6PaidGoGrantedByThisTransition:false};
  }finally{
   if(began)await c.query("ROLLBACK").catch(()=>{});
