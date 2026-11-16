@@ -232,4 +232,25 @@ BEGIN
 END
 $receipt$;
 REVOKE ALL ON FUNCTION clean.phase5_primary_fids_expiry_receipt_v39(text) FROM PUBLIC;
+
+-- Narrow durable STOP for an acknowledged sweep whose COMMIT/readback is
+-- uncertain. No arbitrary incident text, resolve operation, or table grant.
+CREATE FUNCTION clean.phase5_primary_fids_expiry_stop_v39(p_run_id text)
+RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path=pg_catalog,pg_temp SET lock_timeout='3s'
+AS $stop$
+BEGIN
+  IF p_run_id IS NULL OR p_run_id !~ '^P5-PRIMARY-FIDS-SWEEP-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' THEN
+    RAISE EXCEPTION 'P5_PRIMARY_FIDS_SWEEP_RECEIPT_ID_INVALID';
+  END IF;
+  PERFORM pg_advisory_xact_lock(390015,104);
+  IF NOT EXISTS(SELECT 1 FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved) THEN
+    INSERT INTO clean.adb_incident_stop(cause,occurred_at_utc,detail,resolved)
+    VALUES('deletion',clock_timestamp(),jsonb_build_object(
+      'kind','primary_fids_expiry_commit_or_readback_uncertain','sweepRunId',p_run_id),false);
+  END IF;
+  RETURN EXISTS(SELECT 1 FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved);
+END
+$stop$;
+REVOKE ALL ON FUNCTION clean.phase5_primary_fids_expiry_stop_v39(text) FROM PUBLIC;
 COMMIT;
