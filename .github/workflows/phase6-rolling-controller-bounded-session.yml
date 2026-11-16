@@ -1,12 +1,12 @@
 name: Phase6 initial bounded rolling controller session (STOP default)
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' &&
+  ${{ github.event_name == 'workflow_dispatch' && (inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' || inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO') &&
       format('P6 ROLLING CHAIN {0} {1}', inputs.chain_hop, inputs.parent_run_id) || 'Phase6 initial bounded rolling controller session (STOP default)' }}
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Exact single session or separately approved two-session chain confirmation'
+        description: 'Exact single session, separately approved two-session chain, or explicitly approved two-session history retirement rehearsal'
         required: true
         type: string
       approved_main_sha:
@@ -80,7 +80,8 @@ jobs:
       ${{ github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' &&
           (inputs.confirm == 'RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO' ||
-           inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO') &&
+           inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO' ||
+           inputs.confirm == 'RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO') &&
           inputs.approved_main_sha == github.sha &&
           vars.P6_ROLLING_CONTROLLER_ENABLED == '1' }}
     permissions:
@@ -95,6 +96,7 @@ jobs:
       P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
       P6_ROLLING_SESSION_APPROVED: ${{ secrets.P6_ROLLING_SESSION_APPROVED }}
       P6_ROLLING_CHAIN_APPROVED: ${{ secrets.P6_ROLLING_CHAIN_APPROVED }}
+      P6_ROLLING_HISTORY_RETIREMENT_APPROVED: ${{ secrets.P6_ROLLING_HISTORY_RETIREMENT_APPROVED }}
       P6_ROLLING_CHAIN_HOP: ${{ inputs.chain_hop }}
       P6_ROLLING_PARENT_RUN_ID: ${{ inputs.parent_run_id }}
       P6_ROLLING_SENT_AT_UTC: ${{ inputs.sent_at_utc }}

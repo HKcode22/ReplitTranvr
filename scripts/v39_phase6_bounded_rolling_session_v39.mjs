@@ -16,12 +16,18 @@ const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
 const CHAIN_CONFIRM="RUN_TWO_PROTECTED_ROLLING_SESSIONS_AFTER_SEPARATE_PHASE6_GO";
+const ROLLOVER_CONFIRM="RUN_TWO_PROTECTED_ROLLING_SESSIONS_WITH_REVIEWED_HISTORY_RETIREMENT_AFTER_SEPARATE_PHASE6_GO";
 const RECEIPT_FILE="p6-rolling-terminal-receipt.json";
 const JOB="one-protected-bounded-session",STEPS=["Execute one protected rolling session and reconcile accepted workers before terminal",
  "Preserve terminal operational receipt for independently reviewed continuation"];
 const idok=x=>typeof x==="string"&&/^[1-9][0-9]{0,14}$/.test(x);
 const chainTitle=(hop,parent)=>"P6 ROLLING CHAIN "+hop+" "+parent;
 const MIN=60000;
+// Keep the original hard ceiling. Reserve capacity for final history, up to
+// eight known active ACKs, optional retirement prefix proof, root and main.
+// This is a conservative soft admission boundary, not a guarantee against
+// unusually large concurrent GitHub histories or prolonged pending work.
+const REQUEST_CAP=450,DISPATCH_REQUEST_BOUND=300,WAVE_START_BOUND=260;
 const hold=s=>{throw Error("HOLD_P6_ROLLING_RUNTIME_"+s);};
 const time=x=>{
  if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_PROTECTED_UTC");
@@ -34,7 +40,7 @@ export function admitP6RollingSession(env,now=Date.now()){
     !/^[1-9][0-9]{0,14}$/.test(env.GITHUB_RUN_ID??"")||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
     env.GITHUB_SHA!==env.P6_ROLLING_REQUESTED_MAIN_SHA||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
-    ![CONFIRM,CHAIN_CONFIRM].includes(env.P6_ROLLING_SESSION_CONFIRM)||env.P6_ROLLING_CONTROLLER_ENABLED!=="1"||
+    ![CONFIRM,CHAIN_CONFIRM,ROLLOVER_CONFIRM].includes(env.P6_ROLLING_SESSION_CONFIRM)||env.P6_ROLLING_CONTROLLER_ENABLED!=="1"||
     env.P6_ROLLING_SESSION_APPROVED!=="1"||env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||env.V39_P5_SEVEN_REST_BUDGET_SIGNED!=="1"||
     env.V39_PHASE6_PROCESS_ARMED!=="1"||env.V39_PHASE6_OWNER_APPROVED!=="1"||
@@ -47,7 +53,9 @@ export function admitP6RollingSession(env,now=Date.now()){
      "P5_V39_OTHER_REST_REVIEW_DATABASE_URL","P5_V39_OTHER_REST_RESERVE_DATABASE_URL"].some(k=>env[k]))
   hold("NO_PROTECTED_REAL_SESSION_APPROVAL");
  const epoch=time(env.P6_ROLLING_SESSION_EPOCH_UTC),chainDeadline=time(env.P6_ROLLING_SESSION_DEADLINE_UTC);
- const chain=env.P6_ROLLING_SESSION_CONFIRM===CHAIN_CONFIRM;
+ const rollover=env.P6_ROLLING_SESSION_CONFIRM===ROLLOVER_CONFIRM;
+ const chain=rollover||env.P6_ROLLING_SESSION_CONFIRM===CHAIN_CONFIRM;
+ if(rollover&&env.P6_ROLLING_HISTORY_RETIREMENT_APPROVED!=="1")hold("NO_PROTECTED_RETIREMENT_APPROVAL");
  const hop=env.P6_ROLLING_CHAIN_HOP??"0",parent=env.P6_ROLLING_PARENT_RUN_ID??"0";
  const sentText=env.P6_ROLLING_SENT_AT_UTC??"";
  // Keep the original protected epoch across the entire chain. The
@@ -76,7 +84,7 @@ export function admitP6RollingSession(env,now=Date.now()){
  if(policyBytes.toString("base64")!==wire)hold("NONCANONICAL_POLICY");
  const trust={reviewedCodeSha:env.GITHUB_SHA,manifestSha256:env.V39_P5_MANIFEST_SHA256,
   calendarSha256:env.V39_P5_CALENDAR_HASH,releaseSha256:env.V39_P5_RELEASE_SHA256,rightsSha256:env.V39_P5_RIGHTS_SHA256};
- return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,hop:Number(hop),parent:Number(parent),sent,policyBytes,
+ return {sha:env.GITHUB_SHA,id:Number(env.GITHUB_RUN_ID),epoch,deadline,chainDeadline,chain,rollover,hop:Number(hop),parent:Number(parent),sent,policyBytes,
   expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,trust};
 }
 function downloadReceipt({parent,name,token}){
@@ -98,15 +106,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
- let ledger,prior=null,priorTerminalIds=new Set();
+ let ledger,prior=null,priorTerminalIds=new Set(),priorRetirement=null;
+ // Keep origin/chain deadline immutable for protected root admission. Only
+ // the working history epoch can move after authenticated independent proof.
+ let historyEpoch=a.epoch,retirementAudit=null;
  const scheduleEvidenceCache=createP6RollingScheduleEvidenceCache();
  let requests=0,waves=0,calendarDeferred=0,capacityDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
+ let requestBudgetDeferred=0,requestBudgetStop=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  const api=async(url,init)=>{
   const u=new URL(url);
   if(u.origin!=="https://api.github.com"||!u.pathname.startsWith("/repos/"+REPO+"/")||
      u.username||u.password||u.hash||!["GET","POST"].includes(init?.method)||
-     now()>=a.deadline-12000||++requests>450)hold("API_SCOPE_OR_SESSION_REQUEST_BOUND");
+     now()>=a.deadline-12000||++requests>REQUEST_CAP)hold("API_SCOPE_OR_SESSION_REQUEST_BOUND");
   // Every write originates only in the imported fixed-route dispatch core.
   // Refuse a call if it cannot leave a separate reconciliation window.
   if(init.method==="POST"&&now()>=a.deadline-12*MIN)hold("DISPATCH_DRAIN_BOUND");
@@ -194,6 +206,24 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
        !receipt.pendingAcknowledgements.some(y=>y?.lane===x.lane&&y?.runId===x.runId))||
      new Set(receipt.pending.map(x=>x.runId)).size!==receipt.pending.length)
     hold("CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH");
+  if(a.rollover){
+   const p=receipt.historyRetirementCandidate;
+   if(receipt.historyEpochUtc!==new Date(a.epoch).toISOString()||
+      receipt.historyRetirementMode!=="PROTECTED_TWO_SESSION_REHEARSAL"||
+      !p||p.schema!=="v39.phase6.rolling-history-retirement.v1"||
+      !["RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH","REVIEWED_RETIREMENT_CANDIDATE_NO_GO"].includes(p.status)||
+      p.reviewedMainSha!==a.sha||p.priorEpochUtc!==receipt.epochUtc||
+      p.phase6PaidGo!==false||p.providerCalls!==0||p.databaseReads!==0||p.databaseWrites!==0||p.dispatchCount!==0||
+      time(p.observedAtUtc)>a.sent||time(p.observedAtUtc)<a.epoch||
+      time(p.proposedEpochUtc)<a.epoch||time(p.proposedEpochUtc)>a.sent||
+      (p.status==="RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH"&&
+       (p.proposedEpochUtc!==receipt.epochUtc||p.retiredRunCount!==0))||
+      (p.status==="REVIEWED_RETIREMENT_CANDIDATE_NO_GO"&&
+       (time(p.proposedEpochUtc)<=a.epoch||p.requiresIndependentSuccessorReadback!==true)))
+    hold("CHAIN_RETIREMENT_RECEIPT_SCOPE");
+   priorRetirement=p;
+  }else if(receipt.historyRetirementMode!==undefined||receipt.historyRetirementCandidate!==undefined)
+   hold("CHAIN_UNEXPECTED_RETIREMENT_RECEIPT");
   prior=all;priorTerminalIds=new Set(receipt.terminalAcknowledgements.map(x=>x.runId));
  }
  async function pause(ms){
@@ -206,21 +236,51 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   try{await uniqueRoot();break;}
   catch(e){if(e?.message!=="HOLD_P6_ROLLING_RUNTIME_CHAIN_PARENT_NOT_TERMINAL"||i>=5)throw e;await pause(5000);}
  }
- ledger=createP6SessionAckLedger({...a,now,emit,priorAcknowledgements:prior??[]});
+ ledger=createP6SessionAckLedger({...a,epoch:historyEpoch,now,emit,priorAcknowledgements:prior??[]});
  if(a.hop===1){
   const inherited=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
   // Re-read every inherited ACK, including the ones still running in the
   // predecessor. A predecessor terminal claim may never regress to active.
   if(inherited.unknownAttempts||inherited.pending.some(x=>priorTerminalIds.has(x.runId)))
    hold("CHAIN_PRIOR_TERMINAL_ACK_REGRESSED");
+  if(a.rollover){
+   if(priorRetirement.status==="REVIEWED_RETIREMENT_CANDIDATE_NO_GO"){
+    const closing=[];
+    const old=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
+     verifySnapshot:(_route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
+    if(old.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CHAIN_RETIREMENT_OLD_HISTORY_HOLD");
+    ledger.verifyContinuationHistory(closing);
+    const proof=await old.reviewHistoryRetirement({previousReceipt:priorRetirement});
+    const partition=ledger.reviewRolloverPartition(proof);
+    // The old authenticated parent artifact still contains all ACKs.
+    // Only terminal independently proved prefix records leave working
+    // memory. Every carried record must be re-reconciled before any POST.
+    const carry=[...partition.carriedTerminalAcknowledgements,...partition.carriedPendingAcknowledgements];
+    const terminalCarry=new Set(partition.carriedTerminalAcknowledgements.map(x=>x.runId));
+    historyEpoch=time(partition.proposedEpochUtc);
+    await main();await uniqueRoot();
+    ledger=createP6SessionAckLedger({...a,epoch:historyEpoch,now,emit,priorAcknowledgements:carry});
+    const checked=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
+    if(checked.unknownAttempts||checked.pending.some(x=>terminalCarry.has(x.runId)))
+     hold("CHAIN_CARRIED_TERMINAL_ACK_REGRESSED");
+    retirementAudit=partition;
+    emit({status:"CHAIN_WORKING_HISTORY_RETIREMENT_INDEPENDENTLY_VERIFIED_NO_NEW_PERMISSION",
+     oldEpochUtc:new Date(a.epoch).toISOString(),historyEpochUtc:new Date(historyEpoch).toISOString(),
+     retiredAcknowledgements:partition.retiredAcknowledgements.length,carriedAcknowledgements:carry.length,
+     providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+   }else{
+    retirementAudit={status:"RETIREMENT_NO_ADVANCE_KEEP_PRIOR_EPOCH",existingLedgerUnchanged:true};
+   }
+  }
  }
  // Allow a maximum of 8 waves under the first 30-minute protected window.
  // 2 minutes polling cadence is provisional; actual timing must be measured.
  while(waves<8&&now()<a.deadline-12*MIN-60000){
+  if(requests>=WAVE_START_BOUND){requestBudgetStop=true;break;}
   await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
   let observation;
   try{
-   observation=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
+   observation=await readP6RollingGithubSnapshot({sha:a.sha,epoch:historyEpoch,token:env.GITHUB_TOKEN,now,fetcher:api,
     verifySnapshot:ledger.assertVisible,scheduleEvidenceCache});
   }catch(e){
    // A known ACK may be temporarily absent from GitHub's list or become
@@ -248,14 +308,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(narrowed.due.length){
    const dispatchDeadline=Math.min(a.deadline-12*MIN,now()+5*MIN);
    if(dispatchDeadline-now()<60000)break;
-   await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
+   const waveResult=await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
     deadline:dispatchDeadline,now,fetcher:api,recheckRoute:async route=>ledger.assertVisible(route,await recheckRoute(route)),
-    onEvidence:ledger.evidence});
+    mayStartAttempt:()=>requests<DISPATCH_REQUEST_BOUND,onEvidence:ledger.evidence});
+   requestBudgetDeferred+=waveResult.requestBudgetDeferred.length;
+   if(waveResult.requestBudgetDeferred.length)requestBudgetStop=true;
   }
   waves++;
   emit({status:"ROLLING_WAVE_OBSERVED_NOT_COLLECTION_PROOF",wave:waves,calendarDeferred:calendarPlan.calendarDeferred.length,
-   capacityDeferred:deferredByCapacity,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),...ledger.status()});
-  if(ledger.remainingDispatchCapacity()===0)break;
+   capacityDeferred:deferredByCapacity,requestBudgetDeferred,requestBudgetStop,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),...ledger.status()});
+  if(ledger.remainingDispatchCapacity()===0||requestBudgetStop||requests>=WAVE_START_BOUND){
+   if(requests>=WAVE_START_BOUND)requestBudgetStop=true;
+   break;
+  }
   if(waves<8&&now()+2*MIN<a.deadline-12*MIN-60000)await pause(2*MIN);else break;
  }
  // A first approved chain session can transfer EXACT known active ACK
@@ -270,7 +335,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // check. Do not export terminal custody until a fresh complete snapshot
    // contains every independently reconciled ACK in normal history.
    const closing=[];
-   const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
+   const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:historyEpoch,token:env.GITHUB_TOKEN,now,fetcher:api,
     verifySnapshot:(route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
    // Known active ACK may become terminal between direct read and history.
    // Retry only independent GETs, not the worker or successor POST.
@@ -290,26 +355,36 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    const {terminalAcknowledgements,pendingAcknowledgements}=transferKnownActive?ledger.continuationAcknowledgements():
     {terminalAcknowledgements:ledger.terminalAcknowledgements(),pendingAcknowledgements:Object.freeze([])};
    const ackCapacityExhausted=ledger.remainingDispatchCapacity()===0;
+   // Independent predecessor history is proposed BEFORE a successor POST.
+   // No advance is a valid outcome, not a reason to force a reset.
+   const retirementCandidate=a.rollover&&a.hop===0&&!ackCapacityExhausted?
+    await final.reviewHistoryRetirement():null;
+   // Retirement review may take additional GETs. Do not dispatch a successor
+   // against an earlier main/root observation after such a review.
+   if(retirementCandidate){await uniqueRoot();await main();}
    const result={schema:"v39.phase6.bounded-rolling-session.v1",
     status:ackCapacityExhausted?"BOUNDED_ACK_CAPACITY_EXHAUSTED_NO_SUCCESSOR_NOT_COLLECTION_PROOF":
      a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
-    waves,calendarDeferred,capacityDeferred,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
-    successorDispatches:0,nextRunId:null,...state};
+    waves,calendarDeferred,capacityDeferred,requestBudgetDeferred,requestBudgetStop,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
+    successorDispatches:0,nextRunId:null,...state,
+    ...(a.rollover?{historyRetirementMode:"PROTECTED_TWO_SESSION_REHEARSAL",historyEpochUtc:new Date(historyEpoch).toISOString(),
+      ...(retirementCandidate?{historyRetirementCandidate:retirementCandidate}:{}),
+      ...(retirementAudit?{historyRetirementAudit:retirementAudit}:{})}:{} )};
    if(!a.chain||a.hop===1||ackCapacityExhausted)return result;
    const sent=now();
    // This single POST is to the same controller, not a collection route.
    // The successor can only start after the root publishes its exact ACK
    // receipt and finishes; failure or unknown acceptance is never retried.
-   if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>450)
+   if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>REQUEST_CAP)
     hold("CHAIN_SUCCESSOR_DEADLINE");
    emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id});
    try{
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
      body:JSON.stringify({ref:"main",return_run_details:true,inputs:{
-      confirm:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:"1",parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString()
+      confirm:a.rollover?ROLLOVER_CONFIRM:CHAIN_CONFIRM,approved_main_sha:a.sha,chain_hop:"1",parent_run_id:String(a.id),sent_at_utc:new Date(sent).toISOString()
      }})});
     if(res.status!==200)hold("CHAIN_ACK");
     const b=await res.json(),id=b?.workflow_run_id;
