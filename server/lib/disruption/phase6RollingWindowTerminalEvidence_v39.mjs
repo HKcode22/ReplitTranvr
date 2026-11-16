@@ -58,7 +58,7 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
     (max===1?deadline-epoch>30*60000:deadline-epoch<90*60000||deadline-epoch>120*60000)||clock<epoch)
   HOLD("EXPECTED_CLOCK");
  const runIds=[],controllerRows=new Map(),receipts=[],all=new Map(),retired=new Set();
- let parent=0,id=expected.rootRunId,prior=null,priorTerminal=new Map(),priorPending=new Map(),priorHistoryEpoch=epoch;
+ let parent=0,id=expected.rootRunId,prior=null,priorTerminal=new Map(),priorPending=new Map(),priorHistoryEpoch=epoch,recordedWindowCustody=null;
  for(let hop=0;hop<max;hop++){
   if(runIds.includes(id)||all.has(id))HOLD("DUPLICATE_CONTROLLER");
   const run=await readRun(id),created=exactRun(run,id,WF,sha,epoch,deadline,clock);
@@ -77,9 +77,20 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
     x.reviewedMainSha!==sha||x.policyCommitment!==expected.policyCommitment||x.epochUtc!==expected.epochUtc||
     x.chainDeadlineUtc!==expected.chainDeadlineUtc||d>deadline||d<=created||d-created>35*60000||
     (hop===0&&d!==Math.min(deadline,epoch+30*60000))||
-    x.unknownAttempts!==0||x.providerCalls!==0||x.databaseWrites!==0||x.phase6PaidGo!==false||
+    x.unknownAttempts!==0||x.providerCalls!==0||x.databaseWrites!==(hop===0&&x.windowCustody!==undefined?1:0)||x.phase6PaidGo!==false||
     (max===4&&(x.maxSessionHops!==4||x.chainMode!=="PROTECTED_FOUR_SESSION_BOUND"||x.historyRetirementMode!=="PROTECTED_FOUR_SESSION_BOUND"))||
     (max===1&&(x.chainMode!==undefined||x.historyEpochUtc!==undefined)))HOLD("RECEIPT_IDENTITY");
+  if(x.windowCustody!==undefined){
+   const w=x.windowCustody;
+   if(!w||Object.keys(w).sort().join(",")!=="claimedAtUtc,policyCommitment,rootRunId,windowEndUtc,windowIndex,windowStartUtc"||
+    w.rootRunId!==expected.rootRunId||w.policyCommitment!==expected.policyCommitment||
+    w.windowStartUtc!==expected.windowStartUtc||w.windowEndUtc!==expected.windowEndUtc||
+    !Number.isSafeInteger(w.windowIndex)||w.windowIndex<0||w.windowIndex>719||
+    utc(w.claimedAtUtc)<epoch||utc(w.claimedAtUtc)>=deadline||utc(w.claimedAtUtc)>d||
+    (hop>0&&(!recordedWindowCustody||Object.keys(w).some(k=>w[k]!==recordedWindowCustody[k]))))
+    HOLD("DURABLE_CUSTODY_RECEIPT_DRIFT");
+   if(hop===0)recordedWindowCustody=w;
+  }else if(recordedWindowCustody)HOLD("DURABLE_CUSTODY_RECEIPT_MISSING");
   const term=entries(x.terminalAcknowledgements),pending=entries(x.pendingAcknowledgements);
   const current=new Map([...term,...pending]);
   if(current.size!==term.size+pending.size||x.acknowledged!==current.size||x.verifiedTerminal!==term.size||
@@ -156,6 +167,7 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
    controllerRunIds:runIds,uniqueWorkerAcknowledgements:all.size,independentlyVerifiedWorkerJobs:all.size,
    retiredWorkerAcknowledgements:retired.size,receiptArtifacts:receipts,terminalReceiptSha256:receipts.at(-1).receiptSha256,
    completeOperationalChainVerified:true,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
+   ...(recordedWindowCustody?{recordedWindowCustody,actualDbOwnershipVerified:false}:{}),
    providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false};
  }
  HOLD("MISSING_FINAL_RECEIPT");
