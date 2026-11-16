@@ -9,7 +9,7 @@ import {tmpdir} from "node:os";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
+import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
@@ -99,6 +99,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
  let ledger,prior=null;
+ const scheduleEvidenceCache=createP6RollingScheduleEvidenceCache();
  let requests=0,waves=0,calendarDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  const api=async(url,init)=>{
@@ -207,7 +208,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   let observation;
   try{
    observation=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
-    verifySnapshot:ledger.assertVisible});
+    verifySnapshot:ledger.assertVisible,scheduleEvidenceCache});
   }catch(e){
    // A known ACK may be temporarily absent from GitHub's list or become
    // terminal between direct readback and the list. Retry GETs only, never
@@ -249,7 +250,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    // contains every independently reconciled ACK in normal history.
    const closing=[];
    const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:a.epoch,token:env.GITHUB_TOKEN,now,fetcher:api,
-    verifySnapshot:(route,snapshot)=>closing.push(snapshot)});
+    verifySnapshot:(route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
    if(final.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("FINAL_HISTORY_HOLD_NO_SUCCESSOR");
    ledger.verifyTerminalHistory(closing);
    await uniqueRoot();await main();
