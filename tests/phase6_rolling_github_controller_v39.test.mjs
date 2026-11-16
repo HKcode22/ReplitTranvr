@@ -8,7 +8,8 @@ const snaps=()=>P6_ROLLING_ROUTES.map(r=>({workflow:r.workflow,complete:true,run
 const row=(route,delta={})=>({id:123,path:".github/workflows/"+route.workflow,head_branch:"main",head_sha:sha,event:"workflow_dispatch",
  status:"completed",conclusion:"success",run_attempt:1,created_at:new Date(clock-60000).toISOString(),...delta});
 const jobs=route=>route.jobs.map(j=>({name:j.name,status:"completed",conclusion:"success",
- steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:[]}));
+ steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?markers("NO_DUE_WORK"):[]}));
+const markers=selected=>["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x===selected?"success":"skipped"}));
 const result=(id)=>({workflow_run_id:id,run_url:ROOT+"/actions/runs/"+id,html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+id});
 function setup(){
  const snapshots=snaps(),plan=planP6RollingTick(snapshots,context),events=[],calls=[];
@@ -114,4 +115,18 @@ test("bounded read fails closed on truncated API totals or history filter drift"
  const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock};
  await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>({ok:true,json:async()=>({total_count:101,workflow_runs:[]})})}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE/);
  await assert.rejects(readP6RollingGithubSnapshot({...cfg,epoch:clock-7*3600000,fetcher:async()=>{throw Error("must not call")}}),/NO_BOUNDED_SESSION_HISTORY_SCOPE/);
+});
+
+test("green parent with explicit safe HOLD or missing evidence remains distinct from completed work; malformed markers block",()=>{
+ const x=snaps(),r=P6_ROLLING_ROUTES[0];x[0].runs=[row(r)];x[0].jobRunId=123;x[0].jobs=jobs(r);
+ x[0].jobs[0].steps=markers("SAFE_PREFLIGHT_HOLD");
+ assert.equal(planP6RollingTick(x,context).assessments[0].state,"RECENT_SAFE_PREFLIGHT_HOLD");
+ x[0].jobs[0].steps=markers("MISSING_EVIDENCE");
+ assert.equal(planP6RollingTick(x,context).assessments[0].state,"RECENT_MISSING_EVIDENCE");
+ x[0].jobs[0].steps[0].conclusion="success";
+ assert.equal(planP6RollingTick(x,context).assessments[0].state,"HOLD_MISSING_PARENT_OUTCOME");
+ x[0].jobs[0].steps=[];assert.equal(planP6RollingTick(x,context).due.length,0);
+ x[0].jobs[0].steps=markers("SAFE_PREFLIGHT_HOLD");
+ x[0].runs=[row(r,{created_at:new Date(clock-600000).toISOString()})];
+ assert.equal(planP6RollingTick(x,context).assessments[0].state,"DUE_REVIEWED_ROUTE");
 });

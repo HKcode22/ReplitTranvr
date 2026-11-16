@@ -19,7 +19,7 @@ const route=(lane,workflow,minutes,inputs,jobs)=>Object.freeze({
 });
 export const P6_ROLLING_ROUTES=Object.freeze([
  route("SOURCE_POST","phase5-source-upcoming-queue-main-scheduled-readonly.yml",10,{confirm:"RUN_CURRENT_SIGNED_SOURCE_POST_CYCLE"},
-  [{name:"separately-authorized-stored-source-children"},{name:"separately-authorized-current-private-post-children"},{name:"separately-authorized-native-post-producer"}]),
+  [{name:"separately-authorized-stored-source-children",parentOutcome:true},{name:"separately-authorized-current-private-post-children",parentOutcome:true},{name:"separately-authorized-native-post-producer"}]),
  route("PRE_ENROLLMENT","phase6-private-later-enrollment.yml",10,{confirm:"ENROLL_DUE_CURRENT_SIGNED_PRE_CYCLE_NO_PROVIDER",run_days:""},
   [{name:"enroll-current-signed-day"},{name:"enroll-current-signed-t24-day"}]),
  route("T24","phase5-cd-github-one-queued-t24-witness-main-manual.yml",5,{confirm:"RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER",frozen_roster:""},
@@ -37,6 +37,16 @@ export const P6_ROLLING_ROUTES=Object.freeze([
  route("RETENTION_MONITOR","phase5-private-blob-retention-readonly-sentinel-no-provider.yml",60,{confirm:"READONLY_PRIVATE_RETENTION_METADATA_NO_PROVIDER_NO_DELETE"},
   [{name:"private-main-restricted-metadata-sentinel"}])
 ]);
+const DISPOSITIONS=["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"];
+export function readP6ParentOutcomeSteps(steps){
+ if(!Array.isArray(steps))return null;
+ const marker=steps.filter(s=>typeof s.name==="string"&&s.name.startsWith("Parent outcome "));
+ if(marker.length!==DISPOSITIONS.length||new Set(marker.map(s=>s.name)).size!==DISPOSITIONS.length||
+    marker.some(s=>!DISPOSITIONS.includes(s.name.slice("Parent outcome ".length))||
+      s.status!=="completed"||!["success","skipped"].includes(s.conclusion)))return null;
+ const observed=marker.filter(s=>s.conclusion==="success");
+ return observed.length===1?observed[0].name.slice("Parent outcome ".length):null;
+}
 function exactRun(row){
  if(!ACK_ID(row?.id)||typeof row.path!=="string"||row.head_branch!=="main"||
     !CODE.test(row.head_sha??"")||!["workflow_dispatch","schedule"].includes(row.event)||
@@ -71,17 +81,23 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
  if(last){
   if(snapshot.jobRunId!==last.id||!Array.isArray(snapshot.jobs)||snapshot.jobs.length>100)
    return {lane:route.lane,state:"HOLD_MISSING_JOB_EVIDENCE",runId:last.id};
+  const parentDispositions=[];
   for(const required of route.jobs){
    const matches=snapshot.jobs.filter(j=>j.name===required.name);
    if(matches.length!==1||matches[0].status!=="completed"||matches[0].conclusion!=="success")
     return {lane:route.lane,state:"HOLD_GATED_OR_FAILED_REQUIRED_JOB",runId:last.id};
+   if(required.parentOutcome){
+    const disposition=readP6ParentOutcomeSteps(matches[0].steps);
+    if(disposition===null)return {lane:route.lane,state:"HOLD_MISSING_PARENT_OUTCOME",runId:last.id};
+    parentDispositions.push(disposition);
+   }
    if(required.step){
     const steps=matches[0].steps?.filter(s=>s.name===required.step)??[];
     if(steps.length!==1||steps[0].status!=="completed"||steps[0].conclusion!=="success")
      return {lane:route.lane,state:"HOLD_INERT_REQUIRED_STEP",runId:last.id};
    }
   }
-  if(clock-last.created<route.minutes*60000)return {lane:route.lane,state:"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF",runId:last.id};
+  if(clock-last.created<route.minutes*60000)return {lane:route.lane,state:parentDispositions.includes("SAFE_PREFLIGHT_HOLD")?"RECENT_SAFE_PREFLIGHT_HOLD":parentDispositions.includes("MISSING_EVIDENCE")?"RECENT_MISSING_EVIDENCE":"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF",runId:last.id,parentDispositions};
  }
  return {lane:route.lane,state:"DUE_REVIEWED_ROUTE",lastRunId:last?.id??null};
 }
@@ -125,7 +141,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  for(const route of P6_ROLLING_ROUTES.filter(r=>plan.due.includes(r.lane))){
   if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
   const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now()});
-  if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state==="RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF"){deferred.push(route.lane);continue;}
+  if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state.startsWith("RECENT_")){deferred.push(route.lane);continue;}
   if(fresh.state!=="DUE_REVIEWED_ROUTE")hold("FRESH_ROUTE_HISTORY_NO_REPLAY");
   let live;
   try{
