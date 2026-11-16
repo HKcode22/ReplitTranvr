@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Old metadata-only or new READ_ONLY_AUTHENTIC_PRIVATE_DAY_SOURCE_NO_PROVIDER_NO_DISPATCH'
+        description: 'Exact read-only confirmation or RUN_CURRENT_SIGNED_SOURCE_PARENT / RUN_CURRENT_SIGNED_POST_PARENT (separate release required)'
         required: true
         type: string
   pull_request:
@@ -781,7 +781,7 @@ jobs:
   separately-authorized-stored-source-children:
     # Reuses the same scheduler + existing SOURCE one-GET workflow.
     # Both legacy and stored enabled => neither dispatcher runs.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED == 'true' && vars.P6_PRIVATE_SOURCE_REVIEW_MODE == 'stored' && vars.P5_AUTO_SOURCE_DISPATCH_ENABLED != 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_PARENT')) && vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED == 'true' && vars.P6_PRIVATE_SOURCE_REVIEW_MODE == 'stored' && vars.P5_AUTO_SOURCE_DISPATCH_ENABLED != 'true' }}
     permissions:
       contents: read
       actions: write
@@ -802,6 +802,7 @@ jobs:
       P6_PRIVATE_SOURCE_PARENT_RO_DAY_REVIEWS_BASE64: ''
       V39_P5_SOURCE_BATCH_REGISTRY_SHA256: ''
       P6_PRIVATE_STORED_SOURCE_DISPATCH_ENTRYPOINT: '1'
+      P6_CURRENT_PARENT_DISPATCH_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm || '' }}
       P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED: ${{ vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED }}
       P6_PRIVATE_SOURCE_REVIEW_MODE: ${{ vars.P6_PRIVATE_SOURCE_REVIEW_MODE }}
       P5_AUTO_SOURCE_DISPATCH_ENABLED: ${{ vars.P5_AUTO_SOURCE_DISPATCH_ENABLED }}
@@ -840,7 +841,11 @@ jobs:
           set +x
           test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
           test "$GITHUB_REF" = 'refs/heads/main'
-          test "$GITHUB_EVENT_NAME" = schedule
+          case "$GITHUB_EVENT_NAME" in
+            schedule) test -z "$P6_CURRENT_PARENT_DISPATCH_CONFIRM" ;;
+            workflow_dispatch) test "$P6_CURRENT_PARENT_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_SOURCE_PARENT ;;
+            *) exit 2 ;;
+          esac
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
           test "$GITHUB_SHA" = "$V39_P5_QUEUE_APPROVED_CODE_SHA"
@@ -865,7 +870,7 @@ jobs:
           npx --no-install tsx scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs
 
   separately-authorized-current-private-post-children:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.P6_PRIVATE_POST_PARENT_ENABLED == 'true' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_POST_PARENT')) && vars.P6_PRIVATE_POST_PARENT_ENABLED == 'true' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
     permissions:
       contents: read
       actions: write
@@ -883,6 +888,7 @@ jobs:
       P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
       P6_PRIVATE_POST_PARENT_ENTRYPOINT: '1'
+      P6_CURRENT_PARENT_DISPATCH_CONFIRM: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm || '' }}
       P6_PRIVATE_POST_PARENT_ENABLED: ${{ vars.P6_PRIVATE_POST_PARENT_ENABLED }}
       P5_POST_AUTO_DISPATCH_ENABLED: ${{ vars.P5_POST_AUTO_DISPATCH_ENABLED }}
       GITHUB_TOKEN: ${{ github.token }}
@@ -920,6 +926,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
+          case "$GITHUB_EVENT_NAME" in
+            schedule) test -z "$P6_CURRENT_PARENT_DISPATCH_CONFIRM" ;;
+            workflow_dispatch) test "$P6_CURRENT_PARENT_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_POST_PARENT ;;
+            *) exit 2 ;;
+          esac
           test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
           test "$V39_PHASE5_FREEZE_SIGNED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1

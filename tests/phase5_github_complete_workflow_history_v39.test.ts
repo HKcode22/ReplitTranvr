@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {
- readP5CompleteGithubWorkflowHistory,reviewP5HistoryUrl,
+ readP5CompleteGithubWorkflowHistory,readP5CompleteCurrentParentHistory,reviewP5HistoryUrl,
  P5_COMPLETE_HISTORY_MAX
 } from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39";
 import {selectP5DueSignedSourceChildIntents}
@@ -151,10 +151,33 @@ describe("actual GitHub REST UTC and exact stored SOURCE parent history",()=>{
     .rejects.toThrow(/MALFORMED_GITHUB_CHILD_HISTORY/);
   }
  });
- it("permits schedule ONLY for exact parent and workflow_dispatch ONLY for exact children",()=>{
+ it("permits both reviewed parent events but workflow_dispatch ONLY for exact children",()=>{
   const parent=base("phase5-source-upcoming-queue-main-scheduled-readonly.yml");
-  expect(()=>reviewP5HistoryUrl(parent)).toThrow(/WORKFLOW_OR_FILTER_UNREVIEWED/);
+  expect(reviewP5HistoryUrl(parent).searchParams.get("event")).toBe("workflow_dispatch");
+  expect(()=>reviewP5HistoryUrl(parent.replace("workflow_dispatch","push"))).toThrow(/WORKFLOW_OR_FILTER_UNREVIEWED/);
   expect(reviewP5HistoryUrl(parent.replace("workflow_dispatch","schedule")).searchParams.get("event")).toBe("schedule");
   expect(()=>reviewP5HistoryUrl(base(workflows[0]).replace("workflow_dispatch","schedule"))).toThrow(/WORKFLOW_OR_FILTER_UNREVIEWED/);
+ });
+});
+
+describe("combined current parent event history",()=>{
+ const clock=Date.parse("2027-02-10T04:00:00.000Z");
+ const fixture=(manualId:number,failManual=false)=>{
+  const events:string[]=[];
+  const fetcher=async (raw:string)=>{
+   const u=new URL(raw),event=u.searchParams.get("event")!;
+   events.push(event);
+   expect(u.pathname).toContain("phase5-source-upcoming-queue-main-scheduled-readonly.yml");
+   if(failManual&&event==="workflow_dispatch")return {ok:false,status:503};
+   return {ok:true,json:async()=>({total_count:1,workflow_runs:[run(event==="schedule"?1:manualId)]})};
+  };
+  return {events,fetcher:fetcher as unknown as typeof fetch};
+ };
+ it("requires complete history for both triggers and rejects duplicate IDs",async()=>{
+  const x=fixture(2),h=await readP5CompleteCurrentParentHistory(clock,x.fetcher,headers);
+  expect(x.events).toEqual(["schedule","workflow_dispatch"]);
+  expect(h.total_count).toBe(2);expect(h.workflow_runs.map(r=>r.id)).toEqual([1,2]);
+  await expect(readP5CompleteCurrentParentHistory(clock,fixture(1).fetcher,headers)).rejects.toThrow("DUPLICATE_RUN_ACROSS_PARENT_TRIGGER_HISTORY");
+  await expect(readP5CompleteCurrentParentHistory(clock,fixture(2,true).fetcher,headers)).rejects.toThrow("GITHUB_HISTORY_PAGE_UNAVAILABLE");
  });
 });

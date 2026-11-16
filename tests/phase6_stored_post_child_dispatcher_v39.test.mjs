@@ -72,7 +72,8 @@ function fixture(){
    return new Response(JSON.stringify({workflow_run_id:id,run_url:"https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/"+id,
     html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+id}),{status:200});
   }
-  const runs=url.includes("queue-main-scheduled")?[{...run(123456,"in_progress"),display_title:"parent"}]:[run(1),run(2),run(3),run(4)];
+  const runs=url.includes("queue-main-scheduled")?
+   (url.includes("event=schedule")?[{...run(123456,"in_progress"),display_title:"parent"}]:[]):[run(1),run(2),run(3),run(4)];
   return new Response(JSON.stringify({total_count:runs.length,workflow_runs:runs}),{status:200});
  };
  return {env,posts,options:{readPlan,observe,verify,fetchImpl,now:()=>Date.parse(clock)}};
@@ -107,4 +108,30 @@ test("preflight rejects unexpected provider role, URL drift, absent explicit tai
   assert.throws(()=>admitP6StoredPostParent({...env,...d}));
  const trust=admitP6StoredPostParent(env);
  assert.throws(()=>loadP6PostWindows(env,trust,()=>Buffer.from("mutated")),/DAY_PLAN_HASH_DRIFT/);
+});
+
+test("current POST manual confirmation retains the prior scheduled uncertainty fence",async()=>{
+ const {env,posts,options}=fixture();
+ const e={...env,GITHUB_EVENT_NAME:"workflow_dispatch",P6_CURRENT_PARENT_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_POST_PARENT"};
+ assert.doesNotThrow(()=>admitP6StoredPostParent(e));
+ for(const d of [{P6_CURRENT_PARENT_DISPATCH_CONFIRM:"RUN_CURRENT_SIGNED_SOURCE_PARENT"},{P6_CURRENT_PARENT_DISPATCH_CONFIRM:""},{V39_PHASE6_PROCESS_ARMED:"0"},{V39_P5_SEVEN_REST_BUDGET_SIGNED:"0"}])
+  assert.throws(()=>admitP6StoredPostParent({...e,...d}),/NO_SEPARATE/);
+ const makeFetch=uncertain=>async(url,init)=>{
+  if(url.includes("queue-main-scheduled")){
+   const event=new URL(url).searchParams.get("event");
+   const runs=event==="workflow_dispatch"?[{...run(123456,"in_progress"),display_title:"parent"}]:
+    uncertain?[{...run(123455),display_title:"prior parent"}]:[];
+   return new Response(JSON.stringify({total_count:runs.length,workflow_runs:runs}),{status:200});
+  }
+  if(url.includes("/actions/runs/123455/jobs?")){
+   const jobs=[{name:"separately-authorized-current-private-post-children",status:"completed",conclusion:"failure",
+    steps:[{name:"Dispatch current private POST exact children",conclusion:"failure"}]}];
+   return new Response(JSON.stringify({total_count:jobs.length,jobs}),{status:200});
+  }
+  return options.fetchImpl(url,init);
+ };
+ const h=await runP6StoredPostParent(e,{...options,fetchImpl:makeFetch(true)});
+ assert.equal(h.status,"HOLD_POST_PREFLIGHT_NO_DISPATCH");assert.equal(posts.length,0);
+ const r=await runP6StoredPostParent(e,{...options,fetchImpl:makeFetch(false)});
+ assert.equal(r.acknowledgedGithubChildCount,4);assert.equal(posts.length,4);
 });

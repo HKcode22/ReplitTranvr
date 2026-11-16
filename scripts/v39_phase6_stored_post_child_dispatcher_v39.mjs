@@ -14,9 +14,8 @@ import {readP6PrivateSourcePostOnce} from "../server/lib/disruption/phase6Privat
 import {bindP6PostPrivateDayRoute,deriveP6PostOriginalLocalEnv} from "./v39_phase6_private_post_existing_v0083_child_v39.ts";
 import {admitP5FuturePostFrozenForReadOnly,planP5FuturePostOneChild} from "../server/lib/disruption/phase5FuturePostGithubReadonlyRelease_v39.ts";
 import {readActualValidPreAndClock} from "./v39_phase5_future_post_github_child_dispatcher_v39.ts";
-import {readP5CompleteGithubWorkflowHistory} from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39.ts";
+import {readP5CompleteGithubWorkflowHistory,readP5CompleteCurrentParentHistory} from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39.ts";
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
-const PARENT="phase5-source-upcoming-queue-main-scheduled-readonly.yml";
 const CHILD="phase5-one-signed-future-post-v0083-main-manual.yml";
 const JOB="separately-authorized-current-private-post-children";
 const STEP="Dispatch current private POST exact children";
@@ -41,7 +40,8 @@ function tls(raw,login){
 }
 export function admitP6StoredPostParent(env){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
-    env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="schedule"||env.GITHUB_RUN_ATTEMPT!=="1"||
+    env.GITHUB_REF!=="refs/heads/main"||!(env.GITHUB_EVENT_NAME==="schedule"? !env.P6_CURRENT_PARENT_DISPATCH_CONFIRM:
+     env.GITHUB_EVENT_NAME==="workflow_dispatch"&&env.P6_CURRENT_PARENT_DISPATCH_CONFIRM==="RUN_CURRENT_SIGNED_POST_PARENT")||env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
     !/^[0-9]{5,20}$/.test(env.GITHUB_RUN_ID??"")||!Number.isSafeInteger(Number(env.GITHUB_RUN_ID))||
     env.P6_PRIVATE_POST_PARENT_ENABLED!=="true"||env.P5_POST_AUTO_DISPATCH_ENABLED==="true"||
@@ -236,7 +236,7 @@ export async function runP6StoredPostParent(env,options={}){
  at=utc(scan.clock);
  if(Math.abs(now()-at)>120000)hold("STALE_REAL_DB_CLOCK");
  if(!scan.routes.length)return summary("NO_SIGNED_DUE_POST",{acknowledgedGithubChildCount:0,unavailableDays:scan.unavailable});
- const prior=await readP5CompleteGithubWorkflowHistory(historyUrl(PARENT,"schedule",at),fetcher,headers);
+ const prior=await readP5CompleteCurrentParentHistory(at,fetcher,headers);
  await proveP6NoUncertainPostParent(prior,Number(env.GITHUB_RUN_ID),fetcher,headers);
  const history=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",at),fetcher,headers);
  choice=chooseP6PostRoutes(scan.routes,history,scan.clock);

@@ -5,14 +5,13 @@
  */
 import {runP6RealPrivateSourceParentReadOnly}
  from "./v39_phase6_private_source_parent_readonly_v39.mjs";
-import {readP5CompleteGithubWorkflowHistory}
+import {readP5CompleteGithubWorkflowHistory,readP5CompleteCurrentParentHistory}
  from "../server/lib/disruption/phase5GithubCompleteWorkflowHistory_v39.ts";
 import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
  from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {P6_STORED_SOURCE_CAPACITY as CAP} from "../server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts";
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const CHILD="phase5-one-signed-day-source-child-dispatch.yml";
-const PARENT="phase5-source-upcoming-queue-main-scheduled-readonly.yml";
 const JOB="separately-authorized-stored-source-children";
 const STEP="Dispatch stored SOURCE exact children";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
@@ -25,7 +24,8 @@ const flags=["V39_P5_SOURCE_QUEUE_OWNER_APPROVED","V39_P5_AUTO_SOURCE_DISPATCH_A
  "P6_PRIVATE_SOURCE_STORED_DISPATCH_APPROVED","P6_PRIVATE_SOURCE_PARENT_RO_OWNER_APPROVED"];
 export function admitP6StoredSourceDispatcher(env){
  if(env?.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
-    env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="schedule"||
+    env.GITHUB_REF!=="refs/heads/main"||!(env.GITHUB_EVENT_NAME==="schedule"? !env.P6_CURRENT_PARENT_DISPATCH_CONFIRM:
+     env.GITHUB_EVENT_NAME==="workflow_dispatch"&&env.P6_CURRENT_PARENT_DISPATCH_CONFIRM==="RUN_CURRENT_SIGNED_SOURCE_PARENT")||
     env.GITHUB_RUN_ATTEMPT!=="1"||!/^\d{5,20}$/.test(env.GITHUB_RUN_ID??"")||
     !Number.isSafeInteger(Number(env.GITHUB_RUN_ID))||
     !CODE.test(env.GITHUB_SHA??"")||
@@ -112,7 +112,11 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  try{
   // Local read-only arguments only. No mutation of repository global arm.
   const pl=await observe({...env,V39_PHASE6_PROCESS_ARMED:"0",
-   V39_PHASE6_OWNER_APPROVED:"0",P6_PRIVATE_SOURCE_PARENT_RO_ENABLED:"true"},{storedCapacityProfile:true});
+   V39_PHASE6_OWNER_APPROVED:"0",P6_PRIVATE_SOURCE_PARENT_RO_ENABLED:"true",
+   // The admitted paid-routing parent may invoke ONLY the read-only observer
+   // here. Do not synthesize the event or propagate a paid arm to that helper.
+   P6_PRIVATE_SOURCE_PARENT_RO_CONFIRM:env.GITHUB_EVENT_NAME==="workflow_dispatch"?
+    "READ_ONLY_AUTHENTIC_PRIVATE_DAY_SOURCE_NO_PROVIDER_NO_DISPATCH":""},{storedCapacityProfile:true});
   if(pl?.providerCalls!==0||pl.databaseWrites!==0||pl.githubDispatches!==0||pl.paidPhase6Go!==false)
    fail("OBSERVATION_NOT_READ_ONLY");
   if(pl.status==="NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH")
@@ -143,7 +147,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   if(!proposals.length)return summary("NO_SIGNED_DUE_CHILD_NO_DISPATCH",{
    acknowledgedGithubChildCount:0,unavailableSelectedDayCount:unavailableDays,
    unavailableSelectedDueQueryCount:unavailableQueries});
-  const prior=await readP5CompleteGithubWorkflowHistory(historyUrl(PARENT,"schedule",historyClock),fetcher,headers);
+  const prior=await readP5CompleteCurrentParentHistory(historyClock,fetcher,headers);
   await proveNoPriorUncertainStoredDispatch({history:prior,currentRunId:Number(env.GITHUB_RUN_ID),fetcher,headers});
   const child=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",historyClock),fetcher,headers);
   previousIds=new Set(child.workflow_runs.map(x=>x.id));

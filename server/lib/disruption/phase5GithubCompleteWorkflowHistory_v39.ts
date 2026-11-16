@@ -66,7 +66,8 @@ export function reviewP5HistoryUrl(base:string):URL{
  if((!parent&&!WORKFLOWS.has(workflow))||
     [...u.searchParams.keys()].some(k=>!
      ["event","per_page","created"].includes(k))||
-    u.searchParams.get("event")!==(parent?"schedule":"workflow_dispatch")||
+    !(parent?["schedule","workflow_dispatch"].includes(u.searchParams.get("event")??""):
+     u.searchParams.get("event")==="workflow_dispatch")||
     u.searchParams.get("per_page")!=="100"||
     u.searchParams.has("page")||
     !u.searchParams.has("created"))
@@ -136,4 +137,29 @@ export async function readP5CompleteGithubWorkflowHistory(
    return{total_count:total,workflow_runs:all};
  }
  return refuse("INCOMPLETE_GITHUB_HISTORY_AFTER_FIVE_PAGES");
+}
+
+/** Both trigger modes share the original singleton and child admission. A
+ * previous ambiguous manual dispatch must be visible to a scheduled parent,
+ * and vice versa. Never infer a clean history from only the current event.
+ */
+export async function readP5CompleteCurrentParentHistory(
+ clock:number,fetcher:typeof fetch,headers:Record<string,string>
+):Promise<P5CompleteGithubWorkflowHistory>{
+ if(!Number.isSafeInteger(clock)||clock<3*3600_000||clock>8.64e15-60000)
+  refuse("PARENT_HISTORY_CLOCK_INVALID");
+ const window=encodeURIComponent(new Date(clock-3*3600_000).toISOString()+".."+
+  new Date(clock+60000).toISOString());
+ const all:P5CompleteGithubWorkflowRun[]=[];
+ const seen=new Set<number>();
+ for(const event of ["schedule","workflow_dispatch"]){
+  const h=await readP5CompleteGithubWorkflowHistory(ROOT+PREFIX+STORED_SOURCE_PARENT+
+   "/runs?event="+event+"&per_page=100&created="+window,fetcher,headers);
+  for(const row of h.workflow_runs){
+   if(seen.has(row.id))refuse("DUPLICATE_RUN_ACROSS_PARENT_TRIGGER_HISTORY");
+   seen.add(row.id);all.push(row);
+   if(all.length>P5_COMPLETE_HISTORY_MAX)refuse("COMBINED_PARENT_HISTORY_OVERSIZED");
+  }
+ }
+ return {total_count:all.length,workflow_runs:all};
 }
