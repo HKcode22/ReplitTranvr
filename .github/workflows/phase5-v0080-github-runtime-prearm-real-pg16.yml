@@ -1,5 +1,18 @@
 name: Phase5 V0080 Real GitHub Run Prearm PG16 (NO Paid)
 on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        type: string
+        required: true
+        description: 'MEASURE_TWO_FOUR_SLOT_PREARM_CLOCK_WAVES_NO_PROVIDER'
+      approved_main_sha:
+        type: string
+        required: true
+      first_target_utc:
+        type: string
+        required: true
+        description: 'Canonical UTC timestamp approximately 15 minutes after dispatch'
   pull_request:
     branches: [main]
     paths:
@@ -9,6 +22,8 @@ on:
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - 'tests/phase5_github_source_one_query_release_admission_v39.test.ts'
       - 'tests/phase5_v0080_runtime_github_prearm_real_pg_v39.test.ts'
+      - 'scripts/v39_phase5_no_provider_prearm_clock_v39.ts'
+      - 'tests/phase5_no_provider_prearm_clock_v39.test.ts'
       - '.github/workflows/phase5-v0080-github-runtime-prearm-real-pg16.yml'
   push:
     branches: [main]
@@ -19,6 +34,8 @@ on:
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - 'tests/phase5_github_source_one_query_release_admission_v39.test.ts'
       - 'tests/phase5_v0080_runtime_github_prearm_real_pg_v39.test.ts'
+      - 'scripts/v39_phase5_no_provider_prearm_clock_v39.ts'
+      - 'tests/phase5_no_provider_prearm_clock_v39.test.ts'
 permissions:
   contents: read
 env:
@@ -33,6 +50,7 @@ env:
   AERODATABOX_WEBHOOK_SECRET: ''
 jobs:
   real-pg16-no-provider:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 14
     services:
@@ -71,5 +89,74 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
-          npx vitest run tests/phase5_github_source_one_query_release_admission_v39.test.ts tests/phase5_v0080_runtime_github_prearm_real_pg_v39.test.ts
+          npx vitest run tests/phase5_github_source_one_query_release_admission_v39.test.ts tests/phase5_v0080_runtime_github_prearm_real_pg_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts
           echo 'PAID_CALLS=0 DISPOSABLE_PG16_ONLY=1 REPLIT_DB_WRITES=0 PHASE6_GO=0'
+  measure-prearmed-clock:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.confirm == 'MEASURE_TWO_FOUR_SLOT_PREARM_CLOCK_WAVES_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+    name: prearmed-slot-${{ matrix.wave }}-${{ matrix.slot }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: p5-no-provider-prearm-clock-${{ matrix.wave }}-${{ matrix.slot }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        wave: [1, 2]
+        slot: [1, 2, 3, 4]
+    env:
+      V39_PHASE6_OWNER_APPROVED: '0'
+      RAPIDAPI_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, ref: '${{ github.sha }}'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Measure actual setup and existing DB-clock wait; NO physical GET
+        env:
+          GH_TOKEN: ${{ github.token }}
+          P5_PREARM_CLOCK_CONFIRM: ${{ inputs.confirm }}
+          P5_PREARM_CLOCK_APPROVED_MAIN: ${{ inputs.approved_main_sha }}
+          P5_PREARM_CLOCK_FIRST_TARGET: ${{ inputs.first_target_utc }}
+          P5_PREARM_CLOCK_WAVE: ${{ matrix.wave }}
+          P5_PREARM_CLOCK_SLOT: ${{ matrix.slot }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable'
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$V39_P5_SOURCE_DATABASE_URL"
+          npx --no-install tsx scripts/v39_phase5_no_provider_prearm_clock_v39.ts
+      - name: Preserve sanitized observed timing or missed-target evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-prearm-clock-${{ github.run_id }}-${{ matrix.wave }}-${{ matrix.slot }}
+          path: ${{ runner.temp }}/p5-prearm-clock-${{ matrix.wave }}-${{ matrix.slot }}.json
+          retention-days: 30
+          if-no-files-found: error
