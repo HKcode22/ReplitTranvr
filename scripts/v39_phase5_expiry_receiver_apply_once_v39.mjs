@@ -5,8 +5,9 @@
  * GitHub run ID and distinct apply token. No arbitrary target URLs.
  */
 import {join} from "node:path";
+import {pathToFileURL} from "node:url";
 import {tmpdir} from "node:os";
-import {mkdtempSync,readdirSync,lstatSync,readFileSync,rmSync} from "node:fs";
+import {mkdtempSync,readdirSync,lstatSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {readBoundedJson,verifyPublicIdentity,checkP5ExpiryVerificationArtifact,
  P5_EXPIRY_VERIFY_WORKFLOW,P5_EXPIRY_VERIFY_ARTIFACT_FILE} from "./v39_phase5_expiry_receiver_verify_once_v39.mjs";
@@ -108,6 +109,13 @@ export async function applyP5PublishedExpiryOnce(env,{fetcher=fetch,readProof=do
  try{health=await fetcher(ORIGIN+"/__v39/workspace-runtime",{method:"GET",redirect:"error",signal:AbortSignal.timeout(20000),headers:{accept:"application/json"}});}
  catch{hold("PUBLIC_GET");}
  verifyPublicIdentity(await readBoundedJson(health),scope.source);
+ // Recheck main after the public health wait, immediately before the one
+ // fixed POST. The workflow remains independently run-ID gated.
+ try{
+  const live=await fetcher(ROOT+"/git/ref/heads/main",{method:"GET",redirect:"error",signal:AbortSignal.timeout(12000),
+   headers:{accept:"application/vnd.github+json",authorization:"Bearer "+scope.ghToken,"X-GitHub-Api-Version":"2022-11-28"}});
+  if(!live.ok||(await live.json())?.object?.sha!==scope.mainSha)hold("MAIN_CHANGED");
+ }catch{hold("MAIN_CHANGED_OR_UNAVAILABLE_BEFORE_POST");}
  let response;
  try{response=await fetcher(ORIGIN+"/__v39/phase5/recurring-expiry",{method:"POST",redirect:"error",
   signal:AbortSignal.timeout(120000),headers:{accept:"application/json",authorization:"Bearer "+scope.token,
@@ -117,5 +125,24 @@ export async function applyP5PublishedExpiryOnce(env,{fetcher=fetch,readProof=do
  return {status:"P5_PUBLISHED_ONE_DECLARED_EXPIRY_BATCH_RECEIPT",verifiedRunId:scope.verifiedRunId,
   reviewedSourceSha:scope.source,verification,providerCalls:0,objectDownloads:0,phase6PaidGo:false};
 }
-// Deliberately no CLI entry, workflow dispatch, schedule or secret setting
-// until actual VERIFY_ONLY and separately reviewed APPLY delivery/activation.
+export const P5_EXPIRY_APPLY_RECEIPT_FILE="p5-published-expiry-apply-receipt.json";
+// A completed CLI run and uploaded receipt evidence are not a claim of
+// independent storage IAM or backup compliance. An unsuccessful artifact
+// write after an acknowledged POST is an unknown receipt, not replay permission.
+async function main(){
+ try{
+  if(process.argv.length!==2||!process.env.RUNNER_TEMP)hold("CLI_SCOPE");
+  const scope=admitP5PublishedExpiryApply(process.env);
+  const receipt=await applyP5PublishedExpiryOnce(process.env);
+  const result={schema:"v39.phase5.published-expiry-apply-receipt.v1",runId:scope.runId,
+   reviewedMainSha:scope.mainSha,verifiedMainSha:scope.verifiedMainSha,
+   completedAtUtc:new Date().toISOString(),...receipt};
+  writeFileSync(join(process.env.RUNNER_TEMP,P5_EXPIRY_APPLY_RECEIPT_FILE),JSON.stringify(result),{flag:"wx",mode:0o600});
+  console.log(JSON.stringify(result));
+ }catch(e){
+  const m=e?.message??"";
+  console.error(/^HOLD_P5_PUBLISHED_EXPIRY_APPLY_[A-Z0-9_]+$/.test(m)?m:"HOLD_P5_PUBLISHED_EXPIRY_APPLY_UNKNOWN_NO_RETRY");
+  process.exitCode=2;
+ }
+}
+if(import.meta.url===pathToFileURL(process.argv[1]??"").href)void main();
