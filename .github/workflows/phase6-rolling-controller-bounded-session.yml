@@ -33,6 +33,8 @@ on:
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
       - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
       - 'server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs'
+      - 'server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs'
+      - 'server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs'
       - 'tests/phase6_rolling_session_ack_ledger_v39.test.mjs'
       - 'tests/phase6_bounded_rolling_session_v39.test.mjs'
 permissions:
@@ -126,7 +128,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Install existing scoped PostgreSQL client only for reviewed window custody mode
+        if: vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1'
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
       - name: Execute one protected rolling session and reconcile accepted workers before terminal
+        env:
+          P6_ROLLING_WINDOW_CUSTODY_ENABLED: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED }}
+          P6_ROLLING_WINDOW_CUSTODY_APPROVED: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.P6_ROLLING_WINDOW_CUSTODY_APPROVED || '' }}
+          P6_ROLLING_WINDOW_AUTHORIZATION_ID: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.P6_ROLLING_WINDOW_AUTHORIZATION_ID || '' }}
+          P6_ROLLING_WINDOW_EXPECTED_LOGIN: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.P6_ROLLING_WINDOW_EXPECTED_LOGIN || '' }}
+          P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL || '' }}
+          V39_P5_CONFIG_HASH: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED == '1' && secrets.V39_P5_CONFIG_HASH || '' }}
         shell: bash
         run: |
           set -Eeuo pipefail
