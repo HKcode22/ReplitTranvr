@@ -1,0 +1,83 @@
+name: Phase5 one protected declared-expiry batch (STOP default, NO PROVIDER)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'APPLY_ONE_REVIEWED_DECLARED_EXPIRY_ONLY_BATCH_NO_PROVIDER_NO_GO'
+        required: true
+        type: string
+      approved_main_sha:
+        description: 'Exact reviewed main'
+        required: true
+        type: string
+      approved_deployed_sha:
+        description: 'Exact deployed expiry source (same as verified source)'
+        required: true
+        type: string
+      verified_main_sha:
+        description: 'Exact prior successful VERIFY_ONLY main SHA'
+        required: true
+        type: string
+      verified_run_id:
+        description: 'Exact prior successful VERIFY_ONLY run ID'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p5-expiry-protected-one-batch
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  P5_RECURRING_EXPIRY_WRITER_URL: ''
+  P5_RECURRING_EXPIRY_READER_URL: ''
+  P5_EXPIRY_RECEIVER_AUTH_TOKEN: ''
+jobs:
+  protected-one-batch:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          inputs.confirm == 'APPLY_ONE_REVIEWED_DECLARED_EXPIRY_ONLY_BATCH_NO_PROVIDER_NO_GO' &&
+          inputs.approved_main_sha == github.sha &&
+          inputs.approved_deployed_sha == vars.P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA }}
+    environment: phase5-expiry-one-batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ github.sha }}', persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: One protected due-only batch, never replay uncertain POST
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          P5_EXPIRY_APPLY_CONFIRM: ${{ inputs.confirm }}
+          P5_EXPIRY_APPLY_APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+          P5_EXPIRY_APPLY_APPROVED_DEPLOYED_SHA: ${{ inputs.approved_deployed_sha }}
+          P5_EXPIRY_APPLY_DEPLOYED_SOURCE_SHA: ${{ vars.P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA }}
+          P5_EXPIRY_APPLY_VERIFIED_MAIN_SHA: ${{ inputs.verified_main_sha }}
+          P5_EXPIRY_APPLY_VERIFIED_RUN_ID: ${{ inputs.verified_run_id }}
+          P5_EXPIRY_APPLY_APPROVED_RUN_ID: ${{ secrets.P5_EXPIRY_APPLY_APPROVED_RUN_ID }}
+          P5_EXPIRY_APPLY_ENABLED: ${{ secrets.P5_EXPIRY_APPLY_ENABLED }}
+          P5_EXPIRY_APPLY_APPROVAL: ${{ secrets.P5_EXPIRY_APPLY_APPROVAL }}
+          P5_EXPIRY_APPLY_AUTH_TOKEN: ${{ secrets.P5_EXPIRY_APPLY_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs
+      - name: Preserve exact aggregate one-batch receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-expiry-apply-${{ github.run_id }}
+          path: ${{ runner.temp }}/p5-published-expiry-apply-receipt.json
+          retention-days: 7
+          if-no-files-found: error
