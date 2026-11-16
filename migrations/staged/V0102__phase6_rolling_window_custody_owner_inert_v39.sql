@@ -205,6 +205,54 @@ END $read$;
 REVOKE ALL ON FUNCTION clean.phase6_read_bound_rolling_window_v39(bigint,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION clean.phase6_read_bound_rolling_window_v39(bigint,text) TO phase6_rolling_window_claimant_v39;
 
+-- Read-only planning observation for the same already-bound claimant.
+-- No new role, table, closure, reservation, or dispatch permission. A
+-- concurrent claim/revocation can still change the state; the existing
+-- atomic claim remains the final authority. Never return flight data.
+CREATE FUNCTION clean.phase6_plan_bound_rolling_root_v39(
+ p_authorization text,p_manifest text,p_calendar text,p_config text,p_code text,p_policy text,
+ p_from timestamptz,p_until timestamptz
+) RETURNS TABLE(observed_at_utc timestamptz, disposition text)
+ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $plan$
+DECLARE n timestamptz; DECLARE i integer; DECLARE s timestamptz;
+BEGIN
+ IF current_user<>'neondb_owner' OR current_setting('transaction_read_only')<>'on'
+ OR NOT pg_has_role(session_user,'phase6_rolling_window_claimant_v39','MEMBER')
+ OR NOT EXISTS(SELECT 1 FROM pg_roles x WHERE x.rolname=session_user AND x.rolcanlogin
+  AND NOT x.rolsuper AND NOT x.rolcreatedb AND NOT x.rolcreaterole AND NOT x.rolreplication AND NOT x.rolbypassrls)
+ THEN RAISE EXCEPTION 'P6_V0102_RESTRICTED_READONLY_SESSION_HOLD'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM clean.phase6_rolling_policy_binding_v39 b WHERE b.manifest_sha256=p_manifest
+  AND b.expected_session_login=session_user AND b.authorization_id=p_authorization
+  AND b.calendar_sha256=p_calendar AND b.config_sha256=p_config AND b.code_sha=p_code
+  AND b.policy_sha256=p_policy AND b.policy_from_utc=p_from AND b.policy_until_utc=p_until)
+ THEN RAISE EXCEPTION 'P6_V0102_EXACT_OWNER_POLICY_BINDING_REQUIRED'; END IF;
+ n:=clock_timestamp();
+ IF NOT EXISTS(SELECT 1 FROM clean.adb_phase6_authorization a WHERE a.singleton_key
+  AND a.enabled AND a.revoked_at_utc IS NULL AND a.authorized_at_utc<=n
+  AND a.authorization_id=p_authorization AND a.manifest_sha256=p_manifest
+  AND a.calendar_hash=p_calendar AND a.config_hash=p_config AND a.code_sha=p_code)
+ THEN RETURN QUERY SELECT n,'AUTHORIZATION_HOLD'::text; RETURN; END IF;
+ IF n<p_from OR n>=p_until
+ THEN RETURN QUERY SELECT n,'OUTSIDE_POLICY'::text; RETURN; END IF;
+ i:=floor(extract(epoch FROM n-p_from)/7200)::integer;
+ s:=p_from+i*interval '2 hours';
+ IF EXISTS(SELECT 1 FROM clean.phase6_rolling_window_custody_v39 w WHERE w.manifest_sha256=p_manifest
+  AND (w.authorization_id IS DISTINCT FROM p_authorization OR w.calendar_sha256 IS DISTINCT FROM p_calendar
+  OR w.config_sha256 IS DISTINCT FROM p_config OR w.release_code_sha IS DISTINCT FROM p_code
+  OR w.policy_sha256 IS DISTINCT FROM p_policy OR w.policy_from_utc IS DISTINCT FROM p_from
+  OR w.policy_until_utc IS DISTINCT FROM p_until))
+ THEN RETURN QUERY SELECT n,'IMMUTABLE_STUDY_SCOPE_DRIFT'::text; RETURN; END IF;
+ IF EXISTS(SELECT 1 FROM clean.phase6_rolling_window_custody_v39 w WHERE w.closed_at_utc IS NULL)
+ THEN RETURN QUERY SELECT n,'PRIOR_ROOT_UNRESOLVED'::text; RETURN; END IF;
+ IF EXISTS(SELECT 1 FROM clean.phase6_rolling_window_custody_v39 w WHERE
+   (w.manifest_sha256=p_manifest AND w.window_index>=i) OR w.window_end_utc>s)
+ THEN RETURN QUERY SELECT n,'WINDOW_ALREADY_OWNED_OR_OVERLAP'::text; RETURN; END IF;
+ RETURN QUERY SELECT n,'CURRENT_WINDOW_UNCLAIMED_METADATA_ONLY'::text;
+END $plan$;
+REVOKE ALL ON FUNCTION clean.phase6_plan_bound_rolling_root_v39(text,text,text,text,text,text,timestamptz,timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION clean.phase6_plan_bound_rolling_root_v39(text,text,text,text,text,text,timestamptz,timestamptz)
+ TO phase6_rolling_window_claimant_v39;
+
 DO $restricted_post$
 BEGIN
  IF EXISTS(SELECT 1 FROM clean.phase6_rolling_policy_binding_v39)
@@ -225,7 +273,8 @@ BEGIN
  WHERE c.oid='clean.phase6_rolling_policy_binding_v39'::regclass AND a.grantee<>c.relowner)
  OR EXISTS(SELECT 1 FROM pg_proc p,LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
   WHERE p.oid IN ('clean.phase6_claim_bound_rolling_window_v39(text,text,text,text,text,text,timestamptz,timestamptz,bigint)'::regprocedure,
-   'clean.phase6_read_bound_rolling_window_v39(bigint,text)'::regprocedure)
+   'clean.phase6_read_bound_rolling_window_v39(bigint,text)'::regprocedure,
+   'clean.phase6_plan_bound_rolling_root_v39(text,text,text,text,text,text,timestamptz,timestamptz)'::regprocedure)
   AND a.grantee<>p.proowner AND (a.grantee<>'phase6_rolling_window_claimant_v39'::regrole OR a.privilege_type<>'EXECUTE' OR a.is_grantable))
  THEN RAISE EXCEPTION 'P6_V0102_RESTRICTED_EMPTY_ACL_HOLD'; END IF;
 END $restricted_post$;

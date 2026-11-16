@@ -3,7 +3,7 @@
 import pg from "pg";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
-import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
+import {claimP6RollingWindowOnce,readP6KnownRollingWindowOnce,readP6RollingRootPreflight} from "../server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs";
 import assert from "node:assert/strict";
 const URL="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 if(process.env.GITHUB_ACTIONS!=="true"||process.env.P6_WINDOW_DISPOSABLE_PG16!=="1"||
@@ -130,6 +130,17 @@ try {
  await assert.rejects(claimP6RollingWindowOnce({...input(1001),expectedPolicySha256:h("0")},{claimClient:neverRead,readbackClient:fakeClaim}),/MISSING_EXACT_REVIEWED_POLICY/);
  const narrowInput=root=>({...input(root),expectedClaimantSessionLogin:login,separateRestrictedWindowCustodyReviewApproved:true,
   sessionEpochUtc:iso(clock),chainDeadlineUtc:iso(clock+30*60000),chainMode:"SINGLE"});
+ const {rootRunId:unusedRoot,sessionEpochUtc:unusedEpoch,chainDeadlineUtc:unusedDeadline,chainMode:unusedMode,...planInput}=narrowInput(1001);
+ const readPlan=()=>readP6RollingRootPreflight(planInput,{readbackClient:read1});
+ const pre=await readPlan();
+ assert.equal(pre.status,"PROSPECTIVE_ROOT_SCOPE_METADATA_ONLY");assert.equal(pre.mode,"SINGLE");
+ assert.equal(pre.windowIndex,1);assert.equal(pre.actualDbClock,true);assert.equal(pre.restrictedReadOnly,true);
+ assert.equal(pre.permitDispatch,false);assert.equal(pre.databaseWrites,0);assert.equal(pre.independentProviderSettlementVerified,false);
+ assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,1);
+ await assert.rejects(readP6RollingRootPreflight({...planInput,expectedClaimantSessionLogin:wrongLogin},{readbackClient:wrong}),/EXACT_OWNER_POLICY_BINDING_REQUIRED/);
+ const planSql="SELECT * FROM clean.phase6_plan_bound_rolling_root_v39($1,$2,$3,$4,$5,$6,$7,$8)";
+ await assert.rejects(claim1.query(planSql,args(1001).slice(0,-1)),/RESTRICTED_READONLY_SESSION_HOLD/);
+ await assert.rejects(restricted.query(planSql,args(1001).slice(0,-1)),/permission denied/);
  // A valid policy but out-of-window controller deadline must roll back
  // the new root before COMMIT, leaving no ownership row to reconcile.
  await assert.rejects(claimP6RollingWindowOnce({...narrowInput(1000),chainMode:"FOUR",chainDeadlineUtc:iso(clock+120*60000)},
@@ -147,6 +158,7 @@ try {
  assert.equal(new Date(winner.windowEndUtc).getTime(),from.getTime()+4*3600000);
  assert.equal(winner.rootRunId,accepted);assert.equal(winner.actualDbClock,true);assert.equal(winner.independentConnection,true);
  assert.equal(winner.restrictedFunctionOnly,true);
+ assert.equal((await readPlan()).reason,"PRIOR_ROOT_UNRESOLVED");
  await wrong.query("BEGIN READ ONLY");
  assert.equal((await wrong.query(readBound,[accepted,manifest])).rowCount,0);
  await wrong.query("ROLLBACK");
@@ -170,6 +182,7 @@ try {
  // granting the claimant any closure capability.
  await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=false,revoked_at_utc=clock_timestamp()");
  await assert.rejects(readP6KnownRollingWindowOnce(successor,{readbackClient:read1}),/READBACK_CARDINALITY/);
+ assert.equal((await readPlan()).reason,"AUTHORIZATION_HOLD");
  await owner.query("UPDATE clean.adb_phase6_authorization SET enabled=true,revoked_at_utc=NULL");
  console.log("V0102_SCOPED_SUCCESSOR_EXACT_OPEN_ROOT_READ_ONLY_NO_SECOND_CLAIM_NO_CLOCK_EXTENSION_STOP_READBACK=PASS");
  console.log("V0102_EXACT_POLICY_REAL_COMMIT_DISTINCT_CONNECTION_READBACK_AND_UNKNOWN_COMMIT_NO_REPLAY=PASS");
@@ -178,6 +191,9 @@ try {
  assert.equal((await owner.query(close,[manifest,1,accepted,accepted,h("3"),h("4")])).rows[0].ok,true);
  await assert.rejects(readP6KnownRollingWindowOnce(successor,{readbackClient:read1}),/COMMITTED_SCOPE_DRIFT/);
  await assert.rejects(other.query(query,args(1003)),/WINDOW_ALREADY_OWNED_OR_OVERLAP/);
+ assert.equal((await readPlan()).reason,"WINDOW_ALREADY_OWNED_OR_OVERLAP");
+ assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,2);
+ console.log("V0102_ACTUAL_SCOPED_DB_CLOCK_ROOT_PREFLIGHT_NO_CLAIM_PRIOR_UNRESOLVED_STOP_AND_ALREADY_OWNED_PASS");
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table)).rows[0].n,2);
  await owner.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
  await assert.rejects(owner.query(query,args(1003)),/OWNER_READ_COMMITTED_REQUIRED/);await owner.query("ROLLBACK");
