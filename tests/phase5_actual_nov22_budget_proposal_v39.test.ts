@@ -254,7 +254,7 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
    futureRefillConfirmed:false,fullScopeAlertSafetyMeasured:false,independentReviewerApproved:false,stageAuthorizationGranted:false});
   const current=x.concreteReviewRecommendation.jointBudgetReview,b=proposeP5ActualNov22Budget(x.calendarDraft);
   expect(reconcileP6ActualJointBudget(current,b,3680)).toMatchObject({netRestCeiling:46468,restUnallocated:3508,phase6PaidGo:false});
-  for(const tamper of [{accountEvidenceSha256:"0".repeat(64)},{alertCreditsRemaining:1831},{apiUnitsRemaining:59967}])
+  for(const tamper of [{accountEvidenceSha256:"0".repeat(64)},{alertCreditsRemaining:1831},{apiUnitsRemaining:59969}])
    expect(()=>reconcileP6ActualJointBudget({...current,...tamper},b,3680)).toThrow("DATED_ACCOUNT_EVIDENCE_DRIFT");
   expect(x.timingCandidate.timingEvidenceSha256).toBeNull();
   expect(x.phase6PaidGo).toBe(false);
