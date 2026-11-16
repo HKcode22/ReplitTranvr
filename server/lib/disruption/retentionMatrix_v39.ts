@@ -16,16 +16,16 @@ export interface RetentionMatrixRow {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function row(contentClass: string, tables: readonly string[], contentClassification: ContentClassification): RetentionMatrixRow {
-  return {
+  return Object.freeze({
     contentClass,
-    tables,
+    tables: Object.freeze([...tables]),
     contentClassification,
     retentionVerifiedDate: "UNVERIFIED",
     retentionSource: "UNVERIFIED",
     retentionLegalBasis: "UNVERIFIED",
     retentionPeriodDaysOrCondition: "UNVERIFIED",
     expiryAction: "UNVERIFIED",
-  };
+  });
 }
 
 /**
@@ -85,13 +85,45 @@ export function parseRetentionMatrixEvidence(raw: string): RetentionMatrixEviden
   return parsed as RetentionMatrixEvidence;
 }
 
+const EVIDENCE_FIELDS = [
+  "retentionVerifiedDate", "retentionSource", "retentionLegalBasis",
+  "retentionPeriodDaysOrCondition", "expiryAction",
+] as const;
+
+/** Runtime evidence may fill only the five evidence fields. In particular,
+ * JSON supplied by an owner/reviewer cannot reclassify the committed data
+ * inventory as metadata or substitute another table to avoid its TTL. */
 export function resolveRetentionMatrix(evidence: RetentionMatrixEvidence): { rows: RetentionMatrixRow[]; failures: string[] } {
   const failures: string[] = [];
   const known = new Set(RETENTION_MATRIX.map((r) => r.contentClass));
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    return { rows: RETENTION_MATRIX.map(r => ({ ...r })), failures: ["invalid-retention-evidence-object"] };
+  }
   for (const key of Object.keys(evidence)) {
     if (!known.has(key)) failures.push(`unknown-content-class:${key}`);
   }
-  const rows = RETENTION_MATRIX.map((r) => ({ ...r, ...(evidence[r.contentClass] ?? {}) }));
+  const rows = RETENTION_MATRIX.map((r) => {
+    if (!Object.prototype.hasOwnProperty.call(evidence, r.contentClass)) return { ...r };
+    const supplied: unknown = evidence[r.contentClass];
+    if (!supplied || typeof supplied !== "object" || Array.isArray(supplied)) {
+      failures.push(`invalid-retention-evidence-row:${r.contentClass}`);
+      return { ...r };
+    }
+    const fields = supplied as Record<string, unknown>;
+    const extras = Object.keys(fields).filter(k => !(EVIDENCE_FIELDS as readonly string[]).includes(k));
+    const invalid = EVIDENCE_FIELDS.filter(k =>
+      Object.prototype.hasOwnProperty.call(fields, k) && typeof fields[k] !== "string");
+    if (extras.length || invalid.length) {
+      failures.push(`invalid-retention-evidence-fields:${r.contentClass}`);
+      // Fail closed even if a caller accidentally discards the overlay errors.
+      return { ...r };
+    }
+    const allowed: Partial<RetentionClassEvidence> = {};
+    for (const k of EVIDENCE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(fields, k)) allowed[k] = fields[k] as string;
+    }
+    return { ...r, ...allowed };
+  });
   return { rows, failures };
 }
 
@@ -165,22 +197,44 @@ function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]
 
 export function verifyRetentionMatrix(rows: readonly RetentionMatrixRow[] = RETENTION_MATRIX): RetentionMatrixVerdict {
   const failures: string[] = [];
+  if (!Array.isArray(rows)) return { pass: false, failures: ["invalid-retention-matrix-object"] };
   if (rows.length !== RETENTION_MATRIX.length) failures.push(`row-count:${rows.length}-expected-${RETENTION_MATRIX.length}`);
+  const baseline = new Map(RETENTION_MATRIX.map(r => [r.contentClass, r]));
+  const seen = new Set<string>();
   for (const r of rows) {
-    if (!r.contentClass) failures.push("content-class-missing");
-    if (!r.tables || r.tables.length === 0) failures.push(`tables-missing:${r.contentClass}`);
+    if (!r || typeof r !== "object" || typeof r.contentClass !== "string" || !r.contentClass) {
+      failures.push("content-class-missing");
+      continue;
+    }
+    const original = baseline.get(r.contentClass);
+    if (!original) {
+      failures.push(`unknown-content-class:${r.contentClass}`);
+      continue;
+    }
+    if (seen.has(r.contentClass)) failures.push(`duplicate-content-class:${r.contentClass}`);
+    seen.add(r.contentClass);
+    if (!Array.isArray(r.tables) || r.tables.length === 0) failures.push(`tables-missing:${r.contentClass}`);
+    else if (r.tables.length !== original.tables.length || r.tables.some((t: unknown, i: number) => t !== original.tables[i])) {
+      failures.push(`tables-differ-from-committed-matrix:${r.contentClass}`);
+    }
     if (!["raw_api_content", "derived_work", "non_aerodatabox_metadata"].includes(r.contentClassification)) {
       failures.push(`classification-invalid:${r.contentClass}`);
     }
+    if (r.contentClassification !== original.contentClassification) {
+      failures.push(`classification-differs-from-committed-matrix:${r.contentClass}`);
+    }
     let complete = true;
-    for (const f of ["retentionVerifiedDate", "retentionSource", "retentionLegalBasis", "retentionPeriodDaysOrCondition", "expiryAction"] as const) {
+    for (const f of EVIDENCE_FIELDS) {
       const v = r[f];
-      if (!v || v === "UNVERIFIED" || (f === "retentionVerifiedDate" && !ISO_DATE.test(v))) {
+      if (typeof v !== "string" || !v.trim() || v === "UNVERIFIED" || (f === "retentionVerifiedDate" && !ISO_DATE.test(v))) {
         failures.push(`unverified:${r.contentClass}:${f}`);
         complete = false;
       }
     }
-    if (complete) verifyClassificationSemantics(r, failures);
+    if (complete && r.contentClassification === original.contentClassification) verifyClassificationSemantics(r, failures);
+  }
+  for (const key of baseline.keys()) {
+    if (!seen.has(key)) failures.push(`missing-content-class:${key}`);
   }
   return { pass: failures.length === 0, failures: [...new Set(failures)].sort() };
 }
