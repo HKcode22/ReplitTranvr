@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
-import {admitP5ExpiryOwnerInventory} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
+import {admitP5ExpiryOwnerInventory,ownerInventoryIdentityFailures,ownerInventoryClientTls} from "../scripts/v39_phase5_recurring_expiry_owner_inventory_v39";
 import {admitP5RecurringExpiryRuntime,executeP5RecurringExpiryRuntime,boundP5RecurringExpiryStorage} from "../scripts/v39_phase5_recurring_blob_expiry_runtime_v39";
 const sha="a".repeat(40),base={
  P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PROVIDER_BLOB_MODE:"required",
@@ -73,5 +73,29 @@ describe("existing owner inventory admission",()=>{
    expect(()=>admitP5ExpiryOwnerInventory({...ownerEnv,...patch},sha,sha)).toThrow("HOLD_P5_EXPIRY_OWNER_INVENTORY_");
   const direct=ownerEnv.DATABASE_URL.replace("-pooler","");
   expect(admitP5ExpiryOwnerInventory({...ownerEnv,P5_RECURRING_EXPIRY_DIRECT_OWNER_URL:direct},sha,sha).directEndpointAvailable).toBe(true);
+ });
+});
+
+describe("Neon owner read-only actual transport vs backend TLS metadata",()=>{
+ const who={db:"neondb",actor:"neondb_owner",login:"neondb_owner",ver:160010,replica:false,ro:"on",rolcreaterole:true,rolsuper:false,tls:false};
+ it("requires actual client certificate verification even if backend says TLS is enabled",()=>{
+  expect(ownerInventoryIdentityFailures(who,true,true)).toEqual([]);
+  expect(ownerInventoryIdentityFailures({...who,tls:true},true,false)).toEqual(["CLIENT_TLS"]);
+  expect(ownerInventoryIdentityFailures(who,true,false)).toEqual(["CLIENT_TLS"]);
+  expect(ownerInventoryIdentityFailures({...who,tls:null},true,true)).toEqual(["BACKEND_TLS_METADATA"]);
+  expect(ownerInventoryClientTls({connection:{stream:{encrypted:true,authorized:true}}} as any,"ep-test.neon.tech")).toBe(false);
+ });
+ it("does not relax any production actor, privilege, version or read-only requirement",()=>{
+  expect(ownerInventoryIdentityFailures({...who,actor:"other",login:"other",rolsuper:true,rolcreaterole:false,ver:150000,ro:"off",replica:true},true,true))
+   .toEqual(["PG16","PRIMARY","READ_ONLY","CREATEROLE","OWNER","NON_SUPERUSER"]);
+ });
+ it("normalizes only the session-local sslmode to verify-full",()=>{
+  const env={P5_RECURRING_EXPIRY_APPROVED_MAIN_SHA:sha,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",
+   V39_PHASE6_OWNER_APPROVED:"0",DATABASE_URL:"postgresql://neondb_owner:synthetic@ep-test-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+   V39_PROVIDER_BLOB_MODE:"required",V39_PROVIDER_BLOB_BUCKET_ID:"replit-objstore-synthetic"};
+  const cfg=admitP5ExpiryOwnerInventory(env,sha,sha);
+  expect(new URL(cfg.url).searchParams.get("sslmode")).toBe("verify-full");
+  expect(env.DATABASE_URL).toContain("sslmode=require");
+  expect(cfg.directEndpointAvailable).toBe(false);
  });
 });
