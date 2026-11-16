@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs'
       - 'tests/phase5_expiry_receiver_verify_once_v39.test.mjs'
+      - 'scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs'
+      - 'tests/phase5_expiry_receiver_apply_once_v39.test.mjs'
       - 'server/lib/disruption/phase5ExpiryReceiverTransport_v39.ts'
       - 'server/lib/disruption/phase5ExpirySealedHandoff_v39.ts'
       - 'scripts/v39_phase5_expiry_sealed_handoff_v39.ts'
@@ -59,7 +61,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           node --check scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
-          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs
+          node --check scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs
+          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs
           npx vitest run tests/phase5_expiry_receiver_transport_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts tests/phase5_expiry_sealed_handoff_v39.test.ts tests/phase5_expiry_sealed_crypto_v39.test.ts
   actual-verify-only:
     if: >-
@@ -88,3 +91,10 @@ jobs:
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
+      - name: Preserve exact aggregate VERIFY ONLY acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-expiry-verify-${{ github.run_id }}
+          path: ${{ runner.temp }}/p5-published-expiry-verify-receipt.json
+          retention-days: 7
+          if-no-files-found: error
