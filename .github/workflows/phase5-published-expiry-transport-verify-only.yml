@@ -1,0 +1,86 @@
+name: Phase5 published expiry transport VERIFY ONLY (NO PROVIDER, NO DELETE)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs'
+      - 'tests/phase5_expiry_receiver_verify_once_v39.test.mjs'
+      - 'server/lib/disruption/phase5ExpiryReceiverTransport_v39.ts'
+      - 'server/lib/disruption/phase5RecurringExpiryRuntime_v39.ts'
+      - 'server/phase2gCallbackOnly.ts'
+      - 'tests/phase5_expiry_receiver_transport_v39.test.ts'
+      - '.github/workflows/phase5-published-expiry-transport-verify-only.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'VERIFY_PUBLISHED_EXPIRY_TRANSPORT_NO_PROVIDER_NO_DELETE'
+        type: string
+        required: true
+      approved_main_sha:
+        description: 'Exact reviewed main SHA'
+        type: string
+        required: true
+      approved_deployed_sha:
+        description: 'Exact approved published receiver source SHA'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: p5-expiry-receiver-verify-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  P5_RECURRING_EXPIRY_WRITER_URL: ''
+  P5_RECURRING_EXPIRY_READER_URL: ''
+jobs:
+  offline-contract:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Test fixed GitHub client and local HTTP transport (no production)
+        run: |
+          set -Eeuo pipefail
+          node --check scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
+          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs
+          npx vitest run tests/phase5_expiry_receiver_transport_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts
+  actual-verify-only:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main' &&
+        inputs.confirm == 'VERIFY_PUBLISHED_EXPIRY_TRANSPORT_NO_PROVIDER_NO_DELETE' &&
+        inputs.approved_main_sha == github.sha &&
+        inputs.approved_deployed_sha == vars.P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ github.sha }}', persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: One exact published receiver verification; never retry unknown POST
+        env:
+          P5_EXPIRY_RECEIVER_CONFIRM: ${{ inputs.confirm }}
+          P5_EXPIRY_RECEIVER_APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+          P5_EXPIRY_RECEIVER_APPROVED_DEPLOYED_SHA: ${{ inputs.approved_deployed_sha }}
+          P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA: ${{ vars.P5_EXPIRY_RECEIVER_DEPLOYED_SOURCE_SHA }}
+          P5_EXPIRY_RECEIVER_AUTH_TOKEN: ${{ secrets.P5_EXPIRY_RECEIVER_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
