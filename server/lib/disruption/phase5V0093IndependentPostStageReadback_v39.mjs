@@ -9,6 +9,8 @@
  */
 import {compileP5V0093CostOnlySevenRestReview} from
  "./phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {compileP5InertB0062UtcStagePacket} from "./phase5B0062InertCalendarUtcBudgetStage_v39.mjs";
+import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "./phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"];
 const SEVEN=[
@@ -61,7 +63,29 @@ export async function inspectP5V0093IndependentExactPostStage(
     expected.cost.sourceRequestGridSha256!==null||
     !pool||typeof pool.connect!=="function")
   deny("NOT_A_REVIEWED_INERT_COST_ONLY_PACKET");
- const p=expected.staged,c=expected.cost;
+ return inspectExactStagedRows(pool,expected.staged,expected.cost,
+  [stagingReview.expectedExactWriterRole,freezeReview.expectedExactBudgetWriterRole],false);
+}
+
+/** Read back stage 1 independently, without claiming the separate cost or
+ * source-rights review. Refuse any already-present V0093 release rows.
+ * The unsigned cost arithmetic is only a comparison model, not approval. */
+export async function inspectP5B0062IndependentCalendarStage(
+ pool,stagingInput,stagingReview,expectedBudgetWriterRole
+){
+ if(!/^phase5_fids_budget_freeze_[a-z0-9_]{6,32}$/.test(expectedBudgetWriterRole??"")||
+    !pool||typeof pool.connect!=="function")deny("CALENDAR_ONLY_DISTINCT_READER_REQUIRED");
+ const p=compileP5InertB0062UtcStagePacket(stagingInput,stagingReview);
+ const c=buildP5V0082UnknownAirportSevenCostOnlyDraft({
+  schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",
+  slotBudgetInput:stagingInput.slotBudgetInput,
+  expectedReviewerSlotEnvelopeSha256:p.sourceSlotBudgetSha256
+ });
+ return inspectExactStagedRows(pool,p,c,
+  [stagingReview.expectedExactWriterRole,expectedBudgetWriterRole],true);
+}
+
+async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
  const client=await pool.connect();
  let begun=false;
  const fetch=async(sql,args=[])=> (await client.query(sql,args)).rows;
@@ -83,9 +107,9 @@ export async function inspectP5V0093IndependentExactPostStage(
    "pg_is_in_recovery() replica,clock_timestamp() snapshot_utc"
   );
   if(sys.db!=="neondb"||sys.actor!==sys.session_actor||
-     sys.ro!=="on"||i(sys.ver)<160000||sys.replica!==false)
+     sys.ro!=="on"||(i(sys.ver)<160000||i(sys.ver)>=170000||!Number.isSafeInteger(i(sys.ver)))||sys.replica!==false)
    deny("WRONG_DB_OR_NOT_READONLY_PRIMARY_PG16");
-  if([stagingReview.expectedExactWriterRole,freezeReview.expectedExactBudgetWriterRole].includes(sys.actor))
+  if(excludedActors.includes(sys.actor))
    deny("READBACK_MUST_USE_DISTINCT_ACTOR");
   const auth=await one(
    "SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,"+
@@ -180,6 +204,28 @@ export async function inspectP5V0093IndependentExactPostStage(
       !equalNum(d.daily_other_reserved_units,ref.dailyOtherReservedUnits)||
       !equalNum(d.physically_reserved_units,0))
     deny("UTC_CYCLE_DAY_DIFFERS_FROM_REVIEW");
+  }
+  if(calendarOnly){
+   const tables=[...baseTables,"clean.phase5_fids_seven_rest_release_v39",
+    "clean.phase5_fids_cycle_rest_category_cap_v39","clean.phase5_fids_utc_rest_category_budget_v39"];
+   const counts=await one("SELECT "+tables.map((name,n)=>
+    "(SELECT COUNT(*)::int FROM "+name+") n"+n).join(","));
+   if(tables.some((_,n)=>counts["n"+n]!==0))
+    deny("CALENDAR_ONLY_STATE_HAS_COST_OR_SOURCE_ROWS_NO_REPLAY");
+   await client.query("ROLLBACK");begun=false;
+   return {
+    status:"INDEPENDENT_EXACT_B0062_CALENDAR_ONLY_READONLY_MATCH_NO_GO",
+    snapshotAtUtc:stamp(sys.snapshot_utc),database:"neondb",verifiedReadOnly:true,
+    manifestSha256:c.manifestSha256,calendarSha256:c.calendarSha256,
+    exactReviewedStagePacketSha256:p.stagePacketSha256,
+    calendarRows:31,pairedAirportDays:10,ordinaryAirportDaysUnselected:21,
+    restPhysicalChargeDates:c.days.length,categoryCycleCaps:0,categoryUtcBudgetRows:0,
+    costStageCommitted:false,sourceQueriesAndPhysicalAttemptsZero:true,
+    independentHumanSignatureOrRightsAuthenticatedByThisCode:false,
+    originalFlightPreOrPostProven:false,alertSafetyValuesExact:true,
+    authorizationSchemaVersion:"v39",authorizationEnabled:false,
+    providerCalls:0,databaseWrites:0,phase5ScientificFreeze:false,phase6PaidGo:false
+   };
   }
   const rel=await one(
    "SELECT manifest_sha256,budget_release_mode,"+
