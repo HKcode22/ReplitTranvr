@@ -11,7 +11,7 @@ import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
-import {createP6SessionAckLedger} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -100,7 +100,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
  let ledger,prior=null;
  const scheduleEvidenceCache=createP6RollingScheduleEvidenceCache();
- let requests=0,waves=0,calendarDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
+ let requests=0,waves=0,calendarDeferred=0,capacityDeferred=0,visibilityDeferrals=0,visibilityUnresolved=false;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  const api=async(url,init)=>{
   const u=new URL(url);
@@ -179,7 +179,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.policyCommitment!==policyCommitment||receipt.successorDispatches!==1||
      receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||receipt.pending.length!==0||
      receipt.providerCalls!==0||receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
-     !Number.isSafeInteger(receipt.acknowledged)||receipt.acknowledged<0||receipt.acknowledged>96||
+     !Number.isSafeInteger(receipt.acknowledged)||receipt.acknowledged<0||receipt.acknowledged>P6_ROLLING_ACK_CAPACITY||
      receipt.verifiedTerminal!==receipt.acknowledged||!Array.isArray(receipt.terminalAcknowledgements)||
      receipt.terminalAcknowledgements.length!==receipt.acknowledged||
      receipt.terminalAcknowledgements.some(x=>!Number.isFinite(Date.parse(x?.sentAtUtc))||Date.parse(x.sentAtUtc)>a.sent))
@@ -224,8 +224,14 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   if(plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CURRENT_HISTORY_HOLD");
   const hint=assessP6RollingCalendarHints(calendar,now());
   if(hint.status!=="REVIEWED_CALENDAR_WAKE_HINT_ONLY_NO_GO")hold("CALENDAR_WINDOW_UNKNOWN");
-  const narrowed=restrictP6RollingWave(plan,hint.hints.filter(x=>x.mayNeedWork).map(x=>x.lane));
-  calendarDeferred+=narrowed.calendarDeferred.length;
+  const calendarPlan=restrictP6RollingWave(plan,hint.hints.filter(x=>x.mayNeedWork).map(x=>x.lane));
+  calendarDeferred+=calendarPlan.calendarDeferred.length;
+  // Bound possible new ACKs before calling the dispatch core. Never
+  // enlarge the reviewed wave or count a capacity deferral as collection.
+  const capacity=ledger.remainingDispatchCapacity();
+  const narrowed=restrictP6RollingWave(calendarPlan,calendarPlan.due.slice(0,capacity));
+  const deferredByCapacity=calendarPlan.due.length-narrowed.due.length;
+  capacityDeferred+=deferredByCapacity;
   if(narrowed.due.length){
    const dispatchDeadline=Math.min(a.deadline-12*MIN,now()+5*MIN);
    if(dispatchDeadline-now()<60000)break;
@@ -234,8 +240,9 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     onEvidence:ledger.evidence});
   }
   waves++;
-  emit({status:"ROLLING_WAVE_OBSERVED_NOT_COLLECTION_PROOF",wave:waves,calendarDeferred:narrowed.calendarDeferred.length,
-   ...ledger.status()});
+  emit({status:"ROLLING_WAVE_OBSERVED_NOT_COLLECTION_PROOF",wave:waves,calendarDeferred:calendarPlan.calendarDeferred.length,
+   capacityDeferred:deferredByCapacity,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),...ledger.status()});
+  if(ledger.remainingDispatchCapacity()===0)break;
   if(waves<8&&now()+2*MIN<a.deadline-12*MIN-60000)await pause(2*MIN);else break;
  }
  // No subsequent wave until accepted IDs are really reconciled.
@@ -255,13 +262,15 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    ledger.verifyTerminalHistory(closing);
    await uniqueRoot();await main();
    const terminalAcknowledgements=ledger.terminalAcknowledgements();
+   const ackCapacityExhausted=ledger.remainingDispatchCapacity()===0;
    const result={schema:"v39.phase6.bounded-rolling-session.v1",
-    status:a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
+    status:ackCapacityExhausted?"BOUNDED_ACK_CAPACITY_EXHAUSTED_NO_SUCCESSOR_NOT_COLLECTION_PROOF":
+     a.chain?"BOUNDED_CHAIN_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF":"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF",
     runId:a.id,reviewedMainSha:a.sha,epochUtc:new Date(a.epoch).toISOString(),deadlineUtc:new Date(a.deadline).toISOString(),
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
-    waves,calendarDeferred,visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,
+    waves,calendarDeferred,capacityDeferred,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,
     successorDispatches:0,nextRunId:null,...state};
-   if(!a.chain||a.hop===1)return result;
+   if(!a.chain||a.hop===1||ackCapacityExhausted)return result;
    const sent=now();
    // This single POST is to the same controller, not a collection route.
    // The successor can only start after the root publishes its exact ACK
