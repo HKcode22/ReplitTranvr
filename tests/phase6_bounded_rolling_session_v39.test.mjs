@@ -1,13 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
+import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
+import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
 import {runP6RollingSession} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
+import {admitP6RuntimeWindowConfig} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
 import {P6_ROLLING_ROUTES,planP6RollingTick,restrictP6RollingWave,dispatchP6ReviewedRollingWave} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
 const WF="phase6-rolling-controller-bounded-session.yml";
-function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
+function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false,hideFinalOnce=false,hideOrdinaryUntilClosing=false,chain=false,failSuccessor=false,carryActive=false,rollover=false,delayedRetention=false,busyCalendar=false,multi=false}={}){
  let clock=start,seq=1000,snapshots=0,finishAt=Infinity;const plans=new Map(),runs=[],calls=[],events=[];
  const pins=Array.from({length:31},(_,i)=>{
   const service=start+(busyCalendar?(i===0?90*MIN:(24+(i-1)*24)*H):(4+i*4)*24*H),templates=[];
@@ -101,7 +108,7 @@ function setup({failAck=false,duplicate=false,hideAccepted=false,hideFinal=false
    const boundary=u.searchParams.get("created");
    const from=boundary?.split("..")[0];
    const selected=runs.filter(x=>x.path.endsWith("/"+route.workflow)&&x.event===u.searchParams.get("event")&&
-    (!from||Date.parse(x.created_at)>=Date.parse(from))&&!((hideAccepted||(hideFinal&&snapshots>=9))&&route.lane==="PRE_RECOVERY"));
+    (!from||Date.parse(x.created_at)>=Date.parse(from))&&!((hideAccepted||(hideFinal&&snapshots>=9)||(hideFinalOnce&&snapshots===9)||(hideOrdinaryUntilClosing&&snapshots>=2&&snapshots<=8))&&route.lane==="PRE_RECOVERY"));
    return response({total_count:selected.length,workflow_runs:selected});
   }};
  return {env,options,runs,calls,events,controllerRuns,root,get finishAt(){return finishAt;},startSuccessor(receipt){savedReceipt=receipt;clock+=30000;
@@ -165,6 +172,39 @@ test("final history omission after ordinary waves prevents continuation receipt"
  const f=setup({hideFinal:true});
  await assert.rejects(runP6RollingSession(f.env,f.options),/ACK_NOT_VISIBLE_IN_EXACT_HISTORY/);
  assert(f.calls.filter(x=>x.method==="POST").length>=2);
+});
+
+test("ordinary visibility HOLD clears only after fresh complete closing history without any new worker POST",async()=>{
+ const f=setup({hideOrdinaryUntilClosing:true,chain:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF");
+ assert(out.visibilityDeferrals>0);
+ assert(f.events.some(e=>e.status==="CLOSING_ACK_VISIBILITY_RECOVERED_NO_NEW_WORKER_POST"));
+ assert.equal(out.acknowledged,2);
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,3);
+ assert.equal(out.successorDispatches,1);
+});
+test("transient final terminal ACK omission recovers with GET-only closing readback",async()=>{
+ const f=setup({hideFinalOnce:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_TERMINAL_NO_SUCCESSOR_NOT_COLLECTION_PROOF");
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert.equal(out.pending.length,0);
+ assert.equal(out.unknownAttempts,0);
+ assert(f.events.some(e=>e.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,out.acknowledged);
+ assert(f.calls.length<=450);
+});
+test("transient final omission in protected chain restores exact ACK custody before successor",async()=>{
+ const f=setup({hideFinalOnce:true,chain:true});
+ const out=await runP6RollingSession(f.env,f.options);
+ assert.equal(out.status,"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF");
+ assert.equal(out.acknowledged,out.verifiedTerminal);
+ assert(f.events.some(e=>e.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,out.acknowledged+1);
+ assert.equal(out.successorDispatches,1);
+ assert(f.calls.length<=450);
 });
 
 test("two protected sessions preserve original epoch and independently replay only prior ACK readback",async()=>{
@@ -350,4 +390,187 @@ test("successor rejects predecessor job evidence from a different run before new
  };
  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_PARENT_JOB/);
  assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+
+test("integrated worker failure custody is written before the real-shaped POST and no unknown ACK is manufactured",async()=>{
+ const f=setup({failAck:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+30*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST")assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  await assert.rejects(runP6RollingSession(f.env,f.options),/UNKNOWN_DISPATCH_STOP_NO_RETRY/);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,1);
+  assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"DISPATCH_ATTEMPT_BEFORE_ACK");
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("integrated successful successor request preserves exact acceptance before terminal receipt is returned",async()=>{
+ const f=setup({chain:true}),dir=mkdtempSync(join(tmpdir(),"p6-rolling-integration-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+60*MIN,hop:0,parent:0});
+ try{
+  const original=f.options.fetcher;
+  f.options.emit=e=>j.record(e);
+  f.options.fetcher=async(url,opt)=>{
+   if(opt.method==="POST"&&url.includes("/workflows/"+WF+"/dispatches"))
+    assert.equal(JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1)).status,"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK");
+   return original(url,opt);
+  };
+  const out=await runP6RollingSession(f.env,f.options);
+  const last=JSON.parse(readFileSync(p,"utf8").trim().split("\n").at(-1));
+  assert.equal(last.status,"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF");assert.equal(last.nextRunId,out.nextRunId);
+  assert.equal(out.successorDispatches,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("combined writer/readback contract retains real-shaped unknown worker attempt without a manufactured ACK",async()=>{
+ const f=setup({failAck:true}),dir=mkdtempSync(join(tmpdir(),"p6-combined-custody-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+30*MIN,hop:0,parent:0});
+ try{
+  f.options.emit=e=>j.record(e);
+  await assert.rejects(runP6RollingSession(f.env,f.options),/UNKNOWN_DISPATCH_STOP_NO_RETRY/);
+  const parsed=parseP6RollingFailureCustody(readFileSync(p),{runId:12345,mainSha:sha});
+  const out=await reconcileP6FailureCustody(parsed,{readRun:async()=>assert.fail("unknown ACK must not be guessed")});
+  assert.equal(out.unknownWorkerAttempts.length,1);assert.equal(out.workers.length,0);
+  assert.equal(out.permitReplay,false);assert.equal(out.permitNewRoot,false);
+  assert.equal(f.calls.filter(x=>x.method==="POST").length,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("combined fresh closing recovery plus journal/readback keeps exact worker and unknown successor custody",async()=>{
+ const f=setup({chain:true,hideFinalOnce:true,failSuccessor:true}),dir=mkdtempSync(join(tmpdir(),"p6-combined-custody-")),p=join(dir,"journal.jsonl");
+ const j=createP6RollingFailureJournal(p,{id:12345,sha,epoch:start,chainDeadline:start+60*MIN,hop:0,parent:0});
+ try{
+  f.options.emit=e=>{f.events.push(e);j.record(e);};
+  await assert.rejects(runP6RollingSession(f.env,f.options),/CHAIN_UNKNOWN_SUCCESSOR_ACK_NO_REPLAY/);
+  assert(f.events.some(x=>x.status==="CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST"));
+  const parsed=parseP6RollingFailureCustody(readFileSync(p),{runId:12345,mainSha:sha});
+  const seen=[];
+  const out=await reconcileP6FailureCustody(parsed,{readRun:async id=>{seen.push(id);return f.runs.find(x=>x.id===id);}});
+  assert.equal(out.unknownWorkerAttempts.length,0);assert.equal(out.workers.length,f.runs.length);
+  assert.equal(seen.length,f.runs.length);assert(out.workers.every(x=>x.githubState==="KNOWN_GITHUB_SUCCESS_NOT_COLLECTION_PROOF"));
+  assert.equal(out.successor.githubState,"UNKNOWN_SUCCESSOR_ACK_NO_REPLAY");
+  assert.equal(out.permitNewRoot,false);assert.equal(out.permitReplay,false);
+  assert.equal(f.calls.filter(x=>x.method==="POST"&&x.url.includes("/workflows/"+WF+"/dispatches")).length,1);
+ }finally{j.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+
+function enableSyntheticCustody(f){
+ Object.assign(f.env,{P6_ROLLING_WINDOW_CUSTODY_ENABLED:"1",P6_ROLLING_WINDOW_CUSTODY_APPROVED:"1",
+  P6_ROLLING_WINDOW_AUTHORIZATION_ID:"CI-AUTH",P6_ROLLING_WINDOW_EXPECTED_LOGIN:"phase6_rolling_claim_ci_test",
+  P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL:"postgresql://phase6_rolling_claim_ci_test:synthetic-test@ci-only.neon.tech/neondb?sslmode=require",
+  V39_P5_CONFIG_HASH:hash});
+ const checks=[];
+ f.options.windowCustodyCheck=async({scope,rootId,kind})=>{
+  assert.equal(rootId,12345);
+  if(kind==="CLAIM")assert.equal(f.calls.filter(x=>x.method==="POST").length,0);
+  checks.push({rootId,kind,hop:scope.hop,posts:f.calls.filter(x=>x.method==="POST").length});
+  return {rootRunId:rootId,windowIndex:0,windowStartUtc:iso(start),windowEndUtc:iso(start+120*MIN),
+   claimedAtUtc:iso(start),reviewedMainSha:sha,policyCommitment:digest(JSON.stringify({policySha256:scope.expectedPolicySha256,...scope.trust})),
+   actualDbClock:true,restrictedFunctionOnly:true,operationalCustodyWrites:kind==="CLAIM"?1:0,
+   providerCalls:0,flightWrites:0,dispatchCount:0,permitDispatch:false,phase6PaidGo:false,
+   ...(kind==="CLAIM"?{status:"DURABLE_WINDOW_CLAIM_COMMITTED_AND_INDEPENDENTLY_READ_BACK_NOT_DISPATCH_AUTHORITY",independentConnection:true}:
+    {status:"EXACT_OPEN_ROOT_READBACK_NO_NEW_CLAIM_NOT_DISPATCH_AUTHORITY",epochUtc:iso(scope.epoch),
+     chainDeadlineUtc:iso(scope.chainDeadline),chainMode:scope.multi?"FOUR":"SINGLE"})};
+ };
+ return checks;
+}
+
+async function actualShapedClosedWindow({multi=true,carryActive=false,durable=false}={}){
+ const f=setup({chain:multi,multi,carryActive,delayedRetention:multi}),receipts=new Map();
+ const custodyChecks=durable?enableSyntheticCustody(f):[];
+ if(!multi)f.root.display_title="Phase6 initial bounded rolling controller session (STOP default)";
+ for(let hop=0;hop<(multi?4:1);hop++){
+  const x=await runP6RollingSession(f.env,f.options);receipts.set(x.runId,x);
+  if(x.successorDispatches===1)f.startSuccessor(x);
+  else {
+   const row=f.controllerRuns.find(y=>y.id===x.runId);row.status="completed";row.conclusion="success";break;
+  }
+ }
+ const first=receipts.get(12345);
+ const expected={rootRunId:12345,reviewedMainSha:sha,policyCommitment:first.policyCommitment,
+  mode:multi?"FOUR":"SINGLE",windowStartUtc:iso(start),windowEndUtc:iso(start+120*MIN),
+  epochUtc:first.epochUtc,chainDeadlineUtc:first.chainDeadlineUtc};
+ const controlJobs=id=>[{id:id*10+1,name:"one-protected-bounded-session",run_id:id,head_sha:sha,run_attempt:1,
+  status:"completed",conclusion:"success",steps:["Execute one protected rolling session and reconcile accepted workers before terminal",
+   "Preserve terminal operational receipt for independently reviewed continuation"].map(name=>({name,status:"completed",conclusion:"success"}))}];
+ const adapter={now:f.options.now,
+  readRun:async id=>structuredClone([...f.runs,...f.controllerRuns].find(y=>y.id===id)),
+  readJobs:async id=>{
+   if(receipts.has(id))return structuredClone(controlJobs(id));
+   const row=f.runs.find(y=>y.id===id),route=P6_ROLLING_ROUTES.find(y=>row?.path?.endsWith("/"+y.workflow));assert(route);
+   return route.jobs.map((j,i)=>({id:id*10+i+1,run_id:id,run_attempt:1,head_sha:sha,name:j.name,status:"completed",conclusion:"success",
+    steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x==="NO_DUE_WORK"?"success":"skipped"})):[]}));
+  },
+  readReceipt:async id=>({artifactId:id+90000,runId:id,name:"p6-rolling-terminal-"+id,bytes:Buffer.from(JSON.stringify(receipts.get(id)))}),
+  listControllers:async()=>structuredClone(f.controllerRuns)};
+ return {f,expected,adapter,receipts,custodyChecks};
+}
+test("complete actual-shaped four-session window independently accounts for all worker IDs including retired history",async()=>{
+ const {f,expected,adapter,receipts}=await actualShapedClosedWindow();
+ const posts=f.calls.filter(x=>x.method==="POST").length;
+ const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
+ const dispatched=f.runs.filter(x=>x.id!==900); // preexisting active route is not this controller's ACK
+ assert.equal(out.controllerRunIds.length,4);assert.equal(out.independentlyVerifiedWorkerJobs,dispatched.length);
+ assert.equal(out.uniqueWorkerAcknowledgements,dispatched.length);assert(out.retiredWorkerAcknowledgements>0);
+ assert.equal(out.terminalReceiptSha256,digest(Buffer.from(JSON.stringify([...receipts.values()].at(-1)))));
+ assert.equal(out.permitClose,false);assert.equal(out.permitNewRoot,false);assert.equal(out.providerSettlementVerified,false);
+ assert.equal(f.calls.filter(x=>x.method==="POST").length,posts);
+});
+test("standalone root verifies terminal operational evidence without granting next window",async()=>{
+ const {f,expected,adapter}=await actualShapedClosedWindow({multi:false});
+ const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
+ assert.equal(out.controllerRunIds.length,1);assert.equal(out.uniqueWorkerAcknowledgements,f.runs.length);
+ assert.equal(out.permitClose,false);assert.equal(out.permitReplay,false);
+});
+test("window reconciliation refuses lost receipt, unknown attempt, foreign job, extra root and wrong release policy",async()=>{
+ const {expected,adapter,receipts}=await actualShapedClosedWindow();
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence({...expected,policyCommitment:"0".repeat(64)},adapter),/RECEIPT_IDENTITY/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,readReceipt:async()=>null}),/ARTIFACT_SCOPE/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,readJobs:async id=>(await adapter.readJobs(id)).map(y=>({...y,run_id:99999}))}),/JOB_IDENTITY/);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,{...adapter,listControllers:async()=>[...await adapter.listControllers(),{id:99999}]}),/CONTROLLER_CHAIN_HISTORY/);
+ const last=[...receipts.values()].at(-1);last.unknownAttempts=1;
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/RECEIPT_IDENTITY/);last.unknownAttempts=0;
+ const original=last.terminalAcknowledgements;last.terminalAcknowledgements=original.slice(1);
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/ACK_AGGREGATE/);last.terminalAcknowledgements=original;
+});
+
+test("opt-in runtime stages one credential-bound claim before worker POST and transfers same root through all four sessions",async()=>{
+ const {f,expected,adapter,receipts,custodyChecks}=await actualShapedClosedWindow({durable:true});
+ assert.equal(receipts.size,4);assert.equal(custodyChecks.filter(x=>x.kind==="CLAIM").length,1);
+ assert.equal(custodyChecks[0].posts,0);assert(custodyChecks.some(x=>x.kind==="READ"&&x.hop===3));
+ assert(custodyChecks.every(x=>x.rootId===12345));
+ assert.deepEqual([...receipts.values()].map(x=>x.databaseWrites),[1,0,0,0]);
+ const root=receipts.get(12345).windowCustody;
+ assert([...receipts.values()].every(x=>JSON.stringify(x.windowCustody)===JSON.stringify(root)));
+ const out=await verifyP6RollingWindowTerminalEvidence(expected,adapter);
+ assert.deepEqual(out.recordedWindowCustody,root);assert.equal(out.actualDbOwnershipVerified,false);assert.equal(out.permitClose,false);
+ const last=[...receipts.values()].at(-1),original=last.windowCustody;last.windowCustody={...original,windowIndex:1};
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/DURABLE_CUSTODY_RECEIPT_DRIFT/);
+ last.windowCustody=original;delete last.windowCustody;
+ await assert.rejects(verifyP6RollingWindowTerminalEvidence(expected,adapter),/DURABLE_CUSTODY_RECEIPT_MISSING/);
+});
+test("opt-in controller refuses missing credential, root ambiguity, unknown claim or revoked wave before first POST",async()=>{
+ const f=setup();const checks=enableSyntheticCustody(f);
+ for(const patch of [{P6_ROLLING_WINDOW_CUSTODY_APPROVED:"0"},{P6_ROLLING_WINDOW_CUSTODY_ENABLED:"0"},
+  {P6_ROLLING_WINDOW_EXPECTED_LOGIN:"neondb_owner"},{NODE_TLS_REJECT_UNAUTHORIZED:"0"},
+  {P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL:"postgresql://phase6_rolling_claim_ci_test:synthetic-test@ci-only.neon.tech/neondb?sslmode=disable"}])
+  await assert.rejects(runP6RollingSession({...f.env,...patch},f.options),/HOLD_P6_ROLLING_RUNTIME/);
+ assert.equal(f.calls.length,0);assert.equal(checks.length,0);
+ const bad=setup({duplicate:true});const d=enableSyntheticCustody(bad);
+ await assert.rejects(runP6RollingSession(bad.env,bad.options),/PREVIOUS_OR_DUPLICATE_SESSION/);
+ assert.equal(d.length,0);
+ const unknown=setup();enableSyntheticCustody(unknown);
+ unknown.options.windowCustodyCheck=async()=>{throw Error("HOLD_P6_WINDOW_CLAIM_BRIDGE_COMMIT_UNKNOWN_NO_REPLAY");};
+ await assert.rejects(runP6RollingSession(unknown.env,unknown.options),/COMMIT_UNKNOWN_NO_REPLAY/);
+ assert.equal(unknown.calls.filter(x=>x.method==="POST").length,0);
+ const revoked=setup();enableSyntheticCustody(revoked);const call=revoked.options.windowCustodyCheck;
+ revoked.options.windowCustodyCheck=async x=>{if(x.kind==="READ")throw Error("HOLD_P6_WINDOW_CLAIM_BRIDGE_READBACK_CARDINALITY");return call(x);};
+ await assert.rejects(runP6RollingSession(revoked.env,revoked.options),/READBACK_CARDINALITY/);
+ assert.equal(revoked.calls.filter(x=>x.method==="POST").length,0);
+ const cfg=admitP6RuntimeWindowConfig(f.env);
+ assert.equal(cfg.connection.ssl.rejectUnauthorized,true);assert.equal(cfg.connection.database,"neondb");
+ assert(!("connectionString" in cfg.connection));
 });

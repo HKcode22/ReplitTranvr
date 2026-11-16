@@ -1,0 +1,53 @@
+name: Phase6 durable rolling window custody (disposable PG16 only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0102__phase6_rolling_window_custody_owner_inert_v39.sql'
+      - 'tests/phase6_rolling_window_custody_real_pg16_v39.mjs'
+      - 'server/lib/disruption/phase6RollingWindowClaimBridge_v39.mjs'
+      - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
+      - '.github/workflows/phase6-rolling-window-custody-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  disposable-rolling-window-custody:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      P6_WINDOW_DISPOSABLE_PG16: '1'
+      P6_WINDOW_TEST_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      GITHUB_TOKEN: ''
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Prove actual PG16 atomic next-window ownership and unresolved-root refusal
+        run: node tests/phase6_rolling_window_custody_real_pg16_v39.mjs

@@ -1,5 +1,6 @@
 /** Initial bounded rolling runtime using the original worker workflows.
- * Direct provider calls and DB connections are forbidden in this controller.
+ * Direct provider calls and flight-data DB connections are forbidden.
+ * Optional restricted operational window custody is separately scoped.
  * It CAN cause separately approved paid children, so global release and
  * one exact protected session or separately approved two-session chain.
  */
@@ -12,6 +13,8 @@ import {fileURLToPath} from "node:url";
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger,P6_ROLLING_ACK_CAPACITY} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
+import {createP6RollingFailureJournal,P6_ROLLING_FAILURE_JOURNAL_FILE} from "./v39_phase6_rolling_failure_journal_v39.mjs";
+import {admitP6RuntimeWindowConfig,createP6RuntimeWindowCustody,exactP6RuntimeWindowReceipt,compareP6WindowCustody} from "../server/lib/disruption/phase6RollingRuntimeWindowCustody_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml";
 const CONFIRM="RUN_ONE_PROTECTED_ROLLING_SESSION_AFTER_SEPARATE_PHASE6_GO";
@@ -105,11 +108,25 @@ function downloadReceipt({parent,name,token}){
  }catch{hold("CHAIN_RECEIPT_UNAVAILABLE");}
  finally{rmSync(dir,{recursive:true,force:true});}
 }
-export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt}={}){
+export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,fetcher=fetch,readPlan,emit=()=>{},readReceipt=downloadReceipt,windowCustodyCheck}={}){
  const started=now(),a=admitP6RollingSession(env,started);
  const calendar=loadP6RollingCalendarHints({...a,read:readPlan});
  if(a.epoch<calendar.from||a.chainDeadline>calendar.until)hold("SESSION_OUTSIDE_REVIEWED_POLICY");
  const policyCommitment=createHash("sha256").update(JSON.stringify({policySha256:a.expectedPolicySha256,...a.trust})).digest("hex");
+ const windowConfig=admitP6RuntimeWindowConfig(env);
+ if(!windowConfig&&windowCustodyCheck!==undefined)hold("UNEXPECTED_WINDOW_CHECK");
+ const checkWindow=windowConfig?(windowCustodyCheck??createP6RuntimeWindowCustody(windowConfig)):null;
+ let windowCustody=null,previousCustody=null,verifiedRootId=null,rootClaimWrites=0;
+ async function guardWindow(kind){
+  if(!checkWindow)return;
+  if(!verifiedRootId)hold("WINDOW_ROOT_NOT_AUTHENTICATED");
+  const fresh=exactP6RuntimeWindowReceipt(await checkWindow({scope:a,rootId:verifiedRootId,kind,readPlan}),
+   {scope:a,rootId:verifiedRootId,policyCommitment,clock:now(),kind});
+  if(windowCustody)compareP6WindowCustody(windowCustody,fresh);
+  if(previousCustody)compareP6WindowCustody(previousCustody,fresh);
+  windowCustody=fresh;
+  if(kind==="CLAIM")rootClaimWrites=1;
+ }
  let ledger,prior=null,priorTerminalIds=new Set(),priorRetirement=null;
  // Keep origin/chain deadline immutable for protected root admission. Only
  // the working history epoch can move after authenticated independent proof.
@@ -157,9 +174,9 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      (a.chain&&row.display_title!==chainTitle(a.hop,a.parent))||
      (a.hop>0&&Date.parse(row.created_at)<a.sent-1000))
    hold("SESSION_ROOT_IDENTITY_DRIFT");
-  if(a.hop===0)return;
+  if(a.hop===0){verifiedRootId=a.id;return;}
   const parent=exact(h.workflow_runs.find(x=>x.id===a.parent),a.parent);
-  let predecessorParent=0;
+  let predecessorParent=0,foundRoot=a.parent;
   if(a.multi){
    // Earlier controller runs must form one exact linear chain.
    let previousId=0,previousClock=a.epoch;
@@ -171,6 +188,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
        (hop<a.hop-1&&(ancestor.status!=="completed"||ancestor.conclusion!=="success"))||
        (hop===a.hop-1&&ancestor.id!==a.parent)||(hop===a.hop&&ancestor.id!==a.id))
      hold("CHAIN_ANCESTOR_IDENTITY");
+    if(hop===0)foundRoot=ancestor.id;
     if(hop===a.hop-1)predecessorParent=previousId;
     previousId=ancestor.id;previousClock=createdAt;
    }
@@ -195,6 +213,8 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
    if(actual.length!==1||actual[0].status!=="completed"||actual[0].conclusion!=="success")
     hold("CHAIN_PARENT_STEP");
   }
+  if(verifiedRootId!==null&&verifiedRootId!==foundRoot)hold("WINDOW_ROOT_DRIFT");
+  verifiedRootId=foundRoot;
   if(prior!==null)return;
   const name="p6-rolling-terminal-"+a.parent,art=await get("/actions/runs/"+a.parent+"/artifacts?per_page=100");
   if(art?.total_count!==1||!Array.isArray(art.artifacts)||art.artifacts.length!==1)hold("CHAIN_RECEIPT_HISTORY");
@@ -214,7 +234,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.chainDeadlineUtc!==new Date(a.chainDeadline).toISOString()||
      receipt.policyCommitment!==policyCommitment||receipt.successorDispatches!==1||
      receipt.unknownAttempts!==0||!Array.isArray(receipt.pending)||!Array.isArray(receipt.pendingAcknowledgements)||
-     receipt.providerCalls!==0||receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
+     receipt.providerCalls!==0||receipt.databaseWrites!==(checkWindow&&a.hop===1?1:0)||receipt.phase6PaidGo!==false||
      !Number.isSafeInteger(receipt.acknowledged)||receipt.acknowledged<0||receipt.acknowledged>P6_ROLLING_ACK_CAPACITY||
      !Number.isSafeInteger(receipt.verifiedTerminal)||receipt.verifiedTerminal<0||!Array.isArray(receipt.terminalAcknowledgements)||
      receipt.terminalAcknowledgements.length!==receipt.verifiedTerminal||
@@ -222,6 +242,11 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
      receipt.verifiedTerminal+receipt.pending.length!==receipt.acknowledged||
      receipt.ackCapacityExhausted!==false||receipt.remainingDispatchCapacity!==P6_ROLLING_ACK_CAPACITY-receipt.acknowledged)
     hold("CHAIN_RECEIPT_ACK_OR_POLICY_MISMATCH");
+  if(checkWindow){
+   if(!receipt.windowCustody||receipt.windowCustody.rootRunId!==foundRoot||receipt.windowCustody.policyCommitment!==policyCommitment)
+    hold("WINDOW_PARENT_CUSTODY_MISSING");
+   previousCustody=receipt.windowCustody;
+  }else if(receipt.windowCustody!==undefined)hold("UNEXPECTED_WINDOW_PARENT_CUSTODY");
   if(a.multi&&(receipt.maxSessionHops!==a.maxHops||receipt.chainMode!=="PROTECTED_FOUR_SESSION_BOUND"))hold("CHAIN_MULTI_RECEIPT_SCOPE");
   const all=[...receipt.terminalAcknowledgements,...receipt.pendingAcknowledgements];
   if(new Set(all.map(x=>x?.runId)).size!==all.length||
@@ -263,6 +288,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   try{await uniqueRoot();break;}
   catch(e){if(e?.message!=="HOLD_P6_ROLLING_RUNTIME_CHAIN_PARENT_NOT_TERMINAL"||i>=5)throw e;await pause(5000);}
  }
+ await guardWindow(a.hop===0?"CLAIM":"READ");
  ledger=createP6SessionAckLedger({...a,epoch:historyEpoch,now,emit,priorAcknowledgements:prior??[]});
  if(a.hop>0){
   const inherited=await ledger.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
@@ -334,6 +360,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   const deferredByCapacity=calendarPlan.due.length-narrowed.due.length;
   capacityDeferred+=deferredByCapacity;
   if(narrowed.due.length){
+   await guardWindow("READ");
    const dispatchDeadline=Math.min(a.deadline-12*MIN,now()+5*MIN);
    if(dispatchDeadline-now()<60000)break;
    const waveResult=await dispatchP6ReviewedRollingWave(narrowed,{sha:a.sha,approvedSha:a.sha,releaseApproved:true,token:env.GITHUB_TOKEN,
@@ -359,26 +386,38 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
   const hasSuccessor=a.chain&&a.hop+1<a.maxHops&&(!a.multi||a.chainDeadline-now()>=18*MIN);
   const transferKnownActive=hasSuccessor&&ledger.remainingDispatchCapacity()>0&&state.pending.length>0;
   if(!state.pending.length||transferKnownActive){
-   if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
    // The final dispatch can occur after the last ordinary visibility
    // check. Do not export terminal custody until a fresh complete snapshot
    // contains every independently reconciled ACK in normal history.
    const closing=[];
    const final=await readP6RollingGithubSnapshot({sha:a.sha,epoch:historyEpoch,token:env.GITHUB_TOKEN,now,fetcher:api,
     verifySnapshot:(route,snapshot)=>closing.push(snapshot),scheduleEvidenceCache});
-   // Known active ACK may become terminal between direct read and history.
-   // Retry only independent GETs, not the worker or successor POST.
-   if(transferKnownActive){
-    try{ledger.verifyContinuationHistory(closing);}
-    catch(e){
-     if(!["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY",
-      "HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
-      "HOLD_P6_ROLLING_SESSION_ACK_CONTINUATION_ACTIVE_HISTORY_DRIFT"].includes(e?.message)||
-        i>=23||now()+5000>=a.deadline-30000)throw e;
-     emit({status:"CHAIN_KNOWN_ACK_HANDOFF_READBACK_DEFERRED_NO_POST",...state});
-     await pause(5000);continue;
+   // A stale ordinary-wave visibility flag is not fresh closing evidence.
+   // Reconcile once more after a transient listing omission. Never dispatch
+   // new workers in this drain loop, and never retry a POST. Preserve the
+   // shared request/time caps and stop on identity or terminal regression.
+   try{
+    if(transferKnownActive)ledger.verifyContinuationHistory(closing);
+    else ledger.verifyTerminalHistory(closing);
+   }catch(e){
+    const transient=["HOLD_P6_ROLLING_SESSION_ACK_NOT_VISIBLE_IN_EXACT_HISTORY",
+     "HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
+     ...(transferKnownActive?["HOLD_P6_ROLLING_SESSION_ACK_CONTINUATION_ACTIVE_HISTORY_DRIFT"]:[])].includes(e?.message);
+    if(!transient)throw e;
+    // At most two closing GET retries, only with conservative API and time
+    // headroom. Exhaustion remains HOLD rather than an incomplete receipt.
+    if(i>=2||requests>=360||now()+5000>=a.deadline-30000){
+     if(visibilityUnresolved)hold("ACK_HISTORY_VISIBILITY_UNRESOLVED_NO_SUCCESSOR");
+     throw e;
     }
-   }else ledger.verifyTerminalHistory(closing);
+    emit({status:transferKnownActive?"CHAIN_KNOWN_ACK_HANDOFF_READBACK_DEFERRED_NO_POST":
+     "CLOSING_TERMINAL_ACK_READBACK_DEFERRED_NO_POST",...state});
+    await pause(5000);continue;
+   }
+   if(visibilityUnresolved){
+    emit({status:"CLOSING_ACK_VISIBILITY_RECOVERED_NO_NEW_WORKER_POST",...state});
+    visibilityUnresolved=false;
+   }
    if(final.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("FINAL_HISTORY_HOLD_NO_SUCCESSOR");
    await uniqueRoot();await main();
    const {terminalAcknowledgements,pendingAcknowledgements}=transferKnownActive?ledger.continuationAcknowledgements():
@@ -398,18 +437,20 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     chainDeadlineUtc:new Date(a.chainDeadline).toISOString(),sessionHop:a.hop,parentRunId:a.parent,
     waves,calendarDeferred,capacityDeferred,requestBudgetDeferred,requestBudgetStop,ackCapacityExhausted,remainingDispatchCapacity:ledger.remainingDispatchCapacity(),visibilityDeferrals,githubRequests:requests,policyCommitment,terminalAcknowledgements,pendingAcknowledgements,
     successorDispatches:0,nextRunId:null,...state,
+     ...(windowCustody?{windowCustody,databaseWrites:rootClaimWrites}:{}),
     ...(a.multi?{chainMode:"PROTECTED_FOUR_SESSION_BOUND",maxSessionHops:a.maxHops}:{}),
     ...(a.rollover?{historyRetirementMode:a.multi?"PROTECTED_FOUR_SESSION_BOUND":"PROTECTED_TWO_SESSION_REHEARSAL",historyEpochUtc:new Date(historyEpoch).toISOString(),
       ...(retirementCandidate?{historyRetirementCandidate:retirementCandidate}:{}),
       ...(retirementAudit?{historyRetirementAudit:retirementAudit}:{})}:{} )};
    if(!hasSuccessor||ackCapacityExhausted)return result;
+   await guardWindow("READ");
    const sent=now();
    // This single POST is to the same controller, not a collection route.
    // The successor can only start after the root publishes its exact ACK
    // receipt and finishes; failure or unknown acceptance is never retried.
    if(sent>=a.deadline-30000||a.chainDeadline-sent<17*MIN||++requests>REQUEST_CAP)
     hold("CHAIN_SUCCESSOR_DEADLINE");
-   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id});
+   emit({status:"CHAIN_SUCCESSOR_ATTEMPT_BEFORE_ACK",runId:a.id,sentAtUtc:new Date(sent).toISOString()});
    try{
     const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",
      headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),
@@ -421,6 +462,7 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
     if(!Number.isSafeInteger(id)||id<1||id===a.id||[...terminalAcknowledgements,...pendingAcknowledgements].some(x=>x.runId===id)||
        b.run_url!==ROOT+"/actions/runs/"+id||b.html_url!=="https://github.com/"+REPO+"/actions/runs/"+id)
      hold("CHAIN_ACK");
+    emit({status:"CHAIN_SUCCESSOR_EXACT_ACK_NOT_EXECUTION_PROOF",runId:a.id,nextRunId:id,sentAtUtc:new Date(sent).toISOString()});
     return {...result,status:"BOUNDED_SESSION_SUCCESSOR_ACKNOWLEDGED_NOT_COLLECTION_PROOF",
      successorDispatches:1,nextRunId:id,nextDispatchAtUtc:new Date(sent).toISOString(),githubRequests:requests};
    }catch{hold("CHAIN_UNKNOWN_SUCCESSOR_ACK_NO_REPLAY");}
@@ -431,10 +473,19 @@ export async function runP6RollingSession(env,{now=Date.now,sleep=sleepDefault,f
  hold("BOUND_EXHAUSTED_PENDING_ACCEPTED_WORKERS");
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ let journal;
  try{
-  const out=await runP6RollingSession(process.env,{emit:e=>console.log(JSON.stringify(e))});
+  // Refuse before any POST if the terminal receipt destination or local
+  // custody file cannot be initialized. No new remote write path.
   if(!process.env.RUNNER_TEMP)hold("RUNNER_TEMP_REQUIRED");
+  const scope=admitP6RollingSession(process.env);
+  journal=createP6RollingFailureJournal(join(process.env.RUNNER_TEMP,P6_ROLLING_FAILURE_JOURNAL_FILE),scope);
+  const out=await runP6RollingSession(process.env,{emit:e=>{
+   journal.record(e); // Sync finite attempt/ACK evidence before returning.
+   console.log(JSON.stringify(e));
+  }});
   writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),JSON.stringify(out),{flag:"wx",mode:0o600});
   console.log(JSON.stringify(out));
  }catch(e){const m=e?.message??"";console.error(/^HOLD_P6_ROLLING_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_ROLLING_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
+ finally{if(journal)journal.close();}
 }

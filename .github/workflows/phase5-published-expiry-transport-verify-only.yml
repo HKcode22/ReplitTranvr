@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs'
       - 'scripts/v39_phase5_expiry_v4_verify_handoff_owner_v39.mjs'
+      - 'scripts/v39_phase5_expiry_v4_apply_handoff_owner_v39.mjs'
+      - 'tests/phase5_expiry_v4_apply_handoff_owner_v39.test.mjs'
       - 'tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs'
       - 'tests/phase5_expiry_receiver_verify_once_v39.test.mjs'
       - 'scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs'
@@ -56,16 +58,32 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-        with: {persist-credentials: false}
+        with: {persist-credentials: false, fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '20', cache: npm}
+      - name: Prove real historical V4 source-equivalence after integrating unrelated runtime changes (no publication)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
+          node --input-type=module <<'NODE'
+          import {execFileSync} from "node:child_process";
+          import {checkP5V4HistoricalRelease} from "./scripts/v39_phase5_expiry_v4_apply_handoff_owner_v39.mjs";
+          const git=args=>execFileSync("git",args,{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim();
+          const main=git(["rev-parse","HEAD"]),verifiedMain="20dc5a31a58ebc85aacf22a7e6164510dedc3b6a";
+          if(main!==process.env.GITHUB_SHA)throw Error("CI checkout drift");
+          checkP5V4HistoricalRelease({main,verifiedMain});
+          if(git(["rev-parse","HEAD"])!==main||git(["status","--porcelain","--untracked-files=normal"]))throw Error("caller workspace changed");
+          console.log("P5_ACTUAL_HISTORICAL_V4_SOURCE_EQUIVALENCE_WITH_SEPARATE_CURRENT_CALLER_PASS_NO_PUBLISH");
+          NODE
       - run: npm ci --include=dev --no-audit --no-fund
       - name: Test fixed GitHub client and local HTTP transport (no production)
         run: |
           set -Eeuo pipefail
           node --check scripts/v39_phase5_expiry_receiver_verify_once_v39.mjs
           node --check scripts/v39_phase5_expiry_receiver_apply_once_v39.mjs
-          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs
+          node --test tests/phase5_expiry_receiver_verify_once_v39.test.mjs tests/phase5_expiry_receiver_apply_once_v39.test.mjs tests/phase5_expiry_v4_verify_handoff_owner_v39.test.mjs tests/phase5_expiry_v4_apply_handoff_owner_v39.test.mjs
           npx vitest run tests/phase5_expiry_receiver_transport_v39.test.ts tests/phase5_recurring_blob_expiry_runtime_v39.test.ts tests/phase5_expiry_sealed_handoff_v39.test.ts tests/phase5_expiry_sealed_crypto_v39.test.ts
   actual-verify-only:
     if: >-

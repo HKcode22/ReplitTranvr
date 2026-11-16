@@ -7,11 +7,26 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO or PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH'
+        description: 'Existing health/rolling preview/failed custody or READONLY_TERMINAL_ROLLING_WINDOW_CUSTODY_NO_PROVIDER_NO_GO'
         required: true
         type: string
       approved_main_sha:
-        description: 'Required exact main only for rolling preview'
+        description: 'Required exact current main for preview or custody readback'
+        required: false
+        type: string
+        default: ''
+      failed_run_id:
+        description: 'Exact failed rolling controller run ID (readback only)'
+        required: false
+        type: string
+        default: ''
+      failed_main_sha:
+        description: 'Exact failed rolling controller commit SHA (readback only)'
+        required: false
+        type: string
+        default: ''
+      terminal_window_scope_json:
+        description: 'Exact content-free root, code, policy, mode and UTC bounds for terminal readback only'
         required: false
         type: string
         default: ''
@@ -21,6 +36,12 @@ on:
       - 'server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs'
       - 'scripts/v39_phase6_github_controller_heartbeat_v39.mjs'
       - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
+      - 'scripts/v39_phase6_rolling_failure_readback_v39.mjs'
+      - 'scripts/v39_phase6_rolling_window_terminal_readback_v39.mjs'
+      - 'server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs'
+      - 'tests/phase6_rolling_window_terminal_readback_v39.test.mjs'
+      - 'server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs'
+      - 'tests/phase6_rolling_failure_readback_v39.test.mjs'
       - 'tests/phase6_rolling_github_preview_v39.test.mjs'
       - 'tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
@@ -66,7 +87,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY$DATABASE_URL$RAPIDAPI_KEY$GITHUB_TOKEN"
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs tests/phase6_rolling_github_preview_v39.test.mjs
+          node --test tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs tests/phase6_rolling_github_controller_v39.test.mjs tests/phase6_rolling_github_preview_v39.test.mjs tests/phase6_rolling_failure_readback_v39.test.mjs tests/phase6_rolling_window_terminal_readback_v39.test.mjs
           echo 'GH_AUTO_HEARTBEAT_OFFLINE_PASS_NO_PROVIDER_NO_DB_NO_PAID'
 
   actual-main-nonpaid-controller-heartbeat:
@@ -75,13 +96,16 @@ jobs:
           (github.event_name == 'schedule' ||
            (github.event_name == 'workflow_dispatch' &&
             (inputs.confirm == 'READONLY_GITHUB_CONTROLLER_HEALTH_NO_PROVIDER_NO_GO' ||
-            (inputs.confirm == 'PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH' && inputs.approved_main_sha == github.sha)))) }}
+            ((inputs.confirm == 'PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH' || inputs.confirm == 'READONLY_FAILED_ROLLING_CUSTODY_NO_REPLAY_NO_PROVIDER' || inputs.confirm == 'READONLY_TERMINAL_ROLLING_WINDOW_CUSTODY_NO_PROVIDER_NO_GO') && inputs.approved_main_sha == github.sha)))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       P6_CONTROLLER_HEARTBEAT_EXECUTE: '1'
       P6_CONTROLLER_HEARTBEAT_CONFIRM: ${{ inputs.confirm }}
       P6_ROLLING_PREVIEW_APPROVED_MAIN: ${{ inputs.approved_main_sha }}
+      P6_ROLLING_FAILED_RUN_ID: ${{ inputs.failed_run_id }}
+      P6_ROLLING_FAILED_MAIN_SHA: ${{ inputs.failed_main_sha }}
+      P6_ROLLING_WINDOW_SCOPE_JSON: ${{ inputs.terminal_window_scope_json }}
       P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
@@ -113,6 +137,10 @@ jobs:
           set +x
           if [ "$P6_CONTROLLER_HEARTBEAT_CONFIRM" = PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH ]; then
             node scripts/v39_phase6_rolling_github_preview_v39.mjs
+          elif [ "$P6_CONTROLLER_HEARTBEAT_CONFIRM" = READONLY_FAILED_ROLLING_CUSTODY_NO_REPLAY_NO_PROVIDER ]; then
+            node scripts/v39_phase6_rolling_failure_readback_v39.mjs
+          elif [ "$P6_CONTROLLER_HEARTBEAT_CONFIRM" = READONLY_TERMINAL_ROLLING_WINDOW_CUSTODY_NO_PROVIDER_NO_GO ]; then
+            node scripts/v39_phase6_rolling_window_terminal_readback_v39.mjs
           else
             node scripts/v39_phase6_github_controller_heartbeat_v39.mjs
           fi

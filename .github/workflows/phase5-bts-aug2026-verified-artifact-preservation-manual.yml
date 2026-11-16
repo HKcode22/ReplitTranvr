@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/phase5-bts-aug2026-verified-artifact-preservation-manual.yml"
+      - "scripts/v39_phase5_bts_gate_wheelsoff_contrast.py"
   workflow_dispatch:
     inputs:
       confirm:
@@ -54,6 +55,7 @@ jobs:
           test "${V39_PHASE6_OWNER_APPROVED}" = '0'
           test -z "${AERODATABOX_API_KEY}${RAPIDAPI_KEY}${DATABASE_URL}${GATE05_AUTOMATION_DATABASE_URL}${V39_DATABASE_RUNTIME_URL}"
           python3 scripts/v39_phase5_bts_aug2026_historical_training_lane.py --self-test
+          python3 scripts/v39_phase5_bts_gate_wheelsoff_contrast.py --self-test
           echo 'BTS_PRESERVATION_OFFLINE_CONTRACT_PASS_NO_PAID_NO_NEON' >> "$GITHUB_STEP_SUMMARY"
 
   preserve-exact-existing-aug2026:
@@ -175,3 +177,4 @@ jobs:
           fi
           echo 'Requested 90-day Actions retention (actual expiry subject to repository policy).' >> "$GITHUB_STEP_SUMMARY"
           echo 'These are temporary same-repo GitHub artifacts, NOT durable Phase7 object storage or AeroDataBox PRE. No provider API GET, no Neon writes, no Phase5 FREEZE or paid Phase6 GO.' >> "$GITHUB_STEP_SUMMARY"
+
