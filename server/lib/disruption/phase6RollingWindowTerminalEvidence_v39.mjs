@@ -4,6 +4,7 @@
  * I/O adapters must authenticate the exact run/receipt artifact from GitHub.
  */
 import {createHash} from "node:crypto";
+import {verifyP6ParentChildCustody} from "./phase6RollingChildCustody_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "./phase6RollingGithubController_v39.mjs";
 const WF=".github/workflows/phase6-rolling-controller-bounded-session.yml";
 const JOB="one-protected-bounded-session";
@@ -48,7 +49,7 @@ function entries(xs){
  }
  return m;
 }
-export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,readJobs,readReceipt,listControllers,now=Date.now}={}){
+export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,readJobs,readReceipt,listControllers,readParentArtifact,now=Date.now}={}){
  if(!expected||!ID(expected.rootRunId)||!C.test(expected.reviewedMainSha??"")||!H.test(expected.policyCommitment??"")||
     !["SINGLE","FOUR"].includes(expected.mode)||[readRun,readJobs,readReceipt,listControllers].some(x=>typeof x!=="function"))
   HOLD("EXPECTED_SCOPE");
@@ -156,6 +157,7 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
      listed.some(y=>!runIds.includes(y.id)||y.path!==WF||y.head_sha!==sha||y.event!==controllerRows.get(y.id)?.event||
        y.head_branch!=="main"||y.run_attempt!==1||y.status!=="completed"||y.conclusion!=="success"||
        y.created_at!==controllerRows.get(y.id)?.createdAt||y.display_title!==controllerRows.get(y.id)?.title))HOLD("CONTROLLER_CHAIN_HISTORY");
+  const childRuns=[],parentChildReceipts=[],childIds=new Set();
   for(const item of all.values()){
    if(runIds.includes(item.runId))HOLD("WORKER_CONTROLLER_ID_COLLISION");
    const route=ROUTES.get(item.lane),worker=await readRun(item.runId),sent=utc(item.sentAtUtc);
@@ -165,13 +167,20 @@ export async function verifyP6RollingWindowTerminalEvidence(expected,{readRun,re
    const outcome=assessP6RollingRoute(route,{complete:true,workflow:route.workflow,runs:[worker],active:[],jobRunId:item.runId,jobs},
     {sha,epoch:Math.min(createdAt,sent),clock});
    if(outcome.state.startsWith("HOLD_")||outcome.state==="ACTIVE_NO_OVERLAP")HOLD("WORKER_JOB_EVIDENCE");
+   if(item.lane==="SOURCE_POST"){
+    if(typeof readParentArtifact!=="function")HOLD("MISSING_PARENT_CHILD_READER");
+    const expanded=await verifyP6ParentChildCustody({parent:worker,parentJobs:jobs,sha,clock,readArtifact:readParentArtifact,readRun,readJobs});
+    parentChildReceipts.push(...expanded.receipts);
+    for(const c of expanded.children){if(all.has(c.runId)||runIds.includes(c.runId)||childIds.has(c.runId))HOLD("DUPLICATE_OR_FOREIGN_CHILD");childIds.add(c.runId);childRuns.push(c);}
+   }
   }
   return {status:"INDEPENDENT_WINDOW_OPERATIONAL_CHAIN_VERIFIED_NOT_SETTLEMENT_NOT_GO",
    rootRunId:expected.rootRunId,terminalRunId:id,reviewedMainSha:sha,policyCommitment:expected.policyCommitment,
    windowStartUtc:expected.windowStartUtc,windowEndUtc:expected.windowEndUtc,epochUtc:expected.epochUtc,chainDeadlineUtc:expected.chainDeadlineUtc,
    controllerRunIds:runIds,uniqueWorkerAcknowledgements:all.size,independentlyVerifiedWorkerJobs:all.size,
    retiredWorkerAcknowledgements:retired.size,receiptArtifacts:receipts,terminalReceiptSha256:receipts.at(-1).receiptSha256,
-   completeOperationalChainVerified:true,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
+   completeOperationalChainVerified:true,controllerOwnedChildJobsVerified:true,paidCapableChildRuns:childRuns,parentChildReceipts,
+   independentlyVerifiedPaidCapableChildJobs:childRuns.length,independentScheduledOrManualChildrenCovered:false,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
    ...(recordedWindowCustody?{recordedWindowCustody,actualDbOwnershipVerified:false}:{}),
    providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false};
  }

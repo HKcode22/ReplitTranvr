@@ -8,6 +8,7 @@ import {mkdtempSync,writeFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {P6_PAID_CHILD_ROUTES} from "../server/lib/disruption/phase6RollingChildCustody_v39.mjs";
 import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase6-rolling-controller-bounded-session.yml",FILE="p6-rolling-terminal-receipt.json";
@@ -52,8 +53,10 @@ export function unpackP6WindowReceiptArchive(bytes,meta){
  return unpackP6ControllerArtifactArchive(bytes,meta,"TERMINAL");
 }
 export function unpackP6ControllerArtifactArchive(bytes,meta,kind){
- if(!["TERMINAL","FAILURE"].includes(kind))hold("ARCHIVE_FILE_SCOPE");
- const name=kind==="TERMINAL"?FILE:"p6-rolling-failure-custody.jsonl",maxArchive=kind==="TERMINAL"?65536:131072,maxFile=kind==="TERMINAL"?32768:65536;
+ if(!["TERMINAL","FAILURE","SOURCE","POST"].includes(kind))hold("ARCHIVE_FILE_SCOPE");
+ const parent=P6_PAID_CHILD_ROUTES[kind];
+ const name=parent?parent.file:kind==="TERMINAL"?FILE:"p6-rolling-failure-custody.jsonl",
+  maxArchive=parent?16384:kind==="TERMINAL"?65536:131072,maxFile=parent?4096:kind==="TERMINAL"?32768:65536;
  if(!Buffer.isBuffer(bytes)||bytes.length!==meta.size||bytes.length<1||bytes.length>maxArchive||
    "sha256:"+hash(bytes)!==meta.digest)hold("ARCHIVE_SIZE_OR_DIGEST");
  const dir=mkdtempSync(join(tmpdir(),"p6-terminal-readback-")),path=join(dir,"receipt.zip");
@@ -68,7 +71,7 @@ export function unpackP6ControllerArtifactArchive(bytes,meta,kind){
  finally{rmSync(dir,{recursive:true,force:true});}
 }
 export async function runP6WindowTerminalReadback(env,{fetcher=fetch,readArchive=downloadArchive,now=Date.now}={}){
- const a=admitP6WindowTerminalReadback(env),started=now();let requests=0,downloads=0;
+ const a=admitP6WindowTerminalReadback(env),started=now();let requests=0,downloads=0,parentDownloads=0;
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+a.token,"X-GitHub-Api-Version":"2022-11-28"};
  async function get(path){
   if(++requests>600||now()<started||now()-started>360000)hold("REQUEST_OR_TIME_BOUND");
@@ -106,6 +109,22 @@ export async function runP6WindowTerminalReadback(env,{fetcher=fetch,readArchive
    if(JSON.stringify(before)!==JSON.stringify(after))hold("ARTIFACT_CHANGED");
    return {artifactId:before.id,runId,name:before.name,bytes};
   },
+  readParentArtifact:async(runId,lane)=>{
+   const spec=P6_PAID_CHILD_ROUTES[lane];
+   if(!spec||++parentDownloads>64||now()-started>330000)hold("PARENT_DOWNLOAD_BOUND");
+   const name=spec.artifactPrefix+runId;
+   async function meta(){
+    const ar=complete(await get("/actions/runs/"+runId+"/artifacts?per_page=100"),"artifacts",100).filter(x=>x.name===name);
+    if(ar.length!==1||ar[0].expired!==false||!id(ar[0].id)||!Number.isSafeInteger(ar[0].size_in_bytes)||
+       ar[0].size_in_bytes<1||ar[0].size_in_bytes>16384||(ar[0].workflow_run&&Number(ar[0].workflow_run.id)!==runId)||
+       !/^sha256:[a-f0-9]{64}$/.test(ar[0].digest??""))hold("PARENT_ARTIFACT_METADATA");
+    return {id:ar[0].id,size:ar[0].size_in_bytes,digest:ar[0].digest};
+   }
+   const before=await meta(),archive=await readArchive({artifactId:before.id,token:a.token});
+   const bytes=unpackP6ControllerArtifactArchive(archive,before,lane),after=await meta();
+   if(JSON.stringify(before)!==JSON.stringify(after))hold("PARENT_ARTIFACT_CHANGED");
+   return {runId,artifactId:before.id,name,bytes};
+  },
   listControllers:async({fromUtc,untilUtc,scheduledRootRunId})=>{
    const q=new URLSearchParams({branch:"main",event:"workflow_dispatch",per_page:"100",created:fromUtc+".."+untilUtc});
    const rows=complete(await get("/actions/workflows/"+WF+"/runs?"+q),"workflow_runs",100);
@@ -120,7 +139,7 @@ export async function runP6WindowTerminalReadback(env,{fetcher=fetch,readArchive
   }
  });
  await main();
- return {...out,reviewedReaderMainSha:a.main,githubReadRequests:requests,receiptArchiveDownloads:downloads,
+ return {...out,reviewedReaderMainSha:a.main,githubReadRequests:requests,receiptArchiveDownloads:downloads,parentCustodyArchiveDownloads:parentDownloads,
   archiveDigestIndependentlyVerified:true,artifactMetadataBeforeAfterBound:true,actualDbOwnershipVerified:false};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

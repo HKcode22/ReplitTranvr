@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createP6RollingFailureJournal} from "../scripts/v39_phase6_rolling_failure_journal_v39.mjs";
 import {parseP6RollingFailureCustody,reconcileP6FailureCustody} from "../server/lib/disruption/phase6RollingFailureCustodyReadback_v39.mjs";
+import {P6_PAID_CHILD_ROUTES} from "../server/lib/disruption/phase6RollingChildCustody_v39.mjs";
 import {verifyP6RollingWindowTerminalEvidence} from "../server/lib/disruption/phase6RollingWindowTerminalEvidence_v39.mjs";
 import {runP6RollingSession,decodeP6PredecessorReceipt,prepareP6ScheduledRoot} from "../scripts/v39_phase6_bounded_rolling_session_v39.mjs";
 import {execFileSync} from "node:child_process";
@@ -516,9 +517,11 @@ async function actualShapedClosedWindow({multi=true,carryActive=false,durable=fa
    if(receipts.has(id))return structuredClone(controlJobs(id));
    const row=f.runs.find(y=>y.id===id),route=P6_ROLLING_ROUTES.find(y=>row?.path?.endsWith("/"+y.workflow));assert(route);
    return route.jobs.map((j,i)=>({id:id*10+i+1,run_id:id,run_attempt:1,head_sha:sha,name:j.name,status:"completed",conclusion:"success",
-    steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x==="NO_DUE_WORK"?"success":"skipped"})):[]}));
+    started_at:row.created_at,completed_at:row.created_at,
+    steps:j.step?[{name:j.step,status:"completed",conclusion:"success"}]:j.parentOutcome?["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"].map(x=>({name:"Parent outcome "+x,status:"completed",conclusion:x==="NO_DUE_WORK"?"success":"skipped"})).concat([{name:Object.values(P6_PAID_CHILD_ROUTES).find(r=>r.parentJob===j.name).uploadStep,status:"completed",conclusion:"success"}]):[]}));
   },
   readReceipt:async id=>({artifactId:id+90000,runId:id,name:"p6-rolling-terminal-"+id,bytes:Buffer.from(JSON.stringify(receipts.get(id)))}),
+  readParentArtifact:async(id,lane)=>({artifactId:id*10+(lane==="SOURCE"?1:2),runId:id,name:P6_PAID_CHILD_ROUTES[lane].artifactPrefix+id,bytes:Buffer.from(JSON.stringify({schema:"v39.phase6.parent-child-custody.v1",parentRunId:id,reviewedMainSha:sha,lane,disposition:"NO_DUE_WORK",childRunIds:[],recordedAtUtc:f.runs.find(x=>x.id===id).created_at,providerCallsByParent:0,paidGetsCertifiedByParent:0,permitReplay:false,phase6PaidGo:false}))}),
   listControllers:async()=>structuredClone(f.controllerRuns)};
  return {f,expected,adapter,receipts,custodyChecks};
 }
