@@ -52,3 +52,19 @@ Independent new full-calendar retention-backlog check was attempted but Code Mod
 - Deadline remains Nov20 15:10 Pacific strict lead for original planned first nominal request Nov20 15:45 Pacific. If actual approvals/readbacks cannot fit, shift prospectively using original seed and reviewed procedure rather than backfill.
 
 No main changes, provider calls, production writes, credential/variable updates, dispatch, deletion or final approval in this review. Documentation-only branch; do not merge it just to change the retention pin. Phase5 scientific FREEZE HOLD / Phase6 paid NO-GO.
+
+## 4. Completed superseding full-calendar capacity check
+
+The initially blocked bulk retrieval was recovered with four bounded read batches (8/8/8/7). All 31 exact main day files were actually retrieved, day identity, within-day key uniqueness and single-attempt/two-unit parameters checked; the observed timestamp counts were compressed to day starts and shape and reconstructed at quarter-hour resolution. 6,144 nominal templates, 1,516 distinct timestamps, max8 simultaneously. Independent sliding-window and exhaustive event-pair sums agree for all 13 tested windows. [Full source blob identities, compressed inputs and results](evidence/2026-11-17_primary_expiry_nominal_source_backlog_REVIEW_ONLY.json), committed 7213c02047daf9f30bae2f8dd16b5e6e96c1957f. No source bytes or real provider payloads needed. This supersedes the incomplete retrieval in §2; preserve it as failure history.
+
+| Nominal eligibility accumulation interval (constant shift model) | Maximum source originals if all templates yield one | Slack below one run's 256 limit |
+|---|---:|---:|
+| 4h42m58s pooled gap | 100 | 156 |
+| 9h50m19s SOURCE observed historical maximum gap | 192 | 64 |
+| 10h34m47s other sentinel maximum gap | 204 | 52 |
+| Same +9min | 204 | 52 |
+| 12h | 228 | 28 |
+| 15h | 256 | 0 |
+| 24h | 256 | 0 |
+
+The heaviest 10h34m47s nominal interval is Nov27 09:45 through 20:15Z. In the simplified single-attempt SOURCE-only model, 256 is sufficient by count for the observed stress interval; no demonstrated reason to enlarge batches or install anything new. This is not a throughput test or guaranteed capacity: extra FIDS originals, retries, varying expiry or persistence times, existing backlog, locks, failed commit/readback, scheduler startup and additional deletion surfaces are excluded. At 15/24h the nominal maximum itself exhausts the count ceiling. Retention time compliance remains unestablished even when counts fit. Do not alter TTLs or limits from this calculation alone.
