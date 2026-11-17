@@ -299,7 +299,7 @@ export function auditP5ActualSourceFlightCandidates(
  const conflicts=new Set<string>(),seenRetained=new Set<string>();
  if(expectedRetainedIds.length>0){
   if(!Array.isArray(retainedIdentityRows)||retainedIdentityRows.length!==expectedRetainedIds.length)
-   fail("RETAINED_IDENTITY_CONFLICT_SCREEN_MISSING_OR_PARTIAL");
+   return fail("RETAINED_IDENTITY_CONFLICT_SCREEN_MISSING_OR_PARTIAL");
   const expected=new Set(expectedRetainedIds);
   for(const row of retainedIdentityRows){
    if(!row||!expected.has(row.flight_instance_id)||seenRetained.has(row.flight_instance_id)||

@@ -31,7 +31,8 @@ const fakeFetch:typeof fetch=async()=>{
  });
  const departures=fetches===1?[
   move("ZX123","synthetic-retime",20),move("ZX124","synthetic-duplicate-a",40),
-  move("ZX124","synthetic-duplicate-b",40),move("ZX125","synthetic-unchanged",60)
+  move("ZX124","synthetic-duplicate-b",40),move("ZX125","synthetic-unchanged",60),
+  move("ZX127","synthetic-repeated-id",100),move("ZX127","synthetic-repeated-id",100)
  ]:[move("ZX123","synthetic-retime",25),move("ZX125","synthetic-unchanged",60),
   move("ZX126","synthetic-distinct",80)];
  return new Response(JSON.stringify({departures,arrivals:[]}),{
@@ -203,15 +204,19 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   // The two duplicate normalized identities survive as distinct provisional
   // observations; no paid original rollback due to ON CONFLICT row loss.
   const rows=(await pool.query(
-   "SELECT flight_number,analytic_identity_id,canonical_flight_instance_id,codeshare_resolution_status "+
+   "SELECT flight_number,analytic_identity_id,canonical_flight_instance_id,codeshare_resolution_status,provider_record_key "+
    "FROM clean.flight_population ORDER BY flight_number,analytic_identity_id")).rows;
-  expect(rows).toHaveLength(4);
+  expect(rows).toHaveLength(6);
   const duplicates=rows.filter(x=>x.flight_number==="ZX124");
   expect(duplicates).toHaveLength(2);
   expect(new Set(duplicates.map(x=>x.analytic_identity_id)).size).toBe(2);
   expect(duplicates.every(x=>x.canonical_flight_instance_id===null&&
    x.codeshare_resolution_status==="phase5_duplicate_identity_ambiguous")).toBe(true);
   expect(rows.filter(x=>x.canonical_flight_instance_id!==null)).toHaveLength(2);
+  const repeated=rows.filter(x=>x.flight_number==="ZX127");
+  expect(repeated).toHaveLength(2);
+  expect(repeated.every(x=>x.canonical_flight_instance_id===null&&/^fidsrec:p5amb:[0-9a-f]{64}$/.test(x.provider_record_key))).toBe(true);
+  expect(new Set(repeated.map(x=>x.provider_record_key)).size).toBe(2);
  });
  it("replaying same query cannot reserve or issue a second physical GET",async()=>{
   await expect(runP5ScopedFidsSource(plan,make())).rejects
@@ -224,7 +229,7 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
 
  it("screens a genuine second bound synthetic original for retained conflicting retime keys",async()=>{
   // One distinct allowed query/reservation, never replay the previous one.
-  const query2=H("8"),plan2={...plan,acquisition:{...plan.acquisition,queryKey:"CI-P5-D1-HUB-T24-SECOND"}};
+  const query2=H("8"),plan2={...plan,acquisition:{...plan.acquisition,queryKey:"CI-P5-D1-HUB-T24-SECOND",earliestPlannedCutoffUtc:new Date(Date.parse(plan.acquisition.earliestPlannedCutoffUtc)+15*60000).toISOString()}};
   await pool.query(
    `INSERT INTO clean.phase5_fids_allowed_query_v39(
     query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,
@@ -236,9 +241,9 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     reviewed_release_sha256,rights_review_sha256,provider_contract_sha256,github_run_id,
     service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,
     provider_api_version,fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
-    hard_latest_dispatch_utc,prediction_cutoff_utc,state
+    hard_latest_dispatch_utc,$4::timestamptz,state
    FROM clean.phase5_fids_allowed_query_v39 WHERE query_digest=$3`,
-   [query2,plan2.acquisition.queryKey,query]);
+   [query2,plan2.acquisition.queryKey,query,plan2.acquisition.earliestPlannedCutoffUtc]);
   const second=await runP5ScopedFidsSource(plan2,make(plan2,query2));
   expect(second.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
   expect(fetches).toBe(2);

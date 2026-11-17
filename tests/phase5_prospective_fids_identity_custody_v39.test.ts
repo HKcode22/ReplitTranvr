@@ -38,6 +38,7 @@ async function observe(departures:ReturnType<typeof movement>[],params:FidsCensu
    // silently discarded on the normalized key; not a real PG transaction.
    expect(new Set(rs.map(r=>JSON.stringify([r.populationQueryId,r.analyticIdentityId,r.populationRole]))).size)
     .toBe(rs.length);
+   expect(new Set(rs.map(r=>JSON.stringify([r.sourceAirportIcao,r.cutoffUtc,r.flightNumber,r.carrierIata,r.providerRecordKey]))).size).toBe(rs.length);
    return rs.length;
   }
  });
@@ -86,7 +87,15 @@ describe("future scoped Phase5 FIDS identity representation and custody",()=>{
   expect(rows).toHaveLength(3);
   expect(rows.slice(0,2).map(x=>x.codeshareResolutionStatus)).toEqual([
    "phase5_duplicate_provider_record_ambiguous","phase5_duplicate_provider_record_ambiguous"]);
-  expect(rows.slice(0,2).every(x=>x.canonicalFlightInstanceId===null)).toBe(true);
+  expect(rows.slice(0,2).every(x=>x.canonicalFlightInstanceId===null&&/^fidsrec:p5amb:[0-9a-f]{64}$/.test(x.providerRecordKey))).toBe(true);
+  expect(result?.flightInstanceIds).toEqual([phase5ProspectiveCanonicalFlightIdV39(distinct)]);
+ });
+ it("preserves exact duplicate reported IDs using separate observation keys and the unchanged original",async()=>{
+  const {rows,result}=await observe([movement(first),movement(first),movement(distinct)]);
+  expect(rows).toHaveLength(3);
+  expect(rows.slice(0,2).every(x=>x.canonicalFlightInstanceId===null&&/^fidsrec:p5amb:[0-9a-f]{64}$/.test(x.providerRecordKey))).toBe(true);
+  expect(new Set(rows.slice(0,2).map(x=>x.providerRecordKey)).size).toBe(2);
+  expect((result?.rawJson as {departures:ReturnType<typeof movement>[]}).departures.slice(0,2).map(x=>x.id)).toEqual(["synthetic-a","synthetic-a"]);
   expect(result?.flightInstanceIds).toEqual([phase5ProspectiveCanonicalFlightIdV39(distinct)]);
  });
  it("retains every duplicate provisional marketing observation without promoting it",async()=>{

@@ -765,25 +765,36 @@ export async function fetchFidsPopulation(
   const prospectiveIdentityCounts=new Map<string,number>();
   const providerKeyCounts=new Map<string,number>();
   if(prospective)for(const r of unambiguous){
-    const k=identityKey(r),pk=r.row.populationRole+"|"+r.row.providerRecordKey;
+    const k=identityKey(r),pk=r.row.providerRecordKey;
     prospectiveIdentityCounts.set(k,(prospectiveIdentityCounts.get(k)??0)+1);
     providerKeyCounts.set(pk,(providerKeyCounts.get(pk)??0)+1);
   }
   const qualified=prospective?unambiguous.map((r,index):NormalizedFidsRecord=>{
     const repeatedIdentity=(prospectiveIdentityCounts.get(identityKey(r))??0)>1;
-    const repeatedProviderKey=(providerKeyCounts.get(r.row.populationRole+"|"+r.row.providerRecordKey)??0)>1;
-    if(!repeatedIdentity&&!(repeatedProviderKey&&r.resolvedCanonical!==null))return r;
-    const status=repeatedIdentity?"phase5_duplicate_identity_ambiguous":
-      "phase5_duplicate_provider_record_ambiguous";
-    const analyticIdentityId="provisional:"+sha256(JSON.stringify({
+    const repeatedProviderKey=(providerKeyCounts.get(r.row.providerRecordKey)??0)>1;
+    if(!repeatedIdentity&&!repeatedProviderKey)return r;
+    const ambiguous=repeatedIdentity||(repeatedProviderKey&&r.resolvedCanonical!==null);
+    const status=ambiguous?(repeatedIdentity?"phase5_duplicate_identity_ambiguous":
+      "phase5_duplicate_provider_record_ambiguous"):r.row.codeshareResolutionStatus;
+    const appearanceDigest=sha256(JSON.stringify({
       protocol:"P5_ONE_ORIGINAL_AMBIGUOUS_IDENTITY_V1",
       populationQueryId,responseHash,index,originalIdentity:r.row.analyticIdentityId
     }));
-    return {resolvedCanonical:null,row:{
-      ...r.row,canonicalFlightInstanceId:null,analyticIdentityId,
+    const analyticIdentityId=ambiguous?"provisional:"+appearanceDigest:r.row.analyticIdentityId;
+    // B0062 retains the older unique airport/cutoff/flight/carrier/record
+    // key. An ambiguous REPEATED raw provider ID cannot act as a unique
+    // record key. Keep its exact value in the preserved original only;
+    // represent each normalized appearance by its own bound key. Never
+    // use that replacement as a native provider ID or positive match.
+    const providerRecordKey=repeatedProviderKey?"fidsrec:p5amb:"+appearanceDigest:r.row.providerRecordKey;
+    const canonicalFlightInstanceId=ambiguous?null:r.row.canonicalFlightInstanceId;
+    return {resolvedCanonical:ambiguous?null:r.resolvedCanonical,row:{
+      ...r.row,providerRecordKey,canonicalFlightInstanceId,analyticIdentityId,
       codeshareResolutionStatus:status,
       provenanceJson:JSON.stringify({...JSON.parse(r.row.provenanceJson),
-        canonicalFlightInstanceId:null,codeshareResolutionStatus:status})
+        canonicalFlightInstanceId,codeshareResolutionStatus:status,
+        originalCodeshareResolutionStatus:r.row.codeshareResolutionStatus,
+        ...(repeatedProviderKey?{recordKeyDisposition:"AMBIGUOUS_REPEATED_ID_USE_BOUND_APPEARANCE_KEY"}:{})})
     }};
   }):unambiguous;
   const rows = qualified.map((r) => r.row);
