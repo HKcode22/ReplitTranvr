@@ -35,7 +35,7 @@ function mockDb(opts:{
   wrongCalendar?:boolean; beforeNow?:string;
   partial?:boolean; failAfterInsert?:boolean;
   expireAtCommit?:boolean; mutableReadback?:boolean;
-  frameRows?:typeof frame; midARegion?:string;
+  frameRows?:typeof frame; midARegion?:string; futurePairRows?:Row[];
 }={}){
  const queries:string[]=[];
  const initial:Row[]=opts.partial ? [{
@@ -63,6 +63,10 @@ function mockDb(opts:{
        calendar_hash:pins.expectedCalendarHash,
        config_hash:pins.expectedConfigHash,
      }]};
+   if(sql.includes("AND pair_airport_set IS NOT NULL")){
+     const rows=(opts.futurePairRows??[]).filter(r=>new Date(r.scheduled_start_utc)<params[4]);
+     return {rowCount:rows.length,rows};
+   }
    if(sql.includes("FROM clean.adb_phase6_calendar_day"))
      return {rowCount:1,rows:[{
        run_day_index:1,scheduled_start_utc:new Date(start),
@@ -71,7 +75,7 @@ function mockDb(opts:{
        draw_type:"NEW_TEMPLATE",anchor_icao:"WSSS",
        slot_regions:{HUB:"ASIA",MID_A:opts.midARegion??"MIDDLE_EAST",
          MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"},
-       pair_airport_set:null,
+       pair_airport_set:null,window_shape:"4h",active_duration_minutes:240,
        calendar_hash:opts.wrongCalendar?H("e"):pins.expectedCalendarHash,
        config_hash:pins.expectedConfigHash,frame_hash:pins.expectedFrameHash,
      }]};
@@ -146,6 +150,27 @@ describe("Phase5 early adaptive DB owner (mock transaction, no provider)",()=>{
   expect(r.status).toBe("EARLY_DRAW_COMMITTED");
   expect(m.db.draws.map(x=>x.selected_icao)).toEqual(["WSSS","KBUF","SKBO","KGPT"]);
   expect(m.db.updates.some(x=>x.icao==="KTEB")).toBe(false);
+ });
+ it("protects a known fixed pair immediately after an ordinary day without changing the reference pool",async()=>{
+  const upcoming={run_day_index:2,scheduled_start_utc:"2026-11-10T18:00:00.000Z",
+   pair_airport_set:{HUB:{icao:"YSSY"},MID_A:{icao:"OMAA"},MID_B:{icao:"KBUF"},REGIONAL:{icao:"KGPT"}}};
+  const alternateMid={...frame[1],icao:"OMDB"},alternateRegional={...frame[3],icao:"KDEC"};
+  const m=mockDb({frameRows:[...frame,alternateMid,alternateRegional],futurePairRows:[upcoming]});
+  const result=await commitEarlyPhase5Draw(m.pool,pins);
+  expect(result.status).toBe("EARLY_DRAW_COMMITTED");
+  expect(m.db.draws.map(x=>x.selected_icao)).toEqual(["WSSS","OMDB","SKBO","KDEC"]);
+  expect(m.db.draws.find(x=>x.slot_id==="REGIONAL")?.probability_vector.map((x:any)=>x.icao)).toEqual(["KDEC"]);
+ });
+ it("retains candidates at the exact 24-hour future washout boundary",async()=>{
+  const m=mockDb({futurePairRows:[{run_day_index:2,scheduled_start_utc:"2026-11-11T18:00:00.000Z",pair_airport_set:{HUB:{icao:"YSSY"},MID_A:{icao:"OMAA"},MID_B:{icao:"KBUF"},REGIONAL:{icao:"KGPT"}}}]});
+  await commitEarlyPhase5Draw(m.pool,pins);
+  expect(m.db.draws.map(x=>x.selected_icao)).toEqual(["WSSS","OMAA","SKBO","KGPT"]);
+ });
+ it("never substitutes an out-of-cell airport if protecting a fixed pair exhausts a cell",async()=>{
+  const m=mockDb({futurePairRows:[{run_day_index:2,scheduled_start_utc:"2026-11-10T18:00:00.000Z",pair_airport_set:{HUB:{icao:"YSSY"},MID_A:{icao:"OMAA"},MID_B:{icao:"KBUF"},REGIONAL:{icao:"KGPT"}}}]});
+  await expect(commitEarlyPhase5Draw(m.pool,pins)).rejects.toThrow("REFUSED_CELL_EMPTY");
+  expect(m.db.draws).toHaveLength(0);
+  expect(m.queries).toContain("ROLLBACK");
  });
  it("does not relax region or silently draw excluded KTEB if no eligible MID remains",async()=>{
   const kteb={...frame[1],icao:"KTEB",region:"NORTH_AMERICA"};
