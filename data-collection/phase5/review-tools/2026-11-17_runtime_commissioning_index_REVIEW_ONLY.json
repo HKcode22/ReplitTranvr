@@ -1,0 +1,284 @@
+{
+  "schema": "v39.phase5.runtime-commissioning-review-index.NONEXECUTABLE.v1",
+  "status": "REVIEW_ONLY_NOT_STAGE_NOT_POLICY_NOT_AUTH",
+  "accountDecision": {
+    "provider": "AeroDataBox",
+    "channel": "RapidAPI",
+    "plan": "existing grandfathered Team Ultra",
+    "historicalMonthlyUsd": 32,
+    "observedEntitlementUnits": 60000,
+    "changeProviderOrPlan": false,
+    "repeatAccountIdentityInquiry": false,
+    "repeatMailSearch": false,
+    "retentionOwnerAttestation": "2026-09-11: raw 168h; FIDS 24h; qualifying transformed/aggregate work 365d; independent current corpus rights unresolved",
+    "originalEvidence": "data-collection/evidence/early-gates/V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json"
+  },
+  "candidateCodeSha": "f53a36a787351b9859ff7910d7f5cab41c1d77a2",
+  "candidateManifestSha256": "3bdbd05ad23309c54e5ded68c85e084b10d0284e6befe2b5f1491fd4583d1fd1",
+  "candidateConfigSha256": "92179d43e9b9729ba192f86c74e66dda4aae2da4229993509a1ef6a674060e56",
+  "calendarSha256": "45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",
+  "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+  "dayPlanSha256s": [
+    {
+      "runDayIndex": 1,
+      "sha256": "22a6286a82e98caffe55ad7ea1198f57253c83452dcd09b1ebe0fb15859c2b79",
+      "byteCount": 90815
+    },
+    {
+      "runDayIndex": 2,
+      "sha256": "73b5ebcfc14ff5d5d7eedd43fca487d5a91260352af76f19467875db64dc662b",
+      "byteCount": 90815
+    },
+    {
+      "runDayIndex": 3,
+      "sha256": "f0b737aa1d61653c4a23712499aa6b3e63ad1157c2a6af129811c3771219be7d",
+      "byteCount": 90733
+    },
+    {
+      "runDayIndex": 4,
+      "sha256": "6262a1a6dcb406fef7c3ae429e63fd886acd4e185673897230171fa6abe6276d",
+      "byteCount": 90815
+    },
+    {
+      "runDayIndex": 5,
+      "sha256": "b81b750e06948bce0dde69e197737077399b31f89dfa497c6f21ca083210bea2",
+      "byteCount": 135829
+    },
+    {
+      "runDayIndex": 6,
+      "sha256": "620def09a924c5543542e5c865b15705d9e6d9c9abd61575d7240d0a27bd99ca",
+      "byteCount": 116285
+    },
+    {
+      "runDayIndex": 7,
+      "sha256": "c6bedaaaf929d873d371d1a9d21a6de206626bc5aa51820f9515c86a60f7b89b",
+      "byteCount": 90732
+    },
+    {
+      "runDayIndex": 8,
+      "sha256": "51d97d8d1ce8305d9a9dd53848a86141667f9b9b1bcb33a5b458c2cb39e9dcaa",
+      "byteCount": 90732
+    },
+    {
+      "runDayIndex": 9,
+      "sha256": "f3ad1a40c2803703ad38eaefbb94a64ca5414d9ce6927c63e1616e799f3d71d4",
+      "byteCount": 90814
+    },
+    {
+      "runDayIndex": 10,
+      "sha256": "1534dfcd5582d0758075f0cf1db638a4832d1d8fb123cd7ad78fe16cedd2aadf",
+      "byteCount": 136405
+    },
+    {
+      "runDayIndex": 11,
+      "sha256": "9e7c1e19cc151a4ec6b404bc632ea34b809160261e0eb5d016a304d4788070dc",
+      "byteCount": 91199
+    },
+    {
+      "runDayIndex": 12,
+      "sha256": "129e80466207357f980c8c7d3141d83dd284343f0aa5f1874e707936b38503f0",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 13,
+      "sha256": "a02840879e3355dfa2a12fc004a100bf1bfd9fc07bb5d144a5903e724485d909",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 14,
+      "sha256": "4610ee1a80a467b2a4d9c58c786768da7393fa25cbf1237fb203c47cddc4f2c7",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 15,
+      "sha256": "15d9b3de97b0b14e908726a6e0a2d6677f2181b0e28a81a79c925662ab6f6724",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 16,
+      "sha256": "69bd5650b31107f0f3a9082611c5beb4e0af8d61fb8b2cdb915e8981e6505588",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 17,
+      "sha256": "7e39fe9190a892497853bb98abed19da305086e90888654dd20218b58bd5f941",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 18,
+      "sha256": "3ff756088f139b26a9a5ecc500a83c301d2156e4d1ee0a3da2d9ed20e55c7470",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 19,
+      "sha256": "962a1c3f432b27d663592d78b5aa9aba9f443c7421c3b1fed0700418d28dc222",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 20,
+      "sha256": "f917234415a7d8ec768e5ae266c142a05173f7a0a0c58b7f5e316ba3baa3377e",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 21,
+      "sha256": "39e0f779906df73297a9b7b863adf0c04f199060aed3c36f623074e1a9803f8a",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 22,
+      "sha256": "20c605e8d94f25bea2a33886bbdd59f414cfe3c4954e88579216e7f3def3133f",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 23,
+      "sha256": "0e83de59a6f5234c74f3ea8ef06f1eed8349feb736493b0db06c5d7e84afbd00",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 24,
+      "sha256": "45da8c197c033becbd449e56dfd01664fb48aa8ebd43feb37ad0cb4a13c10288",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 25,
+      "sha256": "58a67805491028e88604c71a0d83356362340a66041700f6b1589c3b2f70c5e3",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 26,
+      "sha256": "622d18650552439015a42f18d2723b3b20c45fd1df28363c84500ce8a1c26362",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 27,
+      "sha256": "cbfed398ee9889cb9baaddb65e8b434e4d383699bff3f19a500d9391566e6079",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 28,
+      "sha256": "0fbd571a571a8995b653d7869a950eabf592e23f3fb45bee10324638fd62f4ff",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 29,
+      "sha256": "f8f78de8acc5616ffb3c6c8eb1662d1ac0143c4e0be2a645c48b06e392958b39",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 30,
+      "sha256": "0e6a61d14ab3ff8a25e14c91f1631a03ea4490fd15f5e0459ff0dfa7ed17421e",
+      "byteCount": 116670
+    },
+    {
+      "runDayIndex": 31,
+      "sha256": "90d1029af907efa73872a02a5ae270a3c56797e6721c8f43fac087bfd4de4f05",
+      "byteCount": 116670
+    }
+  ],
+  "dayPlanTotalBytes": 3448574,
+  "timezoneCatalog": {
+    "sha256": "4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534",
+    "byteCount": 14722,
+    "airports": 1017,
+    "groups": 168,
+    "reuseOwnerPrivateExistingFile": true,
+    "privateCatalogIncluded": false
+  },
+  "budget": {
+    "mode": "COST_UPPER_BOUND",
+    "reviewed31DaySourceRequestGridSha256": null,
+    "reviewedCostEnvelopeSha256": null,
+    "reviewedCategoryBudgetSha256": null,
+    "netCycleCeiling": 49468,
+    "dailyCeiling": 1900,
+    "protectedFloor": 1000,
+    "plannedReserve": 41960,
+    "maxQueriesPerDayObservedInPlan": 288
+  },
+  "timingReview": {
+    "sourcePacketClockScenarios": {
+      "preparationLeadMinutes": 180,
+      "minimumSourceLifetimeMinutes": [
+        1756,
+        1816,
+        1876
+      ],
+      "minimumIllustrativeEarlyPostLifetimeMinutes": [
+        1955,
+        2015,
+        2075
+      ],
+      "fullAllocatedTailMinutes": [
+        4755,
+        4815,
+        4875
+      ]
+    },
+    "metadataOnly48hCandidateNotApproved": true,
+    "rawFids24hUnchanged": true,
+    "sourceAccess23hUnchanged": true,
+    "tail48hNotActualAvailability": true
+  },
+  "signingKeyGroups": [
+    {
+      "role": "daily preparation",
+      "secretNames": [
+        "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "fingerprint": null
+    },
+    {
+      "role": "source query",
+      "secretNames": [
+        "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "fingerprint": null
+    },
+    {
+      "role": "day registry/index (same original signer in both places)",
+      "secretNames": [
+        "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+        "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64"
+      ],
+      "fingerprint": null
+    },
+    {
+      "role": "later PRE / T24 registry",
+      "secretNames": [
+        "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64"
+      ],
+      "fingerprint": null
+    },
+    {
+      "role": "POST review",
+      "secretNames": [
+        "P6_PRIVATE_POST_REVIEWER_KEY_BASE64"
+      ],
+      "fingerprint": null
+    },
+    {
+      "role": "independent T24 witness custody",
+      "secretNames": [
+        "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64"
+      ],
+      "fingerprint": null
+    }
+  ],
+  "keysGenerated": false,
+  "existingKeysRotated": false,
+  "approvalFields": {
+    "finalCodeSha": null,
+    "approvedManifestSha256": null,
+    "approvedConfigSha256": null,
+    "rightsSha256": null,
+    "releaseSha256": null,
+    "providerContractSha256": null,
+    "providerPriceSha256": null,
+    "authorizationId": null,
+    "predecessorEvidenceIds": null
+  },
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "githubSecretChanges": 0,
+  "phase6PaidGo": false
+}
