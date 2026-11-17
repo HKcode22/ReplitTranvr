@@ -52,8 +52,16 @@ require_config() {
   [[ "$(api "actions/workflows/$WF" | jq -er '.state')" == active ]] || hold PRIMARY_WORKFLOW_NOT_ACTIVE
   # Missing scheduling variables are STOP defaults; never print their values.
   local listed value flag
-  listed="$(gh variable list -R "$REPO" --json name)"
-  jq -e 'type=="array" and all(.[]; (.name|type)=="string") and ((map(.name)|unique|length)==length)' <<<"$listed" >/dev/null || hold SCHEDULE_VARIABLE_LIST_INVALID
+  # A truncated first page could hide a live flag and mistakenly treat it
+  # as absent/STOP. Require a complete, consistent names-only inventory.
+  listed="$(gh api --paginate "repos/$REPO/actions/variables?per_page=100" | jq -sec '
+    if length>=1 and all(.[]; (.total_count|type)=="number" and (.variables|type)=="array") then
+      . as $pages | [$pages[].variables[].name] as $names |
+      if all($pages[]; .total_count==($names|length)) and
+        all($names[]; type=="string") and (($names|unique|length)==($names|length))
+      then $names | map({name:.}) else error("INCOMPLETE_VARIABLE_NAMES") end
+    else error("INVALID_VARIABLE_PAGES") end
+  ')" || hold SCHEDULE_VARIABLE_LIST_INVALID
   for flag in P5_AUTO_SOURCE_DISPATCH_ENABLED P5_POST_AUTO_DISPATCH_ENABLED P5_T24_AUTO_DISPATCH_ENABLED P5_LATER_PRE_AUTO_DISPATCH_ENABLED P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED P6_PRIVATE_POST_PARENT_ENABLED P6_ROLLING_CONTROLLER_ENABLED; do
     if jq -e --arg n "$flag" 'any(.[]; .name==$n)' <<<"$listed" >/dev/null; then
       value="$(variable "$flag")" || hold SCHEDULE_VARIABLE_READ_UNKNOWN
