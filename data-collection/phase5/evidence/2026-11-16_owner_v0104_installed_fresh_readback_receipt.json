@@ -1,0 +1,43 @@
+{
+  "schema": "v39.phase5.v0104.owner-reported-install-receipt.v1",
+  "source": "Owner supplied actual Replit Shell transcript, November 16 Pacific; exact database timestamp not included",
+  "reviewedMainSha": "6cb6c28a1508a2aaf3ebe5551bf41444dbb6622e",
+  "sqlBlob": "578c76e025bf761f61803e3d70af40ae4a8136e8",
+  "installerBlob": "ad7587cf92305f1a7265e4ea270560586109c501",
+  "testBlob": "9d86b8da3f85339d6215de14ae6c8435f849857d",
+  "hashChecksPassed": 3,
+  "nativeNodeTests": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "before": {
+    "status": "V0104_ABSENT_REVIEW_ONLY_NO_GO",
+    "existingFunctions": 0,
+    "existingNewTriggers": 0,
+    "legacyTriggers": 4,
+    "sourceAttempts": 0,
+    "otherAttempts": 0,
+    "authorizationEnabled": false
+  },
+  "after": {
+    "status": "V0104_INSTALLED_FRESH_READBACK_NO_GO",
+    "existingFunctions": 1,
+    "existingNewTriggers": 2,
+    "legacyTriggers": 4,
+    "sourceAttempts": 0,
+    "otherAttempts": 0,
+    "authorizationEnabled": false,
+    "functionsInstalled": 1,
+    "triggersInstalled": 2,
+    "oldTriggersPreserved": true,
+    "newTables": 0,
+    "freshConnectionReadback": true
+  },
+  "explicitOwnerPromptAccepted": true,
+  "providerCalls": 0,
+  "dataRowWrites": 0,
+  "newRoles": 0,
+  "phase6PaidGo": false,
+  "scope": "Owner received fresh postcommit catalog verification; not separate assistant DB access, recurring expiry proof or ML rights."
+}
