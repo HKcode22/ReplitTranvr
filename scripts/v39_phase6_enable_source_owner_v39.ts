@@ -97,6 +97,50 @@ async function requireStoredReviewedManifest(c:import("pg").PoolClient,p:{manife
   hold("STORED_MANIFEST_NOT_FINAL_REVIEWED");
 }
 
+/** Re-use the exact installed V0104 migration body and physical boundaries.
+ * Installation history alone is not proof a trigger is still enabled.
+ * In the write transaction the two existing physical tables are locked;
+ * this is only a catalog read, never a new migration or retention action.
+ */
+async function requireInstalledPhysicalRestGuard(c:import("pg").PoolClient){
+ const sql=readFileSync(new URL("../migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql",import.meta.url));
+ if(createHash("sha1").update(Buffer.from("blob "+sql.length+"\0")).update(sql).digest("hex")!=="578c76e025bf761f61803e3d70af40ae4a8136e8")
+  hold("PHYSICAL_REST_GUARD_REVIEWED_SQL_DRIFT");
+ const body=sql.toString("utf8").match(/AS \$guard\$([\s\S]*?)\$guard\$;/)?.[1];
+ const f=(await c.query(`SELECT p.oid::text oid,p.prosrc body,p.pronargs::int nargs,
+  p.prosecdef definer,p.provolatile vol,p.prokind kind,p.proconfig config,
+  l.lanname lang,p.prorettype='trigger'::regtype returns_trigger,
+  pg_get_userbyid(p.proowner)=current_user owner_matches,
+  current_setting('session_replication_role')='origin' origin,
+  NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+   WHERE a.grantee<>p.proowner OR a.privilege_type<>'EXECUTE') owner_only
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  JOIN pg_language l ON l.oid=p.prolang
+  WHERE n.nspname='clean' AND p.proname='phase5_physical_rest_live_guard_v39'`)).rows;
+ const q=f[0];
+ if(!body||f.length!==1||!q||q.body!==body||q.nargs!==0||q.definer!==true||
+  q.vol!=="v"||q.kind!=="f"||q.lang!=="plpgsql"||q.returns_trigger!==true||
+  q.owner_matches!==true||q.owner_only!==true||q.origin!==true||
+  !Array.isArray(q.config)||q.config.length!==1||
+  String(q.config[0]).replace(/\s/g,"")!=="search_path=pg_catalog,pg_temp")
+  hold("PHYSICAL_REST_GUARD_FUNCTION_MISSING_OR_DRIFTED");
+ const tables=["phase5_fids_physical_attempt_v39","phase5_other_rest_physical_reservation_v39"];
+ const names=["a00_phase5_fids_physical_rest_live_guard_v39","a00_phase5_other_physical_rest_live_guard_v39"];
+ const tr=(await c.query(`SELECT t.tgname name,n.nspname schema,c.relname tbl,
+  pg_get_userbyid(c.relowner)=current_user owner_matches,t.tgfoid::text fn,t.tgenabled enabled,
+  t.tgtype::int type,t.tgnargs::int nargs,t.tgqual IS NULL no_when,t.tgattr::text attrs,
+  t.tgconstraint=0 no_constraint,t.tgdeferrable deferred,t.tginitdeferred initdeferred,
+  t.tgoldtable oldtable,t.tgnewtable newtable
+  FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE NOT t.tgisinternal AND (t.tgfoid=$1::oid OR (n.nspname='clean' AND t.tgname=ANY($2::text[])))`,
+  [q.oid,names])).rows;
+ if(tr.length!==2||names.some((name,i)=>!tr.some(x=>x.name===name&&x.schema==="clean"&&
+  x.tbl===tables[i]&&x.owner_matches===true&&x.fn===q.oid&&x.enabled==="O"&&x.type===7&&
+  x.nargs===0&&x.no_when===true&&x.attrs===""&&x.no_constraint===true&&
+  x.deferred===false&&x.initdeferred===false&&x.oldtable===null&&x.newtable===null)))
+  hold("PHYSICAL_REST_GUARD_TRIGGER_MISSING_OR_DRIFTED");
+}
+
 // The existing independent reader opens a separate read-only connection.
 // Lock its exact calendar/cost tables against other writes first, so a
 // concurrent mutation cannot invalidate the comparison before the single
@@ -107,7 +151,7 @@ const LOCK_TABLES=[
  "phase5_fids_seven_rest_release_v39","phase5_fids_cycle_rest_category_cap_v39",
  "phase5_fids_utc_rest_category_budget_v39","phase5_fids_day_budget_v39",
  "phase5_fids_allowed_query_v39","phase5_fids_exact_query_partition_v39",
- "phase5_fids_physical_attempt_v39","adb_incident_stop","adb_probe_budget_day",
+ "phase5_fids_physical_attempt_v39","phase5_other_rest_physical_reservation_v39","adb_incident_stop","adb_probe_budget_day",
  "adb_collection_batches","adb_collection_subs","adb_collection_meta"
 ];
 export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:ReviewedStage,auth:Verify){
@@ -137,12 +181,14 @@ export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:Review
    "(SELECT count(*)::int FROM clean.adb_collection_meta WHERE key=$1) prior_enable",[markerKey])).rows[0];
   if(!blockers||Object.values(blockers).some(n=>n!==0))hold("INCIDENT_OPEN_EXPOSURE_OR_PRIOR_ENABLE");
   await requireStoredReviewedManifest(c,p);
+  await requireInstalledPhysicalRestGuard(c);
   const readback=await inspectP5V0093IndependentExactPostStage(pool,s.input,s.review,s.freezeReview);
   if(readback.status!=="INDEPENDENT_EXACT_B0062_V0093_POST_STAGE_READONLY_MATCH_NO_GO"||
      readback.alertSafetyValuesExact!==true||readback.authorizationEnabled!==false||
      readback.exactReviewedStagePacketSha256!==p.stagePacketSha256||
      readback.exactReviewedCostEnvelopeSha256!==cost.costOnlyCategoryDraftSha256)
    hold("EXACT_INDEPENDENT_STAGED_READBACK_REQUIRED");
+  await requireInstalledPhysicalRestGuard(c);
   const t=await clock();verifyP6SourceActivationReview(s,auth,t);
   const changed=await c.query("UPDATE clean.adb_phase6_authorization SET enabled=true "+
    "WHERE singleton_key=true AND enabled=false AND revoked_at_utc IS NULL AND authorization_id=$1 "+
@@ -154,7 +200,7 @@ export async function commitP6ExistingSourceAuthorizationOnce(pool:Pool,s:Review
    authorizationId:admission.authId,authArtifactSha256:admission.artifactSha256,
    manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,
    codeSha:p.codeSha40,stagePacketSha256:p.stagePacketSha256,costEnvelopeSha256:cost.costOnlyCategoryDraftSha256,
-   enabledAtDatabaseUtc:t.toISOString(),independentStagedValuesMatch:true,
+   enabledAtDatabaseUtc:t.toISOString(),independentStagedValuesMatch:true,exactPhysicalRestGuardVerified:true,
    databaseAuthorizationEnabled:true,providerCalls:0,databaseWrites:2,
    githubFlagsChanged:0,legacyAlertStarted:false,phase6PaidGoGrantedByThisTransition:false};
   const inserted=await c.query("INSERT INTO clean.adb_collection_meta(key,value) VALUES($1,$2)",
@@ -190,8 +236,9 @@ export async function verifyP6EnabledSourceAuthorizationReceipt(pool:Pool,receip
      markers[0].value!==JSON.stringify(receipt))
    hold("POST_ENABLE_ROW_OR_MARKER_NOT_IDENTICAL");
   await requireStoredReviewedManifest(c,receipt);
+  await requireInstalledPhysicalRestGuard(c);
   await c.query("ROLLBACK");began=false;
-  return {verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,observedAtUtc:new Date(who.t).toISOString(),
+  return {verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,exactPhysicalRestGuardVerified:true,observedAtUtc:new Date(who.t).toISOString(),
    providerCalls:0,databaseWrites:0,githubFlagsChanged:0,phase6PaidGoGrantedByThisTransition:false};
  }finally{
   if(began)await c.query("ROLLBACK").catch(()=>{});
