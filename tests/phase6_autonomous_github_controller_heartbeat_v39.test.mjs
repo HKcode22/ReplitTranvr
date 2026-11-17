@@ -118,7 +118,7 @@ test("role boundaries: scheduled GH only, no provider or DB credentials",()=>{
   GITHUB_EVENT_NAME:"workflow_dispatch",P6_CONTROLLER_HEARTBEAT_CONFIRM:"wrong"}),
   /NOT_MAIN_READONLY_GITHUB_ACTION/);
 });
-test("nine bounded GitHub read-only list calls and human summary redacted",async()=>{
+test("nine historical lanes plus one separate primary expiry history read; human summary redacted",async()=>{
  const calls=[];
  const fetcher=async(url,opts)=>{
   calls.push({url,opts});
@@ -139,7 +139,10 @@ test("nine bounded GitHub read-only list calls and human summary redacted",async
  });
  assert.equal(x.schema,P6_AUTO_CONTROL_HEARTBEAT_V39);
  assert.equal(x.controllerStates.length,9);
- assert.equal(calls.length,9);
+ assert.equal(calls.length,10);
+ assert.equal(x.primaryFidsExpiry.state,"SCHEDULED_APPLY_DISABLED");
+ assert.equal(x.primaryFidsExpiry.latestExecutedJobVerified,false);
+ assert.equal(x.primaryFidsExpiryNeedsAttention,false);
  assert.equal(x.status,"AUTONOMOUS_GITHUB_SCHEDULE_PRESENT_NOT_COLLECTION_PROOF_NO_GO");
  assert.equal(x.paidPhase6Go,false);
  assert.equal(x.automaticFull31DayRolloverVerified,false);
@@ -219,4 +222,49 @@ test("single observation cannot establish cadence; strict exact gap and age boun
  assert.equal(over.historicalCadence.intervalsExceedingExpectedMax,1);
  assert.equal(over.state,"SCHEDULE_OBSERVATION_STALE");
  assert.equal(reviewP6OneScheduledController(lane,[],T).historicalCadence.latestAgeExceedsExpected,false);
+});
+
+test("primary expiry current-main pin, explicit apply, and actual scheduled job execution remain separate",async()=>{
+ const enabled={...env(),P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",
+  P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:ID,
+  P5_PRIMARY_FIDS_EXPIRY_APPROVAL:"APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER"};
+ const latest={...run(600,{conclusion:"success"}),run_attempt:1};
+ const actual={id:601,run_id:600,name:"primary-fids-expiry",status:"completed",conclusion:"success",
+  steps:[{name:"Verify exact main and execute only bounded primary FIDS expiry",status:"completed",conclusion:"success"}]};
+ async function observe(patch={},row=latest,job=actual){
+  const calls=[];
+  const x=await readP6GithubAutoControllerHeartbeat({...enabled,...patch},{now:()=>new Date(T),fetcher:async(url,opts)=>{
+   calls.push(url);assert.equal(opts.method,"GET");
+   if(url.includes("/actions/runs/600/jobs?")){
+    if(job===null)return {ok:false};
+    return {ok:true,json:async()=>({total_count:1,jobs:[job]})};
+   }
+   const rows=url.includes("phase5-primary-fids-expiry-no-provider.yml")?(row?[row]:[]):[run(calls.length)];
+   return {ok:true,json:async()=>({total_count:rows.length,workflow_runs:rows})};
+  }});
+  return {p:x.primaryFidsExpiry,attention:x.primaryFidsExpiryNeedsAttention,calls};
+ }
+ const good=await observe();
+ assert.equal(good.p.state,"SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF");
+ assert.equal(good.p.latestExecutedJobVerified,true);
+ assert.equal(good.p.latestExecutedJobId,601);
+ assert.equal(good.p.actualRetentionReceiptVerified,false);
+ assert.equal(good.p.physicalDeletionVerified,false);
+ assert.equal(good.p.retentionDeadlineGuaranteed,false);
+ assert.equal(good.attention,false);assert.equal(good.calls.length,11);
+ for(const [patch,row,job,state] of [
+  [{P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:"c".repeat(40)},latest,actual,"SCHEDULE_APPROVED_MAIN_DRIFT"],
+  [{P5_PRIMARY_FIDS_EXPIRY_APPROVAL:""},latest,actual,"SCHEDULE_APPLY_APPROVAL_MISSING"],
+  [{},null,actual,"NO_SCHEDULE_RUN_OBSERVED"],
+  [{},{...latest,head_sha:"c".repeat(40)},actual,"NO_SCHEDULE_RUN_ON_CURRENT_MAIN"],
+  [{},{...latest,created_at:"2026-11-13T20:00:00Z"},actual,"SCHEDULE_OBSERVATION_STALE"],
+  [{},{...latest,run_attempt:2},actual,"SCHEDULE_EXECUTION_NOT_SUCCESSFUL_FIRST_ATTEMPT"],
+  [{},latest,{...actual,conclusion:"skipped"},"SCHEDULE_SUCCESS_WITHOUT_EXECUTED_EXPIRY_STEP"],
+  [{},latest,{...actual,steps:[]},"SCHEDULE_SUCCESS_WITHOUT_EXECUTED_EXPIRY_STEP"],
+  [{},latest,{...actual,run_id:999},"SCHEDULE_SUCCESS_WITHOUT_EXECUTED_EXPIRY_STEP"],
+  [{},latest,null,"SCHEDULE_JOB_EVIDENCE_UNAVAILABLE"]
+ ]){
+  const x=await observe(patch,row,job);
+  assert.equal(x.p.state,state);assert.equal(x.p.latestExecutedJobVerified,false);assert.equal(x.attention,true);
+ }
 });

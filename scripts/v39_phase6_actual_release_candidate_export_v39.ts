@@ -34,7 +34,9 @@ export function replayP6OriginalSeed(){
  * evidence and original compiler. Explicit nulls prevent this review-only
  * input from being mistaken for a runnable stage packet. No false pins.
  */
-export function prepareP6ActualReviewInput(codeSha:string){
+export type P6ReviewRefillChoice=0|3000|6000;
+export function prepareP6ActualReviewInput(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
+ if(![0,3000,6000].includes(reviewRefillChoice))hold("EXPLICIT_REVIEW_REFILL_CHOICE_REQUIRED");
  if(!/^[a-f0-9]{40}$/.test(codeSha))hold("EXACT_REVIEW_CODE_SHA_REQUIRED");
  const preview=replayP6OriginalSeed();
  const draft=preview.result.calendarDraft,proposal=proposeP5ActualNov22Budget(draft);
@@ -114,9 +116,10 @@ export function prepareP6ActualReviewInput(codeSha:string){
     smoke.settlementStableReadCount!==3||smoke.settlementTimeoutSeconds!==600||
     smoke.watchdogPollMs!==5000||smoke.exactExternalInternalReconciliation!==true)
   hold("HISTORICAL_SAFETY_SMOKE_DRIFT");
- // Concrete recommendation for the final review, not approved stage input.
- // 3k reserve is a future planning allocation, not assumed to be refillable.
- const recommendedFinancial=jointBudgetScenarios[1];
+ // Explicit review scenario, not approved stage input. The historical 3k
+ // default preserves exact prior review receipts; the no-refill option is
+ // the current minimum-release proposal. Neither grants Alert spend.
+ const recommendedFinancial=jointBudgetScenarios[reviewRefillChoice===0?0:reviewRefillChoice===3000?1:2];
  const proposedAlertSafety={
   unsettledBurstMarginCredits:smoke.unsettledBurstMarginCredits as number,
   protectedAlertFloorCredits:smoke.protectedAlertFloor as number,
@@ -222,9 +225,9 @@ const docEvidence=(paths:string[])=>paths.map(fileEvidence);
  * deliberately NOT-AUTH identity and historical references, never a claimed
  * authorization. Only counts and digests are returned; stage bytes and
  * runnable day-plan bytes are not emitted here. */
-export function prepareP6ActualReleaseIdentityReview(codeSha:string){
+export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
  const checkout=inspectP6ExactReviewCheckout(codeSha);
- const review=prepareP6ActualReviewInput(codeSha),r=review.concreteReviewRecommendation;
+ const review=prepareP6ActualReviewInput(codeSha,reviewRefillChoice),r=review.concreteReviewRecommendation;
  const seedPath="data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json";
  const seed=JSON.parse(readFileSync(seedPath,"utf8")),preview=replayP6OriginalSeed();
  const {timingEvidenceSha256:_unknownTiming,...timingLimits}=review.timingCandidate;
@@ -366,6 +369,51 @@ export function compileP6ActualCandidateExport(input:{
   independentReleaseStillRequired:true,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
  return {summary,files};
 }
+/** Compare regenerated release plans to the exact committed runtime inputs.
+ * The ordinary unsigned exporter is still used to prepare/review files,
+ * including a legitimate change of evidence hash before those files are
+ * committed. This separate final-check mode never writes or signs anything.
+ */
+export function verifyP6ActualCommittedPlanParity(
+ result:ReturnType<typeof compileP6ActualCandidateExport>,
+ readCommitted:(path:string)=>Buffer,
+ readWorktree:(path:string)=>Buffer,
+){
+ const plans=result.files.slice(0,31),stage=result.files[31];
+ if(result.files.length!==32||result.summary.dayPlanSha256s.length!==31||
+    stage?.path!=="unsigned-stage-input.json"||
+    hash(stage.bytes)!==stage.sha256||stage.sha256!==result.summary.unsignedStageInputSha256)
+  hold("FINAL_EXPORT_STRUCTURE_DRIFT");
+ for(let i=0;i<31;i++){
+  const f=plans[i],d=result.summary.dayPlanSha256s[i];
+  if(f.path!=="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"||
+     d.runDayIndex!==i+1||d.sha256!==f.sha256||hash(f.bytes)!==f.sha256)
+   hold("FINAL_COMPILED_PLAN_IDENTITY_DRIFT");
+  let committed:Buffer,working:Buffer;
+  try{committed=readCommitted(f.path);working=readWorktree(f.path);}
+  catch{return hold("FINAL_COMMITTED_PLAN_MISSING");}
+  if(!Buffer.isBuffer(committed)||!Buffer.isBuffer(working)||
+     hash(committed)!==f.sha256||!working.equals(committed)||!committed.equals(Buffer.from(f.bytes)))
+   hold("FINAL_COMMITTED_PLAN_BYTES_DIFFER");
+ }
+ return {verifiedPlanCount:31,dayPlanSha256s:result.summary.dayPlanSha256s};
+}
+export function verifyP6ActualCommittedCheckout(result:ReturnType<typeof compileP6ActualCandidateExport>){
+ const stage=result.files.find(f=>f.path==="unsigned-stage-input.json");
+ if(!stage||hash(stage.bytes)!==result.summary.unsignedStageInputSha256)hold("FINAL_EXPORT_STRUCTURE_DRIFT");
+ let codeSha:string;
+ try{codeSha=JSON.parse(stage!.bytes).codeSha40;}catch{return hold("FINAL_STAGE_CODE_INVALID");}
+ const checkout=inspectP6ExactReviewCheckout(codeSha);
+ const verified=verifyP6ActualCommittedPlanParity(result,path=>execFileSync("git",["show",codeSha+":"+path],{
+  stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:600000}),path=>readFileSync(path));
+ const after=inspectP6ExactReviewCheckout(codeSha);
+ if(after.treeSha!==checkout.treeSha)hold("REVIEW_CHECKOUT_CHANGED");
+ return {status:"EXACT_COMMITTED_DAY_PLANS_MATCH_UNSIGNED_EXPORT_NO_GO",checkout,...verified,
+  unsignedStageInputSha256:result.summary.unsignedStageInputSha256,
+  unsignedCostOnlyEnvelopeSha256:result.summary.unsignedCostOnlyEnvelopeSha256,
+  providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false,
+  independentApprovalAndRemoteMainCheckStillRequired:true};
+}
 export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6ActualCandidateExport>,destination:string){
  const root=realpathSync(process.cwd()),out=resolve(destination),parent=realpathSync(dirname(out));
  const verifiedOut=resolve(parent,out.slice(dirname(out).length+1));
@@ -385,15 +433,16 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if(process.argv[2]==="--review-only"&&process.argv.length===4){
-   const review=prepareP6ActualReviewInput(process.argv[3]);
-   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3])},null,2));
+  if((process.argv[2]==="--review-only"||process.argv[2]==="--review-only-no-refill")&&process.argv.length===4){
+   const refillChoice=process.argv[2]==="--review-only-no-refill"?0:3000;
+   const review=prepareP6ActualReviewInput(process.argv[3],refillChoice);
+   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice)},null,2));
   }else{
   if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==7)hold("OWNER_LOCAL_EXACT_ARGUMENTS");
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(2);
   const result=compileP6ActualCandidateExport({externalBytes:readFileSync(externalPath),expectedExternalFileSha256:externalSha,
    timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha});
-  console.log(JSON.stringify(writeP6ActualCandidateExport(result,out)));
+  console.log(JSON.stringify(out==="--verify-committed-plans"?verifyP6ActualCommittedCheckout(result):writeP6ActualCandidateExport(result,out)));
   }
  }catch(e){const msg=String((e as Error)?.message??"");console.error(/^HOLD_P6_ACTUAL_RELEASE_EXPORT_[A-Z0-9_]+$/.test(msg)?msg:"HOLD_P6_ACTUAL_RELEASE_EXPORT_REDACTED_NO_RELEASE");process.exitCode=2;}
 }

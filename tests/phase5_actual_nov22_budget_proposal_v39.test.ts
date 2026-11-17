@@ -2,7 +2,7 @@ import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -198,6 +198,20 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(a.files.every(x=>hash(readFileSync(join(dest,x.path)))===x.sha256)).toBe(true);
   expect(()=>writeP6ActualCandidateExport(a,dest)).toThrow();
  });
+ it("compares all 31 regenerated runtime plans with exact committed and working bytes without granting release",()=>{
+  const f=reviewFixture(),externalBytes=Buffer.from(JSON.stringify(f.external)),timingBytes=Buffer.from(JSON.stringify(f.timing));
+  const a=compileP6ActualCandidateExport({externalBytes,expectedExternalFileSha256:hash(externalBytes),timingBytes,expectedTimingFileSha256:hash(timingBytes)});
+  const bytes=new Map(a.files.slice(0,31).map(x=>[x.path,Buffer.from(x.bytes)]));
+  const read=(path:string)=>{const b=bytes.get(path);if(!b)throw Error("missing");return b;};
+  expect(verifyP6ActualCommittedPlanParity(a,read,read)).toEqual({verifiedPlanCount:31,dayPlanSha256s:a.summary.dayPlanSha256s});
+  const last=a.files[30].path;
+  expect(()=>verifyP6ActualCommittedPlanParity(a,p=>p===last?Buffer.concat([read(p),Buffer.from(" ")]):read(p),read)).toThrow("FINAL_COMMITTED_PLAN_BYTES_DIFFER");
+  expect(()=>verifyP6ActualCommittedPlanParity(a,read,p=>p===last?Buffer.concat([read(p),Buffer.from(" ")]):read(p))).toThrow("FINAL_COMMITTED_PLAN_BYTES_DIFFER");
+  expect(()=>verifyP6ActualCommittedPlanParity(a,p=>{if(p===last)throw Error("missing");return read(p);},read)).toThrow("FINAL_COMMITTED_PLAN_MISSING");
+  expect(()=>verifyP6ActualCommittedPlanParity({...a,files:a.files.slice(1)},read,read)).toThrow("FINAL_EXPORT_STRUCTURE_DRIFT");
+  expect(()=>verifyP6ActualCommittedPlanParity({...a,summary:{...a.summary,dayPlanSha256s:a.summary.dayPlanSha256s.map((d,i)=>i===30?{...d,sha256:"0".repeat(64)}:d)}},read,read)).toThrow("FINAL_COMPILED_PLAN_IDENTITY_DRIFT");
+  expect(()=>verifyP6ActualCommittedCheckout(a)).toThrow("REVIEW_CHECKOUT_NOT_EXACT");
+ });
  it("binds the original dual-ledger tree without reallocating REST categories or overspending",()=>{
   const f=reviewFixture(),b=proposeP5ActualNov22Budget(f.draft),j=f.external.jointBudgetReview;
   const a=assembleP6ActualFirstSeedReleaseCandidate(f);
@@ -261,6 +275,15 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(x.phase6PaidGo).toBe(false);
   expect(x.sourceRightsApproved).toBe(false);
   expect(prepareP6ActualReviewInput(code)).toEqual(x);
+  const noRefill=prepareP6ActualReviewInput(code,0);
+  expect(noRefill.concreteReviewRecommendation).toMatchObject({
+   netRestCeilingUnits:49468,jointBudgetReview:{authorizedFutureRefillApiUnits:0,authorizedFutureRefillAlertCredits:0},
+   proposedAlertSafety:{alertRunSpendCeilingCredits:680},independentReviewerApproved:false,stageAuthorizationGranted:false});
+  expect(noRefill.calendarDraft).toEqual(x.calendarDraft);
+  expect(noRefill.externalCandidate).toEqual(x.externalCandidate);
+  expect(noRefill.missingExternalFields).toEqual(x.missingExternalFields);
+  expect(noRefill).toMatchObject({phase6PaidGo:false,sourceRightsApproved:false,actualBudgetReviewApproved:false});
+  expect(()=>prepareP6ActualReviewInput(code,1 as any)).toThrow("EXPLICIT_REVIEW_REFILL_CHOICE_REQUIRED");
   expect(()=>prepareP6ActualReviewInput("fake")).toThrow();
   const ext=Buffer.from(JSON.stringify(p)),timing=Buffer.from(JSON.stringify(x.timingCandidate));
   expect(()=>compileP6ActualCandidateExport({externalBytes:ext,expectedExternalFileSha256:hash(ext),timingBytes:timing,expectedTimingFileSha256:hash(timing)})).toThrow();
@@ -294,6 +317,22 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(JSON.stringify(x)).not.toContain("REVIEW-ONLY-NOT-AN-AUTHORIZATION");
   expect(JSON.stringify(x)).not.toContain('"unsignedStageInput"');
   expect(()=>inspectP6ExactReviewCheckout("0".repeat(40))).toThrow("REVIEW_CHECKOUT_NOT_EXACT");
+  const noRefill=prepareP6ActualReleaseIdentityReview(code,0);
+  expect(noRefill.configCandidate.content.source.cycleRestCeilingUnits).toBe(49468);
+  expect(noRefill.configCandidate.content.jointBudgetReviewCandidate.authorizedFutureRefillApiUnits).toBe(0);
+  expect(noRefill.configCandidate.content.alertSafetyCandidate.alertRunSpendCeilingCredits).toBe(680);
+  expect(noRefill.configCandidate.sha256).toBe(digest(noRefill.configCandidate.content));
+  expect(noRefill.manifestCandidate.sha256).toBe(digest(noRefill.manifestCandidate.content));
+  expect(noRefill.manifestCandidate.content.configCandidateSha256).toBe(noRefill.configCandidate.sha256);
+  expect(noRefill.configCandidate.sha256).not.toBe(x.configCandidate.sha256);
+  expect(noRefill.manifestCandidate.sha256).not.toBe(x.manifestCandidate.sha256);
+  expect(noRefill.geometry).toEqual(x.geometry);
+  expect(noRefill.sourceInventory).toEqual(x.sourceInventory);
+  expect(noRefill.rangeEvidenceCandidate).toEqual(x.rangeEvidenceCandidate);
+  expect(noRefill.timingEvidenceCandidate).toEqual(x.timingEvidenceCandidate);
+  expect(noRefill).toMatchObject({actualAuthorizationId:null,finalPredecessorEvidenceIds:null,
+   stagePacketExported:false,candidateDigestsApproved:false,sourceRightsApproved:false,
+   scientificFreezeApproved:false,phase6PaidGo:false});
  },20000);
 
 });

@@ -52,6 +52,58 @@ export const P6_EXISTING_CONTROLLER_LANES=Object.freeze([
  {lane:"T24",workflow:"phase5-cd-github-one-queued-t24-witness-main-manual.yml",maxExpectedGapMinutes:90,purpose:"Native T24 and independent witness execution"},
  {lane:"RETENTION",workflow:"phase5-private-blob-retention-readonly-sentinel-no-provider.yml",maxExpectedGapMinutes:150,purpose:"Restricted primary-blob expiry metadata monitoring; not deletion"}
 ]);
+// Separate from the historical nine-lane collection cadence summary.
+// This 60-minute diagnostic is not a new retention policy or an SLA.
+export const P6_PRIMARY_FIDS_EXPIRY_LANE=Object.freeze({
+ lane:"PRIMARY_FIDS_EXPIRY",workflow:"phase5-primary-fids-expiry-no-provider.yml",
+ maxExpectedGapMinutes:60,purpose:"15-minute scheduled primary FIDS expiry, distinct from blob sentinel"
+});
+const PRIMARY_APPLY="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER";
+const PRIMARY_STEP="Verify exact main and execute only bounded primary FIDS expiry";
+async function observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc){
+ const history=await readGithub(ROOT+"/actions/workflows/"+P6_PRIMARY_FIDS_EXPIRY_LANE.workflow+
+  "/runs?branch=main&event=schedule&per_page="+MAX_PER_WORKFLOW);
+ if(!history||!Number.isSafeInteger(history.total_count)||history.total_count<0||
+    !Array.isArray(history.workflow_runs)||history.workflow_runs.length>MAX_PER_WORKFLOW||
+    (history.total_count===0)!==(history.workflow_runs.length===0))
+  fail("INVALID_PRIMARY_EXPIRY_HISTORY");
+ const lane=reviewP6OneScheduledController(P6_PRIMARY_FIDS_EXPIRY_LANE,history.workflow_runs,observedAtUtc);
+ const latest=history.workflow_runs.find(r=>r.id===lane.mostRecentRun?.id);
+ const enabled=env.P5_PRIMARY_FIDS_EXPIRY_ENABLED==="true";
+ const pinMatches=env.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA===env.GITHUB_SHA;
+ const approved=env.P5_PRIMARY_FIDS_EXPIRY_APPROVAL===PRIMARY_APPLY;
+ const sameMain=!!latest&&latest.head_sha===env.GITHUB_SHA;
+ let state,jobExecuted=false,jobId=null;
+ if(!enabled){
+  state=["","false",undefined].includes(env.P5_PRIMARY_FIDS_EXPIRY_ENABLED)?
+   "SCHEDULED_APPLY_DISABLED":"SCHEDULE_CONFIGURATION_INVALID";
+ }else if(!pinMatches)state="SCHEDULE_APPROVED_MAIN_DRIFT";
+ else if(!approved)state="SCHEDULE_APPLY_APPROVAL_MISSING";
+ else if(!latest)state="NO_SCHEDULE_RUN_OBSERVED";
+ else if(!sameMain)state="NO_SCHEDULE_RUN_ON_CURRENT_MAIN";
+ else if(lane.historicalCadence.latestAgeExceedsExpected)state="SCHEDULE_OBSERVATION_STALE";
+ else if(latest.status!=="completed")state="SCHEDULE_EXECUTION_PENDING";
+ else if(latest.conclusion!=="success"||latest.run_attempt!==1)state="SCHEDULE_EXECUTION_NOT_SUCCESSFUL_FIRST_ATTEMPT";
+ else{
+  try{
+   const j=await readGithub(ROOT+"/actions/runs/"+latest.id+"/jobs?filter=latest&per_page=10");
+   const x=j?.jobs?.[0];
+   if(j?.total_count!==1||!Array.isArray(j.jobs)||j.jobs.length!==1||
+      !x||x.name!=="primary-fids-expiry"||x.run_id!==latest.id||
+      !Number.isSafeInteger(x.id)||x.id<1||x.status!=="completed"||
+      x.conclusion!=="success"||!Array.isArray(x.steps)||
+      x.steps.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success").length!==1)
+    state="SCHEDULE_SUCCESS_WITHOUT_EXECUTED_EXPIRY_STEP";
+   else{state="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF";jobExecuted=true;jobId=x.id;}
+  }catch{state="SCHEDULE_JOB_EVIDENCE_UNAVAILABLE";}
+ }
+ return {state,scheduledApplyEnabled:enabled,approvalPinMatchesCurrentMain:pinMatches,
+  separateApplyApprovalPresent:approved,latestRunMatchesCurrentMain:sameMain,
+  latestExecutedJobVerified:jobExecuted,latestExecutedJobId:jobId,
+  actualRetentionReceiptVerified:false,physicalDeletionVerified:false,
+  retentionDeadlineGuaranteed:false,providerCalls:0,databaseReads:0,databaseWrites:0,
+  scheduleObservation:lane};
+}
 export const P6_MANUAL_OR_MISSING_RELEASE_LANES=Object.freeze([
  {
   lane:"POST_CHILD",state:"CURRENT_POST_PARENT_AND_CHILD_IMPLEMENTED_ACTUAL_RELEASE_UNVERIFIED",
@@ -221,10 +273,7 @@ export async function readP6GithubAutoControllerHeartbeat(
   fail("INVALID_OBSERVER_CLOCK");
  const observedAtUtc=time.toISOString();
  const out=[];
- for(const lane of P6_EXISTING_CONTROLLER_LANES){
-  const u=ROOT+"/actions/workflows/"+lane.workflow+
-   "/runs?branch=main&event=schedule&per_page="+MAX_PER_WORKFLOW;
-  let parsed;
+ const readGithub=async u=>{
   try{
    const response=await fetcher(u,{
     method:"GET",
@@ -236,8 +285,13 @@ export async function readP6GithubAutoControllerHeartbeat(
     redirect:"error"
    });
    if(!response.ok)fail("GITHUB_CONTROLLER_RUN_HISTORY_UNAVAILABLE");
-   parsed=await response.json();
+   return await response.json();
   }catch{fail("GITHUB_CONTROLLER_RUN_HISTORY_UNAVAILABLE");}
+ };
+ for(const lane of P6_EXISTING_CONTROLLER_LANES){
+  const u=ROOT+"/actions/workflows/"+lane.workflow+
+   "/runs?branch=main&event=schedule&per_page="+MAX_PER_WORKFLOW;
+  const parsed=await readGithub(u);
   if(!parsed||!Number.isSafeInteger(parsed.total_count)||
      parsed.total_count<0||!Array.isArray(parsed.workflow_runs)||
      parsed.workflow_runs.length>MAX_PER_WORKFLOW||
@@ -246,5 +300,15 @@ export async function readP6GithubAutoControllerHeartbeat(
   out.push(reviewP6OneScheduledController(
    lane,parsed.workflow_runs,observedAtUtc));
  }
- return summarizeP6ControllerHeartbeat(out,observedAtUtc);
+ const summary=summarizeP6ControllerHeartbeat(out,observedAtUtc);
+ const primaryFidsExpiry=await observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc);
+ // A disabled schedule is explicitly reported and is not an execution
+ // failure. When enabled, require evidence of execution for the latest
+ // current-main run. Still never claim deletion or deadline proof.
+ const primaryProblem=primaryFidsExpiry.state!=="SCHEDULED_APPLY_DISABLED"&&
+  (primaryFidsExpiry.state!=="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF"||
+   primaryFidsExpiry.scheduleObservation.historicalCadence.intervalsExceedingExpectedMax>0);
+ return {...summary,
+  status:primaryProblem?"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":summary.status,
+  primaryFidsExpiry,primaryFidsExpiryNeedsAttention:primaryProblem};
 }
