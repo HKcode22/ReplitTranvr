@@ -11,6 +11,8 @@ import {runP5ScopedFidsSource,type P5SourceSingleQueryPlan}
  from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 import {createP5V0079ScopedDbPorts}
  from "../server/lib/disruption/phase5V0079ScopedDbPorts_v39";
+import {P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL}
+ from "../server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39";
 const URL="postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable";
 const run=process.env.V39_P5_STAGE4_REAL_PG==="1"?describe:describe.skip;
 const H=(s:string)=>s.repeat(64);
@@ -21,7 +23,19 @@ let pool:Pool,plan:P5SourceSingleQueryPlan;
 let fetches=0;
 const fakeFetch:typeof fetch=async()=>{
  fetches++;
- return new Response(JSON.stringify({departures:[],arrivals:[]}),{
+ const base=Date.parse(plan.acquisition.serviceWindowStartUtc);
+ const move=(number:string,id:string,minutes:number)=>({
+  id,number,codeshareStatus:"IsOperator",isCargo:false,isPrivate:false,isCharter:false,
+  departure:{airport:{icao:"WSSS"},scheduledTime:{utc:new Date(base+minutes*60000).toISOString()}},
+  arrival:{airport:{icao:"OMAA"},scheduledTime:{utc:new Date(base+(minutes+360)*60000).toISOString()}}
+ });
+ const departures=fetches===1?[
+  move("ZX123","synthetic-retime",20),move("ZX124","synthetic-duplicate-a",40),
+  move("ZX124","synthetic-duplicate-b",40),move("ZX125","synthetic-unchanged",60),
+  move("ZX127","synthetic-repeated-id",100),move("ZX127","synthetic-repeated-id",100)
+ ]:[move("ZX123","synthetic-retime",25),move("ZX125","synthetic-unchanged",60),
+  move("ZX126","synthetic-distinct",80),...(fetches===2?[move("ZX124","synthetic-now-single",40)]:[]),...(fetches===3?[move("ZX128","synthetic-third-only",120)]:[])];
+ return new Response(JSON.stringify({departures,arrivals:[]}),{
   status:200,headers:{"content-type":"application/json"}
  });
 };
@@ -137,8 +151,8 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     plan.acquisition.earliestPlannedCutoffUtc,utcChargeDay]);
  });
  afterAll(async()=>{if(pool)await pool.end();});
- const make=(p:P5SourceSingleQueryPlan=plan)=>createP5V0079ScopedDbPorts({
-  plan:p,manifestSha256:manifest,exactQueryDigest:query,
+ const make=(p:P5SourceSingleQueryPlan=plan,digest=query)=>createP5V0079ScopedDbPorts({
+  plan:p,manifestSha256:manifest,exactQueryDigest:digest,
   githubRunId:gitRun,scopedPool:pool,fetchImpl:fakeFetch,
  });
  it("rejects signed first partition if actual PostgreSQL frozen treatment shape differs",async()=>{
@@ -187,6 +201,22 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     JOIN clean.fids_query_response r USING(population_query_id)`)).rows;
   expect(b).toHaveLength(1);
   expect(b[0].response_hash).toBe(b[0].original_hash);
+  // The two duplicate normalized identities survive as distinct provisional
+  // observations; no paid original rollback due to ON CONFLICT row loss.
+  const rows=(await pool.query(
+   "SELECT flight_number,analytic_identity_id,canonical_flight_instance_id,codeshare_resolution_status,provider_record_key "+
+   "FROM clean.flight_population ORDER BY flight_number,analytic_identity_id")).rows;
+  expect(rows).toHaveLength(6);
+  const duplicates=rows.filter(x=>x.flight_number==="ZX124");
+  expect(duplicates).toHaveLength(2);
+  expect(new Set(duplicates.map(x=>x.analytic_identity_id)).size).toBe(2);
+  expect(duplicates.every(x=>x.canonical_flight_instance_id===null&&
+   x.codeshare_resolution_status==="phase5_duplicate_identity_ambiguous")).toBe(true);
+  expect(rows.filter(x=>x.canonical_flight_instance_id!==null)).toHaveLength(2);
+  const repeated=rows.filter(x=>x.flight_number==="ZX127");
+  expect(repeated).toHaveLength(2);
+  expect(repeated.every(x=>x.canonical_flight_instance_id===null&&/^fidsrec:p5amb:[0-9a-f]{64}$/.test(x.provider_record_key))).toBe(true);
+  expect(new Set(repeated.map(x=>x.provider_record_key)).size).toBe(2);
  });
  it("replaying same query cannot reserve or issue a second physical GET",async()=>{
   await expect(runP5ScopedFidsSource(plan,make())).rejects
@@ -196,4 +226,86 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
    "SELECT count(*)::int n FROM clean.phase5_fids_physical_attempt_v39")).rows[0].n)
    .toBe(1);
  });
+
+ it("screens a genuine second bound synthetic original for retained conflicting retime keys",async()=>{
+  // One distinct allowed query/reservation, never replay the previous one.
+  const query2=H("8"),plan2={...plan,acquisition:{...plan.acquisition,queryKey:"CI-P5-D1-HUB-T24-SECOND",earliestPlannedCutoffUtc:new Date(Date.parse(plan.acquisition.earliestPlannedCutoffUtc)+15*60000).toISOString()}};
+  await pool.query(
+   `INSERT INTO clean.phase5_fids_allowed_query_v39(
+    query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,
+    airport_icao,early_draw_sha256,reviewed_release_sha256,rights_review_sha256,
+    provider_contract_sha256,github_run_id,service_window_start_utc,service_window_end_utc,
+    from_local,to_local,airport_iana_timezone,provider_api_version,fids_protocol_version,
+    planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,prediction_cutoff_utc,state)
+   SELECT $1,manifest_sha256,run_day_index,$2,slot_id,horizon,airport_icao,early_draw_sha256,
+    reviewed_release_sha256,rights_review_sha256,provider_contract_sha256,github_run_id,
+    service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,
+    provider_api_version,fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
+    hard_latest_dispatch_utc,$4::timestamptz,state
+   FROM clean.phase5_fids_allowed_query_v39 WHERE query_digest=$3`,
+   [query2,plan2.acquisition.queryKey,query,plan2.acquisition.earliestPlannedCutoffUtc]);
+  const second=await runP5ScopedFidsSource(plan2,make(plan2,query2));
+  expect(second.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
+  expect(fetches).toBe(2);
+  const binding=(await pool.query("SELECT population_query_id FROM clean.phase5_fids_original_binding_v39 WHERE query_digest=$1",[query2])).rows[0];
+  const clock=(await pool.query("SELECT clock_timestamp() AS now")).rows[0].now;
+  const observed=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
+   [binding.population_query_id,manifest,clock,contract,rights])).rows;
+  const members=(await pool.query(
+    "SELECT analytic_identity_id,flight_number FROM clean.flight_population WHERE population_query_id=$1",
+    [binding.population_query_id])).rows;
+  expect(observed).toHaveLength(4);
+  const flags=new Map(observed.map(x=>[x.flight_instance_id,x.conflicting_retained_identity]));
+  // A later singleton cannot erase still-live earlier duplicate identity evidence.
+  expect(members).toHaveLength(4);
+  for(const m of members)expect(flags.get(m.analytic_identity_id)).toBe(
+   m.flight_number==="ZX123"||m.flight_number==="ZX124");
+  // A different study or expired-at-review original isn't re-used as proof.
+  const wrongScope=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
+   [binding.population_query_id,H("9"),clock,contract,rights])).rows;
+  expect(wrongScope).toHaveLength(0);
+  const afterExpiry=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
+   [binding.population_query_id,manifest,new Date(new Date(clock).getTime()+24*3600000),contract,rights])).rows;
+  expect(afterExpiry).toHaveLength(0);
+  expect((await pool.query("SELECT count(*)::int n FROM clean.phase5_fids_physical_attempt_v39")).rows[0].n).toBe(2);
+ });
+ it("keeps another bound original complete despite same-cutoff legacy-key conflicts",async()=>{
+  // Deliberate synthetic same-cutoff stress case, not a calendar change.
+  const query2=H("8"),query3=H("9"),plan3={...plan,acquisition:{...plan.acquisition,
+   queryKey:"CI-P5-D1-HUB-T24-THIRD",earliestPlannedCutoffUtc:new Date(Date.parse(plan.acquisition.earliestPlannedCutoffUtc)+15*60000).toISOString()}};
+  await pool.query(
+   `INSERT INTO clean.phase5_fids_allowed_query_v39(
+    query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,
+    airport_icao,early_draw_sha256,reviewed_release_sha256,rights_review_sha256,
+    provider_contract_sha256,github_run_id,service_window_start_utc,service_window_end_utc,
+    from_local,to_local,airport_iana_timezone,provider_api_version,fids_protocol_version,
+    planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,prediction_cutoff_utc,state)
+   SELECT $1,manifest_sha256,run_day_index,$2,slot_id,horizon,airport_icao,early_draw_sha256,
+    reviewed_release_sha256,rights_review_sha256,provider_contract_sha256,github_run_id,
+    service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,
+    provider_api_version,fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,
+    hard_latest_dispatch_utc,prediction_cutoff_utc,state
+    FROM clean.phase5_fids_allowed_query_v39 WHERE query_digest=$3`,
+    [query3,plan3.acquisition.queryKey,query2]);
+  const third=await runP5ScopedFidsSource(plan3,make(plan3,query3));
+  expect(third.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
+  expect(fetches).toBe(3);
+  const binding=(await pool.query("SELECT population_query_id FROM clean.phase5_fids_original_binding_v39 WHERE query_digest=$1",[query3])).rows[0];
+  const rows=(await pool.query("SELECT flight_number,canonical_flight_instance_id,analytic_identity_id,provider_record_key,codeshare_resolution_status FROM clean.flight_population WHERE population_query_id=$1",[binding.population_query_id])).rows;
+  expect(rows).toHaveLength(4);
+  const demoted=rows.filter(x=>x.flight_number!=="ZX128");
+  expect(demoted).toHaveLength(3);
+  expect(demoted.every(x=>x.canonical_flight_instance_id===null&&
+   /^provisional:[0-9a-f]{64}$/.test(x.analytic_identity_id)&&/^fidsrec:p5amb:[0-9a-f]{64}$/.test(x.provider_record_key)&&
+   x.codeshare_resolution_status==="phase5_legacy_observation_key_ambiguous")).toBe(true);
+  expect(rows.find(x=>x.flight_number==="ZX128")?.canonical_flight_instance_id).toMatch(/^leg:p5v1:/);
+  const original=(await pool.query("SELECT raw_payload FROM clean.fids_query_response WHERE population_query_id=$1",[binding.population_query_id])).rows[0];
+  expect(original.raw_payload.departures.map((x:{id:string})=>x.id)).toEqual(["synthetic-retime","synthetic-unchanged","synthetic-distinct","synthetic-third-only"]);
+  const previous=(await pool.query("SELECT p.canonical_flight_instance_id FROM clean.flight_population p JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id) WHERE b.query_digest=$1",[query2])).rows;
+  expect(previous).toHaveLength(4);
+  expect(previous.every(x=>/^leg:p5v1:/.test(x.canonical_flight_instance_id))).toBe(true);
+  await expect(runP5ScopedFidsSource(plan3,make(plan3,query3))).rejects.toThrow("P5_PHYSICAL_QUERY_NOT_ACTIVE_OR_ALREADY_RESERVED");
+  expect(fetches).toBe(3);
+ });
+
 });

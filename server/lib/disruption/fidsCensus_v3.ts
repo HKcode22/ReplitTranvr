@@ -14,6 +14,8 @@ import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
 import {
   canonicalFlightInstanceId,
+  phase5ProspectiveCanonicalFlightIdV39,
+  P5_CANONICAL_IDENTITY_VERSION,
   type CanonicalFlightInstanceInput,
 } from "./flightInstanceCanonical_v3";
 
@@ -35,6 +37,11 @@ export interface FidsCensusParams {
   providerApiVersion: string;
   fidsProtocolVersion: string;
   openapiSha256: string;
+  /** Explicitly selected only by the future scoped Phase5 SOURCE collector.
+   * V0083 future POST uses the same representation via its reservation marker.
+   * This is not a claim of stable provider ID or cross-original retime linkage.
+   */
+  phase5ProspectiveIdentityV39?: typeof P5_CANONICAL_IDENTITY_VERSION;
   /** Only prospective G5A: stable provider operating identity under retimes. */
   g5aObservedScheduleProtocol?: boolean;
   /**
@@ -54,7 +61,20 @@ export interface FidsCensusParams {
  * Frozen inside the reconstructed FIDS JSON and its existing response hash.
  * This is NOT a network byte-for-byte receipt or operator-flight proof.
  */
+function usesP5ProspectiveIdentity(params:FidsCensusParams):boolean {
+  return params.phase5ProspectiveIdentityV39===P5_CANONICAL_IDENTITY_VERSION||
+    params.phase5PostReservationSha256!==undefined;
+}
 export function buildFidsRequestContractV39(params:FidsCensusParams){
+ if(params.phase5ProspectiveIdentityV39!==undefined&&
+    (params.phase5ProspectiveIdentityV39!==P5_CANONICAL_IDENTITY_VERSION||
+     params.direction!=="Departure"||
+     !["fids_base","fids_split"].includes(params.restCategory??"")||
+     params.g5aObservedScheduleProtocol===true||
+     params.g5aCompositeIdentityStudyStartUtc!==undefined||
+     params.g5aPostReservationId!==undefined||
+     params.phase5PostReservationSha256!==undefined))
+   throw Error("P5_PROSPECTIVE_IDENTITY_SCOPE_INVALID_HOLD");
  if(params.phase5PostReservationSha256!==undefined&&
     (!/^[0-9a-f]{64}$/.test(params.phase5PostReservationSha256)||
      params.restCategory!=="outcome"||
@@ -499,7 +519,9 @@ function normalizeFidsRecord(input: {
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&isOperator&&!departureAirportFromContext&&
         !foreignOrigin){
-      canonical=canonicalFlightInstanceId(identityInput).flight_instance_id;
+      canonical=usesP5ProspectiveIdentity(params)?
+        phase5ProspectiveCanonicalFlightIdV39(identityInput):
+        canonicalFlightInstanceId(identityInput).flight_instance_id;
       analyticIdentityId=canonical;
       identityStatus="confirmed_operating_leg";
     } else {
@@ -646,6 +668,10 @@ export async function fetchFidsPopulation(
     ianaTimezone: params.ianaTimezone,
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
+    // Application normalization version, not an attributed provider field.
+    ...(usesP5ProspectiveIdentity(params)?{
+      phase5PopulationIdentityVersion:P5_CANONICAL_IDENTITY_VERSION
+    }:{}),
     ...(params.phase5PostReservationSha256?{
       phase5PostReservationSha256:params.phase5PostReservationSha256,
       phase5PostPurpose:"FUTURE_POST_SOURCE_OBSERVATION_NOT_AN_ACTUAL_PHYSICAL_LABEL",
@@ -730,8 +756,48 @@ export async function fetchFidsPopulation(
       })).slice(0,24)
     }};
   });
-  const rows = unambiguous.map((r) => r.row);
-  const flightInstanceIds = Array.from(new Set(unambiguous.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
+  // New scoped Phase5 originals retain every in-window normalized observation
+  // even if identities are ambiguous. Distinct raw records may have equal
+  // normalized base; a reused provider record ID may also occur at different
+  // schedules. Never resolve either by array order or hide a paid original
+  // through ON CONFLICT DO NOTHING followed by atomic rollback.
+  const prospective=usesP5ProspectiveIdentity(params);
+  const prospectiveIdentityCounts=new Map<string,number>();
+  const providerKeyCounts=new Map<string,number>();
+  if(prospective)for(const r of unambiguous){
+    const k=identityKey(r),pk=r.row.providerRecordKey;
+    prospectiveIdentityCounts.set(k,(prospectiveIdentityCounts.get(k)??0)+1);
+    if(pk!==null)providerKeyCounts.set(pk,(providerKeyCounts.get(pk)??0)+1);
+  }
+  const qualified=prospective?unambiguous.map((r,index):NormalizedFidsRecord=>{
+    const repeatedIdentity=(prospectiveIdentityCounts.get(identityKey(r))??0)>1;
+    const repeatedProviderKey=r.row.providerRecordKey!==null&&(providerKeyCounts.get(r.row.providerRecordKey)??0)>1;
+    if(!repeatedIdentity&&!repeatedProviderKey)return r;
+    const ambiguous=repeatedIdentity||(repeatedProviderKey&&r.resolvedCanonical!==null);
+    const status=ambiguous?(repeatedIdentity?"phase5_duplicate_identity_ambiguous":
+      "phase5_duplicate_provider_record_ambiguous"):r.row.codeshareResolutionStatus;
+    const appearanceDigest=sha256(JSON.stringify({
+      protocol:"P5_ONE_ORIGINAL_AMBIGUOUS_IDENTITY_V1",
+      populationQueryId,responseHash,index,originalIdentity:r.row.analyticIdentityId
+    }));
+    const analyticIdentityId=ambiguous?"provisional:"+appearanceDigest:r.row.analyticIdentityId;
+    // B0062 retains the older unique airport/cutoff/flight/carrier/record
+    // key. An ambiguous REPEATED raw provider ID cannot act as a unique
+    // record key. Keep its exact value in the preserved original only;
+    // represent each normalized appearance by its own bound key. Never
+    // use that replacement as a native provider ID or positive match.
+    const providerRecordKey=repeatedProviderKey?"fidsrec:p5amb:"+appearanceDigest:r.row.providerRecordKey;
+    const canonicalFlightInstanceId=ambiguous?null:r.row.canonicalFlightInstanceId;
+    return {resolvedCanonical:ambiguous?null:r.resolvedCanonical,row:{
+      ...r.row,providerRecordKey,canonicalFlightInstanceId,analyticIdentityId,
+      codeshareResolutionStatus:status,
+      provenanceJson:JSON.stringify({...JSON.parse(r.row.provenanceJson),
+        canonicalFlightInstanceId,codeshareResolutionStatus:status,
+        originalCodeshareResolutionStatus:r.row.codeshareResolutionStatus,
+        ...(repeatedProviderKey?{recordKeyDisposition:"AMBIGUOUS_REPEATED_ID_USE_BOUND_APPEARANCE_KEY"}:{})})
+    }};
+  }):unambiguous;
+  const rows = qualified.map((r) => r.row);
   const query: FidsQueryObservation = {
     populationQueryId,
     sourceAirportIcao: params.airportIcao,
@@ -750,6 +816,8 @@ export async function fetchFidsPopulation(
     openapiSha256: params.openapiSha256,
   };
   const persistedPopulationRows = await (deps.persist ?? persistFidsObservation)(query, rows);
+  // Scoped atomic persistence may conservatively demote a legacy-key collision.
+  const flightInstanceIds = Array.from(new Set(rows.map(r=>r.canonicalFlightInstanceId).filter((x):x is string=>!!x)));
   return {
     airportIcao: params.airportIcao,
     fromLocal: params.fromLocal,
@@ -883,8 +951,10 @@ export async function persistFidsObservation(
       throw new Error("FIDS_ATOMIC_ORIGINAL_NOT_INSERTED_HOLD");
     const durableAvailableAt = rawInsert.rows[0].available_at as Date;
     let inserted = 0;
-    for (const r of rows) {
-      const result = await client.query(
+    const scopedProspective=beforeCommit!==undefined&&query.queryDirection==="Departure"&&
+      (query.rawPayload as {phase5PopulationIdentityVersion?:unknown}|null)?.phase5PopulationIdentityVersion===P5_CANONICAL_IDENTITY_VERSION;
+    const replacements=new Map<number,PopulationRow>();
+    const insertMember=(r:PopulationRow,legacyKeyOnly:boolean)=>client.query(
         `INSERT INTO clean.flight_population
          (batch_id, source_airport_icao, window_start_utc, window_end_utc, cutoff_utc,
           flight_number, carrier_iata, carrier_icao, call_sign, dep_airport_icao, dep_airport_iata,
@@ -895,7 +965,7 @@ export async function persistFidsObservation(
           canonical_flight_instance_id, analytic_identity_id, provider_api_version,
           fids_protocol_version, openapi_sha256)
          VALUES (${FIDS_ATOMIC_POPULATION_VALUES_V39})
-         ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING`,
+         ${legacyKeyOnly?"ON CONFLICT ON CONSTRAINT flight_population_key DO NOTHING":"ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING"}`,
         [r.batchId,r.sourceAirportIcao,r.windowStartUtc,r.windowEndUtc,r.cutoffUtc,r.flightNumber,
          r.carrierIata,r.carrierIcao,r.callSign,r.depAirportIcao,r.depAirportIata,r.arrAirportIcao,
          r.arrAirportIata,r.depScheduledUtc,r.arrScheduledUtc,r.sourceType,r.providerRecordKey,
@@ -904,7 +974,29 @@ export async function persistFidsObservation(
          durableAvailableAt,r.responseHash,r.canonicalFlightInstanceId,r.analyticIdentityId,
          r.providerApiVersion,r.fidsProtocolVersion,r.openapiSha256],
       );
-      inserted += result.rowCount ?? 0;
+    for(const [index,r] of rows.entries()){
+      let result=await insertMember(r,scopedProspective);
+      if(scopedProspective&&result.rowCount===0){
+        // Only the exact B0062 legacy airport/cutoff/flight/carrier/record
+        // constraint can reach this fallback. Do not replay HTTP, read another
+        // original, modify prior evidence, or claim either identity is proven.
+        // Other SQL errors still roll back the entire bound transaction.
+        const appearanceDigest=sha256(JSON.stringify({
+          protocol:"P5_LEGACY_CROSS_ORIGINAL_CONFLICT_V1",populationQueryId:query.populationQueryId,
+          responseHash:query.responseHash,index,originalIdentity:r.analyticIdentityId
+        }));
+        const demoted:PopulationRow={...r,canonicalFlightInstanceId:null,
+          analyticIdentityId:"provisional:"+appearanceDigest,
+          providerRecordKey:"fidsrec:p5amb:"+appearanceDigest,
+          codeshareResolutionStatus:"phase5_legacy_observation_key_ambiguous",
+          provenanceJson:JSON.stringify({...JSON.parse(r.provenanceJson),
+            canonicalFlightInstanceId:null,codeshareResolutionStatus:"phase5_legacy_observation_key_ambiguous",
+            recordKeyDisposition:"LEGACY_CROSS_ORIGINAL_CONFLICT_USE_BOUND_APPEARANCE_KEY"})};
+        result=await insertMember(demoted,false);
+        if(result.rowCount!==1)throw Error("FIDS_BOUND_LEGACY_CONFLICT_FALLBACK_INCOMPLETE_ROLLBACK");
+        replacements.set(index,demoted);
+      }
+      inserted+=result.rowCount??0;
     }
     // Never claim complete source custody for a partially inserted census.
     if(beforeCommit){
@@ -915,6 +1007,7 @@ export async function persistFidsObservation(
       });
     }
     await client.query("COMMIT");
+    for(const [index,row] of replacements)rows[index]=row;
     return inserted;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});

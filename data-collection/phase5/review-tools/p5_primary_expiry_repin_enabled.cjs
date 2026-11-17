@@ -4,7 +4,9 @@
 const {execFileSync}=require('node:child_process');
 const fs=require('node:fs');
 const REPO='HKcode22/ReplitTranvr';
-const OLD='6cb6c28a1508a2aaf3ebe5551bf41444dbb6622e';
+const OLD='f53a36a787351b9859ff7910d7f5cab41c1d77a2';
+const SELF_PATH='data-collection/phase5/review-tools/p5_primary_expiry_repin_enabled.cjs';
+const {createHash}=require('node:crypto');
 const WF='phase5-primary-fids-expiry-no-provider.yml';
 const PIN='P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA';
 const ENABLE='P5_PRIMARY_FIDS_EXPIRY_ENABLED';
@@ -15,32 +17,35 @@ const VERIFY='VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES';
 const STEP='Verify exact main and execute only bounded primary FIDS expiry';
 const SHA=/^[a-f0-9]{40}$/;
 const EXPECTED_SECRETS=['P5_PRIMARY_FIDS_SWEEP_DATABASE_URL','P5_RETENTION_READER_DATABASE_URL'];
-// Actual primary runtime depends on these unchanged files. In addition,
-// reject any executable changes outside the exact reviewed authorization/scheduling paths.
+// Current identity integration only. Exact known files and unchanged cleanup dependencies;
+// not a general-purpose approval for later releases.
 const UNCHANGED=[`.github/workflows/${WF}`,'scripts/v39_phase5_primary_fids_expiry_github_v39.mjs',
  'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs',
- 'migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql','package.json','package-lock.json'];
+ 'migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql',
+ 'migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql','package.json','package-lock.json'];
 const RELEASE_CODE=Object.freeze({
- 'scripts/v39_phase6_enable_source_owner_v39.ts':'4765e72a5a075f77a4808a19e7c0520f62af5c93',
- 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts':'49a74a2bc28519287a8720e844feec8b938c88ae',
- '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml':'af5c7c8e7508a6eca94f63120141e151ba49108e',
- 'scripts/v39_phase6_source_enable_approval_ledger_v39.ts':'b584f665bd256d1f301fbc1ba466fcd3fd611282',
- 'tests/phase6_source_enable_approval_ledger_v39.test.ts':'702292a0f424b0191548a048180337287c681bd3',
- '.github/workflows/phase5-cd-github-bounded-pre-tick.yml':'a53c70d6bd72f3cb44f9fd9f8c128785781b1590',
- '.github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml':'47929163515cdf04d31f198587ff588917f83332',
- '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml':'646729ecc46cf0e34c65c3b8f817ec2721dd6107',
- '.github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml':'4e3b1b0702570443e2936ad2e4ac479f8820073e',
- '.github/workflows/phase6-private-later-enrollment.yml':'d524337b95f05f940ae650d3c5ed73c9f28ae3d3',
- 'server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts':'ea6fa93cf3dcfe91c9a3c2f517d24b723df78066',
- 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs':'a31c78ceac4ed685237a3f10ebe858de2fc41dfb',
- 'tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts':'03b936be86fbc17cf54cfd57e5b4d81e41bb98c2',
- 'tests/phase6_stored_source_child_dispatcher_v39.test.mjs':'75d7a7f3ba6b41969279a799ece366368139d587',
- 'server/lib/disruption/phase5V0080GitHubPrearm_v39.ts':'8d32ddaaa1994f8759c3fcf6d4301dec50b3abab',
- 'tests/phase5_github_source_one_query_release_admission_v39.test.ts':'52daceed72fa0741e97818d80c5b2fbfcc4b9062'});
+ "scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts": "58d3227d7251a286df4081ea91942b9e5eb1f5cb",
+ "scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs": "d26de09950ed7fdb202a453b072e5d079ee5aad0",
+ "server/lib/disruption/fidsCensus_v3.ts": "db82195639d3d1bdda101c343ba6b1ec27ef0267",
+ "server/lib/disruption/flightInstanceCanonical_v3.ts": "5d718d8172187a9c99b9fd58519e0b51a1846bb1",
+ "server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39.ts": "10040597d1b9f50cc2df8407aae2d07b0058b7f0",
+ "server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts": "23570f525ca433ae3438c129b639eb8caf60ae81",
+ "server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs": "5e64aad5f50d1e98db5079ff3ccd5fe4dcdff493",
+ "tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts": "62303ef6c2c017f111a3cf843b440007eacc3dad",
+ "tests/phase5_prospective_fids_identity_custody_v39.test.ts": "4c559131b08b72d12c9d329959384e968a5623f1",
+ "tests/phase5_stage4_scoped_v0079_real_pg_v39.test.ts": "3d561817ae283b1105653a9307b4a55c1032225e",
+ "data-collection/phase5/2026-11-17_PROSPECTIVE_POST_CROSS_KEY_AMBIGUITY_NO_GO.md": "86e901465a12b5becfa0e98d4cbb1deec768ca13",
+ "server/lib/disruption/phase6ActualPostOutcomeObservability_v39.ts": "979c2b58ca5d7def456f3f125a8e9a9696beb7c4",
+ "tests/phase6_actual_post_outcome_observability_v39.test.ts": "a451c6520cf84e66acc7e55322b00196f996f3c5",
+ "data-collection/phase5/review-tools/p5_primary_expiry_repin_enabled.test.cjs": "0e67cb5f47feed8547407babd1abbfee6448bcc0",
+ "data-collection/phase5/2026-11-17_COMBINED_IDENTITY_RELEASE_AND_RETENTION_REPIN.md": "1cd1af997920cb19ca4b1dba3906b757a21666c4",
+ "server/lib/disruption/evaluationEngines_v39.ts": "59469b9e898988303ad34c62996c45e7f05f480a",
+ "tests/evaluation_engines_v39.test.ts": "1da88d63d622a75c3975340b479d28419ba76f3f"
+});
 const COUNTERS=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
 const hold=s=>{throw Error('HOLD_P5_ENABLED_EXPIRY_REPIN_'+s);};
-const pathOK=p=>typeof p==='string'&&(p.startsWith('data-collection/')||Object.hasOwn(RELEASE_CODE,p));
+const pathOK=p=>typeof p==='string'&&(p===SELF_PATH||Object.hasOwn(RELEASE_CODE,p));
 function validateCompare(c){
  if(!c||c.status!=='ahead'||c.base_commit?.sha!==OLD||c.merge_base_commit?.sha!==OLD||c.behind_by!==0||
     !Number.isSafeInteger(c.ahead_by)||c.ahead_by<1||c.ahead_by!==c.total_commits||
@@ -50,7 +55,7 @@ function validateCompare(c){
   if(!pathOK(f.filename)||!['added','modified'].includes(f.status)||f.previous_filename||names.has(f.filename))hold('UNREVIEWED_RELEASE_PATH');
   names.add(f.filename);
  }
- if(Object.keys(RELEASE_CODE).some(p=>!names.has(p)))hold('REVIEWED_RELEASE_CHANGE_MISSING');
+ if(!names.has(SELF_PATH)||Object.keys(RELEASE_CODE).some(p=>!names.has(p)))hold('REVIEWED_RELEASE_CHANGE_MISSING');
  return names.size;
 }
 function verifyReceipt(run,jobs,log,sha,id,wfId){
@@ -73,7 +78,8 @@ function verifyReceipt(run,jobs,log,sha,id,wfId){
     !Number.isFinite(Date.parse(b.observedAtUtc)))hold('VERIFY_RECEIPT_REQUIRES_REVIEW');
  return {runId:id,jobId:job.id,observedAtUtc:b.observedAtUtc,distinctDbActorsVerified:true,allPrimaryCountersZero:true};
 }
-function execute({gh,confirm,report},mode,sha){
+function execute({gh,confirm,report,selfBlobSha},mode,sha){
+ if(!SHA.test(selfBlobSha??''))hold('EXACT_SELF_BLOB_REQUIRED');
  if(!['--repin','--verify-current'].includes(mode)||!SHA.test(sha??'')||sha===OLD)hold('EXACT_NEW_REVIEWED_MAIN_REQUIRED');
  const api=p=>JSON.parse(gh(['api',`repos/${REPO}/${p}`]));
  const get=k=>gh(['variable','get',k,'-R',REPO]).trim();
@@ -90,7 +96,9 @@ function execute({gh,confirm,report},mode,sha){
  for(const p of UNCHANGED){const a=api(`contents/${p}?ref=${OLD}`),b=api(`contents/${p}?ref=${sha}`);
   if(a?.type!=='file'||b?.type!=='file'||!SHA.test(a.sha??'')||a.sha!==b.sha)hold('CLEANUP_DEPENDENCY_CHANGED');}
  for(const [p,wanted] of Object.entries(RELEASE_CODE)){const f=api(`contents/${p}?ref=${sha}`);
-  if(f?.type!=='file'||f.sha!==wanted)hold('REVIEWED_AUTH_FIX_BLOB_CHANGED');}
+  if(f?.type!=='file'||f.sha!==wanted)hold('REVIEWED_RELEASE_BLOB_CHANGED');}
+ const self=api(`contents/${SELF_PATH}?ref=${sha}`);
+ if(self?.type!=='file'||self.sha!==selfBlobSha)hold('REVIEWED_HELPER_BYTES_CHANGED');
  const workflow=api(`actions/workflows/${WF}`);
  if(!Number.isSafeInteger(workflow?.id)||workflow.id<1||workflow.path!==`.github/workflows/${WF}`||workflow.state!=='active')hold('EXISTING_WORKFLOW_NOT_ACTIVE');
  stable(expected,endpoint);
@@ -124,7 +132,9 @@ function main(){
  const confirm=sha=>{const fd=fs.openSync('/dev/tty','r+');try{fs.writeSync(fd,`Type REPIN EXISTING PRIMARY EXPIRY TO ${sha}: `);
   let line='',buf=Buffer.alloc(1);while(line.length<128&&fs.readSync(fd,buf,0,1,null)===1&&buf[0]!==10)line+=buf.toString();
   return line===`REPIN EXISTING PRIMARY EXPIRY TO ${sha}`;}finally{fs.closeSync(fd);}};
- const report=x=>console.log(JSON.stringify(x));report(execute({gh,confirm,report},process.argv[2],process.argv[3]));
+ const bytes=fs.readFileSync(__filename);
+ const selfBlobSha=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+ const report=x=>console.log(JSON.stringify(x));report(execute({gh,confirm,report,selfBlobSha},process.argv[2],process.argv[3]));
 }
-module.exports={execute,verifyReceipt,validateCompare,OLD,WF,PIN,ENABLE,APPROVAL,ENDPOINT,APPLY,VERIFY,STEP,COUNTERS,UNCHANGED,RELEASE_CODE};
+module.exports={execute,verifyReceipt,validateCompare,OLD,WF,PIN,ENABLE,APPROVAL,ENDPOINT,APPLY,VERIFY,STEP,COUNTERS,UNCHANGED,RELEASE_CODE,SELF_PATH};
 if(require.main===module){try{main();}catch(e){const m=String(e?.message??'');console.error(/^HOLD_P5_ENABLED_EXPIRY_REPIN_[A-Z_]+$/.test(m)?m:'HOLD_P5_ENABLED_EXPIRY_REPIN_REDACTED_INSPECT_NO_REPLAY');process.exitCode=2;}}

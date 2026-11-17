@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {execute,verifyReceipt,validateCompare,OLD,WF,PIN,ENABLE,APPROVAL,ENDPOINT,APPLY,VERIFY,STEP,COUNTERS,UNCHANGED,RELEASE_CODE}=require('./p5_primary_expiry_repin_enabled.cjs');
+const {execute,verifyReceipt,validateCompare,OLD,WF,PIN,ENABLE,APPROVAL,ENDPOINT,APPLY,VERIFY,STEP,COUNTERS,UNCHANGED,RELEASE_CODE,SELF_PATH}=require('./p5_primary_expiry_repin_enabled.cjs');
 const NEW='a'.repeat(40),END='b'.repeat(64),BLOB='c'.repeat(40),id=12345,wfId=23,jobId=6789;
 function fixture(mode='--repin'){
  const vars={[PIN]:mode==='--repin'?OLD:NEW,[ENABLE]:'true',[APPROVAL]:APPLY,[ENDPOINT]:END};
@@ -9,7 +9,7 @@ function fixture(mode='--repin'){
  const common={providerCalls:0,databaseWrites:0,phase6PaidGo:false,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false};
  const receipt={status:'PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES',reviewedMainSha:NEW,distinctDbActorsVerified:true,objectDeletions:0,...common,
   before:{schema:'v39.phase5.primary-fids-expiry-status.v1',observedAtUtc:'2026-11-17T02:50:00.000Z',...Object.fromEntries(COUNTERS.map(k=>[k,0])),deletionStopUnresolved:false,...common}};
- const compare={status:'ahead',base_commit:{sha:OLD},merge_base_commit:{sha:OLD},behind_by:0,ahead_by:2,total_commits:2,files:[...Object.keys(RELEASE_CODE).map(filename=>({filename,status:'modified'})),{filename:'data-collection/phase5/review.md',status:'added'}]};
+ const compare={status:'ahead',base_commit:{sha:OLD},merge_base_commit:{sha:OLD},behind_by:0,ahead_by:2,total_commits:2,files:[...Object.keys(RELEASE_CODE).map(filename=>({filename,status:'modified'})),{filename:SELF_PATH,status:'modified'}]};
  const f={vars,run,jobs,receipt,compare,mode,main:NEW,mutations:[],reports:[],confirm:true,depDiff:false,fixDiff:false,workflowState:'active',dispatchLost:false,pinLost:false,extraLog:false};
  const js=x=>JSON.stringify(x);
  const gh=(a,input)=>{
@@ -27,13 +27,14 @@ function fixture(mode='--repin'){
   if(p.startsWith('compare/'))return js(compare);
   if(p.startsWith('contents/')){const [name,ref]=p.slice(9).split('?ref=');
    if(UNCHANGED.includes(name))return js({type:'file',sha:f.depDiff&&ref===NEW?'d'.repeat(40):BLOB});
-   if(Object.hasOwn(RELEASE_CODE,name))return js({type:'file',sha:f.fixDiff?BLOB:RELEASE_CODE[name]});}
+   if(Object.hasOwn(RELEASE_CODE,name))return js({type:'file',sha:f.fixDiff?BLOB:RELEASE_CODE[name]});
+   if(name===SELF_PATH)return js({type:'file',sha:f.selfDiff?'d'.repeat(40):BLOB});}
   if(p===`actions/workflows/${WF}`)return js({id:wfId,path:`.github/workflows/${WF}`,state:f.workflowState});
   if(p===`actions/runs/${id}`)return js(run);
   if(p.startsWith(`actions/runs/${id}/jobs`))return js(jobs);
   throw Error('unexpected mock request '+a.join(' '));
  };
- f.deps={gh,confirm:()=>f.confirm,report:x=>f.reports.push(x)};f.execute=()=>execute(f.deps,mode,NEW);return f;
+ f.deps={gh,confirm:()=>f.confirm,report:x=>f.reports.push(x),selfBlobSha:BLOB};f.execute=()=>execute(f.deps,mode,NEW);return f;
 }
 test('only exact pin mutation and VERIFY dispatch; enabled and approval unchanged',()=>{
  const f=fixture(),r=f.execute();assert.equal(r.status,'EXISTING_PRIMARY_EXPIRY_REPIN_VERIFY_ONLY_NO_GO');
@@ -56,4 +57,10 @@ test('green skipped job, rerun and malformed or nonzero receipt cannot certify',
 });
 test('truncation, divergence and rename rejected before use',()=>{
  for(const mutate of [f=>f.compare.files=Array.from({length:300},(_,i)=>({filename:'data-collection/'+i,status:'added'})),f=>f.compare.behind_by=1,f=>f.compare.files[0].previous_filename='x']){const f=fixture();mutate(f);assert.throws(()=>validateCompare(f.compare),/HOLD_/);}
+});
+
+test('exact combined review set and self bytes; no unreviewed documentation or executable changes',()=>{
+ for(const mutate of [f=>f.compare.files.push({filename:'data-collection/unreviewed.md',status:'added'}),f=>f.compare.files.pop(),f=>f.selfDiff=true,f=>f.deps.selfBlobSha='wrong',f=>f.compare.files[0].status='removed']){
+  const f=fixture();mutate(f);assert.throws(f.execute,/HOLD_P5_ENABLED_EXPIRY_REPIN_/);assert.deepEqual(f.mutations,[]);
+ }
 });

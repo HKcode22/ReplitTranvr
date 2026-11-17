@@ -90,6 +90,7 @@ function fakePool(options?:{
  actor?:string;sessionLogin?:string;source?:Record<string,unknown>[];
  members?:Record<string,unknown>[];
  tooMany?:boolean;
+ retainedIdentities?:Record<string,unknown>[];
 }){
  const f=fixture(),sql:string[]=[];
  let released=false;
@@ -105,6 +106,8 @@ function fakePool(options?:{
    if(statement.includes("FROM clean.phase5_fids_allowed_query_v39"))
     return{rowCount:options?.source?.length??1,
      rows:options?.source??[f.original]};
+   if(statement.includes("AS conflicting_retained_identity"))
+    return {rowCount:options?.retainedIdentities?.length??0,rows:options?.retainedIdentities??[]};
    if(statement.includes("FROM clean.flight_population p"))
     return{rowCount:options?.tooMany?2501:
       options?.members?.length??1,
@@ -222,5 +225,48 @@ describe("derive actual source run from exact committed reservation and signed q
   await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(a.pool,{...committed(),expectedServiceWindowEndUtc:"2027-02-10T14:00:00.000Z"}))
    .rejects.toThrow("COMMITTED_SOURCE_RUN_OR_SIGNED_QUERY_WINDOW_DRIFT");
   expect(a.sql.at(-1)).toBe("ROLLBACK");
+ });
+});
+
+describe("Phase5 full-width keys use the existing restricted live-original ambiguity screen",()=>{
+ const key="leg:p5v1:"+h("7");
+ const key2="leg:p5v1:"+h("8");
+ const prospective=()=>({...fixture().member,analytic_identity_id:key,canonical_flight_instance_id:key});
+ const alias=(id:string,conflict:boolean)=>({flight_instance_id:id,conflicting_retained_identity:conflict});
+ it("leaves an otherwise eligible new key under independent review when no retained conflict was found",async()=>{
+  const f=fakePool({members:[prospective()],retainedIdentities:[alias(key,false)]});
+  const r=await auditP5RealSourceToNativeFlightCandidatesReadonly(f.pool,fixture().scope);
+  expect(r.candidateCount).toBe(1);
+  expect(r.retainedCrossOriginalIdentityReview).toEqual({inspectedFullWidthKeys:1,conflictingRetainedKeys:0,
+   physicalIdentityCertified:false,expiredOriginalsReviewed:false});
+  expect(f.sql.filter(q=>q.includes("AS conflicting_retained_identity"))).toHaveLength(1);
+  expect(f.sql.at(-1)).toBe("ROLLBACK");
+ });
+ it("censors a changed fresh key without discarding unaffected candidates",async()=>{
+  const orig={...fixture().original,normalized_members_count:2};
+  const member2={...prospective(),analytic_identity_id:key2,canonical_flight_instance_id:key2,population_member_id:"second-member"};
+  const f=fakePool({source:[orig],members:[prospective(),member2],
+   retainedIdentities:[alias(key,true),alias(key2,false)]});
+  const r=await auditP5RealSourceToNativeFlightCandidatesReadonly(f.pool,fixture().scope);
+  expect(r.candidateCount).toBe(1);
+  expect(r.censoredCount).toBe(1);
+  expect(r.candidates[0].status).toBe("CENSORED_AMBIGUOUS_SOURCE_IDENTITY");
+  expect(r.candidates[1].status).toBe("ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED");
+  expect(r.retainedCrossOriginalIdentityReview?.conflictingRetainedKeys).toBe(1);
+ });
+ it("holds rather than assuming conflict-free when the new lookup is incomplete or wrong-scope",async()=>{
+  for(const rows of [[],[alias(key2,false)],[{...alias(key,false),conflicting_retained_identity:"false"}]]){
+   const f=fakePool({members:[prospective()],retainedIdentities:rows});
+   await expect(auditP5RealSourceToNativeFlightCandidatesReadonly(f.pool,fixture().scope))
+    .rejects.toThrow(/RETAINED_IDENTITY_CONFLICT_SCREEN/);
+   expect(f.sql.at(-1)).toBe("ROLLBACK");expect(f.wasReleased()).toBe(true);
+  }
+ });
+ it("does not reclassify legacy audits or do a new retained lookup",async()=>{
+  const f=fakePool();
+  const r=await auditP5RealSourceToNativeFlightCandidatesReadonly(f.pool,fixture().scope);
+  expect(r.candidateCount).toBe(1);
+  expect(r.retainedCrossOriginalIdentityReview).toBeUndefined();
+  expect(f.sql.some(q=>q.includes("AS conflicting_retained_identity"))).toBe(false);
  });
 });

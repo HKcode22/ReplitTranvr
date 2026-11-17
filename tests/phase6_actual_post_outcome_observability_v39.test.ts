@@ -130,6 +130,38 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(reversed.byHorizon["T-6h"]).toMatchObject({reportedDistinctGateRunwayTimes:1,reportedGateAfterRunway:1,reportedGateBeforeRunway:0,actualGateOutNumericCandidates:0});
   expect(reversed.physicalGateOutLabels).toBe(0);
  });
+ it("censors prospective cross-key retimes even when provider IDs change, preserving unrelated positive diagnostics",()=>{
+  const f=fixture(),aKey="leg:p5v1:"+H("a"),bKey="leg:p5v1:"+H("b"),cKey="leg:p5v1:"+H("c");
+  const retimed=f.pre("T-90m",3,"native-002",bKey);
+  const shifted={...retimed};
+  for(const k of ["dep_scheduled_utc","selected_t_milestone_utc","prediction_cutoff_utc","created_at",
+   "original_available_at","member_available_at"] as const)
+   shifted[k]=new Date(Date.parse(retimed[k])+15*60000).toISOString();
+  const other={...f.pre("T-6h",4,"native-003",cKey),flight_number:"SQ79"};
+  const r=f.original([f.flight,f.move("native-002","Departed",shifted.selected_t_milestone_utc),
+   {...f.move("native-003"),number:"SQ79"}]);
+  const out=auditP6ActualPostOutcomeObservability(r.s,r.row,
+   [f.pre("T-6h",1,"native-001",aKey),f.pre("T-90m",2,"native-001",aKey),shifted,other],f.clock);
+  expect(out.uniqueRetainedPreFlights).toBe(3);
+  expect(out.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:2,potentialCrossKeyServiceAlias:1,ambiguousIdentity:1,matchedNativePost:1});
+  expect(out.byHorizon["T-90m"]).toMatchObject({retainedCutoffSafePre:2,potentialCrossKeyServiceAlias:2,ambiguousIdentity:2,matchedNativePost:0});
+  expect(out.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:3,retainedKeysWithPotentialCrossKeyServiceAlias:2,
+   retainedT6UniquePre:2,retainedT90UniquePre:2,retainedConsistentT6T90Pairs:0,sameNativeReportedPostT6T90PairsAfterScheduledT:0,actualPhysicalLabelPairsCertified:0});
+  expect(out.privateDecisions).toHaveLength(1);
+  expect(JSON.stringify(out)).not.toContain(aKey);
+  expect(JSON.stringify(out)).not.toContain("native-002");
+ });
+ it("preserves a same-key prospective pair, while repeated provider IDs on different prospective keys are ambiguous",()=>{
+  const f=fixture(),aKey="leg:p5v1:"+H("a"),bKey="leg:p5v1:"+H("b");
+  const pair=[f.pre("T-6h",1,"native-001",aKey),f.pre("T-90m",2,"native-001",aKey)];
+  const complete=auditP6ActualPostOutcomeObservability(f.s,f.row,pair,f.clock);
+  expect(complete.pairedHorizonObservability).toMatchObject({retainedKeysWithPotentialCrossKeyServiceAlias:0,retainedConsistentT6T90Pairs:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1});
+  const ambiguous=auditP6ActualPostOutcomeObservability(f.s,f.row,
+   [...pair,{...f.pre("T-6h",3,"native-001",bKey),flight_number:"SQ79"}],f.clock);
+  expect(ambiguous.pairedHorizonObservability).toMatchObject({retainedKeysWithPotentialCrossKeyServiceAlias:2,retainedConsistentT6T90Pairs:0});
+  expect(ambiguous.byHorizon["T-6h"]).toMatchObject({potentialCrossKeyServiceAlias:2,ambiguousIdentity:2,matchedNativePost:0});
+  expect(ambiguous.privateDecisions).toHaveLength(0);
+ });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);
   const a=auditP6ActualPostOutcomeObservability(r.s,r.row,[f.pre()],f.clock);

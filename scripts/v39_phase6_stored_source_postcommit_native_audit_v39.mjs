@@ -131,6 +131,7 @@ export function redactP6PostcommitNativeAudit(a,c){
   runDayIndex:a.runDayIndex,horizon:a.horizon,candidateAuditSha256:a.candidateAuditSha256,
   observedMemberCount:a.observedMemberCount,candidateCount:a.candidateCount,censoredCount:a.censoredCount,
   classifications:a.classifications,sourceTimingDiagnostics:a.sourceTimingDiagnostics,observedDbClockUtc:a.actualDbClockUtc,
+  ...(a.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:a.retainedCrossOriginalIdentityReview}:{}),
   providerCalls:0,databaseWrites:0,providerContentsPrinted:false,signedPrePacketsIssued:0,phase6PaidGo:false};
 }
 /** Invoke the existing read-only original compiler for the actual private
