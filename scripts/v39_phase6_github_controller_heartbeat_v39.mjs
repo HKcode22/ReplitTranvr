@@ -35,6 +35,14 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
    (c.historicalCadence?.maxObservedGapMinutes??"Not observed")+" | "+
    (c.historicalCadence?.intervalsExceedingExpectedMax??"Not observed")+" |");
  }
+ if(heartbeat.primaryFidsExpiry){
+  const p=heartbeat.primaryFidsExpiry;
+  lines.push("", "**Primary FIDS expiry (separate from object sentinel):** "+p.state,
+   "Exact-main pin matches: "+p.approvalPinMatchesCurrentMain+
+   " | scheduled apply: "+p.scheduledApplyEnabled+
+   " | actual latest scheduled expiry step executed: "+p.latestExecutedJobVerified,
+   "This does not verify the deletion receipt or guarantee the retention deadline.");
+ }
  lines.push(
   "",
   "Recent interarrival gaps use GitHub run creation metadata, including skipped runs. They are not exact missing cron slots, provider latency or execution-time guarantees.",
@@ -68,6 +76,8 @@ async function main(){
     recentFailed:x.runStateCounts.completedFailed,
     historicalCadence:x.historicalCadence
    })),
+   primaryFidsExpiry:report.primaryFidsExpiry,
+   primaryFidsExpiryNeedsAttention:report.primaryFidsExpiryNeedsAttention,
    controllerProblemCount:report.controllerProblemCount,
    controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,

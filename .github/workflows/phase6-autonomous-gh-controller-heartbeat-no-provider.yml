@@ -85,7 +85,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Offline mock current nine controller histories
+      - name: Offline mock controller histories including separate primary expiry
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -113,6 +113,9 @@ jobs:
       P6_ROLLING_FAILED_MAIN_SHA: ${{ inputs.failed_main_sha }}
       P6_ROLLING_WINDOW_SCOPE_JSON: ${{ inputs.terminal_window_scope_json }}
       P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
+      P5_PRIMARY_FIDS_EXPIRY_ENABLED: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED }}
+      P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA }}
+      P5_PRIMARY_FIDS_EXPIRY_APPROVAL: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -136,7 +139,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Read only GH workflow-run history for nine existing controllers
+      - name: Read only GH workflow history and primary expiry execution metadata
         shell: bash
         run: |
           set -Eeuo pipefail
