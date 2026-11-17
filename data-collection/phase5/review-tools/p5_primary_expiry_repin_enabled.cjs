@@ -21,9 +21,11 @@ const UNCHANGED=[`.github/workflows/${WF}`,'scripts/v39_phase5_primary_fids_expi
  'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs',
  'migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql','package.json','package-lock.json'];
 const RELEASE_CODE=Object.freeze({
- 'scripts/v39_phase6_enable_source_owner_v39.ts':'d8abd5a01e3b178b34196e72c286a3061d6b57ac',
+ 'scripts/v39_phase6_enable_source_owner_v39.ts':'4765e72a5a075f77a4808a19e7c0520f62af5c93',
  'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts':'49a74a2bc28519287a8720e844feec8b938c88ae',
- '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml':'af5c7c8e7508a6eca94f63120141e151ba49108e'});
+ '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml':'af5c7c8e7508a6eca94f63120141e151ba49108e',
+ 'scripts/v39_phase6_source_enable_approval_ledger_v39.ts':'b584f665bd256d1f301fbc1ba466fcd3fd611282',
+ 'tests/phase6_source_enable_approval_ledger_v39.test.ts':'702292a0f424b0191548a048180337287c681bd3'});
 const COUNTERS=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
 const hold=s=>{throw Error('HOLD_P5_ENABLED_EXPIRY_REPIN_'+s);};
