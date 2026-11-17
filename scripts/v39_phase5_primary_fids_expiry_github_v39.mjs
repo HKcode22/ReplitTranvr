@@ -48,6 +48,10 @@ export function admitP6PrivateExpiryExtension(env,primaryApply){
   if(manifest||approval)HOLD("PRIVATE_EXTENSION_OFF_CONFIG_DRIFT");
   return {enabled:false,apply:false};
  }
+ if(mode==="COMMISSION_VERIFY_ONLY"){
+  if(manifest||approval)HOLD("PRIVATE_TRANSITION_CONFIG_DRIFT");
+  return {enabled:false,commission:true,apply:false};
+ }
  if(!["VERIFY_ONLY","APPLY_DUE_ONLY"].includes(mode)||!/^[a-f0-9]{64}$/.test(manifest)||
     (approval&&approval!==P6_PRIVATE_EXPIRY_APPLY)||
     (mode==="APPLY_DUE_ONLY"&&approval!==P6_PRIVATE_EXPIRY_APPLY))
@@ -99,8 +103,8 @@ function verifyTls(c){
 /** Review actual production function definitions and all granted authority.
  * Disposable bypass of TLS/role names strictly gated on test-only URL.
  */
-export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false}={}){
- if(!["writer","reader"].includes(actor)||typeof privateExpiry!=="boolean"||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
+export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false,privateCommission=false}={}){
+ if(!["writer","reader"].includes(actor)||typeof privateExpiry!=="boolean"||typeof privateCommission!=="boolean"||privateExpiry&&privateCommission||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
  const expected=test?role:actor==="writer"?P5_PRIMARY_WRITER:P5_PRIMARY_READER;
  if(!test){owner="neondb_owner";writerRole=P5_PRIMARY_WRITER;readerRole=P5_PRIMARY_READER;verifyTls(c);}
  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -119,8 +123,8 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
     [a.rolsuper,a.rolcreatedb,a.rolcreaterole,a.rolreplication,a.rolbypassrls,a.rolinherit,a.member,a.schema_create,a.db_create].some(v=>v!==false))
     HOLD("UNEXPECTED_ACTOR_OR_DB");
   const src=readFileSync(P5_PRIMARY_SQL,"utf8");
-  const extensionSrc=privateExpiry?readFileSync(P6_PRIVATE_EXPIRY_SQL,"utf8"):"";
-  const activeDefs=privateExpiry?[...defs,...privateDefs]:defs;
+  const extensionSrc=privateExpiry||privateCommission?readFileSync(P6_PRIVATE_EXPIRY_SQL,"utf8"):"";
+  const activeDefs=privateExpiry||privateCommission?[...defs,...privateDefs]:defs;
   const rows=(await c.query(`SELECT p.proname name,oidvectortypes(p.proargtypes) args,
     pg_get_function_result(p.oid) result,p.provolatile vol,p.prosecdef definer,p.prosrc body,p.proconfig config,
     pg_get_userbyid(p.proowner) owner,has_function_privilege(current_user,p.oid,'EXECUTE') allowed,
@@ -132,15 +136,28 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
       WHERE a.grantee<>p.proowner AND a.privilege_type='EXECUTE'),'[]'::jsonb) delegated
     FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace
     WHERE s.nspname='clean' AND p.proname=ANY($1::text[])`,[activeDefs.map(fn)])).rows;
-  if(rows.length!==activeDefs.length)HOLD("EXACT_FUNCTION_SET_MISSING");
-  for(const d of activeDefs){
+  // In explicit non-private-mutating commissioning mode alone, allow the
+  // exact whole extension absent, installed owner-only, or granted to the
+  // two existing actors exactly. No arbitrary fallback on a verifier error.
+  const privateRows=rows.filter(q=>privateDefs.some(d=>fn(d)===q.name));
+  let privateState=privateExpiry?"GRANTED":"OFF";
+  if(privateCommission){
+   if(privateRows.length===0)privateState="ABSENT";
+   else if(privateRows.length===4&&privateRows.every(q=>Array.isArray(q.delegated)&&q.delegated.length===0))privateState="INERT";
+   else if(privateRows.length===4)privateState="GRANTED";
+   else HOLD("PRIVATE_TRANSITION_PARTIAL_FUNCTIONS");
+  }
+  const checkedDefs=privateCommission&&privateState==="ABSENT"?defs:activeDefs;
+  if(rows.length!==checkedDefs.length)HOLD("EXACT_FUNCTION_SET_MISSING");
+  const callable=d=>!d.privateExpiry||privateState==="GRANTED";
+  for(const d of checkedDefs){
    const q=rows.find(q=>q.name===fn(d));
    const m=(d.privateExpiry?extensionSrc:src).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
    const config=["search_path=pg_catalog, pg_temp",...(d.lock?["lock_timeout=3s"]:[])].sort();
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
      JSON.stringify([...q.config].sort())!==JSON.stringify(config)||q.public_exec!==false||
-     q.allowed!==(actor===d.actor)||JSON.stringify(q.delegated)!==JSON.stringify([{role:d.actor==="writer"?writerRole:readerRole,grantable:false}]))HOLD("EXACT_FUNCTION_BODY_OR_GRANT_DRIFT");
+     q.allowed!==(callable(d)&&actor===d.actor)||JSON.stringify(q.delegated)!==JSON.stringify(callable(d)?[{role:d.actor==="writer"?writerRole:readerRole,grantable:false}]:[]))HOLD("EXACT_FUNCTION_BODY_OR_GRANT_DRIFT");
   }
   // No extra application table/column/sequence privileges. Reader keeps
   // precisely its already commissioned five blob metadata columns.
@@ -160,12 +177,12 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
   const extra=(await c.query(`SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace
     WHERE s.nspname IN ('clean','phase6_private','public') AND p.prosecdef
      AND p.prorettype<>'trigger'::regtype AND has_function_privilege(current_user,p.oid,'EXECUTE')
-     AND NOT(s.nspname='clean' AND p.proname=ANY($1::text[]))`,[activeDefs.filter(d=>d.actor===actor).map(fn)])).rows[0];
+     AND NOT(s.nspname='clean' AND p.proname=ANY($1::text[]))`,[checkedDefs.filter(d=>callable(d)&&d.actor===actor).map(fn)])).rows[0];
   const seq=(await c.query(`SELECT count(*)::int n FROM pg_class t JOIN pg_namespace s ON s.oid=t.relnamespace
     WHERE t.relkind='S' AND s.nspname IN ('clean','phase6_private','public')
      AND has_sequence_privilege(current_user,t.oid,'USAGE,SELECT,UPDATE')`)).rows[0];
   if(extra?.n!==0||seq?.n!==0)HOLD("EXCESS_DEFINER_OR_SEQUENCE_AUTHORITY");
-  return true;
+  return privateCommission?privateState:true;
  }finally{await c.query("ROLLBACK").catch(()=>{});}
 }
 const STATUS_KEYS=["liveOriginals","eligibleOriginals","hardDueOriginals","eligibleNextHour","hardDueNextHour","unboundLiveOriginals","markedExpiredPayloadPresent","unlinkedUnexpiredPopulation","unexpiredPopulationWithoutLiveOriginal"];
@@ -241,11 +258,16 @@ async function oneSweep(writer,reader,limit){
 export async function runP5PrimaryExpiry({writer,reader,apply=false,verify=verifyP5PrimaryExpiryActor,verifyOptions={},limit=BATCH,maxBatches=MAX_BATCHES}){
  if(writer===reader||typeof apply!=="boolean"||!n(limit)||limit<1||limit>BATCH||
     !n(maxBatches)||maxBatches<1||maxBatches>MAX_BATCHES)HOLD("RUNTIME_SCOPE");
+ const states=[];
  for(const [pool,actor] of [[writer,"writer"],[reader,"reader"]]){
-  const c=await pool.connect();try{await verify(c,actor,verifyOptions[actor]);}finally{c.release();}
+  const c=await pool.connect();try{states.push(await verify(c,actor,verifyOptions[actor]));}finally{c.release();}
  }
+ const transition=verifyOptions.writer?.privateCommission===true||verifyOptions.reader?.privateCommission===true;
+ if(transition&&(!verifyOptions.writer?.privateCommission||!verifyOptions.reader?.privateCommission||
+    !["ABSENT","INERT","GRANTED"].includes(states[0])||states[0]!==states[1]))
+  HOLD("PRIVATE_TRANSITION_CHANGED_RECHECK_NO_PRIVATE_APPLY");
  const before=await status(reader);
- const base={providerCalls:0,objectDeletions:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false,distinctDbActorsVerified:true};
+ const base={providerCalls:0,objectDeletions:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false,distinctDbActorsVerified:true,...(transition?{privateCommissionState:states[0]}:{})};
  if(!apply)return {status:"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",before,...base,databaseWrites:0};
  if(before.deletionStopUnresolved||bad(before))HOLD("PRIMARY_STATUS_OR_DELETION_STOP_REVIEW_REQUIRED");
  const receipts=[];let current=before;
@@ -265,7 +287,7 @@ async function main(){
  const reader=new pg.Pool({...config,connectionString:a.readerUrl,options:"-c default_transaction_read_only=on",application_name:"p5_fids_expiry_reader"});
  try{
   const extension=a.privateExpiry;
-  const verifyOptions=extension.enabled?{writer:{privateExpiry:true},reader:{privateExpiry:true}}:{};
+  const verifyOptions=extension.enabled?{writer:{privateExpiry:true},reader:{privateExpiry:true}}:extension.commission?{writer:{privateCommission:true},reader:{privateCommission:true}}:{};
   const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply,verifyOptions});
   console.log(JSON.stringify({...result,reviewedMainSha:a.sha}));
   const primaryHold=result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||
