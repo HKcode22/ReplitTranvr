@@ -221,7 +221,7 @@ export const P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL=[
  " OR (h.codeshare_resolution_status IN ('phase5_duplicate_identity_ambiguous',",
  " 'phase5_duplicate_provider_record_ambiguous','phase5_legacy_observation_key_ambiguous')",
  " AND h.canonical_flight_instance_id IS NULL",
- " AND h.analytic_identity_id ~ '^provisional:[a-f0-9]{64}$')))",
+ " AND h.analytic_identity_id ~ '^provisional:[a-f0-9]{64}$'))",
  " AND ((h.flight_number=p.flight_number AND h.carrier_iata=p.carrier_iata)",
  " OR (p.provider_record_key IS NOT NULL AND p.provider_record_key NOT LIKE 'fidsrec:%'",
  " AND h.provider_record_key=p.provider_record_key))",
