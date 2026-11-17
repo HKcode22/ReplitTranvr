@@ -34,7 +34,9 @@ const RELEASE_CODE=Object.freeze({
  'server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts':'ea6fa93cf3dcfe91c9a3c2f517d24b723df78066',
  'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs':'a31c78ceac4ed685237a3f10ebe858de2fc41dfb',
  'tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts':'03b936be86fbc17cf54cfd57e5b4d81e41bb98c2',
- 'tests/phase6_stored_source_child_dispatcher_v39.test.mjs':'75d7a7f3ba6b41969279a799ece366368139d587'});
+ 'tests/phase6_stored_source_child_dispatcher_v39.test.mjs':'75d7a7f3ba6b41969279a799ece366368139d587',
+ 'server/lib/disruption/phase5V0080GitHubPrearm_v39.ts':'8d32ddaaa1994f8759c3fcf6d4301dec50b3abab',
+ 'tests/phase5_github_source_one_query_release_admission_v39.test.ts':'52daceed72fa0741e97818d80c5b2fbfcc4b9062'});
 const COUNTERS=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
 const hold=s=>{throw Error('HOLD_P5_ENABLED_EXPIRY_REPIN_'+s);};

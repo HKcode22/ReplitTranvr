@@ -81,18 +81,28 @@ export async function waitForP5ScheduledPhysicalDispatch(
  if(!Number.isFinite(planned)||!Number.isFinite(cutoff)||cutoff<=planned)
   hold("INVALID_PROSPECTIVE_REQUEST_TIME");
  const maxWaitMs=2*60*60_000;
+ let lastClock=-Infinity;
  for(let poll=0;poll<=1500;poll++){
   const clock=await readDbClock();
   if(!(clock instanceof Date)||!Number.isFinite(clock.getTime()))
    hold("UNTRUSTED_DATABASE_CLOCK");
   const now=clock.getTime();
+  if(now<lastClock)hold("DATABASE_CLOCK_MOVED_BACKWARD");
+  lastClock=now;
   if(now>planned+15*60_000||
      now+maxResponseAndPersistSeconds*1000>cutoff)
    hold("MISSED_PROSPECTIVE_DISPATCH_OR_FLIGHT_CUTOFF");
   if(now>=planned)return;
   if(planned-now>maxWaitMs)
    hold("GITHUB_JOB_STARTED_TOO_EARLY");
-  await sleep(Math.min(5_000,planned-now));
+  // Early prearm can hold many simultaneous workers for up to 90 minutes.
+  // The restricted clock adapter establishes and destroys a role-checked
+  // session on every read. Avoid needless connection churn far from the
+  // target; retain the existing five-second cadence for the final 2 minutes.
+  // Never sleep across that boundary or the planned timestamp. Every
+  // wakeup still needs an actual DB clock and the original cutoff checks.
+  const left=planned-now;
+  await sleep(left>120_000?Math.min(60_000,left-120_000):Math.min(5_000,left));
  }
  hold("SCHEDULE_POLL_LIMIT_HOLD");
 }
