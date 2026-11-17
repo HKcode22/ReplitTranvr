@@ -1,7 +1,8 @@
 name: Phase6 restartable private PRE enrollment (STOP default, no provider)
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # Preserve the existing cadence, stagger core starts; not a timing SLA.
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
     inputs:
       run_days:

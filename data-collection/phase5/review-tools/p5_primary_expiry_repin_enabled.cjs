@@ -16,7 +16,7 @@ const STEP='Verify exact main and execute only bounded primary FIDS expiry';
 const SHA=/^[a-f0-9]{40}$/;
 const EXPECTED_SECRETS=['P5_PRIMARY_FIDS_SWEEP_DATABASE_URL','P5_RETENTION_READER_DATABASE_URL'];
 // Actual primary runtime depends on these unchanged files. In addition,
-// reject any executable changes outside the existing reviewed #858 paths.
+// reject any executable changes outside the exact reviewed authorization/scheduling paths.
 const UNCHANGED=[`.github/workflows/${WF}`,'scripts/v39_phase5_primary_fids_expiry_github_v39.mjs',
  'scripts/v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs',
  'migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql','package.json','package-lock.json'];
@@ -25,7 +25,16 @@ const RELEASE_CODE=Object.freeze({
  'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts':'49a74a2bc28519287a8720e844feec8b938c88ae',
  '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml':'af5c7c8e7508a6eca94f63120141e151ba49108e',
  'scripts/v39_phase6_source_enable_approval_ledger_v39.ts':'b584f665bd256d1f301fbc1ba466fcd3fd611282',
- 'tests/phase6_source_enable_approval_ledger_v39.test.ts':'702292a0f424b0191548a048180337287c681bd3'});
+ 'tests/phase6_source_enable_approval_ledger_v39.test.ts':'702292a0f424b0191548a048180337287c681bd3',
+ '.github/workflows/phase5-cd-github-bounded-pre-tick.yml':'a53c70d6bd72f3cb44f9fd9f8c128785781b1590',
+ '.github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml':'47929163515cdf04d31f198587ff588917f83332',
+ '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml':'646729ecc46cf0e34c65c3b8f817ec2721dd6107',
+ '.github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml':'4e3b1b0702570443e2936ad2e4ac479f8820073e',
+ '.github/workflows/phase6-private-later-enrollment.yml':'d524337b95f05f940ae650d3c5ed73c9f28ae3d3',
+ 'server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts':'ea6fa93cf3dcfe91c9a3c2f517d24b723df78066',
+ 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs':'a31c78ceac4ed685237a3f10ebe858de2fc41dfb',
+ 'tests/phase6_private_source_day_epoch_due_parent_review_v39.test.ts':'03b936be86fbc17cf54cfd57e5b4d81e41bb98c2',
+ 'tests/phase6_stored_source_child_dispatcher_v39.test.mjs':'75d7a7f3ba6b41969279a799ece366368139d587'});
 const COUNTERS=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
 const hold=s=>{throw Error('HOLD_P5_ENABLED_EXPIRY_REPIN_'+s);};
@@ -39,7 +48,7 @@ function validateCompare(c){
   if(!pathOK(f.filename)||!['added','modified'].includes(f.status)||f.previous_filename||names.has(f.filename))hold('UNREVIEWED_RELEASE_PATH');
   names.add(f.filename);
  }
- if(Object.keys(RELEASE_CODE).some(p=>!names.has(p)))hold('REVIEWED_AUTH_FIX_MISSING');
+ if(Object.keys(RELEASE_CODE).some(p=>!names.has(p)))hold('REVIEWED_RELEASE_CHANGE_MISSING');
  return names.size;
 }
 function verifyReceipt(run,jobs,log,sha,id,wfId){

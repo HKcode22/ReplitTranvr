@@ -132,15 +132,24 @@ describe("Phase5 original SOURCE parent: signed day epoch and actual DB due meta
   expect(selected[0].queryDigestSha256).toBe(f.secrets.q5);
   expect(r.redactedSummary.githubDispatches).toBe(0);
  });
- it("stored capacity admits five exact proposals while static retains four, and waits on over-35m work",()=>{
+ it("stored prearm admits 90m ahead without changing the signed request clock or original cutoff",()=>{
   const f=fixture();f.history.total_count=0;f.history.workflow_runs=[];
   const early=reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true});
   expect(early.redactedSummary.candidateCount).toBe(5);
-  f.sourceObserver.candidates[4].plannedDispatchUtc="2026-11-14T06:36:00.000Z";
+  const row=f.sourceObserver.candidates[4];
+  row.plannedDispatchUtc="2026-11-14T07:30:00.000Z";
+  row.latestDispatchUtc="2026-11-14T07:45:00.000Z";
+  const at=reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true});
+  expect(at.redactedSummary.candidateCount).toBe(5);
+  expect((at as any).privateChildProposals.find((x:any)=>x.queryDigestSha256===f.secrets.q5).plannedDispatchUtc).toBe(row.plannedDispatchUtc);
+  row.plannedDispatchUtc="2026-11-14T07:30:00.001Z";
   const later=reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true});
   expect(later.redactedSummary.candidateCount).toBe(4);
   expect(later.redactedSummary.notYetDueOrPrearmed).toBe(1);
   expect(later.redactedSummary.providerCalls).toBe(0);
+  row.plannedDispatchUtc="2026-11-14T07:45:00.001Z";
+  row.latestDispatchUtc="2026-11-14T08:00:00.000Z";
+  expect(()=>reviewP6PrivateDaySourceDueParentNoDispatch({...f.input(),storedCapacityProfile:true})).toThrow(/REAL_DB_LEAD_OR_CUTOFF_CHANGED/);
  });
  it("honestly skips source registry queries outside the observed rolling DB queue window",()=>{
   const f=fixture();
