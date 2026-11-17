@@ -1,0 +1,312 @@
+{
+  "status": "REVIEW_ONLY_NOT_OPERATIONAL_APPROVAL",
+  "main": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "apiPages": [
+    100,
+    100,
+    58
+  ],
+  "uniqueScheduledRecords": 258,
+  "windowStartUtc": "2026-11-16T00:00:00.000Z",
+  "windowEndUtc": "2026-11-17T00:00:00.000Z",
+  "sampleStepSeconds": 60,
+  "sampleCount": 1440,
+  "creationRecordsOnly": true,
+  "skippedRunsCountedAsCreation": true,
+  "primaryLanes": [
+    "source",
+    "pre",
+    "t24",
+    "watchdog",
+    "daily",
+    "enroll"
+  ],
+  "runRecords": {
+    "source": [
+      {
+        "id": 43775605006,
+        "created": "2026-11-15T23:35:06Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43796234222,
+        "created": "2026-11-16T03:07:26Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43856351393,
+        "created": "2026-11-16T11:16:53Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43956780239,
+        "created": "2026-11-16T21:07:12Z",
+        "state": "skipped"
+      },
+      {
+        "id": 44013285291,
+        "created": "2026-11-17T03:53:04Z",
+        "state": "skipped"
+      }
+    ],
+    "pre": [
+      {
+        "id": 43757525617,
+        "created": "2026-11-15T20:20:33Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43778409249,
+        "created": "2026-11-16T00:06:36Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43816573113,
+        "created": "2026-11-16T06:24:50Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43906024996,
+        "created": "2026-11-16T16:18:27Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43986766744,
+        "created": "2026-11-17T00:20:04Z",
+        "state": "skipped"
+      }
+    ],
+    "t24": [
+      {
+        "id": 43777069790,
+        "created": "2026-11-15T23:51:40Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43797188744,
+        "created": "2026-11-16T03:16:30Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43859089488,
+        "created": "2026-11-16T11:35:29Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43957805461,
+        "created": "2026-11-16T21:13:09Z",
+        "state": "skipped"
+      },
+      {
+        "id": 44013433745,
+        "created": "2026-11-17T03:54:21Z",
+        "state": "skipped"
+      }
+    ],
+    "watchdog": [
+      {
+        "id": 43775817327,
+        "created": "2026-11-15T23:37:27Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43795693188,
+        "created": "2026-11-16T03:02:11Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43852723778,
+        "created": "2026-11-16T10:52:37Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43952394781,
+        "created": "2026-11-16T20:41:34Z",
+        "state": "skipped"
+      },
+      {
+        "id": 44008163513,
+        "created": "2026-11-17T03:09:26Z",
+        "state": "skipped"
+      }
+    ],
+    "daily": [
+      {
+        "id": 43776112813,
+        "created": "2026-11-15T23:40:51Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43796119097,
+        "created": "2026-11-16T03:06:20Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43853886450,
+        "created": "2026-11-16T11:00:33Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43954049327,
+        "created": "2026-11-16T20:51:16Z",
+        "state": "skipped"
+      },
+      {
+        "id": 44008781208,
+        "created": "2026-11-17T03:14:30Z",
+        "state": "skipped"
+      }
+    ],
+    "enroll": [
+      {
+        "id": 43760276259,
+        "created": "2026-11-15T20:50:09Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43782470923,
+        "created": "2026-11-16T00:47:38Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43823392502,
+        "created": "2026-11-16T07:22:30Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43916877085,
+        "created": "2026-11-16T17:17:50Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43991224447,
+        "created": "2026-11-17T00:53:08Z",
+        "state": "skipped"
+      }
+    ],
+    "heartbeat": [
+      {
+        "id": 43757287498,
+        "created": "2026-11-15T20:18:07Z",
+        "state": "success"
+      },
+      {
+        "id": 43779428787,
+        "created": "2026-11-16T00:16:53Z",
+        "state": "success"
+      },
+      {
+        "id": 43821884521,
+        "created": "2026-11-16T07:10:11Z",
+        "state": "success"
+      },
+      {
+        "id": 43917485510,
+        "created": "2026-11-16T17:21:18Z",
+        "state": "success"
+      },
+      {
+        "id": 43992105353,
+        "created": "2026-11-17T01:00:02Z",
+        "state": "success"
+      }
+    ],
+    "retention": [
+      {
+        "id": 43772157163,
+        "created": "2026-11-15T22:57:46Z",
+        "state": "skipped"
+      },
+      {
+        "id": 43794591905,
+        "created": "2026-11-16T02:50:45Z",
+        "state": "success"
+      },
+      {
+        "id": 43860160919,
+        "created": "2026-11-16T11:42:51Z",
+        "state": "success"
+      },
+      {
+        "id": 43968635910,
+        "created": "2026-11-16T22:17:38Z",
+        "state": "success"
+      },
+      {
+        "id": 44018644026,
+        "created": "2026-11-17T04:39:05Z",
+        "state": "success"
+      }
+    ]
+  },
+  "six": [
+    {
+      "thresholdMinutes": 60,
+      "allStaleSamples": 826,
+      "independentUnionSamples": 826,
+      "continuousStaleSeconds": 49593,
+      "longestContinuousStaleSeconds": 13378
+    },
+    {
+      "thresholdMinutes": 90,
+      "allStaleSamples": 646,
+      "independentUnionSamples": 646,
+      "continuousStaleSeconds": 38793,
+      "longestContinuousStaleSeconds": 11578
+    },
+    {
+      "thresholdMinutes": 120,
+      "allStaleSamples": 466,
+      "independentUnionSamples": 466,
+      "continuousStaleSeconds": 27993,
+      "longestContinuousStaleSeconds": 9778
+    },
+    {
+      "thresholdMinutes": 240,
+      "allStaleSamples": 43,
+      "independentUnionSamples": 43,
+      "continuousStaleSeconds": 2578,
+      "longestContinuousStaleSeconds": 2578
+    }
+  ],
+  "eight": [
+    {
+      "thresholdMinutes": 60,
+      "allStaleSamples": 743,
+      "independentUnionSamples": 743,
+      "continuousStaleSeconds": 44657,
+      "longestContinuousStaleSeconds": 12936
+    },
+    {
+      "thresholdMinutes": 90,
+      "allStaleSamples": 559,
+      "independentUnionSamples": 559,
+      "continuousStaleSeconds": 33588,
+      "longestContinuousStaleSeconds": 11136
+    },
+    {
+      "thresholdMinutes": 120,
+      "allStaleSamples": 397,
+      "independentUnionSamples": 397,
+      "continuousStaleSeconds": 23846,
+      "longestContinuousStaleSeconds": 9336
+    },
+    {
+      "thresholdMinutes": 240,
+      "allStaleSamples": 36,
+      "independentUnionSamples": 36,
+      "continuousStaleSeconds": 2136,
+      "longestContinuousStaleSeconds": 2136
+    }
+  ],
+  "largestPooledGap": {
+    "left": 43859089488,
+    "right": 43906024996,
+    "start": "2026-11-16T11:35:29Z",
+    "end": "2026-11-16T16:18:27Z",
+    "seconds": 16978
+  },
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
