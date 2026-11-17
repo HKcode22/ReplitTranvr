@@ -5,7 +5,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {describe,it,expect} from "vitest";
 import {verifyP6SourceEnableAuthBytes,verifyP6SourceEnableAuthFile,
- P6_SOURCE_AUTH_LEDGER_SCHEMA,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE}
+ P6_SOURCE_AUTH_LEDGER_SCHEMA,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE,P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS}
  from "../scripts/v39_phase6_source_enable_approval_ledger_v39";
 
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
@@ -18,7 +18,9 @@ const history=Buffer.from("historical "+OLD+"\nAUTH_ARTIFACT_SHA256:"+"a".repeat
 const record={authorizationId:"AUTH-20261119-SYNTHETICFIXTURE",phaseGate:P6_SOURCE_AUTH_PHASE,
  airportFilterWindow:P6_SOURCE_AUTH_SCOPE,maxAlertCredits:100,maxRestUnitsByCategory:null,
  startNotBeforeUtc:"2026-11-18T00:00:00.000Z",expiresAtUtc:"2026-11-21T00:00:00.000Z",
- cleanupOwner:"fixture-owner",predecessorEvidenceIds:[OLD,NEW]};
+ cleanupOwner:"fixture-owner",predecessorEvidenceIds:[OLD,NEW],
+ releaseActivation:{schema:"v39.phase6.exact-source-activation-review.v1",
+  ...Object.fromEntries(P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS.map(k=>[k,sha(evidence)]))}};
 const authBytes=bytes(record);
 const entry={authorizationId:record.authorizationId,artifactSha256:sha(authBytes),predecessorEvidenceIds:[OLD,NEW]};
 const ledger={schema:P6_SOURCE_AUTH_LEDGER_SCHEMA,phaseGate:P6_SOURCE_AUTH_PHASE,
@@ -30,6 +32,33 @@ describe("exact Phase6 source enable approval continuation, no provider or DB",(
  it("accepts only a synthetic exact reviewed record with bound predecessor bytes",()=>{
   const a=verify();
   expect(a.verdict.verified).toBe(true);expect(a.artifactHash).toBe(sha(authBytes));
+ });
+ it("refuses absent, malformed or unbound release digest even with exact approved AUTH bytes",()=>{
+  for(const releaseActivation of [undefined,{...record.releaseActivation,schema:"fixture-wrong"},
+   {...record.releaseActivation,sourceRightsEvidenceSha256:"f".repeat(64)},
+   {...record.releaseActivation,operationalReleaseEvidenceSha256:null},
+   {...record.releaseActivation,scientificFreezeEvidenceSha256:42}]){
+   const a=bytes({...record,releaseActivation});
+   expect(()=>verify(a,bytes({...ledger,approvals:[{...entry,artifactSha256:sha(a)}]})))
+    .toThrow("RELEASE_EVIDENCE_NOT_BOUND_TO_PREDECESSOR");
+  }
+ });
+ it("does not substitute a valid committed but unreferenced release evidence file",()=>{
+  const other=bytes({notNamedByAuth:true}),otherPath="data-collection/phase5/evidence/fixture-unreferenced.json";
+  const a=bytes({...record,releaseActivation:{...record.releaseActivation,sourceRightsEvidenceSha256:sha(other)}});
+  const l=bytes({...ledger,evidence:[...ledger.evidence,{evidenceId:"RUN-20261116-UNREFERENCED",path:otherPath,sha256:sha(other)}],
+   approvals:[{...entry,artifactSha256:sha(a)}]});
+  expect(()=>verify(a,l,history,p=>p===otherPath?other:read(p))).toThrow("RELEASE_EVIDENCE_NOT_BOUND_TO_PREDECESSOR");
+ });
+ it("accepts five distinct actual hash-bound synthetic review files when each is named",()=>{
+  const files=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS.map((k,i)=>({field:k,evidenceId:"RUN-20261116-REVIEW"+i,
+   path:"data-collection/phase5/evidence/fixture-review-"+i+".json",data:bytes({fixtureReview:k})}));
+  const predecessorEvidenceIds=[OLD,...files.map(f=>f.evidenceId)];
+  const a=bytes({...record,predecessorEvidenceIds,releaseActivation:{schema:record.releaseActivation.schema,
+   ...Object.fromEntries(files.map(f=>[f.field,sha(f.data)]))}});
+  const l=bytes({...ledger,evidence:files.map(f=>({evidenceId:f.evidenceId,path:f.path,sha256:sha(f.data)})),
+   approvals:[{...entry,predecessorEvidenceIds,artifactSha256:sha(a)}]});
+  expect(verify(a,l,history,p=>{const f=files.find(x=>x.path===p);if(!f)throw Error("fixture");return f.data;}).verdict.verified).toBe(true);
  });
  it("empty ledger refuses even when predecessor evidence exists",()=>{
   expect(()=>verify(authBytes,bytes({...ledger,approvals:[]}))).toThrow("EXACT_SCOPED_AUTH_NOT_APPROVED");

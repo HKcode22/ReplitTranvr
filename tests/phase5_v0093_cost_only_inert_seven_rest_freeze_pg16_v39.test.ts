@@ -610,13 +610,40 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    .rejects.toThrow("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
   expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(false);
   await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw]);
+  // The existing V0104 must remain exactly deployed at actual enable.
+  const physicalTests=[
+   ["ALTER TABLE clean.phase5_fids_physical_attempt_v39 DISABLE TRIGGER a00_phase5_fids_physical_rest_live_guard_v39",
+    "ALTER TABLE clean.phase5_fids_physical_attempt_v39 ENABLE TRIGGER a00_phase5_fids_physical_rest_live_guard_v39","TRIGGER"],
+   ["DROP TRIGGER a00_phase5_other_physical_rest_live_guard_v39 ON clean.phase5_other_rest_physical_reservation_v39",
+    "CREATE TRIGGER a00_phase5_other_physical_rest_live_guard_v39 BEFORE INSERT ON clean.phase5_other_rest_physical_reservation_v39 FOR EACH ROW EXECUTE FUNCTION clean.phase5_physical_rest_live_guard_v39()","TRIGGER"],
+   ["ALTER FUNCTION clean.phase5_physical_rest_live_guard_v39() SECURITY INVOKER",
+    "ALTER FUNCTION clean.phase5_physical_rest_live_guard_v39() SECURITY DEFINER","FUNCTION"],
+   ["GRANT EXECUTE ON FUNCTION clean.phase5_physical_rest_live_guard_v39() TO PUBLIC",
+    "REVOKE EXECUTE ON FUNCTION clean.phase5_physical_rest_live_guard_v39() FROM PUBLIC","FUNCTION"]
+  ];
+  for(const [breakSql,restoreSql,kind] of physicalTests){
+   await admin.query(breakSql);
+   try{
+    await expect(commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record)))
+     .rejects.toThrow("PHYSICAL_REST_GUARD_"+kind+"_MISSING_OR_DRIFTED");
+    expect((await admin.query("SELECT enabled FROM clean.adb_phase6_authorization")).rows[0].enabled).toBe(false);
+    expect((await admin.query("SELECT count(*)::int n FROM clean.adb_collection_meta WHERE key=$1",
+     ["phase6_source_authorization_enabled:"+record.authorizationId])).rows[0].n).toBe(0);
+   }finally{await admin.query(restoreSql);}
+  }
   const out=await commitP6ExistingSourceAuthorizationOnce(admin,ctx,approved(record));
-  expect(out).toMatchObject({databaseAuthorizationEnabled:true,independentStagedValuesMatch:true,
+  expect(out).toMatchObject({databaseAuthorizationEnabled:true,independentStagedValuesMatch:true,exactPhysicalRestGuardVerified:true,
    providerCalls:0,databaseWrites:2,githubFlagsChanged:0,legacyAlertStarted:false,phase6PaidGoGrantedByThisTransition:false});
   const m=(await admin.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",
    ["phase6_source_authorization_enabled:"+record.authorizationId])).rows;
   expect(m).toHaveLength(1);expect(JSON.parse(m[0].value)).toEqual(out);
-  expect(await verifyP6EnabledSourceAuthorizationReceipt(admin,out)).toMatchObject({verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,databaseWrites:0});
+  expect(await verifyP6EnabledSourceAuthorizationReceipt(admin,out)).toMatchObject({verifiedReadOnly:true,exactEnabledRowAndDurableMarker:true,exactStoredReviewedManifest:true,exactPhysicalRestGuardVerified:true,databaseWrites:0});
+  await admin.query("ALTER TABLE clean.phase5_other_rest_physical_reservation_v39 DISABLE TRIGGER a00_phase5_other_physical_rest_live_guard_v39");
+  try{
+   await expect(verifyP6EnabledSourceAuthorizationReceipt(admin,out)).rejects.toThrow("PHYSICAL_REST_GUARD_TRIGGER_MISSING_OR_DRIFTED");
+  }finally{
+   await admin.query("ALTER TABLE clean.phase5_other_rest_physical_reservation_v39 ENABLE TRIGGER a00_phase5_other_physical_rest_live_guard_v39");
+  }
   await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw+" "]);
   await expect(verifyP6EnabledSourceAuthorizationReceipt(admin,out)).rejects.toThrow("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
   await admin.query("UPDATE clean.adb_collection_meta SET value=$2 WHERE key=$1",[manifestKey,manifestRaw]);
