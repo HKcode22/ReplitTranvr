@@ -5,6 +5,10 @@
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
+import {readFileSync} from "node:fs";
+import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
+import {inspectP6PrivateExpiryOwner,commissionP6PrivateExpiryDb} from "../scripts/v39_phase6_private_epoch_expiry_owner_commission_v39.mjs";
+import {verifyP5PrimaryExpiryActor,runP5PrimaryExpiry,admitP6PrivateExpiryExtension,P6_PRIVATE_EXPIRY_APPLY} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
@@ -350,6 +354,52 @@ try{
  // revisions together; day31 and its unexpired packet must survive.
  const expiredPacket=registry(3,9);
  await insertRegistry(expiredPacket,t(-1000));
+ // Disposable proof of a bounded due-only private cleanup transaction.
+ // Reuse the same signed epoch fixtures, preserve existing tested owner
+ // path by rolling back all proof effects before proceeding below.
+ await dbOwner.query("BEGIN");
+ try{
+  await dbOwner.query("SET LOCAL p6_review.disposable='1'");
+  await dbOwner.query("SET LOCAL statement_timeout='10000ms'");
+  await dbOwner.query("CREATE TEMP TABLE p6_review_temp_init(n int) ON COMMIT DROP");
+  await dbOwner.query(readFileSync("data-collection/phase5/review-tools/p6_private_due_only_candidate_NOT_FOR_INSTALL.sql","utf8"));
+  const secondDue=registry(3,10);
+  await insertRegistry(secondDue,t(-1000));
+  const otherPath="data-collection/phase5/frozen/source_ci_foreign_due_registry.json";
+  const otherManifest="1".repeat(64);
+  await dbOwner.query(
+   "INSERT INTO phase6_private.frozen_native_packet_v39 "+
+   "(logical_path,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes) "+
+   "SELECT $1,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,$2,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes "+
+   "FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$3",
+   [otherPath,otherManifest,expiredPacket.path]);
+  const proof=async(limit,m=manifest)=>(await dbOwner.query(
+   "SELECT pg_temp.p6_review_private_due_only($1,$2) AS v",[m,limit])).rows[0].v;
+  for(const [m,l] of [[manifest,0],[manifest,129],["bad",1],[null,1]]){
+   await dbOwner.query("SAVEPOINT bad_scope");
+   await assert.rejects(proof(l,m),/INVALID_DISPOSABLE_SCOPE/);
+   await dbOwner.query("ROLLBACK TO SAVEPOINT bad_scope");
+   await dbOwner.query("RELEASE SAVEPOINT bad_scope");
+  }
+  const count=async(sql,args=[])=>(await dbOwner.query(sql,args)).rows[0].n;
+  const claimN=await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39");
+  const a=await proof(1);
+  assert.deepEqual(a,{status:"DISPOSABLE_PRIVATE_DUE_ONLY_IN_TX_NOT_COMMIT_PROOF",
+   packets:1,indexRevisions:2,earlierIndexRevisionsRetired:1,claimsPreserved:claimN,
+   remainingDuePackets:1,remainingExpiredHeads:0,providerCalls:0,phase6PaidGo:false});
+  const b=await proof(1);
+  assert.equal(b.packets,1);assert.equal(b.indexRevisions,0);
+  assert.equal(b.remainingDuePackets,0);
+  const c=await proof(1);
+  assert.equal(c.packets,0);assert.equal(c.indexRevisions,0);
+  for(const path of [shortA.path,d31.path,otherPath])
+   assert.equal(await count("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[path]),1);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=3"),0);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39"),claimN);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39 WHERE run_day_index=3"),1);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=31"),1);
+  console.log("P6_PRIVATE_BOUNDED_DUE_ONLY_DISPOSABLE_TX_PROOF_PASS_NO_PRODUCTION_GRANT");
+ }finally{await dbOwner.query("ROLLBACK");}
  const plan=await reviewPrivateExpiry(dbOwner);
  assert.equal(plan.closedDays,1);
  assert.equal(plan.indexRevisions,2);
@@ -393,6 +443,226 @@ try{
   scope:{privateDayRegistryReadOnlyApproved:true,
    existingPaidDispatchApproved:false}
  }),/INCOMPLETE_OR_OVERSIZE_PRIVATE_DAY_REGISTRY_SET/);
+ // Exercise the staged function-only candidate on the *actual* B0062
+ // schema plus existing V0101 private tables. The old owner tests above
+ // remain unchanged. All logins and authorization below are CI-only.
+ const baseline=readFileSync("migrations/baseline/B0062__v39_schema_baseline_20261001.sql","utf8")
+  .split(/\r?\n/).filter(l=>!/^\\(?:un)?restrict /.test(l)).join("\n");
+ assert.equal((await dbOwner.query("SELECT to_regnamespace('clean') IS NULL v")).rows[0].v,true);
+ assert.equal(baseline.split("\n").some(l=>l.startsWith("\\")),false);
+ await dbOwner.query(baseline);
+ await dbOwner.query("RESET search_path");
+ await dbOwner.query(readFileSync("migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql","utf8"));
+ await dbOwner.query(readFileSync("migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql","utf8"));
+ const W="phase5_primary_fids_expiry_prod20261116",R="phase5_retention_reader_prod20261114",pw="ci-only-private-expiry";
+ await dbOwner.query("CREATE ROLE "+W+" LOGIN NOINHERIT PASSWORD '"+pw+"'; CREATE ROLE "+R+" LOGIN NOINHERIT PASSWORD '"+pw+"'");
+ await dbOwner.query("GRANT USAGE ON SCHEMA clean TO "+W+","+R);
+ await dbOwner.query("GRANT EXECUTE ON FUNCTION clean.phase5_primary_fids_expiry_sweep_v39(integer),clean.phase5_primary_fids_expiry_stop_v39(text) TO "+W);
+ await dbOwner.query("GRANT EXECUTE ON FUNCTION clean.phase5_primary_fids_expiry_status_v39(),clean.phase5_primary_fids_expiry_receipt_v39(text) TO "+R);
+ await dbOwner.query("GRANT SELECT(expires_at_utc,deletion_verified_at_utc,content_class,storage_kind,retention_hours) ON clean.provider_content_blob_ref TO "+R);
+ const staged=readFileSync("migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql","utf8");
+ await dbOwner.query(staged);
+ const base="clean.phase6_private_epoch_expiry_";
+ const funcs=[base+"status_v39(text)",base+"receipt_v39(text,text)",base+"sweep_v39(text,integer)",base+"stop_v39(text)"];
+ for(const actor of [W,R]){
+  const result=await dbOwner.query("SELECT has_function_privilege($1,x,'EXECUTE') allowed FROM unnest($2::text[]) AS x",[actor,funcs]);
+  assert(result.rows.every(q=>q.allowed===false));
+ }
+ // Existing role names only, separate connection sessions, no raw tables or
+ // application roles. Production V0105 does not contain any of these grants.
+ const inertReview=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+ assert.equal(inertReview.privateState,"INERT");
+ await dbOwner.query("DROP FUNCTION "+funcs.join(","));
+ const absentReview=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+ assert.deepEqual(absentReview,{...inertReview,privateState:"ABSENT"});
+ await assert.rejects(commissionP6PrivateExpiryDb(dbOwner,staged,inertReview),/REVIEW_DRIFT_OR_ALREADY_GRANTED/);
+ // Simulate an error on the second grant: actual function creation and
+ // first grant are rolled back in the same disposable PostgreSQL transaction.
+ const failSecondGrant={query:async(...a)=>{
+  if(typeof a[0]==="string"&&a[0].startsWith("GRANT EXECUTE ON FUNCTION ")&&a[0].endsWith(" TO "+W))
+   throw Error("CI_SECOND_GRANT_FAILURE");
+  return dbOwner.query(...a);
+ }};
+ await assert.rejects(commissionP6PrivateExpiryDb(failSecondGrant,staged,absentReview),/CI_SECOND_GRANT_FAILURE/);
+ assert.deepEqual(await inspectP6PrivateExpiryOwner(dbOwner,staged),absentReview);
+ const commissioned=await commissionP6PrivateExpiryDb(dbOwner,staged,absentReview);
+ assert.equal(commissioned.functionsInstalled,4);
+ assert.equal(commissioned.functionGrants,4);
+ assert.equal(commissioned.newRoles,0);
+ assert.equal(commissioned.privateContentWrites,0);
+ assert.deepEqual(await inspectP6PrivateExpiryOwner(dbOwner,staged),{...absentReview,privateState:"GRANTED"});
+ await assert.rejects(commissionP6PrivateExpiryDb(dbOwner,staged,absentReview),/REVIEW_DRIFT_OR_ALREADY_GRANTED/);
+ console.log("P6_V0105_OWNER_ATOMIC_FUNCTION_AND_GRANT_COMMISSION_ROLLBACK_NO_REPLAY_PG16_PASS");
+ const w=new pg.Client({connectionString:"postgresql://"+W+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable"});
+ const rr=new pg.Client({connectionString:"postgresql://"+R+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",options:"-c default_transaction_read_only=on"});
+ await w.connect();await rr.connect();
+ try{
+  const s=async(m=manifest)=>(await rr.query("SELECT "+base+"status_v39($1) v",[m])).rows[0].v;
+  const sw=async(l=1,m=manifest)=>(await w.query("SELECT "+base+"sweep_v39($1,$2) v",[m,l])).rows[0].v;
+  const rc=async(id,m=manifest)=>(await rr.query("SELECT "+base+"receipt_v39($1,$2) v",[m,id])).rows[0].v;
+  await assert.rejects(s(),/MANIFEST_MISMATCH/);
+  await assert.rejects(sw(),/MANIFEST_MISMATCH/);
+  await dbOwner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids,revoked_at_utc) VALUES('CI-ONLY-PRIVATE-EXPIRY',$1,$2,$3,$4,'v39',CURRENT_DATE,1900,0,1000,false,'[\"CI-ONLY\"]'::jsonb,clock_timestamp())",[manifest,calendar,release,code]);
+  await assert.rejects(sw(1,six("0")),/MANIFEST_MISMATCH/);
+  await assert.rejects(sw(129),/INVALID_SCOPE/);
+  await assert.rejects(rr.query("SELECT "+base+"sweep_v39($1,1)",[manifest]),{code:"42501"});
+  await assert.rejects(w.query("SELECT "+base+"status_v39($1)",[manifest]),{code:"42501"});
+  await assert.rejects(w.query("SELECT payload_bytes FROM phase6_private.frozen_native_packet_v39"),{code:"42501"});
+  await assert.rejects(rr.query("SELECT value FROM clean.adb_collection_meta"),{code:"42501"});
+  await assert.rejects(w.query("DELETE FROM phase6_private.signed_run_day_epoch_claim_v39"),{code:"42501"});
+  const free=(await dbOwner.query("SELECT d FROM generate_series(5,30) d WHERE NOT EXISTS(SELECT 1 FROM phase6_private.signed_run_day_epoch_claim_v39 c WHERE c.run_day_index=d) AND NOT EXISTS(SELECT 1 FROM phase6_private.frozen_native_packet_v39 q WHERE q.run_day_index=d) ORDER BY d LIMIT 1")).rows[0]?.d;
+  assert(Number.isInteger(free));
+  const a=registry(free,1),b=registry(free,2);
+  for(const x of [a,b]){
+   x.entry.notBeforeUtc=t(-14000);x.entry.hardLatestUtc=t(-11000);await insertRegistry(x);
+  }
+  const first=indexPacket(free,1,[a.entry],null);
+  await publishP6DayEpochIndexRevisionOnce({client:pub,pins:first.pins,wire:first.wire,publicKeyPem:pem,indexBytes:first.bytes,scope:first.scope});
+  const last=indexPacket(free,2,[a.entry,b.entry],first.bytes);
+  const clock=new Date((await dbOwner.query("SELECT clock_timestamp() t")).rows[0].t).getTime();
+  const until=new Date(clock+4500).toISOString();
+  last.review.validUntilUtc=new Date(clock+2500).toISOString();last.review.retentionNotAfterUtc=until;
+  last.wire.signatureBase64=sign(null,p6DayEpochReviewPreimage(last.review),key.privateKey).toString("base64");
+  last.scope.approvedRetentionNotAfterUtc=until;
+  await publishP6DayEpochIndexRevisionOnce({client:pub,pins:last.pins,wire:last.wire,publicKeyPem:pem,indexBytes:last.bytes,scope:last.scope});
+  await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(until)-Date.now()+100)));
+  const due1=registry(free,9),due2=registry(free,10);
+  await insertRegistry(due1,t(-1000));await insertRegistry(due2,t(-1000));
+  const foreign="data-collection/phase5/frozen/source_ci_v0105_foreign_due.json";
+  await dbOwner.query(
+   "INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes) "+
+   "SELECT $1,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,$2,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$3",
+   [foreign,six("1"),due1.path]);
+  const pre=await s();
+  assert.equal(pre.duePackets,2);assert.equal(pre.expiredHeads,1);assert.equal(pre.foreignDuePackets,1);
+  // Publication conflict refuses immediately rather than waiting or changing work.
+  await pub.query("BEGIN");
+  try{
+   await pub.query("LOCK TABLE phase6_private.frozen_native_packet_v39 IN ROW EXCLUSIVE MODE");
+   await assert.rejects(sw(),{code:"55P03"});
+  }finally{await pub.query("ROLLBACK");}
+  assert.equal((await s()).duePackets,2);
+  // A real rollback must erase the aggregate commit marker and all changes.
+  await w.query("BEGIN");
+  const partial=await sw();
+  assert.equal(partial.packets,1);assert.equal(partial.indexRevisions,2);assert.equal(partial.earlierIndexRevisionsRetired,1);
+  assert.equal((await rc(partial.runId)).committedAggregateReceiptFound,false);
+  await w.query("ROLLBACK");
+  assert.equal((await rc(partial.runId)).committedAggregateReceiptFound,false);
+  assert.equal((await s()).duePackets,2);assert.equal((await s()).expiredHeads,1);
+  // Actual independent post-COMMIT aggregate receipt, followed by bounded recovery.
+  const result=await sw();
+  const receipt=await rc(result.runId);
+  assert.equal(receipt.committedAggregateReceiptFound,true);
+  for(const k of ["runId","observedAtUtc","packets","indexRevisions","earlierIndexRevisionsRetired","claimsPreserved","remainingDuePackets","remainingExpiredHeads"])assert.equal(receipt[k],result[k]);
+  assert.equal(result.packets,1);assert.equal(result.indexRevisions,2);assert.equal(result.remainingDuePackets,1);
+  await assert.rejects(rc(result.runId,six("0")),/RECEIPT_SCOPE_DRIFT/);
+  assert.equal((await sw()).packets,1);
+  const empty=await sw();assert.equal(empty.packets,0);assert.equal(empty.indexRevisions,0);
+  assert.equal((await rc(empty.runId)).committedAggregateReceiptFound,false);
+  const post=await s();assert.equal(post.duePackets,0);assert.equal(post.expiredHeads,0);
+  assert.equal(post.claims,pre.claims);assert.equal(post.foreignDuePackets,1);
+  for(const path of [a.path,b.path,foreign])assert.equal((await dbOwner.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[path])).rows[0].n,1);
+  assert.equal((await dbOwner.query("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39 WHERE run_day_index=$1",[free])).rows[0].n,1);
+  assert.equal((await dbOwner.query("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=$1",[free])).rows[0].n,0);
+  await assert.rejects(publishP6DayEpochIndexRevisionOnce({client:pub,pins:first.pins,wire:first.wire,publicKeyPem:pem,indexBytes:first.bytes,scope:first.scope}),/DAY_GENESIS_ALREADY_CLAIMED_NO_REPLAY/);
+  const receiptText=(await dbOwner.query("SELECT value FROM clean.adb_collection_meta WHERE key LIKE 'phase6_private_expiry:%'")).rows.map(x=>x.value).join("|");
+  assert(!receiptText.includes(a.path)&&!receiptText.includes(hash(a.payload))&&!receiptText.includes("filler"));
+  // Runtime core on fresh distinct real sessions: verify-only is inert,
+  // lost actual COMMIT ACK is recovered by the independent aggregate marker,
+  // not a blind replay. A zero-work return does not fabricate such a marker.
+  const wp=new pg.Pool({connectionString:"postgresql://"+W+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",max:1});
+  const rp=new pg.Pool({connectionString:"postgresql://"+R+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",max:1,options:"-c default_transaction_read_only=on"});
+  try{
+   const extra=registry(free,11);await insertRegistry(extra,t(-1000));
+   // Exact existing primary verifier: production TLS is never bypassed by
+   // its actual CLI. Here enable only its original hard-coded disposable
+   // fixture gate for this local test call, restoring env immediately.
+   const saved={db:process.env.DATABASE_URL,gate:process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16};
+   const restore=(k,v)=>v===undefined?delete process.env[k]:process.env[k]=v;
+   try{
+    process.env.DATABASE_URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
+    process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16="1";
+    const vo={test:true,role:W,owner:"neondb_owner"};
+    await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",vo),/EXCESS_DEFINER_OR_SEQUENCE_AUTHORITY/);
+    await verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true});
+    await verifyP5PrimaryExpiryActor(rr,"reader",{test:true,role:R,owner:"neondb_owner",privateExpiry:true});
+    const wrTransition={...vo,privateCommission:true},rdTransition={test:true,role:R,owner:"neondb_owner",privateCommission:true};
+    const transitions={writer:wp,reader:rp,apply:false,verifyOptions:{writer:wrTransition,reader:rdTransition}};
+    assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
+    // Revoke exactly the four grants, then demonstrate unchanged primary
+    // operation through the inert catalog state. No simulator for the ACL.
+    await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" FROM "+R+"; REVOKE EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" FROM "+W);
+    try{
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"INERT");
+     await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true}),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);
+     // Partial authority is never accepted as the transition state.
+     await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs[2]+" TO "+W);
+     try{await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",wrTransition),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);}
+     finally{await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs[2]+" FROM "+W);}
+     // No V0105 functions at all is the only other allowed transition state.
+     await dbOwner.query("DROP FUNCTION "+funcs.join(","));
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"ABSENT");
+     await dbOwner.query(staged);
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"INERT");
+     const i=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+     const c=await commissionP6PrivateExpiryDb(dbOwner,staged,i);
+     assert.equal(c.functionsInstalled,0);assert.equal(c.functionGrants,4);
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
+    }finally{
+     await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" TO "+R+"; GRANT EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" TO "+W);
+    }
+    assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
+    console.log("P6_PRIVATE_COMMISSION_TRANSITION_ABSENT_INERT_GRANTED_PARTIAL_REFUSED_REAL_PG16_PASS");
+    await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs[0]+" TO "+W);
+    try{await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true}),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);}
+    finally{await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs[0]+" FROM "+W);}
+    const primary=await runP5PrimaryExpiry({writer:wp,reader:rp,apply:false,verifyOptions:{
+     writer:{...vo,privateExpiry:true},reader:{test:true,role:R,owner:"neondb_owner",privateExpiry:true}
+    }});
+    assert.equal(primary.status,"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES");assert.equal(primary.databaseWrites,0);
+    assert.equal(primary.before.liveOriginals,0);
+   }finally{restore("DATABASE_URL",saved.db);restore("V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16",saved.gate);}
+   const flags={P6_PRIVATE_EPOCH_EXPIRY_MODE:"APPLY_DUE_ONLY",P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256:manifest,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:P6_PRIVATE_EXPIRY_APPLY};
+   assert.deepEqual(admitP6PrivateExpiryExtension({},true),{enabled:false,apply:false});
+   assert.deepEqual(admitP6PrivateExpiryExtension({P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY"},true),{enabled:false,commission:true,apply:false});
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY"},true),/TRANSITION_CONFIG_DRIFT/);
+   assert.deepEqual(admitP6PrivateExpiryExtension(flags,false),{enabled:true,apply:false,manifest});
+   assert.deepEqual(admitP6PrivateExpiryExtension(flags,true),{enabled:true,apply:true,manifest});
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:""},true),/EXACT_SCOPE_REQUIRED/);
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_MODE:"OFF"},true),/OFF_CONFIG_DRIFT/);
+   console.log("P6_V0105_EXISTING_PRIMARY_EXACT_EIGHT_FUNCTION_ACL_AND_OPTIONAL_MODE_PG16_PASS");
+   const options={writer:wp,reader:rp,manifest,limit:1,maxBatches:1};
+   const verify=await runP6PrivateEpochExpiryCore(options);
+   assert.equal(verify.status,"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES");assert.equal(verify.before.duePackets,1);
+   assert.equal(verify.deadlineDueObservedAtInitialRead,true);
+   assert.equal((await s()).duePackets,1);
+   let lost=0,attempts=0;
+   const simulatedWriter={connect:async()=>{
+    const c=await wp.connect();
+    return {query:async(...args)=>{
+     if(typeof args[0]==="string"&&args[0].includes("sweep_v39"))attempts++;
+     const answer=await c.query(...args);
+     if(args[0]==="COMMIT"){lost++;throw Error("CI_LOST_ACK_AFTER_REAL_COMMIT");}
+     return answer;
+    },release:e=>c.release(e)};
+   }};
+   const recovered=await runP6PrivateEpochExpiryCore({...options,apply:true,writer:simulatedWriter});
+   assert.equal(lost,1);assert.equal(attempts,1);
+   assert.equal(recovered.status,"PRIVATE_EXPIRY_BACKLOG_REMAINS"); // foreign due remains deliberately outside scope
+   assert.equal(recovered.after.duePackets,0);
+   assert.equal(recovered.deadlineDueObservedAtInitialRead,true);
+   assert.equal(recovered.receipts.length,1);assert.equal(recovered.receipts[0].commitAck,false);
+   assert.equal(recovered.receipts[0].independentAggregateReceiptVerified,true);
+   assert.equal(recovered.after.deletionStopUnresolved,false);
+   assert.equal((await runP6PrivateEpochExpiryCore({...options,apply:true})).receipts.length,0);
+  }finally{await wp.end();await rp.end();}
+  console.log("P6_PRIVATE_EXPIRY_RUNTIME_LOST_COMMIT_ACK_INDEPENDENT_RECEIPT_NO_REPLAY_PASS");
+  assert.equal((await w.query("SELECT "+base+"stop_v39($1) v",[result.runId])).rows[0].v,true);
+  assert.equal((await s()).deletionStopUnresolved,true);
+  await assert.rejects(sw(),/DELETION_STOP/);
+  console.log("P6_V0105_STAGED_FUNCTION_ONLY_B0062_V0101_ACTUAL_COMMIT_RECEIPT_AND_STOP_PG16_PASS");
+ }finally{await w.end();await rr.end();}
  console.log(JSON.stringify({
   status:"P6_DAY_EPOCH_REAL_RESTRICTED_PG16_PUBLISH_READ_PASS",
   signedDayIndices:[1,31],sourceRegistries:3,
