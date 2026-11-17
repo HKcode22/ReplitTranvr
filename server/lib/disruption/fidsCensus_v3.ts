@@ -14,6 +14,8 @@ import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
 import {
   canonicalFlightInstanceId,
+  phase5ProspectiveCanonicalFlightIdV39,
+  P5_CANONICAL_IDENTITY_VERSION,
   type CanonicalFlightInstanceInput,
 } from "./flightInstanceCanonical_v3";
 
@@ -35,6 +37,11 @@ export interface FidsCensusParams {
   providerApiVersion: string;
   fidsProtocolVersion: string;
   openapiSha256: string;
+  /** Explicitly selected only by the future scoped Phase5 SOURCE collector.
+   * V0083 future POST uses the same representation via its reservation marker.
+   * This is not a claim of stable provider ID or cross-original retime linkage.
+   */
+  phase5ProspectiveIdentityV39?: typeof P5_CANONICAL_IDENTITY_VERSION;
   /** Only prospective G5A: stable provider operating identity under retimes. */
   g5aObservedScheduleProtocol?: boolean;
   /**
@@ -54,7 +61,20 @@ export interface FidsCensusParams {
  * Frozen inside the reconstructed FIDS JSON and its existing response hash.
  * This is NOT a network byte-for-byte receipt or operator-flight proof.
  */
+function usesP5ProspectiveIdentity(params:FidsCensusParams):boolean {
+  return params.phase5ProspectiveIdentityV39===P5_CANONICAL_IDENTITY_VERSION||
+    params.phase5PostReservationSha256!==undefined;
+}
 export function buildFidsRequestContractV39(params:FidsCensusParams){
+ if(params.phase5ProspectiveIdentityV39!==undefined&&
+    (params.phase5ProspectiveIdentityV39!==P5_CANONICAL_IDENTITY_VERSION||
+     params.direction!=="Departure"||
+     !["fids_base","fids_split"].includes(params.restCategory??"")||
+     params.g5aObservedScheduleProtocol===true||
+     params.g5aCompositeIdentityStudyStartUtc!==undefined||
+     params.g5aPostReservationId!==undefined||
+     params.phase5PostReservationSha256!==undefined))
+   throw Error("P5_PROSPECTIVE_IDENTITY_SCOPE_INVALID_HOLD");
  if(params.phase5PostReservationSha256!==undefined&&
     (!/^[0-9a-f]{64}$/.test(params.phase5PostReservationSha256)||
      params.restCategory!=="outcome"||
@@ -499,7 +519,9 @@ function normalizeFidsRecord(input: {
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&isOperator&&!departureAirportFromContext&&
         !foreignOrigin){
-      canonical=canonicalFlightInstanceId(identityInput).flight_instance_id;
+      canonical=usesP5ProspectiveIdentity(params)?
+        phase5ProspectiveCanonicalFlightIdV39(identityInput):
+        canonicalFlightInstanceId(identityInput).flight_instance_id;
       analyticIdentityId=canonical;
       identityStatus="confirmed_operating_leg";
     } else {
@@ -646,6 +668,10 @@ export async function fetchFidsPopulation(
     ianaTimezone: params.ianaTimezone,
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
+    // Application normalization version, not an attributed provider field.
+    ...(usesP5ProspectiveIdentity(params)?{
+      phase5PopulationIdentityVersion:P5_CANONICAL_IDENTITY_VERSION
+    }:{}),
     ...(params.phase5PostReservationSha256?{
       phase5PostReservationSha256:params.phase5PostReservationSha256,
       phase5PostPurpose:"FUTURE_POST_SOURCE_OBSERVATION_NOT_AN_ACTUAL_PHYSICAL_LABEL",
@@ -730,8 +756,38 @@ export async function fetchFidsPopulation(
       })).slice(0,24)
     }};
   });
-  const rows = unambiguous.map((r) => r.row);
-  const flightInstanceIds = Array.from(new Set(unambiguous.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
+  // New scoped Phase5 originals retain every in-window normalized observation
+  // even if identities are ambiguous. Distinct raw records may have equal
+  // normalized base; a reused provider record ID may also occur at different
+  // schedules. Never resolve either by array order or hide a paid original
+  // through ON CONFLICT DO NOTHING followed by atomic rollback.
+  const prospective=usesP5ProspectiveIdentity(params);
+  const prospectiveIdentityCounts=new Map<string,number>();
+  const providerKeyCounts=new Map<string,number>();
+  if(prospective)for(const r of unambiguous){
+    const k=identityKey(r),pk=r.row.populationRole+"|"+r.row.providerRecordKey;
+    prospectiveIdentityCounts.set(k,(prospectiveIdentityCounts.get(k)??0)+1);
+    providerKeyCounts.set(pk,(providerKeyCounts.get(pk)??0)+1);
+  }
+  const qualified=prospective?unambiguous.map((r,index):NormalizedFidsRecord=>{
+    const repeatedIdentity=(prospectiveIdentityCounts.get(identityKey(r))??0)>1;
+    const repeatedProviderKey=(providerKeyCounts.get(r.row.populationRole+"|"+r.row.providerRecordKey)??0)>1;
+    if(!repeatedIdentity&&!(repeatedProviderKey&&r.resolvedCanonical!==null))return r;
+    const status=repeatedIdentity?"phase5_duplicate_identity_ambiguous":
+      "phase5_duplicate_provider_record_ambiguous";
+    const analyticIdentityId="provisional:"+sha256(JSON.stringify({
+      protocol:"P5_ONE_ORIGINAL_AMBIGUOUS_IDENTITY_V1",
+      populationQueryId,responseHash,index,originalIdentity:r.row.analyticIdentityId
+    }));
+    return {resolvedCanonical:null,row:{
+      ...r.row,canonicalFlightInstanceId:null,analyticIdentityId,
+      codeshareResolutionStatus:status,
+      provenanceJson:JSON.stringify({...JSON.parse(r.row.provenanceJson),
+        canonicalFlightInstanceId:null,codeshareResolutionStatus:status})
+    }};
+  }):unambiguous;
+  const rows = qualified.map((r) => r.row);
+  const flightInstanceIds = Array.from(new Set(qualified.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
   const query: FidsQueryObservation = {
     populationQueryId,
     sourceAirportIcao: params.airportIcao,

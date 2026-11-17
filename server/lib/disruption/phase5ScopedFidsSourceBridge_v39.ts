@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { fetchFidsPopulation, type FidsCensusParams, type FidsQueryObservation, type PopulationRow } from "./fidsCensus_v3";
+import { P5_CANONICAL_IDENTITY_VERSION } from "./flightInstanceCanonical_v3";
 import { verifyPreparedDailyDraw, type PreparedDayForReadback, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
 import type { P5FidsAcquisition } from "./phase5FidsFreezeGridAdmission_v39";
 
@@ -256,6 +257,7 @@ export async function runP5ScopedFidsSource(
     serviceWindowEndUtc:new Date(q.serviceWindowEndUtc),
     cutoffUtc:new Date(q.earliestPlannedCutoffUtc),
     restCategory:first.restCategory,
+    phase5ProspectiveIdentityV39:P5_CANONICAL_IDENTITY_VERSION,
     providerApiVersion:p.providerApiVersion,
     fidsProtocolVersion:p.fidsProtocolVersion,
     openapiSha256:p.openapiSha256,

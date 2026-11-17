@@ -442,6 +442,18 @@ export function canonicalFlightInstanceId(
   };
 }
 
+/**
+ * Forward-only Phase5 representation of the SAME v2 initial-service base.
+ * Preserve all legacy callers and already stored identities. Neither a
+ * longer digest nor a provider record ID proves physical retime linkage:
+ * callers still need the original initial date/schedule from reviewed evidence.
+ */
+export const P5_CANONICAL_IDENTITY_VERSION = "P5_CANONICAL_SHA256_V1" as const;
+export function phase5ProspectiveCanonicalFlightIdV39(input: CanonicalFlightInstanceInput): string {
+  const base = canonicalFlightInstanceId(input).stableIdentity;
+  return "leg:p5v1:" + crypto.createHash("sha256").update(base).digest("hex");
+}
+
 export function retimeFlightInstanceId(
   original: CanonicalFlightInstance,
   newInput: CanonicalFlightInstanceInput,
