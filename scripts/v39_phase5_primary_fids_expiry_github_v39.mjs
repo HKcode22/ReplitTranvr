@@ -74,10 +74,10 @@ function verifyTls(c){
 /** Review actual production function definitions and all granted authority.
  * Disposable bypass of TLS/role names strictly gated on test-only URL.
  */
-export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner"}={}){
+export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER}={}){
  if(!["writer","reader"].includes(actor)||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
  const expected=test?role:actor==="writer"?P5_PRIMARY_WRITER:P5_PRIMARY_READER;
- if(!test){owner="neondb_owner";verifyTls(c);}
+ if(!test){owner="neondb_owner";writerRole=P5_PRIMARY_WRITER;readerRole=P5_PRIMARY_READER;verifyTls(c);}
  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
  try{
   await c.query("SET LOCAL statement_timeout='12000ms'");
@@ -98,7 +98,11 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
     pg_get_function_result(p.oid) result,p.provolatile vol,p.prosecdef definer,p.prosrc body,p.proconfig config,
     pg_get_userbyid(p.proowner) owner,has_function_privilege(current_user,p.oid,'EXECUTE') allowed,
     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
-      WHERE a.grantee=0 AND a.privilege_type='EXECUTE') public_exec
+      WHERE a.grantee=0 AND a.privilege_type='EXECUTE') public_exec,
+    coalesce((SELECT jsonb_agg(jsonb_build_object('role',pg_get_userbyid(a.grantee),'grantable',a.is_grantable)
+       ORDER BY pg_get_userbyid(a.grantee))
+      FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+      WHERE a.grantee<>p.proowner AND a.privilege_type='EXECUTE'),'[]'::jsonb) delegated
     FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace
     WHERE s.nspname='clean' AND p.proname=ANY($1::text[])`,[defs.map(fn)])).rows;
   if(rows.length!==defs.length)HOLD("EXACT_FUNCTION_SET_MISSING");
@@ -109,7 +113,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
      JSON.stringify([...q.config].sort())!==JSON.stringify(config)||q.public_exec!==false||
-     q.allowed!==(actor===d.actor))HOLD("EXACT_FUNCTION_BODY_OR_GRANT_DRIFT");
+     q.allowed!==(actor===d.actor)||JSON.stringify(q.delegated)!==JSON.stringify([{role:d.actor==="writer"?writerRole:readerRole,grantable:false}]))HOLD("EXACT_FUNCTION_BODY_OR_GRANT_DRIFT");
   }
   // No extra application table/column/sequence privileges. Reader keeps
   // precisely its already commissioned five blob metadata columns.
@@ -149,14 +153,18 @@ function checkStatus(v){
 }
 const bad=s=>s.markedExpiredPayloadPresent||s.unlinkedUnexpiredPopulation||s.unexpiredPopulationWithoutLiveOriginal;
 async function readOnly(pool,sql,args=[]){
- const c=await pool.connect();
+ const c=await pool.connect();let poison=false;
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   await c.query("SET LOCAL statement_timeout='12000ms'");
   const result=await c.query(sql,args);
   if(result.rows.length!==1)HOLD("NO_UNIQUE_READBACK");
   return result.rows[0].v;
- }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ }finally{
+  try{await c.query("ROLLBACK");}catch{poison=true;}
+  c.release(poison?new Error("READONLY_ROLLBACK_UNKNOWN"):undefined);
+  if(poison)HOLD("READONLY_ROLLBACK_UNKNOWN");
+ }
 }
 const status=p=>readOnly(p,"SELECT clean."+F+"status_v39() v").then(checkStatus);
 function checkSweep(v,limit){
@@ -183,7 +191,7 @@ async function uncertainStop(writer,reader,runId){
  HOLD("UNCERTAINTY_STOP_RECORDED_NO_REPLAY");
 }
 async function oneSweep(writer,reader,limit){
- const c=await writer.connect();let batch,attempted=false,ack=false;
+ const c=await writer.connect();let batch,attempted=false,ack=false,poison=false;
  try{
   await c.query("BEGIN");
   await c.query("SET LOCAL statement_timeout='20000ms'");
@@ -192,8 +200,8 @@ async function oneSweep(writer,reader,limit){
   batch=checkSweep(z.rows[0]?.v,limit);
   attempted=true;await c.query("COMMIT");ack=true;
  }catch(e){
-  if(!attempted){await c.query("ROLLBACK").catch(()=>{});throw e;}
- }finally{c.release(attempted&&!ack?new Error("PRIMARY_SWEEP_COMMIT_ACK_UNKNOWN"):undefined);}
+  if(!attempted){try{await c.query("ROLLBACK");}catch{poison=true;}throw e;}
+ }finally{c.release(poison||attempted&&!ack?new Error("PRIMARY_SWEEP_CONNECTION_OUTCOME_UNKNOWN"):undefined);}
  if(!batch)HOLD("MISSING_BATCH_RECEIPT");
  // Reconcile a lost COMMIT ACK by independent exact nonempty evidence,
  // not by calling the sweep again. A zero-work batch has no tombstones.
