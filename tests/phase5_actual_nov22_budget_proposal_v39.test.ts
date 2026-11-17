@@ -256,6 +256,53 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(exported.summary.independentReleaseStillRequired).toBe(true);
   expect(exported.summary.phase6PaidGo).toBe(false);
   expect(exported.summary.dayPlanSha256s).toEqual(plans.dayPlanSha256s);
+  // Test the actual inert-stage admission on the compact packet, not only
+  // the historical 47-date example. All approval flags, URLs and hashes
+  // below are synthetic CI fixtures; never connect to a real database.
+  const stage=exported.files.find(x=>x.path==="unsigned-stage-input.json")!;
+  const raw=stage.bytes;
+  expect(hash(Buffer.from(raw))).toBe(stage.sha256);
+  expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(48000);
+  const inputStage=JSON.parse(raw);
+  expect(inputStage.phase6AuthorizationId).toBe("CI-ONLY-NOT-RELEASE");
+  expect(inputStage.phase6StartDateUtc).toBe("2026-11-21");
+  expect(inputStage.calendarDays).toHaveLength(31);
+  expect(inputStage.calendarDays.filter((d:{pairAirportSet:unknown})=>d.pairAirportSet===null)).toHaveLength(21);
+  const compactCost=buildP5V0082UnknownAirportSevenCostOnlyDraft({
+   schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",
+   slotBudgetInput:inputStage.slotBudgetInput,
+   expectedReviewerSlotEnvelopeSha256:inputStage.expectedSignedSlotEnvelopeSha256});
+  expect(compactCost.days).toHaveLength(38);
+  expect(compactCost.days.flatMap(d=>d.categoryRows)).toHaveLength(266);
+  expect(compactCost.categoryCaps).toHaveLength(7);
+  expect(compactCost.cycleSourceReservedUnits).toBe(12288);
+  expect(compactCost.cycleSourceReservedUnits+compactCost.cycleOtherReservedUnits).toBe(37388);
+  expect(compactCost.physicallyReservedUnits).toBe(0);
+  expect(compactCost.sourceRequestGridSha256).toBeNull();
+  const stageRole="phase5_b0062_prelaunch_stage_prod20261113",costRole="phase5_fids_budget_freeze_prod20261113";
+  const stageKey="P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL",costKey="P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL";
+  const url=(role:string)=>"postgresql://"+role+":CI_ONLY@ep-ci.neon.tech/neondb?sslmode=require";
+  const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",
+   GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:inputStage.codeSha40,V39_P5_APPROVED_CODE_SHA:inputStage.codeSha40,
+   P6_INERT_STAGE_MODE:"calendar",P6_INERT_STAGE_CONFIRM:"STAGE_EXACT_31_DAY_CALENDAR_DISABLED_AUTH_NO_PROVIDER",
+   P6_INERT_CALENDAR_REVIEW_APPROVED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0",
+   P6_INERT_STAGE_INPUT_JSON:raw,P6_INERT_STAGE_INPUT_SHA256:stage.sha256,V39_P5_MANIFEST_SHA256:inputStage.manifestSha256,
+   [stageKey]:url(stageRole)};
+  expect(admitP6InertReleaseStage(env)).toMatchObject({mode:"calendar",role:stageRole,phase6PaidGo:false});
+  const costEnv={...env,[stageKey]:"",[costKey]:url(costRole),P6_INERT_STAGE_MODE:"cost",
+   P6_INERT_STAGE_CONFIRM:"STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER",V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
+   P6_INERT_COST_REVIEW_APPROVED:"1",P6_INERT_COST_ENVELOPE_SHA256:compactCost.costOnlyCategoryDraftSha256};
+  expect(admitP6InertReleaseStage(costEnv)).toMatchObject({mode:"cost",role:costRole,phase6PaidGo:false});
+  const original=assembleP6ActualFirstSeedReleaseCandidate(f).unsignedStageInput;
+  const staleCost=buildP5V0082UnknownAirportSevenCostOnlyDraft({
+   schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",slotBudgetInput:original.slotBudgetInput,
+   expectedReviewerSlotEnvelopeSha256:original.expectedSignedSlotEnvelopeSha256});
+  expect(staleCost.days).toHaveLength(47);
+  expect(staleCost.costOnlyCategoryDraftSha256).not.toBe(compactCost.costOnlyCategoryDraftSha256);
+  expect(()=>admitP6InertReleaseStage({...costEnv,P6_INERT_COST_ENVELOPE_SHA256:staleCost.costOnlyCategoryDraftSha256})).toThrow("MISSING_DISTINCT_AUTHENTIC");
+  expect(()=>admitP6InertReleaseStage({...costEnv,V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"})).toThrow("NO_DISTINCT_COST_AND_RIGHTS_APPROVAL");
+  expect(()=>admitP6InertReleaseStage({...costEnv,[stageKey]:url(stageRole)})).toThrow("OTHER_STAGE_CREDENTIAL_MUST_NOT_BE_PRESENT");
+  expect(()=>admitP6InertReleaseStage({...env,P6_INERT_STAGE_INPUT_SHA256:"0".repeat(64)})).toThrow("EXACT_REVIEWED_PACKET_BYTES_REQUIRED");
  });
  it("produces 31 exact review-only metadata plans with first-seed cost parity",()=>{
   const f=reviewFixture(),x=assembleP6ActualFirstSeedReleaseCandidate(f);
