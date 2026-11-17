@@ -255,11 +255,10 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   // A different study or expired-at-review original isn't re-used as proof.
   const wrongScope=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
    [binding.population_query_id,H("9"),clock,contract,rights])).rows;
-  expect(wrongScope).toHaveLength(3);
-  expect(wrongScope.every(x=>x.conflicting_retained_identity===false)).toBe(true);
+  expect(wrongScope).toHaveLength(0);
   const afterExpiry=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
    [binding.population_query_id,manifest,new Date(new Date(clock).getTime()+24*3600000),contract,rights])).rows;
-  expect(afterExpiry.every(x=>x.conflicting_retained_identity===false)).toBe(true);
+  expect(afterExpiry).toHaveLength(0);
   expect((await pool.query("SELECT count(*)::int n FROM clean.phase5_fids_physical_attempt_v39")).rows[0].n).toBe(2);
  });
 });
