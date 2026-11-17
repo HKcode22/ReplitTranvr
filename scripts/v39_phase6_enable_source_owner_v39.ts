@@ -12,7 +12,7 @@ import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
 import type {VerifiedAuthFile} from "./v39_paid_guard_v39";
-import {verifyP6SourceEnableAuthFile,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE} from "./v39_phase6_source_enable_approval_ledger_v39";
+import {verifyP6SourceEnableAuthFile,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE,P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS} from "./v39_phase6_source_enable_approval_ledger_v39";
 import {admitP6InertOwnerReadback} from "./v39_phase6_inert_release_stage_manual_v39.mjs";
 import {compileP5V0093CostOnlySevenRestReview} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
@@ -30,8 +30,7 @@ const at=(s:unknown)=>{
 type ReviewedStage={input:any;review:any;freezeReview:any};
 type OwnerContext=ReviewedStage&{url:string;codeSha:string;stageSha:string;costSha:string};
 type Verify=VerifiedAuthFile;
-const requiredEvidence=["scientificFreezeEvidenceSha256","sourceRightsEvidenceSha256",
- "providerAccountAndBudgetEvidenceSha256","publishedAndGithubStopEvidenceSha256","operationalReleaseEvidenceSha256"] as const;
+const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 
 /** AUTH content pin excludes ONLY final Git SHA, to avoid a circular hash
  * when the scoped continuation approval ledger is committed. Exact final executable
