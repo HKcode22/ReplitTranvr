@@ -565,6 +565,29 @@ try{
     await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",vo),/EXCESS_DEFINER_OR_SEQUENCE_AUTHORITY/);
     await verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true});
     await verifyP5PrimaryExpiryActor(rr,"reader",{test:true,role:R,owner:"neondb_owner",privateExpiry:true});
+    const wrTransition={...vo,privateCommission:true},rdTransition={test:true,role:R,owner:"neondb_owner",privateCommission:true};
+    const transitions={writer:wp,reader:rp,apply:false,verifyOptions:{writer:wrTransition,reader:rdTransition}};
+    assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
+    // Revoke exactly the four grants, then demonstrate unchanged primary
+    // operation through the inert catalog state. No simulator for the ACL.
+    await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" FROM "+R+"; REVOKE EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" FROM "+W);
+    try{
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"INERT");
+     await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true}),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);
+     // Partial authority is never accepted as the transition state.
+     await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs[2]+" TO "+W);
+     try{await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",wrTransition),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);}
+     finally{await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs[2]+" FROM "+W);}
+     // No V0105 functions at all is the only other allowed transition state.
+     await dbOwner.query("DROP FUNCTION "+funcs.join(","));
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"ABSENT");
+     await dbOwner.query(staged);
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"INERT");
+    }finally{
+     await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" TO "+R+"; GRANT EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" TO "+W);
+    }
+    assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
+    console.log("P6_PRIVATE_COMMISSION_TRANSITION_ABSENT_INERT_GRANTED_PARTIAL_REFUSED_REAL_PG16_PASS");
     await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs[0]+" TO "+W);
     try{await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true}),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);}
     finally{await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs[0]+" FROM "+W);}
@@ -576,6 +599,8 @@ try{
    }finally{restore("DATABASE_URL",saved.db);restore("V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16",saved.gate);}
    const flags={P6_PRIVATE_EPOCH_EXPIRY_MODE:"APPLY_DUE_ONLY",P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256:manifest,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:P6_PRIVATE_EXPIRY_APPLY};
    assert.deepEqual(admitP6PrivateExpiryExtension({},true),{enabled:false,apply:false});
+   assert.deepEqual(admitP6PrivateExpiryExtension({P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY"},true),{enabled:false,commission:true,apply:false});
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY"},true),/TRANSITION_CONFIG_DRIFT/);
    assert.deepEqual(admitP6PrivateExpiryExtension(flags,false),{enabled:true,apply:false,manifest});
    assert.deepEqual(admitP6PrivateExpiryExtension(flags,true),{enabled:true,apply:true,manifest});
    assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:""},true),/EXACT_SCOPE_REQUIRED/);
