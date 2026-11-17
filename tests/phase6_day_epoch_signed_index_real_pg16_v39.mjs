@@ -7,6 +7,7 @@ import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
 import {readFileSync} from "node:fs";
 import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
+import {inspectP6PrivateExpiryOwner,commissionP6PrivateExpiryDb} from "../scripts/v39_phase6_private_epoch_expiry_owner_commission_v39.mjs";
 import {verifyP5PrimaryExpiryActor,runP5PrimaryExpiry,admitP6PrivateExpiryExtension,P6_PRIVATE_EXPIRY_APPLY} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
@@ -469,8 +470,29 @@ try{
  }
  // Existing role names only, separate connection sessions, no raw tables or
  // application roles. Production V0105 does not contain any of these grants.
- await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" TO "+R);
- await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" TO "+W);
+ const inertReview=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+ assert.equal(inertReview.privateState,"INERT");
+ await dbOwner.query("DROP FUNCTION "+funcs.join(","));
+ const absentReview=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+ assert.deepEqual(absentReview,{...inertReview,privateState:"ABSENT"});
+ await assert.rejects(commissionP6PrivateExpiryDb(dbOwner,staged,inertReview),/REVIEW_DRIFT_OR_ALREADY_GRANTED/);
+ // Simulate an error on the second grant: actual function creation and
+ // first grant are rolled back in the same disposable PostgreSQL transaction.
+ const failSecondGrant={query:async(...a)=>{
+  if(typeof a[0]==="string"&&a[0].startsWith("GRANT EXECUTE ON FUNCTION ")&&a[0].endsWith(" TO "+W))
+   throw Error("CI_SECOND_GRANT_FAILURE");
+  return dbOwner.query(...a);
+ }};
+ await assert.rejects(commissionP6PrivateExpiryDb(failSecondGrant,staged,absentReview),/CI_SECOND_GRANT_FAILURE/);
+ assert.deepEqual(await inspectP6PrivateExpiryOwner(dbOwner,staged),absentReview);
+ const commissioned=await commissionP6PrivateExpiryDb(dbOwner,staged,absentReview);
+ assert.equal(commissioned.functionsInstalled,4);
+ assert.equal(commissioned.functionGrants,4);
+ assert.equal(commissioned.newRoles,0);
+ assert.equal(commissioned.privateContentWrites,0);
+ assert.deepEqual(await inspectP6PrivateExpiryOwner(dbOwner,staged),{...absentReview,privateState:"GRANTED"});
+ await assert.rejects(commissionP6PrivateExpiryDb(dbOwner,staged,absentReview),/REVIEW_DRIFT_OR_ALREADY_GRANTED/);
+ console.log("P6_V0105_OWNER_ATOMIC_FUNCTION_AND_GRANT_COMMISSION_ROLLBACK_NO_REPLAY_PG16_PASS");
  const w=new pg.Client({connectionString:"postgresql://"+W+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable"});
  const rr=new pg.Client({connectionString:"postgresql://"+R+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",options:"-c default_transaction_read_only=on"});
  await w.connect();await rr.connect();
@@ -583,6 +605,10 @@ try{
      assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"ABSENT");
      await dbOwner.query(staged);
      assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"INERT");
+     const i=await inspectP6PrivateExpiryOwner(dbOwner,staged);
+     const c=await commissionP6PrivateExpiryDb(dbOwner,staged,i);
+     assert.equal(c.functionsInstalled,0);assert.equal(c.functionGrants,4);
+     assert.equal((await runP5PrimaryExpiry(transitions)).privateCommissionState,"GRANTED");
     }finally{
      await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs.slice(0,2).join(",")+" TO "+R+"; GRANT EXECUTE ON FUNCTION "+funcs.slice(2).join(",")+" TO "+W);
     }
