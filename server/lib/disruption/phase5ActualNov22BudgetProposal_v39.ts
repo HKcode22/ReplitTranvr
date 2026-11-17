@@ -15,8 +15,18 @@ const hash=(x:Buffer)=>createHash("sha256").update(x).digest("hex");
 const H=3600000,M=60000,D=86400000;
 const hold=(s:string):never=>{throw Error("HOLD_P5_ACTUAL_NOV22_BUDGET_"+s);};
 type Draft=ReturnType<typeof buildP5ActualFivePairB0062CalendarOnlyDraft>;
-const expectedDraft="46a4d2cd3f0da28365f43a66e3dfcb740a3393434425299b6c22e38322919333";
-const expectedRows="45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c";
+// Two exact, independently reproducible prospective metadata candidates.
+// Default remains the historical Nov22 bytes. The compact variant must be
+// selected explicitly; no generic caller-supplied calendar hash override.
+export type P6ActualCalendarVariant="ORIGINAL_NOV22"|"COMPACT_NOV21";
+const variants={
+ ORIGINAL_NOV22:{draft:"46a4d2cd3f0da28365f43a66e3dfcb740a3393434425299b6c22e38322919333",rows:"45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",total:41960,dates:47,peak:1228,sourceBefore:2560,sourceAfter:9728,before:9364,overlap:344,after:32252,firstSource:"2026-11-20T23:45:00.000Z"},
+ COMPACT_NOV21:{draft:"dcf06aaeb4f4e6ac697230f2eac634ebe5f9d1f72cda4e5bacff0aadfb48c943",rows:"7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",total:37388,dates:38,peak:1280,sourceBefore:4352,sourceAfter:7936,before:13400,overlap:1096,after:22892,firstSource:"2026-11-19T23:45:00.000Z"}
+} as const;
+function exactVariant(variant:P6ActualCalendarVariant){
+ if(!Object.hasOwn(variants,variant))hold("UNKNOWN_CALENDAR_VARIANT");
+ return variants[variant];
+}
 const reset=Date.parse("2026-12-04T02:21:21.000Z");
 const asOf="2026-11-15T09:37:44.000Z";
 // Keep the original historical proposal reproducible; use the newly
@@ -64,7 +74,8 @@ function modelStoredSourceCapacity(templates:readonly {scheduledRequestUtc:strin
   templateCount:tasks.length,tickMinutes:10,minimumLeadMinutes:15,actualJitterMeasured:false,actualChildCompletionMeasured:false,actualProviderYieldMeasured:false,
   policyChangedByModel:false,results};
 }
-export function proposeP5ActualNov22Budget(draft:Draft){
+export function proposeP5ActualNov22Budget(draft:Draft,variant:P6ActualCalendarVariant="ORIGINAL_NOV22"){
+ const selected=exactVariant(variant),expectedDraft=selected.draft,expectedRows=selected.rows;
  if(sha(draft)!==expectedDraft||sha(draft.calendarDays)!==expectedRows||
     draft.proposedCalendarRowsSha256!==expectedRows||draft.phase6PaidGo!==false||
     draft.calendarDays.length!==31||draft.futureOrdinaryAirportsSelected!==0)
@@ -115,7 +126,7 @@ export function proposeP5ActualNov22Budget(draft:Draft){
  // Scenario-bound identities used ONLY to compare arithmetic to the original
  // cost compiler. They are deliberately not authentic manifest/config/range
  // or timing attestations and must never be given to the live stage writer.
- const scenarioTag="ACTUAL_FIRST_SEED_BUDGET_MODEL_ONLY_NOT_APPROVED_RELEASE";
+ const scenarioTag=variant==="ORIGINAL_NOV22"?"ACTUAL_FIRST_SEED_BUDGET_MODEL_ONLY_NOT_APPROVED_RELEASE":"ACTUAL_COMPACT_NOV21_BUDGET_MODEL_ONLY_NOT_APPROVED_RELEASE";
  const modelPin=(kind:string)=>sha({scenarioTag,kind,settings,expectedDraft});
  const p:P5PrelaunchSlotBudgetInput&{explicitOtherOnlyChargeDates:string[]}={
   schema:"v39.phase5.prelaunch-slot-budget-input.v1",
@@ -137,8 +148,9 @@ export function proposeP5ActualNov22Budget(draft:Draft){
   return {chargeDayUtc:r.chargeDayUtc,categories:r.categories,totalReservedUnits:sum};
  });
  const total=budget.cycleSourceUnits+budget.cycleOtherUnits,unallocated=50000-1000-total;
- if(total!==41960||unallocated!==7040||sourceBeforeReset!==2560||sourceAfterReset!==9728||
-  before!==9364||overlap!==344||after!==32252||rows.length!==47)hold("ACTUAL_BUDGET_MODEL_DRIFT");
+ if(total!==selected.total||unallocated!==50000-1000-selected.total||sourceBeforeReset!==selected.sourceBefore||sourceAfterReset!==selected.sourceAfter||
+  before!==selected.before||overlap!==selected.overlap||after!==selected.after||rows.length!==selected.dates||
+  Math.max(...rows.map(r=>r.totalReservedUnits))!==selected.peak)hold("ACTUAL_BUDGET_MODEL_DRIFT");
  const evidence=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json","utf8"));
  if(evidence.observedAtUtc!==asOf||evidence.apiUnitsRemaining!==59968||evidence.apiUnitsLimit!==60000||
     evidence.alertCreditsRemaining!==1830||Date.parse(evidence.apiUnitsResetAtUtc)!==reset||
@@ -250,9 +262,11 @@ export function reconcileP6ActualJointBudget(
 ){
  const whole=(n:number)=>Number.isSafeInteger(n)&&n>=0&&n<=60000;
  const at=Date.parse(j?.observedAtUtc??"");
+ const v=Object.values(variants).find(v=>v.draft===proposal.calendarDraftJsonSha256&&v.rows===proposal.calendarRowsSha256);
+ if(!v)hold("UNRECOGNIZED_EXACT_BUDGET_VARIANT");
  if(!j||!/^[a-f0-9]{64}$/.test(j.accountEvidenceSha256??"")||
     !Number.isFinite(at)||new Date(at).toISOString()!==j.observedAtUtc||
-    at<Date.parse(asOf)||at>=Date.parse("2026-11-20T23:45:00.000Z")||
+    at<Date.parse(asOf)||at>=Date.parse(v!.firstSource)||
     j.apiUnitsResetAtUtc!==new Date(reset).toISOString()||j.apiUnitsLimit!==60000||
     ![j.apiUnitsRemaining,j.alertCreditsRemaining,j.preFreezeProjectApiUnits,
       j.authorizedFutureRefillApiUnits,j.authorizedFutureRefillAlertCredits,j.endingApiMarginUnits,
@@ -312,9 +326,12 @@ export function assembleP6ActualFirstSeedReleaseCandidate(input:{
  expectedExternalInputSha256:string;
  timing:Parameters<typeof compileP6UnsignedFutureSourceDayPlans>[0]["timing"];
  expectedTimingJsonSha256:string;
+ calendarVariant?:P6ActualCalendarVariant;
 }){
  const {draft,envelope,external,timing}=input;
- const proposal=proposeP5ActualNov22Budget(draft);
+ const variant=input.calendarVariant??"ORIGINAL_NOV22",selected=exactVariant(variant);
+ const expectedDraft=selected.draft,expectedRows=selected.rows;
+ const proposal=proposeP5ActualNov22Budget(draft,variant);
  if(!external||sha(external)!==input.expectedExternalInputSha256||
     external.expectedExternalCalendarDraftJsonSha256!==expectedDraft||
     external.expectedCalendarRowsSha256!==expectedRows||

@@ -7,7 +7,8 @@ import {
  reviewP6OneScheduledController,
  summarizeP6ControllerHeartbeat,
  admitP6HeartbeatGithubEnv,
- readP6GithubAutoControllerHeartbeat
+ readP6GithubAutoControllerHeartbeat,
+ reviewP6ActiveStandaloneNotifications
 } from "../server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
 import {formatP6ControllerHeartbeatHuman}
  from "../scripts/v39_phase6_github_controller_heartbeat_v39.mjs";
@@ -267,4 +268,59 @@ test("primary expiry current-main pin, explicit apply, and actual scheduled job 
   const x=await observe(patch,row,job);
   assert.equal(x.p.state,state);assert.equal(x.p.latestExecutedJobVerified,false);assert.equal(x.attention,true);
  }
+});
+
+test("native notification branch is dormant before activation and ignores old historical gaps",async()=>{
+ const a=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100),run(i+200,{created:"2026-11-13T18:00:00Z"})],T));
+ const report=summarizeP6ControllerHeartbeat(a,T);
+ assert(report.controllerHistoricalGapCount>0);
+ const result=await reviewP6ActiveStandaloneNotifications(report,env(),async()=>{throw Error("unexpected read")});
+ assert.equal(result.collectionExpected,false);
+ assert.equal(result.incidentCount,0);
+});
+test("armed current-main monitoring distinguishes executed step, skipped draw, missing parent evidence and safely pending",async()=>{
+ const a=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100,{conclusion:"success"})],T));
+ const report=summarizeP6ControllerHeartbeat(a,T);
+ const jobsByLane={
+  EARLY_DRAW:[["gated-exact-early-parent","Select max ONE genuinely due future parent under actual DB clock and existing serializable owner"]],
+  SOURCE:[["separately-authorized-stored-source-children","Dispatch stored SOURCE exact children"],["separately-authorized-current-private-post-children","Dispatch current private POST exact children"],["separately-authorized-native-post-producer","Review and publish bounded current POST windows with independent readback"]],
+  PRE:[["bounded-reviewed-real-pre","One signed bounded lease tick — original Stage14 and no paid provider"]],
+  PRE_RECOVERY:[["reviewed-existing-queue-watchdog","Bounded existing V0087 reaper, UNKNOWN quarantines never replay"]],
+  DAILY_PREPARE:[["protected-main-one-day-nonpaid","Prepare and publish at most one eligible independently reviewed future day"]],
+  PRE_ENROLLMENT:[["enroll-current-signed-day",null],["enroll-current-signed-t24-day",null]],
+  T24:[["current-private-native-t24","Current signed T24 packets through original Stage14 and independent V0081"]]
+ };
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true"};
+ const readers=patch=>async url=>{
+  const id=Number(url.match(/runs\/(\d+)\/jobs/)[1]),lane=a.find(x=>x.mostRecentRun.id===id).lane;
+  const jobs=jobsByLane[lane].map(([name,step],i)=>({id:1000+i,run_id:id,name,status:"completed",conclusion:"success",steps:step?[{name:step,status:"completed",conclusion:"success"}]:[]}));
+  patch?.(lane,jobs);
+  return {total_count:jobs.length,jobs};
+ };
+ const good=await reviewP6ActiveStandaloneNotifications(report,arm,readers());
+ assert.equal(good.incidentCount,0);
+ assert.equal(good.realDueDrawOrPreparationVerified,false);
+ assert.equal(good.flightCollectionVerified,false);
+ const bad=await reviewP6ActiveStandaloneNotifications(report,arm,readers((lane,jobs)=>{
+  if(lane==="EARLY_DRAW")jobs[0].steps[0].conclusion="skipped";
+  if(lane==="SOURCE")jobs[0].steps.push({name:"Parent outcome MISSING_EVIDENCE",status:"completed",conclusion:"success"});
+  if(lane==="DAILY_PREPARE")jobs[0].conclusion="skipped";
+ }));
+ assert.equal(bad.incidentCount,3);
+ assert(bad.incidents.some(i=>i.lane==="EARLY_DRAW"));
+ assert(bad.incidents.some(i=>i.reason==="PARENT_REPORTED_HOLD_OR_MISSING_EVIDENCE"));
+ assert(bad.incidents.some(i=>i.lane==="DAILY_PREPARE"));
+ const pending=structuredClone(report);
+ pending.controllerStates.find(x=>x.lane==="PRE").mostRecentRun.status="in_progress";
+ const missing=pending.controllerStates.find(x=>x.lane==="EARLY_DRAW");
+ missing.historicalCadence.latestAgeExceedsExpected=true;
+ const x=await reviewP6ActiveStandaloneNotifications(pending,arm,readers());
+ assert.equal(x.incidentCount,1);
+ assert.equal(x.incidents[0].reason,"SCHEDULE_MISSING_OR_STALE");
+ const drift=structuredClone(report);
+ drift.controllerStates.find(x=>x.lane==="T24").mostRecentRun.headSha="c".repeat(40);
+ const y=await reviewP6ActiveStandaloneNotifications(drift,arm,readers());
+ assert.equal(y.incidents[0].reason,"CURRENT_MAIN_EXECUTION_NOT_OBSERVED");
+ assert.equal(y.providerCalls,0);
+ assert.equal(y.dispatches,0);
 });

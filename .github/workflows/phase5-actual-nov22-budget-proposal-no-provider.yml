@@ -7,6 +7,7 @@ on:
       - 'tests/phase5_actual_nov22_budget_proposal_v39.test.ts'
       - '.github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml'
       - 'data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json'
+      - 'data-collection/phase5/planning/phase6-source-day-*.json'
       - 'data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json'
       - 'data-collection/phase5/evidence/2026-11-16_owner_actual_free_quota_59968.json'
       - 'data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json'
@@ -42,6 +43,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/phase6-actual-review"
           npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/review-only.json"
           sha256sum "$RUNNER_TEMP/phase6-actual-review/review-only.json"
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-compact-nov21-no-refill "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          sha256sum "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          node -e 'const r=require(process.argv[1]),g=r.releaseIdentityReview.geometry; if(g.totalQueries!==6144||g.totalReservedUnits!==37388||g.dayPlanCount!==31||r.phase6PaidGo!==false||r.releaseIdentityReview.stagePacketExported!==false||r.calendarRevisionReview.independentDateRevisionApproved!==false)process.exit(2); console.log(JSON.stringify({status:"COMPACT_NOV21_DATED_REVIEW_NO_GO",geometry:g,calendarRowsDigestCandidate:r.releaseIdentityReview.calendarRowsDigestCandidate,manifestCandidateSha256:r.releaseIdentityReview.manifestCandidate.sha256,configCandidateSha256:r.releaseIdentityReview.configCandidate.sha256,phase6PaidGo:false}))' "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          node -e 'const fs=require("node:fs"),crypto=require("node:crypto"),r=require(process.argv[1]),plans=r.releaseIdentityReview.geometry.dayPlanSha256s; if(plans.length!==31)process.exit(2); for(const [i,d] of plans.entries()){if(d.runDayIndex!==i+1)process.exit(2);const p="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json";if(crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")!==d.sha256)throw Error("COMPACT_PLAN_BYTES_DIFFER_"+(i+1))}console.log("COMPACT_COMMITTED_METADATA_DAY_PLAN_PARITY_31_OF_31_NO_GO")' "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
       - uses: actions/upload-artifact@v4
         with:
           name: phase6-actual-first-seed-review-only

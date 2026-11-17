@@ -87,6 +87,8 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
       ["OMAA","MID","MIDDLE_EAST"],
       ["SKBO","MID","SOUTH_AMERICA"],
       ["KGPT","REGIONAL","NORTH_AMERICA"],
+      ["OMDB","MID","MIDDLE_EAST"],
+      ["KDEC","REGIONAL","NORTH_AMERICA"],
     ];
     for(const [icao,tier,region] of frame){
       await db.query(
@@ -112,6 +114,22 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
          MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"}),
        serviceStart,pins.expectedFrameHash],
     );
+    // A compact ordinary service day ends four hours after start; a fixed
+    // pair exactly one day later would have only 20h washout if this draw
+    // picked its reserved MID or REGIONAL. Use the installed scoped role.
+    const following=new Date(Date.parse(serviceStart)+86400000).toISOString();
+    await db.query(
+      `INSERT INTO clean.adb_phase6_calendar_day
+          (run_day_index,budget_day_id,calendar_hash,config_hash,date_utc,
+           utc_slot,time_class,window_shape,evaluation_partition,crossover_group_id,crossover_period,pair_role,draw_type,
+           slot_regions,anchor_icao,pair_airport_set,frozen_draw_seed,
+           scheduled_start_utc,active_duration_minutes,frame_hash)
+        VALUES (2,'P6D02',$1,$2,$3::date,'CI','CI','4h','CI','ci-pair-2',2,'control','PAIR_REPLAY',
+         $4::jsonb,'YSSY',$5::jsonb,'ci-phase5-pair-seed',$6::timestamptz,240,$7)`,
+      [pins.expectedCalendarHash,pins.expectedConfigHash,following.slice(0,10),
+       JSON.stringify({HUB:"ASIA",MID_A:"MIDDLE_EAST",MID_B:"EUROPE",REGIONAL:"NORTH_AMERICA"}),
+       JSON.stringify({HUB:{icao:"YSSY",region:"ASIA"},MID_A:{icao:"OMAA",region:"MIDDLE_EAST"},MID_B:{icao:"LFQQ",region:"EUROPE"},REGIONAL:{icao:"KGPT",region:"NORTH_AMERICA"}}),
+       following,pins.expectedFrameHash]);
   });
   afterAll(async()=>{if(drawDb)await drawDb.end();if(db)await db.end();});
 
@@ -137,6 +155,7 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     expect(rows).toHaveLength(4);
     expect(new Set(rows.map(r=>new Date(r.selected_at_utc).toISOString())).size).toBe(1);
     expect(new Set(rows.map(r=>r.selected_icao)).size).toBe(4);
+    expect(rows.map(r=>r.selected_icao).sort()).toEqual(["KDEC","OMDB","SKBO","WSSS"]);
     const states=await db.query(
       "SELECT icao,last_selected_run_day FROM clean.adb_airport_sampling_state"
     );

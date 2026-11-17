@@ -1,3 +1,5 @@
+import {buildP5Crossover40WindowReview} from "../server/lib/disruption/phase5Crossover40WindowEvidenceReview_v39";
+import {previewP5IndependentTreatmentActiveSegments} from "../server/lib/disruption/phase5IndependentPairedTreatmentSourcePreview_v39";
 /** Owner-local exact first-seed release candidate exporter.
  * Reuses existing preview and assembly functions. No signing, staging,
  * secret changes, database, network, fresh randomness or approval inference.
@@ -9,7 +11,7 @@ import {readFileSync,writeFileSync,mkdirSync,realpathSync} from "node:fs";
 import {resolve,dirname,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
 import {buildP5ProspectiveSeedCalendarPreview} from "./v39_phase5_prospective_seed_to_calendar_preview_v39.mjs";
-import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget,reconcileP6ActualJointBudget,P6_CURRENT_QUOTA_EVIDENCE_PATH} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
+import {assembleP6ActualFirstSeedReleaseCandidate,proposeP5ActualNov22Budget,reconcileP6ActualJointBudget,P6_CURRENT_QUOTA_EVIDENCE_PATH,type P6ActualCalendarVariant} from "../server/lib/disruption/phase5ActualNov22BudgetProposal_v39";
 import {buildP5V0082UnknownAirportSevenCostOnlyDraft} from "../server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs";
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const H=/^[a-f0-9]{64}$/;
@@ -30,16 +32,84 @@ export function replayP6OriginalSeed(){
  return preview;
 }
 
+/** Exact prospective date revision, preserving the original historical seed
+ * commitment. The output is review-only, never a replacement seed attestation. */
+export function replayP6CompactNov21Review(){
+ const original=replayP6OriginalSeed(),old=original.result;
+ const path="data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json";
+ const raw=readFileSync(path);
+ if(createHash("sha1").update(Buffer.from("blob "+raw.length+"\0")).update(raw).digest("hex")!=="ee17a694594356e2b0c772545c490c198db11b42")hold("COMPACT_REVIEW_RECEIPT_DRIFT");
+ const receipt=JSON.parse(raw.toString("utf8")),c=receipt.cases?.[0];
+ if(receipt.status!=="PROSPECTIVE_COMPACT_REVIEW_NOT_RELEASE"||receipt.phase6PaidGo!==false||
+    receipt.originalSeedWorkflow!=="43700154416"||c?.firstServiceUtc!=="2026-11-21T00:00:00.000Z"||
+    c.lastServiceEndUtc!=="2026-12-24T04:00:00.000Z"||c.rows?.length!==31||c.totalReserve!==37388)
+  hold("COMPACT_REVIEW_RECEIPT_SCOPE");
+ const digest=(x:unknown)=>hash(JSON.stringify(x));
+ const iso=(ms:number)=>new Date(ms).toISOString();
+ const moves=new Map<number,string>(c.rows.map((x:any)=>[x.runDayIndex,x.startUtc]));
+ if(moves.size!==31)hold("COMPACT_REVIEW_INDEX_DRIFT");
+ const dateMapSha256=digest(Object.fromEntries(c.rows.map((x:any)=>[String(x.runDayIndex),x.startUtc.slice(0,10)])));
+ const envelope=structuredClone(old.shapeEnvelope);
+ envelope.days=envelope.days.map((d,i)=>{
+  const plan=c.rows[i],row=old.calendarDraft.calendarDays[i],startUtc=moves.get(d.runDayIndex)!;
+  if(plan.runDayIndex!==d.runDayIndex||plan.originalStartUtc!==d.startUtc||plan.windowShape!==d.windowShape||
+     plan.anchorIcao!==row.anchorIcao||plan.partition!==d.partition||
+     JSON.stringify(plan.fixedKnownAirportSet)!==JSON.stringify(d.pairedAirportCandidates)||
+     !Number.isFinite(Date.parse(startUtc))||startUtc.slice(11)!==d.startUtc.slice(11))
+   hold("COMPACT_ORIGINAL_ASSIGNMENT_DRIFT");
+  const delta=Date.parse(startUtc)-Date.parse(d.startUtc),shift=(v:string)=>iso(Date.parse(v)+delta);
+  const activeSegments=d.activeSegments.map(s=>({...s,startUtc:shift(s.startUtc),endUtc:shift(s.endUtc)}));
+  if(JSON.stringify(activeSegments.map(({startUtc,endUtc})=>({startUtc,endUtc})))!==JSON.stringify(plan.segments)||
+     shift(d.endUtc)!==plan.endUtc)hold("COMPACT_ACTIVE_SEGMENT_DRIFT");
+  return {...d,dateUtc:startUtc.slice(0,10),startUtc,endUtc:shift(d.endUtc),activeSegments,
+   excludedSplitGap:d.excludedSplitGap?{startUtc:shift(d.excludedSplitGap.startUtc),endUtc:shift(d.excludedSplitGap.endUtc)}:null,
+   earliestPermittedEarlyDrawUtc:shift(d.earliestPermittedEarlyDrawUtc),
+   latestPermittedEarlyDrawUtcInclusive:shift(d.latestPermittedEarlyDrawUtcInclusive),
+   earliestPossibleSourceT24SpanUtc:shift(d.earliestPossibleSourceT24SpanUtc)};
+ });
+ const owner=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json","utf8"));
+ const prior40=buildP5Crossover40WindowReview({ownerCorrectedReadback:owner,firstRunDateUtc:"2026-11-22"});
+ const rows40=prior40.reviewRows.map(r=>{
+  const d=envelope.days[r.runDayIndex-1],startUtc=d.startUtc,conservativeEndUtc=iso(Date.parse(startUtc)+6*3600000);
+  const weekdayClass=[0,6].includes(new Date(startUtc).getUTCDay())?"weekend":"weekday";
+  if(weekdayClass!==r.weekdayClass)hold("COMPACT_PAIR_WEEKDAY_DRIFT");
+  const identity={dateMapSha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc,conservativeEndUtc};
+  return {...r,reviewKeySha256:digest(identity),startUtc,conservativeEndUtc,dateUtc:d.dateUtc,weekdayClass:r.weekdayClass};
+ });
+ const basic=rows40.map(r=>({reviewKeySha256:r.reviewKeySha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc:r.startUtc,conservativeEndUtc:r.conservativeEndUtc,dateUtc:r.dateUtc,weekdayClass:r.weekdayClass}));
+ const review40={...prior40,firstRunDateUtc:"2026-11-21",candidateDateMapSha256:dateMapSha256,windowIdentitySha256:digest(basic),reviewRows:rows40};
+ const seed=JSON.parse(readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json","utf8"));
+ const treatment=previewP5IndependentTreatmentActiveSegments(review40,{treatmentSeedHex:seed.treatmentSeedHex,announcedCommitmentSha256:seed.announcedCommitmentSha256,claimedCommitmentObservedAtUtc:seed.claimedCommitmentObservedAtUtc});
+ if(treatment.assignmentSha256!==old.shapeEnvelope.claimedTreatmentAssignmentSha256)hold("COMPACT_TREATMENT_DRIFT");
+ envelope.dateMapSha256=dateMapSha256;
+ envelope.crossoverReview40Sha256=review40.windowIdentitySha256;
+ envelope.shapeEnvelopeSha256=digest(envelope.days);
+ const draft=structuredClone(old.calendarDraft);
+ draft.calendarDays=draft.calendarDays.map(row=>{const startUtc=moves.get(row.runDayIndex)!;return {...row,startUtc,budgetDayId:"p5-f8-"+startUtc.slice(0,10).replace(/-/g,"")+"-"+String(row.runDayIndex).padStart(2,"0")};});
+ draft.proposedShapeEnvelopeSha256=envelope.shapeEnvelopeSha256;
+ draft.proposedDateMapSha256=dateMapSha256;
+ draft.proposedCalendarRowsSha256=digest(draft.calendarDays);
+ draft.proposedCalendarDraftSha256=digest({schema:draft.schema,actualCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,proposedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,proposedDateMapSha256:draft.proposedDateMapSha256,claimedTreatmentAssignmentSha256:draft.claimedTreatmentAssignmentSha256,claimedTreatmentCommitmentSha256:draft.claimedTreatmentCommitmentSha256,assembledAtUtc:draft.assembledAtUtc,calendarDays:draft.calendarDays});
+ const revision={schema:"v39.phase6.explicit-prospective-compact-date-revision-review.v1",status:"PROSPECTIVE_COMPACT_REVIEW_NOT_SIGNED",originalPreviewSha256:original.sha256,originalDateCandidateBytesSha256:old.dateCandidateBytesSha256,sourceReceiptSha256:hash(raw),firstServiceUtc:c.firstServiceUtc,firstSourceUtc:c.firstSourceUtc,lastServiceEndUtc:c.lastServiceEndUtc,allocatedOutcomeTailUtc:c.allocatedOutcomeTailUtc,dateMapSha256,calendarRowsSha256:draft.proposedCalendarRowsSha256,calendarDraftSha256:digest(draft),shapeEnvelopeSha256:envelope.shapeEnvelopeSha256,originalTreatmentAssignmentSha256:treatment.assignmentSha256,independentDateRevisionApproved:false,phase6PaidGo:false};
+ return {originalPreviewSha256:original.sha256,revision,calendarDraft:draft,shapeEnvelope:envelope};
+}
+
+function selectP6Calendar(variant:P6ActualCalendarVariant){
+ if(variant==="ORIGINAL_NOV22"){const p=replayP6OriginalSeed();return {sha256:p.sha256,result:{calendarDraft:p.result.calendarDraft,shapeEnvelope:p.result.shapeEnvelope},revision:null};}
+ if(variant!=="COMPACT_NOV21")hold("UNKNOWN_EXACT_CALENDAR_VARIANT");
+ const p=replayP6CompactNov21Review();
+ return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
+}
 /** Actual prospective calendar + exact cost rows, already present in original
  * evidence and original compiler. Explicit nulls prevent this review-only
  * input from being mistaken for a runnable stage packet. No false pins.
  */
 export type P6ReviewRefillChoice=0|3000|6000;
-export function prepareP6ActualReviewInput(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
+export function prepareP6ActualReviewInput(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000,variant:P6ActualCalendarVariant="ORIGINAL_NOV22"){
  if(![0,3000,6000].includes(reviewRefillChoice))hold("EXPLICIT_REVIEW_REFILL_CHOICE_REQUIRED");
  if(!/^[a-f0-9]{40}$/.test(codeSha))hold("EXACT_REVIEW_CODE_SHA_REQUIRED");
- const preview=replayP6OriginalSeed();
- const draft=preview.result.calendarDraft,proposal=proposeP5ActualNov22Budget(draft);
+ const preview=selectP6Calendar(variant);
+ const draft=preview.result.calendarDraft,proposal=proposeP5ActualNov22Budget(draft,variant);
  const ownerEvidencePath="data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json";
  const ownerEvidenceBytes=readFileSync(ownerEvidencePath);
  const owner=JSON.parse(ownerEvidenceBytes.toString("utf8"));
@@ -144,6 +214,7 @@ export function prepareP6ActualReviewInput(codeSha:string,reviewRefillChoice:P6R
  return {schema:"v39.phase6.actual-first-seed-prefilled-review-only.v1" as const,
   status:"REAL_METADATA_PARTIAL_REVIEW_NOT_STAGE_INPUT_NO_GO" as const,
   reviewedCodeCandidate:codeSha,originalPreviewSha256:preview.sha256,
+  ...(preview.revision?{calendarRevisionReview:preview.revision}:{}),
   originalSeedWorkflowRunId:"43700154416",
   frameEvidence:{path:ownerEvidencePath,sha256:hash(ownerEvidenceBytes),observedUtc:owner.observedUtc,
    frameHash:owner.frozenFrameHash,currentFrameRevalidated:false},
@@ -225,11 +296,11 @@ const docEvidence=(paths:string[])=>paths.map(fileEvidence);
  * deliberately NOT-AUTH identity and historical references, never a claimed
  * authorization. Only counts and digests are returned; stage bytes and
  * runnable day-plan bytes are not emitted here. */
-export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000){
+export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000,variant:P6ActualCalendarVariant="ORIGINAL_NOV22"){
  const checkout=inspectP6ExactReviewCheckout(codeSha);
- const review=prepareP6ActualReviewInput(codeSha,reviewRefillChoice),r=review.concreteReviewRecommendation;
+ const review=prepareP6ActualReviewInput(codeSha,reviewRefillChoice,variant),r=review.concreteReviewRecommendation;
  const seedPath="data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json";
- const seed=JSON.parse(readFileSync(seedPath,"utf8")),preview=replayP6OriginalSeed();
+ const seed=JSON.parse(readFileSync(seedPath,"utf8")),preview=selectP6Calendar(variant);
  const {timingEvidenceSha256:_unknownTiming,...timingLimits}=review.timingCandidate;
  const timingEvidence={
   schema:"v39.phase6.prearm-timing-policy-evidence-candidate.v1",
@@ -256,13 +327,14 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
   currentAccountRangePriceCertified:false,sourceRightsApproved:false,independentReviewApproved:false
  };
  const rangeSha=hash(JSON.stringify(rangeEvidence));
- const proposal=proposeP5ActualNov22Budget(review.calendarDraft);
+ const proposal=proposeP5ActualNov22Budget(review.calendarDraft,variant);
  const config={
   schema:"v39.phase6.actual-first-seed-config-candidate.v1",
   status:"PROPOSED_NOT_FROZEN",
   frameSha256:review.frameEvidence.frameHash,
   calendarRowsSha256:review.externalCandidate.expectedCalendarRowsSha256,
   originalSeedSha256:hash(readFileSync(seedPath)),
+  ...(preview.revision?{calendarRevisionReviewSha256:hash(JSON.stringify(preview.revision))}:{}),
   // Existing split helper; reuse the original revealed treatment seed as
   // the explicit split-rule fingerprint input, never draw another seed.
   splitRule:{sha256:splitRuleHash(seed.treatmentSeedHex),seedBasis:"original treatmentSeedHex",
@@ -302,6 +374,7 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
    "data-collection/phase5/2026-11-11_AMENDMENT_E_CANONICAL_TRAVELER_PREDICTIONS_C_D_FREE_ADSB.md",
    "data-collection/phase5/2026-11-10_ADR_PHASE6_AUTONOMOUS_C_PLUS_D_HYBRID_DESIGN.md"]),
   originalSeed:fileEvidence(seedPath),originalPreviewSha256:review.originalPreviewSha256,
+  ...(preview.revision?{calendarRevisionReview:preview.revision,calendarRevisionReceipt:fileEvidence("data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json")}:{}),
   frameEvidence:review.frameEvidence,
   calendarRowsSha256:config.calendarRowsSha256,configCandidateSha256:configSha,
   timingEvidenceCandidateSha256:timingSha,rangeEvidenceCandidateSha256:rangeSha,
@@ -316,8 +389,8 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
  const timing={...timingLimits,timingEvidenceSha256:timingSha};
  const geometry=assembleP6ActualFirstSeedReleaseCandidate({
   draft:preview.result.calendarDraft,envelope:preview.result.shapeEnvelope,external:proposed,
-  expectedExternalInputSha256:hash(JSON.stringify(proposed)),timing,expectedTimingJsonSha256:hash(JSON.stringify(timing))});
- if(geometry.dayPlans.files.length!==31||geometry.dayPlans.totalPlannedQueries!==6144||geometry.totalReservedUnits!==41960)
+  expectedExternalInputSha256:hash(JSON.stringify(proposed)),timing,expectedTimingJsonSha256:hash(JSON.stringify(timing)),calendarVariant:variant});
+ if(geometry.dayPlans.files.length!==31||geometry.dayPlans.totalPlannedQueries!==6144||geometry.totalReservedUnits!==proposal.totalReservedUnits)
   hold("ACTUAL_REVIEW_GEOMETRY_DRIFT");
  const after=inspectP6ExactReviewCheckout(codeSha);
  if(after.treeSha!==checkout.treeSha)hold("REVIEW_CHECKOUT_CHANGED");
@@ -340,6 +413,7 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
 export function compileP6ActualCandidateExport(input:{
  externalBytes:Buffer;expectedExternalFileSha256:string;
  timingBytes:Buffer;expectedTimingFileSha256:string;
+ calendarVariant?:P6ActualCalendarVariant;
 }){
  const {externalBytes,timingBytes}=input;
  if(!Buffer.isBuffer(externalBytes)||externalBytes.length<100||externalBytes.length>100000||
@@ -350,9 +424,9 @@ export function compileP6ActualCandidateExport(input:{
  let external:AssemblyInput["external"],timing:AssemblyInput["timing"];
  try{external=JSON.parse(externalBytes.toString("utf8"));timing=JSON.parse(timingBytes.toString("utf8"));}
  catch{return hold("INVALID_REVIEW_JSON");}
- const preview=replayP6OriginalSeed();
+ const variant=input.calendarVariant??"ORIGINAL_NOV22",preview=selectP6Calendar(variant);
  const assembled=assembleP6ActualFirstSeedReleaseCandidate({draft:preview.result.calendarDraft,envelope:preview.result.shapeEnvelope,
-  external,expectedExternalInputSha256:hash(JSON.stringify(external)),timing,expectedTimingJsonSha256:hash(JSON.stringify(timing))});
+  external,expectedExternalInputSha256:hash(JSON.stringify(external)),timing,expectedTimingJsonSha256:hash(JSON.stringify(timing)),calendarVariant:variant});
  const files=assembled.dayPlans.files.map(f=>({path:f.path,sha256:f.sha256,bytes:f.bytes}));
  const stageBytes=JSON.stringify(assembled.unsignedStageInput);
  if(hash(stageBytes)!==assembled.unsignedStageInputSha256||files.length!==31||
@@ -363,6 +437,7 @@ export function compileP6ActualCandidateExport(input:{
  const summary={status:"ACTUAL_FIRST_SEED_LOCAL_REVIEW_EXPORT_UNSIGNED_NO_GO",
   unsignedCostOnlyEnvelopeSha256:cost.costOnlyCategoryDraftSha256,unsignedStageInputByteCount:Buffer.byteLength(stageBytes),
   originalPreviewSha256:preview.sha256,inputExternalFileSha256:input.expectedExternalFileSha256,inputTimingFileSha256:input.expectedTimingFileSha256,
+  ...(preview.revision?{calendarRevisionReview:preview.revision}:{}),
   unsignedStageInputSha256:assembled.unsignedStageInputSha256,dayPlanSha256s:assembled.dayPlans.dayPlanSha256s,
   sourceQueries:assembled.dayPlans.totalPlannedQueries,totalReservedUnits:assembled.totalReservedUnits,peakDailyUnits:assembled.peakDailyUnits,
   jointBudget:assembled.jointBudget,
@@ -433,15 +508,17 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if((process.argv[2]==="--review-only"||process.argv[2]==="--review-only-no-refill")&&process.argv.length===4){
-   const refillChoice=process.argv[2]==="--review-only-no-refill"?0:3000;
-   const review=prepareP6ActualReviewInput(process.argv[3],refillChoice);
-   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice)},null,2));
+  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill"].includes(process.argv[2])&&process.argv.length===4){
+   const refillChoice=process.argv[2]==="--review-only"?3000:0;
+   const variant=process.argv[2]==="--review-only-compact-nov21-no-refill"?"COMPACT_NOV21":"ORIGINAL_NOV22";
+   const review=prepareP6ActualReviewInput(process.argv[3],refillChoice,variant);
+   console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice,variant)},null,2));
   }else{
-  if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==7)hold("OWNER_LOCAL_EXACT_ARGUMENTS");
-  const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(2);
+  const compact=process.argv[2]==="--compact-nov21";
+  if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==(compact?8:7))hold("OWNER_LOCAL_EXACT_ARGUMENTS");
+  const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(compact?3:2);
   const result=compileP6ActualCandidateExport({externalBytes:readFileSync(externalPath),expectedExternalFileSha256:externalSha,
-   timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha});
+   timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha,calendarVariant:compact?"COMPACT_NOV21":"ORIGINAL_NOV22"});
   console.log(JSON.stringify(out==="--verify-committed-plans"?verifyP6ActualCommittedCheckout(result):writeP6ActualCandidateExport(result,out)));
   }
  }catch(e){const msg=String((e as Error)?.message??"");console.error(/^HOLD_P6_ACTUAL_RELEASE_EXPORT_[A-Z0-9_]+$/.test(msg)?msg:"HOLD_P6_ACTUAL_RELEASE_EXPORT_REDACTED_NO_RELEASE");process.exitCode=2;}

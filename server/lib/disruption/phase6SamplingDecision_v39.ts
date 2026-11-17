@@ -136,6 +136,8 @@ export function chooseAirportsForRunDay(
   plan: FrozenRunDaySamplingPlan,
   frame: FrameSamplingCandidate[],
   statesInput: AirportSamplingState[],
+  /** Known future fixed pair sites whose use now would violate washout. */
+  reservedFuturePairIcaos: readonly string[] = [],
 ): SamplingDecision {
   assertFrozenHash("calendar", plan.calendarHash);
   assertFrozenHash("config", plan.configHash);
@@ -144,6 +146,8 @@ export function chooseAirportsForRunDay(
   const eligible = frame.filter(candidateEligible).map(c => ({ ...c, icao: norm(c.icao) }));
   const byIcao = new Map(eligible.map(c => [c.icao, c]));
   const selections: SamplingSelection[] = [];
+  if (!Array.isArray(reservedFuturePairIcaos) || reservedFuturePairIcaos.some(x=>typeof x!=="string"|| !/^[A-Z]{4}$/.test(x))) throw new Error("REFUSED_FUTURE_PAIR_RESERVATION");
+  const reserved=new Set(reservedFuturePairIcaos);
 
   if (plan.drawType === "PAIR_REPLAY") {
     if (!plan.pairAirportSet) throw new Error("REFUSED_PAIR_REPLAY: exact frozen pair airport set missing");
@@ -176,11 +180,13 @@ export function chooseAirportsForRunDay(
   if (violates24hWashout(stateFor(states, anchor.icao), plan.windowStartUtc)) throw new Error(`REFUSED_WASHOUT: ${anchor.icao} <24h since prior use`);
   selections.push({ slotId: "HUB", icao: anchor.icao, targetRegion: plan.slotRegions.HUB, isRandomized: false, designProbability: null, plannedShare: 1, adaptiveStateHash: null, probabilityVector: null, drawType: "NEW_TEMPLATE" });
 
+  // Keep the full eligible reference/median pool and 7-day policy; exclude
+  // only conflicting candidates from the actual ordinary draw cells.
   const midAll = eligible.filter(c => c.tier === "MID");
   const enforceSevenDay = midAll.length >= 4;
   const used = new Set([anchor.icao]);
   for (const slot of ["MID_A", "MID_B"] as const) {
-    const cell = midAll.filter(c => c.region === plan.slotRegions[slot] && !used.has(c.icao) && !violates24hWashout(stateFor(states, c.icao), plan.windowStartUtc));
+    const cell = midAll.filter(c => c.region === plan.slotRegions[slot] && !used.has(c.icao) && !reserved.has(c.icao) && !violates24hWashout(stateFor(states, c.icao), plan.windowStartUtc));
     const fresh = enforceSevenDay ? cell.filter(c => !midRecent(stateFor(states, c.icao), plan.windowStartUtc)) : cell;
     const available = (fresh.length ? fresh : (!enforceSevenDay ? cell : [])).sort((a, b) => directSort(a, b, states));
     if (!available.length) throw new Error(`REFUSED_CELL_EMPTY: ${slot}×${plan.slotRegions[slot]} has no eligible freshest-first airport`);
@@ -188,7 +194,7 @@ export function chooseAirportsForRunDay(
     selections.push({ slotId: slot, icao: c.icao, targetRegion: plan.slotRegions[slot], isRandomized: false, designProbability: null, plannedShare: 1, adaptiveStateHash: null, probabilityVector: null, drawType: "NEW_TEMPLATE" });
   }
 
-  const regionalCell = eligible.filter(c => c.tier === "REGIONAL" && c.region === plan.slotRegions.REGIONAL && !used.has(c.icao) && !violates24hWashout(stateFor(states, c.icao), plan.windowStartUtc));
+  const regionalCell = eligible.filter(c => c.tier === "REGIONAL" && c.region === plan.slotRegions.REGIONAL && !used.has(c.icao) && !reserved.has(c.icao) && !violates24hWashout(stateFor(states, c.icao), plan.windowStartUtc));
   if (!regionalCell.length) throw new Error(`REFUSED_CELL_EMPTY: REGIONAL×${plan.slotRegions.REGIONAL} has no eligible airport`);
   const medianPool = eligible.filter(c => c.tier === "REGIONAL").map(c => stateFor(states, c.icao)).filter(s => eligibilityForMedianPool("REGIONAL", s.emaYield, s.zeroYieldState, { inFrame: true, preEligible: true, postEligible: true, providerFailure: s.providerFailure, coverageFailed: s.coverageFailed })).map(s => s.emaYield!).filter(Number.isFinite);
   const median = calculateMedianEma(medianPool);

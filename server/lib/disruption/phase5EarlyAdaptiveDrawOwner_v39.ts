@@ -211,7 +211,7 @@ export async function commitEarlyPhase5Draw(
     const cal=await client.query(
       `SELECT run_day_index,scheduled_start_utc,frozen_draw_seed,draw_type,
               anchor_icao,slot_regions,pair_airport_set,calendar_hash,
-              config_hash,frame_hash,date_utc
+              config_hash,frame_hash,date_utc,window_shape,active_duration_minutes
          FROM clean.adb_phase6_calendar_day
         WHERE run_day_index=$1`,
       [pins.runDayIndex],
@@ -285,7 +285,38 @@ export async function commitEarlyPhase5Draw(
       [registry.rows[0].active_frame_version,day.calendarHash],
     );
     const {frame,states}=mapSamplingRows(candidates.rows);
-    const decision=chooseAirportsForRunDay(toSamplingPlan(day),frame,states);
+    // Compact calendars can put an ordinary day immediately before a
+    // frozen replay. A backward-only washout check would let that ordinary
+    // draw choose a reserved MID/REGIONAL, then make the replay impossible.
+    // Read only already frozen future pair identities, never future outcomes.
+    const reserved=new Set<string>();
+    if(day.pairAirportSet===null){
+      const shape=cal.rows[0].window_shape,minutes=Number(cal.rows[0].active_duration_minutes);
+      const elapsed=shape==="4h"&&minutes===240?240:shape==="2x2h"&&minutes===240?300:
+        shape==="up-to-6h"&&Number.isInteger(minutes)&&minutes>=1&&minutes<=360?minutes:null;
+      if(elapsed===null)refuse("CURRENT_WINDOW_END_UNVERIFIED");
+      const end=day.scheduledStartUtc.getTime()+elapsed!*60000;
+      const upcoming=await client.query(
+        `SELECT run_day_index,scheduled_start_utc,pair_airport_set
+           FROM clean.adb_phase6_calendar_day
+          WHERE calendar_hash=$1 AND config_hash=$2 AND frame_hash=$3
+            AND run_day_index>$4 AND pair_airport_set IS NOT NULL
+            AND scheduled_start_utc < $5::timestamptz
+          ORDER BY run_day_index`,
+        [day.calendarHash,day.configHash,day.frameHash,day.runDayIndex,new Date(end+86400000)]);
+      if(upcoming.rows.length>10)refuse("UNBOUNDED_FUTURE_PAIR_RESERVATION");
+      for(const r of upcoming.rows){
+        if(at(r.scheduled_start_utc,"FUTURE_PAIR_START").getTime()<end||
+           !r.pair_airport_set||Object.keys(r.pair_airport_set).length!==4)
+          refuse("INVALID_FUTURE_PAIR_RESERVATION");
+        for(const slot of SLOTS){
+          const code=r.pair_airport_set[slot]?.icao;
+          if(typeof code!=="string"||! /^[A-Z]{4}$/.test(code))refuse("INVALID_FUTURE_PAIR_RESERVATION");
+          reserved.add(code);
+        }
+      }
+    }
+    const decision=chooseAirportsForRunDay(toSamplingPlan(day),frame,states,[...reserved]);
     if(decision.selections.length!==4 ||
        new Set(decision.selections.map(s=>s.icao)).size!==4)
       refuse("INVALID_EARLY_DECISION");
