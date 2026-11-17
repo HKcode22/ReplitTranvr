@@ -9,6 +9,7 @@ import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {TLSSocket,checkServerIdentity} from "node:tls";
+import {runP6PrivateEpochExpiryCore} from "./v39_phase6_private_epoch_expiry_runtime_v39.mjs";
 import {RETENTION_READER_REQUIRED_COLUMNS} from "./v39_phase5_retention_metadata_private_readonly_sentinel_v39.mjs";
 
 export const P5_PRIMARY_WRITER="phase5_primary_fids_expiry_prod20261116";
@@ -29,7 +30,30 @@ const defs=Object.freeze([
  {name:"sweep",args:"integer",result:"jsonb",vol:"v",lock:true,actor:"writer"},
  {name:"stop",args:"text",result:"boolean",vol:"v",lock:true,actor:"writer"}
 ]);
-const fn=d=>F+d.name+"_v39";
+const PRIVATE_F="phase6_private_epoch_expiry_";
+export const P6_PRIVATE_EXPIRY_SQL="migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql";
+export const P6_PRIVATE_EXPIRY_APPLY="APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER";
+const privateDefs=Object.freeze([
+ {name:"status",args:"text",result:"jsonb",vol:"s",lock:false,actor:"reader",privateExpiry:true},
+ {name:"receipt",args:"text, text",result:"jsonb",vol:"s",lock:false,actor:"reader",privateExpiry:true},
+ {name:"sweep",args:"text, integer",result:"jsonb",vol:"v",lock:true,actor:"writer",privateExpiry:true},
+ {name:"stop",args:"text",result:"boolean",vol:"v",lock:true,actor:"writer",privateExpiry:true}
+]);
+const fn=d=>(d.privateExpiry?PRIVATE_F:F)+d.name+"_v39";
+export function admitP6PrivateExpiryExtension(env,primaryApply){
+ const mode=env.P6_PRIVATE_EPOCH_EXPIRY_MODE||"OFF";
+ const manifest=env.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256||"";
+ const approval=env.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL||"";
+ if(mode==="OFF"){
+  if(manifest||approval)HOLD("PRIVATE_EXTENSION_OFF_CONFIG_DRIFT");
+  return {enabled:false,apply:false};
+ }
+ if(!["VERIFY_ONLY","APPLY_DUE_ONLY"].includes(mode)||!/^[a-f0-9]{64}$/.test(manifest)||
+    (approval&&approval!==P6_PRIVATE_EXPIRY_APPLY)||
+    (mode==="APPLY_DUE_ONLY"&&approval!==P6_PRIVATE_EXPIRY_APPLY))
+  HOLD("PRIVATE_EXTENSION_EXACT_SCOPE_REQUIRED");
+ return {enabled:true,apply:primaryApply===true&&mode==="APPLY_DUE_ONLY",manifest};
+}
 const disposable=()=>process.env.GITHUB_ACTIONS==="true"&&
  process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16==="1"&&
  process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -62,7 +86,8 @@ export function admitP5PrimaryExpiryGithub(env){
  const r=scopedUrl(env.P5_RETENTION_READER_DATABASE_URL,P5_PRIMARY_READER);
  if(w.endpoint!==r.endpoint||hash(w.endpoint)!==env.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256)
    HOLD("EXACT_SAME_EXISTING_ENDPOINT_REQUIRED");
- return {apply:mode==="APPLY_DUE_ONLY",writerUrl:w.url,readerUrl:r.url,sha};
+ return {apply:mode==="APPLY_DUE_ONLY",writerUrl:w.url,readerUrl:r.url,sha,
+  privateExpiry:admitP6PrivateExpiryExtension(env,mode==="APPLY_DUE_ONLY")};
 }
 function verifyTls(c){
  const stream=c.connection?.stream,host=c.connectionParameters?.host;
@@ -74,8 +99,8 @@ function verifyTls(c){
 /** Review actual production function definitions and all granted authority.
  * Disposable bypass of TLS/role names strictly gated on test-only URL.
  */
-export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER}={}){
- if(!["writer","reader"].includes(actor)||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
+export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false}={}){
+ if(!["writer","reader"].includes(actor)||typeof privateExpiry!=="boolean"||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
  const expected=test?role:actor==="writer"?P5_PRIMARY_WRITER:P5_PRIMARY_READER;
  if(!test){owner="neondb_owner";writerRole=P5_PRIMARY_WRITER;readerRole=P5_PRIMARY_READER;verifyTls(c);}
  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -94,6 +119,8 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
     [a.rolsuper,a.rolcreatedb,a.rolcreaterole,a.rolreplication,a.rolbypassrls,a.rolinherit,a.member,a.schema_create,a.db_create].some(v=>v!==false))
     HOLD("UNEXPECTED_ACTOR_OR_DB");
   const src=readFileSync(P5_PRIMARY_SQL,"utf8");
+  const extensionSrc=privateExpiry?readFileSync(P6_PRIVATE_EXPIRY_SQL,"utf8"):"";
+  const activeDefs=privateExpiry?[...defs,...privateDefs]:defs;
   const rows=(await c.query(`SELECT p.proname name,oidvectortypes(p.proargtypes) args,
     pg_get_function_result(p.oid) result,p.provolatile vol,p.prosecdef definer,p.prosrc body,p.proconfig config,
     pg_get_userbyid(p.proowner) owner,has_function_privilege(current_user,p.oid,'EXECUTE') allowed,
@@ -104,11 +131,11 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
       FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
       WHERE a.grantee<>p.proowner AND a.privilege_type='EXECUTE'),'[]'::jsonb) delegated
     FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace
-    WHERE s.nspname='clean' AND p.proname=ANY($1::text[])`,[defs.map(fn)])).rows;
-  if(rows.length!==defs.length)HOLD("EXACT_FUNCTION_SET_MISSING");
-  for(const d of defs){
+    WHERE s.nspname='clean' AND p.proname=ANY($1::text[])`,[activeDefs.map(fn)])).rows;
+  if(rows.length!==activeDefs.length)HOLD("EXACT_FUNCTION_SET_MISSING");
+  for(const d of activeDefs){
    const q=rows.find(q=>q.name===fn(d));
-   const m=src.match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
+   const m=(d.privateExpiry?extensionSrc:src).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
    const config=["search_path=pg_catalog, pg_temp",...(d.lock?["lock_timeout=3s"]:[])].sort();
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
@@ -133,7 +160,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
   const extra=(await c.query(`SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid=p.pronamespace
     WHERE s.nspname IN ('clean','phase6_private','public') AND p.prosecdef
      AND p.prorettype<>'trigger'::regtype AND has_function_privilege(current_user,p.oid,'EXECUTE')
-     AND NOT(s.nspname='clean' AND p.proname=ANY($1::text[]))`,[defs.filter(d=>d.actor===actor).map(fn)])).rows[0];
+     AND NOT(s.nspname='clean' AND p.proname=ANY($1::text[]))`,[activeDefs.filter(d=>d.actor===actor).map(fn)])).rows[0];
   const seq=(await c.query(`SELECT count(*)::int n FROM pg_class t JOIN pg_namespace s ON s.oid=t.relnamespace
     WHERE t.relkind='S' AND s.nspname IN ('clean','phase6_private','public')
      AND has_sequence_privilege(current_user,t.oid,'USAGE,SELECT,UPDATE')`)).rows[0];
@@ -237,15 +264,30 @@ async function main(){
  const writer=new pg.Pool({...config,connectionString:a.writerUrl,application_name:"p5_fids_expiry_writer"});
  const reader=new pg.Pool({...config,connectionString:a.readerUrl,options:"-c default_transaction_read_only=on",application_name:"p5_fids_expiry_reader"});
  try{
-  const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply});
+  const extension=a.privateExpiry;
+  const verifyOptions=extension.enabled?{writer:{privateExpiry:true},reader:{privateExpiry:true}}:{};
+  const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply,verifyOptions});
   console.log(JSON.stringify({...result,reviewedMainSha:a.sha}));
-  if(result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||result.before.deletionStopUnresolved||
-     bad(result.before)||result.before.hardDueOriginals>0)process.exitCode=2;
+  const primaryHold=result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||
+    result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0;
+  if(primaryHold)process.exitCode=2;
+  // Primary cleanup executes first. A private failure cannot undo its
+  // acknowledged commit or convert its independent receipt into a failure.
+  // Never start private mutation after a primary HOLD or during VERIFY.
+  if(extension.enabled){
+   if(primaryHold){console.log(JSON.stringify({status:"PRIVATE_EXPIRY_SKIPPED_PRIMARY_HOLD",providerCalls:0,phase6PaidGo:false}));}
+   else{
+    const p=await runP6PrivateEpochExpiryCore({writer,reader,manifest:extension.manifest,apply:extension.apply});
+    console.log(JSON.stringify({...p,reviewedMainSha:a.sha}));
+    if(p.status==="PRIVATE_EXPIRY_BACKLOG_REMAINS"||p.before.deletionStopUnresolved||
+       p.before.foreignDuePackets>0||p.before.foreignDueIndexes>0)process.exitCode=2;
+   }
+  }
  }finally{await Promise.all([writer.end().catch(()=>{}),reader.end().catch(()=>{})]);}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
  await main().catch(e=>{
   const m=String(e?.message??"");
-  console.error(/^HOLD_P5_PRIMARY_FIDS_EXPIRY_[A-Z0-9_]+$/.test(m)?m:"HOLD_P5_PRIMARY_FIDS_EXPIRY_REDACTED_NO_REPLAY");
+  console.error(/^HOLD_(?:P5_PRIMARY_FIDS_EXPIRY|P6_PRIVATE_EXPIRY_RUNTIME)_[A-Z0-9_]+$/.test(m)?m:"HOLD_P5_PRIMARY_FIDS_EXPIRY_REDACTED_NO_REPLAY");
   process.exitCode=2;
  });
