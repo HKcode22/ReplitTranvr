@@ -5,6 +5,7 @@ on:
     paths:
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'tests/phase5_v0093_cost_only_real_pg16_v39.test.ts'
+      - 'migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql'
       - '.github/workflows/phase5-v0093-typed-cost-only-pg16-no-provider.yml'
   push:
     branches: [main]
@@ -28,6 +29,7 @@ jobs:
     timeout-minutes: 15
     env:
       V39_P5_V0093_COST_ONLY_DISPOSABLE_PG16: '1'
+      V39_P5_PHYSICAL_REST_GUARD_DISPOSABLE_PG16: '1'
     services:
       postgres:
         image: postgres:16
@@ -62,7 +64,9 @@ jobs:
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0083__phase5_nonfids_five_category_physical_rest_reservation_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql
           test "$(psql "$DATABASE_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM pg_attribute WHERE attrelid='clean.phase5_fids_seven_rest_release_v39'::regclass AND attname='budget_release_mode' AND NOT attisdropped")" = '1'
       - name: Preserve exact signed partitions and fail closed in cost-only-upper-bound-no-provider
         run: |
