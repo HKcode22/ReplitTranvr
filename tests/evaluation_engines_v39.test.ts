@@ -65,6 +65,10 @@ describe("Phase-0 evaluation engines", () => {
     const p=buildPostPartition([row("c",1),row("d",26)]);
     expect(()=>partitionManifestHash("POST",[{...p[0],partition:"test"},p[1]])).toThrow("REFUSE_FROZEN_PARTITION_ASSIGNMENT_DRIFT");
     expect(partitionManifestHash("POST",p)).toMatch(/^[a-f0-9]{64}$/);
+    // An otherwise valid non-overlapping key substitution must change the
+    // concrete assignment fingerprint, without changing the split rule.
+    expect(partitionManifestHash("A",[{...rows[0],flightInstanceId:"another"},rows[1]]))
+      .not.toBe(partitionManifestHash("A",rows));
   });
 
   it("refuses duplicate rows and invalid day cutoffs", () => {

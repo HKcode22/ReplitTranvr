@@ -117,7 +117,9 @@ export function evaluatePopulationAudit(rows: readonly PopulationAuditRow[], eng
 }
 
 export function partitionManifestHash(engine: PreEngine | "POST", rows: readonly AssignedRow[]): string {
-  const assignments = rows.map(({ rowId, partition, groupKey }) => ({ rowId, partition, groupKey })).sort((a, b) => a.rowId.localeCompare(b.rowId));
+  // Concrete assignment fingerprints bind the exact flight key as well as
+  // the engine group and partition. The pre-collection rule hash is unchanged.
+  const assignments = rows.map(({ rowId, partition, groupKey, flightInstanceId }) => ({ rowId, partition, groupKey, flightInstanceId })).sort((a, b) => a.rowId.localeCompare(b.rowId));
   refuseOverlap(rows.slice());
   // Hashing a caller's assignments is not proof they implement the frozen
   // rule. Recompute from original row fields and reject substituted groups
