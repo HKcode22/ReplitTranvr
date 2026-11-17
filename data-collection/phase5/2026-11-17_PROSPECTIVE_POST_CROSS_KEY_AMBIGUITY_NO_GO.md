@@ -1,0 +1,13 @@
+# November 17 — prospective POST cross-key ambiguity review (NO GO)
+
+Baseline main `f53a36a787351b9859ff7910d7f5cab41c1d77a2`; complementary to draft PR #859 exact head `40b6dbad41f9547620eecc226b12966a7d4f0fff`. No historical key mutation, additional provider request, database migration, new collection system or activation. Coordinate the two PRs before any executable main merge because the existing scheduled primary retention job is exact-main pinned.
+
+## Defect and disposition
+
+The existing retained-partition POST audit groups by flight-instance key and horizon and detects a reused reported provider ID across keys. However, a fresh retime can change both the canonical schedule-derived key and reported provider ID. Two such keys can each receive a positive provider-reported POST diagnostic and a within-key horizon pair even though distinct physical-leg identity is not established. A near-time same-number/origin observation is an ambiguity hint, not proof of retime equivalence.
+
+The narrow prospective-only screen flags distinct full-width keys in the same retained exact service partition with the same normalized number/origin and a schedule distance of at most 12h, or the same non-synthetic provider record key. It examines already cutoff-valid rows, never loads expired originals, retains observed-key/horizon counts, explicitly counts censored singleton horizon observations, excludes flagged keys from positive POST and consistent-pair diagnostics, and never rewrites T or joins keys. Legacy-only diagnostics remain unchanged. Sorted adjacent different-key time checks avoid all-pairs scans. Legitimate repeated services may be conservatively censored; report this missingness, not zero delay or cancellation.
+
+Scope limitations: no cross-partition, expired-original or independently certified physical identity linkage; no guarantee that different numbers and provider IDs cannot refer to one leg. The source-side ambiguity screen in #859 is complementary, not an authorization. A same-key match remains conditional provider evidence, never actual-only gate-out. The raw key count is not the number of distinct physical flights. Actual phase 7 holdout needs independently reviewed physical equivalence or censored groups.
+
+Tests added for changed IDs and retimed keys, retained unrelated diagnostic, same-key paired observations, reused native ID under changed numbers, and aggregate privacy. CI pending at creation; not a production receipt. Keep Phase5 FREEZE HOLD / Phase6 paid NO-GO; preserve Plan f.8 and A/B/C/D1/D2/E, unmodified 31-day plan and budget, existing Ultra account.
