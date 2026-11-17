@@ -206,6 +206,7 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   draft.proposedDateMapSha256=dateMapSha256;
   draft.proposedCalendarRowsSha256=digest(draft.calendarDays);
   draft.proposedCalendarDraftSha256=digest({schema:draft.schema,actualCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,proposedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,proposedDateMapSha256:draft.proposedDateMapSha256,claimedTreatmentAssignmentSha256:draft.claimedTreatmentAssignmentSha256,claimedTreatmentCommitmentSha256:draft.claimedTreatmentCommitmentSha256,assembledAtUtc:draft.assembledAtUtc,calendarDays:draft.calendarDays});
+  console.log("P5_COMPACT_REVIEW_DIGESTS "+JSON.stringify({draftSha256:digest(draft),rowsSha256:draft.proposedCalendarRowsSha256,shapeSha256:envelope.shapeEnvelopeSha256,dateMapSha256,originalTreatmentSha256:treatment.assignmentSha256}));
   // Original calendar pin MUST still refuse the proposed date revision.
   expect(()=>proposeP5ActualNov22Budget(draft)).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
   const external={...f.external,expectedExternalCalendarDraftJsonSha256:digest(draft),
