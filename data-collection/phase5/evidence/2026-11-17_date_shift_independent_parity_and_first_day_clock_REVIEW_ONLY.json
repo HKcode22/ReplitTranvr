@@ -1,0 +1,22 @@
+{
+  "status": "INDEPENDENT_DATE_SHIFT_BUDGET_AND_FIRST_DAY_CLOCK_CHECK_REVIEW_ONLY",
+  "sourceRows": 47,
+  "totals": 41960,
+  "independentCycleWindowComparisons": 20,
+  "firstDay": {
+    "nominalDrawSlots": 12,
+    "firstNominal": "2026-11-19T00:17:00.000Z",
+    "lastNominal": "2026-11-20T20:17:00.000Z",
+    "strictEnableBeforeUtc": "2026-11-20T23:10:00.000Z",
+    "drawClosesExclusiveUtc": "2026-11-20T23:15:00.000Z",
+    "firstSourceUtc": "2026-11-20T23:45:00.000Z",
+    "drawMarginAtStrictBoundaryMinutes": 5,
+    "nominalDrawSlotsAfterStrictBoundary": 0,
+    "sourceParentNoLaterThanUtc": "2026-11-20T23:30:00.000Z",
+    "dailyPreparationCandidateNoLaterThanUtc": "2026-11-20T23:25:00.000Z"
+  },
+  "limitations": "Nominal trigger slots only; actual prior delays and job duration can remove opportunities. No guarantee, no approved date shift, no gate/clock changes.",
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
