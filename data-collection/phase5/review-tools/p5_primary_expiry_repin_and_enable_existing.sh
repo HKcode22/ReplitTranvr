@@ -31,6 +31,8 @@ cleanup(){
  exit "$rc"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 hold(){ echo "HOLD_PRIMARY_EXPIRY_REPIN: $1"; exit 2; }
 main_pin(){
  [[ "$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" == "$PIN" ]] ||
@@ -53,7 +55,7 @@ if [[ "$old" != "$PIN" ]]; then gh variable set "$PINS" -R "$REPO" --body "$PIN"
 [[ "$(var "$PINS")" == "$PIN" && "$(var "$ENABLE")" == false ]] || hold VERIFY_PIN_READBACK
 main_pin
 run_readback(){
- local mode="$1" tag="$2" id n
+ local mode="$1" tag="$2" id n nids
  local url="repos/$REPO/actions/workflows/$WF/runs?event=workflow_dispatch&branch=main&per_page=50"
  gh api "$url" --jq '.workflow_runs[].id' | sort -u > "$TMP/old"
  main_pin
@@ -86,10 +88,10 @@ const jobs=j.jobs.filter(x=>x.name==='primary-fids-expiry'&&x.conclusion==='succ
  x.steps?.some(s=>s.name==='Verify exact main and execute only bounded primary FIDS expiry'&&s.conclusion==='success'));
 if(jobs.length!==1)hold();
 const status=tag==='VERIFY'?'PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES':'PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED';
-const needle='{"status":"'+status+'"';
-const hits=fs.readFileSync(dir+'/log','utf8').split('\n').filter(l=>l.includes(needle));
+const needle='"status":"'+status+'"';
+const hits=fs.readFileSync(dir+'/log','utf8').split('\n').filter(l=>l.includes(needle)&&l.includes('{'));
 if(hits.length!==1)hold();
-const r=JSON.parse(hits[0].slice(hits[0].indexOf(needle)).trim());
+const r=JSON.parse(hits[0].slice(hits[0].indexOf('{')).trim());
 const keys=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
 const zero=s=>s&&keys.every(k=>s[k]===0)&&s.deletionStopUnresolved===false&&
