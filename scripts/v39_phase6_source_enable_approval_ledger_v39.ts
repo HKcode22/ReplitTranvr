@@ -16,6 +16,8 @@ export const P6_SOURCE_AUTH_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_P
 const LEGACY="data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md";
 const HISTORICAL_BLOB="d859a2794d423ec21542afe304d22344b7fccc14";
 export const P6_SOURCE_AUTH_LEDGER_SCHEMA="v39.phase6.source-enable-approval-ledger.v1";
+export const P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS=["scientificFreezeEvidenceSha256","sourceRightsEvidenceSha256",
+ "providerAccountAndBudgetEvidenceSha256","publishedAndGithubStopEvidenceSha256","operationalReleaseEvidenceSha256"] as const;
 const SHA=/^[a-f0-9]{64}$/,COMMIT=/^[a-f0-9]{40}$/;
 const ID=/^(?:RUN|GATE|AUTH|ISS|DEC)-\d{8}-[0-9A-Z]+$/;
 const AUTH=/^AUTH-\d{8}-[0-9A-Z]+$/;
@@ -82,6 +84,15 @@ export function verifyP6SourceEnableAuthBytes(authBytes:Buffer,ledgerBytes:Buffe
  const entry=l.approvals.find((e:any)=>e.authorizationId===a.authorizationId&&e.artifactSha256===artifactHash);
  if(!entry||JSON.stringify(entry.predecessorEvidenceIds)!==JSON.stringify(a.predecessorEvidenceIds))
   hold("EXACT_SCOPED_AUTH_NOT_APPROVED");
+ // The owner transition already requires five release evidence hashes. Bind
+ // each to actual hash-verified scoped predecessor bytes, not merely a
+ // syntactically valid digest inside an otherwise reviewed AUTH artifact.
+ // A single genuine combined review may support more than one field.
+ const b=a.releaseActivation;
+ const named=new Set(l.evidence.filter((e:any)=>a.predecessorEvidenceIds.includes(e.evidenceId)).map((e:any)=>e.sha256));
+ if(!b||typeof b!=="object"||Array.isArray(b)||b.schema!=="v39.phase6.exact-source-activation-review.v1"||
+    P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS.some(k=>typeof b[k]!=="string"||!SHA.test(b[k])||!named.has(b[k])))
+  hold("RELEASE_EVIDENCE_NOT_BOUND_TO_PREDECESSOR");
  const record=a as AuthRecord;
  const verdict=verifyAuthRecord(record,{nowUtc,existingEvidenceIds:[...evidenceIds],
   expectedPhaseGate:P6_SOURCE_AUTH_PHASE,artifactHash,approvedArtifactHashes:[entry.artifactSha256]});

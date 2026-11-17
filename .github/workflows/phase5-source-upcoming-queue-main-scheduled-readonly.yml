@@ -3,7 +3,8 @@ on:
   schedule:
     # Deliberately inert unless repo variable is explicitly TRUE and
     # separately signed Phase5 FREEZE + Contents rights + Phase6 GO exist.
-    - cron: '*/10 * * * *'
+    # Preserve the existing cadence, stagger core starts; not a timing SLA.
+    - cron: '5,15,25,35,45,55 * * * *'
   workflow_dispatch:
     inputs:
       confirm:

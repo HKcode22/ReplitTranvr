@@ -30,7 +30,9 @@ const CONFIRM="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET";
 const PRIVATE_CONFIRM="ONE_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_SAME_JOB_ONE_GET";
 const LIMIT=4;
 // Exact first-seed capacity candidate; original individual paid gates unchanged.
-export const P6_STORED_SOURCE_CAPACITY=Object.freeze({perTickCap:8,inFlightCap:24,maxLeadMinutes:35});
+// Prearm earlier within the existing 105-minute due queue and 120-minute wait.
+// Do not change paid request time, per-tick budget, or in-flight cap.
+export const P6_STORED_SOURCE_CAPACITY=Object.freeze({perTickCap:8,inFlightCap:24,maxLeadMinutes:90});
 const hold=(x:string):never=>{
  throw Error("HOLD_P6_PRIVATE_SOURCE_PARENT_"+x);
 };

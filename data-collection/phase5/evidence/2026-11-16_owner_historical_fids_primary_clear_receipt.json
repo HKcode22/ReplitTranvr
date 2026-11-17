@@ -1,0 +1,30 @@
+{
+  "schema": "v39.phase5.historical-fids-primary-clear-owner-receipt.v1",
+  "evidenceId": "RUN-20261116-HISTORICALFIDSPRIMARYCLEAR",
+  "source": "owner-supplied Replit terminal review and acknowledged commit receipt",
+  "status": "HISTORICAL_FIDS_PRIMARY_CLEAR_COMMITTED_FRESH_READBACK_NO_GO",
+  "reviewedMainSha": "94cc8b5408257ddf5b8aee47701a8bb7883b4946",
+  "remoteMainStillMatches": true,
+  "scopeSha256": "572c94d6ba2c8626c9c56c54da8178ab1a2540e058b12248225d55126854e17a",
+  "runId": "RETEXP-P5-FIDS-572c94d6ba2c8626c9c56c54da8178ab1a2540e058b12248225d55126854e17a",
+  "cutoffUtc": "2026-11-15T13:47:34.388Z",
+  "originalsCleared": 17,
+  "populationCleared": 1574,
+  "preservedProjectMembership": 1574,
+  "preservedPre": 36,
+  "preservedT24": 12,
+  "tombstones": 1591,
+  "freshConnectionReadback": true,
+  "independentActorVerified": false,
+  "providerCalls": 0,
+  "backupOrPitrVerified": false,
+  "accountRightsVerified": false,
+  "completeRetentionDeploymentVerified": false,
+  "phase6PaidGo": false,
+  "receiptCommitTimeUtc": null,
+  "limitations": [
+    "Owner-provided acknowledged primary SQL clearance and fresh-connection readback, not independent actor verification.",
+    "No actual commit timestamp in supplied receipt; cutoff is not commit time.",
+    "No backup, full downstream feature legality, recurring deletion, scientific freeze, or paid authorization established."
+  ]
+}

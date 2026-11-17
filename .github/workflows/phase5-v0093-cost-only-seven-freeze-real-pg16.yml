@@ -10,6 +10,7 @@ on:
       - 'tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts'
       - '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml'
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
+      - 'migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql'
   push:
     branches: [main]
     paths:
@@ -56,7 +57,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Install separate disposable PG16 baseline and preexisting V0079/V0082 then V0093
+      - name: Install disposable PG16 baseline and existing V0079/V0080/V0082/V0083/V0093/V0103/V0104
         run: |
           set -Eeuo pipefail
           test "${GITHUB_ACTIONS}" = 'true'
@@ -66,8 +67,12 @@ jobs:
           test "${DATABASE_URL}" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
           npx tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0083__phase5_nonfids_five_category_physical_rest_reservation_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql
       - name: Real restricted PostgreSQL16 atomic late-failure rollback and zero-paid freeze tests
         run: |
           set -Eeuo pipefail

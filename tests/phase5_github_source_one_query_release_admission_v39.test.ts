@@ -177,6 +177,42 @@ describe("V0080 signed DB-clock prospectivity after prearm, no real timers",()=>
   expect(delays).toBeGreaterThan(0);
   expect(clock).toBe(Date.parse(planned));
  });
+ it("bounded early waits retain precise final polling and reduce role-checked clock calls",async()=>{
+  for(const [minutes,expectedReads] of [[35,58],[60,83],[90,113],[105,128],[120,143]]){
+   let clock=Date.parse(planned)-minutes*60_000,reads=0;
+   const delays:number[]=[];
+   await waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+    async()=>{reads++;return new Date(clock);},
+    async ms=>{
+     const left=Date.parse(planned)-clock;
+     expect(ms).toBeGreaterThan(0);
+     expect(ms).toBeLessThanOrEqual(left>120_000?Math.min(60_000,left-120_000):Math.min(5_000,left));
+     delays.push(ms);clock+=ms;
+    });
+   expect(clock).toBe(Date.parse(planned));
+   expect(reads).toBe(expectedReads);
+   expect(delays.slice(-24)).toEqual(Array(24).fill(5_000));
+  }
+ });
+ it("rejects a backwards authoritative clock instead of waiting again",async()=>{
+  const observations=[Date.parse(planned)-121_000,Date.parse(planned)-122_000];
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>new Date(observations.shift()!),async()=>{})).rejects.toThrow("DATABASE_CLOCK_MOVED_BACKWARD");
+ });
+ it("large runner oversleep rechecks the real cutoff, without an early or late release",async()=>{
+  let clock=Date.parse(planned)-180_000,reads=0;
+  await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>{reads++;return new Date(clock);},async()=>{clock=Date.parse(cutoff)-10_000;}))
+   .rejects.toThrow("MISSED_PROSPECTIVE_DISPATCH");
+  expect(reads).toBe(2);
+ });
+ it("a missed intermediate poll still requires a fresh actual clock before release",async()=>{
+  let clock=Date.parse(planned)-180_000,reads=0;
+  await waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
+   async()=>{reads++;return new Date(clock);},async()=>{clock=Date.parse(planned);});
+  expect(reads).toBe(2);
+  expect(clock).toBe(Date.parse(planned));
+ });
  it("refuses late GitHub run without any paid attempt",async()=>{
   await expect(waitForP5ScheduledPhysicalDispatch(planned,cutoff,60,
    async()=>new Date(Date.parse(planned)+16*60_000),

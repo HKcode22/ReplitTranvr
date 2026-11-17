@@ -55,7 +55,7 @@ export function readP6StableSourceTrust(env){
 // Select the earliest cutoff days; disclose remaining due days, never
 // silently substitute a guessed calendar day or an old packet.
 export function selectP6DueSourceDays(scan,maxLeadMinutes=105){
- if(![35,105].includes(maxLeadMinutes))fail("UNREVIEWED_SOURCE_LOOKAHEAD");
+ if(![35,90,105].includes(maxLeadMinutes))fail("UNREVIEWED_SOURCE_LOOKAHEAD");
  if(scan?.schema!=="v39.phase5.github-upcoming-source-queue-observer.v1"||
     scan.providerCalls!==0||scan.databaseWrites!==0||
     scan.externalGithubDispatches!==0||scan.signedDaySourceBatch!==null||

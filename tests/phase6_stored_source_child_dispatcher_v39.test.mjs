@@ -1,6 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
+import {readFileSync} from "node:fs";
+import {selectP6DueSourceDays} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {runP6StoredSourceDispatcher,admitP6StoredSourceDispatcher}
  from "../scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs";
 const H=c=>c.repeat(64),code="f".repeat(40),clock="2026-11-15T06:00:00.000Z";
@@ -133,7 +135,7 @@ test("unavailable selected days are disclosed without posting any unsigned query
  const f=fixture(),make=n=>f.inputs.map((p,i)=>({...p,query_digest:H(String(n+i))})),input=[...f.inputs,...make(1)];
  const planned={...f.planned,candidateCount:8};Object.defineProperty(planned,"privateStoredChildInputProposals",{value:input});
  const m=f.mock(),out=await runP6StoredSourceDispatcher(f.env,{...f.options,observe:async()=>planned,fetchImpl:m.fetchImpl});
- assert.equal(out.acknowledgedGithubChildCount,8);assert.equal(out.inFlightCap,24);assert.equal(out.perTickCap,8);assert.equal(out.maxLeadMinutes,35);
+ assert.equal(out.acknowledgedGithubChildCount,8);assert.equal(out.inFlightCap,24);assert.equal(out.perTickCap,8);assert.equal(out.maxLeadMinutes,90);
  const near=f.mock({children:Array.from({length:23},(_,i)=>f.run(100+i,"in_progress","P5 SOURCE "+H("9")))});
  assert.equal((await runP6StoredSourceDispatcher(f.env,{...f.options,observe:async()=>planned,fetchImpl:near.fetchImpl})).acknowledgedGithubChildCount,1);
  });
@@ -161,4 +163,42 @@ test("exact explicit SOURCE parent route preserves both trigger histories and or
   assert.equal((await runP6StoredSourceDispatcher(e,{...f.options,fetchImpl:h.fetchImpl})).status,"HOLD_PRE_DISPATCH_NO_POST");
   assert.equal(h.posts.length,0);
  }
+});
+
+// Original queue and signed inputs stay authoritative; no provider or DB.
+test("90-minute lookahead retains legacy and original queue limits, no invented due day",()=>{
+ const row=(n,m)=>({queryDigestSha256:H(String(n)),runDayIndex:n,status:"DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH",
+  plannedDispatchUtc:new Date(Date.parse(clock)+m*60000).toISOString(),
+  latestDispatchUtc:new Date(Date.parse(clock)+(m+10)*60000).toISOString()});
+ const scan={schema:"v39.phase5.github-upcoming-source-queue-observer.v1",providerCalls:0,databaseWrites:0,
+  externalGithubDispatches:0,signedDaySourceBatch:null,signedPacketHandoff:null,
+  candidates:[row(1,36),row(2,90),row(3,91)],observedQueries:3,manifestSha256:H("1"),checkedAtDatabaseUtc:clock};
+ assert.deepEqual(selectP6DueSourceDays(scan,35).dayIndices,[]);
+ assert.deepEqual(selectP6DueSourceDays(scan,90).dayIndices,[1,2]);
+ assert.equal(selectP6DueSourceDays(scan,105).deferredDueDayCount,1);
+ assert.throws(()=>selectP6DueSourceDays(scan,120),/UNREVIEWED_SOURCE_LOOKAHEAD/);
+ scan.candidates[2]=row(3,106);
+ assert.throws(()=>selectP6DueSourceDays(scan,90),/ORIGINAL_DUE_WINDOW_DRIFT/);
+});
+test("core lanes retain their original intervals without top-of-hour or mutual same-minute starts",()=>{
+ const lanes=[["phase5-source-upcoming-queue-main-scheduled-readonly.yml",10],
+  ["phase6-nonpaid-source-day-prepare-publish.yml",10],
+  ["phase5-cd-github-bounded-pre-tick.yml",5],
+  ["phase5-cd-github-one-queued-t24-witness-main-manual.yml",5],
+  ["phase5-cd-github-existing-queue-lease-watchdog.yml",5],
+  ["phase6-private-later-enrollment.yml",10]];
+ const minuteOwners=new Set();
+ for(const [file,interval] of lanes){
+  const raw=readFileSync(new URL("../.github/workflows/"+file,import.meta.url),"utf8");
+  const m=raw.match(/cron: '([0-9,]+) \* \* \* \*'/);
+  assert.ok(m,file);
+  const minutes=m[1].split(",").map(Number);
+  assert.equal(minutes.length,60/interval,file);
+  for(let i=0;i<minutes.length;i++){
+   const minute=minutes[i];assert.ok(minute>0&&minute<60,file);
+   assert.equal((minutes[(i+1)%minutes.length]-minute+60)%60,interval,file);
+   assert.ok(!minuteOwners.has(minute),"same core minute "+minute);minuteOwners.add(minute);
+  }
+ }
+ assert.equal(minuteOwners.size,54);
 });
