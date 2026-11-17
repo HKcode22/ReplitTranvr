@@ -280,7 +280,7 @@ async function main(){
     const p=await runP6PrivateEpochExpiryCore({writer,reader,manifest:extension.manifest,apply:extension.apply});
     console.log(JSON.stringify({...p,reviewedMainSha:a.sha}));
     if(p.status==="PRIVATE_EXPIRY_BACKLOG_REMAINS"||p.before.deletionStopUnresolved||
-       p.before.foreignDuePackets>0||p.before.foreignDueIndexes>0)process.exitCode=2;
+       p.deadlineDueObservedAtInitialRead)process.exitCode=2;
    }
   }
  }finally{await Promise.all([writer.end().catch(()=>{}),reader.end().catch(()=>{})]);}
