@@ -15,12 +15,28 @@ for(const k of ['AERODATABOX_API_KEY','RAPIDAPI_KEY','AERODATABOX_WEBHOOK_SECRET
 const hash=(b,alg='sha256')=>createHash(alg).update(b).digest('hex');
 const blob=b=>hash(Buffer.concat([Buffer.from('blob '+b.length+'\0'),b]),'sha1');
 const print=x=>process.stdout.write(JSON.stringify(x)+'\n');
-let root=null,temp=null,work=null,added=false,stage='PREFLIGHT',helper=null;
+let root=null,temp=null,work=null,added=false,stage='PREFLIGHT',helper=null,operation='START',failure=null;
 function cmd(program,args,{cwd=root,input,timeout=30000,e=env}={}){
  try{return execFileSync(program,args,{cwd,encoding:'utf8',env:e,input,timeout,maxBuffer:24*1024*1024,stdio:['pipe','pipe','pipe']}).trim();}
- catch{hold(stage+'_COMMAND_FAILED_INSPECT_NO_REPLAY');}
+ catch(e){
+  const code=Number.isInteger(e?.status)?e.status:null;
+  const detail=typeof e?.stderr==='string'?e.stderr:'';
+  // Only classify fixed patterns. Do not print CLI arguments, stderr or URLs.
+  const category=/unknown flag|unknown shorthand flag|flag provided but not defined/i.test(detail)?'UNSUPPORTED_CLI_FLAG':
+   /not a git repository/i.test(detail)?'NOT_A_GIT_REPOSITORY':
+   /authentication|not logged|could not read Username|401 Unauthorized/i.test(detail)?'AUTHENTICATION':
+   e?.code==='ENOENT'?'EXECUTABLE_MISSING':e?.code==='ETIMEDOUT'?'TIMEOUT':'COMMAND_FAILED';
+  failure={operation,exitCode:code,category};
+  hold(stage+'_'+operation+'_FAILED_INSPECT_NO_REPLAY');
+ }
 }
-const gh=(args,input,timeout)=>cmd('gh',args,{input,timeout:timeout??30000});
+const gh=(args,input,timeout)=>{
+ const a=args[0],b=args[1]??'';
+ operation=a==='api'?(args.includes('--method')?'GH_API_MUTATION':b.includes('/git/blobs/')?'GH_READ_BLOB':b.includes('/actions/runs/')?'GH_READ_RUN':b.includes('/pulls/')?'GH_READ_PR':b.includes('/git/commits/')?'GH_READ_COMMIT':b.includes('/git/ref/')?'GH_READ_MAIN':'GH_READ_METADATA'):
+ a==='variable'&&b==='list'?'GH_LIST_VARIABLES':a==='variable'&&b==='set'?'GH_SET_VARIABLE':a==='secret'&&b==='list'?'GH_LIST_SECRET_NAMES':
+ a==='pr'&&b==='ready'?'GH_MARK_READY':a==='run'&&b==='watch'?'GH_WATCH_VERIFY':a==='run'&&b==='view'?'GH_READ_VERIFY_LOG':'GH_OTHER';
+ return cmd('gh',args,{input,timeout:timeout??30000});
+};
 const api=p=>JSON.parse(gh(['api','repos/'+R+'/'+p]));
 const remote=()=>api('git/ref/heads/main').object.sha;
 function exactPr(draft){
@@ -29,7 +45,7 @@ function exactPr(draft){
  return p;
 }
 function config(){
- const a=JSON.parse(gh(['variable','list','-R',R,'--json','name,value','--limit','1000']));
+ const a=JSON.parse(gh(['variable','list','-R',R,'--json','name,value']));
  if(!Array.isArray(a)||new Set(a.map(x=>x.name)).size!==a.length)hold('VARIABLE_LIST_SHAPE');
  const v=new Map(a.map(x=>[x.name,x.value]));
  const s=JSON.parse(gh(['secret','list','-R',R,'--json','name']));
@@ -50,7 +66,10 @@ function getBlob(id,file){
  if(blob(b)!==id)hold('BLOB_HASH');
  fs.writeFileSync(file,b,{mode:0o600,flag:'wx'});return b;
 }
-function git(args,cwd=root){return cmd('git',args,{cwd,timeout:180000});}
+function git(args,cwd=root){
+ operation=args.includes('fetch')?'GIT_FETCH':args.includes('worktree')?'GIT_WORKTREE':args.includes('switch')?'GIT_CHECKOUT':args[0]==='status'?'GIT_STATUS':'GIT_IDENTITY';
+ return cmd('git',args,{cwd,timeout:180000});
+}
 function fetchRef(ref){git(['-c','credential.helper=','-c','credential.helper=!gh auth git-credential','fetch','--no-tags','https://github.com/'+R+'.git',ref]);}
 function exactCheckout(sha,tree){
  if(git(['rev-parse','HEAD'],work)!==sha||git(['rev-parse','HEAD^{tree}'],work)!==tree||git(['status','--porcelain','--untracked-files=no'],work))hold('TEMP_CHECKOUT_NOT_EXACT');
@@ -94,6 +113,7 @@ function preflight(endpoint){
  git(['-c','core.hooksPath=/dev/null','worktree','add','--detach',work,BASE]);added=true;
  fs.symlinkSync(path.join(root,'node_modules'),path.join(work,'node_modules'),'dir');
  exactCheckout(BASE,git(['rev-parse',BASE+'^{tree}']));
+ operation='NODE_OWNER_READONLY';
  return JSON.parse(cmd(process.execPath,['--input-type=module','-e',preflightSource],{cwd:work,timeout:70000,e:{...env,FINAL_PRIVATE_ENDPOINT:endpoint,FINAL_PRIVATE_SQL_SHA:hash(bytes)}}));
 }
 function confirm(message){
@@ -106,13 +126,16 @@ function owner(mode,sha,review){
  if(remote()!==sha)hold('REMOTE_MAIN_DRIFT');
  const e={...env,P6_PRIVATE_EXPIRY_OWNER_APPROVED_MAIN_SHA:sha};
  if(mode==='commission'){e.P6_PRIVATE_EXPIRY_OWNER_APPROVAL='COMMISSION_REVIEWED_V0105_EXISTING_FUNCTION_ACTORS_VERIFY_ONLY_NO_GO';e.P6_PRIVATE_EXPIRY_OWNER_REVIEW_SHA256=review;}
+ operation=mode==='review'?'NODE_OWNER_REVIEW':'NODE_OWNER_COMMISSION';
  return JSON.parse(cmd(process.execPath,[OWNER,mode],{cwd:work,timeout:90000,e}));
 }
 function main(){
  if(process.env.GITHUB_ACTIONS==='true'||process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0'||!process.env.DATABASE_URL||!['review','commission'].includes(process.argv[2]??'review')||process.argv.length>3)hold('OWNER_LOCAL_NONPAID_ONLY');
+ operation='GIT_WORKSPACE_ROOT';
  root=fs.realpathSync(cmd('git',['rev-parse','--show-toplevel'],{cwd:process.cwd()}));
  if(!fs.existsSync(path.join(root,'node_modules','pg')))hold('EXISTING_DEPENDENCIES_REQUIRED');
- gh(['auth','status','--hostname','github.com']);
+ // The exact repository API authentication is the relevant proof; an unrelated stale gh account must not block it.
+ if(remote()!==BASE)hold('EXACT_PREMERGE_MAIN_REQUIRED');
  temp=fs.mkdtempSync(path.join(os.tmpdir(),'p5-final-private-'));fs.chmodSync(temp,0o700);
  const helperPath=path.join(temp,'p6_private_commission_repin_REVIEW_ONLY.cjs');
  const helperTest=path.join(temp,'p6_private_commission_repin_REVIEW_ONLY.test.cjs');
@@ -123,7 +146,7 @@ function main(){
  if(!fs.readFileSync(corePath).equals(fs.readFileSync(require.resolve('./p5_final_private_commission_core_REVIEW_ONLY.cjs'))))hold('EXECUTING_CORE_BLOB_DRIFT');
  helper=require(helperPath).handoff;
  const invoke=(mode,sha,state)=>helper({gh,confirm:()=>true,report:print},mode,sha,state);
- const io={state,testHelper:()=>{stage='NATIVE_TEST';cmd(process.execPath,['--test',coreTest,helperTest],{cwd:temp,timeout:90000});print({status:'P5_FINAL_PRIVATE_NATIVE_CORE_AND_HELPER_TESTS_PASSED',providerCalls:0,phase6PaidGo:false})},
+ const io={state,testHelper:()=>{stage='NATIVE_TEST';operation='NODE_REGRESSION_TEST';cmd(process.execPath,['--test',coreTest,helperTest],{cwd:temp,timeout:90000});print({status:'P5_FINAL_PRIVATE_NATIVE_CORE_AND_HELPER_TESTS_PASSED',providerCalls:0,phase6PaidGo:false})},
  ownerPreflight:preflight,confirm,report:print,
  merge:initial=>{
   stage='READY_EXACT_DRAFT';exactPr(true);
@@ -141,7 +164,7 @@ function main(){
  };
  return finishPrivateCommission(io,process.argv[2]??'review');
 }
-try{print(main());}catch(e){const m=String(e?.message??'');console.error(JSON.stringify({status:/^HOLD_(?:P5_FINAL_PRIVATE|P6_PRIVATE_REPIN)_[A-Z0-9_]+$/.test(m)?m:'HOLD_P5_FINAL_PRIVATE_REDACTED_INSPECT_NO_REPLAY',stage,noAutomaticRetry:true,providerCalls:0,phase6PaidGo:false}));process.exitCode=2;}
+try{print(main());}catch(e){const m=String(e?.message??'');console.error(JSON.stringify({status:/^HOLD_(?:P5_FINAL_PRIVATE|P6_PRIVATE_REPIN)_[A-Z0-9_]+$/.test(m)?m:'HOLD_P5_FINAL_PRIVATE_REDACTED_INSPECT_NO_REPLAY',stage,operation:failure?.operation??operation,commandFailure:failure,noAutomaticRetry:true,providerCalls:0,phase6PaidGo:false}));process.exitCode=2;}
 finally{
  if(added)try{git(['-c','core.hooksPath=/dev/null','worktree','remove','--force',work]);added=false;}catch{console.error('HOLD_P5_FINAL_PRIVATE_TEMP_WORKTREE_CLEANUP_REVIEW');}
  if(temp&&!added)fs.rmSync(temp,{recursive:true,force:true});
