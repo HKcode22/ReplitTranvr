@@ -584,6 +584,7 @@ try{
    const options={writer:wp,reader:rp,manifest,limit:1,maxBatches:1};
    const verify=await runP6PrivateEpochExpiryCore(options);
    assert.equal(verify.status,"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES");assert.equal(verify.before.duePackets,1);
+   assert.equal(verify.deadlineDueObservedAtInitialRead,true);
    assert.equal((await s()).duePackets,1);
    let lost=0,attempts=0;
    const simulatedWriter={connect:async()=>{
@@ -599,6 +600,7 @@ try{
    assert.equal(lost,1);assert.equal(attempts,1);
    assert.equal(recovered.status,"PRIVATE_EXPIRY_BACKLOG_REMAINS"); // foreign due remains deliberately outside scope
    assert.equal(recovered.after.duePackets,0);
+   assert.equal(recovered.deadlineDueObservedAtInitialRead,true);
    assert.equal(recovered.receipts.length,1);assert.equal(recovered.receipts[0].commitAck,false);
    assert.equal(recovered.receipts[0].independentAggregateReceiptVerified,true);
    assert.equal(recovered.after.deletionStopUnresolved,false);
