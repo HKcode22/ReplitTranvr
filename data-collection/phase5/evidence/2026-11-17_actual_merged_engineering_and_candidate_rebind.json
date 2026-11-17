@@ -1,0 +1,92 @@
+{
+  "schema": "v39.phase5.merged-engineering-and-review-rebind-observed.v1",
+  "status": "ENGINEERING_MERGE_AND_RETENTION_VERIFY_CLOSED_REVIEW_CANDIDATE_ONLY",
+  "productionMain": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "mergedPr": 859,
+  "reviewedHead": "ef819e1d9bd61c34b7c7bc8cf90a805dd03a6724",
+  "tree": "f4ccdec1f1eceee527ed9bc0f423b223bc63a01c",
+  "mergedPostPr": 860,
+  "ownerReceipt": {
+    "pinReadbackObservedInOwnerTranscript": true,
+    "scheduledApplyEnabled": true,
+    "approvalUnchanged": true,
+    "endpointPinUnchanged": true,
+    "manualApplyDispatched": false,
+    "helperNativeTestsPassed": 8,
+    "independentPinApiAccessByAssistant": false
+  },
+  "productionVerify": {
+    "workflowRunId": 44060075864,
+    "jobId": 133959368916,
+    "receipt": {
+      "status": "PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",
+      "before": {
+        "schema": "v39.phase5.primary-fids-expiry-status.v1",
+        "observedAtUtc": "2026-11-17T09:56:22.671Z",
+        "liveOriginals": 0,
+        "eligibleOriginals": 0,
+        "hardDueOriginals": 0,
+        "eligibleNextHour": 0,
+        "hardDueNextHour": 0,
+        "unboundLiveOriginals": 0,
+        "markedExpiredPayloadPresent": 0,
+        "unlinkedUnexpiredPopulation": 0,
+        "unexpiredPopulationWithoutLiveOriginal": 0,
+        "deletionStopUnresolved": false,
+        "providerCalls": 0,
+        "databaseWrites": 0,
+        "backupOrPitrVerified": false,
+        "completeRetentionDeploymentVerified": false,
+        "phase6PaidGo": false
+      },
+      "providerCalls": 0,
+      "objectDeletions": 0,
+      "backupOrPitrVerified": false,
+      "completeRetentionDeploymentVerified": false,
+      "phase6PaidGo": false,
+      "distinctDbActorsVerified": true,
+      "databaseWrites": 0,
+      "reviewedMainSha": "de15816bccb867dc17dcd396f8bedec66960e115"
+    }
+  },
+  "exactReview": {
+    "workflowRunId": 44061622792,
+    "jobId": 133964675929,
+    "reviewOnlyPr": 861,
+    "receipt": {
+      "status": "MERGED_MAIN_REVIEW_CANDIDATE_REBOUND_NOT_APPROVED",
+      "checkout": {
+        "codeSha": "de15816bccb867dc17dcd396f8bedec66960e115",
+        "treeSha": "f4ccdec1f1eceee527ed9bc0f423b223bc63a01c"
+      },
+      "reviewBytesSha256": "80633cef17f8f821d905c5f3619a8d621de00f7ee2c96e76d2f00ff36ba1580a",
+      "sourceInventorySha256": "3253bd2837fdb09f713f51e71c8c7943cd5110bed4cca310e35e537a74db5352",
+      "executableFileCount": 2177,
+      "manifestCandidateSha256": "88977798241abdefa3531384a38a341897b062746147c3841743996a75b99c78",
+      "configCandidateSha256": "92179d43e9b9729ba192f86c74e66dda4aae2da4229993509a1ef6a674060e56",
+      "timingCandidateSha256": "88cbedd1ec867a6372f69c2708e180509f849d71a34963d4fb5ac851d6e30be5",
+      "rangeCandidateSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
+      "calendarRowsSha256": "45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",
+      "geometry": {
+        "dayPlans": 31,
+        "queries": 6144,
+        "units": 41960,
+        "coverageGridSha256": "125988a1b7bdb08972e6029a46871d75e9dba65085f114dee811e27f8466b851",
+        "reviewOnlyPlanBytesEqualCommitted": 31
+      },
+      "netRestCeiling": 49468,
+      "alertCeiling": 680,
+      "scopeLedgerEvidence": 12,
+      "scopeLedgerApprovals": 0,
+      "byteReproductionExact": true,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "stagePacketExported": false,
+      "sourceRightsApproved": false,
+      "scientificFreezeApproved": false,
+      "phase6PaidGo": false
+    }
+  },
+  "phase5ScientificFreeze": false,
+  "phase6PaidGo": false
+}
