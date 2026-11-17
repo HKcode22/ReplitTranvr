@@ -1,21 +1,13 @@
-name: Phase5 first actual seed and seven-category budget proposal (NO PROVIDER)
+name: Phase5 exact merged main candidate rebind (REVIEW ONLY, never merge)
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'server/lib/disruption/phase5ActualNov22BudgetProposal_v39.ts'
-      - 'tests/phase5_actual_nov22_budget_proposal_v39.test.ts'
       - '.github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml'
-      - 'data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json'
-      - 'data-collection/phase5/evidence/2026-11-15_owner_actual_free_quota_59968.json'
-      - 'data-collection/phase5/evidence/2026-11-16_owner_actual_free_quota_59968.json'
-      - 'data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json'
-      - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
-      - 'scripts/v39_phase6_actual_release_candidate_export_v39.ts'
 permissions:
   contents: read
 jobs:
-  exact-real-metadata-reproduction-and-cost:
+  exact-main-review-only:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -29,22 +21,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: 'de15816bccb867dc17dcd396f8bedec66960e115'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts
-      - name: Produce exact metadata-only review packet, not a runnable release
+      - name: Exact merged source identity
         run: |
           set -Eeuo pipefail
-          mkdir -p "$RUNNER_TEMP/phase6-actual-review"
-          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/review-only.json"
-          sha256sum "$RUNNER_TEMP/phase6-actual-review/review-only.json"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: phase6-actual-first-seed-review-only
-          path: ${{ runner.temp }}/phase6-actual-review/review-only.json
-          if-no-files-found: error
-          retention-days: 30
+          test "$(git rev-parse HEAD)" = 'de15816bccb867dc17dcd396f8bedec66960e115'
+          test "$(git rev-parse 'HEAD^{tree}')" = 'f4ccdec1f1eceee527ed9bc0f423b223bc63a01c'
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Run existing no-refill exporter against actual merged main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          umask 077
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-no-refill 'de15816bccb867dc17dcd396f8bedec66960e115' > "$tmp/review.json"
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-no-refill 'de15816bccb867dc17dcd396f8bedec66960e115' > "$tmp/repeat.json"
+          cmp "$tmp/review.json" "$tmp/repeat.json"
+          REVIEW_JSON="$tmp/review.json" node <<'NODE'
+          const fs=require('node:fs'),{createHash}=require('node:crypto'),assert=require('node:assert/strict');
+          const sha=x=>createHash('sha256').update(x).digest('hex');
+          const bytes=fs.readFileSync(process.env.REVIEW_JSON),j=JSON.parse(bytes),v=j.releaseIdentityReview;
+          assert.equal(v.checkout.codeSha,'de15816bccb867dc17dcd396f8bedec66960e115');
+          assert.equal(v.checkout.treeSha,'f4ccdec1f1eceee527ed9bc0f423b223bc63a01c');
+          assert.equal(v.status,'EXACT_CONTENT_DIGESTS_AND_GEOMETRY_REVIEW_ONLY_NOT_RELEASE');
+          assert.equal(v.actualAuthorizationId,null);
+          assert.equal(v.finalPredecessorEvidenceIds,null);
+          for(const k of ['candidateDigestsApproved','stagePacketExported','sourceRightsApproved','scientificFreezeApproved','phase6PaidGo'])assert.equal(v[k],false);
+          assert.equal(v.geometry.dayPlanCount,31);
+          assert.equal(v.geometry.totalQueries,6144);
+          assert.equal(v.geometry.totalReservedUnits,41960);
+          assert.equal(v.configCandidate.sha256,'92179d43e9b9729ba192f86c74e66dda4aae2da4229993509a1ef6a674060e56');
+          assert.equal(v.calendarRowsDigestCandidate,'45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c');
+          for(const k of ['configCandidate','manifestCandidate','timingEvidenceCandidate','rangeEvidenceCandidate'])assert.equal(sha(JSON.stringify(v[k].content)),v[k].sha256);
+          assert.equal(sha(JSON.stringify(v.sourceInventory)),v.manifestCandidate.content.sourceInventorySha256);
+          assert.equal(v.sourceInventory.length,v.manifestCandidate.content.executableFileCount);
+          const d=JSON.parse(fs.readFileSync('data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json','utf8'));
+          assert.equal(d.approvals.length,0);
+          const committedMatches=v.geometry.dayPlanSha256s.filter(x=>{
+            const file='data-collection/phase5/planning/phase6-source-day-'+String(x.runDayIndex).padStart(2,'0')+'.json';
+            return sha(fs.readFileSync(file))===x.sha256;
+          }).length;
+          console.log(JSON.stringify({status:'MERGED_MAIN_REVIEW_CANDIDATE_REBOUND_NOT_APPROVED',checkout:v.checkout,
+            reviewBytesSha256:sha(bytes),sourceInventorySha256:v.manifestCandidate.content.sourceInventorySha256,
+            executableFileCount:v.sourceInventory.length,manifestCandidateSha256:v.manifestCandidate.sha256,
+            configCandidateSha256:v.configCandidate.sha256,timingCandidateSha256:v.timingEvidenceCandidate.sha256,
+            rangeCandidateSha256:v.rangeEvidenceCandidate.sha256,calendarRowsSha256:v.calendarRowsDigestCandidate,
+            geometry:{dayPlans:v.geometry.dayPlanCount,queries:v.geometry.totalQueries,units:v.geometry.totalReservedUnits,
+            coverageGridSha256:v.geometry.coverageGridSha256,reviewOnlyPlanBytesEqualCommitted:committedMatches},
+            netRestCeiling:j.concreteReviewRecommendation.netRestCeilingUnits,alertCeiling:j.concreteReviewRecommendation.proposedAlertSafety.alertRunSpendCeilingCredits,
+            scopeLedgerEvidence:d.evidence.length,scopeLedgerApprovals:d.approvals.length,byteReproductionExact:true,
+            providerCalls:0,databaseWrites:0,stagePacketExported:false,sourceRightsApproved:false,scientificFreezeApproved:false,phase6PaidGo:false}));
+          NODE
