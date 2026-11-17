@@ -104,3 +104,29 @@ test("current SOURCE handoff uses exact prospective calendar, not a caller-selec
   {V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},{V39_PHASE6_PROCESS_ARMED:"1"},{AERODATABOX_API_KEY:"forbidden"}])
   assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,...delta}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
 });
+
+test("deadline metadata distinguishes already published, missed and partial past genesis from future missing draw",()=>{
+ const f=fixture(),ctx=admitP6NonpaidSourceDayGithub(f.env),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const at=iso(now+2*3600000+45*60000);
+ // Day 1 successfully indexed; day 2 missed with no genesis; day 3
+ // passed its preparation lead with partial genesis; day 4 at risk.
+ f.indexes[0].claim_n=1;f.indexes[0].index_n=1;
+ f.indexes[2].claim_n=1;f.calendar[3].draw_n=0;
+ const r=selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,at);
+ assert.deepEqual(r.missedUnpublishedDays.map(x=>x.runDayIndex),[2]);
+ assert.deepEqual(r.pastIncompleteGenesisDays.map(x=>x.runDayIndex),[3]);
+ assert.deepEqual(r.atRiskMissingDrawDays.map(x=>x.runDayIndex),[4]);
+ assert.equal(r.selected.runDayIndex,5);
+ assert.equal(r.tooLate,1);
+ assert.equal(r.missedUnpublishedDays[0].preparationDeadlineUtc,iso(now+90*60000));
+});
+test("exact minimum remains eligible; a completed past index is not a missed day",()=>{
+ const f=fixture(),ctx=admitP6NonpaidSourceDayGithub(f.env),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const a=selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,iso(now+30*60000));
+ assert.equal(a.selected.runDayIndex,1);
+ assert.equal(a.missedUnpublishedDays.length,0);
+ f.indexes[0].claim_n=1;f.indexes[0].index_n=1;
+ const b=selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,iso(now+60*60000+1));
+ assert.equal(b.missedUnpublishedDays.length,0);
+ assert.equal(b.tooLate,0);
+});

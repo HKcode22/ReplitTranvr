@@ -154,6 +154,9 @@ export function selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUt
   hold("INCOMPLETE_ACTUAL_CALENDAR_OR_INDEX_METADATA");
  const byDay=new Map(calendar.map(x=>[x.run_day_index,x])),indexes=new Map(indexRows.map(x=>[x.run_day_index,x]));
  let tooLate=0,missingDraw=0,alreadyIndexed=0;const eligible=[];
+ // Content-free operational evidence, separate from provider or flight
+ // outcomes. A past first-request deadline is not a valid backfill window.
+ const missedUnpublishedDays=[],atRiskMissingDrawDays=[],pastIncompleteGenesisDays=[];
  for(const plan of plans){
   if(ctx.requestedDay!==null&&plan.runDayIndex!==ctx.requestedDay)continue;
   const c=byDay.get(plan.runDayIndex),i=indexes.get(plan.runDayIndex);
@@ -164,15 +167,33 @@ export function selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUt
      !Number.isSafeInteger(i.index_n)||i.index_n<0||i.index_n>1024)
    hold("ACTUAL_DAY_PLAN_OR_INDEX_STATE_DRIFT");
   const lead=utc(plan.firstRequestUtc)-now;
-  if(lead<minimum){if(lead>=0)tooLate++;continue;}
+  const deadline={runDayIndex:plan.runDayIndex,firstRequestUtc:plan.firstRequestUtc,
+   preparationDeadlineUtc:new Date(utc(plan.firstRequestUtc)-minimum).toISOString()};
+  // Completed genesis metadata must not be called a missed preparation
+  // simply because its first request is now close or in the past.
+  const indexed=i.claim_n===1&&i.index_n>=1;
+  if(lead<minimum){
+   if(indexed)continue;
+   if(lead>=0)tooLate++;
+   if(i.claim_n!==0||i.index_n!==0)pastIncompleteGenesisDays.push(deadline);
+   else missedUnpublishedDays.push(deadline);
+   continue;
+  }
   if(lead>maximum)continue;
-  if(i.claim_n===1&&i.index_n>=1){alreadyIndexed++;continue;}
+  if(indexed){alreadyIndexed++;continue;}
   if(i.claim_n!==0||i.index_n!==0)hold("INCOMPLETE_FUTURE_INDEX_GENESIS_NO_REPLAY");
-  if(c.draw_n!==4){missingDraw++;continue;}
+  if(c.draw_n!==4){
+   missingDraw++;
+   // One hour before the existing minimum lead boundary: notification
+   // only, does not alter selection, lookahead or authorization.
+   if(lead<=minimum+3600000)atRiskMissingDrawDays.push(deadline);
+   continue;
+  }
   eligible.push(plan);
  }
  eligible.sort((a,b)=>a.firstRequestUtc.localeCompare(b.firstRequestUtc)||a.runDayIndex-b.runDayIndex);
- return {selected:eligible[0]??null,eligibleDayCount:eligible.length,missingDraw,tooLate,alreadyIndexed};
+ return {selected:eligible[0]??null,eligibleDayCount:eligible.length,missingDraw,tooLate,alreadyIndexed,
+  missedUnpublishedDays,atRiskMissingDrawDays,pastIncompleteGenesisDays};
 }
 async function calendarRead(restricted,ctx){
  const c=await restricted.connect();
@@ -216,6 +237,11 @@ export async function runP6NonpaidSourceDayGithub(env){
   const base={schema:"v39.phase6.github-nonpaid-source-day-runtime.v1",mainSha:ctx.mainSha,
    eligibleDayCount:selection.eligibleDayCount,missingDrawDayCount:selection.missingDraw,
    tooLateDayCount:selection.tooLate,alreadyIndexedMetadataDayCount:selection.alreadyIndexed,
+   preparationDeadlineEvidence:{schema:"v39.phase6.preparation-deadline-metadata.v1",
+    observedDbUtc:i.now,missedUnpublishedDays:selection.missedUnpublishedDays,
+    atRiskMissingDrawDays:selection.atRiskMissingDrawDays,
+    pastIncompleteGenesisDays:selection.pastIncompleteGenesisDays,
+    actualFlightLossVerified:false,actualProviderCollectionVerified:false},
    providerCalls:0,githubDispatches:0,phase6PaidGo:false};
   if(!selection.selected)return Object.freeze({...base,status:"NO_ELIGIBLE_UNPUBLISHED_FUTURE_DAY_NO_WRITE"});
   const plan=selection.selected,p=ctx.p;
