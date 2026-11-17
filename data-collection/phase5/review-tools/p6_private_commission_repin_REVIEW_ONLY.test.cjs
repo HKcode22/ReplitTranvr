@@ -23,10 +23,11 @@ function mock(mode="configure",state="ABSENT"){
   if(p.startsWith("actions/runs/"))return J({id:Number(p.split("/").at(-1)),head_sha:candidate,run_attempt:1,status:"completed",conclusion:z.ci?"success":"failure"});
   throw Error("unexpected "+p);
  };
+ z.gh=gh;
  z.run=()=>handoff({gh,confirm:()=>z.confirm,report:()=>{}},mode,sha,state,mode==="inspect-run"?"123":undefined);return z;
 }
 const test=require('node:test'),{deepEqual:eq,ok:assert}=require('node:assert/strict');
-(f,pattern,m)=>{let e;try{f.run()}catch(x){e=x}assert(e&&String(e).includes(pattern));eq(f.mutations,m)}
+const reject=(f,pattern,m)=>{let e;try{f.run()}catch(x){e=x}assert(e&&String(e).includes(pattern));eq(f.mutations,m)}
 const M="P6_PRIVATE_EPOCH_EXPIRY_MODE",P="P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA";
 test("review only",()=>{const f=mock("review");eq(f.run().status,"EXACT_PRIVATE_TRANSITION_REVIEW_ONLY");eq(f.mutations,[])});
 test("configure and verify only",()=>{const f=mock();eq(f.run().privateCommissionState,"ABSENT");eq(f.mutations,[M,P,"verify"]);eq(f.vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED,"true")});
@@ -42,3 +43,29 @@ test("lost pin ACK",()=>{const f=mock();f.pinLost=true;reject(f,"PIN_UPDATE_UNKN
 test("lost dispatch ACK",()=>{const f=mock();f.dispatchLost=true;reject(f,"DISPATCH_UNKNOWN",[M,P,"verify"])});
 test("wrong state",()=>{const f=mock();f.receiptDrift=true;reject(f,"VERIFY_RECEIPT_REVIEW_REQUIRED",[M,P,"verify"])});
 test("nonzero counters",()=>{const f=mock();f.counter=1;reject(f,"VERIFY_RECEIPT_REVIEW_REQUIRED",[M,P,"verify"])});
+
+// Exercise the saved native CLI entrypoint with a deterministic local executable.
+// PATH contains ONLY the synthetic gh; no live Github access or credentials.
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('node:child_process');
+function nativeFixture(mode,state,change=()=>{},gha=false){
+ const f=mock(mode,state);change(f);
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'p6-repin-native-'));
+ try{
+  const fixture=path.join(dir,'calls.json'),cursor=path.join(dir,'cursor');
+  const calls=[];
+  if(!gha){
+   try{handoff({gh:(args,input)=>{const answer=f.gh(args,input);calls.push({args,input:input??'',answer:args[0]==='run'&&args[1]==='view'?'primary-fids-expiry\tVerify exact main\t2026-11-17T14:00:00Z '+answer:answer});return answer},confirm:()=>true,report:()=>{}},mode,f.sha,state,mode==='inspect-run'?'123':undefined)}catch(e){if(!String(e.message).startsWith('HOLD_P6_PRIVATE_REPIN_'))throw e;}
+  }
+  fs.writeFileSync(fixture,JSON.stringify(calls));fs.writeFileSync(cursor,'0');
+  fs.writeFileSync(path.join(dir,'gh'),'#!'+process.execPath+'\n'+`const fs=require('node:fs');const a=JSON.parse(fs.readFileSync(process.env.FIXTURE,'utf8'));const i=Number(fs.readFileSync(process.env.CURSOR,'utf8'));const x=a[i];if(!x||JSON.stringify(x.args)!==JSON.stringify(process.argv.slice(2))||x.input!==fs.readFileSync(0,'utf8'))process.exit(77);fs.writeFileSync(process.env.CURSOR,String(i+1));process.stdout.write(x.answer);`,{mode:0o700});
+  const args=[path.join(__dirname,'p6_private_commission_repin_REVIEW_ONLY.cjs'),mode,f.sha,state,...(mode==='inspect-run'?['123']:[])];
+  const result=spawnSync(process.execPath,args,{encoding:'utf8',timeout:15000,env:{PATH:dir,FIXTURE:fixture,CURSOR:cursor,GITHUB_ACTIONS:String(gha)}});
+  assert(!result.error);eq(Number(fs.readFileSync(cursor,'utf8')),calls.length);
+  return {status:result.status,stdout:result.stdout,stderr:result.stderr,callCount:calls.length};
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+}
+test('native CLI review exact fixture, no actual gh',()=>{const r=nativeFixture('review','ABSENT');eq(r.status,0);eq(JSON.parse(r.stdout).status,'EXACT_PRIVATE_TRANSITION_REVIEW_ONLY');eq(r.stderr,'');assert(r.callCount>0)});
+test('native CLI inspect existing receipt with gh log prefix',()=>{const r=nativeFixture('inspect-run','GRANTED');eq(r.status,0);const lines=r.stdout.trim().split('\n').map(x=>JSON.parse(x));eq(lines.at(-1).privateCommissionState,'GRANTED');eq(lines.at(-1).status,'PRIVATE_COMMISSION_TRANSITION_PRIMARY_VERIFY_NO_GO');eq(r.stderr,'')});
+test('native CLI refuses wrong main before writes',()=>{const r=nativeFixture('review','ABSENT',f=>{f.main='b'.repeat(40)});eq(r.status,2);eq(r.stdout,'');assert(r.stderr.includes('EXACT_REVIEWED_MAIN_TREE_REQUIRED'));eq(r.callCount,1)});
+test('native CLI refuses GitHub Actions without even fake gh',()=>{const r=nativeFixture('review','ABSENT',()=>{},true);eq(r.status,2);eq(r.stdout,'');assert(r.stderr.includes('OWNER_LOCAL_ARGUMENTS'));eq(r.callCount,0)});
