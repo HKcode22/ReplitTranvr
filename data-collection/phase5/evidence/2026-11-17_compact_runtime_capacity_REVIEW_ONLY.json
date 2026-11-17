@@ -1,0 +1,403 @@
+{
+  "schema": "v39.phase5.compact-calendar-runtime-capacity-review.v1",
+  "status": "MODEL_ONLY_NO_RELEASE",
+  "currentMain": "345f642e0df3266853a1f9d5e3f12fa262ddf1ee",
+  "runtimeProfile": {
+    "perTick": 8,
+    "inFlight": 24,
+    "maxLookaheadMinutes": 90,
+    "minLookaheadMinutes": 15,
+    "nominalTickMinutes": 10
+  },
+  "original": {
+    "capacity": {
+      "completionTails": [
+        {
+          "tailMinutes": 0,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 5,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 15,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 25,
+          "phaseZeroMissed": 0,
+          "worstMissed": 16,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 35,
+          "phaseZeroMissed": 16,
+          "worstMissed": 16,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 60,
+          "phaseZeroMissed": 80,
+          "worstMissed": 80,
+          "peakInFlight": 24
+        }
+      ],
+      "regularCadence": [
+        {
+          "intervalMinutes": 5,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 10,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 15,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 20,
+          "minMissed": 8,
+          "maxMissed": 16
+        },
+        {
+          "intervalMinutes": 30,
+          "minMissed": 32,
+          "maxMissed": 40
+        },
+        {
+          "intervalMinutes": 60,
+          "minMissed": 2344,
+          "maxMissed": 2716
+        },
+        {
+          "intervalMinutes": 90,
+          "minMissed": 3672,
+          "maxMissed": 3788
+        },
+        {
+          "intervalMinutes": 120,
+          "minMissed": 4128,
+          "maxMissed": 4588
+        }
+      ]
+    },
+    "workload": {
+      "templateCount": 6144,
+      "distinctRequestInstants": 1516,
+      "sourceUtcDates": 42,
+      "peakTemplatesAtInstant": 8,
+      "peakUtcDateTemplates": 256,
+      "maxDueDays": 2,
+      "maxDueQueries": 48,
+      "windows": [
+        {
+          "minutes": 15,
+          "count": 8,
+          "firstRequestUtc": "2026-11-24T06:15:00.000Z",
+          "lastRequestUtc": "2026-11-24T06:15:00.000Z"
+        },
+        {
+          "minutes": 30,
+          "count": 16,
+          "firstRequestUtc": "2026-11-24T06:15:00.000Z",
+          "lastRequestUtc": "2026-11-24T06:30:00.000Z"
+        },
+        {
+          "minutes": 60,
+          "count": 32,
+          "firstRequestUtc": "2026-11-27T14:15:00.000Z",
+          "lastRequestUtc": "2026-11-27T15:00:00.000Z"
+        },
+        {
+          "minutes": 120,
+          "count": 56,
+          "firstRequestUtc": "2026-11-27T13:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T15:30:00.000Z"
+        },
+        {
+          "minutes": 240,
+          "count": 88,
+          "firstRequestUtc": "2026-11-27T11:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T15:30:00.000Z"
+        },
+        {
+          "minutes": 360,
+          "count": 128,
+          "firstRequestUtc": "2026-11-27T14:15:00.000Z",
+          "lastRequestUtc": "2026-11-27T20:00:00.000Z"
+        },
+        {
+          "minutes": 480,
+          "count": 160,
+          "firstRequestUtc": "2026-11-27T12:15:00.000Z",
+          "lastRequestUtc": "2026-11-27T20:00:00.000Z"
+        },
+        {
+          "minutes": 532,
+          "count": 176,
+          "firstRequestUtc": "2026-11-27T11:15:00.000Z",
+          "lastRequestUtc": "2026-11-27T20:00:00.000Z"
+        },
+        {
+          "minutes": 635,
+          "count": 204,
+          "firstRequestUtc": "2026-11-27T09:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T20:15:00.000Z"
+        },
+        {
+          "minutes": 720,
+          "count": 224,
+          "firstRequestUtc": "2026-11-27T09:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T21:30:00.000Z"
+        },
+        {
+          "minutes": 1440,
+          "count": 256,
+          "firstRequestUtc": "2026-11-27T09:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T23:30:00.000Z"
+        }
+      ]
+    }
+  },
+  "compact": {
+    "capacity": {
+      "completionTails": [
+        {
+          "tailMinutes": 0,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 5,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 15,
+          "phaseZeroMissed": 0,
+          "worstMissed": 0,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 25,
+          "phaseZeroMissed": 0,
+          "worstMissed": 136,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 35,
+          "phaseZeroMissed": 136,
+          "worstMissed": 136,
+          "peakInFlight": 24
+        },
+        {
+          "tailMinutes": 60,
+          "phaseZeroMissed": 352,
+          "worstMissed": 352,
+          "peakInFlight": 24
+        }
+      ],
+      "regularCadence": [
+        {
+          "intervalMinutes": 5,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 10,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 15,
+          "minMissed": 0,
+          "maxMissed": 0
+        },
+        {
+          "intervalMinutes": 20,
+          "minMissed": 100,
+          "maxMissed": 136
+        },
+        {
+          "intervalMinutes": 30,
+          "minMissed": 252,
+          "maxMissed": 280
+        },
+        {
+          "intervalMinutes": 60,
+          "minMissed": 2624,
+          "maxMissed": 2932
+        },
+        {
+          "intervalMinutes": 90,
+          "minMissed": 3816,
+          "maxMissed": 3972
+        },
+        {
+          "intervalMinutes": 120,
+          "minMissed": 4288,
+          "maxMissed": 4668
+        }
+      ]
+    },
+    "workload": {
+      "templateCount": 6144,
+      "distinctRequestInstants": 1448,
+      "sourceUtcDates": 36,
+      "peakTemplatesAtInstant": 8,
+      "peakUtcDateTemplates": 280,
+      "maxDueDays": 2,
+      "maxDueQueries": 48,
+      "windows": [
+        {
+          "minutes": 15,
+          "count": 8,
+          "firstRequestUtc": "2026-11-24T06:15:00.000Z",
+          "lastRequestUtc": "2026-11-24T06:15:00.000Z"
+        },
+        {
+          "minutes": 30,
+          "count": 16,
+          "firstRequestUtc": "2026-11-24T06:15:00.000Z",
+          "lastRequestUtc": "2026-11-24T06:30:00.000Z"
+        },
+        {
+          "minutes": 60,
+          "count": 32,
+          "firstRequestUtc": "2026-11-26T14:15:00.000Z",
+          "lastRequestUtc": "2026-11-26T15:00:00.000Z"
+        },
+        {
+          "minutes": 120,
+          "count": 64,
+          "firstRequestUtc": "2026-11-27T20:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T22:30:00.000Z"
+        },
+        {
+          "minutes": 240,
+          "count": 120,
+          "firstRequestUtc": "2026-12-05T17:45:00.000Z",
+          "lastRequestUtc": "2026-12-05T21:30:00.000Z"
+        },
+        {
+          "minutes": 360,
+          "count": 152,
+          "firstRequestUtc": "2026-11-27T16:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T22:30:00.000Z"
+        },
+        {
+          "minutes": 480,
+          "count": 184,
+          "firstRequestUtc": "2026-11-27T14:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T22:30:00.000Z"
+        },
+        {
+          "minutes": 532,
+          "count": 200,
+          "firstRequestUtc": "2026-11-27T13:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T22:30:00.000Z"
+        },
+        {
+          "minutes": 635,
+          "count": 228,
+          "firstRequestUtc": "2026-12-05T13:45:00.000Z",
+          "lastRequestUtc": "2026-12-06T00:15:00.000Z"
+        },
+        {
+          "minutes": 720,
+          "count": 248,
+          "firstRequestUtc": "2026-12-05T13:45:00.000Z",
+          "lastRequestUtc": "2026-12-06T01:30:00.000Z"
+        },
+        {
+          "minutes": 1440,
+          "count": 320,
+          "firstRequestUtc": "2026-11-26T09:45:00.000Z",
+          "lastRequestUtc": "2026-11-27T04:30:00.000Z"
+        }
+      ]
+    },
+    "singleBlackouts": [
+      {
+        "outageMinutes": 60,
+        "missed": 32,
+        "outageStart": "2026-11-27T21:20:00.000Z",
+        "resume": "2026-11-27T22:20:00.000Z",
+        "byDay": {
+          "6": 8,
+          "7": 24
+        }
+      },
+      {
+        "outageMinutes": 90,
+        "missed": 48,
+        "outageStart": "2026-12-05T18:50:00.000Z",
+        "resume": "2026-12-05T20:20:00.000Z",
+        "byDay": {
+          "12": 24,
+          "13": 24
+        }
+      },
+      {
+        "outageMinutes": 120,
+        "missed": 64,
+        "outageStart": "2026-12-05T18:50:00.000Z",
+        "resume": "2026-12-05T20:50:00.000Z",
+        "byDay": {
+          "12": 32,
+          "13": 32
+        }
+      },
+      {
+        "outageMinutes": 240,
+        "missed": 108,
+        "outageStart": "2026-11-27T18:20:00.000Z",
+        "resume": "2026-11-27T22:20:00.000Z",
+        "byDay": {
+          "6": 52,
+          "7": 56
+        }
+      },
+      {
+        "outageMinutes": 350,
+        "missed": 136,
+        "outageStart": "2026-11-27T16:30:00.000Z",
+        "resume": "2026-11-27T22:20:00.000Z",
+        "byDay": {
+          "6": 64,
+          "7": 72
+        }
+      },
+      {
+        "outageMinutes": 490,
+        "missed": 172,
+        "outageStart": "2026-11-27T14:10:00.000Z",
+        "resume": "2026-11-27T22:20:00.000Z",
+        "byDay": {
+          "6": 100,
+          "7": 72
+        }
+      }
+    ],
+    "baselineMissed": 0,
+    "baselineTickCount": 4939
+  },
+  "actualLatencyMeasured": false,
+  "physicalRetentionGuaranteed": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
