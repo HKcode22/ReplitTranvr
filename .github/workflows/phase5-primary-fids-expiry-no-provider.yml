@@ -1,0 +1,71 @@
+name: Phase5 primary FIDS expiry (STOP default, no provider)
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: choice
+        options:
+          - VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES
+          - APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER
+      approved_main_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: p5-primary-fids-expiry-main
+  cancel-in-progress: false
+env:
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+jobs:
+  primary-fids-expiry:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
+          ((github.event_name == 'schedule' &&
+             vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+             vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER') ||
+           (github.event_name == 'workflow_dispatch' &&
+             inputs.approved_main_sha == github.sha &&
+             (inputs.confirm == 'VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES' ||
+              (inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == inputs.confirm)))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA }}
+      P5_PRIMARY_FIDS_EXPIRY_ENABLED: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED }}
+      P5_PRIMARY_FIDS_EXPIRY_APPROVAL: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL }}
+      P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256: ${{ vars.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256 }}
+      P5_PRIMARY_FIDS_EXPIRY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES' && 'VERIFY_ONLY' || 'APPLY_DUE_ONLY' }}
+      P5_PRIMARY_FIDS_SWEEP_DATABASE_URL: ${{ secrets.P5_PRIMARY_FIDS_SWEEP_DATABASE_URL }}
+      P5_RETENTION_READER_DATABASE_URL: ${{ secrets.P5_RETENTION_READER_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify exact main and execute only bounded primary FIDS expiry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$GITHUB_SHA" = "$P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          node --check scripts/v39_phase5_primary_fids_expiry_github_v39.mjs
+          node scripts/v39_phase5_primary_fids_expiry_github_v39.mjs
