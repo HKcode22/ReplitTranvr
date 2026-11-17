@@ -1,0 +1,300 @@
+{
+  "status": "THEORETICAL_WORST_ALIGNED_SOURCE_BLACKOUT_NOT_ACTUAL_LOST_FLIGHTS",
+  "archivedArtifact": 14212961986,
+  "sourceReviewSha256": "a4f9229ea4454ca17301f2f2a518dfba1eda2c86f1c8bc55ceede13f8e70ca48",
+  "templates": 6144,
+  "horizonCounts": {
+    "T-24h": 2048,
+    "T-6h": 2048,
+    "T-90m": 2048
+  },
+  "priorLead": [
+    15,
+    35
+  ],
+  "candidateLead": [
+    15,
+    90
+  ],
+  "capacityModelled": false,
+  "results": [
+    {
+      "gapMinutes": 20,
+      "allOld": [
+        0,
+        {}
+      ],
+      "allNew": [
+        0,
+        {}
+      ],
+      "day1Old": [
+        0,
+        {}
+      ],
+      "day1New": [
+        0,
+        {}
+      ]
+    },
+    {
+      "gapMinutes": 30,
+      "allOld": [
+        8,
+        {
+          "T-6h": 4,
+          "T-90m": 4
+        }
+      ],
+      "allNew": [
+        0,
+        {}
+      ],
+      "day1Old": [
+        4,
+        {
+          "T-24h": 4
+        }
+      ],
+      "day1New": [
+        0,
+        {}
+      ]
+    },
+    {
+      "gapMinutes": 60,
+      "allOld": [
+        24,
+        {
+          "T-6h": 12,
+          "T-90m": 12
+        }
+      ],
+      "allNew": [
+        0,
+        {}
+      ],
+      "day1Old": [
+        12,
+        {
+          "T-24h": 12
+        }
+      ],
+      "day1New": [
+        0,
+        {}
+      ]
+    },
+    {
+      "gapMinutes": 75,
+      "allOld": [
+        32,
+        {
+          "T-6h": 16,
+          "T-90m": 16
+        }
+      ],
+      "allNew": [
+        0,
+        {}
+      ],
+      "day1Old": [
+        16,
+        {
+          "T-24h": 16
+        }
+      ],
+      "day1New": [
+        0,
+        {}
+      ]
+    },
+    {
+      "gapMinutes": 90,
+      "allOld": [
+        40,
+        {
+          "T-6h": 20,
+          "T-90m": 20
+        }
+      ],
+      "allNew": [
+        8,
+        {
+          "T-6h": 4,
+          "T-90m": 4
+        }
+      ],
+      "day1Old": [
+        20,
+        {
+          "T-24h": 20
+        }
+      ],
+      "day1New": [
+        4,
+        {
+          "T-24h": 4
+        }
+      ]
+    },
+    {
+      "gapMinutes": 120,
+      "allOld": [
+        52,
+        {
+          "T-6h": 28,
+          "T-90m": 24
+        }
+      ],
+      "allNew": [
+        24,
+        {
+          "T-6h": 12,
+          "T-90m": 12
+        }
+      ],
+      "day1Old": [
+        28,
+        {
+          "T-24h": 28
+        }
+      ],
+      "day1New": [
+        12,
+        {
+          "T-24h": 12
+        }
+      ]
+    },
+    {
+      "gapMinutes": 160.03,
+      "allOld": [
+        64,
+        {
+          "T-6h": 40,
+          "T-90m": 24
+        }
+      ],
+      "allNew": [
+        48,
+        {
+          "T-6h": 24,
+          "T-90m": 24
+        }
+      ],
+      "day1Old": [
+        40,
+        {
+          "T-24h": 40
+        }
+      ],
+      "day1New": [
+        24,
+        {
+          "T-24h": 24
+        }
+      ]
+    },
+    {
+      "gapMinutes": 349.9,
+      "allOld": [
+        112,
+        {
+          "T-6h": 88,
+          "T-90m": 24
+        }
+      ],
+      "allNew": [
+        100,
+        {
+          "T-6h": 76,
+          "T-90m": 24
+        }
+      ],
+      "day1Old": [
+        80,
+        {
+          "T-6h": 64,
+          "T-90m": 16
+        }
+      ],
+      "day1New": [
+        68,
+        {
+          "T-6h": 64,
+          "T-90m": 4
+        }
+      ]
+    },
+    {
+      "gapMinutes": 492,
+      "allOld": [
+        160,
+        {
+          "T-24h": 8,
+          "T-6h": 56,
+          "T-90m": 96
+        }
+      ],
+      "allNew": [
+        144,
+        {
+          "T-24h": 8,
+          "T-6h": 40,
+          "T-90m": 96
+        }
+      ],
+      "day1Old": [
+        120,
+        {
+          "T-6h": 64,
+          "T-90m": 56
+        }
+      ],
+      "day1New": [
+        104,
+        {
+          "T-6h": 64,
+          "T-90m": 40
+        }
+      ]
+    },
+    {
+      "gapMinutes": 590.3,
+      "allOld": [
+        188,
+        {
+          "T-24h": 8,
+          "T-6h": 84,
+          "T-90m": 96
+        }
+      ],
+      "allNew": [
+        172,
+        {
+          "T-24h": 8,
+          "T-6h": 68,
+          "T-90m": 96
+        }
+      ],
+      "day1Old": [
+        128,
+        {
+          "T-6h": 64,
+          "T-90m": 64
+        }
+      ],
+      "day1New": [
+        128,
+        {
+          "T-6h": 64,
+          "T-90m": 64
+        }
+      ]
+    }
+  ],
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
