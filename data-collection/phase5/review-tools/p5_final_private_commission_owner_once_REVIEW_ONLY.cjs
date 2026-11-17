@@ -1,6 +1,6 @@
 'use strict';
 // Owner-local review-only by default. No provider/collection/staging activation.
-// Requires exact candidate, clean temporary worktree, existing owner DB and gh.
+// Requires exact candidate, isolated temporary Git checkout, existing owner DB and gh.
 // One explicit engineering-only confirmation; errors halt without replay.
 const {finishPrivateCommission}=require('./p5_final_private_commission_core_REVIEW_ONLY.cjs');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFileSync}=require('node:child_process'),{createHash}=require('node:crypto');
@@ -10,12 +10,14 @@ const OWNER='scripts/v39_phase6_private_epoch_expiry_owner_commission_v39.mjs';
 const PIN='P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA',MODE='P6_PRIVATE_EPOCH_EXPIRY_MODE';
 const H=/^[a-f0-9]{40}$/,D=/^[a-f0-9]{64}$/;
 const hold=x=>{throw Error('HOLD_P5_FINAL_PRIVATE_'+x)};
-const env={...process.env,ADB_AUTO_COLLECT:'0',V39_PHASE6_PROCESS_ARMED:'0',V39_PHASE6_OWNER_APPROVED:'0'};
+const env={...process.env,ADB_AUTO_COLLECT:'0',V39_PHASE6_PROCESS_ARMED:'0',V39_PHASE6_OWNER_APPROVED:'0',GH_PROMPT_DISABLED:'1',GIT_TERMINAL_PROMPT:'0'};
+ // Git environment can redirect an otherwise isolated temporary checkout.
+ for(const k of ['GIT_DIR','GIT_WORK_TREE','GIT_INDEX_FILE','GIT_COMMON_DIR','GIT_OBJECT_DIRECTORY','GIT_ALTERNATE_OBJECT_DIRECTORIES','GIT_CONFIG_COUNT','GIT_CONFIG_PARAMETERS'])delete env[k];
 for(const k of ['AERODATABOX_API_KEY','RAPIDAPI_KEY','AERODATABOX_WEBHOOK_SECRET','V39_DATABASE_RUNTIME_URL','P6_PRIVATE_EXPIRY_OWNER_APPROVAL','P6_PRIVATE_EXPIRY_OWNER_REVIEW_SHA256'])delete env[k];
 const hash=(b,alg='sha256')=>createHash(alg).update(b).digest('hex');
 const blob=b=>hash(Buffer.concat([Buffer.from('blob '+b.length+'\0'),b]),'sha1');
 const print=x=>process.stdout.write(JSON.stringify(x)+'\n');
-let root=null,temp=null,work=null,added=false,stage='PREFLIGHT',helper=null,operation='START',failure=null;
+let root=null,temp=null,work=null,stage='PREFLIGHT',helper=null,operation='START',failure=null;
 function cmd(program,args,{cwd=root,input,timeout=30000,e=env}={}){
  try{return execFileSync(program,args,{cwd,encoding:'utf8',env:e,input,timeout,maxBuffer:24*1024*1024,stdio:['pipe','pipe','pipe']}).trim();}
  catch(e){
@@ -67,10 +69,10 @@ function getBlob(id,file){
  fs.writeFileSync(file,b,{mode:0o600,flag:'wx'});return b;
 }
 function git(args,cwd=root){
- operation=args.includes('fetch')?'GIT_FETCH':args.includes('worktree')?'GIT_WORKTREE':args.includes('switch')?'GIT_CHECKOUT':args[0]==='status'?'GIT_STATUS':'GIT_IDENTITY';
+ operation=args.includes('fetch')?'GIT_FETCH':args.includes('init')?'GIT_INIT':args.includes('switch')?'GIT_CHECKOUT':args[0]==='status'?'GIT_STATUS':'GIT_IDENTITY';
  return cmd('git',args,{cwd,timeout:180000});
 }
-function fetchRef(ref){git(['-c','credential.helper=','-c','credential.helper=!gh auth git-credential','fetch','--no-tags','https://github.com/'+R+'.git',ref]);}
+function fetchRef(ref){git(['-c','credential.helper=','-c','credential.helper=!gh auth git-credential','fetch','--depth=1','--no-tags','https://github.com/'+R+'.git',ref],work);}
 function exactCheckout(sha,tree){
  if(git(['rev-parse','HEAD'],work)!==sha||git(['rev-parse','HEAD^{tree}'],work)!==tree||git(['status','--porcelain','--untracked-files=no'],work))hold('TEMP_CHECKOUT_NOT_EXACT');
 }
@@ -104,15 +106,17 @@ try{
 function preflight(endpoint){
  stage='OWNER_PREFLIGHT';
  // Fetch both exact objects; only current approved main code runs against DB.
+ work=path.join(temp,'checkout');
+ fs.mkdirSync(work,{mode:0o700});
+ git(['init','--quiet'],work);
  fetchRef('refs/heads/main');fetchRef('refs/pull/864/head');
- if(remote()!==BASE||git(['rev-parse',HEAD+'^{tree}'])!==TREE||git(['rev-parse',BASE])!==BASE)hold('FETCHED_SCOPE_DRIFT');
- const sql=git(['rev-parse',HEAD+':'+SQL]);
+ if(remote()!==BASE||git(['rev-parse',HEAD+'^{tree}'],work)!==TREE||git(['rev-parse',BASE],work)!==BASE)hold('FETCHED_SCOPE_DRIFT');
+ const sql=git(['rev-parse',HEAD+':'+SQL],work);
  if(sql!=='861229c4c264ed9a47d005f2a96c25cf1c800615')hold('V0105_BLOB_DRIFT');
  const bytes=getBlob(sql,path.join(temp,'v0105.sql'));
- work=path.join(temp,'checkout');
- git(['-c','core.hooksPath=/dev/null','worktree','add','--detach',work,BASE]);added=true;
+ git(['-c','core.hooksPath=/dev/null','switch','--detach',BASE],work);
  fs.symlinkSync(path.join(root,'node_modules'),path.join(work,'node_modules'),'dir');
- exactCheckout(BASE,git(['rev-parse',BASE+'^{tree}']));
+ exactCheckout(BASE,git(['rev-parse',BASE+'^{tree}'],work));
  operation='NODE_OWNER_READONLY';
  return JSON.parse(cmd(process.execPath,['--input-type=module','-e',preflightSource],{cwd:work,timeout:70000,e:{...env,FINAL_PRIVATE_ENDPOINT:endpoint,FINAL_PRIVATE_SQL_SHA:hash(bytes)}}));
 }
@@ -131,8 +135,9 @@ function owner(mode,sha,review){
 }
 function main(){
  if(process.env.GITHUB_ACTIONS==='true'||process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0'||!process.env.DATABASE_URL||!['review','commission'].includes(process.argv[2]??'review')||process.argv.length>3)hold('OWNER_LOCAL_NONPAID_ONLY');
- operation='GIT_WORKSPACE_ROOT';
- root=fs.realpathSync(cmd('git',['rev-parse','--show-toplevel'],{cwd:process.cwd()}));
+ operation='WORKSPACE_EXISTING_DEPENDENCIES';
+ // Do not rely on or modify the user's Git working tree; Replit may not have one.
+ root=fs.realpathSync(process.cwd());
  if(!fs.existsSync(path.join(root,'node_modules','pg')))hold('EXISTING_DEPENDENCIES_REQUIRED');
  // The exact repository API authentication is the relevant proof; an unrelated stale gh account must not block it.
  if(remote()!==BASE)hold('EXACT_PREMERGE_MAIN_REQUIRED');
@@ -166,6 +171,5 @@ function main(){
 }
 try{print(main());}catch(e){const m=String(e?.message??'');console.error(JSON.stringify({status:/^HOLD_(?:P5_FINAL_PRIVATE|P6_PRIVATE_REPIN)_[A-Z0-9_]+$/.test(m)?m:'HOLD_P5_FINAL_PRIVATE_REDACTED_INSPECT_NO_REPLAY',stage,operation:failure?.operation??operation,commandFailure:failure,noAutomaticRetry:true,providerCalls:0,phase6PaidGo:false}));process.exitCode=2;}
 finally{
- if(added)try{git(['-c','core.hooksPath=/dev/null','worktree','remove','--force',work]);added=false;}catch{console.error('HOLD_P5_FINAL_PRIVATE_TEMP_WORKTREE_CLEANUP_REVIEW');}
- if(temp&&!added)fs.rmSync(temp,{recursive:true,force:true});
+ if(temp)fs.rmSync(temp,{recursive:true,force:true});
 }
