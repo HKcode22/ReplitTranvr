@@ -6,7 +6,7 @@ import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {replayP6CompactNov21Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -228,6 +228,34 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   expect(JSON.parse(plans.files[0].bytes).templates[0].scheduledRequestUtc).toBe("2026-11-19T23:45:00.000Z");
   expect(unsigned.phase6PaidGo).toBe(false);
   expect(unsigned.existingB0062WriterInvoked).toBe(false);
+  // The production candidate exporter must reproduce the separately tested
+  // exact prospective translation, while its default still refuses it.
+  const revised=replayP6CompactNov21Review();
+  expect(revised.calendarDraft).toEqual(draft);
+  expect(revised.shapeEnvelope).toEqual(envelope);
+  expect(revised.revision.independentDateRevisionApproved).toBe(false);
+  expect(revised.revision.calendarDraftSha256).toBe("dcf06aaeb4f4e6ac697230f2eac634ebe5f9d1f72cda4e5bacff0aadfb48c943");
+  const b=proposeP5ActualNov22Budget(draft,"COMPACT_NOV21");
+  expect(b.totalReservedUnits).toBe(37388);
+  expect(b.peakDailyUnits).toBe(1280);
+  expect(b.renewal.conservativePriorCycleMax).toBe(14496);
+  expect(b.renewal.conservativeNextCycleMax).toBe(23988);
+  expect(()=>proposeP5ActualNov22Budget(old.calendarDraft,"COMPACT_NOV21")).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
+  const prepared=prepareP6ActualReviewInput("e".repeat(40),0,"COMPACT_NOV21");
+  expect(prepared.proposedTotalReservedUnits).toBe(37388);
+  expect(prepared.originalPreviewSha256).toBe("003885e93f3a3daa1098f648502c5a7dd3beb6e317e906ffe281760aaba763af");
+  expect(prepared.externalCandidate.phase6AuthorizationId).toBeNull();
+  const p=assembleP6ActualFirstSeedReleaseCandidate({draft,envelope,external,expectedExternalInputSha256:digest(external),timing:f.timing,expectedTimingJsonSha256:f.expectedTimingJsonSha256,calendarVariant:"COMPACT_NOV21"});
+  expect(p.dayPlans.dayPlanSha256s).toEqual(plans.dayPlanSha256s);
+  const externalBytes=Buffer.from(JSON.stringify(external)),timingBytes=Buffer.from(JSON.stringify(f.timing));
+  const input={externalBytes,expectedExternalFileSha256:hash(externalBytes),timingBytes,expectedTimingFileSha256:hash(timingBytes)};
+  expect(()=>compileP6ActualCandidateExport(input)).toThrow("EXACT_EXTERNAL_INPUT_SHAPE_OR_TIMING_REQUIRED");
+  const exported=compileP6ActualCandidateExport({...input,calendarVariant:"COMPACT_NOV21"});
+  expect(exported.summary.sourceQueries).toBe(6144);
+  expect(exported.summary.totalReservedUnits).toBe(37388);
+  expect(exported.summary.independentReleaseStillRequired).toBe(true);
+  expect(exported.summary.phase6PaidGo).toBe(false);
+  expect(exported.summary.dayPlanSha256s).toEqual(plans.dayPlanSha256s);
  });
  it("produces 31 exact review-only metadata plans with first-seed cost parity",()=>{
   const f=reviewFixture(),x=assembleP6ActualFirstSeedReleaseCandidate(f);
