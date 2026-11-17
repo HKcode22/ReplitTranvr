@@ -798,7 +798,6 @@ export async function fetchFidsPopulation(
     }};
   }):unambiguous;
   const rows = qualified.map((r) => r.row);
-  const flightInstanceIds = Array.from(new Set(qualified.map((r) => r.resolvedCanonical).filter((x): x is string => !!x)));
   const query: FidsQueryObservation = {
     populationQueryId,
     sourceAirportIcao: params.airportIcao,
@@ -817,6 +816,8 @@ export async function fetchFidsPopulation(
     openapiSha256: params.openapiSha256,
   };
   const persistedPopulationRows = await (deps.persist ?? persistFidsObservation)(query, rows);
+  // Scoped atomic persistence may conservatively demote a legacy-key collision.
+  const flightInstanceIds = Array.from(new Set(rows.map(r=>r.canonicalFlightInstanceId).filter((x):x is string=>!!x)));
   return {
     airportIcao: params.airportIcao,
     fromLocal: params.fromLocal,
@@ -950,8 +951,10 @@ export async function persistFidsObservation(
       throw new Error("FIDS_ATOMIC_ORIGINAL_NOT_INSERTED_HOLD");
     const durableAvailableAt = rawInsert.rows[0].available_at as Date;
     let inserted = 0;
-    for (const r of rows) {
-      const result = await client.query(
+    const scopedProspective=beforeCommit!==undefined&&query.queryDirection==="Departure"&&
+      (query.rawPayload as {phase5PopulationIdentityVersion?:unknown}|null)?.phase5PopulationIdentityVersion===P5_CANONICAL_IDENTITY_VERSION;
+    const replacements=new Map<number,PopulationRow>();
+    const insertMember=(r:PopulationRow,legacyKeyOnly:boolean)=>client.query(
         `INSERT INTO clean.flight_population
          (batch_id, source_airport_icao, window_start_utc, window_end_utc, cutoff_utc,
           flight_number, carrier_iata, carrier_icao, call_sign, dep_airport_icao, dep_airport_iata,
@@ -962,7 +965,7 @@ export async function persistFidsObservation(
           canonical_flight_instance_id, analytic_identity_id, provider_api_version,
           fids_protocol_version, openapi_sha256)
          VALUES (${FIDS_ATOMIC_POPULATION_VALUES_V39})
-         ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING`,
+         ${legacyKeyOnly?"ON CONFLICT ON CONSTRAINT flight_population_key DO NOTHING":"ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING"}`,
         [r.batchId,r.sourceAirportIcao,r.windowStartUtc,r.windowEndUtc,r.cutoffUtc,r.flightNumber,
          r.carrierIata,r.carrierIcao,r.callSign,r.depAirportIcao,r.depAirportIata,r.arrAirportIcao,
          r.arrAirportIata,r.depScheduledUtc,r.arrScheduledUtc,r.sourceType,r.providerRecordKey,
@@ -971,7 +974,29 @@ export async function persistFidsObservation(
          durableAvailableAt,r.responseHash,r.canonicalFlightInstanceId,r.analyticIdentityId,
          r.providerApiVersion,r.fidsProtocolVersion,r.openapiSha256],
       );
-      inserted += result.rowCount ?? 0;
+    for(const [index,r] of rows.entries()){
+      let result=await insertMember(r,scopedProspective);
+      if(scopedProspective&&result.rowCount===0){
+        // Only the exact B0062 legacy airport/cutoff/flight/carrier/record
+        // constraint can reach this fallback. Do not replay HTTP, read another
+        // original, modify prior evidence, or claim either identity is proven.
+        // Other SQL errors still roll back the entire bound transaction.
+        const appearanceDigest=sha256(JSON.stringify({
+          protocol:"P5_LEGACY_CROSS_ORIGINAL_CONFLICT_V1",populationQueryId:query.populationQueryId,
+          responseHash:query.responseHash,index,originalIdentity:r.analyticIdentityId
+        }));
+        const demoted:PopulationRow={...r,canonicalFlightInstanceId:null,
+          analyticIdentityId:"provisional:"+appearanceDigest,
+          providerRecordKey:"fidsrec:p5amb:"+appearanceDigest,
+          codeshareResolutionStatus:"phase5_legacy_observation_key_ambiguous",
+          provenanceJson:JSON.stringify({...JSON.parse(r.provenanceJson),
+            canonicalFlightInstanceId:null,codeshareResolutionStatus:"phase5_legacy_observation_key_ambiguous",
+            recordKeyDisposition:"LEGACY_CROSS_ORIGINAL_CONFLICT_USE_BOUND_APPEARANCE_KEY"})};
+        result=await insertMember(demoted,false);
+        if(result.rowCount!==1)throw Error("FIDS_BOUND_LEGACY_CONFLICT_FALLBACK_INCOMPLETE_ROLLBACK");
+        replacements.set(index,demoted);
+      }
+      inserted+=result.rowCount??0;
     }
     // Never claim complete source custody for a partially inserted census.
     if(beforeCommit){
@@ -982,6 +1007,7 @@ export async function persistFidsObservation(
       });
     }
     await client.query("COMMIT");
+    for(const [index,row] of replacements)rows[index]=row;
     return inserted;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
