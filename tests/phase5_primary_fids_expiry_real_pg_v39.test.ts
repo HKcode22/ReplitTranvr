@@ -4,6 +4,7 @@ import {Pool, type PoolClient} from "pg";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {sha256} from "../server/lib/disruption/retentionExpiry_v39";
+import {runP5PrimaryExpiry,admitP5PrimaryExpiryGithub,P5_PRIMARY_APPLY} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const SQL="migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql";
 const F="clean.phase5_primary_fids_expiry_";
@@ -64,12 +65,13 @@ suite("bounded primary expiry actual PG16",()=>{
  });
  afterAll(async()=>{await db?.end()});
  it("inert installation has no public execution, scoped actor grants cannot read raw content or broad tables",async()=>{
-  await db.query("CREATE ROLE "+writer+" NOLOGIN NOINHERIT; CREATE ROLE "+reader+" NOLOGIN NOINHERIT");
+  await db.query("CREATE ROLE "+writer+" LOGIN NOINHERIT PASSWORD 'ci-primary-test-only'; CREATE ROLE "+reader+" LOGIN NOINHERIT PASSWORD 'ci-primary-test-only'");
   for(const role of [writer,reader]){
    await db.query("GRANT USAGE ON SCHEMA clean TO "+role);
    const a=(await db.query("SELECT has_function_privilege($1,$2,'EXECUTE') AS s,has_function_privilege($1,$3,'EXECUTE') AS w,has_function_privilege($1,$4,'EXECUTE') AS r,has_function_privilege($1,$5,'EXECUTE') AS stop",[role,F+"status_v39()",F+"sweep_v39(integer)",F+"receipt_v39(text)",F+"stop_v39(text)"])).rows[0];
    expect(a).toEqual({s:false,w:false,r:false,stop:false});
   }
+  await db.query("GRANT SELECT(expires_at_utc,deletion_verified_at_utc,content_class,storage_kind,retention_hours) ON clean.provider_content_blob_ref TO "+reader);
   // Disposable role grants only. Production migration grants nobody.
   await db.query("GRANT EXECUTE ON FUNCTION "+F+"sweep_v39(integer),"+F+"stop_v39(text) TO "+writer);
   await db.query("GRANT EXECUTE ON FUNCTION "+F+"status_v39(),"+F+"receipt_v39(text) TO "+reader);
@@ -134,4 +136,45 @@ suite("bounded primary expiry actual PG16",()=>{
   await db.query("UPDATE clean.adb_incident_stop SET resolved=true WHERE id=$1",[incidents[0].id]);
   expect((await sweep(1)).originalsCleared).toBe(1);
  });
+
+ it("runs the actual scoped GitHub database core on distinct disposable logins and reconciles a lost COMMIT ACK without replay",async()=>{
+  const old=await make(28);
+  const w=new Pool({connectionString:"postgresql://"+writer+":ci-primary-test-only@localhost:5432/neondb?sslmode=disable",max:1});
+  const r=new Pool({connectionString:"postgresql://"+reader+":ci-primary-test-only@localhost:5432/neondb?sslmode=disable",max:1});
+  const opt=(role:string)=>({test:true,role,owner:"postgres",writerRole:writer,readerRole:reader});
+  const options={writer:w,reader:r,verifyOptions:{writer:opt(writer),reader:opt(reader)},limit:1,maxBatches:1};
+  try{
+   const ro=await runP5PrimaryExpiry({...options,apply:false});
+   expect(ro).toMatchObject({status:"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",databaseWrites:0,before:{eligibleOriginals:1},distinctDbActorsVerified:true});
+   expect(await cleared(old.pid)).toBe(false);
+   let lost=0;
+   const simulated={
+    connect:async()=>{
+     const c=await w.connect();
+     return {query:async(...args:any[])=>{
+       const result=await (c.query as any)(...args);
+       if(args[0]==="COMMIT"){lost++;throw Error("CI_LOST_COMMIT_ACK_AFTER_ACTUAL_COMMIT");}
+       return result;
+      },release:(e?:Error)=>c.release(e)};
+    },
+    query:(...args:any[])=>(w.query as any)(...args)
+   };
+   const actual=await runP5PrimaryExpiry({...options,writer:simulated,apply:true});
+   expect(lost).toBe(1);
+   expect(actual).toMatchObject({status:"PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED",receipts:[{originalsCleared:1,populationCleared:1,tombstones:2,commitAck:false,independentReadback:true}]});
+   expect(await cleared(old.pid)).toBe(true);
+   expect((await status()).deletionStopUnresolved).toBe(false);
+   const repeat=await runP5PrimaryExpiry({...options,apply:true});
+   expect(repeat.receipts).toEqual([]);
+   await db.query("GRANT SELECT(raw_payload) ON clean.fids_query_response TO "+writer);
+   try{await expect(runP5PrimaryExpiry({...options,apply:true})).rejects.toThrow("UNRELATED_TABLE_OR_COLUMN_GRANT");}
+   finally{await db.query("REVOKE SELECT(raw_payload) ON clean.fids_query_response FROM "+writer);}
+  }finally{await Promise.all([w.end(),r.end()]);}
+ });
+});
+it("production admission remains disabled unless separate exact-main approval and distinct scoped URLs",()=>{
+ const base={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_RUN_ID:"1234",GITHUB_SHA:"a".repeat(40),P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:"a".repeat(40),P5_PRIMARY_FIDS_EXPIRY_MODE:"APPLY_DUE_ONLY",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
+ expect(()=>admitP5PrimaryExpiryGithub(base)).toThrow("SEPARATE_APPLY_APPROVAL_REQUIRED");
+ expect(()=>admitP5PrimaryExpiryGithub({...base,P5_PRIMARY_FIDS_EXPIRY_APPROVAL:P5_PRIMARY_APPLY,P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true"})).toThrow("SCOPED_TLS_CONNECTION_REQUIRED");
+ expect(()=>admitP5PrimaryExpiryGithub({...base,DATABASE_URL:"owner-secret"})).toThrow("EXACT_NONPAID_MAIN_SCOPE_REQUIRED");
 });
