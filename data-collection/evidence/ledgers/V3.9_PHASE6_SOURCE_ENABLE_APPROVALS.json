@@ -47,6 +47,16 @@
       "evidenceId": "RUN-20261116-V0104OWNERINSTALL",
       "path": "data-collection/phase5/evidence/2026-11-16_owner_v0104_installed_fresh_readback_receipt.json",
       "sha256": "75dfe8de490639e086be6c2f00733cda51ae6d77975e2b3b2347bac11e7e9646"
+    },
+    {
+      "evidenceId": "RUN-20261116-HEARTBEAT43992105353",
+      "path": "data-collection/phase5/evidence/2026-11-16_actual_heartbeat_43992105353.json",
+      "sha256": "54d5b467e352ae5ced0357265bb1ff2199431161189e259882abbaecf7bf634c"
+    },
+    {
+      "evidenceId": "RUN-20261116-PRIMARYEXPIRY43997742324",
+      "path": "data-collection/phase5/evidence/2026-11-16_owner_primary_fids_recurring_config_verify_apply_receipt.json",
+      "sha256": "61948b908e1888cff08647b4d307b228dc7f8a767e6444fbcab6f60f55084a61"
     }
   ],
   "approvals": []

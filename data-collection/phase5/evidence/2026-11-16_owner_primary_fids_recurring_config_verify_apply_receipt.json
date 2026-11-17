@@ -1,0 +1,111 @@
+{
+  "schema": "v39.phase5.primary-fids-recurring-owner-commission-observed.v1",
+  "reviewedMainSha": "6cb6c28a1508a2aaf3ebe5551bf41444dbb6622e",
+  "ownerReported": {
+    "status": "PRIMARY_FIDS_RECURRING_CONFIGURED_MANUAL_ZERO_WORK_APPLY_VERIFIED_NO_GO",
+    "scheduledApplyEnabled": true,
+    "futureScheduledExecutionVerified": false,
+    "retentionDeadlineGuaranteed": false,
+    "providerCalls": 0,
+    "phase6PaidGo": false
+  },
+  "independentGithub": [
+    {
+      "runId": 43997617806,
+      "jobId": 133753452135,
+      "event": "workflow_dispatch",
+      "runAttempt": 1,
+      "jobConclusion": "success",
+      "requiredStepExecuted": true,
+      "receipt": {
+        "status": "PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",
+        "before": {
+          "schema": "v39.phase5.primary-fids-expiry-status.v1",
+          "observedAtUtc": "2026-11-17T01:42:58.534Z",
+          "liveOriginals": 0,
+          "eligibleOriginals": 0,
+          "hardDueOriginals": 0,
+          "eligibleNextHour": 0,
+          "hardDueNextHour": 0,
+          "unboundLiveOriginals": 0,
+          "markedExpiredPayloadPresent": 0,
+          "unlinkedUnexpiredPopulation": 0,
+          "unexpiredPopulationWithoutLiveOriginal": 0,
+          "deletionStopUnresolved": false,
+          "providerCalls": 0,
+          "databaseWrites": 0,
+          "backupOrPitrVerified": false,
+          "completeRetentionDeploymentVerified": false,
+          "phase6PaidGo": false
+        },
+        "providerCalls": 0,
+        "objectDeletions": 0,
+        "backupOrPitrVerified": false,
+        "completeRetentionDeploymentVerified": false,
+        "phase6PaidGo": false,
+        "distinctDbActorsVerified": true,
+        "databaseWrites": 0,
+        "reviewedMainSha": "6cb6c28a1508a2aaf3ebe5551bf41444dbb6622e"
+      }
+    },
+    {
+      "runId": 43997742324,
+      "jobId": 133753882020,
+      "event": "workflow_dispatch",
+      "runAttempt": 1,
+      "jobConclusion": "success",
+      "requiredStepExecuted": true,
+      "receipt": {
+        "providerCalls": 0,
+        "objectDeletions": 0,
+        "backupOrPitrVerified": false,
+        "completeRetentionDeploymentVerified": false,
+        "phase6PaidGo": false,
+        "distinctDbActorsVerified": true,
+        "status": "PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED",
+        "before": {
+          "schema": "v39.phase5.primary-fids-expiry-status.v1",
+          "observedAtUtc": "2026-11-17T01:43:57.126Z",
+          "liveOriginals": 0,
+          "eligibleOriginals": 0,
+          "hardDueOriginals": 0,
+          "eligibleNextHour": 0,
+          "hardDueNextHour": 0,
+          "unboundLiveOriginals": 0,
+          "markedExpiredPayloadPresent": 0,
+          "unlinkedUnexpiredPopulation": 0,
+          "unexpiredPopulationWithoutLiveOriginal": 0,
+          "deletionStopUnresolved": false,
+          "providerCalls": 0,
+          "databaseWrites": 0,
+          "backupOrPitrVerified": false,
+          "completeRetentionDeploymentVerified": false,
+          "phase6PaidGo": false
+        },
+        "after": {
+          "schema": "v39.phase5.primary-fids-expiry-status.v1",
+          "observedAtUtc": "2026-11-17T01:43:57.126Z",
+          "liveOriginals": 0,
+          "eligibleOriginals": 0,
+          "hardDueOriginals": 0,
+          "eligibleNextHour": 0,
+          "hardDueNextHour": 0,
+          "unboundLiveOriginals": 0,
+          "markedExpiredPayloadPresent": 0,
+          "unlinkedUnexpiredPopulation": 0,
+          "unexpiredPopulationWithoutLiveOriginal": 0,
+          "deletionStopUnresolved": false,
+          "providerCalls": 0,
+          "databaseWrites": 0,
+          "backupOrPitrVerified": false,
+          "completeRetentionDeploymentVerified": false,
+          "phase6PaidGo": false
+        },
+        "receipts": [],
+        "databaseWritesPossible": false,
+        "reviewedMainSha": "6cb6c28a1508a2aaf3ebe5551bf41444dbb6622e"
+      }
+    }
+  ],
+  "scope": "Owner reported variable readback plus independently retrieved real GitHub job and receipt logs. Zero-work APPLY verified; no actual deletion of content in these runs. No independent scheduled execution, backup/PITR, continuous cadence, rights or paid GO verified."
+}
