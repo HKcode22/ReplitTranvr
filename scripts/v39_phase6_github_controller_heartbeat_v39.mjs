@@ -43,6 +43,10 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
    " | actual latest scheduled expiry step executed: "+p.latestExecutedJobVerified,
    "This does not verify the deletion receipt or guarantee the retention deadline.");
  }
+ if(heartbeat.activeNotifications?.incidentCount){
+  lines.push("","**Current operational incident — review required:**");
+  for(const i of heartbeat.activeNotifications.incidents)lines.push("- "+i.lane+": "+i.reason+(i.runId?" — [run "+i.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.runId+")":""));
+ }
  lines.push(
   "",
   "Recent interarrival gaps use GitHub run creation metadata, including skipped runs. They are not exact missing cron slots, provider latency or execution-time guarantees.",
@@ -78,6 +82,7 @@ async function main(){
    })),
    primaryFidsExpiry:report.primaryFidsExpiry,
    primaryFidsExpiryNeedsAttention:report.primaryFidsExpiryNeedsAttention,
+   activeNotifications:report.activeNotifications,
    controllerProblemCount:report.controllerProblemCount,
    controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,
@@ -87,6 +92,12 @@ async function main(){
   if(process.env.GITHUB_STEP_SUMMARY)
    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
     formatP6ControllerHeartbeatHuman(report)+"\n","utf8");
+  // Fail this observation only, never a collector or a paid child, so native
+  // GitHub failure notifications can surface actionable current incidents.
+  if(report.activeNotifications.incidentCount>0){
+   console.error("P6_CONTROLLER_CURRENT_INCIDENT_REVIEW_REQUIRED");
+   process.exitCode=2;
+  }
  }catch(e){
   // Deliberate no-exception object printing (errors may include credentials).
   console.error(codeOnly(e));
