@@ -767,11 +767,11 @@ export async function fetchFidsPopulation(
   if(prospective)for(const r of unambiguous){
     const k=identityKey(r),pk=r.row.providerRecordKey;
     prospectiveIdentityCounts.set(k,(prospectiveIdentityCounts.get(k)??0)+1);
-    providerKeyCounts.set(pk,(providerKeyCounts.get(pk)??0)+1);
+    if(pk!==null)providerKeyCounts.set(pk,(providerKeyCounts.get(pk)??0)+1);
   }
   const qualified=prospective?unambiguous.map((r,index):NormalizedFidsRecord=>{
     const repeatedIdentity=(prospectiveIdentityCounts.get(identityKey(r))??0)>1;
-    const repeatedProviderKey=(providerKeyCounts.get(r.row.providerRecordKey)??0)>1;
+    const repeatedProviderKey=r.row.providerRecordKey!==null&&(providerKeyCounts.get(r.row.providerRecordKey)??0)>1;
     if(!repeatedIdentity&&!repeatedProviderKey)return r;
     const ambiguous=repeatedIdentity||(repeatedProviderKey&&r.resolvedCanonical!==null);
     const status=ambiguous?(repeatedIdentity?"phase5_duplicate_identity_ambiguous":
