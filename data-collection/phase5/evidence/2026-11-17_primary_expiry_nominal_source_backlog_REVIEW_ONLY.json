@@ -1,0 +1,373 @@
+{
+  "status": "FULL_CALENDAR_NOMINAL_BACKLOG_SENSITIVITY_REVIEW_ONLY",
+  "main": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "readMethod": "All 31 exact pinned files fetched in four batches 8/8/8/7; checked day identity, within-day distinct query keys, nominal source attempt=1 and units=2. Compressed observed timestamp counts transcribed as first start and N/S/E shape and reconstructed. A previous one-call attempt hit tool limits, superseded by completed batches.",
+  "dayShapeRules": {
+    "N": "16 quarter-hour instants per horizon",
+    "S": "8 quarter-hour instants at offsets 0h and 3h per horizon",
+    "E": "24 quarter-hour instants per horizon",
+    "horizonOffsetsHours": [
+      0,
+      18,
+      22.5
+    ],
+    "templatesPerInstantPerSegment": 4
+  },
+  "days": [
+    {
+      "day": 1,
+      "start": "2026-11-20T23:45:00.000Z",
+      "shape": "N",
+      "blob": "74b153f0f9f9c860196d9622aaa48b93048bb95f",
+      "count": 192
+    },
+    {
+      "day": 2,
+      "start": "2026-11-22T03:45:00.000Z",
+      "shape": "N",
+      "blob": "1c07214373af2667f7bd6fdf7e8aab6669aa6ac0",
+      "count": 192
+    },
+    {
+      "day": 3,
+      "start": "2026-11-23T07:45:00.000Z",
+      "shape": "S",
+      "blob": "74fa3937da34aacf4df733aa650b71d45b6c60c1",
+      "count": 192
+    },
+    {
+      "day": 4,
+      "start": "2026-11-24T11:45:00.000Z",
+      "shape": "N",
+      "blob": "b0113a1574cbb1e50cdd8229b7f50f2f77fc06d6",
+      "count": 192
+    },
+    {
+      "day": 5,
+      "start": "2026-11-26T15:45:00.000Z",
+      "shape": "E",
+      "blob": "3cb3377929c2783c517604a6a21a2678ba6affea",
+      "count": 288
+    },
+    {
+      "day": 6,
+      "start": "2026-11-27T19:45:00.000Z",
+      "shape": "N",
+      "blob": "40b38c79a6eb8b0aa3ae1e079ce88fd53225dbaa",
+      "count": 192
+    },
+    {
+      "day": 7,
+      "start": "2026-12-03T23:45:00.000Z",
+      "shape": "S",
+      "blob": "1c9f90bad695a9f91eb3b27259fe5789530845c8",
+      "count": 192
+    },
+    {
+      "day": 8,
+      "start": "2026-12-06T03:45:00.000Z",
+      "shape": "S",
+      "blob": "11ef708ca7ecfecc1bd13da0fda5181c08c76a5a",
+      "count": 192
+    },
+    {
+      "day": 9,
+      "start": "2026-12-07T07:45:00.000Z",
+      "shape": "N",
+      "blob": "4ed10514418cb60a40f5858b9bfee1f7979d7392",
+      "count": 192
+    },
+    {
+      "day": 10,
+      "start": "2026-12-08T11:45:00.000Z",
+      "shape": "E",
+      "blob": "f4ad7f92ffaab18f8d63d1490204aff28c61bbba",
+      "count": 288
+    },
+    {
+      "day": 11,
+      "start": "2026-12-10T15:45:00.000Z",
+      "shape": "N",
+      "blob": "1a98b3d61362ee08459769f65a55a27e46b01607",
+      "count": 192
+    },
+    {
+      "day": 12,
+      "start": "2026-12-11T19:45:00.000Z",
+      "shape": "N",
+      "blob": "143b7fa5f0a3d656096e25b4eb2cf69391e90470",
+      "count": 192
+    },
+    {
+      "day": 13,
+      "start": "2026-12-12T23:45:00.000Z",
+      "shape": "N",
+      "blob": "bb2a0374aa67a5bd71f2140e356e0b74e4d69573",
+      "count": 192
+    },
+    {
+      "day": 14,
+      "start": "2026-12-14T03:45:00.000Z",
+      "shape": "N",
+      "blob": "7d17a9deb9728308c66c9cb79bc0f55dbff24db8",
+      "count": 192
+    },
+    {
+      "day": 15,
+      "start": "2026-12-15T07:45:00.000Z",
+      "shape": "N",
+      "blob": "1a23affd9decdb19a88afea577e3f23f288178ad",
+      "count": 192
+    },
+    {
+      "day": 16,
+      "start": "2026-12-16T11:45:00.000Z",
+      "shape": "N",
+      "blob": "6159a355d25862b4a8eae266c6e9211b71bcb69e",
+      "count": 192
+    },
+    {
+      "day": 17,
+      "start": "2026-12-17T15:45:00.000Z",
+      "shape": "N",
+      "blob": "b678ddc14a9ad0922809f0bbfc128572ce7b7aac",
+      "count": 192
+    },
+    {
+      "day": 18,
+      "start": "2026-12-18T19:45:00.000Z",
+      "shape": "N",
+      "blob": "baafb6cdb599f3ac37c5a354abd2293035ce4c1c",
+      "count": 192
+    },
+    {
+      "day": 19,
+      "start": "2026-12-19T23:45:00.000Z",
+      "shape": "N",
+      "blob": "1ddfe860930dea9216e437e22fdb49c8163a9113",
+      "count": 192
+    },
+    {
+      "day": 20,
+      "start": "2026-12-21T03:45:00.000Z",
+      "shape": "N",
+      "blob": "99119a63b65cd166b9a462c64b748f1b7d94caed",
+      "count": 192
+    },
+    {
+      "day": 21,
+      "start": "2026-12-22T07:45:00.000Z",
+      "shape": "N",
+      "blob": "7fbb53550f71013802ffc4fa0d7bb37498eacd5b",
+      "count": 192
+    },
+    {
+      "day": 22,
+      "start": "2026-12-23T11:45:00.000Z",
+      "shape": "N",
+      "blob": "b969161fc5d0d13294093cdc594bc2eba5596777",
+      "count": 192
+    },
+    {
+      "day": 23,
+      "start": "2026-12-24T15:45:00.000Z",
+      "shape": "N",
+      "blob": "6ea511a8958048e3e93bbc66a84ab741bfeefc5c",
+      "count": 192
+    },
+    {
+      "day": 24,
+      "start": "2026-12-25T19:45:00.000Z",
+      "shape": "N",
+      "blob": "c3be69585a5935e67a9ce4593152fd4b08d72460",
+      "count": 192
+    },
+    {
+      "day": 25,
+      "start": "2026-12-26T23:45:00.000Z",
+      "shape": "N",
+      "blob": "b0d59cf90558d9684797588dd09f82523f64f3f7",
+      "count": 192
+    },
+    {
+      "day": 26,
+      "start": "2026-12-28T03:45:00.000Z",
+      "shape": "N",
+      "blob": "f8271a4d1d120963e2ee197b382cf61d9b8d0674",
+      "count": 192
+    },
+    {
+      "day": 27,
+      "start": "2026-12-29T07:45:00.000Z",
+      "shape": "N",
+      "blob": "2077b16702b46d99a4e8cc09b6ef854ea860bfff",
+      "count": 192
+    },
+    {
+      "day": 28,
+      "start": "2026-12-30T11:45:00.000Z",
+      "shape": "N",
+      "blob": "0684a118058436308d4ebdce98b86d1850768e72",
+      "count": 192
+    },
+    {
+      "day": 29,
+      "start": "2026-12-31T15:45:00.000Z",
+      "shape": "N",
+      "blob": "eb3fbe72e532c8322273756f71d3879d08d80022",
+      "count": 192
+    },
+    {
+      "day": 30,
+      "start": "2027-01-01T19:45:00.000Z",
+      "shape": "N",
+      "blob": "eb57345e82fe0b83a357b5ee4ace8451e0a51397",
+      "count": 192
+    },
+    {
+      "day": 31,
+      "start": "2027-01-02T23:45:00.000Z",
+      "shape": "N",
+      "blob": "149f3ecdb90db14ca7e633e28ca0c497fcf297d4",
+      "count": 192
+    }
+  ],
+  "totalNominalTemplates": 6144,
+  "maximumSimultaneous": 8,
+  "distinctNominalInstantCount": 1516,
+  "cleanupMaxOriginalsPerRun": 256,
+  "windows": [
+    {
+      "windowSeconds": 3600,
+      "nominalMaximum": 40,
+      "independentMaximum": 40,
+      "witnessWindowUtc": [
+        "2026-11-27T14:15:00.000Z",
+        "2026-11-27T15:15:00.000Z"
+      ],
+      "remainingNominalCapacity": 216
+    },
+    {
+      "windowSeconds": 5400,
+      "nominalMaximum": 52,
+      "independentMaximum": 52,
+      "witnessWindowUtc": [
+        "2026-11-27T14:00:00.000Z",
+        "2026-11-27T15:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 204
+    },
+    {
+      "windowSeconds": 7200,
+      "nominalMaximum": 60,
+      "independentMaximum": 60,
+      "witnessWindowUtc": [
+        "2026-11-27T13:30:00.000Z",
+        "2026-11-27T15:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 196
+    },
+    {
+      "windowSeconds": 14400,
+      "nominalMaximum": 92,
+      "independentMaximum": 92,
+      "witnessWindowUtc": [
+        "2026-11-27T11:30:00.000Z",
+        "2026-11-27T15:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 164
+    },
+    {
+      "windowSeconds": 16978,
+      "nominalMaximum": 100,
+      "independentMaximum": 100,
+      "witnessWindowUtc": [
+        "2026-11-27T11:00:00.000Z",
+        "2026-11-27T15:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 156
+    },
+    {
+      "windowSeconds": 21600,
+      "nominalMaximum": 132,
+      "independentMaximum": 132,
+      "witnessWindowUtc": [
+        "2026-11-27T14:00:00.000Z",
+        "2026-11-27T20:00:00.000Z"
+      ],
+      "remainingNominalCapacity": 124
+    },
+    {
+      "windowSeconds": 32400,
+      "nominalMaximum": 180,
+      "independentMaximum": 180,
+      "witnessWindowUtc": [
+        "2026-11-27T11:00:00.000Z",
+        "2026-11-27T20:00:00.000Z"
+      ],
+      "remainingNominalCapacity": 76
+    },
+    {
+      "windowSeconds": 35419,
+      "nominalMaximum": 192,
+      "independentMaximum": 192,
+      "witnessWindowUtc": [
+        "2026-11-27T10:15:00.000Z",
+        "2026-11-27T20:00:00.000Z"
+      ],
+      "remainingNominalCapacity": 64
+    },
+    {
+      "windowSeconds": 38087,
+      "nominalMaximum": 204,
+      "independentMaximum": 204,
+      "witnessWindowUtc": [
+        "2026-11-27T09:45:00.000Z",
+        "2026-11-27T20:15:00.000Z"
+      ],
+      "remainingNominalCapacity": 52
+    },
+    {
+      "windowSeconds": 38627,
+      "nominalMaximum": 204,
+      "independentMaximum": 204,
+      "witnessWindowUtc": [
+        "2026-11-27T09:45:00.000Z",
+        "2026-11-27T20:15:00.000Z"
+      ],
+      "remainingNominalCapacity": 52
+    },
+    {
+      "windowSeconds": 43200,
+      "nominalMaximum": 228,
+      "independentMaximum": 228,
+      "witnessWindowUtc": [
+        "2026-11-27T09:45:00.000Z",
+        "2026-11-27T21:45:00.000Z"
+      ],
+      "remainingNominalCapacity": 28
+    },
+    {
+      "windowSeconds": 54000,
+      "nominalMaximum": 256,
+      "independentMaximum": 256,
+      "witnessWindowUtc": [
+        "2026-11-27T09:45:00.000Z",
+        "2026-11-27T23:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 0
+    },
+    {
+      "windowSeconds": 86400,
+      "nominalMaximum": 256,
+      "independentMaximum": 256,
+      "witnessWindowUtc": [
+        "2026-11-27T09:45:00.000Z",
+        "2026-11-27T23:30:00.000Z"
+      ],
+      "remainingNominalCapacity": 0
+    }
+  ],
+  "limits": "Inclusive nominal request-time window; assumes at most one primary FIDS original per template and constant shift to eligibility. Does not model retries, additional original types, variable expiry or jitter, backlog carried from earlier runs, lock conflicts, throughput, or other deletion surfaces. Not evidence of live dataset or operational rights.",
+  "paidGo": false
+}
