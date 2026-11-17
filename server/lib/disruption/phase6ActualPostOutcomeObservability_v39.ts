@@ -31,6 +31,7 @@ const number=(x:unknown)=>{
  return m?m[1]+(m[2].replace(/^0+/,"")||"0"):null;
 };
 const ico=(x:unknown):x is string=>typeof x==="string"&&/^[A-Z0-9]{4}$/.test(x);
+const P5_PROSPECTIVE_KEY=/^leg:p5v1:[a-f0-9]{64}$/;
 const atField=(x:unknown)=>date(obj(x).utc);
 /** Same source, PRE cutoff, confirmed physical member and exact frame joins
  * as existing V0083, expanded to the whole original UTC service partition.
@@ -55,8 +56,46 @@ export interface P6PostOriginalReadback{
  raw_expired_at_utc:unknown;raw_payload:unknown;members:number;
 }
 type Row=Record<string,unknown>;
+/** Future full-width key conflict hints among currently retained, already
+ * cutoff-validated PRE rows in this exact service partition. This is not
+ * an equivalence relation, not a cross-partition/expired-source lookup,
+ * and not a physical flight identifier. Repeated short-haul services can
+ * also be censored; never merge or change the frozen T on this evidence.
+ * Preserve the historical key-only diagnostic when no prospective key is
+ * involved. Sorted adjacent different-key times are sufficient to flag
+ * every key with a near neighbour; complexity O(n log n), not all pairs.
+ */
+function prospectiveCrossKeyAliases(groups:Iterable<readonly Row[]>):Set<string>{
+ const services=new Map<string,{key:string,t:number}[]>(),providers=new Map<string,Set<string>>();
+ const aliases=new Set<string>();
+ for(const rows of groups)for(const x of rows){
+  const key=String(x.flight_instance_id);
+  if(!P5_PROSPECTIVE_KEY.test(key))continue;
+  const n=number(x.flight_number),t=date(x.selected_t_milestone_utc);
+  if(n&&ico(x.dep_airport_icao)&&t!==null){
+   const k=JSON.stringify([x.dep_airport_icao,n]),a=services.get(k)??[];
+   a.push({key,t});services.set(k,a);
+  }
+  if(id(x.provider_record_key)){
+   const a=providers.get(x.provider_record_key)??new Set<string>();
+   a.add(key);providers.set(x.provider_record_key,a);
+  }
+ }
+ for(const a of services.values()){
+  a.sort((x,y)=>x.t-y.t);
+  for(let i=1;i<a.length;i++){
+   const prev=a[i-1],cur=a[i];
+   if(prev.key!==cur.key&&cur.t-prev.t<=12*3600000){
+    aliases.add(prev.key);aliases.add(cur.key);
+   }
+  }
+ }
+ for(const a of providers.values())if(a.size>1)for(const key of a)aliases.add(key);
+ return aliases;
+}
 const empty=()=>({retainedCutoffSafePre:0,matchedNativePost:0,missingNativeId:0,postAbsent:0,ambiguousIdentity:0,
  reportedCancelled:0,reportedRevisedTime:0,reportedRunwayTime:0,changedGenericSchedule:0,duplicatePre:0,
+ potentialCrossKeyServiceAlias:0,
  reportedDistinctGateRunwayTimes:0,reportedGateBeforeRunway:0,reportedGateAfterRunway:0,reportedRevisedWithoutDistinctRunway:0,
  labelEvidenceUnverified:0,actualGateOutNumericCandidates:0,
  idlessExactReportedService:0,idlessDepartureQueryContextService:0,idlessServiceAmbiguous:0,idlessServiceNotObserved:0,
@@ -103,6 +142,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   const key=x.flight_instance_id+"|"+h;
   const a=grouped.get(key)??[];a.push(x);grouped.set(key,a);
  }
+ const crossKeyAliases=prospectiveCrossKeyAliases(grouped.values());
  const uniqueRetainedFlights=new Set<string>();const privateDecisions: {draft:P5EGateOutFirstCycleInput;postResponseSha256:string;postDecodedBodySha256:string;postMatch:"EXACT_REPORTED_NATIVE_ID_ROUTE_NUMBER_NOT_INDEPENDENT_PHYSICAL_CERTIFICATION";reportedRevisedUtc:string|null;reportedRunwayUtc:string|null;reportedCancellation:boolean}[]=[];
  const bodySha=String(obj(raw.originalDecodedEntityBodyEvidence).bodySha256);
  // The public FlightContract does not promise a stable id. Report a separate
@@ -157,6 +197,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   const x=a[0],h=x.horizon as Horizon,c=counts[h];c.retainedCutoffSafePre++;
   uniqueRetainedFlights.add(String(x.flight_instance_id));
   if(a.length!==1){c.duplicatePre++;continue;}
+  if(crossKeyAliases.has(String(x.flight_instance_id))){c.potentialCrossKeyServiceAlias++;c.ambiguousIdentity++;continue;}
   if(!id(x.provider_record_key)){c.missingNativeId++;observeIdlessService(x,c);continue;}
   if(preIdsByProvider.get(x.provider_record_key)?.size!==1){c.ambiguousIdentity++;continue;}
   const matches=byId.get(x.provider_record_key)??[];
@@ -217,6 +258,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   (!id(a.provider_record_key)||!id(b.provider_record_key)||a.provider_record_key===b.provider_record_key);
  const coverage={
   retainedUniqueFlightCandidates:perFlight.size,
+  retainedKeysWithPotentialCrossKeyServiceAlias:crossKeyAliases.size,
   flightsWithDuplicateHorizon:0,flightsWithCrossHorizonTOrIdentityConflict:0,
   retainedT6UniquePre:0,retainedT90UniquePre:0,retainedT24UniquePre:0,
   retainedConsistentT6T90Pairs:0,retainedConsistentT6T24Pairs:0,retainedConsistentAllThree:0,
@@ -237,6 +279,9 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   if(y?.length===1)coverage.retainedT90UniquePre++;
   if(z?.length===1)coverage.retainedT24UniquePre++;
   if(x?.length===1&&hs.size===1)coverage.t6OnlyAmongRetainedHorizons++;
+  // Keep raw observed-key/horizon counts above, but do not present a
+  // within-key pair as consistent when another live key may be its alias.
+  if(crossKeyAliases.has(k))continue;
   for(const [h,a] of singles)
    if(matched.has(JSON.stringify([k,h]))&&retrieved<reqDate(a[0].selected_t_milestone_utc))
     coverage.matchedHorizonObservationsBeforeScheduledT++;
