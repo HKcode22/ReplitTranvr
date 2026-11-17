@@ -1,0 +1,297 @@
+{
+  "schema": "v39.phase5.controller-event-creation-and-retention-geometry-review.v1",
+  "status": "REVIEW_ONLY_NO_SCHEDULE_OR_TTL_CHANGE",
+  "mainSha": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "repoScheduleQuery": {
+    "total": 258,
+    "unique": 258,
+    "firstCreatedUtc": "2026-10-29T21:03:51Z",
+    "lastCreatedUtc": "2026-11-17T08:59:57Z",
+    "sourceRuns": 28,
+    "sourceAllSkipped": true,
+    "sourceMedianGapMinutes": 398.73333333333335,
+    "sourceMaxGapMinutes": 590.3166666666667,
+    "heartbeatRuns": 12,
+    "heartbeatMaxGapMinutes": 611.1166666666667,
+    "retentionMetadataRuns": 10,
+    "retentionMetadataMaxGapMinutes": 634.7833333333333,
+    "primaryExpiryScheduledRuns": 1
+  },
+  "actualJobSample": {
+    "scope": "all successful scheduled heartbeat and retention jobs in returned repository history",
+    "count": 17,
+    "fields": [
+      "runId",
+      "jobId",
+      "createdToJobStartSeconds",
+      "jobDurationSeconds"
+    ],
+    "jobs": [
+      [
+        44051510998,
+        133930235448,
+        1,
+        14
+      ],
+      [
+        44042985387,
+        133901817543,
+        3,
+        29
+      ],
+      [
+        44018644026,
+        133822561549,
+        3,
+        25
+      ],
+      [
+        43992105353,
+        133735052600,
+        2,
+        15
+      ],
+      [
+        43968635910,
+        133654598744,
+        3,
+        20
+      ],
+      [
+        43917485510,
+        133475446847,
+        3,
+        17
+      ],
+      [
+        43860160919,
+        133274559521,
+        3,
+        32
+      ],
+      [
+        43821884521,
+        133146603674,
+        2,
+        16
+      ],
+      [
+        43794591905,
+        133060392032,
+        3,
+        30
+      ],
+      [
+        43779428787,
+        133013021269,
+        3,
+        19
+      ],
+      [
+        43757287498,
+        132944045520,
+        2,
+        12
+      ],
+      [
+        43725640074,
+        132846851679,
+        2,
+        18
+      ],
+      [
+        43688242545,
+        132733148502,
+        2,
+        12
+      ],
+      [
+        43657019888,
+        132637687704,
+        2,
+        13
+      ],
+      [
+        43638298638,
+        132579883985,
+        2,
+        13
+      ],
+      [
+        43613129032,
+        132502332838,
+        2,
+        11
+      ],
+      [
+        43579980960,
+        132402425118,
+        3,
+        10
+      ]
+    ],
+    "minimumDelaySeconds": 1,
+    "medianDelaySeconds": 2,
+    "maximumDelaySeconds": 3,
+    "causalProofOfGitHubDrop": false,
+    "paidWorkerLatencyCertified": false
+  },
+  "model": {
+    "basis": "existing verified 31-day 6144-template geometry; direct reread of six representative and nonordinary day files 1,3,5,7,8,10; attempted new all-31 retrieval exceeded connector call cap; not independent all-31 parse for this specific sensitivity",
+    "shapeCounts": {
+      "ordinary": 26,
+      "split": 3,
+      "extended": 2
+    },
+    "partitions": 144,
+    "partitionDurationCount": {
+      "minutes240": 112,
+      "minutes120": 32
+    },
+    "sourceAvailabilityAssumption": "at scheduled GET",
+    "postFollowupAfterPartitionMinutes": 60,
+    "postDispatchWindowMinutes": 20,
+    "additionalSensitivityMinutes": 3,
+    "ttlSensitivity": [
+      {
+        "horizon": "T-24h",
+        "templates": 2048,
+        "minAgeMinutes": 1550,
+        "maxAgeMinutes": 1775,
+        "ttl": [
+          {
+            "hours": 8,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 10,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 11,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 12,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 13,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 14,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          },
+          {
+            "hours": 23,
+            "eligibleAtHardLatest": 0,
+            "eligibleAtHardLatestPlus3min": 0
+          }
+        ]
+      },
+      {
+        "horizon": "T-6h",
+        "templates": 2048,
+        "minAgeMinutes": 470,
+        "maxAgeMinutes": 695,
+        "ttl": [
+          {
+            "hours": 8,
+            "eligibleAtHardLatest": 144,
+            "eligibleAtHardLatestPlus3min": 144
+          },
+          {
+            "hours": 10,
+            "eligibleAtHardLatest": 1264,
+            "eligibleAtHardLatestPlus3min": 1264
+          },
+          {
+            "hours": 11,
+            "eligibleAtHardLatest": 1712,
+            "eligibleAtHardLatestPlus3min": 1712
+          },
+          {
+            "hours": 12,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 13,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 14,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 23,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          }
+        ]
+      },
+      {
+        "horizon": "T-90m",
+        "templates": 2048,
+        "minAgeMinutes": 200,
+        "maxAgeMinutes": 425,
+        "ttl": [
+          {
+            "hours": 8,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 10,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 11,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 12,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 13,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 14,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          },
+          {
+            "hours": 23,
+            "eligibleAtHardLatest": 2048,
+            "eligibleAtHardLatestPlus3min": 2048
+          }
+        ]
+      }
+    ],
+    "observedSentinelGapMinutes": 634.7833333333333,
+    "slackAt12HoursMinutes": 85.2166666666667,
+    "slackAt13HoursMinutes": 25.2166666666667,
+    "retentionDeadlineGuaranteed": false,
+    "actualSourceTtlHoursChanged": false
+  },
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "sourceRightsApproved": false,
+  "phase5ScientificFreeze": false,
+  "phase6PaidGo": false
+}
