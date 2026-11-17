@@ -110,6 +110,8 @@ export async function commissionP5PrimaryExpiryDb(c,sql,password,options={}){
   await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");active=true;
   await c.query("SET LOCAL statement_timeout='20000ms'");
   await c.query("SET LOCAL lock_timeout='3000ms'");
+  // Fence the stopped collection scope before the first SERIALIZABLE snapshot.
+  await c.query("LOCK TABLE clean.adb_phase6_authorization,clean.adb_collection_batches,clean.adb_collection_segments,clean.adb_collection_subs,clean.adb_incident_stop IN SHARE ROW EXCLUSIVE MODE");
   await c.query("SELECT pg_advisory_xact_lock(390015,105)");
   const before=await catalog(c,{...options,readonly:false});
   if(before.existingFunctions||before.writerExists)hold("ALREADY_COMMISSIONED_DO_NOT_REPLAY");
@@ -160,7 +162,7 @@ async function main(){
  if(process.argv.length>3||!["review","commission"].includes(mode)||env.GITHUB_ACTIONS==="true"||
     env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.V39_PHASE6_OWNER_APPROVED!=="0"||
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||env.AERODATABOX_API_KEY||env.AERODATABOX_WEBHOOK_SECRET||env.RAPIDAPI_KEY||
-    !env.DATABASE_URL)hold("OWNER_LOCAL_NONPAID_ONLY");
+    !env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL)hold("OWNER_LOCAL_NONPAID_ONLY");
  const pin=repoState(),u=dbUrl(env.DATABASE_URL),sql=readFileSync(P5_PRIMARY_SQL,"utf8");
  configBefore();
  const c=new pg.Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:30000});
