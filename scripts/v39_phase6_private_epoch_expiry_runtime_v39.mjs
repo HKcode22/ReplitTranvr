@@ -91,7 +91,11 @@ export async function runP6PrivateEpochExpiryCore({writer,reader,manifest,apply=
     typeof apply!=="boolean"||!n(limit)||limit<1||limit>128||
     !n(maxBatches)||maxBatches<1||maxBatches>4)hold("INVALID_SCOPE");
  const before=await status(reader,manifest);
- const base={before,providerCalls:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false};
+ // Due at the signed retention_not_after boundary is evidence requiring
+ // deadline review even if a later recovery sweep clears everything.
+ // Do not report deletion recovery as on-time physical retention.
+ const base={before,deadlineDueObservedAtInitialRead:before.duePackets+before.dueIndexes+before.foreignDuePackets+before.foreignDueIndexes>0,
+  providerCalls:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false};
  if(!apply)return {...base,status:"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES",databaseWrites:0};
  if(before.deletionStopUnresolved)hold("DELETION_STOP");
  const receipts=[];let current=before;
