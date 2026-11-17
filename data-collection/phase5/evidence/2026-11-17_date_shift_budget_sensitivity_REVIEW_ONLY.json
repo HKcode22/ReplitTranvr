@@ -1,0 +1,519 @@
+{
+  "status": "DATE_TRANSLATION_SENSITIVITY_ONLY_NOT_A_NEW_RELEASE",
+  "originalMain": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "inputFiles": {
+    "date": {
+      "path": "data-collection/phase5/planning/2026-11-15_nov22_service_start_date_only_candidate.json",
+      "ref": "de15816bccb867dc17dcd396f8bedec66960e115",
+      "blob": "54544099c96875d69da63c88392d0a3febf681d3"
+    },
+    "source": {
+      "path": "data-collection/phase5/evidence/2026-11-17_primary_expiry_nominal_source_backlog_REVIEW_ONLY.json",
+      "ref": "1aabd21218f202b7470f5b9a8c855da34ff0fc3e",
+      "blob": "613dd8827cfb4ec06102bcc07e2c51916a9c6613"
+    },
+    "seed": {
+      "path": "data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json",
+      "ref": "de15816bccb867dc17dcd396f8bedec66960e115",
+      "blob": "9dc34c32541cde8db1e09c8bf4a06fe0af27f389"
+    }
+  },
+  "originalSeedWorkflow": "43700154416",
+  "originalCalendarUntouched": true,
+  "newRandomSeedDrawn": false,
+  "scenarios": [
+    {
+      "offsetDays": 0,
+      "firstServiceUtc": "2026-11-22T00:00:00.000Z",
+      "lastParentStartUtc": "2027-01-04T00:00:00.000Z",
+      "firstSourceUtc": "2026-11-20T23:45:00.000Z",
+      "strictEnableBeforeUtc": "2026-11-20T23:10:00.000Z",
+      "firstDrawWindowOpensUtc": "2026-11-19T00:00:00.000Z",
+      "firstDrawWindowLastInclusiveUtc": "2026-11-20T23:14:59.999Z",
+      "lastSourceUtc": "2027-01-04T02:00:00.000Z",
+      "outcomeTailUtc": "2027-01-06T04:00:00.000Z",
+      "linkedCorpusSpanHours": 1108.25,
+      "shapeCounts": {
+        "N": 26,
+        "S": 3,
+        "E": 2
+      },
+      "segmentCount": 34,
+      "exposedHours": 128,
+      "trainingDays": 20,
+      "validationDays": 5,
+      "testDays": 6,
+      "pairedParents": 10,
+      "ordinaryFutureDraws": 21,
+      "nominalSourceTemplates": 6144,
+      "chargeDates": 47,
+      "totalReserve": 41960,
+      "peakDailyReserve": 1228,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1280,
+        "VALIDATION": 496,
+        "OUTCOME": 27520,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 376
+      },
+      "cycleReview": [
+        {
+          "reset": "2026-12-04T02:21:21.000Z",
+          "observedDateOnly": true,
+          "prior": 9364,
+          "resetDay": 344,
+          "after": 32252,
+          "conservativeBefore": 9708,
+          "conservativeAfter": 32596,
+          "sourceUnitsBefore": 2560
+        },
+        {
+          "reset": "2027-01-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 39920,
+          "resetDay": 744,
+          "after": 1296,
+          "conservativeBefore": 40664,
+          "conservativeAfter": 2040,
+          "sourceUnitsBefore": 12288
+        },
+        {
+          "reset": "2027-02-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 41960,
+          "resetDay": 0,
+          "after": 0,
+          "conservativeBefore": 41960,
+          "conservativeAfter": 0,
+          "sourceUnitsBefore": 12288
+        }
+      ],
+      "cycleWindows": [
+        {
+          "startReset": null,
+          "endReset": "2026-12-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 9708
+        },
+        {
+          "startReset": "2026-12-04T02:21:21.000Z",
+          "endReset": "2027-01-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 31300
+        },
+        {
+          "startReset": "2027-01-04T02:21:21.000Z",
+          "endReset": "2027-02-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 2040
+        },
+        {
+          "startReset": "2027-02-04T02:21:21.000Z",
+          "endReset": null,
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        }
+      ],
+      "originalSeedDateBindingPreservedAsHistorical": true,
+      "newDateCommitmentOrApprovalCreated": false,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    },
+    {
+      "offsetDays": 7,
+      "firstServiceUtc": "2026-11-29T00:00:00.000Z",
+      "lastParentStartUtc": "2027-01-11T00:00:00.000Z",
+      "firstSourceUtc": "2026-11-27T23:45:00.000Z",
+      "strictEnableBeforeUtc": "2026-11-27T23:10:00.000Z",
+      "firstDrawWindowOpensUtc": "2026-11-26T00:00:00.000Z",
+      "firstDrawWindowLastInclusiveUtc": "2026-11-27T23:14:59.999Z",
+      "lastSourceUtc": "2027-01-11T02:00:00.000Z",
+      "outcomeTailUtc": "2027-01-13T04:00:00.000Z",
+      "linkedCorpusSpanHours": 1108.25,
+      "shapeCounts": {
+        "N": 26,
+        "S": 3,
+        "E": 2
+      },
+      "segmentCount": 34,
+      "exposedHours": 128,
+      "trainingDays": 20,
+      "validationDays": 5,
+      "testDays": 6,
+      "pairedParents": 10,
+      "ordinaryFutureDraws": 21,
+      "nominalSourceTemplates": 6144,
+      "chargeDates": 47,
+      "totalReserve": 41960,
+      "peakDailyReserve": 1228,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1280,
+        "VALIDATION": 496,
+        "OUTCOME": 27520,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 376
+      },
+      "cycleReview": [
+        {
+          "reset": "2026-12-04T02:21:21.000Z",
+          "observedDateOnly": true,
+          "prior": 5228,
+          "resetDay": 1228,
+          "after": 35504,
+          "conservativeBefore": 6456,
+          "conservativeAfter": 36732,
+          "sourceUnitsBefore": 1728
+        },
+        {
+          "reset": "2027-01-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 32744,
+          "resetDay": 964,
+          "after": 8252,
+          "conservativeBefore": 33708,
+          "conservativeAfter": 9216,
+          "sourceUnitsBefore": 9984
+        },
+        {
+          "reset": "2027-02-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 41960,
+          "resetDay": 0,
+          "after": 0,
+          "conservativeBefore": 41960,
+          "conservativeAfter": 0,
+          "sourceUnitsBefore": 12288
+        }
+      ],
+      "cycleWindows": [
+        {
+          "startReset": null,
+          "endReset": "2026-12-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 6456
+        },
+        {
+          "startReset": "2026-12-04T02:21:21.000Z",
+          "endReset": "2027-01-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 28480
+        },
+        {
+          "startReset": "2027-01-04T02:21:21.000Z",
+          "endReset": "2027-02-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 9216
+        },
+        {
+          "startReset": "2027-02-04T02:21:21.000Z",
+          "endReset": null,
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        }
+      ],
+      "originalSeedDateBindingPreservedAsHistorical": true,
+      "newDateCommitmentOrApprovalCreated": false,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    },
+    {
+      "offsetDays": 14,
+      "firstServiceUtc": "2026-12-06T00:00:00.000Z",
+      "lastParentStartUtc": "2027-01-18T00:00:00.000Z",
+      "firstSourceUtc": "2026-12-04T23:45:00.000Z",
+      "strictEnableBeforeUtc": "2026-12-04T23:10:00.000Z",
+      "firstDrawWindowOpensUtc": "2026-12-03T00:00:00.000Z",
+      "firstDrawWindowLastInclusiveUtc": "2026-12-04T23:14:59.999Z",
+      "lastSourceUtc": "2027-01-18T02:00:00.000Z",
+      "outcomeTailUtc": "2027-01-20T04:00:00.000Z",
+      "linkedCorpusSpanHours": 1108.25,
+      "shapeCounts": {
+        "N": 26,
+        "S": 3,
+        "E": 2
+      },
+      "segmentCount": 34,
+      "exposedHours": 128,
+      "trainingDays": 20,
+      "validationDays": 5,
+      "testDays": 6,
+      "pairedParents": 10,
+      "ordinaryFutureDraws": 21,
+      "nominalSourceTemplates": 6144,
+      "chargeDates": 47,
+      "totalReserve": 41960,
+      "peakDailyReserve": 1228,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1280,
+        "VALIDATION": 496,
+        "OUTCOME": 27520,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 376
+      },
+      "cycleReview": [
+        {
+          "reset": "2026-12-04T02:21:21.000Z",
+          "observedDateOnly": true,
+          "prior": 0,
+          "resetDay": 18,
+          "after": 41942,
+          "conservativeBefore": 18,
+          "conservativeAfter": 41960,
+          "sourceUnitsBefore": 0
+        },
+        {
+          "reset": "2027-01-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 25568,
+          "resetDay": 964,
+          "after": 15428,
+          "conservativeBefore": 26532,
+          "conservativeAfter": 16392,
+          "sourceUnitsBefore": 7680
+        },
+        {
+          "reset": "2027-02-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 41960,
+          "resetDay": 0,
+          "after": 0,
+          "conservativeBefore": 41960,
+          "conservativeAfter": 0,
+          "sourceUnitsBefore": 12288
+        }
+      ],
+      "cycleWindows": [
+        {
+          "startReset": null,
+          "endReset": "2026-12-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 18
+        },
+        {
+          "startReset": "2026-12-04T02:21:21.000Z",
+          "endReset": "2027-01-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 26532
+        },
+        {
+          "startReset": "2027-01-04T02:21:21.000Z",
+          "endReset": "2027-02-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 16392
+        },
+        {
+          "startReset": "2027-02-04T02:21:21.000Z",
+          "endReset": null,
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        }
+      ],
+      "originalSeedDateBindingPreservedAsHistorical": true,
+      "newDateCommitmentOrApprovalCreated": false,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    },
+    {
+      "offsetDays": 21,
+      "firstServiceUtc": "2026-12-13T00:00:00.000Z",
+      "lastParentStartUtc": "2027-01-25T00:00:00.000Z",
+      "firstSourceUtc": "2026-12-11T23:45:00.000Z",
+      "strictEnableBeforeUtc": "2026-12-11T23:10:00.000Z",
+      "firstDrawWindowOpensUtc": "2026-12-10T00:00:00.000Z",
+      "firstDrawWindowLastInclusiveUtc": "2026-12-11T23:14:59.999Z",
+      "lastSourceUtc": "2027-01-25T02:00:00.000Z",
+      "outcomeTailUtc": "2027-01-27T04:00:00.000Z",
+      "linkedCorpusSpanHours": 1108.25,
+      "shapeCounts": {
+        "N": 26,
+        "S": 3,
+        "E": 2
+      },
+      "segmentCount": 34,
+      "exposedHours": 128,
+      "trainingDays": 20,
+      "validationDays": 5,
+      "testDays": 6,
+      "pairedParents": 10,
+      "ordinaryFutureDraws": 21,
+      "nominalSourceTemplates": 6144,
+      "chargeDates": 47,
+      "totalReserve": 41960,
+      "peakDailyReserve": 1228,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1280,
+        "VALIDATION": 496,
+        "OUTCOME": 27520,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 376
+      },
+      "cycleReview": [
+        {
+          "reset": "2026-12-04T02:21:21.000Z",
+          "observedDateOnly": true,
+          "prior": 0,
+          "resetDay": 0,
+          "after": 41960,
+          "conservativeBefore": 0,
+          "conservativeAfter": 41960,
+          "sourceUnitsBefore": 0
+        },
+        {
+          "reset": "2027-01-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 18392,
+          "resetDay": 964,
+          "after": 22604,
+          "conservativeBefore": 19356,
+          "conservativeAfter": 23568,
+          "sourceUnitsBefore": 5376
+        },
+        {
+          "reset": "2027-02-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 41960,
+          "resetDay": 0,
+          "after": 0,
+          "conservativeBefore": 41960,
+          "conservativeAfter": 0,
+          "sourceUnitsBefore": 12288
+        }
+      ],
+      "cycleWindows": [
+        {
+          "startReset": null,
+          "endReset": "2026-12-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        },
+        {
+          "startReset": "2026-12-04T02:21:21.000Z",
+          "endReset": "2027-01-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 19356
+        },
+        {
+          "startReset": "2027-01-04T02:21:21.000Z",
+          "endReset": "2027-02-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 23568
+        },
+        {
+          "startReset": "2027-02-04T02:21:21.000Z",
+          "endReset": null,
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        }
+      ],
+      "originalSeedDateBindingPreservedAsHistorical": true,
+      "newDateCommitmentOrApprovalCreated": false,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    },
+    {
+      "offsetDays": 28,
+      "firstServiceUtc": "2026-12-20T00:00:00.000Z",
+      "lastParentStartUtc": "2027-02-01T00:00:00.000Z",
+      "firstSourceUtc": "2026-12-18T23:45:00.000Z",
+      "strictEnableBeforeUtc": "2026-12-18T23:10:00.000Z",
+      "firstDrawWindowOpensUtc": "2026-12-17T00:00:00.000Z",
+      "firstDrawWindowLastInclusiveUtc": "2026-12-18T23:14:59.999Z",
+      "lastSourceUtc": "2027-02-01T02:00:00.000Z",
+      "outcomeTailUtc": "2027-02-03T04:00:00.000Z",
+      "linkedCorpusSpanHours": 1108.25,
+      "shapeCounts": {
+        "N": 26,
+        "S": 3,
+        "E": 2
+      },
+      "segmentCount": 34,
+      "exposedHours": 128,
+      "trainingDays": 20,
+      "validationDays": 5,
+      "testDays": 6,
+      "pairedParents": 10,
+      "ordinaryFutureDraws": 21,
+      "nominalSourceTemplates": 6144,
+      "chargeDates": 47,
+      "totalReserve": 41960,
+      "peakDailyReserve": 1228,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1280,
+        "VALIDATION": 496,
+        "OUTCOME": 27520,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 376
+      },
+      "cycleReview": [
+        {
+          "reset": "2026-12-04T02:21:21.000Z",
+          "observedDateOnly": true,
+          "prior": 0,
+          "resetDay": 0,
+          "after": 41960,
+          "conservativeBefore": 0,
+          "conservativeAfter": 41960,
+          "sourceUnitsBefore": 0
+        },
+        {
+          "reset": "2027-01-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 11312,
+          "resetDay": 1016,
+          "after": 29632,
+          "conservativeBefore": 12328,
+          "conservativeAfter": 30648,
+          "sourceUnitsBefore": 3136
+        },
+        {
+          "reset": "2027-02-04T02:21:21.000Z",
+          "observedDateOnly": false,
+          "prior": 41960,
+          "resetDay": 0,
+          "after": 0,
+          "conservativeBefore": 41960,
+          "conservativeAfter": 0,
+          "sourceUnitsBefore": 12288
+        }
+      ],
+      "cycleWindows": [
+        {
+          "startReset": null,
+          "endReset": "2026-12-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        },
+        {
+          "startReset": "2026-12-04T02:21:21.000Z",
+          "endReset": "2027-01-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 12328
+        },
+        {
+          "startReset": "2027-01-04T02:21:21.000Z",
+          "endReset": "2027-02-04T02:21:21.000Z",
+          "conservativeUnitsIncludingEntireBoundaryDates": 30648
+        },
+        {
+          "startReset": "2027-02-04T02:21:21.000Z",
+          "endReset": null,
+          "conservativeUnitsIncludingEntireBoundaryDates": 0
+        }
+      ],
+      "originalSeedDateBindingPreservedAsHistorical": true,
+      "newDateCommitmentOrApprovalCreated": false,
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    }
+  ],
+  "negativeTestsPassed": [
+    "non-week shift",
+    "negative shift",
+    "out of bounded review",
+    "wrong source shape",
+    "reordered date",
+    "wrong seed date",
+    "source nominal timestamp drift"
+  ],
+  "important": "Exact historical original date-bound commitment cannot be reused as proof of new dates. Calendar compiler and budget/export pins refuse shifted bytes; no production stage or authorization is generated. Account reset dates after Dec4 are hypothetical, local civil dates/season/holidays/schedules and source rights need separate review. Do not pick a shift based on outcomes.",
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
