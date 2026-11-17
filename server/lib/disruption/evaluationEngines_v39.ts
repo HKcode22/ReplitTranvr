@@ -56,12 +56,23 @@ function hashPartition(engine: PreEngine, key: string): EvaluationPartition {
 function refuseOverlap(rows: AssignedRow[]): void {
   const rowIds = new Set<string>();
   const groups = new Map<string, EvaluationPartition>();
+  const flights = new Map<string, EvaluationPartition>();
   for (const row of rows) {
     if (!row.rowId || rowIds.has(row.rowId)) throw new Error(`REFUSE_ROW_OVERLAP:${row.rowId}`);
     rowIds.add(row.rowId);
     const prior = groups.get(row.groupKey);
     if (prior && prior !== row.partition) throw new Error(`REFUSE_GROUP_OVERLAP:${row.groupKey}`);
     groups.set(row.groupKey, row.partition);
+    // Amendment E: calendar-day/airport/tail/route blocks do not replace
+    // the separate same-flight constraint. Do not move rows between frozen
+    // partitions to resolve conflicts. An exact key is not physical proof;
+    // any unresolved cross-key aliases require independent censoring upstream.
+    const flight = row.flightInstanceId;
+    if (typeof flight !== "string" || !flight.trim() || flight.trim() !== flight)
+      throw new Error("REFUSE_MISSING_OR_NONCANONICAL_FLIGHT_KEY");
+    const priorFlight = flights.get(flight);
+    if (priorFlight && priorFlight !== row.partition) throw new Error("REFUSE_FLIGHT_PARTITION_OVERLAP");
+    flights.set(flight, row.partition);
   }
 }
 
@@ -108,5 +119,13 @@ export function evaluatePopulationAudit(rows: readonly PopulationAuditRow[], eng
 export function partitionManifestHash(engine: PreEngine | "POST", rows: readonly AssignedRow[]): string {
   const assignments = rows.map(({ rowId, partition, groupKey }) => ({ rowId, partition, groupKey })).sort((a, b) => a.rowId.localeCompare(b.rowId));
   refuseOverlap(rows.slice());
+  // Hashing a caller's assignments is not proof they implement the frozen
+  // rule. Recompute from original row fields and reject substituted groups
+  // or partitions before issuing any manifest fingerprint.
+  const expected = engine === "POST" ? buildPostPartition(rows) : buildPreEnginePartition(engine, rows);
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].partition !== expected[i].partition || rows[i].groupKey !== expected[i].groupKey)
+      throw new Error("REFUSE_FROZEN_PARTITION_ASSIGNMENT_DRIFT");
+  }
   return createHash("sha256").update(canonical({ engine, ruleHash: EVALUATION_RULE_HASH, assignments })).digest("hex");
 }

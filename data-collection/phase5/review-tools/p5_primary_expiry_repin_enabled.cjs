@@ -38,7 +38,9 @@ const RELEASE_CODE=Object.freeze({
  "server/lib/disruption/phase6ActualPostOutcomeObservability_v39.ts": "979c2b58ca5d7def456f3f125a8e9a9696beb7c4",
  "tests/phase6_actual_post_outcome_observability_v39.test.ts": "a451c6520cf84e66acc7e55322b00196f996f3c5",
  "data-collection/phase5/review-tools/p5_primary_expiry_repin_enabled.test.cjs": "0e67cb5f47feed8547407babd1abbfee6448bcc0",
- "data-collection/phase5/2026-11-17_COMBINED_IDENTITY_RELEASE_AND_RETENTION_REPIN.md": "bae5ee272bda70baf5310b92ea6143151d9518f0"
+ "data-collection/phase5/2026-11-17_COMBINED_IDENTITY_RELEASE_AND_RETENTION_REPIN.md": "d65e592be6f04e11ad5147ff1fb78141e7733076",
+ "server/lib/disruption/evaluationEngines_v39.ts": "08fc2ed2bab767e8f1c198ac7753e882d81d835c",
+ "tests/evaluation_engines_v39.test.ts": "6c09685e6aae5d6c657f11a9e51dd90715ba71b3"
 });
 const COUNTERS=['liveOriginals','eligibleOriginals','hardDueOriginals','eligibleNextHour','hardDueNextHour',
  'unboundLiveOriginals','markedExpiredPayloadPresent','unlinkedUnexpiredPopulation','unexpiredPopulationWithoutLiveOriginal'];
