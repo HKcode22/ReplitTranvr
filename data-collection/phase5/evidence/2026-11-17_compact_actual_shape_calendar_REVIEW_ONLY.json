@@ -1,0 +1,2507 @@
+{
+  "status": "PROSPECTIVE_COMPACT_REVIEW_NOT_RELEASE",
+  "originalMain": "de15816bccb867dc17dcd396f8bedec66960e115",
+  "originalSeedWorkflow": "43700154416",
+  "originalDateBlob": "54544099c96875d69da63c88392d0a3febf681d3",
+  "originalSourceShapeBlob": "613dd8827cfb4ec06102bcc07e2c51916a9c6613",
+  "originalSeedBlob": "9dc34c32541cde8db1e09c8bf4a06fe0af27f389",
+  "originalHubsReconstructedUsingOriginalSeed": true,
+  "originalHubs": [
+    "OMAA",
+    "WSSS",
+    "YSSY",
+    "SKBO",
+    "SKBO",
+    "WSSS",
+    "OMAA",
+    "WSSS",
+    "YSSY",
+    "SKBO",
+    "SKBO",
+    "YSSY",
+    "OMAA",
+    "WSSS",
+    "YSSY",
+    "OMAA",
+    "SKBO",
+    "OMAA",
+    "YSSY",
+    "WSSS",
+    "SKBO",
+    "WSSS",
+    "SKBO",
+    "OMAA",
+    "YSSY",
+    "OMAA",
+    "WSSS",
+    "YSSY",
+    "SKBO",
+    "OMAA",
+    "WSSS"
+  ],
+  "originalTreatmentShapesPreserved": true,
+  "scope": "Same original slot sequence, fixed pair order and weekday classes, original HUB order, actual 4/5/6h elapsed parent lengths rather than blanket 6h, one parent per UTC date, no future adaptive airport identities chosen. Changes date-dependent original seed commitment and requires prospective review/rebinding; original treatment is already revealed, no outcome data used. Not independently signed or compiled into production.",
+  "cases": [
+    {
+      "firstServiceUtc": "2026-11-21T00:00:00.000Z",
+      "firstSourceUtc": "2026-11-19T23:45:00.000Z",
+      "strictAuthBeforeUtc": "2026-11-19T23:10:00.000Z",
+      "earlyDrawOpensUtc": "2026-11-18T00:00:00.000Z",
+      "earlyDrawClosesExclusiveUtc": "2026-11-19T23:15:00.000Z",
+      "lastSourceUtc": "2026-12-24T02:00:00.000Z",
+      "lastServiceEndUtc": "2026-12-24T04:00:00.000Z",
+      "allocatedOutcomeTailUtc": "2026-12-26T04:00:00.000Z",
+      "elapsedServiceDates": 34,
+      "firstSourceToTailHours": 868.25,
+      "minimumKnownWashoutHours": 24,
+      "skips": [
+        {
+          "n": 2,
+          "date": "2026-11-22",
+          "reasons": [
+            "ORIGINAL_PAIR_WEEKDAY_CLASS"
+          ]
+        },
+        {
+          "n": 8,
+          "date": "2026-11-29",
+          "reasons": [
+            "ORIGINAL_PAIR_WEEKDAY_CLASS"
+          ]
+        },
+        {
+          "n": 11,
+          "date": "2026-12-03",
+          "reasons": [
+            "KNOWN_AIRPORT_WASHOUT"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "runDayIndex": 1,
+          "originalStartUtc": "2026-11-22T00:00:00.000Z",
+          "startUtc": "2026-11-21T00:00:00.000Z",
+          "endUtc": "2026-11-21T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": "pair-1",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": {
+            "HUB": "OMAA",
+            "MID_A": "OMSJ",
+            "MID_B": "SPJC",
+            "REGIONAL": "KDEC"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-21T00:00:00.000Z",
+              "endUtc": "2026-11-21T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 2,
+          "originalStartUtc": "2026-11-23T04:00:00.000Z",
+          "startUtc": "2026-11-23T04:00:00.000Z",
+          "endUtc": "2026-11-23T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": "pair-2",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "WSSS",
+            "MID_A": "SBFL",
+            "MID_B": "TJSJ",
+            "REGIONAL": "LSZB"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-23T04:00:00.000Z",
+              "endUtc": "2026-11-23T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 3,
+          "originalStartUtc": "2026-11-24T08:00:00.000Z",
+          "startUtc": "2026-11-24T08:00:00.000Z",
+          "endUtc": "2026-11-24T13:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "2x2h",
+          "anchorIcao": "YSSY",
+          "pairId": "pair-3",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "YSSY",
+            "MID_A": "KBUF",
+            "MID_B": "LFQQ",
+            "REGIONAL": "NZNP"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-24T08:00:00.000Z",
+              "endUtc": "2026-11-24T10:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-24T11:00:00.000Z",
+              "endUtc": "2026-11-24T13:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 4,
+          "originalStartUtc": "2026-11-25T12:00:00.000Z",
+          "startUtc": "2026-11-25T12:00:00.000Z",
+          "endUtc": "2026-11-25T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-4",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "EBAW",
+            "MID_B": "NZNS",
+            "REGIONAL": "RJNK"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-25T12:00:00.000Z",
+              "endUtc": "2026-11-25T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 5,
+          "originalStartUtc": "2026-11-27T16:00:00.000Z",
+          "startUtc": "2026-11-26T16:00:00.000Z",
+          "endUtc": "2026-11-26T22:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "up-to-6h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-5",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "YBUD",
+            "MID_B": "RKTU",
+            "REGIONAL": "FAKM"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-26T16:00:00.000Z",
+              "endUtc": "2026-11-26T22:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 6,
+          "originalStartUtc": "2026-11-28T20:00:00.000Z",
+          "startUtc": "2026-11-27T20:00:00.000Z",
+          "endUtc": "2026-11-28T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-27T20:00:00.000Z",
+              "endUtc": "2026-11-28T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 7,
+          "originalStartUtc": "2026-12-05T00:00:00.000Z",
+          "startUtc": "2026-11-28T00:00:00.000Z",
+          "endUtc": "2026-11-28T05:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "2x2h",
+          "anchorIcao": "OMAA",
+          "pairId": "pair-1",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": {
+            "HUB": "OMAA",
+            "MID_A": "OMSJ",
+            "MID_B": "SPJC",
+            "REGIONAL": "KDEC"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-28T00:00:00.000Z",
+              "endUtc": "2026-11-28T02:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-28T03:00:00.000Z",
+              "endUtc": "2026-11-28T05:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 8,
+          "originalStartUtc": "2026-12-07T04:00:00.000Z",
+          "startUtc": "2026-11-30T04:00:00.000Z",
+          "endUtc": "2026-11-30T09:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "2x2h",
+          "anchorIcao": "WSSS",
+          "pairId": "pair-2",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "WSSS",
+            "MID_A": "SBFL",
+            "MID_B": "TJSJ",
+            "REGIONAL": "LSZB"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-30T04:00:00.000Z",
+              "endUtc": "2026-11-30T06:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-30T07:00:00.000Z",
+              "endUtc": "2026-11-30T09:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 9,
+          "originalStartUtc": "2026-12-08T08:00:00.000Z",
+          "startUtc": "2026-12-01T08:00:00.000Z",
+          "endUtc": "2026-12-01T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": "pair-3",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "YSSY",
+            "MID_A": "KBUF",
+            "MID_B": "LFQQ",
+            "REGIONAL": "NZNP"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-01T08:00:00.000Z",
+              "endUtc": "2026-12-01T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 10,
+          "originalStartUtc": "2026-12-09T12:00:00.000Z",
+          "startUtc": "2026-12-02T12:00:00.000Z",
+          "endUtc": "2026-12-02T18:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "up-to-6h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-4",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "EBAW",
+            "MID_B": "NZNS",
+            "REGIONAL": "RJNK"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-02T12:00:00.000Z",
+              "endUtc": "2026-12-02T18:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 11,
+          "originalStartUtc": "2026-12-11T16:00:00.000Z",
+          "startUtc": "2026-12-04T16:00:00.000Z",
+          "endUtc": "2026-12-04T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-5",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "YBUD",
+            "MID_B": "RKTU",
+            "REGIONAL": "FAKM"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-04T16:00:00.000Z",
+              "endUtc": "2026-12-04T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 12,
+          "originalStartUtc": "2026-12-12T20:00:00.000Z",
+          "startUtc": "2026-12-05T20:00:00.000Z",
+          "endUtc": "2026-12-06T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-05T20:00:00.000Z",
+              "endUtc": "2026-12-06T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 13,
+          "originalStartUtc": "2026-12-14T00:00:00.000Z",
+          "startUtc": "2026-12-06T00:00:00.000Z",
+          "endUtc": "2026-12-06T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-06T00:00:00.000Z",
+              "endUtc": "2026-12-06T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 14,
+          "originalStartUtc": "2026-12-15T04:00:00.000Z",
+          "startUtc": "2026-12-07T04:00:00.000Z",
+          "endUtc": "2026-12-07T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-07T04:00:00.000Z",
+              "endUtc": "2026-12-07T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 15,
+          "originalStartUtc": "2026-12-16T08:00:00.000Z",
+          "startUtc": "2026-12-08T08:00:00.000Z",
+          "endUtc": "2026-12-08T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-08T08:00:00.000Z",
+              "endUtc": "2026-12-08T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 16,
+          "originalStartUtc": "2026-12-17T12:00:00.000Z",
+          "startUtc": "2026-12-09T12:00:00.000Z",
+          "endUtc": "2026-12-09T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-09T12:00:00.000Z",
+              "endUtc": "2026-12-09T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 17,
+          "originalStartUtc": "2026-12-18T16:00:00.000Z",
+          "startUtc": "2026-12-10T16:00:00.000Z",
+          "endUtc": "2026-12-10T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-10T16:00:00.000Z",
+              "endUtc": "2026-12-10T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 18,
+          "originalStartUtc": "2026-12-19T20:00:00.000Z",
+          "startUtc": "2026-12-11T20:00:00.000Z",
+          "endUtc": "2026-12-12T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-11T20:00:00.000Z",
+              "endUtc": "2026-12-12T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 19,
+          "originalStartUtc": "2026-12-21T00:00:00.000Z",
+          "startUtc": "2026-12-12T00:00:00.000Z",
+          "endUtc": "2026-12-12T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-12T00:00:00.000Z",
+              "endUtc": "2026-12-12T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 20,
+          "originalStartUtc": "2026-12-22T04:00:00.000Z",
+          "startUtc": "2026-12-13T04:00:00.000Z",
+          "endUtc": "2026-12-13T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-13T04:00:00.000Z",
+              "endUtc": "2026-12-13T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 21,
+          "originalStartUtc": "2026-12-23T08:00:00.000Z",
+          "startUtc": "2026-12-14T08:00:00.000Z",
+          "endUtc": "2026-12-14T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-14T08:00:00.000Z",
+              "endUtc": "2026-12-14T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 22,
+          "originalStartUtc": "2026-12-24T12:00:00.000Z",
+          "startUtc": "2026-12-15T12:00:00.000Z",
+          "endUtc": "2026-12-15T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-15T12:00:00.000Z",
+              "endUtc": "2026-12-15T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 23,
+          "originalStartUtc": "2026-12-25T16:00:00.000Z",
+          "startUtc": "2026-12-16T16:00:00.000Z",
+          "endUtc": "2026-12-16T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-16T16:00:00.000Z",
+              "endUtc": "2026-12-16T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 24,
+          "originalStartUtc": "2026-12-26T20:00:00.000Z",
+          "startUtc": "2026-12-17T20:00:00.000Z",
+          "endUtc": "2026-12-18T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-17T20:00:00.000Z",
+              "endUtc": "2026-12-18T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 25,
+          "originalStartUtc": "2026-12-28T00:00:00.000Z",
+          "startUtc": "2026-12-18T00:00:00.000Z",
+          "endUtc": "2026-12-18T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-18T00:00:00.000Z",
+              "endUtc": "2026-12-18T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 26,
+          "originalStartUtc": "2026-12-29T04:00:00.000Z",
+          "startUtc": "2026-12-19T04:00:00.000Z",
+          "endUtc": "2026-12-19T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-19T04:00:00.000Z",
+              "endUtc": "2026-12-19T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 27,
+          "originalStartUtc": "2026-12-30T08:00:00.000Z",
+          "startUtc": "2026-12-20T08:00:00.000Z",
+          "endUtc": "2026-12-20T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-20T08:00:00.000Z",
+              "endUtc": "2026-12-20T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 28,
+          "originalStartUtc": "2026-12-31T12:00:00.000Z",
+          "startUtc": "2026-12-21T12:00:00.000Z",
+          "endUtc": "2026-12-21T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-21T12:00:00.000Z",
+              "endUtc": "2026-12-21T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 29,
+          "originalStartUtc": "2027-01-01T16:00:00.000Z",
+          "startUtc": "2026-12-22T16:00:00.000Z",
+          "endUtc": "2026-12-22T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-22T16:00:00.000Z",
+              "endUtc": "2026-12-22T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 30,
+          "originalStartUtc": "2027-01-02T20:00:00.000Z",
+          "startUtc": "2026-12-23T20:00:00.000Z",
+          "endUtc": "2026-12-24T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-23T20:00:00.000Z",
+              "endUtc": "2026-12-24T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 31,
+          "originalStartUtc": "2027-01-04T00:00:00.000Z",
+          "startUtc": "2026-12-24T00:00:00.000Z",
+          "endUtc": "2026-12-24T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-24T00:00:00.000Z",
+              "endUtc": "2026-12-24T04:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      "sourceTemplates": 6144,
+      "exposureHours": 128,
+      "segments": 34,
+      "postPartitionSlotGroups": 144,
+      "chargeDates": 38,
+      "categoryRows": 266,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1260,
+        "VALIDATION": 496,
+        "OUTCOME": 23040,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 304
+      },
+      "totalReserve": 37388,
+      "peakDailyReserve": 1280,
+      "projectHeadroomUsingPriorNoRefillReview": 11080,
+      "conservativePriorDec4ResetDateReserve": 14496,
+      "conservativeAfterDec4ResetDateReserve": 23988,
+      "chargeRows": [
+        {
+          "dateUtc": "2026-11-19",
+          "categories": {
+            "BASE_FIDS": 8,
+            "SPLIT_FIDS": 0,
+            "RETRY": 2,
+            "VALIDATION": 0,
+            "OUTCOME": 0,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 18
+        },
+        {
+          "dateUtc": "2026-11-20",
+          "categories": {
+            "BASE_FIDS": 304,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 0,
+            "OUTCOME": 0,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 344
+        },
+        {
+          "dateUtc": "2026-11-21",
+          "categories": {
+            "BASE_FIDS": 72,
+            "SPLIT_FIDS": 0,
+            "RETRY": 8,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 744
+        },
+        {
+          "dateUtc": "2026-11-22",
+          "categories": {
+            "BASE_FIDS": 200,
+            "SPLIT_FIDS": 0,
+            "RETRY": 20,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 868
+        },
+        {
+          "dateUtc": "2026-11-23",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-11-24",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-11-25",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 64,
+            "RETRY": 46,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1158
+        },
+        {
+          "dateUtc": "2026-11-26",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 128,
+            "RETRY": 52,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1236
+        },
+        {
+          "dateUtc": "2026-11-27",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-11-28",
+          "categories": {
+            "BASE_FIDS": 72,
+            "SPLIT_FIDS": 0,
+            "RETRY": 8,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 744
+        },
+        {
+          "dateUtc": "2026-11-29",
+          "categories": {
+            "BASE_FIDS": 192,
+            "SPLIT_FIDS": 0,
+            "RETRY": 20,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 860
+        },
+        {
+          "dateUtc": "2026-11-30",
+          "categories": {
+            "BASE_FIDS": 320,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1016
+        },
+        {
+          "dateUtc": "2026-12-01",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 64,
+            "RETRY": 46,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1158
+        },
+        {
+          "dateUtc": "2026-12-02",
+          "categories": {
+            "BASE_FIDS": 256,
+            "SPLIT_FIDS": 128,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-03",
+          "categories": {
+            "BASE_FIDS": 128,
+            "SPLIT_FIDS": 0,
+            "RETRY": 14,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 790
+        },
+        {
+          "dateUtc": "2026-12-04",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-05",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-06",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-07",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-08",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-09",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-10",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-11",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-12",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-13",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-14",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-15",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-16",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-17",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-18",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-19",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-20",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-21",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-22",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-23",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-24",
+          "categories": {
+            "BASE_FIDS": 72,
+            "SPLIT_FIDS": 0,
+            "RETRY": 8,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 744
+        },
+        {
+          "dateUtc": "2026-12-25",
+          "categories": {
+            "BASE_FIDS": 0,
+            "SPLIT_FIDS": 0,
+            "RETRY": 0,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 648
+        },
+        {
+          "dateUtc": "2026-12-26",
+          "categories": {
+            "BASE_FIDS": 0,
+            "SPLIT_FIDS": 0,
+            "RETRY": 0,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 648
+        }
+      ]
+    },
+    {
+      "firstServiceUtc": "2026-11-22T00:00:00.000Z",
+      "firstSourceUtc": "2026-11-20T23:45:00.000Z",
+      "strictAuthBeforeUtc": "2026-11-20T23:10:00.000Z",
+      "earlyDrawOpensUtc": "2026-11-19T00:00:00.000Z",
+      "earlyDrawClosesExclusiveUtc": "2026-11-20T23:15:00.000Z",
+      "lastSourceUtc": "2026-12-24T02:00:00.000Z",
+      "lastServiceEndUtc": "2026-12-24T04:00:00.000Z",
+      "allocatedOutcomeTailUtc": "2026-12-26T04:00:00.000Z",
+      "elapsedServiceDates": 33,
+      "firstSourceToTailHours": 844.25,
+      "minimumKnownWashoutHours": 24,
+      "skips": [
+        {
+          "n": 8,
+          "date": "2026-11-29",
+          "reasons": [
+            "ORIGINAL_PAIR_WEEKDAY_CLASS"
+          ]
+        },
+        {
+          "n": 11,
+          "date": "2026-12-03",
+          "reasons": [
+            "KNOWN_AIRPORT_WASHOUT"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "runDayIndex": 1,
+          "originalStartUtc": "2026-11-22T00:00:00.000Z",
+          "startUtc": "2026-11-22T00:00:00.000Z",
+          "endUtc": "2026-11-22T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": "pair-1",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": {
+            "HUB": "OMAA",
+            "MID_A": "OMSJ",
+            "MID_B": "SPJC",
+            "REGIONAL": "KDEC"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-22T00:00:00.000Z",
+              "endUtc": "2026-11-22T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 2,
+          "originalStartUtc": "2026-11-23T04:00:00.000Z",
+          "startUtc": "2026-11-23T04:00:00.000Z",
+          "endUtc": "2026-11-23T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": "pair-2",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "WSSS",
+            "MID_A": "SBFL",
+            "MID_B": "TJSJ",
+            "REGIONAL": "LSZB"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-23T04:00:00.000Z",
+              "endUtc": "2026-11-23T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 3,
+          "originalStartUtc": "2026-11-24T08:00:00.000Z",
+          "startUtc": "2026-11-24T08:00:00.000Z",
+          "endUtc": "2026-11-24T13:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "2x2h",
+          "anchorIcao": "YSSY",
+          "pairId": "pair-3",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "YSSY",
+            "MID_A": "KBUF",
+            "MID_B": "LFQQ",
+            "REGIONAL": "NZNP"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-24T08:00:00.000Z",
+              "endUtc": "2026-11-24T10:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-24T11:00:00.000Z",
+              "endUtc": "2026-11-24T13:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 4,
+          "originalStartUtc": "2026-11-25T12:00:00.000Z",
+          "startUtc": "2026-11-25T12:00:00.000Z",
+          "endUtc": "2026-11-25T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-4",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "EBAW",
+            "MID_B": "NZNS",
+            "REGIONAL": "RJNK"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-25T12:00:00.000Z",
+              "endUtc": "2026-11-25T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 5,
+          "originalStartUtc": "2026-11-27T16:00:00.000Z",
+          "startUtc": "2026-11-26T16:00:00.000Z",
+          "endUtc": "2026-11-26T22:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "up-to-6h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-5",
+          "crossoverPeriod": 1,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "YBUD",
+            "MID_B": "RKTU",
+            "REGIONAL": "FAKM"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-26T16:00:00.000Z",
+              "endUtc": "2026-11-26T22:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 6,
+          "originalStartUtc": "2026-11-28T20:00:00.000Z",
+          "startUtc": "2026-11-27T20:00:00.000Z",
+          "endUtc": "2026-11-28T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-27T20:00:00.000Z",
+              "endUtc": "2026-11-28T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 7,
+          "originalStartUtc": "2026-12-05T00:00:00.000Z",
+          "startUtc": "2026-11-28T00:00:00.000Z",
+          "endUtc": "2026-11-28T05:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "2x2h",
+          "anchorIcao": "OMAA",
+          "pairId": "pair-1",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": {
+            "HUB": "OMAA",
+            "MID_A": "OMSJ",
+            "MID_B": "SPJC",
+            "REGIONAL": "KDEC"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-28T00:00:00.000Z",
+              "endUtc": "2026-11-28T02:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-28T03:00:00.000Z",
+              "endUtc": "2026-11-28T05:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 8,
+          "originalStartUtc": "2026-12-07T04:00:00.000Z",
+          "startUtc": "2026-11-30T04:00:00.000Z",
+          "endUtc": "2026-11-30T09:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "2x2h",
+          "anchorIcao": "WSSS",
+          "pairId": "pair-2",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "WSSS",
+            "MID_A": "SBFL",
+            "MID_B": "TJSJ",
+            "REGIONAL": "LSZB"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-11-30T04:00:00.000Z",
+              "endUtc": "2026-11-30T06:00:00.000Z"
+            },
+            {
+              "startUtc": "2026-11-30T07:00:00.000Z",
+              "endUtc": "2026-11-30T09:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 9,
+          "originalStartUtc": "2026-12-08T08:00:00.000Z",
+          "startUtc": "2026-12-01T08:00:00.000Z",
+          "endUtc": "2026-12-01T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": "pair-3",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "YSSY",
+            "MID_A": "KBUF",
+            "MID_B": "LFQQ",
+            "REGIONAL": "NZNP"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-01T08:00:00.000Z",
+              "endUtc": "2026-12-01T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 10,
+          "originalStartUtc": "2026-12-09T12:00:00.000Z",
+          "startUtc": "2026-12-02T12:00:00.000Z",
+          "endUtc": "2026-12-02T18:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "up-to-6h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-4",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "EBAW",
+            "MID_B": "NZNS",
+            "REGIONAL": "RJNK"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-02T12:00:00.000Z",
+              "endUtc": "2026-12-02T18:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 11,
+          "originalStartUtc": "2026-12-11T16:00:00.000Z",
+          "startUtc": "2026-12-04T16:00:00.000Z",
+          "endUtc": "2026-12-04T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": "pair-5",
+          "crossoverPeriod": 2,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": {
+            "HUB": "SKBO",
+            "MID_A": "YBUD",
+            "MID_B": "RKTU",
+            "REGIONAL": "FAKM"
+          },
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-04T16:00:00.000Z",
+              "endUtc": "2026-12-04T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 12,
+          "originalStartUtc": "2026-12-12T20:00:00.000Z",
+          "startUtc": "2026-12-05T20:00:00.000Z",
+          "endUtc": "2026-12-06T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-05T20:00:00.000Z",
+              "endUtc": "2026-12-06T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 13,
+          "originalStartUtc": "2026-12-14T00:00:00.000Z",
+          "startUtc": "2026-12-06T00:00:00.000Z",
+          "endUtc": "2026-12-06T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-06T00:00:00.000Z",
+              "endUtc": "2026-12-06T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 14,
+          "originalStartUtc": "2026-12-15T04:00:00.000Z",
+          "startUtc": "2026-12-07T04:00:00.000Z",
+          "endUtc": "2026-12-07T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-07T04:00:00.000Z",
+              "endUtc": "2026-12-07T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 15,
+          "originalStartUtc": "2026-12-16T08:00:00.000Z",
+          "startUtc": "2026-12-08T08:00:00.000Z",
+          "endUtc": "2026-12-08T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-08T08:00:00.000Z",
+              "endUtc": "2026-12-08T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 16,
+          "originalStartUtc": "2026-12-17T12:00:00.000Z",
+          "startUtc": "2026-12-09T12:00:00.000Z",
+          "endUtc": "2026-12-09T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-09T12:00:00.000Z",
+              "endUtc": "2026-12-09T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 17,
+          "originalStartUtc": "2026-12-18T16:00:00.000Z",
+          "startUtc": "2026-12-10T16:00:00.000Z",
+          "endUtc": "2026-12-10T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-10T16:00:00.000Z",
+              "endUtc": "2026-12-10T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 18,
+          "originalStartUtc": "2026-12-19T20:00:00.000Z",
+          "startUtc": "2026-12-11T20:00:00.000Z",
+          "endUtc": "2026-12-12T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-11T20:00:00.000Z",
+              "endUtc": "2026-12-12T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 19,
+          "originalStartUtc": "2026-12-21T00:00:00.000Z",
+          "startUtc": "2026-12-12T00:00:00.000Z",
+          "endUtc": "2026-12-12T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-12T00:00:00.000Z",
+              "endUtc": "2026-12-12T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 20,
+          "originalStartUtc": "2026-12-22T04:00:00.000Z",
+          "startUtc": "2026-12-13T04:00:00.000Z",
+          "endUtc": "2026-12-13T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "train",
+          "segments": [
+            {
+              "startUtc": "2026-12-13T04:00:00.000Z",
+              "endUtc": "2026-12-13T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 21,
+          "originalStartUtc": "2026-12-23T08:00:00.000Z",
+          "startUtc": "2026-12-14T08:00:00.000Z",
+          "endUtc": "2026-12-14T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-14T08:00:00.000Z",
+              "endUtc": "2026-12-14T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 22,
+          "originalStartUtc": "2026-12-24T12:00:00.000Z",
+          "startUtc": "2026-12-15T12:00:00.000Z",
+          "endUtc": "2026-12-15T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-15T12:00:00.000Z",
+              "endUtc": "2026-12-15T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 23,
+          "originalStartUtc": "2026-12-25T16:00:00.000Z",
+          "startUtc": "2026-12-16T16:00:00.000Z",
+          "endUtc": "2026-12-16T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-16T16:00:00.000Z",
+              "endUtc": "2026-12-16T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 24,
+          "originalStartUtc": "2026-12-26T20:00:00.000Z",
+          "startUtc": "2026-12-17T20:00:00.000Z",
+          "endUtc": "2026-12-18T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-17T20:00:00.000Z",
+              "endUtc": "2026-12-18T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 25,
+          "originalStartUtc": "2026-12-28T00:00:00.000Z",
+          "startUtc": "2026-12-18T00:00:00.000Z",
+          "endUtc": "2026-12-18T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "validation",
+          "segments": [
+            {
+              "startUtc": "2026-12-18T00:00:00.000Z",
+              "endUtc": "2026-12-18T04:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 26,
+          "originalStartUtc": "2026-12-29T04:00:00.000Z",
+          "startUtc": "2026-12-19T04:00:00.000Z",
+          "endUtc": "2026-12-19T08:00:00.000Z",
+          "utcSlot": 4,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-19T04:00:00.000Z",
+              "endUtc": "2026-12-19T08:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 27,
+          "originalStartUtc": "2026-12-30T08:00:00.000Z",
+          "startUtc": "2026-12-20T08:00:00.000Z",
+          "endUtc": "2026-12-20T12:00:00.000Z",
+          "utcSlot": 8,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekend",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-20T08:00:00.000Z",
+              "endUtc": "2026-12-20T12:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 28,
+          "originalStartUtc": "2026-12-31T12:00:00.000Z",
+          "startUtc": "2026-12-21T12:00:00.000Z",
+          "endUtc": "2026-12-21T16:00:00.000Z",
+          "utcSlot": 12,
+          "windowShape": "4h",
+          "anchorIcao": "YSSY",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-21T12:00:00.000Z",
+              "endUtc": "2026-12-21T16:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 29,
+          "originalStartUtc": "2027-01-01T16:00:00.000Z",
+          "startUtc": "2026-12-22T16:00:00.000Z",
+          "endUtc": "2026-12-22T20:00:00.000Z",
+          "utcSlot": 16,
+          "windowShape": "4h",
+          "anchorIcao": "SKBO",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-22T16:00:00.000Z",
+              "endUtc": "2026-12-22T20:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 30,
+          "originalStartUtc": "2027-01-02T20:00:00.000Z",
+          "startUtc": "2026-12-23T20:00:00.000Z",
+          "endUtc": "2026-12-24T00:00:00.000Z",
+          "utcSlot": 20,
+          "windowShape": "4h",
+          "anchorIcao": "OMAA",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-23T20:00:00.000Z",
+              "endUtc": "2026-12-24T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "runDayIndex": 31,
+          "originalStartUtc": "2027-01-04T00:00:00.000Z",
+          "startUtc": "2026-12-24T00:00:00.000Z",
+          "endUtc": "2026-12-24T04:00:00.000Z",
+          "utcSlot": 0,
+          "windowShape": "4h",
+          "anchorIcao": "WSSS",
+          "pairId": null,
+          "crossoverPeriod": null,
+          "weekdayClass": "weekday",
+          "fixedKnownAirportSet": null,
+          "partition": "test",
+          "segments": [
+            {
+              "startUtc": "2026-12-24T00:00:00.000Z",
+              "endUtc": "2026-12-24T04:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      "sourceTemplates": 6144,
+      "exposureHours": 128,
+      "segments": 34,
+      "postPartitionSlotGroups": 144,
+      "chargeDates": 37,
+      "categoryRows": 259,
+      "categoryTotals": {
+        "BASE_FIDS": 11904,
+        "SPLIT_FIDS": 384,
+        "RETRY": 1260,
+        "VALIDATION": 496,
+        "OUTCOME": 22400,
+        "HISTORY": 0,
+        "DIAGNOSTIC": 296
+      },
+      "totalReserve": 36740,
+      "peakDailyReserve": 1280,
+      "projectHeadroomUsingPriorNoRefillReview": 11728,
+      "conservativePriorDec4ResetDateReserve": 13848,
+      "conservativeAfterDec4ResetDateReserve": 23988,
+      "chargeRows": [
+        {
+          "dateUtc": "2026-11-20",
+          "categories": {
+            "BASE_FIDS": 8,
+            "SPLIT_FIDS": 0,
+            "RETRY": 2,
+            "VALIDATION": 0,
+            "OUTCOME": 0,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 18
+        },
+        {
+          "dateUtc": "2026-11-21",
+          "categories": {
+            "BASE_FIDS": 304,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 0,
+            "OUTCOME": 0,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 344
+        },
+        {
+          "dateUtc": "2026-11-22",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-11-23",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-11-24",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-11-25",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 64,
+            "RETRY": 46,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1158
+        },
+        {
+          "dateUtc": "2026-11-26",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 128,
+            "RETRY": 52,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1236
+        },
+        {
+          "dateUtc": "2026-11-27",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-11-28",
+          "categories": {
+            "BASE_FIDS": 72,
+            "SPLIT_FIDS": 0,
+            "RETRY": 8,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 744
+        },
+        {
+          "dateUtc": "2026-11-29",
+          "categories": {
+            "BASE_FIDS": 192,
+            "SPLIT_FIDS": 0,
+            "RETRY": 20,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 860
+        },
+        {
+          "dateUtc": "2026-11-30",
+          "categories": {
+            "BASE_FIDS": 320,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1016
+        },
+        {
+          "dateUtc": "2026-12-01",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 64,
+            "RETRY": 46,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1158
+        },
+        {
+          "dateUtc": "2026-12-02",
+          "categories": {
+            "BASE_FIDS": 256,
+            "SPLIT_FIDS": 128,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-03",
+          "categories": {
+            "BASE_FIDS": 128,
+            "SPLIT_FIDS": 0,
+            "RETRY": 14,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 790
+        },
+        {
+          "dateUtc": "2026-12-04",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-05",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-06",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-07",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-08",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-09",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-10",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-11",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-12",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-13",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-14",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-15",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-16",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-17",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-18",
+          "categories": {
+            "BASE_FIDS": 272,
+            "SPLIT_FIDS": 0,
+            "RETRY": 28,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 964
+        },
+        {
+          "dateUtc": "2026-12-19",
+          "categories": {
+            "BASE_FIDS": 312,
+            "SPLIT_FIDS": 0,
+            "RETRY": 32,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1008
+        },
+        {
+          "dateUtc": "2026-12-20",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-21",
+          "categories": {
+            "BASE_FIDS": 384,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1088
+        },
+        {
+          "dateUtc": "2026-12-22",
+          "categories": {
+            "BASE_FIDS": 392,
+            "SPLIT_FIDS": 0,
+            "RETRY": 40,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1096
+        },
+        {
+          "dateUtc": "2026-12-23",
+          "categories": {
+            "BASE_FIDS": 560,
+            "SPLIT_FIDS": 0,
+            "RETRY": 56,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 1280
+        },
+        {
+          "dateUtc": "2026-12-24",
+          "categories": {
+            "BASE_FIDS": 72,
+            "SPLIT_FIDS": 0,
+            "RETRY": 8,
+            "VALIDATION": 16,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 744
+        },
+        {
+          "dateUtc": "2026-12-25",
+          "categories": {
+            "BASE_FIDS": 0,
+            "SPLIT_FIDS": 0,
+            "RETRY": 0,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 648
+        },
+        {
+          "dateUtc": "2026-12-26",
+          "categories": {
+            "BASE_FIDS": 0,
+            "SPLIT_FIDS": 0,
+            "RETRY": 0,
+            "VALIDATION": 0,
+            "OUTCOME": 640,
+            "HISTORY": 0,
+            "DIAGNOSTIC": 8
+          },
+          "total": 648
+        }
+      ]
+    }
+  ],
+  "negativeTestsPassed": [
+    "non-approved scenario",
+    "changed shape",
+    "changed fixed HUB",
+    "reordered day"
+  ],
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
