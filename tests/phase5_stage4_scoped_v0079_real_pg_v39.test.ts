@@ -34,7 +34,7 @@ const fakeFetch:typeof fetch=async()=>{
   move("ZX124","synthetic-duplicate-b",40),move("ZX125","synthetic-unchanged",60),
   move("ZX127","synthetic-repeated-id",100),move("ZX127","synthetic-repeated-id",100)
  ]:[move("ZX123","synthetic-retime",25),move("ZX125","synthetic-unchanged",60),
-  move("ZX126","synthetic-distinct",80),...(fetches===3?[move("ZX128","synthetic-third-only",120)]:[])];
+  move("ZX126","synthetic-distinct",80),...(fetches===2?[move("ZX124","synthetic-now-single",40)]:[]),...(fetches===3?[move("ZX128","synthetic-third-only",120)]:[])];
  return new Response(JSON.stringify({departures,arrivals:[]}),{
   status:200,headers:{"content-type":"application/json"}
  });
@@ -254,9 +254,12 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   const members=(await pool.query(
     "SELECT analytic_identity_id,flight_number FROM clean.flight_population WHERE population_query_id=$1",
     [binding.population_query_id])).rows;
-  expect(observed).toHaveLength(3);
+  expect(observed).toHaveLength(4);
   const flags=new Map(observed.map(x=>[x.flight_instance_id,x.conflicting_retained_identity]));
-  for(const m of members)expect(flags.get(m.analytic_identity_id)).toBe(m.flight_number==="ZX123");
+  // A later singleton cannot erase still-live earlier duplicate identity evidence.
+  expect(members).toHaveLength(4);
+  for(const m of members)expect(flags.get(m.analytic_identity_id)).toBe(
+   m.flight_number==="ZX123"||m.flight_number==="ZX124");
   // A different study or expired-at-review original isn't re-used as proof.
   const wrongScope=(await pool.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
    [binding.population_query_id,H("9"),clock,contract,rights])).rows;
@@ -299,7 +302,7 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
   const original=(await pool.query("SELECT raw_payload FROM clean.fids_query_response WHERE population_query_id=$1",[binding.population_query_id])).rows[0];
   expect(original.raw_payload.departures.map((x:{id:string})=>x.id)).toEqual(["synthetic-retime","synthetic-unchanged","synthetic-distinct","synthetic-third-only"]);
   const previous=(await pool.query("SELECT p.canonical_flight_instance_id FROM clean.flight_population p JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id) WHERE b.query_digest=$1",[query2])).rows;
-  expect(previous).toHaveLength(3);
+  expect(previous).toHaveLength(4);
   expect(previous.every(x=>/^leg:p5v1:/.test(x.canonical_flight_instance_id))).toBe(true);
   await expect(runP5ScopedFidsSource(plan3,make(plan3,query3))).rejects.toThrow("P5_PHYSICAL_QUERY_NOT_ACTIVE_OR_ALREADY_RESERVED");
   expect(fetches).toBe(3);
