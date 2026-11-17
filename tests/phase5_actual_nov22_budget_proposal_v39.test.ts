@@ -1,3 +1,7 @@
+import {assembleP5UnsignedRealFivePairCalendarSlotBudgetReview} from "../server/lib/disruption/phase5RealFivePairB0062UnsignedStageInputHandoff_v39";
+import {compileP6UnsignedFutureSourceDayPlans} from "../server/lib/disruption/phase6UnsignedFutureSourceDayPlanCompiler_v39";
+import {buildP5Crossover40WindowReview} from "../server/lib/disruption/phase5Crossover40WindowEvidenceReview_v39";
+import {previewP5IndependentTreatmentActiveSegments} from "../server/lib/disruption/phase5IndependentPairedTreatmentSourcePreview_v39";
 import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
@@ -141,6 +145,89 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
   return {draft,envelope:preview.shapeEnvelope,external,expectedExternalInputSha256:digest(external),
    timing,expectedTimingJsonSha256:digest(timing)};
  }
+
+ // Prospective date-only alternative after the original seed reveal: test the
+ // actual generic compilers, never pass a synthetic review to a live writer.
+ it("checks the compressed Nov21–Dec24 UTC alternative through existing B0062 and SOURCE compilers",()=>{
+  const f=reviewFixture(),old=actualPreview();
+  const bytes=readFileSync("data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json");
+  expect(createHash("sha1").update(Buffer.from("blob "+bytes.length+"\0")).update(bytes).digest("hex")).toBe("ee17a694594356e2b0c772545c490c198db11b42");
+  const receipt=JSON.parse(bytes.toString("utf8")),c=receipt.cases[0];
+  expect(receipt.status).toBe("PROSPECTIVE_COMPACT_REVIEW_NOT_RELEASE");
+  expect(receipt.phase6PaidGo).toBe(false);
+  expect(c.firstServiceUtc).toBe("2026-11-21T00:00:00.000Z");
+  expect(c.lastServiceEndUtc).toBe("2026-12-24T04:00:00.000Z");
+  const digest=(x:unknown)=>hash(Buffer.from(JSON.stringify(x)));
+  const iso=(ms:number)=>new Date(ms).toISOString();
+  const moves=new Map<number,string>(c.rows.map((x:any)=>[x.runDayIndex,x.startUtc]));
+  expect(moves.size).toBe(31);
+  const dateMapSha256=digest(Object.fromEntries(c.rows.map((x:any)=>[String(x.runDayIndex),x.startUtc.slice(0,10)])));
+  const envelope=structuredClone(old.shapeEnvelope);
+  envelope.days=envelope.days.map((d,i)=>{
+   const plan=c.rows[i],r=old.calendarDraft.calendarDays[i];
+   expect(plan.runDayIndex).toBe(d.runDayIndex);
+   expect(plan.originalStartUtc).toBe(d.startUtc);
+   expect(plan.windowShape).toBe(d.windowShape);
+   expect(plan.anchorIcao).toBe(r.anchorIcao);
+   expect(plan.partition).toBe(d.partition);
+   expect(plan.fixedKnownAirportSet).toEqual(d.pairedAirportCandidates);
+   const startUtc=moves.get(d.runDayIndex)!;
+   const delta=Date.parse(startUtc)-Date.parse(d.startUtc);
+   const shift=(t:string)=>iso(Date.parse(t)+delta);
+   const activeSegments=d.activeSegments.map(s=>({...s,startUtc:shift(s.startUtc),endUtc:shift(s.endUtc)}));
+   expect(activeSegments.map(({startUtc,endUtc})=>({startUtc,endUtc}))).toEqual(plan.segments);
+   return {...d,dateUtc:startUtc.slice(0,10),startUtc,endUtc:shift(d.endUtc),activeSegments,
+    excludedSplitGap:d.excludedSplitGap?{startUtc:shift(d.excludedSplitGap.startUtc),endUtc:shift(d.excludedSplitGap.endUtc)}:null,
+    earliestPermittedEarlyDrawUtc:shift(d.earliestPermittedEarlyDrawUtc),
+    latestPermittedEarlyDrawUtcInclusive:shift(d.latestPermittedEarlyDrawUtcInclusive),
+    earliestPossibleSourceT24SpanUtc:shift(d.earliestPossibleSourceT24SpanUtc)};
+  });
+  // Rebind the exact existing 40 conservative-window evidence identity
+  // (no provider observations, no fabricated claims).
+  const prior40=buildP5Crossover40WindowReview({ownerCorrectedReadback:JSON.parse(ownerEvidenceBytes.toString("utf8")),firstRunDateUtc:"2026-11-22"});
+  const rows40=prior40.reviewRows.map(r=>{
+   const d=envelope.days[r.runDayIndex-1],startUtc=d.startUtc,conservativeEndUtc=iso(Date.parse(startUtc)+6*3600000);
+   const identity={dateMapSha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc,conservativeEndUtc};
+   return {...r,reviewKeySha256:digest(identity),startUtc,conservativeEndUtc,dateUtc:d.dateUtc,weekdayClass:r.weekdayClass};
+  });
+  const basic=rows40.map(r=>({reviewKeySha256:r.reviewKeySha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc:r.startUtc,conservativeEndUtc:r.conservativeEndUtc,dateUtc:r.dateUtc,weekdayClass:r.weekdayClass}));
+  const review40={...prior40,firstRunDateUtc:"2026-11-21",candidateDateMapSha256:dateMapSha256,windowIdentitySha256:digest(basic),reviewRows:rows40};
+  const treatment=previewP5IndependentTreatmentActiveSegments(review40,{treatmentSeedHex:seedBundle.treatmentSeedHex,announcedCommitmentSha256:seedBundle.announcedCommitmentSha256,claimedCommitmentObservedAtUtc:seedBundle.claimedCommitmentObservedAtUtc});
+  expect(treatment.assignmentSha256).toBe(old.shapeEnvelope.claimedTreatmentAssignmentSha256);
+  envelope.dateMapSha256=dateMapSha256;
+  envelope.crossoverReview40Sha256=review40.windowIdentitySha256;
+  envelope.shapeEnvelopeSha256=digest(envelope.days);
+  const draft=structuredClone(old.calendarDraft);
+  draft.calendarDays=draft.calendarDays.map(r=>{
+   const startUtc=moves.get(r.runDayIndex)!;
+   return {...r,startUtc,budgetDayId:"p5-f8-"+startUtc.slice(0,10).replace(/-/g,"")+"-"+String(r.runDayIndex).padStart(2,"0")};
+  });
+  draft.proposedShapeEnvelopeSha256=envelope.shapeEnvelopeSha256;
+  draft.proposedDateMapSha256=dateMapSha256;
+  draft.proposedCalendarRowsSha256=digest(draft.calendarDays);
+  draft.proposedCalendarDraftSha256=digest({schema:draft.schema,actualCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,proposedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,proposedDateMapSha256:draft.proposedDateMapSha256,claimedTreatmentAssignmentSha256:draft.claimedTreatmentAssignmentSha256,claimedTreatmentCommitmentSha256:draft.claimedTreatmentCommitmentSha256,assembledAtUtc:draft.assembledAtUtc,calendarDays:draft.calendarDays});
+  // Original calendar pin MUST still refuse the proposed date revision.
+  expect(()=>proposeP5ActualNov22Budget(draft)).toThrow("FIRST_REAL_CALENDAR_BYTES_REQUIRED");
+  const external={...f.external,expectedExternalCalendarDraftJsonSha256:digest(draft),
+   expectedCalendarRowsSha256:draft.proposedCalendarRowsSha256,calendarSha256:draft.proposedCalendarRowsSha256,
+   explicitOtherOnlyChargeDates:c.chargeRows.filter((r:any)=>r.categories.BASE_FIDS+r.categories.SPLIT_FIDS===0).map((r:any)=>r.dateUtc),
+   restOtherByUtcDate:c.chargeRows.map((r:any)=>({chargeDayUtc:r.dateUtc,dailyRestCeilingUnits:1900,categories:{FIDS_RETRY_UNIT_BUDGET:r.categories.RETRY,VALIDATION_UNIT_BUDGET:r.categories.VALIDATION,OUTCOME_REST_UNIT_BUDGET:r.categories.OUTCOME,HISTORY_BOOTSTRAP_UNIT_BUDGET:r.categories.HISTORY,DIAGNOSTIC_UNIT_BUDGET:r.categories.DIAGNOSTIC}}))};
+  const unsigned=assembleP5UnsignedRealFivePairCalendarSlotBudgetReview(draft,external);
+  const cost=unsigned.slotOnlyBudget;
+  expect(cost.utcCategoryRows).toHaveLength(38);
+  expect(cost.cycleSourceUnits+cost.cycleOtherUnits).toBe(37388);
+  expect(cost.utcCategoryRows.every(r=>Object.values(r.categories).reduce((a,b)=>a+b,0)<=1900)).toBe(true);
+  expect(unsigned.unsignedStageInput.phase6AuthorizationId).toBe("CI-ONLY-NOT-RELEASE");
+  expect(Buffer.byteLength(JSON.stringify(unsigned.unsignedStageInput))).toBeLessThanOrEqual(48000);
+  const plans=compileP6UnsignedFutureSourceDayPlans({stage:unsigned.unsignedStageInput,expectedStageInputSha256:unsigned.unsignedStageInputSha256,envelope,expectedShapeEnvelopeSha256:envelope.shapeEnvelopeSha256,timing:f.timing,expectedTimingJsonSha256:f.expectedTimingJsonSha256});
+  expect(plans.files).toHaveLength(31);
+  expect(plans.totalPlannedQueries).toBe(6144);
+  expect(plans.ordinaryAirportSelectionsCreated).toBe(0);
+  expect(plans.phase6PaidGo).toBe(false);
+  expect(JSON.parse(plans.files[0].bytes).templates[0].scheduledRequestUtc).toBe("2026-11-19T23:45:00.000Z");
+  expect(unsigned.phase6PaidGo).toBe(false);
+  expect(unsigned.existingB0062WriterInvoked).toBe(false);
+ });
  it("produces 31 exact review-only metadata plans with first-seed cost parity",()=>{
   const f=reviewFixture(),x=assembleP6ActualFirstSeedReleaseCandidate(f);
   expect(x.dayPlans.files).toHaveLength(31);
