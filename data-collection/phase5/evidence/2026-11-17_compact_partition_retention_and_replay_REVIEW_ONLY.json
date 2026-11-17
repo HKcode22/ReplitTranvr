@@ -1,0 +1,171 @@
+{
+  "schema": "v39.phase5.compact_partition_retention_and_replay_review.v1",
+  "status": "REVIEW_ONLY_NOT_AUTH_OR_MODEL_FIT",
+  "firstSourceUtc": "2026-11-19T23:45:00.000Z",
+  "finalTailUtc": "2026-12-26T04:00:00.000Z",
+  "spanHours": 868.25,
+  "partitions": [
+    {
+      "partition": "train",
+      "days": 20,
+      "firstNominalSourceUtc": "2026-11-19T23:45:00.000Z",
+      "lastServiceEndUtc": "2026-12-13T08:00:00.000Z",
+      "allocatedTailUtc": "2026-12-15T08:00:00.000Z",
+      "spanHours": 608.25,
+      "horizons": [
+        {
+          "horizonHours": 24,
+          "templates": 1344,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        },
+        {
+          "horizonHours": 6,
+          "templates": 1344,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        },
+        {
+          "horizonHours": 1.5,
+          "templates": 1344,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 352,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        }
+      ]
+    },
+    {
+      "partition": "validation",
+      "days": 5,
+      "firstNominalSourceUtc": "2026-12-13T07:45:00.000Z",
+      "lastServiceEndUtc": "2026-12-18T04:00:00.000Z",
+      "allocatedTailUtc": "2026-12-20T04:00:00.000Z",
+      "spanHours": 164.25,
+      "horizons": [
+        {
+          "horizonHours": 24,
+          "templates": 320,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        },
+        {
+          "horizonHours": 6,
+          "templates": 320,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        },
+        {
+          "horizonHours": 1.5,
+          "templates": 320,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 0
+        }
+      ]
+    },
+    {
+      "partition": "test",
+      "days": 6,
+      "firstNominalSourceUtc": "2026-12-18T03:45:00.000Z",
+      "lastServiceEndUtc": "2026-12-24T04:00:00.000Z",
+      "allocatedTailUtc": "2026-12-26T04:00:00.000Z",
+      "spanHours": 192.25,
+      "horizons": [
+        {
+          "horizonHours": 24,
+          "templates": 384,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 320
+        },
+        {
+          "horizonHours": 6,
+          "templates": 384,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 320,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 320
+        },
+        {
+          "horizonHours": 1.5,
+          "templates": 384,
+          "nominalAgeStrictlyBelow168hAtOwnTail": 352,
+          "nominalAgeStrictlyBelow168hAtFinalTail": 352
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "from": "train",
+      "to": "validation",
+      "previousAllocatedTailUtc": "2026-12-15T08:00:00.000Z",
+      "horizons": [
+        {
+          "horizonHours": 24,
+          "firstNominalIssueUtc": "2026-12-13T08:00:00.000Z",
+          "priorTailAfterIssueHours": 48,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "horizonHours": 6,
+          "firstNominalIssueUtc": "2026-12-14T02:00:00.000Z",
+          "priorTailAfterIssueHours": 30,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            19,
+            20
+          ]
+        },
+        {
+          "horizonHours": 1.5,
+          "firstNominalIssueUtc": "2026-12-14T06:30:00.000Z",
+          "priorTailAfterIssueHours": 25.5,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "from": "validation",
+      "to": "test",
+      "previousAllocatedTailUtc": "2026-12-20T04:00:00.000Z",
+      "horizons": [
+        {
+          "horizonHours": 24,
+          "firstNominalIssueUtc": "2026-12-18T04:00:00.000Z",
+          "priorTailAfterIssueHours": 48,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            23,
+            24,
+            25
+          ]
+        },
+        {
+          "horizonHours": 6,
+          "firstNominalIssueUtc": "2026-12-18T22:00:00.000Z",
+          "priorTailAfterIssueHours": 30,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            24,
+            25
+          ]
+        },
+        {
+          "horizonHours": 1.5,
+          "firstNominalIssueUtc": "2026-12-19T02:30:00.000Z",
+          "priorTailAfterIssueHours": 25.5,
+          "priorDaysWithAllocatedTailAfterIssue": [
+            24,
+            25
+          ]
+        }
+      ]
+    }
+  ],
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "actualLabelCountsMeasured": false,
+  "scientificFreezeApproved": false,
+  "phase6PaidGo": false,
+  "inputMainSha": "345f642e0df3266853a1f9d5e3f12fa262ddf1ee",
+  "inputGitBlob": "ee17a694594356e2b0c772545c490c198db11b42"
+}
