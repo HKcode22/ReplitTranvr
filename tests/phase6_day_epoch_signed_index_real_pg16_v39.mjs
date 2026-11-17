@@ -7,6 +7,7 @@ import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
 import {readFileSync} from "node:fs";
 import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
+import {verifyP5PrimaryExpiryActor,runP5PrimaryExpiry,admitP6PrivateExpiryExtension,P6_PRIVATE_EXPIRY_APPLY} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
@@ -450,9 +451,14 @@ try{
  assert.equal(baseline.split("\n").some(l=>l.startsWith("\\")),false);
  await dbOwner.query(baseline);
  await dbOwner.query("RESET search_path");
+ await dbOwner.query(readFileSync("migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql","utf8"));
+ await dbOwner.query(readFileSync("migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql","utf8"));
  const W="phase5_primary_fids_expiry_prod20261116",R="phase5_retention_reader_prod20261114",pw="ci-only-private-expiry";
  await dbOwner.query("CREATE ROLE "+W+" LOGIN NOINHERIT PASSWORD '"+pw+"'; CREATE ROLE "+R+" LOGIN NOINHERIT PASSWORD '"+pw+"'");
  await dbOwner.query("GRANT USAGE ON SCHEMA clean TO "+W+","+R);
+ await dbOwner.query("GRANT EXECUTE ON FUNCTION clean.phase5_primary_fids_expiry_sweep_v39(integer),clean.phase5_primary_fids_expiry_stop_v39(text) TO "+W);
+ await dbOwner.query("GRANT EXECUTE ON FUNCTION clean.phase5_primary_fids_expiry_status_v39(),clean.phase5_primary_fids_expiry_receipt_v39(text) TO "+R);
+ await dbOwner.query("GRANT SELECT(expires_at_utc,deletion_verified_at_utc,content_class,storage_kind,retention_hours) ON clean.provider_content_blob_ref TO "+R);
  const staged=readFileSync("migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql","utf8");
  await dbOwner.query(staged);
  const base="clean.phase6_private_epoch_expiry_";
@@ -547,6 +553,34 @@ try{
   const rp=new pg.Pool({connectionString:"postgresql://"+R+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",max:1,options:"-c default_transaction_read_only=on"});
   try{
    const extra=registry(free,11);await insertRegistry(extra,t(-1000));
+   // Exact existing primary verifier: production TLS is never bypassed by
+   // its actual CLI. Here enable only its original hard-coded disposable
+   // fixture gate for this local test call, restoring env immediately.
+   const saved={db:process.env.DATABASE_URL,gate:process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16};
+   const restore=(k,v)=>v===undefined?delete process.env[k]:process.env[k]=v;
+   try{
+    process.env.DATABASE_URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
+    process.env.V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16="1";
+    const vo={test:true,role:W,owner:"neondb_owner"};
+    await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",vo),/EXCESS_DEFINER_OR_SEQUENCE_AUTHORITY/);
+    await verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true});
+    await verifyP5PrimaryExpiryActor(rr,"reader",{test:true,role:R,owner:"neondb_owner",privateExpiry:true});
+    await dbOwner.query("GRANT EXECUTE ON FUNCTION "+funcs[0]+" TO "+W);
+    try{await assert.rejects(verifyP5PrimaryExpiryActor(w,"writer",{...vo,privateExpiry:true}),/EXACT_FUNCTION_BODY_OR_GRANT_DRIFT/);}
+    finally{await dbOwner.query("REVOKE EXECUTE ON FUNCTION "+funcs[0]+" FROM "+W);}
+    const primary=await runP5PrimaryExpiry({writer:wp,reader:rp,apply:false,verifyOptions:{
+     writer:{...vo,privateExpiry:true},reader:{test:true,role:R,owner:"neondb_owner",privateExpiry:true}
+    }});
+    assert.equal(primary.status,"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES");assert.equal(primary.databaseWrites,0);
+    assert.equal(primary.before.liveOriginals,0);
+   }finally{restore("DATABASE_URL",saved.db);restore("V39_P5_PRIMARY_FIDS_DISPOSABLE_PG16",saved.gate);}
+   const flags={P6_PRIVATE_EPOCH_EXPIRY_MODE:"APPLY_DUE_ONLY",P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256:manifest,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:P6_PRIVATE_EXPIRY_APPLY};
+   assert.deepEqual(admitP6PrivateExpiryExtension({},true),{enabled:false,apply:false});
+   assert.deepEqual(admitP6PrivateExpiryExtension(flags,false),{enabled:true,apply:false,manifest});
+   assert.deepEqual(admitP6PrivateExpiryExtension(flags,true),{enabled:true,apply:true,manifest});
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:""},true),/EXACT_SCOPE_REQUIRED/);
+   assert.throws(()=>admitP6PrivateExpiryExtension({...flags,P6_PRIVATE_EPOCH_EXPIRY_MODE:"OFF"},true),/OFF_CONFIG_DRIFT/);
+   console.log("P6_V0105_EXISTING_PRIMARY_EXACT_EIGHT_FUNCTION_ACL_AND_OPTIONAL_MODE_PG16_PASS");
    const options={writer:wp,reader:rp,manifest,limit:1,maxBatches:1};
    const verify=await runP6PrivateEpochExpiryCore(options);
    assert.equal(verify.status,"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES");assert.equal(verify.before.duePackets,1);
