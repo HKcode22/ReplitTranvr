@@ -57,6 +57,11 @@
       "evidenceId": "RUN-20261116-PRIMARYEXPIRY43997742324",
       "path": "data-collection/phase5/evidence/2026-11-16_owner_primary_fids_recurring_config_verify_apply_receipt.json",
       "sha256": "61948b908e1888cff08647b4d307b228dc7f8a767e6444fbcab6f60f55084a61"
+    },
+    {
+      "evidenceId": "RUN-20261116-HISTORICALPRECLASSIFICATION015741",
+      "path": "data-collection/phase5/evidence/2026-11-16_owner_historical_pre_field_classification_corrected_receipt.json",
+      "sha256": "97372aef1326d74382ecc63d12f606d9259ee5dbd8fb09b8fa6a25ddea09bcfd"
     }
   ],
   "approvals": []
