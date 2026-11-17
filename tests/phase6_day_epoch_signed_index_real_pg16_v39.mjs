@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
 import {readFileSync} from "node:fs";
+import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
 import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
@@ -473,7 +474,7 @@ try{
   const rc=async(id,m=manifest)=>(await rr.query("SELECT "+base+"receipt_v39($1,$2) v",[m,id])).rows[0].v;
   await assert.rejects(s(),/MANIFEST_MISMATCH/);
   await assert.rejects(sw(),/MANIFEST_MISMATCH/);
-  await dbOwner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids,revoked_at_utc) VALUES('CI-ONLY-PRIVATE-EXPIRY',$1,$2,$3,$4,'v39',CURRENT_DATE,1,0,1000,false,'[\"CI-ONLY\"]'::jsonb,clock_timestamp())",[manifest,calendar,release,code]);
+  await dbOwner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids,revoked_at_utc) VALUES('CI-ONLY-PRIVATE-EXPIRY',$1,$2,$3,$4,'v39',CURRENT_DATE,1900,0,1000,false,'[\"CI-ONLY\"]'::jsonb,clock_timestamp())",[manifest,calendar,release,code]);
   await assert.rejects(sw(1,six("0")),/MANIFEST_MISMATCH/);
   await assert.rejects(sw(129),/INVALID_SCOPE/);
   await assert.rejects(rr.query("SELECT "+base+"sweep_v39($1,1)",[manifest]),{code:"42501"});
@@ -539,6 +540,37 @@ try{
   await assert.rejects(publishP6DayEpochIndexRevisionOnce({client:pub,pins:first.pins,wire:first.wire,publicKeyPem:pem,indexBytes:first.bytes,scope:first.scope}),/DAY_GENESIS_ALREADY_CLAIMED_NO_REPLAY/);
   const receiptText=(await dbOwner.query("SELECT value FROM clean.adb_collection_meta WHERE key LIKE 'phase6_private_expiry:%'")).rows.map(x=>x.value).join("|");
   assert(!receiptText.includes(a.path)&&!receiptText.includes(hash(a.payload))&&!receiptText.includes("filler"));
+  // Runtime core on fresh distinct real sessions: verify-only is inert,
+  // lost actual COMMIT ACK is recovered by the independent aggregate marker,
+  // not a blind replay. A zero-work return does not fabricate such a marker.
+  const wp=new pg.Pool({connectionString:"postgresql://"+W+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",max:1});
+  const rp=new pg.Pool({connectionString:"postgresql://"+R+":"+pw+"@127.0.0.1:5432/neondb?sslmode=disable",max:1,options:"-c default_transaction_read_only=on"});
+  try{
+   const extra=registry(free,11);await insertRegistry(extra,t(-1000));
+   const options={writer:wp,reader:rp,manifest,limit:1,maxBatches:1};
+   const verify=await runP6PrivateEpochExpiryCore(options);
+   assert.equal(verify.status,"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES");assert.equal(verify.before.duePackets,1);
+   assert.equal((await s()).duePackets,1);
+   let lost=0,attempts=0;
+   const simulatedWriter={connect:async()=>{
+    const c=await wp.connect();
+    return {query:async(...args)=>{
+     if(typeof args[0]==="string"&&args[0].includes("sweep_v39"))attempts++;
+     const answer=await c.query(...args);
+     if(args[0]==="COMMIT"){lost++;throw Error("CI_LOST_ACK_AFTER_REAL_COMMIT");}
+     return answer;
+    },release:e=>c.release(e)};
+   }};
+   const recovered=await runP6PrivateEpochExpiryCore({...options,apply:true,writer:simulatedWriter});
+   assert.equal(lost,1);assert.equal(attempts,1);
+   assert.equal(recovered.status,"PRIVATE_EXPIRY_BACKLOG_REMAINS"); // foreign due remains deliberately outside scope
+   assert.equal(recovered.after.duePackets,0);
+   assert.equal(recovered.receipts.length,1);assert.equal(recovered.receipts[0].commitAck,false);
+   assert.equal(recovered.receipts[0].independentAggregateReceiptVerified,true);
+   assert.equal(recovered.after.deletionStopUnresolved,false);
+   assert.equal((await runP6PrivateEpochExpiryCore({...options,apply:true})).receipts.length,0);
+  }finally{await wp.end();await rp.end();}
+  console.log("P6_PRIVATE_EXPIRY_RUNTIME_LOST_COMMIT_ACK_INDEPENDENT_RECEIPT_NO_REPLAY_PASS");
   assert.equal((await w.query("SELECT "+base+"stop_v39($1) v",[result.runId])).rows[0].v,true);
   assert.equal((await s()).deletionStopUnresolved,true);
   await assert.rejects(sw(),/DELETION_STOP/);
