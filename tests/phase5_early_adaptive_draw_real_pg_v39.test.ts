@@ -121,10 +121,10 @@ suite("Phase5 atomic early writer on disposable B0062 PostgreSQL16 ONLY",()=>{
     await db.query(
       `INSERT INTO clean.adb_phase6_calendar_day
           (run_day_index,budget_day_id,calendar_hash,config_hash,date_utc,
-           utc_slot,time_class,window_shape,evaluation_partition,draw_type,
+           utc_slot,time_class,window_shape,evaluation_partition,crossover_group_id,crossover_period,pair_role,draw_type,
            slot_regions,anchor_icao,pair_airport_set,frozen_draw_seed,
            scheduled_start_utc,active_duration_minutes,frame_hash)
-        VALUES (2,'P6D02',$1,$2,$3::date,'CI','CI','4h','CI','PAIR_REPLAY',
+        VALUES (2,'P6D02',$1,$2,$3::date,'CI','CI','4h','CI','ci-pair-2',2,'control','PAIR_REPLAY',
          $4::jsonb,'YSSY',$5::jsonb,'ci-phase5-pair-seed',$6::timestamptz,240,$7)`,
       [pins.expectedCalendarHash,pins.expectedConfigHash,following.slice(0,10),
        JSON.stringify({HUB:"ASIA",MID_A:"MIDDLE_EAST",MID_B:"EUROPE",REGIONAL:"NORTH_AMERICA"}),
