@@ -154,7 +154,7 @@ export function reviewP6OneScheduledController(
   if(created>clock+5*60_000)fail("FUTURE_RUN_TIMESTAMP");
   seen.add(run.id);
   rows.push({id:run.id,status:run.status,conclusion:run.conclusion,
-   headShaPrefix:run.head_sha.slice(0,10),createdAtUtc:run.created_at,
+   headShaPrefix:run.head_sha.slice(0,10),headSha:run.head_sha,createdAtUtc:run.created_at,
    ageMinutes:Math.max(0,Math.round((clock-created)/60000))});
  }
  rows.sort((a,b)=>b.createdAtUtc.localeCompare(a.createdAtUtc));
@@ -266,7 +266,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    const run=c.mostRecentRun;
    const add=(reason,job=null)=>incidents.push({lane,reason,runId:run?.id??null,job});
    if(!run||c.historicalCadence.latestAgeExceedsExpected){add("SCHEDULE_MISSING_OR_STALE");continue;}
-   if(run.headShaPrefix!==env.GITHUB_SHA.slice(0,10)){add("CURRENT_MAIN_EXECUTION_NOT_OBSERVED");continue;}
+   if(run.headSha!==env.GITHUB_SHA){add("CURRENT_MAIN_EXECUTION_NOT_OBSERVED");continue;}
    if(run.status!=="completed")continue;
    if(run.conclusion!=="success"){add("EXPECTED_SCHEDULE_NOT_SUCCESSFUL");continue;}
    let body;
@@ -361,6 +361,11 @@ export async function readP6GithubAutoControllerHeartbeat(
   (primaryFidsExpiry.state!=="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF"||
    primaryFidsExpiry.scheduleObservation.historicalCadence.intervalsExceedingExpectedMax>0);
  const activeNotifications=await reviewP6ActiveStandaloneNotifications(summary,env,readGithub);
+ // Enabled expiry merits current alerts independently of paid activation.
+ // A normal pending run or an old gap by itself must not spam failures.
+ const currentExpiryIncident=primaryFidsExpiry.scheduledApplyEnabled&&
+  !["SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF","SCHEDULE_EXECUTION_PENDING"].includes(primaryFidsExpiry.state);
+ if(currentExpiryIncident){activeNotifications.incidents.push({lane:"PRIMARY_FIDS_EXPIRY",reason:primaryFidsExpiry.state,runId:primaryFidsExpiry.scheduleObservation.mostRecentRun?.id??null,job:"primary-fids-expiry"});activeNotifications.incidentCount++;}
  return {...summary,activeNotifications,
   status:primaryProblem||activeNotifications.incidentCount>0?"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":summary.status,
   primaryFidsExpiry,primaryFidsExpiryNeedsAttention:primaryProblem};
