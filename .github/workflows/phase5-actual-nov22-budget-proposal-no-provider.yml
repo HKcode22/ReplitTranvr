@@ -42,6 +42,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/phase6-actual-review"
           npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/review-only.json"
           sha256sum "$RUNNER_TEMP/phase6-actual-review/review-only.json"
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-compact-nov21-no-refill "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          sha256sum "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          node -e 'const r=require(process.argv[1]),g=r.releaseIdentityReview.geometry; if(g.totalQueries!==6144||g.totalReservedUnits!==37388||g.dayPlanCount!==31||r.phase6PaidGo!==false||r.releaseIdentityReview.stagePacketExported!==false||r.calendarRevisionReview.independentDateRevisionApproved!==false)process.exit(2); console.log(JSON.stringify({status:"COMPACT_NOV21_DATED_REVIEW_NO_GO",geometry:g,calendarRowsDigestCandidate:r.releaseIdentityReview.calendarRowsDigestCandidate,manifestCandidateSha256:r.releaseIdentityReview.manifestCandidate.sha256,configCandidateSha256:r.releaseIdentityReview.configCandidate.sha256,phase6PaidGo:false}))' "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
       - uses: actions/upload-artifact@v4
         with:
           name: phase6-actual-first-seed-review-only
