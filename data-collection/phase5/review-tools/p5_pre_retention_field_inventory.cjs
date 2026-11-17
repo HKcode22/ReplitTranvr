@@ -10,7 +10,12 @@ const catalog=Object.freeze({
  origin_taf_flight_category:'NOAA_CONTEXT',destination_taf_flight_category:'NOAA_CONTEXT',
  prior_aircraft_adsb_not_ground_reported:'ADSB_CONTEXT',prior_aircraft_adsb_position_age_seconds:'ADSB_CONTEXT',
  prior_aircraft_turnaround_minutes:'HISTORY_CONTEXT',prior_route_departure_delay_median_minutes:'HISTORY_CONTEXT',
- prior_airport_departure_delay_median_minutes:'HISTORY_CONTEXT',airport_congestion_1h:'HISTORY_CONTEXT'
+ prior_airport_departure_delay_median_minutes:'HISTORY_CONTEXT',airport_congestion_1h:'HISTORY_CONTEXT',
+ // Historical G5A staging blob f0dbd65ce306a3cd10a6d2317ad1148f078b0a8c.
+ fids_departure_schedule_asof:'ADB_LITERAL',
+ webhook_optional:'P4_OPTIONAL_WEBHOOK',weather_optional:'P4_OPTIONAL_WEATHER',
+ g5a_population_scope_evidence:'P4_SCOPE_EVIDENCE',
+ g5a_operating_identity_evidence:'P4_IDENTITY_EVIDENCE'
 });
 const horizons=Object.freeze(['T-24h','T-6h','T-90m','OTHER']);
 const identitySql=`SELECT current_database() db,current_user actor,session_user login,
@@ -88,6 +93,8 @@ function assemble(srows,frows,prows){
  if(result.some(h=>h.selected_t_present||h.fields.some(f=>f.expectedSourceClass==='ADB_LITERAL'&&f.nonnull_entries)))findings.push('ADB_DESCRIPTIVE_CONTENT_REVIEW');
  if(result.some(h=>h.flight_id_present||h.query_id_present||h.response_hash_present||h.fields.some(f=>f.expectedSourceClass==='ADB_IDENTIFIER_CONTEXT'&&f.nonnull_entries)))findings.push('LINKAGE_SCOPE_REVIEW');
  if(result.some(h=>h.fields.some(f=>['NOAA_CONTEXT','ADSB_CONTEXT','HISTORY_CONTEXT'].includes(f.expectedSourceClass)&&f.nonnull_entries)))findings.push('OTHER_SOURCE_RIGHTS_REVIEW');
+ if(result.some(h=>h.fields.some(f=>['P4_SCOPE_EVIDENCE','P4_IDENTITY_EVIDENCE'].includes(f.expectedSourceClass)&&f.nonnull_entries)))findings.push('HISTORICAL_G5A_EVIDENCE_REVIEW');
+ if(result.some(h=>h.fields.some(f=>['P4_OPTIONAL_WEBHOOK','P4_OPTIONAL_WEATHER'].includes(f.expectedSourceClass)&&f.nonnull_entries)))findings.push('HISTORICAL_OPTIONAL_NON_NULL_REVIEW');
  return {totalSnapshots:result.reduce((a,h)=>a+h.snapshots,0),horizons:result,findings};
 }
 async function review(c){
@@ -105,13 +112,19 @@ async function review(c){
    derivedWorkCertified:false,accountRightsVerified:false,backupOrPitrVerified:false,providerCalls:0,databaseWrites:0,phase5ScientificFreeze:false,phase6PaidGo:false};
  }finally{if(began)await c.query('ROLLBACK').catch(()=>{});}
 }
+// Compact stdout only; preserve full review and its count semantics.
+function compactReport(report){
+ return {...report,zeroEntryFieldGroupsOmitted:true,horizons:report.horizons.map(h=>({
+  ...h,fields:h.fields.filter(f=>f.entries!==0)
+ }))};
+}
 async function main(){
  const e=process.env;
  if(e.GITHUB_ACTIONS==='true'||!e.DATABASE_URL||e.NODE_TLS_REJECT_UNAUTHORIZED==='0'||e.AERODATABOX_API_KEY||e.RAPIDAPI_KEY||e.AERODATABOX_WEBHOOK_SECRET)hold('OWNER_LOCAL_SCOPE');
  let u;try{u=new URL(e.DATABASE_URL);if(!['postgres:','postgresql:'].includes(u.protocol)||decodeURIComponent(u.username)!=='neondb_owner'||!u.password||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb'||u.hash||!['require','verify-full'].includes(u.searchParams.get('sslmode'))||[...u.searchParams.keys()].some(k=>!['sslmode','channel_binding'].includes(k)))hold('EXISTING_TLS_OWNER_REQUIRED');u.searchParams.set('sslmode','verify-full');}catch{hold('EXISTING_TLS_OWNER_REQUIRED');}
  const {Client}=require(require.resolve('pg',{paths:[process.cwd()]}));
  const c=new Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:15000,options:'-c default_transaction_read_only=on',application_name:'p5_pre_field_inventory'});
- try{await c.connect();console.log(JSON.stringify(await review(c)));}finally{await c.end().catch(()=>{});}
+ try{await c.connect();console.log(JSON.stringify(compactReport(await review(c))));}finally{await c.end().catch(()=>{});}
 }
-module.exports={catalog,horizons,identitySql,snapshotSql,fieldSql,provenanceSql,provenanceKeys,assemble,review};
+module.exports={catalog,horizons,identitySql,snapshotSql,fieldSql,provenanceSql,provenanceKeys,assemble,review,compactReport};
 if(require.main===module)main().catch(e=>{const m=String(e?.message??'');console.error(/^HOLD_P5_PRE_FIELD_INVENTORY_[A-Z_]+$/.test(m)?m:'HOLD_P5_PRE_FIELD_INVENTORY_REDACTED');process.exitCode=2;});

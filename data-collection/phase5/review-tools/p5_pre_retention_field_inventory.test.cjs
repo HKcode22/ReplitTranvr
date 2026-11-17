@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {catalog,identitySql,snapshotSql,fieldSql,provenanceSql,provenanceKeys,assemble,review}=require('./p5_pre_retention_field_inventory.cjs');
+const {catalog,identitySql,snapshotSql,fieldSql,provenanceSql,provenanceKeys,assemble,review,compactReport}=require('./p5_pre_retention_field_inventory.cjs');
 const s=(horizon='T-24h',n=12,over={})=>({horizon,snapshots:n,non_array_features:0,selected_t_present:n,selected_t_version_present:n,query_id_present:n,response_hash_present:n,schedule_version_present:0,flight_id_present:n,provenance_present:n,missingness_present:n,...over});
 const f=(horizon='T-24h',field='origin_icao',n=12,over={})=>({horizon,field,entries:n,snapshots:n,nonnull_entries:n,nonnull_snapshots:n,...over});
 const p=(horizon='T-24h',over={})=>({horizon,non_object_provenance:0,unexpected_provenance_key_snapshots:0,...over});
@@ -12,7 +12,7 @@ function mock({ss=[],fs=[],ps=[],id={},fail}={}){const calls=[];return {calls,c:
  if(sql===fieldSql){assert.deepEqual(args,[Object.keys(catalog)]);return {rows:fs};}
  if(sql===provenanceSql){assert.deepEqual(args,[provenanceKeys]);return {rows:ps};}
  assert.match(sql,/^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY|SET LOCAL statement_timeout='12000ms'|ROLLBACK)$/);return {rows:[]};}}};}
-test('empty inventory is not a rights certificate',async()=>{const {c,calls}=mock();const r=await review(c);assert.equal(r.totalSnapshots,0);assert.equal(r.horizons.length,4);assert.equal(Object.keys(catalog).length,16);assert.equal(r.horizons[0].fields.length,18);assert.deepEqual(r.findings,[]);for(const k of ['accountRightsVerified','derivedWorkCertified','sourceProvenanceVerified','phase5ScientificFreeze','phase6PaidGo','backupOrPitrVerified','fieldValuesExported','unexpectedNamesExported'])assert.equal(r[k],false);assert.equal(r.providerCalls,0);assert.equal(r.databaseWrites,0);assert.equal(calls.at(-1)[0],'ROLLBACK');});
+test('empty inventory is not a rights certificate',async()=>{const {c,calls}=mock();const r=await review(c);assert.equal(r.totalSnapshots,0);assert.equal(r.horizons.length,4);assert.equal(Object.keys(catalog).length,21);assert.equal(r.horizons[0].fields.length,23);assert.deepEqual(r.findings,[]);for(const k of ['accountRightsVerified','derivedWorkCertified','sourceProvenanceVerified','phase5ScientificFreeze','phase6PaidGo','backupOrPitrVerified','fieldValuesExported','unexpectedNamesExported'])assert.equal(r[k],false);assert.equal(r.providerCalls,0);assert.equal(r.databaseWrites,0);assert.equal(calls.at(-1)[0],'ROLLBACK');});
 test('three twelve-row horizons and separated null/non-null feature counts',async()=>{const hs=['T-24h','T-6h','T-90m'];const {c}=mock({ss:hs.map(h=>s(h)),fs:[f(),f('T-6h','scheduled_arrival_utc',12,{nonnull_entries:5,nonnull_snapshots:5}),f('T-90m','origin_metar_visibility_m',12,{nonnull_entries:0,nonnull_snapshots:0})],ps:hs.map(h=>p(h))});const r=await review(c);assert.equal(r.totalSnapshots,36);assert.equal(r.horizons[1].fields.find(x=>x.field==='scheduled_arrival_utc').nonnull_entries,5);assert.equal(r.horizons[2].fields.find(x=>x.field==='origin_metar_visibility_m').nonnull_entries,0);assert.deepEqual(r.findings,['ADB_DESCRIPTIVE_CONTENT_REVIEW','LINKAGE_SCOPE_REVIEW']);});
 test('unknown, malformed, duplicate and unexpected horizon remain distinct',()=>{const r=assemble([s('OTHER',2,{non_array_features:1})],[f('OTHER','origin_icao',1,{entries:2,nonnull_entries:2}),f('OTHER','__UNKNOWN__',1),f('OTHER','__MALFORMED__',1,{nonnull_entries:0,nonnull_snapshots:0})],[p('OTHER',{unexpected_provenance_key_snapshots:1})]);for(const k of ['SNAPSHOT_OR_PROVENANCE_SHAPE_REVIEW','UNKNOWN_OR_MALFORMED_FEATURE_REVIEW','DUPLICATE_KNOWN_FIELD_REVIEW'])assert(r.findings.includes(k));});
 test('unexpected raw names, values, columns and groups fail closed',()=>{for(const fs of [[f('T-24h','UNEXPECTED_PRIVATE_NAME')],[{...f(),value:'PRIVATE_VALUE'}],[f('UNEXPECTED_HORIZON')],[f(),f()]])assert.throws(()=>assemble([s()],fs,[p()]),/HOLD_P5_PRE_FIELD_INVENTORY/);});
@@ -20,3 +20,22 @@ test('invalid count invariants, duplicates and missing provenance are rejected',
 test('wrong database/actor/version/replica/readonly rejected before inventory',async()=>{for(const id of [{db:'other'},{actor:'other'},{login:'other'},{ro:'off'},{replica:true},{ver:170000}]){const {c,calls}=mock({id});await assert.rejects(review(c),/NOT_EXISTING_PG16_PRIMARY_OWNER_READONLY/);assert.equal(calls.length,4);assert.equal(calls.at(-1)[0],'ROLLBACK');}});
 test('SQL failures roll back once with no retry',async()=>{for(const fail of [snapshotSql,fieldSql,provenanceSql]){const {c,calls}=mock({fail});await assert.rejects(review(c),/SYNTHETIC_SQL_FAILURE/);assert.equal(calls.filter(([sql])=>sql===fail).length,1);assert.equal(calls.at(-1)[0],'ROLLBACK');}});
 test('separately signals weather/history/ADS-B contents, not legal grants',()=>{const r=assemble([s()],[f('T-24h','origin_metar_visibility_m'),f('T-24h','prior_aircraft_adsb_not_ground_reported'),f('T-24h','prior_route_departure_delay_median_minutes')],[p()]);assert(r.findings.includes('OTHER_SOURCE_RIGHTS_REVIEW'));});
+
+test('historical G5A five-slot expected shape is identified but not certified as Derived Works',()=>{
+ const hs=['T-24h','T-6h','T-90m'];const fs=hs.flatMap(h=>[
+ f(h,'fids_departure_schedule_asof'),f(h,'webhook_optional',12,{nonnull_entries:0,nonnull_snapshots:0}),f(h,'weather_optional',12,{nonnull_entries:0,nonnull_snapshots:0}),
+ f(h,'g5a_population_scope_evidence'),f(h,'g5a_operating_identity_evidence')]);
+ const r=assemble(hs.map(h=>s(h)),fs,hs.map(h=>p(h)));
+ assert.equal(r.totalSnapshots,36);
+ assert.equal(r.horizons.reduce((n,h)=>n+h.fields.reduce((m,x)=>m+x.entries,0),0),180);
+ assert.equal(r.horizons.reduce((n,h)=>n+h.fields.reduce((m,x)=>m+x.nonnull_entries,0),0),108);
+ assert.deepEqual(r.findings,['ADB_DESCRIPTIVE_CONTENT_REVIEW','LINKAGE_SCOPE_REVIEW','HISTORICAL_G5A_EVIDENCE_REVIEW']);
+ const c=compactReport(r);assert.equal(c.zeroEntryFieldGroupsOmitted,true);assert.deepEqual(c.horizons.map(h=>h.fields.length),[5,5,5,0]);
+ assert.deepEqual(c.findings,r.findings);assert.equal(r.horizons[0].fields.length,23);
+});
+test('optional populated historical features and unknown names still require separate review',()=>{
+ const r=assemble([s()],[f('T-24h','webhook_optional'),f('T-24h','__UNKNOWN__')],[p()]);
+ assert(r.findings.includes('HISTORICAL_OPTIONAL_NON_NULL_REVIEW'));
+ assert(r.findings.includes('UNKNOWN_OR_MALFORMED_FEATURE_REVIEW'));
+ assert(compactReport(r).horizons[0].fields.some(x=>x.field==='__UNKNOWN__'));
+});
