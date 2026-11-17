@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import pg from "pg";
+import {readFileSync} from "node:fs";
 import {reviewPrivateExpiry,APPROVAL as expiryApproval} from "../scripts/v39_phase6_private_epoch_retention_owner_v39.mjs";
 import {
  P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
@@ -350,6 +351,52 @@ try{
  // revisions together; day31 and its unexpired packet must survive.
  const expiredPacket=registry(3,9);
  await insertRegistry(expiredPacket,t(-1000));
+ // Disposable proof of a bounded due-only private cleanup transaction.
+ // Reuse the same signed epoch fixtures, preserve existing tested owner
+ // path by rolling back all proof effects before proceeding below.
+ await dbOwner.query("BEGIN");
+ try{
+  await dbOwner.query("SET LOCAL p6_review.disposable='1'");
+  await dbOwner.query("SET LOCAL statement_timeout='10000ms'");
+  await dbOwner.query("CREATE TEMP TABLE p6_review_temp_init(n int) ON COMMIT DROP");
+  await dbOwner.query(readFileSync("data-collection/phase5/review-tools/p6_private_due_only_candidate_NOT_FOR_INSTALL.sql","utf8"));
+  const secondDue=registry(3,10);
+  await insertRegistry(secondDue,t(-1000));
+  const otherPath="data-collection/phase5/frozen/source_ci_foreign_due_registry.json";
+  const otherManifest="1".repeat(64);
+  await dbOwner.query(
+   "INSERT INTO phase6_private.frozen_native_packet_v39 "+
+   "(logical_path,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,manifest_sha256,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes) "+
+   "SELECT $1,run_day_index,shard_index,kind,content_sha256,reviewed_code_sha,$2,rights_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes "+
+   "FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$3",
+   [otherPath,otherManifest,expiredPacket.path]);
+  const proof=async(limit,m=manifest)=>(await dbOwner.query(
+   "SELECT pg_temp.p6_review_private_due_only($1,$2) AS v",[m,limit])).rows[0].v;
+  for(const [m,l] of [[manifest,0],[manifest,129],["bad",1],[null,1]]){
+   await dbOwner.query("SAVEPOINT bad_scope");
+   await assert.rejects(proof(l,m),/INVALID_DISPOSABLE_SCOPE/);
+   await dbOwner.query("ROLLBACK TO SAVEPOINT bad_scope");
+   await dbOwner.query("RELEASE SAVEPOINT bad_scope");
+  }
+  const count=async(sql,args=[])=>(await dbOwner.query(sql,args)).rows[0].n;
+  const claimN=await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39");
+  const a=await proof(1);
+  assert.deepEqual(a,{status:"DISPOSABLE_PRIVATE_DUE_ONLY_IN_TX_NOT_COMMIT_PROOF",
+   packets:1,indexRevisions:2,earlierIndexRevisionsRetired:1,claimsPreserved:claimN,
+   remainingDuePackets:1,remainingExpiredHeads:0,providerCalls:0,phase6PaidGo:false});
+  const b=await proof(1);
+  assert.equal(b.packets,1);assert.equal(b.indexRevisions,0);
+  assert.equal(b.remainingDuePackets,0);
+  const c=await proof(1);
+  assert.equal(c.packets,0);assert.equal(c.indexRevisions,0);
+  for(const path of [shortA.path,d31.path,otherPath])
+   assert.equal(await count("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[path]),1);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=3"),0);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39"),claimN);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_epoch_claim_v39 WHERE run_day_index=3"),1);
+  assert.equal(await count("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=31"),1);
+  console.log("P6_PRIVATE_BOUNDED_DUE_ONLY_DISPOSABLE_TX_PROOF_PASS_NO_PRODUCTION_GRANT");
+ }finally{await dbOwner.query("ROLLBACK");}
  const plan=await reviewPrivateExpiry(dbOwner);
  assert.equal(plan.closedDays,1);
  assert.equal(plan.indexRevisions,2);
