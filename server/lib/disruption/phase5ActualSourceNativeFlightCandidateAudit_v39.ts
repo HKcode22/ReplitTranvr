@@ -27,6 +27,23 @@ const offset:Record<Horizon,number>={
 };
 const MIN_LEAD=15*60_000;
 const MAX_MEMBERS=2500;
+const P5_FULL_ID=/^leg:p5v1:[a-f0-9]{64}$/;
+export function p5ProspectiveFullWidthMemberIds(
+ rows:readonly P5ActualFlightPopulationRow[]
+):string[]{
+ const ids=new Set<string>();
+ for(const row of rows){
+  const id=row?.analytic_identity_id;
+  if(typeof id==="string"&&id.startsWith("leg:p5v1:")){
+   if(!P5_FULL_ID.test(id))fail("MALFORMED_PROSPECTIVE_IDENTITY_VERSION");
+   ids.add(id);
+  }
+ }
+ return [...ids].sort();
+}
+export interface P5RetainedCrossOriginalIdentityRow{
+ flight_instance_id:string;conflicting_retained_identity:boolean;
+}
 const fail=(what:string):never=>{
  throw Error("REFUSED_P5_ACTUAL_SOURCE_CANDIDATES_"+what);
 };
@@ -133,6 +150,12 @@ export interface P5ActualSourceCandidateAudit{
  sourceResponseSha256:string;queryDigestSha256:string;
  /** Optional only for historical audit objects written before telemetry. */
  sourceTimingDiagnostics?:P5SourceTimingDiagnostics;
+ /** Conservative live-original screen only. Absence does not prove
+  * physical identity or resolve aliases from expired/unseen originals. */
+ retainedCrossOriginalIdentityReview?:{
+  inspectedFullWidthKeys:number;conflictingRetainedKeys:number;
+  physicalIdentityCertified:false;expiredOriginalsReviewed:false;
+ };
  observedMemberCount:number;candidateCount:number;
  censoredCount:number;
  classifications:Record<P5CandidateClassification,number>;
@@ -163,11 +186,53 @@ export const P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL=[
  "FROM clean.flight_population p WHERE p.population_query_id=$1::uuid",
  "ORDER BY p.analytic_identity_id,p.available_at,p.id LIMIT 2501"
 ].join(" ");
+/**
+ * Existing restricted SOURCE role; same study, current original and other
+ * still-live bound originals only. Returns current key and boolean, no
+ * provider payload. Reused provider keys are ambiguity hints, not match proof.
+ * Same-number/origin nearby times or same local date follow the existing
+ * webhook ambiguity rule. Route changes may be retimes/diversions.
+ */
+export const P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL=[
+ "SELECT DISTINCT p.analytic_identity_id AS flight_instance_id,",
+ "EXISTS (SELECT 1 FROM clean.flight_population h",
+ "JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id=h.population_query_id",
+ " AND b.response_hash=h.response_hash",
+ "JOIN clean.fids_query_response q ON q.population_query_id=b.population_query_id",
+ " AND q.response_hash=b.response_hash",
+ "WHERE h.population_query_id<>p.population_query_id",
+ " AND b.manifest_sha256=$2 AND b.rights_review_sha256=$5",
+ " AND q.openapi_sha256=$4 AND q.query_direction='Departure'",
+ " AND q.source_airport_icao=p.source_airport_icao",
+ " AND q.raw_payload IS NOT NULL AND q.raw_expired_at_utc IS NULL",
+ " AND b.source_expires_at_utc>GREATEST($3::timestamptz,clock_timestamp())",
+ " AND b.bound_at_utc<=$3::timestamptz",
+ " AND h.provider_content_expired_at_utc IS NULL AND h.available_at<=$3::timestamptz",
+ " AND h.source_type='fids' AND h.query_direction='Departure'",
+ " AND h.population_role='requested_airport_primary'",
+ " AND h.source_airport_icao=p.source_airport_icao AND h.dep_airport_icao=p.dep_airport_icao",
+ " AND h.scope_classification='confirmed_core' AND h.codeshare_resolution_status='confirmed_operating_leg'",
+ " AND h.canonical_flight_instance_id IS NOT NULL",
+ " AND h.canonical_flight_instance_id=h.analytic_identity_id",
+ " AND h.canonical_flight_instance_id<>p.analytic_identity_id",
+ " AND ((h.flight_number=p.flight_number AND h.carrier_iata=p.carrier_iata)",
+ " OR (p.provider_record_key IS NOT NULL AND p.provider_record_key NOT LIKE 'fidsrec:%'",
+ " AND h.provider_record_key=p.provider_record_key))",
+ " AND (h.dep_scheduled_utc BETWEEN p.dep_scheduled_utc-INTERVAL '12 hours'",
+ " AND p.dep_scheduled_utc+INTERVAL '12 hours'",
+ " OR (h.dep_scheduled_utc AT TIME ZONE p.airport_iana_timezone)::date",
+ " = (p.dep_scheduled_utc AT TIME ZONE p.airport_iana_timezone)::date))",
+ " AS conflicting_retained_identity",
+ "FROM clean.flight_population p WHERE p.population_query_id=$1::uuid",
+ " AND p.analytic_identity_id ~ '^leg:p5v1:[a-f0-9]{64}$'",
+ "ORDER BY flight_instance_id LIMIT 2501"
+].join(" ");
 export function auditP5ActualSourceFlightCandidates(
  scope:P5ActualSourceCandidateScope,
  originalRows:readonly P5ActualBoundOriginalRow[],
  memberRows:readonly P5ActualFlightPopulationRow[],
- actualDbClockUtc:Date|string
+ actualDbClockUtc:Date|string,
+ retainedIdentityRows?:readonly P5RetainedCrossOriginalIdentityRow[]
 ):P5ActualSourceCandidateAudit{
  if(!scope||![scope.manifestSha256,scope.queryDigestSha256,
    scope.reviewedReleaseSha256,scope.rightsReviewSha256,
@@ -218,6 +283,25 @@ export function auditP5ActualSourceFlightCandidates(
   fail("CHANGED_OR_NONPROSPECTIVE_SOURCE_TIME_CUSTODY");
  if(memberRows.length!==Number(o.normalized_members_count))
   fail("COMMITTED_NORMALIZED_POPULATION_COUNT_MISMATCH");
+ const expectedRetainedIds=p5ProspectiveFullWidthMemberIds(memberRows);
+ const conflicts=new Set<string>(),seenRetained=new Set<string>();
+ if(expectedRetainedIds.length>0){
+  if(!Array.isArray(retainedIdentityRows)||retainedIdentityRows.length!==expectedRetainedIds.length)
+   fail("RETAINED_IDENTITY_CONFLICT_SCREEN_MISSING_OR_PARTIAL");
+  const expected=new Set(expectedRetainedIds);
+  for(const row of retainedIdentityRows){
+   if(!row||!expected.has(row.flight_instance_id)||seenRetained.has(row.flight_instance_id)||
+      typeof row.conflicting_retained_identity!=="boolean")
+    fail("RETAINED_IDENTITY_CONFLICT_SCREEN_SCOPE_DRIFT");
+   seenRetained.add(row.flight_instance_id);
+   if(row.conflicting_retained_identity)conflicts.add(row.flight_instance_id);
+  }
+ }else if(retainedIdentityRows!==undefined&&retainedIdentityRows.length!==0)
+  fail("UNEXPECTED_RETAINED_IDENTITY_CONFLICT_SCREEN");
+ const retainedSummary=expectedRetainedIds.length?{
+  inspectedFullWidthKeys:expectedRetainedIds.length,conflictingRetainedKeys:conflicts.size,
+  physicalIdentityCertified:false as const,expiredOriginalsReviewed:false as const
+ }:undefined;
  const planned=scope.plannedRequestUtc===undefined?null:when(scope.plannedRequestUtc);
  const summarizeTiming=(candidates:readonly P5ActualFlightCandidateReview[]):P5SourceTimingDiagnostics=>{
   // Earlier validation has already established source clocks and identity.
@@ -295,7 +379,7 @@ export function auditP5ActualSourceFlightCandidates(
    contentsRightsCertifiedHere:false,stage14PermitIssuedHere:false,
    providerCalls:0,databaseWrites:0
   };
-  if((frequency.get(identity)??0)!==1){
+  if((frequency.get(identity)??0)!==1||conflicts.has(identity)){
    candidate.status="CENSORED_AMBIGUOUS_SOURCE_IDENTITY";
   }else if(m.population_query_id!==o.population_query_id||
     m.canonical_flight_instance_id!==identity||
@@ -363,6 +447,7 @@ export function auditP5ActualSourceFlightCandidates(
   sourceResponseSha256:o.original_response_hash,
   queryDigestSha256:scope.queryDigestSha256,
   sourceTimingDiagnostics:summarizeTiming(out),
+  ...(retainedSummary?{retainedCrossOriginalIdentityReview:retainedSummary}:{}),
   observedMemberCount:out.length,candidateCount:eligible,
   censoredCount:out.length-eligible,
   classifications,candidates:out,

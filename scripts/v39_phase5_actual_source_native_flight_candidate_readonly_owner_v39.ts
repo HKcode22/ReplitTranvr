@@ -19,11 +19,12 @@ import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
 import {P5_STAGE14_BOUND_SOURCE_SQL}
  from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,
+ P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,p5ProspectiveFullWidthMemberIds,
  auditP5ActualSourceFlightCandidates,digestP5ActualSourceCandidateAudit,
  type P5ActualSourceCandidateScope,
  type P5ActualSourceCandidateAudit,
  type P5ActualBoundOriginalRow,
- type P5ActualFlightPopulationRow}
+ type P5ActualFlightPopulationRow,type P5RetainedCrossOriginalIdentityRow}
  from "../server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39";
 
 const SHA=/^[a-f0-9]{64}$/;
@@ -162,10 +163,19 @@ export async function auditP5RealSourceToNativeFlightCandidatesReadonly(
    P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,[id]);
   if(members.rows.length>2500)
    hold("SOURCE_POPULATION_EXCEEDS_REVIEW_CAP_NO_SILENT_TRUNCATION");
+  const memberRows=members.rows as unknown as P5ActualFlightPopulationRow[];
+  const prospectiveKeys=p5ProspectiveFullWidthMemberIds(memberRows);
+  // No new SELECT for the preserved historical audit contract. The new
+  // version must have an exact live-original screen in this same snapshot.
+  const identityRows=prospectiveKeys.length?
+   await client.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,
+    [id,exactScope.manifestSha256,who.rows[0].now,exactScope.providerContractSha256,exactScope.rightsReviewSha256]):null;
+  if(identityRows&&identityRows.rowCount!==prospectiveKeys.length)
+   hold("RETAINED_IDENTITY_CONFLICT_SCREEN_NOT_COMPLETE");
   const report=auditP5ActualSourceFlightCandidates(
    exactScope,original.rows as unknown as P5ActualBoundOriginalRow[],
-   members.rows as unknown as P5ActualFlightPopulationRow[],
-   who.rows[0].now as Date|string);
+   memberRows,who.rows[0].now as Date|string,
+   identityRows?.rows as unknown as P5RetainedCrossOriginalIdentityRow[]|undefined);
   await client.query("ROLLBACK");tx=false;
   return dynamic?{...report,sourceGithubRunId:exactScope.expectedSourceGithubRunId}:report;
  }catch(e){

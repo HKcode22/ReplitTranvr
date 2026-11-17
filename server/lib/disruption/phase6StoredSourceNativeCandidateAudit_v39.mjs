@@ -128,6 +128,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
   candidateCount:audit.candidateCount,censoredCount:audit.censoredCount,classifications:audit.classifications,
   sourceTimingDiagnostics:audit.sourceTimingDiagnostics,
+  ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
  Object.defineProperties(out,{privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
