@@ -7,10 +7,14 @@
  * transaction path. A synthetic CI GH run ID is NOT a production authorization.
  */
 import {Pool} from "pg";
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 const URL="postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable";
 const suite=process.env.V39_P5_V0093_COST_ONLY_DISPOSABLE_PG16==="1"?describe:describe.skip;
+const liveGuard=process.env.V39_P5_PHYSICAL_REST_GUARD_DISPOSABLE_PG16==="1";
+const guardSql="migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql";
+
 const H=(c:string)=>c.repeat(64);
 const manifest=H("a"),calendar=H("b"),config=H("c"),frame=H("d");
 const draw=H("e"),rights=H("f"),provider=H("1"),release=H("2");
@@ -212,6 +216,60 @@ suite("V0093 typed cost-only seven REST physical UTC upper bounds / disposable P
    await db.query(`UPDATE clean.phase5_fids_allowed_query_v39
     SET service_window_end_utc=$2 WHERE query_digest=$1`,
     [splitDigest,splitEnd]);
+ });
+ (liveGuard?it:it.skip)("V0104 final SOURCE reservation checks current AUTH, deletion STOP, hard-due content and rolls back every counter",async()=>{
+   await db.query(readFileSync(guardSql,"utf8"));
+   const before=await counters();
+   await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_LIVE_AUTH_NOT_ENABLED_OR_MISMATCHED");
+   expect(await counters()).toEqual(before);
+   await db.query(`INSERT INTO clean.adb_phase6_authorization
+    (authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,
+     phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,
+     enabled,predecessor_evidence_ids)
+    VALUES('CI-V0104-SOURCE',$1,$2,$3,$4,'v39',$5::date,1900,10,1000,false,
+     '["synthetic-v0104-no-provider"]'::jsonb)`,[manifest,calendar,config,"f".repeat(40),chargeDate]);
+   await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_LIVE_AUTH_NOT_ENABLED_OR_MISMATCHED");
+   await db.query("UPDATE clean.adb_phase6_authorization SET enabled=true,manifest_sha256=$1",[H("0")]);
+   await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_LIVE_AUTH_NOT_ENABLED_OR_MISMATCHED");
+   await db.query("UPDATE clean.adb_phase6_authorization SET manifest_sha256=$1",[manifest]);
+   await db.query("UPDATE clean.adb_phase6_authorization SET enabled=false,revoked_at_utc=clock_timestamp()");
+   await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_LIVE_AUTH_NOT_ENABLED_OR_MISMATCHED");
+   await db.query("UPDATE clean.adb_phase6_authorization SET enabled=true,revoked_at_utc=NULL");
+   expect(await counters()).toEqual(before);
+   const stop=(await db.query("INSERT INTO clean.adb_incident_stop(cause,occurred_at_utc,detail,resolved) VALUES('deletion',clock_timestamp(),'{\"synthetic\":true}'::jsonb,false) RETURNING id")).rows[0].id;
+   await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_DELETION_STOP_UNRESOLVED");
+   expect(await counters()).toEqual(before);
+   await db.query("UPDATE clean.adb_incident_stop SET resolved=true WHERE id=$1",[stop]);
+   const lock=await db.connect();
+   try{
+    await lock.query("BEGIN");
+    await lock.query("SELECT pg_advisory_xact_lock(390015,104)");
+    await expect(reserve(baseDigest)).rejects.toThrow("P5_PHYSICAL_REST_DELETION_STOP_LOCK_BUSY");
+   }finally{await lock.query("ROLLBACK");lock.release();}
+   expect(await counters()).toEqual(before);
+   // A separate transactional fixture: insert an aged original, fail actual
+   // V0079, and roll the whole fixture back. No synthetic historical residue.
+   const c=await db.connect();
+   try{
+    await c.query("BEGIN");
+    await c.query(`WITH a AS (SELECT clock_timestamp()-interval '25 hours' t)
+      INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,
+      query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,
+      airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,
+      response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256)
+      SELECT $1,'WSSS','Departure',$2,$3,'2026-11-09T22:00','2026-11-10T02:00',
+      'Asia/Singapore',a.t,a.t,a.t,$4,'{"synthetic":true}'::jsonb,'ci','ci',$5 FROM a`,
+      [randomUUID(),baseStart,baseEnd,H("a"),provider]);
+    await c.query("SAVEPOINT before_paid_guard");
+    await expect(c.query("SELECT clean.reserve_phase5_fids_physical_get_v39($1,$2,$3,$4,$5,$6)",
+      [manifest,baseDigest,runId,draw,rights,expected(baseDigest)]))
+      .rejects.toThrow("P5_PHYSICAL_REST_PRIMARY_FIDS_HARD_DUE_OR_INVALID");
+    await c.query("ROLLBACK TO SAVEPOINT before_paid_guard");
+   }finally{await c.query("ROLLBACK");c.release();}
+   expect(await counters()).toEqual(before);
+   const a=(await db.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname IN ('a00_phase5_fids_physical_rest_live_guard_v39','a00_phase5_other_physical_rest_live_guard_v39') AND tgenabled='O' AND NOT tgisinternal")).rows[0].n;
+   expect(a).toBe(2);
+   expect(fetchCalls).toBe(0);
  });
  it("reserves BASE/SPLIT atomically while leaving legitimate unspent 2+2 UTC units",async()=>{
    await reserve(baseDigest);

@@ -5,13 +5,17 @@
  * NOT a received provider response or scientific Phase5/Phase6 GO.
  */
 import {Pool,type PoolClient} from "pg";
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {afterAll,beforeAll,describe,it,expect} from "vitest";
 import {readP6RestLedgerAccounting} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const enabled=process.env.V39_P5_V0083_NONFIDS_REAL_PG16==="1";
 const suite=enabled?describe:describe.skip;
+const liveGuard=process.env.V39_P5_PHYSICAL_REST_GUARD_DISPOSABLE_PG16==="1";
+const guardSql="migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql";
+
 const SHA=(c:string)=>c.repeat(64);
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const manifest=SHA("a"),cal=SHA("b"),conf=SHA("c"),rights=SHA("d");
@@ -46,6 +50,7 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
      process.env.V39_PHASE6_OWNER_APPROVED!=="0")
    throw Error("REFUSED_NOT_DISPOSABLE_V0083_NONFIDS_CI");
   admin=new Pool({connectionString:URL,max:3});
+  if(liveGuard)await admin.query(readFileSync(guardSql,"utf8"));
   const now=Date.parse((await admin.query(
    "SELECT clock_timestamp() at")).rows[0].at);
   dayUtc=new Date(now).toISOString().slice(0,10);
@@ -267,6 +272,31 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
     "clean.phase5_fids_utc_rest_category_budget_v39");
    await admin.query("DROP FUNCTION clean.ci_v0083_fail_after_charge()");
   }
+ });
+ (liveGuard?it:it.skip)("V0104 existing restricted OTHER REST worker stops for deletion incident and hard-overdue original",async()=>{
+  const before=await read();
+  const acl=(await runner!.query("SELECT has_function_privilege(current_user,'clean.phase5_physical_rest_live_guard_v39()','EXECUTE') exec,has_table_privilege(current_user,'clean.adb_incident_stop','SELECT') incident_read,has_table_privilege(current_user,'clean.fids_query_response','SELECT') raw_read")).rows[0];
+  expect(acl).toEqual({exec:false,incident_read:false,raw_read:false});
+  const stop=(await admin.query("INSERT INTO clean.adb_incident_stop(cause,occurred_at_utc,detail,resolved) VALUES('deletion',clock_timestamp(),'{\"synthetic\":true}'::jsonb,false) RETURNING id")).rows[0].id;
+  await expect(reserve("OUTCOME_REST_UNIT_BUDGET",3)).rejects.toThrow("P5_PHYSICAL_REST_DELETION_STOP_UNRESOLVED");
+  expect(await read()).toEqual(before);
+  await admin.query("UPDATE clean.adb_incident_stop SET resolved=true WHERE id=$1",[stop]);
+  const id=randomUUID();
+  await admin.query(`WITH a AS (SELECT clock_timestamp()-interval '25 hours' t)
+    INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,
+     query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,
+     airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,
+     response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256)
+    SELECT $1,'WSSS','Departure',a.t+interval '30 hours',a.t+interval '34 hours',
+      '2026-11-09T22:00','2026-11-10T02:00','Asia/Singapore',a.t,a.t,a.t,
+      $2,'{"synthetic":true}'::jsonb,'ci','ci',$3 FROM a`,[id,SHA("a"),provider]);
+  await expect(reserve("OUTCOME_REST_UNIT_BUDGET",3)).rejects.toThrow("P5_PHYSICAL_REST_PRIMARY_FIDS_HARD_DUE_OR_INVALID");
+  expect(await read()).toEqual(before);
+  const sweep=(await admin.query("SELECT clean.phase5_primary_fids_expiry_sweep_v39(1) r")).rows[0].r;
+  expect(sweep.originalsCleared).toBe(1);
+  const cleaned=(await admin.query("SELECT raw_payload IS NULL AND raw_expired_at_utc IS NOT NULL done FROM clean.fids_query_response WHERE population_query_id=$1",[id])).rows[0].done;
+  expect(cleaned).toBe(true);
+  expect(await read()).toEqual(before);
  });
  it("atomically reserves the four non-retry REST categories independently",async()=>{
   for(const [cat,cost] of specs.filter(([c])=>
