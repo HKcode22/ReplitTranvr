@@ -50,7 +50,7 @@ async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
  const get=k=>gh(['variable','get',k,'-R',REPO]).trim();
  const main=()=>api('git/ref/heads/main')?.object?.sha;
  const stable=(p,e)=>{if(main()!==p)hold('MAIN_MOVED');const v=makeConfig(get,p,e);if(main()!==p)hold('MAIN_MOVED');return v;};
- const backstop=()=>{const xs=JSON.parse(gh(['variable','list','-R',REPO,'--json','name,value','--limit','1000']));const v=xs.filter(x=>x.name==='P5_PRIMARY_FIDS_BACKSTOP_ENABLED');if(v.length>1||v.some(x=>x.value!=='false'))hold('BACKSTOP_NOT_OFF');};
+ const backstop=()=>{const xs=JSON.parse(gh(['variable','list','-R',REPO,'--json','name,value','--jq','[.[] | select(.name=="P5_PRIMARY_FIDS_BACKSTOP_ENABLED")]']));const v=xs.filter(x=>x.name==='P5_PRIMARY_FIDS_BACKSTOP_ENABLED');if(v.length>1||v.some(x=>x.value!=='false'))hold('BACKSTOP_NOT_OFF');};
  const workflow=wf=>{const w=api('actions/workflows/'+wf);if(!id(w.id)||w.path!=='.github/workflows/'+wf||w.state!=='active')hold('WORKFLOW_INACTIVE');return w;};
  // Avoid replacing an already-pending cleanup run. Native cron may still race
  // after this read, so the exact acknowledged job must independently complete.
