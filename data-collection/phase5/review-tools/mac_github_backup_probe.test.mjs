@@ -109,3 +109,13 @@ test("anonymous observer never labels manual primary VERIFY as fresh APPLY",asyn
  assert.equal(x.lanes[0].lastObservedSuccessfulStep,null);
  assert.equal(x.lanes[1].level,"RECENT_STEP_ONLY");
 });
+
+test("launchd may preserve exact non-secret GitHub config paths, never a token or relative config path",()=>{
+ const opts={node:"/n",script:"/s",dir:"/d",pin:P,authenticated:true,ghExecutable:"/gh",followMain:true};
+ const xml=launchAgentXml({...opts,ghConfigDir:"/Users/fixture/A&B/gh",xdgConfigHome:"/Users/fixture/config"});
+ assert(xml.includes("<key>GH_CONFIG_DIR</key><string>/Users/fixture/A&amp;B/gh</string>"));
+ assert(xml.includes("<key>XDG_CONFIG_HOME</key><string>/Users/fixture/config</string>"));
+ assert(!xml.includes("GH_TOKEN"));
+ assert.throws(()=>launchAgentXml({...opts,ghConfigDir:"relative"}),/LAUNCH_AGENT_GH_CONFIG_PATH/);
+ assert.throws(()=>launchAgentXml({node:"/n",script:"/s",dir:"/d",pin:P,ghConfigDir:"/gh"}),/LAUNCH_AGENT_GH_CONFIG_PATH/);
+});
