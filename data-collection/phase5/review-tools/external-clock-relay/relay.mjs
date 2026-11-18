@@ -88,9 +88,16 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
    // Exactly one existing nonpaid canary, only if not already running.
    inputs={mode:"OBSERVE"};
   }else if(mode==="PRIMARY_BACKSTOP"){
-   const p=await get(TARGET,"/actions/workflows/"+wf+"/runs?branch=main&per_page=1");
-   if(!Number.isSafeInteger(p?.total_count)||p.total_count<1||p.workflow_runs?.length!==1)HOLD("PRIMARY_HISTORY");
-   const last=exact(p.workflow_runs[0],wf,TARGET);
+   // A successful manual VERIFY shares the same job and step name as APPLY.
+   // Do not count it as proof the scheduled expiry actually ran.
+   const p=await get(TARGET,"/actions/workflows/"+wf+"/runs?branch=main&per_page=20");
+   if(!Number.isSafeInteger(p?.total_count)||p.total_count<0||!Array.isArray(p.workflow_runs)||
+      p.workflow_runs.length!==Math.min(20,p.total_count))HOLD("PRIMARY_HISTORY");
+   const eligible=p.workflow_runs.map(r=>exact(r,wf,TARGET)).filter(r=>r.head_sha===env.TRAVNR_APPROVED_TARGET_MAIN_SHA&&
+     (r.event==="schedule"||r.event==="workflow_dispatch"&&r.display_title==="P5 PRIMARY BACKSTOP CHILD"))
+     .sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
+   if(!eligible.length)return result("DEFER_NO_CURRENT_MAIN_APPLY_BASELINE_REVIEW",clock);
+   const last=eligible[0];
    if(last.head_sha!==env.TRAVNR_APPROVED_TARGET_MAIN_SHA||last.status!=="completed"||last.conclusion!=="success")HOLD("PREVIOUS_PRIMARY_REVIEW");
    const js=complete(await get(TARGET,"/actions/runs/"+last.id+"/jobs?filter=latest&per_page=100"),"jobs");
    const good=js.filter(j=>j.name==="primary-fids-expiry"&&j.run_id===last.id&&j.head_sha===last.head_sha&&j.run_attempt===1&&j.status==="completed"&&j.conclusion==="success"&&
@@ -105,7 +112,26 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
    if(!rootScope)return result("DEFER_OUTSIDE_OR_LATE_POLICY_WINDOW",clock);
    const startUtc=encodeURIComponent(">="+rootScope.windowStart);
    const current=complete(await get(TARGET,q+"&created="+startUtc),"workflow_runs").map(x=>exact(x,wf,TARGET));
-   if(current.length)return result("DEFER_CURRENT_WINDOW_HAS_CONTROLLER_RUN_NO_REPLAY",clock);
+   // A workflow record is not equivalent to a controller that executed.
+   // Re-admit only when every existing record is exact-current-main, terminal,
+   // and all jobs (including the protected session) independently prove SKIP.
+   // Unknown/failed/partially executed roots still require custody reconciliation.
+   if(current.length){
+    for(const r of current){
+     if(r.head_sha!==env.TRAVNR_APPROVED_TARGET_MAIN_SHA||r.status!=="completed"||
+        !["success","skipped"].includes(r.conclusion))
+       return result("DEFER_CURRENT_WINDOW_CUSTODY_REVIEW_NO_REPLAY",{...clock,existingRunId:r.id});
+     const jobs=complete(await get(TARGET,"/actions/runs/"+r.id+"/jobs?filter=latest&per_page=100"),"jobs");
+     const protectedJobs=jobs.filter(j=>j.name==="one-protected-bounded-session");
+     if(protectedJobs.length!==1||!jobs.every(j=>id(j.id)&&j.run_id===r.id&&j.head_sha===r.head_sha&&
+       j.run_attempt===1&&j.status==="completed"&&j.conclusion==="skipped"&&
+       (j.steps==null||Array.isArray(j.steps)&&j.steps.length===0)))
+       return result("DEFER_CURRENT_WINDOW_CUSTODY_REVIEW_NO_REPLAY",{...clock,existingRunId:r.id});
+    }
+    // This proves no protected session step ran, NOT that the DB window is free.
+    // The existing target's exact policy/atomic claim/previous closure gate is final.
+    emit({status:"EXTERNAL_WAKE_ONLY_SKIPPED_CONTROLLER_HISTORY_NO_DB_AUTHORITY",relayRunId:runId,skippedRuns:current.length});
+   }
    // The target validates its immutable policy and prior closure with its
    // scoped live DB claim, not the relay's advisory wall clock.
    inputs=rootScope.inputs;
