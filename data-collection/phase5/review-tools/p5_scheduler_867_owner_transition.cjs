@@ -54,8 +54,8 @@ async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
  const workflow=wf=>{const w=api('actions/workflows/'+wf);if(!id(w.id)||w.path!=='.github/workflows/'+wf||w.state!=='active')hold('WORKFLOW_INACTIVE');return w;};
  // Avoid replacing an already-pending cleanup run. Native cron may still race
  // after this read, so the exact acknowledged job must independently complete.
- const noActive=wf=>{for(const status of ['queued','in_progress','pending','waiting','requested']){
-  const a=api('actions/workflows/'+wf+'/runs?branch=main&status='+status+'&per_page=100');
+ const noActive=(wf,manualOnly=false)=>{for(const status of ['queued','in_progress','pending','waiting','requested']){
+  const a=api('actions/workflows/'+wf+'/runs?branch=main&status='+status+'&per_page=100'+(manualOnly?'&event=workflow_dispatch':''));
   if(a?.total_count!==0||!Array.isArray(a.workflow_runs)||a.workflow_runs.length!==0)hold('ACTIVE_WORKFLOW_REVIEW');
  }};
  const dispatch=(wf,inputs,stage)=>{
@@ -99,7 +99,7 @@ async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
  gh(['variable','set',PIN,'-R',REPO,'--body',next]);
  stable(next,endpoint);record({stage:'RETENTION_PIN_READBACK',newMain:next});
  verify(next,'AFTER_MERGE_VERIFY');stable(next,endpoint);backstop();
- workflow(CANARY);noActive(CANARY);
+ workflow(CANARY);noActive(CANARY,true);
  // One nonpaid three-hop sustained test; no root auto restart.
  const chain=randomChain();if(!/^[a-f0-9]{32}$/.test(chain))hold('CHAIN');
  const end=new Date(now()+180*60000).toISOString();
