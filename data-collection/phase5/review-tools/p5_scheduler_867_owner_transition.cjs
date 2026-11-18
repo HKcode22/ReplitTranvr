@@ -89,7 +89,7 @@ async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
  // verification; absence is not a proof the server never accepted a request.
  const priorStart='2026-11-18T05:02:06Z';
  if(now()<Date.parse(priorStart)+120000)hold('PRIOR_VERIFY_OBSERVATION_TOO_EARLY');
- const prior=api('actions/runs?branch=main&event=workflow_dispatch&created='+encodeURIComponent(priorStart+'..'+new Date(now()).toISOString())+'&per_page=100');
+ const prior=api('actions/runs?branch=main&event=workflow_dispatch&created='+encodeURIComponent('>='+priorStart)+'&per_page=100');
  if(!Number.isSafeInteger(prior?.total_count)||prior.total_count<0||prior.total_count>100||
     !Array.isArray(prior.workflow_runs)||prior.workflow_runs.length!==prior.total_count)hold('PRIOR_HISTORY_INCOMPLETE');
  if(prior.workflow_runs.some(r=>r.path==='.github/workflows/'+EXPIRY))hold('PREVIOUS_VERIFY_MATERIALIZED_INSPECT');
