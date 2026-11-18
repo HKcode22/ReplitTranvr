@@ -43,6 +43,10 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
    " | actual latest scheduled expiry step executed: "+p.latestExecutedJobVerified,
    "This does not verify the deletion receipt or guarantee the retention deadline.");
  }
+ if(heartbeat.directRecovery?.state!=="DIRECT_RECOVERY_DISABLED"&&heartbeat.directRecovery){
+  lines.push("","**Direct external recovery (separate observation):** "+heartbeat.directRecovery.state,
+   "Native schedule gaps remain visible; a controller marker is not an actual SOURCE/PRE/POST receipt.");
+ }
  if(heartbeat.activeNotifications?.incidentCount){
   lines.push("","**Current operational incident — review required:**");
   for(const i of heartbeat.activeNotifications.incidents)lines.push("- "+i.lane+": "+i.reason+(i.runId?" — [run "+i.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.runId+")":""));
@@ -83,6 +87,7 @@ async function main(){
    primaryFidsExpiry:report.primaryFidsExpiry,
    primaryFidsExpiryNeedsAttention:report.primaryFidsExpiryNeedsAttention,
    activeNotifications:report.activeNotifications,
+   directRecovery:report.directRecovery,
    controllerProblemCount:report.controllerProblemCount,
    controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,

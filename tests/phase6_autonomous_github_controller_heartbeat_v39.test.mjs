@@ -8,7 +8,7 @@ import {
  summarizeP6ControllerHeartbeat,
  admitP6HeartbeatGithubEnv,
  readP6GithubAutoControllerHeartbeat,
- reviewP6ActiveStandaloneNotifications
+ reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery
 } from "../server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
 import {formatP6ControllerHeartbeatHuman}
  from "../scripts/v39_phase6_github_controller_heartbeat_v39.mjs";
@@ -357,4 +357,32 @@ test("armed current-main monitoring distinguishes executed step, skipped draw, m
  assert.equal(y.incidents[0].reason,"CURRENT_MAIN_EXECUTION_NOT_OBSERVED");
  assert.equal(y.providerCalls,0);
  assert.equal(y.dispatches,0);
+});
+
+test("direct recovery observation preserves distinct exact terminal, carried, HOLD and native gap evidence",async()=>{
+ const e={...env(),P6_ROLLING_DIRECT_RECOVERY_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:"2026-11-14T01:00:00.000Z"};
+ const child={...run(850,{conclusion:"success",event:"workflow_dispatch",created:"2026-11-14T01:55:00Z"}),
+  run_attempt:1,path:".github/workflows/phase6-direct-recovery-tick.yml",display_title:"P6 DIRECT RECOVERY TICK"};
+ const mk=(name,conclusion="success")=>({name,status:"completed",conclusion});
+ const job={id:851,run_id:850,head_sha:ID,run_attempt:1,name:"direct-protected-recovery-tick",status:"completed",conclusion:"success"};
+ const reader=(mode="TERMINAL",patch={},extra=[])=>async url=>{
+  if(url.includes("/jobs?")){
+   const p={...job,steps:[mk("Execute one direct recovery wave and reconcile exact parent ACKs"),mk("Preserve direct terminal operational receipt"),
+    mk("Direct outcome TERMINAL_PARENT_ACKS_RECONCILED",mode==="TERMINAL"?"success":"skipped"),mk("Direct outcome PREFLIGHT_HOLD_NO_POST",mode==="PREFLIGHT_HOLD"?"success":"skipped"),
+    mk("Direct outcome KNOWN_ACTIVE_PARENT_ACKS_CARRIED",mode==="CARRIED"?"success":"skipped")]};
+   const jobs=[p,...["offline-direct-recovery","direct-readonly-verify"].map((name,i)=>({...job,id:852+i,name,conclusion:"skipped",steps:[]}))];
+   return {total_count:3,jobs};
+  }
+  const rows=[{...child,...patch},...extra];
+  return {total_count:rows.length,workflow_runs:rows};
+ };
+ for(const [mode,state,recent] of [["TERMINAL","DIRECT_RECOVERY_TERMINAL_STEP_OBSERVED_NOT_COLLECTION_PROOF",true],["CARRIED","DIRECT_RECOVERY_KNOWN_ACTIVE_MARKER_OBSERVED_NOT_TERMINAL_PROOF",true],
+ ["PREFLIGHT_HOLD","DIRECT_RECOVERY_PREFLIGHT_HOLD_REVIEW",false],["BROKEN","DIRECT_RECOVERY_RESULT_MARKER_REVIEW",false]]){
+  const o=await observeP6DirectRecovery(e,reader(mode),T);assert.equal(o.state,state);assert.equal(o.recentOperationalTick,recent);
+  assert.equal(o.terminalParentAcknowledgementsProven,false);assert.equal(o.collectionProven,false);assert.equal(o.actualExternalCronAttributionProven,false);
+ }
+ assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{head_sha:"c".repeat(40)}),T)).state,"DIRECT_RECOVERY_PIN_DRIFT");
+ assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{},[{...child,id:800,created_at:"2026-11-14T01:40:00Z",conclusion:"failure"}]),T)).state,"DIRECT_RECOVERY_PRIOR_ATTEMPT_REVIEW");
+ assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{created_at:"2026-11-14T01:30:00Z"}),T)).state,"DIRECT_RECOVERY_STALE");
+ assert.equal((await observeP6DirectRecovery(env(),async()=>{throw Error("must stay disabled")},T)).state,"DIRECT_RECOVERY_DISABLED");
 });

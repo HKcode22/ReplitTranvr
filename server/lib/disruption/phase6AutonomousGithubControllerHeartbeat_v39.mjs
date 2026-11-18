@@ -93,6 +93,55 @@ async function observeP6PrimaryBackup(env,readGithub,observedAtUtc){
    state:now-completed>60*60000?"BACKSTOP_CHILD_STEP_STALE":"BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF"};
  }catch{return {...off,state:"BACKSTOP_EVIDENCE_UNAVAILABLE"};}
 }
+// Independent direct-controller job metadata. A native outage stays visible;
+// a recent controller receipt is never a claim of a paid flight or completed
+// parent. Read only the exact existing workflow when the direct lane is on.
+export async function observeP6DirectRecovery(env,readGithub,observedAtUtc){
+ const base={state:"DIRECT_RECOVERY_DISABLED",runId:null,jobId:null,mode:null,
+  recentOperationalTick:false,terminalParentAcknowledgementsProven:false,
+  actualExternalCronAttributionProven:false,collectionProven:false};
+ if(env.P6_ROLLING_DIRECT_RECOVERY_ENABLED!=="1")return base;
+ const wf="phase6-direct-recovery-tick.yml",path=".github/workflows/"+wf,clock=Date.parse(observedAtUtc);
+ try{
+  const since=Date.parse(env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC);
+  if(!Number.isSafeInteger(since)||new Date(since).toISOString()!==env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC||since>clock)
+   return {...base,state:"DIRECT_RECOVERY_ACTIVATION_INVALID"};
+  const history=await readGithub(ROOT+"/actions/workflows/"+wf+"/runs?branch=main&event=workflow_dispatch&per_page=15&created="+encodeURIComponent(">="+new Date(since).toISOString()));
+  if(!Number.isSafeInteger(history?.total_count)||history.total_count<0||!Array.isArray(history.workflow_runs)||
+    history.workflow_runs.length!==Math.min(history.total_count,15))fail("DIRECT_HISTORY_INCOMPLETE");
+  const rows=[...history.workflow_runs];
+  if(new Set(rows.map(x=>x.id)).size!==rows.length||rows.some(x=>!Number.isSafeInteger(x.id)||x.id<1||x.path!==path||
+    x.head_branch!=="main"||x.event!=="workflow_dispatch"||x.run_attempt!==1||x.display_title!=="P6 DIRECT RECOVERY TICK"||
+    !Number.isFinite(Date.parse(x.created_at))||Date.parse(x.created_at)<since||Date.parse(x.created_at)>clock+5000))
+   return {...base,state:"DIRECT_RECOVERY_HISTORY_IDENTITY_REVIEW"};
+  const last=rows.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id)[0];
+  if(!last)return {...base,state:"DIRECT_RECOVERY_NO_TICK_OBSERVED"};
+  const result={...base,runId:last.id};
+  if(last.head_sha!==env.GITHUB_SHA)return {...result,state:"DIRECT_RECOVERY_PIN_DRIFT"};
+  // A recent later green cannot hide a failed attempt visible in this window.
+  if(rows.some(x=>x.head_sha!==env.GITHUB_SHA||x.status==="completed"&&x.conclusion!=="success"))
+   return {...result,state:"DIRECT_RECOVERY_PRIOR_ATTEMPT_REVIEW"};
+  if(clock-Date.parse(last.created_at)>20*60000)return {...result,state:"DIRECT_RECOVERY_STALE"};
+  if(last.status!=="completed")return {...result,state:"DIRECT_RECOVERY_PENDING"};
+  const j=await readGithub(ROOT+"/actions/runs/"+last.id+"/jobs?filter=latest&per_page=100");
+  if(j?.total_count!==3||!Array.isArray(j.jobs)||j.jobs.length!==3||new Set(j.jobs.map(x=>x.id)).size!==3||
+   j.jobs.some(x=>!Number.isSafeInteger(x.id)||x.id<1||x.run_id!==last.id||x.head_sha!==env.GITHUB_SHA||x.run_attempt!==1||x.status!=="completed")||
+   !["offline-direct-recovery","direct-readonly-verify"].every(name=>j.jobs.filter(x=>x.name===name&&x.conclusion==="skipped"&&(x.steps==null||Array.isArray(x.steps)&&x.steps.length===0)).length===1))
+   return {...result,state:"DIRECT_RECOVERY_JOB_IDENTITY_REVIEW"};
+  const p=j.jobs.find(x=>x.name==="direct-protected-recovery-tick");
+  if(!p||p.conclusion!=="success"||!Array.isArray(p.steps)||!["Execute one direct recovery wave and reconcile exact parent ACKs","Preserve direct terminal operational receipt"].every(name=>
+   p.steps.filter(x=>x.name===name&&x.status==="completed"&&x.conclusion==="success").length===1))
+   return {...result,state:"DIRECT_RECOVERY_REQUIRED_STEP_UNVERIFIED"};
+  const marks=["Direct outcome TERMINAL_PARENT_ACKS_RECONCILED","Direct outcome PREFLIGHT_HOLD_NO_POST","Direct outcome KNOWN_ACTIVE_PARENT_ACKS_CARRIED"].map(name=>p.steps.filter(x=>x.name===name));
+  if(marks.some(x=>x.length!==1||x[0].status!=="completed"||!["success","skipped"].includes(x[0].conclusion))||marks.filter(x=>x[0].conclusion==="success").length!==1)
+   return {...result,state:"DIRECT_RECOVERY_RESULT_MARKER_REVIEW"};
+  const mode=["TERMINAL","PREFLIGHT_HOLD","CARRIED"][marks.findIndex(x=>x[0].conclusion==="success")];
+  return {...result,jobId:p.id,mode,recentOperationalTick:mode!=="PREFLIGHT_HOLD",
+   // Deliberately not a claim of artifact-byte proof from job metadata.
+   state:mode==="TERMINAL"?"DIRECT_RECOVERY_TERMINAL_STEP_OBSERVED_NOT_COLLECTION_PROOF":
+     mode==="CARRIED"?"DIRECT_RECOVERY_KNOWN_ACTIVE_MARKER_OBSERVED_NOT_TERMINAL_PROOF":"DIRECT_RECOVERY_PREFLIGHT_HOLD_REVIEW"};
+ }catch{return {...base,state:"DIRECT_RECOVERY_EVIDENCE_UNAVAILABLE"};}
+}
 async function observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc){
  const history=await readGithub(ROOT+"/actions/workflows/"+P6_PRIMARY_FIDS_EXPIRY_LANE.workflow+
   "/runs?branch=main&event=schedule&per_page="+MAX_PER_WORKFLOW);
@@ -394,13 +443,21 @@ export async function readP6GithubAutoControllerHeartbeat(
  const primaryProblem=primaryFidsExpiry.state!=="SCHEDULED_APPLY_DISABLED"&&
   (primaryFidsExpiry.state!=="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF"||
    primaryFidsExpiry.scheduleObservation.historicalCadence.intervalsExceedingExpectedMax>0);
+ const directRecovery=await observeP6DirectRecovery(env,readGithub,observedAtUtc);
  const activeNotifications=await reviewP6ActiveStandaloneNotifications(summary,env,readGithub);
+ // Never suppress native incidents solely because a controller received a
+ // wake. Conversely, surface a stale/skipped/held enabled backup even when
+ // the native diagnostic happened to be recent.
+ if(env.P6_ROLLING_DIRECT_RECOVERY_ENABLED==="1"&&!directRecovery.recentOperationalTick&&directRecovery.state!=="DIRECT_RECOVERY_PENDING"){
+  activeNotifications.incidents.push({lane:"DIRECT_RECOVERY",reason:directRecovery.state,runId:directRecovery.runId,job:"direct-protected-recovery-tick"});
+  activeNotifications.incidentCount++;
+ }
  // Enabled expiry merits current alerts independently of paid activation.
  // A normal pending run or an old gap by itself must not spam failures.
  const currentExpiryIncident=primaryFidsExpiry.scheduledApplyEnabled&&
   !["SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF","SCHEDULE_EXECUTION_PENDING"].includes(primaryFidsExpiry.state);
  if(currentExpiryIncident){activeNotifications.incidents.push({lane:"PRIMARY_FIDS_EXPIRY",reason:primaryFidsExpiry.state,runId:primaryFidsExpiry.scheduleObservation.mostRecentRun?.id??null,job:"primary-fids-expiry",backupState:primaryFidsExpiry.backup.state,backupRunId:primaryFidsExpiry.backup.runId});activeNotifications.incidentCount++;}
- return {...summary,activeNotifications,
+ return {...summary,activeNotifications,directRecovery,
   status:primaryProblem||activeNotifications.incidentCount>0?"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":summary.status,
   primaryFidsExpiry,primaryFidsExpiryNeedsAttention:primaryProblem};
 }
