@@ -11,6 +11,8 @@ const sha=x=>typeof x==="string"&&/^[a-f0-9]{40}$/.test(x);
 const stamp=s=>{let n=Date.parse(s);if(!Number.isFinite(n)||new Date(n).toISOString()!==s)HOLD("UTC");return n;};
 const iso=n=>new Date(n).toISOString();
 const active=["queued","in_progress","waiting","requested","pending"];
+const MULTI_LANES=["CLOCK_ONLY","PRIMARY_BACKSTOP","ROLLING_ROOT"];
+const laneTitle=lane=>"TRAVNR EXTERNAL CLOCK "+lane;
 const result=(status,fields={})=>({status,...fields,providerCallsByRelay:0,databaseReadsByRelay:0,databaseWritesByRelay:0,paidAuthorityGranted:false});
 export function rootInputs(now,from,until,main,four){
  // This is only a prospective scheduling hint. The target's existing V0102
@@ -37,10 +39,12 @@ export function cronJobSpec(relayToken,now=Date.now()){
    body:JSON.stringify({ref:"main",return_run_details:true})}};
 }
 export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
- const mode=env.TRAVNR_RELAY_MODE||"CLOCK_ONLY", start=now(),runId=Number(env.GITHUB_RUN_ID);
+ const configured=env.TRAVNR_RELAY_MODE||"CLOCK_ONLY", lane=env.TRAVNR_RELAY_LANE||"CLOCK_ONLY",
+  multi=configured==="MULTI_LANE", mode=multi?lane:configured, start=now(),runId=Number(env.GITHUB_RUN_ID);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!==RELAY||env.GITHUB_REF!=="refs/heads/main"||
    env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||!id(runId)||!sha(env.GITHUB_SHA)||
-   !["CLOCK_ONLY","PILOT","PRIMARY_BACKSTOP","ROLLING_ROOT"].includes(mode)||typeof env.GITHUB_TOKEN!=="string"||
+   !["CLOCK_ONLY","PILOT","PRIMARY_BACKSTOP","ROLLING_ROOT"].includes(mode)||
+   (multi?!MULTI_LANES.includes(lane):lane!=="CLOCK_ONLY")||typeof env.GITHUB_TOKEN!=="string"||
    env.GITHUB_TOKEN.length<16||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
    ["DATABASE_URL","AERODATABOX_API_KEY","RAPIDAPI_KEY","V39_DATABASE_RUNTIME_URL","AERODATABOX_WEBHOOK_SECRET"].some(k=>env[k]))HOLD("SCOPE");
  let reads=0,attempted=false;
@@ -59,21 +63,37 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
  const main=async()=>{const x=await get(TARGET,"/git/ref/heads/main");if(x?.object?.sha!==env.TRAVNR_APPROVED_TARGET_MAIN_SHA)HOLD("TARGET_MAIN_DRIFT");};
  try{
   const self=exact(await get(RELAY,"/actions/runs/"+runId),SELF,RELAY);
-  if(self.id!==runId||self.head_sha!==env.GITHUB_SHA||self.event!=="workflow_dispatch"||self.status!=="in_progress")HOLD("SELF_IDENTITY");
+  if(self.id!==runId||self.head_sha!==env.GITHUB_SHA||self.event!=="workflow_dispatch"||self.status!=="in_progress"||
+     multi&&self.display_title!==laneTitle(lane))HOLD("SELF_IDENTITY");
   const elapsed=now()-Date.parse(self.created_at);
   if(elapsed<0||elapsed>24*3600000)HOLD("SELF_CLOCK");
   const clock={relayRunId:runId,mode,actualCreatedUtc:self.created_at,runnerObservedUtc:iso(now()),creationToObservedMs:elapsed};
   if(mode==="CLOCK_ONLY")return result("EXTERNAL_CLOCK_OBSERVED_NO_TARGET_DISPATCH",clock);
+  const lanePrefix=mode==="PRIMARY_BACKSTOP"?"TRAVNR_RELAY_PRIMARY":"TRAVNR_RELAY_ROLLING";
+  if(multi&&env[lanePrefix+"_ENABLED"]!=="1")return result("DEFER_SEPARATE_LANE_OFF",clock);
   if(!sha(env.TRAVNR_APPROVED_TARGET_MAIN_SHA)||typeof env.TRAVNR_TARGET_ACTIONS_TOKEN!=="string"||env.TRAVNR_TARGET_ACTIONS_TOKEN.length<16)HOLD("TARGET_CONFIGURATION");
-  const since=stamp(env.TRAVNR_RELAY_MODE_SINCE_UTC);
+  const since=stamp(multi?env[lanePrefix+"_SINCE_UTC"]:env.TRAVNR_RELAY_MODE_SINCE_UTC);
   if(since>start||start-since>60*24*3600000)HOLD("MODE_CLOCK");
   // Any prior failed relay attempt in this owner-reviewed mode quarantines
   // uncertain POSTs indefinitely until mode is independently reconciled.
   // The date-filtered total_count is sufficient even if results paginate.
   for(const conclusion of ["failure","cancelled","timed_out","action_required","stale"]){
-   const p=await get(RELAY,"/actions/workflows/"+SELF+"/runs?branch=main&event=workflow_dispatch&status="+conclusion+"&per_page=1&created="+encodeURIComponent(">="+iso(since)));
-   if(!Number.isSafeInteger(p?.total_count)||p.total_count<0||!Array.isArray(p.workflow_runs)||p.workflow_runs.length!==Math.min(1,p.total_count))HOLD("PRIOR_RELAY_HISTORY");
-   if(p.total_count>0)return result("QUARANTINED_PRIOR_RELAY_RUN_REVIEW",clock);
+   const p=await get(RELAY,"/actions/workflows/"+SELF+"/runs?branch=main&event=workflow_dispatch&status="+conclusion+"&per_page="+(multi?100:1)+"&created="+encodeURIComponent(">="+iso(since)));
+   if(!Number.isSafeInteger(p?.total_count)||p.total_count<0||!Array.isArray(p.workflow_runs)||
+      p.workflow_runs.length!==Math.min(multi?100:1,p.total_count))HOLD("PRIOR_RELAY_HISTORY");
+   if(!multi&&p.total_count>0)return result("QUARANTINED_PRIOR_RELAY_RUN_REVIEW",clock);
+   if(multi){
+    if(p.total_count>100)HOLD("PRIOR_RELAY_HISTORY");
+    for(const row of p.workflow_runs){
+     const other=exact(row,SELF,RELAY);
+     if(other.status!=="completed"||other.conclusion!==conclusion||
+        Date.parse(other.created_at)<Math.floor(since/1000)*1000)HOLD("PRIOR_RELAY_HISTORY");
+     // Only a known other lane's terminal failure may be ignored. A same
+     // or unidentified lane failure is quarantined, never inferred safe.
+     if(other.display_title===laneTitle(lane)||!MULTI_LANES.some(l=>other.display_title===laneTitle(l)))
+      return result("QUARANTINED_PRIOR_RELAY_RUN_REVIEW",clock);
+    }
+   }
   }
   await main();
   const wf=mode==="PILOT"?PILOT:mode==="PRIMARY_BACKSTOP"?PRIMARY:ROLLING;
