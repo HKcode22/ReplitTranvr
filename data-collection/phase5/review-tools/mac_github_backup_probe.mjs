@@ -112,14 +112,16 @@ export function localGap(previous,observedUtc){
  const minutes=Math.round((b-a)/6000)/10;
  return minutes>20?{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes}:null;
 }
-export function launchAgentXml({node,script,dir,pin,authenticated=false,ghExecutable,followMain=false}){
+export function launchAgentXml({node,script,dir,pin,authenticated=false,ghExecutable,ghConfigDir,xdgConfigHome,followMain=false}){
  if(!SHA.test(pin??"")||[node,script,dir].some(v=>typeof v!=="string"||!v.startsWith("/")||/[\x00-\x1f]/.test(v)))fail("LAUNCH_AGENT_PATHS");
  if(typeof followMain!=="boolean"||followMain&&!authenticated||authenticated!==false&&authenticated!==true||authenticated&&(typeof ghExecutable!=="string"||!ghExecutable.startsWith("/")||/[\x00-\x1f]/.test(ghExecutable)))fail("LAUNCH_AGENT_GH_PATH");
+ const optionalPaths=[["GH_CONFIG_DIR",ghConfigDir],["XDG_CONFIG_HOME",xdgConfigHome]].filter(([,v])=>v!==undefined);
+ if(optionalPaths.length&&(!authenticated||optionalPaths.some(([,v])=>typeof v!=="string"||!v.startsWith("/")||/[\x00-\x1f]/.test(v))))fail("LAUNCH_AGENT_GH_CONFIG_PATH");
  const esc=v=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
  const string=v=>"<string>"+esc(v)+"</string>";
  return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'+
   '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,followMain?"observe-follow-auth-notify":authenticated?"observe-auth-notify":"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
-   (authenticated?'<key>EnvironmentVariables</key><dict><key>TRAVNR_WATCH_GH_BINARY</key>'+string(ghExecutable)+'</dict>\n':'')+
+   (authenticated?'<key>EnvironmentVariables</key><dict><key>TRAVNR_WATCH_GH_BINARY</key>'+string(ghExecutable)+optionalPaths.map(([k,v])=>"<key>"+k+"</key>"+string(v)).join("")+'</dict>\n':'')+
   '<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>600</integer>\n<key>StandardOutPath</key>'+string("/dev/null")+'\n'+
   '<key>StandardErrorPath</key>'+string(join(dir,"launchd-errors.log"))+'\n</dict></plist>\n';
 }
@@ -179,7 +181,7 @@ async function main(){
  }
  if(["launch-agent","launch-agent-auth","launch-agent-follow-auth"].includes(mode)){
   if(process.platform!=="darwin")fail("MAC_ONLY");
-  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin,authenticated:mode!=="launch-agent",followMain:mode==="launch-agent-follow-auth",ghExecutable:mode!=="launch-agent"?githubCli():undefined}));return;
+  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin,authenticated:mode!=="launch-agent",followMain:mode==="launch-agent-follow-auth",ghExecutable:mode!=="launch-agent"?githubCli():undefined,ghConfigDir:mode!=="launch-agent"?process.env.GH_CONFIG_DIR:undefined,xdgConfigHome:mode!=="launch-agent"?process.env.XDG_CONFIG_HOME:undefined}));return;
  }
  if(["observe","observe-notify","observe-auth","observe-auth-notify","observe-follow-auth","observe-follow-auth-notify"].includes(mode)){
   let previous=null;
