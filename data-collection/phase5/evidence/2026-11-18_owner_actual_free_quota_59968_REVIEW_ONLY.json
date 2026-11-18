@@ -1,0 +1,41 @@
+{
+  "schema": "v39.phase4.historical-ultra-and-current-free-account-evidence.v1",
+  "status": "HISTORICAL_TEAM_ULTRA_AND_CURRENT_FREE_QUOTA_SEPARATELY_RECORDED_HOLD",
+  "originalAccountEvidenceRecorded": true,
+  "historicalAccount": {
+    "evidenceAtUtc": "2026-09-10T06:47:29.000Z",
+    "subscribedChannel": "rapidapi",
+    "plan": "Team Ultra / legacy Ultra (owner attested)",
+    "planVersionBasis": "grandfathered (Sept 2026 attestation)",
+    "observedEntitlementUnits": 60000,
+    "observedRemainingUnits": 59994,
+    "independentProjectCeilingUnits": 50000,
+    "observedAlertCredits": 2900,
+    "originalBillingCycleEndUtc": "2026-10-04T02:21:21.000Z"
+  },
+  "originalRetention": {
+    "ownerAttestedRawMaxHours": 168,
+    "ownerAttestedLiveFidsMaxHours": 24,
+    "pitrRecoveryHours": 168,
+    "backupRetentionReviewStatus": "BLOCKED_BACKUP_RECOVERY_AND_UNVERIFIED_SURFACES",
+    "planSpecificRightIndependentlyReverifiedToday": false
+  },
+  "currentFreeProviderQuota": {
+    "observedAtUtc": "2026-11-18T16:40:47.000Z",
+    "apiUnitsLimit": 60000,
+    "apiUnitsRemaining": 59968,
+    "apiUnitsResetAtUtc": "2026-12-04T02:21:21.000Z",
+    "requestsLimit": 240000,
+    "requestsRemaining": 239972,
+    "alertCreditsRemaining": 1830
+  },
+  "currentQuotaDiffersFromSeptemberHistorical": false,
+  "currentQuotaNotProofOfPlanOrCachingRights": true,
+  "newProspectivePaidGate5Authorized": false,
+  "independentOriginalSelectedTMilestoneCertified": false,
+  "independentlyActualOnlyWheelsOffCertified": false,
+  "phase5FreezeAuthorized": false,
+  "phase6Authorized": false,
+  "databaseWrites": 0,
+  "paidProviderCalls": 0
+}

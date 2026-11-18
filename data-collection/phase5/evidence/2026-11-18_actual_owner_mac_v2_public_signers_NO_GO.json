@@ -1,0 +1,79 @@
+{
+  "schema": "v39.phase6.actual-owner-signer-candidates-public-readback.v2",
+  "status": "SIX_MAC_CANDIDATES_CREATED_PUBLIC_KEYS_INDEPENDENTLY_REHASHED_NO_GO",
+  "originMain": "ea89308f468494d848f549539200f73f848a4fa7",
+  "manifestCandidateSha256": "e5315b35fb8978d1de823bb1953191d976ccf093594a656890fb16d91f88a3e0",
+  "signers": [
+    {
+      "id": "daily",
+      "secretNames": [
+        "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXvDEoGp//8n56FXsSrhOYixBFZCu+mw92VIgTSkeWKU=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744"
+    },
+    {
+      "id": "query",
+      "secretNames": [
+        "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtQx9qUWNniSU9Js8agSjLog1VP5KvqMlefOCjO28ibA=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2"
+    },
+    {
+      "id": "registry-index",
+      "secretNames": [
+        "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+        "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA98AgYw31Blg5/W9Etis0v+EDYN8mb//wXJUJ1uZVLek=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67"
+    },
+    {
+      "id": "later-pre-t24-registry",
+      "secretNames": [
+        "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEANXuk8pmy6fEV8ubavtf/LPOryu3p+ix7nNrtpRnEURs=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "de37f2d4f8736cb92c04a31c94d3d252482667f937ce80a0f65b09df5293e733"
+    },
+    {
+      "id": "post",
+      "secretNames": [
+        "P6_PRIVATE_POST_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAwimAPtSLxfj+XIQ0x01rh9AQTdLdbOwy/ndfmlQB/zY=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b"
+    },
+    {
+      "id": "t24-independent-custody",
+      "secretNames": [
+        "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAkXeBEtr+PKjFtfvSaaPmNFCyav6/oAgicWieN1An3fE=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "5d002b5a2cede6da00aab6d3b516aa4766f58858b252ba85e1c67049dd08d23f"
+    }
+  ],
+  "candidateCount": 6,
+  "secretAliasCount": 7,
+  "actualOwnerPreflight": {
+    "repositorySecretNamesScanned": 19,
+    "repositoryEnvironmentsScanned": 4,
+    "approvalCount": 0,
+    "privateSecretValuesRead": false
+  },
+  "localPrivateKeySelfTestsOwnerReportedPassed": true,
+  "publicKeysIndependentDerEd25519Verified": 6,
+  "publicFingerprintsIndependentlyVerified": 6,
+  "originReceiptGitBlob": "b14c6523e12131ea92bd5cd792b439ded77e52da",
+  "oldUnapprovedCandidatesSuperseded": true,
+  "oldCandidatesReused": false,
+  "independentCustodianApproved": false,
+  "delegationPolicyApproved": false,
+  "durableExternalBackupVerified": false,
+  "githubSecretWrites": 0,
+  "databaseWrites": 0,
+  "providerCalls": 0,
+  "phase6PaidGo": false,
+  "provenance": "actual Mac terminal success pasted by owner; assistant Python cryptography parsed all six supplied public SPKI DER as Ed25519 and SHA256 matched all six; private key bytes not observed"
+}
