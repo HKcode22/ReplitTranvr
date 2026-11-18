@@ -85,7 +85,7 @@ function exactInertProof(proof,row,route){
  return !!stamp&&proof.runId===row.id&&proof.workflow===route.workflow&&stamp.id===row.id&&
   stamp.sha===row.head_sha&&stamp.path===row.path&&stamp.created===row.created_at;
 }
-export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
+export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock,directRecovery=false}){
  if(!P6_ROLLING_ROUTES.includes(route)||!CODE.test(sha??"")||!Number.isFinite(epoch)||!Number.isFinite(clock)||epoch>clock)
   hold("UNREVIEWED_ROUTE_OR_CLOCK");
  if(!snapshot||snapshot.workflow!==route.workflow||snapshot.complete!==true||
@@ -119,7 +119,9 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
   const parentDispositions=[];
   for(const required of route.jobs){
    const matches=snapshot.jobs.filter(j=>j.name===required.name);
-   if(matches.length!==1||matches[0].status!=="completed"||matches[0].conclusion!=="success")
+   if(matches.length!==1||matches[0].status!=="completed"||matches[0].conclusion!=="success"||
+      directRecovery===true&&(!ACK_ID(matches[0].id)||matches[0].run_id!==last.id||
+       matches[0].head_sha!==sha||matches[0].run_attempt!==1))
     return {lane:route.lane,state:"HOLD_GATED_OR_FAILED_REQUIRED_JOB",runId:last.id};
    if(required.parentOutcome){
     const disposition=readP6ParentOutcomeSteps(matches[0].steps);
@@ -132,7 +134,12 @@ export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock}){
      return {lane:route.lane,state:"HOLD_INERT_REQUIRED_STEP",runId:last.id};
    }
   }
-  if(clock-last.created<route.minutes*60000)return {lane:route.lane,state:parentDispositions.includes("SAFE_PREFLIGHT_HOLD")?"RECENT_SAFE_PREFLIGHT_HOLD":parentDispositions.includes("MISSING_EVIDENCE")?"RECENT_MISSING_EVIDENCE":"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF",runId:last.id,parentDispositions};
+  // The external ten-minute pulse is not phase-locked to runner creation.
+  // Two minutes of bounded cooldown tolerance preserves an effective ten-
+  // minute wake at ordinary sub-two-minute jitter. The active exclusion
+  // above and the worker's existing singleton/DB/cutoff gates are unchanged.
+  const cooldown=directRecovery===true&&route.minutes===10?8:route.minutes;
+  if(clock-last.created<cooldown*60000)return {lane:route.lane,state:parentDispositions.includes("SAFE_PREFLIGHT_HOLD")?"RECENT_SAFE_PREFLIGHT_HOLD":parentDispositions.includes("MISSING_EVIDENCE")?"RECENT_MISSING_EVIDENCE":"RECENT_JOB_SUCCESS_NOT_COLLECTION_PROOF",runId:last.id,parentDispositions};
  }
  return {lane:route.lane,state:"DUE_REVIEWED_ROUTE",lastRunId:last?.id??null,inertScheduledRuns:inertIds.size};
 }
@@ -193,7 +200,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  for(const route of P6_ROLLING_ROUTES.filter(r=>plan.due.includes(r.lane))){
   if(mayStartAttempt()!==true){requestBudgetDeferred.push(route.lane);continue;}
   if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
-  const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now()});
+  const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now(),directRecovery:stamp.directRecovery===true});
   if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state.startsWith("RECENT_")){deferred.push(route.lane);continue;}
   if(fresh.state!=="DUE_REVIEWED_ROUTE")hold("FRESH_ROUTE_HISTORY_NO_REPLAY");
   let live;
@@ -245,7 +252,7 @@ export function inspectP6RollingRetirementProof(proof,{sha,epoch,now}){
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),directRecovery=false}){
  const started=now(),cache=inertCaches.get(scheduleEvidenceCache);
  if(!cache)hold("INVALID_INERT_SCHEDULE_CACHE");
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
@@ -318,7 +325,7 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   workflow:route.workflow,complete:true,runs:histories[i],active:activeFor(route),
   ...await jobsFor(route,histories[i])
  })));
- const context={sha,epoch,clock:now()};
+ const context={sha,epoch,clock:now(),directRecovery:directRecovery===true};
  // No stale or inverted monotonic wall-clock snapshots may dispatch.
  if(context.clock<started||context.clock-started>120000)hold("GITHUB_SNAPSHOT_TOO_SLOW");
  // Verify every lane's accepted-run history before issuing any new wave.

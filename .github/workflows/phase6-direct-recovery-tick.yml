@@ -19,6 +19,7 @@ on:
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
       - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
+      - 'scripts/v39_phase6_rolling_window_terminal_readback_v39.mjs'
 permissions:
   contents: read
   actions: read
@@ -99,7 +100,7 @@ jobs:
       contents: read
       actions: write
     runs-on: ubuntu-latest
-    timeout-minutes: 26
+    timeout-minutes: 9
     env:
       GITHUB_TOKEN: ${{ github.token }}
       P6_ROLLING_SESSION_CONFIRM: ${{ inputs.confirm }}
@@ -145,6 +146,9 @@ jobs:
       - name: Direct outcome PREFLIGHT_HOLD_NO_POST
         if: steps.execute.outputs.direct_disposition == 'PREFLIGHT_HOLD'
         run: echo 'Direct preflight HOLD; no new attempt'
+      - name: Direct outcome KNOWN_ACTIVE_PARENT_ACKS_CARRIED
+        if: steps.execute.outputs.direct_disposition == 'CARRIED'
+        run: echo 'Exact known active parent ACKs carried for independent successor readback'
       - name: Preserve direct terminal operational receipt
         uses: actions/upload-artifact@v4
         with:

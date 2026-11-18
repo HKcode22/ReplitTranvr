@@ -9,7 +9,7 @@ const active=new Set(["queued","in_progress","waiting","requested","pending"]);
 const fail=s=>{throw Error("HOLD_P6_ROLLING_SESSION_"+s);};
 const idOk=x=>Number.isSafeInteger(x)&&x>0;
 export const P6_ROLLING_ACK_CAPACITY=96;
-export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{},priorAcknowledgements=[]}){
+export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=()=>{},priorAcknowledgements=[],directRecovery=false}){
  if(!/^[a-f0-9]{40}$/.test(sha??"")||!Number.isSafeInteger(epoch)||!Number.isSafeInteger(deadline)||
     epoch>now()||deadline<=now()||deadline-epoch>6*3600000||typeof emit!=="function")fail("BAD_SESSION_SCOPE");
  const rows=new Map(),seen=new Set(),attempts=new Map(),observed=new Map();
@@ -87,7 +87,7 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
    if(!Number.isSafeInteger(result?.total_count)||result.total_count<1||result.total_count>100||
       !Array.isArray(result.jobs)||result.jobs.length!==result.total_count)fail("ACK_JOB_HISTORY_INCOMPLETE");
    const assessment=assessP6RollingRoute(route,{workflow:route.workflow,complete:true,runs:[run],active:[],
-     jobRunId:item.runId,jobs:result.jobs},{sha,epoch:Math.min(epoch,created),clock:now()});
+     jobRunId:item.runId,jobs:result.jobs},{sha,epoch:Math.min(epoch,created),clock:now(),directRecovery:directRecovery===true});
    if(assessment.state.startsWith("HOLD_")||assessment.state==="ACTIVE_NO_OVERLAP")fail("ACK_WORKER_EVIDENCE_HOLD");
    item.terminal=true;
    emit(Object.freeze({lane:item.lane,runId:item.runId,status:"EXACT_WORKER_TERMINAL_NOT_COLLECTION_PROOF",outcome:assessment.state}));
