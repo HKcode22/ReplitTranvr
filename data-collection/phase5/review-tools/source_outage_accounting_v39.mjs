@@ -76,6 +76,26 @@ export function stressPhysicalOutage(plan,outages){
   potentialCoverageLower:(main.planned-blocked-partial)/main.planned,potentialCoverageUpper:(main.planned-blocked)/main.planned,
   completelyBlockedParentDays:fullDays,by,...noAuthority};
 }
+/** Exact worst-aligned contiguous outage across the known frozen request
+ * windows. Maximize lost physical opportunities, not real flight counts.
+ * For an inclusive outage [x,x+D], a window is fully covered iff
+ * hard-D <= x <= planned. Sweep those inclusive start ranges. */
+export function worstPhysicalOutage(plan,minutes,{horizon=null,partition=null}={}){
+ if(!int(minutes,1)||minutes>48*60||horizon!==null&&!H.includes(horizon)||
+    partition!==null&&!["train","validation","test"].includes(partition))hold("STRESS_SCOPE");
+ const target=plan.queries.filter(q=>(horizon===null||q.horizon===horizon)&&(partition===null||q.split===partition));
+ if(!target.length)hold("EMPTY_STRESS_SCOPE");
+ const duration=minutes*60000,events=new Map();
+ for(const q of target){if(q.hard-q.planned>duration)continue;
+  const a=q.hard-duration,z=q.planned+1;events.set(a,(events.get(a)??0)+1);events.set(z,(events.get(z)??0)-1);
+ }
+ let best=-1,active=0,at=null;
+ for(const [t,delta] of [...events].sort((a,b)=>a[0]-b[0])){active+=delta;if(active>best){best=active;at=t;}}
+ if(at===null||best<0)hold("NO_STRESS_WINDOW");
+ const r=stressPhysicalOutage(plan,[{startUtc:iso(at),endUtc:iso(at+duration)}]);
+ return {status:"WORST_ALIGNED_PHYSICAL_OUTAGE_REVIEW_ONLY",minutes,objectiveHorizon:horizon,objectivePartition:partition,
+  objectivePlanned:target.length,objectiveFullyBlocked:best,startUtc:iso(at),endUtc:iso(at+duration),allRequests:r,...noAuthority};
+}
 /** Accepts an explicitly separately reviewed content-free metadata export.
  * It does NOT query production or verify the export's external authenticity.
  * Complete day coverage is an input attestation, not inferred from absent rows.
@@ -154,6 +174,12 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   for(const x of spans){
    const a=stressPhysicalOutage(p,[{startUtc:iso(x.start),endUtc:iso(x.end)}]);
    console.log(JSON.stringify({scenario:x.name,startUtc:iso(x.start),endUtc:iso(x.end),...a,by:{horizon:a.by.horizon,split:a.by.split}}));
+  }
+  for(const [minutes,horizon,partition] of [[60,null,null],[360,null,null],[60,"T-6h","test"],[360,"T-6h","test"]]){
+   const a=worstPhysicalOutage(p,minutes,{horizon,partition}),r=a.allRequests;
+   console.log(JSON.stringify({scenario:"worst-aligned-"+minutes+"m-"+(horizon??"all")+"-"+(partition??"all"),startUtc:a.startUtc,endUtc:a.endUtc,
+    objectiveFullyBlocked:a.objectiveFullyBlocked,objectivePlanned:a.objectivePlanned,plannedRequests:r.plannedRequests,blocked:r.blocked,partiallyAtRisk:r.partiallyAtRisk,
+    potentialCoverageLower:r.potentialCoverageLower,potentialCoverageUpper:r.potentialCoverageUpper,completelyBlockedParentDays:r.completelyBlockedParentDays,by:{horizon:r.by.horizon,split:r.by.split},...noAuthority}));
   }
  }catch(e){console.error(/^HOLD_P5_OUTAGE_REVIEW_[A-Z_]+$/.test(e?.message||"")?e.message:"HOLD_P5_OUTAGE_REVIEW_UNKNOWN");process.exitCode=2;}
 }
