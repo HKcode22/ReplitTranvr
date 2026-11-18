@@ -8,7 +8,7 @@ const MIN=60000,hold=s=>{throw Error("HOLD_SHARED_RUNNER_REVIEW_"+s)};
 const int=(x,a,b)=>Number.isSafeInteger(x)&&x>=a&&x<=b;
 const noGo={providerCalls:0,databaseWrites:0,dispatches:0,phase6PaidGo:false,permitReplay:false};
 export function modelSharedSourceRunners(plan,cfg){
- const {totalSlots,reservedSlots,appCap,leadMinutes,tailMinutes,startupMs,phaseMinutes=5,batch=8,blackouts=[]}=cfg??{};
+ const {totalSlots,reservedSlots,appCap,leadMinutes,tailMinutes,startupMs,phaseMinutes=5,batch=8,blackouts=[],explicitWakes=null}=cfg??{};
  if(!int(totalSlots,1,64)||!int(reservedSlots,0,totalSlots-1)||!int(appCap,1,24)||
     !int(leadMinutes,15,105)||!int(tailMinutes,0,60)||!int(startupMs,0,30*MIN)||
     !int(phaseMinutes,0,9)||!int(batch,1,8)||!Array.isArray(blackouts)||blackouts.length>100)hold("CONFIG");
@@ -23,6 +23,8 @@ export function modelSharedSourceRunners(plan,cfg){
  const first=all[0].planned,last=all.at(-1).planned;
  const begin=Math.ceil((first-leadMinutes*MIN-phaseMinutes*MIN)/(10*MIN))*10*MIN+phaseMinutes*MIN;
  const end=last-15*MIN;
+ if(explicitWakes!==null&&(!Array.isArray(explicitWakes)||explicitWakes.length>100000||explicitWakes.some((t,i)=>!Number.isSafeInteger(t)||i>0&&t<=explicitWakes[i-1])))hold("WAKE_PLAN");
+ const ticks=explicitWakes===null?Array.from({length:Math.max(0,Math.floor((end-begin)/(10*MIN))+1)},(_,i)=>begin+i*10*MIN):explicitWakes.filter(t=>t>=first-leadMinutes*MIN&&t<=end);
  let peakRunning=0,peakAcknowledged=0,peakWaiting=0,admitted=0,blockedTicks=0,lo=0,hi=0;
  // Acknowledged queued jobs occupy application capacity, but do not occupy
  // a physical runner until an actual slot is released. FIFO is a scenario,
@@ -46,7 +48,7 @@ export function modelSharedSourceRunners(plan,cfg){
    allocate(next);
   }
  }
- for(let tick=begin;tick<=end;tick+=10*MIN){
+ for(const tick of ticks){
   drainTo(tick);allocate(tick);
   if(outage.some(x=>x.start<=tick&&tick<x.end))continue;
   while(lo<all.length&&all[lo].planned<tick+15*MIN)lo++;
@@ -72,7 +74,7 @@ export function modelSharedSourceRunners(plan,cfg){
  }
  if(Object.values(counts).reduce((a,b)=>a+b,0)!==all.length||peakRunning>slots||peakAcknowledged>appCap)hold("ACCOUNTING");
  return {status:"SHARED_RUNNER_QUEUE_SCENARIO_NOT_OBSERVED_PROVIDER_LOSS",planned:all.length,admitted,
-  config:{totalSlots,reservedSlots,physicalSourceSlots:slots,appCap,leadMinutes,tailMinutes,startupMs,phaseMinutes,batch,blackouts:outage.length},
+  config:{totalSlots,reservedSlots,physicalSourceSlots:slots,appCap,leadMinutes,tailMinutes,startupMs,phaseMinutes,batch,blackouts:outage.length,explicitWakeCount:explicitWakes===null?null:ticks.length},
   counts,byHorizon,bySplit,byHorizonAndSplit,peakRunning,peakAcknowledged,peakWaiting,blockedTicks,maxQueueMs,maxSetupLateMs,...noGo};
 }
 function main(){
