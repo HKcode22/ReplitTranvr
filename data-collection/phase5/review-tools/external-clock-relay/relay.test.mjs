@@ -16,8 +16,14 @@ function f(mode,fault=""){
    return wrap({workflow_run_id:201,run_url:root+TARGET+"/actions/runs/201",html_url:"https://github.com/"+TARGET+"/actions/runs/201"});
   }
   assert.equal(init.method,"GET");
-  if(url===root+RELAY+"/actions/runs/100")return wrap(row(100,"external-clock.yml",LOCAL,"in_progress"));
-  if(url.includes(root+RELAY+"/actions/workflows/"))return wrap({total_count:fault==="prior"?1:0,workflow_runs:fault==="prior"?[{}]:[]});
+  if(url===root+RELAY+"/actions/runs/100")return wrap({...row(100,"external-clock.yml",LOCAL,"in_progress"),display_title:"TRAVNR EXTERNAL CLOCK "+(env.TRAVNR_RELAY_LANE||"CLOCK_ONLY")});
+  if(url.includes(root+RELAY+"/actions/workflows/")){
+   if(env.TRAVNR_RELAY_MODE==="MULTI_LANE"&&["otherLane","sameLane","unknownLane"].includes(fault)&&url.includes("status=failure")){
+    const title=fault==="unknownLane"?"unknown":fault==="sameLane"?"TRAVNR EXTERNAL CLOCK "+env.TRAVNR_RELAY_LANE:"TRAVNR EXTERNAL CLOCK "+(env.TRAVNR_RELAY_LANE==="PRIMARY_BACKSTOP"?"ROLLING_ROOT":"PRIMARY_BACKSTOP");
+    return wrap({total_count:1,workflow_runs:[{...row(712,"external-clock.yml",LOCAL),display_title:title,conclusion:"failure"}]});
+   }
+   return wrap({total_count:fault==="prior"?1:0,workflow_runs:fault==="prior"?[{}]:[]});
+  }
   if(url===root+TARGET+"/git/ref/heads/main")return wrap({object:{sha:fault==="drift"?LOCAL:SHA}});
   if(url===root+TARGET+"/actions/runs/201")return wrap(fault==="targetFailed"?{...row(201,wf),conclusion:"failure"}:row(201,wf,SHA,"queued"));
   if(url.includes("/actions/runs/112/jobs"))return wrap({total_count:2,jobs:[{id:501,name:"one-protected-bounded-session",run_id:112,head_sha:SHA,run_attempt:1,status:"completed",conclusion:fault==="skip"?"skipped":"success",steps:fault==="skip"?[]:[{name:"Execute one protected rolling session"}]},{id:502,name:"offline-bounded-session-reconciliation",run_id:112,head_sha:SHA,run_attempt:1,status:"completed",conclusion:"skipped",steps:[]}]});
@@ -46,3 +52,15 @@ test("VERIFY-only success is not expiry APPLY freshness or initial baseline",asy
 test("all exact skipped jobs permit only guarded target root wake",async()=>{const x=f("ROLLING_ROOT","skip");assert.equal((await runPulse(x.env,x.opts)).targetRunId,201);assert.equal(x.posts(),1);assert(x.events.some(e=>e.status==="EXTERNAL_WAKE_ONLY_SKIPPED_CONTROLLER_HISTORY_NO_DB_AUTHORITY"));});
 test("actual or partially executed protected root never replays",async()=>{const x=f("ROLLING_ROOT","partial");assert.match((await runPulse(x.env,x.opts)).status,/CUSTODY_REVIEW/);assert.equal(x.posts(),0);});
 test("failed protected root requires custody reconciliation, never replays",async()=>{const x=f("ROLLING_ROOT","failedRoot");assert.match((await runPulse(x.env,x.opts)).status,/CUSTODY_REVIEW/);assert.equal(x.posts(),0);});
+
+function multi(mode,fault=""){
+ const x=f(mode,fault);
+ Object.assign(x.env,{TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_LANE:mode,TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ENABLED:"1",TRAVNR_RELAY_PRIMARY_SINCE_UTC:new Date(NOW-3600000).toISOString(),TRAVNR_RELAY_ROLLING_SINCE_UTC:new Date(NOW-3600000).toISOString()});
+ return x;
+}
+test("multi-lane rolling independent of known terminal primary failure",async()=>{const x=multi("ROLLING_ROOT","otherLane");assert.equal((await runPulse(x.env,x.opts)).targetRunId,201);assert.equal(x.posts(),1);});
+test("multi-lane primary independent of known terminal rolling failure",async()=>{const x=multi("PRIMARY_BACKSTOP","otherLane");assert.equal((await runPulse(x.env,x.opts)).targetRunId,201);assert.equal(x.posts(),1);});
+test("same lane and unidentified prior failures quarantine",async()=>{for(const fault of ["sameLane","unknownLane"]){const x=multi("ROLLING_ROOT",fault);assert.match((await runPulse(x.env,x.opts)).status,/QUARANTINED/);assert.equal(x.posts(),0);}});
+test("disabled lane is independent and never requires target credentials",async()=>{const x=multi("PRIMARY_BACKSTOP");delete x.env.TRAVNR_TARGET_ACTIONS_TOKEN;x.env.TRAVNR_RELAY_PRIMARY_ENABLED="0";assert.match((await runPulse(x.env,x.opts)).status,/LANE_OFF/);assert.equal(x.posts(),0);});
+test("multi-lane clock-only never receives target authority",async()=>{const x=multi("CLOCK_ONLY");delete x.env.TRAVNR_TARGET_ACTIONS_TOKEN;assert.equal((await runPulse(x.env,x.opts)).status,"EXTERNAL_CLOCK_OBSERVED_NO_TARGET_DISPATCH");assert.equal(x.posts(),0);});
+test("single-lane mode rejects spoofed workflow input",async()=>{const x=f("CLOCK_ONLY");x.env.TRAVNR_RELAY_LANE="ROLLING_ROOT";await assert.rejects(runPulse(x.env,x.opts),/SCOPE/);assert.equal(x.posts(),0);});
