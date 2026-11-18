@@ -1,5 +1,5 @@
 name: Phase6 direct existing-worker recovery (STOP default)
-run-name: ${{ github.event_name == 'workflow_dispatch' && 'P6 DIRECT RECOVERY TICK' || 'Phase6 direct recovery tests' }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && (inputs.confirm == 'VERIFY_DIRECT_RECOVERY_CLOCK_NO_PROVIDER_NO_DB_NO_DISPATCH' && 'P6 DIRECT RECOVERY VERIFY' || 'P6 DIRECT RECOVERY TICK') || 'Phase6 direct recovery tests' }}
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,7 @@ on:
     paths:
       - '.github/workflows/phase6-direct-recovery-tick.yml'
       - 'scripts/v39_phase6_direct_recovery_tick_v39.mjs'
+      - 'scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs'
       - 'tests/phase6_direct_recovery_tick_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
@@ -51,6 +52,38 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: node --test tests/phase6_direct_recovery_tick_v39.test.mjs
+      - name: Actual hosted route and scheduling metadata probe NO POST
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs
+  direct-readonly-verify:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 && vars.P6_ROLLING_DIRECT_RECOVERY_ENABLED != '1' &&
+      inputs.confirm == 'VERIFY_DIRECT_RECOVERY_CLOCK_NO_PROVIDER_NO_DB_NO_DISPATCH' &&
+      inputs.approved_main_sha == github.sha
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify exact direct wake and existing workflow metadata NO POST
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          P6_DIRECT_VERIFY_CONFIRM: ${{ inputs.confirm }}
+          P6_DIRECT_VERIFY_APPROVED_MAIN: ${{ inputs.approved_main_sha }}
+          P6_ROLLING_DIRECT_RECOVERY_ENABLED: ${{ vars.P6_ROLLING_DIRECT_RECOVERY_ENABLED }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs
   direct-protected-recovery-tick:
     if: >-
       github.repository == 'HKcode22/ReplitTranvr' &&
