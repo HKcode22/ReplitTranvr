@@ -80,6 +80,26 @@ async function canary(pin,{get,reserve,post,save,now=Date.now,randomChain}){
  save(result);return result;
 }
 
+export function localHealthFingerprint(value){
+ if(!value||typeof value!=="object")return "NO_PRIOR_RECEIPT";
+ return [value.status,...(Array.isArray(value.lanes)?value.lanes.map(l=>l.lane+":"+l.level):[])].join("|");
+}
+export function localGap(previous,observedUtc){
+ if(!previous?.observedUtc)return null;
+ const a=Date.parse(previous.observedUtc),b=Date.parse(observedUtc);
+ if(!Number.isFinite(a)||!Number.isFinite(b)||b<a)return {status:"LOCAL_CLOCK_OR_RECEIPT_UNKNOWN"};
+ const minutes=Math.round((b-a)/6000)/10;
+ return minutes>20?{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes}:null;
+}
+export function launchAgentXml({node,script,dir,pin}){
+ if(!SHA.test(pin??"")||[node,script,dir].some(v=>typeof v!=="string"||!v.startsWith("/")||/[\x00-\x1f]/.test(v)))fail("LAUNCH_AGENT_PATHS");
+ const esc=v=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
+ const string=v=>"<string>"+esc(v)+"</string>";
+ return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'+
+  '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
+  '<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>600</integer>\n<key>StandardOutPath</key>'+string("/dev/null")+'\n'+
+  '<key>StandardErrorPath</key>'+string(join(dir,"launchd-errors.log"))+'\n</dict></plist>\n';
+}
 export {observe,canary,LANES};
 async function get(path){
  const res=await fetch(ROOT+path,{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},redirect:"error",signal:AbortSignal.timeout(10000)});
@@ -102,15 +122,35 @@ function atom(path,value){
 }
 async function main(){
  const [mode,pin,custom]=process.argv.slice(2);
- if(!["observe","canary","inspect"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
+ if(!["observe","observe-notify","canary","inspect","launch-agent"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
  const dir=resolve(custom??join(homedir(),".travnr-github-watch"));
  privateDir(dir);
  if(mode==="inspect"){
   console.log(readFileSync(join(dir,"canary.json"),"utf8"));return;
  }
- if(mode==="observe"){
+ if(mode==="launch-agent"){
+  if(process.platform!=="darwin")fail("MAC_ONLY");
+  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin}));return;
+ }
+ if(mode==="observe"||mode==="observe-notify"){
+  let previous=null;
+  try{previous=JSON.parse(readFileSync(join(dir,"latest.json"),"utf8"));}catch{}
   let result;try{result=await observe(pin,{get});}
   catch(e){result={status:"METADATA_UNAVAILABLE_NOT_HEALTHY",observedUtc:iso(Date.now()),reviewedMain:pin,reason:/^HOLD_MAC_WATCH_[A-Z0-9_]+$/.test(e.message)?e.message:"NETWORK_OR_RESPONSE_UNKNOWN",permitDispatch:false};}
+  const gap=localGap(previous,result.observedUtc);
+  const fingerprint=localHealthFingerprint(result);
+  const old=localHealthFingerprint(previous);
+  const degraded=result.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||
+    result.lanes?.some(l=>l.level!=="RECENT_STEP_ONLY");
+  const changed=fingerprint!==old;
+  if(gap)result.localMonitorGap=gap;
+  if(mode==="observe-notify"&&process.platform==="darwin"&&(gap||changed&&(degraded||previous))){
+   // Notification is best-effort. Do not pass shell syntax or arbitrary metadata.
+   const message=gap?"Local watcher gap detected; inspect latest.json":
+    degraded?"GitHub scheduling requires attention; inspect latest.json":"GitHub metadata state changed; inspect latest.json";
+   try{execFileSync("/usr/bin/osascript",["-e",'on run argv\n display notification (item 1 of argv) with title "Travnr scheduler"\nend run',message],{timeout:5000,stdio:"ignore"});result.notificationAttempt="COMMAND_ACKNOWLEDGED_NOT_DELIVERY_PROOF";}
+   catch{result.notificationAttempt="UNVERIFIED_OR_UNAVAILABLE";}
+  }
   atom(join(dir,"latest.json"),result);console.log(JSON.stringify(result));return;
  }
  // Authenticated gh is used ONLY for the explicitly requested test dispatch.

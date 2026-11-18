@@ -8,8 +8,12 @@ permissions:
   contents: read
 jobs:
   local-backup-fixtures:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,3 +22,14 @@ jobs:
         with:
           node-version: '22'
       - run: node --test data-collection/phase5/review-tools/mac_github_backup_probe.test.mjs
+      - name: Validate actual macOS launch-agent property list without installing it
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -m 700 "$RUNNER_TEMP/travnr-watch-fixture"
+          node data-collection/phase5/review-tools/mac_github_backup_probe.mjs launch-agent "$(git rev-parse HEAD)" "$RUNNER_TEMP/travnr-watch-fixture" > "$RUNNER_TEMP/travnr-watch.plist"
+          plutil -lint "$RUNNER_TEMP/travnr-watch.plist"
+          /usr/libexec/PlistBuddy -c 'Print :StartInterval' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx 600
+          /usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx observe-notify

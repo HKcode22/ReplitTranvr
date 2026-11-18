@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {observe,canary,LANES} from "./mac_github_backup_probe.mjs";
+import {observe,canary,LANES,launchAgentXml,localGap,localHealthFingerprint} from "./mac_github_backup_probe.mjs";
 const P="a".repeat(40),NOW=Date.parse("2030-01-01T12:00Z"),T=m=>new Date(NOW-m*60000).toISOString();
 function fixture(mode="fresh"){
  const calls=[];
@@ -39,4 +39,18 @@ test("unknown acknowledgement and occupied latch cannot cause replay",async()=>{
  await assert.rejects(canary(P,{...shared,reserve:()=>{},post:async()=>{posts++;throw Error("unknown");}}),/UNKNOWN_ACK_NO_RETRY/);
  await assert.rejects(canary(P,{...shared,reserve:()=>{throw Error("already latched");},post:async()=>{posts++;}}),/already latched/);
  assert.equal(posts,1);
+});
+
+test("Mac launch agent is read-only/10-minute, escapes literal paths and refuses relative paths",()=>{
+ const x=launchAgentXml({node:"/opt/homebrew/bin/node",script:"/Users/fixture/A&B/probe.mjs",dir:"/Users/fixture/.travnr",pin:P});
+ assert(x.includes("A&amp;B"));assert(x.includes("<string>observe-notify</string>"));
+ assert(x.includes("<key>StartInterval</key><integer>600</integer>"));
+ assert(!x.includes("<string>canary</string>"));assert(!x.includes("KeepAlive"));
+ assert.throws(()=>launchAgentXml({node:"node",script:"/tmp/s",dir:"/tmp/d",pin:P}),/LAUNCH_AGENT_PATHS/);
+});
+test("local monitor separates absence or a wake gap from GitHub health",()=>{
+ assert.equal(localGap(null,T(0)),null);assert.equal(localGap({observedUtc:T(10)},T(0)),null);
+ assert.deepEqual(localGap({observedUtc:T(62)},T(0)),{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes:62});
+ assert.equal(localGap({observedUtc:T(-1)},T(0)).status,"LOCAL_CLOCK_OR_RECEIPT_UNKNOWN");
+ assert.equal(localHealthFingerprint({status:"x",lanes:[{lane:"a",level:"b"}]}),"x|a:b");
 });
