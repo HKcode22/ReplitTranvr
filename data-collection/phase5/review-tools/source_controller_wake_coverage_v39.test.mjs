@@ -11,3 +11,16 @@ test("late root becomes single or no root, never backdates",()=>{const x=buildWa
 test("native outage and overlapping wakes do not create duplicate parents",()=>{const x=buildWakes({...cfg,nativeOutages:[{start:0,end:W}],rootOutages:[{start:0,end:W}],parentBusyMs:12*M});assert(x.wakes.every((t,i)=>t>=W&&(i===0||t-x.wakes[i-1]>=12*M)))});
 test("explicit empty wake sequence is absence not default fallback",()=>{const p=loadFrozenCycle(process.cwd()),a=modelSharedSourceRunners(p,{totalSlots:20,reservedSlots:4,appCap:24,leadMinutes:90,tailMinutes:15,startupMs:120000,explicitWakes:[]});assert.equal(a.admitted,0);assert.equal(a.counts.NOT_ADMITTED_WITHIN_PREARM_LEAD,6144);assert.throws(()=>modelSharedSourceRunners(p,{totalSlots:20,reservedSlots:4,appCap:24,leadMinutes:90,tailMinutes:15,startupMs:120000,explicitWakes:[1,1]}),/WAKE_PLAN/)});
 test("full exact calendar preserves denominator and no paid authority",()=>{const p=loadFrozenCycle(process.cwd());for(const c of [{native:true,rolling:false},{native:false,rolling:true},{native:true,rolling:true,rootDelayMs:35*M}]){const a=analyze(p,c);assert.equal(a.planned,6144);assert.equal(Object.values(a.counts).reduce((a,b)=>a+b,0),6144);assert.equal(Object.values(a.primaryTest).reduce((a,b)=>a+b,0),384);assert.equal(a.phase6PaidGo,false);assert.equal(a.permitReplay,false)}});
+
+test("proposed independent direct clock has exact 10m cadence and never replays a blocked tick",()=>{
+ const q=buildWakes({from:0,to:60*M,windowOrigin:0,native:false,rolling:false,externalDirect:true,externalDelayMs:30000,
+ externalOutages:[{start:18*M,end:28*M}]});
+ assert.deepEqual(q.wakes,[8.5,28.5,38.5,48.5,58.5].map(x=>x*M));assert.equal(q.counts.externalDirect,5);assert.equal(q.maxInternalWakeGapMs,20*M);
+});
+test("direct clock remains hypothetical and shares parent no-overlap constraint",()=>{
+ const q=buildWakes({from:0,to:2*W,windowOrigin:0,native:true,rolling:true,externalDirect:true,parentBusyMs:12*M});
+ assert(q.wakes.every((t,i)=>!i||t-q.wakes[i-1]>=12*M));
+ assert(q.counts.cooldownOrBusy>0);assert(q.counts.externalDirect>0);
+ const p=loadFrozenCycle(process.cwd()),a=analyze(p,{native:false,rolling:false,externalDirect:true});
+ assert.equal(a.externalDirect,true);assert.equal(a.planned,6144);assert.equal(a.phase6PaidGo,false);assert.equal(a.permitReplay,false);
+});
