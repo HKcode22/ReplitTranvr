@@ -33,8 +33,19 @@ async function probe(){
  };
  const sha=(await get("/git/ref/heads/main"))?.object?.sha;
  if(!/^[a-f0-9]{40}$/.test(sha??"")||isMain&&sha!==e.GITHUB_SHA)hold("MAIN_DRIFT");
+
+ let runHead=e.GITHUB_SHA;
+ if(isPr){
+  // GitHub REST reports the actual PR head SHA, while checkout and
+  // GITHUB_SHA identify the synthetic merge commit. Bind both explicitly.
+  const event=JSON.parse(readFileSync(e.GITHUB_EVENT_PATH,"utf8")),p=event.pull_request;
+  if(!/^[a-f0-9]{40}$/.test(p?.head?.sha??"")||p.head.repo?.full_name!==REPO||
+     p.base?.repo?.full_name!==REPO||p.base.ref!=="main"||p.base.sha!==sha||
+     e.GITHUB_REF!=="refs/pull/"+p.number+"/merge")hold("PR_HEAD_BASE_IDENTITY");
+  runHead=p.head.sha;
+ }
  const direct=(await get("/actions/runs/"+e.GITHUB_RUN_ID));
- if(direct?.id!==Number(e.GITHUB_RUN_ID)||direct.head_sha!==e.GITHUB_SHA||direct.event!==mode||
+ if(direct?.id!==Number(e.GITHUB_RUN_ID)||direct.head_sha!==runHead||direct.event!==mode||
     direct.path!==".github/workflows/phase6-direct-recovery-tick.yml"||direct.status!=="in_progress"||
     direct.run_attempt!==1||isMain&&direct.display_title!=="P6 DIRECT RECOVERY VERIFY")hold("ACTUAL_RUN_IDENTITY");
  const routeStates=[];
@@ -88,7 +99,7 @@ async function probe(){
   maximumTemplatesInNominalHalfOpen90mWindow:maximum,maximumWindowStartUtc:new Date(maximumStart).toISOString(),
   sourcePerTickCapReviewOnly:8,sourceInFlightCapReviewOnly:24,actualCapacityOrCadenceProven:false};
  console.log(JSON.stringify({status:"ACTUAL_DIRECT_CLOCK_READONLY_METADATA_AND_PLAN_PROBE_NO_GO",runId:Number(e.GITHUB_RUN_ID),event:mode,
-  observedMainSha:sha,actualCheckoutSha:e.GITHUB_SHA,routeStates,negativeHistory:counts,previewStatus:snap.plan.status,
+  observedMainSha:sha,actualRunHeadSha:runHead,actualCheckoutSha:e.GITHUB_SHA,routeStates,negativeHistory:counts,previewStatus:snap.plan.status,
   assessments:snap.plan.assessments.map(x=>({lane:x.lane,state:x.state})),sourceTiming,githubReads:reads,
   providerCalls:0,databaseReads:0,databaseWrites:0,dispatches:0,phase6PaidGo:false}));
 }

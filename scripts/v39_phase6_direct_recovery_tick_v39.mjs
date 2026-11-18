@@ -138,7 +138,10 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
    const r=rows[0];if(!exactRoot(r)||r.id===a.id||r.status!=="completed"||r.conclusion!=="success")hold("PREDECESSOR_IDENTITY");
    const jobs=await get("/actions/runs/"+r.id+"/jobs?filter=latest&per_page=100");
    const js=bounded(jobs,"jobs");
-   if(jobs.total_count>100)hold("PREDECESSOR_JOB_HISTORY");
+   if(jobs.total_count!==3||new Set(js.map(j=>j.id)).size!==3||
+      !js.every(j=>validId(j.id)&&j.run_id===r.id&&j.head_sha===a.sha&&j.run_attempt===1&&j.status==="completed")||
+      !["offline-direct-recovery","direct-readonly-verify"].every(name=>js.filter(j=>j.name===name&&j.conclusion==="skipped"&&
+        (j.steps==null||Array.isArray(j.steps)&&j.steps.length===0)).length===1))hold("PREDECESSOR_JOB_HISTORY");
    const m=js.filter(j=>j.name==="direct-protected-recovery-tick"&&j.run_id===r.id&&j.head_sha===a.sha&&j.run_attempt===1&&j.status==="completed"&&j.conclusion==="success");
    if(m.length!==1||!["Execute one direct recovery wave and reconcile exact parent ACKs","Preserve direct terminal operational receipt"].every(name=>
       m[0].steps?.filter(s=>s.name===name&&s.status==="completed"&&s.conclusion==="success").length===1)||
