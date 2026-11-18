@@ -1,0 +1,45 @@
+name: Travnr external clock relay (isolated)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: travnr-external-clock-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  offline-tests:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test relay.test.mjs
+  independent-pulse:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      TRAVNR_RELAY_MODE: ${{ vars.TRAVNR_RELAY_MODE }}
+      TRAVNR_RELAY_MODE_SINCE_UTC: ${{ vars.TRAVNR_RELAY_MODE_SINCE_UTC }}
+      TRAVNR_APPROVED_TARGET_MAIN_SHA: ${{ vars.TRAVNR_APPROVED_TARGET_MAIN_SHA }}
+      TRAVNR_ROLLING_POLICY_FROM_UTC: ${{ vars.TRAVNR_ROLLING_POLICY_FROM_UTC }}
+      TRAVNR_ROLLING_POLICY_UNTIL_UTC: ${{ vars.TRAVNR_ROLLING_POLICY_UNTIL_UTC }}
+      TRAVNR_ROLLING_FOUR_APPROVED: ${{ vars.TRAVNR_ROLLING_FOUR_APPROVED }}
+      TRAVNR_TARGET_ACTIONS_TOKEN: ${{ secrets.TRAVNR_TARGET_ACTIONS_TOKEN }}
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node cli.mjs
