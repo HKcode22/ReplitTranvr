@@ -1,0 +1,27 @@
+name: Detached scientific outage accounting (NO provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'data-collection/phase5/review-tools/source_outage_accounting_v39*.mjs'
+      - 'data-collection/phase5/review-tools/source_shared_runner_capacity_v39*.mjs'
+      - 'data-collection/phase5/review-tools/source_controller_wake_coverage_v39*.mjs'
+      - 'data-collection/phase5/planning/phase6-source-day-*.json'
+      - '.github/workflows/phase5-detached-source-outage-accounting.yml'
+permissions:
+  contents: read
+jobs:
+  exact-frozen-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Exact plan geometry and loss classification fixtures
+        run: |
+          node --test data-collection/phase5/review-tools/source_outage_accounting_v39.test.mjs data-collection/phase5/review-tools/source_shared_runner_capacity_v39.test.mjs data-collection/phase5/review-tools/source_controller_wake_coverage_v39.test.mjs
+          node data-collection/phase5/review-tools/source_outage_accounting_v39.mjs --stress-frozen-cycle
+          node data-collection/phase5/review-tools/source_shared_runner_capacity_v39.mjs --frozen-cycle
+          node data-collection/phase5/review-tools/source_controller_wake_coverage_v39.mjs --frozen-cycle
