@@ -1,0 +1,114 @@
+name: Phase6 direct existing-worker recovery (STOP default)
+run-name: ${{ github.event_name == 'workflow_dispatch' && 'P6 DIRECT RECOVERY TICK' || 'Phase6 direct recovery tests' }}
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: string
+      approved_main_sha:
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-direct-recovery-tick.yml'
+      - 'scripts/v39_phase6_direct_recovery_tick_v39.mjs'
+      - 'tests/phase6_direct_recovery_tick_v39.test.mjs'
+      - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
+      - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
+      - 'server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('p6-direct-pr-{0}', github.event.pull_request.number) || 'p6-rolling-controller-session-main' }}
+  cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  V39_P5_SOURCE_DATABASE_URL: ''
+  P5_V39_PRE_DATABASE_URL: ''
+  P5_V39_PREPARE_DATABASE_URL: ''
+  P5_V39_T24_WITNESS_DATABASE_URL: ''
+  P6_PRIVATE_READER_DATABASE_URL: ''
+  P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+  P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+  P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+  P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL: ''
+jobs:
+  offline-direct-recovery:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/phase6_direct_recovery_tick_v39.test.mjs
+  direct-protected-recovery-tick:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 && vars.P6_ROLLING_DIRECT_RECOVERY_ENABLED == '1' &&
+      vars.P6_ROLLING_CONTROLLER_ENABLED == '1' &&
+      vars.P6_ROLLING_SCHEDULED_ROOT_ENABLED != '1' &&
+      vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED != '1' &&
+      vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED != '1' &&
+      inputs.confirm == 'RUN_ONE_REVIEWED_DIRECT_RECOVERY_TICK_AFTER_SEPARATE_PHASE6_GO' &&
+      inputs.approved_main_sha == github.sha
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      P6_ROLLING_SESSION_CONFIRM: ${{ inputs.confirm }}
+      P6_ROLLING_REQUESTED_MAIN_SHA: ${{ inputs.approved_main_sha }}
+      P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
+      P6_ROLLING_DIRECT_RECOVERY_ENABLED: ${{ vars.P6_ROLLING_DIRECT_RECOVERY_ENABLED }}
+      P6_ROLLING_DIRECT_RECOVERY_APPROVED: ${{ secrets.P6_ROLLING_DIRECT_RECOVERY_APPROVED }}
+      P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC: ${{ vars.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC }}
+      P6_ROLLING_SCHEDULED_ROOT_ENABLED: ${{ vars.P6_ROLLING_SCHEDULED_ROOT_ENABLED }}
+      P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED: ${{ vars.P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED }}
+      P6_ROLLING_WINDOW_CUSTODY_ENABLED: ${{ vars.P6_ROLLING_WINDOW_CUSTODY_ENABLED }}
+      P6_ROLLING_SESSION_APPROVED: ${{ secrets.P6_ROLLING_SESSION_APPROVED }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+      V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+      V39_P5_SEVEN_REST_BUDGET_SIGNED: ${{ secrets.V39_P5_SEVEN_REST_BUDGET_SIGNED }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_PHASE6_OWNER_APPROVED: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Execute one direct recovery wave and reconcile exact parent ACKs
+        env:
+          P6_DIRECT_RECOVERY_ENTRYPOINT: '1'
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase6_direct_recovery_tick_v39.mjs
+      - name: Preserve direct terminal operational receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-direct-terminal-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-direct-terminal.json
+          retention-days: 90
+          if-no-files-found: error
