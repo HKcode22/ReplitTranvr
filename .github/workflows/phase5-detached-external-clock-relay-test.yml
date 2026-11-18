@@ -26,6 +26,8 @@ jobs:
           node --test relay.test.mjs
           node --check pilot_owner_v2.mjs
           node pilot_owner_v2.mjs --self-test
+          node --check pilot_owner_v3.mjs
+          node pilot_owner_v3.mjs --self-test
       - name: Read one actual historical exact VERIFY receipt through the no-write log path
         working-directory: data-collection/phase5/review-tools/external-clock-relay
         env:
