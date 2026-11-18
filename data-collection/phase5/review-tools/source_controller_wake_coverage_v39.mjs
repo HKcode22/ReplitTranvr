@@ -74,6 +74,16 @@ function main(){
   const a=analyze(p,{native,rolling,rootDelayMs:delay*M,parentBusyMs:busy});
   console.log(JSON.stringify({scenario:"bounded-controller-wake",...a}));
  }
+ // Stress the exact 31-day calendar using a hypothetical direct external
+ // wake, not the currently deployed root-only relay. Six-hour outage
+ // begins at first scheduled SOURCE request; all clocks share GH runners.
+ const first=Math.min(...p.queries.map(q=>q.planned)),last=Math.max(...p.queries.map(q=>q.planned));
+ const outage={start:first-90*M,end:first+270*M},all={start:first-90*M,end:last};
+ for(const native of [false,true])for(const externalDirect of [false,true])for(const delay of [30000,15*M,35*M])for(const busy of [0,12*M]){
+  const cfg={native,rolling:true,externalDirect,externalDelayMs:delay,rootDelayMs:35*M,parentBusyMs:busy,
+    nativeOutages:native?[outage]:[all],rootOutages:[outage]};
+  console.log(JSON.stringify({scenario:"proposed-direct-external-source-wake",nativeOutageHours:6,...analyze(p,cfg)}));
+ }
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{if(process.argv[2]!=="--frozen-cycle")hold("CLI_MODE");main();}
