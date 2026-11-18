@@ -245,7 +245,7 @@ export function inspectP6RollingRetirementProof(proof,{sha,epoch,now}){
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache()}){
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  const started=now(),cache=inertCaches.get(scheduleEvidenceCache);
  if(!cache)hold("INVALID_INERT_SCHEDULE_CACHE");
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
@@ -253,15 +253,19 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   hold("NO_BOUNDED_SESSION_HISTORY_SCOPE");
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
  async function get(path,key){
-  try{
-   const res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
-   if(!res.ok)hold("GITHUB_HISTORY_UNAVAILABLE");
-   const v=await res.json();
+  for(let attempt=0;attempt<3;attempt++){
+   let res;
+   try{res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});}
+   catch{if(attempt===2)hold("GITHUB_HISTORY_TRANSPORT_UNAVAILABLE");await sleep(500*(attempt+1));continue;}
+   if([429,502,503,504].includes(res.status)&&attempt<2){await sleep(500*(attempt+1));continue;}
+   if(!res.ok)hold("GITHUB_HISTORY_HTTP_"+res.status);
+   let v;
+   try{v=await res.json();}catch{hold("GITHUB_HISTORY_INVALID_JSON");}
    if(!Number.isSafeInteger(v?.total_count)||v.total_count<0||v.total_count>100||
       !Array.isArray(v[key])||v[key].length!==v.total_count)
-    hold("GITHUB_HISTORY_INCOMPLETE");
+    hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE");
    return v[key];
-  }catch{hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE");}
+  }
  }
  async function history(route){
   const out=[];

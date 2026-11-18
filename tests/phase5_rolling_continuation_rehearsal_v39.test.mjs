@@ -118,7 +118,7 @@ test("read-only preview upstream 503 does not emit a successor and identifies fa
   if(url.includes("/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml/runs"))return reply({},503);
   return prev(url,init);
  };
- await assert.rejects(runP5RollingRehearsal(f.env,f.options),/HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE/);
+ await assert.rejects(runP5RollingRehearsal(f.env,f.options),/HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_HTTP_503/);
  assert.equal(f.posts(),0);
  assert(f.events.some(x=>x.status==="P6_READONLY_PREVIEW_HTTP_FAILURE"&&x.httpStatus===503));
 });
