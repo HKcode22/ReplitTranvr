@@ -1,0 +1,21 @@
+# Managed external backup and scientific outage checkpoint — 2026-11-18 UTC
+
+Review-only; paid GO false; production main remains pinned 45d04392e2eecfc1220230f252d2ada8cc6137e0. Isolated relay main 9cca29330405774520e0c7929f4916e24d9934e4 remains pinned through the pilot. Do not merge either active experiment dependency mid-rehearsal.
+
+## Actual evidence
+Owner supplied job 8889486 CREATE_ACK and enabled exact readback at 06:23:11.184Z; expiry 07:53:06Z. Nine intended ten-minute ticks 06:32 through 07:52. GitHub run 44252068201 job 134624892661 created 06:32:18Z, runner observed 06:32:31.588Z; exact clock-only success, 13.588s creation-to-observation, 31.588s planned-to-observation, no target/provider/DB dispatch. Cron history attribution still pending; not a full pilot PASS.
+Sustained root 44245948924 job 134604820304 successful: 9/9 ticks, drift [8,101,98,47,39,100,33,96,53] ms, max 101 ms; acknowledged successor 44251169314 (in progress at check). No paid work. Outer deadline 08:41:05Z.
+
+## Implemented isolated management
+https://github.com/HKcode22/TravnrClockRelay/pull/2 head 6f9a992268bcbfc80e3f9328344f94701299694a. Actual CI 3/3 success: relay 30/30 run 44253099391; provisioning and owner custody 18/18 run 44253099375; read-only audit 17/17 run 44253099353. Mocked failures and live GitHub metadata, not live authenticated Cron API management. No target token is available in the clock-only job or audit.
+- Owner one-time encrypted secret custody in main-only isolated environments; management requires owner review; audit only GET, separate secret. Token exposed in screenshot must be revoked, not reused.
+- Local pilot rekey uses exclusive private journal and exact header-only mutation/readback; never re-enable expired job or replay uncertain PATCH. Partial audit available immediately, complete attribution after expiry.
+- Independent disabled-first primary expiry and rolling recovery lanes, separate approval and target credential, guarded existing target workflow. Exact same-code failure before sole dispatch-capable step permits continued observation/recovery; unknown POST remains quarantined; no cross-lane failure coupling.
+- Routine read-only audit optional, default off. Clock-only mode at most 60 Cron GETs/day; recovery-pair at most 72/day under nominal schedule. Sampled receipts are not whole-history proof. Budget includes consideration of pilot audit and manual operations.
+
+## Scientific outage accounting
+https://github.com/HKcode22/ReplitTranvr/pull/871 head b34efbd120ed001a534b670a3530bed5fa7163a3; actual calendar test 20/20 run 44252736204. Exact 6144 planned request opportunities, 2048 per horizon, 4032/960/1152 train/validation/test. No actual provider loss inferred. Worst aligned physical outage 60m: 32 fully blocked +4 partial (99.41–99.48% potential total); 360m: 152+4 (97.46–97.53%). Worst aligned primary T6 test 360m: 96/384 blocked (75% potential primary test coverage), 120/6144 total blocked (98.05% total). Entire first test day opportunity outage: 192/6144 blocked, 960/1152 test opportunities remain; 5/6 planned test days remain. This is a sensitivity model, not a pass threshold.
+No post-cutoff replay, no redraw or train/test reassignment, no invented actual label. Unknown reservation/commit must stay unknown; failed or incomplete evidence is explicitly accounted against planned denominators. T6 primary, T90 paired and T24 conditional comparator unchanged. No actual DB adapter or observed loss estimates yet. If estimand no longer supported, report not estimable or exploratory narrower claim, not automatic whole-study invalidation. Preserve source rights, washout, cutoff, budget and protected splits.
+
+## Pending
+Owner rotates exposed token privately and configures custody, optionally rekeys live pilot. Complete nine-slot audit incl Cron history after expiry+grace, review isolated PR merge and post-merge audit, then provision/commission permanent lanes separately. Actual sustained successor/terminal, full latest broad production CI, actual recurring Mac installation, target delivery and integrated production read-only ledger remain unproved. No provider calls, no production DB writes, no new account, no paid activation. Scheduler cannot guarantee zero delay or full provider availability.
