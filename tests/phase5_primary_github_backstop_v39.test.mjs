@@ -9,7 +9,7 @@ function fixture(mode="success"){
  const row=(id,wf,patch={})=>({id,path:".github/workflows/"+wf,head_branch:"main",head_sha:S,run_attempt:1,event:"schedule",status:"completed",conclusion:"success",created_at:iso(START-31*MIN),...patch});
  const parent=row(111,PARENT,{event:"workflow_dispatch",display_title:"P5 PRIMARY BACKSTOP ROOT",status:"in_progress",conclusion:null,created_at:iso(START)});
  const prior=row(222,WORKER,mode==="longOutage"?{created_at:iso(START-7*60*MIN)}:{});
- const c=row(child,WORKER,{event:"workflow_dispatch",display_title:"P5 PRIMARY BACKSTOP CHILD",created_at:iso(START),conclusion:mode==="failed"?"failure":"success"});
+ const c=row(child,WORKER,{event:"workflow_dispatch",display_title:"P5 PRIMARY BACKSTOP CHILD",created_at:iso(mode==="staleChild"?START-2*MIN:START),conclusion:mode==="failed"?"failure":"success"});
  const job=(x,done)=>({total_count:1,jobs:[{id:x.id+1000,run_id:x.id,head_sha:S,run_attempt:1,name:"primary-fids-expiry",status:"completed",conclusion:"success",completed_at:iso(done),steps:[{name:"Verify exact main and execute only bounded primary FIDS expiry",status:"completed",conclusion:"success"}]}]});
  const response=(x,status=200)=>({ok:status===200,status,json:async()=>x});
  const fetcher=async(u,opt)=>{
@@ -18,7 +18,7 @@ function fixture(mode="success"){
    posts++;assert.equal(path,"/actions/workflows/"+WORKER+"/dispatches");
    assert.deepEqual(JSON.parse(opt.body).inputs,{confirm:CHILD_CONFIRM,approved_main_sha:S});
    if(mode==="unknown")throw Error("network");
-   return response({workflow_run_id:child,run_url:ROOT+"/actions/runs/"+child,html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+child});
+   const ack=mode==="oldAck"?222:child;return response({workflow_run_id:ack,run_url:ROOT+"/actions/runs/"+ack,html_url:"https://github.com/HKcode22/ReplitTranvr/actions/runs/"+ack});
   }
   if(path==="/git/ref/heads/main")return response({object:{sha:mode==="drift"?"b".repeat(40):S}});
   if(path==="/actions/runs/111")return response(parent);
@@ -62,4 +62,8 @@ test("main drift, scope drift and prohibited credentials refuse",async()=>{
 test("actual workflow binds the exact primary-only child confirmation and fresh private-mode condition",()=>{
  const w=readFileSync(new URL("../.github/workflows/"+WORKER,import.meta.url),"utf8");
  assert(w.includes(CHILD_CONFIRM));assert(w.includes("vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY'"));assert(w.includes("P5_PRIMARY_FIDS_BACKSTOP_REQUEST"));
+});
+
+test("stale run or reused acknowledged run cannot satisfy fresh wake",async()=>{
+ for(const [mode,reason] of [["staleChild",/CHILD_IDENTITY/],["oldAck",/UNKNOWN_ACK_NO_RETRY/]]){const f=fixture(mode);await assert.rejects(runBackstop(f.env,f.options),reason);assert.equal(f.posts(),1);}
 });

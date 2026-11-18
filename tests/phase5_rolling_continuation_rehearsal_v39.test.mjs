@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {runP5RollingRehearsal,admitP5RollingRehearsal} from "../scripts/v39_phase5_rolling_continuation_rehearsal.mjs";
+import {runP5RollingRehearsal,admitP5RollingRehearsal,observeP5SustainedClock,validateP5SustainedClockReceipt,SUSTAINED_CONFIRM} from "../scripts/v39_phase5_rolling_continuation_rehearsal.mjs";
 const SHA="a".repeat(40),CHAIN="b".repeat(32),REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase5-autonomous-clock-canary-no-provider.yml",START=Date.parse("2030-01-01T00:00:00.000Z");
 const iso=x=>new Date(x).toISOString(),reply=(data,status=200)=>({ok:status===200,status,json:async()=>data});
@@ -68,4 +68,34 @@ test("no production or alternate provider scope",()=>{
  const f=fixture();
  for(const patch of [{P6_ROLLING_CONTROLLER_ENABLED:"1"},{V39_PHASE6_PROCESS_ARMED:"1"},{DATABASE_URL:"forbidden"},{P5_ROLLING_REHEARSAL_HOP:"3"},{GITHUB_RUN_ATTEMPT:"2"}])
   assert.throws(()=>admitP5RollingRehearsal({...f.env,...patch},f.options.now()),/SCOPE/);
+});
+
+test("sustained clock observes nine aligned ticks and refuses invented catch-up",async()=>{
+ const start=START+120000;let t=start,calls=0;
+ const x=await observeP5SustainedClock({now:()=>t,sleep:async ms=>{t+=ms;if(++calls===2)t+=610000;},deadline:START+180*60000});
+ assert.equal(x.expectedSlots,9);assert.equal(x.missed,2);assert.equal(x.ticks.length,7);
+ assert.equal(validateP5SustainedClockReceipt(x),true);
+ const bad=structuredClone(x);bad.ticks[0].missedBefore++;
+ assert.equal(validateP5SustainedClockReceipt(bad),false);
+});
+test("sustained clock refuses regression and too-short deadline",async()=>{
+ let t=START;await assert.rejects(observeP5SustainedClock({now:()=>t,sleep:async()=>{t-=1000;},deadline:START+180*60000}),/SUSTAINED_CLOCK_WAKE/);
+ await assert.rejects(observeP5SustainedClock({now:()=>START,deadline:START+45*60000}),/SUSTAINED_CLOCK_SCOPE/);
+});
+test("sustained root keeps original bounded chain identity and forwards exact confirmation",async()=>{
+ const f=fixture(0);f.env.P5_ROLLING_REHEARSAL_CONFIRM=SUSTAINED_CONFIRM;f.env.P5_ROLLING_REHEARSAL_DEADLINE=iso(START+180*60000);
+ const old=f.options.fetcher;f.options.fetcher=async(url,init)=>{
+  if(init.method==="POST")assert.equal(JSON.parse(init.body).inputs.handoff_confirm,SUSTAINED_CONFIRM);
+  return old(url,init);
+ };
+ const result=await runP5RollingRehearsal(f.env,f.options);
+ assert.equal(result.profile,"SUSTAINED_45M");assert.equal(result.clock.ticks.length,9);
+ assert.equal(result.clock.missed,0);assert.equal(result.rehearsalDispatches,1);
+ assert.equal(result.collectionDispatches,0);assert.equal(result.providerCalls,0);
+ assert.equal(validateP5SustainedClockReceipt(result.clock),true);
+});
+test("sustained successor cannot accept short-profile predecessor receipt",async()=>{
+ const f=fixture(1);f.env.P5_ROLLING_REHEARSAL_CONFIRM=SUSTAINED_CONFIRM;f.env.P5_ROLLING_REHEARSAL_DEADLINE=iso(START+180*60000);
+ await assert.rejects(runP5RollingRehearsal(f.env,f.options),/PARENT_RECEIPT_ACK_MISMATCH/);
+ assert.equal(f.posts(),0);
 });

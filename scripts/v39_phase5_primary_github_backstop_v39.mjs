@@ -109,19 +109,19 @@ export async function runBackstop(env,{now=Date.now,sleep=ms=>new Promise(r=>set
   row(previous,WORKER);
   if(previous.id!==last.id||previous.head_sha!==a.sha||previous.status!=="completed"||previous.conclusion!=="success")hold("PRIOR_WORKER_DRIFT");
   const done=positive(await jobs(previous),previous);
-  if(done>now())hold("FUTURE_JOB");
+  if(done>now()||done<time(previous.created_at))hold("PRIOR_JOB_TIME");
   // A successful VERIFY can defer work but is never called an expiry receipt.
   if(now()-done<SLOT){emit({event:"DEFER_RECENT_WORKER_STEP",runId:previous.id,tick:ticks});continue;}
   await current();
   if(now()+11*MIN>=a.deadline)break;
-  emit({event:"DISPATCH_ATTEMPT",tick:ticks,utc:iso(now())});posts++;
+  const sent=now();emit({event:"DISPATCH_ATTEMPT",tick:ticks,utc:iso(sent)});posts++;
   let ack;
   try{
    const res=await fetcher(ROOT+"/actions/workflows/"+WORKER+"/dispatches",{method:"POST",headers:{...headers,"Content-Type":"application/json"},redirect:"error",
     signal:AbortSignal.timeout(10000),body:JSON.stringify({ref:"main",return_run_details:true,inputs:{confirm:CHILD_CONFIRM,approved_main_sha:a.sha}})});
    if(res.status!==200)hold("UNKNOWN_ACK_NO_RETRY");ack=await res.json();
    if(!id(ack?.workflow_run_id)||ack.run_url!==ROOT+"/actions/runs/"+ack.workflow_run_id||
-    ack.html_url!=="https://github.com/HKcode22/ReplitTranvr/actions/runs/"+ack.workflow_run_id||accepted.includes(ack.workflow_run_id))hold("UNKNOWN_ACK_NO_RETRY");
+    ack.html_url!=="https://github.com/HKcode22/ReplitTranvr/actions/runs/"+ack.workflow_run_id||ack.workflow_run_id===a.runId||ack.workflow_run_id===previous.id||accepted.includes(ack.workflow_run_id))hold("UNKNOWN_ACK_NO_RETRY");
   }catch{hold("UNKNOWN_ACK_NO_RETRY");}
   const childId=ack.workflow_run_id;accepted.push(childId);emit({event:"ACK",runId:childId,tick:ticks});
   const until=Math.min(a.deadline-MIN,now()+10*MIN);
@@ -135,9 +135,9 @@ export async function runBackstop(env,{now=Date.now,sleep=ms=>new Promise(r=>set
     await pause(30000);continue;
    }
    const child=row(receipt,WORKER);
-   if(child.id!==childId||child.head_sha!==a.sha||child.event!=="workflow_dispatch"||child.display_title!=="P5 PRIMARY BACKSTOP CHILD")hold("CHILD_IDENTITY");
+   if(child.id!==childId||child.head_sha!==a.sha||child.event!=="workflow_dispatch"||child.display_title!=="P5 PRIMARY BACKSTOP CHILD"||time(child.created_at)<sent-1000||time(child.created_at)>now()+1000)hold("CHILD_IDENTITY");
    if(child.status==="completed"){
-    if(child.conclusion!=="success")hold("CHILD_FAILED_NO_RETRY");positive(await jobs(child),child);
+    if(child.conclusion!=="success")hold("CHILD_FAILED_NO_RETRY");const completed=positive(await jobs(child),child);if(completed<time(child.created_at)||completed>now())hold("CHILD_JOB_TIME");
     terminal=true;emit({event:"CHILD_JOB_COMPLETED_NOT_DELETION_PROOF",runId:childId,tick:ticks});break;
    }
    if(now()+30000>=until)break;await pause(30000);
