@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'data-collection/phase5/review-tools/source_outage_accounting_v39*.mjs'
+      - 'data-collection/phase5/review-tools/source_shared_runner_capacity_v39*.mjs'
       - 'data-collection/phase5/planning/phase6-source-day-*.json'
       - '.github/workflows/phase5-detached-source-outage-accounting.yml'
 permissions:
@@ -19,5 +20,6 @@ jobs:
         with: {node-version: '22'}
       - name: Exact plan geometry and loss classification fixtures
         run: |
-          node --test data-collection/phase5/review-tools/source_outage_accounting_v39.test.mjs
+          node --test data-collection/phase5/review-tools/source_outage_accounting_v39.test.mjs data-collection/phase5/review-tools/source_shared_runner_capacity_v39.test.mjs
           node data-collection/phase5/review-tools/source_outage_accounting_v39.mjs --stress-frozen-cycle
+          node data-collection/phase5/review-tools/source_shared_runner_capacity_v39.mjs --frozen-cycle
