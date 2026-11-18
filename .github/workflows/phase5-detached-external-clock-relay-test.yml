@@ -23,3 +23,5 @@ jobs:
           node --check cli.mjs
           node --check cron_bootstrap.mjs
           node --test relay.test.mjs
+          node --check pilot_owner_v2.mjs
+          node pilot_owner_v2.mjs --self-test
