@@ -27,7 +27,7 @@ function fixture(fault=""){
  const env={...Object.fromEntries(flags.map(k=>[k,"1"])),GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",
   GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_RUN_ID:"12345",GITHUB_SHA:sha,
   V39_P5_APPROVED_CODE_SHA:sha,P6_ROLLING_REQUESTED_MAIN_SHA:sha,P6_ROLLING_SESSION_CONFIRM:DIRECT_CONFIRM,
-  P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:iso(start-4*H),P5_CD_GH_PRE_STOP:"0",ADB_AUTO_COLLECT:"0",GITHUB_TOKEN:"synthetic-test-token-no-access",
+  P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:iso(start-5*H),P5_CD_GH_PRE_STOP:"0",ADB_AUTO_COLLECT:"0",GITHUB_TOKEN:"synthetic-test-token-no-access",
   V39_P5_MANIFEST_SHA256:hash,V39_P5_CALENDAR_HASH:hash,V39_P5_RELEASE_SHA256:hash,V39_P5_RIGHTS_SHA256:hash,
   P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(policy)};
  let self={id:12345,path:".github/workflows/"+DIRECT_WF,head_sha:sha,head_branch:"main",event:"workflow_dispatch",run_attempt:1,
@@ -94,7 +94,9 @@ function fixture(fault=""){
    if(st==="failure"&&route.lane==="SOURCE_POST"&&["oldSourceFailure","overflowFailure"].includes(fault))
     return wrap([{id:11111,status:"completed",conclusion:"failure",created_at:iso(start-3.5*H)}]);
    if(st)return wrap([]);
-   return wrap(runs.filter(r=>r.path.endsWith("/"+route.workflow)&&r.event===ev&&!(fault==="lostAck"&&prev&&r.status==="in_progress")));
+   const bounds=u.searchParams.get("created")?.split("..").map(Date.parse);
+   assert(bounds?.length===2&&bounds.every(Number.isFinite),"exact bounded route history query");
+   return wrap(runs.filter(r=>r.path.endsWith("/"+route.workflow)&&r.event===ev&&Date.parse(r.created_at)>=bounds[0]&&Date.parse(r.created_at)<=bounds[1]&&!(fault==="lostAck"&&prev&&r.status==="in_progress")));
   }};
  function advance(receipt,{settle=false,fail=false}={}){
   prev={...self,status:"completed",conclusion:"success"};previousReceipt=receipt;
@@ -205,4 +207,48 @@ test("lost inherited ACK in ordinary listing cannot be silently replaced by new 
  f.advance(a);
  await assert.rejects(runDirectTick(f.env,f.options),/NO_REPLAY/);
  assert.equal(f.posts(),n);
+});
+
+function oldEarlyDraw(f,age,{status="completed",conclusion="success"}={}){
+ const route=P6_ROLLING_ROUTES.find(r=>r.lane==="EARLY_DRAW");
+ f.runs.push({id:19876,path:".github/workflows/"+route.workflow,head_branch:"main",head_sha:sha,
+  event:"workflow_dispatch",run_attempt:1,status,conclusion,created_at:iso(start-age)});
+ return route;
+}
+test("direct tick retains EARLY_DRAW history at 3h59m without widening the ordinary 3h lookback",async()=>{
+ const f=fixture(),r=oldEarlyDraw(f,239*MIN);
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(out.status,"DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF");
+ assert(!out.terminalAcknowledgements.some(x=>x.lane==="EARLY_DRAW"));
+ assert(out.terminalAcknowledgements.some(x=>x.lane==="SOURCE_POST"));
+ assert.equal(out.historyEpochUtc,iso(start-3*H));
+ assert.equal(out.earlyDrawHistoryEpochUtc,iso(start-4*H));
+ const queries=f.calls.filter(x=>x.method==="GET"&&new URL(x.url).searchParams.has("event"));
+ assert(queries.length>0);
+ for(const q of queries){
+  const u=new URL(q.url),expected=u.pathname.includes("/"+r.workflow+"/")?start-4*H:start-3*H;
+  assert.equal(u.searchParams.get("created").split("..")[0],iso(expected));
+ }
+ assert(out.githubRequests<=420);
+});
+test("EARLY_DRAW exact four-hour boundary is eligible, while a 3h59m already active parent cannot overlap",async()=>{
+ const a=fixture();oldEarlyDraw(a,240*MIN);
+ const x=await runDirectTick(a.env,a.options);
+ assert(x.terminalAcknowledgements.some(q=>q.lane==="EARLY_DRAW"));
+ const b=fixture();oldEarlyDraw(b,239*MIN,{status:"in_progress",conclusion:null});
+ const y=await runDirectTick(b.env,b.options);
+ assert(!y.terminalAcknowledgements.some(q=>q.lane==="EARLY_DRAW"));
+});
+test("EARLY_DRAW cooldown cannot extend before the reviewed activation epoch",async()=>{
+ const f=fixture();oldEarlyDraw(f,239*MIN);
+ f.env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC=iso(start-30*MIN);
+ const x=await runDirectTick(f.env,f.options);
+ assert.equal(x.earlyDrawHistoryEpochUtc,iso(start-30*MIN));
+ assert.equal(x.historyEpochUtc,iso(start-30*MIN));
+ assert(x.terminalAcknowledgements.some(q=>q.lane==="EARLY_DRAW"));
+});
+test("unreviewed extended history is refused on non-direct assessment",()=>{
+ const r=P6_ROLLING_ROUTES.find(x=>x.lane==="EARLY_DRAW");
+ const snap={workflow:r.workflow,complete:true,runs:[],active:[]};
+ assert.throws(()=>assessP6RollingRoute(r,snap,{sha,epoch:start-3*H,clock:start,earlyDrawHistoryEpoch:start-4*H}),/BAD_EARLY_DRAW_HISTORY_SCOPE/);
 });

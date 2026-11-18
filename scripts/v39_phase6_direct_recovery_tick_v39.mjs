@@ -93,10 +93,15 @@ export function readDirectReceipt(raw,{run,sha,since,policySha256,clock,epoch,di
 export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),fetcher=fetch,readPlan,emit=()=>{},readArchive=downloadDirectArchive}={}){
  const start=now(),a=admitDirectTick(env,start,readPlan),deadline=Math.min(start+7*MIN,a.calendar.until);
  const epoch=Math.max(a.since,Math.floor((start-3*60*MIN)/1000)*1000);
+ // EARLY_DRAW has a 240-minute cooldown, longer than ordinary 3h
+ // preview. Retain that exact lane's full cooldown without adding
+ // request load to the six fast lanes and retention monitor.
+ const earlyDrawHistoryEpoch=Math.max(a.since,Math.floor((start-240*MIN)/1000)*1000);
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  let journal,attempted=false,requests=0,priorVerified=false,prior=[],predecessorRunId=null;
  const report=(status,fields={})=>({schema:"v39.phase6.direct-recovery-tick.v2",status,runId:a.id,reviewedMainSha:a.sha,
   activationUtc:iso(a.since),policySha256:a.calendar.policySha256,historyEpochUtc:iso(epoch),
+  earlyDrawHistoryEpochUtc:iso(earlyDrawHistoryEpoch),
   predecessorRunId,githubRequests:requests,...fields,...noCount});
  const api=async(url,init)=>{
   const u=new URL(url);
@@ -218,7 +223,7 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
     try{
      const snapshots=[];
      const result=await readP6RollingGithubSnapshot({sha:a.sha,epoch,token:env.GITHUB_TOKEN,now,fetcher:api,sleep,
-      directRecovery:true,verifySnapshot:(r,x)=>{journal.assertVisible(r,x);snapshots.push(x);},scheduleEvidenceCache:cache});
+      directRecovery:true,earlyDrawHistoryEpoch,verifySnapshot:(r,x)=>{journal.assertVisible(r,x);snapshots.push(x);},scheduleEvidenceCache:cache});
      if(result.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CURRENT_ROUTE_HISTORY");
      return {result,snapshots};
     }catch(e){
