@@ -1,0 +1,24 @@
+# Nov 18 UTC — external clock installation evidence and one-time owner handoff
+
+Production main was independently rechecked as 45d04392e2eecfc1220230f252d2ada8cc6137e0; exact sustained rehearsal root 44245948924/job 134604820304 was still in progress. Do not merge, repin, or restart the ongoing trial just to install a backup. No provider requests, production DB writes, migrations, paid GO or production settings changes in this checkpoint.
+
+## Actual proof, not only mock tests
+
+- Isolated repository HKcode22/TravnrClockRelay main is 9cca29330405774520e0c7929f4916e24d9934e4, existing v1 installed clock workflow blob 9fcb3cafb28718384d501f8f9248b90746196415.
+- Detached one-shot PR https://github.com/HKcode22/TravnrClockRelay/pull/1, head e4a618efea179e1a65d0f42662670394e9c9c04e, actual review CI run 44249037223/job 134614914938. Exactly one actual accepted clock-only dispatch, independently read completed relay run 44249060068/job 134614996130. Request-to-runner observation 19,563 ms; creation-to-runner 19,272 ms. Zero provider calls, DB reads/writes, target dispatches, paid authority. This is a GitHub API/runner test, NOT external cron execution or an SLA. Keep PR detached; no rerun after unknown acknowledgment.
+- Production detached PR #870 exact head 376c24998f74881cc91dab0b0e1f767f4f2461d0, focused run 44248824109/job 134614211556 success: 28/28 relay cases, 16/16 older pilot cases, 22/22 hardened pilot cases, real historical VERIFY log proof. At observation broader CI 5/6 success with offline safety pending. Actual installed relay intentionally stays v1 during clock-only pilot. Future forwarding code remains uninstalled, no target PAT set by this work.
+- Hardened pilot script blob 4f746daa64dca39f3fff93d2af54732747798baa. Preserves pre-enable journal timestamp, fsyncs private journal on attempt/ACK/readback boundaries, separates ambiguous first slot from missing slot, reconciles actual Cron timestamp and jitter, validates runner time against exact job bounds, rejects unexpected history, reports actual p50/max and separate 120-second diagnostic acceptance. Read-only inspect after unknown setup; never repeat PUT/PATCH blindly. Real Cron service commissioning still outstanding.
+- Mac watcher PR #868 exact e3f5bc53085f6175e4e7e0ed9caa74ba7f360118 all 6/6 CI successful, mac and Linux 12/12 each and actual authenticated follow-main metadata proof. Script blob 6483b87be960419ec7d29c7bb7aa93548c7785b8; prior owner Mac one-shot three GitHub handoffs succeeded (12.164–16.121 seconds), not continuous Mac monitor installation proof.
+- Hourly ChatGPT incident watcher already enabled; no change to its schedule or authority.
+
+## Owner-only 90-minute external pilot
+
+Immediately revoke the credential exposed in the screenshot. Generate a replacement fine-grained GitHub token limited to **only** HKcode22/TravnrClockRelay, Actions read/write, short expiry, no contents write or production access. Do not paste credentials in chat. Cron receives only the isolated repository credential; the existing cron account API key is entered locally and never printed. No production key is needed.
+
+Use the hash-bound v3 pilot helper in a private local directory. Set isolated repo variable TRAVNR_RELAY_MODE to CLOCK_ONLY only if absent; if different, hold. No target secrets. Call setup once; later re-use same private journal and call audit. If an unacknowledged attempt exists, inspect only. A pre-existing matching job without a journal is a HOLD. Never delete a journal to repeat setup. Only a fully verified pilot can be used in the forwarding review; a 200 response alone is not execution proof.
+
+## Boundaries and follow-up
+
+The service API docs https://docs.cron-job.org/rest-api.html support the fixed job CRUD, history, expiry and jitter fields; the 100-request daily management quota is independent of execution frequency. Use a 90-minute trial at ten-minute intervals, not continuous extra runner load yet. The 120-second target is a diagnostic threshold, not a scientific cutoff. The final objective is zero valid-window losses and zero duplicate/early/late-forbidden provider requests, not a promise that hosted GitHub or an external scheduler has zero latency. GitHub documents schedule delays and possible dropped jobs under high load: https://docs.github.com/en/actions/how-tos/troubleshoot-workflows.
+
+The longer no-provider root must finish with independently verified exact successor and terminal receipts before declaring sustained readiness; keep 90-minute prearm, scientific cutoffs, 24-hour treatment washout and actual effective runner capacity review. No new collector, database, paid hosting, or extra production migration. Actual calendar/source rights/manifest/STOP/paid GO remain separate gates. Actual live Cron-job.org verification and local recurring Mac launchd commissioning require owner execution, not assumed from a screenshot.
