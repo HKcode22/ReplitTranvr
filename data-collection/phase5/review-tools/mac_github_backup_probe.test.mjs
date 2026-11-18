@@ -97,3 +97,15 @@ test("follow launchd mode requires authentication, has no dispatch or token",()=
  const x=launchAgentXml({...opts,authenticated:true,ghExecutable:"/gh"});
  assert(x.includes("<string>observe-follow-auth-notify</string>"));assert(!x.includes("GH_TOKEN"));assert(!x.includes("<string>canary</string>"));
 });
+
+test("anonymous observer never labels manual primary VERIFY as fresh APPLY",async()=>{
+ const f=fixture();
+ const x=await observe(P,{...f,get:async path=>{
+  if(path.includes(LANES[0].file)){const v=await f.get(path);v.workflow_runs[0].event="workflow_dispatch";v.workflow_runs[0].display_title="Manual VERIFY";return v;}
+  if(path.includes("/111/"))assert.fail("VERIFY must not be queried as APPLY");
+  return f.get(path);
+ }});
+ assert.equal(x.lanes[0].level,"UNKNOWN_NO_VERIFIED_STEP");
+ assert.equal(x.lanes[0].lastObservedSuccessfulStep,null);
+ assert.equal(x.lanes[1].level,"RECENT_STEP_ONLY");
+});
