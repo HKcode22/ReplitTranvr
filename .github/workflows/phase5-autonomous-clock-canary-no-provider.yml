@@ -171,7 +171,7 @@ jobs:
   rolling-no-provider-rehearsal:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: ${{ inputs.handoff_confirm == 'REHEARSE_THREE_SUSTAINED_GITHUB_CLOCK_SESSIONS_NO_PROVIDER_NO_DB' && 55 || 6 }}
     permissions:
       contents: read
       actions: write
