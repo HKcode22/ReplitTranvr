@@ -1,0 +1,28 @@
+{
+  "schema": "v39.phase5.actual-owner-private-asset-readback.v1",
+  "status": "ORIGINAL_LOCAL_SIGNER_DIRECTORY_MISSING_TIMEZONE_EXACTLY_RECOVERED_NO_GO",
+  "main": "ea89308f468494d848f549539200f73f848a4fa7",
+  "manifestCandidateSha256": "e5315b35fb8978d1de823bb1953191d976ccf093594a656890fb16d91f88a3e0",
+  "signers": {
+    "state": "PRIOR_DIRECTORY_NOT_PRESENT_NO_REGEN",
+    "verifiedKeys": 0,
+    "expectedKeys": 6
+  },
+  "timezone": {
+    "sha256": "4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534",
+    "bytes": 14722,
+    "airports": 1017,
+    "groups": 168,
+    "recoveredReadOnly": true
+  },
+  "createdOrRotatedKeys": 0,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "githubSecretWrites": 0,
+  "workflowDispatches": 0,
+  "signerCustodyApproved": false,
+  "sourceRightsApproved": false,
+  "actualAuthorizationId": null,
+  "phase6PaidGo": false,
+  "provenance": "actual owner pasted exact shell receipt; private filesystem not accessible to assistant; original keys may exist elsewhere"
+}
