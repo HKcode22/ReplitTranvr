@@ -1,0 +1,347 @@
+{
+  "schema": "v39.phase5.actual-scheduler-operational-evidence-review-only.v1",
+  "status": "ACTUAL_DEPLOYED_CLOCK_AND_NATIVE_EXPIRY_EVIDENCE_NOT_RELEASE_APPROVAL",
+  "production": {
+    "main": "ea89308f468494d848f549539200f73f848a4fa7",
+    "ciRunId": 44342306724,
+    "ciJobId": 134935280262,
+    "fullTestSuitePassed": 4333,
+    "fullTestSuiteSkipped": 221,
+    "testFilesPassed": 624,
+    "testFilesSkipped": 42
+  },
+  "relay": {
+    "main": "b3a775b4ec7213af796bb8c727b69c3d0feb8bb7",
+    "fixPr": 20,
+    "priorFailedRunId": 44343687014,
+    "priorAcknowledgedReadonlyTargetRunId": 44343750626,
+    "readOnlyActivationUtc": "2026-11-18T16:17:17.321Z",
+    "readOnlyExpiresUtc": "2026-11-18T18:17:17.321Z",
+    "runId": 44345668673,
+    "jobId": 134947265282,
+    "receipt": {
+      "status": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "relayRunId": 44345668673,
+      "mode": "ROLLING_ROOT",
+      "actualCreatedUtc": "2026-11-18T16:18:19Z",
+      "runnerObservedUtc": "2026-11-18T16:18:27.903Z",
+      "creationToObservedMs": 8903,
+      "targetRunId": 44345719185,
+      "targetStatus": "queued",
+      "targetWorkflow": "phase6-direct-recovery-tick.yml",
+      "relayDispatches": 1,
+      "providerCallsByRelay": 0,
+      "databaseReadsByRelay": 0,
+      "databaseWritesByRelay": 0,
+      "paidAuthorityGranted": false
+    }
+  },
+  "directVerification": {
+    "runId": 44345719185,
+    "jobId": 134947440736,
+    "receipt": {
+      "status": "ACTUAL_DIRECT_CLOCK_READONLY_METADATA_AND_PLAN_PROBE_NO_GO",
+      "runId": 44345719185,
+      "event": "workflow_dispatch",
+      "observedMainSha": "ea89308f468494d848f549539200f73f848a4fa7",
+      "actualRunHeadSha": "ea89308f468494d848f549539200f73f848a4fa7",
+      "actualCheckoutSha": "ea89308f468494d848f549539200f73f848a4fa7",
+      "routeStates": [
+        {
+          "lane": "SOURCE_POST",
+          "workflow": "phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+          "state": "active"
+        },
+        {
+          "lane": "PRE_ENROLLMENT",
+          "workflow": "phase6-private-later-enrollment.yml",
+          "state": "active"
+        },
+        {
+          "lane": "T24",
+          "workflow": "phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+          "state": "active"
+        },
+        {
+          "lane": "LATER_PRE",
+          "workflow": "phase5-cd-github-bounded-pre-tick.yml",
+          "state": "active"
+        },
+        {
+          "lane": "DAILY_PREPARE",
+          "workflow": "phase6-nonpaid-source-day-prepare-publish.yml",
+          "state": "active"
+        },
+        {
+          "lane": "PRE_RECOVERY",
+          "workflow": "phase5-cd-github-existing-queue-lease-watchdog.yml",
+          "state": "active"
+        },
+        {
+          "lane": "EARLY_DRAW",
+          "workflow": "phase5-six-slot-approved-early-four-airport-draw.yml",
+          "state": "active"
+        },
+        {
+          "lane": "RETENTION_MONITOR",
+          "workflow": "phase5-private-blob-retention-readonly-sentinel-no-provider.yml",
+          "state": "active"
+        }
+      ],
+      "negativeHistory": [
+        {
+          "conclusion": "failure",
+          "totalCount": 2,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        },
+        {
+          "conclusion": "cancelled",
+          "totalCount": 0,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        },
+        {
+          "conclusion": "timed_out",
+          "totalCount": 0,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        },
+        {
+          "conclusion": "action_required",
+          "totalCount": 0,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        },
+        {
+          "conclusion": "stale",
+          "totalCount": 0,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        },
+        {
+          "conclusion": "neutral",
+          "totalCount": 0,
+          "matchingExistingWorkerCount": 0,
+          "complete": true
+        }
+      ],
+      "previewStatus": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "assessments": [
+        {
+          "lane": "SOURCE_POST",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "PRE_ENROLLMENT",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "T24",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "LATER_PRE",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "DAILY_PREPARE",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "PRE_RECOVERY",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "EARLY_DRAW",
+          "state": "DUE_REVIEWED_ROUTE"
+        },
+        {
+          "lane": "RETENTION_MONITOR",
+          "state": "DUE_REVIEWED_ROUTE"
+        }
+      ],
+      "sourceTiming": {
+        "firstSourceUtc": "2026-11-19T23:45:00.000Z",
+        "firstWaveTemplates": 4,
+        "admissibleParentObservationFromUtc": "2026-11-19T22:15:00.000Z",
+        "admissibleParentObservationThroughUtc": "2026-11-19T23:30:00.000Z",
+        "nominalExternalTicks": [
+          "2026-11-19T22:18:00.000Z",
+          "2026-11-19T22:28:00.000Z",
+          "2026-11-19T22:38:00.000Z",
+          "2026-11-19T22:48:00.000Z",
+          "2026-11-19T22:58:00.000Z",
+          "2026-11-19T23:08:00.000Z",
+          "2026-11-19T23:18:00.000Z",
+          "2026-11-19T23:28:00.000Z"
+        ],
+        "conservativeAssumedClockToParentObservationMinutes": [
+          {
+            "minutes": 0,
+            "eligibleTickCount": 8
+          },
+          {
+            "minutes": 2,
+            "eligibleTickCount": 8
+          },
+          {
+            "minutes": 5,
+            "eligibleTickCount": 7
+          },
+          {
+            "minutes": 10,
+            "eligibleTickCount": 7
+          },
+          {
+            "minutes": 20,
+            "eligibleTickCount": 6
+          }
+        ],
+        "totalTemplates": 6144,
+        "distinctRequestWaves": 1448,
+        "maxTemplatesAtSameInstant": 8,
+        "maximumTemplatesInNominalHalfOpen90mWindow": 48,
+        "maximumWindowStartUtc": "2026-11-26T14:15:00.000Z",
+        "sourcePerTickCapReviewOnly": 8,
+        "sourceInFlightCapReviewOnly": 24,
+        "cadenceScenarios": [
+          {
+            "cooldownMinutes": 10,
+            "jitterMinutes": [
+              2,
+              4
+            ],
+            "parentMinutes": 1,
+            "tailMinutes": 6,
+            "admitted": 6044,
+            "missed": 100,
+            "peak": 24,
+            "skippedByCooldown": 2459,
+            "skippedByActive": 0,
+            "simulationOnly": true
+          },
+          {
+            "cooldownMinutes": 8,
+            "jitterMinutes": [
+              2,
+              4
+            ],
+            "parentMinutes": 1,
+            "tailMinutes": 6,
+            "admitted": 6144,
+            "missed": 0,
+            "peak": 24,
+            "skippedByCooldown": 0,
+            "skippedByActive": 0,
+            "simulationOnly": true
+          },
+          {
+            "cooldownMinutes": 8,
+            "jitterMinutes": [
+              2,
+              4
+            ],
+            "parentMinutes": 12,
+            "tailMinutes": 6,
+            "admitted": 6044,
+            "missed": 100,
+            "peak": 24,
+            "skippedByCooldown": 0,
+            "skippedByActive": 2459,
+            "simulationOnly": true
+          },
+          {
+            "cooldownMinutes": 8,
+            "jitterMinutes": [
+              2,
+              4
+            ],
+            "parentMinutes": 5,
+            "tailMinutes": 10,
+            "admitted": 6144,
+            "missed": 0,
+            "peak": 24,
+            "skippedByCooldown": 0,
+            "skippedByActive": 0,
+            "simulationOnly": true
+          }
+        ],
+        "actualCapacityOrCadenceProven": false
+      },
+      "githubReads": 38,
+      "providerCalls": 0,
+      "databaseReads": 0,
+      "databaseWrites": 0,
+      "dispatches": 0,
+      "phase6PaidGo": false
+    }
+  },
+  "nativePrimary": {
+    "runId": 44346175227,
+    "jobId": 134949045075,
+    "event": "schedule",
+    "receipt": {
+      "providerCalls": 0,
+      "objectDeletions": 0,
+      "backupOrPitrVerified": false,
+      "completeRetentionDeploymentVerified": false,
+      "phase6PaidGo": false,
+      "distinctDbActorsVerified": true,
+      "privateCommissionState": "GRANTED",
+      "status": "PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED",
+      "before": {
+        "schema": "v39.phase5.primary-fids-expiry-status.v1",
+        "observedAtUtc": "2026-11-18T16:21:16.609Z",
+        "liveOriginals": 0,
+        "eligibleOriginals": 0,
+        "hardDueOriginals": 0,
+        "eligibleNextHour": 0,
+        "hardDueNextHour": 0,
+        "unboundLiveOriginals": 0,
+        "markedExpiredPayloadPresent": 0,
+        "unlinkedUnexpiredPopulation": 0,
+        "unexpiredPopulationWithoutLiveOriginal": 0,
+        "deletionStopUnresolved": false,
+        "providerCalls": 0,
+        "databaseWrites": 0,
+        "backupOrPitrVerified": false,
+        "completeRetentionDeploymentVerified": false,
+        "phase6PaidGo": false
+      },
+      "after": {
+        "schema": "v39.phase5.primary-fids-expiry-status.v1",
+        "observedAtUtc": "2026-11-18T16:21:16.609Z",
+        "liveOriginals": 0,
+        "eligibleOriginals": 0,
+        "hardDueOriginals": 0,
+        "eligibleNextHour": 0,
+        "hardDueNextHour": 0,
+        "unboundLiveOriginals": 0,
+        "markedExpiredPayloadPresent": 0,
+        "unlinkedUnexpiredPopulation": 0,
+        "unexpiredPopulationWithoutLiveOriginal": 0,
+        "deletionStopUnresolved": false,
+        "providerCalls": 0,
+        "databaseWrites": 0,
+        "backupOrPitrVerified": false,
+        "completeRetentionDeploymentVerified": false,
+        "phase6PaidGo": false
+      },
+      "receipts": [],
+      "databaseWritesPossible": false,
+      "reviewedMainSha": "ea89308f468494d848f549539200f73f848a4fa7"
+    }
+  },
+  "scope": {
+    "providerCalls": 0,
+    "productionDbWrites": 0,
+    "paidCollectionProven": false,
+    "realFullStudyCadenceProven": false,
+    "providerRightsApproved": false,
+    "scientificFreezeApproved": false,
+    "independentOperationalReleaseApproved": false,
+    "completePrivateRetentionOrBackupVerified": false,
+    "phase6PaidGo": false
+  }
+}
