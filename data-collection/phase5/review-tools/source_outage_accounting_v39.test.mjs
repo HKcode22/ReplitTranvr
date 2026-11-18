@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildPlan,stressPhysicalOutage,assessSourceLedger,pairCoverage,loadFrozenCycle,split} from "./source_outage_accounting_v39.mjs";
+import {buildPlan,stressPhysicalOutage,worstPhysicalOutage,assessSourceLedger,pairCoverage,loadFrozenCycle,split} from "./source_outage_accounting_v39.mjs";
 const T=Date.parse("2026-11-20T00:00:00.000Z"),i=x=>new Date(x).toISOString(),H="a".repeat(64);
 function day(d=1){
  const templates=["T-24h","T-6h","T-90m"].flatMap((h,k)=>["HUB","MID_A","MID_B","REGIONAL"].map((slot,j)=>{
@@ -35,3 +35,14 @@ const pairs={schema:"v39.review.private-aggregate-pair-coverage.v1",partition:"t
 test("primary T6 and paired T90 remain separately potentially estimable if T24 is absent",()=>{const a=pairCoverage(pairs);assert.equal(a.t6.pairs,35);assert.equal(a.t6.coverage,.35);assert.equal(a.t6t90.pairs,25);assert.equal(a.t6t24.status,"NOT_ESTIMABLE")});
 test("unknown label denominator cannot be inflated and no forced zero loss",()=>{assert.throws(()=>pairCoverage({...pairs,t6t90CommonLabelPairs:40}),/PAIR_DENOMINATOR/);const a=pairCoverage({...pairs,eligibleFrame:0,certifiedActualLabel:0,t6ValidPrediction:0,t90ValidPrediction:0,t6LabelPairs:0,t6t90CommonLabelPairs:0});assert.equal(a.t6.coverage,null);assert.equal(a.t6.status,"NOT_ESTIMABLE")});
 test("actual committed calendar contains all 6144 planned templates and exact horizon/slot counts",()=>{const a=loadFrozenCycle(process.cwd()),r=stressPhysicalOutage(a,[]);assert.equal(a.queries.length,6144);assert.equal(Object.keys(r.by.day).length,31);assert.equal(r.by.horizon["T-6h"].planned,2048);assert.equal(r.by.slot.REGIONAL.planned,1536);assert.equal(Object.values(r.by.split).reduce((s,x)=>s+x.planned,0),6144)});
+
+test("worst contiguous outage sweep agrees with brute endpoint evaluation",()=>{
+ const x=worstPhysicalOutage(p,60),duration=60*60000;
+ const brute=Math.max(...p.queries.flatMap(q=>[q.hard-duration,q.planned]).map(at=>p.queries.filter(q=>at<=q.planned&&at+duration>=q.hard).length));
+ assert.equal(x.objectiveFullyBlocked,brute);assert.equal(x.allRequests.blocked,brute);
+});
+test("worst objective for first-cycle T6 protected test split does not alter denominator",()=>{
+ const z=loadFrozenCycle(process.cwd()),x=worstPhysicalOutage(z,360,{horizon:"T-6h",partition:"test"});
+ assert.equal(x.objectivePlanned,384);assert(x.objectiveFullyBlocked>0);assert.equal(x.allRequests.plannedRequests,6144);
+ assert.equal(x.permitReplay,false);assert.equal(x.studyReleaseApproved,false);
+});
