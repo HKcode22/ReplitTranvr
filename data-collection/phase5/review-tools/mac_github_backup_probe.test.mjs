@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {observe,canary,LANES,launchAgentXml,localGap,localHealthFingerprint,authenticatedReadArgs} from "./mac_github_backup_probe.mjs";
+import {observe,observeFollow,canary,LANES,launchAgentXml,localGap,localHealthFingerprint,authenticatedReadArgs} from "./mac_github_backup_probe.mjs";
 const P="a".repeat(40),NOW=Date.parse("2030-01-01T12:00Z"),T=m=>new Date(NOW-m*60000).toISOString();
 function fixture(mode="fresh"){
  const calls=[];
@@ -63,4 +63,37 @@ test("authenticated watcher uses only exact GET endpoints and stores no auth tok
  const x=launchAgentXml({node:"/opt/homebrew/bin/node",script:"/tmp/probe.mjs",dir:"/tmp/d",pin:P,authenticated:true,ghExecutable:"/opt/homebrew/bin/gh"});
  assert(x.includes("<string>observe-auth-notify</string>"));assert(x.includes("TRAVNR_WATCH_GH_BINARY"));assert(!x.includes("GH_TOKEN"));
  assert.throws(()=>launchAgentXml({node:"/n",script:"/s",dir:"/d",pin:P,authenticated:true,ghExecutable:"gh"}),/LAUNCH_AGENT_GH_PATH/);
+});
+
+test("follow main observes exact live head, preserves reviewed pin and never grants dispatch",async()=>{
+ const f=fixture(),different="b".repeat(40),result=await observeFollow(different,f);
+ assert.equal(result.reviewedMain,different);assert.equal(result.observedMain,P);
+ assert.equal(result.observedMainMatchesReviewedPin,false);assert.equal(result.permitDispatch,false);
+ assert.equal(result.metadataForObservedMain,true);assert(result.lanes.every(l=>l.level==="RECENT_STEP_ONLY"));
+ assert.equal(f.calls.length,7);
+});
+test("follow main refuses a mixed snapshot when head changes mid-observation",async()=>{
+ const f=fixture();let reads=0;
+ const result=await observeFollow(P,{...f,get:async path=>path==="/git/ref/heads/main"&&++reads===3?{object:{sha:"b".repeat(40)}}:f.get(path)});
+ assert.equal(result.status,"MAIN_MOVED_DURING_READ_NOT_HEALTHY");assert.equal(result.permitDispatch,false);
+});
+test("follow mode does not miscount manual VERIFY or a skipped APPLY as fresh",async()=>{
+ const f=fixture();const get=async path=>{
+  if(path.includes(LANES[0].file)){
+   const a=(await f.get(path)).workflow_runs[0];
+   return {total_count:3,workflow_runs:[{...a,id:113,event:"workflow_dispatch",created_at:T(2)},{...a,id:112,created_at:T(3)},{...a,id:111,created_at:T(35)}]};
+  }
+  if(path.includes("/112/"))return {total_count:1,jobs:[{id:1112,run_id:112,head_sha:P,run_attempt:1,name:LANES[0].job,status:"completed",conclusion:"skipped",completed_at:T(2),steps:[]}]};
+  if(path.includes("/111/")){const a=await f.get(path);a.jobs[0].completed_at=T(34);return a;}
+  if(path.includes("/113/"))assert.fail("manual verify must not count as APPLY");
+  return f.get(path);
+ };
+ const result=await observeFollow(P,{...f,get});
+ assert.equal(result.lanes[0].lastObservedSuccessfulStep.runId,111);assert.equal(result.lanes[0].level,"WARN_STALE_STEP");
+});
+test("follow launchd mode requires authentication, has no dispatch or token",()=>{
+ const opts={node:"/n",script:"/s",dir:"/d",pin:P,followMain:true};
+ assert.throws(()=>launchAgentXml(opts),/LAUNCH_AGENT_GH_PATH/);
+ const x=launchAgentXml({...opts,authenticated:true,ghExecutable:"/gh"});
+ assert(x.includes("<string>observe-follow-auth-notify</string>"));assert(!x.includes("GH_TOKEN"));assert(!x.includes("<string>canary</string>"));
 });
