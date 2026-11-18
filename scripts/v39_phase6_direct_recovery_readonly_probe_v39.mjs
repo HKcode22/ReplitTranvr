@@ -92,12 +92,39 @@ async function probe(){
   if(n>maximum){maximum=n;maximumStart=waves[i][0];}
   n-=waves[i][1];
  }
+ // Actual committed calendar replay under explicitly modeled timing.
+ // No assumption about actual GH queue time, PG states or collection success.
+ const opportunity=waves.flatMap(([time,count])=>Array(count).fill(time));
+ function simulate(cooldownMinutes,jitterMinutes,parentMinutes,tailMinutes){
+  const min=15*MIN,max=90*MIN,base=Math.floor((opportunity[0]-max)/(10*MIN))*10*MIN+8*MIN;
+  let i=0,missed=0,peak=0,previous=-Infinity,parentBusyUntil=-Infinity,admitted=0,skippedByCooldown=0,skippedByActive=0;
+  let active=[];
+  for(let k=0,t=base;t<=opportunity.at(-1)+10*MIN;k++,t+=10*MIN){
+   const now=t+jitterMinutes[k%jitterMinutes.length]*MIN;
+   active=active.filter(x=>x>now);
+   while(i<opportunity.length&&opportunity[i]<now+min){i++;missed++;}
+   if(now<parentBusyUntil){skippedByActive++;continue;}
+   if(now-previous<cooldownMinutes*MIN){skippedByCooldown++;continue;}
+   previous=now;parentBusyUntil=now+parentMinutes*MIN;
+   let cap=Math.min(8,24-active.length);
+   while(cap>0&&i<opportunity.length&&opportunity[i]<=now+max){
+    active.push(opportunity[i++]+tailMinutes*MIN);admitted++;cap--;
+   }
+   peak=Math.max(peak,active.length);
+  }
+  missed+=opportunity.length-i;
+  if(admitted+missed!==opportunity.length||peak>24)hold("SIMULATION_INVARIANT");
+  return {cooldownMinutes,jitterMinutes,parentMinutes,tailMinutes,admitted,missed,peak,
+   skippedByCooldown,skippedByActive,simulationOnly:true};
+ }
+ const cadenceScenarios=[simulate(10,[2,4],1,6),simulate(8,[2,4],1,6),
+  simulate(8,[2,4],12,6),simulate(8,[2,4],5,10)];
  const sourceTiming={firstSourceUtc:new Date(first).toISOString(),firstWaveTemplates:groups.get(first),
   admissibleParentObservationFromUtc:new Date(earliest).toISOString(),admissibleParentObservationThroughUtc:new Date(last).toISOString(),
   nominalExternalTicks:ticks.map(t=>new Date(t).toISOString()),conservativeAssumedClockToParentObservationMinutes:[0,2,5,10,20].map(m=>({minutes:m,eligibleTickCount:ticks.filter(t=>t+m*MIN<=last).length})),
   totalTemplates:total,distinctRequestWaves:waves.length,maxTemplatesAtSameInstant:Math.max(...groups.values()),
   maximumTemplatesInNominalHalfOpen90mWindow:maximum,maximumWindowStartUtc:new Date(maximumStart).toISOString(),
-  sourcePerTickCapReviewOnly:8,sourceInFlightCapReviewOnly:24,actualCapacityOrCadenceProven:false};
+  sourcePerTickCapReviewOnly:8,sourceInFlightCapReviewOnly:24,cadenceScenarios,actualCapacityOrCadenceProven:false};
  console.log(JSON.stringify({status:"ACTUAL_DIRECT_CLOCK_READONLY_METADATA_AND_PLAN_PROBE_NO_GO",runId:Number(e.GITHUB_RUN_ID),event:mode,
   observedMainSha:sha,actualRunHeadSha:runHead,actualCheckoutSha:e.GITHUB_SHA,routeStates,negativeHistory:counts,previewStatus:snap.plan.status,
   assessments:snap.plan.assessments.map(x=>({lane:x.lane,state:x.state})),sourceTiming,githubReads:reads,

@@ -199,3 +199,10 @@ test("direct cooldown tolerates jitter only on ten-minute routes, never overlaps
  assert.equal(assessP6RollingRoute(route,{...snap,runs:[busy],active:[busy]},{...ctx,directRecovery:true}).state,"ACTIVE_NO_OVERLAP");
  assert.equal(assessP6RollingRoute(route,{...snap,jobs:jobs.map(j=>({...j,run_id:999}))},{...ctx,directRecovery:true}).state,"HOLD_GATED_OR_FAILED_REQUIRED_JOB");
 });
+
+test("lost inherited ACK in ordinary listing cannot be silently replaced by new dispatch",async()=>{
+ const f=fixture("lostAck"),a=await runDirectTick(f.env,f.options),n=f.posts();
+ f.advance(a);
+ await assert.rejects(runDirectTick(f.env,f.options),/NO_REPLAY/);
+ assert.equal(f.posts(),n);
+});
