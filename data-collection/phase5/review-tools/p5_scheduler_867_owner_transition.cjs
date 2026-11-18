@@ -46,7 +46,18 @@ function makeConfig(get,expected,endpoint){
  return e;
 }
 async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
- const api=(p,method='GET',body)=>JSON.parse(gh(['api','--method',method,'repos/'+REPO+'/'+p],body===undefined?undefined:JSON.stringify(body)));
+ const api=(p,method='GET',body)=>{
+  if((method==='GET')!==(body===undefined))hold('API_BODY_METHOD');
+  const args=['api','--hostname','github.com','--method',method,'-H','Accept: application/vnd.github+json','-H','X-GitHub-Api-Version: 2022-11-28','repos/'+REPO+'/'+p];
+  // gh api ignores piped stdin without --input -. Bind actual JSON to the request.
+  if(body!==undefined)args.push('--input','-');
+  try{return JSON.parse(gh(args,body===undefined?undefined:JSON.stringify(body)));}
+  catch(e){
+   const http=/\bHTTP (\d{3})\b/.exec(String(e?.stderr??''))?.[1];
+   // Do not print response body, credentials or arbitrary CLI errors.
+   hold(http?'API_HTTP_'+http+'_INSPECT_NO_REPLAY':'API_RESPONSE_UNKNOWN_INSPECT_NO_REPLAY');
+  }
+ };
  const get=k=>gh(['variable','get',k,'-R',REPO]).trim();
  const main=()=>api('git/ref/heads/main')?.object?.sha;
  const stable=(p,e)=>{if(main()!==p)hold('MAIN_MOVED');const v=makeConfig(get,p,e);if(main()!==p)hold('MAIN_MOVED');return v;};
@@ -73,6 +84,16 @@ async function execute({gh,record,verifyReceipt,randomChain,now=Date.now}){
   const evidence=verifyReceipt(run,jobs,log,p,rid,w.id);
   record({stage:stage+'_VERIFIED',...evidence});return evidence;
  };
+ // The previous journal shows exactly one attempted READ-ONLY VERIFY POST,
+ // no merge or repin. Reconcile the bounded actual run history before a new
+ // verification; absence is not a proof the server never accepted a request.
+ const priorStart='2026-11-18T05:02:06Z';
+ if(now()<Date.parse(priorStart)+120000)hold('PRIOR_VERIFY_OBSERVATION_TOO_EARLY');
+ const prior=api('actions/runs?branch=main&event=workflow_dispatch&created='+encodeURIComponent(priorStart+'..'+new Date(now()).toISOString())+'&per_page=100');
+ if(!Number.isSafeInteger(prior?.total_count)||prior.total_count<0||prior.total_count>100||
+    !Array.isArray(prior.workflow_runs)||prior.workflow_runs.length!==prior.total_count)hold('PRIOR_HISTORY_INCOMPLETE');
+ if(prior.workflow_runs.some(r=>r.path==='.github/workflows/'+EXPIRY))hold('PREVIOUS_VERIFY_MATERIALIZED_INSPECT');
+ record({stage:'PRIOR_READONLY_VERIFY_HISTORY_RECONCILED',priorDispatchSinceUtc:priorStart,matchingRuns:0,acceptedButUnobservedNotExcluded:true});
  if(main()!==OLD)hold('OLD_MAIN_REQUIRED');
  checkPr(api('pulls/'+PR));for(const rid of CI)checkCi(api('actions/runs/'+rid),rid);
  if(api('commits/'+HEAD)?.commit?.tree?.sha!==TREE)hold('HEAD_TREE_DRIFT');
@@ -111,10 +132,15 @@ async function main(){
  if(process.argv.length!==3||process.env.GITHUB_ACTIONS==='true')hold('OWNER_LOCAL_REQUIRED');
  const helperPath=process.argv[2];const b=fs.readFileSync(helperPath);
  const h=crypto.createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');if(h!==HELPER)hold('EXACT_EXISTING_HELPER_BYTES');
- const state=path.join(os.homedir(),'.travnr-p5-scheduler-transition-867.jsonl');
+ const oldState=path.join(os.homedir(),'.travnr-p5-scheduler-transition-867.jsonl');
+ const history=fs.readFileSync(oldState,'utf8').trim().split('\n').map(x=>JSON.parse(x));
+ if(history.length!==3||history[0].stage!=='OWNER_TRANSITION_STARTED'||history[0].oldMain!==OLD||history[0].reviewedHead!==HEAD||
+    history[1].stage!=='BEFORE_MERGE_VERIFY_ATTEMPT_NO_REPLAY'||history[1].utc!=='2026-11-18T05:02:06.988Z'||
+    history[2].stage!=='HOLD_INSPECT_STATE_NO_BLIND_REPLAY'||history[2].reason!=='UNKNOWN_OR_COMMAND_FAILED')hold('PRIOR_JOURNAL_CHANGED_REVIEW_REQUIRED');
+ const state=path.join(os.homedir(),'.travnr-p5-scheduler-transition-867-recovery-v2.jsonl');
  const fd=fs.openSync(state,'wx',0o600);
  const record=x=>{const v={utc:new Date().toISOString(),...x};fs.appendFileSync(fd,JSON.stringify(v)+'\n');fs.fsyncSync(fd);console.log(JSON.stringify(v));};
- const gh=(args,input,timeout=30000)=>cp.execFileSync('gh',args,{encoding:'utf8',input,timeout,maxBuffer:20*1024*1024,stdio:['pipe','pipe','ignore']});
+ const gh=(args,input,timeout=30000)=>cp.execFileSync('gh',args,{encoding:'utf8',input,timeout,maxBuffer:20*1024*1024,stdio:['pipe','pipe','pipe']});
  try{
   record({stage:'OWNER_TRANSITION_STARTED',stateFile:state,oldMain:OLD,reviewedHead:HEAD});
   await execute({gh,record,verifyReceipt:require(path.resolve(helperPath)).verifyReceipt,randomChain:()=>crypto.randomBytes(16).toString('hex')});
