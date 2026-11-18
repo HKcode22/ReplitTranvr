@@ -43,21 +43,42 @@ function successfulStep(x,r,lane,now){
  if(completed<ms(r.created_at))fail("JOB_TIME");
  return {runId:r.id,jobId:j.id,completedUtc:iso(completed),ageMinutes:age(now,iso(completed)),event:r.event,attempt:r.run_attempt};
 }
-async function observe(pin,{get,now=Date.now}){
+async function observe(pin,{get,now=Date.now,deepAuthenticated=false}){
  if(!SHA.test(pin??"")||typeof get!=="function")fail("PIN");
  const start=now(),main=await get("/git/ref/heads/main");
  if(main?.object?.sha!==pin)return {status:"MAIN_MOVED_REVIEW_REQUIRED",expectedMain:pin,observedMain:main?.object?.sha??null,observedUtc:iso(start),permitDispatch:false};
  const lanes=[];
  for(const lane of LANES){
   const all=latestRows(await get("/actions/workflows/"+lane.file+"/runs?branch=main&per_page=10"),lane,pin,now());
-  const current=all.filter(r=>r.head_sha===pin),latest=current[0],success=current.find(r=>r.status==="completed"&&r.conclusion==="success"&&r.run_attempt===1);
+  const current=all.filter(r=>r.head_sha===pin),latest=current[0];
+  // Authenticated follow mode distinguishes actual APPLY freshness from a
+  // manual VERIFY, and looks past a successful workflow with a skipped job.
+  const candidates=current.filter(r=>r.status==="completed"&&r.conclusion==="success"&&r.run_attempt===1&&
+     (!deepAuthenticated||lane.key!=="primary"||r.event==="schedule"||r.display_title==="P5 PRIMARY BACKSTOP CHILD"));
   let receipt=null;
-  if(success)receipt=successfulStep(await get("/actions/runs/"+success.id+"/jobs?filter=latest&per_page=100"),success,lane,now());
+  for(const success of candidates.slice(0,deepAuthenticated?3:1)){
+   receipt=successfulStep(await get("/actions/runs/"+success.id+"/jobs?filter=latest&per_page=100"),success,lane,now());
+   if(receipt)break;
+  }
   const recentFailure=latest?.status==="completed"&&latest.conclusion!=="success"&&latest.conclusion!=="skipped";
   const level=recentFailure?"CRITICAL_FAILED_RUN":!receipt?"UNKNOWN_NO_VERIFIED_STEP":receipt.ageMinutes>=lane.critical?"CRITICAL_STALE_STEP":receipt.ageMinutes>=lane.warn?"WARN_STALE_STEP":"RECENT_STEP_ONLY";
   lanes.push({lane:lane.key,level,latest:latest?{runId:latest.id,event:latest.event,status:latest.status,conclusion:latest.conclusion,createdUtc:latest.created_at,ageMinutes:age(now(),latest.created_at)}:null,lastObservedSuccessfulStep:receipt});
  }
  return {status:"READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF",reviewedMain:pin,observedUtc:iso(now()),lanes,permitDispatch:false,providerCalls:0,databaseReads:0,databaseWrites:0};
+}
+/** Monitor a fresh actual main without blessing it for production. No dispatch.
+ * The expected pin remains for drift warnings; a changing head within a
+ * read is UNKNOWN, not a stitched view of two deployments. */
+async function observeFollow(pin,{get,now=Date.now}){
+ if(!SHA.test(pin??"")||typeof get!=="function")fail("PIN");
+ const live=(await get("/git/ref/heads/main"))?.object?.sha;
+ if(!SHA.test(live??""))fail("FOLLOW_HEAD");
+ const r=await observe(live,{get,now,deepAuthenticated:true});
+ const end=(await get("/git/ref/heads/main"))?.object?.sha;
+ if(!SHA.test(end??"")||end!==live||r.status==="MAIN_MOVED_REVIEW_REQUIRED")
+  return {status:"MAIN_MOVED_DURING_READ_NOT_HEALTHY",reviewedMain:pin,observedMain:end??null,observedUtc:iso(now()),permitDispatch:false,providerCalls:0,databaseReads:0,databaseWrites:0};
+ return {...r,reviewedMain:pin,observedMain:live,observedMainMatchesReviewedPin:live===pin,
+   metadataForObservedMain:true,permitDispatch:false};
 }
 function checkAck(a,pin){
  if(!ID(a?.workflow_run_id)||a.run_url!==ROOT+"/actions/runs/"+a.workflow_run_id||
@@ -82,7 +103,7 @@ async function canary(pin,{get,reserve,post,save,now=Date.now,randomChain}){
 
 export function localHealthFingerprint(value){
  if(!value||typeof value!=="object")return "NO_PRIOR_RECEIPT";
- return [value.status,...(Array.isArray(value.lanes)?value.lanes.map(l=>l.lane+":"+l.level):[])].join("|");
+ return [value.status,...(typeof value.observedMain==="string"?[value.observedMain,String(value.observedMainMatchesReviewedPin)]:[]),...(Array.isArray(value.lanes)?value.lanes.map(l=>l.lane+":"+l.level):[])].join("|");
 }
 export function localGap(previous,observedUtc){
  if(!previous?.observedUtc)return null;
@@ -91,18 +112,18 @@ export function localGap(previous,observedUtc){
  const minutes=Math.round((b-a)/6000)/10;
  return minutes>20?{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes}:null;
 }
-export function launchAgentXml({node,script,dir,pin,authenticated=false,ghExecutable}){
+export function launchAgentXml({node,script,dir,pin,authenticated=false,ghExecutable,followMain=false}){
  if(!SHA.test(pin??"")||[node,script,dir].some(v=>typeof v!=="string"||!v.startsWith("/")||/[\x00-\x1f]/.test(v)))fail("LAUNCH_AGENT_PATHS");
- if(authenticated!==false&&authenticated!==true||authenticated&&(typeof ghExecutable!=="string"||!ghExecutable.startsWith("/")||/[\x00-\x1f]/.test(ghExecutable)))fail("LAUNCH_AGENT_GH_PATH");
+ if(typeof followMain!=="boolean"||followMain&&!authenticated||authenticated!==false&&authenticated!==true||authenticated&&(typeof ghExecutable!=="string"||!ghExecutable.startsWith("/")||/[\x00-\x1f]/.test(ghExecutable)))fail("LAUNCH_AGENT_GH_PATH");
  const esc=v=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
  const string=v=>"<string>"+esc(v)+"</string>";
  return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'+
-  '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,authenticated?"observe-auth-notify":"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
+  '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,followMain?"observe-follow-auth-notify":authenticated?"observe-auth-notify":"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
    (authenticated?'<key>EnvironmentVariables</key><dict><key>TRAVNR_WATCH_GH_BINARY</key>'+string(ghExecutable)+'</dict>\n':'')+
   '<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>600</integer>\n<key>StandardOutPath</key>'+string("/dev/null")+'\n'+
   '<key>StandardErrorPath</key>'+string(join(dir,"launchd-errors.log"))+'\n</dict></plist>\n';
 }
-export {observe,canary,LANES};
+export {observe,observeFollow,canary,LANES};
 async function get(path){
  const res=await fetch(ROOT+path,{headers:{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},redirect:"error",signal:AbortSignal.timeout(10000)});
  // No retries and no credentials for public metadata. Rate limit/unavailable is UNKNOWN.
@@ -149,26 +170,26 @@ function atom(path,value){
 }
 async function main(){
  const [mode,pin,custom]=process.argv.slice(2);
- if(!["observe","observe-notify","observe-auth","observe-auth-notify","canary","inspect","launch-agent","launch-agent-auth"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
+ if(!["observe","observe-notify","observe-auth","observe-auth-notify","observe-follow-auth","observe-follow-auth-notify","canary","inspect","launch-agent","launch-agent-auth","launch-agent-follow-auth"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
  const dir=resolve(custom??join(homedir(),".travnr-github-watch"));
  privateDir(dir);
  if(mode==="inspect"){
   console.log(readFileSync(join(dir,"canary.json"),"utf8"));return;
  }
- if(mode==="launch-agent"||mode==="launch-agent-auth"){
+ if(["launch-agent","launch-agent-auth","launch-agent-follow-auth"].includes(mode)){
   if(process.platform!=="darwin")fail("MAC_ONLY");
-  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin,authenticated:mode==="launch-agent-auth",ghExecutable:mode==="launch-agent-auth"?githubCli():undefined}));return;
+  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin,authenticated:mode!=="launch-agent",followMain:mode==="launch-agent-follow-auth",ghExecutable:mode!=="launch-agent"?githubCli():undefined}));return;
  }
- if(["observe","observe-notify","observe-auth","observe-auth-notify"].includes(mode)){
+ if(["observe","observe-notify","observe-auth","observe-auth-notify","observe-follow-auth","observe-follow-auth-notify"].includes(mode)){
   let previous=null;
   try{previous=JSON.parse(readFileSync(join(dir,"latest.json"),"utf8"));}catch{}
-  let result;try{result=await observe(pin,{get:mode.startsWith("observe-auth")?getAuthenticated:get});}
+  let result;try{result=mode.startsWith("observe-follow-auth")?await observeFollow(pin,{get:getAuthenticated}):await observe(pin,{get:mode.startsWith("observe-auth")?getAuthenticated:get});}
   catch(e){result={status:"METADATA_UNAVAILABLE_NOT_HEALTHY",observedUtc:iso(Date.now()),reviewedMain:pin,reason:/^HOLD_MAC_WATCH_[A-Z0-9_]+$/.test(e.message)?e.message:"NETWORK_OR_RESPONSE_UNKNOWN",permitDispatch:false};}
   const gap=localGap(previous,result.observedUtc);
   const fingerprint=localHealthFingerprint(result);
   const old=localHealthFingerprint(previous);
   const degraded=result.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||
-    result.lanes?.some(l=>l.level!=="RECENT_STEP_ONLY");
+    result.observedMainMatchesReviewedPin===false||result.lanes?.some(l=>l.level!=="RECENT_STEP_ONLY");
   const changed=fingerprint!==old;
   if(gap)result.localMonitorGap=gap;
   if(mode.endsWith("-notify")&&process.platform==="darwin"&&(gap||changed&&(degraded||previous))){
