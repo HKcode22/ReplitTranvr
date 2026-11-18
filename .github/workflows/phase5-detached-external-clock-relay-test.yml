@@ -7,6 +7,7 @@ on:
       - '.github/workflows/phase5-detached-external-clock-relay-test.yml'
 permissions:
   contents: read
+  actions: read
 jobs:
   isolated-relay-mock-tests:
     runs-on: ubuntu-latest
@@ -25,3 +26,20 @@ jobs:
           node --test relay.test.mjs
           node --check pilot_owner_v2.mjs
           node pilot_owner_v2.mjs --self-test
+      - name: Read one actual historical exact VERIFY receipt through the no-write log path
+        working-directory: data-collection/phase5/review-tools/external-clock-relay
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {readPrimaryVerifyLog,verifyPrimaryBootstrapReceipt} from "./relay.mjs";
+          try{
+            const id=44245869480,sha="45d04392e2eecfc1220230f252d2ada8cc6137e0",root="https://api.github.com/repos/HKcode22/ReplitTranvr";
+            const gh=async path=>{const r=await fetch(root+path,{headers:{Authorization:"Bearer "+process.env.GITHUB_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},redirect:"error",signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error("HOLD_EXTERNAL_CLOCK_ACTUAL_VERIFY_HTTP_"+r.status);return r.json();};
+            const run=await gh("/actions/runs/"+id),jobs=await gh("/actions/runs/"+id+"/jobs?filter=latest&per_page=100");
+            if(jobs.total_count!==1||jobs.jobs?.length!==1||jobs.jobs[0].id!==134604561770)throw Error("HOLD_EXTERNAL_CLOCK_ACTUAL_VERIFY_JOB");
+            const log=await readPrimaryVerifyLog(fetch,process.env.GITHUB_TOKEN,134604561770);
+            const proof=verifyPrimaryBootstrapReceipt(run,jobs,log,sha,id,Date.parse(jobs.jobs[0].completed_at)+1000);
+            console.log(JSON.stringify({status:"ACTUAL_HISTORICAL_VERIFY_RECEIPT_READ_ONLY_NOT_APPLY_OR_CURRENT_FRESHNESS_PROOF",...proof,providerCalls:0,databaseWrites:0,dispatches:0}));
+          }catch(e){console.error(/^HOLD_EXTERNAL_CLOCK_[A-Z0-9_]+$/.test(e?.message||"")?e.message:"HOLD_EXTERNAL_CLOCK_ACTUAL_VERIFY_UNKNOWN");process.exitCode=2;}
+          NODE
