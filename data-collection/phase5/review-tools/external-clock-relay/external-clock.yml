@@ -1,13 +1,19 @@
 name: Travnr external clock relay (isolated)
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('TRAVNR EXTERNAL CLOCK {0}', inputs.lane) || 'Travnr relay tests' }}
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      lane:
+        type: choice
+        options: [CLOCK_ONLY, PRIMARY_BACKSTOP, ROLLING_ROOT]
+        default: CLOCK_ONLY
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: travnr-external-clock-${{ github.event_name }}
+  group: travnr-external-clock-${{ github.event_name }}-${{ inputs.lane || 'CLOCK_ONLY' }}
   cancel-in-progress: false
 jobs:
   offline-tests:
@@ -27,12 +33,17 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ github.token }}
       TRAVNR_RELAY_MODE: ${{ vars.TRAVNR_RELAY_MODE }}
+      TRAVNR_RELAY_LANE: ${{ inputs.lane }}
+      TRAVNR_RELAY_PRIMARY_ENABLED: ${{ vars.TRAVNR_RELAY_PRIMARY_ENABLED }}
+      TRAVNR_RELAY_ROLLING_ENABLED: ${{ vars.TRAVNR_RELAY_ROLLING_ENABLED }}
+      TRAVNR_RELAY_PRIMARY_SINCE_UTC: ${{ vars.TRAVNR_RELAY_PRIMARY_SINCE_UTC }}
+      TRAVNR_RELAY_ROLLING_SINCE_UTC: ${{ vars.TRAVNR_RELAY_ROLLING_SINCE_UTC }}
       TRAVNR_RELAY_MODE_SINCE_UTC: ${{ vars.TRAVNR_RELAY_MODE_SINCE_UTC }}
       TRAVNR_APPROVED_TARGET_MAIN_SHA: ${{ vars.TRAVNR_APPROVED_TARGET_MAIN_SHA }}
       TRAVNR_ROLLING_POLICY_FROM_UTC: ${{ vars.TRAVNR_ROLLING_POLICY_FROM_UTC }}
       TRAVNR_ROLLING_POLICY_UNTIL_UTC: ${{ vars.TRAVNR_ROLLING_POLICY_UNTIL_UTC }}
       TRAVNR_ROLLING_FOUR_APPROVED: ${{ vars.TRAVNR_ROLLING_FOUR_APPROVED }}
-      TRAVNR_TARGET_ACTIONS_TOKEN: ${{ vars.TRAVNR_RELAY_MODE != 'CLOCK_ONLY' && vars.TRAVNR_RELAY_MODE != '' && secrets.TRAVNR_TARGET_ACTIONS_TOKEN || '' }}
+      TRAVNR_TARGET_ACTIONS_TOKEN: ${{ ((vars.TRAVNR_RELAY_MODE == 'MULTI_LANE' && ((inputs.lane == 'PRIMARY_BACKSTOP' && vars.TRAVNR_RELAY_PRIMARY_ENABLED == '1') || (inputs.lane == 'ROLLING_ROOT' && vars.TRAVNR_RELAY_ROLLING_ENABLED == '1'))) || (vars.TRAVNR_RELAY_MODE != 'MULTI_LANE' && vars.TRAVNR_RELAY_MODE != 'CLOCK_ONLY' && vars.TRAVNR_RELAY_MODE != '' && inputs.lane == 'CLOCK_ONLY')) && secrets.TRAVNR_TARGET_ACTIONS_TOKEN || '' }}
       DATABASE_URL: ''
       AERODATABOX_API_KEY: ''
       AERODATABOX_WEBHOOK_SECRET: ''
