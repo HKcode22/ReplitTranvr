@@ -98,6 +98,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Execute one direct recovery wave and reconcile exact parent ACKs
+        id: execute
         env:
           P6_DIRECT_RECOVERY_ENTRYPOINT: '1'
         run: |
@@ -105,6 +106,12 @@ jobs:
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node scripts/v39_phase6_direct_recovery_tick_v39.mjs
+      - name: Direct outcome TERMINAL_PARENT_ACKS_RECONCILED
+        if: steps.execute.outputs.direct_disposition == 'TERMINAL'
+        run: echo 'Direct parent ACKs reconciled; not collection evidence'
+      - name: Direct outcome PREFLIGHT_HOLD_NO_POST
+        if: steps.execute.outputs.direct_disposition == 'PREFLIGHT_HOLD'
+        run: echo 'Direct preflight HOLD; no new attempt'
       - name: Preserve direct terminal operational receipt
         uses: actions/upload-artifact@v4
         with:

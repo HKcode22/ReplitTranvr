@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import {runDirectTick,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {runDirectTick,directDisposition,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
 import {P6_ROLLING_ROUTES} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
@@ -98,4 +98,12 @@ test("accepted failed parent cannot yield a terminal success",async()=>{
 test("known active parents settle before any successful tick receipt",async()=>{
  const f=fixture("busy");const r=await runDirectTick(f.env,f.options);
  assert.equal(r.status,"DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF");assert.equal(r.pending.length,0);assert.equal(r.verifiedTerminal,f.posts());
+});
+
+test("terminal and safe preflight HOLD markers are distinct; absent or conflicting markers HOLD",()=>{
+ const steps=["Direct outcome TERMINAL_PARENT_ACKS_RECONCILED","Direct outcome PREFLIGHT_HOLD_NO_POST"].map((name,i)=>({name,status:"completed",conclusion:i?"skipped":"success"}));
+ assert.equal(directDisposition(steps),"TERMINAL");
+ assert.equal(directDisposition(steps.map((s,i)=>({...s,conclusion:i?"success":"skipped"}))),"PREFLIGHT_HOLD");
+ assert.equal(directDisposition(steps.slice(0,1)),null);
+ assert.equal(directDisposition(steps.map(s=>({...s,conclusion:"success"}))),null);
 });

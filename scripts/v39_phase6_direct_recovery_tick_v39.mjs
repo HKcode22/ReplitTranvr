@@ -7,7 +7,7 @@
 import {readP6RollingGithubSnapshot,restrictP6RollingWave,dispatchP6ReviewedRollingWave,P6_ROLLING_ROUTES,createP6RollingScheduleEvidenceCache} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 import {loadP6RollingCalendarHints,assessP6RollingCalendarHints} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 import {createP6SessionAckLedger} from "../server/lib/disruption/phase6RollingSessionAckLedger_v39.mjs";
-import {writeFileSync} from "node:fs";
+import {writeFileSync,appendFileSync} from "node:fs";
 import {join} from "node:path";
 export const DIRECT_WF="phase6-direct-recovery-tick.yml";
 export const DIRECT_CONFIRM="RUN_ONE_REVIEWED_DIRECT_RECOVERY_TICK_AFTER_SEPARATE_PHASE6_GO";
@@ -23,6 +23,15 @@ const noCount={providerCalls:0,databaseReads:0,databaseWrites:0,phase6PaidGo:fal
 const flagNames=["P6_ROLLING_CONTROLLER_ENABLED","P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_DIRECT_RECOVERY_APPROVED","V39_PHASE5_FREEZE_SIGNED","V39_PHASE5_SOURCE_RIGHTS_APPROVED","V39_P5_SEVEN_REST_BUDGET_SIGNED","V39_PHASE6_PROCESS_ARMED","V39_PHASE6_OWNER_APPROVED"];
 const conflictNames=["P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED","P6_ROLLING_SESSION_APPROVED"];
 const forbidden=["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET","DATABASE_URL","V39_DATABASE_RUNTIME_URL","V39_P5_SOURCE_DATABASE_URL","P5_V39_PRE_DATABASE_URL","P5_V39_PREPARE_DATABASE_URL","P5_V39_T24_WITNESS_DATABASE_URL","P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL","P5_V39_OTHER_REST_REVIEW_DATABASE_URL","P5_V39_OTHER_REST_RESERVE_DATABASE_URL","P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL"];
+
+export function directDisposition(steps){
+ if(!Array.isArray(steps))return null;
+ const names=["Direct outcome TERMINAL_PARENT_ACKS_RECONCILED","Direct outcome PREFLIGHT_HOLD_NO_POST"];
+ const x=names.map(name=>steps.filter(s=>s.name===name));
+ if(x.some(a=>a.length!==1||a[0].status!=="completed"||!["success","skipped"].includes(a[0].conclusion))||
+    x.filter(a=>a[0].conclusion==="success").length!==1)return null;
+ return x[0][0].conclusion==="success"?"TERMINAL":"PREFLIGHT_HOLD";
+}
 export function admitDirectTick(env,now,readPlan){
  const sha=env.GITHUB_SHA,id=Number(env.GITHUB_RUN_ID),since=Date.parse(env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
@@ -113,7 +122,8 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
    if(jobs.total_count>100)hold("PREDECESSOR_JOB_HISTORY");
    const m=js.filter(j=>j.name==="direct-protected-recovery-tick"&&j.run_id===r.id&&j.head_sha===a.sha&&j.run_attempt===1&&j.status==="completed"&&j.conclusion==="success");
    if(m.length!==1||!["Execute one direct recovery wave and reconcile exact parent ACKs","Preserve direct terminal operational receipt"].every(name=>
-      m[0].steps?.filter(s=>s.name===name&&s.status==="completed"&&s.conclusion==="success").length===1))hold("PREDECESSOR_NOT_TERMINAL");
+      m[0].steps?.filter(s=>s.name===name&&s.status==="completed"&&s.conclusion==="success").length===1)||
+      directDisposition(m[0].steps)===null)hold("PREDECESSOR_NOT_TERMINAL");
   }
  }
  const main=async()=>{if((await get("/git/ref/heads/main"))?.object?.sha!==a.sha)hold("MAIN_DRIFT");};
@@ -158,7 +168,13 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
 }
 if(process.env.P6_DIRECT_RECOVERY_ENTRYPOINT==="1"){
  runDirectTick(process.env,{emit:e=>console.log(JSON.stringify(e))}).then(r=>{
+
+  if(typeof process.env.GITHUB_OUTPUT!=="string"||!process.env.GITHUB_OUTPUT.startsWith("/")||process.env.GITHUB_OUTPUT.includes("\n")||
+     typeof process.env.RUNNER_TEMP!=="string"||!process.env.RUNNER_TEMP.startsWith("/"))hold("RECEIPT_PATH");
+  const disposition=r.status==="DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF"?"TERMINAL":r.status==="DIRECT_PREFLIGHT_HOLD_NO_POST"?"PREFLIGHT_HOLD":null;
+  if(!disposition)hold("RECEIPT_DISPOSITION");
   writeFileSync(join(process.env.RUNNER_TEMP,"p6-direct-terminal.json"),JSON.stringify(r),{flag:"wx",mode:0o600});
+  appendFileSync(process.env.GITHUB_OUTPUT,"direct_disposition="+disposition+"\n","utf8");
   console.log(JSON.stringify(r));
  }).catch(e=>{console.error(/^HOLD_[A-Z0-9_]{1,150}$/.test(e?.message??"")?e.message:"HOLD_P6_DIRECT_RECOVERY_FAILED_NO_REPLAY");process.exitCode=2;});
 }
