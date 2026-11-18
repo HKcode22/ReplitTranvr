@@ -1,0 +1,79 @@
+name: One-shot fresh production SOURCE role read-only smoke request (NO paid)
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: phase5-nov18-source-role-fresh-smoke-once
+  cancel-in-progress: false
+jobs:
+  request-and-verify:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'HKcode22' &&
+      github.head_ref == 'phase5/nov18-source-role-fresh-smoke' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Submit existing exact metadata-only smoke once and independently read its terminal evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import {execFileSync} from "node:child_process";
+          const repo="HKcode22/ReplitTranvr",pin="45d04392e2eecfc1220230f252d2ada8cc6137e0",wf="phase5-source-real-github-readonly-metadata-manual.yml",blob="5cc4af66e7fc1f7a4250e4600d350e3542704cef";
+          const root="https://api.github.com/repos/"+repo,headers={Authorization:"Bearer "+process.env.GH_TOKEN,Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+          const hold=s=>{throw Error("HOLD_SOURCE_SMOKE_"+s)},id=n=>Number.isSafeInteger(n)&&n>0;
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));let reads=0,attempted=false;
+          async function get(p){
+            if(++reads>90)hold("READ_BOUND");
+            const a=await fetch(root+p,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
+            if(!a.ok)hold("READ_HTTP_"+a.status);return a.json();
+          }
+          async function stable(){if((await get("/git/ref/heads/main")).object?.sha!==pin)hold("MAIN_DRIFT")}
+          async function main(){
+            if(process.env.GITHUB_REPOSITORY!==repo||process.env.GITHUB_EVENT_NAME!=="pull_request"||process.env.GITHUB_RUN_ATTEMPT!=="1"||typeof process.env.GH_TOKEN!=="string")hold("SCOPE");
+            await stable();
+            if((await get("/contents/.github/workflows/"+wf+"?ref="+pin)).sha!==blob)hold("WORKFLOW_BLOB");
+            if((await get("/contents/scripts/v39_phase5_source_live_github_readonly_once.ts?ref="+pin)).sha!=="df29cd70086b0889f557d58ef749dad7866ba7f4")hold("SCRIPT_BLOB");
+            for(const state of ["queued","in_progress","waiting","requested","pending"]){
+              const h=await get("/actions/workflows/"+wf+"/runs?branch=main&status="+state+"&per_page=100");
+              if(h.total_count!==0||h.workflow_runs?.length!==0)hold("ACTIVE_SMOKE");
+            }
+            await stable();const sent=Date.now();attempted=true;
+            console.log(JSON.stringify({status:"EXACT_SOURCE_ROLE_READONLY_SMOKE_ATTEMPT_NO_REPLAY",reviewedMainSha:pin}));
+            const a=await fetch(root+"/actions/workflows/"+wf+"/dispatches",{method:"POST",headers:{...headers,"Content-Type":"application/json"},redirect:"error",signal:AbortSignal.timeout(10000),body:JSON.stringify({ref:"main",return_run_details:true,inputs:{confirm:"VERIFY_SOURCE_ROLE_READONLY_NO_PROVIDER"}})});
+            if(a.status!==200)hold("ACK_HTTP_"+a.status);
+            const q=await a.json(),n=q.workflow_run_id;
+            if(!id(n)||q.run_url!==root+"/actions/runs/"+n||q.html_url!=="https://github.com/"+repo+"/actions/runs/"+n)hold("ACK_UNKNOWN");
+            console.log(JSON.stringify({status:"SOURCE_ROLE_SMOKE_ACK_NOT_EXECUTION_PROOF",runId:n}));
+            let terminal;
+            for(let i=0;i<65;i++){
+              let v;try{v=await get("/actions/runs/"+n)}catch(e){if(i<3&&e.message==="HOLD_SOURCE_SMOKE_READ_HTTP_404"){await sleep(3000);continue}throw e}
+              if(v.id!==n||v.head_sha!==pin||v.head_branch!=="main"||v.path!==".github/workflows/"+wf||v.event!=="workflow_dispatch"||v.run_attempt!==1||!Number.isFinite(Date.parse(v.created_at))||Date.parse(v.created_at)<sent-5000)hold("RUN_IDENTITY");
+              if(v.status==="completed"){if(v.conclusion!=="success")hold("TARGET_TERMINAL_FAILURE");terminal=v;break;}
+              await sleep(10000);
+            }
+            if(!terminal)hold("TERMINAL_TIMEOUT");
+            const jobs=await get("/actions/runs/"+n+"/jobs?filter=latest&per_page=100"),j=jobs.jobs?.[0];
+            if(jobs.total_count!==1||jobs.jobs?.length!==1||!id(j?.id)||j.name!=="source-live-credential-metadata-only"||j.run_id!==n||j.head_sha!==pin||j.run_attempt!==1||j.status!=="completed"||j.conclusion!=="success"||
+              j.steps?.filter(s=>s.name==="Verify only SOURCE existing PG16 group privileges + READ ONLY metadata"&&s.status==="completed"&&s.conclusion==="success").length!==1)hold("JOB_IDENTITY");
+            const log=execFileSync("gh",["run","view",String(n),"-R",repo,"--job",String(j.id),"--log"],{env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:process.env.GH_TOKEN,GH_PROMPT_DISABLED:"1"},encoding:"utf8",timeout:30000,maxBuffer:2097152,stdio:["ignore","pipe","ignore"]});
+            const lines=log.split(/\r?\n/).map(s=>s.replace(/^.*?\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s+/,""));
+            const start=lines.findIndex((s,i)=>s.trim()==="{"&&lines[i+1]?.includes('"status": "P5_SOURCE_GITHUB_REAL_READONLY_ROLE_VERIFIED"'));
+            if(start<0)hold("RECEIPT_MISSING");
+            const end=lines.findIndex((s,i)=>i>start&&s.trim()==="}");
+            if(end<=start)hold("RECEIPT_INCOMPLETE");
+            const x=JSON.parse(lines.slice(start,end+1).join("\n"));
+            if(x.status!=="P5_SOURCE_GITHUB_REAL_READONLY_ROLE_VERIFIED"||x.mode!=="PRODUCTION_MANUAL_MAIN"||x.authenticatedRoleSet!==true||x.readOnlyTransactionVerified!==true||x.sourceSecretValueLogged!==false||
+               !["sourceRoleChanges","providerFidsGets","alertCreates","sourceOrBudgetRowsRead","flightRowsRead","flightRowsWritten"].every(k=>x[k]===0)||x.livePaidSourceActivated!==false||x.phase6PaidGo!==false)hold("RECEIPT_SCOPE");
+            await stable();
+            console.log(JSON.stringify({status:"FRESH_PRODUCTION_SOURCE_ROLE_READONLY_VERIFIED_NOT_PREARM_PROOF",runId:n,jobId:j.id,reviewedMainSha:pin,providerCalls:0,databaseWrites:0,flightRowsRead:0,phase6PaidGo:false}));
+          }
+          try{await main()}catch(e){console.error((/^HOLD_SOURCE_SMOKE_[A-Z0-9_]+$/.test(e.message)?e.message:"HOLD_SOURCE_SMOKE_REDACTED")+(attempted?"_NO_REPLAY":""));process.exitCode=2}
+          NODE
