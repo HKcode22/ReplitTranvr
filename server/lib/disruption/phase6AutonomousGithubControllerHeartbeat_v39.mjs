@@ -60,6 +60,39 @@ export const P6_PRIMARY_FIDS_EXPIRY_LANE=Object.freeze({
 });
 const PRIMARY_APPLY="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER";
 const PRIMARY_STEP="Verify exact main and execute only bounded primary FIDS expiry";
+async function observeP6PrimaryBackup(env,readGithub,observedAtUtc){
+ const off={state:"BACKSTOP_DISABLED",runId:null,jobId:null,executedStepVerified:false,
+  actualRetentionReceiptVerified:false,physicalDeletionVerified:false,retentionDeadlineGuaranteed:false};
+ if(env.P5_PRIMARY_FIDS_BACKSTOP_ENABLED!=="true")return off;
+ try{
+  const h=await readGithub(ROOT+"/actions/workflows/"+P6_PRIMARY_FIDS_EXPIRY_LANE.workflow+
+   "/runs?branch=main&event=workflow_dispatch&per_page="+MAX_PER_WORKFLOW);
+  if(!Number.isSafeInteger(h?.total_count)||h.total_count<0||!Array.isArray(h.workflow_runs)||
+     h.workflow_runs.length!==Math.min(h.total_count,MAX_PER_WORKFLOW))fail("INVALID_PRIMARY_BACKUP_HISTORY");
+  const children=h.workflow_runs.filter(r=>r?.display_title==="P5 PRIMARY BACKSTOP CHILD")
+   .sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
+  if(!children.length)return {...off,state:"NO_BACKSTOP_CHILD_OBSERVED"};
+  const child=children[0],when=Date.parse(child.created_at),now=Date.parse(observedAtUtc);
+  if(!Number.isSafeInteger(child.id)||child.id<1||child.path!==".github/workflows/"+P6_PRIMARY_FIDS_EXPIRY_LANE.workflow||
+     child.head_branch!=="main"||child.event!=="workflow_dispatch"||child.run_attempt!==1||
+     !Number.isFinite(when)||when>now+5000)return {...off,state:"BACKSTOP_CHILD_IDENTITY_UNVERIFIED"};
+  const base={...off,runId:child.id};
+  if(child.head_sha!==env.GITHUB_SHA)return {...base,state:"NO_BACKSTOP_CHILD_ON_CURRENT_MAIN"};
+  if(child.status!=="completed")return {...base,state:"BACKSTOP_CHILD_PENDING"};
+  if(child.conclusion!=="success")return {...base,state:"BACKSTOP_CHILD_NOT_SUCCESSFUL"};
+  const j=await readGithub(ROOT+"/actions/runs/"+child.id+"/jobs?filter=latest&per_page=10");
+  const job=j?.jobs?.[0],step=job?.steps?.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success");
+  if(j?.total_count!==1||!Array.isArray(j.jobs)||j.jobs.length!==1||
+     !Number.isSafeInteger(job.id)||job.id<1||job.name!=="primary-fids-expiry"||job.run_id!==child.id||job.head_sha!==env.GITHUB_SHA||
+     job.run_attempt!==1||job.status!=="completed"||job.conclusion!=="success"||step?.length!==1)
+   return {...base,state:"BACKSTOP_CHILD_STEP_UNVERIFIED"};
+  const completed=Date.parse(job.completed_at);
+  if(!Number.isFinite(completed)||completed<when||completed>now+5000)
+   return {...base,state:"BACKSTOP_CHILD_TIME_UNVERIFIED"};
+  return {...base,jobId:job.id,executedStepVerified:true,
+   state:now-completed>60*60000?"BACKSTOP_CHILD_STEP_STALE":"BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF"};
+ }catch{return {...off,state:"BACKSTOP_EVIDENCE_UNAVAILABLE"};}
+}
 async function observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc){
  const history=await readGithub(ROOT+"/actions/workflows/"+P6_PRIMARY_FIDS_EXPIRY_LANE.workflow+
   "/runs?branch=main&event=schedule&per_page="+MAX_PER_WORKFLOW);
@@ -97,7 +130,8 @@ async function observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc){
    else{state="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF";jobExecuted=true;jobId=x.id;}
   }catch{state="SCHEDULE_JOB_EVIDENCE_UNAVAILABLE";}
  }
- return {state,scheduledApplyEnabled:enabled,approvalPinMatchesCurrentMain:pinMatches,
+ const backup=await observeP6PrimaryBackup(env,readGithub,observedAtUtc);
+ return {state,backup,scheduledApplyEnabled:enabled,approvalPinMatchesCurrentMain:pinMatches,
   separateApplyApprovalPresent:approved,latestRunMatchesCurrentMain:sameMain,
   latestExecutedJobVerified:jobExecuted,latestExecutedJobId:jobId,
   actualRetentionReceiptVerified:false,physicalDeletionVerified:false,
@@ -365,7 +399,7 @@ export async function readP6GithubAutoControllerHeartbeat(
  // A normal pending run or an old gap by itself must not spam failures.
  const currentExpiryIncident=primaryFidsExpiry.scheduledApplyEnabled&&
   !["SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF","SCHEDULE_EXECUTION_PENDING"].includes(primaryFidsExpiry.state);
- if(currentExpiryIncident){activeNotifications.incidents.push({lane:"PRIMARY_FIDS_EXPIRY",reason:primaryFidsExpiry.state,runId:primaryFidsExpiry.scheduleObservation.mostRecentRun?.id??null,job:"primary-fids-expiry"});activeNotifications.incidentCount++;}
+ if(currentExpiryIncident){activeNotifications.incidents.push({lane:"PRIMARY_FIDS_EXPIRY",reason:primaryFidsExpiry.state,runId:primaryFidsExpiry.scheduleObservation.mostRecentRun?.id??null,job:"primary-fids-expiry",backupState:primaryFidsExpiry.backup.state,backupRunId:primaryFidsExpiry.backup.runId});activeNotifications.incidentCount++;}
  return {...summary,activeNotifications,
   status:primaryProblem||activeNotifications.incidentCount>0?"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":summary.status,
   primaryFidsExpiry,primaryFidsExpiryNeedsAttention:primaryProblem};

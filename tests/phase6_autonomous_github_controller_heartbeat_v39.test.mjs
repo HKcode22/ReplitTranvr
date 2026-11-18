@@ -270,6 +270,40 @@ test("primary expiry current-main pin, explicit apply, and actual scheduled job 
  }
 });
 
+test("native primary schedule warning remains while exact current-main backup child is separately observed",async()=>{
+ const e={...env(),P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",
+  P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:ID,
+  P5_PRIMARY_FIDS_EXPIRY_APPROVAL:"APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER"};
+ const child={...run(700,{conclusion:"success",event:"workflow_dispatch",created:"2026-11-14T01:55:00Z"}),
+  path:".github/workflows/phase5-primary-fids-expiry-no-provider.yml",display_title:"P5 PRIMARY BACKSTOP CHILD",run_attempt:1};
+ const job={id:701,run_id:700,head_sha:ID,run_attempt:1,name:"primary-fids-expiry",
+  status:"completed",conclusion:"success",completed_at:"2026-11-14T01:56:00Z",
+  steps:[{name:"Verify exact main and execute only bounded primary FIDS expiry",status:"completed",conclusion:"success"}]};
+ async function check(candidate=child,jobs=[job]){
+  return readP6GithubAutoControllerHeartbeat(e,{now:()=>new Date(T),fetcher:async(url,opts)=>{
+   assert.equal(opts.method,"GET");
+   if(url.includes("/actions/runs/700/jobs?"))return {ok:true,json:async()=>({total_count:jobs.length,jobs})};
+   if(url.includes("phase5-primary-fids-expiry-no-provider.yml")&&url.includes("event=workflow_dispatch"))
+    return {ok:true,json:async()=>({total_count:1,workflow_runs:[candidate]})};
+   if(url.includes("phase5-primary-fids-expiry-no-provider.yml"))
+    return {ok:true,json:async()=>({total_count:1,workflow_runs:[{...run(600,{conclusion:"success"}),head_sha:"c".repeat(40)}]})};
+   return {ok:true,json:async()=>({total_count:1,workflow_runs:[run(1)]})};
+  }});
+ }
+ const x=await check();
+ assert.equal(x.primaryFidsExpiry.state,"NO_SCHEDULE_RUN_ON_CURRENT_MAIN");
+ assert.equal(x.primaryFidsExpiry.backup.state,"BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF");
+ assert.equal(x.primaryFidsExpiry.backup.runId,700);
+ assert.equal(x.primaryFidsExpiry.backup.jobId,701);
+ assert.equal(x.primaryFidsExpiry.backup.actualRetentionReceiptVerified,false);
+ assert.equal(x.primaryFidsExpiryNeedsAttention,true);
+ assert.equal(x.activeNotifications.incidents.find(i=>i.lane==="PRIMARY_FIDS_EXPIRY")?.backupState,
+  "BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF");
+ const skipped=await check({...child,conclusion:"skipped"},[]);
+ assert.equal(skipped.primaryFidsExpiry.backup.state,"BACKSTOP_CHILD_NOT_SUCCESSFUL");
+ assert.equal(skipped.primaryFidsExpiry.backup.executedStepVerified,false);
+});
+
 test("native notification branch is dormant before activation and ignores old historical gaps",async()=>{
  const a=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100),run(i+200,{created:"2026-11-13T18:00:00Z"})],T));
  const report=summarizeP6ControllerHeartbeat(a,T);
