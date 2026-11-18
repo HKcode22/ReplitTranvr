@@ -7,13 +7,19 @@ import {loadFrozenCycle} from "./source_outage_accounting_v39.mjs";
 import {modelSharedSourceRunners} from "./source_shared_runner_capacity_v39.mjs";
 const M=60000,W=120*M,hold=s=>{throw Error("HOLD_WAKE_COVERAGE_"+s)};
 const int=(n,a,b)=>Number.isSafeInteger(n)&&n>=a&&n<=b;
-export function buildWakes({from,to,windowOrigin,rootOffsetMinutes=13,rootDelayMs=0,setupMs=30000,waveWorkMs=30000,handoffMs=30000,parentBusyMs=0,native=true,rolling=true,rootOutages=[],nativeOutages=[]}){
+export function buildWakes({from,to,windowOrigin,rootOffsetMinutes=13,rootDelayMs=0,setupMs=30000,waveWorkMs=30000,handoffMs=30000,parentBusyMs=0,native=true,rolling=true,externalDirect=false,externalDelayMs=30000,rootOutages=[],nativeOutages=[],externalOutages=[]}){
  if(![from,to,windowOrigin].every(Number.isSafeInteger)||to<=from||to-from>60*86400000||
  !int(rootOffsetMinutes,0,119)||!int(rootDelayMs,0,120*M)||!int(setupMs,0,15*M)||!int(waveWorkMs,0,5*M)||
- !int(handoffMs,0,10*M)||!int(parentBusyMs,0,60*M)||typeof native!=="boolean"||typeof rolling!=="boolean"||
- ![rootOutages,nativeOutages].every(a=>Array.isArray(a)&&a.length<=100&&a.every(x=>Number.isSafeInteger(x?.start)&&Number.isSafeInteger(x?.end)&&x.end>x.start)))hold("CONFIG");
+ !int(handoffMs,0,10*M)||!int(parentBusyMs,0,60*M)||typeof native!=="boolean"||typeof rolling!=="boolean"||typeof externalDirect!=="boolean"||!int(externalDelayMs,0,120*M)||
+ ![rootOutages,nativeOutages,externalOutages].every(a=>Array.isArray(a)&&a.length<=100&&a.every(x=>Number.isSafeInteger(x?.start)&&Number.isSafeInteger(x?.end)&&x.end>x.start)))hold("CONFIG");
  const inside=(xs,t)=>xs.some(x=>x.start<=t&&t<x.end),events=[],roots=[];
  if(native)for(let t=Math.ceil((from-5*M)/(10*M))*10*M+5*M;t<=to;t+=10*M)if(!inside(nativeOutages,t))events.push({t,kind:"NATIVE"});
+ // Hypothetical direct SOURCE wake piggybacks the existing :08/:18 relay clock.
+ // Current live relay dispatches a root, NOT this direct SOURCE route.
+ if(externalDirect)for(let t=Math.ceil((from-8*M-externalDelayMs)/(10*M))*10*M+8*M;t+externalDelayMs<=to;t+=10*M){
+  const arrival=t+externalDelayMs;
+  if(arrival>=from&&!inside(externalOutages,t))events.push({t:arrival,kind:"EXTERNAL_DIRECT"});
+ }
  if(rolling){
   for(let start=windowOrigin+Math.floor((from-windowOrigin)/W)*W;start<=to;start+=W){
    const end=start+W,nominal=start+rootOffsetMinutes*M,epoch=nominal+rootDelayMs;
@@ -50,13 +56,13 @@ export function buildWakes({from,to,windowOrigin,rootOffsetMinutes=13,rootDelayM
   accepted.push(e);
  }
  const gaps=accepted.slice(1).map((e,i)=>e.t-accepted[i].t);
- return {wakes:accepted.map(x=>x.t),roots,counts:{native:accepted.filter(x=>x.kind==="NATIVE").length,rolling:accepted.filter(x=>x.kind==="ROLLING").length,...suppressed},maxInternalWakeGapMs:gaps.length?Math.max(...gaps):null};
+ return {wakes:accepted.map(x=>x.t),roots,counts:{native:accepted.filter(x=>x.kind==="NATIVE").length,rolling:accepted.filter(x=>x.kind==="ROLLING").length,externalDirect:accepted.filter(x=>x.kind==="EXTERNAL_DIRECT").length,...suppressed},maxInternalWakeGapMs:gaps.length?Math.max(...gaps):null};
 }
 export function analyze(plan,cfg){
  const first=Math.min(...plan.queries.map(q=>q.planned)),last=Math.max(...plan.queries.map(q=>q.planned));
  const w=buildWakes({from:first-90*M,to:last-15*M,windowOrigin:0,...cfg});
  const a=modelSharedSourceRunners(plan,{totalSlots:20,reservedSlots:4,appCap:24,leadMinutes:90,tailMinutes:15,startupMs:120000,explicitWakes:w.wakes});
- return {status:"MODELED_CONTROLLER_WAKE_COVERAGE_NOT_LIVE_OR_RELEASE_PROOF",native:cfg.native??true,rolling:cfg.rolling??true,rootOffsetMinutes:cfg.rootOffsetMinutes??13,
+ return {status:"MODELED_CONTROLLER_WAKE_COVERAGE_NOT_LIVE_OR_RELEASE_PROOF",native:cfg.native??true,rolling:cfg.rolling??true,externalDirect:cfg.externalDirect??false,externalDelayMs:cfg.externalDelayMs??30000,rootOffsetMinutes:cfg.rootOffsetMinutes??13,
  rootDelayMs:cfg.rootDelayMs??0,waveWorkMs:cfg.waveWorkMs??30000,parentBusyMs:cfg.parentBusyMs??0,
  wakes:w.counts,maxInternalWakeGapMs:w.maxInternalWakeGapMs,rootModes:w.roots.reduce((a,r)=>(a[r.status]=(a[r.status]??0)+1,a),{}),
  counts:a.counts,primaryTest:a.byHorizonAndSplit["T-6h/test"],planned:a.planned,peakWaiting:a.peakWaiting,
