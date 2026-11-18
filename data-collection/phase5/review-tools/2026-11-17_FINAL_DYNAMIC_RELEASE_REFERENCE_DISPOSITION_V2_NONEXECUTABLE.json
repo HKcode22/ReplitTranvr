@@ -1,0 +1,724 @@
+{
+  "schema": "v39.phase5.current-reference-disposition.NONEXECUTABLE.v2",
+  "reviewedMain": "6f518add10d00567a95fbcaf3650ebf608da8a60",
+  "sourceIndexGitBlob": "d0097f8e8afc63f981a96c2de945339c4e498b35",
+  "ownerReceiptEvidenceBlob": "bfcf6061719978b7a7461a6618469e643ea04d94",
+  "uniqueReferences": 108,
+  "counts": {
+    "EXISTING_PROVIDER_KEY_OWNER_ENV_PRESENT_REUSE_IF_AUTHORIZED": 1,
+    "INTENTIONALLY_ABSENT_CANARY_OR_BURST_DEFAULT": 2,
+    "CONDITIONAL_BUNDLE_FEATURE_GATE_REQUIRED_IF_SIGNED_BUNDLE": 2,
+    "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT": 7,
+    "SEQUENCED_EXECUTION_SWITCH_NOT_YET_SET": 4,
+    "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE": 12,
+    "ONLY_AFTER_GENUINE_SCOPED_APPROVAL": 31,
+    "CONDITIONAL_STANDALONE_LATER_SCOPE": 1,
+    "CONDITIONAL_STANDALONE_LATER_SCOPE_DIGEST": 1,
+    "EXISTING_REPO_NAME_PRESENT_REUSE": 13,
+    "ACTUAL_STAGE_BYTES_OR_COST_PROOF_PENDING": 4,
+    "ACTUAL_POLICY_BYTES_AND_HASH_PENDING": 10,
+    "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING": 7,
+    "KNOWN_CANDIDATE_CLOCK_OR_RANGE_NOT_APPROVED": 2,
+    "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED": 5,
+    "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING": 5,
+    "REVIEWED_LITERAL_PRICE_PENDING_ACCOUNT_APPROVAL": 1
+  },
+  "rows": [
+    {
+      "name": "AERODATABOX_API_KEY",
+      "status": "EXISTING_PROVIDER_KEY_OWNER_ENV_PRESENT_REUSE_IF_AUTHORIZED",
+      "source": "Owner shell boolean true; no secret bytes or provider auth test",
+      "note": "Reuse existing account credential; only after rights and actual scoped release. No new purchase or key rotation."
+    },
+    {
+      "name": "P5_CD_GH_BURST_APPROVED",
+      "status": "INTENTIONALLY_ABSENT_CANARY_OR_BURST_DEFAULT",
+      "source": "Current PHASE6_APPROVED mode requires canary flag !=1; default burst ticks=1, >1 needs separate approved burst",
+      "note": "Keep prior flags absent/no opt-in; do not activate historical canary."
+    },
+    {
+      "name": "P5_CD_GH_E_ROUTE_FEATURES_APPROVED",
+      "status": "CONDITIONAL_BUNDLE_FEATURE_GATE_REQUIRED_IF_SIGNED_BUNDLE",
+      "source": "phase5CdGithubBoundedPreTick_v39.ts:before WRITE_STARTED; phase5CdGithubQueuedT24Witness_v39.ts:before claim",
+      "note": "Both flags required if signed permit includes reviewedSupplementalFeatureBundle. Route flag additionally turns on Stage14 native route option. Do not call these universally optional for selected native feature bundle; actual lawful feature review mandatory.",
+      "acceptedRuntimeStringWhenApproved": "1"
+    },
+    {
+      "name": "P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED",
+      "status": "CONDITIONAL_BUNDLE_FEATURE_GATE_REQUIRED_IF_SIGNED_BUNDLE",
+      "source": "phase5CdGithubBoundedPreTick_v39.ts:before WRITE_STARTED; phase5CdGithubQueuedT24Witness_v39.ts:before claim",
+      "note": "Both flags required if signed permit includes reviewedSupplementalFeatureBundle. Route flag additionally turns on Stage14 native route option. Do not call these universally optional for selected native feature bundle; actual lawful feature review mandatory.",
+      "acceptedRuntimeStringWhenApproved": "1"
+    },
+    {
+      "name": "P5_CD_GH_PHASE5_CANARY_APPROVED",
+      "status": "INTENTIONALLY_ABSENT_CANARY_OR_BURST_DEFAULT",
+      "source": "Current PHASE6_APPROVED mode requires canary flag !=1; default burst ticks=1, >1 needs separate approved burst",
+      "note": "Keep prior flags absent/no opt-in; do not activate historical canary."
+    },
+    {
+      "name": "P5_CD_GH_PRE_APPROVED_CODE_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "P5_CD_GH_PRE_ARMED",
+      "status": "SEQUENCED_EXECUTION_SWITCH_NOT_YET_SET",
+      "source": "Actual B0062 inert stage requires process off; selected paid SOURCE/PRE/T24 requires approved arm and STOP logic",
+      "note": "Keep inert until genuine scoped Phase6 release. Actual PRE gate/enrollment requires 1 and PRE_STOP=0.",
+      "stoppedString": "0",
+      "approvedActiveReleaseString": "1"
+    },
+    {
+      "name": "P5_CD_GH_PRE_ROSTER_SHA256",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "Current PRE tick and watchdog YAML branch excludes fixed roster with current signed schedule",
+      "note": "Use actual current appended registry, not old static roster."
+    },
+    {
+      "name": "P5_CD_GH_PRE_STOP",
+      "status": "SEQUENCED_EXECUTION_SWITCH_NOT_YET_SET",
+      "source": "Actual B0062 inert stage requires process off; selected paid SOURCE/PRE/T24 requires approved arm and STOP logic",
+      "note": "Current unset fails active runtime check. Explicit 0 only after actual approved activation; do not set every flag to 1.",
+      "stoppedString": "1",
+      "approvedActiveReleaseString": "0"
+    },
+    {
+      "name": "P5_CD_GH_PREPARE_ARMED",
+      "status": "SEQUENCED_EXECUTION_SWITCH_NOT_YET_SET",
+      "source": "Actual B0062 inert stage requires process off; selected paid SOURCE/PRE/T24 requires approved arm and STOP logic",
+      "note": "Keep inert until genuine scoped Phase6 release. Actual PRE gate/enrollment requires 1 and PRE_STOP=0.",
+      "stoppedString": "0",
+      "approvedActiveReleaseString": "1"
+    },
+    {
+      "name": "P5_CD_GH_PREPARE_PRIVATE_DAY_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P5_CD_GH_PRIVATE_CURRENT_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P5_CD_GH_PRIVATE_LATER_APPROVED",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "phase5-one-bounded-pre-tick private exact shard branch vs PRIVATE_CURRENT_SCHEDULE",
+      "note": "Only required for legacy manual PRIVATE_EXACT_SHARD, not selected current private schedule."
+    },
+    {
+      "name": "P5_CD_GH_STANDALONE_LATER_APPROVED",
+      "status": "CONDITIONAL_STANDALONE_LATER_SCOPE",
+      "source": "phase5CdGithubPreReleaseGate_v39.ts:readP5CdStandaloneLaterProtocol",
+      "note": "Empty or 0 plus absent standalone digest = witnessed-only default. Adopt approved standalone later for genuinely missing T24, never fabricate witness; independent protocol digest mandatory when 1.",
+      "acceptedRuntimeStringWhenApproved": "1"
+    },
+    {
+      "name": "P5_CD_GH_STANDALONE_LATER_PROTOCOL_SHA256",
+      "status": "CONDITIONAL_STANDALONE_LATER_SCOPE_DIGEST",
+      "source": "phase5CdGithubPreReleaseGate_v39.ts:readP5CdStandaloneLaterProtocol",
+      "note": "Only actual independently accepted SHA256 with flag 1; when disabled omit digest. No fabricated hash."
+    },
+    {
+      "name": "P5_CD_GH_T24_PREPARE_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P5_CD_GH_T24_WITNESS_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P5_RETENTION_READER_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_OTHER_REST_RESERVE_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_OTHER_REST_REVIEW_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_PRE_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_PREPARE_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_T24_WITNESS_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P6_INERT_CALENDAR_REVIEW_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_INERT_COST_ENVELOPE_SHA256",
+      "status": "ACTUAL_STAGE_BYTES_OR_COST_PROOF_PENDING",
+      "source": "Existing compiler + actual reviewed AUTH/material; V0093 cost upper-bound binding",
+      "note": "Do not use original 47-date geometry or coverage-grid SHA as category/cost hash."
+    },
+    {
+      "name": "P6_INERT_COST_REVIEW_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_INERT_STAGE_INPUT_JSON",
+      "status": "ACTUAL_STAGE_BYTES_OR_COST_PROOF_PENDING",
+      "source": "Existing compiler + actual reviewed AUTH/material; V0093 cost upper-bound binding",
+      "note": "Do not use original 47-date geometry or coverage-grid SHA as category/cost hash."
+    },
+    {
+      "name": "P6_INERT_STAGE_INPUT_SHA256",
+      "status": "ACTUAL_STAGE_BYTES_OR_COST_PROOF_PENDING",
+      "source": "Existing compiler + actual reviewed AUTH/material; V0093 cost upper-bound binding",
+      "note": "Do not use original 47-date geometry or coverage-grid SHA as category/cost hash."
+    },
+    {
+      "name": "P6_NATIVE_LATER_RUNTIME_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_NATIVE_POST_POLICY_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NATIVE_POST_POLICY_SHA256",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NATIVE_POST_PRODUCER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_NONPAID_DAILY_POLICY_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NONPAID_DAILY_POLICY_SHA256",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "81bd022724b5b2fbeeccfe17dd5ec4060229acb33cc2c9918edd4de223b01f51"
+    },
+    {
+      "name": "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "b15d0bae2e36db6f9c119098c89bfe0eec8f7d5cd8848d8127b4089bc2726326"
+    },
+    {
+      "name": "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "7a3d77a48304ce4b705aa0241cb5280745fa6b73903547ae11b85cadc30eb02e"
+    },
+    {
+      "name": "P6_NONPAID_SIGNING_POLICY_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NONPAID_SIGNING_POLICY_SHA256",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NONPAID_SOURCE_APPROVED_MAIN_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "P6_NONPAID_SOURCE_RUNTIME_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_NONPAID_TRANSPORT_TRUST_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_NONPAID_TRANSPORT_TRUST_SHA256",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_PRIVATE_DAY_EPOCH_REVIEW_PINS_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_DAY_EPOCH_REVIEW_WIRE_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_DAY_EPOCH_REVIEWER_PUBLIC_KEY_PEM_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "7a3d77a48304ce4b705aa0241cb5280745fa6b73903547ae11b85cadc30eb02e"
+    },
+    {
+      "name": "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "313982cb08711a14493620f4c181b596327d5d693bbe5833ac8b56565c7ab9b2"
+    },
+    {
+      "name": "P6_PRIVATE_POST_CHILD_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_POST_DYNAMIC_CHILD_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_POST_OUTCOME_TAIL_HOURS",
+      "status": "KNOWN_CANDIDATE_CLOCK_OR_RANGE_NOT_APPROVED",
+      "source": "Existing POST runtime requires 48h tail; candidate source geometry uses 240min only under reviewed range",
+      "note": "Actual account/contract range evidence and tail scope required; no arbitrary value."
+    },
+    {
+      "name": "P6_PRIVATE_POST_PARENT_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_POST_REVIEWER_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "e7147792715f1bc84ef972dd5db263fa60ea6b965561e2581a1e6e0f048b53b0"
+    },
+    {
+      "name": "P6_PRIVATE_POST_REVIEWER_TRUST_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_PRIVATE_POST_STORED_REVIEW_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_PUBLISHER_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P6_PRIVATE_READER_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_PARENT_RO_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_QUERY_REVIEW_PINS_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_QUERY_REVIEW_WIRE_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_QUERY_REVIEWER_PUBLIC_KEY_PEM_BASE64",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64",
+      "status": "ACTUAL_POLICY_BYTES_AND_HASH_PENDING",
+      "source": "Existing exact daily/signing/transport/stored/post verifiers; actual public signer fingerprints and accepted rights/release/config/cost/clock",
+      "note": "Runtime exact schemas already implemented. No invented policy approvals/secret values."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_STORED_DISPATCH_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_SOURCE_TRANSPORT_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64",
+      "status": "LOCAL_CANDIDATE_GENERATED_PUBLIC_FINGERPRINT_VERIFIED_UPLOAD_PENDING",
+      "source": "Actual owner candidate receipt, native independent public SPKI SHA256 verification",
+      "note": "Existing local generated key only; no private material in this index. Actual reviewed custody and policy before upload; do not regenerate.",
+      "publicFingerprintSha256": "6b3045b3e662cd41756607cce9a17d536db60dfdec4cc40f070de7a622cf3b06"
+    },
+    {
+      "name": "P6_T24_CUSTODY_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_APPROVED_CODE_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "V39_P5_AUTO_SOURCE_DISPATCH_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_CALENDAR_HASH",
+      "status": "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED",
+      "source": "Owner exact recovered review receipt, approved only after final release review",
+      "note": "Use exact final accepted bytes. Never re-label candidate hash as independent approval."
+    },
+    {
+      "name": "V39_P5_CONFIG_HASH",
+      "status": "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED",
+      "source": "Owner exact recovered review receipt, approved only after final release review",
+      "note": "Use exact final accepted bytes. Never re-label candidate hash as independent approval."
+    },
+    {
+      "name": "V39_P5_EARLY_DRAW_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "V39_P5_EARLY_DRAW_EFFECTIVE_ROLE",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "V39_P5_EARLY_DRAW_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_FRAME_HASH",
+      "status": "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED",
+      "source": "Owner exact recovered review receipt, approved only after final release review",
+      "note": "Use exact final accepted bytes. Never re-label candidate hash as independent approval."
+    },
+    {
+      "name": "V39_P5_MANIFEST_SHA256",
+      "status": "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED",
+      "source": "Owner exact recovered review receipt, approved only after final release review",
+      "note": "Use exact final accepted bytes. Never re-label candidate hash as independent approval."
+    },
+    {
+      "name": "V39_P5_POST_APPROVED_CODE_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "V39_P5_POST_CATEGORY_BUDGET_SHA256",
+      "status": "ACTUAL_STAGE_BYTES_OR_COST_PROOF_PENDING",
+      "source": "Existing compiler + actual reviewed AUTH/material; V0093 cost upper-bound binding",
+      "note": "Do not use original 47-date geometry or coverage-grid SHA as category/cost hash."
+    },
+    {
+      "name": "V39_P5_POST_CONTEXT_SHA256",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "POST workflow expressions private_transport != stored-current",
+      "note": "Stored-current selects actual private POST packet. Do not create fixed per-child digest secrets."
+    },
+    {
+      "name": "V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_POST_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_POST_PRICE_SHA256",
+      "status": "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING",
+      "source": "Independent reviewed actual contract/price/rights/protocol/release artifact bytes",
+      "note": "No digest substitution or fabricated proof."
+    },
+    {
+      "name": "V39_P5_POST_PROVIDER_CONTRACT_SHA256",
+      "status": "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING",
+      "source": "Independent reviewed actual contract/price/rights/protocol/release artifact bytes",
+      "note": "No digest substitution or fabricated proof."
+    },
+    {
+      "name": "V39_P5_POST_REVIEWED_REQUEST_SHA256",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "POST workflow expressions private_transport != stored-current",
+      "note": "Stored-current selects actual private POST packet. Do not create fixed per-child digest secrets."
+    },
+    {
+      "name": "V39_P5_POST_SIGNED_PACKET_SHA256",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "POST workflow expressions private_transport != stored-current",
+      "note": "Stored-current selects actual private POST packet. Do not create fixed per-child digest secrets."
+    },
+    {
+      "name": "V39_P5_PREPARE_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_PROVIDER_CONTRACT_SHA256",
+      "status": "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING",
+      "source": "Independent reviewed actual contract/price/rights/protocol/release artifact bytes",
+      "note": "No digest substitution or fabricated proof."
+    },
+    {
+      "name": "V39_P5_QUEUE_APPROVED_CODE_SHA",
+      "status": "FINAL_EXACT_MAIN_PIN_AFTER_APPROVED_COMMIT",
+      "source": "Exact approved final main; current manifest candidate exporter checkout separately records code/tree",
+      "note": "Do not use stale candidate SHA after final approval commit."
+    },
+    {
+      "name": "V39_P5_RELEASE_SHA256",
+      "status": "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING",
+      "source": "Independent reviewed actual contract/price/rights/protocol/release artifact bytes",
+      "note": "No digest substitution or fabricated proof."
+    },
+    {
+      "name": "V39_P5_REST_UNIT_PRICE_APPROVED",
+      "status": "REVIEWED_LITERAL_PRICE_PENDING_ACCOUNT_APPROVAL",
+      "source": "scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs:admitP6StoredSourceDispatcher",
+      "note": "Not a generic boolean. A value of 1 would fail. Actual current account price/range review must support literal 2; not an approval.",
+      "acceptedRuntimeString": "2"
+    },
+    {
+      "name": "V39_P5_RIGHTS_SHA256",
+      "status": "GENUINE_EXTERNAL_RELEASE_EVIDENCE_HASH_PENDING",
+      "source": "Independent reviewed actual contract/price/rights/protocol/release artifact bytes",
+      "note": "No digest substitution or fabricated proof."
+    },
+    {
+      "name": "V39_P5_SEVEN_REST_BUDGET_SIGNED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_SIGNED_DAY_REGISTRY_RELEASE",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_SOURCE_BATCH_REGISTRY_SHA256",
+      "status": "INTENTIONALLY_ABSENT_SELECTED_DYNAMIC_MODE",
+      "source": "SOURCE child workflow static private_transport=true vs selected stored route",
+      "note": "Stored transport loads actual day/query trust and signed wires; do not invent static stage bytes."
+    },
+    {
+      "name": "V39_P5_SOURCE_DATABASE_URL",
+      "status": "EXISTING_REPO_NAME_PRESENT_REUSE",
+      "source": "Actual owner name-only receipt; prior authenticated scoped commissioning",
+      "note": "No new credential writes or rotation. Name-only is not a fresh login success."
+    },
+    {
+      "name": "V39_P5_SOURCE_DB_ROLE_REVIEWED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_SOURCE_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_SOURCE_QUEUE_OWNER_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_P5_VERIFIED_PROVIDER_MAX_RANGE_MINUTES",
+      "status": "KNOWN_CANDIDATE_CLOCK_OR_RANGE_NOT_APPROVED",
+      "source": "Existing POST runtime requires 48h tail; candidate source geometry uses 240min only under reviewed range",
+      "note": "Actual account/contract range evidence and tail scope required; no arbitrary value."
+    },
+    {
+      "name": "V39_P5_VERIFIED_PROVIDER_RANGE_EVIDENCE_SHA256",
+      "status": "KNOWN_CANDIDATE_STUDY_HASH_NOT_APPROVED",
+      "source": "Owner exact recovered review receipt, approved only after final release review",
+      "note": "Use exact final accepted bytes. Never re-label candidate hash as independent approval."
+    },
+    {
+      "name": "V39_PHASE5_FREEZE_SIGNED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_PHASE5_SOURCE_RIGHTS_APPROVED",
+      "status": "ONLY_AFTER_GENUINE_SCOPED_APPROVAL",
+      "source": "Existing exact consumer gate; actual adopted scientific/operational/rights/budget/custody approval",
+      "note": "Do not set positive flag or infer approval from owner engineering permission, code test, candidate hash or missing-name count."
+    },
+    {
+      "name": "V39_PHASE6_PROCESS_ARMED",
+      "status": "SEQUENCED_EXECUTION_SWITCH_NOT_YET_SET",
+      "source": "Actual B0062 inert stage requires process off; selected paid SOURCE/PRE/T24 requires approved arm and STOP logic",
+      "note": "Current not set. Inert B0062/V0093 require 0. Paid/source/PRE/T24 active scope requires 1 only after DB enable and genuine final approval. Nonpaid daily/post producer explicitly use 0 internally. Never set to 1 merely for staging.",
+      "inertStageString": "0",
+      "approvedActiveReleaseString": "1"
+    }
+  ],
+  "candidateIdentityReviewOnly": {
+    "manifestSha256": "fc6b594ec0e458d8810981ac8f170a3a91384be609e3c16a09c25f5a91449041",
+    "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+    "configSha256": "4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb",
+    "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "rangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
+    "candidatePostTailHours": 48,
+    "candidateProviderMaxRangeMinutes": 240
+  },
+  "primaryCleanupCredentialOutside108ReferenceScopeAlreadyPresent": true,
+  "conditionalInheritedReferencesNotResolved": true,
+  "secretValuesRead": false,
+  "deployableConfiguration": false,
+  "allApprovalFlagsUnset": true,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "githubSecretWrites": 0,
+  "phase6PaidGo": false,
+  "status": "ACTUAL_LOCAL_SIGNERS_COMPLETE_LITERAL_AND_CONDITIONAL_CORRECTIONS_NOT_DEPLOYABLE",
+  "previousIndexGitBlob": "6034059d66ba232fa66d88c77a37e062a3bc526d",
+  "actualSignerPublicReceiptBlob": "b14c6523e12131ea92bd5cd792b439ded77e52da",
+  "actualLocalSignerGroups": 6,
+  "actualLocalProviderKeyPresent": true,
+  "consumerPins": {
+    "price": "25912bb8680280758035526ab18a6b7dc484ab37",
+    "preRelease": "429b521802b63f4c0b769de0157c396ce6058227",
+    "prepareRegistration": "5b6303bcd2a1331af5d4cd688f99941d0f7fa633",
+    "preWorker": "06e4089e97f78af3abd658a0df5f868111da72ed"
+  }
+}
