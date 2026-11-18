@@ -20,10 +20,11 @@ function f(mode,fault=""){
   if(url.includes(root+RELAY+"/actions/workflows/"))return wrap({total_count:fault==="prior"?1:0,workflow_runs:fault==="prior"?[{}]:[]});
   if(url===root+TARGET+"/git/ref/heads/main")return wrap({object:{sha:fault==="drift"?LOCAL:SHA}});
   if(url===root+TARGET+"/actions/runs/201")return wrap(fault==="targetFailed"?{...row(201,wf),conclusion:"failure"}:row(201,wf,SHA,"queued"));
+  if(url.includes("/actions/runs/112/jobs"))return wrap({total_count:2,jobs:[{id:501,name:"one-protected-bounded-session",run_id:112,head_sha:SHA,run_attempt:1,status:"completed",conclusion:fault==="skip"?"skipped":"success",steps:fault==="skip"?[]:[{name:"Execute one protected rolling session"}]},{id:502,name:"offline-bounded-session-reconciliation",run_id:112,head_sha:SHA,run_attempt:1,status:"completed",conclusion:"skipped",steps:[]}]});
   if(url.includes("/actions/runs/111/jobs"))return wrap({total_count:1,jobs:[{name:"primary-fids-expiry",run_id:111,head_sha:SHA,run_attempt:1,status:"completed",conclusion:"success",completed_at:new Date(NOW-(fault==="recent"?5:40)*60000).toISOString(),steps:[{name:"Verify exact main and execute only bounded primary FIDS expiry",status:"completed",conclusion:"success"}]}]});
   if(url.includes("&status="))return wrap({total_count:fault==="active"?1:0,workflow_runs:fault==="active"?[row(301,wf,SHA,"queued")]:[]});
-  if(url.includes("per_page=1")&&!url.includes("per_page=100"))return wrap({total_count:1,workflow_runs:[row(111,wf)]});
-  if(url.includes("&created="))return wrap({total_count:fault==="window"?1:0,workflow_runs:fault==="window"?[row(111,wf)]:[]});
+  if(url.includes("per_page=20"))return wrap({total_count:1,workflow_runs:[{...row(111,wf),event:fault==="verifyOnly"?"workflow_dispatch":"schedule"}]});
+  if(url.includes("&created="))return wrap({total_count:["window","skip","partial","failedRoot"].includes(fault)?1:0,workflow_runs:["window","skip","partial","failedRoot"].includes(fault)?[{...row(112,wf),conclusion:fault==="failedRoot"?"failure":"success"}]:[]});
   throw Error("unexpected request");
  };
  return {env,opts:{now:()=>NOW,fetcher,emit:x=>events.push(x),sleep:async()=>{}},posts:()=>posts,body:()=>body,events};
@@ -40,3 +41,8 @@ test("dynamic scope declines late window and never invents approval",()=>{const 
 test("cron job targets isolated relay only, disabled by default, expiring, no target token",()=>{const j=cronJobSpec(tok,NOW);assert.equal(j.enabled,false);assert.equal(j.requestMethod,1);assert.equal(j.schedule.expiresAt,20261118073000);assert.match(j.url,/TravnrClockRelay/);assert(!j.url.includes("ReplitTranvr"));});
 
 test("already-terminal target failure quarantines the attempted wake",async()=>{const x=f("PILOT","targetFailed");await assert.rejects(runPulse(x.env,x.opts),/ACK_TARGET_TERMINAL_FAILURE_REVIEW_NO_BLIND_REPLAY/);assert.equal(x.posts(),1);});
+
+test("VERIFY-only success is not expiry APPLY freshness or initial baseline",async()=>{const x=f("PRIMARY_BACKSTOP","verifyOnly");assert.match((await runPulse(x.env,x.opts)).status,/NO_CURRENT_MAIN_APPLY_BASELINE/);assert.equal(x.posts(),0);});
+test("all exact skipped jobs permit only guarded target root wake",async()=>{const x=f("ROLLING_ROOT","skip");assert.equal((await runPulse(x.env,x.opts)).targetRunId,201);assert.equal(x.posts(),1);assert(x.events.some(e=>e.status==="EXTERNAL_WAKE_ONLY_SKIPPED_CONTROLLER_HISTORY_NO_DB_AUTHORITY"));});
+test("actual or partially executed protected root never replays",async()=>{const x=f("ROLLING_ROOT","partial");assert.match((await runPulse(x.env,x.opts)).status,/CUSTODY_REVIEW/);assert.equal(x.posts(),0);});
+test("failed protected root requires custody reconciliation, never replays",async()=>{const x=f("ROLLING_ROOT","failedRoot");assert.match((await runPulse(x.env,x.opts)).status,/CUSTODY_REVIEW/);assert.equal(x.posts(),0);});
