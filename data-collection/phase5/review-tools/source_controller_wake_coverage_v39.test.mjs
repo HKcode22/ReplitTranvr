@@ -1,0 +1,13 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {buildWakes,analyze} from "./source_controller_wake_coverage_v39.mjs";
+import {loadFrozenCycle} from "./source_outage_accounting_v39.mjs";
+import {modelSharedSourceRunners} from "./source_shared_runner_capacity_v39.mjs";
+const M=60000,W=120*M;
+const cfg={from:0,to:4*W,windowOrigin:0};
+test("native schedule exact UTC minutes 5,15,25,...",()=>{const x=buildWakes({...cfg,rolling:false});assert.equal(x.wakes[0],5*M);assert(x.wakes.every(t=>t%(10*M)===5*M));assert.equal(x.maxInternalWakeGapMs,10*M)});
+test("four-hop bound does not prove full two-hour rolling coverage",()=>{const x=buildWakes({...cfg,native:false});assert(x.roots.every(r=>r.waves<=32));assert(x.roots.some(r=>r.hops===4));assert(x.maxInternalWakeGapMs>10*M);assert(x.wakes.every((t,i)=>i===0||t-x.wakes[i-1]>=10*M))});
+test("late root becomes single or no root, never backdates",()=>{const x=buildWakes({...cfg,native:false,rootDelayMs:35*M});assert(x.roots.every(r=>r.status==="SINGLE_MODELED"));assert(x.wakes.every(t=>t%W>=48*M));const y=buildWakes({...cfg,native:false,rootDelayMs:100*M});assert.equal(y.wakes.length,0)});
+test("native outage and overlapping wakes do not create duplicate parents",()=>{const x=buildWakes({...cfg,nativeOutages:[{start:0,end:W}],rootOutages:[{start:0,end:W}],parentBusyMs:12*M});assert(x.wakes.every((t,i)=>t>=W&&(i===0||t-x.wakes[i-1]>=12*M)))});
+test("explicit empty wake sequence is absence not default fallback",()=>{const p=loadFrozenCycle(process.cwd()),a=modelSharedSourceRunners(p,{totalSlots:20,reservedSlots:4,appCap:24,leadMinutes:90,tailMinutes:15,startupMs:120000,explicitWakes:[]});assert.equal(a.admitted,0);assert.equal(a.counts.NOT_ADMITTED_WITHIN_PREARM_LEAD,6144);assert.throws(()=>modelSharedSourceRunners(p,{totalSlots:20,reservedSlots:4,appCap:24,leadMinutes:90,tailMinutes:15,startupMs:120000,explicitWakes:[1,1]}),/WAKE_PLAN/)});
+test("full exact calendar preserves denominator and no paid authority",()=>{const p=loadFrozenCycle(process.cwd());for(const c of [{native:true,rolling:false},{native:false,rolling:true},{native:true,rolling:true,rootDelayMs:35*M}]){const a=analyze(p,c);assert.equal(a.planned,6144);assert.equal(Object.values(a.counts).reduce((a,b)=>a+b,0),6144);assert.equal(Object.values(a.primaryTest).reduce((a,b)=>a+b,0),384);assert.equal(a.phase6PaidGo,false);assert.equal(a.permitReplay,false)}});
