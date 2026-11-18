@@ -54,7 +54,7 @@ async function observe(pin,{get,now=Date.now,deepAuthenticated=false}){
   // Authenticated follow mode distinguishes actual APPLY freshness from a
   // manual VERIFY, and looks past a successful workflow with a skipped job.
   const candidates=current.filter(r=>r.status==="completed"&&r.conclusion==="success"&&r.run_attempt===1&&
-     (!deepAuthenticated||lane.key!=="primary"||r.event==="schedule"||r.display_title==="P5 PRIMARY BACKSTOP CHILD"));
+     (lane.key!=="primary"||r.event==="schedule"||r.display_title==="P5 PRIMARY BACKSTOP CHILD"));
   let receipt=null;
   for(const success of candidates.slice(0,deepAuthenticated?3:1)){
    receipt=successfulStep(await get("/actions/runs/"+success.id+"/jobs?filter=latest&per_page=100"),success,lane,now());
@@ -139,6 +139,7 @@ function githubCli(){
 function githubSafeEnv(){
  return {PATH:process.env.PATH,HOME:process.env.HOME,GH_PROMPT_DISABLED:"1",GH_HOST:"github.com",
   ...(process.env.GH_CONFIG_DIR?{GH_CONFIG_DIR:process.env.GH_CONFIG_DIR}:{}),
+  ...(process.env.XDG_CONFIG_HOME?{XDG_CONFIG_HOME:process.env.XDG_CONFIG_HOME}:{}),
   ...(process.env.GH_TOKEN?{GH_TOKEN:process.env.GH_TOKEN}:{}),
   ...(process.env.GITHUB_TOKEN?{GITHUB_TOKEN:process.env.GITHUB_TOKEN}:{})};
 }
