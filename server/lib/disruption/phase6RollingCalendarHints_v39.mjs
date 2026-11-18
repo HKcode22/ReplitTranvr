@@ -9,6 +9,9 @@ const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const hash=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_ROLLING_CALENDAR_"+s);};
 const MIN=60000,HOUR=60*MIN;
+// Conservative upper envelope, not admission: stored SOURCE currently uses
+// 90m; phase6PrivateSourceDayEpochDueParentReview permits <=105m generically.
+export const P6_SOURCE_WAKE_MAX_LEAD_MINUTES=105;
 const offsets={"T-24h":24*HOUR,"T-6h":6*HOUR,"T-90m":90*MIN};
 const lanes=["SOURCE_POST","PRE_ENROLLMENT","T24","LATER_PRE","DAILY_PREPARE","EARLY_DRAW"];
 const issued=new WeakSet();
@@ -69,9 +72,10 @@ export function loadP6RollingCalendarHints({policyBytes,expectedPolicySha256,tru
    if(a<start||z<=a||z>start+6*HOUR||request>=cutoff||cutoff<a-offsets[t.horizon]||cutoff>=end)
     hold("TEMPLATE_CLOCK_DRIFT");
    first=Math.min(first,request);last=Math.max(last,z);earliestService=Math.min(earliestService,a);
-   // Existing stored parent max lead 35m; use a wider hint, never narrow
-   // original admission or infer data availability from this clock.
-   add("SOURCE_POST",request-35*MIN-pad,end+pad);
+   // Never suppress the newer 90m stored SOURCE preparation, including
+   // the first study window with no prior overlapping POST tail. The broader
+   // 105m envelope + padding only wakes the existing independent worker.
+   add("SOURCE_POST",request-P6_SOURCE_WAKE_MAX_LEAD_MINUTES*MIN-pad,end+pad);
    add(t.horizon==="T-24h"?"T24":"LATER_PRE",request-pad,end+pad);
    add("PRE_ENROLLMENT",request-pad,end+pad);
   }

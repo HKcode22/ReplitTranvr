@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import {loadP6RollingCalendarHints,assessP6RollingCalendarHints,planP6RollingRootScope} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
+import {readFileSync} from "node:fs";
+import {loadP6RollingCalendarHints,assessP6RollingCalendarHints,planP6RollingRootScope,P6_SOURCE_WAKE_MAX_LEAD_MINUTES} from "../server/lib/disruption/phase6RollingCalendarHints_v39.mjs";
 const sha="a".repeat(64),code="b".repeat(40),H=3600000,M=60000,start=Date.parse("2030-01-05T00:00:00.000Z"),iso=x=>new Date(x).toISOString();
 const digest=b=>createHash("sha256").update(b).digest("hex");
 const offsets={"T-24h":24*H,"T-6h":6*H,"T-90m":90*M};
@@ -83,4 +84,17 @@ test("prospective root planner advances across fixed policy windows without reus
  assert.equal(planP6RollingRootScope(r,r.until).reason,"OUTSIDE_POLICY");
  assert.throws(()=>planP6RollingRootScope({...r},a),/UNREVIEWED_ROOT_SCOPE/);
  assert.throws(()=>planP6RollingRootScope(loadP6RollingCalendarHints(fixture()),a),/UNREVIEWED_ROOT_SCOPE/);
+});
+
+test("first SOURCE wake covers full native 90m stored prearm and generic 105m envelope",()=>{
+ const r=loadP6RollingCalendarHints(fixture()),request=start-24*H-15*M;
+ const wake=request-(P6_SOURCE_WAKE_MAX_LEAD_MINUTES+10)*M;
+ assert.equal(inspect(r,wake-1).SOURCE_POST.mayNeedWork,false);
+ assert.equal(inspect(r,wake-1).SOURCE_POST.nextPossibleWakeUtc,iso(wake));
+ for(const lead of [105,90,60,35,0])assert.equal(inspect(r,request-lead*M).SOURCE_POST.mayNeedWork,true);
+ assert.equal(inspect(r,request-90*M).T24.mayNeedWork,false);
+ const source=readFileSync(new URL("../server/lib/disruption/phase6PrivateSourceDayEpochDueParentReview_v39.ts",import.meta.url),"utf8");
+ const stored=Number(/maxLeadMinutes:\s*(\d+)/.exec(source)?.[1]);
+ const generic=Number(/planned-now>(\d+)\*60000/.exec(source)?.[1]);
+ assert(Number.isFinite(stored)&&Number.isFinite(generic));assert(P6_SOURCE_WAKE_MAX_LEAD_MINUTES>=Math.max(stored,generic));
 });
