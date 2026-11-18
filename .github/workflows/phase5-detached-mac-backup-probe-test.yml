@@ -1,0 +1,20 @@
+name: Phase5 detached Mac backup probe tests (NO provider)
+on:
+  pull_request:
+    paths:
+      - 'data-collection/phase5/review-tools/mac_github_backup_probe*.mjs'
+      - '.github/workflows/phase5-detached-mac-backup-probe-test.yml'
+permissions:
+  contents: read
+jobs:
+  local-backup-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test data-collection/phase5/review-tools/mac_github_backup_probe.test.mjs
