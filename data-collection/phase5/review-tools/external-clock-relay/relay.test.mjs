@@ -19,7 +19,7 @@ function f(mode,fault=""){
   if(url===root+RELAY+"/actions/runs/100")return wrap(row(100,"external-clock.yml",LOCAL,"in_progress"));
   if(url.includes(root+RELAY+"/actions/workflows/"))return wrap({total_count:fault==="prior"?1:0,workflow_runs:fault==="prior"?[{}]:[]});
   if(url===root+TARGET+"/git/ref/heads/main")return wrap({object:{sha:fault==="drift"?LOCAL:SHA}});
-  if(url===root+TARGET+"/actions/runs/201")return wrap(row(201,wf,SHA,"queued"));
+  if(url===root+TARGET+"/actions/runs/201")return wrap(fault==="targetFailed"?{...row(201,wf),conclusion:"failure"}:row(201,wf,SHA,"queued"));
   if(url.includes("/actions/runs/111/jobs"))return wrap({total_count:1,jobs:[{name:"primary-fids-expiry",run_id:111,head_sha:SHA,run_attempt:1,status:"completed",conclusion:"success",completed_at:new Date(NOW-(fault==="recent"?5:40)*60000).toISOString(),steps:[{name:"Verify exact main and execute only bounded primary FIDS expiry",status:"completed",conclusion:"success"}]}]});
   if(url.includes("&status="))return wrap({total_count:fault==="active"?1:0,workflow_runs:fault==="active"?[row(301,wf,SHA,"queued")]:[]});
   if(url.includes("per_page=1")&&!url.includes("per_page=100"))return wrap({total_count:1,workflow_runs:[row(111,wf)]});
@@ -38,3 +38,5 @@ test("unknown ACK never retries",async()=>{const x=f("PILOT","ack");await assert
 test("scope rejects provider keys and foreign repository",async()=>{for(const a of [{AERODATABOX_API_KEY:"x"},{GITHUB_REPOSITORY:TARGET}]){const x=f("PILOT");await assert.rejects(runPulse({...x.env,...a},x.opts),/SCOPE/);assert.equal(x.posts(),0);}});
 test("dynamic scope declines late window and never invents approval",()=>{const a=new Date(NOW-110*60000).toISOString(),b=new Date(NOW+10*60000).toISOString();assert.equal(rootInputs(NOW,a,b,SHA,true),null);});
 test("cron job targets isolated relay only, disabled by default, expiring, no target token",()=>{const j=cronJobSpec(tok,NOW);assert.equal(j.enabled,false);assert.equal(j.requestMethod,1);assert.equal(j.schedule.expiresAt,20261118073000);assert.match(j.url,/TravnrClockRelay/);assert(!j.url.includes("ReplitTranvr"));});
+
+test("already-terminal target failure quarantines the attempted wake",async()=>{const x=f("PILOT","targetFailed");await assert.rejects(runPulse(x.env,x.opts),/ACK_TARGET_TERMINAL_FAILURE_REVIEW_NO_BLIND_REPLAY/);assert.equal(x.posts(),1);});

@@ -60,7 +60,9 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
  try{
   const self=exact(await get(RELAY,"/actions/runs/"+runId),SELF,RELAY);
   if(self.id!==runId||self.head_sha!==env.GITHUB_SHA||self.event!=="workflow_dispatch"||self.status!=="in_progress")HOLD("SELF_IDENTITY");
-  const clock={relayRunId:runId,mode,actualCreatedUtc:self.created_at,runnerObservedUtc:iso(now()),creationToObservedMs:now()-Date.parse(self.created_at)};
+  const elapsed=now()-Date.parse(self.created_at);
+  if(elapsed<0||elapsed>24*3600000)HOLD("SELF_CLOCK");
+  const clock={relayRunId:runId,mode,actualCreatedUtc:self.created_at,runnerObservedUtc:iso(now()),creationToObservedMs:elapsed};
   if(mode==="CLOCK_ONLY")return result("EXTERNAL_CLOCK_OBSERVED_NO_TARGET_DISPATCH",clock);
   if(!sha(env.TRAVNR_APPROVED_TARGET_MAIN_SHA)||typeof env.TRAVNR_TARGET_ACTIONS_TOKEN!=="string"||env.TRAVNR_TARGET_ACTIONS_TOKEN.length<16)HOLD("TARGET_CONFIGURATION");
   const since=stamp(env.TRAVNR_RELAY_MODE_SINCE_UTC);
@@ -68,7 +70,7 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
   // Any prior failed relay attempt in this owner-reviewed mode quarantines
   // uncertain POSTs indefinitely until mode is independently reconciled.
   // The date-filtered total_count is sufficient even if results paginate.
-  for(const conclusion of ["failure","cancelled","timed_out","action_required","startup_failure","stale"]){
+  for(const conclusion of ["failure","cancelled","timed_out","action_required","stale"]){
    const p=await get(RELAY,"/actions/workflows/"+SELF+"/runs?branch=main&event=workflow_dispatch&status="+conclusion+"&per_page=1&created="+encodeURIComponent(">="+iso(since)));
    if(!Number.isSafeInteger(p?.total_count)||p.total_count<0||!Array.isArray(p.workflow_runs)||p.workflow_runs.length!==Math.min(1,p.total_count))HOLD("PRIOR_RELAY_HISTORY");
    if(p.total_count>0)return result("QUARANTINED_PRIOR_RELAY_RUN_REVIEW",clock);
@@ -123,6 +125,7 @@ export async function runPulse(env,{fetcher=fetch,now=Date.now,emit=()=>{},sleep
   for(let i=0;i<4;i++){try{live=await get(TARGET,"/actions/runs/"+rid);break;}catch(e){if(i===3)throw e;await sleep(3000);}}
   exact(live,wf,TARGET);
   if(live.id!==rid||live.head_sha!==env.TRAVNR_APPROVED_TARGET_MAIN_SHA||live.event!=="workflow_dispatch")HOLD("ACK_READBACK_DRIFT");
+  if(live.status==="completed"&&live.conclusion!=="success")HOLD("ACK_TARGET_TERMINAL_FAILURE_REVIEW");
   return result("TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",{...clock,targetRunId:rid,targetStatus:live.status,targetWorkflow:wf,relayDispatches:1});
  }catch(e){
   const m=/^HOLD_EXTERNAL_CLOCK_[A-Z0-9_]{1,80}$/.test(e?.message??"")?e.message:"HOLD_EXTERNAL_CLOCK_REDACTED";

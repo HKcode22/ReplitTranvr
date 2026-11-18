@@ -1,0 +1,25 @@
+name: Detached external clock relay tests (no target/provider)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'data-collection/phase5/review-tools/external-clock-relay/**'
+      - '.github/workflows/phase5-detached-external-clock-relay-test.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-relay-mock-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Check detached scripts and exercise mocked clock/target/cron scopes
+        working-directory: data-collection/phase5/review-tools/external-clock-relay
+        run: |
+          node --check relay.mjs
+          node --check cli.mjs
+          node --check cron_bootstrap.mjs
+          node --test relay.test.mjs
