@@ -9,7 +9,7 @@ import {fileURLToPath} from "node:url";
 import {unpackP6ControllerArtifactArchive} from "./v39_phase6_rolling_window_terminal_readback_v39.mjs";
 import {readP6RestLedgerAccounting} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",WF=".github/workflows/phase6-autonomous-gh-controller-heartbeat-no-provider.yml";
-const JOB="actual-main-nonpaid-controller-heartbeat",STEPS=["Read only GH workflow-run history for nine existing controllers","Preserve independent exact window readback (operational metadata only)"];
+const JOB="actual-main-nonpaid-controller-heartbeat",STEPS=["Read only GH workflow history and primary expiry execution metadata","Preserve independent exact window readback (operational metadata only)"];
 const ID=x=>Number.isSafeInteger(x)&&x>0&&x<1e15,CODE=/^[a-f0-9]{40}$/,HASH=/^[a-f0-9]{64}$/;
 const hold=s=>{throw Error("HOLD_P6_OWNER_SETTLEMENT_"+s);};
 const digest=b=>createHash("sha256").update(b).digest("hex");
