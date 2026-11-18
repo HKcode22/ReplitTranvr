@@ -1,4 +1,6 @@
 name: Phase5 primary FIDS expiry (STOP default, no provider)
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && 'P5 PRIMARY BACKSTOP CHILD' || 'Phase5 primary FIDS expiry (STOP default, no provider)' }}
 on:
   schedule:
     - cron: '7,22,37,52 * * * *'
@@ -10,6 +12,7 @@ on:
         options:
           - VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES
           - APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER
+          - APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION
       approved_main_sha:
         required: true
         type: string
@@ -40,7 +43,12 @@ jobs:
              (inputs.confirm == 'VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES' ||
               (inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
                vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
-               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == inputs.confirm)))) }}
+               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == inputs.confirm) ||
+              (inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' &&
+               vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY')))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 9
     env:
@@ -49,6 +57,8 @@ jobs:
       P5_PRIMARY_FIDS_EXPIRY_APPROVAL: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL }}
       P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256: ${{ vars.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256 }}
       P5_PRIMARY_FIDS_EXPIRY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES' && 'VERIFY_ONLY' || 'APPLY_DUE_ONLY' }}
+      P5_PRIMARY_FIDS_BACKSTOP_REQUEST: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && '1' || '0' }}
+      P5_PRIMARY_FIDS_BACKSTOP_ENABLED: ${{ vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED }}
       # Optional exact V0105 extension. OFF by default; manual VERIFY always stays read-only.
       P6_PRIVATE_EPOCH_EXPIRY_MODE: ${{ vars.P6_PRIVATE_EPOCH_EXPIRY_MODE }}
       P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256: ${{ vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 }}

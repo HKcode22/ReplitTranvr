@@ -14,7 +14,7 @@ const evidence={status:"INDEPENDENT_WINDOW_OPERATIONAL_CHAIN_VERIFIED_NOT_SETTLE
  independentScheduledOrManualChildrenCovered:false,providerSettlementVerified:false,permitClose:false,permitNewRoot:false,permitReplay:false,
  providerCalls:0,databaseWrites:0,dispatchCount:0,phase6PaidGo:false,controllerRunIds:[root],paidCapableChildRuns:[{parentRunId:45678,lane:"SOURCE",runId:child}],
  independentlyVerifiedPaidCapableChildJobs:1,recordedWindowCustody:{rootRunId:root}};
-function fixture({patch={},wrongDigest=false,drift=false,wrongJob=false}={}){
+function fixture({patch={},wrongDigest=false,drift=false,wrongJob=false,oldStepName=false}={}){
  const dir=mkdtempSync(join(tmpdir(),"p6-owner-ledger-artifact-"));let bytes;
  try{
   const file="p6-independent-window-readback.json";writeFileSync(join(dir,file),JSON.stringify({...evidence,...patch}));
@@ -27,7 +27,7 @@ function fixture({patch={},wrongDigest=false,drift=false,wrongJob=false}={}){
   if(p==="/git/ref/heads/main")return {object:{sha}};
   if(p==="/actions/runs/12345")return {id:12345,path:".github/workflows/phase6-autonomous-gh-controller-heartbeat-no-provider.yml",head_branch:"main",head_sha:sha,event:"workflow_dispatch",run_attempt:1,status:"completed",conclusion:"success"};
   if(p.includes("/jobs?"))return {total_count:1,jobs:[{id:11111,name:"actual-main-nonpaid-controller-heartbeat",run_id:12345,head_sha:sha,run_attempt:1,status:"completed",conclusion:"success",
-   steps:["Read only GH workflow-run history for nine existing controllers","Preserve independent exact window readback (operational metadata only)"].map((name,i)=>({name,status:"completed",conclusion:wrongJob&&i===1?"skipped":"success"}))}]};
+   steps:[oldStepName?"Read only GH workflow-run history for nine existing controllers":"Read only GH workflow history and primary expiry execution metadata","Preserve independent exact window readback (operational metadata only)"].map((name,i)=>({name,status:"completed",conclusion:wrongJob&&i===1?"skipped":"success"}))}]};
   if(p.includes("/artifacts?"))return {total_count:1,artifacts:[{...meta,id:drift&&++reads>1?99998:99999}]};
   assert.fail("unexpected GET");
  },readArchive:async id=>{assert.equal(id,99999);return bytes;}};
@@ -43,7 +43,7 @@ test("owner handoff authenticates actual-shaped independent run/job/artifact the
  assert.equal(f.calls.at(-1),"/git/ref/heads/main");
 });
 test("changed digest, forbidden grants, missing exact upload or altered metadata cannot reach DB",async()=>{
- for(const opts of [{wrongDigest:true},{drift:true},{patch:{permitClose:true}},{wrongJob:true},{patch:{recordedWindowCustody:null}}]){
+ for(const opts of [{wrongDigest:true},{drift:true},{patch:{permitClose:true}},{wrongJob:true},{oldStepName:true},{patch:{recordedWindowCustody:null}}]){
   await assert.rejects(inspectP6OwnerSettlement(input,{...fixture(opts),client:{},readLedger:async()=>assert.fail("DB should not be queried")}),/HOLD_P6_(OWNER_SETTLEMENT|WINDOW_READBACK)/);
  }
 });
@@ -51,4 +51,12 @@ test("owner URL cannot relax TLS or select other DB/login",()=>{
  const base="postgresql://neondb_owner:fixture@ci-only.neon.tech/neondb?sslmode=require";
  assert.equal(ownerSettlementConnection(base,{}).ssl.rejectUnauthorized,true);
  for(const x of [base.replace("sslmode=require","sslmode=disable"),base.replace("neondb_owner","wrong_role"),base.replace("neondb?","replacement?")])assert.throws(()=>ownerSettlementConnection(x,{}),/OWNER_TLS_URL/);
+});
+
+test("owner settlement reader and exact actual heartbeat workflow do not drift",()=>{
+ const w=readFileSync(new URL("../.github/workflows/phase6-autonomous-gh-controller-heartbeat-no-provider.yml",import.meta.url),"utf8");
+ const src=readFileSync(new URL("../scripts/v39_phase6_rolling_window_settlement_owner_readonly_v39.mjs",import.meta.url),"utf8");
+ const names=[...src.matchAll(/STEPS=\["([^"]+)","([^"]+)"\]/g)];
+ assert.equal(names.length,1);
+ for(const name of names[0].slice(1))assert.equal(w.split("- name: "+name+"\n").length-1,1);
 });

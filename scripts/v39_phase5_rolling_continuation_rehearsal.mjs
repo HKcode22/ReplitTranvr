@@ -11,6 +11,9 @@ import {runP6RollingPreview} from "./v39_phase6_rolling_github_preview_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase5-autonomous-clock-canary-no-provider.yml",PATH=".github/workflows/"+WF;
 const CONFIRM="REHEARSE_THREE_ROLLING_SESSIONS_NO_PROVIDER_NO_DB";
+export const SUSTAINED_CONFIRM="REHEARSE_THREE_SUSTAINED_GITHUB_CLOCK_SESSIONS_NO_PROVIDER_NO_DB";
+const SLOT_MS=5*60000, SUSTAINED_HOP_MS=45*60000, SUSTAINED_WINDOW_MS=180*60000;
+const SUSTAINED_DRAIN_MS=120000;
 const JOB="rolling-no-provider-rehearsal";
 const STEP="Observe two real read-only rolling waves and admit at most one rehearsal successor";
 const RECEIPT_STEP="Publish exact non-sensitive rehearsal successor receipt";
@@ -24,7 +27,7 @@ export function admitP5RollingRehearsal(e,now){
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||e.GITHUB_REF!=="refs/heads/main"||
     e.GITHUB_EVENT_NAME!=="workflow_dispatch"||e.GITHUB_RUN_ATTEMPT!=="1"||
     !idok(e.GITHUB_RUN_ID)||!/^[a-f0-9]{40}$/.test(e.GITHUB_SHA??"")||
-    e.GITHUB_SHA!==e.P5_ROLLING_REHEARSAL_SHA||e.P5_ROLLING_REHEARSAL_CONFIRM!==CONFIRM||
+    e.GITHUB_SHA!==e.P5_ROLLING_REHEARSAL_SHA||![CONFIRM,SUSTAINED_CONFIRM].includes(e.P5_ROLLING_REHEARSAL_CONFIRM)||
     !/^[a-f0-9]{32}$/.test(e.P5_ROLLING_REHEARSAL_CHAIN??"")||
     !/^[012]$/.test(e.P5_ROLLING_REHEARSAL_HOP??"")||
     e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||e.V39_PHASE6_OWNER_APPROVED!=="0"||
@@ -34,8 +37,11 @@ export function admitP5RollingRehearsal(e,now){
      "P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL","P5_RETENTION_READER_DATABASE_URL"].some(k=>e[k])||
     typeof e.GITHUB_TOKEN!=="string"||e.GITHUB_TOKEN.length<16||!Number.isSafeInteger(now))fail("SCOPE");
  const hop=Number(e.P5_ROLLING_REHEARSAL_HOP),parent=e.P5_ROLLING_REHEARSAL_PARENT,
-  deadline=stamp(e.P5_ROLLING_REHEARSAL_DEADLINE),epoch=deadline-30*60000;
+  deadline=stamp(e.P5_ROLLING_REHEARSAL_DEADLINE),
+  sustained=e.P5_ROLLING_REHEARSAL_CONFIRM===SUSTAINED_CONFIRM,
+  epoch=deadline-(sustained?SUSTAINED_WINDOW_MS:30*60000);
  if(now<epoch||now>=deadline-60000)fail("DEADLINE");
+ if(sustained&&deadline-now<SUSTAINED_HOP_MS+SUSTAINED_DRAIN_MS)fail("SUSTAINED_INSUFFICIENT_REMAINING_TIME");
  let sent=null;
  if(hop===0){if(parent!=="0"||e.P5_ROLLING_REHEARSAL_SENT)fail("ROOT_PARENT");}
  else{
@@ -43,7 +49,47 @@ export function admitP5RollingRehearsal(e,now){
   sent=stamp(e.P5_ROLLING_REHEARSAL_SENT);
   if(sent<epoch||sent>now||sent>=deadline-30000)fail("PARENT_CLOCK");
  }
- return {id:e.GITHUB_RUN_ID,sha:e.GITHUB_SHA,chain:e.P5_ROLLING_REHEARSAL_CHAIN,hop,parent,epoch,deadline,sent};
+ return {id:e.GITHUB_RUN_ID,sha:e.GITHUB_SHA,chain:e.P5_ROLLING_REHEARSAL_CHAIN,hop,parent,epoch,deadline,sent,sustained,confirm:e.P5_ROLLING_REHEARSAL_CONFIRM};
+}
+/** Observe a bounded in-run UTC clock. A late wake records missed slots instead
+ * of delivering retrospective ticks. No provider, SQL, or dispatch here. */
+export async function observeP5SustainedClock({now=Date.now,sleep=sleepDefault,emit=()=>{},span=SUSTAINED_HOP_MS,deadline}={}){
+ const start=now(),end=start+span;
+ if(!Number.isSafeInteger(start)||!Number.isSafeInteger(deadline)||span!==SUSTAINED_HOP_MS||end+SUSTAINED_DRAIN_MS>deadline)fail("SUSTAINED_CLOCK_SCOPE");
+ const first=Math.floor(start/SLOT_MS)*SLOT_MS+SLOT_MS;
+ const ticks=[]; let slot=first,missed=0,previous=start;
+ while(slot<=end){
+  const before=now();if(!Number.isSafeInteger(before)||before<previous)fail("SUSTAINED_CLOCK_REGRESSED");
+  if(before<slot)await sleep(slot-before);
+  const observed=now();
+  if(!Number.isSafeInteger(observed)||observed<Math.max(before,slot)-250||observed>=deadline-60000)fail("SUSTAINED_CLOCK_WAKE");
+  if(observed<slot)fail("SUSTAINED_CLOCK_EARLY");
+  const latest=Math.floor(observed/SLOT_MS)*SLOT_MS;
+  if(latest>end){missed+=Math.floor((end-slot)/SLOT_MS)+1;break;}
+  const skipped=Math.floor((latest-slot)/SLOT_MS);
+  missed+=skipped;
+  const tick={slotUtc:new Date(latest).toISOString(),observedUtc:new Date(observed).toISOString(),
+   latenessMs:observed-latest,missedBefore:skipped};
+  ticks.push(tick);emit({status:"P5_SUSTAINED_CLOCK_TICK_NO_PROVIDER",...tick});
+  previous=observed;slot=latest+SLOT_MS;
+ }
+ if(ticks.length+missed!==9)fail("SUSTAINED_CLOCK_ACCOUNTING");
+ return {startUtc:new Date(start).toISOString(),endUtc:new Date(end).toISOString(),ticks,missed,expectedSlots:9};
+}
+export function validateP5SustainedClockReceipt(x){
+ if(!x||!Array.isArray(x.ticks)||x.ticks.length>9||!Number.isInteger(x.missed)||x.missed<0||
+    x.expectedSlots!==9||x.ticks.length+x.missed!==9)return false;
+ try{
+  const start=stamp(x.startUtc),end=stamp(x.endUtc);if(end-start!==SUSTAINED_HOP_MS)return false;
+  let prev=Math.floor(start/SLOT_MS)*SLOT_MS,missed=0,priorObserved=start;
+  for(const t of x.ticks){
+   const slot=stamp(t.slotUtc),observed=stamp(t.observedUtc);
+   if(slot%SLOT_MS||slot<=prev||slot>end||observed<slot||observed<priorObserved||
+      observed-slot>=SLOT_MS||t.latenessMs!==observed-slot||t.missedBefore!==(slot-prev)/SLOT_MS-1)return false;
+   missed+=t.missedBefore;prev=slot;priorObserved=observed;
+  }
+  return missed+Math.floor((end-prev)/SLOT_MS)===x.missed;
+ }catch{return false;}
 }
 // Only the fixed metadata artifact on the independently verified predecessor
 // may be downloaded. The artifact contains no provider or DB values.
@@ -130,6 +176,8 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
         receipt.deadlineUtc!==new Date(a.deadline).toISOString()||
         receipt.nextDispatchAtUtc!==new Date(a.sent).toISOString()||
         receipt.nextRunId!==a.id||receipt.rehearsalDispatches!==1||
+        (a.sustained?(receipt.profile!=="SUSTAINED_45M"||!validateP5SustainedClockReceipt(receipt.clock)):
+          (receipt.profile!==undefined||receipt.clock!==undefined))||
         receipt.collectionDispatches!==0||receipt.providerCalls!==0||receipt.databaseReads!==0||
         receipt.databaseWrites!==0||receipt.phase6PaidGo!==false||
         !Array.isArray(receipt.waves)||receipt.waves.length!==2||
@@ -148,7 +196,7 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
   try{await lineage();break;}
   catch(e){if(e?.message!=="HOLD_P5_ROLLING_REHEARSAL_PREDECESSOR_NOT_TERMINAL"||i>=5||now()+70000>=a.deadline)throw e;await pause(5000);}
  }
- const summaries=[];
+ const summaries=[];let sustainedClock;
  for(let wave=1;wave<=2;wave++){
   const p=await runP6RollingPreview({...env,P6_CONTROLLER_HEARTBEAT_CONFIRM:"PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH",
    P6_ROLLING_PREVIEW_APPROVED_MAIN:a.sha},{now,fetcher:read});
@@ -156,11 +204,15 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
   const summary={wave,observedAtUtc:p.observedAtUtc,plan:p.observedPlanStatus,lanes:p.assessments.length,
    hypotheticalDue:p.hypotheticallyDue.length};
   summaries.push(summary);emit({status:"REAL_READONLY_ROLLING_WAVE",...summary});
-  if(wave===1)await pause(15000);
+  if(wave===1){
+   if(a.sustained)sustainedClock=await observeP5SustainedClock({now,sleep,emit,deadline:a.deadline});
+   else await pause(15000);
+  }
  }
  await lineage();await main();
  const base={schema:"v39.phase5.rolling-continuation-rehearsal.v1",chainId:a.chain,hop:a.hop,runId:a.id,parentRunId:a.parent,
   reviewedMainSha:a.sha,deadlineUtc:new Date(a.deadline).toISOString(),waves:summaries,githubReads:gets,
+  ...(a.sustained?{profile:"SUSTAINED_45M",clock:sustainedClock}:{}),
   providerCalls:0,databaseReads:0,databaseWrites:0,collectionDispatches:0,phase6PaidGo:false};
  if(a.hop===2)return {...base,status:"TERMINAL_REHEARSAL_NO_MORE_DISPATCH",rehearsalDispatches:0,nextRunId:null};
  const sent=now();
@@ -170,7 +222,7 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
   if(++posts!==1)fail("DUPLICATE_POST");
   const res=await fetcher(ROOT+"/actions/workflows/"+WF+"/dispatches",{method:"POST",headers:{...headers,"Content-Type":"application/json"},
    redirect:"error",signal:AbortSignal.timeout(10000),body:JSON.stringify({ref:"main",return_run_details:true,inputs:{
-    mode:"ROLLING_REHEARSAL",handoff_confirm:CONFIRM,approved_main_sha:a.sha,chain_id:a.chain,hop:String(a.hop+1),parent_run_id:a.id,
+    mode:"ROLLING_REHEARSAL",handoff_confirm:a.confirm,approved_main_sha:a.sha,chain_id:a.chain,hop:String(a.hop+1),parent_run_id:a.id,
     deadline_utc:new Date(a.deadline).toISOString(),sent_at_utc:new Date(sent).toISOString()}})});
   if(res.status!==200)fail("ACK");
   const b=await res.json(),id=b?.workflow_run_id;

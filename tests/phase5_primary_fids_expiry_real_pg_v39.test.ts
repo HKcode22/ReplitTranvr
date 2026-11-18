@@ -177,4 +177,7 @@ it("production admission remains disabled unless separate exact-main approval an
  expect(()=>admitP5PrimaryExpiryGithub(base)).toThrow("SEPARATE_APPLY_APPROVAL_REQUIRED");
  expect(()=>admitP5PrimaryExpiryGithub({...base,P5_PRIMARY_FIDS_EXPIRY_APPROVAL:P5_PRIMARY_APPLY,P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true"})).toThrow("SCOPED_TLS_CONNECTION_REQUIRED");
  expect(()=>admitP5PrimaryExpiryGithub({...base,DATABASE_URL:"owner-secret"})).toThrow("EXACT_NONPAID_MAIN_SCOPE_REQUIRED");
+ const backup={...base,P5_PRIMARY_FIDS_EXPIRY_APPROVAL:P5_PRIMARY_APPLY,P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_BACKSTOP_REQUEST:"1",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY"};
+ expect(()=>admitP5PrimaryExpiryGithub(backup)).toThrow("SCOPED_TLS_CONNECTION_REQUIRED");
+ for(const patch of [{P6_PRIVATE_EPOCH_EXPIRY_MODE:"APPLY_DUE_ONLY"},{P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"false"},{GITHUB_EVENT_NAME:"schedule"},{P5_PRIMARY_FIDS_EXPIRY_MODE:"VERIFY_ONLY"},{P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256:"b".repeat(64)}])expect(()=>admitP5PrimaryExpiryGithub({...backup,...patch})).toThrow("BACKSTOP_PRIMARY_ONLY_SCOPE");
 });

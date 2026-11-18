@@ -1,6 +1,7 @@
 name: Phase5 Autonomous Six-Slot Clock Canary (NO provider)
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' &&
+  ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'PRIMARY_BACKSTOP' && 'P5 PRIMARY BACKSTOP ROOT' ||
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' &&
       format('P5 ROLLING {0} {1} {2}', inputs.chain_id, inputs.hop, inputs.parent_run_id) ||
       github.event_name == 'workflow_dispatch' && inputs.mode == 'BOUNDED_HANDOFF' &&
       format('P5 HANDOFF {0} {1} {2}', inputs.chain_id, inputs.hop, inputs.parent_run_id) ||
@@ -12,7 +13,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [OBSERVE, BOUNDED_HANDOFF, ROLLING_REHEARSAL]
+        options: [OBSERVE, BOUNDED_HANDOFF, ROLLING_REHEARSAL, PRIMARY_BACKSTOP]
         default: OBSERVE
       handoff_confirm:
         type: string
@@ -43,6 +44,9 @@ on:
       - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
       - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
       - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
+      - 'scripts/v39_phase5_primary_github_backstop_v39.mjs'
+      - 'tests/phase5_primary_github_backstop_v39.test.mjs'
+      - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
       - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
@@ -59,6 +63,9 @@ on:
       - 'scripts/v39_phase5_github_bounded_handoff_canary.mjs'
       - 'tests/phase5_github_bounded_handoff_canary_v39.test.mjs'
       - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
+      - 'scripts/v39_phase5_primary_github_backstop_v39.mjs'
+      - 'tests/phase5_primary_github_backstop_v39.test.mjs'
+      - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
       - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
       - 'server/lib/disruption/phase6RollingGithubController_v39.mjs'
@@ -97,6 +104,7 @@ jobs:
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
           node --test tests/phase5_github_bounded_handoff_canary_v39.test.mjs
           node --test tests/phase5_rolling_continuation_rehearsal_v39.test.mjs
+          node --test tests/phase5_primary_github_backstop_v39.test.mjs
           bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
           node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
           node --test tests/phase5_github_six_slot_coverage_v39.test.mjs
@@ -171,7 +179,7 @@ jobs:
   rolling-no-provider-rehearsal:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'ROLLING_REHEARSAL' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: ${{ inputs.handoff_confirm == 'REHEARSE_THREE_SUSTAINED_GITHUB_CLOCK_SESSIONS_NO_PROVIDER_NO_DB' && 55 || 6 }}
     permissions:
       contents: read
       actions: write
@@ -215,5 +223,64 @@ jobs:
         with:
           name: phase5-rolling-rehearsal-${{ github.run_id }}
           path: ${{ runner.temp }}/p5-rolling-rehearsal-receipt.json
+          retention-days: 7
+          if-no-files-found: error
+
+  bounded-primary-retention-backstop:
+    # One explicitly approved manual pilot; no SOURCE/PRE/POST, no SQL here.
+    # An unknown parent is not automatically restarted by schedule.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+          inputs.mode == 'PRIMARY_BACKSTOP' && inputs.handoff_confirm == 'RUN_BOUNDED_PRIMARY_FIDS_BACKSTOP_NO_PROVIDER_NO_PRIVATE_MUTATION' &&
+          inputs.approved_main_sha == github.sha &&
+          vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED == 'true' &&
+          vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+          vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
+          vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
+          vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 125
+    concurrency:
+      group: p5-primary-backstop-root-singleton
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      P5_BACKSTOP_CONFIRM: ${{ inputs.handoff_confirm }}
+      P5_BACKSTOP_REQUESTED_MAIN: ${{ inputs.approved_main_sha }}
+      P5_BACKSTOP_DEADLINE: ${{ inputs.deadline_utc }}
+      P5_PRIMARY_FIDS_BACKSTOP_ENABLED: ${{ vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED }}
+      P5_PRIMARY_FIDS_EXPIRY_ENABLED: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED }}
+      P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA }}
+      P5_PRIMARY_FIDS_EXPIRY_APPROVAL: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL }}
+      P6_PRIVATE_EPOCH_EXPIRY_MODE: ${{ vars.P6_PRIVATE_EPOCH_EXPIRY_MODE }}
+      RAPIDAPI_KEY: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+      P5_PRIMARY_FIDS_SWEEP_DATABASE_URL: ''
+      P5_RETENTION_READER_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run bounded primary-only GitHub wake loop
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node scripts/v39_phase5_primary_github_backstop_v39.mjs
+      - name: Preserve bounded operational receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-primary-backstop-${{ github.run_id }}
+          path: ${{ runner.temp }}/p5-primary-backstop.jsonl
           retention-days: 7
           if-no-files-found: error
