@@ -60,9 +60,22 @@ function fixture(fault=""){
     return wrap([]);
    }
    if(p.endsWith("/workflows/"+old+"/runs"))return wrap(fault==="oldActive"&&st==="in_progress"?[{...self,id:99999}]:[]);
-   if(p.endsWith("/actions/runs"))return wrap([self,...runs].filter(r=>r.status===st));
+
+   if(p.endsWith("/actions/runs")){
+    if(u.searchParams.has("created")){
+     if(st==="failure"&&fault==="overflowFailure")
+      return response({total_count:101,workflow_runs:Array.from({length:100},(_,i)=>({id:i+50000}))});
+     if(st==="failure"&&["priorRootFailure","oldSourceFailure"].includes(fault))
+      return wrap([{...self,id:11111,path:fault==="oldSourceFailure"?".github/workflows/"+P6_ROLLING_ROUTES[0].workflow:self.path,
+       status:"completed",conclusion:"failure",created_at:iso(start-3.5*H)}]);
+     if(st==="failure"&&fault==="unrelatedFailure")
+      return wrap([{...self,id:11111,path:".github/workflows/unrelated.yml",status:"completed",conclusion:"failure",created_at:iso(start-3.5*H)}]);
+     return wrap([]);
+    }
+    return wrap([self,...runs,...(fault==="oldActive"?[{...self,id:99999,path:".github/workflows/"+old}]:[])].filter(r=>r.status===st));
+   }
    assert(route,p);
-   if(st==="failure"&&route.lane==="SOURCE_POST"&&fault==="oldSourceFailure")
+   if(st==="failure"&&route.lane==="SOURCE_POST"&&["oldSourceFailure","overflowFailure"].includes(fault))
     return wrap([{id:11111,status:"completed",conclusion:"failure",created_at:iso(start-3.5*H)}]);
    if(st)return wrap([]);
    return wrap(runs.filter(r=>r.path.endsWith("/"+route.workflow)&&r.event===ev));
@@ -106,4 +119,13 @@ test("terminal and safe preflight HOLD markers are distinct; absent or conflicti
  assert.equal(directDisposition(steps.map((s,i)=>({...s,conclusion:i?"success":"skipped"}))),"PREFLIGHT_HOLD");
  assert.equal(directDisposition(steps.slice(0,1)),null);
  assert.equal(directDisposition(steps.map(s=>({...s,conclusion:"success"}))),null);
+});
+
+test("complete repository negative sweep avoids per-route calls but overflow falls back and blocks old SOURCE failure",async()=>{
+ const f=fixture("unrelatedFailure"),o=await runDirectTick(f.env,f.options);
+ assert.equal(o.status,"DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF");assert(f.posts()>0);
+ assert(f.calls.filter(x=>x.url.includes("/workflows/")&&x.url.includes("status=failure")).length===0);
+ const g=fixture("overflowFailure"),r=await runDirectTick(g.env,g.options);
+ assert.equal(r.status,"DIRECT_PREFLIGHT_HOLD_NO_POST");assert.equal(g.posts(),0);
+ assert(g.calls.some(x=>x.url.includes(P6_ROLLING_ROUTES[0].workflow+"/runs?")&&x.url.includes("status=failure")));
 });

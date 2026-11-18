@@ -69,7 +69,11 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
   if(init.method==="POST"&&now()>=Math.min(start+4*MIN,deadline-18*MIN))hold("NO_DRAIN_HEADROOM");
   // No transport retries for POST. The existing snapshot helper retries
   // its own GETs; all attempts still consume the global cap above.
-  return fetcher(url,{...init,redirect:"error",signal:AbortSignal.timeout(10000)});
+
+  const response=await fetcher(url,{...init,redirect:"error",signal:AbortSignal.timeout(10000)});
+  const remaining=response.headers?.get?.("x-ratelimit-remaining");
+  if(remaining!=null&&(!/^\d+$/.test(remaining)||Number(remaining)<25))hold("RATE_LIMIT_RESERVE");
+  return response;
  };
  async function get(path){
   for(let i=0;i<3;i++){
@@ -95,10 +99,24 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
   // All negative conclusions since the independently approved activation,
   // not only the three-hour scheduling preview. A historical HOLD is NOT
   // retired when its clock ages. Query one row plus total_count, no truncation.
+
   const targets=[DIRECT_WF,...P6_ROLLING_ROUTES.map(r=>r.workflow)];
+  const allowed=new Set(targets.map(wf=>".github/workflows/"+wf));
   for(const status of failures){
-   const counts=await Promise.all(targets.map(wf=>get(q(wf,status))));
-   for(const x of counts){bounded(x,"workflow_runs",1);if(x.total_count!==0)hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");}
+   // One complete repository-wide negative sweep per conclusion usually
+   // replaces nine requests. If >100 rows, never infer absence from the first
+   // page: check complete per-workflow counts for the same exact time scope.
+   const list=await get("/actions/runs?branch=main&status="+status+"&per_page=100&created="+encodeURIComponent(">="+iso(a.since)));
+   const rs=bounded(list,"workflow_runs");
+   if(list.total_count<=100){
+    if(new Set(rs.map(x=>x.id)).size!==rs.length||rs.some(x=>!validId(x.id)||typeof x.path!=="string"||
+       x.head_branch!=="main"||x.status!=="completed"||x.conclusion!==status||
+       !Number.isFinite(Date.parse(x.created_at))||Date.parse(x.created_at)<a.since))hold("NEGATIVE_HISTORY_IDENTITY");
+    if(rs.some(x=>allowed.has(x.path)))hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");
+   }else{
+    const counts=await Promise.all(targets.map(wf=>get(q(wf,status))));
+    for(const x of counts){bounded(x,"workflow_runs",1);if(x.total_count!==0)hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");}
+   }
   }
   const skip=await get(q(DIRECT_WF,"skipped"));bounded(skip,"workflow_runs",1);
   if(skip.total_count!==0)hold("PRIOR_DIRECT_GATE_SKIPPED_REVIEW");
@@ -106,13 +124,14 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
  async function selfAndPredecessor(){
   const self=await get("/actions/runs/"+a.id);
   if(!exactRoot(self)||self.id!==a.id||self.status!=="in_progress"||self.conclusion!==null)hold("ROOT_IDENTITY");
+
   for(const status of states){
-   for(const wf of [DIRECT_WF,OLD]){
-    const x=await get("/actions/workflows/"+wf+"/runs?branch=main&status="+status+"&per_page=100");
-    const rows=bounded(x,"workflow_runs");if(x.total_count>100)hold("ACTIVE_HISTORY_INCOMPLETE");
-    if(wf===DIRECT_WF&&status==="in_progress"&&!rows.some(r=>r.id===a.id&&exactRoot(r)))hold("SELF_NOT_VISIBLE");
-    if(rows.some(r=>wf!==DIRECT_WF||r.id!==a.id||!exactRoot(r)||r.status!==status))hold("OVERLAPPING_CONTROLLER");
-   }
+   const x=await get("/actions/runs?branch=main&status="+status+"&per_page=100");
+   const rows=bounded(x,"workflow_runs");if(x.total_count>100)hold("ACTIVE_HISTORY_INCOMPLETE");
+   if(rows.some(r=>!validId(r.id)||typeof r.path!=="string"||r.head_branch!=="main"||r.status!==status))hold("ACTIVE_HISTORY_IDENTITY");
+   const controllers=rows.filter(r=>[DIRECT_WF,OLD].some(wf=>r.path===".github/workflows/"+wf));
+   if(status==="in_progress"&&!controllers.some(r=>r.id===a.id&&exactRoot(r)))hold("SELF_NOT_VISIBLE");
+   if(controllers.some(r=>r.id!==a.id||!exactRoot(r)||r.status!==status))hold("OVERLAPPING_CONTROLLER");
   }
   const p=await get(q(DIRECT_WF,"success"));const rows=bounded(p,"workflow_runs",1);
   if(rows.length){
