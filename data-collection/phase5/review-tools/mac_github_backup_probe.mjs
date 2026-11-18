@@ -2,7 +2,7 @@
 /** Detached owner-side backup probe, no dependencies. Mac launchd calls observe only.
  * No database, provider key, paid lanes, or automatic production dispatch.
  * One manual canary per private state directory, no replay after unknown POST. */
-import {mkdirSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,lstatSync,readFileSync} from "node:fs";
+import {mkdirSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,lstatSync,readFileSync,existsSync} from "node:fs";
 import {resolve,join} from "node:path";
 import {homedir} from "node:os";
 import {randomBytes} from "node:crypto";
@@ -91,12 +91,14 @@ export function localGap(previous,observedUtc){
  const minutes=Math.round((b-a)/6000)/10;
  return minutes>20?{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes}:null;
 }
-export function launchAgentXml({node,script,dir,pin}){
+export function launchAgentXml({node,script,dir,pin,authenticated=false,ghExecutable}){
  if(!SHA.test(pin??"")||[node,script,dir].some(v=>typeof v!=="string"||!v.startsWith("/")||/[\x00-\x1f]/.test(v)))fail("LAUNCH_AGENT_PATHS");
+ if(authenticated!==false&&authenticated!==true||authenticated&&(typeof ghExecutable!=="string"||!ghExecutable.startsWith("/")||/[\x00-\x1f]/.test(ghExecutable)))fail("LAUNCH_AGENT_GH_PATH");
  const esc=v=>v.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
  const string=v=>"<string>"+esc(v)+"</string>";
  return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'+
-  '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
+  '<key>Label</key>'+string("com.travnr.github-watch")+'\n<key>ProgramArguments</key><array>'+[node,script,authenticated?"observe-auth-notify":"observe-notify",pin,dir].map(string).join("")+'</array>\n'+
+   (authenticated?'<key>EnvironmentVariables</key><dict><key>TRAVNR_WATCH_GH_BINARY</key>'+string(ghExecutable)+'</dict>\n':'')+
   '<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>600</integer>\n<key>StandardOutPath</key>'+string("/dev/null")+'\n'+
   '<key>StandardErrorPath</key>'+string(join(dir,"launchd-errors.log"))+'\n</dict></plist>\n';
 }
@@ -106,6 +108,31 @@ async function get(path){
  // No retries and no credentials for public metadata. Rate limit/unavailable is UNKNOWN.
  if(!res.ok)fail("PUBLIC_API_UNAVAILABLE_"+res.status);
  return res.json();
+}
+function githubCli(){
+ const x=process.env.TRAVNR_WATCH_GH_BINARY;
+ if(x){if(!x.startsWith("/")||!existsSync(x))fail("GH_BINARY_PATH");return x;}
+ for(const p of ["/opt/homebrew/bin/gh","/usr/local/bin/gh","/usr/bin/gh"])if(existsSync(p))return p;
+ return "gh";
+}
+function githubSafeEnv(){
+ return {PATH:process.env.PATH,HOME:process.env.HOME,GH_PROMPT_DISABLED:"1",GH_HOST:"github.com",
+  ...(process.env.GH_CONFIG_DIR?{GH_CONFIG_DIR:process.env.GH_CONFIG_DIR}:{}),
+  ...(process.env.GH_TOKEN?{GH_TOKEN:process.env.GH_TOKEN}:{}),
+  ...(process.env.GITHUB_TOKEN?{GITHUB_TOKEN:process.env.GITHUB_TOKEN}:{})};
+}
+export function authenticatedReadArgs(path){
+ const fixed=path==="/git/ref/heads/main"||LANES.some(l=>path==="/actions/workflows/"+l.file+"/runs?branch=main&per_page=10")||
+   /^\/actions\/runs\/[1-9][0-9]{0,14}\/jobs\?filter=latest&per_page=100$/.test(path);
+ if(!fixed)fail("READ_ENDPOINT_SCOPE");
+ return ["api","--hostname","github.com","--method","GET","repos/"+REPO+path];
+}
+async function getAuthenticated(path){
+ const args=authenticatedReadArgs(path);
+ try{
+  const out=execFileSync(githubCli(),args,{env:githubSafeEnv(),timeout:15000,maxBuffer:2097152,stdio:["ignore","pipe","ignore"]});
+  return JSON.parse(out.toString("utf8"));
+ }catch{fail("AUTHENTICATED_READ_UNAVAILABLE");}
 }
 function privateDir(path){
  mkdirSync(path,{recursive:true,mode:0o700});
@@ -122,20 +149,20 @@ function atom(path,value){
 }
 async function main(){
  const [mode,pin,custom]=process.argv.slice(2);
- if(!["observe","observe-notify","canary","inspect","launch-agent"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
+ if(!["observe","observe-notify","observe-auth","observe-auth-notify","canary","inspect","launch-agent","launch-agent-auth"].includes(mode)||!SHA.test(pin??"")||process.argv.length>5)fail("USAGE");
  const dir=resolve(custom??join(homedir(),".travnr-github-watch"));
  privateDir(dir);
  if(mode==="inspect"){
   console.log(readFileSync(join(dir,"canary.json"),"utf8"));return;
  }
- if(mode==="launch-agent"){
+ if(mode==="launch-agent"||mode==="launch-agent-auth"){
   if(process.platform!=="darwin")fail("MAC_ONLY");
-  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin}));return;
+  console.log(launchAgentXml({node:process.execPath,script:fileURLToPath(import.meta.url),dir,pin,authenticated:mode==="launch-agent-auth",ghExecutable:mode==="launch-agent-auth"?githubCli():undefined}));return;
  }
- if(mode==="observe"||mode==="observe-notify"){
+ if(["observe","observe-notify","observe-auth","observe-auth-notify"].includes(mode)){
   let previous=null;
   try{previous=JSON.parse(readFileSync(join(dir,"latest.json"),"utf8"));}catch{}
-  let result;try{result=await observe(pin,{get});}
+  let result;try{result=await observe(pin,{get:mode.startsWith("observe-auth")?getAuthenticated:get});}
   catch(e){result={status:"METADATA_UNAVAILABLE_NOT_HEALTHY",observedUtc:iso(Date.now()),reviewedMain:pin,reason:/^HOLD_MAC_WATCH_[A-Z0-9_]+$/.test(e.message)?e.message:"NETWORK_OR_RESPONSE_UNKNOWN",permitDispatch:false};}
   const gap=localGap(previous,result.observedUtc);
   const fingerprint=localHealthFingerprint(result);
@@ -144,7 +171,7 @@ async function main(){
     result.lanes?.some(l=>l.level!=="RECENT_STEP_ONLY");
   const changed=fingerprint!==old;
   if(gap)result.localMonitorGap=gap;
-  if(mode==="observe-notify"&&process.platform==="darwin"&&(gap||changed&&(degraded||previous))){
+  if(mode.endsWith("-notify")&&process.platform==="darwin"&&(gap||changed&&(degraded||previous))){
    // Notification is best-effort. Do not pass shell syntax or arbitrary metadata.
    const message=gap?"Local watcher gap detected; inspect latest.json":
     degraded?"GitHub scheduling requires attention; inspect latest.json":"GitHub metadata state changed; inspect latest.json";
@@ -155,14 +182,11 @@ async function main(){
  }
  // Authenticated gh is used ONLY for the explicitly requested test dispatch.
  // Do not pass provider or database secrets to the child process.
- const safe={PATH:process.env.PATH,HOME:process.env.HOME,GH_PROMPT_DISABLED:"1",GH_HOST:"github.com",
-  ...(process.env.GH_CONFIG_DIR?{GH_CONFIG_DIR:process.env.GH_CONFIG_DIR}:{}),
-  ...(process.env.GH_TOKEN?{GH_TOKEN:process.env.GH_TOKEN}:{}),
-  ...(process.env.GITHUB_TOKEN?{GITHUB_TOKEN:process.env.GITHUB_TOKEN}:{})};
+ const safe=githubSafeEnv();
  const latch=join(dir,"canary.json");
- const result=await canary(pin,{get,randomChain:()=>randomBytes(16).toString("hex"),
+ const result=await canary(pin,{get:getAuthenticated,randomChain:()=>randomBytes(16).toString("hex"),
   reserve:x=>fresh(latch,x),save:x=>atom(latch,x),post:async(path,body)=>{
-   const out=execFileSync("gh",["api","--hostname","github.com","--method","POST","repos/"+REPO+path,"--input","-"],
+   const out=execFileSync(githubCli(),["api","--hostname","github.com","--method","POST","repos/"+REPO+path,"--input","-"],
     {input:JSON.stringify(body),env:safe,timeout:20000,maxBuffer:32768,stdio:["pipe","pipe","ignore"]});
    return JSON.parse(out.toString("utf8"));
   }});

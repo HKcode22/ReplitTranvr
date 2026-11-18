@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {observe,canary,LANES,launchAgentXml,localGap,localHealthFingerprint} from "./mac_github_backup_probe.mjs";
+import {observe,canary,LANES,launchAgentXml,localGap,localHealthFingerprint,authenticatedReadArgs} from "./mac_github_backup_probe.mjs";
 const P="a".repeat(40),NOW=Date.parse("2030-01-01T12:00Z"),T=m=>new Date(NOW-m*60000).toISOString();
 function fixture(mode="fresh"){
  const calls=[];
@@ -53,4 +53,14 @@ test("local monitor separates absence or a wake gap from GitHub health",()=>{
  assert.deepEqual(localGap({observedUtc:T(62)},T(0)),{status:"LOCAL_MONITOR_GAP_OBSERVED",minutes:62});
  assert.equal(localGap({observedUtc:T(-1)},T(0)).status,"LOCAL_CLOCK_OR_RECEIPT_UNKNOWN");
  assert.equal(localHealthFingerprint({status:"x",lanes:[{lane:"a",level:"b"}]}),"x|a:b");
+});
+
+test("authenticated watcher uses only exact GET endpoints and stores no auth token in plist",()=>{
+ const args=authenticatedReadArgs("/git/ref/heads/main");assert.equal(args[args.indexOf("--method")+1],"GET");
+ for(const l of LANES)assert.equal(authenticatedReadArgs("/actions/workflows/"+l.file+"/runs?branch=main&per_page=10")[4],"GET");
+ assert.equal(authenticatedReadArgs("/actions/runs/123/jobs?filter=latest&per_page=100")[4],"GET");
+ for(const p of ["/actions/workflows/p.yml/dispatches","/actions/secrets","/git/ref/heads/evil","https://example.org"])assert.throws(()=>authenticatedReadArgs(p),/READ_ENDPOINT_SCOPE/);
+ const x=launchAgentXml({node:"/opt/homebrew/bin/node",script:"/tmp/probe.mjs",dir:"/tmp/d",pin:P,authenticated:true,ghExecutable:"/opt/homebrew/bin/gh"});
+ assert(x.includes("<string>observe-auth-notify</string>"));assert(x.includes("TRAVNR_WATCH_GH_BINARY"));assert(!x.includes("GH_TOKEN"));
+ assert.throws(()=>launchAgentXml({node:"/n",script:"/s",dir:"/d",pin:P,authenticated:true,ghExecutable:"gh"}),/LAUNCH_AGENT_GH_PATH/);
 });

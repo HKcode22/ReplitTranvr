@@ -6,6 +6,7 @@ on:
       - '.github/workflows/phase5-detached-mac-backup-probe-test.yml'
 permissions:
   contents: read
+  actions: read
 jobs:
   local-backup-fixtures:
     strategy:
@@ -33,14 +34,16 @@ jobs:
           plutil -lint "$RUNNER_TEMP/travnr-watch.plist"
           /usr/libexec/PlistBuddy -c 'Print :StartInterval' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx 600
           /usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx observe-notify
-      - name: Measure actual public GitHub metadata from macOS without credentials
+      - name: Measure actual authenticated GET-only GitHub metadata from macOS
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           set +x
           umask 077
           state="$RUNNER_TEMP/travnr-watch-fixture"
           pin=6f518add10d00567a95fbcaf3650ebf608da8a60
-          /usr/bin/time -l node data-collection/phase5/review-tools/mac_github_backup_probe.mjs observe "$pin" "$state"
-          node -e 'const r=require(process.argv[1]); if(r.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||r.permitDispatch!==false||r.providerCalls!==0||r.databaseReads!==0||r.databaseWrites!==0||r.lanes?.length!==2)process.exit(2); console.log("ACTUAL_PUBLIC_GITHUB_METADATA_READBACK_NO_DISPATCH_NO_PROVIDER");' "$state/latest.json"
+          /usr/bin/time -l node data-collection/phase5/review-tools/mac_github_backup_probe.mjs observe-auth "$pin" "$state"
+          node -e 'const r=require(process.argv[1]); if(r.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||r.permitDispatch!==false||r.providerCalls!==0||r.databaseReads!==0||r.databaseWrites!==0||r.lanes?.length!==2)process.exit(2); console.log("ACTUAL_AUTHENTICATED_GITHUB_METADATA_READBACK_NO_DISPATCH_NO_PROVIDER");' "$state/latest.json"
