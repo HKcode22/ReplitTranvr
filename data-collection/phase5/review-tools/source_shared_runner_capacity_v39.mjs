@@ -32,7 +32,7 @@ export function modelSharedSourceRunners(plan,cfg){
  function allocate(at){
   while(waiting.length&&running.length<slots){
    const {q,tick}=waiting.shift(),ready=at+startupMs;
-   const disposition=ready<=q.planned?"READY_BY_NOMINAL":ready<=q.hard?"READY_AFTER_NOMINAL_WITHIN_HARD_WINDOW":"READY_AFTER_HARD_WINDOW";
+   const disposition=ready<=q.planned?"READY_BY_NOMINAL":ready<q.hard?"READY_AFTER_NOMINAL_WITHIN_HARD_WINDOW":"READY_AFTER_HARD_WINDOW";
    records.set(q.key,{disposition,tick,allocated:at,ready});
    running.push({key:q.key,until:Math.max(ready,q.planned)+tailMinutes*MIN});
   }
