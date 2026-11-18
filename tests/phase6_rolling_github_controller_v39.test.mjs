@@ -116,6 +116,23 @@ test("bounded read fails closed on truncated API totals or history filter drift"
  await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>({ok:true,json:async()=>({total_count:101,workflow_runs:[]})})}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE/);
  await assert.rejects(readP6RollingGithubSnapshot({...cfg,epoch:clock-7*3600000,fetcher:async()=>{throw Error("must not call")}}),/NO_BOUNDED_SESSION_HISTORY_SCOPE/);
 });
+test("read-only history retries transient GitHub responses and preserves permanent failures",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
+ let calls=0;
+ const result=await readP6RollingGithubSnapshot({...cfg,fetcher:async()=>{
+  calls++;
+  if(calls===1)return {ok:false,status:503};
+  return {ok:true,status:200,json:async()=>({total_count:0,workflow_runs:[]})};
+ }});
+ assert.equal(result.plan.assessments.length,P6_ROLLING_ROUTES.length);
+ assert.equal(calls,22);
+ let forbiddenCalls=0;
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>{
+  forbiddenCalls++;
+  return {ok:false,status:403};
+ }}),/GITHUB_HISTORY_HTTP_403/);
+ assert.equal(forbiddenCalls,P6_ROLLING_ROUTES.length);
+});
 
 test("green parent with explicit safe HOLD or missing evidence remains distinct from completed work; malformed markers block",()=>{
  const x=snaps(),r=P6_ROLLING_ROUTES[0];x[0].runs=[row(r)];x[0].jobRunId=123;x[0].jobs=jobs(r);
