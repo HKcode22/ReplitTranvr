@@ -19,6 +19,10 @@ const STEP="Observe two real read-only rolling waves and admit at most one rehea
 const RECEIPT_STEP="Publish exact non-sensitive rehearsal successor receipt";
 const RECEIPT_FILE="p5-rolling-rehearsal-receipt.json";
 const fail=s=>{throw Error("HOLD_P5_ROLLING_REHEARSAL_"+s);};
+export function p5RehearsalSafeError(e){
+ const m=e?.message??"";
+ return /^HOLD_(P5_ROLLING_REHEARSAL|P6_ROLLING_PREVIEW|P6_ROLLING_CONTROLLER)_[A-Z0-9_]{1,90}$/.test(m)?m:"HOLD_P5_ROLLING_REHEARSAL_REDACTED_NO_RETRY";
+}
 const idok=x=>typeof x==="string"&&/^[1-9][0-9]{0,14}$/.test(x);
 const stamp=x=>typeof x==="string"&&Number.isFinite(Date.parse(x))&&new Date(x).toISOString()===x?Date.parse(x):fail("UTC");
 const title=(chain,hop,parent)=>"P5 ROLLING "+chain+" "+hop+" "+parent;
@@ -113,7 +117,7 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
  async function read(url,init){
   const u=new URL(url);
   if(init?.method!=="GET"||u.origin!=="https://api.github.com"||!u.pathname.startsWith("/repos/"+REPO+"/")||
-     u.username||u.password||u.hash||now()>=a.deadline-12000||++gets>110)fail("GET_SCOPE_OR_BOUND");
+     u.username||u.password||u.hash||now()>=a.deadline-12000||++gets>420)fail("GET_SCOPE_OR_BOUND");
   return fetcher(url,{...init,redirect:"error",signal:AbortSignal.timeout(10000)});
  }
  async function get(path){
@@ -131,7 +135,9 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
  }
  async function pause(ms){const prior=now();await sleep(ms);if(now()<prior+ms-250||now()>=a.deadline-12000)fail("PAUSE_CLOCK");}
  async function lineage(){
-  const from=encodeURIComponent(">="+new Date(a.epoch).toISOString());
+  // Workflow API creation timestamps have whole-second resolution. Include the
+  // enclosing second in history; exact() independently checks the admitted epoch.
+  const from=encodeURIComponent(">="+new Date(Math.floor(a.epoch/1000)*1000).toISOString());
   const v=await get("/actions/workflows/"+WF+"/runs?branch=main&event=workflow_dispatch&per_page=100&created="+from);
   if(!Number.isSafeInteger(v?.total_count)||v.total_count<1||v.total_count>100||
      !Array.isArray(v.workflow_runs)||v.workflow_runs.length!==v.total_count)fail("HISTORY_INCOMPLETE");
@@ -198,8 +204,9 @@ export async function runP5RollingRehearsal(env,{now=Date.now,sleep=sleepDefault
  }
  const summaries=[];let sustainedClock;
  for(let wave=1;wave<=2;wave++){
+  emit({status:"P5_READONLY_PREVIEW_START",wave,githubReads:gets});
   const p=await runP6RollingPreview({...env,P6_CONTROLLER_HEARTBEAT_CONFIRM:"PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH",
-   P6_ROLLING_PREVIEW_APPROVED_MAIN:a.sha},{now,fetcher:read});
+   P6_ROLLING_PREVIEW_APPROVED_MAIN:a.sha},{now,fetcher:read,emit});
   if(p.status!=="ACTUAL_GITHUB_ROLLING_PREVIEW_ONLY_NO_GO"||p.dispatchCount!==0||p.providerCalls!==0||p.databaseReads!==0||p.databaseWrites!==0||p.phase6PaidGo!==false)fail("PREVIEW_SCOPE");
   const summary={wave,observedAtUtc:p.observedAtUtc,plan:p.observedPlanStatus,lanes:p.assessments.length,
    hypotheticalDue:p.hypotheticallyDue.length};
@@ -239,5 +246,5 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   writeFileSync(join(process.env.RUNNER_TEMP,RECEIPT_FILE),out,{flag:"wx",mode:0o600});
   console.log(out);
  }
- catch(e){console.error(/^HOLD_P5_ROLLING_REHEARSAL_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P5_ROLLING_REHEARSAL_REDACTED_NO_RETRY");process.exitCode=2;}
+ catch(e){console.error(p5RehearsalSafeError(e));process.exitCode=2;}
 }

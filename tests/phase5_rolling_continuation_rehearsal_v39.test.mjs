@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {runP5RollingRehearsal,admitP5RollingRehearsal,observeP5SustainedClock,validateP5SustainedClockReceipt,SUSTAINED_CONFIRM} from "../scripts/v39_phase5_rolling_continuation_rehearsal.mjs";
+import {runP5RollingRehearsal,admitP5RollingRehearsal,observeP5SustainedClock,validateP5SustainedClockReceipt,SUSTAINED_CONFIRM,p5RehearsalSafeError} from "../scripts/v39_phase5_rolling_continuation_rehearsal.mjs";
 const SHA="a".repeat(40),CHAIN="b".repeat(32),REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const WF="phase5-autonomous-clock-canary-no-provider.yml",START=Date.parse("2030-01-01T00:00:00.000Z");
 const iso=x=>new Date(x).toISOString(),reply=(data,status=200)=>({ok:status===200,status,json:async()=>data});
@@ -98,4 +98,27 @@ test("sustained successor cannot accept short-profile predecessor receipt",async
  const f=fixture(1);f.env.P5_ROLLING_REHEARSAL_CONFIRM=SUSTAINED_CONFIRM;f.env.P5_ROLLING_REHEARSAL_DEADLINE=iso(START+180*60000);
  await assert.rejects(runP5RollingRehearsal(f.env,f.options),/PARENT_RECEIPT_ACK_MISMATCH/);
  assert.equal(f.posts(),0);
+});
+
+test("read-only preview error survives rehearsal redaction, raw response and arbitrary errors remain redacted",()=>{
+ assert.equal(p5RehearsalSafeError(Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE")),"HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE");
+ assert.equal(p5RehearsalSafeError(Error("HOLD_P6_ROLLING_PREVIEW_UNREVIEWED_GET_OR_REQUEST_BOUND")),"HOLD_P6_ROLLING_PREVIEW_UNREVIEWED_GET_OR_REQUEST_BOUND");
+ assert.equal(p5RehearsalSafeError(Error("token-like arbitrary payload")),"HOLD_P5_ROLLING_REHEARSAL_REDACTED_NO_RETRY");
+});
+test("root lineage reads enclosing whole second to avoid omitting an acknowledged same-second creation",async()=>{
+ const f=fixture(0);f.env.P5_ROLLING_REHEARSAL_DEADLINE=iso(START+30*60000+877);
+ const prev=f.options.fetcher;f.options.fetcher=async(url,init)=>{
+  const u=new URL(url);if(u.pathname.endsWith("/workflows/"+WF+"/runs"))assert.equal(u.searchParams.get("created"),">="+iso(START));
+  return prev(url,init);
+ };
+ await runP5RollingRehearsal(f.env,f.options);assert.equal(f.posts(),1);
+});
+test("read-only preview upstream 503 does not emit a successor and identifies failure class",async()=>{
+ const f=fixture(0);const prev=f.options.fetcher;f.options.fetcher=async(url,init)=>{
+  if(url.includes("/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml/runs"))return reply({},503);
+  return prev(url,init);
+ };
+ await assert.rejects(runP5RollingRehearsal(f.env,f.options),/HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE/);
+ assert.equal(f.posts(),0);
+ assert(f.events.some(x=>x.status==="P6_READONLY_PREVIEW_HTTP_FAILURE"&&x.httpStatus===503));
 });

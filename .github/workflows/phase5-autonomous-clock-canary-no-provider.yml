@@ -136,6 +136,27 @@ jobs:
             ${{ runner.temp }}/phase5-clock-coverage-sanitized.json
           retention-days: 7
           if-no-files-found: error
+  actual-readonly-preview-diagnostic:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RAPIDAPI_KEY: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Read actual current main metadata through exact snapshot core without dispatch
+        run: node scripts/v39_phase5_rolling_preview_actual_diagnostic_v39.mjs
+
   bounded-manual-github-handoff:
     # Separate explicit 3-run measurement. Does not execute SOURCE/PRE/POST,
     # does not change the existing scheduled six-slot observation.
