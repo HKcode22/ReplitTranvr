@@ -7,7 +7,7 @@ import {readP6RollingGithubSnapshot} from "../server/lib/disruption/phase6Rollin
 const ROOT="https://api.github.com/repos/HKcode22/ReplitTranvr";
 const CONFIRM="PREVIEW_ROLLING_CONTROLLER_READONLY_NO_PROVIDER_NO_DISPATCH";
 const hold=s=>{throw Error("HOLD_P6_ROLLING_PREVIEW_"+s);};
-export async function runP6RollingPreview(env,{now=Date.now,fetcher=fetch}={}){
+export async function runP6RollingPreview(env,{now=Date.now,fetcher=fetch,emit=()=>{}}={}){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_CONTROLLER_HEARTBEAT_CONFIRM!==CONFIRM||
@@ -28,8 +28,13 @@ export async function runP6RollingPreview(env,{now=Date.now,fetcher=fetch}={}){
   const u=new URL(url);
   if(init?.method!=="GET"||u.origin!=="https://api.github.com"||
      !u.pathname.startsWith("/repos/HKcode22/ReplitTranvr/")||
-     u.username||u.password||u.hash||++requests>32)hold("UNREVIEWED_GET_OR_REQUEST_BOUND");
-  return fetcher(url,{...init,redirect:"error",signal:AbortSignal.timeout(10000)});
+     u.username||u.password||u.hash||++requests>200)hold("UNREVIEWED_GET_OR_REQUEST_BOUND");
+  const kind=u.pathname.includes("/workflows/")?"WORKFLOW_HISTORY":u.pathname.endsWith("/jobs")?"JOB_HISTORY":u.pathname.endsWith("/actions/runs")?"ACTIVE_SWEEP":"MAIN";
+  try{
+   const res=await fetcher(url,{...init,redirect:"error",signal:AbortSignal.timeout(10000)});
+   if(!res.ok)emit({status:"P6_READONLY_PREVIEW_HTTP_FAILURE",kind,httpStatus:res.status,request:requests});
+   return res;
+  }catch(e){emit({status:"P6_READONLY_PREVIEW_TRANSPORT_FAILURE",kind,request:requests});throw e;}
  };
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"};
  async function checkMain(){
