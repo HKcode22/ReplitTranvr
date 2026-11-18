@@ -1,0 +1,71 @@
+{
+  "schema": "v39.phase6.actual-owner-signer-candidates-public-readback.v1",
+  "status": "SIX_CANDIDATES_CREATED_PUBLIC_FINGERPRINTS_INDEPENDENTLY_VERIFIED_NO_GO",
+  "originMain": "6f518add10d00567a95fbcaf3650ebf608da8a60",
+  "originManifestCandidateSha256": "fc6b594ec0e458d8810981ac8f170a3a91384be609e3c16a09c25f5a91449041",
+  "provenance": "OWNER_PASTED_SUCCESSFUL_LOCAL_WRAPPER_RECEIPT; ASSISTANT_NATIVE_NODE22_CRYPTO_PARSED_AND_REHASHED_ALL6_PUBLIC_SPKI_DER",
+  "signers": [
+    {
+      "id": "daily",
+      "secretNames": [
+        "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4AV5q/343ZxMdOxcoafyLT7dQmjvDvGzV5oLmM+zPJ0=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "81bd022724b5b2fbeeccfe17dd5ec4060229acb33cc2c9918edd4de223b01f51"
+    },
+    {
+      "id": "query",
+      "secretNames": [
+        "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA7j2PX24yOpkxP99EH5dMnlm9lXiKMTn7S4weDPXDDqQ=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "b15d0bae2e36db6f9c119098c89bfe0eec8f7d5cd8848d8127b4089bc2726326"
+    },
+    {
+      "id": "registry-index",
+      "secretNames": [
+        "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+        "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEACL35PAxnHpDjeGVrbkvt2dtNMkH1MZXYTNegsHkv/gk=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "7a3d77a48304ce4b705aa0241cb5280745fa6b73903547ae11b85cadc30eb02e"
+    },
+    {
+      "id": "later-pre-t24-registry",
+      "secretNames": [
+        "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAnQncW43hsPPxoIRkhD0zp/pph3T6QuXtjrei+/43VzY=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "313982cb08711a14493620f4c181b596327d5d693bbe5833ac8b56565c7ab9b2"
+    },
+    {
+      "id": "post",
+      "secretNames": [
+        "P6_PRIVATE_POST_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA9+qsXvcIyOWE6UzxHhHnrrtrYVSWUhFjuwv52kMulFM=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "e7147792715f1bc84ef972dd5db263fa60ea6b965561e2581a1e6e0f048b53b0"
+    },
+    {
+      "id": "t24-independent-custody",
+      "secretNames": [
+        "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAsWFz3wQpfiOPhTGz4q0ZWBWqaLHCFALIM4mpZGwSwZE=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "6b3045b3e662cd41756607cce9a17d536db60dfdec4cc40f070de7a622cf3b06"
+    }
+  ],
+  "distinctKeyCount": 6,
+  "secretNameCount": 7,
+  "localPrivateKeySelfTestsOwnerReportedPassed": true,
+  "publicFingerprintsIndependentlyVerified": 6,
+  "independentCustodianApproved": false,
+  "delegationPolicyApproved": false,
+  "durableExternalBackupVerified": false,
+  "aerodataboxApiKeyEnvironmentPresent": true,
+  "accountEntitlementVerified": false,
+  "githubSecretWrites": 0,
+  "databaseWrites": 0,
+  "providerCalls": 0,
+  "phase6PaidGo": false
+}
