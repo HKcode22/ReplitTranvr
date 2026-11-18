@@ -34,6 +34,9 @@ jobs:
           plutil -lint "$RUNNER_TEMP/travnr-watch.plist"
           /usr/libexec/PlistBuddy -c 'Print :StartInterval' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx 600
           /usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$RUNNER_TEMP/travnr-watch.plist" | grep -Fx observe-notify
+          node data-collection/phase5/review-tools/mac_github_backup_probe.mjs launch-agent-follow-auth "$(git rev-parse HEAD)" "$RUNNER_TEMP/travnr-watch-fixture" > "$RUNNER_TEMP/travnr-watch-follow.plist"
+          plutil -lint "$RUNNER_TEMP/travnr-watch-follow.plist"
+          /usr/libexec/PlistBuddy -c 'Print :ProgramArguments:2' "$RUNNER_TEMP/travnr-watch-follow.plist" | grep -Fx observe-follow-auth-notify
       - name: Measure actual authenticated GET-only GitHub metadata from macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -45,5 +48,5 @@ jobs:
           umask 077
           state="$RUNNER_TEMP/travnr-watch-fixture"
           pin=6f518add10d00567a95fbcaf3650ebf608da8a60
-          /usr/bin/time -l node data-collection/phase5/review-tools/mac_github_backup_probe.mjs observe-auth "$pin" "$state"
-          node -e 'const r=require(process.argv[1]); if(r.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||r.permitDispatch!==false||r.providerCalls!==0||r.databaseReads!==0||r.databaseWrites!==0||r.lanes?.length!==2)process.exit(2); console.log("ACTUAL_AUTHENTICATED_GITHUB_METADATA_READBACK_NO_DISPATCH_NO_PROVIDER");' "$state/latest.json"
+          /usr/bin/time -l node data-collection/phase5/review-tools/mac_github_backup_probe.mjs observe-follow-auth "$pin" "$state"
+          node -e 'const r=require(process.argv[1]); if(r.status!=="READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF"||r.permitDispatch!==false||r.providerCalls!==0||r.databaseReads!==0||r.databaseWrites!==0||r.lanes?.length!==2||r.metadataForObservedMain!==true||typeof r.observedMainMatchesReviewedPin!=="boolean")process.exit(2); console.log("ACTUAL_AUTHENTICATED_GITHUB_METADATA_READBACK_NO_DISPATCH_NO_PROVIDER");' "$state/latest.json"
