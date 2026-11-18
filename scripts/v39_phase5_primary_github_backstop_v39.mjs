@@ -72,7 +72,7 @@ export async function runBackstop(env,{now=Date.now,sleep=ms=>new Promise(r=>set
     root.status!=="in_progress"||time(root.created_at)>now()||a.deadline-time(root.created_at)>MAX)hold("ROOT");
  // No second manually launched root in this same authorization window.
  const since=encodeURIComponent(">="+iso(a.deadline-MAX));
- const roots=rows(await get("/actions/workflows/"+PARENT+"/runs?branch=main&per_page=100&created="+since),PARENT);
+ const roots=rows(await get("/actions/workflows/"+PARENT+"/runs?branch=main&event=workflow_dispatch&per_page=100&created="+since),PARENT);
  if(roots.filter(r=>r.display_title==="P5 PRIMARY BACKSTOP ROOT").length!==1||
     !roots.some(r=>r.id===a.runId))hold("ROOT_HISTORY");
  let next=now();
@@ -91,10 +91,23 @@ export async function runBackstop(env,{now=Date.now,sleep=ms=>new Promise(r=>set
   const recent=rows(await get(history+"&created="+encodeURIComponent(">="+iso(tickAt-2*MAX))),WORKER);
   if(recent.some(x=>x.status!=="completed")){emit({event:"DEFER_HISTORY_RACE",tick:ticks,utc:iso(tickAt)});continue;}
   const same=recent.filter(x=>x.head_sha===a.sha).sort((x,y)=>time(y.created_at)-time(x.created_at)||y.id-x.id);
-  if(!same.length||same.some(x=>x.conclusion!=="success"))hold("PRIOR_EXACT_WORKER_REVIEW_REQUIRED");
-  const previous=await get("/actions/runs/"+same[0].id);
+  if(same.some(x=>x.conclusion!=="success"))hold("PRIOR_EXACT_WORKER_REVIEW_REQUIRED");
+  // The cron outage can be much longer than the recent-history window.
+  // Read exactly the latest workflow run (regardless of age); do not invent a
+  // prior success, let an old-main run authorize current work, or submit again
+  // if a newer run is queued, failed, or not yet visible in recent history.
+  const latest=await get("/actions/workflows/"+WORKER+"/runs?branch=main&per_page=1");
+  if(!Number.isSafeInteger(latest?.total_count)||latest.total_count<1||
+     !Array.isArray(latest.workflow_runs)||latest.workflow_runs.length!==1)hold("LATEST_WORKER_HISTORY");
+  const last=row(latest.workflow_runs[0],WORKER);
+  if(last.head_sha!==a.sha)hold("PRIOR_EXACT_WORKER_REVIEW_REQUIRED");
+  if(last.status!=="completed"){emit({event:"DEFER_LATEST_WORKER_RACE",tick:ticks,utc:iso(tickAt)});continue;}
+  if(last.conclusion!=="success")hold("PRIOR_EXACT_WORKER_REVIEW_REQUIRED");
+  if(same.length&&same[0].id!==last.id)hold("LATEST_WORKER_HISTORY_DRIFT");
+  if(!same.length&&time(last.created_at)>=tickAt-2*MAX)hold("LATEST_WORKER_HISTORY_DRIFT");
+  const previous=await get("/actions/runs/"+last.id);
   row(previous,WORKER);
-  if(previous.id!==same[0].id||previous.head_sha!==a.sha||previous.status!=="completed"||previous.conclusion!=="success")hold("PRIOR_WORKER_DRIFT");
+  if(previous.id!==last.id||previous.head_sha!==a.sha||previous.status!=="completed"||previous.conclusion!=="success")hold("PRIOR_WORKER_DRIFT");
   const done=positive(await jobs(previous),previous);
   if(done>now())hold("FUTURE_JOB");
   // A successful VERIFY can defer work but is never called an expiry receipt.
@@ -114,7 +127,14 @@ export async function runBackstop(env,{now=Date.now,sleep=ms=>new Promise(r=>set
   const until=Math.min(a.deadline-MIN,now()+10*MIN);
   let terminal=false;
   for(let n=0;n<21&&now()<until;n++){
-   const child=row(await get("/actions/runs/"+childId),WORKER);
+   // GitHub's acknowledged run can take a short time to become readable.
+   // Retry the GET only, within the existing deadline and request count.
+   let receipt;
+   try{receipt=await get("/actions/runs/"+childId);}catch(e){
+    if(e?.message!=="HOLD_P5_PRIMARY_BACKSTOP_GET"||n>=2||now()+30000>=until)throw e;
+    await pause(30000);continue;
+   }
+   const child=row(receipt,WORKER);
    if(child.id!==childId||child.head_sha!==a.sha||child.event!=="workflow_dispatch"||child.display_title!=="P5 PRIMARY BACKSTOP CHILD")hold("CHILD_IDENTITY");
    if(child.status==="completed"){
     if(child.conclusion!=="success")hold("CHILD_FAILED_NO_RETRY");positive(await jobs(child),child);
