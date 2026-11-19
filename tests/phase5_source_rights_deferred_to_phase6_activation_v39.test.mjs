@@ -21,6 +21,6 @@ test("legacy source-rights flag is explicitly rejected by inert cost admission",
 
 test("Phase6 source enable still requires genuine source-use approval",()=>{
  assert.match(enable,/b\.independentSourceUseApproved!==true/);
- assert.match(enable,/m\.sourceRightsApproved!==true/);
+ assert.match(enable,/rightsDeferred=m\?\.sourceRightsApproved===false&&m\?\.sourceUseDeferredToPhase6Activation===true/);
  assert.match(enable,/EXACT_INDEPENDENT_AUTH_SCOPE_OR_BUDGET_REQUIRED/);
 });
