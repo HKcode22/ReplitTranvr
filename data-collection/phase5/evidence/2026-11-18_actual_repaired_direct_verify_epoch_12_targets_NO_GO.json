@@ -1,0 +1,174 @@
+{
+  "schema": "v39.phase5.actual-repaired-direct-verify-epoch-review.v1",
+  "status": "EXACT_READONLY_DELIVERY_VERIFIED_PLAN_HOLD_PRESERVED_NO_GO",
+  "productionMain": "ea89308f468494d848f549539200f73f848a4fa7",
+  "relayMain": "b3a775b4ec7213af796bb8c727b69c3d0feb8bb7",
+  "activationUtc": "2026-11-18T16:17:17.321Z",
+  "expiryUtc": "2026-11-18T18:17:17.321Z",
+  "rows": [
+    {
+      "relayRunId": 44345668673,
+      "relayJobId": 134947265282,
+      "targetRunId": 44345719185,
+      "targetJobId": 134947440736,
+      "relayCreationToObservedMs": 8903,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44347607546,
+      "relayJobId": 134954185584,
+      "targetRunId": 44347663362,
+      "targetJobId": 134954383644,
+      "relayCreationToObservedMs": 11498,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44349532338,
+      "relayJobId": 134961040975,
+      "targetRunId": 44349592278,
+      "targetJobId": 134961263235,
+      "relayCreationToObservedMs": 9871,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44351448881,
+      "relayJobId": 134967894127,
+      "targetRunId": 44351500056,
+      "targetJobId": 134968084460,
+      "relayCreationToObservedMs": 9323,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44353334107,
+      "relayJobId": 134974673048,
+      "targetRunId": 44353385273,
+      "targetJobId": 134974859482,
+      "relayCreationToObservedMs": 10285,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44355231694,
+      "relayJobId": 134981450696,
+      "targetRunId": 44355295118,
+      "targetJobId": 134981669191,
+      "relayCreationToObservedMs": 13455,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "REVIEWED_ROLLING_WAVE_PLAN_NO_GO",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44357163854,
+      "relayJobId": 134988272309,
+      "targetRunId": 44357227711,
+      "targetJobId": 134988503232,
+      "relayCreationToObservedMs": 13690,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44359034848,
+      "relayJobId": 134995010522,
+      "targetRunId": 44359087291,
+      "targetJobId": 134995185973,
+      "relayCreationToObservedMs": 11785,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44360880022,
+      "relayJobId": 135001600095,
+      "targetRunId": 44360937199,
+      "targetJobId": 135001808069,
+      "relayCreationToObservedMs": 12001,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44362711097,
+      "relayJobId": 135008126384,
+      "targetRunId": 44362806284,
+      "targetJobId": 135008469724,
+      "relayCreationToObservedMs": 23771,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44364523099,
+      "relayJobId": 135014763403,
+      "targetRunId": 44364573021,
+      "targetJobId": 135014763403,
+      "relayCreationToObservedMs": 10607,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    },
+    {
+      "relayRunId": 44366379835,
+      "relayJobId": 135021099800,
+      "targetRunId": 44366429363,
+      "targetJobId": 135021277533,
+      "relayCreationToObservedMs": 9495,
+      "relayReceipt": "TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF",
+      "targetJobConclusion": "success",
+      "targetPreview": "HOLD_ROLLING_WAVE_NO_DISPATCH",
+      "paidTickJob": "skipped"
+    }
+  ],
+  "expiryDeferral": {
+    "relayRunId": 44368226145,
+    "relayJobId": 135027641931,
+    "relayCreationToObservedMs": 23760,
+    "status": "DEFER_OUTSIDE_OR_LATE_POLICY_WINDOW",
+    "targetRunId": null
+  },
+  "observedTargetDeliveryCount": 12,
+  "uniqueTargetCount": 12,
+  "reviewedPlanCount": 6,
+  "heldPlanCount": 6,
+  "maxRelayCreationToObservedMs": 23771,
+  "firstAndLastHeldPlanExactLane": "EARLY_DRAW",
+  "firstAndLastHeldPlanState": "HOLD_INERT_REQUIRED_STEP",
+  "actualInertNativeEarlyDraw": {
+    "runId": 44356821912,
+    "jobId": 134987041617,
+    "jobConclusion": "success",
+    "requiredDatabaseStep": "skipped",
+    "gateStep": "success"
+  },
+  "limitations": [
+    "Read-only target probes, not actual flight collection or actual paid worker dispatch.",
+    "First and last held plan receipts explicitly inspected: EARLY_DRAW inert required step; intervening previews also HOLD, individual lane assessment not separately extracted.",
+    "Native STOP-default run occurred before Phase6 release. Paid activation epoch must be chosen after actual release and prior attempt reconciliation; do not reuse read-only epoch or waive post-activation inert/unknown failures.",
+    "Earlier ACK readback incident on prior relay main remains historical evidence. Independent Cron API attribution for this epoch not undertaken in this chat."
+  ],
+  "providerCalls": 0,
+  "databaseReadsByDirectProbe": 0,
+  "databaseWrites": 0,
+  "targetWorkerDispatches": 0,
+  "phase6PaidGo": false
+}
