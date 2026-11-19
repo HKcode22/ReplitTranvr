@@ -118,7 +118,7 @@ function validateFields(kind: "feature" | "label", fields: unknown, failures: st
       if (names.has(field.name)) failures.push(`${kind}-name-duplicate:${field.name}`);
       names.add(field.name);
     }
-    if (!Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
+    if (typeof field.bucketCount !== "number" || !Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
       failures.push(`${kind}-bucket-count-invalid:${typeof field.name === "string" ? field.name : "missing"}`);
     }
     if (!FIELD_CLASSES.includes(field.fieldClass as Phase7ReleaseFieldClass)) {
@@ -187,7 +187,7 @@ function validateBucketMap(
       continue;
     }
     const value = values[field.name];
-    if (value !== null && (!Number.isInteger(value) || value < 0 || value >= field.bucketCount)) {
+    if (value !== null && (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value >= field.bucketCount)) {
       failures.push(`${kind}-bucket-invalid:${field.name}`);
     }
   }
