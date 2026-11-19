@@ -144,10 +144,10 @@ export function validatePhase7ReviewedTransformationProfile(
   for (const key of ['featureDictionarySha256', 'termsReviewSha256', 'derivedWorkReviewSha256'] as const) {
     if (!isSha(profile[key])) failures.push(key + '-invalid');
   }
+  const profileRecord = profile as unknown as Partial<Phase7ReviewedTransformationProfile>;
   if (!Number.isInteger(profileRecord.mappingExpiryHours) || (profileRecord.mappingExpiryHours as number) < 1 || (profileRecord.mappingExpiryHours as number) > 24) {
     failures.push('mapping-expiry-invalid');
   }
-  const profileRecord = profile as unknown as Partial<Phase7ReviewedTransformationProfile>;
   if (profileRecord.approvedForUse !== true) failures.push('independent-approval-required');
   const fields = profileRecord.fields;
   if (!Array.isArray(fields) || fields.length < 1 || fields.length > 31) {
