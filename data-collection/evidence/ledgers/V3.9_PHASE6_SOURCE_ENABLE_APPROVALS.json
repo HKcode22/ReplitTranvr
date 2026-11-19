@@ -127,6 +127,11 @@
       "evidenceId": "RUN-20261119-NATIVECOREPREARMREVIEW",
       "path": "data-collection/phase5/evidence/2026-11-18_actual_native_core_and_day1_scheduler_review_NO_GO.json",
       "sha256": "ea8fe5f47677a579378d1afa2dcbf5b2e9e91b674caaf29dbc82949a3e481042"
+    },
+    {
+      "evidenceId": "RUN-20261119-CURRENTGITHUBSTOP",
+      "path": "data-collection/phase5/evidence/2026-11-19_current_github_stop_readonly_attestation_NO_GO.json",
+      "sha256": "6a14e56860727c05795716b7610f777cd8189b9299f631ecdb5c4cdba265743e"
     }
   ],
   "approvals": []
