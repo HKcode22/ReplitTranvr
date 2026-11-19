@@ -8,7 +8,7 @@ import pg from 'pg';
 const {Pool}=pg;
 
 const REPO='HKcode22/ReplitTranvr';
-const EXPECTED_MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509';
+const EXPECTED_MAIN='f63ec7572aefbe805489317b54882e97f77a1989';
 const H=/^[a-f0-9]{64}$/;
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const hold=s=>{throw new Error('HOLD_P5_POST879_MANIFEST_'+s);};
@@ -24,6 +24,10 @@ export function validateRightsDeferredManifestRaw(raw,expectedSha){
   m.status==='PHASE5_SCIENTIFIC_FREEZE_RIGHTS_DEFERRED_NO_GO'&&
   m.scientificFreezeApproved===true&&m.finalPredecessorsApproved===true&&
   m.sourceRightsApproved===false&&m.sourceUseDeferredToPhase6Activation===true&&
+  Array.isArray(m.phase5PredecessorEvidenceIds)&&m.phase5PredecessorEvidenceIds.length===28&&
+  new Set(m.phase5PredecessorEvidenceIds).size===28&&
+  m.sourceRightsEvidenceIdReserved==='GATE-20261119-SOURCERIGHTSACTIVATION'&&
+  !m.phase5PredecessorEvidenceIds.includes(m.sourceRightsEvidenceIdReserved)&&
   m.phase6PaidGo===false&&H.test(m.calendarRowsSha256??'')&&H.test(m.configSha256??''),
   'BOUNDARY_FIELDS');
  return m;
