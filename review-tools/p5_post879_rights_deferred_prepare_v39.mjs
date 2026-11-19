@@ -134,7 +134,7 @@ export async function buildPost879RightsDeferredPackage(codeSha=EXPECTED_MAIN){
  need(canonical(stage)===stageFile.bytes,'NONCANONICAL_STAGE');
  need(stage.codeSha40===codeSha&&stage.manifestSha256===manifestSha&&stage.configSha256===configSha&&stage.calendarSha256===identity.calendarRowsDigestCandidate&&stage.phase6AuthorizationId===AUTHORIZATION_ID,'STAGE_IDENTITY');
  need(JSON.stringify(stage.predecessorEvidenceIds)===JSON.stringify(PREDECESSOR_EVIDENCE_IDS),'STAGE_PREDECESSORS');
- need(stage.budget?.cycleRestCeilingUnits===49468&&stage.budget?.protectedRestFloorUnits===1000,'STAGE_BUDGET');
+ need(stage.slotBudgetInput?.cycleRestCeilingUnits===49468&&stage.slotBudgetInput?.protectedRestFloorUnits===1000,'STAGE_BUDGET');
  const costSha=exported.summary.unsignedCostOnlyEnvelopeSha256;
  need(H.test(costSha),'COST_DIGEST');
  const secrets={
