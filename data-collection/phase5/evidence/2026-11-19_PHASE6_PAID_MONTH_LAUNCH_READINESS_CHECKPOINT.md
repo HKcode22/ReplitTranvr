@@ -101,6 +101,20 @@ These are sequential gates, not unfinished Phase 5 work:
 - Do not retain copied provider rows in the Phase 7 packet.
 - Do not repeat completed Phase 5 commissioning.
 
+## Policy-mapped Day 1–Day 31 preparation added
+
+PR #897 is merged at commit `22b154030a2aa4a2ea09184a3021b01d28645ee9` and adds:
+
+- a three-lane model separating temporary provider-shaped source custody, the narrower Phase 7 derived-release packet, and non-reconstructive model/control artifacts;
+- a concrete proposed field dictionary for coarse features, T−24/T−6/T−90 labels, missingness, censoring, and quality state;
+- an explicit exclusion list for identifiers, exact timestamps, raw responses, request metadata, and direct source linkage;
+- a Day 0 preflight, bounded Day 1–Day 31 run, daily fail-closed gates, and Day 31 closeout;
+- model/parity safeguards intended to preserve Phase 7 signal before source-custody expiry.
+
+The dictionary is `PROPOSED_REVIEW_REQUIRED`, not an account-specific rights approval. The document therefore improves launch readiness without changing the empty approval ledger, paid GO flag, source-enable state, scheduler state, relay authorization, or provider-call count. It records the correct project position: provider silence does not block nonpaid engineering, and provider silence does not authorize paid collection.
+
+See `data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md`.
+
 ## Handoff
 
 Engineering can continue without waiting for email. The fail-closed writer is
