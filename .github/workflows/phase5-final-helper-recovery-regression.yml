@@ -156,6 +156,7 @@ jobs:
           need(downstreamOnce.includes('PRIVATE_BLOB="'+gitHash('review-tools/p5_private_policy_review_materializer.cjs')+'"'),'downstream private materializer pin mismatch');
           need(downstreamOnce.includes('STATIC_BLOB="'+gitHash('review-tools/p5_static_install_review_materializer.cjs')+'"'),'downstream static materializer pin mismatch');
           need(downstreamOnce.includes('FREEZE_BLOB="'+gitHash('review-tools/p5_final_phase5_freeze_decision.cjs')+'"'),'downstream freeze materializer pin mismatch');
+          need(downstreamOnce.includes('DEST="$SUB/approved-final-phase5-freeze.json"'),'downstream freeze output filename mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
