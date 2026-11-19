@@ -1,0 +1,60 @@
+{
+  "schema": "v39.phase5.owner-inert-freeze-and-pitr-console-observation.v1",
+  "status": "PHASE5_OWNER_DIRECTED_SCIENTIFIC_FREEZE_COMPLETE_INERT_COMMISSIONED_NO_PHASE6_GO",
+  "evidenceSource": {
+    "freezeReceipt": "owner-pasted Replit Shell terminal output",
+    "pitrObservation": "owner-provided Replit Production Database Settings screenshot",
+    "independentAssistantVerification": false
+  },
+  "productionMainAtReceipt": "ae0915d1eb0c37651d280ff3f178efdb640ed509",
+  "currentMainAtRecording": "7d178225aeea4d8a6b4145546d2c1b12dfb72b42",
+  "receiptMainIsAncestorOfCurrentMain": true,
+  "freezeReceipt": {
+    "authorizationId": "AUTH-20261119-P5INERTFREEZE",
+    "calendarRunId": 44514396519,
+    "costRunId": 44514504901,
+    "inventorySnapshotAtUtc": "2026-11-19T11:24:55.088Z",
+    "manifestSha256": "bd14ff3e558b975a889741380da807644ca9d3573a23e2416986ee6f71e1e41f",
+    "configSha256": "9cb7f3dcb2ee0d857f585fe8433a8dc2b7ac7bb3e3ad384a469c13530856642c",
+    "calendarRowsSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+    "freezeReceiptSha256": "f82a27057b0bf8b8f6ac95e1ca4d14ce14f32ca5ef6997e5746dbbeb7984fe20",
+    "prelaunchStructuralHolds": 0,
+    "phase6Day1EvidencePendingAfterGo": 4,
+    "scientificFreezeApproved": true,
+    "sourceRightsApproved": false,
+    "sourceUseDeferredToPhase6Activation": true,
+    "authorizationEnabled": false,
+    "providerCalls": 0,
+    "databaseWrites": 1,
+    "githubMutations": 0,
+    "phase6PaidGo": false,
+    "privateEvidenceDirectoryPresent": true
+  },
+  "pitrConsoleObservation": {
+    "application": "Travnr-Environment-Setupzip",
+    "databaseSurface": "Replit Production Database > Settings",
+    "observedAtLocal": "2026-11-19T04:39:00-08:00",
+    "externalDatabaseUrlDetected": true,
+    "storageDisplayed": "96MB of 100GB",
+    "pointInTimeRecoveryEnabled": true,
+    "recoveryWindowDays": 7,
+    "scheduledBackupsEnabled": false,
+    "restoreActionInvoked": false,
+    "secretValuesRead": false
+  },
+  "disposition": {
+    "rightsDecisionReopened": false,
+    "scheduledBackupsOffIsSeparateOptionalLayer": true,
+    "pitrEvidenceClosesCurrentConsoleCheck": true,
+    "pitrRestoreProcedureIndependentlyTested": false,
+    "sourceRightsApprovalForPhase6": false,
+    "phase6PaidGo": false,
+    "providerCalls": 0,
+    "databaseWritesByThisEvidenceCommit": 0
+  },
+  "limits": [
+    "The receipt is owner-supplied evidence and is not an independent re-execution by this assistant.",
+    "The screenshot proves the displayed Replit PITR setting, not a restore drill or every provider/object/log retention surface.",
+    "The record does not authorize source use, enable the Phase6 authorization row, dispatch paid workers, or approve a Phase6 GO."
+  ]
+}
