@@ -51,6 +51,9 @@ test("all remaining review materializers are exact and no-mutation",()=>{
  assert.equal(m.privatePolicyBytes.materializer,gh("review-tools/p5_private_policy_review_materializer.cjs"));
  assert.equal(m.staticInstall.materializer,gh("review-tools/p5_static_install_review_materializer.cjs"));
  assert.equal(m.finalPhase5Freeze.materializer,gh("review-tools/p5_final_phase5_freeze_decision.cjs"));
- for(const k of ["finalPolicyBinding","privatePolicyBytes","staticInstall","finalPhase5Freeze"])assert.equal(m[k].ownerWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
+ for(const k of ["finalPolicyBinding","privatePolicyBytes","staticInstall"])assert.equal(m[k].ownerWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
+ assert.equal(m.finalPhase5Freeze.ownerWrapper,gh("review-tools/p5_materialize_final_phase5_freeze_once.sh"));
+ assert.equal(m.finalPhase5Freeze.alternateUnifiedWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
+ assert.equal(m.finalPhase5Freeze.output,"approved-final-phase5-freeze.json");
  assert.match(a.engineeringConclusion,/review-materialization/);
 });
