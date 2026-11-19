@@ -24,10 +24,26 @@ function planInertApprovals(review,receipt,metadata,planWrites){
  // Reuse the verified static installer's metadata compare/replace rules.
  return planWrites(INERT_APPROVALS,metadata,a.approvedReplacements);
 }
+// Generate a non-authorizing, exact review workpaper from the already
+// verified bundle and actual GitHub name/timestamp metadata. No secret
+// value or private policy is included. Review is external and explicit.
+function staticReviewWorkpaper(r,receiptSha,valuesSha,values,metadata,planWrites){
+ need(r?.schema==="v39.phase5.exact-final-commissioning-bundle.v1"&&r.status==="EXACT_LEDGER_AUTH_AND_REVIEWED_POLICY_BUNDLE_VERIFIED_NO_PAID_DISPATCH"&&r.phase6PaidGo===false&&r.approvalFlagsPrepared===0&&r.githubMutations===0&&C.test(r.main??"")&&[receiptSha,valuesSha,r.approvedPrivatePolicyReviewSha256,r.authArtifactSha256,r.stageSha256,r.costEnvelopeSha256].every(x=>H.test(x??"")),"EXACT_BUNDLE_REVIEW_WORKPAPER");
+ const names=Object.keys(values??{});
+ need(names.length===31&&r.staticSecretsPrepared===31&&new Set(names).size===31&&names.every(n=>/^[A-Z0-9_]+$/.test(n)&&!INERT_APPROVALS.includes(n)&&!/_APPROVED$|_ARMED$|_STOP$|_ENABLED$|_DATABASE_URL$|_KEY_BASE64$/.test(n)),"EXACT_STATIC_REVIEW_NAMES");
+ const replacements=ns=>metadata.filter(x=>ns.includes(x.name)).map(({name,updatedAt})=>({name,updatedAt})).sort((a,b)=>a.name.localeCompare(b.name));
+ const proposedStaticReplacements=replacements(names),proposedInertReplacements=replacements(INERT_APPROVALS);
+ const staticPlan=planWrites(names,metadata,proposedStaticReplacements);
+ const inertPlan=planWrites(INERT_APPROVALS,metadata,proposedInertReplacements);
+ return {status:"EXACT_STATIC_INSTALL_REVIEW_WORKPAPER_NOT_APPROVED_NO_GO",main:r.main,staticCount:staticPlan.length,inertCount:inertPlan.length,
+  staticPlan,inertPlan,
+  draftReview:{schema:"v39.phase5.static-install-review.v1",approvedStaticInstallation:false,independentGlobalStopConfirmed:false,phase6PaidGo:false,main:r.main,bundleReceiptSha256:receiptSha,staticValuesSha256:valuesSha,privatePolicyReviewSha256:r.approvedPrivatePolicyReviewSha256,reviewedBy:null,reviewedAtUtc:null,approvedReplacements:proposedStaticReplacements,
+   inertStageFlagInstallation:{approvedExactInertStageFlagInstallation:false,phase6PaidGo:false,authArtifactSha256:r.authArtifactSha256,stageSha256:r.stageSha256,costEnvelopeSha256:r.costEnvelopeSha256,approvedNames:[...INERT_APPROVALS],approvedReplacements:proposedInertReplacements}}};
+}
 function sequence(mode,ops){
  if(mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"||mode==="ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"){ops.coreInputs(mode);return}
  if(mode==="PREPARE_POLICY_REVIEW"){ops.assemble();return}
- if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();return}
+ if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();ops.prepareStaticReviewWorkpaper();return}
  need(mode==="COMMISSION_EXISTING_INERT_NO_GO","MODE");
  // All reviewer artifacts and nonmutating checks pass before any mutation.
  ops.verify();ops.installPlan();ops.checkStagePrerequisites();ops.noPriorAttempt();
@@ -111,6 +127,18 @@ function run(){
    coreInputs:m=>call(tsx,[f.coreInputs,m,d,policySha]),
    assemble:()=>call(tsx,[f.assembly,f.core,d,policySha]),
    verify:()=>bundle("VERIFY_AND_EXPORT_EXACT_APPROVED_BUNDLE"),
+   prepareStaticReviewWorkpaper(){
+    safeDir(out);const rb=safeRead(out,"bundle-receipt.json",200000),vb=safeRead(out,"static-secret-values-PRIVATE.json",400000),st=safeRead(out,"exact-approved-stage-input.json",48000);
+    const r=JSON.parse(rb),v=JSON.parse(vb),installerModule=require(f.install);
+    need(r.main===head&&r.approvedPrivatePolicyReviewSha256===policySha,"EXACT_REVIEWED_BUNDLE");
+    installerModule.validate(r,v,st.toString("utf8"));
+    const w=staticReviewWorkpaper(r,digest(rb),digest(vb),v,secretMeta(),installerModule.planWrites);
+    checkMain();const raw=Buffer.from(JSON.stringify(w)),dest=path.join(out,"static-install-review-workpaper-NOT-APPROVED.json");
+    // This is not the approved filename, and the installer cannot treat
+    // this workpaper as authorization. Do not overwrite a prior review.
+    try{fs.writeFileSync(dest,raw,{flag:"wx",mode:0o600})}catch(e){if(e.code!=="EEXIST")throw e;need(safeRead(out,"static-install-review-workpaper-NOT-APPROVED.json").equals(raw),"WORKPAPER_METADATA_CHANGED_REVIEW_REQUIRED")}
+    console.log(JSON.stringify({status:w.status,main:head,staticCount:w.staticCount,inertCount:w.inertCount,staticCreates:w.staticPlan.filter(x=>x.operation==="CREATE").length,inertCreates:w.inertPlan.filter(x=>x.operation==="CREATE").length,workpaperSha256:digest(raw),approvedReviewCreated:false,secretValuesPrinted:false,githubMutations:0,providerCalls:0,phase6PaidGo:false}));
+   },
    installPlan:()=>installer("PLAN_EXACT_STATIC_INSTALL"),
    checkStagePrerequisites(){
     const meta=secretMeta(),names=new Set(meta.map(x=>x.name));
@@ -153,5 +181,5 @@ function run(){
   console.log(JSON.stringify({status:"EXISTING_EXACT_HANDOFF_STEP_COMPLETE",mode,main:head,phase6PaidGo:false}));
  }finally{fs.rmSync(temp,{recursive:true,force:true})}
 }
-module.exports={sequence,planInertApprovals,INERT_APPROVALS,classifyHistory};
+module.exports={sequence,planInertApprovals,staticReviewWorkpaper,INERT_APPROVALS,classifyHistory};
 if(require.main===module)Promise.resolve().then(()=>process.argv[2]==="OWNER_FINAL_METADATA_READONLY"?remainingOwnerMetadata():run()).catch(e=>{const s=String(e?.message??"");console.error(/^HOLD_P5_BULK_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_BULK_REDACTED_CHECK_EXISTING_JOURNALS_NO_BLIND_REPLAY");process.exitCode=2});
