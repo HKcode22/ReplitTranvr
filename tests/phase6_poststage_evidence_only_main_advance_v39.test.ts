@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {verifyP6PostStageEvidenceOnlyMainAdvance} from
+import {verifyP6PostStageEvidenceOnlyMainAdvance,verifyP6PostStageReviewedBridgeAdvance} from
  "../scripts/v39_phase6_enable_source_owner_v39";
 
 const STAGE="a".repeat(40),HEAD="b".repeat(40);
@@ -34,5 +34,47 @@ describe("Phase6 deferred source-rights evidence-only main continuity",()=>{
  it("rejects synthetic diffs when the SHA did not move",()=>{
   expect(()=>verifyP6PostStageEvidenceOnlyMainAdvance(STAGE,STAGE,[RIGHTS],true)).
    toThrow("HOLD_P6_EXACT_SOURCE_AUTH_POST_STAGE_IDENTICAL_MAIN_HAS_DIFF");
+ });
+});
+
+
+describe("Phase6 reviewed post-stage #881 executable bridge",()=>{
+ const STAGED="ae0915d1eb0c37651d280ff3f178efdb640ed509";
+ const BRIDGE="aa3c3270f7aa47b61edd3b47dae0241f707955ed";
+ const PATHS=[
+  "scripts/v39_phase6_enable_source_owner_v39.ts",
+  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs",
+  "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts"
+ ];
+ it("accepts the exact reviewed bridge with no later changes",()=>{
+  expect(verifyP6PostStageReviewedBridgeAdvance({
+   stageCode:STAGED,currentHead:BRIDGE,stageIsAncestor:true,bridgeIsAncestor:true,
+   stageToBridgePaths:PATHS,bridgeToHeadPaths:[]
+  })).toEqual({stageCode:STAGED,bridgeHead:BRIDGE,currentHead:BRIDGE,
+   reviewedBridgeApplied:true,evidenceOnlyChangedPaths:0});
+ });
+ it("accepts only evidence/ledger changes after the exact bridge",()=>{
+  expect(verifyP6PostStageReviewedBridgeAdvance({
+   stageCode:STAGED,currentHead:"c".repeat(40),stageIsAncestor:true,bridgeIsAncestor:true,
+   stageToBridgePaths:PATHS,bridgeToHeadPaths:[RIGHTS,LEDGER]
+  })).toMatchObject({reviewedBridgeApplied:true,evidenceOnlyChangedPaths:2});
+ });
+ it("rejects any changed reviewed bridge path set",()=>{
+  expect(()=>verifyP6PostStageReviewedBridgeAdvance({
+   stageCode:STAGED,currentHead:BRIDGE,stageIsAncestor:true,bridgeIsAncestor:true,
+   stageToBridgePaths:PATHS.slice(0,2),bridgeToHeadPaths:[]
+  })).toThrow("HOLD_P6_EXACT_SOURCE_AUTH_POST_STAGE_REVIEWED_BRIDGE_DIFF_CHANGED");
+ });
+ it("rejects executable changes after the bridge",()=>{
+  expect(()=>verifyP6PostStageReviewedBridgeAdvance({
+   stageCode:STAGED,currentHead:"d".repeat(40),stageIsAncestor:true,bridgeIsAncestor:true,
+   stageToBridgePaths:PATHS,bridgeToHeadPaths:["scripts/v39_phase6_enable_source_owner_v39.ts"]
+  })).toThrow("HOLD_P6_EXACT_SOURCE_AUTH_POST_STAGE_AFTER_BRIDGE_NOT_EVIDENCE_ONLY");
+ });
+ it("rejects a history that does not contain the pinned bridge",()=>{
+  expect(()=>verifyP6PostStageReviewedBridgeAdvance({
+   stageCode:STAGED,currentHead:"e".repeat(40),stageIsAncestor:true,bridgeIsAncestor:false,
+   stageToBridgePaths:PATHS,bridgeToHeadPaths:[RIGHTS]
+  })).toThrow("HOLD_P6_EXACT_SOURCE_AUTH_POST_STAGE_REVIEWED_BRIDGE_IDENTITY_INVALID");
  });
 });
