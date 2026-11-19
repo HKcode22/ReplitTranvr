@@ -54,13 +54,16 @@ export function admitP6InertReleaseStage(env){
  const p=compileP5InertB0062UtcStagePacket(input,review);
  let freezeReview=null;
  if(mode==="cost"){
-  if(env.P6_INERT_COST_REVIEW_APPROVED!=="1"||env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
-     !H.test(env.P6_INERT_COST_ENVELOPE_SHA256??""))hold("NO_DISTINCT_COST_AND_RIGHTS_APPROVAL");
+  if(env.V39_PHASE5_SOURCE_RIGHTS_APPROVED)hold("SOURCE_RIGHTS_FLAG_RESERVED_FOR_PHASE6_ACTIVATION");
+  if(env.P6_INERT_COST_REVIEW_APPROVED!=="1"||
+     !H.test(env.P6_INERT_COST_ENVELOPE_SHA256??""))hold("NO_DISTINCT_COST_APPROVAL");
   freezeReview={expectedStagedB0062PacketSha256:p.stagePacketSha256,
    expectedSignedSevenCategoryCostSha256:env.P6_INERT_COST_ENVELOPE_SHA256,
    expectedExactBudgetWriterRole:P5_TWO_STAGE_ROLES[1].role,
    independentProspectiveCalendarAndTreatmentApproved:true,independentRealProviderRangeAndRestBudgetApproved:true,
-   independentSourceContentsRightsForIntendedUseApproved:true,exactRestrictedNoProviderBudgetFreezeApproved:true};
+   independentSourceContentsRightsForIntendedUseApproved:false,
+   sourceUseDeferredToPhase6Activation:true,
+   exactRestrictedNoProviderBudgetFreezeApproved:true};
   compileP5V0093CostOnlySevenRestReview(input,review,freezeReview);
  }
  const receipt={mode,role:spec.role,stagePacketSha256:p.stagePacketSha256,codeSha:input.codeSha40,phase6PaidGo:false};
@@ -121,7 +124,9 @@ function admitOwnerReadback(env,raw,stageSha,costSha,head,calendarOnly){
  const freezeReview=calendarOnly?null:{expectedStagedB0062PacketSha256:stageSha,
   expectedSignedSevenCategoryCostSha256:costSha,expectedExactBudgetWriterRole:P5_TWO_STAGE_ROLES[1].role,
   independentProspectiveCalendarAndTreatmentApproved:true,independentRealProviderRangeAndRestBudgetApproved:true,
-  independentSourceContentsRightsForIntendedUseApproved:true,exactRestrictedNoProviderBudgetFreezeApproved:true};
+  independentSourceContentsRightsForIntendedUseApproved:false,
+  sourceUseDeferredToPhase6Activation:true,
+  exactRestrictedNoProviderBudgetFreezeApproved:true};
  if(calendarOnly)compileP5InertB0062UtcStagePacket(input,review);
  else compileP5V0093CostOnlySevenRestReview(input,review,freezeReview);
  const out={stageSha,costSha,codeSha:head,calendarOnly,providerCalls:0,databaseWrites:0,phase6PaidGo:false};

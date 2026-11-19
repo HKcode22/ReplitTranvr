@@ -67,7 +67,7 @@ const stageCommon=["V39_PHASE6_PROCESS_ARMED","V39_P5_APPROVED_CODE_SHA","P6_INE
 const stageModes=Object.freeze({
  calendar:Object.freeze([...stageCommon,"P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL"]),
  cost:Object.freeze([...stageCommon,"P6_INERT_COST_REVIEW_APPROVED","P6_INERT_COST_ENVELOPE_SHA256",
-  "V39_PHASE5_SOURCE_RIGHTS_APPROVED","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"])
+  "P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"])
 });
 function firstInertStageInventory(readWorkflow,present){
  const references=refs(jobSource(readWorkflow("phase5-exact-inert-release-stage-manual.yml"),"existing-restricted-inert-stage"),"secrets");

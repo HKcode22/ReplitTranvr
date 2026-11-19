@@ -9,6 +9,8 @@
  * reservation, provider requests, source contents or Phase6 activation.
  * A genuine distinct commissioned limited DB login, externally signed
  * reviewed packet and owner approval are required for LIVE use.
+ * Source-use permission is deliberately NOT authenticated by this inert cost
+ * freeze. It remains a separate mandatory Phase6 source-activation decision.
  */
 import {createHash} from "node:crypto";
 import {
@@ -76,7 +78,8 @@ export function compileP5V0093CostOnlySevenRestReview(
     !ROLE.test(freezeReview.expectedExactBudgetWriterRole??"")||
     freezeReview.independentProspectiveCalendarAndTreatmentApproved!==true||
     freezeReview.independentRealProviderRangeAndRestBudgetApproved!==true||
-    freezeReview.independentSourceContentsRightsForIntendedUseApproved!==true||
+    freezeReview.independentSourceContentsRightsForIntendedUseApproved!==false||
+    freezeReview.sourceUseDeferredToPhase6Activation!==true||
     freezeReview.exactRestrictedNoProviderBudgetFreezeApproved!==true||
     cost.manifestSha256!==p.manifestSha256||
     cost.calendarSha256!==p.calendarSha256||
@@ -106,6 +109,8 @@ export function compileP5V0093CostOnlySevenRestReview(
   staged:p,cost,
   expectedExactBudgetWriterRole:freezeReview.expectedExactBudgetWriterRole,
   signedCostOnlySha256:freezeReview.expectedSignedSevenCategoryCostSha256,
+  sourceUseDeferredToPhase6Activation:true,
+  independentSourceContentsRightsForIntendedUseApproved:false,
   unknownOrdinaryDayAirportIdentities:21,
   actualSourcedFlights:0,providerCalls:0,databaseWrites:0,
   phase5ScientificFreeze:false,phase6PaidGo:false

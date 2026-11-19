@@ -35,7 +35,8 @@ const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const sha=c=>c.repeat(64);
 // Synthetic test fixture only; a production manifest requires independent review.
 const manifestFixture={schema:"v39.phase6.final-ci-test-only.v1",scientificFreezeApproved:true,
- sourceRightsApproved:true,phase6PaidGo:false,calendarRowsSha256:sha("b"),configSha256:sha("c")};
+ sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,phase6PaidGo:false,
+ calendarRowsSha256:sha("b"),configSha256:sha("c")};
 const manifestRaw=JSON.stringify(manifestFixture),manifestHash=digest(manifestFixture);
 const iso=n=>new Date(n).toISOString();
 const SLOTS=[0,4,8,12,16,20];
@@ -384,7 +385,8 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    expectedExactBudgetWriterRole:BUDGET_ROLE,
    independentProspectiveCalendarAndTreatmentApproved:true,
    independentRealProviderRangeAndRestBudgetApproved:true,
-   independentSourceContentsRightsForIntendedUseApproved:true,
+   independentSourceContentsRightsForIntendedUseApproved:false,
+   sourceUseDeferredToPhase6Activation:true,
    exactRestrictedNoProviderBudgetFreezeApproved:true
   }};
  }
@@ -397,6 +399,18 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    "(SELECT COUNT(*)::int FROM clean.phase5_fids_physical_attempt_v39) attempt"
   )).rows[0];
  }
+ it("keeps source-use permission deferred during inert V0093 review",()=>{
+  const r=budgetReview();
+  const p=compileP5V0093CostOnlySevenRestReview(input,review,r.permit);
+  expect(p.sourceUseDeferredToPhase6Activation).toBe(true);
+  expect(p.independentSourceContentsRightsForIntendedUseApproved).toBe(false);
+  expect(()=>compileP5V0093CostOnlySevenRestReview(input,review,{
+   ...r.permit,sourceUseDeferredToPhase6Activation:false
+  })).toThrow("MISSING_DISTINCT_AUTHENTIC_COST_ONLY_REVIEW");
+  expect(()=>compileP5V0093CostOnlySevenRestReview(input,review,{
+   ...r.permit,independentSourceContentsRightsForIntendedUseApproved:true
+  })).toThrow("MISSING_DISTINCT_AUTHENTIC_COST_ONLY_REVIEW");
+ });
  it("refuses unauthenticated signed cost SHA, administrator and excess UPDATE grant",async()=>{
   const r=budgetReview();
   expect(r.c.unsignedFutureOrdinaryAirports).toBe(21);

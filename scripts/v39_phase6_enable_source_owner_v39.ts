@@ -89,9 +89,11 @@ async function requireStoredReviewedManifest(c:import("pg").PoolClient,p:{manife
     createHash("sha256").update(raw,"utf8").digest("hex")!==p.manifestSha256)
   hold("STORED_REVIEWED_MANIFEST_MISSING_OR_DIFFERENT");
  let m:any;try{m=JSON.parse(raw);}catch{hold("STORED_REVIEWED_MANIFEST_INVALID_JSON");}
+ const rightsAtManifest=m?.sourceRightsApproved===true;
+ const rightsDeferred=m?.sourceRightsApproved===false&&m?.sourceUseDeferredToPhase6Activation===true;
  if(!m||typeof m!=="object"||Array.isArray(m)||typeof m.schema!=="string"||
     !m.schema.startsWith("v39.")||m.scientificFreezeApproved!==true||
-    m.sourceRightsApproved!==true||m.phase6PaidGo!==false||
+    (!rightsAtManifest&&!rightsDeferred)||m.phase6PaidGo!==false||
     m.calendarRowsSha256!==p.calendarSha256||m.configSha256!==p.configSha256)
   hold("STORED_MANIFEST_NOT_FINAL_REVIEWED");
 }

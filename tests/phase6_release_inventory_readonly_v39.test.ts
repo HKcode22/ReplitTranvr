@@ -30,8 +30,9 @@ describe("Phase6 release metadata inventory no GO",()=>{
   expect(a.initialInertStageConfiguration.status).toBe("EXACT_CURRENT_STAGE_SECRET_NAME_MAP_NOT_APPROVAL");
   expect(a.initialInertStageConfiguration.modes?.[0]).toMatchObject({mode:"calendar",requiredRepositorySecretNameReferences:7,
    presentRepositorySecretNames:["P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","V39_PHASE6_PROCESS_ARMED"]});
-  expect(a.initialInertStageConfiguration.modes?.[1]).toMatchObject({mode:"cost",requiredRepositorySecretNameReferences:10});
+  expect(a.initialInertStageConfiguration.modes?.[1]).toMatchObject({mode:"cost",requiredRepositorySecretNameReferences:9});
   expect(a.initialInertStageConfiguration.modes?.[0].absentRepositorySecretNames).not.toContain("V39_PHASE5_SOURCE_RIGHTS_APPROVED");
+   expect(a.initialInertStageConfiguration.modes?.[1].absentRepositorySecretNames).not.toContain("V39_PHASE5_SOURCE_RIGHTS_APPROVED");
   expect(a.initialInertStageConfiguration.modes?.[0].presentRepositorySecretNames).not.toContain("P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL");
   expect(JSON.stringify(a.initialInertStageConfiguration)).not.toContain("AERODATABOX_API_KEY");
   expect(a.initialInertStageConfiguration.phase6PaidGo).toBe(false);
