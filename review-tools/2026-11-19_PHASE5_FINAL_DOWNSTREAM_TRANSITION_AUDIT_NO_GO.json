@@ -175,8 +175,40 @@
       "currentState": "NOT_PHASE5_AUTOMATIC"
     }
   ],
-  "engineeringConclusion": "No additional Phase5 implementation, migration, role, scheduler, recovery, budget, sampling, PRE/POST, signing, manifest, stage, readback, or failure-custody subsystem is missing from the tested closeout chain. Remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
+  "engineeringConclusion": "No additional Phase5 implementation, migration, role, scheduler, recovery, budget, sampling, PRE/POST, signing, manifest, policy, review-materialization, static-install, stage, readback, freeze-materialization, or failure-custody subsystem is missing from the tested closeout chain. Remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
   "phase5TechnicalProtocolFrozen": true,
   "phase5ScientificReleaseFrozen": false,
-  "phase6PaidGo": false
+  "phase6PaidGo": false,
+  "reviewMaterialization": {
+    "finalCore": {
+      "materializer": "7f417fe38eda6082e6448264456af6c3c3b04707",
+      "ownerWrapper": "8cb3af1d07f389cdba7ad963d637c2fa0c80c042",
+      "output": "reviewed-final-core-scope-decisions.json"
+    },
+    "finalPolicyBinding": {
+      "materializer": "2c2f45efad55b12d595773dd51b07e27d7a43b61",
+      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "output": "reviewed-final-policy-binding-decisions.json"
+    },
+    "privatePolicyBytes": {
+      "materializer": "27100b8a67d2ecdd50c39eabf338a72d8982c48a",
+      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "output": "approved-private-policy-review.json"
+    },
+    "staticInstall": {
+      "materializer": "6bfa98eb3e75fd1136e86a28ab0b7e4c9c5bb2e8",
+      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "output": "static-install-review.json"
+    },
+    "finalPhase5Freeze": {
+      "materializer": "607886ff73c1c342873d66820ca16be18f803210",
+      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "output": "final-phase5-freeze-decision.json"
+    },
+    "guarantees": [
+      "Reviewer semantic decisions remain explicit; no materializer mints approval.",
+      "Canonical JSON and exact repository/private byte pins are enforced.",
+      "No materializer performs provider calls, DB writes, paid GO, or collection arming."
+    ]
+  }
 }
