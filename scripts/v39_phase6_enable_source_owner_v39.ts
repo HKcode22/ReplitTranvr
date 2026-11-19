@@ -33,6 +33,13 @@ type Verify=VerifiedAuthFile;
 const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
+const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
+const POST_STAGE_REVIEWED_BRIDGE_HEAD="aa3c3270f7aa47b61edd3b47dae0241f707955ed";
+const POST_STAGE_REVIEWED_BRIDGE_PATHS=Object.freeze([
+ "scripts/v39_phase6_enable_source_owner_v39.ts",
+ "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts"
+]);
 
 /** #879 deliberately permits Phase5 to stage the disabled calendar/cost state
  * before source-use permission exists. A later source-rights/approval commit
@@ -53,6 +60,33 @@ export function verifyP6PostStageEvidenceOnlyMainAdvance(stageCode:string,curren
     changedPaths.some(p=>p!==POST_STAGE_APPROVAL_LEDGER_PATH&&!POST_STAGE_EVIDENCE_PATH.test(p)))
   hold("POST_STAGE_MAIN_NOT_EVIDENCE_ONLY_DESCENDANT");
  return {stageCode,currentHead,evidenceOnlyAdvance:true,changedPaths:changedPaths.length};
+}
+
+/** The owner completed inert B0062/V0093 at the #879 production SHA before
+ * #881 could be merged. Permit exactly that one independently reviewed
+ * executable bridge, then restore the evidence-only rule from the bridge
+ * commit forward. A later edit to any bridge file therefore fails closed.
+ */
+export function verifyP6PostStageReviewedBridgeAdvance(input:{
+ stageCode:string;currentHead:string;stageIsAncestor:boolean;bridgeIsAncestor:boolean;
+ stageToBridgePaths:string[];bridgeToHeadPaths:string[];
+}){
+ const {stageCode,currentHead,stageIsAncestor,bridgeIsAncestor,stageToBridgePaths,bridgeToHeadPaths}=input;
+ if(stageCode!==POST_STAGE_REVIEWED_BRIDGE_STAGE||
+    !CODE.test(currentHead??"")||stageIsAncestor!==true||bridgeIsAncestor!==true||
+    !Array.isArray(stageToBridgePaths)||!Array.isArray(bridgeToHeadPaths)||
+    new Set(stageToBridgePaths).size!==stageToBridgePaths.length||
+    new Set(bridgeToHeadPaths).size!==bridgeToHeadPaths.length)
+  hold("POST_STAGE_REVIEWED_BRIDGE_IDENTITY_INVALID");
+ const expected=[...POST_STAGE_REVIEWED_BRIDGE_PATHS].sort();
+ const actual=[...stageToBridgePaths].sort();
+ if(JSON.stringify(actual)!==JSON.stringify(expected))
+  hold("POST_STAGE_REVIEWED_BRIDGE_DIFF_CHANGED");
+ if(bridgeToHeadPaths.some(p=>typeof p!=="string"||p.length<1||
+    (p!==POST_STAGE_APPROVAL_LEDGER_PATH&&!POST_STAGE_EVIDENCE_PATH.test(p))))
+  hold("POST_STAGE_AFTER_BRIDGE_NOT_EVIDENCE_ONLY");
+ return {stageCode,bridgeHead:POST_STAGE_REVIEWED_BRIDGE_HEAD,currentHead,
+  reviewedBridgeApplied:true,evidenceOnlyChangedPaths:bridgeToHeadPaths.length};
 }
 
 /** AUTH content pin excludes ONLY final Git SHA, to avoid a circular hash
@@ -284,11 +318,24 @@ async function main(){
  if(!ancestor){
   try{execFileSync("git",["merge-base","--is-ancestor",stageCode,head],{stdio:["ignore","ignore","ignore"],timeout:15000});ancestor=true;}catch{}
  }
- const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
- verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
+ if(stageCode===POST_STAGE_REVIEWED_BRIDGE_STAGE&&head!==stageCode){
+  let bridgeAncestor=head===POST_STAGE_REVIEWED_BRIDGE_HEAD;
+  if(!bridgeAncestor){
+   try{execFileSync("git",["merge-base","--is-ancestor",POST_STAGE_REVIEWED_BRIDGE_HEAD,head],
+    {stdio:["ignore","ignore","ignore"],timeout:15000});bridgeAncestor=true;}catch{}
+  }
+  const stageToBridge=cmd("git",["diff","--no-renames","--name-only",stageCode,POST_STAGE_REVIEWED_BRIDGE_HEAD]).split("\n").filter(Boolean);
+  const bridgeToHead=head===POST_STAGE_REVIEWED_BRIDGE_HEAD?[]:
+   cmd("git",["diff","--no-renames","--name-only",POST_STAGE_REVIEWED_BRIDGE_HEAD,head]).split("\n").filter(Boolean);
+  verifyP6PostStageReviewedBridgeAdvance({stageCode,currentHead:head,stageIsAncestor:ancestor,
+   bridgeIsAncestor:bridgeAncestor,stageToBridgePaths:stageToBridge,bridgeToHeadPaths:bridgeToHead});
+ }else{
+  const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
+  verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
+ }
  // The immutable stage remains bound to the executable SHA that created the
- // disabled B0062/V0093 state. Current HEAD supplies only later scoped evidence
- // and its exact approval ledger; executable bytes are forbidden from changing.
+ // disabled B0062/V0093 state. Current HEAD supplies only the one exact
+ // reviewed #881 bridge plus later scoped evidence and its approval ledger.
  const s=admitP6InertOwnerReadback(process.env,stageRaw,stageSha,costSha,stageCode) as unknown as OwnerContext;
  if(process.env.V39_DATABASE_RUNTIME_URL&&process.env.V39_DATABASE_RUNTIME_URL===s.url)
   hold("OWNER_DB_MUST_NOT_BE_RUNTIME_LOGIN");
