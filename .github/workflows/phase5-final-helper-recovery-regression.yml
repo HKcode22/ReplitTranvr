@@ -105,6 +105,7 @@ jobs:
             review-tools/p5_private_policy_review_materializer.test.cjs \
             review-tools/p5_final_policy_binding_materializer.test.cjs \
             review-tools/p5_final_phase5_freeze_decision.test.cjs \
+            review-tools/p5_no_unsigned_manifest_staging_shortcuts.test.cjs \
             review-tools/p5_final_downstream_transition_audit.test.cjs \
             review-tools/p5_final_core_technical_recommendation.test.cjs \
             review-tools/p5_six_policy_binding.test.cjs \
