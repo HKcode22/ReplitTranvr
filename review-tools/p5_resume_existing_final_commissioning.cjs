@@ -15,6 +15,11 @@ const need=(x,s)=>{if(!x)throw Error("HOLD_P5_RESUME_"+s)},sha=b=>crypto.createH
 function next(s){
  if(s.completedStageJournal) return s.freezeWorkpaper?{status:"BOTH_STAGES_ALREADY_ACKNOWLEDGED_NO_REPLAY"}:{mode:"RECOVER_EXISTING_FREEZE_WORKPAPER"};
  if(s.acknowledgedCalendarOnly&&s.coreAdopted&&s.privateReview&&s.staticReview&&s.authOnMain)return {mode:"RESUME_ACKNOWLEDGED_CALENDAR_NO_GO",review:PRIVATE,static:STATIC};
+ if(s.completedStaticInstall){
+  if(!s.stageJournalPresent&&!s.partialInertApproval&&s.coreAdopted&&s.privateReview&&s.staticReview&&s.authOnMain)
+   return {mode:"RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO",review:PRIVATE,static:STATIC};
+  return {status:"HOLD_EXISTING_MUTATION_JOURNAL_RECONCILE_NO_REPLAY"};
+ }
  if(s.anyMutationJournal)return {status:"HOLD_EXISTING_MUTATION_JOURNAL_RECONCILE_NO_REPLAY"};
  if(!s.coreReview)return {status:"HOLD_EXACT_CORE_REVIEW_FILE_ABSENT",missing:[CORE]};
  if(!s.corePrepared)return {mode:"PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE",review:CORE};
@@ -64,12 +69,24 @@ function state(d,out,ledger){
   authOnMain=ledger.approvals.some(x=>x.authorizationId===a.authorizationId&&x.artifactSha256===prepared.authArtifactSha256&&JSON.stringify(x.predecessorEvidenceIds)===JSON.stringify(a.predecessorEvidenceIds));
  }
  let completedStageJournal=false,acknowledgedCalendarOnly=false;
- if(xo("inert-stage-chain-attempt.jsonl")){
+ const stageJournalPresent=xo("inert-stage-chain-attempt.jsonl");
+ if(stageJournalPresent){
   const j=read(safeDir(out),"inert-stage-chain-attempt.jsonl",1000000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
   completedStageJournal=j.at(-1)?.status==="BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO";
   acknowledgedCalendarOnly=j.length===5&&j.at(-1)?.mode==="calendar"&&j.at(-1)?.status==="INDEPENDENT_READBACK_MATCH"&&H.test(j[0]?.secretMetadataSha256??"")&&!xo("acknowledged-calendar-resume-once.json");
  }
- const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),anyMutationJournal:["inert-stage-chain-attempt.jsonl","static-install-attempt.jsonl","inert-approval-install-attempt.jsonl"].some(xo)};
+ const staticJournalPresent=xo("static-install-attempt.jsonl"),inertApprovalJournalPresent=xo("inert-approval-install-attempt.jsonl");
+ let completedStaticInstall=false,completedInertApproval=false;
+ if(staticJournalPresent){
+  const j=read(safeDir(out),"static-install-attempt.jsonl",300000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
+  completedStaticInstall=j.at(-1)?.status==="EXACT_STATIC_SECRETS_INSTALLED_METADATA_ONLY_NO_GO"&&Number.isSafeInteger(j.at(-1)?.installed)&&j.at(-1).installed>0;
+ }
+ if(inertApprovalJournalPresent){
+  const j=read(safeDir(out),"inert-approval-install-attempt.jsonl",100000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
+  completedInertApproval=j.at(-1)?.status==="THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO";
+ }
+ const partialStaticInstall=staticJournalPresent&&!completedStaticInstall,partialInertApproval=inertApprovalJournalPresent&&!completedInertApproval;
+ const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,completedStaticInstall,completedInertApproval,stageJournalPresent,partialStaticInstall,partialInertApproval,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),anyMutationJournal:stageJournalPresent||partialStaticInstall||partialInertApproval};
  return {statuses,prepared};
 }
 function run(){
@@ -132,7 +149,7 @@ function run(){
    if(n.static)args.push(reviewDigest(safeDir(out),n.static,"P5_FINAL_STATIC_REVIEW_SHA256"));
    console.log(JSON.stringify({status:"EXECUTING_EXISTING_ADMITTED_MODE",mode:n.mode,main:head,phase6PaidGo:false}));
    execFileSync(process.execPath,args,{cwd:checkout,env,stdio:"inherit",timeout:45*60*1000});
-   if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(n.mode))return;
+   if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO","RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO"].includes(n.mode))return;
   }
   need(false,"MAXIMUM_LOCAL_CONTINUATION_STEPS");
  }finally{
