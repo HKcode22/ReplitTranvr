@@ -1,0 +1,213 @@
+{
+  "schema": "v39.phase5.independent-compact-metadata-reproduction.v1",
+  "status": "EXACT_OFFLINE_METADATA_COMPARISON_PASS_NOT_RELEASE_APPROVAL",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "originalArtifactId": 14212961986,
+  "originalZipSha256": "53ad64037ab06194e6f4d4e2f40e91e07e0d42cb0acc44ffabdc545c576a8ff5",
+  "originalReviewJsonSha256": "a4f9229ea4454ca17301f2f2a518dfba1eda2c86f1c8bc55ceede13f8e70ca48",
+  "originalCalendarSha256": "45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",
+  "compactCalendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+  "compactReceiptGitBlob": "ee17a694594356e2b0c772545c490c198db11b42",
+  "fixedAirportAndAdaptiveCellScopeSha256": "ce9bd17c2011564dd6c9d941acfdb0eee47bf18e6a503b10f4353f588ca5bd38",
+  "identicalScope": true,
+  "fixedAirportCount": 19,
+  "adaptiveCellCount": 12,
+  "existingPrivateCatalog": {
+    "sha256": "4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534",
+    "airports": 1017,
+    "groups": 168,
+    "bytes": 14722,
+    "privateActualBytesReadByThisContinuation": false
+  },
+  "dateMapSha256": "8e67916ea67bf1ab4cbfffee833b3e35b201cd5be1845899ccaaf12c449ff50c",
+  "shapeEnvelopeSha256": "056ff25eaaf54e4d8b943610e03d6d819858940f5992620dd1a37b365335d7e6",
+  "coverageGridSha256": "371ce938669dc4c0ec8723d89f58c44507900c3eb18306f5ed7de56f6a95539b",
+  "categoryRowsSha256": "a49720f28ce10019ee049436086e1734ac6ee2ec0f24189621aab2e32583ad6a",
+  "categoryTotals": {
+    "FIDS_BASE_UNITS": 11904,
+    "FIDS_SPLIT_UNITS": 384,
+    "FIDS_RETRY_UNIT_BUDGET": 1260,
+    "VALIDATION_UNIT_BUDGET": 496,
+    "OUTCOME_REST_UNIT_BUDGET": 23040,
+    "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+    "DIAGNOSTIC_UNIT_BUDGET": 304
+  },
+  "reserve": 37388,
+  "physicalUtcDates": 38,
+  "categoryRows": 266,
+  "peakDailyUnits": 1280,
+  "maxQueriesPerDay": 288,
+  "sourceQueries": 6144,
+  "byHorizon": {
+    "T-24h": 2048,
+    "T-6h": 2048,
+    "T-90m": 2048
+  },
+  "postPartitionSlotGroups": 144,
+  "matchedGitBlobs": [
+    {
+      "runDayIndex": 1,
+      "gitBlob": "56d02053b3d31c613035752954c19815da14c293",
+      "bytes": 90815
+    },
+    {
+      "runDayIndex": 2,
+      "gitBlob": "3214e9ed569a1be4aaf5f81776f6bd17cc53e540",
+      "bytes": 90815
+    },
+    {
+      "runDayIndex": 3,
+      "gitBlob": "ad3b938319d44f0ff39bdc8447a720d01d75442b",
+      "bytes": 90733
+    },
+    {
+      "runDayIndex": 4,
+      "gitBlob": "34816f36bf6f5c20b794a1ad0b3fe85cbe1119dc",
+      "bytes": 90815
+    },
+    {
+      "runDayIndex": 5,
+      "gitBlob": "ba973a5c73166025b96c41581ecf60adaea83c7e",
+      "bytes": 135829
+    },
+    {
+      "runDayIndex": 6,
+      "gitBlob": "c5a352f42b1570b7484e94a87fc509a1752d1a5e",
+      "bytes": 116285
+    },
+    {
+      "runDayIndex": 7,
+      "gitBlob": "e436c8e43d8cf2e79cefd284b5ae40173f8618fb",
+      "bytes": 90732
+    },
+    {
+      "runDayIndex": 8,
+      "gitBlob": "3be35b2b2ed099422f3dac68d081ffe86ae3afef",
+      "bytes": 90732
+    },
+    {
+      "runDayIndex": 9,
+      "gitBlob": "a227bc76409da6503ed50a0011c1bf7647eebe8b",
+      "bytes": 90814
+    },
+    {
+      "runDayIndex": 10,
+      "gitBlob": "2394b55d898c3d9804a2d69af8c7ce9f45bfe38a",
+      "bytes": 136405
+    },
+    {
+      "runDayIndex": 11,
+      "gitBlob": "8f45bba22c5b4d0330437d617a3804c9aec6eb15",
+      "bytes": 91199
+    },
+    {
+      "runDayIndex": 12,
+      "gitBlob": "0842c838bb607c939afa1fbe659224930f8d2514",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 13,
+      "gitBlob": "714e764e0aca191dbcfafcf5f60ab9f186dc5783",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 14,
+      "gitBlob": "10f5e1cef9f562345c47c6b44e2f6fa4876785b4",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 15,
+      "gitBlob": "b3571ce7c134b516c9860c9f264d49da7669f8f5",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 16,
+      "gitBlob": "90ea55e738c85dd138d7acb82ca8164cc64a9bb0",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 17,
+      "gitBlob": "d49e7bab2395ee57e8610e9da60a6c6240459a93",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 18,
+      "gitBlob": "9529b73825e1b0889c09764c7bafdc36d93793be",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 19,
+      "gitBlob": "a7666d4a012d7fc7bb89638a0e11f5e882b33319",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 20,
+      "gitBlob": "e2ffd815a8a2cccb25598dab2a0c8521d77adaa7",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 21,
+      "gitBlob": "39976c96cda775063e56b7c0a4d878e1d8dc12af",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 22,
+      "gitBlob": "41ed1bea6a980511ea57a85c6cd8503eb7f4bd88",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 23,
+      "gitBlob": "aa9a3b5f3b0cc6ccd4efc33aaf61a5ce6e0f5184",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 24,
+      "gitBlob": "cff0a4356a2ac54c5639a3199ea1e32d03f298aa",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 25,
+      "gitBlob": "c7dc19600dcd8bc2df6a28b97b3e93f06bce82d5",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 26,
+      "gitBlob": "de5eaf3f34b6c45fe6fd8a813504b1e7725f16ef",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 27,
+      "gitBlob": "9b9d473bf92171c02fb33ff4d2d3d6359142e5c1",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 28,
+      "gitBlob": "030be839c192e56d9b3b30b46034503aa98f00c0",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 29,
+      "gitBlob": "bcbc713482a44dafad78a28be9cfbcd1e0242d08",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 30,
+      "gitBlob": "565ce5668e3bc49921107b385641552c7727b142",
+      "bytes": 116670
+    },
+    {
+      "runDayIndex": 31,
+      "gitBlob": "86cedeb0875ecbd49caa9599f8d5047c25b1ea32",
+      "bytes": 116670
+    }
+  ],
+  "reproduction": "Actual historical GitHub ZIP fetched and independently rehashed in native Node 22.16.0; reconstructed date-only rows, selected scope, shifted envelopes (crossoverReview40Sha256 obtained from current actual day 6 committed plan, not independently reconstructed), all 31 query plans and budget rows, computed git blob SHA1 and SHA256, exact Git API tree comparison. No airport redraw. This proves deterministic candidate bytes, not provider semantics, source rights, account freshness or human acceptance.",
+  "providerApiVersionDisplayedByOfficialOpenApi": "1.15.4.0",
+  "providerContractRawSha256": null,
+  "providerContractRawBytesRetrieved": false,
+  "sourceRightsApproved": false,
+  "scientificFreezeApproved": false,
+  "providerPaidCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
