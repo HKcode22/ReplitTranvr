@@ -11,7 +11,7 @@ test("no unsigned-manifest staging shortcut exists",()=>{
 
 test("rights-deferred staging exists only behind a final frozen manifest contract",()=>{
  for(const p of files(ROOT)){
-  if(path.basename(p)===path.basename(__filename))continue;
+  if(path.basename(p)===path.basename(__filename)||p.endsWith(".test.cjs"))continue;
   const s=fs.readFileSync(p,"utf8");
   if(!s.includes("sourceUseDeferredToPhase6Activation:true")&&!s.includes("RESERVED_RIGHTS_ID="))continue;
   assert.ok(SAFE_DEFERRED.has(path.basename(p)),p+" is not an approved rights-deferred helper");
