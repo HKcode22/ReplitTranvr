@@ -33,8 +33,8 @@ source-to-row linkage. Existing source expiry remains authoritative.
 | Production safety | One B0062 authorization singleton exists disabled; source authorization, process arming, and paid GO remain false. Freeze inventory reported zero prelaunch structural holds and zero provider calls. |
 | Source retention | Existing short-lived source-custody and expiry controls remain in force. No provider-shaped source archive was duplicated. |
 | Phase 7 contract/writer | Strict derived-release contract, packet builder, fail-closed writer, rejection tests, grouped split fence, missingness/censoring checks, and documentation are implemented. The exact field dictionary and source-to-derived transformation are still not approved; the writer accepts only already-approved bucketed values. |
-| CI | Post-#891 main safety run 44567069806 completed successfully: migrations/no-op, schema/triggers, TypeScript, offline and full tests, lint, registry, traceability, contradiction scan, preflight, build, and disposable PostgreSQL verification all passed. |
-| Current-main activation continuity | This change pins the exact #890/#891 retention-successor files and hashes into the reviewed post-freeze bridge, with regression coverage. It removes the newly discovered fail-closed mismatch without granting rights, enabling source use, changing the database, or spending credits. |
+| CI | PR #893 exact-head checks all passed: 44573431985 V3.9 Offline Safety, 44573432251 Focused Release, 44573431971 Real PG Receiver Faults, 44573432093 V0093 real PG16, 44573432243 public receiver identity, and 44573432354 public frozen-packet guard. The suite covered migrations/no-op, schema/triggers, TypeScript, offline/full tests, lint, registry, traceability, contradiction scan, preflight, build, and disposable PostgreSQL verification. |
+| Current-main activation continuity | PR #892 pinned the #890/#891 retention successor, and PR #893 added the writer/test blobs plus the updated normalized self-hash to the reviewed post-freeze bridge. The current head removes the mismatch without granting rights, enabling source use, changing the database, or spending credits. |
 
 ## Current failures and what they mean
 
@@ -103,7 +103,9 @@ These are sequential gates, not unfinished Phase 5 work:
 
 ## Handoff
 
-Engineering can continue without waiting for email. The paid run itself remains
+Engineering can continue without waiting for email. The fail-closed writer is
+ready for a separately approved transformation output, but it is not a live
+source adapter. The paid run itself remains
 a controlled NO-GO until the eight-step activation chain above is satisfied.
 The next blocking inputs are a genuine current source-use decision and the
 exact field-level derived transformation. After those are frozen and tested,
