@@ -45,6 +45,8 @@ jobs:
           MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509'
           REVIEW_ROOT="$GITHUB_WORKSPACE"
           PROD="$RUNNER_TEMP/production-main"
+          git fetch --no-tags --depth=1 origin "$MAIN"
+          git cat-file -e "$MAIN^{commit}"
           git worktree add --detach "$PROD" "$MAIN"
           ln -s "$REVIEW_ROOT/node_modules" "$PROD/node_modules"
           cd "$PROD"
