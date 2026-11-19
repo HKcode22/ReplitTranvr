@@ -1,0 +1,736 @@
+{
+  "schema": "v39.phase5.compact-exact-candidate-cost-binding.v1",
+  "status": "EXACT_EXISTING_COMPILER_COST_CANDIDATE_REPRODUCED_NOT_SIGNED_NOT_STAGED",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "sourceGitBlobs": [
+    [
+      "data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json",
+      "ee17a694594356e2b0c772545c490c198db11b42"
+    ],
+    [
+      "server/lib/disruption/phase5PrelaunchUnknownAirportSlotBudgetEnvelope_v39.mjs",
+      "24adc6e12008bd7b5c62fecc80196371d02872da"
+    ],
+    [
+      "server/lib/disruption/phase5F8SegmentedSourceCoverage_v39.mjs",
+      "ce12b7509e60eafb2b9ad3e489a48a0618969a08"
+    ],
+    [
+      "server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs",
+      "48fa5c06073145f95581ced15f77eff7d56f5b43"
+    ]
+  ],
+  "input": {
+    "schema": "v39.phase5.prelaunch-slot-budget-input.v1",
+    "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+    "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+    "configSha256": "4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb",
+    "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "providerRangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
+    "timingEvidenceSha256": "88cbedd1ec867a6372f69c2708e180509f849d71a34963d4fb5ac851d6e30be5",
+    "asOfUtc": "2026-11-16T09:18:44.000Z",
+    "providerMaxRangeMinutes": 240,
+    "refreshEveryMinutes": 15,
+    "physicalGetsPerRefreshUpperBound": 1,
+    "getLeadSeconds": 900,
+    "apiUnitsPerPhysicalGet": 2,
+    "cycleRestCeilingUnits": 49468,
+    "protectedRestFloorUnits": 1000,
+    "calendarDays": [
+      {
+        "runDayIndex": 1,
+        "startUtc": "2026-11-21T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 2,
+        "startUtc": "2026-11-23T04:00:00.000Z",
+        "utcSlot": "04",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 3,
+        "startUtc": "2026-11-24T08:00:00.000Z",
+        "utcSlot": "08",
+        "windowShape": "2x2h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 4,
+        "startUtc": "2026-11-25T12:00:00.000Z",
+        "utcSlot": "12",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 5,
+        "startUtc": "2026-11-26T16:00:00.000Z",
+        "utcSlot": "16",
+        "windowShape": "up-to-6h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 6,
+        "startUtc": "2026-11-27T20:00:00.000Z",
+        "utcSlot": "20",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 7,
+        "startUtc": "2026-11-28T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "2x2h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 8,
+        "startUtc": "2026-11-30T04:00:00.000Z",
+        "utcSlot": "04",
+        "windowShape": "2x2h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 9,
+        "startUtc": "2026-12-01T08:00:00.000Z",
+        "utcSlot": "08",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 10,
+        "startUtc": "2026-12-02T12:00:00.000Z",
+        "utcSlot": "12",
+        "windowShape": "up-to-6h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 11,
+        "startUtc": "2026-12-04T16:00:00.000Z",
+        "utcSlot": "16",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 12,
+        "startUtc": "2026-12-05T20:00:00.000Z",
+        "utcSlot": "20",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 13,
+        "startUtc": "2026-12-06T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 14,
+        "startUtc": "2026-12-07T04:00:00.000Z",
+        "utcSlot": "04",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 15,
+        "startUtc": "2026-12-08T08:00:00.000Z",
+        "utcSlot": "08",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 16,
+        "startUtc": "2026-12-09T12:00:00.000Z",
+        "utcSlot": "12",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 17,
+        "startUtc": "2026-12-10T16:00:00.000Z",
+        "utcSlot": "16",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 18,
+        "startUtc": "2026-12-11T20:00:00.000Z",
+        "utcSlot": "20",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 19,
+        "startUtc": "2026-12-12T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 20,
+        "startUtc": "2026-12-13T04:00:00.000Z",
+        "utcSlot": "04",
+        "windowShape": "4h",
+        "partition": "train"
+      },
+      {
+        "runDayIndex": 21,
+        "startUtc": "2026-12-14T08:00:00.000Z",
+        "utcSlot": "08",
+        "windowShape": "4h",
+        "partition": "validation"
+      },
+      {
+        "runDayIndex": 22,
+        "startUtc": "2026-12-15T12:00:00.000Z",
+        "utcSlot": "12",
+        "windowShape": "4h",
+        "partition": "validation"
+      },
+      {
+        "runDayIndex": 23,
+        "startUtc": "2026-12-16T16:00:00.000Z",
+        "utcSlot": "16",
+        "windowShape": "4h",
+        "partition": "validation"
+      },
+      {
+        "runDayIndex": 24,
+        "startUtc": "2026-12-17T20:00:00.000Z",
+        "utcSlot": "20",
+        "windowShape": "4h",
+        "partition": "validation"
+      },
+      {
+        "runDayIndex": 25,
+        "startUtc": "2026-12-18T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "4h",
+        "partition": "validation"
+      },
+      {
+        "runDayIndex": 26,
+        "startUtc": "2026-12-19T04:00:00.000Z",
+        "utcSlot": "04",
+        "windowShape": "4h",
+        "partition": "test"
+      },
+      {
+        "runDayIndex": 27,
+        "startUtc": "2026-12-20T08:00:00.000Z",
+        "utcSlot": "08",
+        "windowShape": "4h",
+        "partition": "test"
+      },
+      {
+        "runDayIndex": 28,
+        "startUtc": "2026-12-21T12:00:00.000Z",
+        "utcSlot": "12",
+        "windowShape": "4h",
+        "partition": "test"
+      },
+      {
+        "runDayIndex": 29,
+        "startUtc": "2026-12-22T16:00:00.000Z",
+        "utcSlot": "16",
+        "windowShape": "4h",
+        "partition": "test"
+      },
+      {
+        "runDayIndex": 30,
+        "startUtc": "2026-12-23T20:00:00.000Z",
+        "utcSlot": "20",
+        "windowShape": "4h",
+        "partition": "test"
+      },
+      {
+        "runDayIndex": 31,
+        "startUtc": "2026-12-24T00:00:00.000Z",
+        "utcSlot": "00",
+        "windowShape": "4h",
+        "partition": "test"
+      }
+    ],
+    "explicitOtherOnlyChargeDates": [
+      "2026-12-25",
+      "2026-12-26"
+    ],
+    "restOtherByUtcDate": [
+      {
+        "chargeDayUtc": "2026-11-19",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 2,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 0,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-20",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 0,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-21",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 8,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-22",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 20,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-23",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-24",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-25",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 46,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-26",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 52,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-27",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 56,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-28",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 8,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-29",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 20,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-11-30",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-01",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 46,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-02",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-03",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 14,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-04",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-05",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 56,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-06",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 28,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-07",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-08",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-09",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-10",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-11",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 56,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-12",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 28,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-13",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-14",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-15",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-16",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-17",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 56,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-18",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 28,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-19",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 32,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-20",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-21",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-22",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 40,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-23",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 56,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-24",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 8,
+          "VALIDATION_UNIT_BUDGET": 16,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-25",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 0,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      },
+      {
+        "chargeDayUtc": "2026-12-26",
+        "dailyRestCeilingUnits": 1900,
+        "categories": {
+          "FIDS_RETRY_UNIT_BUDGET": 0,
+          "VALIDATION_UNIT_BUDGET": 0,
+          "OUTCOME_REST_UNIT_BUDGET": 640,
+          "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+          "DIAGNOSTIC_UNIT_BUDGET": 8
+        }
+      }
+    ]
+  },
+  "sourceSlotBudgetSha256": "81a3b0e0a8e6e9cd48e8e6997ab4e7c700594797f568aa7b0b704d071f335e5e",
+  "candidateCostOnlyCategoryDraftSha256": "20470f4ad2b7e1dec2f3a0385dda1d2315112fc008d27e5cea72417767ae058f",
+  "physicalCategoryRowsSha256": "a49720f28ce10019ee049436086e1734ac6ee2ec0f24189621aab2e32583ad6a",
+  "categoryCaps": [
+    {
+      "category": "FIDS_BASE_UNITS",
+      "ceilingUnits": 11904
+    },
+    {
+      "category": "FIDS_SPLIT_UNITS",
+      "ceilingUnits": 384
+    },
+    {
+      "category": "FIDS_RETRY_UNIT_BUDGET",
+      "ceilingUnits": 1260
+    },
+    {
+      "category": "VALIDATION_UNIT_BUDGET",
+      "ceilingUnits": 496
+    },
+    {
+      "category": "OUTCOME_REST_UNIT_BUDGET",
+      "ceilingUnits": 23040
+    },
+    {
+      "category": "HISTORY_BOOTSTRAP_UNIT_BUDGET",
+      "ceilingUnits": 0
+    },
+    {
+      "category": "DIAGNOSTIC_UNIT_BUDGET",
+      "ceilingUnits": 304
+    }
+  ],
+  "cycleSourceReservedUnits": 12288,
+  "cycleOtherReservedUnits": 25100,
+  "reservedRestUnits": 37388,
+  "chargeDates": 38,
+  "categoryRows": 266,
+  "peakDailyReservedUnits": 1280,
+  "candidateNetCeiling": 49468,
+  "protectedFloor": 1000,
+  "unallocatedAfterFloor": 11080,
+  "postCandidateOneGetPerGroupWithinEveryDateOutcomeCap": true,
+  "postCandidateMaxDailyUnits": 24,
+  "rawInputsFromActualCompactReceiptAndOwnerRecordedHashes": true,
+  "sourceCodeExecution": "Fetched existing production pure modules and evaluated exact partition, slot and seven-category functions in V8 with independent SHA256 implementation tested against standard vectors; no rewrite of formulas; no native Node or production DB run.",
+  "mutatedInputRejections": 3,
+  "approvedFinalManifest": false,
+  "approvedCostEnvelope": false,
+  "approvedRights": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}

@@ -82,6 +82,36 @@
       "evidenceId": "RUN-20261119-OPERATIONALSCOPEREVIEW",
       "path": "data-collection/phase5/evidence/2026-11-18_existing_operational_scope_review_NOT_RELEASE.json",
       "sha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+    },
+    {
+      "evidenceId": "RUN-20261119-EXACTCOMPACTCOST",
+      "path": "data-collection/phase5/evidence/2026-11-18_exact_compact_cost_binding_NOT_RUNTIME.json",
+      "sha256": "a615aa88d1d48d4bf06743ef3714b22e76bdec4d64cade276c3cef523a2b9c47"
+    },
+    {
+      "evidenceId": "RUN-20261119-NATIVEPOSTGEOMETRY",
+      "path": "data-collection/phase5/evidence/2026-11-18_compact_native_post_geometry_31_actual_plans.json",
+      "sha256": "7b868c08811381bd6b2fead3284b7e560c33846b8f92a7536070efc28095a353"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALSIGNERALIASES",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_owner_seven_signer_aliases_SUCCESS_INACTIVE.json",
+      "sha256": "0b0b73b08906a83bd3e46ea9a152db686ed8f8a8c29c0a750c21726245ba902d"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALPOLICYRECOVERY",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_owner_six_policy_recovery_SUCCESS_NOT_RUNTIME.json",
+      "sha256": "c0b5c84daa72c5b805471da22091e2af2588c4a7d5fc5a171e7a1fa26b193039"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALOWNERRECOVERY",
+      "path": "data-collection/phase5/evidence/2026-11-18_owner_deployed_876_manifest_and_live_backstop_NO_GO.json",
+      "sha256": "ef0e057d941d97eb1baa52fab6a75c110868f20306217a09720b0e58f75868ee"
+    },
+    {
+      "evidenceId": "DEC-20261119-OWNERPRESERVEF8",
+      "path": "data-collection/phase5/evidence/2026-11-18_OWNER_DECISION_PRESERVE_F8_NOT_APPROVAL.md",
+      "sha256": "2b6fb24021c4c81814ba137bc5398aa17ab0cd77e2693c9dffaebee586863cbb"
     }
   ],
   "approvals": []
