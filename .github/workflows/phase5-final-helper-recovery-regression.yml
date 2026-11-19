@@ -20,6 +20,10 @@ on:
       - 'review-tools/p5_exact_final_release_policy_bindings.cjs'
       - 'review-tools/p5_six_policy_binding.test.cjs'
       - 'review-tools/fixtures/p5_six_policy_candidate.json'
+      - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
+      - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
+      - 'review-tools/p5_final_core_mechanical_bindings.test.cjs'
+      - 'review-tools/p5_final_core_mechanical_bindings.test.cjs'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
   pull_request:
     paths:
@@ -65,6 +69,7 @@ jobs:
           node --check review-tools/p5_final_repin_receipt.test.cjs
           node --check review-tools/p5_inert_stage_chain.test.cjs
           node --check review-tools/p5_bulk_handoff.test.cjs
+          node --check review-tools/p5_final_core_mechanical_bindings.test.cjs
           node --check review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
           node --check review-tools/p5_final_core_review.test.cjs
           node --check review-tools/p5_assemble_exact_six_final_policies.cjs
@@ -78,6 +83,7 @@ jobs:
           node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs \
             review-tools/p5_inert_stage_chain.test.cjs \
             review-tools/p5_bulk_handoff.test.cjs \
+            review-tools/p5_final_core_mechanical_bindings.test.cjs \
             review-tools/p5_final_core_review.test.cjs \
             review-tools/p5_six_policy_binding.test.cjs
 
