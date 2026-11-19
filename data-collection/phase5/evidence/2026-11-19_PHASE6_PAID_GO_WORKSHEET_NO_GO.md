@@ -16,7 +16,7 @@ The run may start only when every required item below is `PASS`, the approval le
 
 | Gate | Current value | Status |
 |---|---|---|
-| Current main | `b557c0ee5420a881ad0ef688d934ea608fe113a7` | PASS for documentation state |
+| Current main | `8fc779dc2ebad4bba96c24e64e0c88a79b7be9cb` | PASS for documentation state |
 | Phase 5 freeze | Recorded as complete/inert | PASS for freeze; not paid authorization |
 | Source-use/retention rights | No account-specific approval recorded | **MISSING** |
 | Provider reply | No reply to the Nov 18 follow-up | INFORMATIONAL; not approval and not an engineering hold |
