@@ -150,7 +150,8 @@ jobs:
           need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
           const resumeBlob=require('node:child_process').execFileSync('git',['hash-object','review-tools/p5_resume_existing_final_commissioning.cjs'],{encoding:'utf8'}).trim();
           need(ownerOnce.includes('HELPER_BLOB="'+resumeBlob+'"'),'owner launcher HELPER blob mismatch');
-          need(ownerOnce.includes('TESTED_RUN="44475135730"')&&ownerOnce.includes('TESTED_HEAD="87b5f9722ddbd635208e8e8f2487bb4ea97a8bd7"'),'owner launcher tested-run pin mismatch');
+          need(ownerOnce.includes('TESTED_RUN="44479965836"')&&ownerOnce.includes('TESTED_HEAD="72b781f0c8f1334c1e06cc3b9a560a07497514f9"'),'owner launcher tested-run pin mismatch');
+          need(ownerOnce.includes('TESTED_HELPER_BLOB')&&ownerOnce.includes('p5_resume_existing_final_commissioning.cjs?ref=$TESTED_HEAD')&&ownerOnce.includes('TESTED_HELPER_BLOB_MISMATCH'),'owner launcher tested-helper identity check missing');
           const gitHash=p=>require('node:child_process').execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
           need(reviewOnce.includes('MATERIALIZER_BLOB="'+gitHash('review-tools/p5_final_core_review_materializer.cjs')+'"'),'final review materializer pin mismatch');
           need(reviewOnce.includes('CORE_VALIDATOR_BLOB="'+coreInputs+'"'),'final review core validator pin mismatch');
