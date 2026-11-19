@@ -10,7 +10,6 @@
  */
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process"),{pathToFileURL}=require("node:url");
-const {Pool}=require("pg");
 const REPO="HKcode22/ReplitTranvr",PR=879;
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const TARGETS=["V39_P5_APPROVED_CODE_SHA","V39_P5_MANIFEST_SHA256","P6_INERT_STAGE_INPUT_JSON","P6_INERT_STAGE_INPUT_SHA256","P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","P6_INERT_COST_ENVELOPE_SHA256"];
@@ -48,6 +47,7 @@ async function loadPrepared(){
  return {root,head,dir,rec:r,manifest,config,stage,review:rv,calendarReview,costReview,cost:cd};
 }
 async function storeManifest(ctx,emit){
+ const {Pool}=require("pg");
  const u=process.env.DATABASE_URL;need(typeof u==="string"&&u.length>20,"OWNER_DATABASE_URL");
  const pool=new Pool({connectionString:u,max:2,connectionTimeoutMillis:8000,query_timeout:20000,application_name:"p5_rights_deferred_manifest_store"}),key="phase5_frozen_manifest:"+ctx.manifest.sha256;
  let inserted=0,attempted=false;
