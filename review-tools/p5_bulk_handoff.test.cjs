@@ -2,12 +2,13 @@
 const test=require("node:test"),assert=require("node:assert/strict");
 const {sequence,planInertApprovals,staticReviewWorkpaper,validateCompletedStaticInstallJournal,validateCompletedInertApprovalJournal,INERT_APPROVALS}=require("./p5_bulk_final_owner_handoff.cjs");
 const h=x=>x.repeat(64).slice(0,64),main="a".repeat(40);
-function ops(log){return Object.fromEntries(["coreInputs","assemble","verify","prepareStaticReviewWorkpaper","installPlan","checkStagePrerequisites","noPriorAttempt","storeManifest","install","installInertApprovals","stage","resumeStage"].map(k=>[k,(...a)=>log.push([k,...a])]));}
+function ops(log){return Object.fromEntries(["coreInputs","assemble","verify","prepareStaticReviewWorkpaper","installPlan","checkStagePrerequisites","noPriorAttempt","storeManifest","install","installInertApprovals","stage","resumeStage","resumeAfterStatic"].map(k=>[k,(...a)=>log.push([k,...a])]));}
 test("mode sequencing never mutates before verification/planning",()=>{
  let l=[];sequence("PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE",ops(l));assert.deepEqual(l,[["coreInputs","PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"]]);
  l=[];sequence("PREPARE_POLICY_REVIEW",ops(l));assert.deepEqual(l,[["assemble"]]);
  l=[];sequence("PREPARE_STATIC_REVIEW",ops(l));assert.deepEqual(l,[["verify"],["prepareStaticReviewWorkpaper"]]);
  l=[];sequence("RESUME_ACKNOWLEDGED_CALENDAR_NO_GO",ops(l));assert.deepEqual(l,[["verify"],["resumeStage"]]);
+ l=[];sequence("RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO",ops(l));assert.deepEqual(l,[["verify"],["resumeAfterStatic"]]);
  l=[];sequence("COMMISSION_EXISTING_INERT_NO_GO",ops(l));assert.deepEqual(l.map(x=>x[0]),["verify","installPlan","checkStagePrerequisites","noPriorAttempt","storeManifest","install","installInertApprovals","stage"]);
 });
 test("unknown mode refuses",()=>assert.throws(()=>sequence("GO",ops([])),/HOLD_P5_BULK_MODE/));
