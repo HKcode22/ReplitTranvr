@@ -114,7 +114,7 @@ on approved transformed representations without retaining raw provider
 responses. It cannot promise a particular accuracy in advance; accuracy still
 depends on observed sample size, label coverage, feature signal, and the
 protected evaluation. It also cannot authorize the current automated paid
-collection by itself. The next engineering change is to implement the
-allowlisted release writer and its rejection tests against the current pinned
-main, then submit it for the independent terms/source-use review required by
-the existing Phase 6 activation ledger.
+collection by itself. The allowlisted packet builder and rejection tests are
+now merged on `main`; any future source-facing writer must still accept only
+reviewed bucketed inputs and must be submitted for the independent
+terms/source-use review required by the existing Phase 6 activation ledger.
