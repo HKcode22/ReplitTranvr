@@ -5,6 +5,7 @@ on:
     paths:
       - 'review-tools/p5_post879_rights_deferred_prepare_v39.mjs'
       - 'review-tools/p5_post879_store_manifest_owner_v39.mjs'
+      - 'review-tools/p5_post879_owner_inert_commission_once.cjs'
       - '.github/workflows/phase5-post879-rights-deferred-closeout-review.yml'
 permissions:
   contents: read
@@ -34,10 +35,14 @@ jobs:
           set -Eeuo pipefail
           node --check review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           node --check review-tools/p5_post879_store_manifest_owner_v39.mjs
+          node --check review-tools/p5_post879_owner_inert_commission_once.cjs
           grep -Fq "sourceRightsApproved:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           grep -Fq "sourceUseDeferredToPhase6Activation:true" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           grep -Fq "phase6PaidGo:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
-          ! grep -Eq 'AeroDataBox|fetch\(|axios|https\.request|http\.request' review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          grep -Fq "LEGACY_SOURCE_RIGHTS_SECRET_PRESENT" review-tools/p5_post879_owner_inert_commission_once.cjs
+          grep -Fq "PRIOR_STAGE_RUNS_RECONCILE_NO_REPLAY" review-tools/p5_post879_owner_inert_commission_once.cjs
+          grep -Fq "prelaunchStructuralHolds.length===0" review-tools/p5_post879_owner_inert_commission_once.cjs
+          ! grep -Eq 'fetch\(|axios|https\.request|http\.request' review-tools/p5_post879_rights_deferred_prepare_v39.mjs
       - name: Verify exact package against production main
         shell: bash
         run: |
