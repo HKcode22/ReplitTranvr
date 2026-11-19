@@ -1,0 +1,14 @@
+{
+  "schema": "v39.phase5.private-policy-reviewer-decision-input.v1",
+  "phase6PaidGo": false,
+  "decisions": {
+    "independentExactPolicyAndDailyReviewApproved": null,
+    "independentTransportAndSigningScopeApproved": null,
+    "independentStudyTrustPinsApproved": null,
+    "independentPostReviewerPinsApproved": null,
+    "independentDelegatedNativeReviewApproved": null,
+    "independentDelegatedPostAndDayAppendApproved": null
+  },
+  "reviewedBy": null,
+  "reviewedAtUtc": null
+}
