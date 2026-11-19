@@ -6,7 +6,7 @@ import {resolve,isAbsolute,relative} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const REPO='HKcode22/ReplitTranvr';
-const EXPECTED_MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509';
+const EXPECTED_MAIN='f63ec7572aefbe805489317b54882e97f77a1989';
 const AUTHORIZATION_ID='AUTH-20261119-P5INERTFREEZE';
 const H=/^[a-f0-9]{64}$/;
 const C=/^[a-f0-9]{40}$/;
@@ -25,7 +25,12 @@ export const PREDECESSOR_EVIDENCE_IDS=Object.freeze([
  'RUN-20261119-OPERATIONALSCOPEREVIEW','RUN-20261119-EXACTCOMPACTCOST','RUN-20261119-NATIVEPOSTGEOMETRY',
  'RUN-20261119-ACTUALSIGNERALIASES','RUN-20261119-ACTUALPOLICYRECOVERY','RUN-20261119-ACTUALOWNERRECOVERY',
  'DEC-20261119-OWNERPRESERVEF8','RUN-20261119-EXISTINGSTOPGUARDEVIDENCE','RUN-20261119-FINALOWNERMETADATA',
- 'RUN-20261119-NATIVECOREPREARMREVIEW','RUN-20261119-CURRENTGITHUBSTOP','RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED'
+ 'RUN-20261119-NATIVECOREPREARMREVIEW','RUN-20261119-CURRENTGITHUBSTOP','RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED',
+ 'RUN-20261119-CURRENTFIDSPRICE'
+]);
+export const FUTURE_SOURCE_RIGHTS_EVIDENCE_ID='GATE-20261119-SOURCERIGHTSACTIVATION';
+export const STAGE_PREDECESSOR_EVIDENCE_IDS=Object.freeze([
+ ...PREDECESSOR_EVIDENCE_IDS,FUTURE_SOURCE_RIGHTS_EVIDENCE_ID
 ]);
 
 export const FRESH_NO_REFILL_BUDGET=Object.freeze({
@@ -80,6 +85,8 @@ function finalManifest(identity,configSha){
   scientificFreezeApproved:true,
   finalPredecessorsApproved:true,
   releaseEvidence:RELEASE_EVIDENCE,
+  phase5PredecessorEvidenceIds:[...PREDECESSOR_EVIDENCE_IDS],
+  sourceRightsEvidenceIdReserved:FUTURE_SOURCE_RIGHTS_EVIDENCE_ID,
   phase5OwnerDecisionRef:'ISSUE413-COMMENT-7002623385',
   phase6PaidGo:false
  };
@@ -112,7 +119,7 @@ export async function buildPost879RightsDeferredPackage(codeSha=EXPECTED_MAIN){
   configSha256:configSha,
   codeSha40:codeSha,
   phase6AuthorizationId:AUTHORIZATION_ID,
-  predecessorEvidenceIds:[...PREDECESSOR_EVIDENCE_IDS],
+  predecessorEvidenceIds:[...STAGE_PREDECESSOR_EVIDENCE_IDS],
   alertSafety:review.concreteReviewRecommendation.proposedAlertSafety,
   providerRangeEvidenceSha256:identity.rangeEvidenceCandidate.sha256,
   timingEvidenceSha256:identity.timingEvidenceCandidate.sha256,
@@ -133,7 +140,8 @@ export async function buildPost879RightsDeferredPackage(codeSha=EXPECTED_MAIN){
  const stage=JSON.parse(stageFile.bytes);
  need(canonical(stage)===stageFile.bytes,'NONCANONICAL_STAGE');
  need(stage.codeSha40===codeSha&&stage.manifestSha256===manifestSha&&stage.configSha256===configSha&&stage.calendarSha256===identity.calendarRowsDigestCandidate&&stage.phase6AuthorizationId===AUTHORIZATION_ID,'STAGE_IDENTITY');
- need(JSON.stringify(stage.predecessorEvidenceIds)===JSON.stringify(PREDECESSOR_EVIDENCE_IDS),'STAGE_PREDECESSORS');
+ need(PREDECESSOR_EVIDENCE_IDS.length===28&&STAGE_PREDECESSOR_EVIDENCE_IDS.length===29,'PREDECESSOR_COUNTS');
+ need(JSON.stringify(stage.predecessorEvidenceIds)===JSON.stringify(STAGE_PREDECESSOR_EVIDENCE_IDS),'STAGE_PREDECESSORS');
  // The exported stage carries budget policy in slotBudgetInput; B0062 reconstructs its internal budget from these exact bytes.
  need(stage.slotBudgetInput?.cycleRestCeilingUnits===49468&&stage.slotBudgetInput?.protectedRestFloorUnits===1000,'STAGE_BUDGET');
  const costSha=exported.summary.unsignedCostOnlyEnvelopeSha256;
@@ -160,6 +168,9 @@ export async function buildPost879RightsDeferredPackage(codeSha=EXPECTED_MAIN){
   netRestCeilingUnits:49468,protectedRestFloorUnits:1000,
   sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,
   scientificFreezeApproved:true,authorizationEnabled:false,phase6PaidGo:false,
+  phase5PredecessorCount:PREDECESSOR_EVIDENCE_IDS.length,
+  stagePredecessorCount:STAGE_PREDECESSOR_EVIDENCE_IDS.length,
+  futureSourceRightsEvidenceId:FUTURE_SOURCE_RIGHTS_EVIDENCE_ID,
   providerCalls:0,databaseWrites:0,githubMutations:0,secrets
  };
 }
@@ -176,7 +187,7 @@ async function main(){
  const [mode,codeSha,out]=process.argv.slice(2);
  need(['--verify-only','--write-private'].includes(mode)&&codeSha===EXPECTED_MAIN,'EXACT_ARGUMENTS');
  const p=await buildPost879RightsDeferredPackage(codeSha);
- const summary={status:p.status,codeSha:p.codeSha,authorizationId:p.authorizationId,manifestSha256:p.manifestSha256,configSha256:p.configSha256,calendarRowsSha256:p.calendarRowsSha256,stageInputSha256:p.stageInputSha256,costEnvelopeSha256:p.costEnvelopeSha256,dayPlanCount:p.dayPlanCount,plannedQueries:p.plannedQueries,reservedRestUnits:p.reservedRestUnits,peakDailyUnits:p.peakDailyUnits,netRestCeilingUnits:p.netRestCeilingUnits,sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,scientificFreezeApproved:true,authorizationEnabled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
+ const summary={status:p.status,codeSha:p.codeSha,authorizationId:p.authorizationId,manifestSha256:p.manifestSha256,configSha256:p.configSha256,calendarRowsSha256:p.calendarRowsSha256,stageInputSha256:p.stageInputSha256,costEnvelopeSha256:p.costEnvelopeSha256,dayPlanCount:p.dayPlanCount,plannedQueries:p.plannedQueries,reservedRestUnits:p.reservedRestUnits,peakDailyUnits:p.peakDailyUnits,netRestCeilingUnits:p.netRestCeilingUnits,phase5PredecessorCount:p.phase5PredecessorCount,stagePredecessorCount:p.stagePredecessorCount,futureSourceRightsEvidenceId:p.futureSourceRightsEvidenceId,sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,scientificFreezeApproved:true,authorizationEnabled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false};
  if(mode==='--verify-only'){console.log(canonical(summary));return;}
  need(out,'PRIVATE_OUTPUT_REQUIRED');
  const d=safeOut(out);
