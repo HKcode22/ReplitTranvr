@@ -78,6 +78,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_POLICY_BINDING_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
           bash -n review-tools/p5_materialize_final_core_review_once.sh
+          bash -n review-tools/p5_materialize_downstream_review_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
           cp review-tools/p5_resume_existing_final_commissioning.cjs "$helper_tmp"
           node --check "$helper_tmp"
@@ -129,6 +130,7 @@ jobs:
           const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
           const ownerOnce=fs.readFileSync('review-tools/p5_owner_final_resume_once.sh','utf8');
           const reviewOnce=fs.readFileSync('review-tools/p5_materialize_final_core_review_once.sh','utf8');
+          const downstreamOnce=fs.readFileSync('review-tools/p5_materialize_downstream_review_once.sh','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
           for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
             need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
@@ -144,6 +146,10 @@ jobs:
           need(reviewOnce.includes('MECHANICAL_BLOB="'+gitHash('review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json')+'"'),'final review mechanical pin mismatch');
           need(reviewOnce.includes('CLOSURE_BLOB="'+gitHash('review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json')+'"'),'final review closure pin mismatch');
           need(reviewOnce.includes('LEDGER_BLOB="'+gitHash('review-tools/fixtures/p5_877_evidence_ledger.json')+'"'),'final review ledger pin mismatch');
+          need(downstreamOnce.includes('POLICY_BLOB="'+gitHash('review-tools/p5_final_policy_binding_materializer.cjs')+'"'),'downstream policy materializer pin mismatch');
+          need(downstreamOnce.includes('PRIVATE_BLOB="'+gitHash('review-tools/p5_private_policy_review_materializer.cjs')+'"'),'downstream private materializer pin mismatch');
+          need(downstreamOnce.includes('STATIC_BLOB="'+gitHash('review-tools/p5_static_install_review_materializer.cjs')+'"'),'downstream static materializer pin mismatch');
+          need(downstreamOnce.includes('FREEZE_BLOB="'+gitHash('review-tools/p5_final_phase5_freeze_decision.cjs')+'"'),'downstream freeze materializer pin mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
