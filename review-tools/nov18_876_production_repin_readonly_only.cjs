@@ -142,10 +142,10 @@ function oldRollingReceipt(log,runId){
  const rows=log.split("\n").flatMap(s=>{const k=s.indexOf('{"status":"');if(k<0)return [];try{return [JSON.parse(s.slice(k).trim())]}catch{return []}});
  const final=rows.filter(x=>allowed.includes(x.status)&&x.relayRunId===runId&&x.mode==="ROLLING_ROOT");
  if(final.length!==1)hold("OLD_ROLLING_RECEIPT_COUNT");
- const x=final[0],attempts=rows.filter(x=>x.status==="TARGET_DISPATCH_ATTEMPT_NO_REPLAY"),acks=rows.filter(x=>x.status==="TARGET_DISPATCH_ACK");
+ const x=final[0],attempts=rows.filter(x=>x.status==="EXTERNAL_WAKE_TARGET_ATTEMPT_NO_REPLAY"),acks=rows.filter(x=>x.status==="EXTERNAL_WAKE_TARGET_ACK_NOT_EXECUTION_PROOF");
  if(x.paidAuthorityGranted!==false||x.providerCallsByRelay!==0||x.databaseReadsByRelay!==0||x.databaseWritesByRelay!==0)hold("OLD_ROLLING_NONPAID_SCOPE");
  if(x.status===allowed[0]){
-  if(x.relayDispatches!==1||x.targetWorkflow!==DIRECT||!id(x.targetRunId)||attempts.length>1||acks.length>1)hold("OLD_ROLLING_ACK_SCOPE");
+  if(x.relayDispatches!==1||x.targetWorkflow!==DIRECT||!id(x.targetRunId)||attempts.length!==1||acks.length!==1||attempts[0].relayRunId!==runId||attempts[0].mode!=="ROLLING_ROOT"||attempts[0].workflow!==DIRECT||acks[0].relayRunId!==runId||acks[0].mode!=="ROLLING_ROOT"||acks[0].runId!==x.targetRunId)hold("OLD_ROLLING_ACK_SCOPE");
   return x.targetRunId;
  }
  if(attempts.length||acks.length||x.relayDispatches!==undefined&&x.relayDispatches!==0)hold("OLD_ROLLING_DEFER_WITH_ATTEMPT");
