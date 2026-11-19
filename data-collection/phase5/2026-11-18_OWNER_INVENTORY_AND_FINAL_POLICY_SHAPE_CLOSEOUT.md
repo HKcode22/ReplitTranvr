@@ -1,0 +1,25 @@
+# November 18 Pacific — owner inventory and final policy shape closeout (NO GO)
+
+Production main independently read: 70580b3749544dfcbeff39da181b2aa42b1b4476. Do not merge this review branch simply to update a checkpoint; changing main requires rebind. Owner receipt supplied at 2026-11-19T02:37:32.508Z. This supersedes the request to repeat the consolidated inventory.
+
+## Completed owner work
+- 20-table live inventory completed in the existing owner environment. Calendar, authorization, draw, B0062/V0093 budget/query/admission/prearm and witness tables empty. No unresolved incidents, open probe budgets, activation-blocking batches, unended subscriptions, prior enable markers, or stored manifest. Historical closed counts not a reason for migration/reinstallation.
+- Four existing stage/transport logins and four repository credential names present. Do not regenerate credentials or roles. Repository secret names alone do not establish values or environment-level approval.
+- Existing private candidate located, 4 files verified, 2,188 source inventory, manifest candidate 9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25. No recovery needed, no actual AUTH or certified stage packet.
+- Prior owner readback: 36 PRE rows survive, 12 per horizon, no FK cascade into research tables. Local encrypted archive and downloaded-copy restore for six signers verified; off-device custody and passphrase separation not independently proven. Do not redo restore or key creation.
+- 77 routines screened: one static research write reference UPDATE membership; only owner in inspected project-pattern roles has direct mutation privilege on research tables. Dynamic SQL, external code, backup/PITR and future survival not certified. No raw-data retention extension authorized.
+
+## Actual policy gap and correction
+The old workpaper omitted required runtime properties in both delegated policy drafts. Read the actual producer and signer validators on exact main. Corrected the workpaper in this branch: daily query limit 288 (observed plan maximum, not validator maximum), daily REST 1900, cycle 49468, floor 1000, signing query limit 288 and proposed metadata review retention 96 hours. All are candidate values, not independent acceptance. Exact provider version strings and compact-scope private timezone mapping still required; represented by null rather than invented data. Original 1017-airport catalog evidence cannot by itself prove unchanged compact scope. Existing approval booleans remain false. Not a runtime packet, not a secret upload. No new schema, no paid dispatch.
+
+## Current live scheduler
+Read actual relay 44445772263 and target 44445800978. Relay observed 8582 ms after creation, target readonly success, 7 route states due and one EARLY_DRAW HOLD_INERT_REQUIRED_STEP. Paid tick skipped; no provider requests, DB writes or dispatch from that target. Primary relay 44445286068 correctly deferred recent child; no new deletion proof. This does not establish authorized collection or an uninterrupted future SLA. Current direct-verification lease expires 03:36:16Z on Nov 19 and cannot authorize tomorrow's paid path.
+
+## Critical path
+1. Complete actual independently approved scope and exact evidence pins (including applicable source rights, provider contract, scientific target, current account/budget, STOP and code). Main source-enable approval ledger has 12 evidence entries, zero approvals. Do not promote evidence IDs into authorization.
+2. Exact final manifest and real AUTH binding; materialize approved compact calendar/cost input using the existing exporter, verify all 31 committed day plans and byte digests. Preserve 6,144 templates, 37,388 reserved units and 38 physical UTC dates. No invented approvals or synthetic substitute.
+3. Existing exact non-provider inert stage workflow: calendar first, distinct independent owner --readback-calendar, then cost only with separate accepted cost/rights scope, distinct --readback. Required stage secrets must contain actual independently approved bytes, not this workpaper.
+4. Finish real policy/custody commissioning with existing six keys, verified role identities and exact private byte digests; never print private key contents. Verify runtime release and STOP. Only then execute the existing separate source-enable path and guarded automation acceptance.
+5. Target Nov 19 Pacific: 14:00 wake, 14:15 prearm, AUTH strictly before 15:10, first source 15:45, cutoff 16:00. If actual authorization misses strict deadline, do not backfill or silently shift date. Use existing prospective calendar review and rebind.
+
+No paid calls, production DB mutations, secret changes, migration installs, or main modifications made by this checkpoint. The review branch contains a corrected candidate workpaper, not an implementation launch. Unresolved rights/target acceptance, approved AUTH/manifest, stage packet, stage readbacks, production policies, recovery configuration and end-to-end authorized execution remain real blockers.
