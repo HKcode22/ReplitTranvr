@@ -26,7 +26,7 @@ read -r RUN_HEAD RUN_RESULT < <(
 [[ "$RUN_HEAD" == "$TESTED_HEAD" && "$RUN_RESULT" == "success" ]] ||
   hold "FINAL_HELPER_CI_NOT_EXACT_GREEN"
 
-TMP="$(mktemp)"
+TMP="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
 trap 'rm -f "$TMP"' EXIT
 
 gh api "repos/$REPO/git/blobs/$HELPER_BLOB" --jq '.content' |
