@@ -5,7 +5,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
-const BLOBS={core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"cf5c220fa4c44c13c93e8bfe58f72f5a5bc635ed",install:"651c2389bace887165af6c31349f9882e05decd4",stage:"432043debae812e8495c6d217cc94251a4e9728c"};
+const BLOBS={coreInputs:"6f675422c78ef1dd35bb6790649d0f2b01f4e129",core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"cf5c220fa4c44c13c93e8bfe58f72f5a5bc635ed",install:"651c2389bace887165af6c31349f9882e05decd4",stage:"432043debae812e8495c6d217cc94251a4e9728c"};
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_BULK_"+s)};
 const digest=b=>crypto.createHash("sha256").update(b).digest("hex");
 const INERT_APPROVALS=Object.freeze(["P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED"]);
@@ -25,6 +25,7 @@ function planInertApprovals(review,receipt,metadata,planWrites){
  return planWrites(INERT_APPROVALS,metadata,a.approvedReplacements);
 }
 function sequence(mode,ops){
+ if(mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"||mode==="ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"){ops.coreInputs(mode);return}
  if(mode==="PREPARE_POLICY_REVIEW"){ops.assemble();return}
  if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();return}
  need(mode==="COMMISSION_EXISTING_INERT_NO_GO","MODE");
@@ -34,9 +35,45 @@ function sequence(mode,ops){
 }
 function safeDir(d){const st=fs.lstatSync(d);need(st.isDirectory()&&!st.isSymbolicLink()&&st.uid===process.getuid()&&(st.mode&0o077)===0,"PRIVATE_DIRECTORY");return fs.realpathSync(d)}
 function safeRead(d,n,max=4000000){const p=path.join(d,n),s=fs.lstatSync(p);need(s.isFile()&&!s.isSymbolicLink()&&s.uid===process.getuid()&&s.nlink===1&&(s.mode&0o077)===0&&s.size>0&&s.size<=max,"PRIVATE_FILE");return fs.readFileSync(p)}
+function classifyHistory(endpointResponse,projectResponse,host,project){
+ const normalized=h=>String(h||"").toLowerCase().replace(/-pooler(?=\.)/,"");
+ if(!Array.isArray(endpointResponse?.endpoints)||endpointResponse.endpoints.filter(x=>x.type==="read_write"&&normalized(x.host)===normalized(host)).length!==1)
+  return {status:"PROJECT_NOT_MATCHED_TO_EXISTING_OWNER_DB",historyWindowVerified:false,isolatedRestoreVerified:false};
+ const x=projectResponse?.project;
+ if(x?.id!==project||!Number.isSafeInteger(x.history_retention_seconds)||x.history_retention_seconds<0)
+  return {status:"MATCHED_ENDPOINT_HISTORY_SETTING_NOT_RETURNED",historyWindowVerified:false,isolatedRestoreVerified:false};
+ return {status:"EXISTING_PRODUCTION_ENDPOINT_HISTORY_WINDOW_READONLY",historyWindowVerified:true,historyRetentionSeconds:x.history_retention_seconds,isolatedRestoreVerified:false};
+}
+async function remainingOwnerMetadata(){
+ // Only the genuinely outstanding owner-side management setting and three
+ // stage approval names. Do not replay the previous production inventory.
+ need(process.argv.length===3&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&!!process.env.DATABASE_URL,"EXISTING_OWNER_ENV");
+ const cmd=(c,a)=>execFileSync(c,a,{encoding:"utf8",stdio:["ignore","pipe","ignore"],maxBuffer:4*1024*1024,timeout:30000,env:{...process.env,GH_PROMPT_DISABLED:"1"}}).trim();
+ const head=()=>cmd("gh",["api","repos/"+REPO+"/git/ref/heads/main","--jq",".object.sha"]),pin=head();
+ need(pin==="70580b3749544dfcbeff39da181b2aa42b1b4476","MAIN_MOVED_REVIEW_NEW_PIN");
+ const u=new URL(process.env.DATABASE_URL);
+ need(["postgresql:","postgres:"].includes(u.protocol)&&decodeURIComponent(u.username)==="neondb_owner"&&!!u.password&&u.hostname.endsWith(".neon.tech")&&u.pathname==="/neondb","EXISTING_OWNER_URL");
+ const meta=JSON.parse(cmd("gh",["secret","list","-R",REPO,"--json","name,updatedAt"]));
+ const stageApprovalMetadata=INERT_APPROVALS.map(name=>{const v=meta.find(x=>x.name===name);return {name,present:!!v,updatedAt:v?.updatedAt??null}});
+ const key=process.env.NEON_API_KEY,project=process.env.NEON_PROJECT_ID;
+ let management={status:"NO_EXISTING_MANAGEMENT_CREDENTIALS_USE_LINKED_CONSOLE_SETTING",historyWindowVerified:false,isolatedRestoreVerified:false},managementReads=0;
+ if(key&&project&&/^[a-z0-9-]{1,60}$/.test(project)){
+  const read=async suffix=>{managementReads++;const r=await fetch("https://console.neon.tech/api/v2/projects/"+project+suffix,{method:"GET",headers:{Authorization:"Bearer "+key,Accept:"application/json"},redirect:"error",signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error("MANAGEMENT_READ");return r.json()};
+  try {
+   const ep=await read("/endpoints");
+   const normalize=x=>String(x||"").toLowerCase().replace(/-pooler(?=\.)/,"");
+   if(Array.isArray(ep.endpoints)&&ep.endpoints.filter(e=>e.type==="read_write"&&normalize(e.host)===normalize(u.hostname)).length===1)
+    management=classifyHistory(ep,await read(""),u.hostname,project);
+   else management={status:"PROJECT_NOT_MATCHED_TO_EXISTING_OWNER_DB",historyWindowVerified:false,isolatedRestoreVerified:false};
+  }catch{management={status:"MANAGEMENT_READ_UNAVAILABLE",historyWindowVerified:false,isolatedRestoreVerified:false}}
+ }
+ need(head()===pin,"MAIN_MOVED_DURING_READBACK");
+ console.log(JSON.stringify({status:"EXACT_REMAINING_OWNER_METADATA_READONLY_NO_GO",main:pin,stageApprovalMetadata,management,managementReads,secretValuesRead:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
+}
 function run(){
  const [mode,dirArg,policySha,staticSha]=process.argv.slice(2);
- need(["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO"].includes(mode)&&H.test(policySha??"")&&(mode==="COMMISSION_EXISTING_INERT_NO_GO"?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
+ const coreMode=["PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE","ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"].includes(mode);
+ need((coreMode||["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO"].includes(mode))&&H.test(policySha??"")&&(mode==="COMMISSION_EXISTING_INERT_NO_GO"?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
  need(process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&!!process.env.DATABASE_URL,"EXISTING_OWNER_ENV");
  const env={...process.env,GH_PROMPT_DISABLED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
  for(const k of ["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY","NODE_OPTIONS"])delete env[k];
@@ -47,10 +84,10 @@ function run(){
  checkMain();need(root===fs.realpathSync(process.cwd()),"CHECKOUT_ROOT");env.V39_P5_APPROVED_CODE_SHA=head;
  const d=safeDir(path.resolve(dirArg));need(d!==root&&!d.startsWith(root+path.sep),"PRIVATE_OUTSIDE_CHECKOUT");
  const prep=["policy-complete-shape-NOT-RUNTIME.json","public-provider-contract-CANDIDATE.json","approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"];
- const required=mode==="PREPARE_POLICY_REVIEW"?[...prep,"reviewed-final-policy-binding-decisions.json"]:[...prep.slice(1),"source-inventory.json","approved-policy-objects.json","approved-private-policy-review.json"];
+ const required=coreMode?["manifest-candidate.json","config-candidate.json","source-inventory.json","external-input-offline-review-NOT-STAGE.json","timing-input-offline-review.json","reviewed-final-core-scope-decisions.json"]:mode==="PREPARE_POLICY_REVIEW"?[...prep,"reviewed-final-policy-binding-decisions.json"]:[...prep.slice(1),"source-inventory.json","approved-policy-objects.json","approved-private-policy-review.json"];
  const missing=required.filter(n=>!fs.existsSync(path.join(d,n)));
  if(missing.length){console.log(JSON.stringify({status:"HOLD_MISSING_EXISTING_REVIEWED_INPUTS",missing,phase6PaidGo:false}));process.exitCode=2;return}
- const review=mode==="PREPARE_POLICY_REVIEW"?"reviewed-final-policy-binding-decisions.json":"approved-private-policy-review.json";
+ const review=coreMode?"reviewed-final-core-scope-decisions.json":mode==="PREPARE_POLICY_REVIEW"?"reviewed-final-policy-binding-decisions.json":"approved-private-policy-review.json";
  need(digest(safeRead(d,review))===policySha,"REVIEW_HASH");
  const out=path.join(d,"exact-final-commissioning-"+head.slice(0,12));
  if(mode==="COMMISSION_EXISTING_INERT_NO_GO"){safeDir(out);need(digest(safeRead(out,"static-install-review.json"))===staticSha,"STATIC_REVIEW_HASH")}
@@ -71,6 +108,7 @@ function run(){
   const secretMeta=()=>JSON.parse(gh(["secret","list","-R",REPO,"--json","name,updatedAt"]));
   let approvalPlan=[];
   sequence(mode,{
+   coreInputs:m=>call(tsx,[f.coreInputs,m,d,policySha]),
    assemble:()=>call(tsx,[f.assembly,f.core,d,policySha]),
    verify:()=>bundle("VERIFY_AND_EXPORT_EXACT_APPROVED_BUNDLE"),
    installPlan:()=>installer("PLAN_EXACT_STATIC_INSTALL"),
@@ -115,5 +153,5 @@ function run(){
   console.log(JSON.stringify({status:"EXISTING_EXACT_HANDOFF_STEP_COMPLETE",mode,main:head,phase6PaidGo:false}));
  }finally{fs.rmSync(temp,{recursive:true,force:true})}
 }
-module.exports={sequence,planInertApprovals,INERT_APPROVALS};
-if(require.main===module)try{run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_BULK_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_BULK_REDACTED_CHECK_EXISTING_JOURNALS_NO_BLIND_REPLAY");process.exitCode=2}
+module.exports={sequence,planInertApprovals,INERT_APPROVALS,classifyHistory};
+if(require.main===module)Promise.resolve().then(()=>process.argv[2]==="OWNER_FINAL_METADATA_READONLY"?remainingOwnerMetadata():run()).catch(e=>{const s=String(e?.message??"");console.error(/^HOLD_P5_BULK_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_BULK_REDACTED_CHECK_EXISTING_JOURNALS_NO_BLIND_REPLAY");process.exitCode=2});
