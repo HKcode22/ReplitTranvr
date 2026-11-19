@@ -11,7 +11,11 @@
     "calendarDays": 31,
     "plannedQueries": 6144,
     "reservedRestUnits": 37388,
-    "horizons": ["T-24h", "T-6h", "T-90m"],
+    "horizons": [
+      "T-24h",
+      "T-6h",
+      "T-90m"
+    ],
     "primaryCandidate": "T-6h_actual_gate_out_delay_minutes_conditional_on_operated_leg",
     "pairedUpdate": "T-90m",
     "comparator": "T-24h",
@@ -30,7 +34,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "destination_icao",
@@ -40,7 +47,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "operating_carrier",
@@ -50,7 +60,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "scheduled_arrival_utc",
@@ -60,7 +73,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "provider_revised_departure_utc",
@@ -70,7 +86,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "reported_pre_departure_status",
@@ -80,7 +99,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "origin_metar_visibility_m",
@@ -90,7 +112,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "origin_metar_wind_kt",
@@ -100,7 +125,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "origin_taf_flight_category",
@@ -110,7 +138,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "destination_taf_flight_category",
@@ -120,7 +151,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "prior_aircraft_turnaround_minutes",
@@ -130,7 +164,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "reviewed lagged context feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "prior_aircraft_adsb_not_ground_reported",
@@ -140,7 +177,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "prior_aircraft_adsb_position_age_seconds",
@@ -150,7 +190,10 @@
       "retentionClass": "independent_source_content",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "source-bound as-of observation/forecast feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "independent_source_lifecycle"
     },
     {
       "fieldId": "prior_route_departure_delay_median_minutes",
@@ -160,7 +203,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "reviewed lagged context feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "prior_airport_departure_delay_median_minutes",
@@ -170,7 +216,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "reviewed lagged context feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "airport_congestion_1h",
@@ -180,7 +229,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "unknown"
+      "reconstructionRisk": "unknown",
+      "transformation": "reviewed lagged context feature; exact source and terms disposition remains required",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "actual_gate_out",
@@ -190,7 +242,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "actual_wheels_off",
@@ -200,7 +255,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "actual_wheels_on",
@@ -210,7 +268,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "actual_gate_in",
@@ -220,7 +281,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "cancellation_or_diversion_state",
@@ -230,7 +294,10 @@
       "retentionClass": "provider_derived_candidate",
       "sourceAccessMaximumHours": 24,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "provider_record_reconstructable"
+      "reconstructionRisk": "provider_record_reconstructable",
+      "transformation": "source-bound as-of field retained only for the approved short-lived custody window; no Derived Work classification",
+      "externalReviewSha256": null,
+      "expiryAction": "hard_delete_or_clear"
     },
     {
       "fieldId": "cutoff_and_missingness_metadata",
@@ -240,7 +307,10 @@
       "retentionClass": "project_metadata",
       "sourceAccessMaximumHours": 168,
       "longTermDisposition": "review_required",
-      "reconstructionRisk": "none"
+      "reconstructionRisk": "none",
+      "transformation": "project-generated validity and missingness metadata",
+      "externalReviewSha256": null,
+      "expiryAction": "project_lifecycle"
     }
   ],
   "rules": [
@@ -248,6 +318,7 @@
     "Do not retain Layer A values beyond their approved source/plan expiry or physical recovery-surface limit.",
     "Do not classify a copied per-flight field as a Derived Work from its table name, hash, normalization, or usefulness.",
     "Do not delete a Layer B field until its long-term disposition is actually recorded; unresolved means hold the successor field, not alter the predecessor.",
-    "No source-rights approval, authorization row, scheduler enable, provider call, or paid GO is produced by this artifact."
+    "No source-rights approval, authorization row, scheduler enable, provider call, or paid GO is produced by this artifact.",
+    "Every field entry carries transformation, externalReviewSha256, and expiryAction so this inventory can be validated against the executable contract."
   ]
 }
