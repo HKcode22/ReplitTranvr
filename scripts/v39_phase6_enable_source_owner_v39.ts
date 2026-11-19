@@ -34,12 +34,11 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-const POST_STAGE_REVIEWED_BRIDGE_HEAD="aa3c3270f7aa47b61edd3b47dae0241f707955ed";
-const POST_STAGE_REVIEWED_BRIDGE_PATHS=Object.freeze([
- "scripts/v39_phase6_enable_source_owner_v39.ts",
- "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts"
-]);
+const POST_STAGE_REVIEWED_BRIDGE_BLOBS=Object.freeze({
+ "scripts/v39_phase6_enable_source_owner_v39.ts":"430deca69aa7570b6df9bece8224c197027b6c0b",
+ "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"134e691a470aacc49252e895c1eb8e1e1e9635d9"
+});
 
 /** #879 deliberately permits Phase5 to stage the disabled calendar/cost state
  * before source-use permission exists. A later source-rights/approval commit
@@ -68,25 +67,26 @@ export function verifyP6PostStageEvidenceOnlyMainAdvance(stageCode:string,curren
  * commit forward. A later edit to any bridge file therefore fails closed.
  */
 export function verifyP6PostStageReviewedBridgeAdvance(input:{
- stageCode:string;currentHead:string;stageIsAncestor:boolean;bridgeIsAncestor:boolean;
- stageToBridgePaths:string[];bridgeToHeadPaths:string[];
+ stageCode:string;currentHead:string;stageIsAncestor:boolean;
+ changedPaths:string[];currentBridgeBlobs:Record<string,string>;
 }){
- const {stageCode,currentHead,stageIsAncestor,bridgeIsAncestor,stageToBridgePaths,bridgeToHeadPaths}=input;
+ const {stageCode,currentHead,stageIsAncestor,changedPaths,currentBridgeBlobs}=input;
  if(stageCode!==POST_STAGE_REVIEWED_BRIDGE_STAGE||
-    !CODE.test(currentHead??"")||stageIsAncestor!==true||bridgeIsAncestor!==true||
-    !Array.isArray(stageToBridgePaths)||!Array.isArray(bridgeToHeadPaths)||
-    new Set(stageToBridgePaths).size!==stageToBridgePaths.length||
-    new Set(bridgeToHeadPaths).size!==bridgeToHeadPaths.length)
+    !CODE.test(currentHead??"")||stageIsAncestor!==true||
+    !Array.isArray(changedPaths)||new Set(changedPaths).size!==changedPaths.length||
+    !currentBridgeBlobs||typeof currentBridgeBlobs!=="object"||Array.isArray(currentBridgeBlobs))
   hold("POST_STAGE_REVIEWED_BRIDGE_IDENTITY_INVALID");
- const expected=[...POST_STAGE_REVIEWED_BRIDGE_PATHS].sort();
- const actual=[...stageToBridgePaths].sort();
- if(JSON.stringify(actual)!==JSON.stringify(expected))
-  hold("POST_STAGE_REVIEWED_BRIDGE_DIFF_CHANGED");
- if(bridgeToHeadPaths.some(p=>typeof p!=="string"||p.length<1||
-    (p!==POST_STAGE_APPROVAL_LEDGER_PATH&&!POST_STAGE_EVIDENCE_PATH.test(p))))
+ const bridgePaths=Object.keys(POST_STAGE_REVIEWED_BRIDGE_BLOBS).sort();
+ if(bridgePaths.some(p=>currentBridgeBlobs[p]!==POST_STAGE_REVIEWED_BRIDGE_BLOBS[p]))
+  hold("POST_STAGE_REVIEWED_BRIDGE_BLOB_CHANGED");
+ if(changedPaths.length<bridgePaths.length||
+    bridgePaths.some(p=>!changedPaths.includes(p))||
+    changedPaths.some(p=>!bridgePaths.includes(p)&&
+      p!==POST_STAGE_APPROVAL_LEDGER_PATH&&!POST_STAGE_EVIDENCE_PATH.test(p)))
   hold("POST_STAGE_AFTER_BRIDGE_NOT_EVIDENCE_ONLY");
- return {stageCode,bridgeHead:POST_STAGE_REVIEWED_BRIDGE_HEAD,currentHead,
-  reviewedBridgeApplied:true,evidenceOnlyChangedPaths:bridgeToHeadPaths.length};
+ return {stageCode,currentHead,reviewedBridgeApplied:true,
+  reviewedBridgePaths:bridgePaths.length,evidenceOnlyChangedPaths:
+   changedPaths.filter(p=>!bridgePaths.includes(p)).length};
 }
 
 /** AUTH content pin excludes ONLY final Git SHA, to avoid a circular hash
@@ -319,21 +319,15 @@ async function main(){
   try{execFileSync("git",["merge-base","--is-ancestor",stageCode,head],{stdio:["ignore","ignore","ignore"],timeout:15000});ancestor=true;}catch{}
  }
  if(stageCode===POST_STAGE_REVIEWED_BRIDGE_STAGE&&head!==stageCode){
-  let bridgeAncestor=head===POST_STAGE_REVIEWED_BRIDGE_HEAD;
-  if(!bridgeAncestor){
-   try{execFileSync("git",["merge-base","--is-ancestor",POST_STAGE_REVIEWED_BRIDGE_HEAD,head],
-    {stdio:["ignore","ignore","ignore"],timeout:15000});bridgeAncestor=true;}catch{}
-  }
-  const stageToBridge=cmd("git",["diff","--no-renames","--name-only",stageCode,POST_STAGE_REVIEWED_BRIDGE_HEAD]).split("\n").filter(Boolean);
-  const bridgeToHead=head===POST_STAGE_REVIEWED_BRIDGE_HEAD?[]:
-   cmd("git",["diff","--no-renames","--name-only",POST_STAGE_REVIEWED_BRIDGE_HEAD,head]).split("\n").filter(Boolean);
+  const changed=cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
+  const currentBridgeBlobs=Object.fromEntries(Object.keys(POST_STAGE_REVIEWED_BRIDGE_BLOBS).map(p=>
+   [p,cmd("git",["rev-parse",head+":"+p])]));
   verifyP6PostStageReviewedBridgeAdvance({stageCode,currentHead:head,stageIsAncestor:ancestor,
-   bridgeIsAncestor:bridgeAncestor,stageToBridgePaths:stageToBridge,bridgeToHeadPaths:bridgeToHead});
+   changedPaths:changed,currentBridgeBlobs});
  }else{
   const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
   verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
- }
- // The immutable stage remains bound to the executable SHA that created the
+ } // The immutable stage remains bound to the executable SHA that created the
  // disabled B0062/V0093 state. Current HEAD supplies only the one exact
  // reviewed #881 bridge plus later scoped evidence and its approval ledger.
  const s=admitP6InertOwnerReadback(process.env,stageRaw,stageSha,costSha,stageCode) as unknown as OwnerContext;
