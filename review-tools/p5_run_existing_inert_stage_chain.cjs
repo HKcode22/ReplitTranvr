@@ -21,6 +21,23 @@ function verifyReadback(x,mode,main,review){
  if(mode==="calendar")need(x.costStageCommitted===false&&x.categoryCycleCaps===0&&x.categoryUtcBudgetRows===0,"CALENDAR_ONLY_NO_COST_STAGE");
  else need(x.exactReviewedCostEnvelopeSha256===review.costEnvelopeSha256&&x.categoryCycleCaps===7&&x.categoryUtcBudgetRows===266,"EXACT_SEVEN_CATEGORY_COST_STAGE");
 }
+// Compare only exact metadata of the existing reviewed commissioning secrets.
+ // Name/timestamp continuity is not a plaintext readback or independent approval.
+function captureSecretMetadata(rows,names){
+ need(Array.isArray(rows)&&Array.isArray(names)&&names.length>0&&new Set(names).size===names.length,"SECRET_METADATA_SCOPE");
+ const wanted=new Set(names),out=new Map();
+ for(const row of rows){
+  if(!wanted.has(row?.name))continue;
+  need(!out.has(row.name)&&typeof row.updatedAt==="string"&&Number.isFinite(Date.parse(row.updatedAt)),"SECRET_METADATA_DUPLICATE_OR_INVALID");
+  out.set(row.name,row.updatedAt);
+ }
+ need(out.size===wanted.size,"SECRET_METADATA_MISSING");
+ return out;
+}
+function verifySecretMetadata(rows,expected){
+ const actual=captureSecretMetadata(rows,[...expected.keys()]);
+ need([...expected].every(([name,updatedAt])=>actual.get(name)===updatedAt),"REVIEWED_SECRET_METADATA_DRIFT_NO_REPLAY");
+}
 function runSequence(ops){
  const calendarId=ops.dispatch("calendar");
  ops.awaitSuccess(calendarId,"calendar");
@@ -52,10 +69,21 @@ function run(){
  need(fs.realpathSync(process.cwd())===root&&d!==root&&!d.startsWith(root+path.sep),"PRIVATE_OUTSIDE_EXACT_CHECKOUT");
  checkMain();
  const w=api("actions/workflows/"+WF);need(Number.isSafeInteger(w.id)&&w.state==="active"&&w.path===".github/workflows/"+WF,"EXISTING_WORKFLOW");
- const secretMeta=JSON.parse(gh(["secret","list","-R",REPO,"--json","name,updatedAt"]));
- const m=new Map(secretMeta.map(x=>[x.name,x.updatedAt]));
- need(entries.filter(x=>x.status==="METADATA_READBACK").every(x=>m.get(x.name)===x.updatedAt),"INSTALLED_SECRET_METADATA_CHANGED");
- need(["V39_PHASE6_PROCESS_ARMED","P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED","P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"].every(n=>m.has(n)),"ACTUAL_EXISTING_REVIEW_AND_RESTRICTED_SECRETS_REQUIRED");
+ const secretMeta=()=>JSON.parse(gh(["secret","list","-R",REPO,"--json","name,updatedAt"]));
+ const installed=entries.filter(x=>x.status==="METADATA_READBACK");
+ need(new Set(installed.map(x=>x.name)).size===r.staticSecretsPrepared,"INSTALLED_SECRET_JOURNAL_DUPLICATE");
+ const stageNames=["V39_PHASE6_PROCESS_ARMED","P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED","P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"];
+ const initial=captureSecretMetadata(secretMeta(),[...new Set([...installed.map(x=>x.name),...stageNames])]);
+ need(installed.every(x=>initial.get(x.name)===x.updatedAt),"INSTALLED_SECRET_METADATA_CHANGED");
+ // If the consolidated owner runner installed the three reviewed inert flags,
+ // ensure the actual completed installation receipt still matches at entry.
+ const approvalsPath=path.join(d,"inert-approval-install-attempt.jsonl");
+ if(fs.existsSync(approvalsPath)){
+  const a=file(d,"inert-approval-install-attempt.jsonl",100000).b.toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
+  const flags=stageNames.slice(1,4),readbacks=a.filter(x=>x.status==="METADATA_READBACK");
+  need(a[0]?.main===r.main&&a[0]?.receiptSha256===receiptSha&&a[0]?.status==="EXACT_REVIEWED_INERT_APPROVAL_INSTALL_STARTED_NO_GO"&&a.at(-1)?.status==="THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO"&&readbacks.length===flags.length&&new Set(readbacks.map(x=>x.name)).size===flags.length&&readbacks.every(x=>flags.includes(x.name)&&initial.get(x.name)===x.updatedAt),"INERT_APPROVAL_INSTALL_JOURNAL_DRIFT_NO_REPLAY");
+ }
+ const checkMetadata=()=>verifySecretMetadata(secretMeta(),initial);
  // No guessing the result of a past dispatch. Initial two-stage chain only.
  // A previous attempt at this main must be reconciled with the existing
  // independent readback before any new mutation. Never retry from this tool.
@@ -68,7 +96,7 @@ function run(){
   emit({status:"CHAIN_STARTED",main:r.main,receiptSha,providerCalls:0,phase6PaidGo:false});
   const out=runSequence({
    dispatch(mode){
-    checkMain();emit({mode,status:"DISPATCH_ATTEMPTED_NO_REPLAY"});
+    checkMain();checkMetadata();emit({mode,status:"DISPATCH_ATTEMPTED_NO_REPLAY"});
     // API 2026-03-10 has a documented 200 run-ID response by default.
     // Send only its documented body fields; no legacy optional parameters.
     const x=JSON.parse(gh(["api","--method","POST","-H","X-GitHub-Api-Version: 2026-03-10","repos/"+REPO+"/actions/workflows/"+w.id+"/dispatches","--input","-"],{input:JSON.stringify({ref:"main",inputs:{stage:mode,confirm:confirms[mode]}}),stdio:["pipe","pipe","ignore"]}));
@@ -79,13 +107,13 @@ function run(){
    awaitSuccess(id,mode){
     // Any CLI failure or timeout leaves journal for read-only recovery.
     gh(["run","watch",String(id),"-R",REPO,"--exit-status","--interval","10"],{timeout:15*60*1000,maxBuffer:12*1024*1024});
-    verifyRun(api("actions/runs/"+id),id,w.id,r.main);checkMain();
+    verifyRun(api("actions/runs/"+id),id,w.id,r.main);checkMain();checkMetadata();
     emit({mode,status:"EXACT_RUN_SUCCESS",runId:id});
    },
    readback(mode,id){
     const args=mode==="calendar"?["--readback-calendar",stage.f,r.stageSha256]:["--readback",stage.f,r.stageSha256,r.costEnvelopeSha256];
     const x=JSON.parse(call(process.execPath,["scripts/v39_phase6_inert_release_stage_manual_v39.mjs",...args],{env:readEnv,timeout:120000}));
-    verifyReadback(x,mode,r.main,r);checkMain();
+    verifyReadback(x,mode,r.main,r);checkMain();checkMetadata();
     emit({mode,status:"INDEPENDENT_READBACK_MATCH",runId:id,receipt:x});
    }
   });
@@ -93,5 +121,5 @@ function run(){
   console.log(JSON.stringify({status:"BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO",main:r.main,...out,authorizationEnabled:false,providerCalls:0,phase6PaidGo:false}));
  }finally{fs.closeSync(fd)}
 }
-module.exports={verifyRun,verifyReadback,runSequence};
+module.exports={verifyRun,verifyReadback,runSequence,captureSecretMetadata,verifySecretMetadata};
 if(require.main===module)try{run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_STAGE_CHAIN_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_STAGE_CHAIN_UNKNOWN_RESULT_READBACK_ONLY_NO_REPLAY");process.exitCode=2}
