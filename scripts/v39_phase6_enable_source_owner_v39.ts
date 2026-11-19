@@ -34,18 +34,18 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-const POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="53330b080ddbb9cac4dc0aac34db6ff03cb06897f29e49da0b56f8bb8d2a32e9";
+export const P6_P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="0000000000000000000000000000000000000000000000000000000000000000";
 const POST_STAGE_REVIEWED_BRIDGE_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"134e691a470aacc49252e895c1eb8e1e1e9635d9"
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"0000000000000000000000000000000000000000"
 });
 const POST_STAGE_REVIEWED_BRIDGE_SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
 function normalizedBridgeSelfSha256(){
  const raw=readFileSync(fileURLToPath(import.meta.url),"utf8");
  const normalized=raw.replace(
-  /const POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="[a-f0-9]{64}";/,
-  'const POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="'+"0".repeat(64)+'";');
- if(normalized===raw&&POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256!=="0".repeat(64))
+  /(?:export )?const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="[a-f0-9]{64}";/,
+  'export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="'+"0".repeat(64)+'";');
+ if(normalized===raw&&P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256!=="0".repeat(64))
   hold("POST_STAGE_REVIEWED_BRIDGE_SELF_NORMALIZATION");
  return createHash("sha256").update(normalized,"utf8").digest("hex");
 }
@@ -89,7 +89,7 @@ export function verifyP6PostStageReviewedBridgeAdvance(input:{
   hold("POST_STAGE_REVIEWED_BRIDGE_IDENTITY_INVALID");
  const companionPaths=Object.keys(POST_STAGE_REVIEWED_BRIDGE_BLOBS).sort();
  const bridgePaths=[POST_STAGE_REVIEWED_BRIDGE_SCRIPT,...companionPaths].sort();
- if(selfNormalizedSha256!==POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256)
+ if(selfNormalizedSha256!==P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256)
   hold("POST_STAGE_REVIEWED_BRIDGE_SELF_CHANGED");
  if(companionPaths.some(p=>currentBridgeBlobs[p]!==POST_STAGE_REVIEWED_BRIDGE_BLOBS[p]))
   hold("POST_STAGE_REVIEWED_BRIDGE_BLOB_CHANGED");
