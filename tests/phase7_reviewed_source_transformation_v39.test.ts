@@ -155,7 +155,7 @@ describe('Phase 7 reviewed source transformation boundary', () => {
   });
 
   it('rejects extra source decision keys before transformation', () => {
-    const unsafe = decisions(); unsafe[0] = {...unsafe[0], flightNumber: 'SQ001'};
+    const unsafe = decisions(); unsafe[0] = {...unsafe[0], flightNumber: 'SQ001'} as unknown as Phase7SourceDecision;
     expect(() => transformPhase7ReviewedSourceDecisions(
       profile(), contract(), unsafe as unknown as Phase7SourceDecision[], context,
     )).toThrow('PHASE7_TRANSFORM_REJECTED_DECISIONS');
