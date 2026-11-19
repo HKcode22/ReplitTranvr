@@ -20,6 +20,7 @@ on:
       - 'review-tools/p5_exact_final_release_policy_bindings.cjs'
       - 'review-tools/p5_six_policy_binding.test.cjs'
       - 'review-tools/fixtures/p5_six_policy_candidate.json'
+      - 'review-tools/fixtures/p5_877_evidence_ledger.json'
       - 'review-tools/p5_install_exact_approved_static_values.cjs'
       - 'review-tools/p5_static_install_binding.test.cjs'
       - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
@@ -42,6 +43,7 @@ on:
       - 'review-tools/p5_exact_final_release_policy_bindings.cjs'
       - 'review-tools/p5_six_policy_binding.test.cjs'
       - 'review-tools/fixtures/p5_six_policy_candidate.json'
+      - 'review-tools/fixtures/p5_877_evidence_ledger.json'
       - 'review-tools/p5_install_exact_approved_static_values.cjs'
       - 'review-tools/p5_static_install_binding.test.cjs'
       - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
@@ -70,6 +72,7 @@ jobs:
             node --check "$f"
           done
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_six_policy_candidate.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
 
       - name: Run focused final commissioning regressions
