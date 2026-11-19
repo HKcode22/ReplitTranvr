@@ -13,6 +13,7 @@ REFRESH_BLOB="6bea6dae3e212a2886487f5167690410ea676f24"
 MECHANICAL_BLOB="961277944f7aa1edd75248f965b62249e6c19465"
 CLOSURE_BLOB="0d4170f5e9822a2bf3a6e7dff0845a0b4a2cc440"
 OLD_LEDGER_BLOB="bdfed63588475f90149a61b0d7cae13ec51cffa9"
+OLD_EVIDENCE_HEAD="a4b385907149f5b99ef8f85a11c554c583707916"
 
 hold(){ printf 'HOLD_P5_SOURCE_REFRESH_ONCE: %s\n' "$1" >&2; exit 2; }
 [[ -n "${P5_FINAL_REVIEW_DIRECTORY:-}" ]] || hold "REVIEW_DIRECTORY_REQUIRED"
@@ -24,7 +25,8 @@ gh auth status --hostname github.com >/dev/null 2>&1 || hold "GITHUB_AUTH_MISSIN
 LIVE="$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" || hold "MAIN_READ_FAILED"
 [[ "$LIVE" =~ ^[a-f0-9]{40}$ ]] || hold "MAIN_INVALID"
 
-# Both source evidence commit and live main must be evidence-only descendants of BASE.
+# Live production may still be BASE while source-use evidence is reviewed on
+# the evidence-only branch. Both identities must remain executable-code clean.
 for REF in "$P5_SOURCE_EVIDENCE_COMMIT" "$LIVE"; do
   while IFS= read -r changed; do
     [[ -n "$changed" ]] || continue
@@ -35,8 +37,20 @@ for REF in "$P5_SOURCE_EVIDENCE_COMMIT" "$LIVE"; do
     esac
   done < <(gh api "repos/$REPO/compare/$BASE...$REF" --jq '.files[].filename')
 done
-STATUS="$(gh api "repos/$REPO/compare/$P5_SOURCE_EVIDENCE_COMMIT...$LIVE" --jq '.status')" || hold "ANCESTRY_READ_FAILED"
-[[ "$STATUS" == "ahead" || "$STATUS" == "identical" ]] || hold "SOURCE_COMMIT_NOT_ANCESTOR_OF_LIVE_MAIN"
+
+# The source-use commit must be exactly one append beyond the reviewed
+# 28-record evidence head: the ledger plus the named genuine source evidence.
+STATUS="$(gh api "repos/$REPO/compare/$OLD_EVIDENCE_HEAD...$P5_SOURCE_EVIDENCE_COMMIT" --jq '.status')" ||
+  hold "SOURCE_EVIDENCE_ANCESTRY_READ_FAILED"
+[[ "$STATUS" == "ahead" ]] || hold "SOURCE_COMMIT_NOT_AFTER_FINAL_EVIDENCE_HEAD"
+mapfile -t SOURCE_DELTA < <(
+  gh api "repos/$REPO/compare/$OLD_EVIDENCE_HEAD...$P5_SOURCE_EVIDENCE_COMMIT" --jq '.files[].filename'
+)
+[[ "${#SOURCE_DELTA[@]}" -eq 2 ]] || hold "SOURCE_COMMIT_NOT_SINGLE_EVIDENCE_APPEND"
+printf '%s\n' "${SOURCE_DELTA[@]}" | grep -Fxq "$LEDGER" ||
+  hold "SOURCE_COMMIT_LEDGER_CHANGE_MISSING"
+printf '%s\n' "${SOURCE_DELTA[@]}" | grep -Fxq "$P5_SOURCE_EVIDENCE_PATH" ||
+  hold "SOURCE_COMMIT_EVIDENCE_PATH_MISSING"
 
 DIR="$(node - "$P5_FINAL_REVIEW_DIRECTORY" <<'NODE'
 const fs=require("node:fs"),path=require("node:path");
