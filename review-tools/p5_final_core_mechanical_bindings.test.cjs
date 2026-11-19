@@ -35,7 +35,7 @@ test("no approval or GO can be inferred from this artifact",()=>{
 });
 test("fixed release identity matches current final-core contract",()=>{
  assert.equal(artifact.draftReview.baseCodeSha,"70580b3749544dfcbeff39da181b2aa42b1b4476");
- assert.equal(artifact.draftReview.evidenceCommit,"34557e4fed61d21d269f1d307a5d4c4090f7f5a0");
+ assert.equal(artifact.draftReview.evidenceCommit,"fde8cc5ec593978a91531d0cab38bb970386c9da");
  assert.equal(artifact.draftReview.calendarRowsSha256,"7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c");
  assert.equal(artifact.draftReview.frameSha256,"02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94");
 });
