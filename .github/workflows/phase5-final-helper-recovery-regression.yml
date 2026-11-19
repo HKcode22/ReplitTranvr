@@ -76,8 +76,10 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_STATIC_INSTALL_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_PRIVATE_POLICY_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_POLICY_BINDING_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_PHASE5_FREEZE_REVIEWER_DECISION_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
           bash -n review-tools/p5_materialize_final_core_review_once.sh
+          bash -n review-tools/p5_materialize_final_phase5_freeze_once.sh
           bash -n review-tools/p5_materialize_downstream_review_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
           cp review-tools/p5_resume_existing_final_commissioning.cjs "$helper_tmp"
@@ -123,19 +125,22 @@ jobs:
           STAGE="$(git hash-object review-tools/p5_run_existing_inert_stage_chain.cjs)"
           REPIN="$(git hash-object review-tools/p5_final_primary_relay_repin.cjs)"
           BULK="$(git hash-object review-tools/p5_bulk_final_owner_handoff.cjs)"
-          node - "$CORE_INPUTS" "$CORE" "$ASSEMBLY" "$BUNDLE" "$INSTALL" "$STAGE" "$REPIN" "$BULK" <<'NODE'
+          FREEZE="$(git hash-object review-tools/p5_final_phase5_freeze_decision.cjs)"
+          node - "$CORE_INPUTS" "$CORE" "$ASSEMBLY" "$BUNDLE" "$INSTALL" "$STAGE" "$REPIN" "$BULK" "$FREEZE" <<'NODE'
           const fs=require('node:fs');
-          const [coreInputs,core,assembly,bundle,install,stage,repin,bulk]=process.argv.slice(2);
+          const [coreInputs,core,assembly,bundle,install,stage,repin,bulk,freeze]=process.argv.slice(2);
           const resume=fs.readFileSync('review-tools/p5_resume_existing_final_commissioning.cjs','utf8');
           const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
           const ownerOnce=fs.readFileSync('review-tools/p5_owner_final_resume_once.sh','utf8');
           const reviewOnce=fs.readFileSync('review-tools/p5_materialize_final_core_review_once.sh','utf8');
+          const freezeOnce=fs.readFileSync('review-tools/p5_materialize_final_phase5_freeze_once.sh','utf8');
           const downstreamOnce=fs.readFileSync('review-tools/p5_materialize_downstream_review_once.sh','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
           for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
             need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
           }
           need(resume.includes('REPIN="'+repin+'"'),'resume REPIN blob mismatch');
+          need(resume.includes('FREEZE="'+freeze+'"'),'resume FREEZE blob mismatch');
           need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
           const resumeBlob=require('node:child_process').execFileSync('git',['hash-object','review-tools/p5_resume_existing_final_commissioning.cjs'],{encoding:'utf8'}).trim();
           need(ownerOnce.includes('HELPER_BLOB="'+resumeBlob+'"'),'owner launcher HELPER blob mismatch');
@@ -146,6 +151,7 @@ jobs:
           need(reviewOnce.includes('MECHANICAL_BLOB="'+gitHash('review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json')+'"'),'final review mechanical pin mismatch');
           need(reviewOnce.includes('CLOSURE_BLOB="'+gitHash('review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json')+'"'),'final review closure pin mismatch');
           need(reviewOnce.includes('LEDGER_BLOB="'+gitHash('review-tools/fixtures/p5_877_evidence_ledger.json')+'"'),'final review ledger pin mismatch');
+          need(freezeOnce.includes('FREEZE_BLOB="'+freeze+'"'),'final freeze wrapper helper pin mismatch');
           need(downstreamOnce.includes('POLICY_BLOB="'+gitHash('review-tools/p5_final_policy_binding_materializer.cjs')+'"'),'downstream policy materializer pin mismatch');
           need(downstreamOnce.includes('PRIVATE_BLOB="'+gitHash('review-tools/p5_private_policy_review_materializer.cjs')+'"'),'downstream private materializer pin mismatch');
           need(downstreamOnce.includes('STATIC_BLOB="'+gitHash('review-tools/p5_static_install_review_materializer.cjs')+'"'),'downstream static materializer pin mismatch');
@@ -154,7 +160,7 @@ jobs:
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
             bundleBlob:bundle,installBlob:install,stageBlob:stage,
-            repinBlob:repin,bulkBlob:bulk,
+            repinBlob:repin,bulkBlob:bulk,freezeBlob:freeze,
             providerCalls:0,databaseWrites:0,phase6PaidGo:false
           }));
           NODE
