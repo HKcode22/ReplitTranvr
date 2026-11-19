@@ -6,7 +6,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",BASE="70580b3749544dfcbeff39da181b2aa42b1b4476";
-const RUNNER="2a740b4d046186f4d94eab3aedf79c71f889a42d",STAGE="6a84f6b9cd993965e3d267a1e7f9246de19995ae",REPIN="e27585debcaccd2f123381ed61f448352a732e3f";
+const RUNNER="54b29fad160dbb358c323b26c64d55045096fa04",STAGE="6a84f6b9cd993965e3d267a1e7f9246de19995ae",REPIN="e27585debcaccd2f123381ed61f448352a732e3f";
 const LEDGER="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const PINS={"manifest-candidate.json":"9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25","config-candidate.json":"4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb","source-inventory.json":"6cf7dbe2421604fed2909f6539f68021103137eb5d320c40faf28dfb799fd6a0","external-input-offline-review-NOT-STAGE.json":"a7508acbea9de20ffb3e69771b94f0d6b61f47e77f6bafe38376a9a7c8454fe9"};
