@@ -13,7 +13,7 @@ function core(){
 }
 function input(){
  return {schema:"v39.phase5.final-policy-binding-reviewer-input.v1",phase6PaidGo:false,reviewedBy:"Policy Reviewer",reviewedAtUtc:"2026-11-19T07:00:00.000Z",
-  decisions:Object.fromEntries(FLAGS.map(k=>[k,true])),...Object.fromEntries(HASHES.map(k=>[k:H])),
+  decisions:Object.fromEntries(FLAGS.map(k=>[k,true])),...Object.fromEntries(HASHES.map(k=>[k,H])),
   validFromUtc:"2026-11-19T06:55:00.000Z",validUntilUtc:"2026-12-27T04:00:00.000Z",builderFrozenAtUtc:"2026-11-19T06:50:00.000Z",selectedTVersion:"departure.scheduledTime.utc-v1",standaloneNoT24ProtocolSha256:null};
 }
 const NOW=Date.parse("2026-11-19T07:05:00.000Z");
