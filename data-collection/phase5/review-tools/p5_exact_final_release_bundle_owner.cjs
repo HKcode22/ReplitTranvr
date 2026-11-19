@@ -73,6 +73,7 @@ function staticValues(stageRaw,costSha,p,policies,verified){
  return values;
 }
 async function storeExactManifest(pool,ctx,auth,manifestRaw,core,checkFresh){
+ need(live()===ctx.codeSha,"MAIN_MOVED_BEFORE_MANIFEST_TRANSACTION");
  const key="phase5_frozen_manifest:"+ctx.input.manifestSha256,c=await pool.connect();let began=false,attempted=false,inserted=0;
  try{
   await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");began=true;
@@ -83,10 +84,11 @@ async function storeExactManifest(pool,ctx,auth,manifestRaw,core,checkFresh){
   await c.query("LOCK TABLE clean.adb_collection_meta,clean.adb_phase6_authorization,clean.adb_incident_stop,clean.adb_probe_budget_day,clean.adb_collection_batches,clean.adb_collection_subs IN SHARE ROW EXCLUSIVE MODE");
   const rows=(await c.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",[key])).rows;
   const action=core.selectManifestWrite(rows,manifestRaw);
+  // Initial storage is before either inert stage. Exact reuse also requires
+  // an empty authority; never claim disabled state from raw-file equality.
+  core.validateEmptyAuthority((await c.query("SELECT (SELECT count(*)::int FROM clean.adb_phase6_authorization) auth,(SELECT count(*)::int FROM clean.adb_incident_stop WHERE NOT resolved) incidents,(SELECT count(*)::int FROM clean.adb_probe_budget_day WHERE state='OPEN') open_budget,(SELECT count(*)::int FROM clean.adb_collection_batches WHERE status='ACTIVE' OR run_day_index IS NOT NULL) batches,(SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) subscriptions,(SELECT count(*)::int FROM clean.adb_collection_meta WHERE key LIKE 'phase6_source_authorization_enabled:%') prior_enable")).rows);
+  checkFresh(new Date((await c.query("SELECT clock_timestamp() t")).rows[0].t));
   if(action==="INSERT_ONCE"){
-   core.validateEmptyAuthority((await c.query("SELECT (SELECT count(*)::int FROM clean.adb_phase6_authorization) auth,(SELECT count(*)::int FROM clean.adb_incident_stop WHERE NOT resolved) incidents,(SELECT count(*)::int FROM clean.adb_probe_budget_day WHERE state='OPEN') open_budget,(SELECT count(*)::int FROM clean.adb_collection_batches WHERE status='ACTIVE' OR run_day_index IS NOT NULL) batches,(SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) subscriptions,(SELECT count(*)::int FROM clean.adb_collection_meta WHERE key LIKE 'phase6_source_authorization_enabled:%') prior_enable")).rows);
-   checkFresh(new Date((await c.query("SELECT clock_timestamp() t")).rows[0].t));
-   need(live()===ctx.codeSha,"MAIN_MOVED_BEFORE_MANIFEST_WRITE");
    const result=await c.query("INSERT INTO clean.adb_collection_meta(key,value) VALUES($1,$2)",[key,manifestRaw]);need(result.rowCount===1,"MANIFEST_INSERT_NOT_EXACT");inserted=1;
   }
   attempted=true;await c.query("COMMIT");began=false;
@@ -101,6 +103,8 @@ async function storeExactManifest(pool,ctx,auth,manifestRaw,core,checkFresh){
   const who=(await r.query("SELECT current_database() db,current_user actor,session_user session_actor,current_setting('transaction_read_only') ro")).rows[0];
   need(who?.db==="neondb"&&who.actor==="neondb_owner"&&who.actor===who.session_actor&&who.ro==="on","MANIFEST_READBACK_OWNER_SCOPE");
   const rows=(await r.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",[key])).rows;
+  const authority=(await r.query("SELECT count(*)::int n FROM clean.adb_phase6_authorization")).rows;
+  need(authority.length===1&&authority[0].n===0,"AUTHORITY_CREATED_AFTER_MANIFEST_STORAGE_REVIEW");
   need(core.selectManifestWrite(rows,manifestRaw)==="EXACT_EXISTING_REUSE"&&sha(rows[0].value)===ctx.input.manifestSha256,"MANIFEST_EXACT_READBACK");
   await r.query("ROLLBACK");open=false;
   need(live()===ctx.codeSha,"MAIN_MOVED_AFTER_MANIFEST_COMMIT_NO_REPLAY");
