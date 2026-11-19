@@ -122,6 +122,11 @@
       "evidenceId": "RUN-20261119-FINALOWNERMETADATA",
       "path": "data-collection/phase5/evidence/2026-11-18_actual_final_owner_metadata_readonly_NO_GO.json",
       "sha256": "75b9fa3d024378a262897c5133165bd4c358a9abde13dd569aa0c844942aaac8"
+    },
+    {
+      "evidenceId": "RUN-20261119-NATIVECOREPREARMREVIEW",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_native_core_and_day1_scheduler_review_NO_GO.json",
+      "sha256": "ea8fe5f47677a579378d1afa2dcbf5b2e9e91b674caaf29dbc82949a3e481042"
     }
   ],
   "approvals": []
