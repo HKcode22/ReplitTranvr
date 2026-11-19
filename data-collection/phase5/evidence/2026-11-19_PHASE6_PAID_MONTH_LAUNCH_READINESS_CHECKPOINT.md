@@ -115,6 +115,22 @@ The dictionary is `PROPOSED_REVIEW_REQUIRED`, not an account-specific rights app
 
 See `data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md`.
 
+## Paid-GO worksheet added
+
+PR #898 is merged at commit `6c513ec75a827e494f91a2be9032cd1e7cdeba21` and adds `data-collection/phase5/evidence/2026-11-19_PHASE6_PAID_GO_WORKSHEET_NO_GO.md`.
+
+The worksheet records the exact current state and the required evidence for:
+
+- account-specific paid-use and retention;
+- the field-level derived profile;
+- source-enable/readback;
+- relay repin;
+- a fresh zero-provider rehearsal;
+- the separate bounded paid GO;
+- daily Day 1–Day 31 fail-closed continuation checks.
+
+It is an unarmed worksheet. It does not add an approval, enable a source, arm a process, dispatch a worker, or create a provider call. The current decision remains `PAID_PHASE6_GO=false`, `SOURCE_ENABLE=false`, `PROCESS_ARMED=false`, and `APPROVAL_LEDGER_APPROVALS=0`.
+
 ## Handoff
 
 Engineering can continue without waiting for email. The fail-closed writer is
