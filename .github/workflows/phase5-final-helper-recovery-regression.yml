@@ -158,8 +158,10 @@ jobs:
           need(downstreamOnce.includes('POLICY_BLOB="'+gitHash('review-tools/p5_final_policy_binding_materializer.cjs')+'"'),'downstream policy materializer pin mismatch');
           need(downstreamOnce.includes('PRIVATE_BLOB="'+gitHash('review-tools/p5_private_policy_review_materializer.cjs')+'"'),'downstream private materializer pin mismatch');
           need(downstreamOnce.includes('STATIC_BLOB="'+gitHash('review-tools/p5_static_install_review_materializer.cjs')+'"'),'downstream static materializer pin mismatch');
-          need(downstreamOnce.includes('FREEZE_BLOB="'+gitHash('review-tools/p5_final_phase5_freeze_decision.cjs')+'"'),'downstream freeze materializer pin mismatch');
-          need(downstreamOnce.includes('DEST="$SUB/approved-final-phase5-freeze.json"'),'downstream freeze output filename mismatch');
+          need(!downstreamOnce.includes('FREEZE_BLOB=')&&!downstreamOnce.includes(' FREEZE)'),'generic downstream wrapper must not expose alternate freeze path');
+          need(downstreamOnce.includes('BASE="70580b3749544dfcbeff39da181b2aa42b1b4476"'),'downstream base pin missing');
+          need(downstreamOnce.includes('compare/$BASE...$LIVE')&&downstreamOnce.includes('NON_EVIDENCE_MAIN_DRIFT')&&downstreamOnce.includes('LIVE12='),'downstream evidence-only live-main guard missing');
+          need(freezeOnce.includes('DEST="$OUT/approved-final-phase5-freeze.json"'),'dedicated freeze output filename mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
