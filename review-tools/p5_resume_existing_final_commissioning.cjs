@@ -99,13 +99,11 @@ function state(d,out,ledger){
  if(finalRepinPresent){
   const rs=read(d,repinName,1000000).toString("utf8").trim().split("\n").filter(Boolean).map(l=>JSON.parse(l));
   const last=rs.at(-1);
-  finalRepinComplete=last?.status==="FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO"&&last.main===path.basename(out).slice("exact-final-commissioning-".length).padEnd(40,"").slice(0,12)===false;
-  // Exact main equality is validated by the repin helper; here classify only
-  // a structurally complete receipt and let run() perform the live-main check.
   finalRepinComplete=last?.status==="FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO"&&typeof last.main==="string"&&C.test(last.main)&&Number.isSafeInteger(last.verifyRunId)&&last.verifyRunId>0;
+  var finalRepinMain=finalRepinComplete?last.main:null;
  }
  const partialFinalRepin=finalRepinPresent&&!finalRepinComplete;
- const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,completedStaticInstall,completedInertApproval,stageJournalPresent,partialStaticInstall,partialInertApproval,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),finalFreezeDecision:xo(FINAL_FREEZE),finalRepinPresent,finalRepinComplete,partialFinalRepin,anyMutationJournal:stageJournalPresent||partialStaticInstall||partialInertApproval||partialFinalRepin};
+ const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,completedStaticInstall,completedInertApproval,stageJournalPresent,partialStaticInstall,partialInertApproval,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),finalFreezeDecision:xo(FINAL_FREEZE),finalRepinPresent,finalRepinComplete,finalRepinMain:typeof finalRepinMain==="string"?finalRepinMain:null,partialFinalRepin,anyMutationJournal:stageJournalPresent||partialStaticInstall||partialInertApproval||partialFinalRepin};
  return {statuses,prepared};
 }
 function run(){
@@ -135,18 +133,20 @@ function run(){
   need(fs.readFileSync(path.join(root,"package-lock.json")).equals(fs.readFileSync(path.join(checkout,"package-lock.json")))&&fs.existsSync(path.join(root,"node_modules",".bin","tsx")),"EXISTING_DEPENDENCY_LOCK");
   fs.symlinkSync(path.join(root,"node_modules"),path.join(checkout,"node_modules"),"dir");
   const runner=fetchBlob(RUNNER,"runner.cjs");
+  let freezePath=null;
   for(let i=0;i<6;i++){
    need(live()===head,"MAIN_CHANGED_REVIEW_REQUIRED");
    const ledger=JSON.parse(git(["show",head+":"+LEDGER]));need(ledger.schema==="v39.phase6.source-enable-approval-ledger.v1"&&Array.isArray(ledger.approvals),"EXACT_LEDGER");
    const {statuses,prepared}=state(dir,out,ledger);
    if(statuses.finalFreezeDecision){
-    const freeze=fetchBlob(FREEZE,"final-freeze.cjs"),mod=require(freeze),od=safeDir(out);
+    freezePath??=fetchBlob(FREEZE,"final-freeze.cjs");const mod=require(freezePath),od=safeDir(out);
     const work=JSON.parse(read(od,"final-freeze-review-workpaper-NOT-APPROVED.json",1000000));
     const decisionRaw=read(od,FINAL_FREEZE,1000000),decision=JSON.parse(decisionRaw);
     need(Buffer.from(JSON.stringify(decision)).equals(decisionRaw),"FINAL_FREEZE_DECISION_NOT_CANONICAL");
     mod.validateDecision(work,decision,Date.now());
     need(decision.reviewedMainSha===head&&decision.phase6PaidGo===false&&decision.finalSchedulerRepinApproved===true,"FINAL_FREEZE_DECISION_MAIN_OR_SCOPE");
    }
+   if(statuses.finalRepinComplete)need(statuses.finalRepinMain===head,"FINAL_REPIN_RECEIPT_MAIN_DRIFT");
    const n=next(statuses);
    if(n.status){
     console.log(JSON.stringify({status:n.status,main:head,missing:n.missing??[],preparedAuth:prepared?{authorizationId:prepared.authorizationId,authArtifactSha256:prepared.authArtifactSha256}:null,phase6PaidGo:false,existingJournalsPreserved:true}));
