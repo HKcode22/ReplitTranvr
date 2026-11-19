@@ -49,6 +49,39 @@ function runSequence(ops){
 }
 const confirms={calendar:"STAGE_EXACT_31_DAY_CALENDAR_DISABLED_AUTH_NO_PROVIDER",cost:"STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER"};
 function file(dir,n,max){const f=path.join(dir,n),s=fs.lstatSync(f);need(s.isFile()&&!s.isSymbolicLink()&&s.uid===process.getuid()&&s.nlink===1&&(s.mode&0o077)===0&&s.size>0&&s.size<=max,"PRIVATE_FILE");return {f,b:fs.readFileSync(f)}}
+
+function validateManifestStorageReceipt(r,m){
+ need(m?.status==="EXACT_APPROVED_MANIFEST_STORED_AND_FRESH_READBACK_NO_GO"&&m.manifestSha256===r.manifestSha256&&m.authSha256===r.authArtifactSha256&&[0,1].includes(m.manifestRowsWritten)&&m.databaseWrites===m.manifestRowsWritten&&m.independentReadOnlyBytesMatch===true&&m.providerCalls===0&&m.authorizationEnabled===false&&m.phase6PaidGo===false,"EXACT_MANIFEST_STORAGE_RECEIPT_REQUIRED");
+}
+function prepareFreezeWorkpaper(r,receiptSha,m,manifestReceiptSha,entries,journalSha){
+ need(r?.schema==="v39.phase5.exact-final-commissioning-bundle.v1"&&r.status==="EXACT_LEDGER_AUTH_AND_REVIEWED_POLICY_BUNDLE_VERIFIED_NO_PAID_DISPATCH"&&r.phase6PaidGo===false&&C.test(r.main??"")&&[receiptSha,manifestReceiptSha,journalSha,r.manifestSha256,r.configSha256,r.calendarSha256,r.authArtifactSha256,r.stageSha256,r.costEnvelopeSha256,r.approvedPrivatePolicyReviewSha256,r.policyBundleSha256].every(x=>H.test(x??""))&&/^AUTH-\d{8}-[A-Z0-9]+$/.test(r.authorizationId??"")&&r.staticSecretsPrepared===31,"EXACT_FREEZE_REVIEW_BUNDLE");
+ validateManifestStorageReceipt(r,m);
+ need(Array.isArray(entries)&&entries.length===10,"EXACT_COMPLETED_TWO_STAGE_JOURNAL");
+ const first=entries[0],last=entries[9];
+ need(first?.status==="CHAIN_STARTED"&&first.main===r.main&&first.receiptSha===receiptSha&&first.providerCalls===0&&first.phase6PaidGo===false&&last?.status==="BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO"&&last.authorizationEnabled===false&&last.phase6PaidGo===false,"EXACT_COMPLETED_STAGE_CHAIN");
+ const take=(mode,start)=>{
+  const [a,b,c,d]=entries.slice(start,start+4);
+  need(a?.mode===mode&&a.status==="DISPATCH_ATTEMPTED_NO_REPLAY"&&b?.mode===mode&&b.status==="DISPATCH_EXACT_RUN_ID"&&Number.isSafeInteger(b.runId)&&b.runId>0&&c?.mode===mode&&c.status==="EXACT_RUN_SUCCESS"&&c.runId===b.runId&&d?.mode===mode&&d.status==="INDEPENDENT_READBACK_MATCH"&&d.runId===b.runId,"EXACT_STAGE_RUN_JOURNAL_ORDER");
+  verifyReadback(d.receipt,mode,r.main,r);
+  need(typeof d.receipt.snapshotAtUtc==="string"&&Number.isFinite(Date.parse(d.receipt.snapshotAtUtc))&&new Date(d.receipt.snapshotAtUtc).toISOString()===d.receipt.snapshotAtUtc,"EXACT_READBACK_CLOCK");
+  return {runId:b.runId,receipt:d.receipt};
+ };
+ const calendar=take("calendar",1),cost=take("cost",5);
+ need(calendar.runId!==cost.runId&&last.calendarId===calendar.runId&&last.costId===cost.runId&&Date.parse(calendar.receipt.snapshotAtUtc)<=Date.parse(cost.receipt.snapshotAtUtc),"EXACT_DISTINCT_ORDERED_READBACKS");
+ return {schema:"v39.phase5.final-freeze-review-workpaper.v1",status:"EXACT_COMMISSIONING_EVIDENCE_WORKPAPER_NOT_FREEZE_NO_GO",reviewedMainSha:r.main,authorizationId:r.authorizationId,authArtifactSha256:r.authArtifactSha256,manifestSha256:r.manifestSha256,configSha256:r.configSha256,calendarSha256:r.calendarSha256,stageSha256:r.stageSha256,costEnvelopeSha256:r.costEnvelopeSha256,approvedPrivatePolicyReviewSha256:r.approvedPrivatePolicyReviewSha256,policyBundleSha256:r.policyBundleSha256,bundleReceiptSha256:receiptSha,manifestStorageReceiptSha256:manifestReceiptSha,stageChainJournalSha256:journalSha,manifestStorageReceipt:m,calendar,cost,evidenceScope:"EXISTING_ACKNOWLEDGED_COMMISSIONING_RECEIPTS_ONLY_NOT_FRESH_RECHECK",independentHumanFreezeDecisionAuthenticated:false,phase5FreezeApproved:false,reviewedBy:null,reviewedAtUtc:null,authorizationEnabled:false,phase6PaidGo:false,providerCalls:0,databaseWrites:0};
+}
+function writeFreezeWorkpaper(dir,receiptSha){
+ need(H.test(receiptSha??""),"EXACT_FREEZE_BUNDLE_HASH");
+ const d=fs.realpathSync(dir),ds=fs.lstatSync(dir);
+ need(ds.isDirectory()&&!ds.isSymbolicLink()&&ds.uid===process.getuid()&&(ds.mode&0o077)===0,"PRIVATE_DIRECTORY");
+ const rec=file(d,"bundle-receipt.json",200000),m=file(d,"manifest-storage-receipt.json",100000),j=file(d,"inert-stage-chain-attempt.jsonl",1000000);
+ need(sha(rec.b)===receiptSha,"EXACT_FREEZE_BUNDLE_HASH");
+ const w=prepareFreezeWorkpaper(JSON.parse(rec.b),receiptSha,JSON.parse(m.b),sha(m.b),j.b.toString("utf8").trim().split("\n").map(l=>JSON.parse(l)),sha(j.b));
+ const raw=Buffer.from(JSON.stringify(w)),name="final-freeze-review-workpaper-NOT-APPROVED.json",dest=path.join(d,name);
+ try{fs.writeFileSync(dest,raw,{flag:"wx",mode:0o600})}catch(e){if(e.code!=="EEXIST")throw e;need(file(d,name,1000000).b.equals(raw),"EXISTING_FREEZE_WORKPAPER_DIFFERS_NO_OVERWRITE")}
+ return {status:w.status,main:w.reviewedMainSha,workpaperSha256:sha(raw),calendarRunId:w.calendar.runId,costRunId:w.cost.runId,independentFreezeApproved:false,authorizationEnabled:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+}
+
 function run(){
  const [dirArg,receiptSha]=process.argv.slice(2);
  need(process.argv.length===4&&H.test(receiptSha??"")&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&typeof process.env.DATABASE_URL==="string","OWNER_EXPLICIT_STOP_SCOPE");
@@ -57,6 +90,7 @@ function run(){
  const rec=file(d,"bundle-receipt.json",200000),stage=file(d,"exact-approved-stage-input.json",48000),journal=file(d,"static-install-attempt.jsonl",200000);
  const r=JSON.parse(rec.b),st=JSON.parse(stage.b);
  need(sha(rec.b)===receiptSha&&r.schema==="v39.phase5.exact-final-commissioning-bundle.v1"&&r.status==="EXACT_LEDGER_AUTH_AND_REVIEWED_POLICY_BUNDLE_VERIFIED_NO_PAID_DISPATCH"&&r.phase6PaidGo===false&&C.test(r.main??"")&&H.test(r.stageSha256??"")&&H.test(r.costEnvelopeSha256??"")&&sha(stage.b)===r.stageSha256&&Buffer.from(JSON.stringify(st)).equals(stage.b)&&st.codeSha40===r.main&&st.manifestSha256===r.manifestSha256&&st.phase6AuthorizationId===r.authorizationId,"EXACT_APPROVED_BUNDLE");
+ validateManifestStorageReceipt(r,JSON.parse(file(d,"manifest-storage-receipt.json",100000).b));
  const entries=journal.b.toString("utf8").trim().split("\n").map(l=>JSON.parse(l)),first=entries[0],last=entries.at(-1);
  need(first.main===r.main&&first.receiptSha===receiptSha&&first.phase6PaidGo===false&&last.status==="EXACT_STATIC_SECRETS_INSTALLED_METADATA_ONLY_NO_GO"&&last.installed===r.staticSecretsPrepared&&entries.filter(x=>x.status==="METADATA_READBACK").length===r.staticSecretsPrepared,"COMPLETED_STATIC_INSTALL_JOURNAL");
  const env={...process.env,GH_PROMPT_DISABLED:"1"};
@@ -119,7 +153,10 @@ function run(){
   });
   emit({status:"BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO",...out,authorizationEnabled:false,phase6PaidGo:false});
   console.log(JSON.stringify({status:"BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO",main:r.main,...out,authorizationEnabled:false,providerCalls:0,phase6PaidGo:false}));
+  // Retain the acknowledged stage chain even if local workpaper export fails.
+  // The explicit recovery command reads existing receipts only, never dispatches.
+  console.log(JSON.stringify(writeFreezeWorkpaper(d,receiptSha)));
  }finally{fs.closeSync(fd)}
 }
-module.exports={verifyRun,verifyReadback,runSequence,captureSecretMetadata,verifySecretMetadata};
-if(require.main===module)try{run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_STAGE_CHAIN_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_STAGE_CHAIN_UNKNOWN_RESULT_READBACK_ONLY_NO_REPLAY");process.exitCode=2}
+module.exports={verifyRun,verifyReadback,runSequence,captureSecretMetadata,verifySecretMetadata,validateManifestStorageReceipt,prepareFreezeWorkpaper};
+if(require.main===module)try{if(process.argv[2]==="--prepare-freeze-review"){need(process.argv.length===5,"EXACT_FREEZE_REVIEW_ARGUMENTS");console.log(JSON.stringify(writeFreezeWorkpaper(process.argv[3],process.argv[4])))}else run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_STAGE_CHAIN_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_STAGE_CHAIN_UNKNOWN_RESULT_READBACK_ONLY_NO_REPLAY");process.exitCode=2}

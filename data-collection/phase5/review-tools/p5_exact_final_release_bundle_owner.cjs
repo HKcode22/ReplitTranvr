@@ -160,7 +160,7 @@ async function run(){
   u.searchParams.set("sslmode","verify-full");
   const {Pool}=createRequire(path.join(root,"package.json"))("pg");
   const pool=new Pool({connectionString:u.toString(),max:2,connectionTimeoutMillis:8000,query_timeout:20000,application_name:"p5_exact_approved_manifest_store"});
-  try{console.log(JSON.stringify(await storeExactManifest(pool,ctx,auth,manifest.raw.toString("utf8"),core,checkFresh)))}finally{await pool.end()}
+  try{const stored=await storeExactManifest(pool,ctx,auth,manifest.raw.toString("utf8"),core,checkFresh);writeOnce(out,"manifest-storage-receipt.json",JSON.stringify(stored));console.log(JSON.stringify(stored))}finally{await pool.end()}
  }
 }
 module.exports={approvedPrivateReview,staticValues,storeExactManifest};
