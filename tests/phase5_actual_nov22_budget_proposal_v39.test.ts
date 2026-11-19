@@ -295,7 +295,7 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
    P6_INERT_STAGE_CONFIRM:"STAGE_EXACT_SEVEN_COST_UPPER_BOUNDS_DISABLED_AUTH_NO_PROVIDER",V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
    P6_INERT_COST_REVIEW_APPROVED:"1",P6_INERT_COST_ENVELOPE_SHA256:c.costOnlyCategoryDraftSha256};
   expect(admitP6InertReleaseStage(cost)).toMatchObject({mode:"cost",role:costRole,phase6PaidGo:false});
-  expect(()=>admitP6InertReleaseStage({...cost,V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"})).toThrow("NO_DISTINCT_COST_AND_RIGHTS_APPROVAL");
+  expect(()=>admitP6InertReleaseStage({...cost,V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1"})).toThrow("SOURCE_RIGHTS_FLAG_RESERVED_FOR_PHASE6_ACTIVATION");
   expect(()=>admitP6InertReleaseStage({...cost,P6_INERT_COST_ENVELOPE_SHA256:"0".repeat(64)})).toThrow("MISSING_DISTINCT_AUTHENTIC");
  });
  it("exports original reviewed-input candidates with exact byte pins, no overwrite and no release authority",()=>{
