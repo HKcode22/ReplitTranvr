@@ -45,15 +45,16 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
  const SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
  const P5TEST="tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs";
  const P6TEST="tests/phase6_poststage_evidence_only_main_advance_v39.test.ts";
+ const V9TEST="tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts";
  const SELF=P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256;
  const BLOBS=P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS;
- const PATHS=[SCRIPT,P5TEST,P6TEST];
+ const PATHS=[SCRIPT,P5TEST,P6TEST,V9TEST];
  it("accepts the exact reviewed bridge",()=>{
   expect(verifyP6PostStageReviewedBridgeAdvance({
    stageCode:STAGED,currentHead:"b".repeat(40),stageIsAncestor:true,
    changedPaths:PATHS,currentBridgeBlobs:BLOBS,selfNormalizedSha256:SELF
   })).toEqual({stageCode:STAGED,currentHead:"b".repeat(40),reviewedBridgeApplied:true,
-   reviewedBridgePaths:3,evidenceOnlyChangedPaths:0});
+   reviewedBridgePaths:4,evidenceOnlyChangedPaths:0});
  });
  it("accepts only evidence/ledger changes in addition to the exact bridge",()=>{
   expect(verifyP6PostStageReviewedBridgeAdvance({
