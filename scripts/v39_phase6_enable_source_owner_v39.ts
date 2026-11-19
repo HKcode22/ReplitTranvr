@@ -34,10 +34,11 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="05ccf668d22982ef34df886f4ca4d0d792c32ea6883245151ff7a5275bde6618";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="cb006043d8a0fce62aa4115ac5d4af75c02cc9a8dbe70b70fcbc87e4961c78e5";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"1d6b81ac1e0e29d0ae43bab843bdb539c6d9ce2d"
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"189a4828c469ff0d13029f5c23543336c70fe0c4",
+ "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011"
 });
 const POST_STAGE_REVIEWED_BRIDGE_SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
 function normalizedBridgeSelfSha256(){
@@ -112,18 +113,28 @@ export function p6SourceAuthorizationStageContentSha(input:any){
  if(!CODE.test(codeSha40??""))hold("INVALID_STAGE_CODE");
  return digest(content);
 }
+
+export function verifyP6DeferredActivationPredecessors(staged:string[],activation:string[]){
+ if(!Array.isArray(staged)||!Array.isArray(activation)||staged.length<1||
+    activation.length<=staged.length||
+    staged.some((id,i)=>typeof id!=="string"||activation[i]!==id))
+  hold("DEFERRED_PREDECESSOR_EXTENSION_REQUIRED");
+ return {stagedPredecessors:staged.length,activationPredecessors:activation.length,
+  appendedPredecessors:activation.length-staged.length};
+}
 export function verifyP6SourceActivationReview(s:ReviewedStage,auth:Verify,now:Date){
  const p=compileP5V0093CostOnlySevenRestReview(s.input,s.review,s.freezeReview);
  const a=auth?.record as any,b=a?.releaseActivation;
  const stamp=now.getTime();
  const cats=p.cost.categoryCaps as {category:string;ceilingUnits:number}[];
+ if(a?.predecessorEvidenceIds)
+  verifyP6DeferredActivationPredecessors(p.staged.predecessorEvidenceIds,a.predecessorEvidenceIds);
  if(auth?.verdict?.verified!==true||!H.test(auth.artifactHash??"")||
     !a||a.phaseGate!==PHASE||a.authorizationId!==p.staged.authorizationId||
     !/^AUTH-\d{8}-[A-Z0-9]+$/.test(a.authorizationId)||
     a.airportFilterWindow!==P6_SOURCE_AUTH_SCOPE||
     typeof a.cleanupOwner!=="string"||a.cleanupOwner.trim().length<6||
     !Array.isArray(a.predecessorEvidenceIds)||
-    JSON.stringify(a.predecessorEvidenceIds)!==JSON.stringify(p.staged.predecessorEvidenceIds)||
     a.maxAlertCredits!==p.staged.alertSafety.alertRunSpendCeilingCredits||
     !a.maxRestUnitsByCategory||typeof a.maxRestUnitsByCategory!=="object"||
     Array.isArray(a.maxRestUnitsByCategory)||Object.keys(a.maxRestUnitsByCategory).length!==7||

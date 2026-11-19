@@ -589,7 +589,7 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    airportFilterWindow:P6_SOURCE_AUTH_SCOPE,maxAlertCredits:input.alertSafety.alertRunSpendCeilingCredits,
    maxRestUnitsByCategory:Object.fromEntries(r.c.categoryCaps.map(c=>[c.category,c.ceilingUnits])),
    startNotBeforeUtc:iso(now-M),expiresAtUtc:iso(now+H),cleanupOwner:"CI-only independent STOP",
-   predecessorEvidenceIds:input.predecessorEvidenceIds,
+   predecessorEvidenceIds:[...input.predecessorEvidenceIds,"RUN-20261119-SOURCEUSE"],
    releaseActivation:{schema:"v39.phase6.exact-source-activation-review.v1",
     stageContentSha256:p6SourceAuthorizationStageContentSha(input),costEnvelopeSha256:r.c.costOnlyCategoryDraftSha256,
     independentScientificFreezeApproved:true,independentSourceUseApproved:true,
