@@ -31,8 +31,17 @@ function verifyReceipt(run,jobs,log,head,runId,clock,apply=false){
  need(run?.id===runId&&run.head_sha===head&&run.path===".github/workflows/"+W&&run.head_branch==="main"&&run.event==="workflow_dispatch"&&run.run_attempt===1&&run.status==="completed"&&run.conclusion==="success"&&jobs?.total_count===1&&jobs.jobs?.length===1,"RUN_IDENTITY");
  const j=jobs.jobs[0];need(id(j.id)&&j.run_id===runId&&j.head_sha===head&&j.name==="primary-fids-expiry"&&j.run_attempt===1&&j.status==="completed"&&j.conclusion==="success"&&j.steps?.filter(s=>s.name===STEP&&s.status==="completed"&&s.conclusion==="success").length===1,"ACTUAL_STEP");
  const status=apply?"PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED":"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES";
- const rows=log.split(/\r?\n/).filter(l=>l.includes('{"status":"'+status+'"'));
- need(rows.length===1,"EXACT_RECEIPT");const q=JSON.parse(rows[0].slice(rows[0].indexOf('{"status":"')));
+ // JSON property order is not a receipt contract. Real APPLY logs put
+ // providerCalls first; VERIFY_ONLY logs historically put status first.
+ // Parse complete objects and require exactly one matching top-level status.
+ const rows=[];
+ for(const line of log.split(/\r?\n/)){
+  const start=line.indexOf("{");if(start<0)continue;
+  const raw=line.slice(start).trim();if(!raw.includes(status))continue;
+  let obj;try{obj=JSON.parse(raw)}catch{need(false,"EXACT_RECEIPT_PARSE")}
+  if(obj&&typeof obj==="object"&&!Array.isArray(obj)&&obj.status===status)rows.push(obj);
+ }
+ need(rows.length===1,"EXACT_RECEIPT");const q=rows[0];
  const good=b=>b?.schema==="v39.phase5.primary-fids-expiry-status.v1"&&C9.every(k=>b[k]===0)&&b.deletionStopUnresolved===false&&b.providerCalls===0&&b.databaseWrites===0&&b.phase6PaidGo===false&&b.backupOrPitrVerified===false&&b.completeRetentionDeploymentVerified===false;
  const b=q.before,obs=Date.parse(b?.observedAtUtc),created=Date.parse(run.created_at),finished=Date.parse(j.completed_at);
  need(q.reviewedMainSha===head&&q.distinctDbActorsVerified===true&&q.privateCommissionState==="GRANTED"&&q.providerCalls===0&&q.objectDeletions===0&&q.phase6PaidGo===false&&q.backupOrPitrVerified===false&&q.completeRetentionDeploymentVerified===false&&good(b)&&(apply?good(q.after)&&q.databaseWritesPossible===false:q.databaseWrites===0)&&[obs,created,finished,clock].every(Number.isFinite)&&created<=obs&&obs<=finished+1000&&finished<=clock&&clock-obs<60*60000,"ZERO_WORK_RECEIPT_SCOPE");
