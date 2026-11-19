@@ -40,11 +40,31 @@ function staticReviewWorkpaper(r,receiptSha,valuesSha,values,metadata,planWrites
   draftReview:{schema:"v39.phase5.static-install-review.v1",approvedStaticInstallation:false,independentGlobalStopConfirmed:false,phase6PaidGo:false,main:r.main,bundleReceiptSha256:receiptSha,staticValuesSha256:valuesSha,privatePolicyReviewSha256:r.approvedPrivatePolicyReviewSha256,reviewedBy:null,reviewedAtUtc:null,approvedReplacements:proposedStaticReplacements,
    inertStageFlagInstallation:{approvedExactInertStageFlagInstallation:false,phase6PaidGo:false,authArtifactSha256:r.authArtifactSha256,stageSha256:r.stageSha256,costEnvelopeSha256:r.costEnvelopeSha256,approvedNames:[...INERT_APPROVALS],approvedReplacements:proposedInertReplacements}}};
 }
+function validateCompletedStaticInstallJournal(entries,r,receiptSha,valuesSha,staticSha,metadata){
+ need(Array.isArray(entries)&&entries.length>=4&&Array.isArray(metadata),"ACK_STATIC_JOURNAL_SCOPE");
+ const first=entries[0],last=entries.at(-1),reads=entries.filter(x=>x?.status==="METADATA_READBACK");
+ need(first?.main===r.main&&first.receiptSha===receiptSha&&first.valuesSha===valuesSha&&first.reviewSha===staticSha&&first.phase6PaidGo===false&&Array.isArray(first.plan)&&first.plan.length===r.staticSecretsPrepared,"ACK_STATIC_JOURNAL_HEADER");
+ need(last?.status==="EXACT_STATIC_SECRETS_INSTALLED_METADATA_ONLY_NO_GO"&&last.installed===r.staticSecretsPrepared&&reads.length===r.staticSecretsPrepared&&new Set(reads.map(x=>x.name)).size===r.staticSecretsPrepared,"ACK_STATIC_JOURNAL_COMPLETE");
+ const planned=new Set(first.plan.map(x=>x?.name));need(planned.size===r.staticSecretsPrepared&&reads.every(x=>planned.has(x.name)&&typeof x.updatedAt==="string"&&Number.isFinite(Date.parse(x.updatedAt))),"ACK_STATIC_JOURNAL_NAMES");
+ const current=new Map(metadata.map(x=>[x.name,x.updatedAt]));
+ need(reads.every(x=>current.get(x.name)===x.updatedAt),"ACK_STATIC_METADATA_DRIFT_NO_REPLAY");
+ return true;
+}
+function validateCompletedInertApprovalJournal(entries,r,receiptSha,staticSha,metadata){
+ need(Array.isArray(entries)&&entries.length>=4&&Array.isArray(metadata),"ACK_INERT_JOURNAL_SCOPE");
+ const first=entries[0],last=entries.at(-1),reads=entries.filter(x=>x?.status==="METADATA_READBACK");
+ need(first?.main===r.main&&first.receiptSha256===receiptSha&&first.staticReviewSha256===staticSha&&first.status==="EXACT_REVIEWED_INERT_APPROVAL_INSTALL_STARTED_NO_GO","ACK_INERT_JOURNAL_HEADER");
+ need(last?.status==="THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO"&&reads.length===INERT_APPROVALS.length&&new Set(reads.map(x=>x.name)).size===INERT_APPROVALS.length&&reads.every(x=>INERT_APPROVALS.includes(x.name)&&typeof x.updatedAt==="string"&&Number.isFinite(Date.parse(x.updatedAt))),"ACK_INERT_JOURNAL_COMPLETE");
+ const current=new Map(metadata.map(x=>[x.name,x.updatedAt]));
+ need(reads.every(x=>current.get(x.name)===x.updatedAt),"ACK_INERT_METADATA_DRIFT_NO_REPLAY");
+ return true;
+}
 function sequence(mode,ops){
  if(mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"||mode==="ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"){ops.coreInputs(mode);return}
  if(mode==="PREPARE_POLICY_REVIEW"){ops.assemble();return}
  if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();ops.prepareStaticReviewWorkpaper();return}
  if(mode==="RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"){ops.verify();ops.resumeStage();return}
+ if(mode==="RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO"){ops.verify();ops.resumeAfterStatic();return}
  need(mode==="COMMISSION_EXISTING_INERT_NO_GO","MODE");
  // All reviewer artifacts and nonmutating checks pass before any mutation.
  ops.verify();ops.installPlan();ops.checkStagePrerequisites();ops.noPriorAttempt();
@@ -90,7 +110,7 @@ async function remainingOwnerMetadata(){
 function run(){
  const [mode,dirArg,policySha,staticSha]=process.argv.slice(2);
  const coreMode=["PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE","ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"].includes(mode);
- need((coreMode||["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode))&&H.test(policySha??"")&&(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode)?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
+ need((coreMode||["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO","RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO"].includes(mode))&&H.test(policySha??"")&&(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO","RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO"].includes(mode)?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
  need(process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&!!process.env.DATABASE_URL,"EXISTING_OWNER_ENV");
  const env={...process.env,GH_PROMPT_DISABLED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
  for(const k of ["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY","NODE_OPTIONS"])delete env[k];
@@ -107,7 +127,7 @@ function run(){
  const review=coreMode?"reviewed-final-core-scope-decisions.json":mode==="PREPARE_POLICY_REVIEW"?"reviewed-final-policy-binding-decisions.json":"approved-private-policy-review.json";
  need(digest(safeRead(d,review))===policySha,"REVIEW_HASH");
  const out=path.join(d,"exact-final-commissioning-"+head.slice(0,12));
- if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode)){safeDir(out);need(digest(safeRead(out,"static-install-review.json"))===staticSha,"STATIC_REVIEW_HASH")}
+ if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO","RESUME_AFTER_ACKNOWLEDGED_STATIC_NO_GO"].includes(mode)){safeDir(out);need(digest(safeRead(out,"static-install-review.json"))===staticSha,"STATIC_REVIEW_HASH")}
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),"p5-bulk-"));fs.chmodSync(temp,0o700);
  try{
   const f={};
@@ -182,10 +202,33 @@ function run(){
     const review=JSON.parse(safeRead(out,"static-install-review.json",100000)),rb=safeRead(out,"bundle-receipt.json",200000);
     need(digest(safeRead(out,"static-install-review.json",100000))===staticSha&&review.approvedStaticInstallation===true&&review.independentGlobalStopConfirmed===true&&review.phase6PaidGo===false&&review.main===head&&review.bundleReceiptSha256===digest(rb),"EXACT_EXISTING_STATIC_REVIEW");
     call(process.execPath,[f.stage,out,receipt(),"--resume-acknowledged-calendar"]);
+   },
+   resumeAfterStatic(){
+    const rb=safeRead(out,"bundle-receipt.json",200000),vb=safeRead(out,"static-secret-values-PRIVATE.json",400000),sr=safeRead(out,"static-install-review.json",100000);
+    const r=JSON.parse(rb),review=JSON.parse(sr),meta=secretMeta(),names=new Set(meta.map(x=>x.name));
+    need(digest(sr)===staticSha&&review.approvedStaticInstallation===true&&review.independentGlobalStopConfirmed===true&&review.phase6PaidGo===false&&review.bundleReceiptSha256===digest(rb)&&review.main===head&&r.main===head,"EXACT_EXISTING_STOP_AND_STATIC_REVIEW");
+    need(["V39_PHASE6_PROCESS_ARMED","P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"].every(n=>names.has(n)),"EXISTING_STOP_AND_STAGE_ROLE_NAMES");
+    const staticEntries=safeRead(out,"static-install-attempt.jsonl",300000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
+    validateCompletedStaticInstallJournal(staticEntries,r,digest(rb),digest(vb),staticSha,meta);
+    const w=JSON.parse(gh(["api","repos/"+REPO+"/actions/workflows/phase5-exact-inert-release-stage-manual.yml"]));
+    need(w.state==="active"&&Number.isSafeInteger(w.id),"EXISTING_STAGE_WORKFLOW");
+    const runs=JSON.parse(gh(["api","repos/"+REPO+"/actions/workflows/"+w.id+"/runs?event=workflow_dispatch&head_sha="+head+"&per_page=100"]));
+    need(runs.total_count===0&&Array.isArray(runs.workflow_runs)&&runs.workflow_runs.length===0,"PRIOR_STAGE_ATTEMPT_RECONCILIATION");
+    const approvals=path.join(out,"inert-approval-install-attempt.jsonl");
+    if(fs.existsSync(approvals)){
+     need(review.inertStageFlagInstallation?.approvedExactInertStageFlagInstallation===true,"ACK_INERT_REVIEW_SECTION_REQUIRED");
+     validateCompletedInertApprovalJournal(safeRead(out,"inert-approval-install-attempt.jsonl",100000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l)),r,digest(rb),staticSha,meta);
+     approvalPlan=[];
+    }else{
+     approvalPlan=planInertApprovals(review,r,meta,require(f.install).planWrites);
+     console.log(JSON.stringify({status:"ACKNOWLEDGED_STATIC_RECOVERY_INERT_PLAN_NO_GO",plannedWrites:approvalPlan.map(x=>({name:x.name,operation:x.operation})),phase6PaidGo:false}));
+     if(approvalPlan.length)this.installInertApprovals();
+    }
+    checkMain();call(process.execPath,[f.stage,out,receipt()]);
    }
   });
   console.log(JSON.stringify({status:"EXISTING_EXACT_HANDOFF_STEP_COMPLETE",mode,main:head,phase6PaidGo:false}));
  }finally{fs.rmSync(temp,{recursive:true,force:true})}
 }
-module.exports={sequence,planInertApprovals,staticReviewWorkpaper,INERT_APPROVALS,classifyHistory};
+module.exports={sequence,planInertApprovals,staticReviewWorkpaper,validateCompletedStaticInstallJournal,validateCompletedInertApprovalJournal,INERT_APPROVALS,classifyHistory};
 if(require.main===module)Promise.resolve().then(()=>process.argv[2]==="OWNER_FINAL_METADATA_READONLY"?remainingOwnerMetadata():run()).catch(e=>{const s=String(e?.message??"");console.error(/^HOLD_P5_BULK_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_BULK_REDACTED_CHECK_EXISTING_JOURNALS_NO_BLIND_REPLAY");process.exitCode=2});
