@@ -1,0 +1,19 @@
+{
+  "schema": "v39.phase5.final-core-reviewer-decision-input.v1",
+  "phase6PaidGo": false,
+  "legacyAlertStartApproved": false,
+  "adoptEvidenceBackedRecommendations": false,
+  "finalPredecessorsApproved": null,
+  "independentScientificFreezeApproved": null,
+  "independentSourceUseApproved": null,
+  "independentOperationalReleaseApproved": null,
+  "sourceRightsEvidenceId": null,
+  "sourceRightsEvidenceSha256": null,
+  "reviewedBy": null,
+  "reviewedAtUtc": null,
+  "cleanupOwner": "scripts/v39_phase6_enable_source_owner_v39.ts",
+  "authorizationId": null,
+  "startNotBeforeUtc": null,
+  "expiresAtUtc": null,
+  "accountEvidenceValidUntilUtc": null
+}
