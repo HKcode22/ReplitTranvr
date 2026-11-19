@@ -21,6 +21,9 @@ function materialize(mechanical,closure,ledger,input,nowMs=Date.now()){
  need(mechanical?.schema==="v39.phase5.final-core-mechanical-bindings-ready.v1"&&mechanical.phase6PaidGo===false,"MECHANICAL_SCOPE");
  need(closure?.schema==="v39.phase5.final-core-reviewer-closure-matrix.v1"&&closure.phase6PaidGo===false,"CLOSURE_SCOPE");
  need(mechanical.baseCodeSha===closure.baseCodeSha&&mechanical.evidenceCommit===closure.evidenceCommit&&C.test(mechanical.evidenceCommit),"EVIDENCE_IDENTITY");
+ const rec=closure.evidenceBackedRecommendations;
+ const recKeys=["currentAccountAndBudgetApproved","legacyPublishedAutoCollectVerifiedOff","githubPaidDispatchFlagsVerifiedOff","activeBillableSubscriptionsVerifiedZero","separatePaidDispatchStillRequired"];
+ need(rec&&recKeys.every(k=>rec[k]?.recommendedValue===true),"CLOSURE_RECOMMENDATIONS");
  need(ledger?.schema==="v39.phase6.source-enable-approval-ledger.v1"&&Array.isArray(ledger.evidence)&&Array.isArray(ledger.approvals),"LEDGER_SCOPE");
  need(input?.schema==="v39.phase5.final-core-reviewer-decision-input.v1","INPUT_SCHEMA");
  need(input.phase6PaidGo===false&&input.legacyAlertStartApproved===false,"NO_GO_SCOPE");
@@ -42,6 +45,10 @@ function materialize(mechanical,closure,ledger,input,nowMs=Date.now()){
       "SOURCE_EVIDENCE_NOT_GENUINE_PERMISSION_RECORD");
  const d=JSON.parse(JSON.stringify(mechanical.draftReview));
  need(d?.schema==="v39.phase5.exact-final-core-scope-review.v1"&&d.baseCodeSha===mechanical.baseCodeSha&&d.evidenceCommit===mechanical.evidenceCommit,"DRAFT_SCOPE");
+ need(d.phase6PaidGo===false&&d.legacyAlertStartApproved===false&&
+      ["finalPredecessorsApproved","independentScientificFreezeApproved","independentSourceUseApproved","independentOperationalReleaseApproved","currentAccountAndBudgetApproved","legacyPublishedAutoCollectVerifiedOff","githubPaidDispatchFlagsVerifiedOff","activeBillableSubscriptionsVerifiedZero","separatePaidDispatchStillRequired"].every(k=>d[k]===false)&&
+      ["sourceRightsEvidenceSha256","reviewedBy","reviewedAtUtc","cleanupOwner","authorizationId","startNotBeforeUtc","expiresAtUtc","accountEvidenceValidUntilUtc"].every(k=>d[k]===null),
+      "MECHANICAL_DRAFT_NOT_PRISTINE");
  const ids=d.predecessorEvidenceIds;
  need(Array.isArray(ids)&&ids.length>=1&&new Set(ids).size===ids.length&&ids.every(x=>ID.test(x)&&rows.has(x)),"PREDECESSOR_SCOPE");
  need(ids.includes(input.sourceRightsEvidenceId),"SOURCE_EVIDENCE_NOT_A_PREDECESSOR");
