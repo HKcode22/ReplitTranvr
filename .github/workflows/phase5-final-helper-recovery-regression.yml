@@ -118,7 +118,7 @@ jobs:
           need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
           const resumeBlob=require('node:child_process').execFileSync('git',['hash-object','review-tools/p5_resume_existing_final_commissioning.cjs'],{encoding:'utf8'}).trim();
           need(ownerOnce.includes('HELPER_BLOB="'+resumeBlob+'"'),'owner launcher HELPER blob mismatch');
-          need(ownerOnce.includes('TESTED_RUN="44474151073"')&&ownerOnce.includes('TESTED_HEAD="f593d2affcd20b4ce036da575b52107ed9a17fab"'),'owner launcher tested-run pin mismatch');
+          need(ownerOnce.includes('TESTED_RUN="44475135730"')&&ownerOnce.includes('TESTED_HEAD="87b5f9722ddbd635208e8e8f2487bb4ea97a8bd7"'),'owner launcher tested-run pin mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
