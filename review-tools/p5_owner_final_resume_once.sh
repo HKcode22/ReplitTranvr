@@ -8,8 +8,8 @@ umask 077
 
 REPO="HKcode22/ReplitTranvr"
 HELPER_BLOB="3fa07ba994069a9495e2e65880bf1954a3444708"
-TESTED_RUN="44475135730"
-TESTED_HEAD="87b5f9722ddbd635208e8e8f2487bb4ea97a8bd7"
+TESTED_RUN="44479965836"
+TESTED_HEAD="72b781f0c8f1334c1e06cc3b9a560a07497514f9"
 
 hold(){ printf 'HOLD_P5_FINAL_OWNER_ONCE: %s\n' "$1" >&2; exit 2; }
 
@@ -25,6 +25,13 @@ read -r RUN_HEAD RUN_RESULT < <(
 ) || hold "TESTED_RUN_UNAVAILABLE"
 [[ "$RUN_HEAD" == "$TESTED_HEAD" && "$RUN_RESULT" == "success" ]] ||
   hold "FINAL_HELPER_CI_NOT_EXACT_GREEN"
+
+TESTED_HELPER_BLOB="$(
+  gh api "repos/$REPO/contents/review-tools/p5_resume_existing_final_commissioning.cjs?ref=$TESTED_HEAD"     --jq '.sha'
+)" || hold "TESTED_HELPER_READ_FAILED"
+
+[[ "$TESTED_HELPER_BLOB" == "$HELPER_BLOB" ]] ||
+  hold "TESTED_HELPER_BLOB_MISMATCH"
 
 TMP="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
 trap 'rm -f "$TMP"' EXIT
