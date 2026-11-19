@@ -1,0 +1,87 @@
+name: Phase5 current GitHub STOP read-only attestation
+
+on:
+  push:
+    branches:
+      - phase5/final-helper-recovery-fixes-clean-20261118
+    paths:
+      - '.github/workflows/phase5-current-stop-readonly-attestation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  current-stop-attestation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+      P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+      P5_CD_GH_PREPARE_ARMED: ${{ secrets.P5_CD_GH_PREPARE_ARMED }}
+      P6_NONPAID_SOURCE_SCHEDULE_ENABLED: ${{ vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED }}
+      P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED: ${{ vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED }}
+      P6_PRIVATE_POST_PARENT_ENABLED: ${{ vars.P6_PRIVATE_POST_PARENT_ENABLED }}
+      P6_NATIVE_LATER_RUNTIME_ENABLED: ${{ vars.P6_NATIVE_LATER_RUNTIME_ENABLED }}
+      P6_NATIVE_POST_PRODUCER_ENABLED: ${{ vars.P6_NATIVE_POST_PRODUCER_ENABLED }}
+      P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED }}
+      P6_PRIVATE_T24_EXECUTION_ENABLED: ${{ vars.P6_PRIVATE_T24_EXECUTION_ENABLED }}
+      P6_PRIVATE_LATER_ENROLL_ENABLED: ${{ vars.P6_PRIVATE_LATER_ENROLL_ENABLED }}
+      P6_PRIVATE_T24_ENROLL_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_ENABLED }}
+      P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED }}
+      P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
+      P5_CD_GH_PRE_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_PRE_SCHEDULE_ENABLED }}
+      P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+      P6_ROLLING_CONTROLLER_ENABLED: ${{ vars.P6_ROLLING_CONTROLLER_ENABLED }}
+      P5_AUTO_SOURCE_DISPATCH_ENABLED: ${{ vars.P5_AUTO_SOURCE_DISPATCH_ENABLED }}
+      P5_POST_AUTO_DISPATCH_ENABLED: ${{ vars.P5_POST_AUTO_DISPATCH_ENABLED }}
+      P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
+      P5_LATER_PRE_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_AUTO_DISPATCH_ENABLED }}
+      P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED: ${{ vars.P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED }}
+      P6_T24_CUSTODY_ENABLED: ${{ vars.P6_T24_CUSTODY_ENABLED }}
+      P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED: ${{ vars.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED }}
+      EXPECTED_MAIN: 70580b3749544dfcbeff39da181b2aa42b1b4476
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify exact current STOP without printing secret values
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          LIVE="$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq '.object.sha')"
+          test "$LIVE" = "$EXPECTED_MAIN"
+          test "$V39_PHASE6_PROCESS_ARMED" = "0"
+          test "$P5_CD_GH_PRE_STOP" = "1"
+          test "$P5_CD_GH_PRE_ARMED" = "0"
+          test "$P5_CD_GH_PREPARE_ARMED" = "0"
+          names=(
+            P6_NONPAID_SOURCE_SCHEDULE_ENABLED
+            P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED
+            P6_PRIVATE_POST_PARENT_ENABLED
+            P6_NATIVE_LATER_RUNTIME_ENABLED
+            P6_NATIVE_POST_PRODUCER_ENABLED
+            P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED
+            P6_PRIVATE_T24_EXECUTION_ENABLED
+            P6_PRIVATE_LATER_ENROLL_ENABLED
+            P6_PRIVATE_T24_ENROLL_ENABLED
+            P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED
+            P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED
+            P5_CD_GH_PRE_SCHEDULE_ENABLED
+            P5_CD_GH_T24_SCHEDULE_ENABLED
+            P6_ROLLING_CONTROLLER_ENABLED
+            P5_AUTO_SOURCE_DISPATCH_ENABLED
+            P5_POST_AUTO_DISPATCH_ENABLED
+            P5_T24_AUTO_DISPATCH_ENABLED
+            P5_LATER_PRE_AUTO_DISPATCH_ENABLED
+            P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED
+            P6_T24_CUSTODY_ENABLED
+            P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED
+          )
+          for n in "${names[@]}"; do
+            test -z "${!n}"
+          done
+          echo 'CURRENT_GITHUB_STOP_AND_21_MODE_VARS_EXACT_READONLY_NO_GO'
+          echo 'fourStopSecretValuesExact=true'
+          echo 'all21ModeVarsUnset=true'
+          echo 'secretPlaintextPrinted=false'
+          echo 'providerCalls=0 databaseReads=0 databaseWrites=0 githubWrites=0 phase6PaidGo=false'
