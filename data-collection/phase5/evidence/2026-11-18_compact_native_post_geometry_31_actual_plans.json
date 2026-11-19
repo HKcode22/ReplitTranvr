@@ -1,0 +1,343 @@
+{
+  "schema": "v39.phase5.compact-native-post-geometry-independent-calculation.v1",
+  "status": "ACTUAL_COMMITTED_PLAN_GEOMETRY_REPRODUCED_CONDITIONAL_NOT_PAID_RELEASE",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "source": "Fetched and parsed all 31 current committed day plans individually using GitHub file read; grouped each template by runDayIndex, slot, serviceWindowStartUtc, serviceWindowEndUtc; calculated follow-up and dispatch clocks per group, rejected UTC date crossings, counted nominal source timestamps plus 23h greater than dispatch window end; no provider original or actual outcome read.",
+  "plans": 31,
+  "sourceTemplates": 6144,
+  "partitionSlotGroups": 144,
+  "scenarios": [
+    {
+      "followupMinutes": 30,
+      "dispatchWindowMinutes": 10,
+      "midnightCrossingGroups": 0,
+      "eligibleGroups": 144,
+      "oneGetPerGroupUpperBoundUnits": 288,
+      "nominalRawOriginalTemplatesRemainingAtEnd": {
+        "T-24h": 0,
+        "T-6h": 2048,
+        "T-90m": 2048
+      },
+      "groupsWithAnyNominalRawOriginal": {
+        "T-24h": 0,
+        "T-6h": 144,
+        "T-90m": 144
+      }
+    },
+    {
+      "followupMinutes": 60,
+      "dispatchWindowMinutes": 20,
+      "midnightCrossingGroups": 0,
+      "eligibleGroups": 144,
+      "oneGetPerGroupUpperBoundUnits": 288,
+      "nominalRawOriginalTemplatesRemainingAtEnd": {
+        "T-24h": 0,
+        "T-6h": 2048,
+        "T-90m": 2048
+      },
+      "groupsWithAnyNominalRawOriginal": {
+        "T-24h": 0,
+        "T-6h": 144,
+        "T-90m": 144
+      }
+    },
+    {
+      "followupMinutes": 120,
+      "dispatchWindowMinutes": 20,
+      "midnightCrossingGroups": 0,
+      "eligibleGroups": 144,
+      "oneGetPerGroupUpperBoundUnits": 288,
+      "nominalRawOriginalTemplatesRemainingAtEnd": {
+        "T-24h": 0,
+        "T-6h": 2048,
+        "T-90m": 2048
+      },
+      "groupsWithAnyNominalRawOriginal": {
+        "T-24h": 0,
+        "T-6h": 144,
+        "T-90m": 144
+      }
+    },
+    {
+      "followupMinutes": 240,
+      "dispatchWindowMinutes": 20,
+      "midnightCrossingGroups": 0,
+      "eligibleGroups": 144,
+      "oneGetPerGroupUpperBoundUnits": 288,
+      "nominalRawOriginalTemplatesRemainingAtEnd": {
+        "T-24h": 0,
+        "T-6h": 2048,
+        "T-90m": 2048
+      },
+      "groupsWithAnyNominalRawOriginal": {
+        "T-24h": 0,
+        "T-6h": 144,
+        "T-90m": 144
+      }
+    }
+  ],
+  "selectedCandidate": {
+    "followupAfterPartitionEndSeconds": 3600,
+    "dispatchWindowSeconds": 1200,
+    "expectedApiUnitsPerGet": 2,
+    "oneGetPerGroupUpperBoundUnits": 288,
+    "maximumUtcDayUnits": 24,
+    "unitsByUtcChargeDate": {
+      "2026-11-21": 8,
+      "2026-11-23": 8,
+      "2026-11-24": 16,
+      "2026-11-25": 8,
+      "2026-11-26": 16,
+      "2026-11-28": 24,
+      "2026-11-30": 16,
+      "2026-12-01": 8,
+      "2026-12-02": 16,
+      "2026-12-04": 8,
+      "2026-12-06": 16,
+      "2026-12-07": 8,
+      "2026-12-08": 8,
+      "2026-12-09": 8,
+      "2026-12-10": 8,
+      "2026-12-12": 16,
+      "2026-12-13": 8,
+      "2026-12-14": 8,
+      "2026-12-15": 8,
+      "2026-12-16": 8,
+      "2026-12-18": 16,
+      "2026-12-19": 8,
+      "2026-12-20": 8,
+      "2026-12-21": 8,
+      "2026-12-22": 8,
+      "2026-12-24": 16
+    },
+    "dayRows": [
+      {
+        "runDayIndex": 1,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-11-21",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 2,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-11-23",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 3,
+        "sourceTemplates": 192,
+        "groups": 8,
+        "chargeDayUtc": "2026-11-24",
+        "oneGetUpperBoundUnits": 16
+      },
+      {
+        "runDayIndex": 4,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-11-25",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 5,
+        "sourceTemplates": 288,
+        "groups": 8,
+        "chargeDayUtc": "2026-11-26",
+        "oneGetUpperBoundUnits": 16
+      },
+      {
+        "runDayIndex": 6,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-11-28",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 7,
+        "sourceTemplates": 192,
+        "groups": 8,
+        "chargeDayUtc": "2026-11-28",
+        "oneGetUpperBoundUnits": 16
+      },
+      {
+        "runDayIndex": 8,
+        "sourceTemplates": 192,
+        "groups": 8,
+        "chargeDayUtc": "2026-11-30",
+        "oneGetUpperBoundUnits": 16
+      },
+      {
+        "runDayIndex": 9,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-01",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 10,
+        "sourceTemplates": 288,
+        "groups": 8,
+        "chargeDayUtc": "2026-12-02",
+        "oneGetUpperBoundUnits": 16
+      },
+      {
+        "runDayIndex": 11,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-04",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 12,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-06",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 13,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-06",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 14,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-07",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 15,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-08",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 16,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-09",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 17,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-10",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 18,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-12",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 19,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-12",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 20,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-13",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 21,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-14",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 22,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-15",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 23,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-16",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 24,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-18",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 25,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-18",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 26,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-19",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 27,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-20",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 28,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-21",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 29,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-22",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 30,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-24",
+        "oneGetUpperBoundUnits": 8
+      },
+      {
+        "runDayIndex": 31,
+        "sourceTemplates": 192,
+        "groups": 4,
+        "chargeDayUtc": "2026-12-24",
+        "oneGetUpperBoundUnits": 8
+      }
+    ],
+    "independentFinalGeometryApproval": false
+  },
+  "limitations": [
+    "This is nominal timing and one GET per group geometry, not actual flight/label availability, verified provider price, real HTTP latency, successful POST, or guaranteed retry/reservation coverage.",
+    "T24 raw originals are nominally expired under the existing 23-hour access guard; use existing independently verified T24 witness, never treat its existence as license or physical gate-out evidence.",
+    "Actual gate-out labels remain conditional on same-milestone actual-only external evidence; no revisedTime proxy renaming.",
+    "No new policy scope or paid operations authorized."
+  ],
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}

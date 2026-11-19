@@ -1,0 +1,25 @@
+{
+  "schema": "v39.phase5.current-marketplace-fids-range-cost-attestation.v1",
+  "status": "CURRENT_FIDS_RANGE_AND_UNIT_COST_TECHNICAL_ATTESTATION_NOT_RIGHTS_NOT_GO",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "observedAtUtc": "2026-11-19T07:02:47.000Z",
+  "provider": "AeroDataBox",
+  "channel": "RapidAPI",
+  "currentMarketplaceFacts": {
+    "ultraFidsPageSizeHours": 12,
+    "tier2ApiUnitsPerRequest": 2,
+    "candidateProviderRangeMinutes": 240,
+    "candidateApiUnitsPerPhysicalGet": 2,
+    "candidateRangeWithinCurrentUltraFidsLimit": true
+  },
+  "sourceUrls": [
+    "https://rapidapi.com/aedbx-aedbx/api/aerodatabox/pricing",
+    "https://aerodatabox.com/pricing/"
+  ],
+  "reviewScope": "Operational range/unit-cost basis for inert B0062 calendar and budget staging only. This does not establish source-use/retention permission, scientific freeze, provider data coverage, actual flight availability, or paid GO.",
+  "sourceRightsApproved": false,
+  "scientificFreezeApproved": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}

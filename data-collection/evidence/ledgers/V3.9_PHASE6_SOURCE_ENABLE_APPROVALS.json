@@ -62,6 +62,86 @@
       "evidenceId": "RUN-20261116-HISTORICALPRECLASSIFICATION015741",
       "path": "data-collection/phase5/evidence/2026-11-16_owner_historical_pre_field_classification_corrected_receipt.json",
       "sha256": "97372aef1326d74382ecc63d12f606d9259ee5dbd8fb09b8fa6a25ddea09bcfd"
+    },
+    {
+      "evidenceId": "RUN-20261119-FRESHACCOUNT033903",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_fresh_account_and_external_list_033903_NOT_APPROVAL.json",
+      "sha256": "7002466888531e26e29c1ecd205ecbed5a534282ced73b5adb315e5c98a5f4b0"
+    },
+    {
+      "evidenceId": "RUN-20261119-SCIENTIFICSCOPEREVIEW",
+      "path": "data-collection/phase5/evidence/2026-11-18_finite_scientific_scope_review_NOT_FREEZE.json",
+      "sha256": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203"
+    },
+    {
+      "evidenceId": "RUN-20261119-FRESHBUDGETRECONCILED",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_account_compact_budget_reconciled_NOT_APPROVAL.json",
+      "sha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b"
+    },
+    {
+      "evidenceId": "RUN-20261119-OPERATIONALSCOPEREVIEW",
+      "path": "data-collection/phase5/evidence/2026-11-18_existing_operational_scope_review_NOT_RELEASE.json",
+      "sha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+    },
+    {
+      "evidenceId": "RUN-20261119-EXACTCOMPACTCOST",
+      "path": "data-collection/phase5/evidence/2026-11-18_exact_compact_cost_binding_NOT_RUNTIME.json",
+      "sha256": "a615aa88d1d48d4bf06743ef3714b22e76bdec4d64cade276c3cef523a2b9c47"
+    },
+    {
+      "evidenceId": "RUN-20261119-NATIVEPOSTGEOMETRY",
+      "path": "data-collection/phase5/evidence/2026-11-18_compact_native_post_geometry_31_actual_plans.json",
+      "sha256": "7b868c08811381bd6b2fead3284b7e560c33846b8f92a7536070efc28095a353"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALSIGNERALIASES",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_owner_seven_signer_aliases_SUCCESS_INACTIVE.json",
+      "sha256": "0b0b73b08906a83bd3e46ea9a152db686ed8f8a8c29c0a750c21726245ba902d"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALPOLICYRECOVERY",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_owner_six_policy_recovery_SUCCESS_NOT_RUNTIME.json",
+      "sha256": "c0b5c84daa72c5b805471da22091e2af2588c4a7d5fc5a171e7a1fa26b193039"
+    },
+    {
+      "evidenceId": "RUN-20261119-ACTUALOWNERRECOVERY",
+      "path": "data-collection/phase5/evidence/2026-11-18_owner_deployed_876_manifest_and_live_backstop_NO_GO.json",
+      "sha256": "ef0e057d941d97eb1baa52fab6a75c110868f20306217a09720b0e58f75868ee"
+    },
+    {
+      "evidenceId": "DEC-20261119-OWNERPRESERVEF8",
+      "path": "data-collection/phase5/evidence/2026-11-18_OWNER_DECISION_PRESERVE_F8_NOT_APPROVAL.md",
+      "sha256": "2b6fb24021c4c81814ba137bc5398aa17ab0cd77e2693c9dffaebee586863cbb"
+    },
+    {
+      "evidenceId": "RUN-20261119-EXISTINGSTOPGUARDEVIDENCE",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_existing_stop_and_callback_guard_NOT_GLOBAL_APPROVAL.json",
+      "sha256": "8389b83bba5b04d8aefcf508699d9b05899c421277dae7ec1ec58ea16cecb786"
+    },
+    {
+      "evidenceId": "RUN-20261119-FINALOWNERMETADATA",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_final_owner_metadata_readonly_NO_GO.json",
+      "sha256": "75b9fa3d024378a262897c5133165bd4c358a9abde13dd569aa0c844942aaac8"
+    },
+    {
+      "evidenceId": "RUN-20261119-NATIVECOREPREARMREVIEW",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_native_core_and_day1_scheduler_review_NO_GO.json",
+      "sha256": "ea8fe5f47677a579378d1afa2dcbf5b2e9e91b674caaf29dbc82949a3e481042"
+    },
+    {
+      "evidenceId": "RUN-20261119-CURRENTGITHUBSTOP",
+      "path": "data-collection/phase5/evidence/2026-11-19_current_github_stop_readonly_attestation_NO_GO.json",
+      "sha256": "6a14e56860727c05795716b7610f777cd8189b9299f631ecdb5c4cdba265743e"
+    },
+    {
+      "evidenceId": "RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED",
+      "path": "data-collection/phase5/evidence/2026-11-19_published_and_github_stop_combined_review_NO_GO.json",
+      "sha256": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c"
+    },
+    {
+      "evidenceId": "RUN-20261119-CURRENTFIDSPRICE",
+      "path": "data-collection/phase5/evidence/2026-11-19_current_marketplace_fids_range_cost_NOT_RIGHTS_NO_GO.json",
+      "sha256": "f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1"
     }
   ],
   "approvals": []

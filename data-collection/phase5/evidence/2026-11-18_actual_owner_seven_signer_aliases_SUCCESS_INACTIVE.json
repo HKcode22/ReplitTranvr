@@ -1,0 +1,57 @@
+{
+  "schema": "v39.phase5.owner-inactive-signer-alias-receipt.v1",
+  "status": "SEVEN_EXISTING_SIGNER_ALIASES_COMMISSIONED_INACTIVE_NO_GO",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "source": "Owner Mac terminal transcript November 18 Pacific; actual seven successful metadata readbacks, not independent secret-value readback",
+  "installerGitBlob": "7e828d0aac9b67ecfd19935bd02985f29778cdc1",
+  "signerCount": 6,
+  "aliasCount": 7,
+  "newAliases": 7,
+  "aliases": [
+    {
+      "name": "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64",
+      "fingerprintSha256": "7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64",
+      "fingerprintSha256": "80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+      "fingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64",
+      "fingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64",
+      "fingerprintSha256": "de37f2d4f8736cb92c04a31c94d3d252482667f937ce80a0f65b09df5293e733",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_PRIVATE_POST_REVIEWER_KEY_BASE64",
+      "fingerprintSha256": "4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b",
+      "metadataReadback": true
+    },
+    {
+      "name": "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64",
+      "fingerprintSha256": "5d002b5a2cede6da00aab6d3b516aa4766f58858b252ba85e1c67049dd08d23f",
+      "metadataReadback": true
+    }
+  ],
+  "verifiedOwnerLocalPublicFingerprints": true,
+  "githubSecretNamesAndUpdatedAtReadBack": true,
+  "githubSecretValuesReadBack": false,
+  "approvalFlagsChanged": 0,
+  "policySecretsChanged": 0,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "workflowDispatches": 0,
+  "independentCustodyApprovalGranted": false,
+  "phase6PaidGo": false
+}
