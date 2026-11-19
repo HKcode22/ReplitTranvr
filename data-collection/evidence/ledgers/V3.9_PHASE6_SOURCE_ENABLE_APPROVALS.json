@@ -117,6 +117,11 @@
       "evidenceId": "RUN-20261119-EXISTINGSTOPGUARDEVIDENCE",
       "path": "data-collection/phase5/evidence/2026-11-18_actual_existing_stop_and_callback_guard_NOT_GLOBAL_APPROVAL.json",
       "sha256": "8389b83bba5b04d8aefcf508699d9b05899c421277dae7ec1ec58ea16cecb786"
+    },
+    {
+      "evidenceId": "RUN-20261119-FINALOWNERMETADATA",
+      "path": "data-collection/phase5/evidence/2026-11-18_actual_final_owner_metadata_readonly_NO_GO.json",
+      "sha256": "75b9fa3d024378a262897c5133165bd4c358a9abde13dd569aa0c844942aaac8"
     }
   ],
   "approvals": []
