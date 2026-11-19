@@ -1,0 +1,10 @@
+{
+  "schema": "v39.phase5.static-install-reviewer-decision-input.v1",
+  "phase6PaidGo": false,
+  "approvedStaticInstallation": null,
+  "independentGlobalStopConfirmed": null,
+  "approvedExactInertStageFlagInstallation": null,
+  "adoptExactReplacementMetadata": null,
+  "reviewedBy": null,
+  "reviewedAtUtc": null
+}
