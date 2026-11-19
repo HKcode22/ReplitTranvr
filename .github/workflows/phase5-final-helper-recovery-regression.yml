@@ -42,7 +42,8 @@ jobs:
             review-tools/p5_bulk_final_owner_handoff.cjs
             review-tools/p5_resume_existing_final_commissioning.cjs
             review-tools/p5_run_existing_inert_stage_chain.cjs
-            review-tools/p5_prepare_adopt_exact_final_core_inputs.cjsreview-tools/p5_final_core_review_materializer.cjs
+            review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
+            review-tools/p5_final_core_review_materializer.cjs
             review-tools/p5_static_install_review_materializer.cjs
             review-tools/p5_private_policy_review_materializer.cjs
             review-tools/p5_final_policy_binding_materializer.cjs
@@ -50,6 +51,8 @@ jobs:
             review-tools/p5_assemble_exact_six_final_policies.cjs
             review-tools/p5_exact_final_release_policy_bindings.cjs
             review-tools/p5_install_exact_approved_static_values.cjs
+            review-tools/p5_phase5_rights_deferred_prepare.cjs
+            review-tools/p5_phase5_rights_deferred_commission.cjs
             review-tools/p5_final_repin_receipt.test.cjs
             review-tools/p5_manifest_receipt_recovery.test.cjs
             review-tools/p5_inert_stage_chain.test.cjs
@@ -57,14 +60,22 @@ jobs:
             review-tools/p5_resume_state.test.cjs
             review-tools/p5_resume_state_machine.test.cjs
             review-tools/p5_final_core_review.test.cjs
+            review-tools/p5_final_core_review_materializer.test.cjs
+            review-tools/p5_static_install_review_materializer.test.cjs
+            review-tools/p5_private_policy_review_materializer.test.cjs
+            review-tools/p5_final_policy_binding_materializer.test.cjs
+            review-tools/p5_final_phase5_freeze_decision.test.cjs
+            review-tools/p5_no_unsigned_manifest_staging_shortcuts.test.cjs
+            review-tools/p5_final_downstream_transition_audit.test.cjs
+            review-tools/p5_final_core_technical_recommendation.test.cjs
             review-tools/p5_six_policy_binding.test.cjs
             review-tools/p5_static_install_binding.test.cjs
-            review-tools/p5_final_core_mechanical_bindings.test.cjs \
-            review-tools/p5_final_core_closure_matrix.test.cjs \
-            review-tools/p5_phase5_rights_deferred_prepare.test.cjs \
-            review-tools/p5_phase5_rights_deferred_commission.test.cjs \
-            tests/phase6_direct_recovery_tick_v39.test.mjs \
-            tests/phase6_rolling_failure_journal_v39.test.mjs \
+            review-tools/p5_final_core_mechanical_bindings.test.cjs
+            review-tools/p5_final_core_closure_matrix.test.cjs
+            review-tools/p5_phase5_rights_deferred_prepare.test.cjs
+            review-tools/p5_phase5_rights_deferred_commission.test.cjs
+            tests/phase6_direct_recovery_tick_v39.test.mjs
+            tests/phase6_rolling_failure_journal_v39.test.mjs
             tests/phase6_rolling_failure_readback_v39.test.mjs
           )
           for f in "${files[@]}"; do node --check "$f"; done
@@ -111,6 +122,8 @@ jobs:
             review-tools/p5_static_install_binding.test.cjs \
             review-tools/p5_final_core_mechanical_bindings.test.cjs \
             review-tools/p5_final_core_closure_matrix.test.cjs \
+            review-tools/p5_phase5_rights_deferred_prepare.test.cjs \
+            review-tools/p5_phase5_rights_deferred_commission.test.cjs \
             tests/phase6_direct_recovery_tick_v39.test.mjs \
             tests/phase6_rolling_failure_journal_v39.test.mjs \
             tests/phase6_rolling_failure_readback_v39.test.mjs
