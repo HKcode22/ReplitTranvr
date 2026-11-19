@@ -31,5 +31,5 @@ test("rights-deferred staging exists only behind a final frozen manifest contrac
    assert.match(s,/authorizationEnabled:false/);
    assert.match(s,/phase6PaidGo:false/);
   }
- });
+ }
 });
