@@ -2,7 +2,7 @@
 // Historical, sanitized zero-work production receipts only; no DB, provider,
 // dispatch or secret use. Run: node --test review-tools/p5_final_repin_receipt.test.cjs
 const test=require("node:test"),assert=require("node:assert/strict");
-const {verifyReceipt}=require("./p5_final_primary_relay_repin.cjs");
+const {verifyReceipt,classify,sameVars,BASE,RELAY}=require("./p5_final_primary_relay_repin.cjs");
 const fixtures=[
   {
     "run": {
@@ -109,4 +109,46 @@ test("refuse wrong main, wrong attempt and stale receipt",()=>{
 });
 test("refuse paid work, nonzero eligible rows or absent after receipt",()=>{
  for(const x of [{...q,providerCalls:1},{...q,before:{...q.before,eligibleOriginals:1}},{...q,after:null}])assert.throws(()=>check(apply,JSON.stringify(x)),/ZERO_WORK_RECEIPT_SCOPE/);
+});
+
+test("repin classification admits only the exact stopped old-pin baseline",()=>{
+ const now=Date.parse("2026-11-19T06:30:00.000Z"),head="b".repeat(40);
+ const p={
+  P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",
+  P5_PRIMARY_FIDS_EXPIRY_APPROVAL:"APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER",
+  P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",
+  P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY",
+  P5_RETENTION_READONLY_MONITOR_ENABLED:"true",
+  P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256:"a".repeat(64),
+  P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0",P6_ROLLING_SCHEDULED_ROOT_ENABLED:"0",
+  P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED:"0",P6_ROLLING_WINDOW_CUSTODY_ENABLED:"0",
+  P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:BASE
+ };
+ const rr={
+  TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",
+  TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_VERIFY",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"0",
+  TRAVNR_CRON_RELAY_SHA:RELAY,TRAVNR_TARGET_FORWARD_ENV_READY:"1",
+  TRAVNR_RELAY_ROLLING_SINCE_UTC:new Date(now-3*3600000).toISOString(),
+  TRAVNR_RELAY_PRIMARY_SINCE_UTC:new Date(now-3600000).toISOString(),
+  TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID:"123",
+  TRAVNR_APPROVED_TARGET_MAIN_SHA:BASE
+ };
+ assert.equal(classify(p,rr,head,null,now),"TRANSITION");
+ assert.throws(()=>classify({...p,P6_ROLLING_DIRECT_RECOVERY_ENABLED:"1"},rr,head,null,now),/COLLECTION_MUST_REMAIN_STOPPED/);
+ assert.throws(()=>classify(p,{...rr,TRAVNR_RELAY_DIRECT_TICK_APPROVED:"1"},head,null,now),/EXISTING_RELAY_CONFIG/);
+ assert.throws(()=>classify({...p,UNRELATED_PIN:BASE},rr,head,null,now),/OTHER_OLD_MAIN_PIN_REVIEW/);
+ assert.throws(()=>classify({...p,P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:"c".repeat(40)},rr,head,null,now),/NONINITIAL_PIN_STATE_INSPECT_NO_REPLAY/);
+});
+test("completed repin journal is no-replay only when both repositories match it",()=>{
+ const now=Date.parse("2026-11-19T06:30:00.000Z"),head="b".repeat(40);
+ const p={P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_EXPIRY_APPROVAL:"APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY",P5_RETENTION_READONLY_MONITOR_ENABLED:"true",P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256:"a".repeat(64),P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0",P6_ROLLING_SCHEDULED_ROOT_ENABLED:"0",P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED:"0",P6_ROLLING_WINDOW_CUSTODY_ENABLED:"0",P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:head};
+ const rr={TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_VERIFY",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"0",TRAVNR_CRON_RELAY_SHA:RELAY,TRAVNR_TARGET_FORWARD_ENV_READY:"1",TRAVNR_RELAY_ROLLING_SINCE_UTC:new Date(now-3*3600000).toISOString(),TRAVNR_RELAY_PRIMARY_SINCE_UTC:new Date(now-3600000).toISOString(),TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID:"456",TRAVNR_APPROVED_TARGET_MAIN_SHA:head};
+ const journal={status:"FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO",main:head,verifyRunId:456};
+ assert.equal(classify(p,rr,head,journal,now),"ALREADY_COMPLETE");
+ assert.throws(()=>classify(p,{...rr,TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID:"457"},head,journal,now),/PARTIAL_OR_DRIFTED_JOURNAL_NO_REPLAY/);
+});
+test("variable equality checks exact keyset and values",()=>{
+ assert.equal(sameVars({a:"1",b:"2"},{b:"2",a:"1"}),true);
+ assert.equal(sameVars({a:"1"},{a:"1",b:"2"}),false);
+ assert.equal(sameVars({a:"1"},{a:"2"}),false);
 });
