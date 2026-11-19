@@ -44,9 +44,46 @@ fetch_blob(){
 
 fetch_blob "$MATERIALIZER_BLOB" "$TMP/materializer.cjs"
 fetch_blob "$CORE_VALIDATOR_BLOB" "$TMP/core.cjs"
-fetch_blob "$MECHANICAL_BLOB" "$TMP/mechanical.json"
-fetch_blob "$CLOSURE_BLOB" "$TMP/closure.json"
-fetch_blob "$LEDGER_BLOB" "$TMP/ledger.json"
+
+if [[ -n "${P5_FINAL_CORE_REFRESH_DIRECTORY:-}" ]]; then
+  REFRESH_DIR="$(node - "$P5_FINAL_CORE_REFRESH_DIRECTORY" <<'NODE'
+const fs=require("node:fs"),path=require("node:path");
+const p=path.resolve(process.argv[2]),s=fs.lstatSync(p);
+if(!s.isDirectory()||s.isSymbolicLink()||s.uid!==process.getuid()||(s.mode&0o077)!==0)process.exit(2);
+process.stdout.write(fs.realpathSync(p));
+NODE
+)" || hold "REFRESH_DIRECTORY_INVALID"
+  [[ "$REFRESH_DIR" != "$(pwd -P)" && "$REFRESH_DIR" != "$(pwd -P)"/* ]] ||
+    hold "REFRESH_DIRECTORY_INSIDE_WORKSPACE"
+  for pair in     "final-core-mechanical.json:$TMP/mechanical.json"     "final-core-closure.json:$TMP/closure.json"     "source-enable-ledger.json:$TMP/ledger.json"     "refresh-receipt.json:$TMP/refresh-receipt.json"
+  do
+    src="${pair%%:*}"; dst="${pair#*:}"
+    [[ -f "$REFRESH_DIR/$src" && ! -L "$REFRESH_DIR/$src" ]] || hold "REFRESH_FILE_MISSING"
+    cp "$REFRESH_DIR/$src" "$dst"
+  done
+  node - "$TMP/mechanical.json" "$TMP/closure.json" "$TMP/ledger.json" "$TMP/refresh-receipt.json" <<'NODE' || exit 2
+const fs=require("node:fs"),crypto=require("node:crypto");
+const sha=b=>crypto.createHash("sha256").update(b).digest("hex");
+const gitBlob=b=>crypto.createHash("sha1").update(Buffer.from("blob "+b.length+"\0")).update(b).digest("hex");
+const mb=fs.readFileSync(process.argv[2]),cb=fs.readFileSync(process.argv[3]),lb=fs.readFileSync(process.argv[4]),rr=fs.readFileSync(process.argv[5]);
+const m=JSON.parse(mb),c=JSON.parse(cb),l=JSON.parse(lb),r=JSON.parse(rr);
+if(Buffer.from(JSON.stringify(m,null,2)+"\n").compare(mb)!==0||
+   Buffer.from(JSON.stringify(c,null,2)+"\n").compare(cb)!==0||
+   Buffer.from(JSON.stringify(l,null,2)+"\n").compare(lb)!==0||
+   Buffer.from(JSON.stringify(r)).compare(rr)!==0)throw Error("REFRESH_NONCANONICAL");
+if(r.schema!=="v39.phase5.final-core-source-evidence-refresh-receipt.v1"||
+   r.evidenceCommit!==m.evidenceCommit||c.evidenceCommit!==m.evidenceCommit||
+   r.mechanicalSha256!==sha(mb)||r.closureSha256!==sha(cb)||r.ledgerSha256!==sha(lb)||
+   m.ledgerBlob!==gitBlob(lb)||r.predecessorCount!==m.draftReview?.predecessorEvidenceIds?.length||
+   l.evidence?.length!==r.predecessorCount||m.draftReview?.independentSourceUseApproved!==false||
+   m.draftReview?.sourceRightsEvidenceSha256!==null)
+ throw Error("REFRESH_IDENTITY");
+NODE
+else
+  fetch_blob "$MECHANICAL_BLOB" "$TMP/mechanical.json"
+  fetch_blob "$CLOSURE_BLOB" "$TMP/closure.json"
+  fetch_blob "$LEDGER_BLOB" "$TMP/ledger.json"
+fi
 
 node --check "$TMP/materializer.cjs" >/dev/null || hold "MATERIALIZER_SYNTAX"
 node --check "$TMP/core.cjs" >/dev/null || hold "CORE_VALIDATOR_SYNTAX"
