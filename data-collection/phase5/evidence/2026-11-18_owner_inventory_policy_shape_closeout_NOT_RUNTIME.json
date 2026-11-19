@@ -1,0 +1,384 @@
+{
+  "schema": "v39.phase6.final-policy-inputs-workpaper-NOT-RUNTIME.v1",
+  "status": "SHAPE_CORRECTED_CANDIDATE_UNAPPROVED_DO_NOT_UPLOAD",
+  "main": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "manifestCandidateSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+  "manifestApproved": false,
+  "actualMacPossessionVerified": true,
+  "macObservedUtc": "2026-11-19T01:55:26.977Z",
+  "backupVerified": false,
+  "plansVerified": 31,
+  "plannedQueries": 6144,
+  "reservedRestUnits": 37388,
+  "sourceKeyReceiptBlob": "f76181a9dc05fd45c898a15e7d70d14cc4cbe22e",
+  "sourcePlanIndexBlob": "6b626c5f34a0891d1322eb150d97456a7ed95d02",
+  "sharedKnownCandidatePins": {
+    "approvedCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+    "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+    "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+    "configSha256": "4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb",
+    "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "releaseSha256": null,
+    "rightsSha256": null,
+    "providerContractSha256": null,
+    "reviewedCategoryBudgetSha256": null,
+    "expectedPrepareRole": "phase5_fids_prepare_prod_20261107",
+    "budgetReleaseMode": "COST_UPPER_BOUND",
+    "reviewed31DaySourceRequestGridSha256": null,
+    "reviewedCostEnvelopeSha256": null,
+    "validFromUtc": null,
+    "validUntilUtc": null
+  },
+  "publicSignerGroups": [
+    {
+      "id": "daily",
+      "secretNames": [
+        "P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXvDEoGp//8n56FXsSrhOYixBFZCu+mw92VIgTSkeWKU=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744"
+    },
+    {
+      "id": "query",
+      "secretNames": [
+        "P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtQx9qUWNniSU9Js8agSjLog1VP5KvqMlefOCjO28ibA=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2"
+    },
+    {
+      "id": "registry-index",
+      "secretNames": [
+        "P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64",
+        "P6_PRIVATE_DAY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA98AgYw31Blg5/W9Etis0v+EDYN8mb//wXJUJ1uZVLek=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67"
+    },
+    {
+      "id": "later-pre-t24-registry",
+      "secretNames": [
+        "P6_PRIVATE_LATER_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEANXuk8pmy6fEV8ubavtf/LPOryu3p+ix7nNrtpRnEURs=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "de37f2d4f8736cb92c04a31c94d3d252482667f937ce80a0f65b09df5293e733"
+    },
+    {
+      "id": "post",
+      "secretNames": [
+        "P6_PRIVATE_POST_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAwimAPtSLxfj+XIQ0x01rh9AQTdLdbOwy/ndfmlQB/zY=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b"
+    },
+    {
+      "id": "t24-independent-custody",
+      "secretNames": [
+        "P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64"
+      ],
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAkXeBEtr+PKjFtfvSaaPmNFCyav6/oAgicWieN1An3fE=\n-----END PUBLIC KEY-----\n",
+      "fingerprintSha256": "5d002b5a2cede6da00aab6d3b516aa4766f58858b252ba85e1c67049dd08d23f"
+    }
+  ],
+  "policyDrafts": {
+    "P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64": {
+      "independentStudyTrustPinsApproved": false,
+      "expectedReaderSessionLogin": "phase6_private_reader_login_prod20261115",
+      "reviewedCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+      "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+      "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+      "releaseSha256": null,
+      "rightsSha256": null,
+      "dayReviewerFingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67",
+      "dayReviewerPublicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA98AgYw31Blg5/W9Etis0v+EDYN8mb//wXJUJ1uZVLek=\n-----END PUBLIC KEY-----\n",
+      "queryReviewerFingerprintSha256": "80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2",
+      "queryReviewerPublicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAtQx9qUWNniSU9Js8agSjLog1VP5KvqMlefOCjO28ibA=\n-----END PUBLIC KEY-----\n"
+    },
+    "P6_NONPAID_DAILY_POLICY_BASE64": {
+      "approvedCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+      "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+      "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+      "configSha256": "4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb",
+      "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+      "releaseSha256": null,
+      "rightsSha256": null,
+      "providerContractSha256": null,
+      "reviewedCategoryBudgetSha256": null,
+      "expectedPrepareRole": "phase5_fids_prepare_prod_20261107",
+      "budgetReleaseMode": "COST_UPPER_BOUND",
+      "reviewed31DaySourceRequestGridSha256": null,
+      "reviewedCostEnvelopeSha256": null,
+      "validFromUtc": null,
+      "validUntilUtc": null,
+      "schema": "v39.phase6.delegated-daily-source-review-policy.v1",
+      "delegatedDailyPacketProductionApproved": false,
+      "dayPlanSha256s": [
+        {
+          "runDayIndex": 1,
+          "sha256": "07e12cb7397a49b31d7e1f907244f7d6f97f659ab23196ac0fad86369a925659"
+        },
+        {
+          "runDayIndex": 2,
+          "sha256": "8b5340bab56af41321767e7b7d101a3820be777998bfd810f4102400aa4b5696"
+        },
+        {
+          "runDayIndex": 3,
+          "sha256": "70b38509894c8b27f1b2a7b8ad9133d891cd0b928891534a27e09cfe9cf4df26"
+        },
+        {
+          "runDayIndex": 4,
+          "sha256": "3717267ed945dd9c25b6c963e1d4e04450c5466f5c4fb3fd86917e066061fb09"
+        },
+        {
+          "runDayIndex": 5,
+          "sha256": "24f6b1eb9c7c786a16acc689adb3fcbc4c8a0b7e43610624a96801c2259a2f94"
+        },
+        {
+          "runDayIndex": 6,
+          "sha256": "8da0d5340f1b3b4d5dfe37b4e5570f3763f8071069fcecd1628191f5ee6dfed8"
+        },
+        {
+          "runDayIndex": 7,
+          "sha256": "e4cf6fc8a79ecb99a39684068b9ea49913e49ecfdba651e7c50e2c7a5edd7650"
+        },
+        {
+          "runDayIndex": 8,
+          "sha256": "74bc4f06347133af505c448ea1991c0171a833fb90e2cd811cf3592ff7b44f75"
+        },
+        {
+          "runDayIndex": 9,
+          "sha256": "e58735a4a2147fe870cb288c38ed4d49f04fb34f06122a59e7d47c55bc1d7a84"
+        },
+        {
+          "runDayIndex": 10,
+          "sha256": "ef9856fce9eb333f050ccc150c0eacc09f88251e9c305091582173975a67ef91"
+        },
+        {
+          "runDayIndex": 11,
+          "sha256": "dff97f608c1062253dd5e4b5e9cf3816bdaa5519860d77e2dfd351b1e464e466"
+        },
+        {
+          "runDayIndex": 12,
+          "sha256": "7d20d424c9328f6aa2f2eb2e66706d51f47d5ef41280ebe320d98d3334458de5"
+        },
+        {
+          "runDayIndex": 13,
+          "sha256": "43a6026250f8cb4272d167385a4cac5e2515bae94ee4350dbc75fd4b1cf8ca55"
+        },
+        {
+          "runDayIndex": 14,
+          "sha256": "501490518e37130a649c97bf543805b3aa004ed42b38c29ba67090ae37af122c"
+        },
+        {
+          "runDayIndex": 15,
+          "sha256": "12c22b1de8080d22b7725cbf784d52ffab7b45633a0180ea45edd3b94b8bfb3b"
+        },
+        {
+          "runDayIndex": 16,
+          "sha256": "b5e89cd644ed10478797c96ffa27d8030b991f882959bd987029dbe4234c84d8"
+        },
+        {
+          "runDayIndex": 17,
+          "sha256": "16a8461da82fad8710df0392723cedb0af8c096fd8b11ebe9d4fbbd178c7ae9b"
+        },
+        {
+          "runDayIndex": 18,
+          "sha256": "8aede7b638ab5b1860b21b2c49c646d46dc640f45001321bfdbb6baab1abbc01"
+        },
+        {
+          "runDayIndex": 19,
+          "sha256": "90bfac4a48458aaadde7110e170c3ec616a2132cfe8e59a97568f90cdbf90daa"
+        },
+        {
+          "runDayIndex": 20,
+          "sha256": "4efc95ee2fae340b1ab8ac39dba4634488329e78b96e243c7ecce9c544f562c7"
+        },
+        {
+          "runDayIndex": 21,
+          "sha256": "3304bccbd3a0f769c56ccd90132c1709d58ec46f1945b52e42d19a7811b9525a"
+        },
+        {
+          "runDayIndex": 22,
+          "sha256": "f411f21bb5542ef4f8ac5ffc6dff60bb66f2637afe0199bc7003eeb8fb4031b7"
+        },
+        {
+          "runDayIndex": 23,
+          "sha256": "f8e1828294431b15a9dce27c228ca91bc0d2e9fd40e48be084d3599a301b50b0"
+        },
+        {
+          "runDayIndex": 24,
+          "sha256": "bd9b452df84a7173cf057b6f49e766423fbc9cb2ec5fb22d7947f6a7f63140d6"
+        },
+        {
+          "runDayIndex": 25,
+          "sha256": "37dbf1dea40f7c1bf564808074dd61694c52e6ed29557446cf21699fdc006b17"
+        },
+        {
+          "runDayIndex": 26,
+          "sha256": "71f76c8adfc894dab8f7ff76d5669b3e5e03c9ad6bef9f9deadfd287a79d3a0a"
+        },
+        {
+          "runDayIndex": 27,
+          "sha256": "6bfab870015ee51208d1267f2131e93565982deb38847ec036d4866e6d236124"
+        },
+        {
+          "runDayIndex": 28,
+          "sha256": "f4e6fac988bf91a9d99c1f5e4f4e9f3a6cf9180e9ef4f2932455670416bea2fb"
+        },
+        {
+          "runDayIndex": 29,
+          "sha256": "744d6c7b8c0f1d946e472d69d8f528b2f5cce91379f4d56f7ecbc1643fcc49ce"
+        },
+        {
+          "runDayIndex": 30,
+          "sha256": "856a30f2873d41ea93b2b49d365d7e55ef0f29b0aacd392cee6dd0080ca88f7a"
+        },
+        {
+          "runDayIndex": 31,
+          "sha256": "fb3eaa840510a6d7e935f77774d6866cfc4f4bc41d396ed488df74cad3cdb8fa"
+        }
+      ],
+      "maxQueriesPerDay": 288,
+      "dailyRestCeiling": 1900,
+      "cycleRestCeiling": 49468,
+      "minimumProtectedFloor": 1000,
+      "providerApiVersion": null,
+      "fidsProtocolVersion": null,
+      "airportTimezoneGroups": null
+    },
+    "P6_NONPAID_SIGNING_POLICY_BASE64": {
+      "approvedCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+      "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
+      "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+      "configSha256": "4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb",
+      "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+      "releaseSha256": null,
+      "rightsSha256": null,
+      "providerContractSha256": null,
+      "reviewedCategoryBudgetSha256": null,
+      "expectedPrepareRole": "phase5_fids_prepare_prod_20261107",
+      "budgetReleaseMode": "COST_UPPER_BOUND",
+      "reviewed31DaySourceRequestGridSha256": null,
+      "reviewedCostEnvelopeSha256": null,
+      "validFromUtc": null,
+      "validUntilUtc": null,
+      "schema": "v39.phase6.delegated-source-review-policy.v1",
+      "delegatedAutomatedSourceSigningApproved": false,
+      "queryReviewerFingerprintSha256": "80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2",
+      "registryReviewerFingerprintSha256": "60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67",
+      "maxQueriesPerDay": 288,
+      "maximumReviewRetentionHours": 96
+    },
+    "P6_NONPAID_TRANSPORT_TRUST_BASE64": {
+      "schema": "v39.phase6.approved-nonpaid-source-transport-trust.v1",
+      "independentTransportAndSigningScopeApproved": false,
+      "reviewedMainSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+      "dailyPolicySha256": null,
+      "signingPolicySha256": null,
+      "expectedReaderSessionLogin": "phase6_private_reader_login_prod20261115",
+      "expectedPublisherSessionLogin": "phase6_private_publisher_login_prod20261115",
+      "maximumDailyReviewRetentionHours": 96,
+      "minimumPreparationLeadMinutes": 20,
+      "maximumPreparationLookaheadMinutes": 720,
+      "dailyReviewerFingerprintSha256": "7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744",
+      "dailyReviewerPublicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXvDEoGp//8n56FXsSrhOYixBFZCu+mw92VIgTSkeWKU=\n-----END PUBLIC KEY-----\n"
+    },
+    "P6_PRIVATE_POST_REVIEWER_TRUST_BASE64": {
+      "independentPostReviewerPinsApproved": false,
+      "postReviewerFingerprintSha256": "4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b",
+      "postReviewerPublicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAwimAPtSLxfj+XIQ0x01rh9AQTdLdbOwy/ndfmlQB/zY=\n-----END PUBLIC KEY-----\n"
+    }
+  },
+  "timingCandidateNotApproved": {
+    "minimumPreparationLeadMinutes": 20,
+    "maximumPreparationLookaheadMinutes": 720,
+    "maximumDailyReviewRetentionHours": 96,
+    "maximumSourceMetadataReviewRetentionHours": 96
+  },
+  "budgetCandidate": {
+    "mode": "COST_UPPER_BOUND",
+    "reviewed31DaySourceRequestGridSha256": null,
+    "reviewedCostEnvelopeSha256": null,
+    "reviewedCategoryBudgetSha256": null,
+    "netCycleCeiling": 49468,
+    "dailyCeiling": 1900,
+    "protectedFloor": 1000,
+    "plannedReserve": 37388,
+    "maxQueriesPerDayObservedInPlan": 288,
+    "peakDailyReservedUnits": 1280,
+    "physicalUtcChargeDates": 38,
+    "physicalUtcCategoryRows": 266,
+    "headroomAfterProtectedFloor": 11080,
+    "sourceUnits": 12288
+  },
+  "unresolvedFields": [
+    "actual approved release/manifest binding",
+    "applicable rights SHA256",
+    "approved provider contract and category/cost envelope SHA256",
+    "current release-specific approval of historically independently verified reader/publisher identities",
+    "validity clock and independent policy acceptance",
+    "approved policy byte digests",
+    "durable key backup"
+  ],
+  "note": "Non-runtime workpaper only; nulls and false flags intentional; do not encode or load as secrets. Existing code requires real approvals. No final authorization or key data. Metadata timing values are unchanged review candidates, not claims of source retention permission. Numeric limits are proposed from the exact compact-plan budget workpaper; maxQueriesPerDay uses the observed plan maximum, not the runtime's broader validator ceiling. No provider version or timezone mapping invented. Null airportTimezoneGroups must not be used in runtime.",
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "githubSecretWrites": 0,
+  "phase6PaidGo": false,
+  "actualHistoricalRoleEvidence": {
+    "runId": 43696971798,
+    "reader": {
+      "jobId": 132759593167,
+      "status": "P6_PRIVATE_READER_GITHUB_READONLY_PASS",
+      "login": "phase6_private_reader_login_prod20261115"
+    },
+    "publisher": {
+      "jobId": 132759593008,
+      "status": "P6_PRIVATE_PUBLISHER_GITHUB_READONLY_PASS",
+      "login": "phase6_private_publisher_login_prod20261115"
+    },
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "currentCredentialValueNotRead": true,
+    "releaseScopeApprovalNotInferred": true
+  },
+  "backupEvidence": {
+    "localEncryptedRestoreVerified": true,
+    "downloadedCopyRestoreVerified": true,
+    "signersRestored": 6,
+    "offDeviceStorageIndependentlyVerified": false
+  },
+  "validatorSources": [
+    "server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts",
+    "server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts"
+  ],
+  "additionalUnresolvedFields": [
+    "providerApiVersion and fidsProtocolVersion bound to actual reviewed provider contract",
+    "private timezone mapping bound to compact calendar scope; prior original-calendar catalog evidence is not automatically reusable",
+    "96-hour metadata review retention remains a candidate, not provider content rights"
+  ],
+  "ownerInventory": {
+    "observedAtUtc": "2026-11-19T02:37:32.508Z",
+    "stageState": "EMPTY_EXISTING_STAGE_TABLES",
+    "exactMatchingLocalReviewCount": 1,
+    "verifiedFiles": 4,
+    "sourceInventoryCount": 2188,
+    "actualAuthorizationId": null,
+    "stagePacketCertified": false,
+    "storedManifestCount": 0,
+    "unresolvedIncidents": 0,
+    "openProbeBudgets": 0,
+    "activationBlockingBatches": 0,
+    "unendedSubscriptions": 0,
+    "priorEnableMarkers": 0,
+    "existingStageAndTransportRolesVerified": 4,
+    "staticRoutineCount": 77,
+    "staticResearchWriteMatches": [
+      "UPDATE:population_research_membership"
+    ],
+    "dynamicSqlAndExternalApplicationsProven": false,
+    "neonManagementHistoryWindowVerified": false,
+    "backupRestoreVerified": false,
+    "phase6PaidGo": false
+  }
+}
