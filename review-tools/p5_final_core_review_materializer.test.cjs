@@ -1,6 +1,7 @@
 "use strict";
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),os=require("node:os"),path=require("node:path"),cp=require("node:child_process");
 const {materialize,readJson}=require("./p5_final_core_review_materializer.cjs");
+const {validateReview}=require("./p5_prepare_adopt_exact_final_core_inputs.cjs");
 const mechanical=JSON.parse(fs.readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"));
 const closure=JSON.parse(fs.readFileSync("review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json","utf8"));
 const ledger=JSON.parse(fs.readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"));
@@ -38,6 +39,7 @@ test("synthetic genuine permission row can materialize exact reviewed shape",()=
  assert.equal(out.legacyAlertStartApproved,false);
  assert.equal(out.reviewedBy,"Independent Reviewer");
  assert.ok(out.predecessorEvidenceIds.includes(x.id));
+ assert.equal(validateReview(out,NOW),true);
 });
 test("current preserve-f8 NOT_APPROVAL record cannot masquerade as source permission",()=>{
  const input=synthetic().input;
