@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {verifyP6PostStageEvidenceOnlyMainAdvance,verifyP6PostStageReviewedBridgeAdvance,
- P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256} from
+ P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256,P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS} from
  "../scripts/v39_phase6_enable_source_owner_v39";
 
 const STAGE="a".repeat(40),HEAD="b".repeat(40);
@@ -45,10 +45,7 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
  const P5TEST="tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs";
  const P6TEST="tests/phase6_poststage_evidence_only_main_advance_v39.test.ts";
  const SELF=P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256;
- const BLOBS={
-  [P5TEST]:"3d5f3826e00ea5b18dbf31b223900d660afa553e",
-  [P6TEST]:"134e691a470aacc49252e895c1eb8e1e1e9635d9"
- };
+ const BLOBS=P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS;
  const PATHS=[SCRIPT,P5TEST,P6TEST];
  it("accepts the exact reviewed bridge",()=>{
   expect(verifyP6PostStageReviewedBridgeAdvance({
