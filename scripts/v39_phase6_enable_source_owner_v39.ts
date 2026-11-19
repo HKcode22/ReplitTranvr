@@ -34,10 +34,10 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="47cf2c2c63df794fe0a73410e60655874838e2e82de63f2a025624f5710ada68";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="9e68320e26104f19da5d11dcb2635763ec1a536dfc255bf881a8318e09b04db6";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"f940d558c98bc218f0070b0ddb08b9bdc805af8b",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"a665441282f562b73579788f3e4da72d2fac46da",
  "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011",
  "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"7c01a7f4a67ff72888f63b7dce23621092af4c68",
  "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
@@ -47,7 +47,7 @@ export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "data-collection/phase5/2026-11-19_PHASE6_SECOND_RETENTION_PHASE7_DERIVED_RELEASE_PACKET.md":"c0d8e2230aa31705e0c942b4402043d021f73972",
  "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
  "tests/phase7_derived_release_writer_v39.test.ts":"8388385f85cb90311daf218d2d0c21155fc7f458",
- "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"1d33aa8644c56037957a076077108b60d37781b4",
+ "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"5140030b8e98567b0b2c2ed95a505274572f9089",
  "tests/phase7_reviewed_source_transformation_v39.test.ts":"3a0bdb46da835aea2ea78167ace4fc6bd0c5f390"
 });
 const POST_STAGE_REVIEWED_BRIDGE_SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
