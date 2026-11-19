@@ -202,14 +202,15 @@
     },
     "finalPhase5Freeze": {
       "materializer": "607886ff73c1c342873d66820ca16be18f803210",
-      "ownerWrapper": "b494b3dd8f5fd794d5f42a565899ab4f722682e0",
+      "ownerWrapper": "c8d81d7672f91cb2e4dc8f28f31d585905db5b4a",
       "output": "approved-final-phase5-freeze.json"
     },
     "guarantees": [
       "Reviewer semantic decisions remain explicit; no materializer mints approval.",
       "Canonical JSON and exact repository/private byte pins are enforced.",
       "No materializer performs provider calls, DB writes, paid GO, or collection arming.",
-      "Downstream POLICY/PRIVATE/STATIC review wrapper follows evidence-only live main and refuses executable drift; final FREEZE has one dedicated live-main wrapper."
+      "Downstream POLICY/PRIVATE/STATIC review wrapper follows evidence-only live main and refuses executable drift; final FREEZE has one dedicated live-main wrapper.",
+      "Dedicated final FREEZE wrapper also refuses executable/runtime main drift and accepts only the evidence-only main transition."
     ]
   }
 }
