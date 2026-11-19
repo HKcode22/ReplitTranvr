@@ -66,7 +66,7 @@ function githubReview(){
  const vars=objects(gh(['api','--paginate','repos/'+R+'/actions/variables?per_page=100','--jq','.variables[] | @json']));
  const v=new Map(vars.map(x=>[x.name,x.value]));
  return {presentRequiredSecretNames:SECRETS.filter(x=>names.has(x)),absentRequiredSecretNames:SECRETS.filter(x=>!names.has(x)),
-  candidateModeFlags:Object.entries(FLAG_EXPECTED).map(([name,expected])=>({name,state:!v.has(name)?'UNSET':v.get(name)===expected?'MATCHES_STOP_REFERENCE':'OTHER_VALUE_REVIEW'})),
+  repositorySecretNamesOnly:true,candidateModeFlags:Object.entries(FLAG_EXPECTED).map(([name,expected])=>({name,state:!v.has(name)?'UNSET':v.get(name)===expected?'MATCHES_STOP_REFERENCE':'OTHER_VALUE_REVIEW'})),
   secretValuesRead:false,actualApprovalValuesRead:false,flagReferenceOnlyNotGlobalStopProof:true};
 }
 async function review(c){
@@ -98,9 +98,27 @@ async function review(c){
   const settings=await read("SELECT name,setting FROM pg_settings WHERE name=ANY($1::text[]) ORDER BY name",[['archive_mode','wal_level','data_checksums','track_commit_timestamp']]);
   await c.query('ROLLBACK');tx=false;
   return {observedAtUtc:new Date(id.t).toISOString(),counts,authorization:auth,stageState:state(counts,auth),activationBlockingCounts:stop,existingStageAndTransportRoleCatalog:roles,
-   researchMutationPrivilegeEdges:grants,staticRoutineScan:{checked:funcs.length,matching:direct,selectedGuardIdentities:triggerFunctionIdentities,dynamicSqlAndExternalApplicationsNotProven:false},
+   researchMutationPrivilegeEdges:grants,staticRoutineScan:{checked:funcs.length,matching:direct,selectedGuardIdentities:triggerFunctionIdentities,dynamicSqlAndExternalApplicationsProven:false},
    postgresSettings:settings,neonManagementHistoryWindowVerified:false,backupRestoreVerified:false,stageExactValuesVerified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  }finally{if(tx)await c.query('ROLLBACK').catch(()=>{});}
+}
+function canonicalHost(h){return String(h||'').toLowerCase().replace(/-pooler(?=\.)/,'');}
+async function management(u){
+ const key=process.env.NEON_API_KEY,project=process.env.NEON_PROJECT_ID;
+ if(!key||!project)return {status:'NEON_MANAGEMENT_SETTINGS_NOT_AVAILABLE_IN_EXISTING_ENV',managementReads:0,historyWindowVerified:false,restoreVerified:false};
+ if(!/^[a-z0-9-]{1,60}$/.test(project))return {status:'NEON_PROJECT_ID_FORMAT_REVIEW',managementReads:0,historyWindowVerified:false,restoreVerified:false};
+ let reads=0;
+ const get=async suffix=>{reads++;const r=await fetch('https://console.neon.tech/api/v2/projects/'+project+suffix,{method:'GET',headers:{Authorization:'Bearer '+key,Accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('MGMT_HTTP');return r.json();};
+ try{
+  const ep=await get('/endpoints');
+  if(!Array.isArray(ep.endpoints)||ep.endpoints.filter(x=>canonicalHost(x.host)===canonicalHost(u.hostname)&&x.type==='read_write').length!==1)
+   return {status:'NEON_MANAGEMENT_PROJECT_NOT_MATCHED_TO_EXISTING_PRODUCTION_ENDPOINT',managementReads:reads,historyWindowVerified:false,restoreVerified:false};
+  const info=await get('');
+  const x=info.project;
+  if(x?.id!==project||!n(x.history_retention_seconds))
+   return {status:'NEON_MANAGEMENT_RESPONSE_HISTORY_FIELD_UNAVAILABLE',managementReads:reads,historyWindowVerified:false,restoreVerified:false};
+  return {status:'NEON_EXISTING_ENDPOINT_MATCHED_HISTORY_SETTING_READONLY',managementReads:reads,historyRetentionSeconds:x.history_retention_seconds,historyWindowVerified:true,restoreVerified:false,settingsChanged:false};
+ }catch{return {status:'NEON_MANAGEMENT_READ_FAILED_NO_SETTINGS_CHANGED',managementReads:reads,historyWindowVerified:false,restoreVerified:false};}
 }
 async function main(){
  const e=process.env;need(e.GITHUB_ACTIONS!=='true'&&e.DATABASE_URL&&!e.AERODATABOX_API_KEY&&!e.RAPIDAPI_KEY&&!e.AERODATABOX_WEBHOOK_SECRET&&e.NODE_TLS_REJECT_UNAUTHORIZED!=='0','OWNER_SCOPE');
@@ -109,8 +127,8 @@ async function main(){
  u.searchParams.set('sslmode','verify-full');
  const {Client}=require(require.resolve('pg',{paths:[process.cwd()]}));const c=new Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:15000,options:'-c default_transaction_read_only=on',application_name:'p5_consolidated_release_inventory'});
  try{await c.connect();const db=await review(c);console.log(JSON.stringify({status:'P5_CONSOLIDATED_PRODUCTION_REMAINING_INVENTORY_READONLY',main:PIN,...db}));}finally{await c.end().catch(()=>{});}
- const local=localReview(),github=githubReview();need(live()===PIN,'MAIN_CHANGED_DURING_REVIEW');
- console.log(JSON.stringify({status:'P5_CONSOLIDATED_PRIVATE_CANDIDATE_AND_GITHUB_METADATA_NO_GO',main:PIN,local,github,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
+ const local=localReview(),github=githubReview(),recoverySettings=await management(u);need(live()===PIN,'MAIN_CHANGED_DURING_REVIEW');
+ console.log(JSON.stringify({status:'P5_CONSOLIDATED_PRIVATE_CANDIDATE_AND_GITHUB_METADATA_NO_GO',main:PIN,local,github,recoverySettings,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
 }
-module.exports={state,researchWrites};
+module.exports={state,researchWrites,canonicalHost};
 if(require.main===module)main().catch(e=>{console.error(/^HOLD_P5_CONSOLIDATED_[A-Z0-9_]+$/.test(e.message)?e.message:'HOLD_P5_CONSOLIDATED_REDACTED');process.exitCode=2;});
