@@ -1,0 +1,253 @@
+{
+  "schema": "v39.phase6.policy-aligned-field-dispositions.v1",
+  "status": "SUCCESSOR_REVIEW_PENDING_EXACT_SOURCE_AND_TERMS_DISPOSITION",
+  "predecessor": {
+    "mainSha": "88a065458537aa5e1a0055dec82b7bf81b0c00eb",
+    "manifestSha256": "bd14ff3e558b975a889741380da807644ca9d3573a23e2416986ee6f71e1e41f",
+    "configSha256": "9cb7f3dcb2ee0d857f585fe8433a8dc2b7ac7bb3e3ad384a469c13530856642c",
+    "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c"
+  },
+  "scientificScopeUnchanged": {
+    "calendarDays": 31,
+    "plannedQueries": 6144,
+    "reservedRestUnits": 37388,
+    "horizons": ["T-24h", "T-6h", "T-90m"],
+    "primaryCandidate": "T-6h_actual_gate_out_delay_minutes_conditional_on_operated_leg",
+    "pairedUpdate": "T-90m",
+    "comparator": "T-24h",
+    "prePostSeparation": true,
+    "protectedChronologicalEvaluation": true
+  },
+  "longTermRetentionDefault": "REVIEW_REQUIRED_FOR_PROVIDER_LINKED_OR_PROVIDER_DERIVED_FIELDS",
+  "paidGo": false,
+  "authorizationEnabled": false,
+  "fields": [
+    {
+      "fieldId": "origin_icao",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "origin airport route context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "destination_icao",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "destination airport route context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "operating_carrier",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "carrier effect and baseline",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "scheduled_arrival_utc",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "scheduled timing context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "provider_revised_departure_utc",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "schedule revision feature",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "reported_pre_departure_status",
+      "table": "clean.flight_snapshots",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "pre-departure status risk",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "origin_metar_visibility_m",
+      "table": "clean.flight_snapshots",
+      "source": "NOAA_METAR",
+      "scientificRole": "origin as-of observed weather",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "origin_metar_wind_kt",
+      "table": "clean.flight_snapshots",
+      "source": "NOAA_METAR",
+      "scientificRole": "origin as-of observed weather",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "origin_taf_flight_category",
+      "table": "clean.flight_snapshots",
+      "source": "NOAA_TAF",
+      "scientificRole": "origin as-of forecast weather",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "destination_taf_flight_category",
+      "table": "clean.flight_snapshots",
+      "source": "NOAA_TAF",
+      "scientificRole": "destination as-of forecast weather",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "prior_aircraft_turnaround_minutes",
+      "table": "clean.flight_snapshots",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "scientificRole": "prior-aircraft context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "prior_aircraft_adsb_not_ground_reported",
+      "table": "clean.flight_snapshots",
+      "source": "ADSB_LOL",
+      "scientificRole": "prior-aircraft physical context",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "prior_aircraft_adsb_position_age_seconds",
+      "table": "clean.flight_snapshots",
+      "source": "ADSB_LOL",
+      "scientificRole": "prior-aircraft observation freshness",
+      "retentionClass": "independent_source_content",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "prior_route_departure_delay_median_minutes",
+      "table": "clean.flight_snapshots",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "scientificRole": "lagged route context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "prior_airport_departure_delay_median_minutes",
+      "table": "clean.flight_snapshots",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "scientificRole": "lagged airport context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "airport_congestion_1h",
+      "table": "clean.flight_snapshots",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "scientificRole": "lagged airport congestion context",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "unknown"
+    },
+    {
+      "fieldId": "actual_gate_out",
+      "table": "clean.flight_outcomes",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "conditional primary label candidate",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "actual_wheels_off",
+      "table": "clean.flight_outcomes",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "separate physical milestone",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "actual_wheels_on",
+      "table": "clean.flight_outcomes",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "separate physical milestone",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "actual_gate_in",
+      "table": "clean.flight_outcomes",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "separate physical milestone",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "cancellation_or_diversion_state",
+      "table": "clean.flight_outcomes",
+      "source": "AERODATABOX_FIDS",
+      "scientificRole": "separate outcome class",
+      "retentionClass": "provider_derived_candidate",
+      "sourceAccessMaximumHours": 24,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "provider_record_reconstructable"
+    },
+    {
+      "fieldId": "cutoff_and_missingness_metadata",
+      "table": "clean.flight_snapshots",
+      "source": "PROJECT_METADATA",
+      "scientificRole": "as-of validity and missingness control",
+      "retentionClass": "project_metadata",
+      "sourceAccessMaximumHours": 168,
+      "longTermDisposition": "review_required",
+      "reconstructionRisk": "none"
+    }
+  ],
+  "rules": [
+    "Do not delete Layer A values before the source-bound PRE/POST and required reconciliation complete.",
+    "Do not retain Layer A values beyond their approved source/plan expiry or physical recovery-surface limit.",
+    "Do not classify a copied per-flight field as a Derived Work from its table name, hash, normalization, or usefulness.",
+    "Do not delete a Layer B field until its long-term disposition is actually recorded; unresolved means hold the successor field, not alter the predecessor.",
+    "No source-rights approval, authorization row, scheduler enable, provider call, or paid GO is produced by this artifact."
+  ]
+}
