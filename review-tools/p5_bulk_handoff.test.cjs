@@ -1,6 +1,6 @@
 "use strict";
 const test=require("node:test"),assert=require("node:assert/strict");
-const {sequence,planInertApprovals,staticReviewWorkpaper,INERT_APPROVALS}=require("./p5_bulk_final_owner_handoff.cjs");
+const {sequence,planInertApprovals,staticReviewWorkpaper,validateCompletedStaticInstallJournal,validateCompletedInertApprovalJournal,INERT_APPROVALS}=require("./p5_bulk_final_owner_handoff.cjs");
 const h=x=>x.repeat(64).slice(0,64),main="a".repeat(40);
 function ops(log){return Object.fromEntries(["coreInputs","assemble","verify","prepareStaticReviewWorkpaper","installPlan","checkStagePrerequisites","noPriorAttempt","storeManifest","install","installInertApprovals","stage","resumeStage"].map(k=>[k,(...a)=>log.push([k,...a])]));}
 test("mode sequencing never mutates before verification/planning",()=>{
@@ -36,4 +36,25 @@ test("static workpaper stays explicitly unapproved and excludes control names",(
  assert.equal(w.draftReview.phase6PaidGo,false);
  assert.equal(w.draftReview.inertStageFlagInstallation.approvedExactInertStageFlagInstallation,false);
  assert.equal(w.staticCount,31);assert.equal(w.inertCount,3);
+});
+
+test("completed static journal can be acknowledged only with all 31 exact metadata readbacks",()=>{
+ const r={main,staticSecretsPrepared:31},receiptSha=h("1"),valuesSha=h("2"),staticSha=h("3");
+ const plan=Array.from({length:31},(_,i)=>({name:"STATIC_"+String(i).padStart(2,"0"),operation:"CREATE",oldUpdatedAt:null}));
+ const reads=plan.map((x,i)=>({name:x.name,status:"METADATA_READBACK",updatedAt:new Date(Date.parse("2026-11-19T06:00:00.000Z")+i*1000).toISOString()}));
+ const entries=[{main,receiptSha,valuesSha,reviewSha:staticSha,plan,phase6PaidGo:false},...plan.flatMap((x,i)=>[{name:x.name,status:"WRITE_ATTEMPTED",oldUpdatedAt:null},reads[i]]),{status:"EXACT_STATIC_SECRETS_INSTALLED_METADATA_ONLY_NO_GO",installed:31}];
+ const metadata=reads.map(({name,updatedAt})=>({name,updatedAt}));
+ assert.equal(validateCompletedStaticInstallJournal(entries,r,receiptSha,valuesSha,staticSha,metadata),true);
+ assert.throws(()=>validateCompletedStaticInstallJournal(entries.slice(0,-1),r,receiptSha,valuesSha,staticSha,metadata),/ACK_STATIC_JOURNAL_COMPLETE/);
+ assert.throws(()=>validateCompletedStaticInstallJournal(entries,r,receiptSha,valuesSha,staticSha,metadata.map((x,i)=>i?x:{...x,updatedAt:"2026-11-19T07:00:00.000Z"})),/ACK_STATIC_METADATA_DRIFT_NO_REPLAY/);
+});
+test("completed inert approval journal requires exactly the three approved flag names and current timestamps",()=>{
+ const r={main},receiptSha=h("1"),staticSha=h("2");
+ const reads=INERT_APPROVALS.map((name,i)=>({name,status:"METADATA_READBACK",updatedAt:new Date(Date.parse("2026-11-19T06:10:00.000Z")+i*1000).toISOString()}));
+ const entries=[{main,receiptSha256:receiptSha,staticReviewSha256:staticSha,status:"EXACT_REVIEWED_INERT_APPROVAL_INSTALL_STARTED_NO_GO"},...reads.flatMap(x=>[{name:x.name,status:"WRITE_ATTEMPTED"},x]),{status:"THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO"}];
+ const metadata=reads.map(({name,updatedAt})=>({name,updatedAt}));
+ assert.equal(validateCompletedInertApprovalJournal(entries,r,receiptSha,staticSha,metadata),true);
+ const duplicate=entries.map(x=>x);duplicate[4]={...duplicate[4],name:INERT_APPROVALS[0]};
+ assert.throws(()=>validateCompletedInertApprovalJournal(duplicate,r,receiptSha,staticSha,metadata),/ACK_INERT_JOURNAL_COMPLETE/);
+ assert.throws(()=>validateCompletedInertApprovalJournal(entries,r,receiptSha,staticSha,metadata.map((x,i)=>i?x:{...x,updatedAt:"2026-11-19T07:00:00.000Z"})),/ACK_INERT_METADATA_DRIFT_NO_REPLAY/);
 });
