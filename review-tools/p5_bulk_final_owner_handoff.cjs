@@ -8,13 +8,29 @@ const REPO="HKcode22/ReplitTranvr",H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const BLOBS={core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"cf5c220fa4c44c13c93e8bfe58f72f5a5bc635ed",install:"651c2389bace887165af6c31349f9882e05decd4",stage:"432043debae812e8495c6d217cc94251a4e9728c"};
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_BULK_"+s)};
 const digest=b=>crypto.createHash("sha256").update(b).digest("hex");
+const INERT_APPROVALS=Object.freeze(["P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED"]);
+// Optional continuation of the existing exact independent review. These
+// are already-required stage controls, not a new review or an authorization
+// minted by this runner. Never set collection/arm/owner or other GO flags.
+function planInertApprovals(review,receipt,metadata,planWrites){
+ const names=new Set(metadata.map(x=>x.name));
+ const a=review.inertStageFlagInstallation;
+ if(a===undefined){
+  need(INERT_APPROVALS.every(n=>names.has(n)),"EXISTING_STAGE_APPROVALS_MISSING_EXACT_REVIEW_REQUIRED");
+  return [];
+ }
+ need(a&&a.approvedExactInertStageFlagInstallation===true&&a.phase6PaidGo===false&&a.authArtifactSha256===receipt.authArtifactSha256&&H.test(a.authArtifactSha256??"")&&a.stageSha256===receipt.stageSha256&&H.test(a.stageSha256??"")&&a.costEnvelopeSha256===receipt.costEnvelopeSha256&&H.test(a.costEnvelopeSha256??""),"EXACT_INERT_FLAG_REVIEW_SCOPE");
+ need(Array.isArray(a.approvedNames)&&a.approvedNames.length===INERT_APPROVALS.length&&new Set(a.approvedNames).size===INERT_APPROVALS.length&&INERT_APPROVALS.every(n=>a.approvedNames.includes(n)),"EXACT_THREE_INERT_APPROVAL_NAMES_ONLY");
+ // Reuse the verified static installer's metadata compare/replace rules.
+ return planWrites(INERT_APPROVALS,metadata,a.approvedReplacements);
+}
 function sequence(mode,ops){
  if(mode==="PREPARE_POLICY_REVIEW"){ops.assemble();return}
  if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();return}
  need(mode==="COMMISSION_EXISTING_INERT_NO_GO","MODE");
  // All reviewer artifacts and nonmutating checks pass before any mutation.
  ops.verify();ops.installPlan();ops.checkStagePrerequisites();ops.noPriorAttempt();
- ops.storeManifest();ops.install();ops.stage();
+ ops.storeManifest();ops.install();ops.installInertApprovals();ops.stage();
 }
 function safeDir(d){const st=fs.lstatSync(d);need(st.isDirectory()&&!st.isSymbolicLink()&&st.uid===process.getuid()&&(st.mode&0o077)===0,"PRIVATE_DIRECTORY");return fs.realpathSync(d)}
 function safeRead(d,n,max=4000000){const p=path.join(d,n),s=fs.lstatSync(p);need(s.isFile()&&!s.isSymbolicLink()&&s.uid===process.getuid()&&s.nlink===1&&(s.mode&0o077)===0&&s.size>0&&s.size<=max,"PRIVATE_FILE");return fs.readFileSync(p)}
@@ -52,26 +68,52 @@ function run(){
   function values(){return digest(safeRead(out,"static-secret-values-PRIVATE.json",400000))}
   function installer(m){call(process.execPath,[f.install,m,out,receipt(),values(),staticSha])}
   const bundle=m=>call(tsx,[f.bundle,f.core,m,d,policySha]);
+  const secretMeta=()=>JSON.parse(gh(["secret","list","-R",REPO,"--json","name,updatedAt"]));
+  let approvalPlan=[];
   sequence(mode,{
    assemble:()=>call(tsx,[f.assembly,f.core,d,policySha]),
    verify:()=>bundle("VERIFY_AND_EXPORT_EXACT_APPROVED_BUNDLE"),
    installPlan:()=>installer("PLAN_EXACT_STATIC_INSTALL"),
    checkStagePrerequisites(){
-    const meta=JSON.parse(gh(["secret","list","-R",REPO,"--json","name,updatedAt"]));
-    const names=new Set(meta.map(x=>x.name));
-    need(["V39_PHASE6_PROCESS_ARMED","P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED","P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"].every(n=>names.has(n)),"EXISTING_STAGE_APPROVAL_AND_ROLE_NAMES");
+    const meta=secretMeta(),names=new Set(meta.map(x=>x.name));
+    need(["V39_PHASE6_PROCESS_ARMED","P5_V39_B0062_PRELAUNCH_STAGE_DATABASE_URL","P5_V39_V0093_COST_ONLY_BUDGET_DATABASE_URL"].every(n=>names.has(n)),"EXISTING_STOP_AND_STAGE_ROLE_NAMES");
+    const rb=safeRead(out,"bundle-receipt.json",200000),sr=safeRead(out,"static-install-review.json",100000);
+    need(digest(sr)===staticSha,"STATIC_REVIEW_DRIFT");
+    const review=JSON.parse(sr),r=JSON.parse(rb);
+    need(review.approvedStaticInstallation===true&&review.independentGlobalStopConfirmed===true&&review.phase6PaidGo===false&&review.bundleReceiptSha256===digest(rb)&&review.main===head&&r.main===head,"EXACT_EXISTING_STOP_AND_STATIC_REVIEW");
+    approvalPlan=planInertApprovals(review,r,meta,require(f.install).planWrites);
+    console.log(JSON.stringify({status:"INERT_STAGE_APPROVAL_METADATA_PLAN_NO_GO",existingOrReviewedNames:INERT_APPROVALS,plannedWrites:approvalPlan.map(x=>({name:x.name,operation:x.operation})),secretValuesRead:false,phase6PaidGo:false}));
     const w=JSON.parse(gh(["api","repos/"+REPO+"/actions/workflows/phase5-exact-inert-release-stage-manual.yml"]));
     need(w.state==="active"&&Number.isSafeInteger(w.id),"EXISTING_STAGE_WORKFLOW");
     const runs=JSON.parse(gh(["api","repos/"+REPO+"/actions/workflows/"+w.id+"/runs?event=workflow_dispatch&head_sha="+head+"&per_page=100"]));
     need(runs.total_count===0&&Array.isArray(runs.workflow_runs)&&runs.workflow_runs.length===0,"PRIOR_STAGE_ATTEMPT_RECONCILIATION");
    },
-   noPriorAttempt(){need(!["static-install-attempt.jsonl","inert-stage-chain-attempt.jsonl"].some(n=>fs.existsSync(path.join(out,n))),"LOCAL_ATTEMPT_RECONCILIATION")},
+   noPriorAttempt(){need(!["static-install-attempt.jsonl","inert-stage-chain-attempt.jsonl","inert-approval-install-attempt.jsonl"].some(n=>fs.existsSync(path.join(out,n))),"LOCAL_ATTEMPT_RECONCILIATION")},
    storeManifest:()=>bundle("STORE_EXACT_APPROVED_MANIFEST_AND_EXPORT_NO_PROVIDER"),
    install:()=>installer("INSTALL_EXACT_STATIC_NO_GO"),
+   installInertApprovals(){
+    if(!approvalPlan.length)return;
+    const fd=fs.openSync(path.join(out,"inert-approval-install-attempt.jsonl"),"wx",0o600);
+    const emit=x=>{fs.writeSync(fd,JSON.stringify(x)+"\n");fs.fsyncSync(fd)};
+    try{
+     emit({main:head,receiptSha256:receipt(),staticReviewSha256:staticSha,status:"EXACT_REVIEWED_INERT_APPROVAL_INSTALL_STARTED_NO_GO"});
+     for(const p of approvalPlan){
+      checkMain();
+      const now=secretMeta().find(x=>x.name===p.name)?.updatedAt??null;
+      need(now===p.oldUpdatedAt,"INERT_APPROVAL_METADATA_DRIFT_NO_REPLAY");
+      emit({name:p.name,status:"WRITE_ATTEMPTED"});
+      cmd("gh",["secret","set",p.name,"-R",REPO],{input:"1",stdio:["pipe","pipe","ignore"]});
+      const after=secretMeta().find(x=>x.name===p.name);
+      need(after&&Number.isFinite(Date.parse(after.updatedAt))&&(now===null||Date.parse(after.updatedAt)>Date.parse(now)),"INERT_APPROVAL_METADATA_READBACK_NO_REPLAY");
+      emit({name:p.name,status:"METADATA_READBACK",updatedAt:after.updatedAt});
+     }
+     checkMain();emit({status:"THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO"});
+    }finally{fs.closeSync(fd)}
+   },
    stage:()=>call(process.execPath,[f.stage,out,receipt()])
   });
   console.log(JSON.stringify({status:"EXISTING_EXACT_HANDOFF_STEP_COMPLETE",mode,main:head,phase6PaidGo:false}));
  }finally{fs.rmSync(temp,{recursive:true,force:true})}
 }
-module.exports={sequence};
+module.exports={sequence,planInertApprovals,INERT_APPROVALS};
 if(require.main===module)try{run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_BULK_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_BULK_REDACTED_CHECK_EXISTING_JOURNALS_NO_BLIND_REPLAY");process.exitCode=2}
