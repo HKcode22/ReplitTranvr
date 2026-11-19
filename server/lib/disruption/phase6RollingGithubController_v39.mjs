@@ -85,9 +85,18 @@ function exactInertProof(proof,row,route){
  return !!stamp&&proof.runId===row.id&&proof.workflow===route.workflow&&stamp.id===row.id&&
   stamp.sha===row.head_sha&&stamp.path===row.path&&stamp.created===row.created_at;
 }
-export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock,directRecovery=false}){
+// The direct caller has a shorter ordinary history window. Only EARLY_DRAW
+// needs the longer cooldown lookback; never widen the frequent-lane scans.
+function laneHistoryEpoch(route,{epoch,clock,directRecovery=false,earlyDrawHistoryEpoch=epoch}){
+ if(!Number.isFinite(earlyDrawHistoryEpoch)||earlyDrawHistoryEpoch>epoch||
+    (earlyDrawHistoryEpoch!==epoch&&(!directRecovery||clock-earlyDrawHistoryEpoch>6*3600000)))
+  hold("BAD_EARLY_DRAW_HISTORY_SCOPE");
+ return route.lane==="EARLY_DRAW"?earlyDrawHistoryEpoch:epoch;
+}
+export function assessP6RollingRoute(route,snapshot,{sha,epoch,clock,directRecovery=false,earlyDrawHistoryEpoch=epoch}){
  if(!P6_ROLLING_ROUTES.includes(route)||!CODE.test(sha??"")||!Number.isFinite(epoch)||!Number.isFinite(clock)||epoch>clock)
   hold("UNREVIEWED_ROUTE_OR_CLOCK");
+ epoch=laneHistoryEpoch(route,{epoch,clock,directRecovery,earlyDrawHistoryEpoch});
  if(!snapshot||snapshot.workflow!==route.workflow||snapshot.complete!==true||
   !Array.isArray(snapshot.runs)||snapshot.runs.length>100||!Array.isArray(snapshot.active)||snapshot.active.length>100)
   hold("INCOMPLETE_ROUTE_HISTORY");
@@ -200,7 +209,7 @@ export async function dispatchP6ReviewedRollingWave(plan,{sha,approvedSha,releas
  for(const route of P6_ROLLING_ROUTES.filter(r=>plan.due.includes(r.lane))){
   if(mayStartAttempt()!==true){requestBudgetDeferred.push(route.lane);continue;}
   if(now()>=deadline-30000)hold("WAVE_DEADLINE_NO_REPLAY");
-  const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now(),directRecovery:stamp.directRecovery===true});
+  const fresh=assessP6RollingRoute(route,await recheckRoute(route),{sha,epoch:stamp.epoch,clock:now(),directRecovery:stamp.directRecovery===true,earlyDrawHistoryEpoch:stamp.earlyDrawHistoryEpoch});
   if(fresh.state==="ACTIVE_NO_OVERLAP"||fresh.state.startsWith("RECENT_")){deferred.push(route.lane);continue;}
   if(fresh.state!=="DUE_REVIEWED_ROUTE")hold("FRESH_ROUTE_HISTORY_NO_REPLAY");
   let live;
@@ -252,12 +261,13 @@ export function inspectP6RollingRetirementProof(proof,{sha,epoch,now}){
  * An unexplained failure from an earlier session needs reviewed restart;
  * caller must NOT reset epoch autonomously to hide prior uncertainty.
  */
-export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),directRecovery=false}){
+export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.now(),fetcher=fetch,verifySnapshot=()=>{},scheduleEvidenceCache=createP6RollingScheduleEvidenceCache(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),directRecovery=false,earlyDrawHistoryEpoch=epoch}){
  const started=now(),cache=inertCaches.get(scheduleEvidenceCache);
  if(!cache)hold("INVALID_INERT_SCHEDULE_CACHE");
  if(!CODE.test(sha??"")||!Number.isSafeInteger(epoch)||epoch>started||
     started-epoch>6*3600000||typeof token!=="string"||token.length<16)
   hold("NO_BOUNDED_SESSION_HISTORY_SCOPE");
+ laneHistoryEpoch(P6_ROLLING_ROUTES.find(r=>r.lane==="EARLY_DRAW"),{epoch,clock:started,directRecovery,earlyDrawHistoryEpoch});
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
  async function get(path,key){
   for(let attempt=0;attempt<3;attempt++){
@@ -275,15 +285,15 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   }
  }
  async function history(route){
-  const out=[];
+  const out=[],routeEpoch=laneHistoryEpoch(route,{epoch,clock:started,directRecovery,earlyDrawHistoryEpoch});
   for(const event of ["schedule","workflow_dispatch"]){
-   const created=encodeURIComponent(new Date(epoch).toISOString()+".."+new Date(now()+60000).toISOString());
+   const created=encodeURIComponent(new Date(routeEpoch).toISOString()+".."+new Date(now()+60000).toISOString());
    const list=await get("/actions/workflows/"+route.workflow+"/runs?branch=main&event="+event+"&per_page=100&created="+created,"workflow_runs");
    if(list.some(r=>r.event!==event))hold("GITHUB_EVENT_FILTER_DRIFT");
    out.push(...list);
   }
   if(out.length>100||new Set(out.map(x=>x.id)).size!==out.length||
-     out.some(x=>exactRun(x).created<epoch||x.path!==".github/workflows/"+route.workflow))
+     out.some(x=>exactRun(x).created<routeEpoch||x.path!==".github/workflows/"+route.workflow))
    hold("GITHUB_SESSION_HISTORY_DRIFT");
   return out;
  }
@@ -325,7 +335,7 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   workflow:route.workflow,complete:true,runs:histories[i],active:activeFor(route),
   ...await jobsFor(route,histories[i])
  })));
- const context={sha,epoch,clock:now(),directRecovery:directRecovery===true};
+ const context={sha,epoch,clock:now(),directRecovery:directRecovery===true,...(earlyDrawHistoryEpoch===epoch?{}:{earlyDrawHistoryEpoch})};
  // No stale or inverted monotonic wall-clock snapshots may dispatch.
  if(context.clock<started||context.clock-started>120000)hold("GITHUB_SNAPSHOT_TOO_SLOW");
  // Verify every lane's accepted-run history before issuing any new wave.
@@ -345,6 +355,7 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
  // from the OLD epoch before it can consider adopting the proposed cut.
  let retirementUsed=false;
  async function reviewHistoryRetirement({previousReceipt}={}){
+  if(earlyDrawHistoryEpoch!==epoch)hold("DIRECT_EXTENDED_HISTORY_NOT_RETIREMENT_SCOPE");
   if(retirementUsed)hold("RETIREMENT_ALREADY_REVIEWED");
   retirementUsed=true;
   const overlap=600000,limit=64,receiptSchema="v39.phase6.rolling-history-retirement.v1";
