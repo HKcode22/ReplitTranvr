@@ -121,7 +121,9 @@ function admitOwnerReadback(env,raw,stageSha,costSha,head,calendarOnly){
  const freezeReview=calendarOnly?null:{expectedStagedB0062PacketSha256:stageSha,
   expectedSignedSevenCategoryCostSha256:costSha,expectedExactBudgetWriterRole:P5_TWO_STAGE_ROLES[1].role,
   independentProspectiveCalendarAndTreatmentApproved:true,independentRealProviderRangeAndRestBudgetApproved:true,
-  independentSourceContentsRightsForIntendedUseApproved:true,exactRestrictedNoProviderBudgetFreezeApproved:true};
+  independentSourceContentsRightsForIntendedUseApproved:false,
+  sourceUseDeferredToPhase6Activation:true,
+  exactRestrictedNoProviderBudgetFreezeApproved:true};
  if(calendarOnly)compileP5InertB0062UtcStagePacket(input,review);
  else compileP5V0093CostOnlySevenRestReview(input,review,freezeReview);
  const out={stageSha,costSha,codeSha:head,calendarOnly,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
