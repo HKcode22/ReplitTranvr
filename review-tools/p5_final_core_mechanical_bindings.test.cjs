@@ -1,9 +1,12 @@
 "use strict";
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),crypto=require("node:crypto");
 const artifact=JSON.parse(fs.readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"));
-const ledger=JSON.parse(fs.readFileSync("data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json","utf8"));
+const ledgerRaw=fs.readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json");
+const ledger=JSON.parse(ledgerRaw.toString("utf8"));
+const ledgerBlob=crypto.createHash("sha1").update(Buffer.from("blob "+ledgerRaw.length+"\0")).update(ledgerRaw).digest("hex");
 const byId=Object.fromEntries(ledger.evidence.map(x=>[x.evidenceId,x]));
 const h=x=>/^[a-f0-9]{64}$/.test(x);
+test("fixture is the exact PR877 evidence ledger bound by the workpaper",()=>assert.equal(ledgerBlob,artifact.ledgerBlob));
 test("mechanical bindings point to exact ledger entries",()=>{
  for(const [field,v] of Object.entries(artifact.mechanicallyBoundEvidence)){
   assert.ok(byId[v.evidenceId],field+" missing ledger evidence");
