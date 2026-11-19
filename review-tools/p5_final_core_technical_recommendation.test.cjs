@@ -13,6 +13,8 @@ test("technical recommendations are yes only for non-source-use domains",()=>{
  assert.equal(a.phase6PaidGo,false);
 });
 test("technical recommendation evidence matches exact mechanical bindings",()=>{
+ assert.equal(a.evidenceCommit,m.evidenceCommit);
+ assert.equal(a.evidenceHashes.currentFidsRangeCost,"f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1");
  assert.equal(a.evidenceHashes.scientific,m.mechanicallyBoundEvidence.scientificFreezeEvidenceSha256.sha256);
  assert.equal(a.evidenceHashes.accountBudget,m.mechanicallyBoundEvidence.providerAccountAndBudgetEvidenceSha256.sha256);
  assert.equal(a.evidenceHashes.publishedGithubStop,m.mechanicallyBoundEvidence.publishedAndGithubStopEvidenceSha256.sha256);
