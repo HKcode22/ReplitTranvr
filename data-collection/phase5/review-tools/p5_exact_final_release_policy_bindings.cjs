@@ -74,6 +74,7 @@ function selectManifestWrite(rows,raw){
  need(rows[0].value===raw,"EXISTING_MANIFEST_DIFFERENT_NO_OVERWRITE");return "EXACT_EXISTING_REUSE";
 }
 function validateEmptyAuthority(rows){
- need(Array.isArray(rows)&&rows.length===1&&Object.values(rows[0]).every(x=>x===0),"PRODUCTION_AUTHORITY_OR_EXPOSURE_NOT_EMPTY");
+ const keys=["auth","incidents","open_budget","batches","subscriptions","prior_enable"];
+ need(Array.isArray(rows)&&rows.length===1&&plain(rows[0])&&Object.keys(rows[0]).length===keys.length&&keys.every(k=>rows[0][k]===0),"PRODUCTION_AUTHORITY_OR_EXPOSURE_NOT_EMPTY");
 }
 module.exports={NAMES,F,validateFinalPolicies,verifyFinalManifest,selectManifestWrite,validateEmptyAuthority};
