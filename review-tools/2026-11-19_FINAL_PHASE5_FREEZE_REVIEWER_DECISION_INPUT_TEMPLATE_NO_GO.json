@@ -1,0 +1,10 @@
+{
+  "schema": "v39.phase5.final-freeze-reviewer-decision-input.v1",
+  "phase5ScientificReleaseFreezeApproved": null,
+  "commissioningEvidenceApproved": null,
+  "finalSchedulerRepinApproved": null,
+  "separatePhase6PaidGoRequired": null,
+  "reviewedBy": null,
+  "reviewedAtUtc": null,
+  "phase6PaidGo": false
+}
