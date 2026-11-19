@@ -65,6 +65,10 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
+          helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
+          cp review-tools/p5_resume_existing_final_commissioning.cjs "$helper_tmp"
+          node --check "$helper_tmp"
+          rm -f "$helper_tmp"
 
       - name: Run focused final commissioning regressions
         shell: bash
