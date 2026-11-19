@@ -55,7 +55,8 @@ function run(){
  const home=fs.realpathSync(os.homedir()),source=path.join(home,'.travnr-phase6-signer-candidates-v2');
  const orig=inspect(source,true);
  const dest=fs.realpathSync(process.argv[2]);need(fs.statSync(dest).isDirectory(),'DESTINATION_DIRECTORY');
- const xml=cmd('/usr/sbin/diskutil',['info','-plist',dest]);
+ const match=dest.match(/^\/Volumes\/[^/]+/);need(match,'DESTINATION_MUST_BE_EXTERNAL_MOUNT');
+ const xml=cmd('/usr/sbin/diskutil',['info','-plist',match[0]]);
  const info=JSON.parse(cmd('/usr/bin/plutil',['-convert','json','-o','-','-'],{input:xml,stdio:['pipe','pipe','pipe']}));
  externalVolume(dest,fs.statSync(home).dev,info,fs.statSync(dest).dev);
  const temp=fs.mkdtempSync(path.join(dest,'.travnr-encrypted-backup-'));fs.chmodSync(temp,0o700);
@@ -74,9 +75,11 @@ function run(){
   native(['detach',mount]);attached=false;
   need(JSON.stringify(inspect(source,true))===JSON.stringify(orig),'ORIGINAL_BYTES_CHANGED');
   need(!fs.existsSync(final),'DESTINATION_EXISTS');
-  // Hard link gives exclusive no-clobber publication on the same volume.
-  fs.linkSync(image,final);const fd=fs.openSync(final,'r');try{fs.fsyncSync(fd)}finally{fs.closeSync(fd)}
-  const backupSha=sha(fs.readFileSync(final));
+  // Exclusive encrypted copy also works on external filesystems without hard links.
+  const imageSha=sha(fs.readFileSync(image));
+  fs.copyFileSync(image,final,fs.constants.COPYFILE_EXCL);fs.chmodSync(final,0o600);
+  const fd=fs.openSync(final,'r+');try{fs.fsyncSync(fd)}finally{fs.closeSync(fd)}
+  const backupSha=sha(fs.readFileSync(final));need(backupSha===imageSha,'PUBLISHED_ENCRYPTED_BYTES_DIFFER');
   completed=true;fs.unlinkSync(image);fs.rmdirSync(temp);
   console.log(JSON.stringify({status:'SIX_EXISTING_MAC_KEYS_ENCRYPTED_EXTERNAL_BACKUP_RESTORE_VERIFIED_NO_GO',observedUtc:new Date().toISOString(),verifiedSignerCount:6,exactOriginalAndRestoredBytes:true,encryptedDiskImage:true,externalVolumeVerified:true,archiveSha256:backupSha,backupPath:final,independentCustodianApproved:false,passphraseSeparateOwnerResponsibility:true,privateKeyBytesPrinted:false,githubSecretWrites:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
  }finally{
