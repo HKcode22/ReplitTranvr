@@ -71,7 +71,7 @@ case "$P5_REVIEW_MODE" in
    [[ -d "$SUB" ]] || hold "COMMISSIONING_DIRECTORY_MISSING"
    fetch_blob "$FREEZE_BLOB" "$TMP/materializer.cjs"
    node "$TMP/materializer.cjs" "$SUB/final-freeze-review-workpaper-NOT-APPROVED.json" "$P5_REVIEWER_INPUT" > "$TMP/out.json" || hold "FREEZE_REVIEW_REFUSED"
-   DEST="$SUB/final-phase5-freeze-decision.json"
+   DEST="$SUB/approved-final-phase5-freeze.json"
    ;;
  *) hold "UNKNOWN_MODE" ;;
 esac
