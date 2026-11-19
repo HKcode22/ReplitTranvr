@@ -14,8 +14,9 @@ const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const need=(x,k)=>{if(!x)throw Error("HOLD_P5_FINAL_REVIEW_MATERIALIZER_"+k)};
 const sha=b=>crypto.createHash("sha256").update(b).digest("hex");
 const canonical=x=>Buffer.from(JSON.stringify(x));
-const readJson=p=>{const raw=fs.readFileSync(p);let x;try{x=JSON.parse(raw)}catch{need(false,"INVALID_JSON")}
- need(canonical(x).equals(raw),"NONCANONICAL_JSON_"+p.split("/").pop());return {raw,x,sha256:sha(raw)}};
+const readJson=(p,requireCanonical=false)=>{const raw=fs.readFileSync(p);let x;try{x=JSON.parse(raw)}catch{need(false,"INVALID_JSON")}
+ if(requireCanonical)need(canonical(x).equals(raw),"NONCANONICAL_JSON_"+p.split("/").pop());
+ return {raw,x,sha256:sha(raw)}};
 function validUtc(x){return typeof x==="string"&&UTC.test(x)&&Number.isFinite(Date.parse(x))&&new Date(x).toISOString()===x}
 function materialize(mechanical,closure,ledger,input,nowMs=Date.now()){
  need(mechanical?.schema==="v39.phase5.final-core-mechanical-bindings-ready.v1"&&mechanical.phase6PaidGo===false,"MECHANICAL_SCOPE");
@@ -87,10 +88,10 @@ function materialize(mechanical,closure,ledger,input,nowMs=Date.now()){
 function run(){
  need(process.argv.length===6,"ARGS");
  const [mechanicalPath,closurePath,ledgerPath,inputPath]=process.argv.slice(2);
- const mechanical=readJson(mechanicalPath).x,closure=readJson(closurePath).x,ledger=readJson(ledgerPath).x,input=readJson(inputPath).x;
+ const mechanical=readJson(mechanicalPath).x,closure=readJson(closurePath).x,ledger=readJson(ledgerPath).x,input=readJson(inputPath,true).x;
  const out=materialize(mechanical,closure,ledger,input);
  const raw=canonical(out);
  process.stdout.write(raw);
 }
-module.exports={materialize,canonical};
+module.exports={materialize,canonical,readJson};
 if(require.main===module)try{run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_FINAL_REVIEW_MATERIALIZER_[A-Z0-9_./-]+$/.test(s)?s:"HOLD_P5_FINAL_REVIEW_MATERIALIZER_REDACTED");process.exitCode=2;}
