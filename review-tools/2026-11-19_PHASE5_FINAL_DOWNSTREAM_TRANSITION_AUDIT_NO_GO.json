@@ -187,29 +187,29 @@
     },
     "finalPolicyBinding": {
       "materializer": "2c2f45efad55b12d595773dd51b07e27d7a43b61",
-      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
+      "ownerWrapper": "c91bce2eb61f26df5557b3295cdb324631b69f5f",
       "output": "reviewed-final-policy-binding-decisions.json"
     },
     "privatePolicyBytes": {
       "materializer": "27100b8a67d2ecdd50c39eabf338a72d8982c48a",
-      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
+      "ownerWrapper": "c91bce2eb61f26df5557b3295cdb324631b69f5f",
       "output": "approved-private-policy-review.json"
     },
     "staticInstall": {
       "materializer": "6bfa98eb3e75fd1136e86a28ab0b7e4c9c5bb2e8",
-      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
+      "ownerWrapper": "c91bce2eb61f26df5557b3295cdb324631b69f5f",
       "output": "static-install-review.json"
     },
     "finalPhase5Freeze": {
       "materializer": "607886ff73c1c342873d66820ca16be18f803210",
       "ownerWrapper": "b494b3dd8f5fd794d5f42a565899ab4f722682e0",
-      "output": "approved-final-phase5-freeze.json",
-      "alternateUnifiedWrapper": "731b17e3783471bd97231756cad102fcd6ea597e"
+      "output": "approved-final-phase5-freeze.json"
     },
     "guarantees": [
       "Reviewer semantic decisions remain explicit; no materializer mints approval.",
       "Canonical JSON and exact repository/private byte pins are enforced.",
-      "No materializer performs provider calls, DB writes, paid GO, or collection arming."
+      "No materializer performs provider calls, DB writes, paid GO, or collection arming.",
+      "Downstream POLICY/PRIVATE/STATIC review wrapper follows evidence-only live main and refuses executable drift; final FREEZE has one dedicated live-main wrapper."
     ]
   }
 }
