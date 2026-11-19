@@ -66,3 +66,8 @@ The current approval ledger remains evidence-only with zero approvals. The separ
 This successor package is ready for independent review and future field-level disposition work. It is not, by itself, permission to start the paid month. A paid start still requires a real external source-use/retention decision, an exact final signed manifest/configuration, the separate approval/readback record, and a fresh operational release decision. Until those records exist, the correct runtime state remains STOP/NO-GO.
 
 This record deliberately preserves the original package so a successor failure cannot alter the prior Phase 1–5 construction.
+
+
+## CI repair checkpoint — 2026-11-19 UTC
+
+The first upload of the derived-release files was rejected because the branch contained base64 text rather than decoded UTF-8. That commit was superseded on the successor branch by `f171202ce1d9fbe51f0ee3aa35fb890077cdef86`, which replaces all three affected blobs with UTF-8 text. The earlier failure was packaging-only; it did not reach production and did not alter the frozen predecessor. Fresh CI for the corrected successor head remains required before this engineering addition is called validated.
