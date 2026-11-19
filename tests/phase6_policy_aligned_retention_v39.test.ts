@@ -33,8 +33,8 @@ const contract=():Phase6PolicyContract=>({
     {fieldId:"missingness_flags",table:"clean.flight_snapshots",
       source:"PROJECT_METADATA",scientificRole:"feature missingness",
       retentionClass:"project_metadata",sourceAccessMaximumHours:168,
-      longTermDisposition:"approved_after_external_review",reconstructionRisk:"none",
-      transformation:"project-generated missingness metadata",
+      longTermDisposition:"approved_after_external_review",reconstructionRisk:"reviewed_nonreconstructable",
+      transformation:"feature engineering: project-generated missingness metadata",
       externalReviewSha256:sha,expiryAction:"project_lifecycle"},
   ],
 });
