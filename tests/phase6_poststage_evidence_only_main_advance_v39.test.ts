@@ -67,7 +67,7 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
    "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
    "tests/phase7_derived_release_writer_v39.test.ts":"8388385f85cb90311daf218d2d0c21155fc7f458",
    "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"5140030b8e98567b0b2c2ed95a505274572f9089",
-   "tests/phase7_reviewed_source_transformation_v39.test.ts":"3a0bdb46da835aea2ea78167ace4fc6bd0c5f390"
+   "tests/phase7_reviewed_source_transformation_v39.test.ts":"1382be1bcc0f70a5fe45c20921f70840118dd574"
   });
  });
  it("accepts only evidence/ledger changes in addition to the exact bridge",()=>{
