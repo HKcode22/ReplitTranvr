@@ -68,6 +68,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
+          bash -n review-tools/p5_materialize_final_core_review_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
           cp review-tools/p5_resume_existing_final_commissioning.cjs "$helper_tmp"
           node --check "$helper_tmp"
@@ -112,6 +113,7 @@ jobs:
           const resume=fs.readFileSync('review-tools/p5_resume_existing_final_commissioning.cjs','utf8');
           const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
           const ownerOnce=fs.readFileSync('review-tools/p5_owner_final_resume_once.sh','utf8');
+          const reviewOnce=fs.readFileSync('review-tools/p5_materialize_final_core_review_once.sh','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
           for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
             need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
@@ -121,6 +123,12 @@ jobs:
           const resumeBlob=require('node:child_process').execFileSync('git',['hash-object','review-tools/p5_resume_existing_final_commissioning.cjs'],{encoding:'utf8'}).trim();
           need(ownerOnce.includes('HELPER_BLOB="'+resumeBlob+'"'),'owner launcher HELPER blob mismatch');
           need(ownerOnce.includes('TESTED_RUN="44475135730"')&&ownerOnce.includes('TESTED_HEAD="87b5f9722ddbd635208e8e8f2487bb4ea97a8bd7"'),'owner launcher tested-run pin mismatch');
+          const gitHash=p=>require('node:child_process').execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
+          need(reviewOnce.includes('MATERIALIZER_BLOB="'+gitHash('review-tools/p5_final_core_review_materializer.cjs')+'"'),'final review materializer pin mismatch');
+          need(reviewOnce.includes('CORE_VALIDATOR_BLOB="'+coreInputs+'"'),'final review core validator pin mismatch');
+          need(reviewOnce.includes('MECHANICAL_BLOB="'+gitHash('review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json')+'"'),'final review mechanical pin mismatch');
+          need(reviewOnce.includes('CLOSURE_BLOB="'+gitHash('review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json')+'"'),'final review closure pin mismatch');
+          need(reviewOnce.includes('LEDGER_BLOB="'+gitHash('review-tools/fixtures/p5_877_evidence_ledger.json')+'"'),'final review ledger pin mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
