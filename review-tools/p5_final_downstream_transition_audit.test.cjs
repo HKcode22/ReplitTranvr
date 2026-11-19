@@ -41,8 +41,16 @@ test("actual current hold remains review-file-only",()=>{
  assert.equal(a.currentActualHold.existingJournalsPreserved,true);
  assert.equal(a.currentActualHold.phase6PaidGo,false);
 });
-test("materializer audit remains no-mutation and pinned",()=>{
+test("all remaining review materializers are exact and no-mutation",()=>{
  assert.equal(a.finalReviewMaterialization.materializer,gh("review-tools/p5_final_core_review_materializer.cjs"));
  assert.equal(a.finalReviewMaterialization.productionMutations,0);
- assert.match(a.engineeringConclusion,/No additional Phase5 implementation/);
+ const m=a.reviewMaterialization;
+ assert.equal(m.finalCore.materializer,gh("review-tools/p5_final_core_review_materializer.cjs"));
+ assert.equal(m.finalCore.ownerWrapper,gh("review-tools/p5_materialize_final_core_review_once.sh"));
+ assert.equal(m.finalPolicyBinding.materializer,gh("review-tools/p5_final_policy_binding_materializer.cjs"));
+ assert.equal(m.privatePolicyBytes.materializer,gh("review-tools/p5_private_policy_review_materializer.cjs"));
+ assert.equal(m.staticInstall.materializer,gh("review-tools/p5_static_install_review_materializer.cjs"));
+ assert.equal(m.finalPhase5Freeze.materializer,gh("review-tools/p5_final_phase5_freeze_decision.cjs"));
+ for(const k of ["finalPolicyBinding","privatePolicyBytes","staticInstall","finalPhase5Freeze"])assert.equal(m[k].ownerWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
+ assert.match(a.engineeringConclusion,/review-materialization/);
 });
