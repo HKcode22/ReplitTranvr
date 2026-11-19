@@ -1,6 +1,6 @@
 "use strict";
-const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs");
-const {materialize}=require("./p5_final_core_review_materializer.cjs");
+const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),os=require("node:os"),path=require("node:path"),cp=require("node:child_process");
+const {materialize,readJson}=require("./p5_final_core_review_materializer.cjs");
 const mechanical=JSON.parse(fs.readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"));
 const closure=JSON.parse(fs.readFileSync("review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json","utf8"));
 const ledger=JSON.parse(fs.readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"));
@@ -73,4 +73,36 @@ test("closure recommendation drift is refused",()=>{
  const x=synthetic(),c=structuredClone(closure);
  c.evidenceBackedRecommendations.githubPaidDispatchFlagsVerifiedOff.recommendedValue=false;
  assert.throws(()=>materialize(x.m,c,x.l,x.input,NOW),/CLOSURE_RECOMMENDATIONS/);
+});
+
+test("CLI accepts official pretty repository inputs but emits canonical reviewed bytes",()=>{
+ const x=synthetic(),dir=fs.mkdtempSync(path.join(os.tmpdir(),"p5-review-materializer-"));
+ try{
+  const mechanicalPath=path.join(dir,"mechanical.json"),closurePath=path.join(dir,"closure.json"),ledgerPath=path.join(dir,"ledger.json"),inputPath=path.join(dir,"input.json");
+  fs.writeFileSync(mechanicalPath,JSON.stringify(x.m,null,2)+"\n");
+  fs.writeFileSync(closurePath,JSON.stringify(closure,null,2)+"\n");
+  fs.writeFileSync(ledgerPath,JSON.stringify(x.l,null,2)+"\n");
+  fs.writeFileSync(inputPath,JSON.stringify(x.input));
+  assert.equal(readJson(mechanicalPath).x.schema,x.m.schema);
+  assert.equal(readJson(closurePath).x.schema,closure.schema);
+  assert.equal(readJson(ledgerPath).x.schema,x.l.schema);
+  const stdout=cp.execFileSync(process.execPath,[
+   path.resolve("review-tools/p5_final_core_review_materializer.cjs"),
+   mechanicalPath,closurePath,ledgerPath,inputPath
+  ],{encoding:"utf8",env:{...process.env}});
+  const out=JSON.parse(stdout);
+  assert.equal(stdout,JSON.stringify(out));
+  assert.equal(out.sourceRightsEvidenceSha256,x.hash);
+  assert.equal(out.phase6PaidGo,false);
+ }finally{fs.rmSync(dir,{recursive:true,force:true})}
+});
+test("reviewer decision input bytes remain strictly canonical",()=>{
+ const x=synthetic(),dir=fs.mkdtempSync(path.join(os.tmpdir(),"p5-review-materializer-"));
+ try{
+  const inputPath=path.join(dir,"input.json");
+  fs.writeFileSync(inputPath,JSON.stringify(x.input,null,2)+"\n");
+  assert.throws(()=>readJson(inputPath,true),/NONCANONICAL_JSON_input\.json/);
+  fs.writeFileSync(inputPath,JSON.stringify(x.input));
+  assert.equal(readJson(inputPath,true).x.authorizationId,x.input.authorizationId);
+ }finally{fs.rmSync(dir,{recursive:true,force:true})}
 });
