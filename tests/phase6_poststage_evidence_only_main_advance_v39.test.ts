@@ -48,13 +48,23 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
  const V9TEST="tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts";
  const SELF=P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256;
  const BLOBS=P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS;
- const PATHS=[SCRIPT,P5TEST,P6TEST,V9TEST];
+ const PATHS=[SCRIPT,...Object.keys(BLOBS).sort()];
  it("accepts the exact reviewed bridge",()=>{
   expect(verifyP6PostStageReviewedBridgeAdvance({
    stageCode:STAGED,currentHead:"b".repeat(40),stageIsAncestor:true,
    changedPaths:PATHS,currentBridgeBlobs:BLOBS,selfNormalizedSha256:SELF
   })).toEqual({stageCode:STAGED,currentHead:"b".repeat(40),reviewedBridgeApplied:true,
-   reviewedBridgePaths:4,evidenceOnlyChangedPaths:0});
+   reviewedBridgePaths:Object.keys(BLOBS).length+1,evidenceOnlyChangedPaths:0});
+ });
+ it("pins the complete Phase 7 retention successor as reviewed bridge input",()=>{
+  expect(BLOBS).toMatchObject({
+   "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"7c01a7f4a67ff72888f63b7dce23621092af4c68",
+   "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
+   "tests/phase6_derived_training_release_contract_v39.test.ts":"834b53e5e061d3caf924b916e059f7fd3afb7d26",
+   "tests/phase6_derived_training_release_packet_v39.test.ts":"2721708b73e719a58bf4667b37e3e60a65c10ad9",
+   "data-collection/phase5/2026-11-19_PHASE6_EPHEMERAL_SOURCE_AND_PHASE7_MODEL_RELEASE_PROFILE_DRAFT.md":"b2a47de5570158e67edd01c64c034fc1c0111fee",
+   "data-collection/phase5/2026-11-19_PHASE6_SECOND_RETENTION_PHASE7_DERIVED_RELEASE_PACKET.md":"c0d8e2230aa31705e0c942b4402043d021f73972"
+  });
  });
  it("accepts only evidence/ledger changes in addition to the exact bridge",()=>{
   expect(verifyP6PostStageReviewedBridgeAdvance({
