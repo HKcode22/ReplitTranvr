@@ -1,0 +1,79 @@
+{
+  "schema": "v39.phase5.final-core-reviewer-closure-matrix.v1",
+  "status": "REVIEWER_CLOSURE_MATRIX_EVIDENCE_RECOMMENDATIONS_NOT_APPROVAL",
+  "baseCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "evidenceCommit": "fde8cc5ec593978a91531d0cab38bb970386c9da",
+  "phase6PaidGo": false,
+  "purpose": "Reduce the final independent review to explicit semantic decisions. Recommended values below are evidence-backed review aids, not approvals and must not be copied into reviewed-final-core-scope-decisions.json without an actual reviewer decision.",
+  "mechanicallyReady": {
+    "finalPredecessorCount": 27,
+    "calendarRowsSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+    "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "existingRangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
+    "existingTimingEvidenceSha256": "88cbedd1ec867a6372f69c2708e180509f849d71a34963d4fb5ac851d6e30be5",
+    "accountReviewSha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
+    "rawAccountEvidenceSha256": "7002466888531e26e29c1ecd205ecbed5a534282ced73b5adb315e5c98a5f4b0",
+    "scientificFreezeEvidenceSha256": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203",
+    "providerAccountAndBudgetEvidenceSha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
+    "publishedAndGithubStopEvidenceSha256": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c",
+    "operationalReleaseEvidenceSha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+  },
+  "evidenceBackedRecommendations": {
+    "currentAccountAndBudgetApproved": {
+      "recommendedValue": true,
+      "basis": "Actual 2026-11-19T03:39:03Z provider account read: 59,968/60,000 API units, 1,830 Alert credits, no refill; exact candidate 37,388 reserve, 49,468 net ceiling, 1,000 protected floor and 11,080 headroom.",
+      "limitation": "Reviewer must choose an accountEvidenceValidUntilUtc that remains current at commissioning."
+    },
+    "legacyPublishedAutoCollectVerifiedOff": {
+      "recommendedValue": true,
+      "basis": "Exact callback-only deployed source identity and healthy deployment plus code startup guard requiring auto-collect false; combined with current GitHub STOP evidence.",
+      "limitation": "Code-plus-deployment inference, not plaintext Replit secret readback."
+    },
+    "githubPaidDispatchFlagsVerifiedOff": {
+      "recommendedValue": true,
+      "basis": "Actual same-repository STOP attestation run 44474020044 asserted four STOP secret values and all 21 collection-mode variables unset without printing secret plaintext."
+    },
+    "activeBillableSubscriptionsVerifiedZero": {
+      "recommendedValue": true,
+      "basis": "Actual provider list/account observation at 2026-11-19T03:39:03Z returned activeSubscriptionCount=0."
+    },
+    "separatePaidDispatchStillRequired": {
+      "recommendedValue": true,
+      "basis": "All final helper/stage contracts retain phase6PaidGo=false; final source activation and paid dispatch are separate from Phase5 commissioning."
+    }
+  },
+  "explicitReviewerJudgments": {
+    "finalPredecessorsApproved": {
+      "value": null,
+      "question": "Does the reviewer adopt the exact 27-record predecessor set as the final release evidence set?"
+    },
+    "independentScientificFreezeApproved": {
+      "value": null,
+      "question": "Does the reviewer adopt f.8/A/B/C/D1/D2/E with T-6 conditional gate-out primary, T-90 update, T-24 comparator, explicit missing/not-estimable handling and no proxy target switch despite full historical Gate5 not being retroactively passed?"
+    },
+    "independentSourceUseApproved": {
+      "value": null,
+      "question": "Does the reviewer have genuine applicable source-use evidence sufficient for the intended prospective use? Engineering does not fabricate this field.",
+      "sourceRightsEvidenceSha256": null
+    },
+    "independentOperationalReleaseApproved": {
+      "value": null,
+      "question": "Does the reviewer accept the current operational evidence for inert commissioning, with paid collection still separately disabled and actual B0062/V0093 readbacks still downstream?"
+    }
+  },
+  "reviewerSuppliedIdentityAndClock": [
+    "reviewedBy",
+    "reviewedAtUtc",
+    "cleanupOwner",
+    "authorizationId",
+    "startNotBeforeUtc",
+    "expiresAtUtc",
+    "accountEvidenceValidUntilUtc"
+  ],
+  "legacyAlertStartApproved": false,
+  "notes": [
+    "This matrix is not reviewed-final-core-scope-decisions.json.",
+    "No boolean in this file is authenticated as an independent approval.",
+    "No provider call, database write, GitHub secret write, scheduler repin or paid authorization is performed."
+  ]
+}
