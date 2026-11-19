@@ -35,7 +35,8 @@ const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const sha=c=>c.repeat(64);
 // Synthetic test fixture only; a production manifest requires independent review.
 const manifestFixture={schema:"v39.phase6.final-ci-test-only.v1",scientificFreezeApproved:true,
- sourceRightsApproved:true,phase6PaidGo:false,calendarRowsSha256:sha("b"),configSha256:sha("c")};
+ sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,phase6PaidGo:false,
+ calendarRowsSha256:sha("b"),configSha256:sha("c")};
 const manifestRaw=JSON.stringify(manifestFixture),manifestHash=digest(manifestFixture);
 const iso=n=>new Date(n).toISOString();
 const SLOTS=[0,4,8,12,16,20];
