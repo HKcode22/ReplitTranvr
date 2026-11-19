@@ -44,6 +44,9 @@ jobs:
             review-tools/p5_run_existing_inert_stage_chain.cjs
             review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
             review-tools/p5_final_core_review_materializer.cjs
+            review-tools/p5_static_install_review_materializer.cjs
+            review-tools/p5_private_policy_review_materializer.cjs
+            review-tools/p5_final_policy_binding_materializer.cjs
             review-tools/p5_final_phase5_freeze_decision.cjs
             review-tools/p5_assemble_exact_six_final_policies.cjs
             review-tools/p5_exact_final_release_policy_bindings.cjs
@@ -70,6 +73,9 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_PHASE5_FINAL_DOWNSTREAM_TRANSITION_AUDIT_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_CORE_TECHNICAL_REVIEW_RECOMMENDATION_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_STATIC_INSTALL_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_PRIVATE_POLICY_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_POLICY_BINDING_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
           bash -n review-tools/p5_materialize_final_core_review_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
@@ -90,6 +96,9 @@ jobs:
             review-tools/p5_resume_state_machine.test.cjs \
             review-tools/p5_final_core_review.test.cjs \
             review-tools/p5_final_core_review_materializer.test.cjs \
+            review-tools/p5_static_install_review_materializer.test.cjs \
+            review-tools/p5_private_policy_review_materializer.test.cjs \
+            review-tools/p5_final_policy_binding_materializer.test.cjs \
             review-tools/p5_final_phase5_freeze_decision.test.cjs \
             review-tools/p5_final_downstream_transition_audit.test.cjs \
             review-tools/p5_final_core_technical_recommendation.test.cjs \
