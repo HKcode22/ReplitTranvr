@@ -13,7 +13,7 @@ test("candidate and freeze boundary stay exact",()=>{
  assert.equal(a.phase5ScientificReleaseFrozen,false);
  assert.equal(a.phase6PaidGo,false);
 });
-test("all nine exact helper pins match repository bytes",()=>{
+test("all exact closeout helper pins match repository bytes",()=>{
  const map={
   coreInputs:"review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs",
   finalPolicyValidator:"review-tools/p5_exact_final_release_policy_bindings.cjs",
@@ -53,7 +53,11 @@ test("all remaining review materializers are exact and no-mutation",()=>{
  assert.equal(m.finalPhase5Freeze.materializer,gh("review-tools/p5_final_phase5_freeze_decision.cjs"));
  for(const k of ["finalPolicyBinding","privatePolicyBytes","staticInstall"])assert.equal(m[k].ownerWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
  assert.equal(m.finalPhase5Freeze.ownerWrapper,gh("review-tools/p5_materialize_final_phase5_freeze_once.sh"));
- assert.equal(m.finalPhase5Freeze.alternateUnifiedWrapper,gh("review-tools/p5_materialize_downstream_review_once.sh"));
  assert.equal(m.finalPhase5Freeze.output,"approved-final-phase5-freeze.json");
+ const resume=fs.readFileSync("review-tools/p5_resume_existing_final_commissioning.cjs","utf8");
+ assert.ok(resume.includes('FREEZE="'+gh("review-tools/p5_final_phase5_freeze_decision.cjs")+'"'));
+ assert.ok(resume.includes('HOLD_FINAL_PHASE5_FREEZE_DECISION_ABSENT'));
+ assert.ok(resume.includes('FINAL_SCHEDULER_REPIN_AFTER_FREEZE'));
+ assert.ok(resume.indexOf('FINAL_SCHEDULER_REPIN_AFTER_FREEZE')>resume.indexOf('HOLD_FINAL_PHASE5_FREEZE_DECISION_ABSENT'));
  assert.match(a.engineeringConclusion,/review-materialization/);
 });
