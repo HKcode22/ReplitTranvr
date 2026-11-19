@@ -34,7 +34,7 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-const POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="0000000000000000000000000000000000000000000000000000000000000000";
+const POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="53330b080ddbb9cac4dc0aac34db6ff03cb06897f29e49da0b56f8bb8d2a32e9";
 const POST_STAGE_REVIEWED_BRIDGE_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
  "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"134e691a470aacc49252e895c1eb8e1e1e9635d9"
