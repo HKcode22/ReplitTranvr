@@ -284,7 +284,7 @@ async function main(){
  if(!ancestor){
   try{execFileSync("git",["merge-base","--is-ancestor",stageCode,head],{stdio:["ignore","ignore","ignore"],timeout:15000});ancestor=true;}catch{}
  }
- const changed=stageCode===head?[]:cmd("git",["diff","--name-only",stageCode,head]).split("\n").filter(Boolean);
+ const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
  verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
  // The immutable stage remains bound to the executable SHA that created the
  // disabled B0062/V0093 state. Current HEAD supplies only later scoped evidence
