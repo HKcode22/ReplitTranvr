@@ -43,6 +43,7 @@ jobs:
             review-tools/p5_resume_existing_final_commissioning.cjs
             review-tools/p5_run_existing_inert_stage_chain.cjs
             review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
+            review-tools/p5_final_core_review_materializer.cjs
             review-tools/p5_assemble_exact_six_final_policies.cjs
             review-tools/p5_exact_final_release_policy_bindings.cjs
             review-tools/p5_install_exact_approved_static_values.cjs
@@ -84,6 +85,7 @@ jobs:
             review-tools/p5_resume_state.test.cjs \
             review-tools/p5_resume_state_machine.test.cjs \
             review-tools/p5_final_core_review.test.cjs \
+            review-tools/p5_final_core_review_materializer.test.cjs \
             review-tools/p5_six_policy_binding.test.cjs \
             review-tools/p5_static_install_binding.test.cjs \
             review-tools/p5_final_core_mechanical_bindings.test.cjs \
