@@ -30,6 +30,7 @@ test("deferred source-use evidence may advance main only through scoped evidence
  assert.match(enable,/POST_STAGE_EVIDENCE_PATH=.*data-collection/);
  assert.match(enable,/POST_STAGE_MAIN_NOT_EVIDENCE_ONLY_DESCENDANT/);
  assert.match(enable,/merge-base","--is-ancestor/);
+ assert.match(enable,/diff","--no-renames","--name-only/);
  assert.match(enable,/admitP6InertOwnerReadback\(process\.env,stageRaw,stageSha,costSha,stageCode\)/);
  assert.match(enable,/verifyP6SourceEnableAuthFile\(authPath,head\)/);
 });
