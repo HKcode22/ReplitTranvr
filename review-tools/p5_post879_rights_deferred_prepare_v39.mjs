@@ -188,5 +188,5 @@ async function main(){
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]).href){
- main().catch(e=>{const m=String(e?.message??'');console.error(/^HOLD_P5_POST879_PREPARE_[A-Z0-9_]+$/.test(m)?m:'HOLD_P5_POST879_PREPARE_REDACTED');process.exitCode=2;});
+ main().catch(e=>{const m=String(e?.message??'');console.error(/^(?:HOLD_P5_POST879_PREPARE|HOLD_P6_ACTUAL_RELEASE_EXPORT|REFUSED_P5_INERT_B0062_UTC_STAGE|REFUSED_P5_V0093_COST_ONLY_INPUT_FREEZE)_[A-Z0-9_]+$/.test(m)?m:'HOLD_P5_POST879_PREPARE_REDACTED');process.exitCode=2;});
 }
