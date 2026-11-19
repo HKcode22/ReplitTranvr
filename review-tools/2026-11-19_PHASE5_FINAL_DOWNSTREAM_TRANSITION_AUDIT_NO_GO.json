@@ -175,7 +175,7 @@
       "currentState": "NOT_PHASE5_AUTOMATIC"
     }
   ],
-  "engineeringConclusion": "Phase5 closeout now includes an explicit post-commissioning final-freeze decision contract and a resume state machine that permits final scheduler repin only after that decision validates against exact B0062/V0093 readbacks. No additional demonstrated Phase5 implementation defect remains in the tested chain; remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
+  "engineeringConclusion": "Phase5 closeout now includes canonical review-materialization for final core, final policy binding, private policy bytes, static install, and the explicit post-commissioning final-freeze decision; the resume state machine permits final scheduler repin only after that decision validates against exact B0062/V0093 readbacks. No additional demonstrated Phase5 implementation defect remains in the tested chain; remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
   "phase5TechnicalProtocolFrozen": true,
   "phase5ScientificReleaseFrozen": false,
   "phase6PaidGo": false,
