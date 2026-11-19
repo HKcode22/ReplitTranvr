@@ -75,7 +75,49 @@ function evidence(ref,v){
  const b=exact(ACCOUNT_PATH);need(sha(b)===ACCOUNT_SHA,"EXACT_ACTUAL_ACCOUNT_REVIEW");
  return JSON.parse(b);
 }
+// Exercise native checkout imports and exact fresh account binding without
+// creating an authorization, asserting review flags, exporting stage bytes,
+// or requiring the provider decision. Existing candidate files stay untouched.
+function unsignedExternal(e,b,head){
+ need(head===BASE&&e?.codeSha40===BASE&&e.phase6AuthorizationId===null&&e.predecessorEvidenceIds===null&&e.providerRangeEvidenceSha256===RANGE&&e.timingEvidenceSha256===TIMING&&e.cycleRestCeilingUnits===49468&&b?.jointBudgetReview?.accountEvidenceSha256===RAW_ACCOUNT_SHA&&b.jointBudgetReview.observedAtUtc==="2026-11-19T03:39:03.000Z"&&b.jointBudgetReview.apiUnitsRemaining===59968&&b.jointBudgetReview.alertCreditsRemaining===1830&&b.jointBudgetReview.authorizedFutureRefillApiUnits===0&&b.jointBudgetReview.authorizedFutureRefillAlertCredits===0&&b.arithmetic?.restReserved===37388,"EXACT_UNSIGNED_CURRENT_BUDGET");
+ return {...e,phase6AuthorizationId:"REVIEW-ONLY-NOT-AN-AUTHORIZATION",predecessorEvidenceIds:["RUN-20261119-FINALOWNERMETADATA","RUN-20261119-FRESHACCOUNT033903"],asOfUtc:b.jointBudgetReview.observedAtUtc,jointBudgetReview:b.jointBudgetReview};
+}
+async function verifyNativeUnsignedCore(accountFile){
+ need(process.argv.length===4&&process.env.GITHUB_ACTIONS!=="true"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&!["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY","DATABASE_URL","V39_DATABASE_RUNTIME_URL","NODE_OPTIONS"].some(k=>process.env[k]),"NATIVE_OFFLINE_ONLY_SCOPE");
+ const root=fs.realpathSync(git(["rev-parse","--show-toplevel"])),head=git(["rev-parse","HEAD"]);
+ need(root===fs.realpathSync(process.cwd())&&head===BASE&&head===remote()&&git(["status","--porcelain","--untracked-files=no"])==="","NATIVE_EXACT_CLEAN_MAIN");
+ const raw=fs.readFileSync(accountFile);need(sha(raw)===ACCOUNT_SHA,"NATIVE_ACTUAL_ACCOUNT_EVIDENCE");const b=JSON.parse(raw);
+ const home=fs.realpathSync(require("node:os").homedir()),matches=[];
+ const dirs=fs.readdirSync(home).filter(n=>/^\.phase5-final-review-[A-Za-z0-9_-]+$/.test(n)).sort();
+ need(dirs.length<=100,"NATIVE_PRIVATE_REVIEW_DIR_BOUND");
+ for(const n of dirs){
+  const parent=path.join(home,n),dir=path.join(parent,"nov18-"+BASE.slice(0,12));
+  if(!fs.existsSync(dir))continue;
+  try{
+   privateDir(parent);const d=privateDir(dir);need(d!==root&&!d.startsWith(root+path.sep),"NATIVE_PRIVATE_OUTSIDE_CHECKOUT");
+   const p=Object.fromEntries(Object.entries(PINS).map(([name,expected])=>{const q=read(d,name);need(q.sha256===expected,"NATIVE_RECOVERED_INPUT_DIGEST");return [name,q.x]}));
+   const t=read(d,"timing-input-offline-review.json",10000);
+   need(t.x.timingEvidenceSha256===TIMING,"NATIVE_EXISTING_TIMING");
+   matches.push({p,timing:t.x,timingFileSha256:t.sha256});
+  }catch(e){if(!/^(?:HOLD_P5_CORE_INPUT_|ENOENT)/.test(String(e?.message??"")))throw e}
+ }
+ need(matches.length>0&&matches.every(x=>x.timingFileSha256===matches[0].timingFileSha256),"NATIVE_EXISTING_CANDIDATE_REQUIRED_NO_RECOVERY_REPLAY");
+ const {p,timing}=matches[0],c=p["config-candidate.json"],m=p["manifest-candidate.json"],e=p["external-input-offline-review-NOT-STAGE.json"];
+ need(c.status==="PROPOSED_NOT_FROZEN"&&c.reviewApproved===false&&c.sourceRightsApproved===false&&m.scientificFreezeApproved===false&&m.finalPredecessorsApproved===false&&m.phase6PaidGo===false&&e.manifestSha256===PINS["manifest-candidate.json"]&&e.configSha256===PINS["config-candidate.json"]&&c.calendarRowsSha256===CAL&&m.calendarRowsSha256===CAL&&Object.entries(c.source.timing).every(([k,v])=>v===timing[k]),"NATIVE_REAL_UNSIGNED_INPUT_SCOPE");
+ const ext=unsignedExternal(e,b,head),eb=Buffer.from(json(ext)),tb=Buffer.from(json(timing)),imp=p=>import(pathToFileURL(path.join(root,p)).href);
+ const exporter=await imp("scripts/v39_phase6_actual_release_candidate_export_v39.ts");
+ const result=exporter.compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:sha(eb),timingBytes:tb,expectedTimingFileSha256:sha(tb),calendarVariant:"COMPACT_NOV21"});
+ const parity=exporter.verifyP6ActualCommittedCheckout(result),r=result.summary,stage=JSON.parse(result.files[31].bytes);
+ need(parity.verifiedPlanCount===31&&r.sourceQueries===6144&&r.totalReservedUnits===37388&&r.peakDailyUnits===1280&&stage.phase6AuthorizationId==="REVIEW-ONLY-NOT-AN-AUTHORIZATION"&&r.jointBudget?.netRestCeiling===49468&&r.jointBudget?.restUnallocated===11080&&r.phase6PaidGo===false&&head===remote(),"NATIVE_EXACT_COMPACT_PARITY");
+ // Import the genuine eventual owner verifier and cost implementation now,
+ // but do not feed a mock approval into production admission functions.
+ const owner=await imp("scripts/v39_phase6_enable_source_owner_v39.ts"),cost=await imp("server/lib/disruption/phase5V0082UnknownAirportSevenCostOnlyDraft_v39.mjs");
+ const compiled=cost.buildP5V0082UnknownAirportSevenCostOnlyDraft({schema:"v39.phase5.v0082-cost-only-from-slot-input.v1",slotBudgetInput:stage.slotBudgetInput,expectedReviewerSlotEnvelopeSha256:stage.expectedSignedSlotEnvelopeSha256});
+ need(compiled.costOnlyCategoryDraftSha256===r.unsignedCostOnlyEnvelopeSha256&&compiled.categoryCaps.length===7&&H.test(owner.p6SourceAuthorizationStageContentSha(stage)),"NATIVE_COST_AND_OWNER_IMPORT_PARITY");
+ console.log(json({status:"NATIVE_CURRENT_ACCOUNT_UNSIGNED_CORE_INTEGRATION_PASS_NO_GO",main:head,verifiedPlanCount:31,plannedQueries:6144,reservedRestUnits:37388,peakDailyUnits:1280,netRestCeiling:49468,restUnallocated:11080,categories:compiled.categoryCaps.length,stageBytes:r.unsignedStageInputByteCount,accountEvidenceSha256:RAW_ACCOUNT_SHA,reviewedReleaseArtifactsCreated:false,authorizationCreated:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
+}
 async function run(){
+ if(process.argv[2]==="VERIFY_NATIVE_UNSIGNED_CORE_NO_GO")return verifyNativeUnsignedCore(process.argv[3]);
  const [mode,dirArg,reviewSha]=process.argv.slice(2);
  need(process.argv.length===5&&["PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE","ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"].includes(mode)&&H.test(reviewSha??"")&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&!["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY"].some(k=>process.env[k]),"OWNER_LOCAL_STOP_SCOPE");
  const root=fs.realpathSync(git(["rev-parse","--show-toplevel"])),head=git(["rev-parse","HEAD"]),d=privateDir(dirArg);
@@ -122,5 +164,5 @@ async function run(){
  for(const [k,val] of Object.entries({manifest:x.manifest,config:x.config,"external-input":x.external,"timing-input":x.timing,auth}))write(d,"approved-"+k+".json",val);
  console.log(json({status:"EXACT_EXISTING_LEDGER_AUTH_CORE_INPUTS_ADOPTED_PRIVATE_NO_GO",main:head,...summary,ledgerWrites:0,databaseWrites:0,providerCalls:0}));
 }
-module.exports={validateReview,bindCandidates,decisionAuth,FLAGS,EH};
+module.exports={validateReview,bindCandidates,decisionAuth,unsignedExternal,FLAGS,EH};
 if(require.main===module)run().catch(e=>{const s=String(e?.message??"");console.error(/^HOLD_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_CORE_INPUT_REDACTED");process.exitCode=2});
