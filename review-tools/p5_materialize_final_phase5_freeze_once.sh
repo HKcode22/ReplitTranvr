@@ -7,6 +7,7 @@ set +x
 umask 077
 
 REPO="HKcode22/ReplitTranvr"
+BASE="70580b3749544dfcbeff39da181b2aa42b1b4476"
 FREEZE_BLOB="607886ff73c1c342873d66820ca16be18f803210"
 
 hold(){ printf 'HOLD_P5_FINAL_FREEZE_ONCE: %s\n' "$1" >&2; exit 2; }
@@ -18,6 +19,17 @@ gh auth status --hostname github.com >/dev/null 2>&1 || hold "GITHUB_AUTH_MISSIN
 
 LIVE="$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" || hold "MAIN_READ_FAILED"
 [[ "$LIVE" =~ ^[a-f0-9]{40}$ ]] || hold "MAIN_INVALID"
+
+if [[ "$LIVE" != "$BASE" ]]; then
+  while IFS= read -r changed; do
+    [[ -n "$changed" ]] || continue
+    case "$changed" in
+      data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json) ;;
+      data-collection/phase5/evidence/*.json|data-collection/phase5/evidence/*.md) ;;
+      *) hold "NON_EVIDENCE_MAIN_DRIFT" ;;
+    esac
+  done < <(gh api "repos/$REPO/compare/$BASE...$LIVE" --jq '.files[].filename')
+fi
 
 DIR="$(node - "$P5_FINAL_REVIEW_DIRECTORY" <<'NODE'
 const fs=require("node:fs"),path=require("node:path");
