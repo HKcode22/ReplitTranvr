@@ -69,9 +69,9 @@ function run(){
   const out=runSequence({
    dispatch(mode){
     checkMain();emit({mode,status:"DISPATCH_ATTEMPTED_NO_REPLAY"});
-    // GitHub REST API version 2026-03-10 returns workflow_run_id, rather
+    // Explicit return_run_details requests workflow_run_id in API 2026-03-10, rather
     // than the earlier ambiguous 204. No polling a guessed latest run.
-    const x=JSON.parse(gh(["api","--method","POST","-H","X-GitHub-Api-Version: 2026-03-10","repos/"+REPO+"/actions/workflows/"+w.id+"/dispatches","--input","-"],{input:JSON.stringify({ref:"main",inputs:{stage:mode,confirm:confirms[mode]}}),stdio:["pipe","pipe","ignore"]}));
+    const x=JSON.parse(gh(["api","--method","POST","-H","X-GitHub-Api-Version: 2026-03-10","repos/"+REPO+"/actions/workflows/"+w.id+"/dispatches","--input","-"],{input:JSON.stringify({ref:"main",inputs:{stage:mode,confirm:confirms[mode]},return_run_details:true}),stdio:["pipe","pipe","ignore"]}));
     const id=x.workflow_run_id;
     need(Number.isSafeInteger(id)&&id>0&&x.run_url==="https://api.github.com/repos/"+REPO+"/actions/runs/"+id&&x.html_url==="https://github.com/"+REPO+"/actions/runs/"+id,"DISPATCH_RESPONSE_UNKNOWN_NO_REPLAY");
     emit({mode,status:"DISPATCH_EXACT_RUN_ID",runId:id});return id;
