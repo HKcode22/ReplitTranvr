@@ -6,7 +6,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",BASE="70580b3749544dfcbeff39da181b2aa42b1b4476";
-const RUNNER="1bb48e3e9b07f722da4193b01d455e2170a840a6",STAGE="daa81214a05399e0df11d880fb42543f72090436";
+const RUNNER="1bb48e3e9b07f722da4193b01d455e2170a840a6",STAGE="daa81214a05399e0df11d880fb42543f72090436",REPIN="3a0cf0091af584f22c0a82d9d55a6e3456e21939";
 const LEDGER="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const PINS={"manifest-candidate.json":"9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25","config-candidate.json":"4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb","source-inventory.json":"6cf7dbe2421604fed2909f6539f68021103137eb5d320c40faf28dfb799fd6a0","external-input-offline-review-NOT-STAGE.json":"a7508acbea9de20ffb3e69771b94f0d6b61f47e77f6bafe38376a9a7c8454fe9"};
@@ -97,10 +97,20 @@ function run(){
   need(fs.readFileSync(path.join(root,"package-lock.json")).equals(fs.readFileSync(path.join(checkout,"package-lock.json")))&&fs.existsSync(path.join(root,"node_modules",".bin","tsx")),"EXISTING_DEPENDENCY_LOCK");
   fs.symlinkSync(path.join(root,"node_modules"),path.join(checkout,"node_modules"),"dir");
   const runner=fetchBlob(RUNNER,"runner.cjs");
+  let checkedFinalSchedulerPins=false;
   for(let i=0;i<6;i++){
    need(live()===head,"MAIN_CHANGED_REVIEW_REQUIRED");
    const ledger=JSON.parse(git(["show",head+":"+LEDGER]));need(ledger.schema==="v39.phase6.source-enable-approval-ledger.v1"&&Array.isArray(ledger.approvals),"EXACT_LEDGER");
    const {statuses,prepared}=state(dir,out,ledger),n=next(statuses);
+   // Only once actual ledger AUTH is adopted on the final clean evidence-only
+   // main. The old production and relay pins otherwise reject the new SHA.
+   // No separate owner run; never touch pins on absent review or uncertain
+   // commissioning journal. Paid routing and actual collection stay STOP.
+   if(!checkedFinalSchedulerPins&&head!==BASE&&statuses.authOnMain&&statuses.coreAdopted&&!statuses.anyMutationJournal){
+    const repin=fetchBlob(REPIN,"final-repin.cjs");
+    execFileSync(process.execPath,[repin,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:20*60*1000});
+    checkedFinalSchedulerPins=true;
+   }
    if(n.status){
     console.log(JSON.stringify({status:n.status,main:head,missing:n.missing??[],preparedAuth:prepared?{authorizationId:prepared.authorizationId,authArtifactSha256:prepared.authArtifactSha256}:null,phase6PaidGo:false,existingJournalsPreserved:true}));
     if(n.status.startsWith("HOLD"))process.exitCode=2;

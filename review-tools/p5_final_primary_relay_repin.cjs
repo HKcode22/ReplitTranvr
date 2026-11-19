@@ -15,8 +15,8 @@ const need=(x,s)=>{if(!x)throw Error("HOLD_P5_FINAL_REPIN_"+s)},sha=b=>crypto.cr
 function classify(p,r,head,journal,now){
  need(C.test(head)&&head!==BASE&&Number.isFinite(now),"EXACT_FINAL_MAIN");
  need(p.P5_PRIMARY_FIDS_EXPIRY_ENABLED==="true"&&p.P5_PRIMARY_FIDS_EXPIRY_APPROVAL==="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER"&&p.P5_PRIMARY_FIDS_BACKSTOP_ENABLED==="true"&&p.P6_PRIVATE_EPOCH_EXPIRY_MODE==="COMMISSION_VERIFY_ONLY"&&p.P5_RETENTION_READONLY_MONITOR_ENABLED==="true"&&H.test(p.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256??""),"EXISTING_PRIMARY_CONFIG");
- need(["P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_CONTROLLER_ENABLED","P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"].every(k=>p[k]!=="1"),"COLLECTION_MUST_REMAIN_STOPPED");
- need(r.TRAVNR_RELAY_MODE==="MULTI_LANE"&&r.TRAVNR_RELAY_PRIMARY_ENABLED==="1"&&r.TRAVNR_RELAY_ROLLING_ROUTE==="DIRECT_VERIFY"&&r.TRAVNR_RELAY_DIRECT_TICK_APPROVED==="0"&&r.TRAVNR_CRON_RELAY_SHA===RELAY&&r.TRAVNR_TARGET_FORWARD_ENV_READY==="1","EXISTING_RELAY_CONFIG");
+ need(["P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"].every(k=>p[k]!=="1"),"COLLECTION_MUST_REMAIN_STOPPED");
+ need(r.TRAVNR_RELAY_MODE==="MULTI_LANE"&&r.TRAVNR_RELAY_PRIMARY_ENABLED==="1"&&r.TRAVNR_RELAY_ROLLING_ROUTE==="DIRECT_VERIFY"&&r.TRAVNR_RELAY_DIRECT_TICK_APPROVED==="0"&&r.TRAVNR_CRON_RELAY_SHA===RELAY&&(r.TRAVNR_TARGET_FORWARD_ENV_READY===undefined||r.TRAVNR_TARGET_FORWARD_ENV_READY==="1"),"EXISTING_RELAY_CONFIG");
  const since=Date.parse(r.TRAVNR_RELAY_ROLLING_SINCE_UTC),primary=Date.parse(r.TRAVNR_RELAY_PRIMARY_SINCE_UTC);
  need(Number.isFinite(since)&&Number.isFinite(primary)&&since+7200000<=now&&primary<=now&&now-primary<60*86400000&&r.TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID&&/^[1-9]\d{0,14}$/.test(r.TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID),"EXPIRED_VERIFY_EPOCH_AND_EXISTING_BASELINE");
  need(Object.entries(p).every(([k,v])=>v!==BASE||k==="P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA")&&Object.entries(r).every(([k,v])=>v!==BASE||k==="TRAVNR_APPROVED_TARGET_MAIN_SHA"),"OTHER_OLD_MAIN_PIN_REVIEW");
@@ -43,6 +43,7 @@ const gh=(a,o={})=>cmd("gh",a,o),api=(r,p)=>JSON.parse(gh(["api","--method","GET
 const main=r=>api(r,"git/ref/heads/main").object.sha,git=a=>cmd("git",a);
 const vars=r=>{const pages=JSON.parse(gh(["api","--paginate","--slurp","repos/"+r+"/actions/variables?per_page=100"]));need(Array.isArray(pages)&&pages.length>0&&pages.length<=10&&pages.every(x=>Array.isArray(x.variables)&&x.total_count===pages[0].total_count),"VARIABLE_PAGES");const rows=pages.flatMap(x=>x.variables);need(rows.length===pages[0].total_count&&new Set(rows.map(x=>x.name)).size===rows.length,"VARIABLE_ROWS");return Object.fromEntries(rows.map(x=>[x.name,x.value]))};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const sameVars=(a,b)=>Object.keys(a).length===Object.keys(b).length&&Object.entries(a).every(([k,v])=>b[k]===v);
 function receipt(runId,head,apply=false){
  const run=api(P,"actions/runs/"+runId),jobs=api(P,"actions/runs/"+runId+"/jobs?filter=latest&per_page=100");
  need(jobs.total_count===1&&id(jobs.jobs?.[0]?.id),"EXACT_JOB");
@@ -68,6 +69,11 @@ async function run(){
  const authSha=approved(d,head),file="final-primary-relay-repin-"+head.slice(0,12)+".jsonl",out=path.join(d,file);
  let journal=null;if(fs.existsSync(out)){const rows=read(d,file).toString("utf8").trim().split("\n").map(JSON.parse);journal=rows.at(-1);need(journal.authSha===authSha,"JOURNAL_AUTH_DRIFT")}
  const p=vars(P),r=vars(R),mode=classify(p,r,head,journal,Date.now());
+ // The environment-level variable may override the repository setting.
+ const ev=api(R,"environments/travnr-target-forward/variables?per_page=100");
+ need(Number.isSafeInteger(ev.total_count)&&ev.total_count>=0&&ev.total_count<=100&&Array.isArray(ev.variables)&&ev.variables.length===ev.total_count,"FORWARD_ENV_METADATA");
+ const ready=ev.variables.find(x=>x.name==="TRAVNR_TARGET_FORWARD_ENV_READY")?.value??r.TRAVNR_TARGET_FORWARD_ENV_READY;
+ need(ready==="1","EXISTING_FORWARD_ENV_NOT_READY");
  if(mode==="ALREADY_COMPLETE"){console.log(JSON.stringify({status:"EXISTING_FINAL_SCHEDULER_REPIN_RECEIPT_MATCHES_NO_REPLAY",main:head,verifyRunId:journal.verifyRunId,phase6PaidGo:false}));return}
  // Existing previous exact primary child must have completed successfully.
  const recent=api(P,"actions/workflows/"+W+"/runs?branch=main&event=workflow_dispatch&per_page=20"),prior=recent.workflow_runs?.find(x=>x.head_sha===BASE&&x.display_title==="P5 PRIMARY BACKSTOP CHILD");
@@ -75,7 +81,7 @@ async function run(){
  const active=()=>{for(const [repo,wfs] of [[P,[W,"phase6-direct-recovery-tick.yml","phase6-rolling-controller-bounded-session.yml"]],[R,["external-clock.yml"]]])for(const w of wfs)for(const s of ["queued","in_progress","waiting","requested","pending"]){const x=api(repo,"actions/workflows/"+w+"/runs?branch=main&status="+s+"&per_page=1");need(Number.isSafeInteger(x.total_count)&&x.total_count>=0,"ACTIVE_METADATA");if(x.total_count)return true}return false};
  const until=Date.now()+180000;
  while(active()){stable();need(Date.now()<until,"ACTIVE_WORKFLOW_REVIEW");await sleep(5000)}
- stable();need(JSON.stringify(vars(P))===JSON.stringify(p)&&JSON.stringify(vars(R))===JSON.stringify(r),"VARIABLES_CHANGED_REVIEW");
+ stable();need(sameVars(vars(P),p)&&sameVars(vars(R),r),"VARIABLES_CHANGED_REVIEW");
  const fd=fs.openSync(out,"wx",0o600),emit=x=>{fs.writeSync(fd,JSON.stringify({main:head,authSha,...x})+"\n");fs.fsyncSync(fd);console.log(JSON.stringify({main:head,...x,phase6PaidGo:false}))};
  try{
   emit({status:"FINAL_PIN_TRANSITION_STARTED_NO_REPLAY"});
@@ -96,5 +102,5 @@ async function run(){
   stable();emit({status:"FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO",verifyRunId:proof.runId,verifyJobId:proof.jobId,providerCalls:0,paidAuthorityGranted:false,actualNextBackupChildNotYetObserved:true,macReadOnlyMonitorRepinStillRequired:true});
  }finally{fs.closeSync(fd)}
 }
-module.exports={classify,verifyReceipt,BASE,RELAY,C9};
+module.exports={classify,verifyReceipt,BASE,RELAY,C9,sameVars};
 if(require.main===module)run().catch(e=>{console.error(/^HOLD_P5_FINAL_REPIN_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P5_FINAL_REPIN_UNKNOWN_INSPECT_JOURNAL_NO_REPLAY");process.exitCode=2});
