@@ -152,19 +152,19 @@
     },
     {
       "order": 13,
-      "name": "Final Phase5 scientific/release freeze decision",
+      "name": "Final Phase5 scientific/release freeze decision bound to exact commissioning readbacks",
       "kind": "reviewer",
       "implemented": true,
       "tested": true,
-      "currentState": "READY_AFTER_12"
+      "currentState": "READY_AFTER_12_REQUIRES_GENUINE_REVIEWER_DECISION"
     },
     {
       "order": 14,
-      "name": "Final scheduler primary/relay repin/readback",
+      "name": "Final scheduler primary/relay repin/readback only after validated final Phase5 freeze",
       "kind": "production-control-plane",
       "implemented": true,
       "tested": true,
-      "currentState": "READY_AFTER_13"
+      "currentState": "READY_AFTER_VALIDATED_13"
     },
     {
       "order": 15,
@@ -175,7 +175,7 @@
       "currentState": "NOT_PHASE5_AUTOMATIC"
     }
   ],
-  "engineeringConclusion": "No additional Phase5 implementation, migration, role, scheduler, recovery, budget, sampling, PRE/POST, signing, manifest, policy, review-materialization, static-install, stage, readback, freeze-materialization, or failure-custody subsystem is missing from the tested closeout chain. Remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
+  "engineeringConclusion": "Phase5 closeout now includes an explicit post-commissioning final-freeze decision contract and a resume state machine that permits final scheduler repin only after that decision validates against exact B0062/V0093 readbacks. No additional demonstrated Phase5 implementation defect remains in the tested chain; remaining items are genuine review decisions and execution/readbacks of already-implemented steps.",
   "phase5TechnicalProtocolFrozen": true,
   "phase5ScientificReleaseFrozen": false,
   "phase6PaidGo": false,
