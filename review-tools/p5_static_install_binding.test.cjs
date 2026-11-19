@@ -10,8 +10,11 @@ const p={authVerified:true,authorizationId:"AUTH-20261119-FINAL",authArtifactSha
 const s={schema:"v39.phase5.final-six-policy-binding-decisions.v1",phase6PaidGo:false,authorizationId:p.authorizationId,authArtifactSha256:p.authArtifactSha256,reviewedMainSha:p.codeSha,manifestSha256:p.manifestSha256,configSha256:p.configSha256,rightsSha256:p.rightsSha256,costSha256:p.costSha256,reviewedBy:"independent-reviewer",reviewedAtUtc:"2026-11-19T06:35:00.000Z",decisions:Object.fromEntries(FLAGS.map(k=>[k,true])),releaseSha256:h("7"),externalContentUseReviewSha256:h("8"),builderSha256:h("9"),runAndRetentionEvidenceSha256:h("a"),selectedTArtifactHash:h("b"),selectedTSemanticsEvidenceSha256:h("c"),t24CustodyPolicySha256:h("d"),reviewedProviderPriceSha256:h("e"),externalPostContentsAndBudgetEvidenceSha256:h("f"),validFromUtc:"2026-11-19T05:00:00.000Z",validUntilUtc:"2026-12-27T04:00:00.000Z",builderFrozenAtUtc:"2026-11-19T06:30:00.000Z",selectedTVersion:"departure.scheduledTime.utc/v39",standaloneNoT24ProtocolSha256:null};
 const ops={hash:x=>crypto.createHash("sha256").update(JSON.stringify(x)).digest("hex"),publicFingerprint:pem=>crypto.createHash("sha256").update(crypto.createPublicKey(pem).export({type:"spki",format:"der"})).digest("hex"),byteLength:Buffer.byteLength};
 function assembled(){
+ const airportTimezoneGroups=[{timezone:"UTC",airports:["TEST"]}];
+ const pins={...p,airportTimezoneCatalogSha256:ops.hash({airportTimezoneGroups}),releaseSha256:s.releaseSha256};
  const work={status:"PRIVATE_SIX_POLICY_SHAPES_WITH_PUBLIC_CONTRACT_CANDIDATE_NOT_RUNTIME",phase6PaidGo:false,manifestApproved:false,policyDrafts:structuredClone(fixture.policyDrafts)};
- const policies=assemble(work,p,s,ops),pins={...p,releaseSha256:s.releaseSha256};
+ work.policyDrafts.P6_NONPAID_DAILY_POLICY_BASE64.airportTimezoneGroups=airportTimezoneGroups;
+ const policies=assemble(work,pins,s,ops);
  const verified=validateFinalPolicies(policies,pins,ops);
  const stage=JSON.stringify({codeSha40:p.codeSha,manifestSha256:p.manifestSha256,phase6AuthorizationId:p.authorizationId});
  const values=staticValues(stage,p.costSha256,pins,policies,verified);
