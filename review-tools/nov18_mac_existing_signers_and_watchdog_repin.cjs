@@ -23,6 +23,7 @@ function validateKeys(dir){checked(dir,true);const out=[];
  NEED(new Set(out.map(x=>x.fingerprintSha256)).size===6,'SIGNER_DUPLICATE');return out;
 }
 const readPlist=f=>JSON.parse(cmd('/usr/bin/plutil',['-convert','json','-o','-',f]));
+const canonical=x=>Array.isArray(x)?x.map(canonical):x&&typeof x==="object"?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
 function validatePlist(pl){const a=pl.ProgramArguments;
  NEED(pl.Label===LABEL&&Array.isArray(a)&&a.length===5&&a.every(x=>typeof x==='string')&&a[0].startsWith('/')&&a[1].startsWith('/')&&a[2]==='observe-auth-notify'&&/^[a-f0-9]{40}$/.test(a[3])&&a[4].startsWith('/')&&pl.StartInterval===600&&pl.RunAtLoad===true,'EXISTING_AGENT_IDENTITY');
  NEED(Object.keys(pl.EnvironmentVariables??{}).every(k=>['TRAVNR_WATCH_GH_BINARY','GH_CONFIG_DIR','XDG_CONFIG_HOME'].includes(k)),'UNEXPECTED_AGENT_ENV');
@@ -48,8 +49,8 @@ function execute(){
    fs.writeFileSync(candidate,original,{mode:st.mode&0o777,flag:'wx'});
    cmd('/usr/libexec/PlistBuddy',['-c','Set :ProgramArguments:3 '+PIN,candidate]);cmd('/usr/bin/plutil',['-lint',candidate]);
    const next=readPlist(candidate);validatePlist(next);const expected={...pl,ProgramArguments:a.map((x,i)=>i===3?PIN:x)};
-   // JSON serialization key order stable because both reads use plutil.
-   NEED(JSON.stringify(next)===JSON.stringify(expected),'OTHER_AGENT_FIELD_CHANGED');
+   // Compare values without assuming plist dictionary key ordering.
+   NEED(JSON.stringify(canonical(next))===JSON.stringify(canonical(expected)),'OTHER_AGENT_FIELD_CHANGED');
    NEED(live()===PIN,'MAIN_MOVED_BEFORE_BOOTSTRAP');
    if(loaded){cmd('/bin/launchctl',['bootout',service]);unloaded=true;}
    fs.renameSync(candidate,plfile);installed=true;cmd('/bin/launchctl',['bootstrap',domain,plfile]);bootstrapped=true;changed=true;
