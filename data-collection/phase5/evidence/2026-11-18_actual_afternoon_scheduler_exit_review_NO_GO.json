@@ -1,0 +1,133 @@
+{
+  "schema": "v39.phase5.nov18-exact-commissioning-progress.v1",
+  "status": "SCHEDULER_COOLDOWN_TRANSITION_READY_NO_GO",
+  "productionBase": "ea89308f468494d848f549539200f73f848a4fa7",
+  "relayMain": "b3a775b4ec7213af796bb8c727b69c3d0feb8bb7",
+  "candidateHead": "255c029f721d6eec8de199df183ba8e909b31ec8",
+  "candidateTree": "e84f9e599187bd76792661799fa4ca881314ae4d",
+  "candidatePr": 876,
+  "ci": {
+    "checksPassed": 9,
+    "checksFailed": 0,
+    "directCasesPassed": 18,
+    "fullSafetyRun": 44351069592,
+    "fullSafetyJob": 134966507958,
+    "fullSafetySuccess": true
+  },
+  "soak": {
+    "runId": 44351643063,
+    "jobId": 134968584649,
+    "artifactId": 14476336834,
+    "sha256": "d020dae8a925d8827844d9002a2577710de027e73a660f6193f945a83bc25240",
+    "expectedSlots": 59,
+    "missingSlots": 0,
+    "duplicates": 0,
+    "lateSlots": 0,
+    "verifiedTargetMetadata": 23,
+    "expectedExpiryDeferrals": 23,
+    "snapshots": 33,
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "dispatchesByObserver": 0,
+    "paidAuthorityGranted": false
+  },
+  "expiredDirectVerify": {
+    "fromUtc": "2026-11-18T16:17:17.321Z",
+    "untilUtc": "2026-11-18T18:17:17.321Z",
+    "relayTargetRunPairs": [
+      [
+        44345668673,
+        44345719185
+      ],
+      [
+        44347607546,
+        44347663362
+      ],
+      [
+        44349532338,
+        44349592278
+      ],
+      [
+        44351448881,
+        44351500056
+      ],
+      [
+        44353334107,
+        44353385273
+      ],
+      [
+        44355231694,
+        44355295118
+      ],
+      [
+        44357163854,
+        44357227711
+      ],
+      [
+        44359034848,
+        44359087291
+      ],
+      [
+        44360880022,
+        44360937199
+      ],
+      [
+        44362711097,
+        44362806284
+      ],
+      [
+        44364523099,
+        44364573021
+      ],
+      [
+        44366379835,
+        44366429363
+      ]
+    ],
+    "allCompletedSuccessMetadata": true,
+    "allExactReadOnlyTargetReceiptsVerified": true,
+    "latestSixPreviewHeldEarlyDrawInert": true,
+    "oldEpochAfterExpiryTargetRunsObserved": 0,
+    "oldIncidentPreserved": 44343687014,
+    "providerCalls": 0,
+    "dbWrites": 0,
+    "collectionProven": false
+  },
+  "nativeEarlyDrawHold": {
+    "runId": 44356821912,
+    "jobId": 134987041617,
+    "gateStep": "success",
+    "installStep": "skipped",
+    "actualDrawStep": "skipped",
+    "readonlyPreviewHold": "HOLD_INERT_REQUIRED_STEP",
+    "classification": "PRE_RELEASE_STOP_INERT_NOT_ACTUAL_DRAW_NOT_PRODUCTION_FAILURE",
+    "paidAdmissionMustStillHoldOnUnexpectedInertExecution": true
+  },
+  "nativeHeartbeat": {
+    "runId": 44427172906,
+    "jobId": 135234900570,
+    "result": "failure",
+    "primaryStatus": "SCHEDULE_OBSERVATION_STALE",
+    "backupObservedAsFresh": true,
+    "collectionExpected": false
+  },
+  "latestExactPrimaryBackup": {
+    "runId": 44428075334,
+    "jobId": 135238021260,
+    "observedAtUtc": "2026-11-19T00:19:54.916Z",
+    "allNineCountersZero": true,
+    "distinctDBActors": true,
+    "privateCommissionGranted": true,
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "privateApplyNotArmed": true,
+    "physicalDeletionOrPitrCertified": false
+  },
+  "ownerTransitionBlob": "2ee1a81d5899806dc929cb1efedc070ae274f6a1",
+  "ownerWrapperBlob": "2c995a987988de13fe4514924e85c4bc96df4d78",
+  "actualOwnerTransitionPending": true,
+  "actualFinalApprovalLedgerReferences": 12,
+  "actualFinalApprovals": 0,
+  "phase5Freeze": false,
+  "phase6PaidGo": false
+}
