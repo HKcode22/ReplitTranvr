@@ -11,6 +11,8 @@ on:
       - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
       - 'review-tools/p5_bulk_final_owner_handoff.cjs'
       - 'review-tools/p5_resume_existing_final_commissioning.cjs'
+      - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
+      - 'review-tools/p5_inert_stage_chain.test.cjs'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
   pull_request:
     paths:
@@ -20,6 +22,8 @@ on:
       - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
       - 'review-tools/p5_bulk_final_owner_handoff.cjs'
       - 'review-tools/p5_resume_existing_final_commissioning.cjs'
+      - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
+      - 'review-tools/p5_inert_stage_chain.test.cjs'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
 
 permissions:
@@ -43,13 +47,16 @@ jobs:
           node --check review-tools/p5_export_exact_approved_bundle.cjs
           node --check review-tools/p5_bulk_final_owner_handoff.cjs
           node --check review-tools/p5_resume_existing_final_commissioning.cjs
+          node --check review-tools/p5_run_existing_inert_stage_chain.cjs
           node --check review-tools/p5_final_repin_receipt.test.cjs
+          node --check review-tools/p5_inert_stage_chain.test.cjs
           node --check review-tools/p5_manifest_receipt_recovery.test.cjs
 
       - name: Run focused historical-receipt regressions
         run: |
           set -Eeuo pipefail
-          node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs
+          node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs \
+            review-tools/p5_inert_stage_chain.test.cjs
 
       - name: Verify exact helper blob pin chain
         run: |
