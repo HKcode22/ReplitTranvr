@@ -6,14 +6,21 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",BASE="70580b3749544dfcbeff39da181b2aa42b1b4476";
-const RUNNER="54b29fad160dbb358c323b26c64d55045096fa04",STAGE="6a84f6b9cd993965e3d267a1e7f9246de19995ae",REPIN="e27585debcaccd2f123381ed61f448352a732e3f";
+const RUNNER="54b29fad160dbb358c323b26c64d55045096fa04",STAGE="6a84f6b9cd993965e3d267a1e7f9246de19995ae",REPIN="e27585debcaccd2f123381ed61f448352a732e3f",FREEZE="607886ff73c1c342873d66820ca16be18f803210";
 const LEDGER="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const PINS={"manifest-candidate.json":"9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25","config-candidate.json":"4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb","source-inventory.json":"6cf7dbe2421604fed2909f6539f68021103137eb5d320c40faf28dfb799fd6a0","external-input-offline-review-NOT-STAGE.json":"a7508acbea9de20ffb3e69771b94f0d6b61f47e77f6bafe38376a9a7c8454fe9"};
-const CORE="reviewed-final-core-scope-decisions.json",POLICY="reviewed-final-policy-binding-decisions.json",PRIVATE="approved-private-policy-review.json",STATIC="static-install-review.json";
+const CORE="reviewed-final-core-scope-decisions.json",POLICY="reviewed-final-policy-binding-decisions.json",PRIVATE="approved-private-policy-review.json",STATIC="static-install-review.json",FINAL_FREEZE="approved-final-phase5-freeze.json";
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_RESUME_"+s)},sha=b=>crypto.createHash("sha256").update(b).digest("hex");
 function next(s){
- if(s.completedStageJournal) return s.freezeWorkpaper?{status:"BOTH_STAGES_ALREADY_ACKNOWLEDGED_NO_REPLAY"}:{mode:"RECOVER_EXISTING_FREEZE_WORKPAPER"};
+ if(s.finalRepinPresent&&!s.completedStageJournal)return {status:"HOLD_FINAL_REPIN_EXISTS_BEFORE_COMPLETED_COMMISSIONING_RECONCILE_NO_REPLAY"};
+ if(s.completedStageJournal){
+  if(!s.freezeWorkpaper)return {mode:"RECOVER_EXISTING_FREEZE_WORKPAPER"};
+  if(!s.finalFreezeDecision)return {status:"HOLD_FINAL_PHASE5_FREEZE_DECISION_ABSENT",missing:[FINAL_FREEZE]};
+  if(s.partialFinalRepin)return {status:"HOLD_FINAL_REPIN_JOURNAL_RECONCILE_NO_REPLAY"};
+  if(!s.finalRepinComplete)return {mode:"FINAL_SCHEDULER_REPIN_AFTER_FREEZE"};
+  return {status:"PHASE5_FINAL_FREEZE_AND_SCHEDULER_REPIN_COMPLETE_NO_PAID_GO"};
+ }
  if(s.acknowledgedCalendarOnly&&s.coreAdopted&&s.privateReview&&s.staticReview&&s.authOnMain)return {mode:"RESUME_ACKNOWLEDGED_CALENDAR_NO_GO",review:PRIVATE,static:STATIC};
  if(s.completedStaticInstall){
   if(!s.stageJournalPresent&&!s.partialInertApproval&&s.coreAdopted&&s.privateReview&&s.staticReview&&s.authOnMain)
@@ -86,7 +93,19 @@ function state(d,out,ledger){
   completedInertApproval=j.at(-1)?.status==="THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO";
  }
  const partialStaticInstall=staticJournalPresent&&!completedStaticInstall,partialInertApproval=inertApprovalJournalPresent&&!completedInertApproval;
- const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,completedStaticInstall,completedInertApproval,stageJournalPresent,partialStaticInstall,partialInertApproval,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),anyMutationJournal:stageJournalPresent||partialStaticInstall||partialInertApproval};
+ const repinName="final-primary-relay-repin-"+path.basename(out).slice("exact-final-commissioning-".length)+".jsonl";
+ const repinPath=path.join(d,repinName),finalRepinPresent=fs.existsSync(repinPath);
+ let finalRepinComplete=false;
+ if(finalRepinPresent){
+  const rs=read(d,repinName,1000000).toString("utf8").trim().split("\n").filter(Boolean).map(l=>JSON.parse(l));
+  const last=rs.at(-1);
+  finalRepinComplete=last?.status==="FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO"&&last.main===path.basename(out).slice("exact-final-commissioning-".length).padEnd(40,"").slice(0,12)===false;
+  // Exact main equality is validated by the repin helper; here classify only
+  // a structurally complete receipt and let run() perform the live-main check.
+  finalRepinComplete=last?.status==="FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO"&&typeof last.main==="string"&&C.test(last.main)&&Number.isSafeInteger(last.verifyRunId)&&last.verifyRunId>0;
+ }
+ const partialFinalRepin=finalRepinPresent&&!finalRepinComplete;
+ const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,completedStaticInstall,completedInertApproval,stageJournalPresent,partialStaticInstall,partialInertApproval,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),finalFreezeDecision:xo(FINAL_FREEZE),finalRepinPresent,finalRepinComplete,partialFinalRepin,anyMutationJournal:stageJournalPresent||partialStaticInstall||partialInertApproval||partialFinalRepin};
  return {statuses,prepared};
 }
 function run(){
@@ -116,20 +135,19 @@ function run(){
   need(fs.readFileSync(path.join(root,"package-lock.json")).equals(fs.readFileSync(path.join(checkout,"package-lock.json")))&&fs.existsSync(path.join(root,"node_modules",".bin","tsx")),"EXISTING_DEPENDENCY_LOCK");
   fs.symlinkSync(path.join(root,"node_modules"),path.join(checkout,"node_modules"),"dir");
   const runner=fetchBlob(RUNNER,"runner.cjs");
-  let checkedFinalSchedulerPins=false;
   for(let i=0;i<6;i++){
    need(live()===head,"MAIN_CHANGED_REVIEW_REQUIRED");
    const ledger=JSON.parse(git(["show",head+":"+LEDGER]));need(ledger.schema==="v39.phase6.source-enable-approval-ledger.v1"&&Array.isArray(ledger.approvals),"EXACT_LEDGER");
-   const {statuses,prepared}=state(dir,out,ledger),n=next(statuses);
-   // Only once actual ledger AUTH is adopted on the final clean evidence-only
-   // main. The old production and relay pins otherwise reject the new SHA.
-   // No separate owner run; never touch pins on absent review or uncertain
-   // commissioning journal. Paid routing and actual collection stay STOP.
-   if(!checkedFinalSchedulerPins&&head!==BASE&&statuses.authOnMain&&statuses.coreAdopted&&!statuses.anyMutationJournal){
-    const repin=fetchBlob(REPIN,"final-repin.cjs");
-    execFileSync(process.execPath,[repin,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:20*60*1000});
-    checkedFinalSchedulerPins=true;
+   const {statuses,prepared}=state(dir,out,ledger);
+   if(statuses.finalFreezeDecision){
+    const freeze=fetchBlob(FREEZE,"final-freeze.cjs"),mod=require(freeze),od=safeDir(out);
+    const work=JSON.parse(read(od,"final-freeze-review-workpaper-NOT-APPROVED.json",1000000));
+    const decisionRaw=read(od,FINAL_FREEZE,1000000),decision=JSON.parse(decisionRaw);
+    need(Buffer.from(JSON.stringify(decision)).equals(decisionRaw),"FINAL_FREEZE_DECISION_NOT_CANONICAL");
+    mod.validateDecision(work,decision,Date.now());
+    need(decision.reviewedMainSha===head&&decision.phase6PaidGo===false&&decision.finalSchedulerRepinApproved===true,"FINAL_FREEZE_DECISION_MAIN_OR_SCOPE");
    }
+   const n=next(statuses);
    if(n.status){
     console.log(JSON.stringify({status:n.status,main:head,missing:n.missing??[],preparedAuth:prepared?{authorizationId:prepared.authorizationId,authArtifactSha256:prepared.authArtifactSha256}:null,phase6PaidGo:false,existingJournalsPreserved:true}));
     if(n.status.startsWith("HOLD"))process.exitCode=2;
@@ -139,6 +157,12 @@ function run(){
     const stage=fetchBlob(STAGE,"stage.cjs");
     execFileSync(process.execPath,[stage,"--prepare-freeze-review",out,sha(read(safeDir(out),"bundle-receipt.json",200000))],{cwd:checkout,env:noCred,stdio:"inherit",timeout:120000});
     return;
+   }
+   if(n.mode==="FINAL_SCHEDULER_REPIN_AFTER_FREEZE"){
+    need(head!==BASE,"FINAL_REPIN_REQUIRES_EVIDENCE_ONLY_MAIN");
+    const repin=fetchBlob(REPIN,"final-repin.cjs");
+    execFileSync(process.execPath,[repin,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:20*60*1000});
+    continue;
    }
    if(n.mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"){
     const r=JSON.parse(read(dir,CORE,200000)),c=r.evidenceCommit;need(C.test(c??""),"EXACT_EVIDENCE_COMMIT");
@@ -157,5 +181,5 @@ function run(){
   fs.rmSync(tmp,{recursive:true,force:true});
  }
 }
-module.exports={next};
+module.exports={next,state};
 if(require.main===module)try{run()}catch(e){console.error(/^HOLD_P5_RESUME_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P5_RESUME_EXISTING_HELPER_STOPPED_INSPECT_OUTPUT_NO_REPLAY");process.exitCode=2}
