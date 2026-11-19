@@ -83,7 +83,7 @@
   "policyDrafts": {
     "P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64": {
       "independentStudyTrustPinsApproved": false,
-      "expectedReaderSessionLogin": null,
+      "expectedReaderSessionLogin": "phase6_private_reader_login_prod20261115",
       "reviewedCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
       "manifestSha256": "9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25",
       "calendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
@@ -266,8 +266,8 @@
       "reviewedMainSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
       "dailyPolicySha256": null,
       "signingPolicySha256": null,
-      "expectedReaderSessionLogin": null,
-      "expectedPublisherSessionLogin": null,
+      "expectedReaderSessionLogin": "phase6_private_reader_login_prod20261115",
+      "expectedPublisherSessionLogin": "phase6_private_publisher_login_prod20261115",
       "maximumDailyReviewRetentionHours": 96,
       "minimumPreparationLeadMinutes": 20,
       "maximumPreparationLookaheadMinutes": 720,
@@ -306,7 +306,7 @@
     "actual approved release/manifest binding",
     "applicable rights SHA256",
     "approved provider contract and category/cost envelope SHA256",
-    "actual reader/publisher login identities and approval",
+    "current release-specific approval of historically independently verified reader/publisher identities",
     "validity clock and independent policy acceptance",
     "approved policy byte digests",
     "durable key backup"
@@ -315,5 +315,22 @@
   "providerCalls": 0,
   "databaseWrites": 0,
   "githubSecretWrites": 0,
-  "phase6PaidGo": false
+  "phase6PaidGo": false,
+  "actualHistoricalRoleEvidence": {
+    "runId": 43696971798,
+    "reader": {
+      "jobId": 132759593167,
+      "status": "P6_PRIVATE_READER_GITHUB_READONLY_PASS",
+      "login": "phase6_private_reader_login_prod20261115"
+    },
+    "publisher": {
+      "jobId": 132759593008,
+      "status": "P6_PRIVATE_PUBLISHER_GITHUB_READONLY_PASS",
+      "login": "phase6_private_publisher_login_prod20261115"
+    },
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "currentCredentialValueNotRead": true,
+    "releaseScopeApprovalNotInferred": true
+  }
 }
