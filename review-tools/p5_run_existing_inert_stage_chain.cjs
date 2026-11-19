@@ -38,10 +38,19 @@ function verifySecretMetadata(rows,expected){
  const actual=captureSecretMetadata(rows,[...expected.keys()]);
  need([...expected].every(([name,updatedAt])=>actual.get(name)===updatedAt),"REVIEWED_SECRET_METADATA_DRIFT_NO_REPLAY");
 }
-function runSequence(ops){
- const calendarId=ops.dispatch("calendar");
- ops.awaitSuccess(calendarId,"calendar");
- ops.readback("calendar",calendarId);
+function metadataDigest(m){return sha(JSON.stringify([...m].sort(([a],[b])=>a.localeCompare(b))))}
+function acknowledgedCalendar(entries,r,receiptSha,currentMetadataSha){
+ need(Array.isArray(entries)&&entries.length===5,"ACKNOWLEDGED_CALENDAR_JOURNAL_ONLY");
+ const [a,b,c,d,e]=entries;
+ need(a?.status==="CHAIN_STARTED"&&a.main===r.main&&a.receiptSha===receiptSha&&a.providerCalls===0&&a.phase6PaidGo===false&&H.test(currentMetadataSha??"")&&a.secretMetadataSha256===currentMetadataSha,"EXACT_INITIAL_METADATA_BINDING");
+ need(b?.mode==="calendar"&&b.status==="DISPATCH_ATTEMPTED_NO_REPLAY"&&c?.mode==="calendar"&&c.status==="DISPATCH_EXACT_RUN_ID"&&Number.isSafeInteger(c.runId)&&c.runId>0&&d?.mode==="calendar"&&d.status==="EXACT_RUN_SUCCESS"&&d.runId===c.runId&&e?.mode==="calendar"&&e.status==="INDEPENDENT_READBACK_MATCH"&&e.runId===c.runId,"EXACT_ACKNOWLEDGED_CALENDAR");
+ verifyReadback(e.receipt,"calendar",r.main,r);
+ need(typeof e.receipt.snapshotAtUtc==="string"&&Number.isFinite(Date.parse(e.receipt.snapshotAtUtc))&&new Date(e.receipt.snapshotAtUtc).toISOString()===e.receipt.snapshotAtUtc,"EXACT_PRIOR_READBACK_CLOCK");
+ return {runId:c.runId,receipt:e.receipt};
+}
+function runSequence(ops,acknowledgedCalendarId=null){
+ const calendarId=acknowledgedCalendarId===null?ops.dispatch("calendar"):acknowledgedCalendarId;
+ if(acknowledgedCalendarId===null){ops.awaitSuccess(calendarId,"calendar");ops.readback("calendar",calendarId);}
  const costId=ops.dispatch("cost");
  ops.awaitSuccess(costId,"cost");
  ops.readback("cost",costId);
@@ -83,8 +92,9 @@ function writeFreezeWorkpaper(dir,receiptSha){
 }
 
 function run(){
- const [dirArg,receiptSha]=process.argv.slice(2);
- need(process.argv.length===4&&H.test(receiptSha??"")&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&typeof process.env.DATABASE_URL==="string","OWNER_EXPLICIT_STOP_SCOPE");
+ const [dirArg,receiptSha,resumeMode]=process.argv.slice(2);
+ const resume=resumeMode==="--resume-acknowledged-calendar";
+ need((process.argv.length===4||process.argv.length===5&&resume)&&H.test(receiptSha??"")&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&typeof process.env.DATABASE_URL==="string","OWNER_EXPLICIT_STOP_SCOPE");
  const d=fs.realpathSync(dirArg),ds=fs.lstatSync(dirArg);
  need(ds.isDirectory()&&!ds.isSymbolicLink()&&ds.uid===process.getuid()&&(ds.mode&0o077)===0,"PRIVATE_DIRECTORY");
  const rec=file(d,"bundle-receipt.json",200000),stage=file(d,"exact-approved-stage-input.json",48000),journal=file(d,"static-install-attempt.jsonl",200000);
@@ -121,16 +131,46 @@ function run(){
  // No guessing the result of a past dispatch. Initial two-stage chain only.
  // A previous attempt at this main must be reconciled with the existing
  // independent readback before any new mutation. Never retry from this tool.
- const prior=api("actions/workflows/"+w.id+"/runs?event=workflow_dispatch&head_sha="+r.main+"&per_page=100");
- need(prior.total_count===0&&Array.isArray(prior.workflow_runs)&&prior.workflow_runs.length===0,"PRIOR_STAGE_ATTEMPT_RECONCILIATION_REQUIRED");
- const fd=fs.openSync(path.join(d,"inert-stage-chain-attempt.jsonl"),"wx",0o600);
+ const priorRuns=()=>api("actions/workflows/"+w.id+"/runs?event=workflow_dispatch&head_sha="+r.main+"&per_page=100");
+ const noExtraStageRuns=expected=>{
+  const p=priorRuns();
+  need(p.total_count===(expected===null?0:1)&&Array.isArray(p.workflow_runs)&&p.workflow_runs.length===p.total_count&&(expected===null||p.workflow_runs[0].id===expected),"PRIOR_STAGE_ATTEMPT_RECONCILIATION_REQUIRED");
+ };
+ const currentMetadataSha=metadataDigest(initial),readEnv={...env,DATABASE_URL:process.env.DATABASE_URL,V39_P5_APPROVED_CODE_SHA:r.main,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
+ const stageReadback=mode=>{
+  const args=mode==="calendar"?["--readback-calendar",stage.f,r.stageSha256]:["--readback",stage.f,r.stageSha256,r.costEnvelopeSha256];
+  const x=JSON.parse(call(process.execPath,["scripts/v39_phase6_inert_release_stage_manual_v39.mjs",...args],{env:readEnv,timeout:120000}));
+  verifyReadback(x,mode,r.main,r);checkMain();checkMetadata();return x;
+ };
+ let recovered=null,originalJournal=null;
+ const chainName="inert-stage-chain-attempt.jsonl",chainPath=path.join(d,chainName);
+ if(resume){
+  originalJournal=file(d,chainName,1000000).b;
+  recovered=acknowledgedCalendar(originalJournal.toString("utf8").trim().split("\n").map(l=>JSON.parse(l)),r,receiptSha,currentMetadataSha);
+  noExtraStageRuns(recovered.runId);
+  verifyRun(api("actions/runs/"+recovered.runId),recovered.runId,w.id,r.main);
+  // A fresh owner readback must still prove exactly the disabled calendar,
+  // no cost rows and no source/paid attempt. An already committed cost is
+  // not a reason to dispatch another cost action.
+  const fresh=stageReadback("calendar");
+  need(Date.parse(fresh.snapshotAtUtc)>=Date.parse(recovered.receipt.snapshotAtUtc),"RESUME_READBACK_CLOCK");
+  checkMain();checkMetadata();noExtraStageRuns(recovered.runId);
+  need(file(d,chainName,1000000).b.equals(originalJournal),"STAGE_JOURNAL_CHANGED");
+  // Durable exclusive resume claim, even if the process dies before POST.
+  // Never delete or automatically retry an uncertain resume claim.
+  const lock=fs.openSync(path.join(d,"acknowledged-calendar-resume-once.json"),"wx",0o600);
+  try{fs.writeSync(lock,JSON.stringify({status:"CALENDAR_VERIFIED_COST_ONLY_RESUME_CLAIM_NO_REPLAY",main:r.main,receiptSha,calendarRunId:recovered.runId,originalJournalSha256:sha(originalJournal),secretMetadataSha256:currentMetadataSha,freshCalendarReadback:fresh,phase6PaidGo:false}));fs.fsyncSync(lock)}finally{fs.closeSync(lock)}
+ }else noExtraStageRuns(null);
+ const fd=fs.openSync(chainPath,resume?"a":"wx",0o600);
  const emit=x=>{fs.writeSync(fd,JSON.stringify(x)+"\n");fs.fsyncSync(fd)};
- const readEnv={...env,DATABASE_URL:process.env.DATABASE_URL,V39_P5_APPROVED_CODE_SHA:r.main,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
  try{
-  emit({status:"CHAIN_STARTED",main:r.main,receiptSha,providerCalls:0,phase6PaidGo:false});
+  if(resume){
+   need(file(d,chainName,1000000).b.equals(originalJournal),"STAGE_JOURNAL_CHANGED");
+   console.log(JSON.stringify({status:"EXACT_ACKNOWLEDGED_CALENDAR_FRESH_READBACK_COST_ONLY_RESUME",calendarRunId:recovered.runId,phase6PaidGo:false}));
+  }else emit({status:"CHAIN_STARTED",main:r.main,receiptSha,secretMetadataSha256:currentMetadataSha,providerCalls:0,phase6PaidGo:false});
   const out=runSequence({
    dispatch(mode){
-    checkMain();checkMetadata();emit({mode,status:"DISPATCH_ATTEMPTED_NO_REPLAY"});
+    checkMain();checkMetadata();if(resume)noExtraStageRuns(recovered.runId);emit({mode,status:"DISPATCH_ATTEMPTED_NO_REPLAY"});
     // API 2026-03-10 has a documented 200 run-ID response by default.
     // Send only its documented body fields; no legacy optional parameters.
     const x=JSON.parse(gh(["api","--method","POST","-H","X-GitHub-Api-Version: 2026-03-10","repos/"+REPO+"/actions/workflows/"+w.id+"/dispatches","--input","-"],{input:JSON.stringify({ref:"main",inputs:{stage:mode,confirm:confirms[mode]}}),stdio:["pipe","pipe","ignore"]}));
@@ -145,12 +185,10 @@ function run(){
     emit({mode,status:"EXACT_RUN_SUCCESS",runId:id});
    },
    readback(mode,id){
-    const args=mode==="calendar"?["--readback-calendar",stage.f,r.stageSha256]:["--readback",stage.f,r.stageSha256,r.costEnvelopeSha256];
-    const x=JSON.parse(call(process.execPath,["scripts/v39_phase6_inert_release_stage_manual_v39.mjs",...args],{env:readEnv,timeout:120000}));
-    verifyReadback(x,mode,r.main,r);checkMain();checkMetadata();
+    const x=stageReadback(mode);
     emit({mode,status:"INDEPENDENT_READBACK_MATCH",runId:id,receipt:x});
    }
-  });
+  },recovered?.runId??null);
   emit({status:"BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO",...out,authorizationEnabled:false,phase6PaidGo:false});
   console.log(JSON.stringify({status:"BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO",main:r.main,...out,authorizationEnabled:false,providerCalls:0,phase6PaidGo:false}));
   // Retain the acknowledged stage chain even if local workpaper export fails.
@@ -158,5 +196,5 @@ function run(){
   console.log(JSON.stringify(writeFreezeWorkpaper(d,receiptSha)));
  }finally{fs.closeSync(fd)}
 }
-module.exports={verifyRun,verifyReadback,runSequence,captureSecretMetadata,verifySecretMetadata,validateManifestStorageReceipt,prepareFreezeWorkpaper};
+module.exports={verifyRun,verifyReadback,runSequence,captureSecretMetadata,verifySecretMetadata,validateManifestStorageReceipt,prepareFreezeWorkpaper,acknowledgedCalendar,metadataDigest};
 if(require.main===module)try{if(process.argv[2]==="--prepare-freeze-review"){need(process.argv.length===5,"EXACT_FREEZE_REVIEW_ARGUMENTS");console.log(JSON.stringify(writeFreezeWorkpaper(process.argv[3],process.argv[4])))}else run()}catch(e){const s=String(e?.message??"");console.error(/^HOLD_P5_STAGE_CHAIN_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_STAGE_CHAIN_UNKNOWN_RESULT_READBACK_ONLY_NO_REPLAY");process.exitCode=2}

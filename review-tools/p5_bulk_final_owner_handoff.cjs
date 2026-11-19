@@ -5,7 +5,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
-const BLOBS={coreInputs:"c9adb783f29103fdfdd118472cbcc4d4910374ce",core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"be7946cd6bfe4f0662ce87e7fcf3005297042aef",install:"60691feaf6e0dd02a2b36b9ec6af9c0c46069af1",stage:"daa81214a05399e0df11d880fb42543f72090436"};
+const BLOBS={coreInputs:"c9adb783f29103fdfdd118472cbcc4d4910374ce",core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"be7946cd6bfe4f0662ce87e7fcf3005297042aef",install:"60691feaf6e0dd02a2b36b9ec6af9c0c46069af1",stage:"6a84f6b9cd993965e3d267a1e7f9246de19995ae"};
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_BULK_"+s)};
 const digest=b=>crypto.createHash("sha256").update(b).digest("hex");
 const INERT_APPROVALS=Object.freeze(["P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED"]);
@@ -44,6 +44,7 @@ function sequence(mode,ops){
  if(mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"||mode==="ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"){ops.coreInputs(mode);return}
  if(mode==="PREPARE_POLICY_REVIEW"){ops.assemble();return}
  if(mode==="PREPARE_STATIC_REVIEW"){ops.verify();ops.prepareStaticReviewWorkpaper();return}
+ if(mode==="RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"){ops.verify();ops.resumeStage();return}
  need(mode==="COMMISSION_EXISTING_INERT_NO_GO","MODE");
  // All reviewer artifacts and nonmutating checks pass before any mutation.
  ops.verify();ops.installPlan();ops.checkStagePrerequisites();ops.noPriorAttempt();
@@ -89,7 +90,7 @@ async function remainingOwnerMetadata(){
 function run(){
  const [mode,dirArg,policySha,staticSha]=process.argv.slice(2);
  const coreMode=["PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE","ADOPT_CORE_ALREADY_APPROVED_ON_MAIN"].includes(mode);
- need((coreMode||["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO"].includes(mode))&&H.test(policySha??"")&&(mode==="COMMISSION_EXISTING_INERT_NO_GO"?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
+ need((coreMode||["PREPARE_POLICY_REVIEW","PREPARE_STATIC_REVIEW","COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode))&&H.test(policySha??"")&&(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode)?process.argv.length===6&&H.test(staticSha??""):process.argv.length===5),"EXACT_REVIEW_ARGUMENTS");
  need(process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&!!process.env.DATABASE_URL,"EXISTING_OWNER_ENV");
  const env={...process.env,GH_PROMPT_DISABLED:"1",ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",V39_PHASE6_OWNER_APPROVED:"0"};
  for(const k of ["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY","NODE_OPTIONS"])delete env[k];
@@ -106,7 +107,7 @@ function run(){
  const review=coreMode?"reviewed-final-core-scope-decisions.json":mode==="PREPARE_POLICY_REVIEW"?"reviewed-final-policy-binding-decisions.json":"approved-private-policy-review.json";
  need(digest(safeRead(d,review))===policySha,"REVIEW_HASH");
  const out=path.join(d,"exact-final-commissioning-"+head.slice(0,12));
- if(mode==="COMMISSION_EXISTING_INERT_NO_GO"){safeDir(out);need(digest(safeRead(out,"static-install-review.json"))===staticSha,"STATIC_REVIEW_HASH")}
+ if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(mode)){safeDir(out);need(digest(safeRead(out,"static-install-review.json"))===staticSha,"STATIC_REVIEW_HASH")}
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),"p5-bulk-"));fs.chmodSync(temp,0o700);
  try{
   const f={};
@@ -176,7 +177,12 @@ function run(){
      checkMain();emit({status:"THREE_EXACT_REVIEWED_INERT_APPROVAL_FLAGS_INSTALLED_NO_GO"});
     }finally{fs.closeSync(fd)}
    },
-   stage:()=>call(process.execPath,[f.stage,out,receipt()])
+   stage:()=>call(process.execPath,[f.stage,out,receipt()]),
+   resumeStage(){
+    const review=JSON.parse(safeRead(out,"static-install-review.json",100000)),rb=safeRead(out,"bundle-receipt.json",200000);
+    need(digest(safeRead(out,"static-install-review.json",100000))===staticSha&&review.approvedStaticInstallation===true&&review.independentGlobalStopConfirmed===true&&review.phase6PaidGo===false&&review.main===head&&review.bundleReceiptSha256===digest(rb),"EXACT_EXISTING_STATIC_REVIEW");
+    call(process.execPath,[f.stage,out,receipt(),"--resume-acknowledged-calendar"]);
+   }
   });
   console.log(JSON.stringify({status:"EXISTING_EXACT_HANDOFF_STEP_COMPLETE",mode,main:head,phase6PaidGo:false}));
  }finally{fs.rmSync(temp,{recursive:true,force:true})}

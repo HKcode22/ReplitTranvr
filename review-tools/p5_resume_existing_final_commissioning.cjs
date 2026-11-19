@@ -6,7 +6,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",BASE="70580b3749544dfcbeff39da181b2aa42b1b4476";
-const RUNNER="1bb48e3e9b07f722da4193b01d455e2170a840a6",STAGE="daa81214a05399e0df11d880fb42543f72090436",REPIN="3a0cf0091af584f22c0a82d9d55a6e3456e21939";
+const RUNNER="9b9af7d604ac864e39c72a28f736b611a2c6d8a4",STAGE="6a84f6b9cd993965e3d267a1e7f9246de19995ae",REPIN="3a0cf0091af584f22c0a82d9d55a6e3456e21939";
 const LEDGER="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const PINS={"manifest-candidate.json":"9f6a12965dcf3eb911da4b13b3d58e5b8ebd0c6544861f499b7ec807cf0dbe25","config-candidate.json":"4055c04207222f5dbdda7d124c30f7bfdc40e852e68fef38df4d1e93e0659edb","source-inventory.json":"6cf7dbe2421604fed2909f6539f68021103137eb5d320c40faf28dfb799fd6a0","external-input-offline-review-NOT-STAGE.json":"a7508acbea9de20ffb3e69771b94f0d6b61f47e77f6bafe38376a9a7c8454fe9"};
@@ -14,6 +14,7 @@ const CORE="reviewed-final-core-scope-decisions.json",POLICY="reviewed-final-pol
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_RESUME_"+s)},sha=b=>crypto.createHash("sha256").update(b).digest("hex");
 function next(s){
  if(s.completedStageJournal) return s.freezeWorkpaper?{status:"BOTH_STAGES_ALREADY_ACKNOWLEDGED_NO_REPLAY"}:{mode:"RECOVER_EXISTING_FREEZE_WORKPAPER"};
+ if(s.acknowledgedCalendarOnly&&s.coreAdopted&&s.privateReview&&s.staticReview&&s.authOnMain)return {mode:"RESUME_ACKNOWLEDGED_CALENDAR_NO_GO",review:PRIVATE,static:STATIC};
  if(s.anyMutationJournal)return {status:"HOLD_EXISTING_MUTATION_JOURNAL_RECONCILE_NO_REPLAY"};
  if(!s.coreReview)return {status:"HOLD_EXACT_CORE_REVIEW_FILE_ABSENT",missing:[CORE]};
  if(!s.corePrepared)return {mode:"PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE",review:CORE};
@@ -62,12 +63,13 @@ function state(d,out,ledger){
   need(H.test(prepared.authArtifactSha256??"")&&sha(authRaw)===prepared.authArtifactSha256&&a.authorizationId===prepared.authorizationId,"EXACT_PREPARED_AUTH_RECEIPT");
   authOnMain=ledger.approvals.some(x=>x.authorizationId===a.authorizationId&&x.artifactSha256===prepared.authArtifactSha256&&JSON.stringify(x.predecessorEvidenceIds)===JSON.stringify(a.predecessorEvidenceIds));
  }
- let completedStageJournal=false;
+ let completedStageJournal=false,acknowledgedCalendarOnly=false;
  if(xo("inert-stage-chain-attempt.jsonl")){
   const j=read(safeDir(out),"inert-stage-chain-attempt.jsonl",1000000).toString("utf8").trim().split("\n").map(l=>JSON.parse(l));
   completedStageJournal=j.at(-1)?.status==="BOTH_EXISTING_INERT_STAGES_EXACT_READBACK_NO_GO";
+  acknowledgedCalendarOnly=j.length===5&&j.at(-1)?.mode==="calendar"&&j.at(-1)?.status==="INDEPENDENT_READBACK_MATCH"&&H.test(j[0]?.secretMetadataSha256??"")&&!xo("acknowledged-calendar-resume-once.json");
  }
- const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),anyMutationJournal:["inert-stage-chain-attempt.jsonl","static-install-attempt.jsonl","inert-approval-install-attempt.jsonl"].some(xo)};
+ const statuses={coreReview:ex(CORE),corePrepared,authOnMain,coreAdopted:["approved-manifest.json","approved-config.json","approved-external-input.json","approved-timing-input.json","approved-auth.json"].every(ex),policyDecision:ex(POLICY),policyObjects:ex("approved-policy-objects.json"),privateReview:ex(PRIVATE),staticWorkpaper:xo("static-install-review-workpaper-NOT-APPROVED.json"),staticReview:xo(STATIC),completedStageJournal,acknowledgedCalendarOnly,freezeWorkpaper:xo("final-freeze-review-workpaper-NOT-APPROVED.json"),anyMutationJournal:["inert-stage-chain-attempt.jsonl","static-install-attempt.jsonl","inert-approval-install-attempt.jsonl"].some(xo)};
  return {statuses,prepared};
 }
 function run(){
@@ -130,7 +132,7 @@ function run(){
    if(n.static)args.push(reviewDigest(safeDir(out),n.static,"P5_FINAL_STATIC_REVIEW_SHA256"));
    console.log(JSON.stringify({status:"EXECUTING_EXISTING_ADMITTED_MODE",mode:n.mode,main:head,phase6PaidGo:false}));
    execFileSync(process.execPath,args,{cwd:checkout,env,stdio:"inherit",timeout:45*60*1000});
-   if(n.mode==="COMMISSION_EXISTING_INERT_NO_GO")return;
+   if(["COMMISSION_EXISTING_INERT_NO_GO","RESUME_ACKNOWLEDGED_CALENDAR_NO_GO"].includes(n.mode))return;
   }
   need(false,"MAXIMUM_LOCAL_CONTINUATION_STEPS");
  }finally{
