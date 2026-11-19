@@ -133,7 +133,7 @@ function run(){
   need(fs.readFileSync(path.join(root,"package-lock.json")).equals(fs.readFileSync(path.join(checkout,"package-lock.json")))&&fs.existsSync(path.join(root,"node_modules",".bin","tsx")),"EXISTING_DEPENDENCY_LOCK");
   fs.symlinkSync(path.join(root,"node_modules"),path.join(checkout,"node_modules"),"dir");
   const runner=fetchBlob(RUNNER,"runner.cjs");
-  let freezePath=null;
+  let freezePath=null,repinPath=null;
   for(let i=0;i<6;i++){
    need(live()===head,"MAIN_CHANGED_REVIEW_REQUIRED");
    const ledger=JSON.parse(git(["show",head+":"+LEDGER]));need(ledger.schema==="v39.phase6.source-enable-approval-ledger.v1"&&Array.isArray(ledger.approvals),"EXACT_LEDGER");
@@ -149,6 +149,12 @@ function run(){
    if(statuses.finalRepinComplete)need(statuses.finalRepinMain===head,"FINAL_REPIN_RECEIPT_MAIN_DRIFT");
    const n=next(statuses);
    if(n.status){
+    if(n.status==="PHASE5_FINAL_FREEZE_AND_SCHEDULER_REPIN_COMPLETE_NO_PAID_GO"){
+     repinPath??=fetchBlob(REPIN,"final-repin.cjs");
+     // Existing repin helper classifies the acknowledged journal against the
+     // live repository + relay variables and performs no write when complete.
+     execFileSync(process.execPath,[repinPath,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:5*60*1000});
+    }
     console.log(JSON.stringify({status:n.status,main:head,missing:n.missing??[],preparedAuth:prepared?{authorizationId:prepared.authorizationId,authArtifactSha256:prepared.authArtifactSha256}:null,phase6PaidGo:false,existingJournalsPreserved:true}));
     if(n.status.startsWith("HOLD"))process.exitCode=2;
     return;
@@ -160,8 +166,8 @@ function run(){
    }
    if(n.mode==="FINAL_SCHEDULER_REPIN_AFTER_FREEZE"){
     need(head!==BASE,"FINAL_REPIN_REQUIRES_EVIDENCE_ONLY_MAIN");
-    const repin=fetchBlob(REPIN,"final-repin.cjs");
-    execFileSync(process.execPath,[repin,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:20*60*1000});
+    repinPath??=fetchBlob(REPIN,"final-repin.cjs");
+    execFileSync(process.execPath,[repinPath,dir,head],{cwd:checkout,env:noCred,stdio:"inherit",timeout:20*60*1000});
     continue;
    }
    if(n.mode==="PREPARE_CORE_EXACT_REVIEW_NO_LEDGER_WRITE"){
