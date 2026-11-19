@@ -24,3 +24,13 @@ test("Phase6 source enable still requires genuine source-use approval",()=>{
  assert.match(enable,/rightsDeferred=m\?\.sourceRightsApproved===false&&m\?\.sourceUseDeferredToPhase6Activation===true/);
  assert.match(enable,/EXACT_INDEPENDENT_AUTH_SCOPE_OR_BUDGET_REQUIRED/);
 });
+
+test("deferred source-use evidence may advance main only through scoped evidence and approval-ledger paths",()=>{
+ assert.match(enable,/POST_STAGE_APPROVAL_LEDGER_PATH="data-collection\/evidence\/ledgers\/V3\.9_PHASE6_SOURCE_ENABLE_APPROVALS\.json"/);
+ assert.match(enable,/POST_STAGE_EVIDENCE_PATH=.*data-collection/);
+ assert.match(enable,/POST_STAGE_MAIN_NOT_EVIDENCE_ONLY_DESCENDANT/);
+ assert.match(enable,/merge-base","--is-ancestor/);
+ assert.match(enable,/diff","--no-renames","--name-only/);
+ assert.match(enable,/admitP6InertOwnerReadback\(process\.env,stageRaw,stageSha,costSha,stageCode\)/);
+ assert.match(enable,/verifyP6SourceEnableAuthFile\(authPath,head\)/);
+});

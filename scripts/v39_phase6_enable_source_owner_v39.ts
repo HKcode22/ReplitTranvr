@@ -31,6 +31,29 @@ type ReviewedStage={input:any;review:any;freezeReview:any};
 type OwnerContext=ReviewedStage&{url:string;codeSha:string;stageSha:string;costSha:string};
 type Verify=VerifiedAuthFile;
 const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
+const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
+const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
+
+/** #879 deliberately permits Phase5 to stage the disabled calendar/cost state
+ * before source-use permission exists. A later source-rights/approval commit
+ * therefore must not invalidate the already-staged executable SHA. Only a
+ * strict descendant containing scoped evidence files and/or the dedicated
+ * SOURCE approval ledger is permitted; any executable/config/workflow change
+ * still fails closed and requires a new prospective stage.
+ */
+export function verifyP6PostStageEvidenceOnlyMainAdvance(stageCode:string,currentHead:string,changedPaths:string[],stageIsAncestor:boolean){
+ if(!CODE.test(stageCode??"")||!CODE.test(currentHead??"")||!Array.isArray(changedPaths)||
+    changedPaths.some(p=>typeof p!=="string"||p.length<1)||new Set(changedPaths).size!==changedPaths.length)
+  hold("POST_STAGE_MAIN_IDENTITY_INVALID");
+ if(stageCode===currentHead){
+  if(changedPaths.length!==0)hold("POST_STAGE_IDENTICAL_MAIN_HAS_DIFF");
+  return {stageCode,currentHead,evidenceOnlyAdvance:false,changedPaths:0};
+ }
+ if(stageIsAncestor!==true||changedPaths.length<1||
+    changedPaths.some(p=>p!==POST_STAGE_APPROVAL_LEDGER_PATH&&!POST_STAGE_EVIDENCE_PATH.test(p)))
+  hold("POST_STAGE_MAIN_NOT_EVIDENCE_ONLY_DESCENDANT");
+ return {stageCode,currentHead,evidenceOnlyAdvance:true,changedPaths:changedPaths.length};
+}
 
 /** AUTH content pin excludes ONLY final Git SHA, to avoid a circular hash
  * when the scoped continuation approval ledger is committed. Exact final executable
@@ -254,7 +277,19 @@ async function main(){
  const head=cmd("git",["rev-parse","HEAD"]),remote=()=>cmd("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha"]);
  if(head!==remote()||cmd("git",["status","--porcelain","--untracked-files=no"])!=="")
   hold("EXACT_CLEAN_REVIEWED_MAIN_REQUIRED");
- const s=admitP6InertOwnerReadback(process.env,readFileSync(stagePath,"utf8"),stageSha,costSha,head) as unknown as OwnerContext;
+ const stageRaw=readFileSync(stagePath,"utf8");
+ let stageCode:string;try{stageCode=JSON.parse(stageRaw)?.codeSha40;}catch{hold("STAGED_CODE_IDENTITY_INVALID");}
+ if(!CODE.test(stageCode??""))hold("STAGED_CODE_IDENTITY_INVALID");
+ let ancestor=stageCode===head;
+ if(!ancestor){
+  try{execFileSync("git",["merge-base","--is-ancestor",stageCode,head],{stdio:["ignore","ignore","ignore"],timeout:15000});ancestor=true;}catch{}
+ }
+ const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
+ verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
+ // The immutable stage remains bound to the executable SHA that created the
+ // disabled B0062/V0093 state. Current HEAD supplies only later scoped evidence
+ // and its exact approval ledger; executable bytes are forbidden from changing.
+ const s=admitP6InertOwnerReadback(process.env,stageRaw,stageSha,costSha,stageCode) as unknown as OwnerContext;
  if(process.env.V39_DATABASE_RUNTIME_URL&&process.env.V39_DATABASE_RUNTIME_URL===s.url)
   hold("OWNER_DB_MUST_NOT_BE_RUNTIME_LOGIN");
  const a=verifyP6SourceEnableAuthFile(authPath,head);
