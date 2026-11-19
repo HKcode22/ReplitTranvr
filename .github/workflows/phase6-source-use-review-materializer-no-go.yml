@@ -1,0 +1,56 @@
+name: Phase6 source-use evidence materializer review (NO GO)
+on:
+  push:
+    branches: [phase6/source-use-review-materializer-final-main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/2026-11-19_SOURCE_USE_REVIEWER_DECISION_INPUT_TEMPLATE_NO_GO.json'
+      - 'review-tools/p5_source_use_evidence_ledger_materializer.cjs'
+      - 'review-tools/p5_source_use_evidence_ledger_materializer.test.cjs'
+      - 'review-tools/p5_materialize_source_use_evidence_once.sh'
+      - '.github/workflows/phase6-source-use-review-materializer-no-go.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and no-provider boundary
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p5_source_use_evidence_ledger_materializer.cjs
+          node --check review-tools/p5_source_use_evidence_ledger_materializer.test.cjs
+          bash -n review-tools/p5_materialize_source_use_evidence_once.sh
+          grep -Fq 'BASE="4a155339479bf9324f626e36b1010054f67403cc"' review-tools/p5_materialize_source_use_evidence_once.sh
+          grep -Fq 'MATERIALIZER_BLOB="480970e85b123ef35895cd696b9ea198fb856012"' review-tools/p5_materialize_source_use_evidence_once.sh
+          grep -Fq 'phase6PaidGo:false' review-tools/p5_source_use_evidence_ledger_materializer.cjs
+          ! grep -Eq 'fetch\(|axios|https\.request|http\.request|new Pool|pg\.' review-tools/p5_source_use_evidence_ledger_materializer.cjs
+      - name: Focused materializer tests
+        run: node --test review-tools/p5_source_use_evidence_ledger_materializer.test.cjs
+      - name: Current production ledger remains unapproved
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json';
+          const x=JSON.parse(fs.readFileSync(p,'utf8'));
+          if(x.schema!=='v39.phase6.source-enable-approval-ledger.v1' ||
+             x.evidence.length!==28 || x.approvals.length!==0) process.exit(2);
+          console.log(JSON.stringify({status:'CURRENT_LEDGER_28_EVIDENCE_ZERO_APPROVALS',phase6PaidGo:false}));
+          NODE
+      - name: Confirm this review cannot activate Phase6
+        run: |
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          echo SOURCE_USE_MATERIALIZER_REVIEW_COMPLETE_NO_PROVIDER_NO_DB_NO_GO
