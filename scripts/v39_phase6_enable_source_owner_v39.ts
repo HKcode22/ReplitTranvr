@@ -37,7 +37,7 @@ const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509
 export const P6_P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="0000000000000000000000000000000000000000000000000000000000000000";
 const POST_STAGE_REVIEWED_BRIDGE_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"0000000000000000000000000000000000000000"
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"7eab4f255b1aec3daccf453c744f53949e247ca1"
 });
 const POST_STAGE_REVIEWED_BRIDGE_SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
 function normalizedBridgeSelfSha256(){
