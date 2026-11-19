@@ -20,6 +20,8 @@ test("all predecessor IDs exist and remain unique",()=>{
  const ids=artifact.draftReview.predecessorEvidenceIds;
  assert.equal(new Set(ids).size,ids.length);
  for(const id of ids)assert.ok(byId[id],id);
+ assert.equal(ids.length,28);
+ assert.ok(ids.includes("RUN-20261119-CURRENTFIDSPRICE"));
 });
 test("unresolved source-rights evidence is not fabricated",()=>{
  assert.equal(artifact.deliberatelyUnbound.sourceRightsEvidenceSha256,null);
@@ -35,7 +37,7 @@ test("no approval or GO can be inferred from this artifact",()=>{
 });
 test("fixed release identity matches current final-core contract",()=>{
  assert.equal(artifact.draftReview.baseCodeSha,"70580b3749544dfcbeff39da181b2aa42b1b4476");
- assert.equal(artifact.draftReview.evidenceCommit,"fde8cc5ec593978a91531d0cab38bb970386c9da");
+ assert.equal(artifact.draftReview.evidenceCommit,"a4b385907149f5b99ef8f85a11c554c583707916");
  assert.equal(artifact.draftReview.calendarRowsSha256,"7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c");
  assert.equal(artifact.draftReview.frameSha256,"02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94");
 });
