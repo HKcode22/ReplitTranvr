@@ -42,6 +42,8 @@ jobs:
           grep -Fq "sourceRightsApproved:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           grep -Fq "sourceUseDeferredToPhase6Activation:true" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           grep -Fq "phase6PaidGo:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          grep -Fq "RUN-20261119-CURRENTFIDSPRICE" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          grep -Fq "GATE-20261119-SOURCERIGHTSACTIVATION" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
           grep -Fq "LEGACY_SOURCE_RIGHTS_SECRET_PRESENT" review-tools/p5_post879_owner_inert_commission_once.cjs
           grep -Fq "PRIOR_STAGE_RUNS_RECONCILE_NO_REPLAY" review-tools/p5_post879_owner_inert_commission_once.cjs
           grep -Fq "prelaunchStructuralHolds.length===0" review-tools/p5_post879_owner_inert_commission_once.cjs
@@ -50,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509'
+          MAIN='f63ec7572aefbe805489317b54882e97f77a1989'
           REVIEW_ROOT="$GITHUB_WORKSPACE"
           PROD="$RUNNER_TEMP/production-main"
           git fetch --no-tags --depth=1 origin "$MAIN"
@@ -63,9 +65,11 @@ jobs:
           const fs=require('fs');
           const x=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
           if(x.status!=='EXACT_PHASE5_INERT_RIGHTS_DEFERRED_PACKAGE_READY_NO_GO'||
-             x.codeSha!=='ae0915d1eb0c37651d280ff3f178efdb640ed509'||
+             x.codeSha!=='f63ec7572aefbe805489317b54882e97f77a1989'||
              x.dayPlanCount!==31||x.plannedQueries!==6144||x.reservedRestUnits!==37388||
              x.peakDailyUnits!==1280||x.netRestCeilingUnits!==49468||
+             x.phase5PredecessorCount!==28||x.stagePredecessorCount!==29||
+             x.futureSourceRightsEvidenceId!=='GATE-20261119-SOURCERIGHTSACTIVATION'||
              x.sourceRightsApproved!==false||x.sourceUseDeferredToPhase6Activation!==true||
              x.scientificFreezeApproved!==true||x.authorizationEnabled!==false||
              x.providerCalls!==0||x.databaseWrites!==0||x.githubMutations!==0||
@@ -75,7 +79,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509'
+          MAIN='f63ec7572aefbe805489317b54882e97f77a1989'
           REVIEW_ROOT="$GITHUB_WORKSPACE"
           PROD="$RUNNER_TEMP/production-main"
           OUT="$RUNNER_TEMP/post879-package"
