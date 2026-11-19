@@ -55,7 +55,10 @@ jobs:
             review-tools/p5_final_core_review.test.cjs
             review-tools/p5_six_policy_binding.test.cjs
             review-tools/p5_static_install_binding.test.cjs
-            review-tools/p5_final_core_mechanical_bindings.test.cjs
+            review-tools/p5_final_core_mechanical_bindings.test.cjs \
+            tests/phase6_direct_recovery_tick_v39.test.mjs \
+            tests/phase6_rolling_failure_journal_v39.test.mjs \
+            tests/phase6_rolling_failure_readback_v39.test.mjs
           )
           for f in "${files[@]}"; do node --check "$f"; done
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_six_policy_candidate.json","utf8"))'
