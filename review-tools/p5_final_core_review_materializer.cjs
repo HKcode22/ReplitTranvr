@@ -36,6 +36,10 @@ function materialize(mechanical,closure,ledger,input,nowMs=Date.now()){
  const rows=new Map(ledger.evidence.map(r=>[r.evidenceId,r]));
  const sourceRow=rows.get(input.sourceRightsEvidenceId);
  need(sourceRow&&sourceRow.sha256===input.sourceRightsEvidenceSha256,"SOURCE_EVIDENCE_NOT_IN_LEDGER");
+ need(typeof sourceRow.path==="string"&&
+      /(?:source.*rights|rights.*source|source.*use|provider.*permission|permission.*provider)/i.test(sourceRow.path)&&
+      !/(?:NOT_APPROVAL|NO_GO|NOT_RELEASE|NOT_FREEZE|OWNER_DECISION_PRESERVE_F8)/i.test(sourceRow.path),
+      "SOURCE_EVIDENCE_NOT_GENUINE_PERMISSION_RECORD");
  const d=JSON.parse(JSON.stringify(mechanical.draftReview));
  need(d?.schema==="v39.phase5.exact-final-core-scope-review.v1"&&d.baseCodeSha===mechanical.baseCodeSha&&d.evidenceCommit===mechanical.evidenceCommit,"DRAFT_SCOPE");
  const ids=d.predecessorEvidenceIds;
