@@ -43,7 +43,8 @@ jobs:
             review-tools/p5_bulk_final_owner_handoff.cjs
             review-tools/p5_resume_existing_final_commissioning.cjs
             review-tools/p5_run_existing_inert_stage_chain.cjs
-            review-tools/p5_prepare_adopt_exact_final_core_inputs.cjsreview-tools/p5_final_core_review_materializer.cjs
+            review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
+            review-tools/p5_final_core_review_materializer.cjs
             review-tools/p5_static_install_review_materializer.cjs
             review-tools/p5_private_policy_review_materializer.cjs
             review-tools/p5_final_policy_binding_materializer.cjs
