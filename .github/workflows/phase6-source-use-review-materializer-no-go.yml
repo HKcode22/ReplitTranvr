@@ -33,7 +33,7 @@ jobs:
           node --check review-tools/p5_source_use_evidence_ledger_materializer.cjs
           node --check review-tools/p5_source_use_evidence_ledger_materializer.test.cjs
           bash -n review-tools/p5_materialize_source_use_evidence_once.sh
-          grep -Fq 'BASE="4a155339479bf9324f626e36b1010054f67403cc"' review-tools/p5_materialize_source_use_evidence_once.sh
+          grep -Fq 'BASE="7d178225aeea4d8a6b4145546d2c1b12dfb72b42"' review-tools/p5_materialize_source_use_evidence_once.sh
           grep -Fq 'MATERIALIZER_BLOB="480970e85b123ef35895cd696b9ea198fb856012"' review-tools/p5_materialize_source_use_evidence_once.sh
           grep -Fq 'phase6PaidGo:false' review-tools/p5_source_use_evidence_ledger_materializer.cjs
           ! grep -Eq 'fetch\(|axios|https\.request|http\.request|new Pool|pg\.' review-tools/p5_source_use_evidence_ledger_materializer.cjs
