@@ -2,13 +2,13 @@
   "schema": "v39.phase5.final-core-technical-review-recommendation.v1",
   "status": "TECHNICAL_REVIEW_RECOMMENDS_THREE_CORE_DECISIONS_SOURCE_USE_SEPARATE_NO_GO",
   "productionMain": "70580b3749544dfcbeff39da181b2aa42b1b4476",
-  "evidenceCommit": "fde8cc5ec593978a91531d0cab38bb970386c9da",
+  "evidenceCommit": "a4b385907149f5b99ef8f85a11c554c583707916",
   "phase6PaidGo": false,
   "reviewerScope": "Technical/scientific/operational assessment only; not vendor permission, legal advice, source-use approval, or final AUTH.",
   "recommendations": {
     "finalPredecessorsApproved": {
       "recommendedValue": true,
-      "basis": "Exact 27-record predecessor set is hash-closed in the scoped evidence ledger and includes scientific scope, current account/budget, current GitHub STOP plus deployed callback guard, operational scope, signer/policy recovery, candidate recovery and current-main prearm evidence."
+      "basis": "Exact 28-record predecessor set is hash-closed in the scoped evidence ledger and includes scientific scope, current account/budget, current GitHub STOP plus deployed callback guard, operational scope, signer/policy recovery, candidate recovery and current-main prearm evidence. The set now also includes current marketplace FIDS range/unit-cost technical evidence."
     },
     "independentScientificFreezeApproved": {
       "recommendedValue": true,
@@ -30,7 +30,7 @@
     },
     "currentAccountAndBudgetApproved": {
       "recommendedValue": true,
-      "basis": "59,968/60,000 API units, 1,830 Alert credits, 0 active subscriptions at 2026-11-19T03:39:03Z; 37,388 reserve, 49,468 net ceiling, 1,000 protected floor, 11,080 headroom, 1,280 peak daily < 1,900 cap."
+      "basis": "59,968/60,000 API units, 1,830 Alert credits, 0 active subscriptions at 2026-11-19T03:39:03Z; 37,388 reserve, 49,468 net ceiling, 1,000 protected floor, 11,080 headroom, 1,280 peak daily < 1,900 cap. Current marketplace FIDS basis: Ultra 12-hour FIDS range limit and Tier-2 2 API units/request, so the 240-minute/2-unit candidate remains within current published limits."
     },
     "legacyPublishedAutoCollectVerifiedOff": {
       "recommendedValue": true,
@@ -59,7 +59,8 @@
     "scientific": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203",
     "accountBudget": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
     "publishedGithubStop": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c",
-    "operational": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+    "operational": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462",
+    "currentFidsRangeCost": "f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1"
   },
   "implementationEvidence": {
     "closeoutRunId": 44476635406,
