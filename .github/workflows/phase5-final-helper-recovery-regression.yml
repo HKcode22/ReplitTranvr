@@ -102,12 +102,16 @@ jobs:
           const [coreInputs,core,assembly,bundle,install,stage,repin,bulk]=process.argv.slice(2);
           const resume=fs.readFileSync('review-tools/p5_resume_existing_final_commissioning.cjs','utf8');
           const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
+          const ownerOnce=fs.readFileSync('review-tools/p5_owner_final_resume_once.sh','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
           for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
             need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
           }
           need(resume.includes('REPIN="'+repin+'"'),'resume REPIN blob mismatch');
           need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
+          const resumeBlob=require('node:child_process').execFileSync('git',['hash-object','review-tools/p5_resume_existing_final_commissioning.cjs'],{encoding:'utf8'}).trim();
+          need(ownerOnce.includes('HELPER_BLOB="'+resumeBlob+'"'),'owner launcher HELPER blob mismatch');
+          need(ownerOnce.includes('TESTED_RUN="44473898294"')&&ownerOnce.includes('TESTED_HEAD="ac1f89042ca4ac4c3e5810c29fba6d7f75fb03d5"'),'owner launcher tested-run pin mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
             coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
