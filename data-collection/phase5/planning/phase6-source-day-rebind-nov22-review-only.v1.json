@@ -1,0 +1,53 @@
+{
+  "schema": "v39.phase6.review-only-date-rebind.v1",
+  "status": "REVIEW_ONLY_NO_GO",
+  "predecessorMainSha": "88a065458537aa5e1a0055dec82b7bf81b0c00eb",
+  "predecessorManifestSha256": "bd14ff3e558b975a889741380da807644ca9d3573a23e2416986ee6f71e1e41f",
+  "predecessorConfigSha256": "9cb7f3dcb2ee0d857f585fe8433a8dc2b7ac7bb3e3ad384a469c13530856642c",
+  "predecessorCalendarSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
+  "sourcePlanRef": "main:data-collection/phase5/planning/phase6-source-day-*.json",
+  "rebindOffsetHours": 24,
+  "current": {
+    "firstServiceUtc": "2026-11-21T00:00:00.000Z",
+    "firstScheduledSourceRequestUtc": "2026-11-19T23:45:00.000Z",
+    "strictAuthorizationCutoffUtc": "2026-11-19T23:10:00.000Z",
+    "lastServiceUtc": "2026-12-24T00:00:00.000Z"
+  },
+  "candidate": {
+    "firstServiceUtc": "2026-11-22T00:00:00.000Z",
+    "firstScheduledSourceRequestUtc": "2026-11-20T23:45:00.000Z",
+    "strictAuthorizationCutoffUtc": "2026-11-20T23:10:00.000Z",
+    "lastServiceUtc": "2026-12-25T00:00:00.000Z"
+  },
+  "invariants": {
+    "plannedDays": 31,
+    "templatesPerDay": 192,
+    "plannedQueries": 6144,
+    "reservedRestUnits": 37388,
+    "horizons": [
+      "T-24h",
+      "T-6h",
+      "T-90m"
+    ],
+    "slots": [
+      "HUB",
+      "MID_A",
+      "MID_B",
+      "REGIONAL"
+    ],
+    "queryKeysUnchanged": true,
+    "fieldValuesOtherThanUtcUnchanged": true,
+    "originalPlanFilesUnmodified": true
+  },
+  "activation": {
+    "sourceRightsApproved": false,
+    "authorizationEnabled": false,
+    "phase6PaidGo": false,
+    "schedulerEnabled": false,
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "requiresFreshSignedEpoch": true,
+    "requiresDay1Readback": true
+  },
+  "note": "This metadata describes a deterministic candidate only. It is not a replacement calendar, signed release, or permission to call AeroDataBox."
+}
