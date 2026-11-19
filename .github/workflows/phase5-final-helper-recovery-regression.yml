@@ -1,0 +1,87 @@
+name: Phase5 final helper recovery regression (no provider)
+
+on:
+  push:
+    branches:
+      - phase5/final-helper-recovery-fixes-clean-20261118
+    paths:
+      - 'review-tools/p5_final_primary_relay_repin.cjs'
+      - 'review-tools/p5_final_repin_receipt.test.cjs'
+      - 'review-tools/p5_export_exact_approved_bundle.cjs'
+      - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
+      - 'review-tools/p5_bulk_final_owner_handoff.cjs'
+      - 'review-tools/p5_resume_existing_final_commissioning.cjs'
+      - '.github/workflows/phase5-final-helper-recovery-regression.yml'
+  pull_request:
+    paths:
+      - 'review-tools/p5_final_primary_relay_repin.cjs'
+      - 'review-tools/p5_final_repin_receipt.test.cjs'
+      - 'review-tools/p5_export_exact_approved_bundle.cjs'
+      - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
+      - 'review-tools/p5_bulk_final_owner_handoff.cjs'
+      - 'review-tools/p5_resume_existing_final_commissioning.cjs'
+      - '.github/workflows/phase5-final-helper-recovery-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  helper-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check exact final helpers
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p5_final_primary_relay_repin.cjs
+          node --check review-tools/p5_export_exact_approved_bundle.cjs
+          node --check review-tools/p5_bulk_final_owner_handoff.cjs
+          node --check review-tools/p5_resume_existing_final_commissioning.cjs
+          node --check review-tools/p5_final_repin_receipt.test.cjs
+          node --check review-tools/p5_manifest_receipt_recovery.test.cjs
+
+      - name: Run focused historical-receipt regressions
+        run: |
+          set -Eeuo pipefail
+          node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs
+
+      - name: Verify exact helper blob pin chain
+        run: |
+          set -Eeuo pipefail
+          REPIN="$(git hash-object review-tools/p5_final_primary_relay_repin.cjs)"
+          BUNDLE="$(git hash-object review-tools/p5_export_exact_approved_bundle.cjs)"
+          BULK="$(git hash-object review-tools/p5_bulk_final_owner_handoff.cjs)"
+          node - "$REPIN" "$BUNDLE" "$BULK" <<'NODE'
+          const fs=require('node:fs');
+          const [repin,bundle,bulk]=process.argv.slice(2);
+          const resume=fs.readFileSync('review-tools/p5_resume_existing_final_commissioning.cjs','utf8');
+          const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
+          const need=(x,m)=>{if(!x)throw Error(m)};
+          need(resume.includes('REPIN="'+repin+'"'),'resume REPIN blob mismatch');
+          need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
+          need(handoff.includes('bundle:"'+bundle+'"'),'bulk bundle blob mismatch');
+          console.log(JSON.stringify({
+            status:'PHASE5_FINAL_HELPER_PIN_CHAIN_EXACT_NO_GO',
+            repinBlob:repin,
+            bundleBlob:bundle,
+            bulkBlob:bulk,
+            providerCalls:0,
+            databaseWrites:0,
+            phase6PaidGo:false
+          }));
+          NODE
+
+      - name: Confirm no production credentials are present
+        run: |
+          set -Eeuo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${AERODATABOX_WEBHOOK_SECRET:-}"
+          test -z "${DATABASE_URL:-}"
+          echo 'NO_PROVIDER_OR_PRODUCTION_DB_CREDENTIALS'
