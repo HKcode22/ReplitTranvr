@@ -5,12 +5,18 @@ const base={
  coreReview:false,corePrepared:false,authOnMain:false,coreAdopted:false,
  policyDecision:false,policyObjects:false,privateReview:false,staticWorkpaper:false,
  staticReview:false,completedStageJournal:false,acknowledgedCalendarOnly:false,
- freezeWorkpaper:false,anyMutationJournal:false
+ freezeWorkpaper:false,finalFreezeDecision:false,finalRepinPresent:false,finalRepinComplete:false,finalRepinMain:null,partialFinalRepin:false,anyMutationJournal:false
 };
 const n=x=>next({...base,...x});
-test("completed stages never replay and only recover missing freeze workpaper",()=>{
- assert.deepEqual(n({completedStageJournal:true,freezeWorkpaper:true}),{status:"BOTH_STAGES_ALREADY_ACKNOWLEDGED_NO_REPLAY"});
+test("completed stages require workpaper, independent freeze, and final repin in order",()=>{
  assert.deepEqual(n({completedStageJournal:true,freezeWorkpaper:false}),{mode:"RECOVER_EXISTING_FREEZE_WORKPAPER"});
+ assert.deepEqual(n({completedStageJournal:true,freezeWorkpaper:true}),{status:"HOLD_FINAL_PHASE5_FREEZE_DECISION_ABSENT",missing:["approved-final-phase5-freeze.json"]});
+ assert.deepEqual(n({completedStageJournal:true,freezeWorkpaper:true,finalFreezeDecision:true}),{mode:"FINAL_SCHEDULER_REPIN_AFTER_FREEZE"});
+ assert.deepEqual(n({completedStageJournal:true,freezeWorkpaper:true,finalFreezeDecision:true,finalRepinPresent:true,finalRepinComplete:true,finalRepinMain:"c".repeat(40)}),{status:"PHASE5_FINAL_FREEZE_AND_SCHEDULER_REPIN_COMPLETE_NO_PAID_GO"});
+});
+test("scheduler repin cannot precede completed commissioning or replay an uncertain journal",()=>{
+ assert.match(n({finalRepinPresent:true,partialFinalRepin:true}).status,/HOLD_FINAL_REPIN_EXISTS_BEFORE_COMPLETED_COMMISSIONING/);
+ assert.match(n({completedStageJournal:true,freezeWorkpaper:true,finalFreezeDecision:true,finalRepinPresent:true,partialFinalRepin:true}).status,/HOLD_FINAL_REPIN_JOURNAL_RECONCILE_NO_REPLAY/);
 });
 test("acknowledged calendar-only journal resumes cost exactly once despite mutation journal presence",()=>{
  const x=n({acknowledgedCalendarOnly:true,coreAdopted:true,privateReview:true,staticReview:true,authOnMain:true,anyMutationJournal:true});
