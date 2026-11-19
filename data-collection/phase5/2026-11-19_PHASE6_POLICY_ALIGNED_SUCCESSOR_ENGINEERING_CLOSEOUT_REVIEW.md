@@ -41,6 +41,12 @@ No route, airport, carrier, timestamp, PRE, POST, or outcome field was banned or
 
 GitHub Actions workflow `V3.9 Offline Safety` run `44544657240` / run `4946` completed successfully for successor head `58977b1bf6a48fabde8f904ec9c16a7c5b471067`. The run passed the offline suite, full suite, TypeScript, lint, registry, traceability, contradiction scanner, aggregate preflight, production build, and disposable PG16 behavior checks. The run used no provider call and no production database mutation.
 
+## Derived Phase 7 release profile
+
+A separate review-only profile and structural contract now define a conservative path from short-lived source custody to a possible Phase 7 model artifact. The profile preserves route, airport, carrier, schedule, timestamp, PRE, POST, and outcome information in the operational source layer; it does not delete or reclassify those fields. It deliberately prevents a future release writer from treating copied provider-shaped values, identifiers, hashes, timestamps, or source linkage as long-term model features without a field-level transformation and independent review.
+
+The new contract and tests are offline-only. They require a random release-row identifier, allowlisted numeric buckets, explicit feature/label transform evidence, bounded source-to-release mapping expiry, protected splits, and explicit terms/Derived Work review slots. They never authorize source use, change the current retention job, alter the frozen manifest, enable the scheduler, or create a paid GO. The concrete feature dictionary and review hashes remain intentionally unbound until the external review and final approval ledger are complete.
+
 ## Still intentionally false
 
 The successor does not create any of the following:
