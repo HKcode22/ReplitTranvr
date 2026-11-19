@@ -43,6 +43,10 @@ function inspectPublicContract(b){
  check(c.paths[k]?.get&&typeof c.paths[k].get==="object","CONTRACT_FIDS_PATH");
  return {rawSha256:hash(b),bytes:b.length,version:c.info.version,fidsPath:k};
 }
+function writeOnce(p,b){
+ const raw=Buffer.isBuffer(b)?b:Buffer.from(b,"utf8");
+ try{fs.writeFileSync(p,raw,{flag:"wx",mode:0o600});return "WRITTEN"}catch(e){if(e.code!=="EEXIST")throw e;const st=fs.lstatSync(p);check(st.isFile()&&!st.isSymbolicLink()&&(st.mode&0o077)===0&&st.size===raw.length&&fs.readFileSync(p).equals(raw),"EXISTING_OUTPUT_DRIFT");return "EXACT_EXISTING_REUSED"}
+}
 function run(){
  check(process.env.GITHUB_ACTIONS!=="true"&&process.argv.length===3,"OWNER_ONLY");check(head()===PIN,"MAIN_CHANGED");
  const home=fs.realpathSync(os.homedir());
@@ -59,7 +63,8 @@ function run(){
  check(daily.delegatedDailyPacketProductionApproved===false&&daily.airportTimezoneGroups===null&&daily.airportFrames===undefined,"DRAFT_SCOPE");
  daily.airportTimezoneGroups=a.cat.airportTimezoneGroups;
  check(Object.keys(work.policyDrafts).length===6&&daily.nativeLaterReview?.approved===false&&daily.nativePreFeatureReview?.approved===false&&work.policyDrafts.P6_NATIVE_POST_POLICY_BASE64?.independentPostRequestGeometryApproved===false,"SIX_POLICY_SCOPE");
- const publicContract=inspectPublicContract(fs.readFileSync(process.argv[2]));
+ const contractFile=fs.lstatSync(process.argv[2]);check(contractFile.isFile()&&!contractFile.isSymbolicLink()&&contractFile.size>0&&contractFile.size<=20*1024*1024,"CONTRACT_FILE");
+ const contractRaw=fs.readFileSync(process.argv[2]),publicContract=inspectPublicContract(contractRaw);
  work.contractCandidate={...work.contractCandidate,...publicContract,rawBytesReviewed:false};
  const dailyBytes=Buffer.byteLength(JSON.stringify(daily));check(dailyBytes<=35000,"DAILY_SIZE");
  work.status="PRIVATE_SIX_POLICY_SHAPES_WITH_PUBLIC_CONTRACT_CANDIDATE_NOT_RUNTIME";
@@ -69,8 +74,9 @@ function run(){
  // Do not assign approved provider/budget/rights/release digests or approval booleans.
  check(head()===PIN,"MAIN_CHANGED_AFTER_ASSEMBLY");
  const out=path.join(b.d,"policy-complete-shape-NOT-RUNTIME.json"),raw=JSON.stringify(work);
- fs.writeFileSync(out,raw,{flag:"wx",mode:0o600});
- console.log(JSON.stringify({status:work.status,main:PIN,manifestCandidateSha256:MANIFEST,timezoneScopeProof:work.timezoneScopeProof,candidateCategoryRowsSha256:work.candidateCategoryRowsSha256,privateWorkpaperSha256:hash(raw),privateWorkpaperBytes:Buffer.byteLength(raw),dailyPolicyCandidateBytes:dailyBytes,publicContractCandidate:publicContract,policyCount:6,policyInstalled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
+ const contractDisposition=writeOnce(path.join(b.d,"public-provider-contract-CANDIDATE.json"),contractRaw);
+ const workpaperDisposition=writeOnce(out,raw);
+ console.log(JSON.stringify({status:work.status,main:PIN,manifestCandidateSha256:MANIFEST,timezoneScopeProof:work.timezoneScopeProof,candidateCategoryRowsSha256:work.candidateCategoryRowsSha256,privateWorkpaperSha256:hash(raw),privateWorkpaperBytes:Buffer.byteLength(raw),dailyPolicyCandidateBytes:dailyBytes,publicContractCandidate:publicContract,contractDisposition,workpaperDisposition,policyCount:6,policyInstalled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
 }
-module.exports={moveCalendar,scope,validateCatalog,inspectPublicContract};
+module.exports={moveCalendar,scope,validateCatalog,inspectPublicContract,writeOnce};
 if(require.main===module)try{run()}catch(e){const s=String(e.message||"");console.error(/^HOLD_P5_PRIVATE_POLICY_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_PRIVATE_POLICY_REDACTED");process.exitCode=2}
