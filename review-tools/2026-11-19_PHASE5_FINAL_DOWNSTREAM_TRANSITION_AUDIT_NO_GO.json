@@ -25,7 +25,7 @@
     "inertStageChain": "6a84f6b9cd993965e3d267a1e7f9246de19995ae",
     "schedulerRepin": "e27585debcaccd2f123381ed61f448352a732e3f",
     "bulkHandoff": "54b29fad160dbb358c323b26c64d55045096fa04",
-    "consolidatedResume": "3848253a95cb912ed0c840aa020ddfb119bcf587"
+    "consolidatedResume": "3fa07ba994069a9495e2e65880bf1954a3444708"
   },
   "finalReviewMaterialization": {
     "materializer": "7f417fe38eda6082e6448264456af6c3c3b04707",
@@ -187,23 +187,24 @@
     },
     "finalPolicyBinding": {
       "materializer": "2c2f45efad55b12d595773dd51b07e27d7a43b61",
-      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
       "output": "reviewed-final-policy-binding-decisions.json"
     },
     "privatePolicyBytes": {
       "materializer": "27100b8a67d2ecdd50c39eabf338a72d8982c48a",
-      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
       "output": "approved-private-policy-review.json"
     },
     "staticInstall": {
       "materializer": "6bfa98eb3e75fd1136e86a28ab0b7e4c9c5bb2e8",
-      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
+      "ownerWrapper": "731b17e3783471bd97231756cad102fcd6ea597e",
       "output": "static-install-review.json"
     },
     "finalPhase5Freeze": {
       "materializer": "607886ff73c1c342873d66820ca16be18f803210",
-      "ownerWrapper": "4532559493e343fec87d76f4f2a3a6e55f2536dc",
-      "output": "final-phase5-freeze-decision.json"
+      "ownerWrapper": "b494b3dd8f5fd794d5f42a565899ab4f722682e0",
+      "output": "approved-final-phase5-freeze.json",
+      "alternateUnifiedWrapper": "731b17e3783471bd97231756cad102fcd6ea597e"
     },
     "guarantees": [
       "Reviewer semantic decisions remain explicit; no materializer mints approval.",
