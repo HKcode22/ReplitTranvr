@@ -35,30 +35,42 @@ function blob(id){const b=Buffer.from(gh(["api","repos/HKcode22/ReplitTranvr/git
 function exact(p,sha){const st=fs.lstatSync(p);check(st.isFile()&&!st.isSymbolicLink()&&(st.mode&0o077)===0&&st.size<=10*1024*1024,"FILE");const b=fs.readFileSync(p);check(hash(b)===sha,"DIGEST");return JSON.parse(b.toString("utf8"))}
 function privateDir(p){const st=fs.lstatSync(p);return st.isDirectory()&&!st.isSymbolicLink()&&(st.mode&0o077)===0}
 function pick(home,pattern,read){const found=[];for(const name of fs.readdirSync(home).filter(n=>pattern.test(n)).sort()){const p=path.join(home,name);try{if(privateDir(p))found.push(read(p))}catch{}}check(found.length>=1,"EXISTING_PRIVATE_INPUT_NOT_FOUND");return found[0]}
+function inspectPublicContract(b){
+ check(Buffer.isBuffer(b)&&b.length>0&&b.length<=20*1024*1024,"CONTRACT_SIZE");
+ const c=JSON.parse(b.toString("utf8"));
+ check(typeof c.openapi==="string"&&c.info?.version==="1.15.4.0"&&c.paths&&typeof c.paths==="object","CONTRACT_VERSION");
+ const k="/flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}";
+ check(c.paths[k]?.get&&typeof c.paths[k].get==="object","CONTRACT_FIDS_PATH");
+ return {rawSha256:hash(b),bytes:b.length,version:c.info.version,fidsPath:k};
+}
 function run(){
- check(process.env.GITHUB_ACTIONS!=="true"&&process.argv.length===2,"OWNER_ONLY");check(head()===PIN,"MAIN_CHANGED");
+ check(process.env.GITHUB_ACTIONS!=="true"&&process.argv.length===3,"OWNER_ONLY");check(head()===PIN,"MAIN_CHANGED");
  const home=fs.realpathSync(os.homedir());
  const a=pick(home,/^\.phase5-review-[A-Za-z0-9_-]+$/,p=>({review:exact(path.join(p,"review-only.json"),OLD_REVIEW),cat:exact(path.join(p,"airport-timezone-catalog-CANDIDATE.json"),CAT)}));
  const b=pick(home,/^\.phase5-final-review-[A-Za-z0-9_-]+$/,p=>{const d=path.join(p,"nov18-"+PIN.slice(0,12));check(privateDir(d),"CANDIDATE_DIR");const m=exact(path.join(d,"manifest-candidate.json"),MANIFEST),cfg=exact(path.join(d,"config-candidate.json"),CONFIG);check(m.scientificFreezeApproved===false&&m.phase6PaidGo===false&&m.configCandidateSha256===CONFIG&&cfg.status==="PROPOSED_NOT_FROZEN"&&cfg.calendarRowsSha256===COMPACT,"CANDIDATE_SCOPE");return {d,cfg}});
- const compact=blob("ee17a694594356e2b0c772545c490c198db11b42"),work=blob("c0f4f26cdf831ae8a85b3c3ac1a06cc5dc913b4b");
+ const compact=blob("ee17a694594356e2b0c772545c490c198db11b42"),work=blob("f5b5b553b52d9e426727c343d439d19f5187a825");
  check(compact.status==="PROSPECTIVE_COMPACT_REVIEW_NOT_RELEASE"&&compact.phase6PaidGo===false&&compact.cases[0].totalReserve===37388,"COMPACT_SCOPE");
  check(work.main===PIN&&work.manifestCandidateSha256===MANIFEST&&work.manifestApproved===false&&work.phase6PaidGo===false,"WORKPAPER_SCOPE");
  const rows=a.review.calendarDraft?.calendarDays;check(digest(rows)===OLD,"ORIGINAL_CALENDAR");
  const moved=moveCalendar(rows,compact.cases[0]);check(digest(moved)===COMPACT,"COMPACT_CALENDAR");
- const s=scope(rows);check(JSON.stringify(s)===JSON.stringify(scope(moved))&&s.fixed.length===19&&s.cells.length===12,"SCOPE_CHANGED");
+ const s=scope(rows);check(JSON.stringify(s)===JSON.stringify(scope(moved))&&s.fixed.length===19&&s.cells.length===12&&digest(s)==="ce9bd17c2011564dd6c9d941acfdb0eee47bf18e6a503b10f4353f588ca5bd38","SCOPE_CHANGED");
  const stats=validateCatalog(a.cat,s.fixed);
  const daily=work.policyDrafts.P6_NONPAID_DAILY_POLICY_BASE64;
  check(daily.delegatedDailyPacketProductionApproved===false&&daily.airportTimezoneGroups===null&&daily.airportFrames===undefined,"DRAFT_SCOPE");
  daily.airportTimezoneGroups=a.cat.airportTimezoneGroups;
- work.status="PRIVATE_TIMEZONE_POLICY_CANDIDATE_NOT_RUNTIME";
+ check(Object.keys(work.policyDrafts).length===6&&daily.nativeLaterReview?.approved===false&&daily.nativePreFeatureReview?.approved===false&&work.policyDrafts.P6_NATIVE_POST_POLICY_BASE64?.independentPostRequestGeometryApproved===false,"SIX_POLICY_SCOPE");
+ const publicContract=inspectPublicContract(fs.readFileSync(process.argv[2]));
+ work.contractCandidate={...work.contractCandidate,...publicContract,rawBytesReviewed:false};
+ const dailyBytes=Buffer.byteLength(JSON.stringify(daily));check(dailyBytes<=35000,"DAILY_SIZE");
+ work.status="PRIVATE_SIX_POLICY_SHAPES_WITH_PUBLIC_CONTRACT_CANDIDATE_NOT_RUNTIME";
  work.timezoneScopeProof={originalCalendarSha256:OLD,compactCalendarSha256:COMPACT,originalCatalogSha256:CAT,scopeSha256:digest(s),fixedAirportCount:s.fixed.length,adaptiveCellCount:s.cells.length,catalogAirports:stats.airports,catalogGroups:stats.groups,independentFinalPolicyApproval:false};
  work.candidateCategoryRowsSha256=b.cfg.physicalUtcCategoryRowsSha256;
- check(/^[a-f0-9]{64}$/.test(work.candidateCategoryRowsSha256),"CATEGORY_DIGEST");
+ check(work.candidateCategoryRowsSha256==="a49720f28ce10019ee049436086e1734ac6ee2ec0f24189621aab2e32583ad6a","CATEGORY_DIGEST");
  // Do not assign approved provider/budget/rights/release digests or approval booleans.
  check(head()===PIN,"MAIN_CHANGED_AFTER_ASSEMBLY");
- const out=path.join(b.d,"policy-with-timezone-NOT-RUNTIME.json"),raw=JSON.stringify(work);
+ const out=path.join(b.d,"policy-complete-shape-NOT-RUNTIME.json"),raw=JSON.stringify(work);
  fs.writeFileSync(out,raw,{flag:"wx",mode:0o600});
- console.log(JSON.stringify({status:work.status,main:PIN,manifestCandidateSha256:MANIFEST,timezoneScopeProof:work.timezoneScopeProof,candidateCategoryRowsSha256:work.candidateCategoryRowsSha256,privateWorkpaperSha256:hash(raw),privateWorkpaperBytes:Buffer.byteLength(raw),policyInstalled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
+ console.log(JSON.stringify({status:work.status,main:PIN,manifestCandidateSha256:MANIFEST,timezoneScopeProof:work.timezoneScopeProof,candidateCategoryRowsSha256:work.candidateCategoryRowsSha256,privateWorkpaperSha256:hash(raw),privateWorkpaperBytes:Buffer.byteLength(raw),dailyPolicyCandidateBytes:dailyBytes,publicContractCandidate:publicContract,policyCount:6,policyInstalled:false,providerCalls:0,databaseWrites:0,githubMutations:0,phase6PaidGo:false}));
 }
-module.exports={moveCalendar,scope,validateCatalog};
+module.exports={moveCalendar,scope,validateCatalog,inspectPublicContract};
 if(require.main===module)try{run()}catch(e){const s=String(e.message||"");console.error(/^HOLD_P5_PRIVATE_POLICY_[A-Z0-9_]+$/.test(s)?s:"HOLD_P5_PRIVATE_POLICY_REDACTED");process.exitCode=2}
