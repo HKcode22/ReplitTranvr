@@ -36,9 +36,20 @@ const ops={
  byteLength:Buffer.byteLength
 };
 function work(){return {status:"PRIVATE_SIX_POLICY_SHAPES_WITH_PUBLIC_CONTRACT_CANDIDATE_NOT_RUNTIME",phase6PaidGo:false,manifestApproved:false,policyDrafts:structuredClone(fixture.policyDrafts)};}
-test("actual public candidate shapes assemble into a valid six-policy bundle",()=>{
+function privateCatalogCase(){
+ const airportTimezoneGroups=[{timezone:"UTC",airports:["TEST"]}];
+ const pins={...p,airportTimezoneCatalogSha256:ops.hash({airportTimezoneGroups})};
+ const w=work();
+ w.policyDrafts.P6_NONPAID_DAILY_POLICY_BASE64.airportTimezoneGroups=airportTimezoneGroups;
+ return {pins,w};
+}
+test("public candidate remains non-runtime until exact private timezone catalog is supplied",()=>{
  const w=assemble(work(),p,s,ops);
- const out=validateFinalPolicies(w,{...p,releaseSha256:s.releaseSha256},ops);
+ assert.throws(()=>validateFinalPolicies(w,{...p,releaseSha256:s.releaseSha256},ops),/EXACT_VERIFIED_TIMEZONE_CATALOG/);
+});
+test("synthetic exact private-catalog binding exercises the positive validator path",()=>{
+ const x=privateCatalogCase(),w=assemble(x.w,x.pins,s,ops);
+ const out=validateFinalPolicies(w,{...x.pins,releaseSha256:s.releaseSha256},ops);
  assert.equal(out.policyCount,6);assert.equal(out.validThroughOutcomeTail,true);
  assert.equal(out.policyDigests.length,6);
 });
@@ -62,7 +73,7 @@ test("any missing explicit policy decision is refused before assembly",()=>{
 test("validity must cover the entire outcome tail",()=>{
  assert.throws(()=>assemble(work(),p,{...s,validUntilUtc:"2026-12-25T00:00:00.000Z"},ops),/REVIEWED_VALIDITY/);
 });
-test("validator rejects post-assembly tampering",()=>{
- const w=assemble(work(),p,s,ops);w.P6_NATIVE_POST_POLICY_BASE64.expectedApiUnitsPerGet=3;
- assert.throws(()=>validateFinalPolicies(w,{...p,releaseSha256:s.releaseSha256},ops),/REVIEWED_POST_COST_AND_WINDOW/);
+test("validator rejects post-assembly tampering after private-catalog admission",()=>{
+ const x=privateCatalogCase(),w=assemble(x.w,x.pins,s,ops);w.P6_NATIVE_POST_POLICY_BASE64.expectedApiUnitsPerGet=3;
+ assert.throws(()=>validateFinalPolicies(w,{...x.pins,releaseSha256:s.releaseSha256},ops),/REVIEWED_POST_COST_AND_WINDOW/);
 });
