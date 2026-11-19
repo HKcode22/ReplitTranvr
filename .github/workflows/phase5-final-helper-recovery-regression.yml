@@ -45,6 +45,7 @@ jobs:
             review-tools/p5_run_existing_inert_stage_chain.cjs
             review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
             review-tools/p5_final_core_review_materializer.cjs
+            review-tools/p5_source_use_evidence_ledger_materializer.cjs
             review-tools/p5_static_install_review_materializer.cjs
             review-tools/p5_private_policy_review_materializer.cjs
             review-tools/p5_final_policy_binding_materializer.cjs
@@ -59,6 +60,7 @@ jobs:
             review-tools/p5_resume_state.test.cjs
             review-tools/p5_resume_state_machine.test.cjs
             review-tools/p5_final_core_review.test.cjs
+            review-tools/p5_source_use_evidence_ledger_materializer.test.cjs
             review-tools/p5_six_policy_binding.test.cjs
             review-tools/p5_static_install_binding.test.cjs
             review-tools/p5_final_core_mechanical_bindings.test.cjs \
@@ -78,6 +80,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_PRIVATE_POLICY_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_POLICY_BINDING_REVIEWER_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_PHASE5_FREEZE_REVIEWER_DECISION_INPUT_TEMPLATE_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_SOURCE_USE_REVIEWER_DECISION_INPUT_TEMPLATE_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
           bash -n review-tools/p5_materialize_final_core_review_once.sh
           bash -n review-tools/p5_materialize_final_phase5_freeze_once.sh
@@ -100,6 +103,7 @@ jobs:
             review-tools/p5_resume_state_machine.test.cjs \
             review-tools/p5_final_core_review.test.cjs \
             review-tools/p5_final_core_review_materializer.test.cjs \
+            review-tools/p5_source_use_evidence_ledger_materializer.test.cjs \
             review-tools/p5_static_install_review_materializer.test.cjs \
             review-tools/p5_private_policy_review_materializer.test.cjs \
             review-tools/p5_final_policy_binding_materializer.test.cjs \
