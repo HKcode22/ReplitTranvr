@@ -61,6 +61,7 @@ jobs:
             review-tools/p5_static_install_binding.test.cjs
             review-tools/p5_final_core_mechanical_bindings.test.cjs \
             review-tools/p5_final_core_closure_matrix.test.cjs \
+            review-tools/p5_phase5_rights_deferred_prepare.test.cjs \
             tests/phase6_direct_recovery_tick_v39.test.mjs \
             tests/phase6_rolling_failure_journal_v39.test.mjs \
             tests/phase6_rolling_failure_readback_v39.test.mjs
