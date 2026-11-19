@@ -1,0 +1,15 @@
+{
+  "schema": "v39.phase5.source-use-reviewer-decision-input.v1",
+  "phase6PaidGo": false,
+  "independentSourceUseApproved": null,
+  "intendedProspectiveUseReviewed": null,
+  "intendedRetentionAndResearchUseReviewed": null,
+  "reviewerIndependenceAttested": null,
+  "reviewBasis": null,
+  "providerGrantClaimed": null,
+  "providerPermissionReference": null,
+  "basisReferences": [],
+  "rationale": null,
+  "reviewedBy": null,
+  "reviewedAtUtc": null
+}
