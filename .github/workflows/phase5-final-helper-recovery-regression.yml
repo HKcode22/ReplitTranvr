@@ -5,55 +5,19 @@ on:
     branches:
       - phase5/final-helper-recovery-fixes-clean-20261118
     paths:
-      - 'review-tools/p5_final_primary_relay_repin.cjs'
-      - 'review-tools/p5_final_repin_receipt.test.cjs'
-      - 'review-tools/p5_export_exact_approved_bundle.cjs'
-      - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
-      - 'review-tools/p5_bulk_final_owner_handoff.cjs'
-      - 'review-tools/p5_bulk_handoff.test.cjs'
-      - 'review-tools/p5_resume_existing_final_commissioning.cjs'
-      - 'review-tools/p5_resume_state_machine.test.cjs'
-      - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
-      - 'review-tools/p5_inert_stage_chain.test.cjs'
-      - 'review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs'
-      - 'review-tools/p5_final_core_review.test.cjs'
-      - 'review-tools/p5_assemble_exact_six_final_policies.cjs'
-      - 'review-tools/p5_exact_final_release_policy_bindings.cjs'
-      - 'review-tools/p5_six_policy_binding.test.cjs'
-      - 'review-tools/fixtures/p5_six_policy_candidate.json'
-      - 'review-tools/fixtures/p5_877_evidence_ledger.json'
-      - 'review-tools/p5_install_exact_approved_static_values.cjs'
-      - 'review-tools/p5_static_install_binding.test.cjs'
-      - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
-      - 'review-tools/p5_final_core_mechanical_bindings.test.cjs'
+      - 'review-tools/**'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
   pull_request:
     paths:
-      - 'review-tools/p5_final_primary_relay_repin.cjs'
-      - 'review-tools/p5_final_repin_receipt.test.cjs'
-      - 'review-tools/p5_export_exact_approved_bundle.cjs'
-      - 'review-tools/p5_manifest_receipt_recovery.test.cjs'
-      - 'review-tools/p5_bulk_final_owner_handoff.cjs'
-      - 'review-tools/p5_bulk_handoff.test.cjs'
-      - 'review-tools/p5_resume_existing_final_commissioning.cjs'
-      - 'review-tools/p5_resume_state_machine.test.cjs'
-      - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
-      - 'review-tools/p5_inert_stage_chain.test.cjs'
-      - 'review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs'
-      - 'review-tools/p5_final_core_review.test.cjs'
-      - 'review-tools/p5_assemble_exact_six_final_policies.cjs'
-      - 'review-tools/p5_exact_final_release_policy_bindings.cjs'
-      - 'review-tools/p5_six_policy_binding.test.cjs'
-      - 'review-tools/fixtures/p5_six_policy_candidate.json'
-      - 'review-tools/fixtures/p5_877_evidence_ledger.json'
-      - 'review-tools/p5_install_exact_approved_static_values.cjs'
-      - 'review-tools/p5_static_install_binding.test.cjs'
-      - 'review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json'
-      - 'review-tools/p5_final_core_mechanical_bindings.test.cjs'
+      - 'review-tools/**'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   helper-regression:
@@ -65,25 +29,57 @@ jobs:
       V39_PHASE6_OWNER_APPROVED: '0'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Syntax-check exact final helpers
+      - name: Syntax-check exact final helpers and fixtures
+        shell: bash
         run: |
           set -Eeuo pipefail
-          for f in             review-tools/p5_final_primary_relay_repin.cjs             review-tools/p5_export_exact_approved_bundle.cjs             review-tools/p5_bulk_final_owner_handoff.cjs             review-tools/p5_resume_existing_final_commissioning.cjs             review-tools/p5_run_existing_inert_stage_chain.cjs             review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs             review-tools/p5_assemble_exact_six_final_policies.cjs             review-tools/p5_exact_final_release_policy_bindings.cjs             review-tools/p5_install_exact_approved_static_values.cjs             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs             review-tools/p5_inert_stage_chain.test.cjs             review-tools/p5_bulk_handoff.test.cjs             review-tools/p5_resume_state.test.cjs             review-tools/p5_resume_state_machine.test.cjs             review-tools/p5_final_core_review.test.cjs             review-tools/p5_six_policy_binding.test.cjs             review-tools/p5_static_install_binding.test.cjs \
-            review-tools/p5_resume_state.test.cjs             review-tools/p5_resume_state_machine.test.cjs             review-tools/p5_final_core_mechanical_bindings.test.cjs
-          do
-            node --check "$f"
-          done
+          files=(
+            review-tools/p5_final_primary_relay_repin.cjs
+            review-tools/p5_export_exact_approved_bundle.cjs
+            review-tools/p5_bulk_final_owner_handoff.cjs
+            review-tools/p5_resume_existing_final_commissioning.cjs
+            review-tools/p5_run_existing_inert_stage_chain.cjs
+            review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
+            review-tools/p5_assemble_exact_six_final_policies.cjs
+            review-tools/p5_exact_final_release_policy_bindings.cjs
+            review-tools/p5_install_exact_approved_static_values.cjs
+            review-tools/p5_final_repin_receipt.test.cjs
+            review-tools/p5_manifest_receipt_recovery.test.cjs
+            review-tools/p5_inert_stage_chain.test.cjs
+            review-tools/p5_bulk_handoff.test.cjs
+            review-tools/p5_resume_state.test.cjs
+            review-tools/p5_resume_state_machine.test.cjs
+            review-tools/p5_final_core_review.test.cjs
+            review-tools/p5_six_policy_binding.test.cjs
+            review-tools/p5_static_install_binding.test.cjs
+            review-tools/p5_final_core_mechanical_bindings.test.cjs
+          )
+          for f in "${files[@]}"; do node --check "$f"; done
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_six_policy_candidate.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
 
       - name: Run focused final commissioning regressions
+        shell: bash
         run: |
           set -Eeuo pipefail
-          node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs             review-tools/p5_inert_stage_chain.test.cjs             review-tools/p5_bulk_handoff.test.cjs             review-tools/p5_final_core_review.test.cjs             review-tools/p5_six_policy_binding.test.cjs             review-tools/p5_static_install_binding.test.cjs             review-tools/p5_final_core_mechanical_bindings.test.cjs
+          node --test \
+            review-tools/p5_final_repin_receipt.test.cjs \
+            review-tools/p5_manifest_receipt_recovery.test.cjs \
+            review-tools/p5_inert_stage_chain.test.cjs \
+            review-tools/p5_bulk_handoff.test.cjs \
+            review-tools/p5_resume_state.test.cjs \
+            review-tools/p5_resume_state_machine.test.cjs \
+            review-tools/p5_final_core_review.test.cjs \
+            review-tools/p5_six_policy_binding.test.cjs \
+            review-tools/p5_static_install_binding.test.cjs \
+            review-tools/p5_final_core_mechanical_bindings.test.cjs
 
       - name: Verify complete exact helper blob pin chain
+        shell: bash
         run: |
           set -Eeuo pipefail
           CORE_INPUTS="$(git hash-object review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs)"
@@ -100,28 +96,22 @@ jobs:
           const resume=fs.readFileSync('review-tools/p5_resume_existing_final_commissioning.cjs','utf8');
           const handoff=fs.readFileSync('review-tools/p5_bulk_final_owner_handoff.cjs','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
-          for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})){
-            need(handoff.includes(name+':"'+sha+'"'), 'bulk '+name+' blob mismatch');
+          for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
+            need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
           }
           need(resume.includes('REPIN="'+repin+'"'),'resume REPIN blob mismatch');
           need(resume.includes('RUNNER="'+bulk+'"'),'resume RUNNER blob mismatch');
           console.log(JSON.stringify({
             status:'PHASE5_FINAL_COMPLETE_HELPER_PIN_CHAIN_EXACT_NO_GO',
-            coreInputsBlob:coreInputs,
-            coreBlob:core,
-            assemblyBlob:assembly,
-            bundleBlob:bundle,
-            installBlob:install,
-            stageBlob:stage,
-            repinBlob:repin,
-            bulkBlob:bulk,
-            providerCalls:0,
-            databaseWrites:0,
-            phase6PaidGo:false
+            coreInputsBlob:coreInputs,coreBlob:core,assemblyBlob:assembly,
+            bundleBlob:bundle,installBlob:install,stageBlob:stage,
+            repinBlob:repin,bulkBlob:bulk,
+            providerCalls:0,databaseWrites:0,phase6PaidGo:false
           }));
           NODE
 
       - name: Confirm no production credentials are present
+        shell: bash
         run: |
           set -Eeuo pipefail
           test -z "${AERODATABOX_API_KEY:-}"
