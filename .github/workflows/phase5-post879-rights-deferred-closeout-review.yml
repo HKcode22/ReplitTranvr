@@ -19,6 +19,7 @@ env:
   RAPIDAPI_KEY: ''
   DATABASE_URL: ''
   V39_DATABASE_RUNTIME_URL: ''
+  GH_TOKEN: ${{ github.token }}
 jobs:
   exact-current-main-review:
     runs-on: ubuntu-latest
