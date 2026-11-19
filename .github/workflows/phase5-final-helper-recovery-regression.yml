@@ -93,6 +93,7 @@ jobs:
           bash -n review-tools/p5_materialize_final_core_review_once.sh
           bash -n review-tools/p5_materialize_final_phase5_freeze_once.sh
           bash -n review-tools/p5_materialize_downstream_review_once.sh
+          bash -n review-tools/p5_phase5_rights_deferred_owner_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
           cp review-tools/p5_resume_existing_final_commissioning.cjs "$helper_tmp"
           node --check "$helper_tmp"
@@ -150,6 +151,7 @@ jobs:
           const reviewOnce=fs.readFileSync('review-tools/p5_materialize_final_core_review_once.sh','utf8');
           const freezeOnce=fs.readFileSync('review-tools/p5_materialize_final_phase5_freeze_once.sh','utf8');
           const downstreamOnce=fs.readFileSync('review-tools/p5_materialize_downstream_review_once.sh','utf8');
+          const rightsDeferredOnce=fs.readFileSync('review-tools/p5_phase5_rights_deferred_owner_once.sh','utf8');
           const need=(x,m)=>{if(!x)throw Error(m)};
           for(const [name,sha] of Object.entries({coreInputs,core,assembly,bundle,install,stage})) {
             need(handoff.includes(name+':"'+sha+'"'),'bulk '+name+' blob mismatch');
@@ -173,6 +175,10 @@ jobs:
           need(!downstreamOnce.includes('FREEZE_BLOB=')&&!downstreamOnce.includes(' FREEZE)'),'generic downstream wrapper must not expose alternate freeze path');
           need(downstreamOnce.includes('BASE="70580b3749544dfcbeff39da181b2aa42b1b4476"'),'downstream base pin missing');
           need(downstreamOnce.includes('compare/$BASE...$LIVE')&&downstreamOnce.includes('NON_EVIDENCE_MAIN_DRIFT')&&downstreamOnce.includes('LIVE12='),'downstream evidence-only live-main guard missing');
+          need(rightsDeferredOnce.includes('PREP_BLOB="'+gitHash('review-tools/p5_phase5_rights_deferred_prepare.cjs')+'"'),'rights-deferred owner wrapper prepare pin mismatch');
+          need(rightsDeferredOnce.includes('COMMISSION_BLOB="'+gitHash('review-tools/p5_phase5_rights_deferred_commission.cjs')+'"'),'rights-deferred owner wrapper commission pin mismatch');
+          need(rightsDeferredOnce.includes('node_modules/.bin/tsx "$TMP/prepare.cjs" PREPARE_PHASE5_RIGHTS_DEFERRED_NO_GO'),'rights-deferred prepare must use pinned tsx');
+          need(rightsDeferredOnce.includes('node "$TMP/commission.cjs" COMMISSION_PHASE5_RIGHTS_DEFERRED_NO_GO'),'rights-deferred commission invocation mismatch');
           need(freezeOnce.includes('DEST="$OUT/approved-final-phase5-freeze.json"'),'dedicated freeze output filename mismatch');
           need(freezeOnce.includes('BASE="70580b3749544dfcbeff39da181b2aa42b1b4476"')&&freezeOnce.includes('compare/$BASE...$LIVE')&&freezeOnce.includes('NON_EVIDENCE_MAIN_DRIFT'),'dedicated freeze evidence-only live-main guard missing');
           console.log(JSON.stringify({
