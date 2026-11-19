@@ -67,9 +67,9 @@ function execute(){
  // No separate canary, never POST. Reuse the LaunchAgent's narrow environment paths.
  let env={PATH:process.env.PATH,HOME:home,GH_PROMPT_DISABLED:'1',...pl.EnvironmentVariables};
  const j=JSON.parse(cmd(a[0],[a[1],'observe-auth',PIN,a[4]],{env}));
- NEED(j.status==='READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF'&&j.observedMainMatchesReviewedPin===true&&live()===PIN,'ACTUAL_OBSERVATION_REQUIRES_REVIEW');
+ NEED(j.status==='READONLY_GITHUB_METADATA_NOT_COLLECTION_OR_DELETION_PROOF'&&j.reviewedMain===PIN&&j.permitDispatch===false&&j.providerCalls===0&&j.databaseReads===0&&j.databaseWrites===0&&live()===PIN,'ACTUAL_OBSERVATION_REQUIRES_REVIEW');
  cmd('/bin/launchctl',['print',service]);
- console.log(JSON.stringify({status:'MAC_EXISTING_WATCHDOG_REPINNED_AND_OBSERVED_NO_GO',oldPin,newPin:PIN,changed,observedUtc:j.observedUtc,lanes:j.lanes?.map(x=>({lane:x.lane??x.id??x.name??null,level:x.level,runId:x.runId??null})),localMonitorGap:j.localMonitorGap??null,launchAgentLoaded:true,intervalSeconds:600,githubSecretWrites:0,providerCalls:0,databaseWrites:0,dispatches:0,phase6PaidGo:false}));
+ console.log(JSON.stringify({status:'MAC_EXISTING_WATCHDOG_REPINNED_AND_OBSERVED_NO_GO',oldPin,newPin:PIN,changed,observedUtc:j.observedUtc,lanes:j.lanes?.map(x=>({lane:x.lane??x.id??x.name??null,level:x.level,runId:x.lastObservedSuccessfulStep?.runId??x.latest?.runId??null})),localMonitorGap:j.localMonitorGap??null,launchAgentLoaded:true,intervalSeconds:600,githubSecretWrites:0,providerCalls:0,databaseWrites:0,dispatches:0,phase6PaidGo:false}));
 }
 module.exports={validatePlist,validateKeys};
 if(require.main===module)try{execute()}catch(e){console.error(/^HOLD_P5_MAC_READBACK_[A-Z0-9_]+$/.test(e.message)?e.message:'HOLD_P5_MAC_READBACK_LOCAL_STATE_REVIEW');process.exitCode=2}
