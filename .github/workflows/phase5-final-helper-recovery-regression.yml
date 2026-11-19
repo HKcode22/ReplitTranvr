@@ -14,6 +14,8 @@ on:
       - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
       - 'review-tools/p5_inert_stage_chain.test.cjs'
       - 'review-tools/p5_bulk_handoff.test.cjs'
+      - 'review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs'
+      - 'review-tools/p5_final_core_review.test.cjs'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
   pull_request:
     paths:
@@ -26,6 +28,8 @@ on:
       - 'review-tools/p5_run_existing_inert_stage_chain.cjs'
       - 'review-tools/p5_inert_stage_chain.test.cjs'
       - 'review-tools/p5_bulk_handoff.test.cjs'
+      - 'review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs'
+      - 'review-tools/p5_final_core_review.test.cjs'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
 
 permissions:
@@ -53,6 +57,8 @@ jobs:
           node --check review-tools/p5_final_repin_receipt.test.cjs
           node --check review-tools/p5_inert_stage_chain.test.cjs
           node --check review-tools/p5_bulk_handoff.test.cjs
+          node --check review-tools/p5_prepare_adopt_exact_final_core_inputs.cjs
+          node --check review-tools/p5_final_core_review.test.cjs
           node --check review-tools/p5_manifest_receipt_recovery.test.cjs
 
       - name: Run focused historical-receipt regressions
@@ -60,7 +66,8 @@ jobs:
           set -Eeuo pipefail
           node --test             review-tools/p5_final_repin_receipt.test.cjs             review-tools/p5_manifest_receipt_recovery.test.cjs \
             review-tools/p5_inert_stage_chain.test.cjs \
-            review-tools/p5_bulk_handoff.test.cjs
+            review-tools/p5_bulk_handoff.test.cjs \
+            review-tools/p5_final_core_review.test.cjs
 
       - name: Verify exact helper blob pin chain
         run: |
