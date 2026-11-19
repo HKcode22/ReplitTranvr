@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
 env:
+  GH_TOKEN: ${{ github.token }}
   ADB_AUTO_COLLECT: '0'
   V39_PHASE6_PROCESS_ARMED: '0'
   V39_PHASE6_OWNER_APPROVED: '0'
