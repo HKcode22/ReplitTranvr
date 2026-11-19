@@ -1,0 +1,78 @@
+name: Phase5 post-879 rights-deferred closeout review (NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/p5_post879_rights_deferred_prepare_v39.mjs'
+      - 'review-tools/p5_post879_store_manifest_owner_v39.mjs'
+      - '.github/workflows/phase5-post879-rights-deferred-closeout-review.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  exact-current-main-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Syntax and explicit no-provider contract
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          node --check review-tools/p5_post879_store_manifest_owner_v39.mjs
+          grep -Fq "sourceRightsApproved:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          grep -Fq "sourceUseDeferredToPhase6Activation:true" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          grep -Fq "phase6PaidGo:false" review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+          ! grep -Eq 'AeroDataBox|fetch\(|axios|https\.request|http\.request' review-tools/p5_post879_rights_deferred_prepare_v39.mjs
+      - name: Verify exact package against production main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509'
+          REVIEW_ROOT="$GITHUB_WORKSPACE"
+          PROD="$RUNNER_TEMP/production-main"
+          git worktree add --detach "$PROD" "$MAIN"
+          ln -s "$REVIEW_ROOT/node_modules" "$PROD/node_modules"
+          cd "$PROD"
+          "$REVIEW_ROOT/node_modules/.bin/tsx"             "$REVIEW_ROOT/review-tools/p5_post879_rights_deferred_prepare_v39.mjs"             --verify-only "$MAIN" > "$RUNNER_TEMP/verify.json"
+          node - "$RUNNER_TEMP/verify.json" <<'NODE'
+          const fs=require('fs');
+          const x=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(x.status!=='EXACT_PHASE5_INERT_RIGHTS_DEFERRED_PACKAGE_READY_NO_GO'||
+             x.codeSha!=='ae0915d1eb0c37651d280ff3f178efdb640ed509'||
+             x.dayPlanCount!==31||x.plannedQueries!==6144||x.reservedRestUnits!==37388||
+             x.peakDailyUnits!==1280||x.netRestCeilingUnits!==49468||
+             x.sourceRightsApproved!==false||x.sourceUseDeferredToPhase6Activation!==true||
+             x.scientificFreezeApproved!==true||x.authorizationEnabled!==false||
+             x.providerCalls!==0||x.databaseWrites!==0||x.githubMutations!==0||
+             x.phase6PaidGo!==false) process.exit(2);
+          NODE
+      - name: Materialize private package and validate frozen manifest bytes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MAIN='ae0915d1eb0c37651d280ff3f178efdb640ed509'
+          REVIEW_ROOT="$GITHUB_WORKSPACE"
+          PROD="$RUNNER_TEMP/production-main"
+          OUT="$RUNNER_TEMP/post879-package"
+          cd "$PROD"
+          "$REVIEW_ROOT/node_modules/.bin/tsx"             "$REVIEW_ROOT/review-tools/p5_post879_rights_deferred_prepare_v39.mjs"             --write-private "$MAIN" "$OUT" > "$RUNNER_TEMP/write.json"
+          SHA="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.manifestSha256)" "$OUT/phase5-closeout-package-summary.json")"
+          node "$REVIEW_ROOT/review-tools/p5_post879_store_manifest_owner_v39.mjs"             --validate-only "$OUT/phase5-frozen-manifest.json" "$SHA"
+          test "$(stat -c '%a' "$OUT/phase5-frozen-manifest.json")" = 600
+          test "$(stat -c '%a' "$OUT/phase5-static-secret-values-PRIVATE.json")" = 600
+          echo "POST879_EXACT_PACKAGE_AND_MANIFEST_VALID_NO_PROVIDER_NO_DB_NO_GO"
