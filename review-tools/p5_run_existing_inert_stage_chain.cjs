@@ -13,10 +13,13 @@ function verifyRun(x,id,workflowId,main){
  need(x?.id===id&&x.workflow_id===workflowId&&x.head_sha===main&&x.head_branch==="main"&&x.event==="workflow_dispatch"&&x.run_attempt===1&&x.path===".github/workflows/phase5-exact-inert-release-stage-manual.yml","RUN_IDENTITY");
  need(x.status==="completed"&&x.conclusion==="success","STAGE_RUN_NOT_SUCCESSFUL");
 }
-function verifyReadback(x,mode,main){
+function verifyReadback(x,mode,main,review){
  const need=(x,s)=>{if(!x)throw Error("HOLD_P5_STAGE_CHAIN_"+s)};
  const names={calendar:"INDEPENDENT_EXACT_B0062_CALENDAR_ONLY_READONLY_MATCH_NO_GO",cost:"INDEPENDENT_EXACT_B0062_V0093_POST_STAGE_READONLY_MATCH_NO_GO"};
- need(x?.status===names[mode]&&x.codeSha===main&&x.independentOwnerReadback===true&&x.authorizationEnabled===false&&x.providerCalls===0&&x.databaseWrites===0&&x.phase6PaidGo===false,"INDEPENDENT_READBACK_REQUIRED");
+ need(x?.status===names[mode]&&x.codeSha===main&&x.independentOwnerReadback===true&&x.authorizationEnabled===false&&x.providerCalls===0&&x.databaseWrites===0&&x.phase6PaidGo===false&&x.phase5ScientificFreeze===false&&x.verifiedReadOnly===true&&x.database==="neondb","INDEPENDENT_READBACK_REQUIRED");
+ need(review&&x.manifestSha256===review.manifestSha256&&x.calendarSha256===review.calendarSha256&&x.exactReviewedStagePacketSha256===review.stageSha256&&x.calendarRows===31&&x.pairedAirportDays===10&&x.ordinaryAirportDaysUnselected===21&&x.restPhysicalChargeDates===38&&x.sourceQueriesAndPhysicalAttemptsZero===true&&x.alertSafetyValuesExact===true,"EXACT_CALENDAR_STAGE_SCOPE");
+ if(mode==="calendar")need(x.costStageCommitted===false&&x.categoryCycleCaps===0&&x.categoryUtcBudgetRows===0,"CALENDAR_ONLY_NO_COST_STAGE");
+ else need(x.exactReviewedCostEnvelopeSha256===review.costEnvelopeSha256&&x.categoryCycleCaps===7&&x.categoryUtcBudgetRows===266,"EXACT_SEVEN_CATEGORY_COST_STAGE");
 }
 function runSequence(ops){
  const calendarId=ops.dispatch("calendar");
@@ -82,7 +85,7 @@ function run(){
    readback(mode,id){
     const args=mode==="calendar"?["--readback-calendar",stage.f,r.stageSha256]:["--readback",stage.f,r.stageSha256,r.costEnvelopeSha256];
     const x=JSON.parse(call(process.execPath,["scripts/v39_phase6_inert_release_stage_manual_v39.mjs",...args],{env:readEnv,timeout:120000}));
-    verifyReadback(x,mode,r.main);checkMain();
+    verifyReadback(x,mode,r.main,r);checkMain();
     emit({mode,status:"INDEPENDENT_READBACK_MATCH",runId:id,receipt:x});
    }
   });
