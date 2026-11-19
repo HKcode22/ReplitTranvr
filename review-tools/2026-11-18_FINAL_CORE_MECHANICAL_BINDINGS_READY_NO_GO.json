@@ -3,8 +3,8 @@
   "status": "MECHANICAL_EVIDENCE_BINDINGS_READY_NOT_REVIEWED_NO_GO",
   "purpose": "Prefill only evidence identities that are deterministic from PR #877. This file is not reviewed-final-core-scope-decisions.json and cannot authorize collection.",
   "baseCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
-  "evidenceCommit": "2655adad1cf8d33fa6f05ef17bc19c3fb295e427",
-  "ledgerBlob": "2b91bb2126db0b3cf2a5ee425b36a1441be103b7",
+  "evidenceCommit": "34557e4fed61d21d269f1d307a5d4c4090f7f5a0",
+  "ledgerBlob": "c97bf1589df5df058d8c248e4ee3c249d455b0f8",
   "workpaperBlob": "b0d1a46fd5a4660c50b786c9e1e028ff09686bfa",
   "mechanicallyBoundEvidence": {
     "scientificFreezeEvidenceSha256": {
@@ -18,9 +18,9 @@
       "sha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b"
     },
     "publishedAndGithubStopEvidenceSha256": {
-      "evidenceId": "RUN-20261119-EXISTINGSTOPGUARDEVIDENCE",
-      "path": "data-collection/phase5/evidence/2026-11-18_actual_existing_stop_and_callback_guard_NOT_GLOBAL_APPROVAL.json",
-      "sha256": "8389b83bba5b04d8aefcf508699d9b05899c421277dae7ec1ec58ea16cecb786"
+      "evidenceId": "RUN-20261119-CURRENTGITHUBSTOP",
+      "path": "data-collection/phase5/evidence/2026-11-19_current_github_stop_readonly_attestation_NO_GO.json",
+      "sha256": "6a14e56860727c05795716b7610f777cd8189b9299f631ecdb5c4cdba265743e"
     },
     "operationalReleaseEvidenceSha256": {
       "evidenceId": "RUN-20261119-OPERATIONALSCOPEREVIEW",
@@ -54,7 +54,7 @@
   "draftReview": {
     "schema": "v39.phase5.exact-final-core-scope-review.v1",
     "baseCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
-    "evidenceCommit": "2655adad1cf8d33fa6f05ef17bc19c3fb295e427",
+    "evidenceCommit": "34557e4fed61d21d269f1d307a5d4c4090f7f5a0",
     "calendarRowsSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
     "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
     "existingRangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
@@ -75,7 +75,7 @@
     "scientificFreezeEvidenceSha256": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203",
     "sourceRightsEvidenceSha256": null,
     "providerAccountAndBudgetEvidenceSha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
-    "publishedAndGithubStopEvidenceSha256": "8389b83bba5b04d8aefcf508699d9b05899c421277dae7ec1ec58ea16cecb786",
+    "publishedAndGithubStopEvidenceSha256": "6a14e56860727c05795716b7610f777cd8189b9299f631ecdb5c4cdba265743e",
     "operationalReleaseEvidenceSha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462",
     "reviewedBy": null,
     "reviewedAtUtc": null,
@@ -109,7 +109,8 @@
       "DEC-20261119-OWNERPRESERVEF8",
       "RUN-20261119-EXISTINGSTOPGUARDEVIDENCE",
       "RUN-20261119-FINALOWNERMETADATA",
-      "RUN-20261119-NATIVECOREPREARMREVIEW"
+      "RUN-20261119-NATIVECOREPREARMREVIEW",
+      "RUN-20261119-CURRENTGITHUBSTOP"
     ]
   },
   "phase6PaidGo": false
