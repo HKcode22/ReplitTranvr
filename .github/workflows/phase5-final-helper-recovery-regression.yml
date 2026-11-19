@@ -67,6 +67,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_FINAL_CORE_REVIEWER_CLOSURE_MATRIX_NO_GO.json","utf8"))'
+          node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-19_PHASE5_FINAL_DOWNSTREAM_TRANSITION_AUDIT_NO_GO.json","utf8"))'
           bash -n review-tools/p5_owner_final_resume_once.sh
           bash -n review-tools/p5_materialize_final_core_review_once.sh
           helper_tmp="$(mktemp --suffix=.cjs 2>/dev/null || mktemp "${TMPDIR:-/tmp}/p5-final-helper.XXXXXX.cjs")"
@@ -87,6 +88,7 @@ jobs:
             review-tools/p5_resume_state_machine.test.cjs \
             review-tools/p5_final_core_review.test.cjs \
             review-tools/p5_final_core_review_materializer.test.cjs \
+            review-tools/p5_final_downstream_transition_audit.test.cjs \
             review-tools/p5_six_policy_binding.test.cjs \
             review-tools/p5_static_install_binding.test.cjs \
             review-tools/p5_final_core_mechanical_bindings.test.cjs \
