@@ -3,7 +3,7 @@
 const fs=require("node:fs"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr";
-const BASE="4a155339479bf9324f626e36b1010054f67403cc";
+const BASE="7d178225aeea4d8a6b4145546d2c1b12dfb72b42";
 const LEDGER="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const PINS=Object.freeze([
  "V39_P5_APPROVED_CODE_SHA",
