@@ -1,24 +1,38 @@
 #!/usr/bin/env bash
 # Canonical owner-local materialization of genuine downstream reviewer decisions.
-# Modes: POLICY, PRIVATE, STATIC, FREEZE. No DB/provider/secret/GO mutation.
+# Modes: POLICY, PRIVATE, STATIC. Final FREEZE uses the dedicated live-main wrapper. No DB/provider/secret/GO mutation.
 set -Eeuo pipefail
 set +x
 umask 077
 
 REPO="HKcode22/ReplitTranvr"
-MAIN="70580b3749544dfcbeff39da181b2aa42b1b4476"
-MAIN12="70580b374954"
+BASE="70580b3749544dfcbeff39da181b2aa42b1b4476"
 POLICY_BLOB="2c2f45efad55b12d595773dd51b07e27d7a43b61"
 PRIVATE_BLOB="27100b8a67d2ecdd50c39eabf338a72d8982c48a"
 STATIC_BLOB="6bfa98eb3e75fd1136e86a28ab0b7e4c9c5bb2e8"
-FREEZE_BLOB="607886ff73c1c342873d66820ca16be18f803210"
 
 hold(){ printf 'HOLD_P5_DOWNSTREAM_REVIEW_ONCE: %s\n' "$1" >&2; exit 2; }
 [[ -n "${P5_REVIEW_MODE:-}" ]] || hold "MODE_REQUIRED"
 [[ -n "${P5_FINAL_REVIEW_DIRECTORY:-}" ]] || hold "REVIEW_DIRECTORY_REQUIRED"
 [[ -n "${P5_REVIEWER_INPUT:-}" && -f "$P5_REVIEWER_INPUT" ]] || hold "REVIEWER_INPUT_REQUIRED"
 gh auth status --hostname github.com >/dev/null 2>&1 || hold "GITHUB_AUTH_MISSING"
-[[ "$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" == "$MAIN" ]] || hold "MAIN_CHANGED"
+LIVE="$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" || hold "MAIN_READ_FAILED"
+[[ "$LIVE" =~ ^[a-f0-9]{40}$ ]] || hold "MAIN_INVALID"
+LIVE12="${LIVE:0:12}"
+
+# Final-core AUTH approval is an evidence-only main transition. Downstream
+# reviews must follow that live reviewed main rather than hard-pin the old
+# executable base. Any executable/runtime drift remains a hard HOLD.
+if [[ "$LIVE" != "$BASE" ]]; then
+  while IFS= read -r changed; do
+    [[ -n "$changed" ]] || continue
+    case "$changed" in
+      data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json) ;;
+      data-collection/phase5/evidence/*.json|data-collection/phase5/evidence/*.md) ;;
+      *) hold "NON_EVIDENCE_MAIN_DRIFT" ;;
+    esac
+  done < <(gh api "repos/$REPO/compare/$BASE...$LIVE" --jq '.files[].filename')
+fi
 
 DIR="$(node - "$P5_FINAL_REVIEW_DIRECTORY" <<'NODE'
 const fs=require("node:fs"),path=require("node:path");
@@ -60,18 +74,11 @@ case "$P5_REVIEW_MODE" in
    DEST="$DIR/approved-private-policy-review.json"
    ;;
  STATIC)
-   SUB="$DIR/exact-final-commissioning-$MAIN12"
+   SUB="$DIR/exact-final-commissioning-$LIVE12"
    [[ -d "$SUB" ]] || hold "COMMISSIONING_DIRECTORY_MISSING"
    fetch_blob "$STATIC_BLOB" "$TMP/materializer.cjs"
    node "$TMP/materializer.cjs" "$SUB/static-install-review-workpaper-NOT-APPROVED.json" "$P5_REVIEWER_INPUT" > "$TMP/out.json" || hold "STATIC_REVIEW_REFUSED"
    DEST="$SUB/static-install-review.json"
-   ;;
- FREEZE)
-   SUB="$DIR/exact-final-commissioning-$MAIN12"
-   [[ -d "$SUB" ]] || hold "COMMISSIONING_DIRECTORY_MISSING"
-   fetch_blob "$FREEZE_BLOB" "$TMP/materializer.cjs"
-   node "$TMP/materializer.cjs" "$SUB/final-freeze-review-workpaper-NOT-APPROVED.json" "$P5_REVIEWER_INPUT" > "$TMP/out.json" || hold "FREEZE_REVIEW_REFUSED"
-   DEST="$SUB/approved-final-phase5-freeze.json"
    ;;
  *) hold "UNKNOWN_MODE" ;;
 esac
