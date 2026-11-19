@@ -1,5 +1,7 @@
 name: Phase5 post-879 rights-deferred closeout review (NO GO)
 on:
+  push:
+    branches: [phase5/nov19-post879-rights-deferred-closeout]
   pull_request:
     branches: [main]
     paths:
