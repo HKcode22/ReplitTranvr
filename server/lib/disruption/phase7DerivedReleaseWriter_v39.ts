@@ -9,7 +9,7 @@ import {
   PHASE6_DERIVED_RELEASE_NEVER_AUTHORIZES_PAID_GO,
   type Phase6ReleaseHorizon,
   type Phase7DerivedReleaseContract,
-  type Phase7DerivedReleaseCensoring,
+  type Phase7ReleaseCensoring,
   type Phase7ReleaseSplit,
 } from "./phase6DerivedTrainingReleaseContract_v39";
 
@@ -30,7 +30,7 @@ export interface Phase7ApprovedDerivedInput {
   labelBuckets: Record<string, number | null>;
   missingness: Record<string, boolean>;
   qualityFlags: number;
-  censoring: Phase7DerivedReleaseCensoring;
+  censoring: Phase7ReleaseCensoring;
 }
 
 export interface Phase7DerivedReleaseSink {
