@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - phase5/final-helper-recovery-fixes-clean-20261118
+      - phase5/final-closeout-proof-20261118
     paths:
       - 'review-tools/**'
       - '.github/workflows/phase5-final-helper-recovery-regression.yml'
