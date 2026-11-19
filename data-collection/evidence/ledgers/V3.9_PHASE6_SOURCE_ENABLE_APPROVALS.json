@@ -137,6 +137,11 @@
       "evidenceId": "RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED",
       "path": "data-collection/phase5/evidence/2026-11-19_published_and_github_stop_combined_review_NO_GO.json",
       "sha256": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c"
+    },
+    {
+      "evidenceId": "RUN-20261119-CURRENTFIDSPRICE",
+      "path": "data-collection/phase5/evidence/2026-11-19_current_marketplace_fids_range_cost_NOT_RIGHTS_NO_GO.json",
+      "sha256": "f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1"
     }
   ],
   "approvals": []
