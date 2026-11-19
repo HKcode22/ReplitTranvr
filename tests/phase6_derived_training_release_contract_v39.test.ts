@@ -9,7 +9,7 @@ import {
 const sha = "a".repeat(64);
 const contract = (): Phase7DerivedReleaseContract => ({
   schema: "v39.phase6.phase7-derived-release-contract.v1",
-  version: "v1",
+  version: "v01",
   featureDictionarySha256: sha,
   termsReviewSha256: "b".repeat(64),
   derivedWorkReviewSha256: "c".repeat(64),
