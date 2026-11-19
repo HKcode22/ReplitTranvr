@@ -10,7 +10,7 @@ import type {Phase7ApprovedDerivedInput} from './phase7DerivedReleaseWriter_v39'
 import {
   type Phase7DerivedReleaseContract,
   type Phase7ReleaseCensoring,
-  type Phase7ReleaseHorizon,
+  type Phase6ReleaseHorizon,
   type Phase7ReleaseSplit,
   validatePhase7DerivedReleaseContract,
 } from './phase6DerivedTrainingReleaseContract_v39';
@@ -63,7 +63,7 @@ export interface Phase7SourceDecision {
 }
 
 export interface Phase7TransformationContext {
-  horizon: Phase7ReleaseHorizon;
+  horizon: Phase6ReleaseHorizon;
   cohortBucket: number;
   split: Phase7ReleaseSplit;
   censoring: Phase7ReleaseCensoring;
@@ -147,8 +147,10 @@ export function validatePhase7ReviewedTransformationProfile(
   if (!Number.isInteger(profile.mappingExpiryHours) || profile.mappingExpiryHours < 1 || profile.mappingExpiryHours > 24) {
     failures.push('mapping-expiry-invalid');
   }
-  if (profile.approvedForUse !== true) failures.push('independent-approval-required');
-  if (!Array.isArray(profile.fields) || profile.fields.length < 1 || profile.fields.length > 31) {
+  const profileRecord = profile as unknown as Partial<Phase7ReviewedTransformationProfile>;
+  if (profileRecord.approvedForUse !== true) failures.push('independent-approval-required');
+  const fields = profileRecord.fields;
+  if (!Array.isArray(fields) || fields.length < 1 || fields.length > 31) {
     failures.push('fields-count-invalid');
     return fail({pass: false, failures});
   }
@@ -157,7 +159,7 @@ export function validatePhase7ReviewedTransformationProfile(
   const outputNames = new Set<string>();
   let featureCount = 0;
   let labelCount = 0;
-  for (const raw of profile.fields) {
+  for (const raw of fields) {
     if (!isPlainRecord(raw)) {
       failures.push('field-not-object');
       continue;
@@ -224,7 +226,7 @@ function validateDecisions(decisions: readonly Phase7SourceDecision[]): Phase7Tr
       failures.push('decision-extra-or-missing-keys');
       continue;
     }
-    const decision = raw as Phase7SourceDecision;
+    const decision = raw as unknown as Phase7SourceDecision;
     if (!SOURCE_FIELD.test(decision.sourceField)) failures.push('decision-source-field-invalid');
     if (seen.has(decision.sourceField)) failures.push('decision-source-field-duplicate:' + decision.sourceField);
     seen.add(decision.sourceField);
@@ -242,10 +244,11 @@ function validateDecisions(decisions: readonly Phase7SourceDecision[]): Phase7Tr
 function validateContext(context: unknown): Phase7TransformationVerdict {
   const failures: string[] = [];
   if (!isPlainRecord(context) || !hasExactKeys(context, CONTEXT_KEYS)) return {pass: false, failures: ['context-extra-or-missing-keys']};
-  if (context.horizon !== 'T-24h' && context.horizon !== 'T-6h' && context.horizon !== 'T-90m') failures.push('context-horizon-invalid');
-  if (!Number.isInteger(context.cohortBucket) || context.cohortBucket < 0) failures.push('context-cohort-invalid');
-  if (context.split !== 'train' && context.split !== 'validation' && context.split !== 'test') failures.push('context-split-invalid');
-  if (context.censoring !== 'observed' && context.censoring !== 'censored' && context.censoring !== 'missing' && context.censoring !== 'not_due') failures.push('context-censoring-invalid');
+  const contextRecord = context as unknown as Partial<Phase7TransformationContext>;
+  if (contextRecord.horizon !== 'T-24h' && contextRecord.horizon !== 'T-6h' && contextRecord.horizon !== 'T-90m') failures.push('context-horizon-invalid');
+  if (!Number.isInteger(contextRecord.cohortBucket) || (contextRecord.cohortBucket as number) < 0) failures.push('context-cohort-invalid');
+  if (contextRecord.split !== 'train' && contextRecord.split !== 'validation' && contextRecord.split !== 'test') failures.push('context-split-invalid');
+  if (contextRecord.censoring !== 'observed' && contextRecord.censoring !== 'censored' && contextRecord.censoring !== 'missing' && contextRecord.censoring !== 'not_due') failures.push('context-censoring-invalid');
   return fail({pass: false, failures});
 }
 
