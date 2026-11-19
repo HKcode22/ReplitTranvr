@@ -5,7 +5,7 @@
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os"),crypto=require("node:crypto");
 const {execFileSync}=require("node:child_process");
 const REPO="HKcode22/ReplitTranvr",H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
-const BLOBS={coreInputs:"6f675422c78ef1dd35bb6790649d0f2b01f4e129",core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"cf5c220fa4c44c13c93e8bfe58f72f5a5bc635ed",install:"651c2389bace887165af6c31349f9882e05decd4",stage:"432043debae812e8495c6d217cc94251a4e9728c"};
+const BLOBS={coreInputs:"c9adb783f29103fdfdd118472cbcc4d4910374ce",core:"34156ac65811165c0d217e7175f8643eeef55761",assembly:"cf9463ae4c078cf178acd350fbe510cd4d371591",bundle:"78bb0b7bea4712305edab194952faf55310c4903",install:"60691feaf6e0dd02a2b36b9ec6af9c0c46069af1",stage:"432043debae812e8495c6d217cc94251a4e9728c"};
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_BULK_"+s)};
 const digest=b=>crypto.createHash("sha256").update(b).digest("hex");
 const INERT_APPROVALS=Object.freeze(["P6_INERT_CALENDAR_REVIEW_APPROVED","P6_INERT_COST_REVIEW_APPROVED","V39_PHASE5_SOURCE_RIGHTS_APPROVED"]);
