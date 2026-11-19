@@ -23,9 +23,10 @@ reclassified by this change.
 
 The current project record already says to continue nonpaid engineering while
 keeping source-use permission as a distinct Phase 6 activation condition. The
-current production `main` review head is `88a065458537aa5e1a0055dec82b7bf81b0c00eb`;
-the source authorization and paid collection remain disabled. No reply is
-treated as no approval.
+packet was reviewed against the pre-merge baseline
+`88a065458537aa5e1a0055dec82b7bf81b0c00eb` and is now merged on production
+`main` at `3ecefd427433d48e73de86caeff8e3a6d313cd90`; the source authorization
+and paid collection remain disabled. No reply is treated as no approval.
 
 The provider's current public materials say that seven days is the default
 caching limit, that some named plans have extended caching, and that a genuine
@@ -106,9 +107,21 @@ Recent failures are not silently converted into successful collection:
    POST, or rights decision.
 3. The current source/retention package is preserved; the second packet does
    not duplicate its data or ask the expiry worker to preserve it.
-4. This checkout lacks `node_modules`, so local TypeScript/Vitest commands
-   cannot run here without network installation. The new validator tests are
-   included for the repository's existing CI; no local test pass is claimed.
+4. The local checkout lacked `node_modules`, so local TypeScript/Vitest
+   commands were not claimed as passing. GitHub Actions installed the locked
+   dependencies and passed the full typecheck, offline tests, full suite, lint,
+   registry, traceability, contradiction scan, preflight, build, and
+   disposable-PostgreSQL checks both on PR #890 and after the merge
+   (`44563526583`).
+
+## Verified implementation state
+
+The packet builder, strict contract validator, tests, and this decision record
+are present on `main` at `3ecefd427433d48e73de86caeff8e3a6d313cd90`. The
+post-merge safety run passed, and the implementation had no provider HTTP,
+production database write, migration, paid call, or activation side effect.
+This verifies the engineering boundary only; it does not convert the
+unresolved terms review into permission.
 
 ## Required gates before any writer or source activation
 
