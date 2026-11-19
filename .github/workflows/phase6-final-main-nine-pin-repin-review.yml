@@ -1,0 +1,44 @@
+name: Phase6 final-main nine-pin repin review (NO GO)
+on:
+  push:
+    branches: [phase6/final-main-nine-pin-repin-review]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/p6_final_main_nine_pin_repin.cjs'
+      - 'review-tools/p6_final_main_nine_pin_repin.test.cjs'
+      - '.github/workflows/phase6-final-main-nine-pin-repin-review.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and exact mutation boundary
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p6_final_main_nine_pin_repin.cjs
+          node --check review-tools/p6_final_main_nine_pin_repin.test.cjs
+          grep -Fq 'rightsChanged:false' review-tools/p6_final_main_nine_pin_repin.cjs
+          grep -Fq 'armingChanged:false' review-tools/p6_final_main_nine_pin_repin.cjs
+          grep -Fq 'stopChanged:false' review-tools/p6_final_main_nine_pin_repin.cjs
+          grep -Fq 'budgetChanged:false' review-tools/p6_final_main_nine_pin_repin.cjs
+          ! grep -Eq 'AERODATABOX_API_KEY|RAPIDAPI_KEY|DATABASE_URL' review-tools/p6_final_main_nine_pin_repin.cjs
+      - name: Focused repin boundary tests
+        run: node --test review-tools/p6_final_main_nine_pin_repin.test.cjs
+      - name: No authority in CI
+        run: |
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          echo NINE_PIN_REPIN_REVIEW_COMPLETE_NO_SECRETS_WRITTEN_NO_PROVIDER_NO_GO
