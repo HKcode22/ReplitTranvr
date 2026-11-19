@@ -182,7 +182,7 @@
   "reviewMaterialization": {
     "finalCore": {
       "materializer": "7f417fe38eda6082e6448264456af6c3c3b04707",
-      "ownerWrapper": "8cb3af1d07f389cdba7ad963d637c2fa0c80c042",
+      "ownerWrapper": "260b2b05fd16bfc5beabb936cd612cfc02347f37",
       "output": "reviewed-final-core-scope-decisions.json"
     },
     "finalPolicyBinding": {
