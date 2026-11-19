@@ -64,6 +64,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_six_policy_candidate.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/fixtures/p5_877_evidence_ledger.json","utf8"))'
           node -e 'JSON.parse(require("fs").readFileSync("review-tools/2026-11-18_FINAL_CORE_MECHANICAL_BINDINGS_READY_NO_GO.json","utf8"))'
+          bash -n review-tools/p5_owner_final_resume_once.sh
 
       - name: Run focused final commissioning regressions
         shell: bash
