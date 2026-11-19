@@ -34,7 +34,7 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="cab621e081fa1e14f11b01a07d5c24e8895547efbec3a1f175cb89df7950036f";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="ea2fe59174108c7164c2dde0b1444b5b3c21d0557f74d5d4a3ccdd1030f5ca6e";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
  "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"329395f24e354e15a8faa9283bee9ad8116838af",
@@ -359,8 +359,9 @@ async function main(){
   const changed=stageCode===head?[]:cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
   verifyP6PostStageEvidenceOnlyMainAdvance(stageCode,head,changed,ancestor);
  } // The immutable stage remains bound to the executable SHA that created the
- // disabled B0062/V0093 state. Current HEAD supplies only the one exact
- // reviewed #881 bridge plus later scoped evidence and its approval ledger.
+ // disabled B0062/V0093 state. Current HEAD may contain only the exact reviewed
+ // activation and derived-release bridge bytes plus later scoped evidence and
+ // the dedicated approval ledger.
  const s=admitP6InertOwnerReadback(process.env,stageRaw,stageSha,costSha,stageCode) as unknown as OwnerContext;
  if(process.env.V39_DATABASE_RUNTIME_URL&&process.env.V39_DATABASE_RUNTIME_URL===s.url)
   hold("OWNER_DB_MUST_NOT_BE_RUNTIME_LOGIN");
