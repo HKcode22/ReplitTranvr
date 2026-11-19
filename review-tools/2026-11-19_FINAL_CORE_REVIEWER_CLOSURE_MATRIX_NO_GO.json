@@ -2,11 +2,11 @@
   "schema": "v39.phase5.final-core-reviewer-closure-matrix.v1",
   "status": "REVIEWER_CLOSURE_MATRIX_EVIDENCE_RECOMMENDATIONS_NOT_APPROVAL",
   "baseCodeSha": "70580b3749544dfcbeff39da181b2aa42b1b4476",
-  "evidenceCommit": "fde8cc5ec593978a91531d0cab38bb970386c9da",
+  "evidenceCommit": "a4b385907149f5b99ef8f85a11c554c583707916",
   "phase6PaidGo": false,
   "purpose": "Reduce the final independent review to explicit semantic decisions. Recommended values below are evidence-backed review aids, not approvals and must not be copied into reviewed-final-core-scope-decisions.json without an actual reviewer decision.",
   "mechanicallyReady": {
-    "finalPredecessorCount": 27,
+    "finalPredecessorCount": 28,
     "calendarRowsSha256": "7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",
     "frameSha256": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
     "existingRangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
@@ -16,12 +16,13 @@
     "scientificFreezeEvidenceSha256": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203",
     "providerAccountAndBudgetEvidenceSha256": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
     "publishedAndGithubStopEvidenceSha256": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c",
-    "operationalReleaseEvidenceSha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+    "operationalReleaseEvidenceSha256": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462",
+    "currentFidsRangeCostEvidenceSha256": "f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1"
   },
   "evidenceBackedRecommendations": {
     "currentAccountAndBudgetApproved": {
       "recommendedValue": true,
-      "basis": "Actual 2026-11-19T03:39:03Z provider account read: 59,968/60,000 API units, 1,830 Alert credits, no refill; exact candidate 37,388 reserve, 49,468 net ceiling, 1,000 protected floor and 11,080 headroom.",
+      "basis": "Actual 2026-11-19T03:39:03Z provider account read: 59,968/60,000 API units, 1,830 Alert credits, no refill; exact candidate 37,388 reserve, 49,468 net ceiling, 1,000 protected floor and 11,080 headroom. Current marketplace review also re-attests the 240-minute candidate range as within Ultra's 12-hour FIDS limit and FIDS Tier-2 cost at 2 API units/request.",
       "limitation": "Reviewer must choose an accountEvidenceValidUntilUtc that remains current at commissioning."
     },
     "legacyPublishedAutoCollectVerifiedOff": {
@@ -45,7 +46,7 @@
   "explicitReviewerJudgments": {
     "finalPredecessorsApproved": {
       "value": null,
-      "question": "Does the reviewer adopt the exact 27-record predecessor set as the final release evidence set?"
+      "question": "Does the reviewer adopt the exact 28-record predecessor set as the final release evidence set?"
     },
     "independentScientificFreezeApproved": {
       "value": null,
