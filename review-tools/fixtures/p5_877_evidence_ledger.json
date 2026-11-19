@@ -132,6 +132,11 @@
       "evidenceId": "RUN-20261119-CURRENTGITHUBSTOP",
       "path": "data-collection/phase5/evidence/2026-11-19_current_github_stop_readonly_attestation_NO_GO.json",
       "sha256": "6a14e56860727c05795716b7610f777cd8189b9299f631ecdb5c4cdba265743e"
+    },
+    {
+      "evidenceId": "RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED",
+      "path": "data-collection/phase5/evidence/2026-11-19_published_and_github_stop_combined_review_NO_GO.json",
+      "sha256": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c"
     }
   ],
   "approvals": []
