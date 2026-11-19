@@ -1,0 +1,72 @@
+{
+  "schema": "v39.phase5.final-core-technical-review-recommendation.v1",
+  "status": "TECHNICAL_REVIEW_RECOMMENDS_THREE_CORE_DECISIONS_SOURCE_USE_SEPARATE_NO_GO",
+  "productionMain": "70580b3749544dfcbeff39da181b2aa42b1b4476",
+  "evidenceCommit": "fde8cc5ec593978a91531d0cab38bb970386c9da",
+  "phase6PaidGo": false,
+  "reviewerScope": "Technical/scientific/operational assessment only; not vendor permission, legal advice, source-use approval, or final AUTH.",
+  "recommendations": {
+    "finalPredecessorsApproved": {
+      "recommendedValue": true,
+      "basis": "Exact 27-record predecessor set is hash-closed in the scoped evidence ledger and includes scientific scope, current account/budget, current GitHub STOP plus deployed callback guard, operational scope, signer/policy recovery, candidate recovery and current-main prearm evidence."
+    },
+    "independentScientificFreezeApproved": {
+      "recommendedValue": true,
+      "basis": "Prospective f.8/A/B/C/D1/D2/E protocol is internally coherent as a conditional pilot: T-6 genuine signed gate-out primary only when authentic/evaluable, T-90 paired update, T-24 comparator only with lawful custody, XGBoost vs persistence MAE on paired held-out intersection, 1,000 calendar-day bootstrap, >=2 minute practical threshold, no proxy target switch, missing cutoffs never backfilled, NOT_ESTIMABLE permitted, confirmatory claim explicitly false.",
+      "conditions": [
+        "This does not retroactively mark full historical Gate5 PASS.",
+        "Physical gate-out/operated-leg truth remains conditional and must be measured rather than assumed.",
+        "Adequacy rule must be fixed before outcomes."
+      ]
+    },
+    "independentOperationalReleaseApproved": {
+      "recommendedValue": true,
+      "basis": "For inert commissioning only: production main is stable; current GitHub STOP was independently attested; published receiver/source guard matched; active provider subscriptions were zero at the fresh account observation; final helper/recovery chain is fully tested; B0062/V0093 remain disabled/no-provider with independent readbacks and no-replay guards; paid/source activation is a distinct later transition.",
+      "conditions": [
+        "Recommendation is not a paid dispatch approval.",
+        "Sustained paid production timing/capacity is not claimed as proven.",
+        "Actual B0062/V0093 readbacks remain downstream evidence, not assumed in advance."
+      ]
+    },
+    "currentAccountAndBudgetApproved": {
+      "recommendedValue": true,
+      "basis": "59,968/60,000 API units, 1,830 Alert credits, 0 active subscriptions at 2026-11-19T03:39:03Z; 37,388 reserve, 49,468 net ceiling, 1,000 protected floor, 11,080 headroom, 1,280 peak daily < 1,900 cap."
+    },
+    "legacyPublishedAutoCollectVerifiedOff": {
+      "recommendedValue": true,
+      "basis": "Published callback-only source identity and startup guard plus current GitHub STOP combined review."
+    },
+    "githubPaidDispatchFlagsVerifiedOff": {
+      "recommendedValue": true,
+      "basis": "Run 44474020044 asserted four STOP controls and all 21 collection-mode variables unset without printing secret values."
+    },
+    "activeBillableSubscriptionsVerifiedZero": {
+      "recommendedValue": true,
+      "basis": "Fresh account observation activeSubscriptionCount=0."
+    },
+    "separatePaidDispatchStillRequired": {
+      "recommendedValue": true,
+      "basis": "Every final helper/stage receipt keeps phase6PaidGo=false; Phase6 source authorization and paid dispatch remain separate."
+    }
+  },
+  "sourceUse": {
+    "recommendedValue": null,
+    "status": "SEPARATE_GENUINE_DECISION_REQUIRED",
+    "reason": "Existing owner preserve-f.8 and support-continuity records explicitly are not vendor permission and must not be promoted into a source-rights approval.",
+    "providerGrantClaimed": false
+  },
+  "evidenceHashes": {
+    "scientific": "b7900e4d4c6e1f26c58c4a333c2b2ac480803ab39ece9b972cb657b9b3d29203",
+    "accountBudget": "8b1c5f077dca3c024d73d0a782323d009ea60706bb042c2babbe0d76e522f33b",
+    "publishedGithubStop": "0fe341791b99013146eff5d6fce18dc3ea8c1cd5e5243224d3c9d85b72b7763c",
+    "operational": "fd0aa7d6b35b69bb657cbfa8cc481b91a855249bb0fea1802ccc69ada6e5a462"
+  },
+  "implementationEvidence": {
+    "closeoutRunId": 44476635406,
+    "testsPassed": 114,
+    "testsFailed": 0,
+    "exactHelperPinChain": true,
+    "providerCredentialsPresent": false,
+    "productionDatabaseCredentialsPresent": false
+  }
+}
