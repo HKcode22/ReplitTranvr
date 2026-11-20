@@ -37,7 +37,14 @@ export interface Phase7GroupOutcomeScope{
   * same-leg source may supply the earlier evaluation facts. */
  evidence:Readonly<Partial<Record<Phase6ReleaseHorizon,P5EGateOutFirstCycleInput|null>>>;
 }
-export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,fragments:readonly Phase7StoredPreFragment[],scope:Phase7GroupOutcomeScope,releasedAtUtc:string){
+/** Explicit reviewer-issued opaque UUIDs permit reproducible exact bytes.
+ * They are not derived from a source identifier and must not be reused.
+ * Existing offline assembly may still generate fresh random UUIDs. */
+export interface Phase7FinalAssemblyIds{
+ continuousPacketId:string;
+ missingPreRows:Readonly<Partial<Record<Phase6ReleaseHorizon,string>>>;
+}
+export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,fragments:readonly Phase7StoredPreFragment[],scope:Phase7GroupOutcomeScope,releasedAtUtc:string,ids?:Phase7FinalAssemblyIds){
  const groupId=scope.groupId;
  if(!isGroupUuid(groupId))throw Error("PHASE7_FINAL_GROUP_REJECTED:scope");
  const now=clock(releasedAtUtc),contractSha=hashPhase7DurableCandidate(contract),profileSha=hashPhase7DurableCandidate(profile);
@@ -49,6 +56,14 @@ export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseC
   const r=f.packet.rows[0];
   need(r.censoring==="not_due"&&r.qualityFlags<P7_NO_VERIFIED_LABEL&&Object.values(r.labelBuckets).every(v=>v===null)&&!byHorizon.has(r.horizon)&&!rowIds.has(r.releaseRowId),"stored-pre-only");
   rowIds.add(r.releaseRowId);byHorizon.set(r.horizon,r);
+ }
+ if(ids){
+  const missing=hs.filter(h=>!byHorizon.has(h));
+  const supplied=[ids.continuousPacketId,...Object.values(ids.missingPreRows)];
+  need(Object.keys(ids).sort().join("|")==="continuousPacketId|missingPreRows"&&
+   Object.keys(ids.missingPreRows).length===missing.length&&missing.every(h=>Object.hasOwn(ids.missingPreRows,h))&&
+   supplied.every(x=>typeof x==="string"&&UUID.test(x)&&x!==groupId&&!rowIds.has(x))&&
+   new Set(supplied).size===supplied.length,"reviewer-opaque-ids");
  }
  const anchor=fragments[0].packet.rows[0];
  need(fragments.every(f=>f.packet.rows[0].split===anchor.split&&f.packet.rows[0].cohortBucket===anchor.cohortBucket),"group-cohort-drift");
@@ -63,7 +78,7 @@ export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseC
   if(!r){
    need(e===undefined||e===null,"no-outcome-for-absent-pre");
    const feat=emptyFeatures(),lab=emptyLabels();
-   rows.push({releaseRowId:randomUUID(),horizon:h,cohortBucket:anchor.cohortBucket,split:anchor.split,featureBuckets:feat,labelBuckets:lab,missingness:Object.fromEntries([...Object.keys(feat),...Object.keys(lab)].map(k=>[k,true])),qualityFlags:P7_ABSENT_PRE_PLACEHOLDER|P7_NO_VERIFIED_LABEL,censoring:"missing"});
+   rows.push({releaseRowId:ids?.missingPreRows[h]??randomUUID(),horizon:h,cohortBucket:anchor.cohortBucket,split:anchor.split,featureBuckets:feat,labelBuckets:lab,missingness:Object.fromEntries([...Object.keys(feat),...Object.keys(lab)].map(k=>[k,true])),qualityFlags:P7_ABSENT_PRE_PLACEHOLDER|P7_NO_VERIFIED_LABEL,censoring:"missing"});
    labelByHorizon.set(h,null);continue;
   }
   present[h]=true;
@@ -91,6 +106,6 @@ export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseC
  }
  const packet=createPhase7DerivedReleasePacket(contract,rows,groupId);
  const packetSha=sha(serializePhase7DerivedReleasePacket(contract,packet)),t6=rows[1];
- const continuous:Phase7DurableDerivedBundle["continuous"]={schema:"v39.phase7.continuous-gate-out-target-packet.v1",packetId:randomUUID(),derivedPacketSha256:packetSha,targetName:"gate_out_delay_minutes",unit:"minutes",primaryHorizon:"T-6h",rows:[{releaseRowId:t6.releaseRowId,value:labelByHorizon.get("T-6h")??null,censoring:t6.censoring}]};
+ const continuous:Phase7DurableDerivedBundle["continuous"]={schema:"v39.phase7.continuous-gate-out-target-packet.v1",packetId:ids?.continuousPacketId??randomUUID(),derivedPacketSha256:packetSha,targetName:"gate_out_delay_minutes",unit:"minutes",primaryHorizon:"T-6h",rows:[{releaseRowId:t6.releaseRowId,value:labelByHorizon.get("T-6h")??null,censoring:t6.censoring}]};
  return {packet,association:{schema:"v39.phase7.paired-derived-association-candidate.v1" as const,packetSha256:packetSha,reviewEvidenceSha256:scope.associationReviewSha256,groups:[{groupId:scope.groupId,split:anchor.split,rows:rows.map(r=>({horizon:r.horizon,releaseRowId:r.releaseRowId}))}],sourceMappingPersisted:false as const,approvedForUse:false as const},continuous,denominator:{present,primaryPrePresent:present["T-6h"],primaryNumeric:labelByHorizon.get("T-6h")!==null&&present["T-6h"],pairedT6T90Numerical:present["T-6h"]&&present["T-90m"]&&labelByHorizon.get("T-6h")!==null&&labelByHorizon.get("T-90m")!==null,t24ComparatorNumerical:present["T-24h"]&&labelByHorizon.get("T-24h")!==null},sourceMembershipAuthenticatedHere:false,sourceValuesPersisted:false,approvedForDurableStorage:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }

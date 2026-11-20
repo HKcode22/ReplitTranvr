@@ -8,7 +8,7 @@ import type {P6PostPreservationAnchor} from "./phase6ActualPostOutcomeObservabil
 import type {Phase7DerivedReleaseContract} from "./phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "./phase7ReviewedSourceTransformation_v39";
 import {serializePhase7DerivedReleasePacket,type Phase7DerivedReleasePacket} from "./phase6DerivedTrainingReleasePacket_v39";
-import {assemblePhase7FinalGroupCandidate,type Phase7StoredPreFragment,type Phase7GroupOutcomeScope} from "./phase7FinalGroupAssembly_v39";
+import {assemblePhase7FinalGroupCandidate,type Phase7StoredPreFragment,type Phase7GroupOutcomeScope,type Phase7FinalAssemblyIds} from "./phase7FinalGroupAssembly_v39";
 import {hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle,type Phase7DurableDerivedBundle,type Phase7DurableBundleApproval} from "./phase7DurableDerivedBundleCandidate_v39";
 const H=/^[a-f0-9]{64}$/,UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const role=(s:string)=>/^[a-z][a-z0-9_]{4,62}$/.test(s)&&!["postgres","neondb_owner"].includes(s);
@@ -55,7 +55,7 @@ export async function finalizeReviewedPhase7PostGroup(input:{
  writer:Pool;reader:Pool;writerRole:string;readerRole:string;
  contract:Phase7DerivedReleaseContract;profile:Phase7ReviewedTransformationProfile;
  anchor:P6PostPreservationAnchor;fragments:readonly Phase7StoredPreFragment[];
- scope:Phase7GroupOutcomeScope;releasedAtUtc:string;
+ scope:Phase7GroupOutcomeScope;releasedAtUtc:string;assemblyIds?:Phase7FinalAssemblyIds;
  independentlyApproveExactBundle:(b:Readonly<Phase7DurableDerivedBundle>)=>Promise<Phase7DurableBundleApproval>;
 }){
  const {anchor:a,scope:s}=input;
@@ -64,7 +64,7 @@ export async function finalizeReviewedPhase7PostGroup(input:{
   (s.evidence[a.horizon]!=null&&(
    s.evidence[a.horizon]!.preIssuedAtUtc!==a.preIssuedAtUtc||s.evidence[a.horizon]!.originalSourceAvailableAtUtc!==a.originalSourceAvailableAtUtc||
    s.evidence[a.horizon]!.frozenSourceOriginalSha256!==a.sourceResponseSha256)))hold("REVIEW_NOT_BOUND_TO_LIVE_ANCHOR");
- const v=assemblePhase7FinalGroupCandidate(input.contract,input.profile,input.fragments,s,input.releasedAtUtc);
+ const v=assemblePhase7FinalGroupCandidate(input.contract,input.profile,input.fragments,s,input.releasedAtUtc,input.assemblyIds);
  // Construct exact requested final bytes, not an approval. The independent
  // reviewer must return a valid review binding precisely these bytes.
  const bundle:Phase7DurableDerivedBundle={schema:"v39.phase7.durable-derived-bundle.v1",packet:v.packet,
