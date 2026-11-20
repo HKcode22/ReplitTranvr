@@ -554,7 +554,18 @@ describe("Monday prospective release candidate compiler (unsigned, no GO)",()=>{
  });
  it("regenerates all unsigned source plan digests from the real compiler with no authorization",()=>{
   const code=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
-  const x=prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23");
+  const x=prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23",true);
+  const plans=x.reviewOnlyDayPlanExport!;
+  expect(plans).toMatchObject({status:"UNSIGNED_METADATA_ONLY_NOT_STAGED_NO_GO",phase6PaidGo:false,calendarRowsSha256:"55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b"});
+  expect(plans.plans).toHaveLength(31);
+  expect(plans.plans.every((f,i)=>f.path==="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"&&hash(f.bytes)===f.sha256&&f.sha256===x.geometry.dayPlanSha256s[i].sha256)).toBe(true);
+  const parsed=plans.plans.map(f=>JSON.parse(f.bytes));
+  expect(parsed[0].expectedServiceStartUtc).toBe("2026-11-25T00:00:00.000Z");
+  expect(parsed[0].templates[0].scheduledRequestUtc).toBe("2026-11-23T23:45:00.000Z");
+  expect(parsed.reduce((n,p)=>n+p.templates.length,0)).toBe(6144);
+  expect(parsed[30].expectedServiceStartUtc).toBe("2026-12-27T00:00:00.000Z");
+  expect(prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23").reviewOnlyDayPlanExport).toBeUndefined();
+  expect(()=>prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_NOV22",true)).toThrow("MONDAY_REVIEW_PLAN_EXPORT_SCOPE");
   expect(x.geometry).toMatchObject({dayPlanCount:31,totalQueries:6144,totalReservedUnits:36740});
   expect(x.geometry.dayPlanSha256s).toHaveLength(31);
   expect(x.geometry.dayPlanSha256s.every((v,i)=>v.runDayIndex===i+1&&/^[a-f0-9]{64}$/.test(v.sha256))).toBe(true);

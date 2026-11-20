@@ -9,7 +9,7 @@ import {lstatSync,mkdirSync,readFileSync,realpathSync,writeFileSync} from "node:
 import {resolve,join,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
-import {prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,compileP6ActualCandidateExport,verifyP6ActualCommittedPlanParity} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {compileP6ProspectiveDisabledStageRevisionV39,commitP6ProspectiveDisabledStageRevisionOnceV39,verifyP6ProspectiveDisabledStageRevisionReadOnlyV39,type P6ProspectiveDisabledStageRevisionReviewV39} from "../server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39";
 import {P5_TWO_STAGE_ROLES} from "../scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs";
 import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_MONDAY_CALENDAR_ROWS_SHA} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
@@ -105,6 +105,9 @@ async function main(){
  }
  const dir=privateDir(outOrPackage);
  if(!privateRead(join(dir,"prospective-revision-package.json")).equals(Buffer.from(JSON.stringify(v.ctx)))||process.env.P6_MONDAY_OWNER_APPLY_APPROVAL!=="APPLY_EXACT_REVIEWED_DISABLED_MONDAY_STAGE_ONLY_NO_PROVIDER")hold("EXACT_REVIEWED_PACKAGE_AND_OWNER_APPROVAL");
+ // Refuse any owner DB mutation unless ALL 31 tracked and working plan bytes
+ // already match the exact Monday compiler. Green preview CI alone is not parity.
+ verifyP6ActualCommittedPlanParity(v.result,path=>execFileSync("git",["show",head+":"+path],{stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:600000}),path=>readFileSync(path));
  const u=new URL(process.env.DATABASE_URL??"");
  if(!["postgresql:","postgres:"].includes(u.protocol)||decodeURIComponent(u.username)!=="neondb_owner"||!u.password||!u.hostname.endsWith(".neon.tech")||u.pathname!=="/neondb"||u.hash||!["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||process.env.V39_DATABASE_RUNTIME_URL===process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||remote()!==head)hold("EXISTING_OWNER_PRIMARY_TLS");
  const pool=new Pool({connectionString:u.toString(),max:2,connectionTimeoutMillis:8000,query_timeout:30000,application_name:"p6_monday_prospective_disabled_revision"});

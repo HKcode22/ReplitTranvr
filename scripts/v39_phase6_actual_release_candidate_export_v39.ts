@@ -442,7 +442,8 @@ const docEvidence=(paths:string[])=>paths.map(fileEvidence);
  * deliberately NOT-AUTH identity and historical references, never a claimed
  * authorization. Only counts and digests are returned; stage bytes and
  * runnable day-plan bytes are not emitted here. */
-export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000,variant:P6ActualCalendarVariant="ORIGINAL_NOV22"){
+export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefillChoice:P6ReviewRefillChoice=3000,variant:P6ActualCalendarVariant="ORIGINAL_NOV22",includeMondayReviewPlanBytes=false){
+ if(includeMondayReviewPlanBytes&&(variant!=="COMPACT_MONDAY_NOV23"||reviewRefillChoice!==0))hold("MONDAY_REVIEW_PLAN_EXPORT_SCOPE");
  const checkout=inspectP6ExactReviewCheckout(codeSha);
  const review=prepareP6ActualReviewInput(codeSha,reviewRefillChoice,variant),r=review.concreteReviewRecommendation;
  const seedPath="data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json";
@@ -550,6 +551,7 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
   geometry:{dayPlanCount:geometry.dayPlans.files.length,totalQueries:geometry.dayPlans.totalPlannedQueries,
    totalReservedUnits:geometry.totalReservedUnits,dayPlanSha256s:geometry.dayPlans.dayPlanSha256s,
    coverageGridSha256:geometry.dayPlans.coverageGridSha256},
+  ...(includeMondayReviewPlanBytes?{reviewOnlyDayPlanExport:{schema:"v39.phase6.monday-day-plans-review-only.v1",status:"UNSIGNED_METADATA_ONLY_NOT_STAGED_NO_GO",calendarRowsSha256:config.calendarRowsSha256,plans:geometry.dayPlans.files.map(f=>({path:f.path,sha256:f.sha256,bytes:f.bytes})),phase6PaidGo:false as const}}:{}),
   // Do not return the non-AUTH stage packet or its hash: reviewer approval
   // and actual predecessor IDs must replace the review-only context.
   actualAuthorizationId:null,finalPredecessorEvidenceIds:null,
@@ -654,7 +656,10 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill","--review-only-compact-nov22-no-refill","--review-only-compact-monday-nov23-no-refill"].includes(process.argv[2])&&process.argv.length===4){
+  if(process.argv[2]==="--review-only-compact-monday-nov23-day-plans"&&process.argv.length===4){
+   const review=prepareP6ActualReleaseIdentityReview(process.argv[3],0,"COMPACT_MONDAY_NOV23",true);
+   console.log(JSON.stringify(review.reviewOnlyDayPlanExport));
+  }else if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill","--review-only-compact-nov22-no-refill","--review-only-compact-monday-nov23-no-refill"].includes(process.argv[2])&&process.argv.length===4){
    const refillChoice=process.argv[2]==="--review-only"?3000:0;
    const variant:P6ActualCalendarVariant=process.argv[2]==="--review-only-compact-nov21-no-refill"?"COMPACT_NOV21":
     process.argv[2]==="--review-only-compact-nov22-no-refill"?"COMPACT_NOV22":process.argv[2]==="--review-only-compact-monday-nov23-no-refill"?"COMPACT_MONDAY_NOV23":"ORIGINAL_NOV22";
