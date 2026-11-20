@@ -6,7 +6,7 @@ import {join} from "node:path";
 import {execFileSync} from "node:child_process";
 import {mergeP7VerifiedNoaaIntoBoundPreBundle,verifyP7IndependentPublicNoaaArtifact} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
 import {openP7NoaaGithubArchiveReader,readP7LatestReviewedPublicNoaaSnapshot,readP7NoaaZipMembers} from "../server/lib/disruption/phase7NoaaGithubArchiveReader_v39";
-import {P7_NOAA_PRODUCTION_WORKFLOW,P7_NOAA_PRODUCTION_RAW,P7_NOAA_PRODUCTION_REVIEW} from "../server/lib/disruption/phase7NoaaProductionArchivePlan_v39";
+import {P7_NOAA_PRODUCTION_WORKFLOW,P7_NOAA_PRODUCTION_RAW,P7_NOAA_PRODUCTION_REVIEW,publicP7WeatherStationGroups} from "../server/lib/disruption/phase7NoaaProductionArchivePlan_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import type {P5EReviewedSupplementalBundle} from "../server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39";
 import {verifyP7NoaaArchive,issueP7NoaaArchiveWires} from "../server/lib/disruption/phase7NoaaPublicArchive_v39";
@@ -105,3 +105,19 @@ describe("actual ZIP byte reader and bounded GitHub metadata path",()=>{
   const z=readerFixture();z.empty();expect(await z.read()).toMatchObject({status:"NO_ELIGIBLE_COMPLETED_PUBLIC_NOAA_ARCHIVE",snapshot:null,stationCount:0});
  });
 });
+
+it("checks the actual 31-day calendar station scope without a provider call",()=>{
+ const plans=Array.from({length:31},(_,i)=>JSON.parse(readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json","utf8")));
+ const times=plans.flatMap(p=>p.templates.map((q:{scheduledRequestUtc:string})=>Date.parse(q.scheduledRequestUtc))) as number[];
+ expect(times.length).toBe(6144);
+ const first=Math.min(...times),last=Math.max(...times);
+ expect(publicP7WeatherStationGroups(plans,"2026-11-23T23:11:00.000Z").groups.flat().sort()).toEqual(Object.values(plans[0].pairedIcaos).sort());
+ for(let t=Math.floor(first/3600000)*3600000+660000;t<=last+10800000;t+=3600000){
+  const scope=publicP7WeatherStationGroups(plans,new Date(t).toISOString());
+  expect(scope.groups.length).toBeLessThanOrEqual(4);
+  expect(scope.groups.every(g=>g.length<=8)).toBe(true);
+  const wanted=new Set<string>();
+  for(const p of plans)for(const q of p.templates)if(Math.abs(Date.parse(q.scheduledRequestUtc)-t)<=10800000)wanted.add(p.pairedIcaos[q.slot]);
+  expect(scope.groups.flat()).toEqual([...wanted].sort());
+ }
+},30000);
