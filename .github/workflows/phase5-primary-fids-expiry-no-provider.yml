@@ -1,6 +1,6 @@
 name: Phase5 primary FIDS expiry (STOP default, no provider)
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && 'P5 PRIMARY BACKSTOP CHILD' || 'Phase5 primary FIDS expiry (STOP default, no provider)' }}
+  ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER' && 'P5 FULL RETENTION BACKSTOP CHILD' || github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && 'P5 PRIMARY BACKSTOP CHILD' || 'Phase5 primary FIDS expiry (STOP default, no provider)' }}
 on:
   schedule:
     - cron: '7,22,37,52 * * * *'
@@ -14,6 +14,7 @@ on:
           - VERIFY_P7_RESEARCH_EXPIRY_ONLY_NO_WRITES
           - APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER
           - APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION
+          - APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER
       approved_main_sha:
         required: true
         type: string
@@ -52,7 +53,18 @@ jobs:
                (vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY' ||
                 (vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'APPLY_DUE_ONLY' &&
                  vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 != '' &&
-                 vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER')))))) }}
+                 vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER'))) ||
+              (inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER' &&
+               vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P6_FULL_RETENTION_BACKSTOP_ENABLED == 'true' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'APPLY_DUE_ONLY' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 != '' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P7_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
+               vars.P7_EXPIRY_ENABLED == 'true' &&
+               vars.P7_EXPIRY_APPROVAL == 'APPLY_P7_DUE_ONLY_NO_PROVIDER')))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 9
     env:
@@ -63,6 +75,8 @@ jobs:
       P5_PRIMARY_FIDS_EXPIRY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES' && 'VERIFY_ONLY' || 'APPLY_DUE_ONLY' }}
       P5_PRIMARY_FIDS_BACKSTOP_REQUEST: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && '1' || '0' }}
       P5_PRIMARY_FIDS_BACKSTOP_ENABLED: ${{ vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED }}
+      P6_FULL_RETENTION_BACKSTOP_REQUEST: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER' && '1' || '0' }}
+      P6_FULL_RETENTION_BACKSTOP_ENABLED: ${{ vars.P6_FULL_RETENTION_BACKSTOP_ENABLED }}
       # A separately approved PRIMARY-ONLY backstop must never inherit private APPLY authority.
       # Native schedule/manual ordinary APPLY retains the configured V0105 extension unchanged.
       # Manual VERIFY still stays read-only in the runner.
@@ -101,16 +115,29 @@ jobs:
             vars.P7_EXPIRY_APPROVAL == 'APPLY_P7_DUE_ONLY_NO_PROVIDER') ||
            (github.event_name == 'workflow_dispatch' &&
             inputs.approved_main_sha == github.sha &&
-            inputs.confirm == 'VERIFY_P7_RESEARCH_EXPIRY_ONLY_NO_WRITES')) }}
+            (inputs.confirm == 'VERIFY_P7_RESEARCH_EXPIRY_ONLY_NO_WRITES' ||
+             (vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA == github.sha && (inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER' &&
+               vars.P5_PRIMARY_FIDS_BACKSTOP_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
+               vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P6_FULL_RETENTION_BACKSTOP_ENABLED == 'true' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'APPLY_DUE_ONLY' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 != '' &&
+               vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER' &&
+               vars.P7_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
+               vars.P7_EXPIRY_ENABLED == 'true' &&
+               vars.P7_EXPIRY_APPROVAL == 'APPLY_P7_DUE_ONLY_NO_PROVIDER'))))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       P7_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P7_EXPIRY_APPROVED_MAIN_SHA }}
       P7_EXPIRY_ENABLED: ${{ vars.P7_EXPIRY_ENABLED }}
       P7_EXPIRY_APPROVAL: ${{ vars.P7_EXPIRY_APPROVAL }}
-      P7_EXPIRY_MODE: ${{ github.event_name == 'schedule' && 'APPLY_DUE_ONLY' || 'VERIFY_ONLY' }}
+      P7_EXPIRY_MODE: ${{ (github.event_name == 'schedule' || inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER') && 'APPLY_DUE_ONLY' || 'VERIFY_ONLY' }}
+      P6_FULL_RETENTION_BACKSTOP_REQUEST: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER' && '1' || '0' }}
+      P6_FULL_RETENTION_BACKSTOP_ENABLED: ${{ vars.P6_FULL_RETENTION_BACKSTOP_ENABLED }}
       P7_EXPIRY_READER_DATABASE_URL: ${{ secrets.P7_EXPIRY_READER_DATABASE_URL }}
-      P7_EXPIRY_WRITER_DATABASE_URL: ${{ github.event_name == 'schedule' && secrets.P7_EXPIRY_WRITER_DATABASE_URL || '' }}
+      P7_EXPIRY_WRITER_DATABASE_URL: ${{ (github.event_name == 'schedule' || inputs.confirm == 'APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER') && secrets.P7_EXPIRY_WRITER_DATABASE_URL || '' }}
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}

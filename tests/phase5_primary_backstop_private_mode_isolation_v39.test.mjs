@@ -25,3 +25,13 @@ test("native ordinary APPLY passes through private authority; manual VERIFY and 
  for(const k of ["ADB_AUTO_COLLECT","V39_PHASE6_PROCESS_ARMED","V39_PHASE6_OWNER_APPROVED"])assert.ok(child.includes(k+": '0'"));
  for(const k of ["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET"])assert.ok(child.includes(k+": ''"));
 });
+
+test("full retention wake is distinct, explicitly approved, and never changes primary-only command",()=>{
+ const full="APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER";
+ assert.ok(child.includes("P5 FULL RETENTION BACKSTOP CHILD"));
+ assert.ok(child.includes("vars.P6_FULL_RETENTION_BACKSTOP_ENABLED == 'true'"));
+ assert.ok(child.includes("vars.P7_EXPIRY_APPROVAL == 'APPLY_P7_DUE_ONLY_NO_PROVIDER'"));
+ assert.ok(child.includes("inputs.confirm == '"+full+"'"));
+ assert.ok(child.includes("P6_FULL_RETENTION_BACKSTOP_REQUEST:"));
+ assert.ok(child.includes("inputs.confirm == '"+confirm+"' && 'COMMISSION_VERIFY_ONLY'"));
+});

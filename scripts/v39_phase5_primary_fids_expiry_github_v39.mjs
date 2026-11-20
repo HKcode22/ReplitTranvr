@@ -90,6 +90,12 @@ export function admitP5PrimaryExpiryGithub(env){
  if(!["0","1"].includes(backup)||backup==="1"&&(env.GITHUB_EVENT_NAME!=="workflow_dispatch"||mode!=="APPLY_DUE_ONLY"||
     env.P5_PRIMARY_FIDS_BACKSTOP_ENABLED!=="true"||env.P6_PRIVATE_EPOCH_EXPIRY_MODE!=="COMMISSION_VERIFY_ONLY"||
     env.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256||env.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL))HOLD("BACKSTOP_PRIMARY_ONLY_SCOPE");
+ // Preserve the prior PRIMARY-ONLY wake; full retention has separate approval.
+ const full=env.P6_FULL_RETENTION_BACKSTOP_REQUEST??"0";
+ if(!["0","1"].includes(full)||full==="1"&&(backup!=="0"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||mode!=="APPLY_DUE_ONLY"||
+  env.P5_PRIMARY_FIDS_BACKSTOP_ENABLED!=="true"||env.P6_FULL_RETENTION_BACKSTOP_ENABLED!=="true"||
+  env.P6_PRIVATE_EPOCH_EXPIRY_MODE!=="APPLY_DUE_ONLY"||env.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL!==P6_PRIVATE_EXPIRY_APPLY||
+  !/^[a-f0-9]{64}$/.test(env.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256??"")))HOLD("FULL_RETENTION_BACKSTOP_SEPARATE_SCOPE");
  const w=scopedUrl(env.P5_PRIMARY_FIDS_SWEEP_DATABASE_URL,P5_PRIMARY_WRITER);
  const r=scopedUrl(env.P5_RETENTION_READER_DATABASE_URL,P5_PRIMARY_READER);
  if(w.endpoint!==r.endpoint||hash(w.endpoint)!==env.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256)

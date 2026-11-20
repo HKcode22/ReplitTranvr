@@ -14,6 +14,10 @@ async function main(){
   e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||!["VERIFY_ONLY","APPLY_DUE_ONLY"].includes(mode??"")||
   (mode==="APPLY_DUE_ONLY"&&(e.P7_EXPIRY_APPROVAL!=="APPLY_P7_DUE_ONLY_NO_PROVIDER"||e.P7_EXPIRY_ENABLED!=="true"))||
   (mode==="VERIFY_ONLY"&&e.P7_EXPIRY_WRITER_DATABASE_URL))hold("WRONG_NO_PROVIDER_SCOPE");
+ const full=e.P6_FULL_RETENTION_BACKSTOP_REQUEST??"0";
+ if(!["0","1"].includes(full)||full==="1"&&(e.GITHUB_EVENT_NAME!=="workflow_dispatch"||mode!=="APPLY_DUE_ONLY"||e.P6_FULL_RETENTION_BACKSTOP_ENABLED!=="true")||
+  mode==="APPLY_DUE_ONLY"&&e.GITHUB_EVENT_NAME!=="schedule"&&full!=="1"||
+  mode==="VERIFY_ONLY"&&(e.GITHUB_EVENT_NAME!=="workflow_dispatch"||full!=="0"))hold("BACKSTOP_OR_NATIVE_SCOPE");
  function url(raw:string|undefined,role:string){
   const u=new URL(raw??"");
   if(!sameP6NeonDatabaseEndpoint(u,u)||decodeURIComponent(u.username)!==role||!u.password||
