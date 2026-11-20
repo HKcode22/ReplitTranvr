@@ -6,6 +6,7 @@ on:
       - 'server/lib/disruption/phase7InertStorageCommission_v39.ts'
       - 'scripts/v39_phase7_inert_storage_owner_v39.ts'
       - 'scripts/v39_phase7_expiry_github_v39.ts'
+      - 'scripts/v39_phase7_preservation_logins_owner_v39.mjs'
       - 'server/lib/disruption/phase7ExpiryRunner_v39.ts'
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase7_inert_storage_commission_v39.test.ts'

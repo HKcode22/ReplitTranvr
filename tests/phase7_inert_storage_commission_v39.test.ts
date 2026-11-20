@@ -1,6 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {readFileSync} from "node:fs";
+import {P7_PRESERVATION_ACTORS,inspectP7PreservationActors,commissionP7PreservationActors,verifyP7PreservationLogin} from "../scripts/v39_phase7_preservation_logins_owner_v39.mjs";
 import {runP7ExpiryOnce} from "../server/lib/disruption/phase7ExpiryRunner_v39";
 import {compileP7InertStorageSql,installP7InertStorage,inspectP7InertStorage,P7_INERT_ROLES} from "../server/lib/disruption/phase7InertStorageCommission_v39";
 describe("exact inert schema compiler",()=>{
@@ -30,6 +31,23 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
    await expect(inspectP7InertStorage(pool)).rejects.toThrow("TABLE_PRIVILEGE_DRIFT");
    await pool.query("REVOKE SELECT ON phase7_private.pre_source_link_v39 FROM "+P7_INERT_ROLES.bundleReader);
    await pool.query("ALTER ROLE "+P7_INERT_ROLES.expiryReader+" LOGIN PASSWORD 'disposable-only'; ALTER ROLE "+P7_INERT_ROLES.expiryWriter+" LOGIN PASSWORD 'disposable-only'");
+   // Commission the other FOUR existing actors, no new schema or data policy.
+   const owner=await pool.connect(),passwords=Object.fromEntries(P7_PRESERVATION_ACTORS.map((a,i)=>[a.role,String(i+1).repeat(48)]));
+   try{
+    expect(await inspectP7PreservationActors(owner,{newLogins:false})).toMatchObject({preservationLogins:0,expiryLogins:2});
+    let called=0;
+    await expect(commissionP7PreservationActors(owner,passwords,async c=>{await disposableGuard(c);if(++called===2)throw Error("rollback fixture");})).rejects.toThrow("rollback fixture");
+    expect(await inspectP7PreservationActors(owner,{newLogins:false})).toMatchObject({preservationLogins:0});
+    await expect(commissionP7PreservationActors(owner,passwords,disposableGuard)).resolves.toMatchObject({newLogins:4});
+    expect(await inspectP7PreservationActors(owner,{newLogins:true})).toMatchObject({preservationLogins:4,expiryLogins:2});
+    await expect(commissionP7PreservationActors(owner,passwords,disposableGuard)).rejects.toThrow("ROLE_BOUNDARY");
+   }finally{owner.release();}
+   for(const a of P7_PRESERVATION_ACTORS){
+    const actor=new Pool({connectionString:url!.replace("postgres:postgres@",a.role+":"+passwords[a.role]+"@"),max:1});
+    const c=await actor.connect();
+    try{await verifyP7PreservationLogin(c,a);await expect(c.query("SELECT * FROM phase7_private.pre_source_link_v39")).rejects.toThrow();}
+    finally{c.release();await actor.end();}
+   }
    const reader=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.expiryReader+":disposable-only@"),max:1});
    const writer=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.expiryWriter+":disposable-only@"),max:1});
    try{
