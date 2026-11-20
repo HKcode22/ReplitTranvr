@@ -1,9 +1,10 @@
 name: Phase6 private Nov20 revision helper review (NO PROVIDER)
 
 on:
-  push:
-    branches:
-      - phase6/nov20-private-revision-owner-helper
+  pull_request:
+    paths:
+      - "review-tools/p6_nov20_prospective_revision_owner_v39.ts"
+      - ".github/workflows/phase6-private-nov20-revision-helper-review-no-provider.yml"
   workflow_dispatch:
 
 permissions:
