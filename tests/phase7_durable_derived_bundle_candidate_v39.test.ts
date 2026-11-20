@@ -9,11 +9,11 @@ import type {Phase7ApprovedDerivedInput} from "../server/lib/disruption/phase7De
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",version:"v01",featureDictionarySha256:sha("dict"),termsReviewSha256:sha("terms"),derivedWorkReviewSha256:sha("derived"),sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2099-12-31T00:00:00.000Z",cohortBucketCount:4,features:[{name:"congestion_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("feature"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:4,fieldClass:"approved_derived",transformEvidenceSha256:sha("label"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
 const row=(horizon:Phase6ReleaseHorizon):Phase7ApprovedDerivedInput=>({horizon,cohortBucket:1,split:"train",featureBuckets:{congestion_bin:1},labelBuckets:{delay_bin:2},missingness:{congestion_bin:false,delay_bin:false},qualityFlags:0,censoring:"observed"});
-function fixture(){
- const paired=buildPhase7PairedDerivedCandidate(contract,[[row("T-24h"),row("T-6h"),row("T-90m")]],sha("synthetic association review"));
+function fixture(c=contract){
+ const paired=buildPhase7PairedDerivedCandidate(c,[[row("T-24h"),row("T-6h"),row("T-90m")]],sha("synthetic association review"));
  // Synthetic test decision only; no operational approval is manufactured.
  const bundle:Phase7DurableDerivedBundle={schema:"v39.phase7.durable-derived-bundle.v1",packet:paired.packet,paired:{...paired.association,schema:"v39.phase7.paired-derived-association-reviewed.v1",approvedForUse:true},continuous:{schema:"v39.phase7.continuous-gate-out-target-packet.v1",packetId:"3f2504e0-4f89-41d3-9a0c-0305e82c3303",derivedPacketSha256:paired.association.packetSha256,targetName:"gate_out_delay_minutes",unit:"minutes",primaryHorizon:"T-6h",rows:[{releaseRowId:paired.packet.rows[1].releaseRowId,value:-3.75,censoring:"observed"}]}};
- const approval:Phase7DurableBundleApproval={schema:"v39.phase7.durable-derived-bundle-independent-review.v1",contractSha256:hashPhase7DurableCandidate(contract),bundleSha256:hashPhase7DurableCandidate(bundle),sourceParityReviewSha256:sha("synthetic parity"),reconstructionReviewSha256:sha("synthetic reconstruction"),fieldReviewSha256:sha("synthetic fields"),associationReviewSha256:paired.association.reviewEvidenceSha256,continuousTargetReviewSha256:sha("synthetic target"),approvedForDurableStorage:true,sourceMappingPersisted:false,minTargetMinutes:-60,maxTargetMinutes:1440};
+ const approval:Phase7DurableBundleApproval={schema:"v39.phase7.durable-derived-bundle-independent-review.v1",contractSha256:hashPhase7DurableCandidate(c),bundleSha256:hashPhase7DurableCandidate(bundle),sourceParityReviewSha256:sha("synthetic parity"),reconstructionReviewSha256:sha("synthetic reconstruction"),fieldReviewSha256:sha("synthetic fields"),associationReviewSha256:paired.association.reviewEvidenceSha256,continuousTargetReviewSha256:sha("synthetic target"),approvedForDurableStorage:true,sourceMappingPersisted:false,minTargetMinutes:-60,maxTargetMinutes:1440};
  return {bundle,approval};
 }
 const now=new Date("2026-11-20T04:00:00Z");
@@ -43,9 +43,21 @@ describe.skipIf(db!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmo
    await admin.query(readFileSync("data-collection/phase5/review-tools/p7_derived_release_storage_candidate_NOT_FOR_INSTALL.sql","utf8"));
    await admin.query("CREATE ROLE phase7_test_writer LOGIN PASSWORD 'p7test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; CREATE ROLE phase7_test_reader LOGIN PASSWORD 'p7test' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT USAGE ON SCHEMA phase7_private TO phase7_test_writer,phase7_test_reader; GRANT INSERT ON phase7_private.derived_release_bundle_v39 TO phase7_test_writer; GRANT SELECT ON phase7_private.derived_release_bundle_v39 TO phase7_test_reader;");
    const {bundle,approval}=fixture();
+   // Actual role privileges, including column-level privileges, not just role names.
+   await admin.query("GRANT SELECT (packet_id) ON phase7_private.derived_release_bundle_v39 TO phase7_test_writer");
+   await expect(writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,actors,now)).rejects.toThrow(/restricted-actor/);
+   await admin.query("REVOKE SELECT (packet_id) ON phase7_private.derived_release_bundle_v39 FROM phase7_test_writer");
+   const dbClock=(await admin.query("SELECT clock_timestamp() AS at")).rows[0].at as Date;
+   const expired={...contract,researchExpiryUtc:new Date(dbClock.getTime()-1000).toISOString()};
+   const old=fixture(expired);
+   await expect(writeReviewedPhase7DurableBundle(writer,reader,expired,old.bundle,old.approval,actors,new Date(dbClock.getTime()-2000))).rejects.toThrow(/database-research-expired/);
+   expect((await reader.query("SELECT count(*)::int n FROM phase7_private.derived_release_bundle_v39")).rows[0].n).toBe(0);
    const receipt=await writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,actors,now);
    expect(receipt.status).toBe("DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK");
    expect((await reconcileReviewedPhase7DurableBundle(reader,contract,bundle,approval,actors,now)).databaseWrites).toBe(0);
+   await admin.query("GRANT UPDATE (row_count) ON phase7_private.derived_release_bundle_v39 TO phase7_test_reader");
+   await expect(reconcileReviewedPhase7DurableBundle(reader,contract,bundle,approval,actors,now)).rejects.toThrow(/restricted-actor/);
+   await admin.query("REVOKE UPDATE (row_count) ON phase7_private.derived_release_bundle_v39 FROM phase7_test_reader");
    await expect(writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,actors,now)).rejects.toThrow();
    await expect(writer.query("SELECT count(*) FROM phase7_private.derived_release_bundle_v39")).rejects.toThrow();
    await expect(reader.query("DELETE FROM phase7_private.derived_release_bundle_v39")).rejects.toThrow();
