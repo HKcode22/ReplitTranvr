@@ -158,6 +158,78 @@ export function replayP6CompactNov22Review(){
  return {originalPreviewSha256:original.sha256,revision,calendarDraft:draft,shapeEnvelope:envelope};
 }
 
+/** Monday prospective replay, deliberately unsigned and not yet selectable by
+ * the production compiler. Preserve the previous immutable review and rebuild
+ * all 31 dated windows, early-draw bounds, crossover review keys and digests.
+ * Exact budget/compiler pins must be independently reviewed before selection. */
+export function replayP6CompactMondayReview(){
+ const old=replayP6CompactNov22Review(),draft=structuredClone(old.calendarDraft),envelope=structuredClone(old.shapeEnvelope);
+ const raw=readFileSync("data-collection/phase5/evidence/2026-11-20_nov23_monday_exact_geometry_budget_REVIEW_ONLY.json");
+ if(createHash("sha1").update(Buffer.from("blob "+raw.length+"\0")).update(raw).digest("hex")!=="2fc13ebbdeb3f9e6430ee12f7f3c30389c8cbb22")hold("MONDAY_REVIEW_RECEIPT_DRIFT");
+ const receipt=JSON.parse(raw.toString("utf8"));
+ if(receipt.status!=="MONDAY_NOV23_PREFERRED_FALLBACK_NOT_STAGED_NO_GO"||receipt.phase6PaidGo!==false||
+    receipt.originalCalendarHash!==draft.proposedCalendarRowsSha256||receipt.rows?.length!==31||
+    receipt.templates!==6144||receipt.totalReservedUnits!==36740||receipt.maxUtcDayUnits!==1280||
+    receipt.firstSourceUtc!=="2026-11-23T23:45:00.000Z"||receipt.firstServiceUtc!=="2026-11-25T00:00:00.000Z"||
+    receipt.lastServiceEndUtc!=="2026-12-27T04:00:00.000Z"||receipt.outcomeTailEndUtc!=="2026-12-29T04:00:00.000Z")
+  hold("MONDAY_REVIEW_RECEIPT_SCOPE");
+ const digest=(x:unknown)=>hash(JSON.stringify(x)),iso=(ms:number)=>new Date(ms).toISOString();
+ const moves=new Map<number,string>(receipt.rows.map((x:any)=>[x.runDayIndex,x.startUtc]));
+ if(moves.size!==31)hold("MONDAY_REVIEW_INDEX");
+ const dateMapSha256=digest(Object.fromEntries(receipt.rows.map((x:any)=>[String(x.runDayIndex),x.startUtc.slice(0,10)])));
+ envelope.days=envelope.days.map((d,i)=>{
+  const p=receipt.rows[i],startUtc=moves.get(d.runDayIndex)!;
+  const delta=Date.parse(startUtc)-Date.parse(d.startUtc),expectedShift=(i>=4&&i<=6?4:3)*86400000;
+  if(delta!==expectedShift||p.runDayIndex!==d.runDayIndex||p.partition!==d.partition||
+     p.utcSlot!==d.utcSlot||p.windowShape!==d.windowShape||p.pairId!==d.pairId||
+     p.crossoverPeriod!==d.crossoverPeriod||p.pairRole!==d.pairRole||
+     JSON.stringify(p.pairedAirportCandidates)!==JSON.stringify(d.pairedAirportCandidates))
+   hold("MONDAY_FROZEN_ASSIGNMENT_DRIFT");
+  const shift=(v:string)=>iso(Date.parse(v)+delta);
+  const activeSegments=d.activeSegments.map(x=>({...x,startUtc:shift(x.startUtc),endUtc:shift(x.endUtc)}));
+  if(JSON.stringify(activeSegments)!==JSON.stringify(p.activeSegments)||shift(d.endUtc)!==p.endUtc)
+   hold("MONDAY_ACTIVE_SEGMENT_DRIFT");
+  return {...d,dateUtc:startUtc.slice(0,10),startUtc,endUtc:shift(d.endUtc),activeSegments,
+   excludedSplitGap:d.excludedSplitGap?{startUtc:shift(d.excludedSplitGap.startUtc),endUtc:shift(d.excludedSplitGap.endUtc)}:null,
+   earliestPermittedEarlyDrawUtc:shift(d.earliestPermittedEarlyDrawUtc),
+   latestPermittedEarlyDrawUtcInclusive:shift(d.latestPermittedEarlyDrawUtcInclusive),
+   earliestPossibleSourceT24SpanUtc:shift(d.earliestPossibleSourceT24SpanUtc)};
+ });
+ const owner=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json","utf8"));
+ const prior40=buildP5Crossover40WindowReview({ownerCorrectedReadback:owner,firstRunDateUtc:"2026-11-22"});
+ const rows40=prior40.reviewRows.map(r=>{
+  const d=envelope.days[r.runDayIndex-1],startUtc=d.startUtc,conservativeEndUtc=iso(Date.parse(startUtc)+6*3600000);
+  const weekdayClass=[0,6].includes(new Date(startUtc).getUTCDay())?"weekend":"weekday";
+  const p=receipt.rows[r.runDayIndex-1];
+  if(p.weekdayClass!==weekdayClass||p.previousWeekdayClass!==r.weekdayClass)hold("MONDAY_PAIR_CLASS_DRIFT");
+  const identity={dateMapSha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc,conservativeEndUtc};
+  return {...r,reviewKeySha256:digest(identity),startUtc,conservativeEndUtc,dateUtc:d.dateUtc,weekdayClass};
+ });
+ const pairs=Array.from(new Set(rows40.map(r=>r.pairId))).map(pairId=>{
+  const classes=new Set(rows40.filter(r=>r.pairId===pairId).map(r=>r.weekdayClass));
+  if(classes.size!==1)hold("MONDAY_WITHIN_PAIR_CLASS_DRIFT");
+  return {pairId,weekdayClass:[...classes][0]};
+ });
+ if(pairs.length!==5||pairs.filter(p=>p.weekdayClass==="weekend").length!==1||
+    pairs.find(p=>p.pairId==="pair-1")?.weekdayClass!=="weekday"||
+    pairs.find(p=>p.pairId==="pair-4")?.weekdayClass!=="weekend")hold("MONDAY_WEEKEND_PAIR_EXCHANGE_DRIFT");
+ const basic=rows40.map(r=>({reviewKeySha256:r.reviewKeySha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc:r.startUtc,conservativeEndUtc:r.conservativeEndUtc,dateUtc:r.dateUtc,weekdayClass:r.weekdayClass}));
+ const review40={...prior40,firstRunDateUtc:"2026-11-25",candidateDateMapSha256:dateMapSha256,windowIdentitySha256:digest(basic),reviewRows:rows40};
+ const seed=JSON.parse(readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json","utf8"));
+ const treatment=previewP5IndependentTreatmentActiveSegments(review40,{treatmentSeedHex:seed.treatmentSeedHex,announcedCommitmentSha256:seed.announcedCommitmentSha256,claimedCommitmentObservedAtUtc:seed.claimedCommitmentObservedAtUtc});
+ if(treatment.assignmentSha256!==old.shapeEnvelope.claimedTreatmentAssignmentSha256)hold("MONDAY_TREATMENT_DRIFT");
+ envelope.dateMapSha256=dateMapSha256;
+ envelope.crossoverReview40Sha256=review40.windowIdentitySha256;
+ envelope.shapeEnvelopeSha256=digest(envelope.days);
+ draft.calendarDays=draft.calendarDays.map(row=>{const startUtc=moves.get(row.runDayIndex)!;return {...row,startUtc,budgetDayId:"p5-f8-"+startUtc.slice(0,10).replace(/-/g,"")+"-"+String(row.runDayIndex).padStart(2,"0")};});
+ draft.proposedShapeEnvelopeSha256=envelope.shapeEnvelopeSha256;
+ draft.proposedDateMapSha256=dateMapSha256;
+ draft.proposedCalendarRowsSha256=digest(draft.calendarDays);
+ draft.proposedCalendarDraftSha256=digest({schema:draft.schema,actualCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,proposedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,proposedDateMapSha256:draft.proposedDateMapSha256,claimedTreatmentAssignmentSha256:draft.claimedTreatmentAssignmentSha256,claimedTreatmentCommitmentSha256:draft.claimedTreatmentCommitmentSha256,assembledAtUtc:draft.assembledAtUtc,calendarDays:draft.calendarDays});
+ const revision={schema:"v39.phase6.explicit-prospective-monday-date-revision-review.v1",status:"MONDAY_REVIEW_REPLAY_NOT_SIGNED",originalPreviewSha256:old.originalPreviewSha256,sourceReceiptSha256:hash(raw),firstServiceUtc:receipt.firstServiceUtc,firstSourceUtc:receipt.firstSourceUtc,authorizationDeadlineUtc:receipt.authorizationDeadlineUtc,lastServiceEndUtc:receipt.lastServiceEndUtc,allocatedOutcomeTailUtc:receipt.outcomeTailEndUtc,dateMapSha256,calendarRowsSha256:draft.proposedCalendarRowsSha256,calendarDraftSha256:digest(draft),shapeEnvelopeSha256:envelope.shapeEnvelopeSha256,originalTreatmentAssignmentSha256:treatment.assignmentSha256,independentDateRevisionApproved:false,phase6PaidGo:false};
+ return {originalPreviewSha256:old.originalPreviewSha256,revision,calendarDraft:draft,shapeEnvelope:envelope};
+}
+
 function selectP6Calendar(variant:P6ActualCalendarVariant){
  if(variant==="ORIGINAL_NOV22"){const p=replayP6OriginalSeed();return {sha256:p.sha256,result:{calendarDraft:p.result.calendarDraft,shapeEnvelope:p.result.shapeEnvelope},revision:null};}
  if(variant==="COMPACT_NOV21"){
