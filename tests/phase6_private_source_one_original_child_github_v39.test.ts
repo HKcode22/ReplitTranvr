@@ -352,3 +352,11 @@ describe("stored SOURCE child keeps private paths, fixed trust and original gate
   ])expect(()=>gate({...f.env,...changes})).toThrow(/HOLD_P6_/);
  });
 });
+
+it("does not forward private research review policy or actor credentials to the original SOURCE child",()=>{
+ const e={P6_PHASE7_PRE_POLICY_BASE64:"synthetic-policy",P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:"synthetic-actor",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader",P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT:"0"};
+ const c=isolatedP6OriginalOneGetChildEnv(e);
+ expect(Object.keys(c).filter(k=>k.startsWith("P6_PHASE7_")||k.startsWith("P6_PRIVATE_"))).toEqual([]);
+ expect(e.P6_PHASE7_PRE_POLICY_BASE64).toBe("synthetic-policy");
+ expect(c.P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT).toBe("1");
+});

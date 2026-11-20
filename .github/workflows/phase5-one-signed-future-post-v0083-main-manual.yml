@@ -203,6 +203,18 @@ jobs:
       - name: Exactly one future V0083 reviewed OUTCOME GET plus source original
         env:
           RELEASE_FILE: ${{ inputs.frozen_future_post_packet }}
+          P6_PHASE7_PRE_POLICY_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_POLICY_BASE64 || '' }}
+          P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 || '' }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 || '' }}
+          P6_PHASE7_POST_STORAGE_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_STORAGE_APPROVED || '' }}
+          P6_PHASE7_POST_CONTRACT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_CONTRACT_SHA256 || '' }}
+          P6_PHASE7_POST_PROFILE_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_PROFILE_SHA256 || '' }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 || '' }}
+          P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 || '' }}
+          P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 || '' }}
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL || '' }}
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL || '' }}
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL || '' }}
         shell: bash
         run: |
           set -Eeuo pipefail

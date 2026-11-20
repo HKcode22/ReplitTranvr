@@ -11,6 +11,8 @@ on:
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase7_inert_storage_commission_v39.test.ts'
       - 'tests/phase7_pre_policy_owner_scope_v39.test.ts'
+      - 'tests/phase7_independent_noaa_receipt_v39.test.ts'
+      - 'server/lib/disruption/phase7IndependentNoaaReceipt_v39.ts'
       - 'review-tools/p7_commission_pre_policy_owner_v39.ts'
       - 'server/lib/disruption/phase7PrePolicyCommission_v39.ts'
       - 'data-collection/phase5/review-tools/p7_*_candidate_NOT_FOR_INSTALL.sql'
@@ -48,4 +50,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '20', cache: npm}
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts tests/phase7_pre_policy_owner_scope_v39.test.ts
+      - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts tests/phase7_pre_policy_owner_scope_v39.test.ts tests/phase7_independent_noaa_receipt_v39.test.ts

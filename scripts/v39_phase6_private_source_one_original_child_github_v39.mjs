@@ -250,7 +250,7 @@ export function isolatedP6OriginalOneGetChildEnv(parentEnv){
   fail("NO_PARENT_ENV_FOR_LEAST_PRIVILEGE_CHILD");
  const child={...parentEnv};
  for(const key of Object.keys(child)){
-  if(key.startsWith("P6_PRIVATE_"))
+  if(key.startsWith("P6_PRIVATE_")||key.startsWith("P6_PHASE7_"))
    delete child[key];
  }
  child.P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT="1";
