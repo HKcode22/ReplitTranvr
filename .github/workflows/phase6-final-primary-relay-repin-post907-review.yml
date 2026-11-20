@@ -1,0 +1,42 @@
+name: Phase6 final primary+relay repin review post-907 (NO GO)
+on:
+  push:
+    branches: [phase6/final-scheduler-repin-post907-review]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/p6_final_primary_relay_repin.cjs'
+      - 'review-tools/p6_final_primary_relay_repin.test.cjs'
+      - '.github/workflows/phase6-final-primary-relay-repin-post886-review.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and fixed identities
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p6_final_primary_relay_repin.cjs
+          node --check review-tools/p6_final_primary_relay_repin.test.cjs
+          grep -Fq 'FINAL_EXECUTABLE_BASE="fd1012b28a6de97de4d136096ac751da8516dd4b"' review-tools/p6_final_primary_relay_repin.cjs
+          grep -Fq 'INITIAL_SCHEDULER_PIN="70580b3749544dfcbeff39da181b2aa42b1b4476"' review-tools/p6_final_primary_relay_repin.cjs
+          grep -Fq 'RELAY="b3a775b4ec7213af796bb8c727b69c3d0feb8bb7"' review-tools/p6_final_primary_relay_repin.cjs
+      - name: Focused scheduler repin receipt tests
+        run: node --test review-tools/p6_final_primary_relay_repin.test.cjs
+      - name: No authority in CI
+        run: |
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          echo FINAL_PRIMARY_RELAY_REPIN_REVIEW_COMPLETE_NO_PROVIDER_NO_GO
