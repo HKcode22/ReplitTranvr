@@ -79,6 +79,7 @@ export async function readP7ExactSelectedFeaturesPage(pool:P5EReadOnlyPgPool,per
  const reads=a.privatePermitReadbacks;
  if(a.providerCalls!==0||a.dbWrites!==0||a.originalBodyReadCount!==1||a.matchedCount!==permits.length||
   !reads||reads.length!==permits.length||Object.getOwnPropertyDescriptor(a,"privatePermitReadbacks")?.enumerable!==false)hold("EXACT_PAGE_SOURCE_READBACK");
+ if(reads===null)return hold("EXACT_PAGE_SOURCE_READBACK");
  const out=reads.map((v,i)=>{
   if(v.flightInstanceId!==permits[i].flightInstanceId)hold("EXACT_PAGE_ORDER");
   const x=recomputeP7ExactSelectedFeatures(permits[i],v.bundle,v,externalContentUseReviewSha256);
