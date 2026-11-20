@@ -33,7 +33,18 @@ the Phase 6 operational study can run without flight identity, airports,
 carriers, routes, or exact timestamps. Those fields are required in Packet A
 for the PRE/POST chain and for leakage-safe model construction.
 
-## What Packet B intentionally does not retain long-term
+The current AeroDataBox Terms separately identify airport/airline/aircraft
+codes, flight numbers/designators, registrations, and similar subject keys as
+**Reference identifiers** that may be retained for identification, linking, and
+subsequent retrieval under Article 5.8, subject to the exact Plan Terms and the
+anti-substitution conditions. Those identifiers are not automatically
+forbidden in every long-term lane. Exact schedule/observation/event timestamps
+remain a separate source-content question. The current Packet B writer is
+conservative and holds identifier-shaped output names until an explicit
+reference-identifier profile is reviewed; that hold must not be applied to
+Packet A.
+
+## What Packet B does not retain long-term by default
 
 Packet A still contains the following fields during the operational study,
 subject to the evidenced source/backup lifecycle. Packet B must exclude them
@@ -42,11 +53,18 @@ record:
 
 - raw payloads, response/request hashes, delivery IDs, provider IDs, query IDs,
   subscription/account facts, provider timestamps, and evidence JSON;
-- flight number, callsign, carrier, tail/registration, airport code/name,
-  exact route, exact scheduled/revised/actual timestamps, and flight-instance
-  or population-member identifiers;
+- exact route/segment source-record fields, exact scheduled/revised/actual
+  timestamps, and flight-instance or population-member identifiers when they
+  carry a recoverable source record;
 - direct source values merely copied into `features_json`, `provenance_json`,
   `flight_outcomes`, or `historical_feature_store`.
+
+A separate reference-identifier sidecar is a **candidate**, not an enabled
+permission. If the exact account/plan review permits it, airport/airline/flight
+codes and similar keys may be retained only for the Article 5.8
+identification/linking/retrieval purpose and only if the collection is not a
+compiled substitute for the Services. The current Packet B schema and writer
+hold this lane until that profile is independently reviewed.
 
 Deleting the raw body while keeping any of the above is not enough. Hashing or
 shortening a flight identity is not enough either.
