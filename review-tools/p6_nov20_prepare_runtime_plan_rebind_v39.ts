@@ -22,6 +22,22 @@ const live=()=>cmd("gh",["api","repos/HKcode22/ReplitTranvr/git/ref/heads/main",
 const outside=(root:string,p:string)=>{const r=relative(root,p);return r===".."||r.startsWith("../")||isAbsolute(r)};
 function privateDir(p:string){const s=lstatSync(p);need(s.isDirectory()&&!s.isSymbolicLink()&&s.uid===process.getuid?.()&&(s.mode&0o077)===0,"PRIVATE_DIR");return realpathSync(p)}
 function read(d:string,name:string,max:number){const p=join(d,name),s=lstatSync(p);need(s.isFile()&&!s.isSymbolicLink()&&s.uid===process.getuid?.()&&s.nlink===1&&(s.mode&0o077)===0&&s.size>0&&s.size<=max,"PRIVATE_FILE");const raw=readFileSync(p);const x=JSON.parse(raw.toString("utf8"));need(Buffer.from(JSON.stringify(x)).equals(raw),"CANONICAL_JSON");return {raw,x}}
+// Only review-hash changes and the already approved Day-1 +24h shift
+// are ignored by this structural comparison. No other field may drift.
+export function verifyDayPlanGeometry(old:any,next:any,day:number){
+ need(Number.isInteger(day)&&day>=1&&day<=31&&old?.runDayIndex===day&&next?.runDayIndex===day&&Array.isArray(old.templates)&&Array.isArray(next.templates),"DAY_IDENTITY");
+ const clocks=["budgetDayUtc","physicalChargeDayUtc","serviceWindowStartUtc","serviceWindowEndUtc","earliestPlannedCutoffUtc","scheduledRequestUtc"];
+ const clone=JSON.parse(JSON.stringify(old));
+ const shift=day===1?86400000:0;
+ const move=(value:unknown)=>{need(typeof value==="string"&&Number.isFinite(Date.parse(value)),"QUERY_CLOCK_INVALID");const d=new Date(Date.parse(value as string)+shift).toISOString();return (value as string).length===10?d.slice(0,10):d;};
+ clone.expectedServiceStartUtc=move(clone.expectedServiceStartUtc);
+ for(const q of clone.templates)for(const k of clocks)q[k]=move(q[k]);
+ for(const [section,key] of [["reviewedRefreshTiming","reviewed31DayCoverageGridSha256"],["reviewedSegmentedSource","reviewedProviderRangeEvidenceSha256"]]){
+  need(H.test(clone[section]?.[key]??"")&&H.test(next[section]?.[key]??""),"REVIEW_EVIDENCE_DIGEST");
+  clone[section][key]=next[section][key];
+ }
+ need(JSON.stringify(clone)===JSON.stringify(next),"UNAPPROVED_PLAN_GEOMETRY_DRIFT");
+}
 type Exported=ReturnType<typeof compileP6ActualCandidateExport>;
 export function verifyRuntimePlans(result:Exported,stageRaw:string,readCommitted:(p:string)=>Buffer){
  const sum=result.summary;
@@ -34,17 +50,7 @@ export function verifyRuntimePlans(result:Exported,stageRaw:string,readCommitted
   const expected="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json";
   need(f.path===expected&&d.runDayIndex===i+1&&d.sha256===f.sha256&&sha(f.bytes)===f.sha256,"DAY_PLAN_IDENTITY");
   const oldRaw=readCommitted(expected),old=JSON.parse(oldRaw.toString("utf8")),next=JSON.parse(f.bytes);
-  need(old.runDayIndex===i+1&&next.runDayIndex===i+1&&Array.isArray(old.templates)&&Array.isArray(next.templates)&&old.templates.length===next.templates.length,"DAY_TEMPLATE_COUNT");
-  need(JSON.stringify(old.pairedIcaos)===JSON.stringify(next.pairedIcaos)&&old.expectedDrawType===next.expectedDrawType,"SAMPLING_IDENTITY_DRIFT");
-  const expectedTime=i===0?Date.parse(old.expectedServiceStartUtc)+86400000:Date.parse(old.expectedServiceStartUtc);
-  need(Number.isFinite(expectedTime)&&Date.parse(next.expectedServiceStartUtc)===expectedTime,"PROSPECTIVE_START_DRIFT");
-  // The revised plan may update evidence hashes globally, but the sampler,
-  // horizons, query keys and per-template price/attempt units cannot drift.
-  for(let j=0;j<next.templates.length;j++){
-   const a=old.templates[j],b=next.templates[j];
-   for(const k of ["queryKey","runDayIndex","slot","horizon","providerQueryDirection","apiUnitsPerAttempt","maxAttempts","maxResponseAndPersistSeconds"])need(a[k]===b[k],"QUERY_IDENTITY_DRIFT");
-   for(const k of ["budgetDayUtc","physicalChargeDayUtc","serviceWindowStartUtc","serviceWindowEndUtc","earliestPlannedCutoffUtc","scheduledRequestUtc"])need(Date.parse(b[k])===Date.parse(a[k])+(i===0?86400000:0),"QUERY_CLOCK_DRIFT");
-  }
+  verifyDayPlanGeometry(old,next,i+1);
   count+=next.templates.length;diffs.push({runDayIndex:i+1,oldSha256:sha(oldRaw),newSha256:f.sha256,changed:!oldRaw.equals(Buffer.from(f.bytes))});
  }
  const final=result.files[31];
