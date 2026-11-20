@@ -13,7 +13,7 @@ const H=/^[a-f0-9]{64}$/;
 const validHash=(x:unknown):x is string=>typeof x==="string"&&H.test(x)&&!/^([a-f0-9])\1{63}$/.test(x);
 const fail=(s:string):never=>{throw Error("PHASE7_DURABLE_BUNDLE_REJECTED:"+s)};
 const need=(x:unknown,s:string)=>{if(!x)fail(s)};
-const exact=(x:unknown,k:string[])=>x!==null&&typeof x==="object"&&!Array.isArray(x)&&(Object.getPrototypeOf(x)===Object.prototype||Object.getPrototypeOf(x)===null)&&Object.keys(x).sort().join(",")===[...k].sort().join(",");
+const exact=(x:unknown,k:string[])=>x!==null&&typeof x==="object"&&!Array.isArray(x)&&(Object.getPrototypeOf(x)===Object.prototype||Object.getPrototypeOf(x)===null)&&Object.keys(x).length===k.length&&k.every(key=>Object.hasOwn(x,key));
 function canonical(x:unknown):string{
  if(x===null||typeof x!=="object")return JSON.stringify(x);
  if(Array.isArray(x))return "["+x.map(canonical).join(",")+"]";
@@ -83,14 +83,14 @@ type Verified=ReturnType<typeof validateDurableDerivedBundle>;
 type Actor={writerRole:string;readerRole:string};
 const roleName=(x:string)=>/^[a-z][a-z0-9_]{4,62}$/.test(x)&&!["postgres","neondb_owner"].includes(x);
 async function actor(c:import("pg").PoolClient,expected:string,readOnly:boolean){
- const q=(await c.query("SELECT current_user actor,session_user login,current_setting('transaction_read_only') ro,current_database() db,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls FROM pg_roles r WHERE r.rolname=current_user")).rows;
- need(q.length===1&&q[0].actor===expected&&q[0].login===expected&&q[0].ro===(readOnly?"on":"off")&&q[0].db==="neondb"&&q[0].replica===false&&q[0].rolsuper===false&&q[0].rolcreaterole===false&&q[0].rolcreatedb===false&&q[0].rolbypassrls===false,"restricted-actor");
+ const q=(await c.query("SELECT current_user actor,session_user login,current_setting('transaction_read_only') ro,current_database() db,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) member FROM pg_roles r WHERE r.rolname=current_user")).rows;
+ need(q.length===1&&q[0].actor===expected&&q[0].login===expected&&q[0].ro===(readOnly?"on":"off")&&q[0].db==="neondb"&&q[0].replica===false&&q[0].rolsuper===false&&q[0].rolcreaterole===false&&q[0].rolcreatedb===false&&q[0].rolbypassrls===false&&q[0].rolreplication===false&&q[0].member===false,"restricted-actor");
 }
 function roles(a:Actor){need(roleName(a.writerRole)&&roleName(a.readerRole)&&a.writerRole!==a.readerRole,"distinct-roles")}
 async function independentReadback(reader:Pool,v:Verified,a:Actor){
  const c=await reader.connect();
  try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await actor(c,a.readerRole,true);
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.readerRole,true);
   const q=(await c.query("SELECT bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes FROM "+RECORD+" WHERE packet_id=$1",[v.packetId])).rows;
   need(q.length===1&&q[0].bundle_sha256===v.bundleSha256&&q[0].approval_sha256===v.approvalSha256&&q[0].row_count===v.rowCount&&new Date(q[0].research_expiry_utc).toISOString()===v.researchExpiryUtc&&Buffer.isBuffer(q[0].payload_bytes)&&q[0].payload_bytes.equals(Buffer.from(v.bytes)),"independent-exact-readback");
   await c.query("ROLLBACK");
@@ -105,13 +105,13 @@ export async function writeReviewedPhase7DurableBundle(writer:Pool,reader:Pool,c
  const v=validateDurableDerivedBundle(contract,bundle,approval,now);
  const c=await writer.connect();let commitAttempted=false,commitAck=false;
  try{
-  await c.query("BEGIN");await actor(c,a.writerRole,false);
+  await c.query("BEGIN");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.writerRole,false);
   const r=await c.query("INSERT INTO "+RECORD+"(packet_id,bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes) VALUES($1,$2,$3,$4,$5,$6)",[v.packetId,v.bundleSha256,v.approvalSha256,v.rowCount,v.researchExpiryUtc,Buffer.from(v.bytes)]);
   need(r.rowCount===1,"insert-count");
   commitAttempted=true;await c.query("COMMIT");commitAck=true;
  }catch(e){if(!commitAttempted)await c.query("ROLLBACK").catch(()=>{});if(commitAttempted)fail("commit-unknown-reconcile-no-replay");throw e;}
  finally{c.release(commitAttempted&&!commitAck?Error("UNKNOWN_COMMIT"):undefined)}
- await independentReadback(reader,v,a);
+ try{await independentReadback(reader,v,a)}catch{fail("committed-readback-unverified-reconcile-no-replay")}
  return {status:"DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK",packetId:v.packetId,bundleSha256:v.bundleSha256,rowCount:v.rowCount,providerCalls:0,sourceMappingPersisted:false,phase6PaidGo:false};
 }
 export async function reconcileReviewedPhase7DurableBundle(reader:Pool,contract:Phase7DerivedReleaseContract,bundle:Phase7DurableDerivedBundle,approval:Phase7DurableBundleApproval,a:Actor,now:Date){
