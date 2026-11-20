@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {ROUTES,classifyRun,classifyModes,selectRouteRun} from "./p6_nov20_unattended_readiness_readonly.mjs";
+import {ROUTES,classifyRun,classifyModes,selectRouteRun,classifySecretMetadata,STAGE_BOUND_SECRETS} from "./p6_nov20_unattended_readiness_readonly.mjs";
 const head="0a7b1a28f243de76d4c83026d15f585265ef6f7b",relay="b3a775b4ec7213af796bb8c727b69c3d0feb8bb7",manifest="3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7";
 const now=Date.parse("2026-11-20T04:00:00Z"),route=ROUTES[0];
 const run={id:1,head_sha:head,event:"schedule",head_branch:"main",path:".github/workflows/"+route[1],status:"completed",conclusion:"success",run_attempt:1,created_at:"2026-11-20T03:40:00Z"};
@@ -34,4 +34,15 @@ test("new manual VERIFY cannot conceal prior scheduled APPLY failure or be count
  assert.equal(selectRouteRun([verify],route),undefined);
  const child={...verify,display_title:"P5 PRIMARY BACKSTOP CHILD"};
  assert.equal(selectRouteRun([verify,child],route),child);
+});
+
+test("static policy timestamps never certify plaintext and expose stale/missing names",()=>{
+ const rows=STAGE_BOUND_SECRETS.slice(1).map(name=>({name,updated_at:"2026-11-19T00:00:00Z"}));
+ rows[0].updated_at="2026-11-20T03:30:00Z";
+ const out=classifySecretMetadata(rows);
+ assert.equal(out.length,19);
+ assert.equal(out[0].status,"MISSING");
+ assert.equal(out[1].status,"UPDATED_METADATA_ONLY_VALUE_UNVERIFIED");
+ assert.ok(out.slice(2).every(x=>x.status==="PRE_RESTAGE_ACCOUNT_OBSERVATION_REVIEW_REQUIRED"));
+ assert.throws(()=>classifySecretMetadata([rows[0],rows[0]]),/SECRET_METADATA_DUPLICATE/);
 });
