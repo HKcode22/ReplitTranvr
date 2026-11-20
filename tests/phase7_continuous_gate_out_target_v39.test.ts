@@ -138,6 +138,24 @@ describe("Phase 7 Amendment E continuous gate-out target",()=>{
       .toThrow(/release-row-censoring-mismatch/);
   });
 
+  it("rejects an omitted censored T-6 row from the released denominator",()=>{
+    expect(()=>buildPhase7ContinuousGateOutTargetV39(profile(),packet(),[observed()]))
+      .toThrow(/t6-denominator-incomplete/);
+  });
+
+  it("rejects duplicate IDs even if the duplicate has a different horizon",()=>{
+    const p=packet();
+    const duplicate={...p.rows[0],horizon:"T-90m" as const};
+    expect(()=>buildPhase7ContinuousGateOutTargetV39(profile(),{...p,rows:[...p.rows,duplicate]},[observed(),censored()]))
+      .toThrow(/duplicate-packet-row-id/);
+  });
+
+  it("does not require non-T-6 rows in the continuous primary target",()=>{
+    const p=packet();
+    const extra={...p.rows[0],releaseRowId:"55555555-5555-4555-8555-555555555555",horizon:"T-90m" as const};
+    expect(buildPhase7ContinuousGateOutTargetV39(profile(),{...p,rows:[...p.rows,extra]},[observed(),censored()]).packet.rows).toHaveLength(2);
+  });
+
   it("fails closed unless the reviewed profile forbids long-lived source-shaped output",()=>{
     const unsafe={...profile(),sourceTimestampOutput:true as false};
     expect(validatePhase7ContinuousGateOutTargetProfileV39(unsafe).pass).toBe(false);
