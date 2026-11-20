@@ -566,7 +566,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   expect(saved.postCommitDatabaseReadbackVerified).toBe(true);
   if(p7){
    expect(saved.phase7DerivedPreFragmentIndependentlyVerified).toBe(true);
-   const pre=(await admin.query("SELECT f.packet_bytes,l.expires_at_utc,b.source_expires_at_utc FROM phase7_private.pre_fragment_v39 f JOIN phase7_private.pre_source_link_v39 l ON l.row_id=f.row_id JOIN clean.flight_snapshots s ON s.id=l.snapshot_id JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id=s.population_query_id WHERE l.snapshot_id=$1",[saved.committedSnapshotId])).rows;
+   const pre=(await admin.query("SELECT f.packet_bytes,l.expires_at_utc,b.source_expires_at_utc FROM phase7_private.pre_fragment_v39 f JOIN phase7_private.pre_source_link_v39 l ON l.row_id=f.row_id JOIN clean.flight_snapshots s ON s.id=l.snapshot_id JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id WHERE l.snapshot_id=$1",[saved.committedSnapshotId])).rows;
    expect(pre).toHaveLength(1);
    const bytes=pre[0].packet_bytes.toString("utf8"),row=JSON.parse(bytes).rows[0];
    expect(row.featureBuckets).toEqual({status_bin:0,context_bin:1});
