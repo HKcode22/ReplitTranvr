@@ -51,7 +51,9 @@ it("binds the Monday six-policy statics to the real recompiled stage and tail, n
  const config=JSON.stringify({calendarRowsSha256:calendar,frameSha256:review.frameEvidence.frameHash,phase6PaidGo:false});
  const manifest=JSON.stringify({calendarRowsSha256:calendar,configSha256:h(config),originalFrozenPacketPreserved:true,originalFrozenManifestSha256:"3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",scientificFreezeApproved:true,sourceUseDeferredToPhase6Activation:true,sourceRightsApproved:false,phase6PaidGo:false});
  const timingSha=h("synthetic timing");
- const external={...review.externalCandidate,manifestSha256:h(manifest),calendarSha256:calendar,configSha256:h(config),phase6AuthorizationId:"AUTH-20261120-CIMONDAY",predecessorEvidenceIds:["CI-ONLY-NOT-RELEASE"],alertSafety:rec.proposedAlertSafety,providerRangeEvidenceSha256:h("synthetic range"),timingEvidenceSha256:timingSha,cycleRestCeilingUnits:rec.netRestCeilingUnits,jointBudgetReview:rec.jointBudgetReview};
+ const external={...review.externalCandidate,manifestSha256:h(manifest),calendarSha256:calendar,configSha256:h(config),phase6AuthorizationId:"AUTH-20261120-CIMONDAY",predecessorEvidenceIds:["CI-ONLY-NOT-RELEASE"],alertSafety:rec.proposedAlertSafety,providerRangeEvidenceSha256:"cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",timingEvidenceSha256:timingSha,cycleRestCeilingUnits:rec.netRestCeilingUnits,jointBudgetReview:rec.jointBudgetReview};
+ // Actual metadata-only Monday export pins range evidence in each plan;
+ // the synthetic authorization and timing evidence do not change its bytes.
  const eb=Buffer.from(JSON.stringify(external)),tb=Buffer.from(JSON.stringify({...review.timingCandidate,timingEvidenceSha256:timingSha}));
  const result=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:h(eb),timingBytes:tb,expectedTimingFileSha256:h(tb),calendarVariant:"COMPACT_MONDAY_NOV23"});
  const stage=result.files[31].bytes;
