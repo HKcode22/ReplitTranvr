@@ -34,10 +34,10 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="eb212961b571dff18e2ad644b72e7275a6276037620a450ae14c063927a9ebb3";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="37f8d46501719922b63154e4ff08cbda25df61249ddd997c87141cd72283295a";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"67cf8bf1ad5e6760a29dfa5b4d6e7bdcc595c5d2",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"f52f9bb2a3b0909edf83d37e502760b4bd0045c9",
  "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011",
  "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"4c2e80bdc564e919a8c7e7ea9faede18d0421a7a",
  "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
@@ -49,7 +49,7 @@ export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md":"9ae7c6eaad5340fb632f59487d468b0949c07b45",
  "data-collection/phase5/README.md":"c77975b5085745506303233226dda09b3be06381",
  "scripts/v39_phase6_actual_release_candidate_export_v39.ts":"957aca9011753b26495096e23294ed8ddda2e887",
- "tests/phase5_actual_nov22_budget_proposal_v39.test.ts":"3d659819e591956b8e6be49ccbb2effdcb6207e0",
+ "tests/phase5_actual_nov22_budget_proposal_v39.test.ts":"42349cfc1f1cd64f3a8f922acd5515b483e551ec",
  "server/lib/disruption/retentionDeployment_v39.ts":"f0670ab604a563e3d516485a4f1ea8f665d40179",
  "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
  "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
