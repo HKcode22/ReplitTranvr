@@ -93,6 +93,8 @@ const context = {
   cohortBucket: 1,
   split: 'train' as const,
   censoring: 'observed' as const,
+  issuedAtUtc: '2026-11-19T00:30:00.000Z',
+  releasedAtUtc: '2026-11-19T12:00:00.000Z',
 };
 
 describe('Phase 7 reviewed source transformation boundary', () => {
@@ -152,6 +154,34 @@ describe('Phase 7 reviewed source transformation boundary', () => {
       fields: [{...profile().fields[0], outputField: 'airport_code'}, profile().fields[1]],
     };
     expect(validatePhase7ReviewedTransformationProfile(unsafe).pass).toBe(false);
+  });
+
+  it('never admits future PRE features or POST labels unavailable at release', () => {
+    const input = decisions();
+    input[0] = {...input[0], availableAtUtc: '2026-11-19T00:30:00.001Z'};
+    input[1] = {...input[1], availableAtUtc: '2026-11-19T12:00:00.001Z'};
+    const result = transformPhase7ReviewedSourceDecisions(profile(), contract(), input, context);
+    expect(result.input.featureBuckets).toEqual({congestion_bin: null});
+    expect(result.input.labelBuckets).toEqual({delay_bin: null});
+    expect(result.input.qualityFlags & 32).toBe(32);
+    input[0] = {...input[0], availableAtUtc: context.issuedAtUtc};
+    input[1] = {...input[1], availableAtUtc: context.releasedAtUtc};
+    const exact = transformPhase7ReviewedSourceDecisions(profile(), contract(), input, context);
+    expect(exact.input.featureBuckets).toEqual({congestion_bin: 1});
+    expect(exact.input.labelBuckets).toEqual({delay_bin: 2});
+  });
+
+  it('rejects reversed clocks and mismatched review hashes or retention windows', () => {
+    expect(() => transformPhase7ReviewedSourceDecisions(profile(), contract(), decisions(), {...context, releasedAtUtc: '2026-11-18T12:00:00.000Z'})).toThrow(/context-clock-invalid/);
+    for (const changed of [
+      {...profile(), termsReviewSha256: sha('different terms')},
+      {...profile(), featureDictionarySha256: sha('different dictionary')},
+      {...profile(), derivedWorkReviewSha256: sha('different derived review')},
+      {...profile(), mappingExpiryHours: 12},
+    ]) expect(() => transformPhase7ReviewedSourceDecisions(changed, contract(), decisions(), context)).toThrow(/REVIEW_BINDING_MISMATCH/);
+    const p = profile();
+    const changed = {...p, fields: [{...p.fields[0], transformEvidenceSha256: sha('different field review')}, p.fields[1]]};
+    expect(() => transformPhase7ReviewedSourceDecisions(changed, contract(), decisions(), context)).toThrow(/FIELD_REVIEW_BINDING_MISMATCH/);
   });
 
   it('rejects extra source decision keys before transformation', () => {
