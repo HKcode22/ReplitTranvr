@@ -5,7 +5,7 @@ import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,aud
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
  const trust={independentStudyTrustPinsApproved:true,reviewedCodeSha:"a".repeat(40),
-  manifestSha256:H("a"),rightsSha256:H("b"),releaseSha256:H("c"),calendarSha256:H("d")};
+  manifestSha256:h("synthetic manifest"),rightsSha256:h("synthetic rights"),releaseSha256:H("c"),calendarSha256:H("d")};
  const q={schema:"v39.phase5.github-source-one-query-template.v2",manifestSha256:trust.manifestSha256,
   queryDigestSha256:H("e"),plan:{independentlyApprovedSourceAndRetention:true,githubOnlyOwnerApproved:true,
    reviewedProviderRightsSha256:trust.rightsSha256,reviewedReleaseSha256:trust.releaseSha256,
