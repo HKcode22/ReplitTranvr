@@ -67,6 +67,9 @@ export interface P5EReviewedSupplementalBundle{
  externalSourceAndContentsReviewReceiptSha256:string;
  fields:SupplementalField[];
  observations:P5EReviewedSupplementalObservation[];
+ /** Raw public weather snapshot provenance is transient in this existing
+  * frozen permit/roster only, never a permanent per-flight mapping. */
+ phase7WeatherArchive?:{schema:"v39.phase7.public-weather-selection-binding.v1";snapshotSha256:string|null;selectedAsOfUtc:string};
 }
 export interface P5EReviewSupplementRequest{
  flightInstanceId:string;horizon:PreHorizon;

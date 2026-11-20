@@ -5,8 +5,10 @@
  * individual receipt; omission, substitution or mixed capture is rejected.
  */
 import {createHash,createPublicKey,sign,verify,type KeyObject} from "node:crypto";
-import {verifyP7IndependentPublicNoaaArtifact,type P7PublicNoaaArtifactReceipt,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
+import {mergeP7VerifiedNoaaIntoBoundPreBundle,verifyP7IndependentPublicNoaaArtifact,type P7WeatherExactReadScope,type P7PublicNoaaArtifactReceipt,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {P7_NOAA_PUBLIC_MAX_AGE_MS} from "./phase7NoaaProductionArchivePlan_v39";
+import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
+import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_PUBLIC_NOAA_SNAPSHOT_"+s)};
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/,N=/^[1-9][0-9]{4,24}$/,I=/^[A-Z]{4}$/;
 const sha=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
@@ -80,12 +82,29 @@ export function makeP7PublicWeatherSnapshotPort(env:NodeJS.ProcessEnv,snapshot:P
   async readReviewedWeatherArtifacts(scope:Readonly<{airports:readonly string[];observedDbClockUtc:string}>){return relevant(scope.airports,scope.observedDbClockUtc)},
   /** Exact selected weather scope from original permit. The independent
    * authority still checks the real normalized route and original member. */
-  async readExactReviewedWeatherArtifacts(p:Readonly<import("./phase5V0079SingleBoundFlightPreWriter_v39").P5Stage14SingleFlightPrePermit>){
+  async readExactReviewedWeatherArtifacts(p:Readonly<P5Stage14SingleFlightPrePermit>){
    if(!v)return [];
    const airports=new Set<string>([p.airportIcao]);
    if(p.expectedDestinationIcao)airports.add(p.expectedDestinationIcao);
    for(const field of p.reviewedSupplementalFeatureBundle?.observations??[])if(field.source==="NOAA_TAF"&&field.airportIcao)airports.add(field.airportIcao);
    return relevant([...airports],v.reviewedAtUtc);
+  },
+  /** Reproduce the FULL selected weather denominator (presence AND absence)
+   * from the independently read actual operating route and frozen as-of
+   * clock, not the publisher's claimed destination or selected values. */
+  async verifyExactWeatherSelection(p:Readonly<P5Stage14SingleFlightPrePermit>,s:P7WeatherExactReadScope){
+   const b=p.reviewedSupplementalFeatureBundle,w=b?.phase7WeatherArchive;
+   const cutoff=at(p.selectedTNativeUtc)-({"T-24h":86400000,"T-6h":21600000,"T-90m":5400000}[p.horizon]);
+   if(!b||!w||!exact(w,["schema","snapshotSha256","selectedAsOfUtc"])||w.schema!=="v39.phase7.public-weather-selection-binding.v1"||w.snapshotSha256!==(v?.snapshotSha256??null)||
+    !Number.isFinite(cutoff)||at(w.selectedAsOfUtc)<at(s.memberAvailableAtUtc)||at(w.selectedAsOfUtc)>at(s.observedDbClockUtc)||at(w.selectedAsOfUtc)>=cutoff||
+    p.flightInstanceId!==s.flightInstanceId||p.airportIcao!==s.originIcao||(p.expectedDestinationIcao!==undefined&&p.expectedDestinationIcao!==s.destinationIcao))return hold("FROZEN_WEATHER_SCOPE");
+   const airports=[...new Set([s.originIcao,...(s.destinationIcao?[s.destinationIcao]:[])])],wires=relevant(airports,w.selectedAsOfUtc);
+   const verified=wires.map(x=>verifyP7IndependentPublicNoaaArtifact(env,x,w.selectedAsOfUtc));
+   const fids=b.observations.filter(x=>x.source==="AERODATABOX_FIDS");
+   const actual=mergeP7VerifiedNoaaIntoBoundPreBundle({...b,observations:fids,observationsSha256:sha(JSON.stringify(fids))},{flightInstanceId:s.flightInstanceId,originIcao:s.originIcao,destinationIcao:s.destinationIcao,selectedNativeTUtc:p.selectedTNativeUtc,ownCutoffUtc:new Date(cutoff).toISOString(),observedDbClockUtc:w.selectedAsOfUtc},verified).privateBundle;
+   const choices=(o:typeof b.observations)=>o.filter(x=>x.source==="NOAA_METAR"||x.source==="NOAA_TAF").sort((a,b)=>a.field.localeCompare(b.field));
+   if(hashPhase7DurableCandidate(choices(actual.observations))!==hashPhase7DurableCandidate(choices(b.observations)))hold("EXACT_PRESENT_AND_MISSING_WEATHER_DENOMINATOR");
+   return wires;
   }
  });
 }

@@ -249,7 +249,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const local=p7LocalPreSocketPaths(env,false),stored=openP7StoredPreProofPort(env);
   const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits)});
   const weather=openP7LocalPublicNoaaSnapshotPort(env);
-  console.log(JSON.stringify(await runP6NativeLaterRuntime(env,{...port,readReviewedWeatherArtifacts:weather.readReviewedWeatherArtifacts})));
+  console.log(JSON.stringify(await runP6NativeLaterRuntime(env,{...port,snapshotSha256:weather.snapshotSha256,readReviewedWeatherArtifacts:weather.readReviewedWeatherArtifacts})));
  }
  catch(e){const s=String(e?.message??"");console.error(/^HOLD_(?:P6|P5)_[A-Z0-9_]+$/.test(s)?s:"HOLD_P6_NATIVE_LATER_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
 }
