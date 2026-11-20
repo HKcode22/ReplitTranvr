@@ -73,7 +73,7 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
    ".github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml":"155802406f483f651337ec6694c890d7352bb9eb",
    "server/lib/disruption/retentionDeployment_v39.ts":"f0670ab604a563e3d516485a4f1ea8f665d40179",
    "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
-   "server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts":"7e5e06a4308b88a459e7c9aac26ee68e5b588d01",
+   "server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts":"4e83a44708a7a019f350fc974c931d3fa855bdc3",
    "server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs":"e270ca8fdc5dea422412aa76e7537d49f5df4fd4",
    "tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts":"0a9084041bc4b747f4ca00b61c152a9fb321efac",
    ".github/workflows/phase6-prospective-disabled-stage-revision-pg16.yml":"4bbe0816309dbcf0c7af2e90049ecf9b8eb6ec08",
