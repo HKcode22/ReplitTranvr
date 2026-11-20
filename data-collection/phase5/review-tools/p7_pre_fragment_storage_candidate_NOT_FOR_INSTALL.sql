@@ -25,8 +25,8 @@ CREATE TABLE phase7_private.pre_fragment_v39(
  CHECK((convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0->>'cohortBucket')::int=cohort_bucket),
  CHECK(convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0->>'split'=split),
  CHECK(convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0->>'censoring'='not_due'),
- CHECK(convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0 ?& ARRAY['releaseRowId','horizon','cohortBucket','split','featureBuckets','labelBuckets','missingness','qualityFlags','censoring']),
- CHECK(convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0 - ARRAY['releaseRowId','horizon','cohortBucket','split','featureBuckets','labelBuckets','missingness','qualityFlags','censoring']='{}'::jsonb)
+ CHECK((convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0) ?& ARRAY['releaseRowId','horizon','cohortBucket','split','featureBuckets','labelBuckets','missingness','qualityFlags','censoring']),
+ CHECK((convert_from(packet_bytes,'UTF8')::jsonb->'rows'->0) - ARRAY['releaseRowId','horizon','cohortBucket','split','featureBuckets','labelBuckets','missingness','qualityFlags','censoring']='{}'::jsonb)
 );
 -- Snapshot identity is temporary ONLY. Neither the durable fragment nor its
 -- research payload contains the source snapshot ID or operational timestamps.
