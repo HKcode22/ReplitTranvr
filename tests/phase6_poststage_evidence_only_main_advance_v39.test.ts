@@ -75,7 +75,7 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
    "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
    "server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts":"d7d5ef10041771147bcc448ea9b1fe3a1b45dc42",
    "server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs":"e270ca8fdc5dea422412aa76e7537d49f5df4fd4",
-   "tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts":"0a9084041bc4b747f4ca00b61c152a9fb321efac",
+   "tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts":"f6999d244f089668e6abb7fc7a9a858686e4fadf",
    ".github/workflows/phase6-prospective-disabled-stage-revision-pg16.yml":"4bbe0816309dbcf0c7af2e90049ecf9b8eb6ec08",
    "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
    "tests/phase7_derived_release_writer_v39.test.ts":"8388385f85cb90311daf218d2d0c21155fc7f458",
