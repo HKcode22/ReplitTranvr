@@ -63,7 +63,7 @@ export async function recoverPhase7CommittedPost(input:{
  source:Pick<Pool,"connect">;consumer:Phase7PostConsumer;
 }){
  const {env,scope:s,wire,source}=input;
- if(env.AERODATABOX_API_KEY||env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
+ if(env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET||env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
   env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL||env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL||
   Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v))hold("RECOVERY_ONLY");
  const f=verifyP5FuturePostReviewedFrame(s.packet);

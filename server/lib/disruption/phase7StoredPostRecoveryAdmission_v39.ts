@@ -1,0 +1,160 @@
+/** Independent no-GET restart admission for one previously attempted signed
+ * POST. Verifies the actual retained day revision, original signed packet and
+ * GitHub child identity. Never calls the paid-child admission/dispatcher.
+ * A closed dispatch window is permitted only inside the existing recovery
+ * bound, and only an actual committed original + independent receipt may
+ * pass the subsequent recovery readback. No workflow inputs are authority.
+ */
+import {createHash} from "node:crypto";
+import {Client,Pool} from "pg";
+import {readP6StablePostTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
+import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
+import {hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
+import {readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
+import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
+import {admitP5FuturePostFrozenForReadOnly} from "./phase5FuturePostGithubReadonlyRelease_v39";
+import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v39";
+import {discoverPhase7CommittedPostScope,recoverPhase7CommittedPost} from "./phase7CommittedPostRecovery_v39";
+import type {Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
+import type {P6PostCommittedScope} from "./phase6ActualPostOutcomeObservability_v39";
+import type {P6ProspectiveShardHandoff} from "./phase6SignedThirtyOneDayShardHandoff_v39";
+import type {P5ReviewedFuturePostOneGet} from "./phase5V0083FuturePostOriginalDb_v39";
+const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/,RUN=/^[1-9][0-9]{4,14}$/;
+const REPO="HKcode22/ReplitTranvr",WORKFLOW=".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml";
+const HOLD=(s:string):never=>{throw Error("HOLD_P7_STORED_POST_RECOVERY_"+s);};
+const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+const at=(s:unknown)=>{if(typeof s!=="string"||!Number.isFinite(Date.parse(s)))return HOLD("CLOCK");return Date.parse(s)};
+export interface P7RecoverySelector{
+ runDayIndex:number;indexRevision:number;indexSha256:string;shardIndex:number;packetSha256:string;
+ routingIntentSha256:string;originalGithubRunId:string;
+}
+const integer=(n:unknown,max:number)=>typeof n==="number"&&Number.isSafeInteger(n)&&n>=1&&n<=max;
+function selectorOK(s:P7RecoverySelector){
+ return s&&integer(s.runDayIndex,31)&&integer(s.indexRevision,1024)&&integer(s.shardIndex,100000)&&
+ [s.indexSha256,s.packetSha256,s.routingIntentSha256].every(x=>H.test(x??""))&&RUN.test(s.originalGithubRunId??"");
+}
+const readonlyScope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+export function admitP7StoredPostRecovery(env:NodeJS.ProcessEnv,s:P7RecoverySelector){
+ if(!selectorOK(s)||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.GITHUB_ACTIONS!=="true"||
+  env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
+  !["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME??"")||env.GITHUB_RUN_ATTEMPT!=="1"||
+  !C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
+  !RUN.test(env.GITHUB_RUN_ID??"")||env.GITHUB_RUN_ID===s.originalGithubRunId||
+  env.ADB_AUTO_COLLECT!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
+  [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,
+   env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
+   env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P6_PRIVATE_PUBLISHER_DATABASE_URL,
+   env.P5_V39_PRE_DATABASE_URL,env.P5_V39_PREPARE_DATABASE_URL,env.P5_V39_T24_WITNESS_DATABASE_URL].some(Boolean)||
+  Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
+  ![env.V39_P5_POST_CATEGORY_BUDGET_SHA256,env.V39_P5_POST_PROVIDER_CONTRACT_SHA256,
+    env.V39_P5_FRAME_HASH,env.V39_P5_POST_PRICE_SHA256].every(v=>H.test(v??""))||
+  typeof env.GITHUB_TOKEN!=="string"||env.GITHUB_TOKEN.length<16)HOLD("EXACT_NO_PAID_SCOPE");
+ const trust=readP6StablePostTrust(env);
+ const url=(raw:string|undefined,login:string)=>{
+  let u:URL;try{u=new URL(raw??"");}catch{return HOLD("RESTRICTED_URL");}
+  if(!sameP6NeonDatabaseEndpoint(u,u)||decodeURIComponent(u.username)!==login||!u.password||
+     u.pathname!=="/neondb"||u.hash||u.searchParams.getAll("sslmode").length!==1||
+     !["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
+     [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+     (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))HOLD("RESTRICTED_TLS_URL");
+  u.searchParams.set("sslmode","verify-full");return u;
+ };
+ const reader=url(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin),
+  source=url(env.V39_P5_SOURCE_DATABASE_URL,"phase5_p5_source_login_20261108");
+ if(reader.username===source.username||!sameP6NeonDatabaseEndpoint(reader,source))HOLD("SAME_EXISTING_ENDPOINT");
+ const out={trust,selector:s,providerCalls:0};
+ return Object.freeze(Object.defineProperties(out,{
+  privateReaderUrl:{value:reader.toString(),enumerable:false},privateSourceUrl:{value:source.toString(),enumerable:false}
+ })) as typeof out&{readonly privateReaderUrl:string;readonly privateSourceUrl:string};
+}
+/** This selector has no access to paid routes or reservations. */
+export function selectP7RecoverablePostRoute(handoff:any,s:P7RecoverySelector):P6ProspectiveShardHandoff{
+ const z=handoff?.redactedSummary,r=Object.getOwnPropertyDescriptor(handoff??{},"privateRecoverablePostRoutingCandidates");
+ if(!selectorOK(s)||z?.status!=="ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"||
+  z.runDayIndex!==s.runDayIndex||z.indexRevision!==s.indexRevision||z.externallySignedDayEpochIndexSha256!==s.indexSha256||
+  z.reviewedEd25519SourceWasOriginalDayBytes!==true||z.providerCalls!==0||z.databaseWrites!==0||z.phase6PaidGo!==false||
+  !r||r.enumerable!==false||!Array.isArray(r.value)||r.value.length>1024||typeof handoff.getFrozen!=="function")HOLD("AUTHENTICATED_RECOVERY_INDEX");
+ const hits=r!.value.filter((x:P6ProspectiveShardHandoff)=>x.lane==="POST"&&x.runDayIndex===s.runDayIndex&&
+  x.shardIndex===s.shardIndex&&x.signedFrozenSha256===s.packetSha256&&x.routingIntentSha256===s.routingIntentSha256);
+ if(hits.length!==1)HOLD("EXACT_RECOVERY_ROUTE");
+ const x:P6ProspectiveShardHandoff=hits[0],now=at(z.observedRealPgClockUtc);
+ if(!x.privateBytesOnlyFromRestrictedReader||x.newPaidDispatchAuthorizedHere!==false||
+  now<at(x.notBeforeUtc)||now>=at(x.hardLatestUtc)+600000||
+  !x.boundSourceRegistryPath||!H.test(x.boundSourceRegistrySha256??""))HOLD("RECOVERY_ROUTE_WINDOW");
+ const p=handoff.getFrozen(x.signedFrozenPath),src=handoff.getFrozen(x.boundSourceRegistryPath);
+ if(!Buffer.isBuffer(p)||sha(p)!==s.packetSha256||!Buffer.isBuffer(src)||sha(src)!==x.boundSourceRegistrySha256)HOLD("RECOVERY_EXACT_BYTES");
+ return x;
+}
+/** GitHub history is evidence of which original run to look up, never
+ * proof of a reservation/response. Only first-attempt terminal children,
+ * within the signed original dispatch window, are admitted. A failed
+ * child without committed data subsequently holds in the original DB read. */
+export function verifyP7OriginalPostRun(run:any,s:P7RecoverySelector,route:P6ProspectiveShardHandoff,code:string,clock:string){
+ if(!selectorOK(s)||!C.test(code)||!run||String(run.id)!==s.originalGithubRunId||
+  run.repository?.full_name!==REPO||run.head_repository?.full_name!==REPO||
+  run.path!==WORKFLOW||run.head_branch!=="main"||run.head_sha!==code||
+  run.event!=="workflow_dispatch"||run.run_attempt!==1||run.status!=="completed"||
+  !["success","failure","cancelled","timed_out"].includes(run.conclusion)||
+  run.display_title!=="P5 POST "+s.packetSha256)HOLD("ORIGINAL_GITHUB_RUN_IDENTITY");
+ const create=at(run.created_at),start=at(run.run_started_at),updated=at(run.updated_at),now=at(clock);
+ if(create<at(route.notBeforeUtc)||create>=at(route.hardLatestUtc)||start<create||
+  start>=at(route.hardLatestUtc)||updated<start||updated>now+5000||now-updated>600000)
+  HOLD("ORIGINAL_GITHUB_RUN_CLOCK");
+ return s.originalGithubRunId;
+}
+export async function readP7OriginalPostRun(env:NodeJS.ProcessEnv,s:P7RecoverySelector,route:P6ProspectiveShardHandoff,clock:string,fetcher:typeof fetch=fetch){
+ const response=await fetcher("https://api.github.com/repos/"+REPO+"/actions/runs/"+s.originalGithubRunId,
+  {method:"GET",headers:{Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28"},
+   redirect:"error",signal:AbortSignal.timeout(10000)});
+ if(!response.ok)HOLD("ORIGINAL_GITHUB_READ");
+ return verifyP7OriginalPostRun(await response.json(),s,route,env.GITHUB_SHA!,clock);
+}
+export async function readP7StoredPostRecoveryPacket(env:NodeJS.ProcessEnv,s:P7RecoverySelector,fetcher:typeof fetch=fetch){
+ const a=admitP7StoredPostRecovery(env,s),t=a.trust,c=new Client({connectionString:a.privateReaderUrl,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_recovery_original_read"});
+ try{
+  await c.connect();await c.query("SET ROLE phase6_private_frozen_reader_v39");
+  const day=await readP6StoredPrivateReviewOnce({client:c,trust:t,scope:readonlyScope,selector:{kind:"EXACT_DAY",runDayIndex:s.runDayIndex,indexRevision:s.indexRevision,indexSha256:s.indexSha256}});
+  const handoff=await hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly({client:c,pins:day.pins,wire:day.wire,publicKeyPem:day.publicKeyPem,
+   scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning:false}});
+  const route=selectP7RecoverablePostRoute(handoff,s);
+  const signed=await readP6StoredPrivateReviewOnce({client:c,trust:t,scope:readonlyScope,selector:{kind:"POST",runDayIndex:s.runDayIndex,shardIndex:s.shardIndex,logicalPath:route.signedFrozenPath,contentSha256:s.packetSha256}});
+  const read=await readP6PrivateSourcePostOnce(c,signed.pins,signed.wire,signed.publicKeyPem),z=read.redactedSummary;
+  if(z.kind!=="POST_PACKET"||z.verifiedEd25519Review!==true||z.contentSha256!==s.packetSha256||z.providerCalls!==0||z.databaseWrites!==0||
+   z.runDayIndex!==s.runDayIndex||z.shardIndex!==s.shardIndex||read.privateLogicalPath!==route.signedFrozenPath||
+   !Buffer.isBuffer(read.privateBytes)||!read.privateBytes.equals(handoff.getFrozen(route.signedFrozenPath))||
+   at(z.observedDatabaseClockUtc)<at(handoff.redactedSummary.observedRealPgClockUtc)||
+   at(z.observedDatabaseClockUtc)-at(handoff.redactedSummary.observedRealPgClockUtc)>120000||
+   at(z.observedDatabaseClockUtc)>=at(route.hardLatestUtc)+600000||
+   at(z.observedDatabaseClockUtc)>=at(day.wire.review.validUntilUtc)||at(z.observedDatabaseClockUtc)>=at(day.wire.review.retentionNotAfterUtc))HOLD("LIVE_RETAINED_POST_PACKET");
+  const originalRun=await readP7OriginalPostRun(env,s,route,z.observedDatabaseClockUtc,fetcher);
+  const packet=JSON.parse(read.privateBytes.toString("utf8"));
+  const p=admitP5FuturePostFrozenForReadOnly(read.privateBytes,packet,{
+    frozenPacketPath:route.signedFrozenPath,expectedPacketSha256:s.packetSha256,approvedCodeSha:t.reviewedCodeSha,currentGithubRunId:originalRun,
+    manifestSha256:t.manifestSha256,sourceRightsSha256:t.rightsSha256,
+    categoryBudgetSha256:env.V39_P5_POST_CATEGORY_BUDGET_SHA256!,providerContractSha256:env.V39_P5_POST_PROVIDER_CONTRACT_SHA256!,
+    requestSha256:packet.reviewed?.requestSha256,requestContextSha256:packet.reviewed?.reviewedRequestContextSha256,
+    frameSha256:env.V39_P5_FRAME_HASH!,providerPriceSha256:env.V39_P5_POST_PRICE_SHA256!});
+  if(p.runDayIndex!==s.runDayIndex||p.postDispatchEarliestUtc!==route.notBeforeUtc||p.postDispatchHardLatestUtc!==route.hardLatestUtc)HOLD("ORIGINAL_PACKET_ROUTE_CLOCK");
+  const out={status:"EXACT_ORIGINAL_RUN_AND_RETAINED_SIGNED_POST_RECOVERY_PACKET_NO_GET",providerCalls:0,paidReservations:0,phase6PaidGo:false};
+  return Object.freeze(Object.defineProperty(out,"privatePacket",{value:Object.freeze(p),enumerable:false})) as typeof out&{readonly privatePacket:Readonly<P5ReviewedFuturePostOneGet>};
+ }finally{await c.end().catch(()=>{});}
+}
+export interface P7RecoveryReceiptTransport{
+ readExactRecoveryReceipt(scope:Readonly<P6PostCommittedScope>):Promise<unknown>;
+}
+/** Complete the nonpaid read/reconcile path using the exact original
+ * signed packet plus the private independent receipt transport. */
+export async function runP7StoredPostRecovery(input:{
+ env:NodeJS.ProcessEnv;selector:P7RecoverySelector;transport:P7RecoveryReceiptTransport;consumer:Phase7PostConsumer;
+}){
+ const {env,selector,transport,consumer}=input,a=admitP7StoredPostRecovery(env,selector);
+ if(typeof transport?.readExactRecoveryReceipt!=="function")HOLD("PRIVATE_RECEIPT_TRANSPORT");
+ const packet=(await readP7StoredPostRecoveryPacket(env,selector)).privatePacket;
+ const pool=new Pool({connectionString:a.privateSourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_recovery_source"});
+ try{
+  const source=makeP5Stage28DedicatedRolePool(pool,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107"});
+  const scope=await discoverPhase7CommittedPostScope(source,packet);
+  const wire=await transport.readExactRecoveryReceipt(Object.freeze({...scope,packet:Object.freeze({...scope.packet})}));
+  return await recoverPhase7CommittedPost({env,scope,wire,source,consumer});
+ }finally{await pool.end();}
+}
