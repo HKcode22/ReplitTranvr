@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {existsSync,mkdirSync,readFileSync,realpathSync,rmSync,writeFileSync} from "node:fs";
-import {dirname,resolve} from "node:path";
+import {existsSync,mkdirSync,readFileSync,realpathSync,writeFileSync} from "node:fs";
+import {resolve} from "node:path";
 import {Pool} from "pg";
 import {
   compileP6ActualCandidateExport,
