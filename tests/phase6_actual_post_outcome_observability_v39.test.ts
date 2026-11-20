@@ -4,11 +4,12 @@ import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnve
 import {p5V0083FuturePostReservationSha256,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {auditP6ActualPostOutcomeObservability,readP6CommittedPostOutcomeObservability,P6_POST_PARTITION_PRE_SQL} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 const H=(x:string)=>x.repeat(64),sha=(x:Buffer|string)=>createHash("sha256").update(x).digest("hex");
-function fixture(){
+function fixture(realDigestShape=false){
+ const D=(x:string)=>realDigestShape?sha('synthetic-post-pin:'+x):H(x);
  const p:P5ReviewedFuturePostOneGet={
-  schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",manifestSha256:H("a"),requestSha256:H("b"),
-  githubRunId:"1234567890",reviewedSourceRightsSha256:H("c"),reviewedProviderPriceSha256:H("d"),reviewedCategoryBudgetSha256:H("e"),
-  reviewedRequestContextSha256:H("f"),reviewedProviderContractSha256:H("9"),reviewedFrameSha256:H("8"),
+  schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",manifestSha256:D("a"),requestSha256:D("b"),
+  githubRunId:"1234567890",reviewedSourceRightsSha256:D("c"),reviewedProviderPriceSha256:D("d"),reviewedCategoryBudgetSha256:D("e"),
+  reviewedRequestContextSha256:D("f"),reviewedProviderContractSha256:D("9"),reviewedFrameSha256:D("8"),
   runDayIndex:1,slot:"HUB",airportIcao:"WSSS",flightInstanceId:"leg:synthetic:001",
   expectedSelectedTNativeUtc:"2027-02-02T10:00:00.000Z",plannedSourceFromUtc:"2027-02-02T09:00:00.000Z",plannedSourceToUtc:"2027-02-02T11:00:00.000Z",
   fromLocal:"2027-02-02T17:00",toLocal:"2027-02-02T19:00",airportIanaTimezone:"Asia/Singapore",
@@ -320,7 +321,7 @@ import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6
 import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
 describe("independent committed POST unverified-label settlement issuer",()=>{
  function make(){
-  const f=fixture(),keys=generateKeyPairSync("ed25519"),now="2027-02-02T12:04:00.000Z",code="c".repeat(40),role="phase7_post_scoped_prod20261120";
+  const f=fixture(true),keys=generateKeyPairSync("ed25519"),now="2027-02-02T12:04:00.000Z",code="c".repeat(40),role="phase7_post_scoped_prod20261120";
   const h=(s:string)=>sha("post-fixture:"+s);
   const shared={version:"v01",featureDictionarySha256:h("dictionary"),termsReviewSha256:h("terms"),derivedWorkReviewSha256:h("derived")};
   const contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z",cohortBucketCount:31,features:[{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:h("feature"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:4,fieldClass:"approved_derived",transformEvidenceSha256:h("label"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};

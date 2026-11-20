@@ -46,7 +46,7 @@ export function createP7IndependentPostSettlementIssuer(d:Inputs){
   e.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256===e.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256)hold("SIGNER_SCOPE");
  const p=pinned(e.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64,e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256) as Policy;
  if(!exact(p,["schema","manifestSha256","rightsSha256","prePolicySha256","contractSha256","profileSha256","nativePostPolicySha256","validFromUtc","validUntilUtc","unverifiedLabelDisposition","independentBoundedSettlementApproved","sourceParityReviewSha256","reconstructionReviewSha256","fieldReviewSha256","associationReviewSha256","continuousTargetReviewSha256","minTargetMinutes","maxTargetMinutes"])||
-  p.schema!=="v39.phase7.independent-post-settlement-policy.v1"||p.manifestSha256!==e.V39_P5_MANIFEST_SHA256||p.rightsSha256!==e.V39_P5_RIGHTS_SHA256||
+  p.schema!=="v39.phase7.independent-post-settlement-policy.v1"||!digest(p.manifestSha256)||!digest(p.rightsSha256)||p.manifestSha256!==e.V39_P5_MANIFEST_SHA256||p.rightsSha256!==e.V39_P5_RIGHTS_SHA256||
   !digest(p.prePolicySha256)||p.prePolicySha256!==e.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256||
   p.contractSha256!==hashPhase7DurableCandidate(contract)||p.contractSha256!==e.P6_PHASE7_POST_CONTRACT_SHA256||p.profileSha256!==hashPhase7DurableCandidate(profile)||p.profileSha256!==e.P6_PHASE7_POST_PROFILE_SHA256||
   p.nativePostPolicySha256!==e.P6_NATIVE_POST_POLICY_SHA256||p.unverifiedLabelDisposition!=="CENSOR_AFTER_REVIEWED_POST_OBSERVATION"||p.independentBoundedSettlementApproved!==true||
