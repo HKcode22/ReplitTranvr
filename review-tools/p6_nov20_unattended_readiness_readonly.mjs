@@ -19,11 +19,21 @@ export const ROUTES=[
 ];
 const VARS=["P5_PRIMARY_FIDS_EXPIRY_ENABLED","P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA","P5_PRIMARY_FIDS_EXPIRY_APPROVAL","P5_PRIMARY_FIDS_BACKSTOP_ENABLED","P6_PRIVATE_EPOCH_EXPIRY_MODE","P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256","P5_RETENTION_READONLY_MONITOR_ENABLED","P6_ROLLING_CONTROLLER_ENABLED","P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"];
 const RVAR=["TRAVNR_RELAY_MODE","TRAVNR_RELAY_PRIMARY_ENABLED","TRAVNR_RELAY_ROLLING_ROUTE","TRAVNR_RELAY_DIRECT_TICK_APPROVED","TRAVNR_APPROVED_TARGET_MAIN_SHA","TRAVNR_CRON_RELAY_SHA"];
+// Do not let a newer manual VERIFY conceal a failed or missing actual APPLY.
+export function selectRouteRun(runs,route){
+ const [repo,file]=route;
+ return runs.find(x=>file==="phase5-primary-fids-expiry-no-provider.yml"
+   ? x.event==="schedule"||x.event==="workflow_dispatch"&&x.display_title==="P5 PRIMARY BACKSTOP CHILD"
+   : file==="external-clock.yml"
+     ? x.event==="workflow_dispatch"&&x.display_title==="TRAVNR EXTERNAL CLOCK PRIMARY_BACKSTOP"
+     : ["schedule","workflow_dispatch"].includes(x.event));
+}
 export function classifyRun(run,jobs,route,head,now){
  const [repo,file,job,step,maxAge]=route;
  if(!run)return {status:"NO_RECENT_RUN",currentMainExecution:false};
  need(id(run.id)&&["schedule","workflow_dispatch"].includes(run.event)&&run.head_branch==="main"&&run.path===".github/workflows/"+file,"RUN_SCOPE");
  const result={runId:run.id,head:run.head_sha,event:run.event,conclusion:run.conclusion??null,createdAtUtc:run.created_at,currentMainExecution:false};
+ if(!selectRouteRun([run],route))return {...result,status:"NOT_ELIGIBLE_EXECUTION_ROUTE"};
  if(run.head_sha!==head)return {...result,status:"OLD_MAIN"};
  if(run.status!=="completed")return {...result,status:"NOT_COMPLETED"};
  if(run.conclusion!=="success"||run.run_attempt!==1)return {...result,status:"NOT_FIRST_ATTEMPT_SUCCESS"};
@@ -97,7 +107,7 @@ async function main(){
    const w=get(repo,"actions/workflows/"+file);
    const runs=get(repo,"actions/workflows/"+file+"/runs?branch=main&per_page=20").workflow_runs;
    need(Array.isArray(runs),"RUN_LIST");
-   const run=runs.find(x=>["schedule","workflow_dispatch"].includes(x.event));
+   const run=selectRouteRun(runs,route);
    const jobs=run?get(repo,"actions/runs/"+run.id+"/jobs?filter=latest&per_page=100"):null;
    need(!jobs||jobs.total_count===jobs.jobs.length,"JOB_LIST");
    history.push({file,workflowState:w.state,...classifyRun(run,jobs?.jobs??[],route,target,Date.now())});
