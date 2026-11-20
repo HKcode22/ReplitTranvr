@@ -177,6 +177,45 @@ BEGIN
  RETURN QUERY SELECT v_group,v_expiry;
 END $fn$;
 REVOKE ALL ON FUNCTION phase7_private.persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz) FROM PUBLIC;
+-- Scoped POST reader resolves the durable group only through an authenticated
+-- still-live PRE snapshot. It never returns raw source identities, clocks or
+-- expired mapping rows. Earlier T24 derived fragments can be returned through
+-- a currently valid T6/T90 anchor, without reopening their expired originals.
+CREATE FUNCTION phase7_private.read_bound_pre_group_v39(p_manifest text,p_snapshot bigint,p_rights text)
+ RETURNS TABLE(group_id uuid,contract_sha256 text,profile_sha256 text,packet_sha256 text,packet_bytes bytea)
+ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $read$
+ DECLARE v_at timestamptz; v_group uuid; v_contract text; v_profile text;
+ BEGIN
+ IF current_setting('transaction_read_only')<>'on' OR current_setting('transaction_isolation') NOT IN ('repeatable read','serializable') THEN
+  RAISE EXCEPTION 'P7_PRE_GROUP_REQUIRES_STABLE_READONLY'; END IF;
+ v_at:=clock_timestamp();
+ SELECT f.group_id,f.contract_sha256,f.profile_sha256 INTO STRICT v_group,v_contract,v_profile
+ FROM phase7_private.pre_source_link_v39 l
+ JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id
+ JOIN clean.flight_snapshots s ON s.id=l.snapshot_id
+ JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id AND b.response_hash=s.fids_response_hash
+ JOIN phase7_private.pre_preservation_policy_v39 pol ON pol.manifest_sha256=b.manifest_sha256 AND pol.contract_sha256=f.contract_sha256 AND pol.profile_sha256=f.profile_sha256
+ WHERE s.id=p_snapshot AND s.prediction_state='PRE_DEPARTURE' AND b.manifest_sha256=p_manifest AND b.rights_review_sha256=p_rights AND pol.rights_sha256=p_rights
+ AND l.expires_at_utc>v_at AND b.source_expires_at_utc>v_at AND f.research_expiry_utc>v_at AND pol.valid_from_utc<=v_at AND pol.valid_until_utc>v_at;
+ RETURN QUERY SELECT f.group_id,f.contract_sha256,f.profile_sha256,f.packet_sha256,f.packet_bytes
+ FROM phase7_private.pre_fragment_v39 f
+ WHERE f.group_id=v_group AND f.contract_sha256=v_contract AND f.profile_sha256=v_profile AND f.research_expiry_utc>v_at
+ ORDER BY CASE f.horizon WHEN 'T-24h' THEN 1 WHEN 'T-6h' THEN 2 ELSE 3 END;
+ END $read$;
+REVOKE ALL ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text) FROM PUBLIC;
+-- Metadata only, independent bounded cleanup observation; no identity values.
+CREATE FUNCTION phase7_private.pre_link_expiry_status_v39() RETURNS jsonb
+ LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp
+ AS $status$
+ WITH t AS (SELECT clock_timestamp() at)
+ SELECT jsonb_build_object('schema','v39.phase7.pre-link-expiry-status.v1',
+ 'observedAtUtc',t.at,'liveLinks',count(*) FILTER(WHERE l.expires_at_utc>t.at),
+ 'dueLinks',count(*) FILTER(WHERE l.expires_at_utc<=t.at),
+ 'dueNextHour',count(*) FILTER(WHERE l.expires_at_utc>t.at AND l.expires_at_utc<=t.at+interval '1 hour'),
+ 'providerCalls',0,'databaseWrites',0,'phase6PaidGo',false)
+ FROM t LEFT JOIN phase7_private.pre_source_link_v39 l ON true GROUP BY t.at
+ $status$;
+REVOKE ALL ON FUNCTION phase7_private.pre_link_expiry_status_v39() FROM PUBLIC;
 -- Deliberately separate safe due-only sweep; no source or durable-row DELETE.
 CREATE FUNCTION phase7_private.sweep_due_pre_links_v39(p_limit int)
  RETURNS integer LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $fn$
