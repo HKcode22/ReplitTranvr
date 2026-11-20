@@ -1,0 +1,83 @@
+{
+  "schema": "v39.phase6.owner-unattended-readiness-metadata.v1",
+  "status": "OWNER_READONLY_AUDIT_CONFIRMS_THREE_MODE_BLOCKERS_NO_GO",
+  "observedAtUtc": "2026-11-20T04:02:33.043Z",
+  "productionMain": "0a7b1a28f243de76d4c83026d15f585265ef6f7b",
+  "relayMain": "b3a775b4ec7213af796bb8c727b69c3d0feb8bb7",
+  "db": {
+    "enabledAuth": 0,
+    "exactAuth": 1,
+    "unresolvedIncidents": 0,
+    "hardDueFids": 0,
+    "overdueBlobRefs": 0,
+    "duePrivatePackets": 0,
+    "duePrivateIndexes": 0,
+    "liveRestGuardCount": 2,
+    "privateExpiryStatusFunctionPresent": true
+  },
+  "modeBlockers": [
+    "PRIMARY_EXPIRY_MAIN_DRIFT",
+    "RELAY_PIN_DRIFT",
+    "PRIVATE_EXPIRY_NOT_ACTIVELY_COMMISSIONED_FOR_CURRENT_MANIFEST"
+  ],
+  "privateExpiryMode": "COMMISSION_VERIFY_ONLY",
+  "history": [
+    {
+      "run": 44659076104,
+      "lane": "primary",
+      "result": "skipped"
+    },
+    {
+      "run": 44668495275,
+      "job": 136063532628,
+      "lane": "sentinel",
+      "result": "fresh exact-main actual step metadata only"
+    },
+    {
+      "run": 44640202090,
+      "lane": "heartbeat",
+      "result": "old-main failure"
+    },
+    {
+      "run": 44670269614,
+      "lane": "relay",
+      "result": "success metadata only forwarding unproven"
+    }
+  ],
+  "staticStageBindingRepoScope": {
+    "stale": [
+      "V39_P5_MANIFEST_SHA256",
+      "P6_INERT_STAGE_INPUT_JSON",
+      "P6_INERT_STAGE_INPUT_SHA256",
+      "P6_INERT_COST_ENVELOPE_SHA256"
+    ],
+    "missing": [
+      "V39_P5_CALENDAR_HASH",
+      "V39_P5_CONFIG_HASH",
+      "V39_P5_POST_CATEGORY_BUDGET_SHA256",
+      "V39_P5_RELEASE_SHA256",
+      "V39_P5_RIGHTS_SHA256",
+      "P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64",
+      "P6_NONPAID_DAILY_POLICY_BASE64",
+      "P6_NONPAID_SIGNING_POLICY_BASE64",
+      "P6_NONPAID_TRANSPORT_TRUST_BASE64",
+      "P6_PRIVATE_POST_REVIEWER_TRUST_BASE64",
+      "P6_NATIVE_POST_POLICY_BASE64",
+      "P6_NONPAID_DAILY_POLICY_SHA256",
+      "P6_NONPAID_SIGNING_POLICY_SHA256",
+      "P6_NONPAID_TRANSPORT_TRUST_SHA256",
+      "P6_NATIVE_POST_POLICY_SHA256"
+    ]
+  },
+  "limits": [
+    "Owner-provided output not independent DB access by assistant",
+    "No actual secret values read",
+    "No backup restore or live PITR configuration check",
+    "No proof of private deletion throughput",
+    "No new field/data rights conclusion"
+  ],
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "githubWritesByAudit": 0,
+  "phase6PaidGo": false
+}
