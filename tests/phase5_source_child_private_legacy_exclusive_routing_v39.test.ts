@@ -81,6 +81,16 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
   expect(only).not.toContain("secrets.");
   for(const step of steps.filter(x=>x.startsWith("Independently read actual committed")||x.startsWith("Review and publish later PRE"))){expect(step).toContain(paid);expect(step).not.toContain(pre);}
  });
+ it("optional public NOAA archive cannot introduce a required actor-commissioning step",()=>{
+  const steps=job(PRIVATE).split(/\n {6}- (?:name: |uses: )/).slice(1);
+  const archive=steps.find(x=>x.startsWith("Read latest completed signed public NOAA archive"));
+  expect(archive).toContain("vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED == '1'");
+  expect(archive).not.toContain("secrets.AERODATABOX_API_KEY");
+  for(const name of ["Preflight independent PRE lane role","Preflight independent PRE proof role","Review and publish later PRE using existing private registry"]){
+   const step=steps.find(x=>x.startsWith(name));expect(step).toContain("P6_NOAA_PUBLIC_ARCHIVE_ENABLED: ${{ vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED }}");
+   expect(step?.split("\n").find(l=>l.includes("if:"))).not.toContain("P6_NOAA_PUBLIC_ARCHIVE_ENABLED");
+  }
+ });
  it("private mode never falls back to old packet files and retains own PG16 review",()=>{
   const old=job(LEGACY),privateJob=job(PRIVATE);
   expect(old).toContain("scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts");

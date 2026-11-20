@@ -32,3 +32,15 @@ export function removeP7LocalPublicNoaaSnapshot(dir:string){
  const path=join(dir,filename);
  try{safeFile(path);unlinkSync(path)}catch(err){if((err as NodeJS.ErrnoException).code!=="ENOENT")throw err}
 }
+
+/** Optional NOAA acquisition is a recorded release setting, not an extra
+ * launch gate. An enabled reader must validate its exact signed snapshot;
+ * failures must not be converted to ordinary missing observations. In
+ * disabled mode no public archive observation is claimed. The existing
+ * evidence producer still rejects any present unverified weather fields. */
+export function openP7LocalPublicNoaaSnapshotPortIfEnabled(env:NodeJS.ProcessEnv){
+ const mode=env.P6_NOAA_PUBLIC_ARCHIVE_ENABLED??"";
+ if(mode==="1")return openP7LocalPublicNoaaSnapshotPort(env);
+ if(mode===""||mode==="0")return undefined;
+ return hold("INVALID_ARCHIVE_MODE");
+}

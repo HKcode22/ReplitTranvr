@@ -281,7 +281,7 @@ jobs:
       # OS/runner trust boundary. Before any paid GET in the autonomous
       # native mode, real restricted actors and V0106 custody must be ready.
       - name: Read latest completed signed public NOAA archive (no provider or DB credentials)
-        if: ${{ success() && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
+        if: ${{ success() && vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED == '1' && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
         env:
           V39_PHASE6_PROCESS_ARMED: '0'
           GH_TOKEN: ${{ github.token }}
@@ -303,6 +303,7 @@ jobs:
       - name: Preflight independent PRE lane role (no provider, no DB writes)
         if: ${{ success() && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
         env:
+          P6_NOAA_PUBLIC_ARCHIVE_ENABLED: ${{ vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED }}
           V39_PHASE6_PROCESS_ARMED: '0'
           P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED: ${{ secrets.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED }}
           P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
@@ -331,6 +332,7 @@ jobs:
       - name: Preflight independent PRE proof role (no provider, no DB writes)
         if: ${{ success() && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
         env:
+          P6_NOAA_PUBLIC_ARCHIVE_ENABLED: ${{ vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED }}
           V39_PHASE6_PROCESS_ARMED: '0'
           P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED: ${{ secrets.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED }}
           P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
@@ -420,6 +422,7 @@ jobs:
         # Mutually exclusive with audit-only. Never expose the private
         # reviewer keys or publisher credential to the original paid step.
         env:
+          P6_NOAA_PUBLIC_ARCHIVE_ENABLED: ${{ vars.P6_NOAA_PUBLIC_ARCHIVE_ENABLED }}
           AERODATABOX_API_KEY: ''
           RAPIDAPI_KEY: ''
           AERODATABOX_WEBHOOK_SECRET: ''
