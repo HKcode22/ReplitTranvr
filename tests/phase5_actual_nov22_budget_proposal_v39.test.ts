@@ -41,6 +41,11 @@ describe("postponed Nov20 SOURCE start compact calendar replay",()=>{
   expect(x.revision.originalTreatmentAssignmentSha256).toBe(x.shapeEnvelope.claimedTreatmentAssignmentSha256);
   expect(x.revision.independentDateRevisionApproved).toBe(false);
   expect(x.revision.phase6PaidGo).toBe(false);
+  const receipt=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json","utf8")).cases[1];
+  expect(receipt.sourceTemplates).toBe(6144);
+  expect(receipt.totalReserve).toBe(36740);
+  expect(receipt.peakDailyReserve).toBe(1280);
+  expect(receipt.strictAuthBeforeUtc).toBe("2026-11-20T23:10:00.000Z");
   console.log("P5_COMPACT_NOV22_REVIEW_DIGESTS "+JSON.stringify({
    draftSha256:digest(x.calendarDraft),rowsSha256:x.calendarDraft.proposedCalendarRowsSha256,
    shapeSha256:x.shapeEnvelope.shapeEnvelopeSha256,dateMapSha256:x.shapeEnvelope.dateMapSha256
