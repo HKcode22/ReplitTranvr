@@ -31,8 +31,8 @@ const H40=/^[a-f0-9]{40}$/;
 const H64=/^[a-f0-9]{64}$/;
 
 function sha256(b){return createHash("sha256").update(b).digest("hex");}
-function gitBlobSha(b){
-  return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex");
+export function gitBlobSha(b){
+  return createHash("sha1").update(Buffer.from(`blob ${b.length}`,"utf8")).update(Buffer.from([0])).update(b).digest("hex");
 }
 function hold(s){throw new Error("HOLD_P6_HISTORICAL_STAGE_RECOVERY_"+s);}
 function need(ok,s){if(!ok)hold(s);}
