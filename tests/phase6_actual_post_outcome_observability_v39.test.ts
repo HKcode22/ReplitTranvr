@@ -204,7 +204,7 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
  });
 });
 
-import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
+import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity,discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,recoverPhase7PostByOriginalReservation} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 describe("read-only committed POST recovery candidate",()=>{
  function recoveryFixture(){
@@ -224,11 +224,12 @@ describe("read-only committed POST recovery candidate",()=>{
   const sqls:string[]=[];
   const pool=(rows=[f.pre()],now="2027-02-02T12:04:00.000Z")=>({connect:vi.fn(async()=>({query:async(sql:string)=>{
    sqls.push(sql);
-   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now}]};
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(now)}]};
+   if(sql.startsWith("SELECT r.population_query_id::text AS id"))return {rowCount:1,rows:[{id:f.s.populationQueryId,response_hash:f.s.responseSha256,members:f.s.normalizedMembers}]};
    if(sql.startsWith("SELECT r.population_query_id"))return {rowCount:1,rows:[f.row]};
    if(sql===P6_POST_PARTITION_PRE_SQL)return {rowCount:rows.length,rows};
    return {rowCount:0,rows:[]};},release:()=>sqls.push("released")}))});
-  return {f,env,consumer,wire,pool,sqls,prior};
+  return {f,env,consumer,wire,pool,sqls,prior,keys};
  }
  it("recovers an exact prior committed scope, with no paid capability or private fields in the receipt",async()=>{
   const x=recoveryFixture(),source=x.pool();
@@ -254,4 +255,41 @@ describe("read-only committed POST recovery candidate",()=>{
   await expect(recoverPhase7CommittedPost({...base,source:x.pool(undefined,"2027-02-02T12:08:00.000Z") as any})).rejects.toThrow("LIVE_AUDIT_DRIFT");
   expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
  });
+ it("discovers original committed scope by the original run reservation, not the restart run ID",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const found=await discoverPhase7CommittedPostScope(source as any,x.f.p);
+  expect(found).toEqual(x.f.s);
+  const out=await recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:x.wire(),consumer:x.consumer});
+  expect(out).toMatchObject({verifiedGroupCount:1,providerCalls:0,paidReservations:0});
+  expect(x.sqls.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  const other={...x.f.p,githubRunId:"1234567899"};
+  await expect(recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:other,wire:x.wire(),consumer:x.consumer})).rejects.toThrow("EXACT_SCOPE");
+  expect(x.consumer.preserveCommitted).toHaveBeenCalledOnce();
+ });
+ it("issued recovery wire requires fresh actual audit, pinned independent key and issuer-only credentials",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const env={...x.env,P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED:"1"};
+  const priorAudit={sha256:phase7CommittedPostAuditIdentity(x.prior),observedAtUtc:x.f.clock};
+  const args={env,source:source as any,scope:x.f.s,priorAudit,signer:x.keys.privateKey};
+  const receipt=await issuePhase7CommittedPostRecoveryReceipt(args);
+  expect(receipt.status).toBe("INDEPENDENT_COMMITTED_POST_RECOVERY_RECEIPT_ISSUED_NO_GO");
+  expect(JSON.stringify(receipt)).not.toContain("payloadBase64");
+  const out=await recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:receipt.privateWire,consumer:x.consumer});
+  expect(out.verifiedGroupCount).toBe(1);
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,env:{...env,P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:"synthetic"}})).rejects.toThrow("INDEPENDENT_RECOVERY_ISSUER_SCOPE");
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,signer:generateKeyPairSync("ed25519").privateKey})).rejects.toThrow("ISSUER_PIN");
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,source:x.pool([x.f.pre("T-6h",2)]) as any})).rejects.toThrow("ISSUER_PRIOR_AUDIT_DRIFT");
+ });
+ it("does not substitute a missing or duplicate source original after a process interruption",async()=>{
+  const x=recoveryFixture();
+  for(const n of [0,2]){
+   const source={connect:async()=>({query:async(sql:string)=>{
+    if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(x.f.clock)}]};
+    if(sql.startsWith("SELECT r.population_query_id::text AS id"))return {rowCount:n,rows:Array.from({length:n},()=>({id:x.f.s.populationQueryId,response_hash:x.f.s.responseSha256,members:1}))};
+    return {rowCount:0,rows:[]};},release:()=>{}})};
+   await expect(recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:x.wire(),consumer:x.consumer})).rejects.toThrow("DISCOVERY_NO_UNIQUE_LIVE_ORIGINAL_NO_REPLAY");
+  }
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
+ });
+
 });
