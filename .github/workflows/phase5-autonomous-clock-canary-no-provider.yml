@@ -46,6 +46,7 @@ on:
       - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
       - 'scripts/v39_phase5_primary_github_backstop_v39.mjs'
       - 'tests/phase5_primary_github_backstop_v39.test.mjs'
+      - 'tests/phase5_primary_backstop_private_mode_isolation_v39.test.mjs'
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
       - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
@@ -65,6 +66,7 @@ on:
       - 'scripts/v39_phase5_rolling_continuation_rehearsal.mjs'
       - 'scripts/v39_phase5_primary_github_backstop_v39.mjs'
       - 'tests/phase5_primary_github_backstop_v39.test.mjs'
+      - 'tests/phase5_primary_backstop_private_mode_isolation_v39.test.mjs'
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase5_rolling_continuation_rehearsal_v39.test.mjs'
       - 'scripts/v39_phase6_rolling_github_preview_v39.mjs'
@@ -104,7 +106,7 @@ jobs:
           node --test tests/phase5_github_autonomous_clock_canary_v39.test.mjs
           node --test tests/phase5_github_bounded_handoff_canary_v39.test.mjs
           node --test tests/phase5_rolling_continuation_rehearsal_v39.test.mjs
-          node --test tests/phase5_primary_github_backstop_v39.test.mjs
+          node --test tests/phase5_primary_github_backstop_v39.test.mjs tests/phase5_primary_backstop_private_mode_isolation_v39.test.mjs
           bash -n scripts/phase5_synthetic_webhook_readonly_preflight_owner.sh
           node --test tests/phase5_synthetic_webhook_readonly_preflight.test.mjs
           node --test tests/phase5_github_six_slot_coverage_v39.test.mjs
@@ -258,7 +260,10 @@ jobs:
           vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED == 'true' &&
           vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
           vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER' &&
-          vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY' }}
+          (vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'COMMISSION_VERIFY_ONLY' ||
+           (vars.P6_PRIVATE_EPOCH_EXPIRY_MODE == 'APPLY_DUE_ONLY' &&
+            vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 != '' &&
+            vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL == 'APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 125
     concurrency:
@@ -276,7 +281,8 @@ jobs:
       P5_PRIMARY_FIDS_EXPIRY_ENABLED: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_ENABLED }}
       P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA }}
       P5_PRIMARY_FIDS_EXPIRY_APPROVAL: ${{ vars.P5_PRIMARY_FIDS_EXPIRY_APPROVAL }}
-      P6_PRIVATE_EPOCH_EXPIRY_MODE: ${{ vars.P6_PRIVATE_EPOCH_EXPIRY_MODE }}
+      # This explicit primary-only bounded root never receives private expiry authority.
+      P6_PRIVATE_EPOCH_EXPIRY_MODE: 'COMMISSION_VERIFY_ONLY'
       RAPIDAPI_KEY: ''
       V39_P5_SOURCE_DATABASE_URL: ''
       P5_V39_PRE_DATABASE_URL: ''
