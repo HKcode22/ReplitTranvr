@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from "vitest";
-import {readPhase7PostScopedGroup,P7_POST_SCOPED_GROUP_SQL,finalizeReviewedPhase7PostGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {readPhase7PostScopedGroup,P7_POST_SCOPED_GROUP_SQL,finalizeReviewedPhase7PostGroup,preflightPhase7PostScopedReader} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {createHash,randomUUID} from "node:crypto";
 import {buildPhase7DerivedReleasePacket} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
 import {serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
@@ -40,4 +40,11 @@ describe("private POST group scoped SQL adapter",()=>{
   await expect(finalizeReviewedPhase7PostGroup({anchor:a,fragments:v.fragments,scope:{evidence:{"T-6h":{flightInstanceId:"leg:test-two"}}} as any,contract,profile,writer:f.pool as any,reader:f.pool as any,writerRole:"p7_writer",readerRole:role,releasedAtUtc:v.observedAtUtc,independentlyApproveExactBundle:review})).rejects.toThrow("REVIEW_NOT_BOUND_TO_LIVE_ANCHOR");
   expect(review).not.toHaveBeenCalled();
  });
+});
+
+it("preflight uses the same restricted actor and does not read private rows or write",async()=>{
+ const f=fake();await preflightPhase7PostScopedReader(f.pool,role,contract);
+ expect(f.query).not.toHaveBeenCalledWith(P7_POST_SCOPED_GROUP_SQL,expect.anything());
+ expect(f.query.mock.calls.some(([sql])=>/INSERT|UPDATE|DELETE/.test(sql)&&!sql.startsWith("SELECT current_user"))).toBe(false);
+ const denied=fake({can_scope:false});await expect(preflightPhase7PostScopedReader(denied.pool,role,contract)).rejects.toThrow("READER_SCOPE_OR_CLOCK");expect(denied.release).toHaveBeenCalledOnce();
 });
