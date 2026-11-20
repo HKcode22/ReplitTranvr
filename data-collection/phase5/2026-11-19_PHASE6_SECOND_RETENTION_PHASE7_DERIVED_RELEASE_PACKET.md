@@ -75,16 +75,23 @@ they do not grant a license, prove a transformation, or enable collection.
 ## What the derived-release validator rejects
 
 The validator rejects extra keys and source-shaped names **in the long-lived
-Phase 7 derived-release packet**. That means a derived row cannot contain a
-flight number, callsign, tail/registration, airport, route, exact timestamp/
-date/schedule, provider/query/response hash, raw payload, or source identity.
+Phase 7 derived-release packet**. The current conservative profile therefore
+rejects raw payloads, exact source timestamps/dates/schedules, provider/query/
+response hashes, raw source records, route/segment records, and source-to-row
+identity linkage.
 
 This is not a Phase 6 collection prohibition. The private operational packet
-must retain those fields while they are needed for identity resolution,
-cutoff-safe joins, PRE/POST linkage, duplicate prevention, and target
-construction, subject to the applicable source and backup policy. A UUID v4
-row ID is only a fresh packet-local identifier; it is not a claim that a value
-is anonymous or non-reconstructable.
+must retain flight/leg, airport, carrier, route, and exact-time fields while
+they are needed for identity resolution, cutoff-safe joins, PRE/POST linkage,
+duplicate prevention, and target construction, subject to the applicable
+source and backup policy. AeroDataBox's published Article 5.8 also creates a
+distinct Reference identifier category for airport/airline/aircraft codes,
+flight numbers/designators, registrations, and similar subject keys used only
+for identification, linking, or subsequent retrieval. Those identifiers are
+not automatically forbidden, but the exact account/plan/purpose review must
+confirm the conditions and the current writer has no approved reference-
+identifier lane yet. A UUID v4 row ID is only a fresh packet-local identifier;
+it is not a claim that a value is anonymous or non-reconstructable.
 
 Temporary source-to-row linkage remains in the operational/source-custody
 layer. Before it expires, the pipeline must either produce a rights-approved
@@ -105,8 +112,10 @@ and only after the exact field contract and independent terms review pass.
 The packet therefore protects scientific continuity without changing
 the original study fields. Flight identifiers, airports, carriers, routes,
 legs, and exact timestamps remain in the operational lane because the study
-cannot construct its PRE/POST chain without them. They are not automatically
-removed from Phase 6.
+cannot construct its PRE/POST chain without them. Reference identifiers get a
+separate terms classification; exact timestamps and full source records do not
+inherit that classification automatically. Nothing is silently removed from
+Phase 6.
 
 Before any of those fields expire, the pipeline must run the full-to-derived
 parity check: coverage, label counts, censoring, missingness, calibration,

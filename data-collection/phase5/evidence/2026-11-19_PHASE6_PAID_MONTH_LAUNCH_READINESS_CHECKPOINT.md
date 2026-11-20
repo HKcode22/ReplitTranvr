@@ -51,9 +51,14 @@ authoritative.
    1,830 Alert credits, and the November 18 readback. Do not repeat account
    discovery. The remaining review is narrower: whether the exact account,
    purpose, and backup/PITR/replica/log surfaces permit retaining the full
-   linked per-flight operational corpus for the study lifecycle. No provider
-   reply is required for engineering, but silence is not converted into a
-   retention grant.
+   linked per-flight operational corpus for the study lifecycle. The published
+   Terms' Article 5.8 Reference identifier category is a separate classification
+   path for airport/airline/flight identifiers used for identification, linking,
+   or retrieval; it does not automatically cover exact timestamps or full
+   source records, and the current Packet B writer keeps that lane fail-closed.
+   No provider reply is required for engineering, but silence is not converted
+   into a retention grant.
+
 3. **Native GitHub schedule:** the latest coverage review found only one of five
    eligible slots successful, with severe delay/missing slots. Native cron alone
    is not sufficient for the month run.
