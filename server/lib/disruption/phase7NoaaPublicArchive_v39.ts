@@ -12,7 +12,7 @@ export const P7_NOAA_CANARY_STATIONS=Object.freeze(["KDEC","OMAA","OMSJ","SPJC"]
 export const P7_NOAA_ARTIFACT_NAME="v39-p7-noaa-public-source-canary";
 export type P7NoaaKind="METAR"|"TAF";
 export type P7NoaaSourceReceipt={kind:P7NoaaKind;requestedAirports:string[];fetchedAtUtc:string;sourceBodySha256:string;httpStatus:200|204};
-export type P7NoaaCapture={schema:"v39.phase7.noaa-public-source-canary.v1"|"v39.phase7.noaa-public-source-production.v1";githubRunId:string;codeSha:string;sources:P7NoaaSourceReceipt[]};
+export type P7NoaaCapture={schema:"v39.phase7.noaa-public-source-canary.v1";githubRunId:string;codeSha:string;sources:P7NoaaSourceReceipt[]};
 function stations(a:readonly string[]){
  if(!Array.isArray(a)||a.length<1||a.length>8||a.some(s=>!/^[A-Z]{4}$/.test(s))||new Set(a).size!==a.length)HOLD("STATIONS");
  return [...a].sort();
@@ -51,18 +51,17 @@ export async function captureP7NoaaPublicSource(kind:P7NoaaKind,scope:readonly s
 // Only this process may use the result of its actual archive verification.
 // Rehydrating JSON or supplying a caller-authored report is not issuer evidence.
 const verifiedArchiveReports=new WeakSet<object>();
-export function verifyP7NoaaArchive(input:{capture:unknown;metar:string;taf:string;githubRunId:string;codeSha:string;githubArtifactId:string;artifactDigest:string;archiveBytes:Buffer;artifactCreatedAtUtc:string;durableReadAtUtc:string;reviewedAtUtc:string;expectedProductionStations?:readonly string[]}){
+export function verifyP7NoaaArchive(input:{capture:unknown;metar:string;taf:string;githubRunId:string;codeSha:string;githubArtifactId:string;artifactDigest:string;archiveBytes:Buffer;artifactCreatedAtUtc:string;durableReadAtUtc:string;reviewedAtUtc:string}){
  const i=input,x=i.capture as P7NoaaCapture;
- const production=i.expectedProductionStations!==undefined,wanted=production?stations(i.expectedProductionStations!):P7_NOAA_CANARY_STATIONS;
- if(!exact(x,["schema","githubRunId","codeSha","sources"])||x.schema!==(production?"v39.phase7.noaa-public-source-production.v1":"v39.phase7.noaa-public-source-canary.v1")||
+ if(!exact(x,["schema","githubRunId","codeSha","sources"])||x.schema!=="v39.phase7.noaa-public-source-canary.v1"||
  !N.test(i.githubRunId)||!N.test(i.githubArtifactId)||!C.test(i.codeSha)||x.githubRunId!==i.githubRunId||x.codeSha!==i.codeSha||
  !Array.isArray(x.sources)||x.sources.length!==2||x.sources[0]?.kind!=="METAR"||x.sources[1]?.kind!=="TAF"||
- !Buffer.isBuffer(i.archiveBytes)||i.archiveBytes.length<100||i.archiveBytes.length>(production?18000000:2200000)||!H.test(i.artifactDigest)||sha(i.archiveBytes)!==i.artifactDigest)HOLD("ARCHIVE_IDENTITY");
+ !Buffer.isBuffer(i.archiveBytes)||i.archiveBytes.length<100||i.archiveBytes.length>2200000||!H.test(i.artifactDigest)||sha(i.archiveBytes)!==i.artifactDigest)HOLD("ARCHIVE_IDENTITY");
  const created=at(i.artifactCreatedAtUtc),durable=at(i.durableReadAtUtc),reviewed=at(i.reviewedAtUtc);
  if(created>durable||durable>reviewed||reviewed-created>24*3600000)HOLD("ARCHIVE_CLOCK");
  const sources=x.sources.map((s,j)=>{
   if(!exact(s,["kind","requestedAirports","fetchedAtUtc","sourceBodySha256","httpStatus"])||
-   JSON.stringify(s.requestedAirports)!==JSON.stringify(wanted)||![200,204].includes(s.httpStatus)||
+   JSON.stringify(s.requestedAirports)!==JSON.stringify(P7_NOAA_CANARY_STATIONS)||![200,204].includes(s.httpStatus)||
    at(s.fetchedAtUtc)>created||created-at(s.fetchedAtUtc)>3600000)HOLD("SOURCE_SCOPE");
   const body=j===0?i.metar:i.taf,v=validateP7NoaaPublicBody(s.kind,body,s.requestedAirports,s.fetchedAtUtc);
   if(v.sourceBodySha256!==s.sourceBodySha256||s.httpStatus===204&&body!=="[]")HOLD("SOURCE_DIGEST");

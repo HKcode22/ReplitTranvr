@@ -38,19 +38,3 @@ describe("public NOAA source archive, no paid provider",()=>{
   expect(()=>issueP7NoaaArchiveWires({...args,env:{...env,DATABASE_URL:"wrong"}})).toThrow("ISSUER_APPROVAL");
  });
 });
-
-import {publicP7WeatherStationGroups} from "../server/lib/disruption/phase7NoaaProductionArchivePlan_v39";
-it("production archive cannot substitute arbitrary station scope for the canary",()=>{
- const run="1234567890",code="d".repeat(40),raw=Buffer.alloc(512,5),metar="[]",taf="[]",at="2026-11-23T23:00:00.000Z";
- const capture={schema:"v39.phase7.noaa-public-source-production.v1",githubRunId:run,codeSha:code,sources:["METAR","TAF"].map(kind=>({kind,requestedAirports:["KJFK"],fetchedAtUtc:at,sourceBodySha256:h("[]"),httpStatus:204}))};
- const args={capture,metar,taf,githubRunId:run,codeSha:code,githubArtifactId:"9876543210",artifactDigest:h(raw),archiveBytes:raw,artifactCreatedAtUtc:"2026-11-23T23:01:00.000Z",durableReadAtUtc:"2026-11-23T23:02:00.000Z",reviewedAtUtc:"2026-11-23T23:02:01.000Z"};
- expect(verifyP7NoaaArchive({...args,expectedProductionStations:["KJFK"]}).sources).toHaveLength(2);
- expect(()=>verifyP7NoaaArchive(args)).toThrow("ARCHIVE_IDENTITY");
- expect(()=>verifyP7NoaaArchive({...args,expectedProductionStations:["KDEC"]})).toThrow("SOURCE_SCOPE");
-});
-it("uses only sampled public calendar slots near the clock, no dynamic route input",()=>{
- const plans=Array.from({length:31},(_,i)=>({runDayIndex:i+1,pairedIcaos:{HUB:"KJFK",MID_A:"KSFO",MID_B:"KSEA",REGIONAL:"KDEC"},templates:[{slot:"HUB",scheduledRequestUtc:new Date(Date.parse("2026-11-23T23:45:00.000Z")+86400000*i).toISOString()}]}));
- expect(publicP7WeatherStationGroups(plans,"2026-11-23T23:00:00.000Z")).toEqual({runDayIndexes:[1],groups:[["KJFK"]]});
- expect(publicP7WeatherStationGroups(plans,"2026-11-22T23:00:00.000Z")).toEqual({runDayIndexes:[],groups:[]});
- expect(()=>publicP7WeatherStationGroups(plans.slice(1),"2026-11-23T23:00:00.000Z")).toThrow("PLAN_DENOMINATOR");
-});

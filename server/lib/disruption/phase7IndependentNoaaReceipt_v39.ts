@@ -34,7 +34,6 @@ export interface P7PublicNoaaArtifactReceipt{
  githubRunId:string;githubArtifactId:string;requestedAirports:readonly string[];
  fetchedAtUtc:string;artifactCreatedAtUtc:string;durableReadAtUtc:string;reviewedAtUtc:string;validUntilUtc:string;
 }
-export type P7WeatherExactReadScope=Readonly<{flightInstanceId:string;originIcao:string;destinationIcao:string|null;memberAvailableAtUtc:string;observedDbClockUtc:string}>;
 export type P7WeatherJoinScope={
  flightInstanceId:string;originIcao:string;destinationIcao:string|null;selectedNativeTUtc:string;
  ownCutoffUtc:string;observedDbClockUtc:string;
@@ -112,7 +111,7 @@ export function mergeP7VerifiedNoaaIntoBoundPreBundle(bundle:P5EReviewedSuppleme
  * is unchanged. No provider fetch, private packet write or signature here. */
 export async function enrichP7NativeFeatureReviewWithNoaa(input:{
  env:NodeJS.ProcessEnv;handoff:any;featureReview:any;
- port:{snapshotSha256?:string|null;readReviewedWeatherArtifacts:(scope:Readonly<{airports:readonly string[];observedDbClockUtc:string}>)=>Promise<readonly P7SignedPublicNoaaArtifact[]>};
+ port:{readReviewedWeatherArtifacts:(scope:Readonly<{airports:readonly string[];observedDbClockUtc:string}>)=>Promise<readonly P7SignedPublicNoaaArtifact[]>};
  forbiddenSignerFingerprints:readonly string[];
 }){
  const {env,handoff:h,featureReview:f,port}=input;
@@ -146,8 +145,6 @@ export async function enrichP7NativeFeatureReviewWithNoaa(input:{
  const raw=scopes.size?await port.readReviewedWeatherArtifacts(Object.freeze({airports:Object.freeze([...stations].sort()),observedDbClockUtc:f.observedDbClockUtc})):[];
  if(!Array.isArray(raw)||raw.length>128)HOLD("WEATHER_ARTIFACT_SET");
  const weather=raw.map(v=>verifyP7IndependentPublicNoaaArtifact(env,v,f.observedDbClockUtc));
- const boundSnapshot=Object.hasOwn(port,"snapshotSha256");
- if(boundSnapshot&&((port.snapshotSha256!==null&&!digest(port.snapshotSha256))||(port.snapshotSha256===null&&weather.length!==0)||weather.some(a=>a.privateReceipt.sourcePurposeSha256!==env.P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256)))HOLD("EXACT_PRODUCTION_WEATHER_SNAPSHOT");
  // Artifact may serve multiple airports; require that it intersects this
  // exact request. Avoid unrelated global material in this native handoff.
  if(weather.some(a=>!a.privateReceipt.requestedAirports.some(v=>stations.has(v)))||new Set(weather.map(a=>a.receiptSha256)).size!==weather.length)HOLD("WEATHER_ARTIFACT_SCOPE");
@@ -157,8 +154,7 @@ export async function enrichP7NativeFeatureReviewWithNoaa(input:{
   const relevant=weather.filter(a=>a.privateReceipt.requestedAirports.includes(scope.originIcao)||(scope.destinationIcao!==null&&a.privateReceipt.requestedAirports.includes(scope.destinationIcao)));
   const m=mergeP7VerifiedNoaaIntoBoundPreBundle(d.compiled.bundle,scope,relevant);
   counts.weatherPresentFields+=m.weatherFieldsPresent;counts.weatherMissingFields+=m.weatherFieldsMissing;counts.weatherAmbiguousFields+=m.ambiguousFields;
-  const b=boundSnapshot?{...m.privateBundle,phase7WeatherArchive:{schema:"v39.phase7.public-weather-selection-binding.v1",snapshotSha256:port.snapshotSha256,selectedAsOfUtc:f.observedDbClockUtc}}:m.privateBundle;
-  return Object.freeze(Object.defineProperty({...d,compiled:{...d.compiled,bundle:b}},"privateWeatherJoinScope",{value:d.privateWeatherJoinScope,enumerable:false}));
+  return Object.freeze(Object.defineProperty({...d,compiled:{...d.compiled,bundle:m.privateBundle}},"privateWeatherJoinScope",{value:d.privateWeatherJoinScope,enumerable:false}));
  });
  return Object.freeze(Object.defineProperty({...f,...counts},"privateDecisions",{value:Object.freeze(decisions),enumerable:false}));
 }

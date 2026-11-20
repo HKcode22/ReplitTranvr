@@ -27,7 +27,6 @@ export interface P7IndependentLaneArchivePort{
   * or a proof generated from the PRE permit itself. */
  readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<Input>;
  readExactSignedLaneReceiptPage?(permits:readonly P5Stage14SingleFlightPrePermit[]):Promise<ReadonlyMap<string,Input>>;
- verifyExactWeatherSelection?(p:Readonly<P5Stage14SingleFlightPrePermit>,s:import("./phase7IndependentNoaaReceipt_v39").P7WeatherExactReadScope):Promise<readonly P7SignedPublicNoaaArtifact[]>;
 }
 function publicKey(v:string|undefined){
  if(!v||v.length>5500||!/^[A-Za-z0-9+/]+={0,2}$/.test(v))return hold("AUTHORITY_PUBLIC_KEY");
@@ -121,8 +120,7 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
      // a fresh DB clock bounds the separately signed review as of now.
      const receipt=await archive.readExactSignedLaneReceipt(p);
      const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
-     const weatherArtifacts=archive.verifyExactWeatherSelection?await archive.verifyExactWeatherSelection(p,actual.privateWeatherScope):receipt.weatherArtifacts;
-     return reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual,archive:{...receipt,weatherArtifacts}});
+     return reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual,archive:receipt});
     },
     async readExactLaneEvidencePage(permits){
      const keys=permits.map(hashPhase7DurableCandidate);
@@ -135,13 +133,7 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
      }
      if(!(receipts instanceof Map)||receipts.size!==keys.length||keys.some(k=>!receipts.has(k)))hold("EXACT_INDEPENDENT_RECEIPT_PAGE");
      const actual=await readP7ExactSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256);
-     const result=new Map<string,ReturnType<typeof reconcileP7ActualSourceLaneReceipt>>();
-     for(let i=0;i<permits.length;i++){
-      const p=permits[i],receipt=receipts.get(keys[i])!;
-      const weatherArtifacts=archive.verifyExactWeatherSelection?await archive.verifyExactWeatherSelection(p,actual[i].privateWeatherScope):receipt.weatherArtifacts;
-      result.set(keys[i],reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual[i],archive:{...receipt,weatherArtifacts}}));
-     }
-     return result;
+     return new Map(permits.map((p,i)=>[keys[i],reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual[i],archive:receipts.get(keys[i])!})]));
     },
     readDatabaseClockUtc:()=>readP7RestrictedSourceClock(pool)
    }});
