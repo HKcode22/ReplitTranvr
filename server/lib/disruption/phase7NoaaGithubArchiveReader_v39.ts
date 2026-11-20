@@ -92,3 +92,40 @@ export function openP7NoaaGithubArchiveReader(token:string,http:typeof fetch=fet
  }
  return {run,artifact,download,recentCompletedRuns,artifacts};
 }
+
+/** Find the most recent completed exact-main reviewed public weather
+ * snapshot in the bounded as-of window. No retry acquisition or private
+ * route selectors. No candidate archive is ordinary missingness. A claimed
+ * reviewed archive that fails signature/metadata/byte validation is HOLD,
+ * never silently replaced by missing data or a different capture.
+ */
+export async function readP7LatestReviewedPublicNoaaSnapshot(input:{env:NodeJS.ProcessEnv;clockUtc:string;plans:readonly import("./phase7NoaaProductionArchivePlan_v39").P7PublicNoaaPlan[];reader:ReturnType<typeof openP7NoaaGithubArchiveReader>}){
+ const {env,clockUtc,plans,reader}=input;
+ const {P7_NOAA_PUBLIC_MAX_AGE_MS,P7_NOAA_PRODUCTION_RAW,P7_NOAA_PRODUCTION_REVIEW,publicP7WeatherStationGroups}=await import("./phase7NoaaProductionArchivePlan_v39");
+ const {verifyP7PublicNoaaSnapshot}=await import("./phase7NoaaProductionReviewedSnapshot_v39");
+ const now=at(clockUtc);
+ if(!C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||env.P6_PHASE7_NOAA_ARCHIVE_ISSUER_APPROVED!=="1")hold("PROTECTED_READ_SCOPE");
+ const runs=await reader.recentCompletedRuns(env.GITHUB_SHA!,new Date(now-P7_NOAA_PUBLIC_MAX_AGE_MS).toISOString(),clockUtc);
+ for(const run of runs){
+  if(at(run.updated_at)>now)continue;
+  const artifacts=await reader.artifacts(run),raw=artifacts.filter(a=>a.name===P7_NOAA_PRODUCTION_RAW),review=artifacts.filter(a=>a.name===P7_NOAA_PRODUCTION_REVIEW);
+  // Completed enabled capture outside its calendar window (or a disabled
+  // workflow) produces neither archive. Partial pairs are never usable.
+  if(!raw.length&&!review.length)continue;
+  if(raw.length!==1||review.length!==1)hold("COMPLETE_ARCHIVE_PAIR_REQUIRED");
+  const rawMeta=validateP7NoaaGithubArtifact(await reader.artifact(String(raw[0].id)),run,P7_NOAA_PRODUCTION_RAW,18000000,clockUtc);
+  const signedMeta=validateP7NoaaGithubArtifact(await reader.artifact(String(review[0].id)),run,P7_NOAA_PRODUCTION_REVIEW,18000000,clockUtc);
+  if(String(rawMeta.id)!==String(raw[0].id)||rawMeta.digest!==raw[0].digest||String(signedMeta.id)!==String(review[0].id)||signedMeta.digest!==review[0].digest||
+   at(signedMeta.created_at)<at(rawMeta.created_at)||at(signedMeta.created_at)>at(run.updated_at))hold("ARCHIVE_PAIR_METADATA");
+  const zip=await reader.download(signedMeta,18000000),members=readP7NoaaZipMembers(zip,{"reviewed.json":10000000});
+  const snapshot=JSON.parse(members["reviewed.json"]),v=verifyP7PublicNoaaSnapshot(env,snapshot);
+  if(v.githubRunId!==String(run.id)||v.rawArtifactId!==String(rawMeta.id)||v.rawArchiveSha256!==rawMeta.digest.slice(7)||
+   at(v.scopeAtUtc)<at(run.run_started_at)||at(v.reviewedAtUtc)>at(signedMeta.created_at)||at(v.reviewedAtUtc)<at(rawMeta.created_at)||
+   v.receipts.some(q=>at(q.artifactCreatedAtUtc)!==at(rawMeta.created_at)||at(q.durableReadAtUtc)<at(rawMeta.created_at)))hold("EXACT_SNAPSHOT_GITHUB_BINDING");
+  const expected=publicP7WeatherStationGroups(plans,v.scopeAtUtc);
+  if(v.receipts.length!==expected.groups.length*2||v.receipts.some((q,i)=>JSON.stringify(q.requestedAirports)!==JSON.stringify(expected.groups[Math.floor(i/2)])))hold("PUBLIC_PLAN_DENOMINATOR_DRIFT");
+  if(now-at(v.scopeAtUtc)>P7_NOAA_PUBLIC_MAX_AGE_MS)continue;
+  return {snapshot,status:"EXACT_REVIEWED_PUBLIC_NOAA_SNAPSHOT_READY" as const,snapshotSha256:v.snapshotSha256,stationCount:v.stationCount,receiptCount:v.receipts.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ }
+ return {snapshot:null,status:"NO_ELIGIBLE_COMPLETED_PUBLIC_NOAA_ARCHIVE" as const,snapshotSha256:null,stationCount:0,receiptCount:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+}

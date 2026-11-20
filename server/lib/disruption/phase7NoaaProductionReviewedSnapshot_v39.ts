@@ -67,6 +67,7 @@ export function signP7PublicNoaaSnapshot(env:NodeJS.ProcessEnv,signer:KeyObject,
  verifyP7PublicNoaaSnapshot(env,out);return out;
 }
 export function makeP7PublicWeatherSnapshotPort(env:NodeJS.ProcessEnv,snapshot:P7PublicNoaaSnapshot|null){
+ trust(env);
  const v=snapshot===null?null:verifyP7PublicNoaaSnapshot(env,snapshot);
  function relevant(airports:readonly string[],clock:string){
   const now=at(clock);

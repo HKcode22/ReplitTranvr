@@ -68,7 +68,7 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
   }
  });
  it("actor-only confirmation cannot reach any provider credential or actual observation",()=>{
-  const b=job(PRIVATE),steps=b.split(/\n      - (?:name: |uses: )/).slice(1);
+  const b=job(PRIVATE),steps=b.split(/\n {6}- (?:name: |uses: )/).slice(1);
   const paid="inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'";
   const pre="inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'";
   const providerSteps=steps.filter(x=>x.includes("secrets.AERODATABOX_API_KEY")||x.includes("v39_phase6_private_source_one_original_child_github_v39.mjs"));
