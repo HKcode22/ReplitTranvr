@@ -3,7 +3,7 @@ import {readFileSync} from "node:fs";
 import {Pool} from "pg";
 import {describe,it,expect} from "vitest";
 import {buildPhase7PairedDerivedCandidate} from "../server/lib/disruption/phase7PairedDerivedReleaseCandidate_v39";
-import {validateDurableDerivedBundle,hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle,reconcileReviewedPhase7DurableBundle,type Phase7DurableDerivedBundle,type Phase7DurableBundleApproval} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {validateDurableDerivedBundle,hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle,reconcileReviewedPhase7DurableBundle,persistOrReconcileReviewedPhase7Bundle,type Phase7DurableDerivedBundle,type Phase7DurableBundleApproval} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import type {Phase7DerivedReleaseContract,Phase6ReleaseHorizon} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ApprovedDerivedInput} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -55,8 +55,13 @@ describe.skipIf(db!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmo
    const receipt=await writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,actors,now);
    expect(receipt.status).toBe("DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK");
    expect((await reconcileReviewedPhase7DurableBundle(reader,contract,bundle,approval,actors,now)).databaseWrites).toBe(0);
+   // The already committed exact row is independently read back, not inserted again.
+   expect(await persistOrReconcileReviewedPhase7Bundle(writer,reader,contract,bundle,approval,actors,now)).toMatchObject({status:"DERIVED_BUNDLE_EXACT_READBACK_NO_REPLAY",databaseWrites:0,providerCalls:0});
+   const conflict={...approval,sourceParityReviewSha256:sha("different exact approval")};
+   await expect(persistOrReconcileReviewedPhase7Bundle(writer,reader,contract,bundle,conflict,actors,now)).rejects.toThrow(/independent-exact-readback/);
    await admin.query("GRANT UPDATE (row_count) ON phase7_private.derived_release_bundle_v39 TO phase7_test_reader");
    await expect(reconcileReviewedPhase7DurableBundle(reader,contract,bundle,approval,actors,now)).rejects.toThrow(/restricted-actor/);
+   await expect(persistOrReconcileReviewedPhase7Bundle(writer,reader,contract,bundle,approval,actors,now)).rejects.toThrow(/restricted-actor/);
    await admin.query("REVOKE UPDATE (row_count) ON phase7_private.derived_release_bundle_v39 FROM phase7_test_reader");
    await expect(writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,actors,now)).rejects.toThrow();
    await expect(writer.query("SELECT count(*) FROM phase7_private.derived_release_bundle_v39")).rejects.toThrow();
@@ -66,7 +71,7 @@ describe.skipIf(db!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmo
    await admin.query(readFileSync("data-collection/phase5/review-tools/p7_pre_fragment_storage_candidate_NOT_FOR_INSTALL.sql","utf8"));
    await admin.query(readFileSync("data-collection/phase5/review-tools/p7_research_expiry_candidate_NOT_FOR_INSTALL.sql","utf8"));
    const another=fixture();
-   await writeReviewedPhase7DurableBundle(writer,reader,contract,another.bundle,another.approval,actors,now);
+   expect((await persistOrReconcileReviewedPhase7Bundle(writer,reader,contract,another.bundle,another.approval,actors,now)).status).toBe("DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK");
    await admin.query("UPDATE phase7_private.derived_release_bundle_v39 SET created_at_utc=clock_timestamp()-interval '2 days',research_expiry_utc=clock_timestamp()-interval '1 day' WHERE packet_id=$1",[bundle.packet.packetId]);
    expect((await admin.query("SELECT phase7_private.research_expiry_status_v39() AS s")).rows[0].s).toMatchObject({dueBundles:1,dueFragments:0,dueLinks:0});
    await expect(reader.query("SELECT phase7_private.sweep_due_research_outputs_v39(1)")).rejects.toThrow();

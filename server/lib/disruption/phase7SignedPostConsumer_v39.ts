@@ -9,7 +9,7 @@ import type {Phase7ReviewedTransformationProfile} from "./phase7ReviewedSourceTr
 import type {Phase7StoredPreFragment} from "./phase7FinalGroupAssembly_v39";
 import {readPhase7PostScopedGroup,preflightPhase7PostScopedReader} from "./phase7PostScopedGroup_v39";
 import {verifyPhase7SignedPostSettlement,readPhase7PostReviewerPublicKey} from "./phase7SignedPostReview_v39";
-import {hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle,preflightPhase7DurableBundleActors} from "./phase7DurableDerivedBundleCandidate_v39";
+import {hashPhase7DurableCandidate,persistOrReconcileReviewedPhase7Bundle,preflightPhase7DurableBundleActors} from "./phase7DurableDerivedBundleCandidate_v39";
 import {phase7AuditedPreservationGroups,type Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_SIGNED_POST_CONSUMER_"+s);};
 export interface Phase7PrivateOutcomeReviewTransport{
@@ -57,7 +57,7 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
    const seenGroups=new Set<string>();
    // Validate all reviews before any write. This avoids a missing review in
    // the middle silently turning a partial group denominator into success.
-   const pending:ReturnType<typeof verifyPhase7SignedPostSettlement>[]=[];
+   const pending:{verified:ReturnType<typeof verifyPhase7SignedPostSettlement>;anchor:P6PostPreservationAnchor;wire:unknown;fragmentsSha256:string}[]=[];
    for(const live of byLeg.values()){
     if(live.length>3||new Set(live.map(x=>x.horizon)).size!==live.length||
      live.some(x=>x.selectedNativeTUtc!==live[0].selectedNativeTUtc))hold("LIVE_HORIZON_CONFLICT");
@@ -78,12 +78,18 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
      if(e&&(e.preIssuedAtUtc!==h.preIssuedAtUtc||e.originalSourceAvailableAtUtc!==h.originalSourceAvailableAtUtc||
        e.frozenSourceOriginalSha256!==h.sourceResponseSha256))hold("LIVE_HORIZON_EVIDENCE_DRIFT");
     }
-    pending.push(v);
+    pending.push({verified:v,anchor,wire,fragmentsSha256:hashPhase7DurableCandidate(fresh.fragments)});
    }
    let verifiedGroupCount=0;
-   for(const v of pending){
-    const r=await writeReviewedPhase7DurableBundle(d.bundleWriter,d.bundleReader,d.contract,v.bundle,v.approval,{writerRole:d.bundleWriterRole,readerRole:d.bundleReaderRole},new Date(v.releasedAtUtc));
-    if(r.status!=="DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK")hold("UNKNOWN_GROUP_COMMIT_NO_REPLAY");
+   for(const item of pending){
+    // The earlier validation may precede many other group reviews. Check
+    // the real source/contract clock AGAIN before each write/reconciliation.
+    const fresh=await readPhase7PostScopedGroup(d.scopedReader,d.scopedReaderRole,d.contract,d.profile,item.anchor);
+    if(hashPhase7DurableCandidate(fresh.fragments)!==item.fragmentsSha256)hold("GROUP_CHANGED_BEFORE_SETTLEMENT");
+    const v=verifyPhase7SignedPostSettlement({env:d.env,wire:item.wire,committed:c,anchor:item.anchor,fragments:fresh.fragments,contract:d.contract,profile:d.profile,observedDbClockUtc:fresh.observedAtUtc});
+    if(v.reviewSha256!==item.verified.reviewSha256||hashPhase7DurableCandidate(v.bundle)!==hashPhase7DurableCandidate(item.verified.bundle))hold("EXACT_REVIEW_CHANGED");
+    const r=await persistOrReconcileReviewedPhase7Bundle(d.bundleWriter,d.bundleReader,d.contract,v.bundle,v.approval,{writerRole:d.bundleWriterRole,readerRole:d.bundleReaderRole},new Date(fresh.observedAtUtc));
+    if(!["DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK","DERIVED_BUNDLE_EXACT_READBACK_NO_REPLAY"].includes(r.status))hold("UNKNOWN_GROUP_COMMIT_NO_REPLAY");
     verifiedGroupCount++;
    }
    return {independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,verifiedGroupCount,heldGroupCount:0,excludedAmbiguousGroupCount:excluded.size,accountedRetainedFlightCount:byLeg.size+excluded.size};

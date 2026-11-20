@@ -98,13 +98,15 @@ export async function preflightPhase7DurableBundleActors(writer:Pool,reader:Pool
   finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
  }
 }
-async function independentReadback(reader:Pool,v:Verified,a:Actor){
+async function independentReadback(reader:Pool,v:Verified,a:Actor,allowAbsent=false):Promise<"EXACT"|"ABSENT">{
  const c=await reader.connect();
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.readerRole,true,v.researchExpiryUtc);
-  const q=(await c.query("SELECT bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes FROM "+RECORD+" WHERE packet_id=$1 AND research_expiry_utc>clock_timestamp()",[v.packetId])).rows;
+  const q=(await c.query("SELECT bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes FROM "+RECORD+" WHERE packet_id=$1",[v.packetId])).rows;
+  if(q.length===0&&allowAbsent){await c.query("ROLLBACK");return "ABSENT";}
   need(q.length===1&&q[0].bundle_sha256===v.bundleSha256&&q[0].approval_sha256===v.approvalSha256&&q[0].row_count===v.rowCount&&new Date(q[0].research_expiry_utc).toISOString()===v.researchExpiryUtc&&Buffer.isBuffer(q[0].payload_bytes)&&q[0].payload_bytes.equals(Buffer.from(v.bytes)),"independent-exact-readback");
-  await c.query("ROLLBACK");
+  await actor(c,a.readerRole,true,v.researchExpiryUtc);
+  await c.query("ROLLBACK");return "EXACT";
  }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
 /** Production grants/installation deliberately absent. No retry on unknown
@@ -129,4 +131,23 @@ export async function writeReviewedPhase7DurableBundle(writer:Pool,reader:Pool,c
 export async function reconcileReviewedPhase7DurableBundle(reader:Pool,contract:Phase7DerivedReleaseContract,bundle:Phase7DurableDerivedBundle,approval:Phase7DurableBundleApproval,a:Actor,now:Date){
  roles(a);const v=validateDurableDerivedBundle(contract,bundle,approval,now);await independentReadback(reader,v,a);
  return {status:"DERIVED_BUNDLE_EXACT_READBACK_NO_REPLAY",packetId:v.packetId,bundleSha256:v.bundleSha256,rowCount:v.rowCount,databaseWrites:0,phase6PaidGo:false};
+}
+
+/** Exact restart-safe group settlement. Read before writing, and never
+ * repeat an INSERT after an unknown result. The independent reader must
+ * distinguish actual absence from connection/permission/byte conflicts.
+ * This accepts only the same complete approved bytes and never a new GET. */
+export async function persistOrReconcileReviewedPhase7Bundle(writer:Pool,reader:Pool,contract:Phase7DerivedReleaseContract,bundle:Phase7DurableDerivedBundle,approval:Phase7DurableBundleApproval,a:Actor,now:Date){
+ roles(a);need(writer!==reader,"distinct-connections");
+ const v=validateDurableDerivedBundle(contract,bundle,approval,now);
+ const existing=await independentReadback(reader,v,a,true);
+ const reconciled=()=>({status:"DERIVED_BUNDLE_EXACT_READBACK_NO_REPLAY" as const,packetId:v.packetId,bundleSha256:v.bundleSha256,rowCount:v.rowCount,databaseWrites:0,providerCalls:0,sourceMappingPersisted:false,phase6PaidGo:false});
+ if(existing==="EXACT")return reconciled();
+ try{return await writeReviewedPhase7DurableBundle(writer,reader,contract,bundle,approval,a,now);}
+ catch(e){
+  // One read-only reconciliation after conflict/unknown commit. If absent,
+  // mismatched, expired or unreadable, retain the original HOLD; no retry.
+  try{if(await independentReadback(reader,v,a)==="EXACT")return reconciled();}catch{/* no replay */}
+  throw e;
+ }
 }
