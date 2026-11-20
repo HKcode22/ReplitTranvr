@@ -18,6 +18,16 @@ export const ROUTES=[
  [R,"external-clock.yml",null,null,45]
 ];
 const VARS=["P5_PRIMARY_FIDS_EXPIRY_ENABLED","P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA","P5_PRIMARY_FIDS_EXPIRY_APPROVAL","P5_PRIMARY_FIDS_BACKSTOP_ENABLED","P6_PRIVATE_EPOCH_EXPIRY_MODE","P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256","P5_RETENTION_READONLY_MONITOR_ENABLED","P6_ROLLING_CONTROLLER_ENABLED","P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"];
+// Old static install included these exact one-way secret names. Timestamps
+// can expose a stale deployment but do not prove secret plaintext/hash parity.
+export const STAGE_BOUND_SECRETS=["V39_P5_MANIFEST_SHA256","V39_P5_CALENDAR_HASH","V39_P5_CONFIG_HASH","V39_P5_POST_CATEGORY_BUDGET_SHA256","P6_INERT_STAGE_INPUT_JSON","P6_INERT_STAGE_INPUT_SHA256","P6_INERT_COST_ENVELOPE_SHA256","V39_P5_RELEASE_SHA256","V39_P5_RIGHTS_SHA256","P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64","P6_NONPAID_DAILY_POLICY_SHA256","P6_NONPAID_SIGNING_POLICY_SHA256","P6_NONPAID_TRANSPORT_TRUST_SHA256","P6_NATIVE_POST_POLICY_SHA256"];
+export function classifySecretMetadata(rows,stageEpoch=Date.parse("2026-11-20T03:00:20.729Z")){
+ need(Array.isArray(rows)&&new Set(rows.map(x=>x.name)).size===rows.length,"SECRET_METADATA_DUPLICATE");
+ return STAGE_BOUND_SECRETS.map(name=>{
+  const s=rows.find(x=>x.name===name),at=stamp(s?.updated_at);
+  return {name,updatedAtUtc:Number.isFinite(at)?s.updated_at:null,status:!s?"MISSING":!Number.isFinite(at)?"TIMESTAMP_UNKNOWN":at<stageEpoch?"PRE_RESTAGE_ACCOUNT_OBSERVATION_REVIEW_REQUIRED":"UPDATED_METADATA_ONLY_VALUE_UNVERIFIED"};
+ });
+}
 const RVAR=["TRAVNR_RELAY_MODE","TRAVNR_RELAY_PRIMARY_ENABLED","TRAVNR_RELAY_ROLLING_ROUTE","TRAVNR_RELAY_DIRECT_TICK_APPROVED","TRAVNR_APPROVED_TARGET_MAIN_SHA","TRAVNR_CRON_RELAY_SHA"];
 // Do not let a newer manual VERIFY conceal a failed or missing actual APPLY.
 export function selectRouteRun(runs,route){
@@ -113,10 +123,21 @@ async function main(){
    history.push({file,workflowState:w.state,...classifyRun(run,jobs?.jobs??[],route,target,Date.now())});
   }catch{history.push({file,status:"HISTORY_UNVERIFIED",currentMainExecution:false});}
  }
+ const secretRows=[];
+ let page=1,total=null;
+ for(;page<=10;page++){
+  const v=get(P,"actions/secrets?per_page=100&page="+page);
+  need(Array.isArray(v.secrets)&&Number.isSafeInteger(v.total_count)&&v.total_count>=0&&(total===null||v.total_count===total),"SECRET_METADATA_PAGE");
+  total=v.total_count;secretRows.push(...v.secrets);
+  if(secretRows.length===total)break;
+  need(v.secrets.length===100&&secretRows.length<total,"SECRET_METADATA_TRUNCATED");
+ }
+ need(secretRows.length===total,"SECRET_METADATA_INCOMPLETE");
+ const staticStageBindingMetadata=classifySecretMetadata(secretRows);
  const db=await counts();
  need(get(P,"git/ref/heads/main").object.sha===head&&get(R,"git/ref/heads/main").object.sha===relay,"MAIN_CHANGED");
  console.log(JSON.stringify({status:"P6_UNATTENDED_READINESS_METADATA_ONLY_NO_GO",head,relay,db,
   modeBlockers:classifyModes(p,r,head),privateExpiryMode:["OFF","COMMISSION_VERIFY_ONLY","VERIFY_ONLY","APPLY_DUE_ONLY"].includes(p.P6_PRIVATE_EPOCH_EXPIRY_MODE)?p.P6_PRIVATE_EPOCH_EXPIRY_MODE:"UNKNOWN",
-  history,limitations:["job step metadata is not a machine receipt","PITR settings/actual backup recovery are not fetched by SQL","private APPLY/backstop collision is based on current reviewed workflow","no claim of durable Packet B"],providerCalls:0,databaseWrites:0,githubWrites:0,phase6PaidGo:false},null,2));
+  history,staticStageBindingMetadata,limitations:["job step metadata is not a machine receipt","PITR settings/actual backup recovery are not fetched by SQL","private APPLY/backstop collision is based on current reviewed workflow","no claim of durable Packet B"],providerCalls:0,databaseWrites:0,githubWrites:0,phase6PaidGo:false},null,2));
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url)main().catch(e=>{console.error(/^HOLD_P6_UNATTENDED_READONLY_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_UNATTENDED_READONLY_REDACTED");process.exitCode=2});
