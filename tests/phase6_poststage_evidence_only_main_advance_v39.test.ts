@@ -68,7 +68,7 @@ describe("Phase6 reviewed post-stage bridge integrity",()=>{
    "data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md":"9ae7c6eaad5340fb632f59487d468b0949c07b45",
    "data-collection/phase5/README.md":"c77975b5085745506303233226dda09b3be06381",
    "scripts/v39_phase6_actual_release_candidate_export_v39.ts":"957aca9011753b26495096e23294ed8ddda2e887",
-   "tests/phase5_actual_nov22_budget_proposal_v39.test.ts":"3d659819e591956b8e6be49ccbb2effdcb6207e0",
+   "tests/phase5_actual_nov22_budget_proposal_v39.test.ts":"42349cfc1f1cd64f3a8f922acd5515b483e551ec",
    "server/lib/disruption/retentionDeployment_v39.ts":"f0670ab604a563e3d516485a4f1ea8f665d40179",
    "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
    "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
