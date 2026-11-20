@@ -44,7 +44,7 @@ const budgetRole=P5_TWO_STAGE_ROLES.find((x:any)=>x.key==="P5_V39_V0093_COST_ONL
 if(!writerRole||!budgetRole)HOLD("TWO_STAGE_ROLE_BINDING");
 
 function oldReviews(oldInput:any){
-  if(jsonHash(oldInput)!==OLD_STAGE_SHA||oldInput.authorizationId!==AUTH_ID||
+  if(jsonHash(oldInput)!==OLD_STAGE_SHA||oldInput.phase6AuthorizationId!==AUTH_ID||
      oldInput.manifestSha256!==OLD_MANIFEST_SHA||!CODE.test(oldInput.codeSha40??""))
     HOLD("OLD_PRIVATE_STAGE_NOT_EXACT_FROZEN_PACKET");
   return {
@@ -73,8 +73,8 @@ function buildPrivatePackage(oldStagePath:string){
   for(const p of [DATE_REVIEW_PATH,BOUNDED_SOURCE_PATH,PITR_REVIEW_PATH])
     if(!existsSync(p))HOLD("REQUIRED_REVIEW_EVIDENCE_MISSING");
   const oldRaw=readFileSync(oldStagePath);
-  if(hash(oldRaw)!==OLD_STAGE_SHA)HOLD("OLD_STAGE_RAW_SHA_MISMATCH");
-  const oldInput=JSON.parse(oldRaw.toString("utf8"));
+  let oldInput:any; try{oldInput=JSON.parse(oldRaw.toString("utf8"));}catch{HOLD("OLD_STAGE_INVALID_JSON");}
+  if(jsonHash(oldInput)!==OLD_STAGE_SHA)HOLD("OLD_STAGE_CANONICAL_SHA_MISMATCH");
   const {oldStageReview,oldFreezeReview}=oldReviews(oldInput);
 
   const review=prepareP6ActualReviewInput(currentHead,0,"COMPACT_NOV22");
@@ -159,7 +159,7 @@ function buildPrivatePackage(oldStagePath:string){
   if(!stageFile||stageFile.sha256!==exported.summary.unsignedStageInputSha256)
     HOLD("NEW_STAGE_EXPORT_MISSING");
   const newInput=JSON.parse(stageFile.bytes);
-  if(newInput.authorizationId!==AUTH_ID||newInput.manifestSha256!==manifestSha||
+  if(newInput.phase6AuthorizationId!==AUTH_ID||newInput.manifestSha256!==manifestSha||
      newInput.configSha256!==configSha||newInput.codeSha40!==currentHead||
      newInput.predecessorEvidenceIds.length!==oldInput.predecessorEvidenceIds.length)
     HOLD("NEW_STAGE_IDENTITY_DRIFT");
