@@ -1,3 +1,6 @@
+import {preparePhase7BoundPrePreservation,type Phase7BoundPrePreservationRequest} from "../server/lib/disruption/phase7BoundPrePreservation_v39";
+import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
+import {selectP5EStage14BoundRouteFeatures} from "../server/lib/disruption/phase5AmendmentEStage14BoundRouteFeatures_v39";
 import {createHash} from 'node:crypto';
 import {describe, expect, it} from 'vitest';
 import {
@@ -190,4 +193,35 @@ describe('Phase 7 reviewed source transformation boundary', () => {
       profile(), contract(), unsafe as unknown as Phase7SourceDecision[], context,
     )).toThrow('PHASE7_TRANSFORM_REJECTED_DECISIONS');
   });
+});
+
+describe("handoff from actual Stage14 source selectors before original expiry",()=>{
+ const fixture=():Phase7BoundPrePreservationRequest=>{
+  const issuedAtUtc="2026-11-21T05:59:00.000Z",selectedNativeTUtc="2026-11-22T06:00:00.000Z",cutoffUtc="2026-11-21T06:00:00.000Z",sourceHash=sha("synthetic original"),queryId="bfffffa0-0999-4999-8999-099999999999",flightInstanceId="synthetic-leg";
+  const route=selectP5EStage14BoundRouteFeatures({flightInstanceId,horizon:"T-24h",selectedNativeTUtc,cutoffUtc,issuedAtUtc,expectedOriginalResponseSha256:sourceHash,expectedPopulationQueryId:queryId,originalSourceUseIndependentlyReviewedOutsideThisFunction:true,normalizedMember:{analytic_identity_id:flightInstanceId,population_query_id:queryId,response_hash:sourceHash,dep_airport_icao:"KSFO",arr_airport_icao:"KLAX",available_at:"2026-11-21T05:30:00.000Z",fids_retrieval_utc:"2026-11-21T05:29:00.000Z"}});
+  return {horizon:"T-24h",selectedNativeTUtc,cutoffUtc,issuedAtUtc,transformedAtUtc:"2026-11-21T05:59:01.000Z",sourceExpiresAtUtc:"2026-11-22T05:30:00.000Z",split:"train",cohortBucket:1,features:[...route.features,{featureName:"airport_congestion_1h",value:3.5,informationAvailableAt:new Date("2026-11-21T05:45:00.000Z"),source:"REVIEWED_HISTORIC_CONTEXT",sourceVersion:sha("history")},{featureName:"operating_carrier",value:null,informationAvailableAt:new Date("2026-11-21T05:30:00.000Z"),source:"AERODATABOX_FIDS",sourceVersion:sourceHash}],dispositions:P5_E_ALLOWED_PRE_FEATURES.map(field=>({field,disposition:field==="airport_congestion_1h"?"REVIEWED_DERIVED_BUCKET":"LONG_TERM_RIGHTS_REQUIRED",outputField:field==="airport_congestion_1h"?"congestion_bin":null,reviewSha256:field==="airport_congestion_1h"?sha("feature"):sha(field)})),separatelyVerifiedFields:[]};
+ };
+ it("uses real route selector outputs, keeps all 16 field dispositions, never exposes source values or creates labels",()=>{
+  const req=fixture(),out=preparePhase7BoundPrePreservation(contract(),profile(),req);
+  expect(out.input.featureBuckets).toEqual({congestion_bin:1});
+  expect(out.input.labelBuckets).toEqual({delay_bin:null});
+  expect(out.input.censoring).toBe("not_due");
+  expect(out.audit.fields).toBe(16);
+  expect(out.audit.counts.origin_icao).toMatchObject({present:1,lost:1,preserved:0});
+  expect(out.audit.counts.destination_icao).toMatchObject({present:1,lost:1,preserved:0});
+  expect(out.audit.counts.operating_carrier).toMatchObject({present:0,lost:0,preserved:0});
+  expect(out.audit.counts.airport_congestion_1h).toMatchObject({present:1,lost:0,preserved:1});
+  expect(JSON.stringify(out)).not.toMatch(/KSFO|KLAX|2026-11-21|synthetic-leg|synthetic original|availableAtUtc/);
+  expect(out.durableWriteCompleted).toBe(false);
+ });
+ it("rejects post-issue source, expired original, missing field review and source family mismatch",()=>{
+  const req=fixture(),hist=req.features[2];
+  for(const changed of [
+   {...req,features:[...req.features.slice(0,2),{...hist,informationAvailableAt:new Date("2026-11-21T05:59:00.001Z")},req.features[3]]},
+   {...req,transformedAtUtc:req.sourceExpiresAtUtc},
+   {...req,dispositions:req.dispositions.slice(1)},
+   {...req,features:[...req.features.slice(0,2),{...hist,source:"AERODATABOX_FIDS"},req.features[3]]},
+   {...req,dispositions:req.dispositions.map(d=>d.field==="airport_congestion_1h"?{...d,reviewSha256:sha("different review")}:d)},
+  ])expect(()=>preparePhase7BoundPrePreservation(contract(),profile(),changed)).toThrow(/PHASE7_BOUND_PRE_PRESERVATION_REJECTED/);
+ });
 });

@@ -82,16 +82,17 @@ export const hashPhase7DurableCandidate=(x:unknown)=>digest(canonical(x));
 type Verified=ReturnType<typeof validateDurableDerivedBundle>;
 type Actor={writerRole:string;readerRole:string};
 const roleName=(x:string)=>/^[a-z][a-z0-9_]{4,62}$/.test(x)&&!["postgres","neondb_owner"].includes(x);
-async function actor(c:import("pg").PoolClient,expected:string,readOnly:boolean){
- const q=(await c.query("SELECT current_user actor,session_user login,current_setting('transaction_read_only') ro,current_database() db,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) member FROM pg_roles r WHERE r.rolname=current_user")).rows;
- need(q.length===1&&q[0].actor===expected&&q[0].login===expected&&q[0].ro===(readOnly?"on":"off")&&q[0].db==="neondb"&&q[0].replica===false&&q[0].rolsuper===false&&q[0].rolcreaterole===false&&q[0].rolcreatedb===false&&q[0].rolbypassrls===false&&q[0].rolreplication===false&&q[0].member===false,"restricted-actor");
+async function actor(c:import("pg").PoolClient,expected:string,readOnly:boolean,expiryUtc:string){
+ const q=(await c.query("SELECT clock_timestamp() AS db_clock,current_user actor,session_user login,current_setting('transaction_read_only') ro,current_database() db,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) member,has_schema_privilege(current_user,'phase7_private','USAGE') AS can_use,has_schema_privilege(current_user,'phase7_private','CREATE') AS can_create,has_table_privilege(current_user,'phase7_private.derived_release_bundle_v39','SELECT') AS can_read,has_table_privilege(current_user,'phase7_private.derived_release_bundle_v39','INSERT') AS can_write,has_any_column_privilege(current_user,'phase7_private.derived_release_bundle_v39','SELECT') AS can_read_any,has_any_column_privilege(current_user,'phase7_private.derived_release_bundle_v39','INSERT') AS can_write_any,has_any_column_privilege(current_user,'phase7_private.derived_release_bundle_v39','UPDATE') AS can_update,has_any_column_privilege(current_user,'phase7_private.derived_release_bundle_v39','REFERENCES') AS can_reference,has_table_privilege(current_user,'phase7_private.derived_release_bundle_v39','DELETE,TRUNCATE,TRIGGER') AS can_mutate FROM pg_roles r WHERE r.rolname=current_user")).rows;
+ need(q.length===1&&q[0].actor===expected&&q[0].login===expected&&q[0].ro===(readOnly?"on":"off")&&q[0].db==="neondb"&&q[0].replica===false&&q[0].rolsuper===false&&q[0].rolcreaterole===false&&q[0].rolcreatedb===false&&q[0].rolbypassrls===false&&q[0].rolreplication===false&&q[0].member===false&&q[0].can_use===true&&q[0].can_create===false&&q[0].can_read===readOnly&&q[0].can_read_any===readOnly&&q[0].can_write===!readOnly&&q[0].can_write_any===!readOnly&&q[0].can_update===false&&q[0].can_reference===false&&q[0].can_mutate===false,"restricted-actor");
+ need(q[0].db_clock instanceof Date&&Number.isFinite(q[0].db_clock.getTime())&&q[0].db_clock.getTime()<Date.parse(expiryUtc),"database-research-expired");
 }
 function roles(a:Actor){need(roleName(a.writerRole)&&roleName(a.readerRole)&&a.writerRole!==a.readerRole,"distinct-roles")}
 async function independentReadback(reader:Pool,v:Verified,a:Actor){
  const c=await reader.connect();
  try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.readerRole,true);
-  const q=(await c.query("SELECT bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes FROM "+RECORD+" WHERE packet_id=$1",[v.packetId])).rows;
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.readerRole,true,v.researchExpiryUtc);
+  const q=(await c.query("SELECT bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes FROM "+RECORD+" WHERE packet_id=$1 AND research_expiry_utc>clock_timestamp()",[v.packetId])).rows;
   need(q.length===1&&q[0].bundle_sha256===v.bundleSha256&&q[0].approval_sha256===v.approvalSha256&&q[0].row_count===v.rowCount&&new Date(q[0].research_expiry_utc).toISOString()===v.researchExpiryUtc&&Buffer.isBuffer(q[0].payload_bytes)&&q[0].payload_bytes.equals(Buffer.from(v.bytes)),"independent-exact-readback");
   await c.query("ROLLBACK");
  }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
@@ -105,9 +106,10 @@ export async function writeReviewedPhase7DurableBundle(writer:Pool,reader:Pool,c
  const v=validateDurableDerivedBundle(contract,bundle,approval,now);
  const c=await writer.connect();let commitAttempted=false,commitAck=false;
  try{
-  await c.query("BEGIN");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.writerRole,false);
+  await c.query("BEGIN");await c.query("SET LOCAL statement_timeout=\u002760000ms\u0027");await actor(c,a.writerRole,false,v.researchExpiryUtc);
   const r=await c.query("INSERT INTO "+RECORD+"(packet_id,bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes) VALUES($1,$2,$3,$4,$5,$6)",[v.packetId,v.bundleSha256,v.approvalSha256,v.rowCount,v.researchExpiryUtc,Buffer.from(v.bytes)]);
   need(r.rowCount===1,"insert-count");
+  await actor(c,a.writerRole,false,v.researchExpiryUtc);
   commitAttempted=true;await c.query("COMMIT");commitAck=true;
  }catch(e){if(!commitAttempted)await c.query("ROLLBACK").catch(()=>{});if(commitAttempted)fail("commit-unknown-reconcile-no-replay");throw e;}
  finally{c.release(commitAttempted&&!commitAck?Error("UNKNOWN_COMMIT"):undefined)}

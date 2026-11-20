@@ -7,6 +7,10 @@ on:
       - 'tests/phase7_durable_derived_bundle_candidate_v39.test.ts'
       - 'server/lib/disruption/phase7CanonicalFieldParity_v39.ts'
       - 'tests/phase7_canonical_field_parity_v39.test.ts'
+      - 'server/lib/disruption/phase7BoundPrePreservation_v39.ts'
+      - 'tests/phase7_reviewed_source_transformation_v39.test.ts'
+      - 'server/lib/disruption/phase7FinalGroupAssembly_v39.ts'
+      - 'tests/phase7_final_group_assembly_v39.test.ts'
       - 'data-collection/phase5/review-tools/p7_derived_release_storage_candidate_NOT_FOR_INSTALL.sql'
       - '.github/workflows/phase7-durable-derived-bundle-disposable-pg16.yml'
 permissions:
@@ -50,5 +54,5 @@ jobs:
           set +x
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx --no-install vitest run tests/phase7_durable_derived_bundle_candidate_v39.test.ts tests/phase7_canonical_field_parity_v39.test.ts
+          npx --no-install vitest run tests/phase7_durable_derived_bundle_candidate_v39.test.ts tests/phase7_canonical_field_parity_v39.test.ts tests/phase7_reviewed_source_transformation_v39.test.ts tests/phase7_final_group_assembly_v39.test.ts
           echo PHASE7_DURABLE_BUNDLE_DISPOSABLE_PG16_NO_GO
