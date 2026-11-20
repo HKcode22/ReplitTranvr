@@ -1,0 +1,44 @@
+name: Phase7 exact inert storage commissioning (disposable PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/lib/disruption/phase7InertStorageCommission_v39.ts'
+      - 'scripts/v39_phase7_inert_storage_owner_v39.ts'
+      - 'tests/phase7_inert_storage_commission_v39.test.ts'
+      - 'data-collection/phase5/review-tools/p7_*_candidate_NOT_FOR_INSTALL.sql'
+      - '.github/workflows/phase7-inert-storage-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  exact-inert-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: neondb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      P7_INERT_DISPOSABLE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable'
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts
