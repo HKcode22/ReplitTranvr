@@ -10,7 +10,7 @@ import {execFileSync} from "node:child_process";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {P5_PRIMARY_WRITER as W,P5_PRIMARY_READER as R,P5_PRIMARY_SQL,P5_PRIMARY_APPLY,
- P6_PRIVATE_EXPIRY_SQL} from "./v39_phase5_primary_fids_expiry_github_v39.mjs";
+ P6_PRIVATE_EXPIRY_SQL,primaryDeadlineSqlForFunction} from "./v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {inspectP5PrimaryExpiryOwner} from "./v39_phase5_primary_fids_expiry_owner_commission_v39.mjs";
 const REPO="HKcode22/ReplitTranvr";
 const F="clean.phase6_private_epoch_expiry_";
@@ -69,7 +69,8 @@ export async function inspectP6PrivateExpiryCatalog(c,sql,readonly){
   for(let i=0;i<4;i++){
    const q=rows.find(x=>x.name===fns[i]);
    const marker="AS $"+names[i]+"$";const end="$"+names[i]+"$;";
-   const sep=g.src.split(marker);
+   const selected=g.private?g.src:readFileSync(primaryDeadlineSqlForFunction(names[i],process.env.P5_PRIMARY_FIDS_DEADLINE_PROFILE||"V0103"),"utf8");
+   const sep=selected.split(marker);
    const body=sep.length===2?sep[1].split(end)[0]:null;
    const config=["search_path=pg_catalog, pg_temp",...(i>=2?["lock_timeout=3s"]:[])].sort();
    const expected=inert?[]:[{role:roles[i],grantable:false,privilege:"EXECUTE"}];

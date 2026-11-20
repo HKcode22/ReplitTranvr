@@ -16,6 +16,12 @@ export const P5_PRIMARY_WRITER="phase5_primary_fids_expiry_prod20261116";
 export const P5_PRIMARY_READER="phase5_retention_reader_prod20261114";
 export const P5_PRIMARY_APPLY="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER";
 export const P5_PRIMARY_SQL="migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql";
+export const P5_PRIMARY_MARGIN_SQL="migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql";
+export const P5_PRIMARY_MARGIN_PROFILE="V0107_VERIFIED_FUTURE_POST_23H_MARGIN";
+export function primaryDeadlineSqlForFunction(name,profile="V0103"){
+ if(!["V0103",P5_PRIMARY_MARGIN_PROFILE].includes(profile))HOLD("UNKNOWN_PRIMARY_DEADLINE_PROFILE");
+ return profile===P5_PRIMARY_MARGIN_PROFILE&&["status","sweep"].includes(name)?P5_PRIMARY_MARGIN_SQL:P5_PRIMARY_SQL;
+}
 const F="phase5_primary_fids_expiry_";
 const PREFIX="P5-PRIMARY-FIDS-SWEEP-";
 const RUN=new RegExp("^"+PREFIX+"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$");
@@ -101,6 +107,7 @@ export function admitP5PrimaryExpiryGithub(env){
  if(w.endpoint!==r.endpoint||hash(w.endpoint)!==env.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256)
    HOLD("EXACT_SAME_EXISTING_ENDPOINT_REQUIRED");
  return {apply:mode==="APPLY_DUE_ONLY",writerUrl:w.url,readerUrl:r.url,sha,
+  primaryDeadlineProfile:(()=>{const p=env.P5_PRIMARY_FIDS_DEADLINE_PROFILE||"V0103";primaryDeadlineSqlForFunction("status",p);return p})(),
   privateExpiry:admitP6PrivateExpiryExtension(env,mode==="APPLY_DUE_ONLY")};
 }
 function verifyTls(c){
@@ -113,7 +120,7 @@ function verifyTls(c){
 /** Review actual production function definitions and all granted authority.
  * Disposable bypass of TLS/role names strictly gated on test-only URL.
  */
-export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false,privateCommission=false}={}){
+export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false,privateCommission=false,primaryDeadlineProfile="V0103"}={}){
  if(!["writer","reader"].includes(actor)||typeof privateExpiry!=="boolean"||typeof privateCommission!=="boolean"||privateExpiry&&privateCommission||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
  const expected=test?role:actor==="writer"?P5_PRIMARY_WRITER:P5_PRIMARY_READER;
  if(!test){owner="neondb_owner";writerRole=P5_PRIMARY_WRITER;readerRole=P5_PRIMARY_READER;verifyTls(c);}
@@ -132,7 +139,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
     a.ro!=="on"||a.replica!==false||a.rolcanlogin!==true||a.usage!==true||
     [a.rolsuper,a.rolcreatedb,a.rolcreaterole,a.rolreplication,a.rolbypassrls,a.rolinherit,a.member,a.schema_create,a.db_create].some(v=>v!==false))
     HOLD("UNEXPECTED_ACTOR_OR_DB");
-  const src=readFileSync(P5_PRIMARY_SQL,"utf8");
+  primaryDeadlineSqlForFunction("status",primaryDeadlineProfile);
   const extensionSrc=privateExpiry||privateCommission?readFileSync(P6_PRIVATE_EXPIRY_SQL,"utf8"):"";
   const activeDefs=privateExpiry||privateCommission?[...defs,...privateDefs]:defs;
   const rows=(await c.query(`SELECT p.proname name,oidvectortypes(p.proargtypes) args,
@@ -162,7 +169,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
   const callable=d=>!d.privateExpiry||privateState==="GRANTED";
   for(const d of checkedDefs){
    const q=rows.find(q=>q.name===fn(d));
-   const m=(d.privateExpiry?extensionSrc:src).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
+   const m=(d.privateExpiry?extensionSrc:readFileSync(primaryDeadlineSqlForFunction(d.name,primaryDeadlineProfile),"utf8")).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
    const config=["search_path=pg_catalog, pg_temp",...(d.lock?["lock_timeout=3s"]:[])].sort();
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
@@ -297,9 +304,10 @@ async function main(){
  const reader=new pg.Pool({...config,connectionString:a.readerUrl,options:"-c default_transaction_read_only=on",application_name:"p5_fids_expiry_reader"});
  try{
   const extension=a.privateExpiry;
-  const verifyOptions=extension.enabled?{writer:{privateExpiry:true},reader:{privateExpiry:true}}:extension.commission?{writer:{privateCommission:true},reader:{privateCommission:true}}:{};
+  const actorOptions={primaryDeadlineProfile:a.primaryDeadlineProfile,...(extension.enabled?{privateExpiry:true}:extension.commission?{privateCommission:true}:{})};
+  const verifyOptions={writer:actorOptions,reader:{...actorOptions}};
   const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply,verifyOptions});
-  console.log(JSON.stringify({...result,reviewedMainSha:a.sha}));
+  console.log(JSON.stringify({...result,reviewedMainSha:a.sha,primaryDeadlineProfile:a.primaryDeadlineProfile}));
   const primaryHold=result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||
     result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0;
   if(primaryHold)process.exitCode=2;
