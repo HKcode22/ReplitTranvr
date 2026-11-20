@@ -25,11 +25,13 @@ const validPassword=s=>typeof s==="string"&&/^[A-Za-z0-9_-]{48}$/.test(s);
 async function privileges(c,a,login){
  const q=(await c.query(`SELECT r.rolcanlogin login,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolreplication,r.rolbypassrls,r.rolinherit,
  EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) member,
+ EXISTS(SELECT 1 FROM pg_auth_members m JOIN pg_roles member ON member.oid=m.member JOIN pg_roles grantor ON grantor.oid=m.grantor
+ WHERE m.roleid=r.oid AND NOT(member.rolname='neondb_owner' AND grantor.rolsuper AND m.admin_option AND NOT m.inherit_option AND NOT m.set_option)) unexpected_member,
  has_schema_privilege(r.oid,'phase7_private','USAGE') usage,has_schema_privilege(r.oid,'phase7_private','CREATE') can_create,
  has_database_privilege(r.oid,current_database(),'CREATE') db_create,
  has_database_privilege(r.oid,current_database(),'CONNECT') can_connect
  FROM pg_roles r WHERE r.rolname=$1`,[a.role])).rows;
- if(q.length!==1||q[0].login!==login||q[0].usage!==true||(login&&q[0].can_connect!==true)||["rolsuper","rolcreaterole","rolcreatedb","rolreplication","rolbypassrls","rolinherit","member","can_create","db_create"].some(k=>q[0][k]!==false))hold("ROLE_BOUNDARY");
+ if(q.length!==1||q[0].login!==login||q[0].usage!==true||(login&&q[0].can_connect!==true)||["rolsuper","rolcreaterole","rolcreatedb","rolreplication","rolbypassrls","rolinherit","member","unexpected_member","can_create","db_create"].some(k=>q[0][k]!==false))hold("ROLE_BOUNDARY");
  const table=(await c.query(`SELECT t.relname,has_any_column_privilege($1,t.oid,'SELECT') r,
  has_any_column_privilege($1,t.oid,'INSERT') i,has_any_column_privilege($1,t.oid,'UPDATE,REFERENCES') u,
  has_table_privilege($1,t.oid,'DELETE,TRUNCATE,TRIGGER') d FROM pg_class t JOIN pg_namespace s ON s.oid=t.relnamespace

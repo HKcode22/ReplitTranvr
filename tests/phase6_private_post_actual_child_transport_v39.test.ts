@@ -172,3 +172,30 @@ describe("native POST binding is carried into original actual PRE check",()=>{
   expect(()=>bind({anchorBoundPreRetentionNotAfterUtc:"2027-02-10T12:59:00.000Z"})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
  });
 });
+
+import {admitPhase7ProtectedPostResolver,openPhase7ProtectedPostConsumer,P7_POST_ACTORS} from "../server/lib/disruption/phase7ProtectedPostResolver_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+describe("exact protected research storage POST resolver",()=>{
+ const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
+ function protectedEnv(){
+  const e=env(),outcome=key(),pre=key(),manifest=sha("manifest"),rights=sha("rights");
+  e.V39_P5_MANIFEST_SHA256=manifest;e.V39_P5_RIGHTS_SHA256=rights;
+  const stable=JSON.parse(Buffer.from(e.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64!,"base64").toString());
+  e.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64=b64({...stable,manifestSha256:manifest,rightsSha256:rights});
+  const contract={sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z"},profile={mappingExpiryHours:24},dispositions=[];
+  const review={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:manifest,rightsSha256:rights,contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:contract.researchExpiryUtc,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const reviewSha256=hashPhase7DurableCandidate(review);
+  return {...e,P6_PHASE7_POST_STORAGE_APPROVED:"1",P6_PHASE7_PRE_POLICY_BASE64:b64({contract,profile,dispositions,review,reviewSha256}),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:reviewSha256,P6_PHASE7_POST_CONTRACT_SHA256:review.contractSha256,P6_PHASE7_POST_PROFILE_SHA256:review.profileSha256,P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha("post policy"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:pre.fp,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:outcome.fp,P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(outcome.pem).toString("base64"),...Object.fromEntries(Object.values(P7_POST_ACTORS).map(a=>[a.secret,"postgresql://"+a.role+":fixture@ep-test.neon.tech/neondb?sslmode=verify-full"]))};
+ }
+ it("matches existing exact role credentials and reuses the PRE dictionary without exposing URL or policy bytes",async()=>{
+  const e=protectedEnv(),r=admitPhase7ProtectedPostResolver(e);
+  expect(r.providerCalls).toBe(0);expect(JSON.stringify(r)).not.toMatch(/postgresql|fixture|contract/);
+  const transport={preflight:async()=>({providerCalls:0 as const,writeAuthority:false as const,independentReviewerAvailable:true as const}),readExactReview:async()=>{throw Error("fixture transport never called")}};
+  const x=openPhase7ProtectedPostConsumer(e,transport);expect(x.consumer.policySha256).toBe(e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256);await x.close();
+ });
+ it("rejects missing authority, wrong endpoint, broader role, native key alias and an uncommissioned port",()=>{
+  const e=protectedEnv();
+  for(const delta of [{P6_PHASE7_POST_STORAGE_APPROVED:"0"},{P6_PHASE7_POST_CONTRACT_SHA256:sha("different")},{P6_PHASE7_POST_SCOPED_DATABASE_URL:e.P6_PHASE7_POST_SCOPED_DATABASE_URL.replace("ep-test","ep-other")},{P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:e.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL},{P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:p.fp},{P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64:"forbidden"}])expect(()=>admitPhase7ProtectedPostResolver({...e,...delta})).toThrow();
+  expect(()=>openPhase7ProtectedPostConsumer(e,undefined as any)).toThrow("INDEPENDENT_TRANSPORT_UNCOMMISSIONED");
+ });
+});

@@ -35,6 +35,9 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
    const owner=await pool.connect(),passwords=Object.fromEntries(P7_PRESERVATION_ACTORS.map((a,i)=>[a.role,String(i+1).repeat(48)]));
    try{
     expect(await inspectP7PreservationActors(owner,{newLogins:false})).toMatchObject({preservationLogins:0,expiryLogins:2});
+    await owner.query("CREATE ROLE p7_ci_unexpected_member NOLOGIN; GRANT "+P7_INERT_ROLES.bundleReader+" TO p7_ci_unexpected_member");
+    try{await expect(inspectP7PreservationActors(owner,{newLogins:false})).rejects.toThrow("ROLE_BOUNDARY");}
+    finally{await owner.query("REVOKE "+P7_INERT_ROLES.bundleReader+" FROM p7_ci_unexpected_member; DROP ROLE p7_ci_unexpected_member");}
     let called=0;
     await expect(commissionP7PreservationActors(owner,passwords,async c=>{await disposableGuard(c);if(++called===2)throw Error("rollback fixture");})).rejects.toThrow("rollback fixture");
     expect(await inspectP7PreservationActors(owner,{newLogins:false})).toMatchObject({preservationLogins:0});
