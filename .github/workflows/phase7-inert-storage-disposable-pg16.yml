@@ -10,6 +10,9 @@ on:
       - 'server/lib/disruption/phase7ExpiryRunner_v39.ts'
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase7_inert_storage_commission_v39.test.ts'
+      - 'tests/phase7_pre_policy_owner_scope_v39.test.ts'
+      - 'review-tools/p7_commission_pre_policy_owner_v39.ts'
+      - 'server/lib/disruption/phase7PrePolicyCommission_v39.ts'
       - 'data-collection/phase5/review-tools/p7_*_candidate_NOT_FOR_INSTALL.sql'
       - '.github/workflows/phase7-inert-storage-disposable-pg16.yml'
 permissions:
@@ -45,4 +48,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '20', cache: npm}
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts
+      - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts tests/phase7_pre_policy_owner_scope_v39.test.ts
