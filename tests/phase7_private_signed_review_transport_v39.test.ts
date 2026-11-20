@@ -35,6 +35,9 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
  expect(()=>verifyP7StoredWire(trust,f.a,wire(f.prePayload,post),f.clock)).toThrow("SIGNATURE");
  expect(()=>verifyP7StoredWire(trust,f.a,wire({...f.prePayload,manifestSha256:h("foreign")},pre),f.clock)).toThrow("EXACT_SIGNED_SCOPE");
  expect(()=>verifyP7StoredWire(trust,f.b,f.bw,f.validUntilUtc)).toThrow("LIVE_REVIEW");
+ expect(verifyP7StoredWire(trust,f.b,f.bw,f.clock).storageKind).toBe("PHASE7_RECOVERY_RECEIPT");
+ expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,flightInstanceId:"unexpected source content"},post),f.clock)).toThrow("RECOVERY_METADATA_ONLY");
+ expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,originalAuditSha256:"not-a-digest"},post),f.clock)).toThrow("RECOVERY_METADATA_ONLY");
  expect(()=>verifyP7StoredWire(trust,{...f.c,scopeSha256:h("wrong")},f.cw,f.clock)).toThrow("EXACT_SIGNED_SCOPE");
  expect(()=>verifyP7StoredWire({...trust,env:{...trust.env,P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"0"}},f.a,f.aw,f.clock)).toThrow("PROTECTED_STUDY");
 });
@@ -55,7 +58,8 @@ active("real private custody signed-review transport",()=>{
     await expect(publishP7PrivateSignedReviewOnce(args)).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
    }
    expect([...(await readP7PrivateSignedReviews(reader,trust,[f.a,f.b,f.c])).values()]).toEqual([f.aw,f.bw,f.cw]);
-   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind='PHASE7_SIGNED_REVIEW' AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
+   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
+   const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') GROUP BY kind ORDER BY kind");expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
    await expect(readP7PrivateSignedReviews(reader,trust,[{...f.a,scopeSha256:h("absent")}])).rejects.toThrow("MISSING_EXACT_REVIEW_NO_FALLBACK");
    await expect(readP7PrivateSignedReviews(publisher,trust,[f.a])).rejects.toThrow();
    await expect(publisher.query("UPDATE phase6_private.frozen_native_packet_v39 SET retention_not_after_utc=clock_timestamp()+interval '1 day' WHERE logical_path=$1",[p7ReviewPath(f.a)])).rejects.toThrow();

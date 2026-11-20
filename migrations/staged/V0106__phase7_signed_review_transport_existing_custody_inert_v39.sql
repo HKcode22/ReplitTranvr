@@ -32,7 +32,7 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
  ADD CONSTRAINT p6_v0101_kind_allowed CHECK (kind IN (
   'SOURCE_DAY_REGISTRY','SOURCE_QUERY_PACKET','LATER_PRE_PACKET',
   'LATER_PRE_DAY_REGISTRY','POST_PACKET','SOURCE_DAY_PREPARE_REVIEW',
-  'T24_PRE_PACKET','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_FENCE')),
+  'T24_PRE_PACKET','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT','PHASE7_RECOVERY_FENCE')),
  ADD CONSTRAINT p6_v0101_kind_path_guard CHECK (
   (kind='SOURCE_DAY_REGISTRY' AND logical_path ~ '^data-collection/phase5/frozen/source_[A-Za-z0-9_.-]{8,125}\.json$') OR
   (kind='SOURCE_QUERY_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/sourceq_[A-Za-z0-9_.-]{8,110}\.json$') OR
@@ -41,7 +41,7 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
   (kind='T24_PRE_PACKET' AND logical_path ~ '^data-collection/phase5/frozen/t24p_[A-Za-z0-9_-]{8,100}\.json$') OR
   (kind='T24_PRE_DAY_REGISTRY' AND logical_path ~ '^data-collection/phase5/frozen/t24r_[A-Za-z0-9_-]{8,100}\.json$') OR
   (kind='T24_WITNESS_RECEIPT_CANDIDATE' AND shard_index=1 AND logical_path ~ '^data-collection/phase5/frozen/t24w_[a-f0-9]{64}\.json$') OR
-  (kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_FENCE') AND shard_index=1 AND logical_path ~ '^data-collection/phase5/frozen/p7review_[a-f0-9]{64}\.json$') OR
+  (kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT','PHASE7_RECOVERY_FENCE') AND shard_index=1 AND logical_path ~ '^data-collection/phase5/frozen/p7review_[a-f0-9]{64}\.json$') OR
   (kind='SOURCE_DAY_PREPARE_REVIEW' AND shard_index=1 AND logical_path=
     'data-collection/phase5/frozen/prepare_d'||run_day_index::text||'_'||manifest_sha256||'.json')),
  ADD CONSTRAINT p6_v0101_bytes_guard CHECK (
@@ -54,9 +54,18 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
     AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
   (kind='T24_PRE_PACKET' AND review_wire_bytes IS NULL AND retention_not_after_utc<=externally_reviewed_at_utc+interval '7 days') OR
   (kind='PHASE7_SIGNED_REVIEW' AND review_wire_bytes IS NULL AND retention_not_after_utc<=externally_reviewed_at_utc+interval '24 hours') OR
+  -- Distinguish operational metadata from source-bearing settlement wires.
+  -- SQL enforces the bounded recovery shape as well as the JS signer/readback.
+  (kind='PHASE7_RECOVERY_RECEIPT' AND review_wire_bytes IS NULL AND octet_length(payload_bytes)<=8192
+    AND retention_not_after_utc<=externally_reviewed_at_utc+interval '2 minutes'
+    AND coalesce((convert_from(payload_bytes,'UTF8')::jsonb - 'payloadBase64' - 'signatureBase64')='{}'::jsonb,false)
+    AND coalesce(jsonb_typeof(convert_from(payload_bytes,'UTF8')::jsonb->'payloadBase64')='string',false)
+    AND coalesce(jsonb_typeof(convert_from(payload_bytes,'UTF8')::jsonb->'signatureBase64')='string',false)
+    AND coalesce((convert_from(decode(convert_from(payload_bytes,'UTF8')::jsonb->>'payloadBase64','base64'),'UTF8')::jsonb - 'schema' - 'policySha256' - 'committedScopeSha256' - 'originalAuditSha256' - 'originalAuditAtUtc' - 'originalAvailableAtUtc' - 'reviewedAtUtc' - 'validUntilUtc')='{}'::jsonb,false)
+    AND coalesce(convert_from(decode(convert_from(payload_bytes,'UTF8')::jsonb->>'payloadBase64','base64'),'UTF8')::jsonb->>'schema'='v39.phase7.committed-post-recovery-receipt.v2',false)) OR
   (kind='PHASE7_RECOVERY_FENCE' AND review_wire_bytes IS NULL AND octet_length(payload_bytes)<=512
     AND external_review_sha256=content_sha256 AND retention_not_after_utc<=externally_reviewed_at_utc+interval '10 minutes') OR
-  (kind NOT IN ('SOURCE_DAY_PREPARE_REVIEW','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','T24_PRE_PACKET','PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_FENCE') AND
+  (kind NOT IN ('SOURCE_DAY_PREPARE_REVIEW','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','T24_PRE_PACKET','PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT','PHASE7_RECOVERY_FENCE') AND
    (review_wire_bytes IS NULL OR
     (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
 DO $postflight$

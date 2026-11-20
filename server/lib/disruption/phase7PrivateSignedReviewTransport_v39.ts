@@ -1,8 +1,10 @@
 /** Concrete immutable signed-review transport using the existing phase6_private
  * custody, V0106 staged constraint extension. No source data fetch, no new
  * signature, no paid retry or implicit policy approval. Exact wire validity
- * and source expiry are distinct: no read after the signed validUntil, and
- * no physical retention after that instant is authorized by this adapter.
+ * and source expiry are distinct. Recovery wires and fences are operational
+ * digest/clock metadata, not reusable source Contents or research outcomes.
+ * Their signed access cutoff remains unchanged; cleanup is due immediately
+ * at the cutoff. No legal retention extension or proof of physical purge.
  */
 import {createHash,createPublicKey,verify} from "node:crypto";
 import {Client} from "pg";
@@ -72,11 +74,13 @@ export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unkno
  if(from>now||now>=until||until-from>(s.kind==="PRE_PROOF"?86400000:s.kind==="POST_SETTLEMENT"?21600000:600000))hold("LIVE_REVIEW");
  // The receipt remains valid at most two minutes. The separate issuance
  // fence contains only bounded operational metadata, not the signed wire.
+ if(s.kind==="POST_RECOVERY"&&(!exact(x,["schema","policySha256","committedScopeSha256","originalAuditSha256","originalAuditAtUtc","originalAvailableAtUtc","reviewedAtUtc","validUntilUtc"])||
+  ![x.policySha256,x.committedScopeSha256,x.originalAuditSha256].every(digest)))hold("RECOVERY_METADATA_ONLY");
  const originalAvailable=s.kind==="POST_RECOVERY"?at(x.originalAvailableAtUtc):null;
  if(originalAvailable!==null&&(originalAvailable>at(x.originalAuditAtUtc)||at(x.originalAuditAtUtc)>from||until-from>120000||until>originalAvailable+600000))hold("RECOVERY_ORIGINAL_WINDOW");
  const bytes=Buffer.from(JSON.stringify(w));
  if(bytes.length<100||bytes.length>65000)hold("BYTES");
- return {path,wire:Object.freeze({...w}),bytes,contentSha256:sha(bytes),externalReviewSha256:sha(raw),reviewedAtUtc:reviewed,validUntilUtc:x.validUntilUtc as string,recoveryFenceUntilUtc:originalAvailable===null?null:new Date(originalAvailable+600000).toISOString()};
+ return {path,wire:Object.freeze({...w}),bytes,contentSha256:sha(bytes),externalReviewSha256:sha(raw),reviewedAtUtc:reviewed,validUntilUtc:x.validUntilUtc as string,recoveryFenceUntilUtc:originalAvailable===null?null:new Date(originalAvailable+600000).toISOString(),storageKind:s.kind==="POST_RECOVERY"?"PHASE7_RECOVERY_RECEIPT":"PHASE7_SIGNED_REVIEW"};
 }
 /** Separate path domain; the marker is not a scientific result or a receipt. */
 export function p7RecoveryFencePath(s:P7ReviewSelector){
@@ -90,7 +94,7 @@ function recoveryFence(s:P7ReviewSelector,w:ReturnType<typeof verifyP7StoredWire
  return {path:p7RecoveryFencePath(s),bytes,contentSha256:sha(bytes),until:w.recoveryFenceUntilUtc};
 }
 async function checkInstalled(c:DB){
- const z=await c.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid=$1::regclass AND convalidated AND conname='p6_v0101_kind_allowed' AND pg_get_constraintdef(oid) LIKE '%PHASE7_SIGNED_REVIEW%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_FENCE%'",[TABLE]);
+ const z=await c.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid=$1::regclass AND convalidated AND conname='p6_v0101_kind_allowed' AND pg_get_constraintdef(oid) LIKE '%PHASE7_SIGNED_REVIEW%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_FENCE%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_RECEIPT%'",[TABLE]);
  if(z.rowCount!==1||z.rows[0]?.n!==1)hold("SCHEMA_NOT_COMMISSIONED");
 }
 async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector[],clock:string){
@@ -111,7 +115,7 @@ async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector
  const results=new Map<string,P7Wire>();
  for(let i=0;i<selectors.length;i++){
   const hits=z.rows.filter((v:any)=>v.logical_path===paths[i]),v=hits[0],s=selectors[i];
-  if(hits.length!==1||v.kind!=="PHASE7_SIGNED_REVIEW"||v.run_day_index!==s.runDayIndex||v.shard_index!==1||
+  if(hits.length!==1||v.kind!==(s.kind==="POST_RECOVERY"?"PHASE7_RECOVERY_RECEIPT":"PHASE7_SIGNED_REVIEW")||v.run_day_index!==s.runDayIndex||v.shard_index!==1||
      v.reviewed_code_sha!==e.GITHUB_SHA||v.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
      v.review_wire_bytes!==null||!Buffer.isBuffer(v.payload_bytes)||v.payload_bytes.length>65000)hold("ROW_SCOPE");
   const w=verifyP7StoredWire(t,s,JSON.parse(v.payload_bytes.toString("utf8")),clock);
@@ -159,7 +163,7 @@ export async function publishP7PrivateSignedReviewOnce(input:{client:DB;reader:D
   const f=s.kind==="POST_RECOVERY"?recoveryFence(s,w):null;
   const q=await c.query("SELECT count(*)::int AS n FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[f?[w.path,f.path]:[w.path]]);
   if(q.rowCount!==1||q.rows[0]?.n!==0)hold("ALREADY_PRESENT_READ_ONLY_RECONCILE");
-  const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',$2,1,$3,$4,$5,$6,$7,$8,$9,$10,NULL)",[w.path,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes]);
+  const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,NULL)",[w.path,w.storageKind,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes]);
   if(z.rowCount!==1)hold("INSERT_COUNT");
   // Atomic with the immutable receipt: a committed fence survives physical
   // deletion of the short-lived proof until the original read window closes.
