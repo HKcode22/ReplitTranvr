@@ -13,6 +13,10 @@ on:
       - 'data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json'
       - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
       - 'scripts/v39_phase6_actual_release_candidate_export_v39.ts'
+      - 'scripts/v39_phase6_revised_stage_executable_bridge_v39.ts'
+      - 'review-tools/p6_nov20_finalize_recovered_policies_v39.ts'
+      - 'tests/phase6_revised_stage_executable_bridge_v39.test.ts'
+      - 'tests/phase6_revised_static_policy_values_v39.test.ts'
 permissions:
   contents: read
 jobs:
@@ -36,7 +40,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts
+      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts tests/phase6_revised_stage_executable_bridge_v39.test.ts tests/phase6_revised_static_policy_values_v39.test.ts
       - name: Produce exact metadata-only review packet, not a runnable release
         run: |
           set -Eeuo pipefail
