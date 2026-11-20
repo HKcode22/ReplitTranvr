@@ -16,14 +16,11 @@ import type {Pool,PoolClient} from "pg";
 // integration tests below; keep this bridge narrow instead of widening the global
 // legacy declaration surface.
 // @ts-ignore legacy runtime ESM export exists and is exercised in PG16 CI.
-import {compileP5InertB0062UtcStagePacket} from
- "./phase5B0062InertCalendarUtcBudgetStage_v39.mjs";
+import {compileP5InertB0062UtcStagePacket} from "./phase5B0062InertCalendarUtcBudgetStage_v39.mjs";
 // @ts-ignore legacy runtime ESM module has no complete declaration file.
-import {compileP5V0093CostOnlySevenRestReview} from
- "./phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {compileP5V0093CostOnlySevenRestReview} from "./phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 // @ts-ignore legacy runtime ESM module has no complete declaration file.
-import {inspectP5V0093IndependentExactPostStage} from
- "./phase5V0093IndependentPostStageReadback_v39.mjs";
+import {inspectP5V0093IndependentExactPostStage} from "./phase5V0093IndependentPostStageReadback_v39.mjs";
 
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
