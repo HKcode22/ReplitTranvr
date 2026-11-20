@@ -230,11 +230,12 @@ export function openP7PrivateSignedReviewReader(env:NodeJS.ProcessEnv){
  * for lane receipt. Weather artifacts require a separately verified public
  * archive; optional absence cannot be made into evidence for a present field. */
 export function openP7StoredPreLaneArchivePort(env:NodeJS.ProcessEnv,publicWeatherPort?:{
- readExactReviewedWeatherArtifacts(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<readonly import("./phase7IndependentNoaaReceipt_v39").P7SignedPublicNoaaArtifact[]>
+ readExactReviewedWeatherArtifacts(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<readonly import("./phase7IndependentNoaaReceipt_v39").P7SignedPublicNoaaArtifact[]>;
+ verifyExactWeatherSelection?(p:Readonly<P5Stage14SingleFlightPrePermit>,s:import("./phase7IndependentNoaaReceipt_v39").P7WeatherExactReadScope):Promise<readonly import("./phase7IndependentNoaaReceipt_v39").P7SignedPublicNoaaArtifact[]>;
 }){
  if([env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P6_PRIVATE_PUBLISHER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL].some(Boolean))hold("PRE_LANE_READER_SCOPE");
  const r=openP7PrivateSignedReviewReader(env);
- return {inspect:r.inspect,async readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
+ return {inspect:r.inspect,verifyExactWeatherSelection:publicWeatherPort?.verifyExactWeatherSelection,async readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
   const s=preLaneReceiptSelector(p);
   const wire=(await r.read([s])).get(s.scopeSha256);
   if(!wire)hold("MISSING_PRE_LANE_RECEIPT");
