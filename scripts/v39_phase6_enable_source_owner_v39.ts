@@ -388,8 +388,8 @@ async function main(){
    expectedOperationalEvidenceSha256:(exactAuth.record as any).releaseActivation.operationalReleaseEvidenceSha256,
    now:new Date(),stageIsAncestor:ancestor,reviewedCommitIsAncestor:reviewedAncestor,
    reviewedDiff:paths(reviewedCommit!),currentDiff:paths(head),
-   readReviewedBlob:p=>cmd("git",["rev-parse",reviewedCommit!+":"+p]),
-   readCurrentBlob:p=>cmd("git",["rev-parse",head+":"+p])});
+   readReviewedBlob:p=>cmd("git",["ls-tree",reviewedCommit!,"--",p]).split("\t")[0],
+   readCurrentBlob:p=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]});
  }else if(stageCode===POST_STAGE_REVIEWED_BRIDGE_STAGE&&head!==stageCode){
   const changed=cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
   const currentBridgeBlobs=Object.fromEntries(Object.keys(P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS).map(p=>
