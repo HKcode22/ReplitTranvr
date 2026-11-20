@@ -77,6 +77,12 @@ export interface P5EV0079BoundFeatureReadScope{
  expectedSelectedNativeTUtc:string;
  expectedForecastCutoffUtc:string;
  expectedOriginIcao:string;
+ /** Optional exact prospective permit provenance; legacy read-only callers
+  * remain unchanged. Never infer these values from a permit digest. */
+ permitSourceScope?:{
+  runDayIndex:number;slot:string;horizon:string;githubRunId:string;
+  releaseSha256:string;providerContractSha256:string;earlyDrawSha256:string;
+ };
  /** Already independently authenticated (not created by this function). */
  externalContentUseReviewSha256:string;
 }
@@ -90,6 +96,9 @@ export async function compileP5EOneBoundOriginalReadonly(
  phase5ScientificFreezePassed:false;phase6PaidGo:false;
  sourceRightsAuthenticatedHere:false;
  providerCalls:0;dbWrites:0;
+ readonly privateReadback?:Readonly<{
+  normalizedMember:Record<string,unknown>;observedDbClockUtc:string;sourceExpiresAtUtc:string;
+ }>;
 }>{
  if(!s||![s.manifestSha256,s.queryDigestSha256,
    s.expectedResponseSha256,s.expectedRightsReviewSha256,
@@ -168,6 +177,14 @@ export async function compileP5EOneBoundOriginalReadonly(
      time(raw.dep_scheduled_utc)!==target||
      time(raw.member_available_at)!==time(member.available_at))
    hold("V0079_ORIGINAL_NORMALIZED_IDENTITY_OR_LICENSE_DRIFT");
+  const permit=s.permitSourceScope;
+  if(permit&&(Number(src.run_day_index)!==permit.runDayIndex||src.slot_id!==permit.slot||
+     src.horizon!==permit.horizon||src.github_run_id!==permit.githubRunId||
+     src.attempt_run_id!==permit.githubRunId||src.reviewed_release_sha256!==permit.releaseSha256||
+     src.provider_contract_sha256!==permit.providerContractSha256||src.early_draw_sha256!==permit.earlyDrawSha256||
+     member.provider_content_expired_at_utc!==null||member.query_direction!=="Departure"||
+     target<time(src.service_window_start_utc)||target>=time(src.service_window_end_utc)))
+   hold("EXACT_PROSPECTIVE_PERMIT_SOURCE_SCOPE");
   if(time(src.source_expires_at_utc)<=dbNow||
      time(src.source_expires_at_utc)<=cutoff||
      time(raw.source_expires_at_utc)<=cutoff||
@@ -194,16 +211,28 @@ export async function compileP5EOneBoundOriginalReadonly(
    externallyReviewedSourceAndContentsSha256:
     s.externalContentUseReviewSha256
   });
+  // Observe a fresh database clock after actual original compilation, not
+  // merely transaction start. Do not emit the source member in JSON.
+  let privateReadback;
+  if(permit){
+   const z=(await c.query("SELECT clock_timestamp() AS at")).rows;
+   const observed=time(z[0]?.at);
+   if(z.length!==1||observed<dbNow||observed>=cutoff||observed>=time(src.source_expires_at_utc))
+    hold("FRESH_PERMIT_SOURCE_READBACK_CLOCK");
+   privateReadback=Object.freeze({normalizedMember:Object.freeze({...member}),
+    observedDbClockUtc:new Date(observed).toISOString(),sourceExpiresAtUtc:new Date(time(src.source_expires_at_utc)).toISOString()});
+  }
   await c.query("COMMIT");began=false;
-  return{
-   schema:"v39.phase5.e-readonly-bound-original-feature-compiler.v1",
-   status:"EXACT_SOURCE_COVERED_FEATURE_PACKET_DRAFT_NOT_SIGNED",
+  const out={
+   schema:"v39.phase5.e-readonly-bound-original-feature-compiler.v1" as const,
+   status:"EXACT_SOURCE_COVERED_FEATURE_PACKET_DRAFT_NOT_SIGNED" as const,
    bundle:compiled.bundle,
    evidencedFidsFields:compiled.evidencedFidsFields,
    missingFidsFields:compiled.missingFidsFields,
-   sourceRightsAuthenticatedHere:false,providerCalls:0,dbWrites:0,
-   phase5ScientificFreezePassed:false,phase6PaidGo:false
+   sourceRightsAuthenticatedHere:false as const,providerCalls:0 as const,dbWrites:0 as const,
+   phase5ScientificFreezePassed:false as const,phase6PaidGo:false as const
   };
+  return privateReadback?Object.freeze(Object.defineProperty(out,"privateReadback",{value:privateReadback,enumerable:false})):out;
  }catch(e){
   if(began)await c.query("ROLLBACK").catch(()=>{});
   throw e;

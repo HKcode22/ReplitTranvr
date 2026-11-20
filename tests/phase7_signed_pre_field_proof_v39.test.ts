@@ -84,3 +84,22 @@ describe("independent source-lane receipt into exact PRE proof",()=>{
   expect(()=>createPhase7IndependentPreProofPort({...x.args,forbiddenSignerFingerprints:[x.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256]})).toThrow("DISTINCT_PINNED_ISSUERS");
  });
 });
+
+import {recomputeP7ExactSelectedFeatures} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
+import type {P5EReviewedSupplementalBundle} from "../server/lib/disruption/phase5AmendmentESignedSupplementalFeatures_v39";
+describe("independent source reader exact Stage14 feature selection",()=>{
+ it("recomputes route and native source presence, rejects a signed permit that silently omits or alters a real field",()=>{
+  const flight="leg:synthetic-member",originalHash=h("source"),purpose=h("purpose"),query="12345678-1234-4123-8123-123456789abc",at="2027-01-02T05:00:00.000Z";
+  const observation={flightInstanceId:flight,field:"operating_carrier" as const,value:"SIA",source:"AERODATABOX_FIDS" as const,sourceRecordId:originalHash,observedAtUtc:at,availableAtUtc:at,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const};
+  const bundle=(observations:P5EReviewedSupplementalBundle["observations"]):P5EReviewedSupplementalBundle=>({schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:flight,populationQueryId:query,originalResponseSha256:originalHash,externalSourceAndContentsReviewReceiptSha256:purpose,fields:["operating_carrier","scheduled_arrival_utc","provider_revised_departure_utc","reported_pre_departure_status"],observations,observationsSha256:h(JSON.stringify(observations))});
+  const o=bundle([observation]),p={...fixture().p,flightInstanceId:flight,expectedSourcePopulationQueryId:query,expectedSourceResponseSha256:originalHash,airportIcao:"WSSS",reviewedSupplementalFeatureBundle:o};
+  const read={normalizedMember:{analytic_identity_id:flight,population_query_id:query,response_hash:originalHash,dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",available_at:new Date(at)},observedDbClockUtc:"2027-01-02T05:15:00.000Z",sourceExpiresAtUtc:"2027-01-02T09:00:00.000Z"};
+  const x=recomputeP7ExactSelectedFeatures(p,o,read,purpose);
+  expect(x.selectedCount).toBe(3);
+  expect(x.privateSelectedFeatures.filter(f=>f.value!==null).map(f=>f.featureName)).toEqual(["origin_icao","destination_icao","operating_carrier"]);
+  expect(JSON.stringify(x)).not.toContain("WSSS");
+  expect(()=>recomputeP7ExactSelectedFeatures({...p,reviewedSupplementalFeatureBundle:bundle([])},o,read,purpose)).toThrow("FIDS_FEATURE_DRIFT");
+  expect(()=>recomputeP7ExactSelectedFeatures({...p,reviewedSupplementalFeatureBundle:bundle([{...observation,value:"QFA"}])},o,read,purpose)).toThrow("FIDS_FEATURE_DRIFT");
+  expect(()=>recomputeP7ExactSelectedFeatures(p,o,{...read,sourceExpiresAtUtc:"2027-01-02T05:59:59.000Z"},purpose)).toThrow("LIVE_EXACT_ROUTE");
+ });
+});
