@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import pg from "pg";
+import {inspectP6PrivateDueGuardCatalog} from "../scripts/v39_phase6_private_due_guard_owner_v39.mjs";
 const url="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 const admitted=process.env.GITHUB_ACTIONS==="true"&&process.env.P6_PRIVATE_GUARD_DISPOSABLE_URL===url&&!process.env.DATABASE_URL&&!process.env.V39_DATABASE_RUNTIME_URL&&!process.env.AERODATABOX_API_KEY&&!process.env.RAPIDAPI_KEY;
 test("private due guard preserves V0104 and blocks both physical boundaries on every manifest (disposable PG16)",{skip:!admitted,timeout:40000},async()=>{
@@ -20,7 +21,15 @@ test("private due guard preserves V0104 and blocks both physical boundaries on e
   await c.query(readFileSync("migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql","utf8"));
   const old=(await c.query("SELECT prosrc,oid::text oid FROM pg_proc WHERE oid='clean.phase5_physical_rest_live_guard_v39()'::regprocedure")).rows[0];
   const candidate=readFileSync("data-collection/phase5/review-tools/p6_private_due_physical_rest_guard_candidate_NOT_FOR_INSTALL.sql","utf8");
+  const before=await inspectP6PrivateDueGuardCatalog(c,candidate);
+  assert.equal(before.installed,false);
   await c.query(candidate);
+  const after=await inspectP6PrivateDueGuardCatalog(c,candidate);
+  assert.deepEqual(after,{...before,installed:true});
+  await c.query("ALTER TABLE clean.phase5_fids_physical_attempt_v39 DISABLE TRIGGER a01_phase6_fids_private_due_guard_v39");
+  await assert.rejects(inspectP6PrivateDueGuardCatalog(c,candidate),/EXACT_TRIGGER_SCOPE/);
+  await c.query("ALTER TABLE clean.phase5_fids_physical_attempt_v39 ENABLE TRIGGER a01_phase6_fids_private_due_guard_v39");
+  assert.deepEqual(await inspectP6PrivateDueGuardCatalog(c,candidate),after);
   assert.deepEqual((await c.query("SELECT prosrc,oid::text oid FROM pg_proc WHERE oid='clean.phase5_physical_rest_live_guard_v39()'::regprocedure")).rows[0],old);
   assert.equal((await c.query("SELECT count(*)::int n FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O'")).rows[0].n,4);
   await c.query("UPDATE clean.adb_phase6_authorization SET enabled=true");

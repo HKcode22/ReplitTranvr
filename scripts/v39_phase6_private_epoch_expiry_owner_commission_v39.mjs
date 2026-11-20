@@ -21,7 +21,7 @@ const signatures=names.map((x,i)=>F+x+"_v39("+args[i]+")");
 const HOLD=x=>{throw Error("HOLD_P6_PRIVATE_EXPIRY_OWNER_"+x);};
 const digest=x=>createHash("sha256").update(x).digest("hex");
 const approval="COMMISSION_REVIEWED_V0105_EXISTING_FUNCTION_ACTORS_VERIFY_ONLY_NO_GO";
-async function catalog(c,sql,readonly){
+export async function inspectP6PrivateExpiryCatalog(c,sql,readonly){
  const a=(await c.query(`SELECT current_database() db,current_user actor,session_user login,
   current_setting('server_version_num')::int version,current_setting('transaction_read_only') ro,
   current_setting('session_replication_role') origin,pg_is_in_recovery() replica`)).rows[0];
@@ -87,7 +87,7 @@ export async function inspectP6PrivateExpiryOwner(c,sql=readFileSync(P6_PRIVATE_
  const primary=await inspectP5PrimaryExpiryOwner(c);
  if(primary.existingFunctions!==4||!primary.writerExists)HOLD("PRIMARY_NOT_COMMISSIONED");
  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
- try{await c.query("SET LOCAL statement_timeout='12000ms'");return await catalog(c,sql,true);}
+ try{await c.query("SET LOCAL statement_timeout='12000ms'");return await inspectP6PrivateExpiryCatalog(c,sql,true);}
  finally{await c.query("ROLLBACK");}
 }
 function body(sql){
@@ -109,14 +109,14 @@ export async function commissionP6PrivateExpiryDb(c,sql,expected){
   // Stop collection/publication transition; no locks on raw FIDS or reader.
   await c.query("LOCK TABLE clean.adb_phase6_authorization,clean.adb_collection_batches,clean.adb_collection_segments,clean.adb_collection_subs,clean.adb_incident_stop,phase6_private.frozen_native_packet_v39,phase6_private.signed_run_day_index_revision_v39,phase6_private.signed_run_day_epoch_claim_v39 IN SHARE ROW EXCLUSIVE MODE");
   await c.query("SELECT pg_advisory_xact_lock(390015,106)");
-  const locked=await catalog(c,sql,false);
+  const locked=await inspectP6PrivateExpiryCatalog(c,sql,false);
   if(JSON.stringify(locked)!==JSON.stringify(before))HOLD("LOCKED_SCOPE_CHANGED");
   if(before.privateState==="ABSENT")await c.query(body(sql));
-  const inert=await catalog(c,sql,false);
+  const inert=await inspectP6PrivateExpiryCatalog(c,sql,false);
   if(inert.privateState!=="INERT")HOLD("INERT_STATE_REQUIRED");
   await c.query("GRANT EXECUTE ON FUNCTION "+signatures.slice(0,2).join(",")+" TO "+R);
   await c.query("GRANT EXECUTE ON FUNCTION "+signatures.slice(2).join(",")+" TO "+W);
-  const after=await catalog(c,sql,false);
+  const after=await inspectP6PrivateExpiryCatalog(c,sql,false);
   if(JSON.stringify(after)!==JSON.stringify({...before,privateState:"GRANTED"}))HOLD("IN_TRANSACTION_SCOPE_DRIFT");
   commitAttempted=true;await c.query("COMMIT");active=false;
   return {status:"PRIVATE_EXPIRY_FUNCTIONS_GRANTED_COMMIT_ACKNOWLEDGED",functionsInstalled:before.privateState==="ABSENT"?4:0,
@@ -128,7 +128,7 @@ export async function commissionP6PrivateExpiryDb(c,sql,expected){
  }
 }
 const run=(cmd,args)=>execFileSync(cmd,args,{encoding:"utf8",timeout:15000,stdio:["ignore","pipe","ignore"],maxBuffer:2*1024*1024}).trim();
-function repoState(){
+export function readP6PrivateExpiryOwnerRepoState(){
  const pin=process.env.P6_PRIVATE_EXPIRY_OWNER_APPROVED_MAIN_SHA??"";
  if(!/^[a-f0-9]{40}$/.test(pin)||run("git",["rev-parse","HEAD"])!==pin||
     run("git",["status","--porcelain","--untracked-files=no"])||
@@ -151,7 +151,7 @@ async function main(){
     e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||e.V39_PHASE6_OWNER_APPROVED!=="0"||
     e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||e.AERODATABOX_API_KEY||e.RAPIDAPI_KEY||e.AERODATABOX_WEBHOOK_SECRET||
     !e.DATABASE_URL||e.V39_DATABASE_RUNTIME_URL)HOLD("OWNER_LOCAL_NONPAID_ONLY");
- const config=repoState(),u=new URL(e.DATABASE_URL);
+ const config=readP6PrivateExpiryOwnerRepoState(),u=new URL(e.DATABASE_URL);
  if(!["postgres:","postgresql:"].includes(u.protocol)||decodeURIComponent(u.username)!=="neondb_owner"||
     !u.password||u.pathname!=="/neondb"||!u.hostname.endsWith(".neon.tech")||u.hash||
     !["require","verify-full"].includes(u.searchParams.get("sslmode"))||
@@ -169,11 +169,11 @@ async function main(){
    return;
   }
   if(e.P6_PRIVATE_EXPIRY_OWNER_APPROVAL!==approval||e.P6_PRIVATE_EXPIRY_OWNER_REVIEW_SHA256!==reviewSha256||
-    JSON.stringify(repoState())!==JSON.stringify(config))HOLD("EXACT_EXPLICIT_REVIEW_REQUIRED");
+    JSON.stringify(readP6PrivateExpiryOwnerRepoState())!==JSON.stringify(config))HOLD("EXACT_EXPLICIT_REVIEW_REQUIRED");
   const result=await commissionP6PrivateExpiryDb(c,sql,before);
   const after=await inspectP6PrivateExpiryOwner(c,sql);
   if(after.privateState!=="GRANTED")HOLD("COMMITTED_OWNER_READBACK_DRIFT_NO_REPLAY");
-  if(JSON.stringify(repoState())!==JSON.stringify(config))HOLD("CONFIG_CHANGED_AFTER_COMMIT_NO_REPLAY");
+  if(JSON.stringify(readP6PrivateExpiryOwnerRepoState())!==JSON.stringify(config))HOLD("CONFIG_CHANGED_AFTER_COMMIT_NO_REPLAY");
   console.log(JSON.stringify({...result,reviewedMainSha:config.pin,reviewSha256,ownerReadback:after.privateState,
    independentRestrictedGithubVerifyStillRequired:true,privateApplyEnabled:false}));
  }finally{await c.end().catch(()=>{});}
