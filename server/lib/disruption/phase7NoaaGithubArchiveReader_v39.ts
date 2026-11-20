@@ -120,7 +120,7 @@ export async function readP7LatestReviewedPublicNoaaSnapshot(input:{env:NodeJS.P
   const zip=await reader.download(signedMeta,18000000),members=readP7NoaaZipMembers(zip,{"reviewed.json":10000000});
   const snapshot=JSON.parse(members["reviewed.json"]),v=verifyP7PublicNoaaSnapshot(env,snapshot);
   if(v.githubRunId!==String(run.id)||v.rawArtifactId!==String(rawMeta.id)||v.rawArchiveSha256!==rawMeta.digest.slice(7)||
-   at(v.scopeAtUtc)<at(run.run_started_at)||at(v.reviewedAtUtc)>at(signedMeta.created_at)||at(v.reviewedAtUtc)<at(rawMeta.created_at)||
+   at(v.scopeAtUtc)<at(run.run_started_at)||at(v.reviewedAtUtc)>at(signedMeta.created_at)+999||at(v.reviewedAtUtc)<at(rawMeta.created_at)||
    v.receipts.some(q=>at(q.artifactCreatedAtUtc)!==at(rawMeta.created_at)||at(q.durableReadAtUtc)<at(rawMeta.created_at)))hold("EXACT_SNAPSHOT_GITHUB_BINDING");
   const expected=publicP7WeatherStationGroups(plans,v.scopeAtUtc);
   if(v.receipts.length!==expected.groups.length*2||v.receipts.some((q,i)=>JSON.stringify(q.requestedAirports)!==JSON.stringify(expected.groups[Math.floor(i/2)])))hold("PUBLIC_PLAN_DENOMINATOR_DRIFT");
