@@ -182,7 +182,8 @@ async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
   const cycle=await one(
    "SELECT manifest_sha256,cycle_api_ceiling,other_category_reserved_units,"+
    "protected_api_floor_units,physically_reserved_units "+
-   "FROM clean.phase5_fids_cycle_budget_v39"
+   "FROM clean.phase5_fids_cycle_budget_v39 WHERE manifest_sha256=$1",
+   [c.manifestSha256]
   );
   if(cycle.manifest_sha256!==c.manifestSha256||
      !equalNum(cycle.cycle_api_ceiling,c.cycleApiCeiling)||
@@ -193,7 +194,8 @@ async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
   const utc=await fetch(
    "SELECT manifest_sha256,charge_day_utc,daily_api_ceiling,"+
    "daily_other_reserved_units,physically_reserved_units "+
-   "FROM clean.phase5_fids_utc_charge_budget_v39 ORDER BY charge_day_utc"
+   "FROM clean.phase5_fids_utc_charge_budget_v39 WHERE manifest_sha256=$1 ORDER BY charge_day_utc",
+   [c.manifestSha256]
   );
   const reviewDates=new Map(c.days.map(d=>[d.chargeDayUtc,d]));
   if(utc.length!==c.days.length)deny("PHYSICAL_UTC_DAY_COUNT_MISMATCH");
@@ -248,7 +250,8 @@ async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
    deny("TYPED_COST_ONLY_RELEASE_NOT_IDENTICAL");
   const caps=await fetch(
    "SELECT manifest_sha256,category,ceiling_units "+
-   "FROM clean.phase5_fids_cycle_rest_category_cap_v39 ORDER BY category"
+   "FROM clean.phase5_fids_cycle_rest_category_cap_v39 WHERE manifest_sha256=$1 ORDER BY category",
+   [c.manifestSha256]
   );
   const capMap=new Map(c.categoryCaps.map(r=>[r.category,r.ceilingUnits]));
   if(caps.length!==7||new Set(caps.map(r=>r.category)).size!==7||
@@ -258,7 +261,8 @@ async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
   const categories=await fetch(
    "SELECT manifest_sha256,charge_day_utc,category,planned_units,"+
    "physically_reserved_units FROM clean.phase5_fids_utc_rest_category_budget_v39 "+
-   "ORDER BY charge_day_utc,category"
+   "WHERE manifest_sha256=$1 ORDER BY charge_day_utc,category",
+   [c.manifestSha256]
   );
   const expectedCategory=new Map(c.days.flatMap(d=>d.categoryRows.map(r=>
     [d.chargeDayUtc+":"+r.category,r.plannedUnits])));
