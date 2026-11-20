@@ -18,9 +18,11 @@ The run may start only when every required item below is `PASS`, the approval le
 |---|---|---|
 | Main SHA observed before this worksheet refresh | `8fc779dc2ebad4bba96c24e64e0c88a79b7be9cb` | PASS for documentation state; reread at GO |
 | Phase 5 freeze | Recorded as complete/inert | PASS for freeze; not paid authorization |
-| Source-use/retention rights | No account-specific approval recorded | **MISSING** |
-| Provider reply | No reply to the Nov 18 follow-up | INFORMATIONAL; not approval and not an engineering hold |
+| Account identity/quota evidence | Legacy RapidAPI Team Ultra, owner-attested $32 renewal, observed 60,000 units, separate 50,000-unit project ceiling, 1,830 Alert credits, Nov 18 readback | **COMPLETE as account evidence** |
+| 31-day linked-record/backup retention classification | Full operational fields are required; exact account/purpose/backup treatment is not yet mapped field-by-field | **REVIEW_REQUIRED** |
+| Provider reply | No reply to the Nov 18 follow-up | INFORMATIONAL; not an engineering hold and not permission |
 | Approval ledger | 28 evidence records; 0 approvals | **NO_GO** |
+| Phase 6 operational field set | Flight/leg IDs, airports, carriers, routes, exact timestamps, PRE/POST bindings remain required | **PRESERVED** |
 | Reviewed derived transformation profile | Candidate dictionary is `PROPOSED_REVIEW_REQUIRED` | **MISSING** |
 | Source-enable/readback | Not executed for Phase 6 | **MISSING** |
 | Relay repin | Blocked by missing Phase 6 AUTH | **MISSING** |
@@ -33,28 +35,32 @@ The run may start only when every required item below is `PASS`, the approval le
 
 ### A. Account-specific source-use and retention
 
-- [ ] Current AeroDataBox/RapidAPI account and plan identified without exposing a credential.
-- [ ] Paid/commercial use is evidenced for the exact account.
-- [ ] Retention allowance is evidenced for the exact plan/account.
-- [ ] Cache-Control behavior and maximum applicable retention are recorded.
-- [ ] Backup, PITR, replica, log, artifact, and incidental-copy treatment is recorded.
-- [ ] PRE, POST, target labels, and derived packet use are covered.
-- [ ] The exact account-specific evidence is committed to the private evidence path and referenced by SHA.
+**Already complete and recorded:** account identity/quota evidence is in the repository. Do not repeat the account checker merely to rediscover Team Ultra, the $32 renewal, 60,000 observed units, the separate 50,000-unit project ceiling, or the 1,830 Alert credits.
 
-**Result:** `MISSING` until the above are complete.
+Remaining field-level classification:
 
-### B. Field-level derived transformation
+- [ ] Confirm the exact purpose/plan clause governing the linked operational fields.
+- [ ] Confirm whether the full study lifecycle is permitted for flight/leg IDs, airports, carriers, routes, exact timestamps, PRE/POST values, and source bindings.
+- [ ] Confirm Cache-Control and the maximum applicable source-content lifetime.
+- [ ] Confirm backup, PITR, replica, log, artifact, and incidental-copy treatment.
+- [ ] Confirm whether the derived/model packet qualifies for a distinct lifecycle.
+- [ ] Bind the decision to the actual account observation and exact field dictionary.
 
-- [ ] The exact output dictionary is frozen.
-- [ ] Every output field has source family, transformation, buckets/categories, null state, and reconstruction-risk rationale.
-- [ ] Identifiers, exact timestamps, raw responses, request metadata, and direct source linkage are excluded from the long-lived packet.
+**Result:** account evidence `COMPLETE`; 31-day linked-record/backup classification remains `REVIEW_REQUIRED`.
+
+### B. Field-level operational and derived transformation
+
+- [ ] Full Phase 6 operational schema is frozen, including flight/leg identifiers, airports, carriers, routes, exact timestamps, source bindings, PRE/POST, and outcomes.
+- [ ] The exact Packet B output dictionary is frozen separately.
+- [ ] Every Packet B field has source family, transformation, buckets/categories, null state, and reconstruction-risk rationale.
+- [ ] Packet A fields are not silently removed from the study because Packet B is narrower.
 - [ ] T−6 gate-out delay remains separate from T−24/T−90 comparators and after-takeoff arrival delay.
 - [ ] `not_due`, `censored`, `missing`, and `invalid` are not converted into negative labels.
-- [ ] The source adapter emits only the writer's approved shape.
-- [ ] Independent review confirms that the exact output is not a per-record restatement or reconstructable substitute.
-- [ ] A reviewed profile is committed with `approvedForUse: true` only after the rights evidence exists.
+- [ ] The source adapter emits only the Packet B writer's approved shape.
+- [ ] Full-to-derived parity is measured before any Packet A field expires.
+- [ ] A reviewed profile is committed with `approvedForUse: true` only after field-level rights and backup treatment are evidenced.
 
-**Result:** `MISSING` while the repository only has `PROPOSED_REVIEW_REQUIRED`.
+**Result:** Packet A study fields are `PRESERVED`; Packet B remains `PROPOSED_REVIEW_REQUIRED`.
 
 ### C. Activation and readback
 
@@ -125,4 +131,4 @@ PROVIDER_CALLS = 0
 APPROVAL_LEDGER_APPROVALS = 0
 ```
 
-This worksheet makes the project ready to execute the remaining gates without waiting for an email, but it intentionally does not turn missing account-specific rights evidence into permission.
+This worksheet makes the project ready to execute the remaining gates without waiting for an email. It records that account identity/quota evidence is complete, while the separate field-level decision for retaining the full linked operational corpus and backup surfaces remains review-required.
