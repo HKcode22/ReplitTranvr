@@ -12,7 +12,7 @@ import {fileURLToPath} from "node:url";
 import {compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {verifyP6SourceEnableAuthFile} from "../scripts/v39_phase6_source_enable_approval_ledger_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
-import {verifyP6SourceActivationReview} from "../scripts/v39_phase6_enable_source_owner_v39";
+import {verifyP6SourceActivationReview,verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
 import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const REPO="HKcode22/ReplitTranvr";
 const WORK="7925dca816933a401ec97f1d3a1f920b881c8f1e296ab8f70f0563c19cf13b0e";
@@ -95,14 +95,20 @@ async function run(){
  for(const f of result.files.slice(0,31))need(sha(gitRaw(head,f.path))===f.sha256&&readFileSync(join(root,f.path)).equals(Buffer.from(f.bytes)),"EXACT_COMMITTED_DAY_PLANS");
  const auth=read(authPath,authSha,256000),a=verifyP6SourceEnableAuthFile(authPath,head);
  need(a.artifactHash===auth.sha256&&a.verdict.verified===true,"EXACT_APPROVED_SOURCE_AUTH");
- const release=(a.record as any).releaseActivation,raw=gitRaw(head,isMonday?P6_MONDAY_BRIDGE_REVIEW_PATH:P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
- need(C.test(reviewed),"REVIEWED_EXECUTABLE_COMMIT");
+ const release=(a.record as any).releaseActivation;
  const diff=(h:string)=>cmd("git",["diff","--no-renames","--name-only",pin.stageCode,h]).split("\n").filter(Boolean);
  const ctx=admitP6InertOwnerReadback({...process.env,V39_P5_APPROVED_CODE_SHA:pin.stageCode},stage.raw.toString("utf8"),stage.sha256,pin.costSha,pin.stageCode);
  verifyP6SourceActivationReview(ctx as any,a,new Date());
- const bridge={stageCode:pin.stageCode,stageSha:stage.sha256,costSha:pin.costSha,currentHead:head,reviewBytes:raw,expectedOperationalEvidenceSha256:release.operationalReleaseEvidenceSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:diff(head),readReviewedBlob:(p:string)=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:(p:string)=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]};
- if(isMonday)verifyP6MondayRevisedExecutableBridge(bridge,stage.raw.toString("utf8"),release.stageContentSha256,release.costEnvelopeSha256);
- else verifyP6RevisedExecutableBridge(bridge);
+ const changes=diff(head);
+ const evidenceOnly=isMonday&&changes.every(p=>p==="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json"||/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/.test(p));
+ if(evidenceOnly)verifyP6PostStageEvidenceOnlyMainAdvance(pin.stageCode,head,changes,ancestor(pin.stageCode,head));
+ else{
+  const raw=gitRaw(head,isMonday?P6_MONDAY_BRIDGE_REVIEW_PATH:P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
+  need(C.test(reviewed),"REVIEWED_EXECUTABLE_COMMIT");
+  const bridge={stageCode:pin.stageCode,stageSha:stage.sha256,costSha:pin.costSha,currentHead:head,reviewBytes:raw,expectedOperationalEvidenceSha256:release.operationalReleaseEvidenceSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:changes,readReviewedBlob:(p:string)=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:(p:string)=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]};
+  if(isMonday)verifyP6MondayRevisedExecutableBridge(bridge,stage.raw.toString("utf8"),release.stageContentSha256,release.costEnvelopeSha256);
+  else verifyP6RevisedExecutableBridge(bridge);
+ }
  const dec=read(decisionPath,decisionSha),decision=dec.x;
  const p={authVerified:true,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,codeSha:head,manifestSha256:pin.manifestSha,configSha256:pin.configSha,calendarSha256:pin.calendarSha,frameSha256:FRAME,rightsSha256:release.sourceRightsEvidenceSha256,providerContractSha256:CONTRACT,costSha256:pin.costSha,releaseSha256:decision.releaseSha256,dayPlanSha256s:result.summary.dayPlanSha256s,airportTimezoneCatalogSha256:CATALOG,dailyRestCeiling:1900,cycleRestCeiling:stage.x.slotBudgetInput.cycleRestCeilingUnits,minimumProtectedFloor:stage.x.slotBudgetInput.protectedRestFloorUnits,maxQueriesPerDay:288,nowUtc:new Date().toISOString(),outcomeTailUtc:pin.outcomeTailUtc};
  const ops={hash,publicFingerprint:(pem:string)=>{const k=createPublicKey(pem);need(k.asymmetricKeyType==="ed25519","SIGNER_TYPE");return sha(k.export({type:"spki",format:"der"}))},byteLength:Buffer.byteLength};
