@@ -73,6 +73,10 @@ export interface Phase7TransformationContext {
   cohortBucket: number;
   split: Phase7ReleaseSplit;
   censoring: Phase7ReleaseCensoring;
+  /** Actual PRE issuance, not a later processing or export time. */
+  issuedAtUtc: string;
+  /** Time at which the bounded custody transformation is performed. */
+  releasedAtUtc: string;
 }
 
 export interface Phase7TransformationVerdict {
@@ -101,13 +105,14 @@ const FIELD_KEYS = [
 const DECISION_KEYS = [
   'sourceField', 'value', 'availableAtUtc', 'missingReason', 'rightsDisposition',
 ] as const;
-const CONTEXT_KEYS = ['horizon', 'cohortBucket', 'split', 'censoring'] as const;
+const CONTEXT_KEYS = ['horizon', 'cohortBucket', 'split', 'censoring', 'issuedAtUtc', 'releasedAtUtc'] as const;
 const SOURCE_RIGHTS_ALLOW = 'EXTERNALLY_REVIEWED_ALLOW' as const;
 const QUALITY_MISSING = 1;
 const QUALITY_UNAPPROVED = 2;
 const QUALITY_INVALID_VALUE = 4;
 const QUALITY_NO_AS_OF_TIME = 8;
 const QUALITY_CENSORED_LABEL = 16;
+const QUALITY_NOT_AVAILABLE_AS_OF = 32;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -255,6 +260,8 @@ function validateContext(context: unknown): Phase7TransformationVerdict {
   if (!Number.isInteger(contextRecord.cohortBucket) || (contextRecord.cohortBucket as number) < 0) failures.push('context-cohort-invalid');
   if (contextRecord.split !== 'train' && contextRecord.split !== 'validation' && contextRecord.split !== 'test') failures.push('context-split-invalid');
   if (contextRecord.censoring !== 'observed' && contextRecord.censoring !== 'censored' && contextRecord.censoring !== 'missing' && contextRecord.censoring !== 'not_due') failures.push('context-censoring-invalid');
+  if (!isUtc(contextRecord.issuedAtUtc) || !isUtc(contextRecord.releasedAtUtc) ||
+      Date.parse(contextRecord.issuedAtUtc as string) > Date.parse(contextRecord.releasedAtUtc as string)) failures.push('context-clock-invalid');
   return fail({pass: false, failures});
 }
 
@@ -297,6 +304,11 @@ export function transformPhase7ReviewedSourceDecisions(
   requireValid(validateDecisions(decisions), 'PHASE7_TRANSFORM_REJECTED_DECISIONS');
   requireValid(validateContext(context), 'PHASE7_TRANSFORM_REJECTED_CONTEXT');
 
+  if (profile.featureDictionarySha256 !== contract.featureDictionarySha256 ||
+      profile.termsReviewSha256 !== contract.termsReviewSha256 ||
+      profile.derivedWorkReviewSha256 !== contract.derivedWorkReviewSha256 ||
+      profile.mappingExpiryHours !== contract.sourceToReleaseMappingExpiryHours)
+    throw new Error('PHASE7_TRANSFORM_REJECTED_REVIEW_BINDING_MISMATCH');
   if (!contract.allowedHorizons.includes(context.horizon)) throw new Error('PHASE7_TRANSFORM_REJECTED_HORIZON');
   if (context.cohortBucket >= contract.cohortBucketCount) throw new Error('PHASE7_TRANSFORM_REJECTED_COHORT');
   const names = contractFieldNames(contract);
@@ -311,6 +323,8 @@ export function transformPhase7ReviewedSourceDecisions(
     if (field.role === 'label' && !names.labels.includes(field.outputField)) throw new Error('PHASE7_TRANSFORM_REJECTED_LABEL_FIELD_MISMATCH');
     const contractField = [...contract.features, ...contract.labels].find(candidate => candidate.name === field.outputField);
     if (contractField?.bucketCount !== field.bucketCount) throw new Error('PHASE7_TRANSFORM_REJECTED_BUCKET_COUNT_MISMATCH');
+    if (contractField?.transformEvidenceSha256 !== field.transformEvidenceSha256)
+      throw new Error('PHASE7_TRANSFORM_REJECTED_FIELD_REVIEW_BINDING_MISMATCH');
   }
 
   const bySource = new Map(decisions.map(decision => [decision.sourceField, decision]));
@@ -329,6 +343,9 @@ export function transformPhase7ReviewedSourceDecisions(
     } else if (decision.availableAtUtc === null) {
       missing = true;
       qualityFlags |= QUALITY_NO_AS_OF_TIME;
+    } else if (Date.parse(decision.availableAtUtc) > Date.parse(field.role === 'feature' ? context.issuedAtUtc : context.releasedAtUtc)) {
+      missing = true;
+      qualityFlags |= QUALITY_NOT_AVAILABLE_AS_OF;
     } else if (decision.missingReason !== null || decision.value === null || decision.value === undefined) {
       missing = true;
       qualityFlags |= QUALITY_MISSING;

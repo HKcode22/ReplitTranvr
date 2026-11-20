@@ -25,6 +25,12 @@ import {selectP5EReviewedSupplementalFeatures,
  from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {decideP5LaterPreEvidencePath,
  type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
+import {persistPhase7BoundPreFragmentInTransaction,verifyPhase7PreFragmentReadback,type Phase7BoundPreTransactionInput,type Phase7PreFragmentReceipt} from "./phase7PreFragmentTransaction_v39";
+// Dormant until the actual reviewed caller and sealed policy are commissioned.
+// Existing legacy/CI callers retain their original mode.
+type Phase7PreIntegration=Pick<Phase7BoundPreTransactionInput,"contract"|"profile"|"dispositions"|"review"|"reviewSha256"|"separatelyVerifiedFields">&{
+ reader:Pool;expectedReaderRole:string;
+};
 const SHA=/^[0-9a-f]{64}$/;
 const ID=/^[a-zA-Z0-9_.:|-]{5,200}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -271,6 +277,7 @@ export interface P5Stage14SingleFlightPreResult{
  externalPhysicalOperatingLegIndependentlyAuthenticatedByThisFunction:false;
  providerRightsIndependentlyCertifiedByThisFunction:false;
  actualOnlyWheelsOffAndOutcomeCertified:false;
+ phase7DerivedPreFragmentIndependentlyVerified?:true;
  phase5FreezePassed:false;phase6PaidGo:false;
 }
 export const P5_STAGE14_BOUND_SOURCE_SQL=[
@@ -493,8 +500,14 @@ export async function persistP5V0079SingleBoundFlightPre(
   realV0088QueueFenceGh?:P5CdV0088RealQueueCiFence;
   amendmentENativeRouteBoundCi?:true;
   amendmentENativeRouteBoundGh?:true;
+  phase7PrePreservation?:Phase7PreIntegration;
  }
 ):Promise<P5Stage14SingleFlightPreResult>{
+ const preserve=options?.phase7PrePreservation;
+ const allowedCi=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1"&&options?.realV0088QueueFenceCi!==undefined&&options.amendmentENativeRouteBoundCi===true&&process.env.GITHUB_ACTIONS==="true"&&process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.ADB_AUTO_COLLECT==="0"&&!process.env.AERODATABOX_API_KEY&&!process.env.RAPIDAPI_KEY&&!process.env.AERODATABOX_WEBHOOK_SECRET;
+ const allowedGh=options?.realV0088QueueFenceGh!==undefined&&options.amendmentENativeRouteBoundGh===true&&process.env.GITHUB_ACTIONS==="true"&&process.env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256===preserve?.reviewSha256&&!!preserve;
+ if(preserve&&!allowedCi&&!allowedGh)hold("P7_PRE_REQUIRES_SEPARATELY_COMMISSIONED_PRESERVATION");
+ if(preserve&&(preserve.reader===pool||preserve.expectedReaderRole===p.expectedRestrictedPreWriterRole))hold("P7_PRE_REQUIRES_DISTINCT_READER");
  assertP5CdDisposableFenceArguments(options?.disposableCdQueueFence);
  assertP5CdV0088CiFence(options?.realV0088QueueFenceCi);
  assertP5ENativeRouteCi(options?.amendmentENativeRouteBoundCi);
@@ -531,6 +544,7 @@ export async function persistP5V0079SingleBoundFlightPre(
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_PRE_WRITER");
  const c:PoolClient=await pool.connect();
  let begun=false,commitAttempted=false,commitAcknowledged=false;
+ let preserved:Phase7PreFragmentReceipt|undefined;
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE");
   begun=true;
@@ -674,6 +688,11 @@ export async function persistP5V0079SingleBoundFlightPre(
     .rows[0]?.at,"DB_BEFORE_INSERT"));
   const inserted=await persistPreSnapshot(c,built.snapshot);
   if(inserted!==1)hold("PRE_ALREADY_COMMITTED_OR_INSERT_FAILED");
+  if(preserve){
+   const rows=(await c.query("SELECT id::text AS id FROM clean.flight_snapshots WHERE flight_instance_id=$1 AND horizon=$2 AND prediction_cutoff_utc=$3 AND prediction_state=\u0027PRE_DEPARTURE\u0027 LIMIT 2",[p.flightInstanceId,p.horizon,cutoff])).rows;
+   if(rows.length!==1||!/^[1-9][0-9]{0,17}$/.test(rows[0].id??""))hold("P7_PRE_EXACT_INSERTED_SNAPSHOT_REQUIRED");
+   preserved=await persistPhase7BoundPreFragmentInTransaction(c,{contract:preserve.contract,profile:preserve.profile,dispositions:preserve.dispositions,review:preserve.review,reviewSha256:preserve.reviewSha256,separatelyVerifiedFields:preserve.separatelyVerifiedFields,manifestSha256:p.manifestSha256,queryDigestSha256:p.queryDigestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,snapshotId:rows[0].id,runDayIndex:p.runDayIndex,selectedNativeTUtc:p.selectedTNativeUtc,cutoffUtc:cutoff.toISOString(),issuedAtUtc:first.toISOString(),sourceExpiresAtUtc:new Date(source.expires).toISOString(),horizon:p.horizon,features:[...eRoute,...extras]});
+  }
   const immediatelyBeforeCommit=dbTime((await c.query(
     "SELECT clock_timestamp() AS at")).rows[0]?.at,"DB_BEFORE_COMMIT");
   due(cutoff,immediatelyBeforeCommit);
@@ -717,6 +736,7 @@ export async function persistP5V0079SingleBoundFlightPre(
        cutoff.getTime()||
     post.getTime()>=cutoff.getTime())
     hold("POST_COMMIT_LATE_OR_UNVERIFIED_QUARANTINE_NO_RETRY");
+  if(preserved&&preserve)await verifyPhase7PreFragmentReadback(preserve.reader,preserve.expectedReaderRole,preserved);
   return {
    schema:"v39.phase5.stage14.single-bound-flight-pre-writer.v1",
    status:"ONE_SOURCE_BOUND_PROSPECTIVE_PRE_SAVED_NOT_SCIENTIFIC_FREEZE",
@@ -731,6 +751,7 @@ export async function persistP5V0079SingleBoundFlightPre(
    postCommitDatabaseReadbackVerified:true,
    postCommitDbClockAtUtc:post.toISOString(),
    preSnapshotsInserted:1,providerCalls:0,alertCreates:0,
+   ...(preserved?{phase7DerivedPreFragmentIndependentlyVerified:true as const}:{}),
    authenticPersistedT24WitnessAnchoredForLaterHorizon:
     laterEvidence==="WITNESSED_T24_LATER",
    laterPreEvidenceTier:laterEvidence,
