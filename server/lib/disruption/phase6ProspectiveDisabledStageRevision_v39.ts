@@ -11,10 +11,17 @@
  */
 import {createHash} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
+// The three legacy Phase-5 modules are runtime ESM with intentionally incomplete
+// TypeScript declarations. Their exact exports are exercised by disposable-PG16
+// integration tests below; keep this bridge narrow instead of widening the global
+// legacy declaration surface.
+// @ts-ignore legacy runtime ESM export exists and is exercised in PG16 CI.
 import {compileP5InertB0062UtcStagePacket} from
  "./phase5B0062InertCalendarUtcBudgetStage_v39.mjs";
+// @ts-ignore legacy runtime ESM module has no complete declaration file.
 import {compileP5V0093CostOnlySevenRestReview} from
  "./phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+// @ts-ignore legacy runtime ESM module has no complete declaration file.
 import {inspectP5V0093IndependentExactPostStage} from
  "./phase5V0093IndependentPostStageReadback_v39.mjs";
 
