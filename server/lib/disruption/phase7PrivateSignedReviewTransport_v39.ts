@@ -212,7 +212,17 @@ export function openP7PrivateSignedReviewReader(env:NodeJS.ProcessEnv){
   try{await c.connect();await c.query("SET ROLE phase6_private_frozen_reader_v39");return await readP7PrivateSignedReviews(c,trust,selectors)}
   finally{await c.end().catch(()=>{})}
  }
- return {read};
+ async function inspect(){
+  const c=new Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_independent_review_preflight"});
+  try{
+   await c.connect();await c.query("SET ROLE phase6_private_frozen_reader_v39");
+   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   await c.query("SET LOCAL statement_timeout='10000ms'");
+   await readP6DayEpochRestrictedReaderClock(c,trust.expectedReaderSessionLogin);await checkInstalled(c);
+   await c.query("ROLLBACK");return {providerCalls:0,databaseWrites:0,ready:true as const};
+  }finally{await c.end().catch(()=>{})}
+ }
+ return {read,inspect};
 }
 /** The source-lane authority and proof signer are distinct keys and roles
  * in the workflow. The producer independently reads this exact authority
@@ -224,7 +234,7 @@ export function openP7StoredPreLaneArchivePort(env:NodeJS.ProcessEnv,publicWeath
 }){
  if([env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P6_PRIVATE_PUBLISHER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL].some(Boolean))hold("PRE_LANE_READER_SCOPE");
  const r=openP7PrivateSignedReviewReader(env);
- return {async readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
+ return {inspect:r.inspect,async readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
   const s=preLaneReceiptSelector(p);
   const wire=(await r.read([s])).get(s.scopeSha256);
   if(!wire)hold("MISSING_PRE_LANE_RECEIPT");
@@ -394,6 +404,9 @@ export async function publishP7PreEvidenceBatchFromProtectedEnv(env:NodeJS.Proce
   if(kind==="PRE_PROOF")verifyPhase7SignedPreFieldProof(env,p,policy.reviewSha256,policy.dispositions,wire);
   return {selector,wire};
  });
+ return withP7PreEvidenceEndpoints(env,trust,(publisher,reader,t)=>publishP7PreEvidenceBatchOnce({client:publisher,reader,trust:t,items}));
+}
+async function withP7PreEvidenceEndpoints<T>(env:NodeJS.ProcessEnv,trust:P7ReviewTrust,fn:(publisher:DB,reader:DB,trust:P7ReviewTrust)=>Promise<T>){
  const source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");
  function url(name:string,login:string){
   const u=new URL(env[name]??"");
@@ -408,6 +421,21 @@ export async function publishP7PreEvidenceBatchFromProtectedEnv(env:NodeJS.Proce
  try{
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
-  return await publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items});
+  return await fn(publisher,reader,trust);
  }finally{await Promise.allSettled([reader.end(),publisher.end()])}
+}
+
+/** Pre-spend readiness: both restricted sessions and the exact installed
+ * custody constraints must be real. No test insert; both TX roll back. */
+export async function inspectP7PreEvidenceBatchPublisher(env:NodeJS.ProcessEnv){
+ const t=preBatchTrust(env,"PRE_LANE_RECEIPT");preBatchTrust(env,"PRE_PROOF");parsePhase7ProtectedPrePolicy(env);
+ return withP7PreEvidenceEndpoints(env,t,async(publisher,reader,trust)=>{
+  await reader.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  try{await readP6DayEpochRestrictedReaderClock(reader,trust.expectedReaderSessionLogin);await checkInstalled(reader);}
+  finally{await reader.query("ROLLBACK");}
+  await publisher.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");
+  try{await readP6DayEpochRestrictedPublisherClock(publisher,trust.expectedPublisherSessionLogin);await checkInstalled(publisher);}
+  finally{await publisher.query("ROLLBACK");}
+  return {providerCalls:0,databaseWrites:0,ready:true as const};
+ });
 }

@@ -107,7 +107,7 @@ function readFrame(socket:Socket,timeoutMs:number):Promise<unknown>{
   function data(b:Buffer){size+=b.length;if(size>MAX_FRAME){err();return;}const idx=b.indexOf(10);
    if(idx>=0&&idx!==b.length-1){err();return;}
    parts.push(b);if(idx<0)return;
-   try{const value=JSON.parse(Buffer.concat(parts,size-0).toString("utf8"));socket.pause();finish(undefined,value);}catch{err();}
+   try{const value=JSON.parse(Buffer.concat(parts,size).toString("utf8"));socket.pause();finish(undefined,value);}catch{err();}
   }
   socket.on("data",data);socket.once("error",err);socket.once("end",end);socket.once("close",end);socket.resume();
  });
@@ -125,6 +125,8 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
  const {path,role,scope,handler}=input;scopeValid(scope);
  if(!Object.hasOwn(ops,role)||typeof handler!=="function")hold("ROLE");
  const seen=new Set<string>();let busy=false,closed=false;const sockets=new Set<Socket>();
+ let resolveClosed!:()=>void;const closedPromise=new Promise<void>(resolve=>{resolveClosed=resolve});
+
  const server=createServer({allowHalfOpen:true},socket=>{
   sockets.add(socket);socket.on("error",()=>{});socket.once("close",()=>sockets.delete(socket));
   if(busy||closed){socket.destroy();return;}busy=true;
@@ -135,11 +137,19 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
     let payload:Payload={wires:[],committedCount:0};
     if(req.op!=="ready"&&req.op!=="stop"){
      if(seen.size>=MAX_REQUESTS||seen.has(req.requestSha256))hold("DUPLICATE_OR_MAX_REQUESTS_NO_REPLAY");
-     seen.add(req.requestSha256);payload=await handler(req);
+     seen.add(req.requestSha256);
+     // The caller has a 240s bound. A timed-out publisher is an ambiguous
+     // outcome: terminate this endpoint, never accept another request.
+     let deadline:ReturnType<typeof setTimeout>|undefined;
+     try{payload=await Promise.race([handler(req),new Promise<Payload>((_,reject)=>{deadline=setTimeout(()=>reject(new Error("WORKER_DEADLINE")),230000);})]);}
+     catch(e){if((e as Error)?.message==="WORKER_DEADLINE"){void close().finally(()=>input.onFatal?.());return;}throw e;}
+     finally{if(deadline)clearTimeout(deadline);}
+
     }
     const response:OK={schema:"v39.phase7.local-pre-handoff-response.v1",requestSha256:req.requestSha256,ok:true,...payload};
-    validateResponse(response,req);socket.end(frame(response));
-    if(req.op==="stop")setImmediate(()=>void close());
+    validateResponse(response,req);
+    if(req.op==="stop"){socket.end(frame(response),()=>{void close()});}
+    else socket.end(frame(response));
    }catch{
     if(req)socket.end(frame({schema:"v39.phase7.local-pre-handoff-response.v1",requestSha256:req.requestSha256,ok:false}));
     else socket.destroy();
@@ -152,13 +162,14 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
   for(const s of sockets)s.destroy();
   await new Promise<void>(resolve=>server.close(()=>resolve()));
   try{if(lstatSync(path).isSocket())unlinkSync(path);}catch{}
+  resolveClosed();
  };
  let lifetime:ReturnType<typeof setTimeout>;
  await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(path,()=>{server.off("error",reject);resolve();});});
  chmodSync(path,0o600);
  lifetime=setTimeout(()=>{void close().finally(()=>input.onFatal?.());},input.maxLifetimeMs??150*60000);
  server.on("error",()=>{void close().finally(()=>input.onFatal?.());});
- return {close};
+ return {close,closed:closedPromise};
 }
 /** Existing private runner scratch directory, not a storage channel. No
  * permits/wires/credentials in files. Socket paths contain only GH run id. */

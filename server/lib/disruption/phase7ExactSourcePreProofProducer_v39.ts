@@ -62,7 +62,7 @@ export function admitP7ExactSourcePreProducer(env:NodeJS.ProcessEnv,mode:"proof"
  if(forbidden.some(v=>!digest(v))||new Set(forbidden).size!==4)hold("DISTINCT_PINNED_SIGNERS");
  return {policy,externalContentUseReviewSha256:f.externalContentUseReviewSha256 as string,authority:publicKey(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64),forbiddenSignerFingerprints:forbidden as string[],sourceUrl:source.toString()};
 }
-async function freshSourceClock(pool:P5EReadOnlyPgPool){
+export async function readP7RestrictedSourceClock(pool:P5EReadOnlyPgPool){
  const c=await pool.connect();
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout='12000ms'");
@@ -121,8 +121,8 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
      const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
      return reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual,archive:receipt});
     },
-    readDatabaseClockUtc:()=>freshSourceClock(pool)
+    readDatabaseClockUtc:()=>readP7RestrictedSourceClock(pool)
    }});
-  return {port,close:()=>underlying.end()};
+  return {port,preflight:()=>readP7RestrictedSourceClock(pool),close:()=>underlying.end()};
  }catch(e){void underlying.end();throw e}
 }

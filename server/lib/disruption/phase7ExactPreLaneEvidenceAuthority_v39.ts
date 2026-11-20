@@ -15,7 +15,7 @@ import {createHash,createPublicKey,randomUUID,sign,type KeyObject} from "node:cr
 import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
-import {admitP7ExactSourcePreProducer} from "./phase7ExactSourcePreProofProducer_v39";
+import {admitP7ExactSourcePreProducer,readP7RestrictedSourceClock} from "./phase7ExactSourcePreProofProducer_v39";
 import {readP7ExactSelectedFeatures,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
 import {verifyP7NoaaExactPreLaneEvidence,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {admitPurposeBoundReferenceIdentifier} from "./phase7PurposeBoundReferenceIdentifier_v39";
@@ -126,5 +126,5 @@ export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signe
   const weather=weatherPort?await weatherPort.readExactReviewedWeatherArtifacts(p):[];
   const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
   return signP7ActualPreLaneReceipt({env,signer,termsReviewSha256:a.policy.profile.termsReviewSha256,dispositions:a.policy.dispositions,referencePolicy},p,actual,weather);
- },close:()=>underlying.end()};
+ },preflight:()=>readP7RestrictedSourceClock(pool),close:()=>underlying.end()};
 }
