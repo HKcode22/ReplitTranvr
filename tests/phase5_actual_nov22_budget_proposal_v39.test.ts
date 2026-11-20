@@ -6,7 +6,7 @@ import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {replayP6CompactNov21Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {replayP6CompactNov21Review,replayP6CompactNov22Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -29,6 +29,25 @@ function actualPreview(){
  return x.result;
 }
 const actual=()=>actualPreview().calendarDraft;
+describe("postponed Nov20 SOURCE start compact calendar replay",()=>{
+ it("replays the already-reviewed second compact case without changing seed/treatment or granting release",()=>{
+  const x=replayP6CompactNov22Review();
+  const digest=(v:unknown)=>hash(Buffer.from(JSON.stringify(v)));
+  expect(x.revision.firstServiceUtc).toBe("2026-11-22T00:00:00.000Z");
+  expect(x.revision.firstSourceUtc).toBe("2026-11-20T23:45:00.000Z");
+  expect(x.revision.lastServiceEndUtc).toBe("2026-12-24T04:00:00.000Z");
+  expect(x.calendarDraft.calendarDays).toHaveLength(31);
+  expect(x.shapeEnvelope.days).toHaveLength(31);
+  expect(x.revision.originalTreatmentAssignmentSha256).toBe(x.shapeEnvelope.claimedTreatmentAssignmentSha256);
+  expect(x.revision.independentDateRevisionApproved).toBe(false);
+  expect(x.revision.phase6PaidGo).toBe(false);
+  console.log("P5_COMPACT_NOV22_REVIEW_DIGESTS "+JSON.stringify({
+   draftSha256:digest(x.calendarDraft),rowsSha256:x.calendarDraft.proposedCalendarRowsSha256,
+   shapeSha256:x.shapeEnvelope.shapeEnvelopeSha256,dateMapSha256:x.shapeEnvelope.dateMapSha256
+  }));
+ });
+});
+
 describe("original actual first randomization and seven-category cap PROPOSAL",()=>{
  it("reproduces the expired-artifact-independent exact preview, no new seed",()=>{
   const x=actual();expect(x.calendarDays).toHaveLength(31);expect(x.futureOrdinaryAirportsSelected).toBe(0);
