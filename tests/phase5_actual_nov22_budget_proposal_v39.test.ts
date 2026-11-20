@@ -51,6 +51,26 @@ describe("postponed Nov20 SOURCE start compact calendar replay",()=>{
    shapeSha256:x.shapeEnvelope.shapeEnvelopeSha256,dateMapSha256:x.shapeEnvelope.dateMapSha256
   }));
  });
+ it("pins the second compact case as an exact no-refill candidate without changing paid GO",()=>{
+  const x=replayP6CompactNov22Review();
+  const b=proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_NOV22");
+  expect(b.calendarDraftJsonSha256).toBe("ba6ce0f7ca6f63b154d2d5c3d8d85ccdcd2baf7f7b0a56f2cedc8d7feb136049");
+  expect(b.calendarRowsSha256).toBe("9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6");
+  expect(b.totalReservedUnits).toBe(36740);
+  expect(b.peakDailyUnits).toBe(1280);
+  expect(b.renewal.sourceBeforeReset).toBe(4352);
+  expect(b.renewal.sourceAfterReset).toBe(7936);
+  expect(b.renewal.conservativePriorCycleMax).toBe(13848);
+  expect(b.renewal.conservativeNextCycleMax).toBe(23988);
+  const review=prepareP6ActualReviewInput("e".repeat(40),0,"COMPACT_NOV22");
+  expect(review.externalCandidate.expectedCalendarRowsSha256).toBe(b.calendarRowsSha256);
+  expect(review.proposedSourceQueries).toBe(6144);
+  expect(review.proposedTotalReservedUnits).toBe(36740);
+  expect(review.proposedPeakDailyUnits).toBe(1280);
+  expect(review.calendarRevisionReview.firstSourceUtc).toBe("2026-11-20T23:45:00.000Z");
+  expect(review.calendarRevisionReview.independentDateRevisionApproved).toBe(false);
+  expect(review.phase6PaidGo).toBe(false);
+ });
 });
 
 describe("original actual first randomization and seven-category cap PROPOSAL",()=>{
