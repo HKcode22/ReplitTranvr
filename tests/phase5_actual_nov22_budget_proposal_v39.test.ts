@@ -532,3 +532,35 @@ describe("Monday exact prospective calendar compiler replay (NO GO)",()=>{
   console.log("P6_MONDAY_UNSIGNED_REPLAY_DIGESTS "+JSON.stringify(r));
  });
 });
+
+describe("Monday prospective release candidate compiler (unsigned, no GO)",()=>{
+ it("recompiles actual 31-day cost envelope against the unshifted provider renewal",()=>{
+  const x=replayP6CompactMondayReview();
+  const b=proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_MONDAY_NOV23");
+  expect(b.calendarRowsSha256).toBe("55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b");
+  expect(b.totalReservedUnits).toBe(36740);
+  expect(b.peakDailyUnits).toBe(1280);
+  expect(b.physicalUtcRows).toHaveLength(37);
+  expect(b.renewal.sourceBeforeReset).toBe(3416);
+  expect(b.renewal.sourceAfterReset).toBe(8872);
+  expect(b.renewal.conservativePriorCycleMax).toBe(10874);
+  expect(b.renewal.conservativeNextCycleMax).toBe(27024);
+  expect(()=>proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_NOV22")).toThrow();
+  expect(()=>proposeP5ActualNov22Budget(replayP6CompactNov22Review().calendarDraft,"COMPACT_MONDAY_NOV23")).toThrow();
+  const review=prepareP6ActualReviewInput("e".repeat(40),0,"COMPACT_MONDAY_NOV23");
+  expect(review).toMatchObject({proposedSourceQueries:6144,proposedTotalReservedUnits:36740,proposedPeakDailyUnits:1280,sourceRightsApproved:false,actualBudgetReviewApproved:false,phase6PaidGo:false});
+  expect(review.externalCandidate.phase6AuthorizationId).toBeNull();
+  expect(review.quotaEvidence.currentBalanceRevalidated).toBe(false);
+ });
+ it("regenerates all unsigned source plan digests from the real compiler with no authorization",()=>{
+  const code=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
+  const x=prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23");
+  expect(x.geometry).toMatchObject({dayPlanCount:31,totalQueries:6144,totalReservedUnits:36740});
+  expect(x.geometry.dayPlanSha256s).toHaveLength(31);
+  expect(x.geometry.dayPlanSha256s.every((v,i)=>v.runDayIndex===i+1&&/^[a-f0-9]{64}$/.test(v.sha256))).toBe(true);
+  expect(x.manifestCandidate.content.calendarRowsSha256).toBe("55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b");
+  expect(x.manifestCandidate.content.calendarRevisionReceipt?.sha256).toBe("2d760133b7f881e9233f645756b0b6cf1f57464a3800c1442e3d0c39a5e722e6");
+  expect(x).toMatchObject({actualAuthorizationId:null,stagePacketExported:false,candidateDigestsApproved:false,sourceRightsApproved:false,scientificFreezeApproved:false,phase6PaidGo:false});
+  console.log("P6_MONDAY_RELEASE_COMPILER_REVIEW "+JSON.stringify({manifest:x.manifestCandidate.sha256,config:x.configCandidate.sha256,calendar:x.calendarRowsDigestCandidate,geometry:x.geometry,timing:x.timingEvidenceCandidate.sha256,range:x.rangeEvidenceCandidate.sha256,phase6PaidGo:false}));
+ },20000);
+});

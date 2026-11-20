@@ -240,6 +240,10 @@ function selectP6Calendar(variant:P6ActualCalendarVariant){
   const p=replayP6CompactNov22Review();
   return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
  }
+ if(variant==="COMPACT_MONDAY_NOV23"){
+  const p=replayP6CompactMondayReview();
+  return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
+ }
  return hold("UNKNOWN_EXACT_CALENDAR_VARIANT");
 }
 /** Actual prospective calendar + exact cost rows, already present in original
@@ -516,7 +520,7 @@ export function prepareP6ActualReleaseIdentityReview(codeSha:string,reviewRefill
    "data-collection/phase5/2026-11-11_AMENDMENT_E_CANONICAL_TRAVELER_PREDICTIONS_C_D_FREE_ADSB.md",
    "data-collection/phase5/2026-11-10_ADR_PHASE6_AUTONOMOUS_C_PLUS_D_HYBRID_DESIGN.md"]),
   originalSeed:fileEvidence(seedPath),originalPreviewSha256:review.originalPreviewSha256,
-  ...(preview.revision?{calendarRevisionReview:preview.revision,calendarRevisionReceipt:fileEvidence("data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json")}:{}),
+  ...(preview.revision?{calendarRevisionReview:preview.revision,calendarRevisionReceipt:fileEvidence(variant==="COMPACT_MONDAY_NOV23"?"data-collection/phase5/evidence/2026-11-20_nov23_monday_exact_geometry_budget_REVIEW_ONLY.json":"data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json")}:{}),
   frameEvidence:review.frameEvidence,
   calendarRowsSha256:config.calendarRowsSha256,configCandidateSha256:configSha,
   timingEvidenceCandidateSha256:timingSha,rangeEvidenceCandidateSha256:rangeSha,
@@ -650,18 +654,19 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill","--review-only-compact-nov22-no-refill"].includes(process.argv[2])&&process.argv.length===4){
+  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill","--review-only-compact-nov22-no-refill","--review-only-compact-monday-nov23-no-refill"].includes(process.argv[2])&&process.argv.length===4){
    const refillChoice=process.argv[2]==="--review-only"?3000:0;
    const variant:P6ActualCalendarVariant=process.argv[2]==="--review-only-compact-nov21-no-refill"?"COMPACT_NOV21":
-    process.argv[2]==="--review-only-compact-nov22-no-refill"?"COMPACT_NOV22":"ORIGINAL_NOV22";
+    process.argv[2]==="--review-only-compact-nov22-no-refill"?"COMPACT_NOV22":process.argv[2]==="--review-only-compact-monday-nov23-no-refill"?"COMPACT_MONDAY_NOV23":"ORIGINAL_NOV22";
    const review=prepareP6ActualReviewInput(process.argv[3],refillChoice,variant);
    console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice,variant)},null,2));
   }else{
   const compactNov21=process.argv[2]==="--compact-nov21",compactNov22=process.argv[2]==="--compact-nov22";
-  const compact=compactNov21||compactNov22;
+  const compactMonday=process.argv[2]==="--compact-monday-nov23";
+   const compact=compactNov21||compactNov22||compactMonday;
   if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==(compact?8:7))hold("OWNER_LOCAL_EXACT_ARGUMENTS");
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(compact?3:2);
-  const variant:P6ActualCalendarVariant=compactNov21?"COMPACT_NOV21":compactNov22?"COMPACT_NOV22":"ORIGINAL_NOV22";
+  const variant:P6ActualCalendarVariant=compactNov21?"COMPACT_NOV21":compactNov22?"COMPACT_NOV22":compactMonday?"COMPACT_MONDAY_NOV23":"ORIGINAL_NOV22";
   const result=compileP6ActualCandidateExport({externalBytes:readFileSync(externalPath),expectedExternalFileSha256:externalSha,
    timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha,calendarVariant:variant});
   console.log(JSON.stringify(out==="--verify-committed-plans"?verifyP6ActualCommittedCheckout(result):writeP6ActualCandidateExport(result,out)));
