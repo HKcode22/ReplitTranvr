@@ -23,7 +23,13 @@ export interface RoutineBackupExceptionReviewV39 {
   reviewedAtUtc: string;
   accountTermsReviewSha256: string;
   rotationAndAccessReviewSha256: string;
-  restoreDrillReviewSha256: string;
+  /** Either a real recovery drill review or a non-destructive recovery-control
+   * review may be supplied. A production restore is not required merely to
+   * demonstrate Article 5.8 recovery-only handling. */
+  restoreDrillReviewSha256?: string;
+  restoreControlReviewSha256?: string;
+  productionRestoreReplacesLiveDataVerified?: true;
+  recoveryOnlyRestorePurposeVerified?: true;
   reviewedRotationHours: number;
   applicableAccountTermsAllowIncidentalBackup: true;
   routineMinimumNecessaryScopeVerified: true;
@@ -65,12 +71,22 @@ function reviewedRoutineBackup(e: RetentionDeploymentEvidenceV39): boolean {
   if(!r || !b || b.state!=="DEPLOYED" || b.plaintextProviderContentRecoverable!==true ||
      !isNonNegativeFinite(b.recoveryWindowHours) || b.recoveryWindowHours<=0) return false;
   const reviewed=Date.parse(r.reviewedAtUtc), verified=Date.parse(e.verifiedAtUtc);
+  const validHash=(x:unknown):x is string=>typeof x==="string"&&SHA.test(x)&&!/^([a-f0-9])\1{63}$/.test(x);
+  const drill=validHash(r.restoreDrillReviewSha256);
+  const control=validHash(r.restoreControlReviewSha256);
+  // Exactly one recovery proof path. A non-destructive control review is
+  // accepted only when the reviewer has verified that production restore
+  // replaces live data and that any restore remains recovery-only.
+  if(drill===control) return false;
+  const recoveryEvidenceSha256=drill?r.restoreDrillReviewSha256!:r.restoreControlReviewSha256!;
   return r.schema==="v39.retention.routine-backup-review.v1" &&
     Number.isFinite(reviewed) && Number.isFinite(verified) &&
     reviewed>=Date.parse("2026-10-11T00:00:00Z") && reviewed<=verified &&
-    [r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,r.restoreDrillReviewSha256]
-      .every(x=>typeof x==="string"&&SHA.test(x)&&!/^([a-f0-9])\1{63}$/.test(x)) &&
-    new Set([r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,r.restoreDrillReviewSha256]).size===3 &&
+    [r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,recoveryEvidenceSha256]
+      .every(validHash) &&
+    new Set([r.accountTermsReviewSha256,r.rotationAndAccessReviewSha256,recoveryEvidenceSha256]).size===3 &&
+    (drill || (r.productionRestoreReplacesLiveDataVerified===true &&
+               r.recoveryOnlyRestorePurposeVerified===true)) &&
     r.reviewedRotationHours===b.recoveryWindowHours &&
     r.applicableAccountTermsAllowIncidentalBackup===true &&
     r.routineMinimumNecessaryScopeVerified===true &&
@@ -89,7 +105,9 @@ function reviewedRoutineBackup(e: RetentionDeploymentEvidenceV39): boolean {
  * maximum is not satisfied under the original ordinary-cache policy.
  * The later Article 5.8 incidental-backup path is conditional on actual
  * account applicability, verified ordinary rotation, restricted use and
- * a restore drill that re-enforces the original expiry before access.
+ * either a reviewed recovery drill or a non-destructive recovery-control
+ * review that quarantines restored data and re-enforces original expiry
+ * before any non-recovery access.
  * No backup-only exception enlarges primary/replica/object/log retention.
  */
 export function verifyRetentionDeploymentEvidence(
