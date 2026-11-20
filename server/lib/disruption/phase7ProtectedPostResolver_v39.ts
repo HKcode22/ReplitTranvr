@@ -43,7 +43,8 @@ export function admitPhase7ProtectedPostResolver(env:NodeJS.ProcessEnv){
  return out as typeof out&{privateUrls:typeof urls;privatePolicy:typeof policy;privateEnv:typeof local};
 }
 export function openPhase7ProtectedPostConsumer(env:NodeJS.ProcessEnv,transport:Phase7PrivateOutcomeReviewTransport){
- if(typeof transport?.preflight!=="function"||typeof transport?.readExactReview!=="function")hold("INDEPENDENT_TRANSPORT_UNCOMMISSIONED");
+ if(typeof transport?.preflight!=="function"||typeof transport?.readExactReview!=="function"||
+    typeof transport?.readOrRecordExactRecoveryReceipt!=="function"||typeof transport?.readExactRecoveryReceipt!=="function")hold("INDEPENDENT_TRANSPORT_UNCOMMISSIONED");
  const x=admitPhase7ProtectedPostResolver(env),u=x.privateUrls;
  const scoped=new Pool({connectionString:u.scoped,max:2,connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_post_scoped_read"});
  const writer=new Pool({connectionString:u.writer,max:2,connectionTimeoutMillis:8000,query_timeout:60000,application_name:"p7_post_bundle_write"});

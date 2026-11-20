@@ -52,6 +52,44 @@ function verifyReceipt(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,wire:unknown
  if(prior>reviewed||reviewed>=until||until-prior>600000)hold("REVIEW_WINDOW");
  return x;
 }
+/** Authenticate an independently stored recovery wire against the current
+ * private audit and an actual restricted database clock. The original
+ * audit timestamp is not replaced by the recovery/re-read time. */
+export function verifyPhase7RecoveryReceiptForAudit(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,a:Phase7PostAudit,wire:unknown,observedDbClockUtc:string){
+ const x=verifyReceipt(env,s,wire),now=clock(observedDbClockUtc),auditAt=clock(a.privateObservedDbClockUtc);
+ if(clock(x.originalAuditAtUtc)>auditAt||auditAt>now||
+    now<clock(x.reviewedAtUtc)||now>=clock(x.validUntilUtc)||
+    x.originalAuditSha256!==phase7CommittedPostAuditIdentity(a))hold("LIVE_AUDIT_DRIFT");
+ return x;
+}
+/** The outcome review authority must independently re-read the original and
+ * persist the signed recovery wire inside bounded source custody. The
+ * consumer only transmits the scope and audit digest, never source bodies
+ * or the private flight denominator. A second exact readback is required.
+ * This interface itself is not a storage implementation or commissioning.
+ */
+export interface Phase7RecoveryReceiptCustodyPort{
+ readOrRecordExactRecoveryReceipt(input:Readonly<{committed:Readonly<P6PostCommittedScope>;priorAudit:Readonly<{sha256:string;observedAtUtc:string}>}>):Promise<unknown>;
+ readExactRecoveryReceipt(scope:Readonly<P6PostCommittedScope>):Promise<unknown>;
+}
+export async function requirePhase7RecoveryReceiptBeforeSettlement(input:{
+ env:NodeJS.ProcessEnv;scope:P6PostCommittedScope;audit:Phase7PostAudit;
+ custody:Phase7RecoveryReceiptCustodyPort;readRestrictedClock:()=>Promise<string>;
+}){
+ const {env,scope,audit,custody}=input;
+ if(typeof custody?.readOrRecordExactRecoveryReceipt!=="function"||typeof custody?.readExactRecoveryReceipt!=="function"||
+    typeof input.readRestrictedClock!=="function")hold("RECEIPT_CUSTODY_REQUIRED");
+ const privateScope=Object.freeze({...scope,packet:Object.freeze({...scope.packet})});
+ const priorAudit=Object.freeze({sha256:phase7CommittedPostAuditIdentity(audit),observedAtUtc:audit.privateObservedDbClockUtc});
+ const wire=await custody.readOrRecordExactRecoveryReceipt(Object.freeze({committed:privateScope,priorAudit}));
+ // Never read back an invalid, mismatched or expired write result as success.
+ verifyPhase7RecoveryReceiptForAudit(env,scope,audit,wire,await input.readRestrictedClock());
+ const again=await custody.readExactRecoveryReceipt(privateScope);
+ verifyPhase7RecoveryReceiptForAudit(env,scope,audit,again,await input.readRestrictedClock());
+ const x=wire as {payloadBase64:string;signatureBase64:string},y=again as typeof x;
+ if(x.payloadBase64!==y.payloadBase64||x.signatureBase64!==y.signatureBase64)hold("RECOVERY_CUSTODY_READBACK_DRIFT");
+ return {status:"EXACT_SIGNED_RECOVERY_RECEIPT_READBACK_BEFORE_SETTLEMENT" as const,providerCalls:0 as const};
+}
 /** Requires an independently signed receipt of the previous full audit.
  * Re-read the identical original and live denominator from the existing
  * restricted SOURCE role. If an anchor expired or new PRE appeared, hold
@@ -69,11 +107,10 @@ export async function recoverPhase7CommittedPost(input:{
  const f=verifyP5FuturePostReviewedFrame(s.packet);
  if(f.reservedSha256!==s.reservationSha256||s.packet.manifestSha256!==env.V39_P5_MANIFEST_SHA256||
   s.packet.reviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256)hold("ORIGINAL_SCOPE");
- const consumer=requirePhase7PostConsumer(env,input.consumer),receipt=verifyReceipt(env,s,wire);
+ const consumer=requirePhase7PostConsumer(env,input.consumer);
+ verifyReceipt(env,s,wire);
  const a=await readP6CommittedPostOutcomeObservability(source,s);
- const now=clock(a.privateObservedDbClockUtc);
- if(now<clock(receipt.reviewedAtUtc)||now>=clock(receipt.validUntilUtc)||
-  phase7CommittedPostAuditIdentity(a)!==receipt.originalAuditSha256)hold("LIVE_AUDIT_DRIFT");
+ verifyPhase7RecoveryReceiptForAudit(env,s,a,wire,a.privateObservedDbClockUtc);
  await consumer.preflight(s.packet);
  const result=await consumeCommittedPhase7Post(consumer,s,a);
  return {status:"COMMITTED_POST_RECOVERY_INDEPENDENT_READBACK_NO_GET" as const,

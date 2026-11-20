@@ -27,7 +27,7 @@ async function assertPhase7PostScopedActor(c:import("pg").PoolClient,expectedRol
 /** Check the same exact scoped-reader grants before a paid POST. */
 export async function preflightPhase7PostScopedReader(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract){
  const c=await reader.connect();
- try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout='12000ms'");await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));}
+ try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout='12000ms'");const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();}
  finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
 export async function readPhase7PostScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor):Promise<{fragments:Phase7StoredPreFragment[];observedAtUtc:string}>{

@@ -204,7 +204,7 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
  });
 });
 
-import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity,discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,recoverPhase7PostByOriginalReservation} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
+import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity,discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,recoverPhase7PostByOriginalReservation,requirePhase7RecoveryReceiptBeforeSettlement} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 describe("read-only committed POST recovery candidate",()=>{
  function recoveryFixture(){
@@ -279,6 +279,19 @@ describe("read-only committed POST recovery candidate",()=>{
   await expect(issuePhase7CommittedPostRecoveryReceipt({...args,env:{...env,P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:"synthetic"}})).rejects.toThrow("INDEPENDENT_RECOVERY_ISSUER_SCOPE");
   await expect(issuePhase7CommittedPostRecoveryReceipt({...args,signer:generateKeyPairSync("ed25519").privateKey})).rejects.toThrow("ISSUER_PIN");
   await expect(issuePhase7CommittedPostRecoveryReceipt({...args,source:x.pool([x.f.pre("T-6h",2)]) as any})).rejects.toThrow("ISSUER_PRIOR_AUDIT_DRIFT");
+ });
+ it("requires signed exact custody readback before settlement",async()=>{
+  const x=recoveryFixture(),wire=x.wire(),now="2027-02-02T12:04:00.000Z";
+  const record=vi.fn().mockResolvedValue(wire),read=vi.fn().mockResolvedValue({...wire}),clock=vi.fn().mockResolvedValue(now);
+  const args={env:x.env,scope:x.f.s,audit:x.prior,custody:{readOrRecordExactRecoveryReceipt:record,readExactRecoveryReceipt:read},readRestrictedClock:clock};
+  const out=await requirePhase7RecoveryReceiptBeforeSettlement(args);
+  expect(out).toEqual({status:"EXACT_SIGNED_RECOVERY_RECEIPT_READBACK_BEFORE_SETTLEMENT",providerCalls:0});
+  expect(record).toHaveBeenCalledOnce();expect(read).toHaveBeenCalledOnce();expect(clock).toHaveBeenCalledTimes(2);
+  expect(record.mock.calls[0][0].priorAudit).toEqual({sha256:phase7CommittedPostAuditIdentity(x.prior),observedAtUtc:x.f.clock});
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>x.wire({validUntilUtc:"2027-02-02T12:07:00.000Z"})}})).rejects.toThrow("RECOVERY_CUSTODY_READBACK_DRIFT");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,readRestrictedClock:async()=>"2027-02-02T12:08:00.000Z"})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readOrRecordExactRecoveryReceipt:async()=>({})}})).rejects.toThrow("WIRE");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>{throw Error("readback unavailable")}}})).rejects.toThrow("readback unavailable");
  });
  it("does not substitute a missing or duplicate source original after a process interruption",async()=>{
   const x=recoveryFixture();

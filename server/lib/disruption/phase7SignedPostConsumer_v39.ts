@@ -11,11 +11,12 @@ import {readPhase7PostScopedGroup,preflightPhase7PostScopedReader} from "./phase
 import {verifyPhase7SignedPostSettlement,readPhase7PostReviewerPublicKey} from "./phase7SignedPostReview_v39";
 import {hashPhase7DurableCandidate,persistOrReconcileReviewedPhase7Bundle,preflightPhase7DurableBundleActors} from "./phase7DurableDerivedBundleCandidate_v39";
 import {phase7AuditedPreservationGroups,type Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
+import {requirePhase7RecoveryReceiptBeforeSettlement,type Phase7RecoveryReceiptCustodyPort} from "./phase7CommittedPostRecovery_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_SIGNED_POST_CONSUMER_"+s);};
-export interface Phase7PrivateOutcomeReviewTransport{
+export interface Phase7PrivateOutcomeReviewTransport extends Phase7RecoveryReceiptCustodyPort{
  /** The real separate reviewer transport must demonstrate its independent
   * read-only availability before a paid request. Never dispatch source I/O. */
- preflight(p:Readonly<P5ReviewedFuturePostOneGet>):Promise<{providerCalls:0;writeAuthority:false;independentReviewerAvailable:true}>;
+ preflight(p:Readonly<P5ReviewedFuturePostOneGet>):Promise<{providerCalls:0;writeAuthority:false;independentReviewerAvailable:true;recoveryReceiptCustodyAvailable:true}>;
  readExactReview(input:{committed:Readonly<P6PostCommittedScope>;anchor:Readonly<P6PostPreservationAnchor>;
   fragments:readonly Phase7StoredPreFragment[];observedDbClockUtc:string}):Promise<unknown>;
 }
@@ -30,7 +31,8 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
   new Set([d.scopedReader,d.bundleWriter,d.bundleReader]).size!==3||
   hashPhase7DurableCandidate(d.contract)!==d.env.P6_PHASE7_POST_CONTRACT_SHA256||
   hashPhase7DurableCandidate(d.profile)!==d.env.P6_PHASE7_POST_PROFILE_SHA256||
-  typeof d.transport?.preflight!=="function"||typeof d.transport?.readExactReview!=="function")hold("PROTECTED_SCOPE");
+  typeof d.transport?.preflight!=="function"||typeof d.transport?.readExactReview!=="function"||
+  typeof d.transport?.readOrRecordExactRecoveryReceipt!=="function"||typeof d.transport?.readExactRecoveryReceipt!=="function")hold("PROTECTED_SCOPE");
  let admittedRequest:string|null=null;
  return {policySha256,
   async preflight(p){
@@ -38,7 +40,7 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
    await preflightPhase7PostScopedReader(d.scopedReader,d.scopedReaderRole,d.contract);
    await preflightPhase7DurableBundleActors(d.bundleWriter,d.bundleReader,d.contract,{writerRole:d.bundleWriterRole,readerRole:d.bundleReaderRole});
    const r=await d.transport.preflight(p);
-   if(r?.providerCalls!==0||r.writeAuthority!==false||r.independentReviewerAvailable!==true)hold("REVIEW_TRANSPORT");
+   if(r?.providerCalls!==0||r.writeAuthority!==false||r.independentReviewerAvailable!==true||r.recoveryReceiptCustodyAvailable!==true)hold("REVIEW_TRANSPORT");
    admittedRequest=p.requestSha256;
   },
   async preserveCommitted(c,a){
@@ -80,6 +82,11 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
     }
     pending.push({verified:v,anchor,wire,fragmentsSha256:hashPhase7DurableCandidate(fresh.fragments)});
    }
+   // A crash after the first group write must have an independently signed,
+   // exact original denominator receipt to reconcile without another GET.
+   // Also require the receipt for a zero-group/excluded-only result.
+   await requirePhase7RecoveryReceiptBeforeSettlement({env:d.env,scope:c,audit:a,custody:d.transport,
+    readRestrictedClock:()=>preflightPhase7PostScopedReader(d.scopedReader,d.scopedReaderRole,d.contract)});
    let verifiedGroupCount=0;
    for(const item of pending){
     // The earlier validation may precede many other group reviews. Check

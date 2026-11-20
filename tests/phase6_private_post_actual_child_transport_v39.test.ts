@@ -205,7 +205,7 @@ describe("exact protected research storage POST resolver",()=>{
  it("matches existing exact role credentials and reuses the PRE dictionary without exposing URL or policy bytes",async()=>{
   const e=protectedEnv(),r=admitPhase7ProtectedPostResolver(e);
   expect(r.providerCalls).toBe(0);expect(JSON.stringify(r)).not.toMatch(/postgresql|fixture|contract/);
-  const transport={preflight:async()=>({providerCalls:0 as const,writeAuthority:false as const,independentReviewerAvailable:true as const}),readExactReview:async()=>{throw Error("fixture transport never called")}};
+  const transport={preflight:async()=>({providerCalls:0 as const,writeAuthority:false as const,independentReviewerAvailable:true as const,recoveryReceiptCustodyAvailable:true as const}),readExactReview:async()=>{throw Error("fixture transport never called")},readOrRecordExactRecoveryReceipt:async()=>{throw Error("fixture transport never called")},readExactRecoveryReceipt:async()=>{throw Error("fixture transport never called")}};
   const x=openPhase7ProtectedPostConsumer(e,transport);expect(x.consumer.policySha256).toBe(e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256);await x.close();
  });
  it("rejects missing authority, wrong endpoint, broader role, native key alias and an uncommissioned port",()=>{
