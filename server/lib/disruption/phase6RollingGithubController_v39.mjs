@@ -278,9 +278,19 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
    if(!res.ok)hold("GITHUB_HISTORY_HTTP_"+res.status);
    let v;
    try{v=await res.json();}catch{hold("GITHUB_HISTORY_INVALID_JSON");}
-   if(!Number.isSafeInteger(v?.total_count)||v.total_count<0||v.total_count>100||
-      !Array.isArray(v[key])||v[key].length!==v.total_count)
-    hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE");
+   // A successful GET can have inconsistent list/count metadata during
+   // concurrent Actions state changes. Do not treat it as empty history.
+   // Re-read only the exact same GET, within the existing three-attempt
+   // and snapshot time budgets. No widening, no POST, no hidden pagination.
+   const scope=key==="jobs"?"JOBS":path.includes("status=")?"ACTIVE_SWEEP":"ROUTE_HISTORY";
+   if(!Number.isSafeInteger(v?.total_count)||v.total_count<0||!Array.isArray(v[key]))
+    hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_"+scope+"_SHAPE");
+   if(v.total_count>100)
+    hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_"+scope+"_LIMIT");
+   if(v[key].length!==v.total_count){
+    if(attempt<2&&now()-started<110000){await sleep(500*(attempt+1));continue;}
+    hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_"+scope+"_COUNT");
+   }
    return v[key];
   }
  }

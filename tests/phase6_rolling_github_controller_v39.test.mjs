@@ -284,3 +284,27 @@ test("older active custody prevents retirement; four-hour early draw cooldown is
  const p=await b.reviewHistoryRetirement();
  assert.equal(p.proposedEpochUtc,new Date(clock-55*60000).toISOString());assert.equal(p.retiredRunCount,0);
 });
+
+test("transient exact GET count mismatch can recover without accepting incomplete history",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
+ let first=null,recovered=0,calls=0;
+ const result=await readP6RollingGithubSnapshot({...cfg,fetcher:async(url,opt)=>{
+  assert.equal(opt.method,"GET");calls++;
+  if(first===null){first=url;return {ok:true,json:async()=>({total_count:1,workflow_runs:[]})};}
+  if(url===first)recovered++;
+  return {ok:true,json:async()=>({total_count:0,workflow_runs:[]})};
+ }});
+ assert.equal(recovered,1);assert.equal(calls,22);
+ assert.equal(result.plan.assessments.length,P6_ROLLING_ROUTES.length);
+});
+test("persistent inconsistent active history or out-of-scope count remains a hard hold",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
+ let retries=0;
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async(url,opt)=>{
+  assert.equal(opt.method,"GET");
+  if(new URL(url).searchParams.has("status")){retries++;return {ok:true,json:async()=>({total_count:1,workflow_runs:[]})};}
+  return {ok:true,json:async()=>({total_count:0,workflow_runs:[]})};
+ }}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT/);
+ assert.equal(retries,3);
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>({ok:true,json:async()=>({total_count:101,workflow_runs:[]})})}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ROUTE_HISTORY_LIMIT/);
+});
