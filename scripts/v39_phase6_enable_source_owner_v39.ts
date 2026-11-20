@@ -34,10 +34,10 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="7bd4da0c2b9b6c8fcf8dccca455a1946f5625cea894ab874d06ff87ccdb21c1c";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="97891384c1a51bacff1231cbb354274221eba4004a564e234dcfdc4f9dc39b87";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"630a1a79b31b22b422248ce028e7c0cb49020914",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"c8ae6e8de50d36ed12b3cd3675e71e55c7496eea",
  "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011",
  "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"4c2e80bdc564e919a8c7e7ea9faede18d0421a7a",
  "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
@@ -48,6 +48,12 @@ export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "data-collection/phase5/2026-11-19_PHASE6_FIELD_PRESERVATION_AND_ACCOUNT_EVIDENCE_CORRECTION.md":"63e694a4dab410e6df965faa2105a7044f4c2400",
  "data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md":"9ae7c6eaad5340fb632f59487d468b0949c07b45",
  "data-collection/phase5/README.md":"c77975b5085745506303233226dda09b3be06381",
+ "scripts/v39_phase6_actual_release_candidate_export_v39.ts":"a44ef3f665d0645455faac500908f4388e7c2656",
+ "tests/phase5_actual_nov22_budget_proposal_v39.test.ts":"f0534779d921f6962eb0e3ab6e0a103dcc07d93b",
+ "server/lib/disruption/phase5ActualNov22BudgetProposal_v39.ts":"37fe2caf3ddc41511daae89cb8a648f55fef8878",
+ ".github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml":"155802406f483f651337ec6694c890d7352bb9eb",
+ "server/lib/disruption/retentionDeployment_v39.ts":"f0670ab604a563e3d516485a4f1ea8f665d40179",
+ "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
  "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
  "tests/phase7_derived_release_writer_v39.test.ts":"8388385f85cb90311daf218d2d0c21155fc7f458",
  "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"18ddf2f5ae277a671c0104ccf8fe4bdf4d8e5055",

@@ -94,11 +94,81 @@ export function replayP6CompactNov21Review(){
  return {originalPreviewSha256:original.sha256,revision,calendarDraft:draft,shapeEnvelope:envelope};
 }
 
+
+/** Exact postponed prospective date revision using the already-reviewed second compact case.
+ * Preserves the original seed/treatment and moves the first SOURCE request to Nov 20.
+ * Review-only: no signing, staging, provider calls or paid GO. */
+export function replayP6CompactNov22Review(){
+ const original=replayP6OriginalSeed(),old=original.result;
+ const path="data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json";
+ const raw=readFileSync(path);
+ if(createHash("sha1").update(Buffer.from("blob "+raw.length+"\0")).update(raw).digest("hex")!=="ee17a694594356e2b0c772545c490c198db11b42")hold("COMPACT_REVIEW_RECEIPT_DRIFT");
+ const receipt=JSON.parse(raw.toString("utf8")),c=receipt.cases?.[1];
+ if(receipt.status!=="PROSPECTIVE_COMPACT_REVIEW_NOT_RELEASE"||receipt.phase6PaidGo!==false||
+    receipt.originalSeedWorkflow!=="43700154416"||c?.firstServiceUtc!=="2026-11-22T00:00:00.000Z"||
+    c.lastServiceEndUtc!=="2026-12-24T04:00:00.000Z"||c.rows?.length!==31||c.totalReserve!==36740)
+  hold("COMPACT_REVIEW_RECEIPT_SCOPE");
+ const digest=(x:unknown)=>hash(JSON.stringify(x));
+ const iso=(ms:number)=>new Date(ms).toISOString();
+ const moves=new Map<number,string>(c.rows.map((x:any)=>[x.runDayIndex,x.startUtc]));
+ if(moves.size!==31)hold("COMPACT_REVIEW_INDEX_DRIFT");
+ const dateMapSha256=digest(Object.fromEntries(c.rows.map((x:any)=>[String(x.runDayIndex),x.startUtc.slice(0,10)])));
+ const envelope=structuredClone(old.shapeEnvelope);
+ envelope.days=envelope.days.map((d,i)=>{
+  const plan=c.rows[i],row=old.calendarDraft.calendarDays[i],startUtc=moves.get(d.runDayIndex)!;
+  if(plan.runDayIndex!==d.runDayIndex||plan.originalStartUtc!==d.startUtc||plan.windowShape!==d.windowShape||
+     plan.anchorIcao!==row.anchorIcao||plan.partition!==d.partition||
+     JSON.stringify(plan.fixedKnownAirportSet)!==JSON.stringify(d.pairedAirportCandidates)||
+     !Number.isFinite(Date.parse(startUtc))||startUtc.slice(11)!==d.startUtc.slice(11))
+   hold("COMPACT_ORIGINAL_ASSIGNMENT_DRIFT");
+  const delta=Date.parse(startUtc)-Date.parse(d.startUtc),shift=(v:string)=>iso(Date.parse(v)+delta);
+  const activeSegments=d.activeSegments.map(s=>({...s,startUtc:shift(s.startUtc),endUtc:shift(s.endUtc)}));
+  if(JSON.stringify(activeSegments.map(({startUtc,endUtc})=>({startUtc,endUtc})))!==JSON.stringify(plan.segments)||
+     shift(d.endUtc)!==plan.endUtc)hold("COMPACT_ACTIVE_SEGMENT_DRIFT");
+  return {...d,dateUtc:startUtc.slice(0,10),startUtc,endUtc:shift(d.endUtc),activeSegments,
+   excludedSplitGap:d.excludedSplitGap?{startUtc:shift(d.excludedSplitGap.startUtc),endUtc:shift(d.excludedSplitGap.endUtc)}:null,
+   earliestPermittedEarlyDrawUtc:shift(d.earliestPermittedEarlyDrawUtc),
+   latestPermittedEarlyDrawUtcInclusive:shift(d.latestPermittedEarlyDrawUtcInclusive),
+   earliestPossibleSourceT24SpanUtc:shift(d.earliestPossibleSourceT24SpanUtc)};
+ });
+ const owner=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-09_five_full_frame_pairs_post_selection_kteb_to_kbuf_readonly.json","utf8"));
+ const prior40=buildP5Crossover40WindowReview({ownerCorrectedReadback:owner,firstRunDateUtc:"2026-11-22"});
+ const rows40=prior40.reviewRows.map(r=>{
+  const d=envelope.days[r.runDayIndex-1],startUtc=d.startUtc,conservativeEndUtc=iso(Date.parse(startUtc)+6*3600000);
+  const weekdayClass=[0,6].includes(new Date(startUtc).getUTCDay())?"weekend":"weekday";
+  if(weekdayClass!==r.weekdayClass)hold("COMPACT_PAIR_WEEKDAY_DRIFT");
+  const identity={dateMapSha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc,conservativeEndUtc};
+  return {...r,reviewKeySha256:digest(identity),startUtc,conservativeEndUtc,dateUtc:d.dateUtc,weekdayClass:r.weekdayClass};
+ });
+ const basic=rows40.map(r=>({reviewKeySha256:r.reviewKeySha256,pairId:r.pairId,crossoverPeriod:r.crossoverPeriod,runDayIndex:r.runDayIndex,slot:r.slot,airportIcao:r.airportIcao,startUtc:r.startUtc,conservativeEndUtc:r.conservativeEndUtc,dateUtc:r.dateUtc,weekdayClass:r.weekdayClass}));
+ const review40={...prior40,firstRunDateUtc:"2026-11-22",candidateDateMapSha256:dateMapSha256,windowIdentitySha256:digest(basic),reviewRows:rows40};
+ const seed=JSON.parse(readFileSync("data-collection/phase5/planning/2026-11-15_actual_first_seed_43700154416.json","utf8"));
+ const treatment=previewP5IndependentTreatmentActiveSegments(review40,{treatmentSeedHex:seed.treatmentSeedHex,announcedCommitmentSha256:seed.announcedCommitmentSha256,claimedCommitmentObservedAtUtc:seed.claimedCommitmentObservedAtUtc});
+ if(treatment.assignmentSha256!==old.shapeEnvelope.claimedTreatmentAssignmentSha256)hold("COMPACT_TREATMENT_DRIFT");
+ envelope.dateMapSha256=dateMapSha256;
+ envelope.crossoverReview40Sha256=review40.windowIdentitySha256;
+ envelope.shapeEnvelopeSha256=digest(envelope.days);
+ const draft=structuredClone(old.calendarDraft);
+ draft.calendarDays=draft.calendarDays.map(row=>{const startUtc=moves.get(row.runDayIndex)!;return {...row,startUtc,budgetDayId:"p5-f8-"+startUtc.slice(0,10).replace(/-/g,"")+"-"+String(row.runDayIndex).padStart(2,"0")};});
+ draft.proposedShapeEnvelopeSha256=envelope.shapeEnvelopeSha256;
+ draft.proposedDateMapSha256=dateMapSha256;
+ draft.proposedCalendarRowsSha256=digest(draft.calendarDays);
+ draft.proposedCalendarDraftSha256=digest({schema:draft.schema,actualCorrectedPairSelectionSha256:draft.actualCorrectedPairSelectionSha256,proposedShapeEnvelopeSha256:draft.proposedShapeEnvelopeSha256,proposedDateMapSha256:draft.proposedDateMapSha256,claimedTreatmentAssignmentSha256:draft.claimedTreatmentAssignmentSha256,claimedTreatmentCommitmentSha256:draft.claimedTreatmentCommitmentSha256,assembledAtUtc:draft.assembledAtUtc,calendarDays:draft.calendarDays});
+ const revision={schema:"v39.phase6.explicit-prospective-compact-date-revision-review.v1",status:"PROSPECTIVE_COMPACT_REVIEW_NOT_SIGNED",originalPreviewSha256:original.sha256,originalDateCandidateBytesSha256:old.dateCandidateBytesSha256,sourceReceiptSha256:hash(raw),firstServiceUtc:c.firstServiceUtc,firstSourceUtc:c.firstSourceUtc,lastServiceEndUtc:c.lastServiceEndUtc,allocatedOutcomeTailUtc:c.allocatedOutcomeTailUtc,dateMapSha256,calendarRowsSha256:draft.proposedCalendarRowsSha256,calendarDraftSha256:digest(draft),shapeEnvelopeSha256:envelope.shapeEnvelopeSha256,originalTreatmentAssignmentSha256:treatment.assignmentSha256,independentDateRevisionApproved:false,phase6PaidGo:false};
+ return {originalPreviewSha256:original.sha256,revision,calendarDraft:draft,shapeEnvelope:envelope};
+}
+
 function selectP6Calendar(variant:P6ActualCalendarVariant){
  if(variant==="ORIGINAL_NOV22"){const p=replayP6OriginalSeed();return {sha256:p.sha256,result:{calendarDraft:p.result.calendarDraft,shapeEnvelope:p.result.shapeEnvelope},revision:null};}
- if(variant!=="COMPACT_NOV21")hold("UNKNOWN_EXACT_CALENDAR_VARIANT");
- const p=replayP6CompactNov21Review();
- return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
+ if(variant==="COMPACT_NOV21"){
+  const p=replayP6CompactNov21Review();
+  return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
+ }
+ if(variant==="COMPACT_NOV22"){
+  const p=replayP6CompactNov22Review();
+  return {sha256:p.originalPreviewSha256,result:{calendarDraft:p.calendarDraft,shapeEnvelope:p.shapeEnvelope},revision:p.revision};
+ }
+ return hold("UNKNOWN_EXACT_CALENDAR_VARIANT");
 }
 /** Actual prospective calendar + exact cost rows, already present in original
  * evidence and original compiler. Explicit nulls prevent this review-only
@@ -508,17 +578,20 @@ export function writeP6ActualCandidateExport(result:ReturnType<typeof compileP6A
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   // Review-only packet of prospective metadata; no actual provider Contents.
-  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill"].includes(process.argv[2])&&process.argv.length===4){
+  if(["--review-only","--review-only-no-refill","--review-only-compact-nov21-no-refill","--review-only-compact-nov22-no-refill"].includes(process.argv[2])&&process.argv.length===4){
    const refillChoice=process.argv[2]==="--review-only"?3000:0;
-   const variant=process.argv[2]==="--review-only-compact-nov21-no-refill"?"COMPACT_NOV21":"ORIGINAL_NOV22";
+   const variant:P6ActualCalendarVariant=process.argv[2]==="--review-only-compact-nov21-no-refill"?"COMPACT_NOV21":
+    process.argv[2]==="--review-only-compact-nov22-no-refill"?"COMPACT_NOV22":"ORIGINAL_NOV22";
    const review=prepareP6ActualReviewInput(process.argv[3],refillChoice,variant);
    console.log(JSON.stringify({...review,releaseIdentityReview:prepareP6ActualReleaseIdentityReview(process.argv[3],refillChoice,variant)},null,2));
   }else{
-  const compact=process.argv[2]==="--compact-nov21";
+  const compactNov21=process.argv[2]==="--compact-nov21",compactNov22=process.argv[2]==="--compact-nov22";
+  const compact=compactNov21||compactNov22;
   if(process.env.GITHUB_ACTIONS==="true"||process.argv.length!==(compact?8:7))hold("OWNER_LOCAL_EXACT_ARGUMENTS");
   const [externalPath,externalSha,timingPath,timingSha,out]=process.argv.slice(compact?3:2);
+  const variant:P6ActualCalendarVariant=compactNov21?"COMPACT_NOV21":compactNov22?"COMPACT_NOV22":"ORIGINAL_NOV22";
   const result=compileP6ActualCandidateExport({externalBytes:readFileSync(externalPath),expectedExternalFileSha256:externalSha,
-   timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha,calendarVariant:compact?"COMPACT_NOV21":"ORIGINAL_NOV22"});
+   timingBytes:readFileSync(timingPath),expectedTimingFileSha256:timingSha,calendarVariant:variant});
   console.log(JSON.stringify(out==="--verify-committed-plans"?verifyP6ActualCommittedCheckout(result):writeP6ActualCandidateExport(result,out)));
   }
  }catch(e){const msg=String((e as Error)?.message??"");console.error(/^HOLD_P6_ACTUAL_RELEASE_EXPORT_[A-Z0-9_]+$/.test(msg)?msg:"HOLD_P6_ACTUAL_RELEASE_EXPORT_REDACTED_NO_RELEASE");process.exitCode=2;}

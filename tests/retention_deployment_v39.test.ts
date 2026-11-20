@@ -101,6 +101,19 @@ describe("V3.9 retention deployment / recovery-window safety", () => {
     e.primaryExpiryHours={raw_provider_content:168,live_fids_cache:25};
     expect(verifyRetentionDeploymentEvidence(e).pass).toBe(false);
   });
+  it("accepts a non-destructive recovery-control review instead of requiring a live production restore drill",()=>{
+    const e=withReviewedBackup(),r=e.routineBackupExceptionReview!;
+    delete r.restoreDrillReviewSha256;
+    r.restoreControlReviewSha256="3456789abcdef012".repeat(4);
+    r.productionRestoreReplacesLiveDataVerified=true;
+    r.recoveryOnlyRestorePurposeVerified=true;
+    const v=verifyRetentionDeploymentEvidence(e);
+    expect(v.pass).toBe(true);
+    expect(v.routineBackupExceptionDisposition).toBe("REVIEW_EVIDENCE_ACCEPTED");
+    expect(v.nonIncidentalRecoverableHours).toEqual({raw_provider_content:168,live_fids_cache:24});
+    expect(verifyRetentionDeploymentEvidence({...e,routineBackupExceptionReview:{...r,recoveryOnlyRestorePurposeVerified:undefined} as RoutineBackupExceptionReviewV39}).pass).toBe(false);
+    expect(verifyRetentionDeploymentEvidence({...e,routineBackupExceptionReview:{...r,restoreDrillReviewSha256:"456789abcdef0123".repeat(4)} as RoutineBackupExceptionReviewV39}).pass).toBe(false);
+  });
   it("does not use public terms alone, a policy-only claim, stale rotation or unverified restore to approve backup",()=>{
     const e=withReviewedBackup(),r=e.routineBackupExceptionReview!;
     for(const bad of [
