@@ -174,7 +174,7 @@ export async function readP6T24CurrentRegistrySet({client,trust,runDayIndex}){
  * native packet / separate witness protocol authorization. Build from exact
  * actual original feature matches and original packet completer; no
  * fabricated receipt and no independent physical-outcome claim. */
-export function buildP6DelegatedT24PrivateRegistry({handoff,features,authority,current,trust}){
+export function buildP6DelegatedT24PrivateRegistry({handoff,features,authority,current,trust,phase7ProofScope=undefined}){
  const d=handoff?.privateOriginalDossier,t=trust,pb=authority?.policyBytes;
  trustCheck(t);const now=current?.observedDbClockUtc;
  if(!Buffer.isBuffer(pb)||hash(pb)!==t.expectedT24PolicySha256||
@@ -233,8 +233,9 @@ export function buildP6DelegatedT24PrivateRegistry({handoff,features,authority,c
     expectedReviewedSupplementalFeatureBundleSha256:featureSha,expectedExternalSupplementalContentUseReviewSha256:f.externalContentUseReviewSha256}});
  }
  if(!reviewItems.length)return {status:"NO_ELIGIBLE_NEW_NATIVE_T24_PACKET",candidateCount:remaining.length,censored,deferredCount,providerCalls:0,phase6PaidGo:false};
- const done=completeP6PostcommitReviewedPreBatch(handoff,{expectedDossierSha256:handoff.privateOriginalDossierSha256,observedDbClockUtc:now},reviewItems);
+ const done=completeP6PostcommitReviewedPreBatch(handoff,{...phase7ProofScope,expectedDossierSha256:handoff.privateOriginalDossierSha256,observedDbClockUtc:now},reviewItems);
  if(done.completedPacketCount!==reviewItems.length)hold("ORIGINAL_T24_PACKET_COMPLETION_DRIFT");
+ if(phase7ProofScope?.phase7ProofPreviewOnly===true)return Object.freeze(Object.defineProperty({status:"PHASE7_T24_EXACT_PROOF_REQUESTS_NO_SIGNATURE",phase7ProofPreviewOnly:true,packetCount:0,proofRequestCount:done.completedPacketCount,providerCalls:0,databaseWrites:0,phase6PaidGo:false},"privateCompletedPackets",{value:done.privateCompletedPackets,enumerable:false}));
  const files=done.privateCompletedPackets.map(x=>({filePath:x.proposedFilePath,packetSha256:x.completed.packetSha256,bytes:x.completed.packetBytes}));
  const entries=done.privateCompletedPackets.map(x=>{const s=x.completed.packet.prePermit;return {filePath:x.proposedFilePath,
   packetSha256:x.completed.packetSha256,flightInstanceId:s.flightInstanceId,queryDigestSha256:s.queryDigestSha256,

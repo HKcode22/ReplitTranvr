@@ -374,3 +374,16 @@ describe("current private T24 registry routing into the existing queue",()=>{
   expect(()=>deriveP6T24QueueTrust({...a,reviewerPublicKeyPem:generateKeyPairSync("ed25519").publicKey.export({type:"spki",format:"pem"})})).toThrow("WRONG_REVIEWER_KEY");
  });
 });
+
+describe("independent PRE proof publication boundary",()=>{
+ it("previews both permit types without a publishable registry or signature",()=>{
+  const later=delegatedNativeFixture();
+  const p=signP6DelegatedNativeLaterReviewPage({...later.args,scope:{...later.args.scope,phase7ProofPreviewOnly:true}} as any) as any;
+  expect(p).toMatchObject({phase7ProofPreviewOnly:true,signatureIssued:false});expect(p.privateCompletedPackets).toHaveLength(1);expect(p.privatePlan).toBeUndefined();expect(JSON.stringify(p)).not.toContain("flight_new");
+  const f=t24RegistryFixture(),q=buildP6DelegatedT24PrivateRegistry({...f,phase7ProofScope:{phase7ProofPreviewOnly:true}} as any) as any;
+  expect(q).toMatchObject({phase7ProofPreviewOnly:true,packetCount:0,proofRequestCount:1});expect(q.privateCompletedPackets).toHaveLength(1);expect(q.privateWire).toBeUndefined();expect(JSON.stringify(q)).not.toContain(f.id);
+ });
+ it("rejects a mixed preview and proof-required invocation",()=>{
+  const f=delegatedNativeFixture();expect(()=>signP6DelegatedNativeLaterReviewPage({...f.args,scope:{...f.args.scope,phase7ProofPreviewOnly:true,phase7ProofRequired:true}} as any)).toThrow("PHASE7_MIXED_PROOF_MODE");
+ });
+});

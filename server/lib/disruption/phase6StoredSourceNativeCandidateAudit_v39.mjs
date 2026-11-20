@@ -357,7 +357,8 @@ export function completeP6PostcommitReviewedPreBatch(handoff,scope,reviews){
   if(Date.parse(e.source.ownPreCutoffUtc)<=Date.parse(scope.observedDbClockUtc)+900000){late++;continue;}
   // Real independent input must be attached BEFORE a registry is proposed
   // or a shard is signed. No proof = no Phase6 preservation packet.
-  if(scope.phase7ProofRequired===true){
+  if(scope.phase7ProofPreviewOnly===true&&(scope.phase7ProofRequired===true||scope.phase7IndependentProofsByPermitSha256!==undefined||scope.phase7ProtectedEnv!==undefined))fail("PHASE7_MIXED_PROOF_MODE");
+   if(scope.phase7ProofRequired===true){
    const policy=parsePhase7ProtectedPrePolicy(scope.phase7ProtectedEnv??{});
    const key=hashPhase7DurableCandidate(packet.packet.prePermit);
    if(!(scope.phase7IndependentProofsByPermitSha256 instanceof Map)||!scope.phase7IndependentProofsByPermitSha256.has(key))
@@ -369,7 +370,7 @@ export function completeP6PostcommitReviewedPreBatch(handoff,scope,reviews){
    expectedExternallyPinnedReviewArtifactSha256:item.pins.expectedReviewArtifactSha256,completed:packet});
  }
  let plan=null;
- if(d.horizon!=="T-24h"&&completed.length){
+ if(scope.phase7ProofPreviewOnly!==true&&d.horizon!=="T-24h"&&completed.length){
   plan=proposeP5ReviewedLaterPacketsAsUnsignedDayShard(raw,JSON.parse(raw.toString("utf8")),{
    expectedExternallyApprovedSourceRegistrySha256:d.sourceDayRegistrySha256,sourceRegistryFilePath:path,
    proposedLaterRegistryFilePath:scope.proposedLaterRegistryFilePath,reviewedMainCodeSha:d.reviewedMainCodeSha,
@@ -522,7 +523,11 @@ export function signP6DelegatedNativeLaterReviewPage({handoff,featureReview,evid
   signatureIssued:false,humanReviewPerformed:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  if(!reviews.length)return Object.freeze(result);
  const completed=completeP6PostcommitReviewedPreBatch(handoff,scope,reviews),plan=completed.privateLaterRegistryPlan;
- if(!plan||completed.completedPacketCount!==reviews.length||completed.privateCompletedPackets.some(x=>
+ if(scope.phase7ProofPreviewOnly===true){
+   if(completed.completedPacketCount!==reviews.length||plan!==null)fail("PHASE7_PREVIEW_DRIFT");
+   return Object.freeze(Object.defineProperty({...result,phase7ProofPreviewOnly:true},"privateCompletedPackets",{value:completed.privateCompletedPackets,enumerable:false}));
+  }
+  if(!plan||completed.completedPacketCount!==reviews.length||completed.privateCompletedPackets.some(x=>
   !x.completed.packet.prePermit.reviewedSupplementalFeatureBundle))
   fail("DELEGATED_NATIVE_REVIEW_ORIGINAL_PACKET_COMPLETION_DRIFT");
  const evidenceDigest=hash(Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-later-shard-review-evidence.v1",
