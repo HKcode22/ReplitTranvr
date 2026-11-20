@@ -49,7 +49,8 @@ export interface P6ProspectiveCalendarSuccessorPacket {
   original:typeof P6_ORIGINAL_FROZEN_RELEASE;
   successor:{
     authorizationId:string; manifestSha256:string; manifestJson:string;
-    calendarSha256:string; configSha256:string; codeSha40:string; phase6StartDateUtc:string;
+    calendarSha256:string; runtimeCalendarRowsSha256:string; runtimeBudgetRowsSha256:string;
+    configSha256:string; codeSha40:string; phase6StartDateUtc:string;
     predecessorEvidenceIds:string[];
     calendarDays:P6SuccessorCalendarDay[];
     cycleBudget:{cycleApiCeiling:number; otherCategoryReservedUnits:number; protectedApiFloorUnits:number};
@@ -101,7 +102,7 @@ export function validateP6ProspectiveCalendarSuccessorPacket(
     hold("PACKET_IDENTITY");
   const s=p.successor,r=p.review;
   if(!AUTH.test(s.authorizationId)||s.authorizationId===P6_ORIGINAL_FROZEN_RELEASE.authorizationId||
-    ![s.manifestSha256,s.calendarSha256,s.configSha256,
+    ![s.manifestSha256,s.calendarSha256,s.runtimeCalendarRowsSha256,s.runtimeBudgetRowsSha256,s.configSha256,
       s.sevenRestRelease.reviewedProviderRangeSha256,s.sevenRestRelease.reviewedCategoryBudgetSha256].
       every(x=>SHA.test(x??""))||!CODE.test(s.codeSha40)||
     s.calendarSha256!==P6_NOV20_SUCCESSOR_REVIEW.calendarRowsSha256||
@@ -115,16 +116,23 @@ export function validateP6ProspectiveCalendarSuccessorPacket(
   let m:any; try{m=JSON.parse(s.manifestJson);}catch{hold("MANIFEST_JSON");}
   if(!m||m.scientificFreezeApproved!==true||m.phase6PaidGo!==false||
     m.sourceUseDeferredToPhase6Activation!==true||m.calendarRowsSha256!==s.calendarSha256||
+    m.runtimeCalendarRowsSha256!==s.runtimeCalendarRowsSha256||
+    m.runtimeBudgetRowsSha256!==s.runtimeBudgetRowsSha256||
     m.configSha256!==s.configSha256||m.originalPhase5ManifestSha256!==P6_ORIGINAL_FROZEN_RELEASE.manifestSha256||
     m.prospectiveDateSuccessorApproved!==true)
     hold("MANIFEST_SCOPE");
-  if(!Array.isArray(s.calendarDays)||s.calendarDays.length!==31)hold("CALENDAR_COUNT");
+  if(!Array.isArray(s.calendarDays)||s.calendarDays.length!==31||
+    sha(JSON.stringify(s.calendarDays))!==s.runtimeCalendarRowsSha256)hold("CALENDAR_COUNT_OR_HASH");
   s.calendarDays.forEach(validDay);
   if(s.calendarDays[0].startUtc!==P6_NOV20_SUCCESSOR_REVIEW.firstServiceUtc||
     s.phase6StartDateUtc!=="2026-11-22")hold("FIRST_SERVICE_DATE");
   if(Date.parse(s.calendarDays[0].startUtc)-now.getTime()<=24*HOUR+50*60000)
     hold("FIRST_T24_WINDOW_ALREADY_DUE");
   if(Date.parse(s.firstSourceUtc)<=now.getTime())hold("FIRST_SOURCE_ALREADY_DUE");
+  if(sha(JSON.stringify({cycleBudget:s.cycleBudget,utcBudgets:s.utcBudgets,
+      sevenRestRelease:s.sevenRestRelease,cycleCategoryCaps:s.cycleCategoryCaps,
+      utcCategoryBudgets:s.utcCategoryBudgets}))!==s.runtimeBudgetRowsSha256)
+    hold("BUDGET_ROWS_HASH");
   if(!whole(s.cycleBudget.cycleApiCeiling,1,60000)||
     !whole(s.cycleBudget.otherCategoryReservedUnits)||!whole(s.cycleBudget.protectedApiFloorUnits)||
     !Array.isArray(s.utcBudgets)||s.utcBudgets.length<31||
