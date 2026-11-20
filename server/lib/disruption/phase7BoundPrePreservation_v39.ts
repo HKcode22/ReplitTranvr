@@ -24,7 +24,7 @@ const sourceFor:Record<P5EPreField,readonly string[]>={
  prior_aircraft_adsb_not_ground_reported:["ADSB_LOL"],prior_aircraft_adsb_position_age_seconds:["ADSB_LOL"],
  prior_route_departure_delay_median_minutes:["REVIEWED_HISTORIC_CONTEXT"],
  prior_airport_departure_delay_median_minutes:["REVIEWED_HISTORIC_CONTEXT"],
- airport_congestion_1h:["AERODATABOX_FIDS","REVIEWED_HISTORIC_CONTEXT"]
+ airport_congestion_1h:["REVIEWED_HISTORIC_CONTEXT"]
 };
 export interface Phase7BoundPrePreservationRequest {
  horizon:PreHorizon;
@@ -50,7 +50,7 @@ export function preparePhase7BoundPrePreservation(contract:Phase7DerivedReleaseC
  need(req.dispositions.length===expected.size&&new Set(req.dispositions.map(d=>d.field)).size===expected.size&&req.dispositions.every(d=>expected.has(d.field)),"disposition-denominator");
  const byField=new Map(req.features.map(f=>[f.featureName,f])),byDisposition=new Map(req.dispositions.map(d=>[d.field,d]));
  const features=profile.fields.filter(f=>f.role==="feature");
- need(features.length===contract.features.length&&features.every(f=>expected.has(f.sourceField)&&byDisposition.get(f.sourceField as P5EPreField)?.disposition==="REVIEWED_DERIVED_BUCKET"&&byDisposition.get(f.sourceField as P5EPreField)?.outputField===f.outputField),"exact-profile-field-binding");
+ need(features.length===contract.features.length&&features.every(f=>expected.has(f.sourceField)&&byDisposition.get(f.sourceField as P5EPreField)?.disposition==="REVIEWED_DERIVED_BUCKET"&&byDisposition.get(f.sourceField as P5EPreField)?.outputField===f.outputField&&byDisposition.get(f.sourceField as P5EPreField)?.reviewSha256===f.transformEvidenceSha256),"exact-profile-field-binding");
  // No source identifier may be treated as a 1:1 category bucket to bypass
  // the deliberately separate purpose-bound reference lane.
  const identifiers=new Set(["origin_icao","destination_icao","operating_carrier"]);
