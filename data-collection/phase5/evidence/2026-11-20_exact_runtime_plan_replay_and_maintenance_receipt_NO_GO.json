@@ -1,0 +1,244 @@
+{
+  "schema": "v39.phase6.nov20.exact-runtime-plan-replay-and-maintenance-evidence.v1",
+  "status": "RUNTIME_PLAN_CANDIDATE_EXACT_PRIMARY_REPIN_VERIFIED_NO_GO",
+  "stageCodeSha": "0a7b1a28f243de76d4c83026d15f585265ef6f7b",
+  "stageSha256": "6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc",
+  "planReview": {
+    "runId": 44674940648,
+    "jobId": 136084421458,
+    "headSha": "28460f2ce087a32986c29a970e875bf0fdca9cd7",
+    "result": {
+      "status": "EXACT_NOV20_PUBLIC_METADATA_REPLAY_NO_GO",
+      "plans": [
+        {
+          "runDayIndex": 1,
+          "oldSha256": "07e12cb7397a49b31d7e1f907244f7d6f97f659ab23196ac0fad86369a925659",
+          "newSha256": "86d68b3f08cd7fac5142bc4683b1a53cc6814830d583919494c28d2337d938f7",
+          "changed": true
+        },
+        {
+          "runDayIndex": 2,
+          "oldSha256": "8b5340bab56af41321767e7b7d101a3820be777998bfd810f4102400aa4b5696",
+          "newSha256": "7115f6dc4243b620bb75112289cf6fc8aa0242ac54965ff4623a85dd6d3286fe",
+          "changed": true
+        },
+        {
+          "runDayIndex": 3,
+          "oldSha256": "70b38509894c8b27f1b2a7b8ad9133d891cd0b928891534a27e09cfe9cf4df26",
+          "newSha256": "11fadf5df4eceb532ff53fad5347a667baa135dfa70084bcb047c603e691127f",
+          "changed": true
+        },
+        {
+          "runDayIndex": 4,
+          "oldSha256": "3717267ed945dd9c25b6c963e1d4e04450c5466f5c4fb3fd86917e066061fb09",
+          "newSha256": "cf5502d92d62f745df354ce6ffacff6ae0ff82b16e74f29a05ef24712f4dfbce",
+          "changed": true
+        },
+        {
+          "runDayIndex": 5,
+          "oldSha256": "24f6b1eb9c7c786a16acc689adb3fcbc4c8a0b7e43610624a96801c2259a2f94",
+          "newSha256": "7ddcbc34a34e42a99e96c1f11fa273c02f763d556dd6016aa04b9b96b2921d89",
+          "changed": true
+        },
+        {
+          "runDayIndex": 6,
+          "oldSha256": "8da0d5340f1b3b4d5dfe37b4e5570f3763f8071069fcecd1628191f5ee6dfed8",
+          "newSha256": "8b80c4928f7f04492718168c7f26dc8c45a269025f56d9f55dc6b614836bba3f",
+          "changed": true
+        },
+        {
+          "runDayIndex": 7,
+          "oldSha256": "e4cf6fc8a79ecb99a39684068b9ea49913e49ecfdba651e7c50e2c7a5edd7650",
+          "newSha256": "d571425d139c09b23dcd9b5fe426bcb8b97fcc65f4103e199731f3633944f465",
+          "changed": true
+        },
+        {
+          "runDayIndex": 8,
+          "oldSha256": "74bc4f06347133af505c448ea1991c0171a833fb90e2cd811cf3592ff7b44f75",
+          "newSha256": "2d076dbf678b0e1c41615a4dd8e2bd695f586b9296cabbee91f9b333c7d4bc6a",
+          "changed": true
+        },
+        {
+          "runDayIndex": 9,
+          "oldSha256": "e58735a4a2147fe870cb288c38ed4d49f04fb34f06122a59e7d47c55bc1d7a84",
+          "newSha256": "45e51284e0cd8b88db79b79b97522aed47496328a89c717cb5b84bc35ac2b7fc",
+          "changed": true
+        },
+        {
+          "runDayIndex": 10,
+          "oldSha256": "ef9856fce9eb333f050ccc150c0eacc09f88251e9c305091582173975a67ef91",
+          "newSha256": "0ffa4c9daa2b11095726f6ed01dba88e19b986595baff3d1388c5065a07e73bf",
+          "changed": true
+        },
+        {
+          "runDayIndex": 11,
+          "oldSha256": "dff97f608c1062253dd5e4b5e9cf3816bdaa5519860d77e2dfd351b1e464e466",
+          "newSha256": "105c1bc3d37303dadbb2d7abe065bf37e1d229643e1f793d3b30a594720bd52c",
+          "changed": true
+        },
+        {
+          "runDayIndex": 12,
+          "oldSha256": "7d20d424c9328f6aa2f2eb2e66706d51f47d5ef41280ebe320d98d3334458de5",
+          "newSha256": "f4d6a0ee07205c1dae7dcb91a8ce768b8231a91049b58ab9a6a66b8e04398a9a",
+          "changed": true
+        },
+        {
+          "runDayIndex": 13,
+          "oldSha256": "43a6026250f8cb4272d167385a4cac5e2515bae94ee4350dbc75fd4b1cf8ca55",
+          "newSha256": "8d7049644f8300088e87114547efcb2b5de496634f4ae268065d8180e335ff26",
+          "changed": true
+        },
+        {
+          "runDayIndex": 14,
+          "oldSha256": "501490518e37130a649c97bf543805b3aa004ed42b38c29ba67090ae37af122c",
+          "newSha256": "df5fd2b46314bd0205dcf1f4b90f5e62cacc9c3477b2552842a1164d130dd221",
+          "changed": true
+        },
+        {
+          "runDayIndex": 15,
+          "oldSha256": "12c22b1de8080d22b7725cbf784d52ffab7b45633a0180ea45edd3b94b8bfb3b",
+          "newSha256": "7fd0764687159593654d0310284f5015fdb5d0e0cbe362e4bfb5dde3b64b459c",
+          "changed": true
+        },
+        {
+          "runDayIndex": 16,
+          "oldSha256": "b5e89cd644ed10478797c96ffa27d8030b991f882959bd987029dbe4234c84d8",
+          "newSha256": "ab26a8f35b1f4ca19268968b9bb44a7ab664980023ddc4c342cdc904407bd9af",
+          "changed": true
+        },
+        {
+          "runDayIndex": 17,
+          "oldSha256": "16a8461da82fad8710df0392723cedb0af8c096fd8b11ebe9d4fbbd178c7ae9b",
+          "newSha256": "8d6b960d2bdf10806d29531c1911973995ee2041a16ed3c8dde79034a8cb3459",
+          "changed": true
+        },
+        {
+          "runDayIndex": 18,
+          "oldSha256": "8aede7b638ab5b1860b21b2c49c646d46dc640f45001321bfdbb6baab1abbc01",
+          "newSha256": "08cdbcabb6af8b8b15da0dc381ede7e291e649535a961ca35970ef5906460f15",
+          "changed": true
+        },
+        {
+          "runDayIndex": 19,
+          "oldSha256": "90bfac4a48458aaadde7110e170c3ec616a2132cfe8e59a97568f90cdbf90daa",
+          "newSha256": "d454787ffeaffccc415422b185cb070845bf30ab622ab3bd6d346ace5a69aa25",
+          "changed": true
+        },
+        {
+          "runDayIndex": 20,
+          "oldSha256": "4efc95ee2fae340b1ab8ac39dba4634488329e78b96e243c7ecce9c544f562c7",
+          "newSha256": "4aaf2d1a2b85bc6188bdee346dff9282b9331ce4ea455c19a2df0d4ded1d0450",
+          "changed": true
+        },
+        {
+          "runDayIndex": 21,
+          "oldSha256": "3304bccbd3a0f769c56ccd90132c1709d58ec46f1945b52e42d19a7811b9525a",
+          "newSha256": "d53c6eef652e3f25d99a15b9a13d6989994898c1a0add0cb0b65739c2202a8cb",
+          "changed": true
+        },
+        {
+          "runDayIndex": 22,
+          "oldSha256": "f411f21bb5542ef4f8ac5ffc6dff60bb66f2637afe0199bc7003eeb8fb4031b7",
+          "newSha256": "cfe7dcfef95c0060541814989f41bd0867596e6694b3d4f97ac11695af7aa5ea",
+          "changed": true
+        },
+        {
+          "runDayIndex": 23,
+          "oldSha256": "f8e1828294431b15a9dce27c228ca91bc0d2e9fd40e48be084d3599a301b50b0",
+          "newSha256": "e36fb18ac0e21890f8a5739e147d5d6623576dc2916db4a2b750352367621419",
+          "changed": true
+        },
+        {
+          "runDayIndex": 24,
+          "oldSha256": "bd9b452df84a7173cf057b6f49e766423fbc9cb2ec5fb22d7947f6a7f63140d6",
+          "newSha256": "6cf369efd0c658f9af1604b879b952edf28a1f48a53ce2958eee6edb179c956f",
+          "changed": true
+        },
+        {
+          "runDayIndex": 25,
+          "oldSha256": "37dbf1dea40f7c1bf564808074dd61694c52e6ed29557446cf21699fdc006b17",
+          "newSha256": "908c8919a474a1b0a96ef4b35031c88f6e23e10db7fbd1774915452361fa6630",
+          "changed": true
+        },
+        {
+          "runDayIndex": 26,
+          "oldSha256": "71f76c8adfc894dab8f7ff76d5669b3e5e03c9ad6bef9f9deadfd287a79d3a0a",
+          "newSha256": "d9ac54b2ebfac84b17d302890374d4a0befa2b48634778ff03dc564efef40814",
+          "changed": true
+        },
+        {
+          "runDayIndex": 27,
+          "oldSha256": "6bfab870015ee51208d1267f2131e93565982deb38847ec036d4866e6d236124",
+          "newSha256": "0b62533200e0e144b214a23b108e3289e18b289b1eab08f62361886488b85a12",
+          "changed": true
+        },
+        {
+          "runDayIndex": 28,
+          "oldSha256": "f4e6fac988bf91a9d99c1f5e4f4e9f3a6cf9180e9ef4f2932455670416bea2fb",
+          "newSha256": "f3d21d00b9a5b3990a04ffc722e7f63b52b3319181f715f376d291a6c191ca48",
+          "changed": true
+        },
+        {
+          "runDayIndex": 29,
+          "oldSha256": "744d6c7b8c0f1d946e472d69d8f528b2f5cce91379f4d56f7ecbc1643fcc49ce",
+          "newSha256": "97a8eb0f1dff8cff4f1c2b8eca100e6424966db7dfd75047ab2bbcf0fde1734b",
+          "changed": true
+        },
+        {
+          "runDayIndex": 30,
+          "oldSha256": "856a30f2873d41ea93b2b49d365d7e55ef0f29b0aacd392cee6dd0080ca88f7a",
+          "newSha256": "ca14ddaf28e2d4989686f6de976b785d372354c627005c488074c5a33dc8a269",
+          "changed": true
+        },
+        {
+          "runDayIndex": 31,
+          "oldSha256": "fb3eaa840510a6d7e935f77774d6866cfc4f4bc41d396ed488df74cad3cdb8fa",
+          "newSha256": "11c52576f025a92d23e92acc9acc5ea88636dcefc6844b48fabbc88125f11efa",
+          "changed": true
+        }
+      ],
+      "planRebindMetadata": {
+        "coverageGridSha256": "96a857adc0f93dc071ae7677522162dd4f0a972def2e0bffff6cfb787bb43650",
+        "rangeEvidenceSha256": "cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3",
+        "dateMapSha256": "389c6e38918caa8f48cbfee7733337eb05e4b4baa0a18579ef34d09c6fe3ab82",
+        "crossoverReview40Sha256": "d14246fe10c6e98ea8f70b30555e5bd1b540d10fab2325b70711cb75afeaa734",
+        "shapeEnvelopeSha256": "a1c003d3d2817f5294c644e41263c0943a4e2bec32679093edd7755d3e4d917a"
+      },
+      "providerCalls": 0,
+      "databaseWrites": 0,
+      "phase6PaidGo": false
+    },
+    "adoptionPr": 924,
+    "adoptionCommit": "89bfc7d01d72c4bdebaec8ed0fdfa6336f282450",
+    "changedPaths": 31
+  },
+  "maintenance": {
+    "ownerReportedRepinSucceeded": true,
+    "verifiedPrimaryRunId": 44673991849,
+    "verifiedPrimaryJobId": 136081343861,
+    "observedAtUtc": "2026-11-20T04:23:15.331Z",
+    "liveOriginals": 0,
+    "eligibleOriginals": 0,
+    "hardDueOriginals": 0,
+    "distinctDbActorsVerified": true,
+    "primaryVerifyDatabaseWrites": 0,
+    "relayTargetReadbackReported": true,
+    "actualNextBackupChildNotYetObserved": true,
+    "macMonitorRepinStillRequired": true
+  },
+  "privatePolicyWorkpapersFoundInOwnerSearch": false,
+  "privateDueGuard": {
+    "pr": 923,
+    "testHead": "e11a473952716e67d3e054538516365fa4f5fe95",
+    "runId": 44674813091,
+    "disposablePg16Passed": true,
+    "productionInstalled": false
+  },
+  "providerCalls": 0,
+  "phase6PaidGo": false,
+  "notes": [
+    "Plan geometry hold explained by embedded 31-day ordinary-day envelopes; full exact compiler check passed.",
+    "No approval ledger entry or production deployment. No provider source payloads committed.",
+    "No repeat owner maintenance or plan preparation required. Exact combined release identity bridge and actual static/policy review remain."
+  ]
+}
