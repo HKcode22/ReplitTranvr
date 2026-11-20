@@ -7,16 +7,16 @@ const code="scripts/v39_phase6_enable_source_owner_v39.ts",paths=[...plan,code].
 const evidence="data-collection/phase5/evidence/2026-11-20_scope_review.json";
 const sha=(x:Buffer)=>createHash("sha256").update(x).digest("hex");
 function fixture(){
- const review={schema:"v39.phase6.revised-stage-executable-bridge-review.v1",stageCodeSha:P6_NOV22_STAGE_CODE,stagePacketSha256:P6_NOV22_STAGE_SHA,costEnvelopeSha256:P6_NOV22_COST_SHA,reviewedExecutableCommit:reviewed,changedBlobs:paths.map(path=>({path,blobSha:blobs[path]})),reviewedBy:"synthetic-reviewer",reviewedAtUtc:"2026-11-20T04:00:00.000Z",independentOperationalReleaseApproved:true,phase6PaidGo:false};
+ const review={schema:"v39.phase6.revised-stage-executable-bridge-review.v1",stageCodeSha:P6_NOV22_STAGE_CODE,stagePacketSha256:P6_NOV22_STAGE_SHA,costEnvelopeSha256:P6_NOV22_COST_SHA,reviewedExecutableCommit:reviewed,changedBlobs:paths.map(path=>({path,blobSha:blobs[path],mode:"100644"})),reviewedBy:"synthetic-reviewer",reviewedAtUtc:"2026-11-20T04:00:00.000Z",independentOperationalReleaseApproved:true,phase6PaidGo:false};
  const reviewBytes=Buffer.from(JSON.stringify(review,null,2)+"\n");
- const request={stageCode:P6_NOV22_STAGE_CODE,stageSha:P6_NOV22_STAGE_SHA,costSha:P6_NOV22_COST_SHA,currentHead:head,reviewBytes,expectedOperationalEvidenceSha256:sha(reviewBytes),now:new Date("2026-11-20T05:00:00.000Z"),stageIsAncestor:true,reviewedCommitIsAncestor:true,reviewedDiff:paths,currentDiff:[...paths,evidence],readReviewedBlob:(p:string)=>blobs[p],readCurrentBlob:(p:string)=>blobs[p]};
+ const request={stageCode:P6_NOV22_STAGE_CODE,stageSha:P6_NOV22_STAGE_SHA,costSha:P6_NOV22_COST_SHA,currentHead:head,reviewBytes,expectedOperationalEvidenceSha256:sha(reviewBytes),now:new Date("2026-11-20T05:00:00.000Z"),stageIsAncestor:true,reviewedCommitIsAncestor:true,reviewedDiff:paths,currentDiff:[...paths,evidence],readReviewedBlob:(p:string)=>"100644 blob "+blobs[p],readCurrentBlob:(p:string)=>"100644 blob "+blobs[p]};
  return {review,request};
 }
 describe("exact approved executable succession, no staged-byte rewrite",()=>{
  it("admits exact 31 plans and reviewed changed code with only subsequent evidence",()=>{const {request}=fixture();expect(verifyP6RevisedExecutableBridge(request)).toMatchObject({reviewedExecutablePaths:32,phase6PaidGo:false})});
  it("rejects drift, omitted plan, unreviewed executable, predecessor changes and unrelated commits",()=>{
   const {request}=fixture();
-  for(const r of [{...request,currentDiff:[...request.currentDiff,"package-lock.json"]},{...request,reviewedDiff:paths.slice(1)},{...request,stageSha:"0".repeat(64)},{...request,reviewedCommitIsAncestor:false},{...request,readCurrentBlob:(p:string)=>p===code?"f".repeat(40):blobs[p]},{...request,expectedOperationalEvidenceSha256:"a".repeat(64)}])expect(()=>verifyP6RevisedExecutableBridge(r)).toThrow(/HOLD_P6_EXACT_SOURCE_AUTH_EXECUTABLE_BRIDGE/);
+  for(const r of [{...request,currentDiff:[...request.currentDiff,"package-lock.json"]},{...request,reviewedDiff:paths.slice(1)},{...request,stageSha:"0".repeat(64)},{...request,reviewedCommitIsAncestor:false},{...request,readCurrentBlob:(p:string)=>p===code?"100644 blob "+"f".repeat(40):"100644 blob "+blobs[p]},{...request,expectedOperationalEvidenceSha256:"a".repeat(64)},{...request,readCurrentBlob:(p:string)=>"120000 blob "+blobs[p]}])expect(()=>verifyP6RevisedExecutableBridge(r)).toThrow(/HOLD_P6_EXACT_SOURCE_AUTH_EXECUTABLE_BRIDGE/);
  });
  it("rejects unapproved review and a review that omits a day even with matching hash/diff",()=>{
   const {request,review}=fixture();
