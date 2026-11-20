@@ -10,7 +10,7 @@ import type {Phase7StoredPreFragment} from "./phase7FinalGroupAssembly_v39";
 import {readPhase7PostScopedGroup} from "./phase7PostScopedGroup_v39";
 import {verifyPhase7SignedPostSettlement,readPhase7PostReviewerPublicKey} from "./phase7SignedPostReview_v39";
 import {hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle} from "./phase7DurableDerivedBundleCandidate_v39";
-import type {Phase7PostConsumer,Phase7PostAudit} from "./phase7PostPreservationBridge_v39";
+import {phase7AuditedPreservationGroups,type Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_SIGNED_POST_CONSUMER_"+s);};
 export interface Phase7PrivateOutcomeReviewTransport{
  /** The real separate reviewer transport must demonstrate its independent
@@ -44,13 +44,14 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
     Object.getOwnPropertyDescriptor(a,"privatePreservationAnchors")?.enumerable!==false||
     !Number.isSafeInteger(a.uniqueRetainedPreFlights)||a.uniqueRetainedPreFlights<0||a.uniqueRetainedPreFlights>2500)hold("COMMITTED_SCOPE");
    admittedRequest=null;
-   const byLeg=new Map<string,P6PostPreservationAnchor[]>();
+   // Purely scientific ambiguity is locally excluded by the actual source
+   // audit, never by the reviewer or a catch-all error handler. Preserve all
+   // other groups; no data is invented, no uncertain reservation is replayed.
    for(const h of a.privatePreservationAnchors){
-    if(h.ambiguousIdentity||h.manifestSha256!==c.packet.manifestSha256||h.rightsSha256!==c.packet.reviewedSourceRightsSha256||
-     h.airportIcao!==c.packet.airportIcao||h.runDayIndex!==c.packet.runDayIndex||h.frameSha256!==c.packet.reviewedFrameSha256)hold("AMBIGUOUS_OR_CROSS_PARTITION");
-    const list=byLeg.get(h.flightInstanceId)??[];list.push(h);byLeg.set(h.flightInstanceId,list);
+    if(h.manifestSha256!==c.packet.manifestSha256||h.rightsSha256!==c.packet.reviewedSourceRightsSha256||
+     h.airportIcao!==c.packet.airportIcao||h.runDayIndex!==c.packet.runDayIndex||h.frameSha256!==c.packet.reviewedFrameSha256)hold("CROSS_PARTITION");
    }
-   if(byLeg.size!==a.uniqueRetainedPreFlights)hold("GROUP_DENOMINATOR");
+   const {eligible:byLeg,excluded}=phase7AuditedPreservationGroups(a);
    const seenGroups=new Set<string>();
    // Validate all reviews before any write. This avoids a missing review in
    // the middle silently turning a partial group denominator into success.
@@ -83,7 +84,7 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
     if(r.status!=="DERIVED_BUNDLE_DURABLE_INDEPENDENT_READBACK")hold("UNKNOWN_GROUP_COMMIT_NO_REPLAY");
     verifiedGroupCount++;
    }
-   return {independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,verifiedGroupCount,heldGroupCount:0,accountedRetainedFlightCount:byLeg.size};
+   return {independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,verifiedGroupCount,heldGroupCount:0,excludedAmbiguousGroupCount:excluded.size,accountedRetainedFlightCount:byLeg.size+excluded.size};
   }
  };
 }

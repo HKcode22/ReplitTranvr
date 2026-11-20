@@ -171,6 +171,10 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(ambiguous.pairedHorizonObservability).toMatchObject({retainedKeysWithPotentialCrossKeyServiceAlias:2,retainedConsistentT6T90Pairs:0});
   expect(ambiguous.byHorizon["T-6h"]).toMatchObject({potentialCrossKeyServiceAlias:2,ambiguousIdentity:2,matchedNativePost:0});
   expect(ambiguous.privateDecisions).toHaveLength(0);
+  expect(new Set(ambiguous.privateAmbiguousPreservationFlightIds)).toEqual(new Set([aKey,bKey]));
+  expect(ambiguous.privatePreservationAnchors.every(h=>h.ambiguousIdentity)).toBe(true);
+  expect(Object.getOwnPropertyDescriptor(ambiguous,"privateAmbiguousPreservationFlightIds")?.enumerable).toBe(false);
+  expect(JSON.stringify(ambiguous)).not.toContain(aKey);
  });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);

@@ -265,6 +265,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   number(a.flight_number)!==null&&number(a.flight_number)===number(b.flight_number)&&
   (!id(a.provider_record_key)||!id(b.provider_record_key)||a.provider_record_key===b.provider_record_key);
  const privatePreservationAnchors:P6PostPreservationAnchor[]=[];
+ const privateAmbiguousPreservationFlightIds:string[]=[];
  const coverage={
   retainedUniqueFlightCandidates:perFlight.size,
   retainedKeysWithPotentialCrossKeyServiceAlias:crossKeyAliases.size,
@@ -284,6 +285,8 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   const singles=[...hs.entries()].filter(([,a])=>a.length===1);
   const conflict=hs.size>1&&singles.some(([,a],i)=>singles.slice(i+1).some(([,b])=>!pair(a[0],b[0])));
   if(conflict)coverage.flightsWithCrossHorizonTOrIdentityConflict++;
+  const scientificallyAmbiguous=duplicate||conflict||crossKeyAliases.has(k)||singles.some(([,rows])=>id(rows[0].provider_record_key)&&preIdsByProvider.get(rows[0].provider_record_key)?.size!==1);
+  if(scientificallyAmbiguous)privateAmbiguousPreservationFlightIds.push(k);
   // Even a missing reported POST must preserve its unique retained PRE
   // denominator. Duplicate/conflicting groups are explicit holds, not labels.
   for(const [h,rows] of singles){
@@ -294,7 +297,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
     flightInstanceId:k,horizon:h,selectedNativeTUtc:iso(reqDate(a.selected_t_milestone_utc)),
     preIssuedAtUtc:iso(reqDate(a.created_at)),originalSourceAvailableAtUtc:iso(reqDate(a.original_available_at)),
     sourceExpiresAtUtc:iso(reqDate(a.source_expires_at_utc)),sourceResponseSha256:String(a.fids_response_hash),
-    ambiguousIdentity:duplicate||conflict||crossKeyAliases.has(k)||(id(a.provider_record_key)&&preIdsByProvider.get(a.provider_record_key)?.size!==1)
+    ambiguousIdentity:scientificallyAmbiguous
    }));
   }
   const x=hs.get("T-6h"),y=hs.get("T-90m"),z=hs.get("T-24h");
@@ -330,8 +333,9 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   retainedEvidenceOnly:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperties(out,{
   privateDecisions:{value:Object.freeze(privateDecisions),enumerable:false},
-  privatePreservationAnchors:{value:Object.freeze(privatePreservationAnchors),enumerable:false}
- })) as typeof out&{readonly privateDecisions:typeof privateDecisions;readonly privatePreservationAnchors:readonly P6PostPreservationAnchor[]};
+  privatePreservationAnchors:{value:Object.freeze(privatePreservationAnchors),enumerable:false},
+  privateAmbiguousPreservationFlightIds:{value:Object.freeze(privateAmbiguousPreservationFlightIds),enumerable:false}
+ })) as typeof out&{readonly privateDecisions:typeof privateDecisions;readonly privatePreservationAnchors:readonly P6PostPreservationAnchor[];readonly privateAmbiguousPreservationFlightIds:readonly string[]};
 }
 /** Fresh restricted DB read immediately after original+members COMMIT.
  * No logging raw bytes or private decisions. Failure is an audit failure
