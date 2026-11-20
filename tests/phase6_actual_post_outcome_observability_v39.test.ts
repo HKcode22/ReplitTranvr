@@ -50,6 +50,16 @@ function fixture(){
  return {p,clock,flight,move,original,pre,...original()};
 }
 describe("actual POST outcome observability, original cutoff-safe retained PRE partition",()=>{
+ it("hands off exact live PRE scopes including unmatched POST without serializing source identities",()=>{
+  const f=fixture(),a=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre(),f.pre("T-90m",2,"other-native","leg:synthetic:002")],f.clock);
+  expect(a.privatePreservationAnchors).toHaveLength(2);
+  expect(a.privatePreservationAnchors[0]).toMatchObject({snapshotId:"1",manifestSha256:f.p.manifestSha256,
+   rightsSha256:f.p.reviewedSourceRightsSha256,queryDigestSha256:H("1"),horizon:"T-6h"});
+  expect(a.privatePreservationAnchors[1]).toMatchObject({snapshotId:"2",horizon:"T-90m"});
+  expect(Object.getOwnPropertyDescriptor(a,"privatePreservationAnchors")?.enumerable).toBe(false);
+  expect(JSON.stringify(a)).not.toContain("leg:synthetic");
+  expect(JSON.stringify(a)).not.toContain("snapshotId");
+ });
  it("matches each retained horizon without declaring revised or runway time actual gate-out",()=>{
   const f=fixture(),a=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre(),f.pre("T-90m",2)],f.clock);
   expect(a).toMatchObject({uniqueRetainedPreFlights:1,actualGateOutNumericCandidates:0,physicalGateOutLabels:0,physicalRunwayLabels:0,

@@ -43,6 +43,14 @@ export const P6_POST_PARTITION_PRE_SQL=P5_FUTURE_POST_ACTUAL_PRE_SQL
  " AND q.service_window_start_utc=$4::timestamptz AND q.service_window_end_utc=$6::timestamptz "+
  " AND b.source_expires_at_utc>$8::timestamptz AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL "+
  " ORDER BY s.flight_instance_id,s.horizon,s.id LIMIT 7501";
+/** Ephemeral only, never serialized, persisted or exposed in the public audit. */
+export interface P6PostPreservationAnchor{
+ readonly manifestSha256:string;readonly rightsSha256:string;readonly queryDigestSha256:string;
+ readonly snapshotId:string;readonly runDayIndex:number;readonly airportIcao:string;readonly frameSha256:string;
+ readonly flightInstanceId:string;readonly horizon:Horizon;readonly selectedNativeTUtc:string;
+ readonly preIssuedAtUtc:string;readonly originalSourceAvailableAtUtc:string;readonly sourceExpiresAtUtc:string;
+ readonly sourceResponseSha256:string;readonly ambiguousIdentity:boolean;
+}
 export interface P6PostCommittedScope{
  packet:P5ReviewedFuturePostOneGet;
  populationQueryId:string;responseSha256:string;normalizedMembers:number;
@@ -256,6 +264,7 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   ico(a.arr_airport_icao)&&a.arr_airport_icao===b.arr_airport_icao&&
   number(a.flight_number)!==null&&number(a.flight_number)===number(b.flight_number)&&
   (!id(a.provider_record_key)||!id(b.provider_record_key)||a.provider_record_key===b.provider_record_key);
+ const privatePreservationAnchors:P6PostPreservationAnchor[]=[];
  const coverage={
   retainedUniqueFlightCandidates:perFlight.size,
   retainedKeysWithPotentialCrossKeyServiceAlias:crossKeyAliases.size,
@@ -270,10 +279,24 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   fullStudyDenominatorCertified:false
  };
  for(const [k,hs] of perFlight){
-  if([...hs.values()].some(a=>a.length!==1))coverage.flightsWithDuplicateHorizon++;
+  const duplicate=[...hs.values()].some(a=>a.length!==1);
+  if(duplicate)coverage.flightsWithDuplicateHorizon++;
   const singles=[...hs.entries()].filter(([,a])=>a.length===1);
-  if(hs.size>1&&singles.some(([,a],i)=>singles.slice(i+1).some(([,b])=>!pair(a[0],b[0]))))
-   coverage.flightsWithCrossHorizonTOrIdentityConflict++;
+  const conflict=hs.size>1&&singles.some(([,a],i)=>singles.slice(i+1).some(([,b])=>!pair(a[0],b[0])));
+  if(conflict)coverage.flightsWithCrossHorizonTOrIdentityConflict++;
+  // Even a missing reported POST must preserve its unique retained PRE
+  // denominator. Duplicate/conflicting groups are explicit holds, not labels.
+  for(const [h,rows] of singles){
+   const a=rows[0];
+   privatePreservationAnchors.push(Object.freeze({manifestSha256:p.manifestSha256,
+    rightsSha256:p.reviewedSourceRightsSha256,queryDigestSha256:String(a.query_digest),
+    snapshotId:String(a.snapshot_id),runDayIndex:p.runDayIndex,airportIcao:p.airportIcao,frameSha256:p.reviewedFrameSha256,
+    flightInstanceId:k,horizon:h,selectedNativeTUtc:iso(reqDate(a.selected_t_milestone_utc)),
+    preIssuedAtUtc:iso(reqDate(a.created_at)),originalSourceAvailableAtUtc:iso(reqDate(a.original_available_at)),
+    sourceExpiresAtUtc:iso(reqDate(a.source_expires_at_utc)),sourceResponseSha256:String(a.fids_response_hash),
+    ambiguousIdentity:duplicate||conflict||crossKeyAliases.has(k)||(id(a.provider_record_key)&&preIdsByProvider.get(a.provider_record_key)?.size!==1)
+   }));
+  }
   const x=hs.get("T-6h"),y=hs.get("T-90m"),z=hs.get("T-24h");
   if(x?.length===1)coverage.retainedT6UniquePre++;
   if(y?.length===1)coverage.retainedT90UniquePre++;
@@ -305,7 +328,10 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   actualGateOutNumericCandidates:0,fullStudyDenominatorCertified:false,
   confirmedCancellationLabels:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
   retainedEvidenceOnly:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
- return Object.freeze(Object.defineProperty(out,"privateDecisions",{value:Object.freeze(privateDecisions),enumerable:false})) as typeof out&{readonly privateDecisions:typeof privateDecisions};
+ return Object.freeze(Object.defineProperties(out,{
+  privateDecisions:{value:Object.freeze(privateDecisions),enumerable:false},
+  privatePreservationAnchors:{value:Object.freeze(privatePreservationAnchors),enumerable:false}
+ })) as typeof out&{readonly privateDecisions:typeof privateDecisions;readonly privatePreservationAnchors:readonly P6PostPreservationAnchor[]};
 }
 /** Fresh restricted DB read immediately after original+members COMMIT.
  * No logging raw bytes or private decisions. Failure is an audit failure
