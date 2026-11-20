@@ -65,7 +65,7 @@ function makeInput(codeSha="f".repeat(40)){
   const period=pi===null?null:i<5?1:2;
   const role=pi===null?null:pi<3?(period===1?"control":"alternative"):
    (period===1?"alternative":"control");
-  const shape=role==="alternative"?(pi!<3?"2x2h":"up-to-6h"):"4h";
+  const shape=role==="alternative"?(pi<3?"2x2h":"up-to-6h"):"4h";
   const start=base+i*7*D+SLOTS[i%6]*H;
   const pairSet=pi===null?null:PAIR_SITES[pi];
   const anchor=pairSet?.HUB?.icao??HUBS[i%4];
