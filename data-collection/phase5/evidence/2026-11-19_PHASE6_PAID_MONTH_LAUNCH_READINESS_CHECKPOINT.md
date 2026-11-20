@@ -1,8 +1,9 @@
 # Phase 6 paid-month launch readiness checkpoint — November 19, 2026
 
-**Disposition: Phase 5 COMPLETE; Phase 6 engineering READY EXCEPT FOR THE
-EXPLICIT ACTIVATION CHAIN; paid collection is NOT STARTED and remains
-fail-closed.** This checkpoint supersedes any interpretation that an unanswered
+**Disposition: Phase 5 engineering foundations and freeze artifacts are COMPLETE;
+the final source-rights/scientific activation gate remains HOLD; Phase 6
+engineering is READY EXCEPT FOR THE EXPLICIT ACTIVATION CHAIN; paid collection
+is NOT STARTED and remains fail-closed.** This checkpoint supersedes any interpretation that an unanswered
 provider email should stop unrelated engineering. Silence is not approval, but
 it is also not a reason to stop code, testing, documentation, or derived-release
 work.
@@ -15,14 +16,18 @@ source-use decision and exact authorization before any source query or paid
 dispatch. Therefore November 20 is an intended launch date, not evidence that
 the run automatically started.
 
-The existing source-custody package was not replaced or duplicated. No existing
-or future production row has been moved into the new packet yet. The new Phase 7
-packet is a narrower, tested derived-release representation. The new fail-closed
-writer emits only that packet from already-approved bucketed inputs; it is not a
-raw-source transformer. It keeps model-useful horizon, split, missingness,
-censoring, quality, and bucketed feature/label information while rejecting
-source identities, exact flight records, raw payloads, exact timestamps, and
-source-to-row linkage. Existing source expiry remains authoritative.
+Packet A—the existing Phase 6 operational/source-custody packet—is preserved as
+the full-fidelity lane. Packet B—the new Phase 7 derived-release packet—is a
+separate representation and retention boundary. They are not two permanent
+copies of a provider archive, and no existing or future production row has been
+moved into Packet B yet. Packet B is a narrower, tested derived-release
+representation; it does not replace Packet A or remove any operational field.
+The fail-closed writer emits only Packet B from already-approved bucketed inputs;
+it is not a raw-source transformer. It keeps model-useful horizon, split,
+missingness, censoring, quality, and bucketed feature/label information while
+rejecting source identities, exact flight records, raw payloads, exact
+timestamps, and source-to-row linkage. Existing Packet A source expiry remains
+authoritative.
 
 ## Completed and verified
 
@@ -31,7 +36,7 @@ source-to-row linkage. Existing source expiry remains authoritative.
 | Phase 5 freeze | Production inert/scientific freeze complete. Do not restage B0062/V0093 or rerun completed migrations. |
 | Study geometry | 31 parent days, 6,144 planned source templates, 37,388 reserved REST units, seven cost categories, and the original f.8 / A / B / C / D1 / D2 / E design are frozen. |
 | Production safety | One B0062 authorization singleton exists disabled; source authorization, process arming, and paid GO remain false. Freeze inventory reported zero prelaunch structural holds and zero provider calls. |
-| Source retention | Existing short-lived source-custody and expiry controls remain in force. No provider-shaped source archive was duplicated. |
+| Source retention | Packet A's short-lived source-custody and expiry controls remain in force. Packet B is not a duplicated permanent provider archive. |
 | Phase 7 contract/writer | Strict derived-release contract, packet builder, fail-closed writer, rejection tests, grouped split fence, missingness/censoring checks, and documentation are implemented. A pure review-gated source-to-derived adapter and rejection test matrix are now implemented, but no concrete approved profile, account-specific rights decision, or live provider adapter is committed. The writer still accepts only already-approved bucketed values. |
 | CI | PR #893 exact-head checks passed for the derived writer, and PR #895 exact-head verification passed for the reviewed transformation adapter: TypeScript, focused no-provider release, full offline tests, migrations/no-op, schema/triggers, lint, registry, traceability, contradiction scan, preflight, production build, and disposable PostgreSQL behavior. |
 | Current-main activation continuity | PR #892 pinned the #890/#891 retention successor, PR #893 added the fail-closed writer/test blobs, and PR #895 added the review-gated adapter/test blobs plus a refreshed normalized self-hash to the reviewed post-freeze bridge. Main remains rights-disabled, source-disabled, database-unchanged, scheduler-inactive, and credit-neutral. |
