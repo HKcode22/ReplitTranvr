@@ -23,14 +23,35 @@ export interface P6ReviewedExecutableBridge {
  reviewedBy:string;reviewedAtUtc:string;independentOperationalReleaseApproved:true;
  phase6PaidGo:false;
 }
-export function verifyP6RevisedExecutableBridge(input:{
+type BridgeInput={
  stageCode:string;stageSha:string;costSha:string;currentHead:string;
  reviewBytes:Buffer;expectedOperationalEvidenceSha256:string;
  now:Date;stageIsAncestor:boolean;reviewedCommitIsAncestor:boolean;
  reviewedDiff:readonly string[];currentDiff:readonly string[];
  readReviewedBlob:(path:string)=>string;readCurrentBlob:(path:string)=>string;
-}){
- need(input.stageCode===P6_NOV22_STAGE_CODE&&input.stageSha===P6_NOV22_STAGE_SHA&&input.costSha===P6_NOV22_COST_SHA&&CODE.test(input.currentHead)&&input.stageIsAncestor===true&&input.reviewedCommitIsAncestor===true,"STAGE_OR_ANCESTRY");
+};
+export function verifyP6RevisedExecutableBridge(input:BridgeInput){
+ need(input.stageCode===P6_NOV22_STAGE_CODE&&input.stageSha===P6_NOV22_STAGE_SHA&&input.costSha===P6_NOV22_COST_SHA,"STAGE_OR_ANCESTRY");
+ return verifyExactBridge(input);
+}
+/** The Monday successor is accepted only for the exact recompiled stage
+ * whose full bytes and cost are independently bound by the SOURCE ledger.
+ * Never accept an alternative date map or a caller-supplied generic bypass. */
+export const P6_MONDAY_CALENDAR_ROWS_SHA="55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b";
+export const P6_MONDAY_BRIDGE_REVIEW_PATH="data-collection/phase5/evidence/2026-11-23_phase6_revised_executable_bridge_review.json";
+export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw:string,approvedStageContentSha256:string,approvedCostSha256:string){
+ let s:any;try{s=JSON.parse(stageRaw)}catch{fail("MONDAY_STAGE_JSON")}
+ const {codeSha40,...content}=s??{};
+ need(Buffer.byteLength(stageRaw)<=48000&&JSON.stringify(s)===stageRaw&&sha(Buffer.from(stageRaw))===input.stageSha&&codeSha40===input.stageCode&&
+   CODE.test(codeSha40)&&codeSha40!==P6_NOV22_STAGE_CODE&&s.calendarSha256===P6_MONDAY_CALENDAR_ROWS_SHA&&
+   Array.isArray(s.calendarDays)&&s.calendarDays.length===31&&sha(Buffer.from(JSON.stringify(s.calendarDays)))===P6_MONDAY_CALENDAR_ROWS_SHA&&
+   s.calendarDays[0].startUtc==="2026-11-25T00:00:00.000Z"&&s.calendarDays[30].startUtc==="2026-12-27T00:00:00.000Z"&&
+   SHA.test(approvedStageContentSha256)&&sha(Buffer.from(JSON.stringify(content)))===approvedStageContentSha256&&
+   SHA.test(approvedCostSha256)&&input.costSha===approvedCostSha256,"MONDAY_EXACT_APPROVED_STAGE");
+ return verifyExactBridge(input);
+}
+function verifyExactBridge(input:BridgeInput){
+ need(CODE.test(input.stageCode)&&SHA.test(input.stageSha)&&SHA.test(input.costSha)&&CODE.test(input.currentHead)&&input.stageIsAncestor===true&&input.reviewedCommitIsAncestor===true,"STAGE_OR_ANCESTRY");
  need(Buffer.isBuffer(input.reviewBytes)&&input.reviewBytes.length>100&&input.reviewBytes.length<=200000&&SHA.test(input.expectedOperationalEvidenceSha256)&&sha(input.reviewBytes)===input.expectedOperationalEvidenceSha256,"OPERATIONAL_EVIDENCE_HASH");
  let x:any;try{x=JSON.parse(input.reviewBytes.toString("utf8"))}catch{fail("REVIEW_JSON")}
  need(Buffer.from(JSON.stringify(x,null,2)+"\n").equals(input.reviewBytes)&&exact(x,["schema","stageCodeSha","stagePacketSha256","costEnvelopeSha256","reviewedExecutableCommit","changedBlobs","reviewedBy","reviewedAtUtc","independentOperationalReleaseApproved","phase6PaidGo"])&&x.schema==="v39.phase6.revised-stage-executable-bridge-review.v1"&&x.stageCodeSha===input.stageCode&&x.stagePacketSha256===input.stageSha&&x.costEnvelopeSha256===input.costSha&&CODE.test(x.reviewedExecutableCommit)&&x.reviewedExecutableCommit!==input.stageCode&&x.independentOperationalReleaseApproved===true&&x.phase6PaidGo===false&&typeof x.reviewedBy==="string"&&x.reviewedBy.trim().length>=3&&typeof x.reviewedAtUtc==="string"&&Number.isFinite(Date.parse(x.reviewedAtUtc))&&new Date(x.reviewedAtUtc).toISOString()===x.reviewedAtUtc&&Date.parse(x.reviewedAtUtc)<=input.now.getTime(),"REVIEW_SCOPE");

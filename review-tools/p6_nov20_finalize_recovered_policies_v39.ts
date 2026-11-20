@@ -13,7 +13,7 @@ import {compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_relea
 import {verifyP6SourceEnableAuthFile} from "../scripts/v39_phase6_source_enable_approval_ledger_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {verifyP6SourceActivationReview} from "../scripts/v39_phase6_enable_source_owner_v39";
-import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const REPO="HKcode22/ReplitTranvr";
 const WORK="7925dca816933a401ec97f1d3a1f920b881c8f1e296ab8f70f0563c19cf13b0e";
 const CATALOG="4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534";
@@ -45,9 +45,29 @@ function archive(id:string,d:string,name:string){
  return createRequire(import.meta.url)(file);
 }
 const CODE_NAMES=["V39_P5_APPROVED_CODE_SHA","P6_NONPAID_SOURCE_APPROVED_MAIN_SHA","V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA","P5_CD_GH_PRE_APPROVED_CODE_SHA","V39_P5_POST_APPROVED_CODE_SHA","P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA","V39_P5_QUEUE_APPROVED_CODE_SHA"];
-export function buildRevisedStaticValues(p:any,w:Record<string,unknown>,stageRaw:string,price:string){
- need(C.test(p.codeSha)&&p.codeSha!==P6_NOV22_STAGE_CODE&&sha(stageRaw)===P6_NOV22_STAGE_SHA&&p.manifestSha256===MANIFEST&&p.configSha256===CONFIG&&p.calendarSha256===CALENDAR&&p.frameSha256===FRAME&&p.costSha256===P6_NOV22_COST_SHA&&p.providerContractSha256===CONTRACT&&H.test(p.releaseSha256)&&H.test(p.rightsSha256)&&H.test(price),"STATIC_EXACT_REVISED_PINS");
- const v:Record<string,string>={...Object.fromEntries(CODE_NAMES.map(k=>[k,p.codeSha])),V39_P5_MANIFEST_SHA256:MANIFEST,V39_P5_CALENDAR_HASH:CALENDAR,V39_P5_CONFIG_HASH:CONFIG,V39_P5_FRAME_HASH:FRAME,V39_P5_RELEASE_SHA256:p.releaseSha256,V39_P5_RIGHTS_SHA256:p.rightsSha256,V39_P5_PROVIDER_CONTRACT_SHA256:CONTRACT,P6_INERT_STAGE_INPUT_JSON:stageRaw,P6_INERT_STAGE_INPUT_SHA256:P6_NOV22_STAGE_SHA,P6_INERT_COST_ENVELOPE_SHA256:P6_NOV22_COST_SHA,P6_PRIVATE_POST_OUTCOME_TAIL_HOURS:"48",V39_P5_POST_PROVIDER_CONTRACT_SHA256:CONTRACT,V39_P5_POST_CATEGORY_BUDGET_SHA256:P6_NOV22_COST_SHA,V39_P5_POST_PRICE_SHA256:price};
+/** Derive date-sensitive policy pins from the actual compiled bytes, not
+ * from a hand-edited calendar or a hard-coded old tail. No approval here. */
+export function bindMondayPolicyStage(stageRaw:string,manifestRaw:string,configRaw:string,externalBytes:Buffer,timingBytes:Buffer){
+ const stage=JSON.parse(stageRaw),manifest=JSON.parse(manifestRaw),config=JSON.parse(configRaw);
+ const result=compileP6ActualCandidateExport({externalBytes,expectedExternalFileSha256:sha(externalBytes),timingBytes,expectedTimingFileSha256:sha(timingBytes),calendarVariant:"COMPACT_MONDAY_NOV23"});
+ const rev=result.summary.calendarRevisionReview;
+ need(JSON.stringify(stage)===stageRaw&&result.files.length===32&&result.files[31].bytes===stageRaw&&
+  result.summary.unsignedStageInputSha256===sha(stageRaw)&&result.summary.sourceQueries===6144&&result.summary.totalReservedUnits===36740&&result.summary.peakDailyUnits===1280&&
+  stage.calendarSha256===P6_MONDAY_CALENDAR_ROWS_SHA&&stage.frameSha256===FRAME&&stage.manifestSha256===sha(manifestRaw)&&stage.configSha256===sha(configRaw)&&
+  manifest.calendarRowsSha256===stage.calendarSha256&&manifest.configSha256===stage.configSha256&&config.calendarRowsSha256===stage.calendarSha256&&config.frameSha256===FRAME&&
+  manifest.originalFrozenPacketPreserved===true&&manifest.originalFrozenManifestSha256===MANIFEST&&manifest.scientificFreezeApproved===true&&manifest.sourceUseDeferredToPhase6Activation===true&&manifest.sourceRightsApproved===false&&manifest.phase6PaidGo===false&&
+  rev?.firstSourceUtc==="2026-11-23T23:45:00.000Z"&&rev.firstServiceUtc==="2026-11-25T00:00:00.000Z"&&rev.lastServiceEndUtc==="2026-12-27T04:00:00.000Z"&&rev.allocatedOutcomeTailUtc==="2026-12-29T04:00:00.000Z","MONDAY_EXACT_COMPILER_AND_MANIFEST");
+ const last=stage.calendarDays[30],lastEnd=Date.parse(last.startUtc)+(last.windowShape==="4h"?4:last.windowShape==="2x2h"?5:6)*3600000;
+ const outcomeTailUtc=new Date(lastEnd+48*3600000).toISOString();
+ need(outcomeTailUtc===rev!.allocatedOutcomeTailUtc,"MONDAY_TAIL_DRIFT");
+ return {result,stageCode:stage.codeSha40 as string,stageSha:sha(stageRaw),costSha:result.summary.unsignedCostOnlyEnvelopeSha256,manifestSha:stage.manifestSha256 as string,configSha:stage.configSha256 as string,calendarSha:stage.calendarSha256 as string,outcomeTailUtc};
+}
+type MondayBinding=ReturnType<typeof bindMondayPolicyStage>;
+export function buildRevisedStaticValues(p:any,w:Record<string,unknown>,stageRaw:string,price:string,monday?:MondayBinding){
+ const pin=monday??{stageCode:P6_NOV22_STAGE_CODE,stageSha:P6_NOV22_STAGE_SHA,costSha:P6_NOV22_COST_SHA,manifestSha:MANIFEST,configSha:CONFIG,calendarSha:CALENDAR,outcomeTailUtc:"2026-12-26T04:00:00.000Z"};
+ need(!monday||(monday.calendarSha===P6_MONDAY_CALENDAR_ROWS_SHA&&monday.result.files[31].bytes===stageRaw&&monday.outcomeTailUtc==="2026-12-29T04:00:00.000Z"&&p.outcomeTailUtc===monday.outcomeTailUtc),"STATIC_MONDAY_BINDING");
+ need(C.test(p.codeSha)&&p.codeSha!==pin.stageCode&&sha(stageRaw)===pin.stageSha&&p.manifestSha256===pin.manifestSha&&p.configSha256===pin.configSha&&p.calendarSha256===pin.calendarSha&&p.frameSha256===FRAME&&p.costSha256===pin.costSha&&p.providerContractSha256===CONTRACT&&H.test(p.releaseSha256)&&H.test(p.rightsSha256)&&H.test(price),"STATIC_EXACT_REVISED_PINS");
+ const v:Record<string,string>={...Object.fromEntries(CODE_NAMES.map(k=>[k,p.codeSha])),V39_P5_MANIFEST_SHA256:pin.manifestSha,V39_P5_CALENDAR_HASH:pin.calendarSha,V39_P5_CONFIG_HASH:pin.configSha,V39_P5_FRAME_HASH:FRAME,V39_P5_RELEASE_SHA256:p.releaseSha256,V39_P5_RIGHTS_SHA256:p.rightsSha256,V39_P5_PROVIDER_CONTRACT_SHA256:CONTRACT,P6_INERT_STAGE_INPUT_JSON:stageRaw,P6_INERT_STAGE_INPUT_SHA256:pin.stageSha,P6_INERT_COST_ENVELOPE_SHA256:pin.costSha,P6_PRIVATE_POST_OUTCOME_TAIL_HOURS:"48",V39_P5_POST_PROVIDER_CONTRACT_SHA256:CONTRACT,V39_P5_POST_CATEGORY_BUDGET_SHA256:pin.costSha,V39_P5_POST_PRICE_SHA256:price};
  const names=["P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64"];
  need(Object.keys(w).length===6&&names.every(k=>Object.hasOwn(w,k)),"SIX_POLICY_BYTES");
  for(const name of names)v[name]=Buffer.from(JSON.stringify(w[name])).toString("base64");
@@ -57,7 +77,7 @@ export function buildRevisedStaticValues(p:any,w:Record<string,unknown>,stageRaw
 }
 async function run(){
  const [mode,recoveryPath,revisionPath,authPath,authSha,decisionPath,decisionSha,outPath]=process.argv.slice(2);
- need(process.argv.length===10&&mode==="--prepare-private"&&H.test(authSha)&&H.test(decisionSha)&&process.env.GITHUB_ACTIONS!=="true"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&!["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET"].some(k=>process.env[k]),"OWNER_SCOPE");
+ need(process.argv.length===10&&["--prepare-private","--prepare-private-monday"].includes(mode)&&H.test(authSha)&&H.test(decisionSha)&&process.env.GITHUB_ACTIONS!=="true"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&!["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET"].some(k=>process.env[k]),"OWNER_SCOPE");
  const root=realpathSync(cmd("git",["rev-parse","--show-toplevel"])),head=cmd("git",["rev-parse","HEAD"]),home=realpathSync(process.env.HOME!);
  need(root===realpathSync(process.cwd())&&head===main()&&head!==P6_NOV22_STAGE_CODE&&cmd("git",["status","--porcelain","--untracked-files=no"])==="","CLEAN_FINAL_MAIN");
  const d=dirs(recoveryPath),rev=dirs(revisionPath),out=resolve(outPath);
@@ -65,21 +85,26 @@ async function run(){
  const work=read(join(d,"policy-complete-shape-NOT-RUNTIME.json"),WORK),catalog=read(join(d,"airport-timezone-catalog-CANDIDATE.json"),CATALOG);
  const publicBytes=read(join(d,"public-provider-contract-CANDIDATE.json"),CONTRACT,20000000);
  need(hash({airportTimezoneGroups:work.x.policyDrafts.P6_NONPAID_DAILY_POLICY_BASE64.airportTimezoneGroups})===catalog.sha256&&publicBytes.x.info.version==="1.15.4.0","RECOVERED_CATALOG_AND_CONTRACT");
- const stage=read(join(rev,"new-stage-input.json"),P6_NOV22_STAGE_SHA,48000),manifest=read(join(rev,"new-manifest.json"),MANIFEST),config=read(join(rev,"new-config.json"),CONFIG),external=read(join(rev,"new-external.json")),timing=read(join(rev,"new-timing.json"));
- need(stage.x.codeSha40===P6_NOV22_STAGE_CODE&&stage.x.calendarSha256===CALENDAR&&stage.x.frameSha256===FRAME&&stage.x.configSha256===CONFIG&&stage.x.manifestSha256===MANIFEST&&manifest.x.sourceUseDeferredToPhase6Activation===true&&manifest.x.scientificFreezeApproved===true&&config.x.calendarRowsSha256===CALENDAR,"STAGE_SCOPE");
- const result=compileP6ActualCandidateExport({externalBytes:external.raw,expectedExternalFileSha256:external.sha256,timingBytes:timing.raw,expectedTimingFileSha256:timing.sha256,calendarVariant:"COMPACT_NOV22"});
- need(result.summary.unsignedStageInputSha256===P6_NOV22_STAGE_SHA&&result.summary.unsignedCostOnlyEnvelopeSha256===P6_NOV22_COST_SHA&&result.summary.sourceQueries===6144&&result.summary.totalReservedUnits===36740&&result.files.length===32&&result.files[31].bytes===stage.raw.toString("utf8"),"ACTUAL_REVISED_COMPILER");
+ const isMonday=mode==="--prepare-private-monday";
+ const stage=read(join(rev,"new-stage-input.json"),isMonday?undefined:P6_NOV22_STAGE_SHA,48000),manifest=read(join(rev,"new-manifest.json"),isMonday?undefined:MANIFEST),config=read(join(rev,"new-config.json"),isMonday?undefined:CONFIG),external=read(join(rev,"new-external.json")),timing=read(join(rev,"new-timing.json"));
+ const monday=isMonday?bindMondayPolicyStage(stage.raw.toString("utf8"),manifest.raw.toString("utf8"),config.raw.toString("utf8"),external.raw,timing.raw):undefined;
+ const pin=monday??{stageCode:P6_NOV22_STAGE_CODE,stageSha:P6_NOV22_STAGE_SHA,costSha:P6_NOV22_COST_SHA,manifestSha:MANIFEST,configSha:CONFIG,calendarSha:CALENDAR,outcomeTailUtc:"2026-12-26T04:00:00.000Z"};
+ need(stage.x.codeSha40===pin.stageCode&&stage.x.calendarSha256===pin.calendarSha&&stage.x.frameSha256===FRAME&&stage.x.configSha256===pin.configSha&&stage.x.manifestSha256===pin.manifestSha&&manifest.x.sourceUseDeferredToPhase6Activation===true&&manifest.x.scientificFreezeApproved===true&&config.x.calendarRowsSha256===pin.calendarSha,"STAGE_SCOPE");
+ const result=monday?.result??compileP6ActualCandidateExport({externalBytes:external.raw,expectedExternalFileSha256:external.sha256,timingBytes:timing.raw,expectedTimingFileSha256:timing.sha256,calendarVariant:"COMPACT_NOV22"});
+ need(result.summary.unsignedStageInputSha256===pin.stageSha&&result.summary.unsignedCostOnlyEnvelopeSha256===pin.costSha&&result.summary.sourceQueries===6144&&result.summary.totalReservedUnits===36740&&result.files.length===32&&result.files[31].bytes===stage.raw.toString("utf8"),"ACTUAL_REVISED_COMPILER");
  for(const f of result.files.slice(0,31))need(sha(gitRaw(head,f.path))===f.sha256&&readFileSync(join(root,f.path)).equals(Buffer.from(f.bytes)),"EXACT_COMMITTED_DAY_PLANS");
  const auth=read(authPath,authSha,256000),a=verifyP6SourceEnableAuthFile(authPath,head);
  need(a.artifactHash===auth.sha256&&a.verdict.verified===true,"EXACT_APPROVED_SOURCE_AUTH");
- const release=(a.record as any).releaseActivation,raw=gitRaw(head,P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
+ const release=(a.record as any).releaseActivation,raw=gitRaw(head,isMonday?P6_MONDAY_BRIDGE_REVIEW_PATH:P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
  need(C.test(reviewed),"REVIEWED_EXECUTABLE_COMMIT");
- const diff=(h:string)=>cmd("git",["diff","--no-renames","--name-only",P6_NOV22_STAGE_CODE,h]).split("\n").filter(Boolean);
- verifyP6RevisedExecutableBridge({stageCode:P6_NOV22_STAGE_CODE,stageSha:stage.sha256,costSha:P6_NOV22_COST_SHA,currentHead:head,reviewBytes:raw,expectedOperationalEvidenceSha256:release.operationalReleaseEvidenceSha256,now:new Date(),stageIsAncestor:ancestor(P6_NOV22_STAGE_CODE,head),reviewedCommitIsAncestor:ancestor(P6_NOV22_STAGE_CODE,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:diff(head),readReviewedBlob:p=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:p=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]});
- const ctx=admitP6InertOwnerReadback({...process.env,V39_P5_APPROVED_CODE_SHA:P6_NOV22_STAGE_CODE},stage.raw.toString("utf8"),stage.sha256,P6_NOV22_COST_SHA,P6_NOV22_STAGE_CODE);
+ const diff=(h:string)=>cmd("git",["diff","--no-renames","--name-only",pin.stageCode,h]).split("\n").filter(Boolean);
+ const ctx=admitP6InertOwnerReadback({...process.env,V39_P5_APPROVED_CODE_SHA:pin.stageCode},stage.raw.toString("utf8"),stage.sha256,pin.costSha,pin.stageCode);
  verifyP6SourceActivationReview(ctx as any,a,new Date());
+ const bridge={stageCode:pin.stageCode,stageSha:stage.sha256,costSha:pin.costSha,currentHead:head,reviewBytes:raw,expectedOperationalEvidenceSha256:release.operationalReleaseEvidenceSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:diff(head),readReviewedBlob:(p:string)=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:(p:string)=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]};
+ if(isMonday)verifyP6MondayRevisedExecutableBridge(bridge,stage.raw.toString("utf8"),release.stageContentSha256,release.costEnvelopeSha256);
+ else verifyP6RevisedExecutableBridge(bridge);
  const dec=read(decisionPath,decisionSha),decision=dec.x;
- const p={authVerified:true,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,codeSha:head,manifestSha256:MANIFEST,configSha256:CONFIG,calendarSha256:CALENDAR,frameSha256:FRAME,rightsSha256:release.sourceRightsEvidenceSha256,providerContractSha256:CONTRACT,costSha256:P6_NOV22_COST_SHA,releaseSha256:decision.releaseSha256,dayPlanSha256s:result.summary.dayPlanSha256s,airportTimezoneCatalogSha256:CATALOG,dailyRestCeiling:1900,cycleRestCeiling:stage.x.slotBudgetInput.cycleRestCeilingUnits,minimumProtectedFloor:stage.x.slotBudgetInput.protectedRestFloorUnits,maxQueriesPerDay:288,nowUtc:new Date().toISOString(),outcomeTailUtc:"2026-12-26T04:00:00.000Z"};
+ const p={authVerified:true,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,codeSha:head,manifestSha256:pin.manifestSha,configSha256:pin.configSha,calendarSha256:pin.calendarSha,frameSha256:FRAME,rightsSha256:release.sourceRightsEvidenceSha256,providerContractSha256:CONTRACT,costSha256:pin.costSha,releaseSha256:decision.releaseSha256,dayPlanSha256s:result.summary.dayPlanSha256s,airportTimezoneCatalogSha256:CATALOG,dailyRestCeiling:1900,cycleRestCeiling:stage.x.slotBudgetInput.cycleRestCeilingUnits,minimumProtectedFloor:stage.x.slotBudgetInput.protectedRestFloorUnits,maxQueriesPerDay:288,nowUtc:new Date().toISOString(),outcomeTailUtc:pin.outcomeTailUtc};
  const ops={hash,publicFingerprint:(pem:string)=>{const k=createPublicKey(pem);need(k.asymmetricKeyType==="ed25519","SIGNER_TYPE");return sha(k.export({type:"spki",format:"der"}))},byteLength:Buffer.byteLength};
  const temp=mkdtempSync(join(home,".travnr-policy-assembler-"));
  try{
@@ -89,12 +114,12 @@ async function run(){
  // verified by the actual scoped approved auth and existing stage verifier.
  const policies=assembler.assemble(work.x,p,decision,ops);
  const checked=validator.validateFinalPolicies(policies,p,ops);
- const statics=buildRevisedStaticValues(p,policies,stage.raw.toString("utf8"),decision.reviewedProviderPriceSha256);
+ const statics=buildRevisedStaticValues(p,policies,stage.raw.toString("utf8"),decision.reviewedProviderPriceSha256,monday);
  need(main()===head,"MAIN_CHANGED");
  mkdirSync(out,{mode:0o700});
  const write=(n:string,v:unknown)=>writeFileSync(join(out,n),JSON.stringify(v),{flag:"wx",mode:0o600});
  write("six-policy-objects-PRIVATE.json",policies);write("static-values-PRIVATE.json",statics);
- const receipt={schema:"v39.phase6.revised-six-policy-bundle.v1",status:"SIX_EXACT_REVISED_POLICY_BYTES_PREPARED_AWAITING_BYTE_REVIEW_NO_GO",main:head,stageCode:P6_NOV22_STAGE_CODE,stageSha256:stage.sha256,costSha256:P6_NOV22_COST_SHA,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,decisionSha256:dec.sha256,operationalEvidenceSha256:release.operationalReleaseEvidenceSha256,policyBundleSha256:hash(policies),staticValuesSha256:hash(statics),policyDigests:checked.policyDigests,policySizes:checked.policySizes,staticCount:31,plans:31,sourceQueries:6144,reservedUnits:36740,output:out,staticInstalled:false,providerCalls:0,databaseWrites:0,githubWrites:0,phase6PaidGo:false};
+ const receipt={schema:"v39.phase6.revised-six-policy-bundle.v1",status:"SIX_EXACT_REVISED_POLICY_BYTES_PREPARED_AWAITING_BYTE_REVIEW_NO_GO",main:head,stageCode:pin.stageCode,stageSha256:stage.sha256,costSha256:pin.costSha,outcomeTailUtc:pin.outcomeTailUtc,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,decisionSha256:dec.sha256,operationalEvidenceSha256:release.operationalReleaseEvidenceSha256,policyBundleSha256:hash(policies),staticValuesSha256:hash(statics),policyDigests:checked.policyDigests,policySizes:checked.policySizes,staticCount:31,plans:31,sourceQueries:6144,reservedUnits:36740,output:out,staticInstalled:false,providerCalls:0,databaseWrites:0,githubWrites:0,phase6PaidGo:false};
  write("bundle-receipt.json",receipt);console.log(JSON.stringify(receipt));
  }finally{rmSync(temp,{recursive:true,force:true})}
 }

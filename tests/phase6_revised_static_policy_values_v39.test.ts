@@ -2,7 +2,7 @@ import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {it,expect} from "vitest";
 import {prepareP6ActualReviewInput,compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
-import {buildRevisedStaticValues} from "../review-tools/p6_nov20_finalize_recovered_policies_v39";
+import {buildRevisedStaticValues,bindMondayPolicyStage} from "../review-tools/p6_nov20_finalize_recovered_policies_v39";
 // Independent replay using public planning metadata only. The exact stage hash
 // is the owner-confirmed revised packet, not a new authorization or DB action.
 it("replays the actual revised 6144-query compiler against the exact owner stage and all committed plans",()=>{
@@ -36,4 +36,27 @@ it("replays the actual revised 6144-query compiler against the exact owner stage
  expect(()=>buildRevisedStaticValues({...p,codeSha:code},mockPolicies,stage,h("synthetic price"))).toThrow(/STATIC_EXACT_REVISED_PINS/);
  expect(()=>buildRevisedStaticValues(p,mockPolicies,stage+" ",h("synthetic price"))).toThrow(/STATIC_EXACT_REVISED_PINS/);
  console.log("REVISED_STATIC_31_VALUES_PIN_SEPARATION_SYNTHETIC_NO_GO");
+},30000);
+
+it("binds the Monday six-policy statics to the real recompiled stage and tail, never old pins",()=>{
+ const h=(v:string|Buffer)=>createHash("sha256").update(v).digest("hex");
+ const code="c".repeat(40),review=prepareP6ActualReviewInput(code,0,"COMPACT_MONDAY_NOV23"),rec=review.concreteReviewRecommendation;
+ const calendar=review.externalCandidate.expectedCalendarRowsSha256;
+ const config=JSON.stringify({calendarRowsSha256:calendar,frameSha256:review.frameEvidence.frameHash,phase6PaidGo:false});
+ const manifest=JSON.stringify({calendarRowsSha256:calendar,configSha256:h(config),originalFrozenPacketPreserved:true,originalFrozenManifestSha256:"3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",scientificFreezeApproved:true,sourceUseDeferredToPhase6Activation:true,sourceRightsApproved:false,phase6PaidGo:false});
+ const timingSha=h("synthetic timing");
+ const external={...review.externalCandidate,manifestSha256:h(manifest),calendarSha256:calendar,configSha256:h(config),phase6AuthorizationId:"AUTH-20261120-CIMONDAY",predecessorEvidenceIds:["CI-ONLY-NOT-RELEASE"],alertSafety:rec.proposedAlertSafety,providerRangeEvidenceSha256:h("synthetic range"),timingEvidenceSha256:timingSha,cycleRestCeilingUnits:rec.netRestCeilingUnits,jointBudgetReview:rec.jointBudgetReview};
+ const eb=Buffer.from(JSON.stringify(external)),tb=Buffer.from(JSON.stringify({...review.timingCandidate,timingEvidenceSha256:timingSha}));
+ const result=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:h(eb),timingBytes:tb,expectedTimingFileSha256:h(tb),calendarVariant:"COMPACT_MONDAY_NOV23"});
+ const stage=result.files[31].bytes;
+ const b=bindMondayPolicyStage(stage,manifest,config,eb,tb);
+ expect(b.outcomeTailUtc).toBe("2026-12-29T04:00:00.000Z");expect(b.stageSha).toBe(h(stage));expect(b.costSha).toBe(result.summary.unsignedCostOnlyEnvelopeSha256);
+ const p={codeSha:"d".repeat(40),manifestSha256:h(manifest),configSha256:h(config),calendarSha256:calendar,frameSha256:review.frameEvidence.frameHash,costSha256:b.costSha,providerContractSha256:"63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09",releaseSha256:h("synthetic release"),rightsSha256:h("synthetic rights"),outcomeTailUtc:b.outcomeTailUtc};
+ const names=["P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64"];
+ const w=Object.fromEntries(names.map(n=>[n,{synthetic:true,approved:false}]));
+ const v=buildRevisedStaticValues(p,w,stage,h("price"),b);
+ expect(Object.keys(v)).toHaveLength(31);expect(v.V39_P5_CALENDAR_HASH).toBe(calendar);expect(v.P6_INERT_STAGE_INPUT_SHA256).toBe(h(stage));expect(v.V39_P5_POST_CATEGORY_BUDGET_SHA256).toBe(b.costSha);
+ expect(()=>buildRevisedStaticValues({...p,outcomeTailUtc:"2026-12-26T04:00:00.000Z"},w,stage,h("price"),b)).toThrow("STATIC_MONDAY_BINDING");
+ expect(()=>buildRevisedStaticValues(p,w,stage,h("price"))).toThrow("STATIC_EXACT_REVISED_PINS");
+ expect(()=>bindMondayPolicyStage(stage,manifest+" ",config,eb,tb)).toThrow("MONDAY_EXACT_COMPILER_AND_MANIFEST");
 },30000);
