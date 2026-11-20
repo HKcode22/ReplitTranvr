@@ -9,7 +9,11 @@ import {createHash,createPublicKey,verify} from "node:crypto";
 import {decodeP4G5FreeNoaaMetarV39,type P4G5NoaaMetarReceiptV39} from "./phase4Gate5NoaaMetarReceipt_v39";
 import {compileP5ExistingNoaaMetarToE,draftP5ECombinedExistingSourcesPacket} from "./phase5AmendmentENoaaHistoricalReceiptCompiler_v39";
 import {compileP5AlreadyDurableNoaaTafAsOfV39} from "./phase5AmendmentEExistingNoaaTafReceipt_v39";
-import type {P5EReviewedSupplementalBundle,P5EReviewedSupplementalObservation} from "./phase5AmendmentESignedSupplementalFeatures_v39";
+import {selectP5EReviewedSupplementalFeatures,type P5EReviewedSupplementalBundle,type P5EReviewedSupplementalObservation} from "./phase5AmendmentESignedSupplementalFeatures_v39";
+import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
+import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
+import {phase7SelectedFeatureDigest} from "./phase7SignedPreFieldProof_v39";
+import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 const HOLD=(s:string):never=>{throw Error("HOLD_P7_INDEPENDENT_NOAA_"+s)};
 const H=/^[a-f0-9]{64}$/,ICAO=/^[A-Z]{4}$/,NUM=/^[1-9][0-9]{4,24}$/;
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
@@ -153,4 +157,68 @@ export async function enrichP7NativeFeatureReviewWithNoaa(input:{
   return Object.freeze(Object.defineProperty({...d,compiled:{...d.compiled,bundle:m.privateBundle}},"privateWeatherJoinScope",{value:d.privateWeatherJoinScope,enumerable:false}));
  });
  return Object.freeze(Object.defineProperty({...f,...counts},"privateDecisions",{value:Object.freeze(decisions),enumerable:false}));
+}
+
+/** Independently reconstruct the WEATHER part of a specific prospective
+ * permit's selected-feature evidence from actual signed public source bytes.
+ * The caller must obtain the exact member/route/clock via the restricted
+ * source reader. Not a complete lane authority: reference identifiers and
+ * other present separate fields need their own genuine independent readback.
+ * In particular, a copied source value, sourceRecordId, or permit digest is
+ * not a substitute for recomputing these observations from the archive.
+ */
+export function verifyP7NoaaExactPreLaneEvidence(input:{
+ env:NodeJS.ProcessEnv;permit:Readonly<P5Stage14SingleFlightPrePermit>;
+ scope:Readonly<{flightInstanceId:string;originIcao:string;destinationIcao:string|null;memberAvailableAtUtc:string;observedDbClockUtc:string}>;
+ dispositions:readonly Phase7CanonicalFieldDisposition[];artifacts:readonly P7SignedPublicNoaaArtifact[];
+}){
+ const {env,permit:p,scope:s,dispositions,artifacts}=input,b=p.reviewedSupplementalFeatureBundle;
+ const names=["origin_metar_visibility_m","origin_metar_wind_kt","origin_taf_flight_category","destination_taf_flight_category"] as const;
+ const isWeather=(f:string):f is typeof names[number]=>names.includes(f as typeof names[number]);
+ const policy=env.P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256;
+ const now=at(s.observedDbClockUtc),cutoff=at(p.selectedTNativeUtc)-({"T-24h":86400000,"T-6h":21600000,"T-90m":5400000}[p.horizon]);
+ if(!digest(policy)||!b||p.manifestSha256!==env.V39_P5_MANIFEST_SHA256||p.expectedReviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256||
+  p.flightInstanceId!==s.flightInstanceId||p.airportIcao!==s.originIcao||p.expectedDestinationIcao!==undefined&&p.expectedDestinationIcao!==s.destinationIcao||
+  !Number.isFinite(cutoff)||now>=cutoff||at(s.memberAvailableAtUtc)>now||!Array.isArray(artifacts)||artifacts.length>128||
+  !Array.isArray(dispositions)||new Set(dispositions.map(x=>x.field)).size!==dispositions.length)HOLD("EXACT_WEATHER_LANE_SCOPE");
+ const chosen=selectP5EReviewedSupplementalFeatures({flightInstanceId:p.flightInstanceId,horizon:p.horizon,selectedNativeTUtc:p.selectedTNativeUtc,
+  cutoffUtc:new Date(cutoff).toISOString(),issuedAtUtc:s.observedDbClockUtc,sourceOriginalSha256:p.expectedSourceResponseSha256,
+  sourcePopulationQueryId:p.expectedSourcePopulationQueryId,memberAvailableAtUtc:s.memberAvailableAtUtc,originIcao:s.originIcao,destinationIcao:s.destinationIcao,bundle:b!});
+ const verified=artifacts.map(w=>verifyP7IndependentPublicNoaaArtifact(env,w,s.observedDbClockUtc));
+ if(verified.some(a=>a.privateReceipt.sourcePurposeSha256!==policy||
+   !a.privateReceipt.requestedAirports.some(v=>v===s.originIcao||v===s.destinationIcao))||
+   new Set(verified.map(a=>a.receiptSha256)).size!==verified.length)HOLD("WEATHER_LANE_PURPOSE_OR_ARTIFACT_SET");
+ const candidates:{observation:P5EReviewedSupplementalObservation;artifact:Verified}[]=[];
+ for(const a of verified){
+  const q=a.privateReceipt;
+  const xs=q.kind==="METAR"?compileP5ExistingNoaaMetarToE({flightInstanceId:p.flightInstanceId,originAirportIcao:s.originIcao,actualPredictionIssuedAtUtc:s.observedDbClockUtc,
+     receipt:a.privateMetarReceipts.find(v=>v.airportIcao===s.originIcao)??null,independentlyReviewedSourcePurposeSha256:q.sourcePurposeSha256}).observations:
+    s.destinationIcao===s.originIcao?[]:compileP5AlreadyDurableNoaaTafAsOfV39({flightInstanceId:p.flightInstanceId,originAirportIcao:s.originIcao,destinationAirportIcao:s.destinationIcao,
+     originalSelectedNativeDepartureUtc:p.selectedTNativeUtc,actualPredictionIssuedAtUtc:s.observedDbClockUtc,sourceJsonText:a.privateSourceJsonText,
+     fetchedAtUtc:q.fetchedAtUtc,durableArtifactReadAtUtc:q.durableReadAtUtc,independentlyReviewedResponseBytesSha256:q.sourceBodySha256,
+     independentlyReviewedPurposeSha256:q.sourcePurposeSha256}).observations;
+  for(const observation of xs)candidates.push({observation,artifact:a});
+ }
+ const fields: {field:typeof names[number];disposition:"INDEPENDENT_SOURCE_EXACT_LANE";purpose:"independent_research";fieldReviewSha256:string;selectedFeatureSha256:string;durableEvidenceSha256:string;durableReadAtUtc:string}[]=[];
+ const present=chosen.features.filter(f=>isWeather(f.featureName)&&f.value!==null&&f.value!==undefined);
+ for(const f of present){
+  const field=f.featureName as typeof names[number],disposition=dispositions.find(d=>d.field===field);
+  if(!disposition||!digest(disposition.reviewSha256)||!["INDEPENDENT_SOURCE_EXACT_LANE","REVIEWED_DERIVED_BUCKET"].includes(disposition.disposition))HOLD("WEATHER_LANE_FIELD_DISPOSITION");
+  const observations=b!.observations.filter(o=>o.field===field&&o.value!==null);
+  if(observations.length!==1)HOLD("WEATHER_LANE_OBSERVATION_DENOMINATOR");
+  const observation=observations[0],obsSha=hashPhase7DurableCandidate(observation);
+  // Multiple authentic artifact receipts may contain the same original
+  // row, but the exact durable clock and observation bytes must match.
+  const matches=candidates.filter(c=>hashPhase7DurableCandidate(c.observation)===obsSha);
+  if(matches.length!==1)HOLD("WEATHER_LANE_EXACT_SOURCE_OBSERVATION_NOT_REPRODUCED");
+  const {artifact}=matches[0],q=artifact.privateReceipt;
+  if(disposition!.disposition==="INDEPENDENT_SOURCE_EXACT_LANE"){
+   fields.push({field,disposition:"INDEPENDENT_SOURCE_EXACT_LANE",purpose:"independent_research",fieldReviewSha256:disposition!.reviewSha256,
+    selectedFeatureSha256:phase7SelectedFeatureDigest(f),durableEvidenceSha256:hashPhase7DurableCandidate({receiptSha256:artifact.receiptSha256,
+     archiveSha256:q.artifactArchiveSha256,sourceBodySha256:q.sourceBodySha256,sourceObservationSha256:obsSha}),durableReadAtUtc:q.durableReadAtUtc});
+  }
+ }
+ const out={status:"P7_NOAA_WEATHER_FIELDS_INDEPENDENTLY_REPRODUCED_NO_GO",presentWeatherFields:present.length,weatherFieldsMissing:names.length-present.length,
+  separateWeatherLaneFields:fields.length,completePreLaneEvidence:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(out,"privateWeatherFields",{value:Object.freeze(fields.map(f=>Object.freeze(f))),enumerable:false})) as typeof out&{readonly privateWeatherFields:ReadonlyArray<Readonly<typeof fields[number]>>};
 }

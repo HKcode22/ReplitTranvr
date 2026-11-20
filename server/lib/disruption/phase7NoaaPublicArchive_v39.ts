@@ -48,6 +48,9 @@ export async function captureP7NoaaPublicSource(kind:P7NoaaKind,scope:readonly s
  const receipt:P7NoaaSourceReceipt={kind,requestedAirports,fetchedAtUtc,sourceBodySha256:v.sourceBodySha256,httpStatus:r.status as 200|204};
  return {receipt,body,rowCount:v.rowCount};
 }
+// Only this process may use the result of its actual archive verification.
+// Rehydrating JSON or supplying a caller-authored report is not issuer evidence.
+const verifiedArchiveReports=new WeakSet<object>();
 export function verifyP7NoaaArchive(input:{capture:unknown;metar:string;taf:string;githubRunId:string;codeSha:string;githubArtifactId:string;artifactDigest:string;archiveBytes:Buffer;artifactCreatedAtUtc:string;durableReadAtUtc:string;reviewedAtUtc:string}){
  const i=input,x=i.capture as P7NoaaCapture;
  if(!exact(x,["schema","githubRunId","codeSha","sources"])||x.schema!=="v39.phase7.noaa-public-source-canary.v1"||
@@ -66,13 +69,15 @@ export function verifyP7NoaaArchive(input:{capture:unknown;metar:string;taf:stri
  });
  if(at(sources[0].fetchedAtUtc)>at(sources[1].fetchedAtUtc))HOLD("SOURCE_CLOCK_ORDER");
  const result={status:"P7_PUBLIC_NOAA_ARCHIVE_INDEPENDENT_BYTE_READBACK_NO_GO",githubRunId:i.githubRunId,githubArtifactId:i.githubArtifactId,artifactArchiveSha256:i.artifactDigest,artifactCreatedAtUtc:i.artifactCreatedAtUtc,durableReadAtUtc:i.durableReadAtUtc,reviewedAtUtc:i.reviewedAtUtc,sources,paidProviderCalls:0,databaseWrites:0,phase6PaidGo:false};
- return Object.freeze(result);
+ const frozen=Object.freeze({...result,sources:Object.freeze(result.sources.map(s=>Object.freeze({...s,requestedAirports:Object.freeze([...s.requestedAirports])})))});
+ verifiedArchiveReports.add(frozen);return frozen;
 }
 /** Independently protected issuer (not the capture job). No arbitrary public
  * caller may turn a canary into an approval or fake a production source.
  * The real reviewed GitHub reader must supply bytes to verifyP7NoaaArchive. */
 export function issueP7NoaaArchiveWires(input:{env:NodeJS.ProcessEnv;verified:ReturnType<typeof verifyP7NoaaArchive>;metar:string;taf:string;signer:KeyObject}):P7SignedPublicNoaaArtifact[]{
  const {env,verified,signer}=input;
+ if(!verifiedArchiveReports.has(verified))HOLD("ISSUER_REHYDRATED_OR_UNVERIFIED_REPORT");
  if(env.P6_PHASE7_NOAA_ARCHIVE_ISSUER_APPROVED!=="1"||env.ADB_AUTO_COLLECT!=="0"||env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||
   signer?.type!=="private"||signer.asymmetricKeyType!=="ed25519"||sha(createPublicKey(signer).export({format:"der",type:"spki"}))!==env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256||
   !H.test(env.P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256??""))HOLD("ISSUER_APPROVAL");

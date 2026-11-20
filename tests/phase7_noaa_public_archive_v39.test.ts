@@ -33,6 +33,7 @@ describe("public NOAA source archive, no paid provider",()=>{
    V39_P5_MANIFEST_SHA256:h("manifest"),V39_P5_RIGHTS_SHA256:h("rights"),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:h("policy")};
   const args={env,verified,metar:a.metar,taf:a.taf,signer:k.privateKey};
   expect(issueP7NoaaArchiveWires(args)).toHaveLength(2);
+  expect(()=>issueP7NoaaArchiveWires({...args,verified:JSON.parse(JSON.stringify(verified))})).toThrow("ISSUER_REHYDRATED_OR_UNVERIFIED_REPORT");
   expect(()=>issueP7NoaaArchiveWires({...args,taf:"[]"})).toThrow("ISSUER_BYTES");
   expect(()=>issueP7NoaaArchiveWires({...args,env:{...env,DATABASE_URL:"wrong"}})).toThrow("ISSUER_APPROVAL");
  });

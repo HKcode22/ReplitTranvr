@@ -1,7 +1,10 @@
 name: Phase4 Gate5 Free NOAA Weather Receipt (No Paid Provider)
 
 on:
+  # Public actual capture is opt-in after the first verified canary; avoid
+  # two NOAA requests on every unrelated PR revision.
   pull_request:
+    types: [labeled]
     branches: [main]
     paths:
       - ".github/workflows/phase4-gate5-free-noaa-weather-receipt.yml"
@@ -109,7 +112,7 @@ jobs:
           echo 'No physical flight denominator, no persisted PRE, no Gate5 scientific PASS and no Phase5/Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"
 
   p7-noaa-public-capture:
-    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'phase7-noaa-public-canary' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     permissions:
@@ -144,7 +147,7 @@ jobs:
 
   p7-noaa-public-verify:
     needs: [p7-noaa-public-capture]
-    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'phase7-noaa-public-canary' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     permissions:

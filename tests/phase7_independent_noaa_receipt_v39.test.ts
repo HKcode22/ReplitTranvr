@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,enrichP7NativeFeatureReviewWithNoaa,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
+import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,enrichP7NativeFeatureReviewWithNoaa,verifyP7NoaaExactPreLaneEvidence,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
 const sha=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const now="2026-11-25T00:00:00.000Z",t="2026-11-25T06:15:00.000Z",scope={flightInstanceId:"leg:fixture:001",originIcao:"WSSS",destinationIcao:"YSSY",selectedNativeTUtc:t,ownCutoffUtc:"2026-11-25T00:15:00.000Z",observedDbClockUtc:now};
 const key=generateKeyPairSync("ed25519"),env={P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(key.publicKey.export({format:"pem",type:"spki"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:sha(key.publicKey.export({format:"der",type:"spki"})),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:sha("synthetic policy"),V39_P5_MANIFEST_SHA256:sha("synthetic manifest"),V39_P5_RIGHTS_SHA256:sha("synthetic rights")};
@@ -50,4 +50,23 @@ it("native publisher handoff requests only public stations, keeps private FIDS b
  expect(x.privateDecisions[0].compiled.bundle.observations).toHaveLength(3);
  expect(b.observations).toHaveLength(1);
  await expect(enrichP7NativeFeatureReviewWithNoaa({env,handoff:h,featureReview:f,port,forbiddenSignerFingerprints:[env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256]})).rejects.toThrow("NATIVE_REVIEW_HANDOFF");
+});
+
+it("recomputes the exact present weather fields from signed source bytes for the independent lane, never a claimed value or missing archive",()=>{
+ const m=fixture("METAR",[metar]),t0=fixture("TAF",[taf]),verified=[m,t0].map(w=>verifyP7IndependentPublicNoaaArtifact(env,w,now));
+ const b=mergeP7VerifiedNoaaIntoBoundPreBundle(bundle(),scope,verified).privateBundle;
+ const p={manifestSha256:env.V39_P5_MANIFEST_SHA256,expectedReviewedSourceRightsSha256:env.V39_P5_RIGHTS_SHA256,
+  flightInstanceId:scope.flightInstanceId,airportIcao:scope.originIcao,expectedDestinationIcao:scope.destinationIcao,selectedTNativeUtc:scope.selectedNativeTUtc,horizon:"T-6h",
+  expectedSourceResponseSha256:b.originalResponseSha256,expectedSourcePopulationQueryId:b.populationQueryId,reviewedSupplementalFeatureBundle:b};
+ const scoped={flightInstanceId:scope.flightInstanceId,originIcao:scope.originIcao,destinationIcao:scope.destinationIcao,observedDbClockUtc:now,memberAvailableAtUtc:"2026-11-24T23:10:00.000Z"};
+ const dispositions=["origin_metar_visibility_m","origin_metar_wind_kt","origin_taf_flight_category","destination_taf_flight_category"].map(field=>({field,disposition:"INDEPENDENT_SOURCE_EXACT_LANE",outputField:null,reviewSha256:sha(field)}));
+ const args={env:{...env,P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256:sha("synthetic NOAA review")},permit:p as any,scope:scoped,dispositions:dispositions as any,artifacts:[m,t0]};
+ const r=verifyP7NoaaExactPreLaneEvidence(args);
+ expect(r).toMatchObject({presentWeatherFields:3,weatherFieldsMissing:1,separateWeatherLaneFields:3,completePreLaneEvidence:false});
+ expect(JSON.stringify(r)).not.toContain("sourceBodySha256");expect(r.privateWeatherFields.map(x=>x.field).sort()).toEqual(["destination_taf_flight_category","origin_metar_visibility_m","origin_metar_wind_kt"]);
+ const changed=b.observations.map(o=>o.field==="origin_metar_wind_kt"?{...o,value:1}:o);
+ expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,permit:{...args.permit,reviewedSupplementalFeatureBundle:{...b,observations:changed,observationsSha256:sha(JSON.stringify(changed))}}})).toThrow("EXACT_SOURCE_OBSERVATION_NOT_REPRODUCED");
+ expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,artifacts:[t0]})).toThrow("EXACT_SOURCE_OBSERVATION_NOT_REPRODUCED");
+ expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,env:{...args.env,P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256:sha("other purpose")}})).toThrow("WEATHER_LANE_PURPOSE_OR_ARTIFACT_SET");
+ expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,scope:{...scoped,destinationIcao:"OMAA"}})).toThrow("EXACT_WEATHER_LANE_SCOPE");
 });
