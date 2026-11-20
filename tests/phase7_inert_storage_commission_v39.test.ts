@@ -1,4 +1,7 @@
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
+import {readPhase7RetainedPreCoverage} from "../server/lib/disruption/phase7RetainedPreCoverage_v39";
+import {createPhase7DerivedReleasePacket,serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
+import {assemblePhase7FinalGroupCandidate} from "../server/lib/disruption/phase7FinalGroupAssembly_v39";
 import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
 import {P5_STAGE28_GROUPS} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
@@ -128,6 +131,43 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
     expect(drained).toMatchObject({status:"P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK",deletedLinks:2505,deletedFragments:4,deletedBundles:0,after:{dueLinks:0,dueFragments:0,liveLinks:1}});
     expect((await pool.query("SELECT count(*)::int n FROM phase7_private.pre_fragment_v39")).rows[0].n).toBe(2502);
     expect((await pool.query("SELECT snapshot_id::int n FROM phase7_private.pre_source_link_v39")).rows).toEqual([{n:2506}]);
+    // Census of actual durable PRE retention after an operational link
+    // has expired: keep the T24-only group, finalize a separate paired
+    // group without claiming that missing gate-out evidence is observed.
+    const {contract,profile}=JSON.parse(fx.raw.toString("utf8"));
+    const g1=randomUUID(),g2=randomUUID(),scope={cohortBucket:1,split:"train" as const};
+    const sha=(b:string|Buffer)=>createHash("sha256").update(b).digest("hex");
+    const fragment=async(groupId:string,horizon:"T-24h"|"T-6h",snapshotId:number)=>{
+     const rowId=randomUUID(),packet=createPhase7DerivedReleasePacket(contract,[{releaseRowId:rowId,horizon,...scope,featureBuckets:{context_bin:1},labelBuckets:{delay_bin:null},missingness:{context_bin:false,delay_bin:true},qualityFlags:0,censoring:"not_due"}]);
+     const bytes=Buffer.from(serializePhase7DerivedReleasePacket(contract,packet)),packetSha256=sha(bytes),contractSha256=hashPhase7DurableCandidate(contract),profileSha256=hashPhase7DurableCandidate(profile);
+     await pool.query("INSERT INTO phase7_private.pre_fragment_v39(row_id,group_id,horizon,cohort_bucket,split,contract_sha256,profile_sha256,research_expiry_utc,packet_sha256,packet_bytes) VALUES($1,$2,$3,1,'train',$4,$5,$6,$7,$8)",[rowId,groupId,horizon,contractSha256,profileSha256,contract.researchExpiryUtc,packetSha256,bytes]);
+     await pool.query("INSERT INTO phase7_private.pre_source_link_v39(snapshot_id,row_id,expires_at_utc) VALUES($1,$2,clock_timestamp()-interval '1 second')",[snapshotId,rowId]);
+     return {groupId,contractSha256,profileSha256,packetSha256,packet};
+    };
+    await fragment(g1,"T-24h",3001);
+    const f24=await fragment(g2,"T-24h",3002),f6=await fragment(g2,"T-6h",3003);
+    const final=assemblePhase7FinalGroupCandidate(contract,profile,[f24,f6],{groupId:g2,associationReviewSha256:sha("fixture association"),outcomeReviewSha256:sha("fixture censored outcome"),groupSettlementDue:true,evidence:{}},new Date().toISOString());
+    const bundle={schema:"v39.phase7.durable-derived-bundle.v1",packet:final.packet,paired:{...final.association,schema:"v39.phase7.paired-derived-association-reviewed.v1",approvedForUse:true},continuous:final.continuous};
+    const canonical=(x:any):string=>x===null||typeof x!=="object"?JSON.stringify(x):Array.isArray(x)?"["+x.map(canonical).join(",")+"]":"{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+canonical(x[k])).join(",")+"}";
+    const payload=Buffer.from(canonical(bundle));
+    await pool.query("INSERT INTO phase7_private.derived_release_bundle_v39(packet_id,bundle_sha256,approval_sha256,row_count,research_expiry_utc,payload_bytes) VALUES($1,$2,$3,3,$4,$5)",[g2,sha(payload),sha("fixture approval"),contract.researchExpiryUtc,payload]);
+    expect(await runP7ExpiryOnce(reader,writer,"APPLY_DUE_ONLY")).toMatchObject({deletedLinks:3,deletedFragments:0,deletedBundles:0});
+    const pre=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.preReader+":"+passwords[P7_INERT_ROLES.preReader]+"@"),max:1});
+    const bundleRead=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.bundleReader+":"+passwords[P7_INERT_ROLES.bundleReader]+"@"),max:1});
+    try{
+     const result=await readPhase7RetainedPreCoverage(pre,bundleRead,contract,profile,scope);
+     expect(result).toMatchObject({samePrimarySnapshot:true,retainedPreFragments:3,retainedGroups:2,settledGroups:1,unsettledGroups:1,unsettledT24OnlyGroups:1,primaryObserved:0,retainedByHorizon:{"T-24h":2,"T-6h":1,"T-90m":0},finalizedByHorizon:{"T-24h":1,"T-6h":1,"T-90m":0},unsettledByHorizon:{"T-24h":1,"T-6h":0,"T-90m":0},expiredSourceLinksRead:false,providerCalls:0,databaseWrites:0});
+     expect(JSON.stringify(result)).not.toContain(g1);expect(JSON.stringify(result)).not.toContain(g2);
+     await expect(readPhase7RetainedPreCoverage(bundleRead,pre,contract,profile,scope)).rejects.toThrow("INDEPENDENT_LOGIN_READBACK");
+     // Independently read a corrupted final value with a valid new byte
+     // digest: storage shape alone cannot certify source-to-final parity.
+     const changed=structuredClone(bundle);changed.packet.rows.find(x=>x.horizon==="T-6h")!.featureBuckets.context_bin=2;
+     changed.paired.packetSha256=sha(serializePhase7DerivedReleasePacket(contract,changed.packet));changed.continuous.derivedPacketSha256=changed.paired.packetSha256;
+     const bad=Buffer.from(canonical(changed));
+     await pool.query("UPDATE phase7_private.derived_release_bundle_v39 SET payload_bytes=$1,bundle_sha256=$2 WHERE packet_id=$3",[bad,sha(bad),g2]);
+     await expect(readPhase7RetainedPreCoverage(pre,bundleRead,contract,profile,scope)).rejects.toThrow("PRESERVED_FEATURE_OR_ID_CHANGED");
+    }finally{await Promise.all([pre.end(),bundleRead.end()]);}
+
    }finally{await Promise.all([reader.end(),writer.end()])}
   }finally{await pool.end()}
  },60000);
