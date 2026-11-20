@@ -158,21 +158,33 @@ async function main(){
   const checkout=join(temp,"historical");
   const patched=join(temp,"prepare-patched.mjs");
   let worktree=false;
+  let stage="FETCH_COMPILER";
   try{
     const helper=fetchBlob(p.prepareHelperBlob);
+    stage="PATCH_COMPILER";
     const patchedRaw=patchHistoricalPrepareHelperV39(helper);
     writeFileSync(patched,patchedRaw,{flag:"wx",mode:0o600});
 
-    cmd("git",["-C",root,"fetch","--no-tags","origin",p.historicalMain],{
-      env:{...process.env,GIT_TERMINAL_PROMPT:"0",GH_PROMPT_DISABLED:"1"},
-    });
-    need(cmd("git",["-C",root,"rev-parse","FETCH_HEAD"])===p.historicalMain,"FETCH_PIN");
+    stage="LOCATE_HISTORICAL_COMMIT";
+    // Avoid a network fetch when the exact historical object already exists.
+    try{cmd("git",["-C",root,"cat-file","-e",p.historicalMain+"^{commit}"]);}
+    catch{
+      cmd("git",["-C",root,"fetch","--no-tags","origin",p.historicalMain],{
+        env:{...process.env,GIT_TERMINAL_PROMPT:"0",GH_PROMPT_DISABLED:"1"},
+      });
+      need(cmd("git",["-C",root,"rev-parse","FETCH_HEAD"])===p.historicalMain,"FETCH_PIN");
+    }
+    stage="ADD_HISTORICAL_WORKTREE";
     cmd("git",["-C",root,"worktree","add","--detach",checkout,p.historicalMain]);
     worktree=true;
+    stage="VERIFY_HISTORICAL_WORKTREE";
     need(cmd("git",["-C",checkout,"rev-parse","HEAD"])===p.historicalMain,"HISTORICAL_HEAD");
     need(cmd("git",["-C",checkout,"rev-parse","HEAD^{tree}"])===p.historicalTree,"HISTORICAL_TREE");
     need(cmd("git",["-C",checkout,"status","--porcelain","--untracked-files=no"])==="","HISTORICAL_DIRTY");
-    symlinkSync(join(root,"node_modules"),join(checkout,"node_modules"),"dir");
+    stage="LINK_DEPENDENCIES";
+    const historicalDeps=join(checkout,"node_modules");
+    if(!existsSync(historicalDeps))symlinkSync(realpathSync(join(root,"node_modules")),historicalDeps,"dir");
+    need(realpathSync(historicalDeps)===realpathSync(join(root,"node_modules")),"DEPENDENCY_LINK_MISMATCH");
 
     const env={
       PATH:process.env.PATH,
@@ -180,6 +192,8 @@ async function main(){
       TMPDIR:process.env.TMPDIR||tmpdir(),
       GH_TOKEN:process.env.GH_TOKEN,
       GITHUB_TOKEN:process.env.GITHUB_TOKEN,
+      GH_CONFIG_DIR:process.env.GH_CONFIG_DIR,
+      XDG_CONFIG_HOME:process.env.XDG_CONFIG_HOME,
       ADB_AUTO_COLLECT:"0",
       V39_PHASE6_PROCESS_ARMED:"0",
       V39_PHASE6_OWNER_APPROVED:"0",
@@ -187,15 +201,24 @@ async function main(){
     for(const k of ["AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET","RAPIDAPI_KEY","DATABASE_URL",
       "V39_DATABASE_RUNTIME_URL","NODE_OPTIONS"]) delete env[k];
 
+    stage="RUN_HISTORICAL_COMPILER";
     cmd(tsx,[patched,"--write-private",p.historicalMain,out],{
       cwd:checkout,env,timeout:240000,maxBuffer:32*1024*1024,
     });
+    stage="VERIFY_FINAL_IDENTITIES";
     need(cmd("git",["-C",checkout,"status","--porcelain","--untracked-files=no"])==="",
       "HISTORICAL_CHANGED");
     exactCurrentMain(root);
     chmodSync(out,0o700);
     const receipt=verifyRecoveredPackageV39(out);
     console.log(JSON.stringify({...receipt,recoveryDirectory:out}));
+  }catch(e){
+    const m=String(e?.message??"");
+    if(/^HOLD_P6_HISTORICAL_STAGE_RECOVERY_[A-Z0-9_]+$/.test(m))throw e;
+    const stderr=typeof e?.stderr==="string"?e.stderr:"";
+    const childHold=stderr.split(/\r?\n/).find(line=>/^(?:HOLD_P5_POST879_PREPARE|HOLD_P6_ACTUAL_RELEASE_EXPORT|REFUSED_P5_INERT_B0062_UTC_STAGE|REFUSED_P5_V0093_COST_ONLY_INPUT_FREEZE)_[A-Z0-9_]+$/.test(line));
+    if(stage==="RUN_HISTORICAL_COMPILER"&&childHold)hold("COMPILER_"+childHold);
+    hold(stage+"_FAILED");
   }finally{
     if(worktree){
       try{cmd("git",["-C",root,"worktree","remove","--force",checkout]);}catch{}
