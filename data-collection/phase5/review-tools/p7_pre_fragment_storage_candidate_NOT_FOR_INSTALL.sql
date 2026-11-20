@@ -181,7 +181,7 @@ REVOKE ALL ON FUNCTION phase7_private.persist_bound_pre_fragment_v39(text,text,b
 -- still-live PRE snapshot. It never returns raw source identities, clocks or
 -- expired mapping rows. Earlier T24 derived fragments can be returned through
 -- a currently valid T6/T90 anchor, without reopening their expired originals.
-CREATE FUNCTION phase7_private.read_bound_pre_group_v39(p_manifest text,p_snapshot bigint,p_rights text)
+CREATE FUNCTION phase7_private.read_bound_pre_group_v39(p_manifest text,p_snapshot bigint,p_rights text,p_query text,p_day integer,p_airport text,p_frame text)
  RETURNS TABLE(group_id uuid,contract_sha256 text,profile_sha256 text,packet_sha256 text,packet_bytes bytea)
  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $read$
  DECLARE v_at timestamptz; v_group uuid; v_contract text; v_profile text;
@@ -195,14 +195,22 @@ CREATE FUNCTION phase7_private.read_bound_pre_group_v39(p_manifest text,p_snapsh
  JOIN clean.flight_snapshots s ON s.id=l.snapshot_id
  JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id AND b.response_hash=s.fids_response_hash
  JOIN phase7_private.pre_preservation_policy_v39 pol ON pol.manifest_sha256=b.manifest_sha256 AND pol.contract_sha256=f.contract_sha256 AND pol.profile_sha256=f.profile_sha256
- WHERE s.id=p_snapshot AND s.prediction_state='PRE_DEPARTURE' AND b.manifest_sha256=p_manifest AND b.rights_review_sha256=p_rights AND pol.rights_sha256=p_rights
+ JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=b.query_digest AND q.manifest_sha256=b.manifest_sha256
+ JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash
+ JOIN clean.flight_population fp ON fp.population_query_id=b.population_query_id AND fp.population_member_id=s.population_member_id AND fp.canonical_flight_instance_id=s.flight_instance_id
+ WHERE q.query_digest=p_query AND q.run_day_index=p_day AND q.airport_icao=p_airport AND q.state='ACTIVE' AND q.rights_review_sha256=p_rights
+ AND s.frame_hash=p_frame AND q.horizon=s.horizon AND fp.source_airport_icao=q.airport_icao
+ AND fp.population_role='requested_airport_primary' AND fp.source_type='fids' AND fp.codeshare_resolution_status='confirmed_operating_leg'
+ AND fp.available_at<=s.prediction_cutoff_utc AND s.created_at<s.prediction_cutoff_utc
+ AND fp.provider_content_expired_at_utc IS NULL AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL
+ AND s.id=p_snapshot AND s.prediction_state='PRE_DEPARTURE' AND b.manifest_sha256=p_manifest AND b.rights_review_sha256=p_rights AND pol.rights_sha256=p_rights
  AND l.expires_at_utc>v_at AND b.source_expires_at_utc>v_at AND f.research_expiry_utc>v_at AND pol.valid_from_utc<=v_at AND pol.valid_until_utc>v_at;
  RETURN QUERY SELECT f.group_id,f.contract_sha256,f.profile_sha256,f.packet_sha256,f.packet_bytes
  FROM phase7_private.pre_fragment_v39 f
  WHERE f.group_id=v_group AND f.contract_sha256=v_contract AND f.profile_sha256=v_profile AND f.research_expiry_utc>v_at
  ORDER BY CASE f.horizon WHEN 'T-24h' THEN 1 WHEN 'T-6h' THEN 2 ELSE 3 END;
  END $read$;
-REVOKE ALL ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) FROM PUBLIC;
 -- Metadata only, independent bounded cleanup observation; no identity values.
 CREATE FUNCTION phase7_private.pre_link_expiry_status_v39() RETURNS jsonb
  LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp
