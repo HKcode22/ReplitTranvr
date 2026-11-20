@@ -18,10 +18,11 @@ type Draft=ReturnType<typeof buildP5ActualFivePairB0062CalendarOnlyDraft>;
 // Two exact, independently reproducible prospective metadata candidates.
 // Default remains the historical Nov22 bytes. The compact variant must be
 // selected explicitly; no generic caller-supplied calendar hash override.
-export type P6ActualCalendarVariant="ORIGINAL_NOV22"|"COMPACT_NOV21";
+export type P6ActualCalendarVariant="ORIGINAL_NOV22"|"COMPACT_NOV21"|"COMPACT_NOV22";
 const variants={
  ORIGINAL_NOV22:{draft:"46a4d2cd3f0da28365f43a66e3dfcb740a3393434425299b6c22e38322919333",rows:"45a44fffeb774b5d0829487bd82f1a4a40f70085bc776f269cf04f0a8c70962c",total:41960,dates:47,peak:1228,sourceBefore:2560,sourceAfter:9728,before:9364,overlap:344,after:32252,firstSource:"2026-11-20T23:45:00.000Z"},
- COMPACT_NOV21:{draft:"dcf06aaeb4f4e6ac697230f2eac634ebe5f9d1f72cda4e5bacff0aadfb48c943",rows:"7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",total:37388,dates:38,peak:1280,sourceBefore:4352,sourceAfter:7936,before:13400,overlap:1096,after:22892,firstSource:"2026-11-19T23:45:00.000Z"}
+ COMPACT_NOV21:{draft:"dcf06aaeb4f4e6ac697230f2eac634ebe5f9d1f72cda4e5bacff0aadfb48c943",rows:"7125264304fe658028d54eb95b5e18b243a1d66100c9d1620d0d93c419c7077c",total:37388,dates:38,peak:1280,sourceBefore:4352,sourceAfter:7936,before:13400,overlap:1096,after:22892,firstSource:"2026-11-19T23:45:00.000Z"},
+ COMPACT_NOV22:{draft:"ba6ce0f7ca6f63b154d2d5c3d8d85ccdcd2baf7f7b0a56f2cedc8d7feb136049",rows:"9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6",total:36740,dates:37,peak:1280,sourceBefore:4352,sourceAfter:7936,before:12752,overlap:1096,after:22892,firstSource:"2026-11-20T23:45:00.000Z"}
 } as const;
 function exactVariant(variant:P6ActualCalendarVariant){
  if(!Object.hasOwn(variants,variant))hold("UNKNOWN_CALENDAR_VARIANT");
