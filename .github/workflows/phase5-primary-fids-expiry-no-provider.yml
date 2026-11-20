@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES
+          - VERIFY_P7_RESEARCH_EXPIRY_ONLY_NO_WRITES
           - APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER
           - APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION
       approved_main_sha:
@@ -88,3 +89,40 @@ jobs:
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
           node --check scripts/v39_phase5_primary_fids_expiry_github_v39.mjs
           node scripts/v39_phase5_primary_fids_expiry_github_v39.mjs
+
+  phase7-expiry:
+    # Independent scope, same existing cadence. This does not inherit
+    # primary or private epoch permission; manual verify has no writer URL.
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          vars.P7_EXPIRY_APPROVED_MAIN_SHA == github.sha &&
+          ((github.event_name == 'schedule' &&
+            vars.P7_EXPIRY_ENABLED == 'true' &&
+            vars.P7_EXPIRY_APPROVAL == 'APPLY_P7_DUE_ONLY_NO_PROVIDER') ||
+           (github.event_name == 'workflow_dispatch' &&
+            inputs.approved_main_sha == github.sha &&
+            inputs.confirm == 'VERIFY_P7_RESEARCH_EXPIRY_ONLY_NO_WRITES')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      P7_EXPIRY_APPROVED_MAIN_SHA: ${{ vars.P7_EXPIRY_APPROVED_MAIN_SHA }}
+      P7_EXPIRY_ENABLED: ${{ vars.P7_EXPIRY_ENABLED }}
+      P7_EXPIRY_APPROVAL: ${{ vars.P7_EXPIRY_APPROVAL }}
+      P7_EXPIRY_MODE: ${{ github.event_name == 'schedule' && 'APPLY_DUE_ONLY' || 'VERIFY_ONLY' }}
+      P7_EXPIRY_READER_DATABASE_URL: ${{ secrets.P7_EXPIRY_READER_DATABASE_URL }}
+      P7_EXPIRY_WRITER_DATABASE_URL: ${{ github.event_name == 'schedule' && secrets.P7_EXPIRY_WRITER_DATABASE_URL || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Bounded derived research and temporary link due-only expiry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET"
+          npx --no-install tsx scripts/v39_phase7_expiry_github_v39.ts
