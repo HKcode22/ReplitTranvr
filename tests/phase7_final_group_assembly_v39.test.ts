@@ -1,5 +1,7 @@
 import {describe,it,expect} from "vitest";
-import {createHash,randomUUID} from "node:crypto";
+import {createHash,randomUUID,generateKeyPairSync,sign} from "node:crypto";
+import {verifyPhase7SignedPostSettlement,phase7PostFragmentsDigest} from "../server/lib/disruption/phase7SignedPostReview_v39";
+import type {P6PostCommittedScope,P6PostPreservationAnchor} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 import {assemblePhase7FinalGroupCandidate,P7_ABSENT_PRE_PLACEHOLDER,P7_CANCELLED_SEPARATE_OUTCOME,type Phase7StoredPreFragment} from "../server/lib/disruption/phase7FinalGroupAssembly_v39";
 import {buildPhase7DerivedReleasePacket} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
 import {hashPhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
@@ -64,5 +66,30 @@ describe("final group assembly preserves actual PRE IDs and conditional primary 
   expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[f,t],{...scope,evidence:{"T-6h":e,"T-90m":{...q,flightInstanceId:"leg:synthetic:other"}}},now)).toThrow();
   expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[f],{...scope,evidence:{"T-90m":q}},now)).toThrow();
   expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[f],{...scope,groupSettlementDue:false,evidence:{}},now)).toThrow();
+ });
+});
+
+describe("independent exact POST settlement wire (synthetic signer only)",()=>{
+ it("authenticates binding and reproducible bytes, rejects wrong source/group/signature/time",()=>{
+  const fragment=pre("T-6h"),e=outcome("T-6h"),s={...scope,evidence:{"T-6h":e}};
+  const ids={continuousPacketId:randomUUID(),missingPreRows:{"T-24h":randomUUID(),"T-90m":randomUUID()}};
+  const a=assemblePhase7FinalGroupCandidate(contract,profile,[fragment],s,now,ids);
+  expect(assemblePhase7FinalGroupCandidate(contract,profile,[fragment],s,now,ids)).toEqual(a);
+  expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[fragment],s,now,{...ids,continuousPacketId:fragment.packet.rows[0].releaseRowId})).toThrow("reviewer-opaque-ids");
+  const b:Phase7DurableDerivedBundle={schema:"v39.phase7.durable-derived-bundle.v1",packet:a.packet,paired:{...a.association,schema:"v39.phase7.paired-derived-association-reviewed.v1",approvedForUse:true},continuous:a.continuous};
+  const approval:Phase7DurableBundleApproval={schema:"v39.phase7.durable-derived-bundle-independent-review.v1",contractSha256:hashPhase7DurableCandidate(contract),bundleSha256:hashPhase7DurableCandidate(b),sourceParityReviewSha256:sha("parity"),reconstructionReviewSha256:sha("reconstruction"),fieldReviewSha256:sha("fields"),associationReviewSha256:s.associationReviewSha256,continuousTargetReviewSha256:sha("target"),approvedForDurableStorage:true,sourceMappingPersisted:false,minTargetMinutes:-60,maxTargetMinutes:1440};
+  const anchor:P6PostPreservationAnchor={manifestSha256:sha("manifest"),rightsSha256:sha("rights"),queryDigestSha256:sha("query"),snapshotId:"42",runDayIndex:1,airportIcao:"WSSS",frameSha256:sha("frame"),flightInstanceId:e.flightInstanceId,horizon:e.horizon,selectedNativeTUtc:e.selectedNativeTUtc,preIssuedAtUtc:e.preIssuedAtUtc,originalSourceAvailableAtUtc:e.originalSourceAvailableAtUtc,sourceExpiresAtUtc:"2026-11-22T20:00:00.000Z",sourceResponseSha256:e.frozenSourceOriginalSha256,ambiguousIdentity:false};
+  const committed={packet:{manifestSha256:anchor.manifestSha256,reviewedSourceRightsSha256:anchor.rightsSha256,runDayIndex:1,airportIcao:"WSSS",reviewedFrameSha256:anchor.frameSha256},populationQueryId:randomUUID(),responseSha256:sha("synthetic post"),normalizedMembers:1,reservationSha256:sha("reservation")} as P6PostCommittedScope;
+  const {privateKey,publicKey}=generateKeyPairSync("ed25519"),policySha256=sha("protected policy");
+  const env={P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:policySha256,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:createHash("sha256").update(publicKey.export({format:"der",type:"spki"})).digest("hex"),P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(publicKey.export({format:"pem",type:"spki"})).toString("base64")};
+  const payload={schema:"v39.phase7.exact-post-group-settlement.v1",policySha256,manifestSha256:anchor.manifestSha256,rightsSha256:anchor.rightsSha256,anchorSha256:hashPhase7DurableCandidate(anchor),committedPostSha256:hashPhase7DurableCandidate(committed),fragmentsSha256:phase7PostFragmentsDigest([fragment]),reviewedAtUtc:now,validUntilUtc:"2026-11-22T09:00:00.000Z",releasedAtUtc:now,scope:s,assemblyIds:ids,approval};
+  const wireFor=(p:unknown)=>{const raw=Buffer.from(JSON.stringify(p));return {payloadBase64:raw.toString("base64"),signatureBase64:sign(null,raw,privateKey).toString("base64")}};
+  const args={env,wire:wireFor(payload),committed,anchor,fragments:[fragment],contract,profile,observedDbClockUtc:"2026-11-22T08:01:00.000Z"};
+  expect(verifyPhase7SignedPostSettlement(args).bundle).toEqual(b);
+  expect(()=>verifyPhase7SignedPostSettlement({...args,committed:{...committed,responseSha256:sha("wrong")}})).toThrow("EXACT_SCOPE");
+  expect(()=>verifyPhase7SignedPostSettlement({...args,anchor:{...anchor,ambiguousIdentity:true}})).toThrow("EXACT_SCOPE");
+  expect(()=>verifyPhase7SignedPostSettlement({...args,observedDbClockUtc:payload.validUntilUtc})).toThrow("LIVE_SETTLEMENT_WINDOW");
+  expect(()=>verifyPhase7SignedPostSettlement({...args,wire:wireFor({...payload,approval:{...approval,bundleSha256:sha("wrong")}})})).toThrow("exact-reviewed-bundle-bytes");
+  expect(()=>verifyPhase7SignedPostSettlement({...args,wire:{...args.wire,signatureBase64:Buffer.alloc(64).toString("base64")}})).toThrow("SIGNATURE");
  });
 });
