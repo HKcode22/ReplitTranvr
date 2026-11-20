@@ -11,7 +11,7 @@ import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5
 import {loadP6CurrentPreCalendarWindows,selectP6LaterCalendarDueDays} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
-import {verifyP5CdFrozenRoster,runP5CdGithubPreTick,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+import {verifyP5CdFrozenRoster,runP5CdGithubPreTick,type P5CdFrozenRoster,type P5CdPhase7PreResolver} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {waitP5CdGithubSignedDueWindow} from "../server/lib/disruption/phase5CdGithubDbClockLookahead_v39";
 import {runP5CdGithubStage14Microburst} from "../server/lib/disruption/phase5CdGithubBoundedStage14Microburst_v39";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -46,9 +46,10 @@ function verifiedPackets(p:Projection,env:NodeJS.ProcessEnv){
  const raw=p.privateRosterBytes as Buffer;
  return verifyP5CdFrozenRoster(raw,JSON.parse(raw.toString("utf8")) as P5CdFrozenRoster,p.privateEntries,requireP5CdGithubPreRelease(env));
 }
-export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
+export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7PreResolver?:P5CdPhase7PreResolver){
  verifyP5CdGithubFrozenCodeLineage(env);
  const ctx=admitP6CurrentPrivateLaterPre(env);
+ if(typeof phase7PreResolver!=="function")hold("P7_INDEPENDENT_PER_PACKET_PRESERVATION_NOT_COMMISSIONED");
  async function read<T>(work:(c:Client)=>Promise<T>){
   const c=new Client({connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,query_timeout:25000,
    application_name:"phase6_current_later_pre_reader"});
@@ -117,7 +118,7 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
        expectedUnchangedRosterDigest:originalDigest}));
       s=fresh.selector;
       if(stopped)hold("PEER_LANE_STOPPED");
-      const z=await runP5CdGithubPreTick(env,{db:pre,pool:pre,packets},{
+      const z=await runP5CdGithubPreTick(env,{db:pre,pool:pre,packets,phase7PreResolver},{
        owner:"cd-gh-"+env.GITHUB_RUN_ID+"-lane"+(i+1),limit:2,leaseSeconds:120});
       // Preserve confirmed prior tick counts if a later DB read or peer
       // STOP causes this lane's microburst to reject.

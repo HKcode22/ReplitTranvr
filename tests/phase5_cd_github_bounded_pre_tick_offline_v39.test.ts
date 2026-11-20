@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {
  verifyP5CdFrozenRoster,bindP5CdTaskToFrozenPermit,
- runP5CdGithubPreTick,type P5CdFrozenRoster
+ runP5CdGithubPreTick,resolveP5CdPhase7Pre,type P5CdFrozenRoster
 } from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import type {P5CdClaimedTask} from
  "../server/lib/disruption/phase5CdDurableQueueClient_v39";
@@ -19,6 +19,7 @@ const rights=sha("d"),manifest=sha("a");
 function gate(){
  return{
   schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,
+  releaseMode:"PHASE5_CANARY" as const,
   approvedCodeSha:code,rosterSha256:"",
   rightsSha256:rights,manifestSha256:manifest,
   stop:false as const,providerCalls:0 as const,
@@ -96,11 +97,11 @@ function env():NodeJS.ProcessEnv{
   P5_CD_GH_CODE_LINEAGE_VERIFIED:code+":"+code,
   P5_CD_GH_PRE_CONFIRM:"ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER",
   P5_CD_GH_PRE_ARMED:"1",P5_CD_GH_PRE_STOP:"0",
-  P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",
-  P5_CD_GH_PHASE5_CANARY_APPROVED:"",
-  V39_PHASE5_FREEZE_SIGNED:"1",
+  P5_CD_GH_PRE_MODE:"PHASE5_CANARY",
+  P5_CD_GH_PHASE5_CANARY_APPROVED:"1",
+  V39_PHASE5_FREEZE_SIGNED:"0",
   V39_PHASE5_SOURCE_RIGHTS_APPROVED:"1",
-  V39_PHASE6_PROCESS_ARMED:"1",ADB_AUTO_COLLECT:"0",
+  V39_PHASE6_PROCESS_ARMED:"0",ADB_AUTO_COLLECT:"0",
   P5_CD_GH_PRE_ROSTER_SHA256:sha("e"),
   V39_P5_MANIFEST_SHA256:manifest,V39_P5_RIGHTS_SHA256:rights,
   P5_V39_PRE_DATABASE_URL:
@@ -147,6 +148,15 @@ describe("Phase5 GH bounded tick with existing signed PRE packets",()=>{
    b,roster,[{filePath:file,packetSha256:hash,bytes}],
    {...f.release,rosterSha256:createHash("sha256").update(b).digest("hex")}
   )).toThrow("FROZEN_PERMIT_SOURCE_RIGHTS_OR_NATIVE_T_UNREVIEWED");
+ });
+ it("Phase6 requires an exact independent per-packet preservation resolver before any queue SQL",async()=>{
+  const f=fixture(),live={...env(),P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",P5_CD_GH_PHASE5_CANARY_APPROVED:"",V39_PHASE5_FREEZE_SIGNED:"1",V39_PHASE6_PROCESS_ARMED:"1"};
+  let touched=0;
+  const deps={db:{query:async()=>{touched++;return{rows:[]}}},pool:{connect:async()=>{throw Error("MUST_NOT_CONNECT")}} as any,packets:f.packetSet};
+  await expect(runP5CdGithubPreTick(live,deps,{owner:"ci-gh-worker-12"})).rejects.toThrow("PHASE6_P7_PRESERVATION_RESOLVER_REQUIRED");
+  await expect(runP5CdGithubPreTick(live,{...deps,phase7PreResolver:async()=>({packetSha256:sha("f"),integration:null as any})},{owner:"ci-gh-worker-12"})).rejects.toThrow("P7_PRESERVATION_PROOF_WRONG_EXACT_PACKET");
+  await expect(resolveP5CdPhase7Pre(live,requireP5CdGithubPreRelease(live),[...f.packetSet.values()][0],async p=>({packetSha256:p.packetSha256,integration:null as any}))).rejects.toThrow("P7_PROTECTED_POLICY_OR_DISTINCT_READER_MISSING");
+  expect(touched).toBe(0);
  });
  it("STOP rejects before ANY DB claim or recovery",async()=>{
   let count=0;const fake={query:async()=>{count++;return{rows:[]}}};

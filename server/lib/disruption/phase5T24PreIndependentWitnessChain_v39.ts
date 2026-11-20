@@ -160,6 +160,8 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
  // readback under the approved PRE role. No fabricated source or T.
  const saved=await persistP5V0079SingleBoundFlightPre(
   prePool,pre,stage14CdFence);
+ if(stage14CdFence?.phase7PrePreservation&&saved.phase7DerivedPreFragmentIndependentlyVerified!==true)
+  HOLD("P7_DURABLE_PRE_READBACK_NOT_VERIFIED_NO_WITNESS");
  if(saved.horizon!=="T-24h"||
     saved.preSnapshotsInserted!==1||
     saved.postCommitDatabaseReadbackVerified!==true||
@@ -201,6 +203,7 @@ export async function persistP5ReviewedT24PreAndIndependentWitness(
   committedSnapshotId:saved.committedSnapshotId,
   sourcePopulationQueryId:pre.expectedSourcePopulationQueryId,
   preCommittedAndReadBackBeforeCutoff:true as const,
+  ...(saved.phase7DerivedPreFragmentIndependentlyVerified===true?{phase7DerivedPreFragmentIndependentlyVerified:true as const}:{}),
   witnessCommittedAndReadBackBeforeCutoff:true as const,
   postPreCommitDbObservedAtUtc:observed.postPreCommitDbObservedAtUtc,
   postWitnessCommitReadbackAtUtc:observed.postWitnessCommitReadbackAtUtc,

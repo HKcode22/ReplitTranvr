@@ -25,12 +25,31 @@ import {selectP5EReviewedSupplementalFeatures,
  from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {decideP5LaterPreEvidencePath,
  type P5StandaloneLaterNoT24Review} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
-import {persistPhase7BoundPreFragmentInTransaction,verifyPhase7PreFragmentReadback,type Phase7BoundPreTransactionInput,type Phase7PreFragmentReceipt} from "./phase7PreFragmentTransaction_v39";
+import {persistPhase7BoundPreFragmentInTransaction,verifyPhase7PreFragmentReadback,checkProspectivePrePolicy,type Phase7BoundPreTransactionInput,type Phase7PreFragmentReceipt} from "./phase7PreFragmentTransaction_v39";
 // Dormant until the actual reviewed caller and sealed policy are commissioned.
 // Existing legacy/CI callers retain their original mode.
-type Phase7PreIntegration=Pick<Phase7BoundPreTransactionInput,"contract"|"profile"|"dispositions"|"review"|"reviewSha256"|"separatelyVerifiedFields">&{
+export type Phase7PreIntegration=Pick<Phase7BoundPreTransactionInput,"contract"|"profile"|"dispositions"|"review"|"reviewSha256"|"separatelyVerifiedFields">&{
  reader:Pool;expectedReaderRole:string;
 };
+/** Protected policy identity is checked independently of the packet builder.
+ * The resolver must obtain actual per-permit separate-lane proof; this helper
+ * does not derive a proof from the list of approved fields or source presence. */
+export function requirePhase7GhPreIntegration(env:NodeJS.ProcessEnv,p:P5Stage14SingleFlightPrePermit,preserve:Phase7PreIntegration|undefined){
+ if(!preserve||env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED!=="1"||
+    env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256!==preserve.reviewSha256||
+    !preserve.reader||typeof preserve.reader.connect!=="function"||
+    !/^[a-z][a-z0-9_]{4,62}$/.test(preserve.expectedReaderRole??"")||
+    ["postgres","neondb_owner",p.expectedRestrictedPreWriterRole].includes(preserve.expectedReaderRole))
+  throw Error("REFUSED_P5_STAGE14_PRE_P7_PROTECTED_POLICY_OR_DISTINCT_READER_MISSING");
+ checkProspectivePrePolicy(preserve,p.manifestSha256,p.expectedReviewedSourceRightsSha256);
+ const fields=preserve.separatelyVerifiedFields;
+ if(!Array.isArray(fields)||new Set(fields).size!==fields.length||
+    preserve.dispositions.some(d=>d.disposition==="LONG_TERM_RIGHTS_REQUIRED")||
+    fields.some(f=>!preserve.dispositions.some(d=>d.field===f&&
+     ["INDEPENDENT_SOURCE_EXACT_LANE","PURPOSE_BOUND_REFERENCE_LANE"].includes(d.disposition))))
+  throw Error("REFUSED_P5_STAGE14_PRE_P7_UNRESOLVED_OR_UNBOUND_FIELD_PROOF");
+ return preserve;
+}
 const SHA=/^[0-9a-f]{64}$/;
 const ID=/^[a-zA-Z0-9_.:|-]{5,200}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -504,6 +523,11 @@ export async function persistP5V0079SingleBoundFlightPre(
  }
 ):Promise<P5Stage14SingleFlightPreResult>{
  const preserve=options?.phase7PrePreservation;
+ // A live Phase6 writer cannot silently fall back to the old optional path.
+ if(process.env.V39_PHASE6_PROCESS_ARMED==="1"&&!preserve)
+  hold("P7_PHASE6_DURABLE_PRE_REQUIRED");
+ if(options?.realV0088QueueFenceGh&&process.env.P5_CD_GH_PRE_MODE==="PHASE6_APPROVED")
+  requirePhase7GhPreIntegration(process.env,p,preserve);
  const allowedCi=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1"&&options?.realV0088QueueFenceCi!==undefined&&options.amendmentENativeRouteBoundCi===true&&process.env.GITHUB_ACTIONS==="true"&&process.env.DATABASE_URL==="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.ADB_AUTO_COLLECT==="0"&&!process.env.AERODATABOX_API_KEY&&!process.env.RAPIDAPI_KEY&&!process.env.AERODATABOX_WEBHOOK_SECRET;
  const allowedGh=options?.realV0088QueueFenceGh!==undefined&&options.amendmentENativeRouteBoundGh===true&&process.env.GITHUB_ACTIONS==="true"&&process.env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256===preserve?.reviewSha256&&!!preserve;
  if(preserve&&!allowedCi&&!allowedGh)hold("P7_PRE_REQUIRES_SEPARATELY_COMMISSIONED_PRESERVATION");

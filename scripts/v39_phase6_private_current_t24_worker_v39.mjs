@@ -89,9 +89,10 @@ export async function runP6BoundedT24Packets(packets,lanes,work,clock=()=>perfor
   candidateCount:packets.length,attemptedCount:next,verified,custodied,notDue,skipped,held,deferredCount:packets.length-next,
   aggregateCountsMayExcludeUnknownCommits:held>0,providerCalls:0,phase6PaidGo:false};
 }
-export async function runP6CurrentT24Worker(env){
+export async function runP6CurrentT24Worker(env,phase7PreResolver){
  verifyP5CdGithubFrozenCodeLineage(env);
  const ctx=admitP6CurrentT24Worker(env);
+ if(typeof phase7PreResolver!=="function")hold("P7_INDEPENDENT_PER_PACKET_PRESERVATION_NOT_COMMISSIONED");
  async function read(work){
   const c=new pg.Client({connectionString:env.P6_PRIVATE_READER_DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:25000,
    application_name:"p6_current_t24_registry_reader"});
@@ -139,7 +140,7 @@ export async function runP6CurrentT24Worker(env){
    try{
     if(stopped())return "SKIPPED";
     const t=await runP5CdOneQueuedT24Witness(b.local,{preDb:pre,prePool:pre,witnessPool:witness,
-     rosterBytes:q.rosterBytes,roster:q.roster,files:q.files});
+     rosterBytes:q.rosterBytes,roster:q.roster,files:q.files,phase7PreResolver});
     if(t.status==="NO_DUE_SIGNED_T24_TASK")return "NO_DUE";
     if(t.status!=="T24_PRE_V0081_WITNESS_AND_QUEUE_VERIFIED_NOT_SCIENTIFIC_FREEZE")return "UNKNOWN";
     try{const c=await custody.publish(t);return c.privateT24CustodyCommittedAndReadBack?"VERIFIED_WITH_CUSTODY":"VERIFIED_CUSTODY_UNKNOWN";}
