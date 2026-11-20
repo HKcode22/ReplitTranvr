@@ -21,17 +21,24 @@ The project therefore retains two distinct products:
 
 | Product | Purpose | Retention disposition |
 | --- | --- | --- |
-| Operational source custody | prove on-time PRE/POST construction, recover short-lived failures, and enforce source expiry | existing FIDS/raw expiry controls; deletion/tombstone only |
-| Phase 7 release artifact | train, validate, calibrate, and reproduce a model from a restricted feature/label representation | only after an independent review certifies the exact representation as non-reconstructable Derived Work under the applicable provider terms; the packet itself never grants that approval |
+| **Packet A — operational source custody** | Prove on-time PRE/POST construction, identify operating legs, join airports/carriers/routes, anchor exact cutoffs, recover short-lived failures, prevent duplicate requests, and enforce source expiry | Full study fields remain here: flight/leg identifiers, airport and carrier identity, route/segment links, exact schedule/observation/event timestamps, source bindings, PRE/POST/outcome values, weather/ADSB/history inputs, and audit receipts. Existing FIDS/raw/source-linked expiry and backup controls remain authoritative. |
+| **Packet B — Phase 7 release artifact** | Train, validate, calibrate, and reproduce a model from a restricted feature/label representation | Only after independent review certifies the exact representation as permitted and non-reconstructable under the applicable provider terms. The Packet B writer rejects direct source-shaped fields; it never grants that approval and never deletes Packet A fields. |
 
 The Phase 5 frozen manifest remains the predecessor. A future signed release
 must bind this profile's exact schema/version and must not mutate that manifest
 or manufacture `sourceRightsApproved`.
 
-## What is intentionally not retained in the Phase 7 artifact
+The word “excluded” below applies only to Packet B. It does **not** mean that
+the Phase 6 operational study can run without flight identity, airports,
+carriers, routes, or exact timestamps. Those fields are required in Packet A
+for the PRE/POST chain and for leakage-safe model construction.
 
-The artifact must exclude all of the following when they originate from
-AeroDataBox or encode a recoverable AeroDataBox flight record:
+## What Packet B intentionally does not retain long-term
+
+Packet A still contains the following fields during the operational study,
+subject to the evidenced source/backup lifecycle. Packet B must exclude them
+when they originate from AeroDataBox or encode a recoverable AeroDataBox flight
+record:
 
 - raw payloads, response/request hashes, delivery IDs, provider IDs, query IDs,
   subscription/account facts, provider timestamps, and evidence JSON;
@@ -65,9 +72,13 @@ artifact field may permit joining back to an expired `clean.flight_population`,
 
 This remains useful for Phase 7: supervised training and protected validation
 need a fixed feature vector, outcome, horizon, split, and quality/missingness
-state. They do not need the provider response body. The trade-off is deliberate:
-the model can learn from approved bins/engineered variables, but cannot depend
-on an exact long-lived flight replay or an unbounded per-flight archive.
+state. They do not need the provider response body. Packet A is still the
+full-fidelity operational source for constructing those values. Before any
+Packet A field expires, the project must compare Packet B against the full
+operational feature/label view. If removing an airport, carrier, route, leg,
+flight key, or exact time materially changes coverage or model performance,
+that field is `LONG_TERM_RIGHTS_REQUIRED`; it must not be silently dropped
+and described as equivalent.
 
 ## Required controls before use
 
@@ -105,7 +116,9 @@ against accidental source copying; they are not a provider-rights determination.
 the Phase 7 release artifact. Their names and existing matrix classification do
 not satisfy the field contract above. The current inventory correctly requires
 field-level proof for PRE and outcome content. This profile preserves those
-guards; it does not reclassify them by owner declaration.
+guards; it does not reclassify them by owner declaration. It also does not
+prohibit the fields from Packet A; it separates operational custody from the
+long-term Packet B release.
 
 ## Readiness outcome
 
