@@ -4,6 +4,7 @@
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {realpathSync} from "node:fs";
+import {createRequire} from "node:module";
 import {resolve} from "node:path";
 import {pathToFileURL,fileURLToPath} from "node:url";
 const REPO="HKcode22/ReplitTranvr", BASE="0a7b1a28f243de76d4c83026d15f585265ef6f7b", HEAD="e91536badf97fdf6302fc3db52c1e9e864dfb6c0";
@@ -70,13 +71,20 @@ async function inspectDisabled(c,write){
  need(s?.auth_rows===1&&s.exact_disabled===1&&s.calendar_rows===31&&s.exact_calendar===31&&["incidents","subs","batches","draws","queries","attempts","other_attempts","packets","indexes","claims"].every(k=>s[k]===0),"DISABLED_STAGE_NOT_EMPTY_EXACT");
  return {authDisabled:true,calendarRows:31,physicalAttempts:0,activeSubscriptions:0,unresolvedIncidents:0};
 }
+/** Exercise exactly this loader in no-provider CI using the pinned candidate
+ * checkout and its dependency lock. No connection or DB mutation here. */
+export async function loadExactInertImplementation(root){
+ const {Pool}=createRequire(resolve(root,"package.json"))("pg");
+ const m=await import(pathToFileURL(resolve(root,"server/lib/disruption/phase7InertStorageCommission_v39.ts")).href);
+ need(typeof Pool==="function"&&typeof m.installP7InertStorage==="function"&&typeof m.inspectP7InertStorage==="function"&&m.compileP7InertStorageSql().length===3,"CANDIDATE_LOADER");
+ return {Pool,installP7InertStorage:m.installP7InertStorage,inspectP7InertStorage:m.inspectP7InertStorage};
+}
 async function main(){
  const [mode]=process.argv.slice(2);
  need(process.argv.length===3&&["--inspect","--install-inert"].includes(mode),"MODE");
  need(mode!=="--install-inert"||process.env.P7_OWNER_INERT_SCHEMA_APPROVAL==="INSTALL_EXACT_INERT_SCHEMA_AND_NOLOGIN_ROLES_NO_PAID","OWNER_EXPLICIT_INERT_APPROVAL");
  const u=verifyOwnerScope(),root=realpathSync(process.cwd());
- const {Pool}=await import(pathToFileURL(resolve(root,"node_modules/pg/lib/index.js")).href);
- const {installP7InertStorage,inspectP7InertStorage}=await import(pathToFileURL(resolve(root,"server/lib/disruption/phase7InertStorageCommission_v39.ts")).href);
+ const {Pool,installP7InertStorage,inspectP7InertStorage}=await loadExactInertImplementation(root);
  const pool=new Pool({connectionString:u,max:2,connectionTimeoutMillis:8000,query_timeout:35000,application_name:"phase7_detached_inert_only"});
  try{
   const probe=await pool.connect();let state,present;

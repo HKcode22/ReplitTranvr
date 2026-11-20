@@ -5,13 +5,14 @@ on:
     paths:
       - 'review-tools/p7_nov20_detached_inert_owner.mjs'
       - 'review-tools/p7_nov20_detached_inert_owner.test.mjs'
+      - 'review-tools/p7_nov20_detached_inert_owner.loader.test.mjs'
       - '.github/workflows/phase7-detached-inert-owner-review.yml'
 permissions:
   contents: read
 jobs:
   native-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       DATABASE_URL: ''
       AERODATABOX_API_KEY: ''
@@ -26,3 +27,13 @@ jobs:
         with: {node-version: '20'}
       - run: node --check review-tools/p7_nov20_detached_inert_owner.mjs
       - run: node --test review-tools/p7_nov20_detached_inert_owner.test.mjs
+      - uses: actions/checkout@v4
+        with:
+          ref: e91536badf97fdf6302fc3db52c1e9e864dfb6c0
+          path: candidate
+          persist-credentials: false
+      - run: npm ci --include=dev --no-audit --no-fund
+        working-directory: candidate
+      - name: Exact pinned candidate tsx loader and SQL blob proof (no DB)
+        working-directory: candidate
+        run: ./node_modules/.bin/tsx ../review-tools/p7_nov20_detached_inert_owner.loader.test.mjs
