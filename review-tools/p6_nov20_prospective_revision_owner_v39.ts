@@ -110,6 +110,8 @@ function buildPrivatePackage(oldStagePath:string){
   const reviewedManifest:any={
     ...identity.manifestCandidate.content,
     status:"SCIENTIFIC_FREEZE_PROSPECTIVE_DATE_SUCCESSOR_APPROVED_NO_GO",
+    originalCandidateConfigSha256:identity.configCandidate.sha256,
+    configCandidateSha256:configSha,
     originalFrozenPacketPreserved:true,
     originalFrozenManifestSha256:OLD_MANIFEST_SHA,
     prospectiveDateRevisionApproved:true,
