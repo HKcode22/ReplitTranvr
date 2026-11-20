@@ -607,11 +607,18 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
     expect(current[i].prosrc===old[i].prosrc).toBe(name==="receipt"||name==="stop");
    }
    const now=(await c.query("SELECT clock_timestamp() at")).rows[0].at.getTime(),age=now-23.5*H,at=iso(age),reservedAt=iso(age-1000),day=reservedAt.slice(0,10);
-   const req=digest("synthetic future POST"),res=digest("synthetic reserved POST"),unbound=digest("not reserved"),rights=sha("d"),price=sha("f");
+   const unbound=digest("not reserved"),rights=sha("d"),price=sha("f");
    const release=(await c.query("SELECT manifest_sha256,reviewed_category_budget_sha256 FROM clean.phase5_fids_seven_rest_release_v39")).rows[0];
    await c.query("UPDATE clean.adb_phase6_authorization SET enabled=true");
-   await c.query("INSERT INTO clean.phase5_other_rest_reviewed_call_v39(request_sha256,manifest_sha256,rest_category,planned_charge_day_utc,earliest_dispatch_utc,hard_latest_dispatch_utc,github_run_id,rights_review_sha256,provider_price_sha256,reviewed_request_context_sha256,reviewed_category_budget_sha256,api_units_per_get) VALUES($1,$2,'OUTCOME_REST_UNIT_BUDGET',$3::date,$4,$4,'12345678910',$5,$6,$7,$8,2)",[req,release.manifest_sha256,day,reservedAt,rights,price,digest("context"),release.reviewed_category_budget_sha256]);
-   await c.query("INSERT INTO clean.phase5_other_rest_physical_reservation_v39(reservation_sha256,request_sha256,manifest_sha256,rest_category,charged_utc_date,approved_api_units,previous_reserved_units,github_run_id,rights_review_sha256,provider_price_sha256,reserved_at_utc) VALUES($1,$2,$3,'OUTCOME_REST_UNIT_BUDGET',$4::date,2,0,'12345678910',$5,$6,$7)",[res,req,release.manifest_sha256,day,rights,price,reservedAt]);
+   let seq=0;
+   const reserve=async(label:string)=>{
+    const req=digest("synthetic future POST "+label),res=digest("synthetic reserved POST "+label);
+    await c.query("INSERT INTO clean.phase5_other_rest_reviewed_call_v39(request_sha256,manifest_sha256,rest_category,planned_charge_day_utc,earliest_dispatch_utc,hard_latest_dispatch_utc,github_run_id,rights_review_sha256,provider_price_sha256,reviewed_request_context_sha256,reviewed_category_budget_sha256,api_units_per_get) VALUES($1,$2,'OUTCOME_REST_UNIT_BUDGET',$3::date,$4,$4,'12345678910',$5,$6,$7,$8,2)",[req,release.manifest_sha256,day,reservedAt,rights,price,digest("context "+label),release.reviewed_category_budget_sha256]);
+    // Explicit distinct synthetic txid is ONLY for disposable fixtures in the enclosing rollback.
+    await c.query("INSERT INTO clean.phase5_other_rest_physical_reservation_v39(reservation_sha256,request_sha256,manifest_sha256,rest_category,charged_utc_date,approved_api_units,previous_reserved_units,github_run_id,rights_review_sha256,provider_price_sha256,reserved_at_utc,reserved_txid) VALUES($1,$2,$3,'OUTCOME_REST_UNIT_BUDGET',$4::date,2,0,'12345678910',$5,$6,$7,$8)",[res,req,release.manifest_sha256,day,rights,price,reservedAt,1000000000+(++seq)]);
+    return res;
+   };
+   const res=await reserve("exact"),resBad=await reserve("nested mismatch"),resWrong=await reserve("wrong child"),resFresh=await reserve("fresh"),resDup=await reserve("duplicate");
    await c.query("UPDATE clean.adb_phase6_authorization SET enabled=false");
    const raw=(token:string,nested=token)=>({phase5PostPurpose:"FUTURE_POST_SOURCE_OBSERVATION_NOT_AN_ACTUAL_PHYSICAL_LABEL",phase5PostReservationSha256:token,fidsRequestContract:{phase5PostReservationSha256:nested},originalDecodedEntityBodyPreserved:true,synthetic:true});
    const make=async(payload:object,when:string,batch?:string)=>{
@@ -620,16 +627,13 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
     if(batch)await c.query("INSERT INTO clean.flight_population(batch_id,source_airport_icao,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256,population_member_id,dep_scheduled_utc,provider_record_key) VALUES($1,'WSSS',$2,$3,$4,'fids',$5,$6,$6,'requested_airport_primary','confirmed_core',$4,$7,'CI1','Departure',$8,$9,'Asia/Singapore','confirmed_operating_leg',$4,'ci','ci',$10,$11,$2,$6)",[batch,from,to,when,id,identity,hash,from.slice(0,16),to.slice(0,16),sha("e"),member]);
     return {id,member};
    };
-   const yes=await make(raw(res),at,res),other=await make({synthetic:true},at),forged=await make(raw(unbound),at,unbound),bad=await make(raw(res,unbound),at,res),wrongChild=await make(raw(res),at,unbound),fresh=await make(raw(res),iso(now-22.5*H),res);
-   // Same reservation appears in multiple fixtures solely to challenge
-   // classification; the exact valid row plus a deliberately fresh row
-   // must have different time eligibility. No production ledger is used.
-   expect(await status()).toMatchObject({liveOriginals:6,eligibleOriginals:1,hardDueOriginals:0});
+   const yes=await make(raw(res),at,res),other=await make({synthetic:true},at),forged=await make(raw(unbound),at,unbound),bad=await make(raw(resBad,unbound),at,resBad),wrongChild=await make(raw(resWrong),at,unbound),fresh=await make(raw(resFresh),iso(now-22.5*H),resFresh),dupe1=await make(raw(resDup),at,resDup),dupe2=await make(raw(resDup),at,resDup);
+   expect(await status()).toMatchObject({liveOriginals:8,eligibleOriginals:1,hardDueOriginals:0});
    const swept=(await c.query("SELECT clean.phase5_primary_fids_expiry_sweep_v39(1) r")).rows[0].r;
    expect(swept).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,remainingEligibleAtCutoff:0,remainingHardDueAtCutoff:0});
    expect((await c.query("SELECT raw_payload IS NULL AND raw_expired_at_utc IS NOT NULL AND response_hash IS NULL AS done FROM clean.fids_query_response WHERE population_query_id=$1",[yes.id])).rows[0].done).toBe(true);
    expect((await c.query("SELECT count(*)::int n FROM clean.population_research_membership WHERE population_member_id=$1",[yes.member])).rows[0].n).toBe(1);
-   expect((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE population_query_id=ANY($1::uuid[]) AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL",[[other.id,forged.id,bad.id,wrongChild.id,fresh.id]])).rows[0].n).toBe(5);
+   expect((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE population_query_id=ANY($1::uuid[]) AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL",[[other.id,forged.id,bad.id,wrongChild.id,fresh.id,dupe1.id,dupe2.id]])).rows[0].n).toBe(7);
    expect((await c.query("SELECT clean.phase5_primary_fids_expiry_receipt_v39($1) r",[swept.runId])).rows[0].r).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,nonemptyPrimaryReceiptVerified:true});
   }finally{await c.query("ROLLBACK");c.release()}
   expect((await admin.query("SELECT clean.phase5_primary_fids_expiry_status_v39() r")).rows[0].r.liveOriginals).toBe(0);
