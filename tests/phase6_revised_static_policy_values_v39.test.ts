@@ -6,7 +6,7 @@ import {buildRevisedStaticValues,bindMondayPolicyStage} from "../review-tools/p6
 import {compileP6ProspectiveDisabledStageRevisionV39} from "../server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39";
 // Independent replay using public planning metadata only. The exact stage hash
 // is the owner-confirmed revised packet, not a new authorization or DB action.
-it("replays the actual revised 6144-query compiler against the exact owner stage and all committed plans",()=>{
+it("replays the archived Nov22 owner stage and all 31 historically verified plan hashes",()=>{
  const code="0a7b1a28f243de76d4c83026d15f585265ef6f7b";
  const h=(v:string|Buffer)=>createHash("sha256").update(v).digest("hex");
  const evidence=(path:string)=>({path,sha256:h(readFileSync(path))});
@@ -24,7 +24,12 @@ it("replays the actual revised 6144-query compiler against the exact owner stage
  expect(h(stage)).toBe("6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc");
  const st=JSON.parse(stage);
  expect(result.summary.unsignedCostOnlyEnvelopeSha256).toBe("a3d3525a890bfe542f9588b18d3b5d9367ba657ccae2c1c0401edc625ac46124");
- for(const f of result.files.slice(0,31))expect(h(readFileSync(f.path))).toBe(f.sha256);
+ // Immutable old plan hashes from successful run 44719412090 / artifact 14621551097,
+ // verified against the then-committed Nov22 files. Current main-candidate
+ // files are independently checked against Monday below; no old date replay.
+ const historicalPlanHashes=["86d68b3f08cd7fac5142bc4683b1a53cc6814830d583919494c28d2337d938f7","7115f6dc4243b620bb75112289cf6fc8aa0242ac54965ff4623a85dd6d3286fe","11fadf5df4eceb532ff53fad5347a667baa135dfa70084bcb047c603e691127f","cf5502d92d62f745df354ce6ffacff6ae0ff82b16e74f29a05ef24712f4dfbce","7ddcbc34a34e42a99e96c1f11fa273c02f763d556dd6016aa04b9b96b2921d89","8b80c4928f7f04492718168c7f26dc8c45a269025f56d9f55dc6b614836bba3f","d571425d139c09b23dcd9b5fe426bcb8b97fcc65f4103e199731f3633944f465","2d076dbf678b0e1c41615a4dd8e2bd695f586b9296cabbee91f9b333c7d4bc6a","45e51284e0cd8b88db79b79b97522aed47496328a89c717cb5b84bc35ac2b7fc","0ffa4c9daa2b11095726f6ed01dba88e19b986595baff3d1388c5065a07e73bf","105c1bc3d37303dadbb2d7abe065bf37e1d229643e1f793d3b30a594720bd52c","f4d6a0ee07205c1dae7dcb91a8ce768b8231a91049b58ab9a6a66b8e04398a9a","8d7049644f8300088e87114547efcb2b5de496634f4ae268065d8180e335ff26","df5fd2b46314bd0205dcf1f4b90f5e62cacc9c3477b2552842a1164d130dd221","7fd0764687159593654d0310284f5015fdb5d0e0cbe362e4bfb5dde3b64b459c","ab26a8f35b1f4ca19268968b9bb44a7ab664980023ddc4c342cdc904407bd9af","8d6b960d2bdf10806d29531c1911973995ee2041a16ed3c8dde79034a8cb3459","08cdbcabb6af8b8b15da0dc381ede7e291e649535a961ca35970ef5906460f15","d454787ffeaffccc415422b185cb070845bf30ab622ab3bd6d346ace5a69aa25","4aaf2d1a2b85bc6188bdee346dff9282b9331ce4ea455c19a2df0d4ded1d0450","d53c6eef652e3f25d99a15b9a13d6989994898c1a0add0cb0b65739c2202a8cb","cfe7dcfef95c0060541814989f41bd0867596e6694b3d4f97ac11695af7aa5ea","e36fb18ac0e21890f8a5739e147d5d6623576dc2916db4a2b750352367621419","6cf369efd0c658f9af1604b879b952edf28a1f48a53ce2958eee6edb179c956f","908c8919a474a1b0a96ef4b35031c88f6e23e10db7fbd1774915452361fa6630","d9ac54b2ebfac84b17d302890374d4a0befa2b48634778ff03dc564efef40814","0b62533200e0e144b214a23b108e3289e18b289b1eab08f62361886488b85a12","f3d21d00b9a5b3990a04ffc722e7f63b52b3319181f715f376d291a6c191ca48","97a8eb0f1dff8cff4f1c2b8eca100e6424966db7dfd75047ab2bbcf0fde1734b","ca14ddaf28e2d4989686f6de976b785d372354c627005c488074c5a33dc8a269","11c52576f025a92d23e92acc9acc5ea88636dcefc6844b48fabbc88125f11efa"];
+ expect(result.files.slice(0,31).map(f=>f.sha256)).toEqual(historicalPlanHashes);
+ expect(result.files.slice(0,31).every(f=>h(f.bytes)===f.sha256)).toBe(true);
  const p={codeSha:"b".repeat(40),manifestSha256:st.manifestSha256,configSha256:st.configSha256,calendarSha256:st.calendarSha256,frameSha256:st.frameSha256,costSha256:result.summary.unsignedCostOnlyEnvelopeSha256,providerContractSha256:"63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09",releaseSha256:h("synthetic release"),rightsSha256:h("synthetic rights")};
  const names=["P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64"];
  const mockPolicies=Object.fromEntries(names.map(n=>[n,{synthetic:true,approved:false}]));
@@ -51,6 +56,7 @@ it("binds the Monday six-policy statics to the real recompiled stage and tail, n
  const result=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:h(eb),timingBytes:tb,expectedTimingFileSha256:h(tb),calendarVariant:"COMPACT_MONDAY_NOV23"});
  const stage=result.files[31].bytes;
  const b=bindMondayPolicyStage(stage,manifest,config,eb,tb);
+ expect(result.files.slice(0,31).every(f=>h(readFileSync(f.path))===f.sha256&&readFileSync(f.path).equals(Buffer.from(f.bytes)))).toBe(true);
  expect(b.outcomeTailUtc).toBe("2026-12-29T04:00:00.000Z");expect(b.stageSha).toBe(h(stage));expect(b.costSha).toBe(result.summary.unsignedCostOnlyEnvelopeSha256);
  const p={codeSha:"d".repeat(40),manifestSha256:h(manifest),configSha256:h(config),calendarSha256:calendar,frameSha256:review.frameEvidence.frameHash,costSha256:b.costSha,providerContractSha256:"63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09",releaseSha256:h("synthetic release"),rightsSha256:h("synthetic rights"),outcomeTailUtc:b.outcomeTailUtc};
  const names=["P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64"];

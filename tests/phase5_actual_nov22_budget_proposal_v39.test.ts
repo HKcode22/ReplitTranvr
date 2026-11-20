@@ -510,15 +510,17 @@ describe("Monday exact prospective calendar compiler replay (NO GO)",()=>{
    expect({...b,startUtc:a.startUtc,budgetDayId:a.budgetDayId}).toEqual(a);
    count[d.partition]=(count[d.partition]??0)+1;
    const p=JSON.parse(readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json","utf8"));
-   expect(p.expectedServiceStartUtc).toBe(a.startUtc);
+   // Current tracked bytes now represent the adopted Monday calendar.
+   expect(p.expectedServiceStartUtc).toBe(b.startUtc);
    for(const t of p.templates){
     expect(keys.has(t.queryKey)).toBe(false);keys.add(t.queryKey);templates++;
-    const req=Date.parse(t.scheduledRequestUtc)+delta,cut=Date.parse(t.earliestPlannedCutoffUtc)+delta;
-    const start=Date.parse(t.serviceWindowStartUtc)+delta,end=Date.parse(t.serviceWindowEndUtc)+delta;
+    const req=Date.parse(t.scheduledRequestUtc),cut=Date.parse(t.earliestPlannedCutoffUtc);
+    const start=Date.parse(t.serviceWindowStartUtc),end=Date.parse(t.serviceWindowEndUtc);
+    expect(old.shapeEnvelope.days[i].activeSegments.some(s=>start-delta>=Date.parse(s.startUtc)&&end-delta<=Date.parse(s.endUtc))).toBe(true);
     expect(cut-req).toBe(900000);
     expect(d.activeSegments.some(s=>start>=Date.parse(s.startUtc)&&end<=Date.parse(s.endUtc))).toBe(true);
     expect(t.apiUnitsPerAttempt*t.maxAttempts).toBe(2);
-    const day=iso(req).slice(0,10);expect(day).toBe(iso(Date.parse(t.physicalChargeDayUtc+"T00:00:00.000Z")+delta).slice(0,10));
+    const day=iso(req).slice(0,10);expect(day).toBe(t.physicalChargeDayUtc);
     charge.set(day,(charge.get(day)??0)+2);first=Math.min(first,req);last=Math.max(last,req);
    }
   }
@@ -558,7 +560,7 @@ describe("Monday prospective release candidate compiler (unsigned, no GO)",()=>{
   const plans=x.reviewOnlyDayPlanExport!;
   expect(plans).toMatchObject({status:"UNSIGNED_METADATA_ONLY_NOT_STAGED_NO_GO",phase6PaidGo:false,calendarRowsSha256:"55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b"});
   expect(plans.plans).toHaveLength(31);
-  expect(plans.plans.every((f,i)=>f.path==="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"&&hash(f.bytes)===f.sha256&&f.sha256===x.geometry.dayPlanSha256s[i].sha256)).toBe(true);
+  expect(plans.plans.every((f,i)=>f.path==="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"&&hash(f.bytes)===f.sha256&&f.sha256===x.geometry.dayPlanSha256s[i].sha256&&readFileSync(f.path).equals(Buffer.from(f.bytes)))).toBe(true);
   const parsed=plans.plans.map(f=>JSON.parse(f.bytes));
   expect(parsed[0].expectedServiceStartUtc).toBe("2026-11-25T00:00:00.000Z");
   expect(parsed[0].templates[0].scheduledRequestUtc).toBe("2026-11-23T23:45:00.000Z");
