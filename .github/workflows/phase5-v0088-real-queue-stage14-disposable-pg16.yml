@@ -11,6 +11,8 @@ on:
       - 'tests/phase5_amendment_e_stage14_bound_route_features_v39.test.ts'
       - 'server/lib/disruption/phase5AmendmentEStage14BoundRouteFeatures_v39.ts'
       - 'server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39.ts'
+      - 'server/lib/disruption/phase7PreFragmentTransaction_v39.ts'
+      - 'data-collection/phase5/review-tools/p7_pre_fragment_storage_candidate_NOT_FOR_INSTALL.sql'
 permissions:
   contents: read
 jobs:
@@ -21,6 +23,7 @@ jobs:
       GITHUB_ACTIONS: 'true'
       V39_P5_CD_V0088_STAGE14_CI: '1'
       V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
+      V39_P7_STAGE14_PRESERVATION_DISPOSABLE: '1'
       V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
       V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '0'
       V39_PHASE6_PROCESS_ARMED: '0'
@@ -31,6 +34,7 @@ jobs:
       P5_CD_CI_WRITER_URL: 'postgresql://phase5_fids_pre_writer_cd_ciuser01:ci-only@localhost:5432/neondb?sslmode=disable'
       P5_V39_PRE_DATABASE_URL: ''
       P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      RAPIDAPI_KEY: ''
       AERODATABOX_API_KEY: ''
       AERODATABOX_WEBHOOK_SECRET: ''
     services:
@@ -67,7 +71,7 @@ jobs:
           test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           test "$ADB_AUTO_COLLECT" = 0
-          test -z "$AERODATABOX_API_KEY"
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           test -z "$AERODATABOX_WEBHOOK_SECRET"
           test -z "$P5_V39_PRE_DATABASE_URL"
           test -z "$P5_V39_OTHER_REST_RESERVE_DATABASE_URL"
