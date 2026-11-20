@@ -254,6 +254,7 @@ DECLARE
   v_receipts bigint;
   v_remaining bigint;
   v_hard bigint;
+  v_earliest_cleared_hard_deadline timestamptz;
 BEGIN
   IF current_database()<>'neondb' OR pg_is_in_recovery()
      OR current_setting('transaction_read_only')<>'off'
@@ -274,7 +275,7 @@ BEGIN
   -- skipped rows remain counted in the backlog. Later freshly arriving
   -- records cannot be accidentally admitted by a moving wall clock.
   FOR r IN
-    SELECT q.population_query_id,
+    SELECT q.population_query_id,q.raw_persisted_at_utc+interval '24 hours' AS hard_deadline,
        encode(sha256(convert_to(q.raw_payload::text,'UTF8')),'hex') AS body_digest
     FROM clean.fids_query_response q
     LEFT JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id)
@@ -363,6 +364,7 @@ BEGIN
         WHERE p.population_query_id=r.population_query_id) THEN
       RAISE EXCEPTION 'P5_PRIMARY_FIDS_SWEEP_CHILD_NOT_CLEARED';
     END IF;
+    v_earliest_cleared_hard_deadline:=least(v_earliest_cleared_hard_deadline,r.hard_deadline);
     v_originals:=v_originals+1;
     v_children:=v_children+v_clear;
   END LOOP;
@@ -398,7 +400,7 @@ BEGIN
     'status','PRIMARY_FIDS_SWEEP_IN_TRANSACTION_NOT_COMMIT_PROOF','observedAtUtc',v_at,
     'runId',v_run,'originalsCleared',v_originals,'populationCleared',v_children,
     'tombstones',v_receipts,'remainingEligibleAtCutoff',v_remaining,
-    'remainingHardDueAtCutoff',v_hard,'providerCalls',0,'objectDeletions',0,
+    'remainingHardDueAtCutoff',v_hard,'earliestClearedHardDeadlineUtc',v_earliest_cleared_hard_deadline,'providerCalls',0,'objectDeletions',0,
     'backupOrPitrVerified',false,'completeRetentionDeploymentVerified',false,'phase6PaidGo',false);
 END
 $sweep$;

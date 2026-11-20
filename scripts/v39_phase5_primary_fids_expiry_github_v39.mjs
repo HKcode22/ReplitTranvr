@@ -228,14 +228,16 @@ async function readOnly(pool,sql,args=[]){
  }
 }
 const status=p=>readOnly(p,"SELECT clean."+F+"status_v39() v").then(checkStatus);
-function checkSweep(v,limit){
+function checkSweep(v,limit,deadlineProfile){
  if(!v||v.schema!=="v39.phase5.primary-fids-expiry-sweep.v1"||v.status!=="PRIMARY_FIDS_SWEEP_IN_TRANSACTION_NOT_COMMIT_PROOF"||
     !RUN.test(v.runId??"")||!["originalsCleared","populationCleared","tombstones","remainingEligibleAtCutoff","remainingHardDueAtCutoff"].every(k=>n(v[k]))||
     v.originalsCleared>limit||v.tombstones!==v.originalsCleared+v.populationCleared||
     v.remainingHardDueAtCutoff>v.remainingEligibleAtCutoff||v.providerCalls!==0||v.objectDeletions!==0||
     v.phase6PaidGo!==false||v.completeRetentionDeploymentVerified!==false||v.backupOrPitrVerified!==false)
   HOLD("INVALID_SWEEP_RECEIPT");
- return {runId:v.runId,originalsCleared:v.originalsCleared,populationCleared:v.populationCleared,tombstones:v.tombstones,remainingEligibleAtCutoff:v.remainingEligibleAtCutoff,remainingHardDueAtCutoff:v.remainingHardDueAtCutoff};
+ const margin=deadlineProfile===P5_PRIMARY_MARGIN_PROFILE;
+ if(margin&&(v.originalsCleared===0?v.earliestClearedHardDeadlineUtc!==null:typeof v.earliestClearedHardDeadlineUtc!=="string"||!Number.isFinite(Date.parse(v.earliestClearedHardDeadlineUtc))))HOLD("MISSING_CLEARED_HARD_DEADLINE");
+ return {runId:v.runId,originalsCleared:v.originalsCleared,populationCleared:v.populationCleared,tombstones:v.tombstones,remainingEligibleAtCutoff:v.remainingEligibleAtCutoff,remainingHardDueAtCutoff:v.remainingHardDueAtCutoff,...(margin?{earliestClearedHardDeadlineUtc:v.earliestClearedHardDeadlineUtc}: {})};
 }
 async function verifyReceipt(reader,r){
  const v=await readOnly(reader,"SELECT clean."+F+"receipt_v39($1) v",[r.runId]);
@@ -251,14 +253,14 @@ async function uncertainStop(writer,reader,runId){
  }catch{HOLD("UNCERTAINTY_STOP_UNVERIFIED_NO_REPLAY");}
  HOLD("UNCERTAINTY_STOP_RECORDED_NO_REPLAY");
 }
-async function oneSweep(writer,reader,limit){
+async function oneSweep(writer,reader,limit,deadlineProfile){
  const c=await writer.connect();let batch,attempted=false,ack=false,poison=false;
  try{
   await c.query("BEGIN");
   await c.query("SET LOCAL statement_timeout='20000ms'");
   await c.query("SET LOCAL lock_timeout='3000ms'");
   const z=await c.query("SELECT clean."+F+"sweep_v39($1) v",[limit]);
-  batch=checkSweep(z.rows[0]?.v,limit);
+  batch=checkSweep(z.rows[0]?.v,limit,deadlineProfile);
   attempted=true;await c.query("COMMIT");ack=true;
  }catch(e){
   if(!attempted){try{await c.query("ROLLBACK");}catch{poison=true;}throw e;}
@@ -272,9 +274,21 @@ async function oneSweep(writer,reader,limit){
  }catch{await uncertainStop(writer,reader,batch.runId);}
  return {...batch,commitAck:ack,independentReadback:true};
 }
+/** Reader statement time is AFTER the independent committed tombstone receipt.
+ * This is a conservative upper bound on commit time; a late readback does not
+ * prove a late commit, but it cannot certify the hard deadline either. */
+export function primaryDeadlineUnprovenAfterSweep(receipt,readback){
+ if(receipt.remainingHardDueAtCutoff>0||readback.hardDueOriginals>0)return true;
+ if(receipt.originalsCleared===0||!Object.hasOwn(receipt,"earliestClearedHardDeadlineUtc"))return false;
+ const deadline=Date.parse(receipt.earliestClearedHardDeadlineUtc),at=Date.parse(readback.observedAtUtc);
+ return !Number.isFinite(deadline)||!Number.isFinite(at)||at>=deadline;
+}
 export async function runP5PrimaryExpiry({writer,reader,apply=false,verify=verifyP5PrimaryExpiryActor,verifyOptions={},limit=BATCH,maxBatches=MAX_BATCHES}){
  if(writer===reader||typeof apply!=="boolean"||!n(limit)||limit<1||limit>BATCH||
     !n(maxBatches)||maxBatches<1||maxBatches>MAX_BATCHES)HOLD("RUNTIME_SCOPE");
+ const deadlineProfile=verifyOptions.writer?.primaryDeadlineProfile??"V0103";
+ if(deadlineProfile!==(verifyOptions.reader?.primaryDeadlineProfile??"V0103"))HOLD("PRIMARY_DEADLINE_PROFILE_MISMATCH");
+ primaryDeadlineSqlForFunction("sweep",deadlineProfile);
  const states=[];
  for(const [pool,actor] of [[writer,"writer"],[reader,"reader"]]){
   const c=await pool.connect();try{states.push(await verify(c,actor,verifyOptions[actor]));}finally{c.release();}
@@ -287,15 +301,18 @@ export async function runP5PrimaryExpiry({writer,reader,apply=false,verify=verif
  const base={providerCalls:0,objectDeletions:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false,distinctDbActorsVerified:true,...(transition?{privateCommissionState:states[0]}:{})};
  if(!apply)return {status:"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",before,...base,databaseWrites:0};
  if(before.deletionStopUnresolved||bad(before))HOLD("PRIMARY_STATUS_OR_DELETION_STOP_REVIEW_REQUIRED");
- const receipts=[];let current=before;
+ const receipts=[];let current=before,deadlineEvidenceHold=before.hardDueOriginals>0;
  for(let i=0;i<maxBatches&&current.eligibleOriginals>0;i++){
-  const r=await oneSweep(writer,reader,limit);receipts.push(r);
+  const r=await oneSweep(writer,reader,limit,deadlineProfile);
   current=await status(reader);
+  const unproven=primaryDeadlineUnprovenAfterSweep(r,current);
+  deadlineEvidenceHold=deadlineEvidenceHold||unproven;
+  receipts.push({...r,readbackObservedAtUtc:current.observedAtUtc,deadlineEvidenceHold:unproven});
   if(bad(current)||current.deletionStopUnresolved)HOLD("PRIMARY_STATUS_AFTER_SWEEP_REVIEW_REQUIRED");
   if(r.originalsCleared===0)break;
  }
  return {...base,status:current.eligibleOriginals===0?"PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED":"PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS",
-  before,after:current,receipts,databaseWritesPossible:receipts.some(x=>x.originalsCleared>0)};
+  before,after:current,receipts,deadlineEvidenceHold,databaseWritesPossible:receipts.some(x=>x.originalsCleared>0)};
 }
 async function main(){
  const a=admitP5PrimaryExpiryGithub(process.env);
@@ -309,7 +326,7 @@ async function main(){
   const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply,verifyOptions});
   console.log(JSON.stringify({...result,reviewedMainSha:a.sha,primaryDeadlineProfile:a.primaryDeadlineProfile}));
   const primaryHold=result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||
-    result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0;
+    result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0||result.deadlineEvidenceHold===true;
   if(primaryHold)process.exitCode=2;
   // Primary cleanup executes first. A private failure cannot undo its
   // acknowledged commit or convert its independent receipt into a failure.

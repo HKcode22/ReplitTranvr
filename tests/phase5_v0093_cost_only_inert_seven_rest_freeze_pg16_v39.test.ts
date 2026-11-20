@@ -5,7 +5,7 @@
  */
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
-import {primaryDeadlineSqlForFunction,P5_PRIMARY_MARGIN_PROFILE,P5_PRIMARY_MARGIN_SQL} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
+import {primaryDeadlineUnprovenAfterSweep,primaryDeadlineSqlForFunction,P5_PRIMARY_MARGIN_PROFILE,P5_PRIMARY_MARGIN_SQL} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {URL as NodeFileURL} from "node:url";
 import {Pool} from "pg";
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
@@ -631,6 +631,10 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
    expect(await status()).toMatchObject({liveOriginals:8,eligibleOriginals:1,hardDueOriginals:0});
    const swept=(await c.query("SELECT clean.phase5_primary_fids_expiry_sweep_v39(1) r")).rows[0].r;
    expect(swept).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,remainingEligibleAtCutoff:0,remainingHardDueAtCutoff:0});
+   expect(new Date(swept.earliestClearedHardDeadlineUtc).toISOString()).toBe(iso(age+24*H));
+   expect(primaryDeadlineUnprovenAfterSweep(swept,{hardDueOriginals:0,observedAtUtc:await status().then(x=>x.observedAtUtc)})).toBe(false);
+   expect(primaryDeadlineUnprovenAfterSweep(swept,{hardDueOriginals:0,observedAtUtc:iso(age+24*H)})).toBe(true);
+   expect(primaryDeadlineUnprovenAfterSweep(swept,{hardDueOriginals:1,observedAtUtc:iso(now)})).toBe(true);
    expect((await c.query("SELECT raw_payload IS NULL AND raw_expired_at_utc IS NOT NULL AND response_hash IS NULL AS done FROM clean.fids_query_response WHERE population_query_id=$1",[yes.id])).rows[0].done).toBe(true);
    expect((await c.query("SELECT count(*)::int n FROM clean.population_research_membership WHERE population_member_id=$1",[yes.member])).rows[0].n).toBe(1);
    expect((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE population_query_id=ANY($1::uuid[]) AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL",[[other.id,forged.id,bad.id,wrongChild.id,fresh.id,dupe1.id,dupe2.id]])).rows[0].n).toBe(7);
