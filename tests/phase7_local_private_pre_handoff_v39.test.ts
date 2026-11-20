@@ -54,3 +54,29 @@ describe("private same-runner PRE handoff transport",()=>{
   expect(steps).toEqual(["issue_lane","publish_lane"]);
  });
 });
+
+import {projectP7LocalRoleEnvironment} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
+describe("actual protected role credential projection",()=>{
+ const base:NodeJS.ProcessEnv={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",
+  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main",GITHUB_SHA:scope.codeSha,V39_P5_APPROVED_CODE_SHA:scope.codeSha,
+  GITHUB_RUN_ID:scope.runId,P5_SOURCE_BATCH_RUN_DAY_INDEX:String(scope.runDayIndex),P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST:scope.queryDigestSha256,V39_P5_MANIFEST_SHA256:scope.manifestSha256,V39_P5_RIGHTS_SHA256:scope.rightsSha256,V39_P5_RELEASE_SHA256:scope.releaseSha256,V39_P5_PROVIDER_CONTRACT_SHA256:scope.providerContractSha256,
+  ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED:"1",RUNNER_TRACKING_ID:"synthetic-tracking-id",
+  P6_NONPAID_DAILY_POLICY_BASE64:"synthetic-policy",P6_NONPAID_DAILY_POLICY_SHA256:h("daily"),GITHUB_TOKEN:"must-not-forward",ACTIONS_RUNTIME_TOKEN:"must-not-forward"};
+ const source="postgresql://phase5_p5_source_login_20261108:fake@ep-ci.example.neon.tech/neondb?sslmode=require";
+ const endpoint=new URL(source);endpoint.password="";
+ const lane={...base,V39_P5_SOURCE_DATABASE_URL:source,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64:"synthetic-lane-key",P6_PHASE7_PRE_REFERENCE_LINK_POLICY_BASE64:"synthetic-link-policy",P6_PHASE7_PRE_REFERENCE_LINK_POLICY_SHA256:h("link")};
+ const proof={...base,V39_P5_SOURCE_DATABASE_URL:source,P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64:"synthetic-proof-key",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",
+  P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
+ const publisher={...base,P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",P6_PRIVATE_PUBLISHER_DATABASE_URL:"synthetic-publisher-url",P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
+ it("does not forward other keys, tokens, or the source password to publisher",()=>{
+  const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
+  expect(l.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64).toBe("synthetic-lane-key");expect(l.P6_PRIVATE_READER_DATABASE_URL).toBeUndefined();
+  expect(p.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64).toBe("synthetic-proof-key");expect(p.P6_PRIVATE_PUBLISHER_DATABASE_URL).toBeUndefined();
+  expect(new URL(w.V39_P5_SOURCE_DATABASE_URL!).password).toBe("");
+  for(const x of [l,p,w]){expect(x.GITHUB_TOKEN).toBeUndefined();expect(x.ACTIONS_RUNTIME_TOKEN).toBeUndefined();}
+  expect(Object.keys(w).filter(k=>k.includes("PRIVATE_KEY"))).toEqual([]);
+  expect(()=>projectP7LocalRoleEnvironment({...lane,P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64:"not allowed"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...publisher,V39_P5_SOURCE_DATABASE_URL:source},"publisher",endpoint.toString())).toThrow("PUBLISHER_SOURCE_CREDENTIAL");
+  expect(()=>projectP7LocalRoleEnvironment({...proof,AERODATABOX_API_KEY:"not allowed"},"proof")).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
+ });
+});

@@ -5,11 +5,11 @@
  * trust is explicit, not security isolation against a compromised runner.
  */
 import {createPrivateKey} from "node:crypto";
-import {spawn,execFileSync} from "node:child_process";
+import {execFileSync} from "node:child_process";
 import {lstatSync,realpathSync,readFileSync,writeFileSync,unlinkSync,rmdirSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
-import {callP7LocalPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,p7LocalPreSocketPaths,readP7LocalPreScope,type P7LocalPreRole} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
+import {callP7LocalPreRole,launchP7DetachedPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,p7LocalPreSocketPaths,readP7LocalPreScope,type P7LocalPreRole} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
 import {openP7ActualPreLaneEvidenceAuthority} from "../server/lib/disruption/phase7ExactPreLaneEvidenceAuthority_v39";
 import {openP7ExactSourcePreProofProducer} from "../server/lib/disruption/phase7ExactSourcePreProofProducer_v39";
 import {inspectP7PreEvidenceBatchPublisher,openP7StoredPreLaneArchivePort,publishP7PreEvidenceBatchFromProtectedEnv} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
@@ -85,21 +85,8 @@ async function start(role:P7LocalPreRole){
   if(role==="proof"&&!sameP6NeonDatabaseEndpoint(source(e.V39_P5_SOURCE_DATABASE_URL,true),source(endpoint,false)))hold("SOURCE_ENDPOINT_DRIFT");
  }
  const env=projectP7LocalRoleEnvironment(e,role,endpoint);
- const child=spawn(process.execPath,["--import","tsx",fileURLToPath(import.meta.url),"serve",role],{env,cwd:process.cwd(),detached:true,stdio:"ignore"});
- let exited=false;child.once("exit",()=>{exited=true});child.once("error",()=>{exited=true});
- try{
-  const until=Date.now()+60000;
-  while(Date.now()<until&&!exited){
-   let s;try{s=lstatSync(paths[role])}catch(err){if((err as NodeJS.ErrnoException).code!=="ENOENT")throw err;}
-   if(s){
-    if(!s.isSocket()||s.uid!==process.getuid?.()||(s.mode&0o077)!==0)hold("SOCKET_PERMISSION");
-    await callP7LocalPreRole(paths[role],makeP7LocalPreRequest(scope,"ready"),5000);
-    child.unref();console.log(JSON.stringify({status:"P7_LOCAL_PRE_ROLE_READY_NO_PROVIDER",role,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false}));return;
-   }
-   await new Promise(resolve=>setTimeout(resolve,200));
-  }
-  hold("ROLE_STARTUP_UNVERIFIED");
- }catch(err){try{child.kill("SIGTERM")}catch{}throw err}
+ await launchP7DetachedPreRole({scriptPath:fileURLToPath(import.meta.url),role,path:paths[role],scope,env,cwd:process.cwd()});
+ console.log(JSON.stringify({status:"P7_LOCAL_PRE_ROLE_READY_NO_PROVIDER",role,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false}));
 }
 async function serve(role:P7LocalPreRole){
  process.umask(0o077);

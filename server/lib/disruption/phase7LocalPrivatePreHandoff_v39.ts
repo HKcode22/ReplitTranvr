@@ -5,6 +5,7 @@
  * against a compromised runner/OS user. Production requires explicit
  * owner approval of this trust boundary. No provider request here. */
 import {createServer,createConnection,type Socket} from "node:net";
+import {spawn} from "node:child_process";
 import {chmodSync,lstatSync,mkdirSync,realpathSync,unlinkSync} from "node:fs";
 import {join} from "node:path";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
@@ -200,4 +201,27 @@ export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:
   if(!(stored instanceof Map)||stored.size!==ks.length||ks.some((k,i)=>JSON.stringify(stored.get(k))!==JSON.stringify(issueProof.wires[i].wire)))hold("FINAL_INDEPENDENT_READBACK_DRIFT");
   return stored;
  }};
+}
+
+/** Exact launcher shared by production and a no-secret GitHub cross-step
+ * process rehearsal. Child stays under the runner's orphan-cleanup ID.
+ * Production caller first projects its approved role-only credentials. */
+export async function launchP7DetachedPreRole(input:{scriptPath:string;role:P7LocalPreRole;path:string;scope:P7LocalPreScope;env:NodeJS.ProcessEnv;cwd:string}){
+ const {scriptPath,role,path,scope,env,cwd}=input;scopeValid(scope);
+ if(!Object.hasOwn(ops,role)||!env.RUNNER_TRACKING_ID||!scriptPath.endsWith(".ts")||!scriptPath.startsWith(cwd+"/")||realpathSync(scriptPath)!==scriptPath)hold("LAUNCH_SCOPE");
+ const child=spawn(process.execPath,["--import","tsx",scriptPath,"serve",role],{env,cwd,detached:true,stdio:"ignore"});
+ let exited=false;child.once("exit",()=>{exited=true});child.once("error",()=>{exited=true});
+ try{
+  const until=Date.now()+60000;
+  while(Date.now()<until&&!exited){
+   let s;try{s=lstatSync(path)}catch(err){if((err as NodeJS.ErrnoException).code!=="ENOENT")throw err;}
+   if(s){
+    if(!s.isSocket()||s.uid!==process.getuid?.()||(s.mode&0o077)!==0)hold("SOCKET_PERMISSION");
+    await callP7LocalPreRole(path,makeP7LocalPreRequest(scope,"ready"),5000);
+    child.unref();return;
+   }
+   await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  hold("ROLE_STARTUP_UNVERIFIED");
+ }catch(err){try{child.kill("SIGTERM")}catch{}throw err}
 }
