@@ -20,8 +20,10 @@ import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/
 import {inspectP6DayEpochExistingShardSemanticsNoGo} from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 import {openP7StoredPreProofPort} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39.ts";
-import {openP7LocalPrivatePreHandoff,p7LocalPreSocketPaths} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts";
+import {openP7LocalPrivatePreHandoff,p7LocalPreSocketPaths,callP7LocalPreRole,makeP7LocalPreRequest} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
+import {checkPhase7PrePolicyStructure,inspectPhase7PreWriterRole} from "../server/lib/disruption/phase7PrePolicyCommission_v39.ts";
+import {openPhase7ProtectedPreResolver,parsePhase7ProtectedPrePolicy} from "../server/lib/disruption/phase7ProtectedPreResolver_v39.ts";
 const H=/^[a-f0-9]{64}$/,LOGIN=/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/;
 const hold=s=>{throw Error("HOLD_P6_NATIVE_LATER_RUNTIME_"+s);};
 const hash=b=>createHash("sha256").update(b).digest("hex");
@@ -51,13 +53,14 @@ function endpoint(raw,login,source,direct){
 /** Existing exact source audit checks retained. The extra ROLE/key
  * credentials are limited to this follow-on step, never passed to the
  * original audit's admission or the paid SOURCE child. */
-export function admitP6NativeLaterRuntime(env,read){
- if(env.P6_NATIVE_LATER_RUNTIME_ENABLED!=="1"||env.P6_NATIVE_LATER_RUNTIME_APPROVED!=="1"||
+export function admitP6NativeLaterRuntime(env,read,mode="committed"){
+ const actorOnly=mode==="actor-preflight";
+ if((!actorOnly&&env.P6_NATIVE_LATER_RUNTIME_ENABLED!=="1")||env.P6_NATIVE_LATER_RUNTIME_APPROVED!=="1"||
     env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET||
     env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||env.V39_PHASE6_PROCESS_ARMED!=="0"||
     env.ADB_AUTO_COLLECT!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0")hold("NOT_APPROVED_NONPAID_RUNTIME");
  const auditEnv={...env};for(const k of ports)delete auditEnv[k];
- const c=admitP6PostcommitNativeAudit(auditEnv,read);
+ const c=admitP6PostcommitNativeAudit(auditEnv,read,mode);
  const policyBytes=Buffer.from(env.P6_NONPAID_DAILY_POLICY_BASE64,"base64"),p=JSON.parse(policyBytes.toString("utf8")),v=p.nativeLaterReview;
  const t=c.trust,day=v?.dayAppendPolicy,custody=v?.t24Custody;
  if(v?.approved!==true||v.privatePublicationApproved!==true||
@@ -131,6 +134,30 @@ export function planP6NativeLaterAppendScope(handoff,current,policy,pageIndex){
   expectedReviewedSourceRightsSha256:d.entries[0].source.expectedReviewedSourceRightsSha256,
   proposedLaterRegistryFilePath:path,shardIndex},
   expectedSourceReviewEvidenceSha256:src[0].reviewEvidenceSha256};
+}
+/** Existing native admission and actual writer/readback role checks,
+ * before acquiring a paid original. Only this readiness path accepts the
+ * disarmed actor-only confirmation. No future signed index is invented. */
+export async function preflightP6NativeLaterRuntime(env){
+ const actorOnly=env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";
+ const x=admitP6NativeLaterRuntime(env,undefined,actorOnly?"actor-preflight":"committed");
+ if(x.v.nativeT24ReviewApproved!==true||x.v.independentT24WitnessProtocolReviewed!==true||x.v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107")hold("T24_WITNESS_PROTOCOL_NOT_APPROVED");
+ const policy=parsePhase7ProtectedPrePolicy(env),local=p7LocalPreSocketPaths(env,false);
+ const underlying=new pg.Pool({connectionString:x.preUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p6_pre_spend_writer_privilege_check"});
+ const pre=makeP5Stage28DedicatedRolePool(underlying,{group:"pre",reviewedDedicatedLogin:preLogin,forbiddenApplicationLogin:"phase5_runtime_application_login"});
+ let opened;
+ try{
+  opened=openPhase7ProtectedPreResolver(env);
+  const z=await inspectPhase7PreWriterRole(pre),clock=z.observedDbClockUtc;
+  for(const p of [x.v,x.v.dayAppendPolicy,{validFromUtc:x.custody.policyValidFromUtc,validUntilUtc:x.custody.policyValidUntilUtc}]){
+   if(Date.parse(clock)>=Date.parse(p.validUntilUtc)||(!actorOnly&&Date.parse(clock)<Date.parse(p.validFromUtc)))hold("NATIVE_POLICY_CLOCK");
+  }
+  checkPhase7PrePolicyStructure(policy,clock);
+  const reader=await opened.preflight();
+  if(reader.ready!==true)hold("PRE_FRAGMENT_READER");
+  for(const path of Object.values(local.roles))await callP7LocalPreRole(path,makeP7LocalPreRequest(local.scope,"ready"),5000);
+  return {status:"P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO",actorOnly,observedDbClockUtc:clock,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false};
+ }finally{await Promise.allSettled([underlying.end(),opened?.close()])}
 }
 export async function runP6NativeLaterRuntime(env,phase7ProofPort){
  if(typeof phase7ProofPort?.readExactPermitProofs!=="function")hold("INDEPENDENT_PRE_PROOF_PORT_NOT_COMMISSIONED");
@@ -247,7 +274,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64||env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64)hold("NATIVE_PUBLISHER_HAS_INDEPENDENT_KEY");
   const local=p7LocalPreSocketPaths(env,false),stored=openP7StoredPreProofPort(env);
   const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits)});
-  console.log(JSON.stringify(await runP6NativeLaterRuntime(env,port)));
+  if(process.argv.length===3&&process.argv[2]==="--preflight")console.log(JSON.stringify(await preflightP6NativeLaterRuntime(env)));
+  else if(process.argv.length===2)console.log(JSON.stringify(await runP6NativeLaterRuntime(env,port)));
+  else hold("EXACT_MODE");
  }
  catch(e){const s=String(e?.message??"");console.error(/^HOLD_(?:P6|P5)_[A-Z0-9_]+$/.test(s)?s:"HOLD_P6_NATIVE_LATER_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
 }

@@ -81,6 +81,20 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
   expect(only).not.toContain("secrets.");
   for(const step of steps.filter(x=>x.startsWith("Independently read actual committed")||x.startsWith("Review and publish later PRE"))){expect(step).toContain(paid);expect(step).not.toContain(pre);}
  });
+ it("stored paid SOURCE cannot bypass native PRE readiness; actor-only uses no provider",()=>{
+  const b=job(PRIVATE);
+  const gate=b.slice(b.indexOf("Reject unfinished release BEFORE"),b.indexOf("Admission for real actor preflight ONLY"));
+  expect(gate).toContain('test "$P6_NATIVE_LATER_RUNTIME_ENABLED" = 1');
+  expect(gate).toContain('test "$P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED" = 1');
+  const ready=b.indexOf("Validate native PRE publication readiness BEFORE SOURCE");
+  expect(ready).toBeGreaterThan(b.indexOf("Preflight independent PRE publisher role"));
+  expect(ready).toBeLessThan(b.indexOf("Authenticate real private PG16 signed index"));
+  const step=b.slice(ready,b.indexOf("Authenticate real private PG16 signed index"));
+  expect(step).toContain("ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER");
+  expect(step).toContain(" --preflight");
+  expect(step).not.toContain("secrets.AERODATABOX_API_KEY");
+  expect(step).toContain("P6_PHASE7_PRE_READBACK_DATABASE_URL");
+ });
  it("private mode never falls back to old packet files and retains own PG16 review",()=>{
   const old=job(LEGACY),privateJob=job(PRIVATE);
   expect(old).toContain("scripts/v39_phase5_one_signed_day_source_child_github_owner_v39.ts");

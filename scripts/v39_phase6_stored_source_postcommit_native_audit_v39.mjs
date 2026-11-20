@@ -29,13 +29,15 @@ function dbUrl(raw,login){
   hold("WRONG_RESTRICTED_TLS_DB_URL");
  return u;
 }
-export function admitP6PostcommitNativeAudit(env,read=readFileSync){
+export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committed"){
+ const actorOnly=mode==="actor-preflight"&&env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";
+ if(!["committed","actor-preflight"].includes(mode)||(mode==="actor-preflight"&&!actorOnly))hold("EXACT_PREFLIGHT_MODE");
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA||
     env.V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED!=="1"||
-    env.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED!=="1"||env.P6_PRIVATE_SOURCE_TRANSPORT_INPUT!=="stored"||
-    env.V39_P5_CHILD_CONFIRM!=="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET"||
+    (!actorOnly&&env.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED!=="1")||env.P6_PRIVATE_SOURCE_TRANSPORT_INPUT!=="stored"||
+    (!actorOnly&&env.V39_P5_CHILD_CONFIRM!=="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET")||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
     env.V39_PHASE6_PROCESS_ARMED!=="0"||env.ADB_AUTO_COLLECT!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
     [env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,env.RAPIDAPI_KEY,env.AERODATABOX_API_KEY,
@@ -43,10 +45,10 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync){
      env.P5_V39_PREPARE_DATABASE_URL,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
      env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_T24_WITNESS_DATABASE_URL].some(Boolean)||
     !GH.test(env.GITHUB_RUN_ID??"")||!SHA.test(env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST??"")||
-    !SHA.test(env.P6_PRIVATE_DAY_INDEX_SHA256??"")||
     !/^(?:[1-9]|[12][0-9]|3[01])$/.test(env.P5_SOURCE_BATCH_RUN_DAY_INDEX??"")||
-    !/^[1-9][0-9]{0,3}$/.test(env.P6_PRIVATE_DAY_INDEX_REVISION??"")||
-    Number(env.P6_PRIVATE_DAY_INDEX_REVISION)>1024)
+    (!actorOnly&&(!SHA.test(env.P6_PRIVATE_DAY_INDEX_SHA256??"")||
+     !/^[1-9][0-9]{0,3}$/.test(env.P6_PRIVATE_DAY_INDEX_REVISION??"")||
+     Number(env.P6_PRIVATE_DAY_INDEX_REVISION)>1024)))
   hold("NOT_EXACT_NONPAID_STORED_SOURCE_CHILD_SCOPE");
  const trust=readP6StableSourceTrust(env);
  const readerUrl=dbUrl(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin);
@@ -90,7 +92,7 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync){
   hold("FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  return {trust,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL,sourceUrl:env.V39_P5_SOURCE_DATABASE_URL,
   nativePreFeatureReview:featureReview===undefined?null:Object.freeze({...featureReview}),
-  expectedSourceRunId:env.GITHUB_RUN_ID,
+  expectedSourceRunId:env.GITHUB_RUN_ID,actorPreflightOnly:actorOnly,
   selector:{runDayIndex:day,indexRevision:Number(env.P6_PRIVATE_DAY_INDEX_REVISION),
    indexSha256:env.P6_PRIVATE_DAY_INDEX_SHA256,queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST},
   policy:{independentNativeCandidateReadOnlyApproved:true,existingPaidDispatchApproved:false,

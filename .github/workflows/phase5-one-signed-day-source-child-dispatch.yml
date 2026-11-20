@@ -198,6 +198,8 @@ jobs:
           V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
           AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
           P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_NATIVE_LATER_RUNTIME_ENABLED: ${{ vars.P6_NATIVE_LATER_RUNTIME_ENABLED }}
+          P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED: ${{ vars.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -211,6 +213,9 @@ jobs:
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
           if [[ "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" == stored ]]; then
+            # Production stored SOURCE must preserve PRE, never fall back to audit-only.
+            test "$P6_NATIVE_LATER_RUNTIME_ENABLED" = 1
+            test "$P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED" = 1
             test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
             test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64"
             test "$REGISTRY_FILE" = PRIVATE_STORED
@@ -353,6 +358,43 @@ jobs:
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase7_local_pre_evidence_roles_v39.ts start publisher
+      - name: Validate native PRE publication readiness BEFORE SOURCE (NONPAID)
+        if: ${{ success() && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET') }}
+        # Mutually exclusive with audit-only. Never expose the private
+        # reviewer keys or publisher credential to the original paid step.
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED: ${{ vars.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED }}
+          V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED }}
+          V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          P6_NATIVE_LATER_RUNTIME_ENABLED: ${{ vars.P6_NATIVE_LATER_RUNTIME_ENABLED }}
+          P6_NATIVE_LATER_RUNTIME_APPROVED: ${{ secrets.P6_NATIVE_LATER_RUNTIME_APPROVED }}
+          P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED: ${{ secrets.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED }}
+          P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+          P6_PHASE7_PRE_READBACK_DATABASE_URL: ${{ secrets.P6_PHASE7_PRE_READBACK_DATABASE_URL }}
+          P6_PHASE7_PRE_READBACK_ROLE: ${{ secrets.P6_PHASE7_PRE_READBACK_ROLE }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PRIVATE_LATER_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64 }}
+          P6_PRIVATE_DAY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64 }}
+          P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
+          P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64 }}
+          P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED }}
+          P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN }}
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          npx --no-install tsx scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs --preflight
       - name: Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child
         if: ${{ success() && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' }}
         shell: bash
