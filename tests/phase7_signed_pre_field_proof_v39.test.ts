@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {phase7SelectedFeatureDigest,verifyPhase7SignedPreFieldProof,verifyPhase7SelectedFieldProofs} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
+import {attachPhase7SignedProofBeforeRoster,phase7SelectedFeatureDigest,verifyPhase7SignedPreFieldProof,verifyPhase7SelectedFieldProofs} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
@@ -23,6 +23,18 @@ describe("signed exact PRE separate-lane field proof",()=>{
   expect(verifyPhase7SelectedFieldProofs(v,[f.feature],"2027-01-02T05:59:00.000Z","2027-01-02T09:00:00.000Z")).toEqual(["origin_icao"]);
   expect(()=>verifyPhase7SelectedFieldProofs(v,[{...f.feature,value:"YSSY"}],"2027-01-02T05:59:00.000Z","2027-01-02T09:00:00.000Z")).toThrow("SELECTED_VALUE_DRIFT");
   expect(()=>verifyPhase7SelectedFieldProofs(v,[f.feature],"2027-01-02T06:00:00.000Z","2027-01-02T09:00:00.000Z")).toThrow("PROOF_WINDOW");
+ });
+ it("attaches only genuine exact proof bytes before roster signing, without public receipt leakage",()=>{
+  const f=fixture(),packet={schema:"synthetic",prePermit:f.p};
+  const packetBytes=Buffer.from(JSON.stringify(packet)),packetSha256=h2(packetBytes),p={packet,packetBytes,packetSha256};
+  const wire=f.wire(f.proof),out=attachPhase7SignedProofBeforeRoster(p,f.env,f.policy,f.dispositions,wire);
+  expect(out.packetSha256).not.toBe(packetSha256);
+  expect(out.packetSha256).toBe(h2(out.packetBytes));
+  expect(JSON.parse(out.packetBytes.toString("utf8"))).toEqual({...packet,phase7FieldProof:wire});
+  expect(out.packet.prePermit).toEqual(f.p);
+  expect(JSON.stringify(out)).not.toContain("payloadBase64");
+  expect(()=>attachPhase7SignedProofBeforeRoster({...p,packetBytes:Buffer.from("tampered")},f.env,f.policy,f.dispositions,wire)).toThrow("UNSIGNED_COMPLETION_BYTES");
+  expect(()=>attachPhase7SignedProofBeforeRoster(p,f.env,f.policy,f.dispositions,{})).toThrow("PROTECTED_TRUST");
  });
  it("refuses wrong signer, permit, unsigned field and proof beyond cutoff",()=>{
   const f=fixture(),w=f.wire(f.proof);

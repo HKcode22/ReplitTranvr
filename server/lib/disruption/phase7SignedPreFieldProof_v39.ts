@@ -71,3 +71,26 @@ export function verifyPhase7SelectedFieldProofs(proof:Phase7VerifiedPreFieldProo
  }
  return proof.fields.map(f=>f.field);
 }
+
+/** Attach actual independent wire to the completed UNSIGNED exact permit
+ * before the existing roster/registry signature. This does not produce
+ * evidence or alter the permit. Keep private payload fields nonenumerable
+ * in the completion receipt; the wire is carried inside exact packet bytes. */
+export function attachPhase7SignedProofBeforeRoster<T extends {packet:{prePermit:P5Stage14SingleFlightPrePermit};packetBytes:Buffer;packetSha256:string}>(
+ completed:T,env:NodeJS.ProcessEnv,policySha256:string,dispositions:readonly Phase7CanonicalFieldDisposition[],wire:unknown
+):T{
+ if(!completed||!Buffer.isBuffer(completed.packetBytes)||completed.packetBytes.length>200000||
+  createHash("sha256").update(completed.packetBytes).digest("hex")!==completed.packetSha256||
+  !Buffer.from(JSON.stringify(completed.packet),"utf8").equals(completed.packetBytes)||
+  Object.hasOwn(completed.packet,"phase7FieldProof"))hold("UNSIGNED_COMPLETION_BYTES");
+ verifyPhase7SignedPreFieldProof(env,completed.packet.prePermit,policySha256,dispositions,wire);
+ const packet={...completed.packet,phase7FieldProof:wire};
+ const bytes=Buffer.from(JSON.stringify(packet),"utf8");
+ if(bytes.length>200000)hold("PACKET_BOUND");
+ const out={...completed,packetSha256:createHash("sha256").update(bytes).digest("hex")};
+ Object.defineProperties(out,{
+  packet:{value:packet,enumerable:false,writable:false,configurable:false},
+  packetBytes:{value:bytes,enumerable:false,writable:false,configurable:false}
+ });
+ return Object.freeze(out) as T;
+}
