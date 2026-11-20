@@ -97,10 +97,10 @@ BEGIN
  AND v.valid_from_utc<=v_at AND v.valid_until_utc>v_at;
  IF EXISTS(SELECT 1 FROM phase7_private.pre_source_link_v39 l WHERE l.expires_at_utc<=v_at) THEN
   RAISE EXCEPTION 'P7_PRE_DUE_LINK_CLEANUP_REQUIRED'; END IF;
- SELECT x.id,x.flight_instance_id,x.horizon,x.selected_t_milestone_utc,x.prediction_cutoff_utc,x.frame_hash,x.config_hash,x.created_at,
+ SELECT x.id,x.flight_instance_id,x.horizon::text AS horizon,x.selected_t_milestone_utc,x.prediction_cutoff_utc,x.frame_hash,x.config_hash,x.created_at,
  b.source_expires_at_utc,b.bound_at_utc INTO STRICT s
  FROM clean.flight_snapshots x JOIN clean.phase5_fids_original_binding_v39 b
- ON b.population_query_id=x.population_query_id AND b.response_hash=x.fids_response_hash
+ ON b.population_query_id::text=x.population_query_id AND b.response_hash=x.fids_response_hash
  WHERE x.id=p_snapshot AND x.prediction_state='PRE_DEPARTURE'
  AND b.manifest_sha256=p_manifest AND b.query_digest=p_query
  AND b.rights_review_sha256=p_rights
