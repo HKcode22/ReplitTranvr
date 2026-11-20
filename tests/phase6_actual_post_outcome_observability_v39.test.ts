@@ -1,5 +1,5 @@
-import {createHash} from "node:crypto";
-import {describe,it,expect} from "vitest";
+import {createHash,generateKeyPairSync,sign} from "node:crypto";
+import {describe,it,expect,vi} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {p5V0083FuturePostReservationSha256,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {auditP6ActualPostOutcomeObservability,readP6CommittedPostOutcomeObservability,P6_POST_PARTITION_PRE_SQL} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
@@ -201,5 +201,57 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   const a=await readP6CommittedPostOutcomeObservability(pool as any,f.s);
   expect(a.byHorizon["T-6h"]).toMatchObject({matchedNativePost:1,postAbsent:1,retainedCutoffSafePre:2});
   expect(sqls).toContain("ROLLBACK");expect(sqls.every(x=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(x))).toBe(true);
+ });
+});
+
+import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+describe("read-only committed POST recovery candidate",()=>{
+ function recoveryFixture(){
+  const f=fixture(),keys=generateKeyPairSync("ed25519");
+  const policy="ae".repeat(32),fp=sha(keys.publicKey.export({type:"spki",format:"der"}));
+  const env={V39_P5_MANIFEST_SHA256:f.p.manifestSha256,V39_P5_RIGHTS_SHA256:f.p.reviewedSourceRightsSha256,
+   P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:fp,
+   P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+  const prior=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre()],f.clock);
+  const receipt={schema:"v39.phase7.committed-post-recovery-receipt.v1",policySha256:policy,
+   committedScopeSha256:hashPhase7DurableCandidate(f.s),originalAuditSha256:phase7CommittedPostAuditIdentity(prior),
+   originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:08:00.000Z"};
+  const wire=(patch:Record<string,unknown>={})=>{const b=Buffer.from(JSON.stringify({...receipt,...patch}));return {payloadBase64:b.toString("base64"),signatureBase64:sign(null,b,keys.privateKey).toString("base64")};};
+  const consumer={policySha256:policy,preflight:vi.fn().mockResolvedValue(undefined),
+   preserveCommitted:vi.fn().mockResolvedValue({independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,
+    verifiedGroupCount:1,heldGroupCount:0,excludedAmbiguousGroupCount:0,accountedRetainedFlightCount:1})};
+  const sqls:string[]=[];
+  const pool=(rows=[f.pre()],now="2027-02-02T12:04:00.000Z")=>({connect:vi.fn(async()=>({query:async(sql:string)=>{
+   sqls.push(sql);
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now}]};
+   if(sql.startsWith("SELECT r.population_query_id"))return {rowCount:1,rows:[f.row]};
+   if(sql===P6_POST_PARTITION_PRE_SQL)return {rowCount:rows.length,rows};
+   return {rowCount:0,rows:[]};},release:()=>sqls.push("released")}))});
+  return {f,env,consumer,wire,pool,sqls,prior};
+ }
+ it("recovers an exact prior committed scope, with no paid capability or private fields in the receipt",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const out=await recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer});
+  expect(out).toMatchObject({status:"COMMITTED_POST_RECOVERY_INDEPENDENT_READBACK_NO_GET",verifiedGroupCount:1,paidReservations:0,providerCalls:0,phase6PaidGo:false});
+  expect(x.consumer.preflight).toHaveBeenCalledOnce();expect(x.consumer.preserveCommitted).toHaveBeenCalledOnce();
+  expect(x.sqls.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  expect(JSON.stringify(out)).not.toContain(x.f.p.flightInstanceId);
+  expect(JSON.stringify(x.prior)).not.toContain("privateObservedDbClockUtc");
+ });
+ it("holds a changed private denominator even when the total count is unchanged",async()=>{
+  const x=recoveryFixture(),source=x.pool([x.f.pre("T-6h",2)]);
+  await expect(recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
+ });
+ it("refuses a paid credential, forged wire, prior run drift and expired review",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const base={env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer};
+  await expect(recoverPhase7CommittedPost({...base,env:{...x.env,AERODATABOX_API_KEY:"synthetic"}})).rejects.toThrow("RECOVERY_ONLY");
+  await expect(recoverPhase7CommittedPost({...base,wire:{...x.wire(),signatureBase64:Buffer.alloc(64).toString("base64")}})).rejects.toThrow("SIGNATURE");
+  await expect(recoverPhase7CommittedPost({...base,wire:x.wire({committedScopeSha256:"ba".repeat(32)})})).rejects.toThrow("EXACT_SCOPE");
+  expect(source.connect).not.toHaveBeenCalled();
+  await expect(recoverPhase7CommittedPost({...base,source:x.pool(undefined,"2027-02-02T12:08:00.000Z") as any})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
  });
 });
