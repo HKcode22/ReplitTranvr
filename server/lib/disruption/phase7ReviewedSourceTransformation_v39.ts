@@ -1,6 +1,12 @@
 /**
  * Phase 7 review-gated source-to-derived transformation boundary.
  *
+ * This module is Packet B only: the Phase 7 long-term derived-release lane.
+ * Packet A remains the full Phase 6 operational/source-custody lane and keeps
+ * the flight/leg, airport, carrier, route, PRE/POST, and exact-time fields
+ * required to build and audit the study. This module must never be used to
+ * delete, reject, or redefine Packet A operational fields.
+ *
  * This module is a pure adapter contract. It does not read provider rows,
  * persist source values, call a provider, change retention, or enable paid GO.
  * A concrete profile must carry independently reviewed hashes and an explicit
