@@ -49,6 +49,12 @@ The remaining rights question is specifically:
 
 That is a retention/purpose/backup classification question, not an account-identity question.
 
+### Important published-terms distinction
+
+The current AeroDataBox Terms have a separate **Reference identifiers** category. It expressly lists identifiers such as airport IATA/ICAO codes, airline codes, aircraft-type codes, flight numbers/designators, registrations, ICAO 24-bit addresses, and API retrieval identifiers. The published retention purpose for that category is identifying, linking, and subsequently retrieving the designated subject, and it is not a license to compile those identifiers into a substitute for the Services. The exact account/plan terms and the actual purpose still control.
+
+Therefore the project must not collapse “identifier” into “forbidden.” Packet A retains these identifiers for the study. Packet B may use a separately reviewed reference-identifier lane only if the exact account/plan/purpose review confirms the Article 5.8 conditions. Exact event/schedule/observation timestamps are not automatically covered by that identifier category and remain a separate source-content retention question. The current Packet B writer stays fail-closed until that distinction is represented in an approved profile. See the [Terms of Use](https://aerodatabox.com/terms), Article 5.8.
+
 ## 3. Correct two-packet architecture
 
 ### Packet A — Phase 6 private operational/source-custody packet
@@ -84,15 +90,15 @@ Its purpose is to retain model-ready information after source custody expires. I
 - aggregate and model/calibration metrics;
 - versioned schema and transformation hashes.
 
-The existing strict writer intentionally rejects direct source-shaped fields in this long-lived representation. That safeguard is correct for Packet B; it must not be interpreted as a prohibition on Packet A's operational tables.
+The existing strict writer currently rejects direct source-shaped fields and identifier-shaped names in this long-lived representation. That is a conservative fail-closed hold while the exact account/plan/purpose classification is completed; it is not a conclusion that every identifier is prohibited. A separately reviewed Packet B reference-identifier lane may be added only for the Article 5.8 identification/linking/retrieval purpose and must not become a substitute dataset. The safeguard must not be interpreted as a prohibition on Packet A's operational tables.
 
 ## 4. Field classification for the study
 
 | Field family | Needed by Phase 6? | Packet A operational lane | Packet B long-term lane |
 |---|---:|---|---|
-| Flight/service and operating-leg identifiers | Yes | Required for identity and joins | Rights review; do not silently drop |
-| Origin/destination airport | Yes | Required for sampling, route, weather, and strata | Rights review; coarse region only is an optional fallback |
-| Operating/marketing carrier | Yes | Required for carrier/route analysis and model features | Rights review; preserve if permitted |
+| Flight/service and operating-leg identifiers | Yes | Required for identity and joins | Reference-identifier review for identification/linking/retrieval; do not silently drop or treat as a substitute dataset |
+| Origin/destination airport | Yes | Required for sampling, route, weather, and strata | Reference-identifier review for airport codes; a coarse region is not automatically equivalent |
+| Operating/marketing carrier | Yes | Required for carrier/route analysis and model features | Reference-identifier review for carrier codes; preserve if permitted and do not silently substitute |
 | Route and segment/leg links | Yes | Required for as-of joins and duplicate prevention | Rights review; do not substitute a different route |
 | Exact scheduled/revised timestamps | Yes | Required for T−24/T−6/T−90 cutoff logic and leakage prevention | Rights review; coarse calendar transform is not automatically equivalent |
 | Exact source observation/request/response timestamps | Yes | Required for freshness, billing, retry, and provenance | Control/derived summary unless retention is permitted |
@@ -104,7 +110,7 @@ The existing strict writer intentionally rejects direct source-shaped fields in 
 | Budget/expiry/deletion receipts | Yes | Required control evidence | Preserve as non-source control summaries |
 | API keys, request URLs, account metadata | No | Secret/control storage only | Exclude |
 
-The terms “flight identifier,” “airport identity,” “carrier identity,” and “exact timestamp” therefore do not mean “useless data.” They are essential study fields. The question is where they live, for how long, and under which evidenced permission.
+The terms “flight identifier,” “airport identity,” “carrier identity,” and “exact timestamp” therefore do not mean “useless data.” They are essential study fields. Reference identifiers have a distinct published category; exact timestamps and full source rows do not automatically share it. The question is where each field lives, for how long, and under which evidenced permission.
 
 ## 5. ML preservation rule
 
