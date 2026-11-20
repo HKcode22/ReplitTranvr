@@ -52,7 +52,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          npx vitest run tests/phase5_actual_source_native_flight_candidate_audit_v39.test.ts tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase7_signed_pre_field_proof_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts
+          npx vitest run tests/phase5_actual_source_native_flight_candidate_audit_v39.test.ts tests/phase5_actual_source_native_flight_candidate_readonly_owner_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase5_amendment_e_v0079_original_readonly_compiler_v39.test.ts tests/phase7_signed_pre_field_proof_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts tests/phase7_noaa_public_archive_v39.test.ts tests/phase7_noaa_production_reviewed_snapshot_v39.test.ts
           npx --no-install tsx --test tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs
           echo 'SOURCE_NATIVE_CANDIDATES_OFFLINE_TEST_ONLY_NOT_LICENSE_OR_SIGNED_PRE'
       - name: Start synthetic independent lane in separate GitHub step
