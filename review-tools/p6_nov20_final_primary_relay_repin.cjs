@@ -13,8 +13,8 @@ const W="phase5-primary-fids-expiry-no-provider.yml",STEP="Verify exact main and
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const C9=["liveOriginals","eligibleOriginals","hardDueOriginals","eligibleNextHour","hardDueNextHour","unboundLiveOriginals","markedExpiredPayloadPresent","unlinkedUnexpiredPopulation","unexpiredPopulationWithoutLiveOriginal"];
 const need=(x,s)=>{if(!x)throw Error("HOLD_P5_FINAL_REPIN_"+s)},sha=b=>crypto.createHash("sha256").update(b).digest("hex"),id=n=>Number.isSafeInteger(n)&&n>0;
-function classify(p,r,head,journal,now){
- need(C.test(head)&&head!==FINAL_EXECUTABLE_BASE&&Number.isFinite(now),"EXACT_FINAL_MAIN");
+function classify(p,r,head,journal,now,maintenance=false){
+ need(C.test(head)&&(maintenance?head===FINAL_EXECUTABLE_BASE:head!==FINAL_EXECUTABLE_BASE)&&Number.isFinite(now),"EXACT_FINAL_MAIN");
  need(p.P5_PRIMARY_FIDS_EXPIRY_ENABLED==="true"&&p.P5_PRIMARY_FIDS_EXPIRY_APPROVAL==="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER"&&p.P5_PRIMARY_FIDS_BACKSTOP_ENABLED==="true"&&p.P6_PRIVATE_EPOCH_EXPIRY_MODE==="COMMISSION_VERIFY_ONLY"&&p.P5_RETENTION_READONLY_MONITOR_ENABLED==="true"&&H.test(p.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256??""),"EXISTING_PRIMARY_CONFIG");
  need(["P6_ROLLING_DIRECT_RECOVERY_ENABLED","P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"].every(k=>p[k]!=="1"),"COLLECTION_MUST_REMAIN_STOPPED");
  need(r.TRAVNR_RELAY_MODE==="MULTI_LANE"&&r.TRAVNR_RELAY_PRIMARY_ENABLED==="1"&&r.TRAVNR_RELAY_ROLLING_ROUTE==="DIRECT_VERIFY"&&r.TRAVNR_RELAY_DIRECT_TICK_APPROVED==="0"&&r.TRAVNR_CRON_RELAY_SHA===RELAY&&(r.TRAVNR_TARGET_FORWARD_ENV_READY===undefined||r.TRAVNR_TARGET_FORWARD_ENV_READY==="1"),"EXISTING_RELAY_CONFIG");
@@ -25,7 +25,8 @@ function classify(p,r,head,journal,now){
   need(journal.status==="FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO"&&journal.main===head&&id(journal.verifyRunId)&&p.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA===head&&r.TRAVNR_APPROVED_TARGET_MAIN_SHA===head&&r.TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID===String(journal.verifyRunId),"PARTIAL_OR_DRIFTED_JOURNAL_NO_REPLAY");
   return "ALREADY_COMPLETE";
  }
- need(p.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA===INITIAL_SCHEDULER_PIN&&r.TRAVNR_APPROVED_TARGET_MAIN_SHA===INITIAL_SCHEDULER_PIN,"NONINITIAL_PIN_STATE_INSPECT_NO_REPLAY");
+ const priorPin=p.P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA;
+ need(priorPin===r.TRAVNR_APPROVED_TARGET_MAIN_SHA&&(priorPin===INITIAL_SCHEDULER_PIN||!maintenance&&priorPin===FINAL_EXECUTABLE_BASE),"NONINITIAL_PIN_STATE_INSPECT_NO_REPLAY");
  return "TRANSITION";
 }
 function verifyReceipt(run,jobs,log,head,runId,clock,apply=false){
@@ -69,9 +70,21 @@ function approved(dir,head){
  need(transition.authArtifactSha256===sha(raw),"TRANSITION_AUTH_IDENTITY");
  return sha(raw);
 }
-function stopped(head,p){
- const raw=execFileSync("git",["show",head+":"+STOP_PATH],{encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000});
- const ledger=JSON.parse(git(["show",head+":"+LEDGER]));
+const MAINTENANCE_STOP_BLOB="6c79cd8153819dba2932d465b6f39ea26622a3f5";
+const MAINTENANCE_STOP_SHA="75ebdd9f3e832f9236624221839ed035788288c31b91d08ea0052516f3b43646";
+function maintenanceStop(){
+ const x=api(P,"git/blobs/"+MAINTENANCE_STOP_BLOB);
+ need(x.sha===MAINTENANCE_STOP_BLOB&&x.encoding==="base64","MAINTENANCE_ATTESTATION_BLOB");
+ const bytes=Buffer.from(x.content,"base64");
+ need(sha(bytes)===MAINTENANCE_STOP_SHA&&crypto.createHash("sha1").update("blob "+bytes.length+"\0").update(bytes).digest("hex")===MAINTENANCE_STOP_BLOB,"MAINTENANCE_ATTESTATION_HASH");
+ const e=JSON.parse(bytes.toString("utf8"));
+ need(e.workflowRunId===44660415066&&e.workflowJobId===136036975111&&e.phase6PaidGo===false&&e.independentOperationalReleaseApproved===false,"MAINTENANCE_ATTESTATION_SCOPE");
+ // This is a hash-bound STOP evidence record only, NOT an AUTH ledger approval.
+ return {raw:bytes.toString("utf8"),ledger:{evidence:[{path:STOP_PATH,evidenceId:e.evidenceId,sha256:MAINTENANCE_STOP_SHA}],approvals:[]}};
+}
+function stopped(head,p,maintenance=false){
+ const evidence=maintenance?maintenanceStop():{raw:execFileSync("git",["show",head+":"+STOP_PATH],{encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000}),ledger:JSON.parse(git(["show",head+":"+LEDGER]))};
+ const {raw,ledger}=evidence;
  const pages=JSON.parse(gh(["api","--paginate","--slurp","repos/"+P+"/actions/secrets?per_page=100"]));
  need(Array.isArray(pages)&&pages.length>0&&pages.every(x=>Array.isArray(x.secrets)&&x.total_count===pages[0].total_count),"SECRET_PAGES");
  const rows=pages.flatMap(x=>x.secrets);
@@ -79,18 +92,19 @@ function stopped(head,p){
  verifyCurrentStop(raw,ledger,rows,Object.keys(p).map(name=>({name})));
 }
 async function run(){
- const [arg,head]=process.argv.slice(2);
- need(process.argv.length===4&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET","DATABASE_URL","V39_DATABASE_RUNTIME_URL"].every(k=>!process.env[k]),"NO_PROVIDER_OR_OWNER_DB");
- need(C.test(head)&&head!==FINAL_EXECUTABLE_BASE&&git(["rev-parse","HEAD"])===head&&git(["status","--porcelain","--untracked-files=no"])==="","CLEAN_FINAL_CHECKOUT");
+ const [arg,head,modeArg]=process.argv.slice(2);
+ const maintenance=modeArg==="--restore-existing-retention-only";
+ need((process.argv.length===4&&!modeArg||process.argv.length===5&&maintenance)&&process.env.GITHUB_ACTIONS!=="true"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET","DATABASE_URL","V39_DATABASE_RUNTIME_URL"].every(k=>!process.env[k]),"NO_PROVIDER_OR_OWNER_DB");
+ need(C.test(head)&&(maintenance?head===FINAL_EXECUTABLE_BASE:head!==FINAL_EXECUTABLE_BASE)&&git(["rev-parse","HEAD"])===head&&git(["status","--porcelain","--untracked-files=no"])==="","CLEAN_FINAL_CHECKOUT");
  const stable=()=>need(main(P)===head&&main(R)===RELAY,"MAIN_DRIFT");
  stable();git(["merge-base","--is-ancestor",FINAL_EXECUTABLE_BASE,head]);
  const delta=git(["diff","--name-status","--no-renames",FINAL_EXECUTABLE_BASE,head]).split("\n").filter(Boolean);
- need(delta.length>0&&delta.length<128&&delta.every(s=>/^[AM]\t(?:data-collection\/evidence\/ledgers\/V3\.9_PHASE6_SOURCE_ENABLE_APPROVALS\.json|data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(json|md))$/.test(s)),"EVIDENCE_ONLY_FINAL_MAIN");
+ need((maintenance?delta.length===0:delta.length>0)&&delta.length<128&&delta.every(s=>/^[AM]\t(?:data-collection\/evidence\/ledgers\/V3\.9_PHASE6_SOURCE_ENABLE_APPROVALS\.json|data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(json|md))$/.test(s)),"EVIDENCE_ONLY_FINAL_MAIN");
  const d=safeDir(path.resolve(arg));need(!d.startsWith(fs.realpathSync(process.cwd())+path.sep)&&d!==fs.realpathSync(process.cwd()),"PRIVATE_OUTSIDE_CHECKOUT");
- const authSha=approved(d,head),file="final-primary-relay-repin-"+head.slice(0,12)+".jsonl",out=path.join(d,file);
+ const authSha=maintenance?MAINTENANCE_STOP_SHA:approved(d,head),file=(maintenance?"maintenance-primary-relay-repin-":"final-primary-relay-repin-")+head.slice(0,12)+".jsonl",out=path.join(d,file);
  let journal=null;if(fs.existsSync(out)){const rows=read(d,file).toString("utf8").trim().split("\n").map(JSON.parse);journal=rows.at(-1);need(journal.authSha===authSha,"JOURNAL_AUTH_DRIFT")}
- const p=vars(P),r=vars(R),mode=classify(p,r,head,journal,Date.now());
- stopped(head,p);
+ const p=vars(P),r=vars(R),mode=classify(p,r,head,journal,Date.now(),maintenance);
+ stopped(head,p,maintenance);
  // The environment-level variable may override the repository setting.
  const ev=api(R,"environments/travnr-target-forward/variables?per_page=100");
  need(Number.isSafeInteger(ev.total_count)&&ev.total_count>=0&&ev.total_count<=100&&Array.isArray(ev.variables)&&ev.variables.length===ev.total_count,"FORWARD_ENV_METADATA");
@@ -112,7 +126,7 @@ async function run(){
  const fd=fs.openSync(out,"wx",0o600),emit=x=>{fs.writeSync(fd,JSON.stringify({main:head,authSha,...x})+"\n");fs.fsyncSync(fd);console.log(JSON.stringify({main:head,...x,phase6PaidGo:false}))};
  try{
   emit({status:"FINAL_PIN_TRANSITION_STARTED_NO_REPLAY"});
-  const set=(repo,name,value)=>{stable();stopped(head,vars(P));emit({status:"VARIABLE_WRITE_ATTEMPT",repo,name});gh(["variable","set",name,"-R",repo,"--body",value]);need(gh(["variable","get",name,"-R",repo])===value,"VARIABLE_READBACK");emit({status:"VARIABLE_READBACK",repo,name});stable()};
+  const set=(repo,name,value)=>{stable();stopped(head,vars(P),maintenance);emit({status:"VARIABLE_WRITE_ATTEMPT",repo,name});gh(["variable","set",name,"-R",repo,"--body",value]);need(gh(["variable","get",name,"-R",repo])===value,"VARIABLE_READBACK");emit({status:"VARIABLE_READBACK",repo,name});stable()};
   set(P,"P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA",head);
   emit({status:"EXACT_NEW_MAIN_VERIFY_DISPATCH_ATTEMPT_NO_REPLAY"});
   const a=JSON.parse(gh(["api","--method","POST","-H","X-GitHub-Api-Version: 2026-03-10","repos/"+P+"/actions/workflows/"+W+"/dispatches","--input","-"],{input:JSON.stringify({ref:"main",inputs:{confirm:"VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES",approved_main_sha:head}}),stdio:["pipe","pipe","ignore"]}));
@@ -126,7 +140,7 @@ async function run(){
   set(R,"TRAVNR_APPROVED_TARGET_MAIN_SHA",head);
   const finalP=vars(P),finalR=vars(R);
   need(Object.keys(p).length===Object.keys(finalP).length&&Object.keys(r).length===Object.keys(finalR).length&&Object.entries(p).every(([k,v])=>finalP[k]===(k==="P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA"?head:v))&&Object.entries(r).every(([k,v])=>finalR[k]===(k==="TRAVNR_APPROVED_TARGET_MAIN_SHA"?head:k==="TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID"?String(proof.runId):v)),"UNEXPECTED_CONFIG_CHANGE");
-  stable();stopped(head,finalP);emit({status:"FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO",verifyRunId:proof.runId,verifyJobId:proof.jobId,providerCalls:0,paidAuthorityGranted:false,actualNextBackupChildNotYetObserved:true,macReadOnlyMonitorRepinStillRequired:true});
+  stable();stopped(head,finalP,maintenance);emit({status:"FINAL_PRIMARY_AND_RELAY_REPIN_VERIFIED_NO_GO",maintenanceOnly:maintenance,verifyRunId:proof.runId,verifyJobId:proof.jobId,providerCalls:0,paidAuthorityGranted:false,actualNextBackupChildNotYetObserved:true,macReadOnlyMonitorRepinStillRequired:true});
  }finally{fs.closeSync(fd)}
 }
 module.exports={classify,verifyReceipt,FINAL_EXECUTABLE_BASE,INITIAL_SCHEDULER_PIN,RELAY,C9,sameVars};
