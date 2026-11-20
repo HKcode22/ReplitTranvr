@@ -66,5 +66,6 @@ it("replays the actual revised 6144-query compiler against the exact owner stage
  const d=verifyRuntimePlans(result,stage,p=>readFileSync(p));
  expect(d).toHaveLength(31);
  expect(d.every(x=>x.changed)).toBe(true);
- console.log(JSON.stringify({status:"EXACT_NOV20_PUBLIC_METADATA_REPLAY_NO_GO",plans:d,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+ const p1=JSON.parse(result.files[0].bytes),p6=JSON.parse(result.files[5].bytes),env=p6.reviewedOrdinaryDayEnvelope.envelope;
+ console.log(JSON.stringify({status:"EXACT_NOV20_PUBLIC_METADATA_REPLAY_NO_GO",plans:d,planRebindMetadata:{coverageGridSha256:p1.reviewedRefreshTiming.reviewed31DayCoverageGridSha256,rangeEvidenceSha256:p1.reviewedSegmentedSource.reviewedProviderRangeEvidenceSha256,dateMapSha256:env.dateMapSha256,crossoverReview40Sha256:env.crossoverReview40Sha256,shapeEnvelopeSha256:env.shapeEnvelopeSha256},providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
 },30000);
