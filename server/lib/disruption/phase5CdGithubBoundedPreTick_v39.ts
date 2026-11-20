@@ -56,6 +56,8 @@ export interface P5CdVerifiedTaskPacket{
  /** Only present when an independently frozen T24 Stage17 witness is
   * paired to this exact source-bound T24 packet; no fabricated receipt. */
  witnessReview?:P5IndependentT24WitnessReview;
+ /** Private proof bytes included in the original exact signed roster packet. */
+ phase7FieldProof?:unknown;
 }
 export function verifyP5CdFrozenRoster(
  raw:Buffer,roster:P5CdFrozenRoster,entries:P5CdFrozenRosterEntry[],
@@ -137,7 +139,8 @@ export function verifyP5CdFrozenRoster(
   }
   packets.set(expected.packetSha256,{
    packetSha256:expected.packetSha256,permit:pre,
-   ...(witnessReview?{witnessReview}:{})
+   ...(witnessReview?{witnessReview}:{}),
+   ...(packet.phase7FieldProof!==undefined?{phase7FieldProof:packet.phase7FieldProof}:{})
   });
  }
  return packets;

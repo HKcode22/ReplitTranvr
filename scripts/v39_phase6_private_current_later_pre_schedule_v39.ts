@@ -16,6 +16,7 @@ import {waitP5CdGithubSignedDueWindow} from "../server/lib/disruption/phase5CdGi
 import {runP5CdGithubStage14Microburst} from "../server/lib/disruption/phase5CdGithubBoundedStage14Microburst_v39";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 
+import {openPhase7ProtectedPreResolver} from "../server/lib/disruption/phase7ProtectedPreResolver_v39";
 const hold=(s:string):never=>{throw Error("REFUSED_P5_CD_GH_CURRENT_PRE_"+s);};
 export function admitP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
  const base=requireP5CdGithubCurrentPrivatePreScope(env);
@@ -142,7 +143,11 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
  }finally{await base.end();}
 }
 if(process.env.P6_PRIVATE_CURRENT_PRE_EXECUTE==="1"){
- try{const r=await runP6CurrentPrivateLaterPre(process.env);console.log(JSON.stringify(r));
-  if(r.status==="HOLD_CURRENT_PRIVATE_LATER_PRE_NO_REPLAY")process.exitCode=2;}
+ try{
+  const commissioned=openPhase7ProtectedPreResolver(process.env);
+  try{const r=await runP6CurrentPrivateLaterPre(process.env,commissioned.resolver);console.log(JSON.stringify(r));
+   if(r.status==="HOLD_CURRENT_PRIVATE_LATER_PRE_NO_REPLAY")process.exitCode=2;}
+  finally{await commissioned.close();}
+ }
  catch(e){console.error("HOLD_P6_CURRENT_PRIVATE_LATER_PRE_REDACTED_NO_REPLAY");process.exitCode=2;}
 }

@@ -16,6 +16,7 @@ import {waitP5CdGithubSignedDueWindow} from "../server/lib/disruption/phase5CdGi
 import {requireP5CdT24DispatchEvent,runP5CdOneQueuedT24Witness} from "../server/lib/disruption/phase5CdGithubQueuedT24Witness_v39.ts";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 import {admitP6CommittedT24Custody,openP6CommittedT24Custody} from "./v39_phase6_committed_t24_witness_custody_v39.mjs";
+import {openPhase7ProtectedPreResolver} from "../server/lib/disruption/phase7ProtectedPreResolver_v39.ts";
 const H=/^[a-f0-9]{64}$/;
 const hold=s=>{throw Error("HOLD_P6_CURRENT_T24_"+s);};
 export function admitP6CurrentT24Worker(env){
@@ -151,6 +152,10 @@ export async function runP6CurrentT24Worker(env,phase7PreResolver){
  }finally{await Promise.allSettled([preRaw.end(),witnessRaw.end()]);}
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){
- try{const r=await runP6CurrentT24Worker(process.env);console.log(JSON.stringify(r));if(r.held)process.exitCode=2;}
+ try{
+  const commissioned=openPhase7ProtectedPreResolver(process.env);
+  try{const r=await runP6CurrentT24Worker(process.env,commissioned.resolver);console.log(JSON.stringify(r));if(r.held)process.exitCode=2;}
+  finally{await commissioned.close();}
+ }
  catch{console.error("HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY");process.exitCode=2;}
 }

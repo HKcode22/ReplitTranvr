@@ -28,8 +28,9 @@ import {decideP5LaterPreEvidencePath,
 import {persistPhase7BoundPreFragmentInTransaction,verifyPhase7PreFragmentReadback,checkProspectivePrePolicy,type Phase7BoundPreTransactionInput,type Phase7PreFragmentReceipt} from "./phase7PreFragmentTransaction_v39";
 // Dormant until the actual reviewed caller and sealed policy are commissioned.
 // Existing legacy/CI callers retain their original mode.
+import {verifyPhase7SignedPreFieldProof,verifyPhase7SelectedFieldProofs} from "./phase7SignedPreFieldProof_v39";
 export type Phase7PreIntegration=Pick<Phase7BoundPreTransactionInput,"contract"|"profile"|"dispositions"|"review"|"reviewSha256"|"separatelyVerifiedFields">&{
- reader:Pool;expectedReaderRole:string;
+ reader:Pool;expectedReaderRole:string;signedSeparateFieldProof?:unknown;
 };
 /** Protected policy identity is checked independently of the packet builder.
  * The resolver must obtain actual per-permit separate-lane proof; this helper
@@ -48,6 +49,9 @@ export function requirePhase7GhPreIntegration(env:NodeJS.ProcessEnv,p:P5Stage14S
     fields.some(f=>!preserve.dispositions.some(d=>d.field===f&&
      ["INDEPENDENT_SOURCE_EXACT_LANE","PURPOSE_BOUND_REFERENCE_LANE"].includes(d.disposition))))
   throw Error("REFUSED_P5_STAGE14_PRE_P7_UNRESOLVED_OR_UNBOUND_FIELD_PROOF");
+ const proof=verifyPhase7SignedPreFieldProof(env,p,preserve.reviewSha256,preserve.dispositions,preserve.signedSeparateFieldProof);
+ if(proof.fields.length!==fields.length||proof.fields.some(f=>!fields.includes(f.field)))
+  throw Error("REFUSED_P5_STAGE14_PRE_P7_FIELD_LIST_DRIFT");
  return preserve;
 }
 const SHA=/^[0-9a-f]{64}$/;
@@ -713,6 +717,10 @@ export async function persistP5V0079SingleBoundFlightPre(
   const inserted=await persistPreSnapshot(c,built.snapshot);
   if(inserted!==1)hold("PRE_ALREADY_COMMITTED_OR_INSERT_FAILED");
   if(preserve){
+   if(options?.realV0088QueueFenceGh&&process.env.P5_CD_GH_PRE_MODE==="PHASE6_APPROVED"){
+    const proof=verifyPhase7SignedPreFieldProof(process.env,p,preserve.reviewSha256,preserve.dispositions,preserve.signedSeparateFieldProof);
+    verifyPhase7SelectedFieldProofs(proof,[...eRoute,...extras],first.toISOString(),new Date(source.expires).toISOString());
+   }
    const rows=(await c.query("SELECT id::text AS id FROM clean.flight_snapshots WHERE flight_instance_id=$1 AND horizon=$2 AND prediction_cutoff_utc=$3 AND prediction_state=\u0027PRE_DEPARTURE\u0027 LIMIT 2",[p.flightInstanceId,p.horizon,cutoff])).rows;
    if(rows.length!==1||!/^[1-9][0-9]{0,17}$/.test(rows[0].id??""))hold("P7_PRE_EXACT_INSERTED_SNAPSHOT_REQUIRED");
    preserved=await persistPhase7BoundPreFragmentInTransaction(c,{contract:preserve.contract,profile:preserve.profile,dispositions:preserve.dispositions,review:preserve.review,reviewSha256:preserve.reviewSha256,separatelyVerifiedFields:preserve.separatelyVerifiedFields,manifestSha256:p.manifestSha256,queryDigestSha256:p.queryDigestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,snapshotId:rows[0].id,runDayIndex:p.runDayIndex,selectedNativeTUtc:p.selectedTNativeUtc,cutoffUtc:cutoff.toISOString(),issuedAtUtc:first.toISOString(),sourceExpiresAtUtc:new Date(source.expires).toISOString(),horizon:p.horizon,features:[...eRoute,...extras]});
