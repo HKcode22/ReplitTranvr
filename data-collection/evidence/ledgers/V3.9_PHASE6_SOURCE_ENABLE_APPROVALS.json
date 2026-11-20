@@ -167,6 +167,16 @@
       "evidenceId": "DEC-20261120-PITRRECOVERY",
       "path": "data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md",
       "sha256": "191cae2e3f10de529c3c65613c06a3d88d2cd4b349e1520039ebc083b9a69d6d"
+    },
+    {
+      "evidenceId": "RUN-20261120-OWNEREXACTAUTHMETA",
+      "path": "data-collection/phase5/evidence/2026-11-20_owner_exact_stage_authorization_metadata_NO_GO.json",
+      "sha256": "c0f533a9a341cc6cf4069313733817c66681471492b4a5b54ae57e40a719f85e"
+    },
+    {
+      "evidenceId": "RUN-20261120-PRODCATALOGRECONCILE",
+      "path": "data-collection/phase5/evidence/2026-11-20_production_schema_reconciliation_AND_EXPIRY_HANDOFF_NO_GO.md",
+      "sha256": "f80e972db07d60e110ac8118aa1582a623cfd275e272afc6c87e6760cc50b5c7"
     }
   ],
   "approvals": []
