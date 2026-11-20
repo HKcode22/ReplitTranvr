@@ -16,7 +16,6 @@ import {
 } from "../server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39";
 import {P5_TWO_STAGE_ROLES} from "../scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs";
 
-const SHA=/^[a-f0-9]{64}$/;
 const CODE=/^[a-f0-9]{40}$/;
 const REPO="HKcode22/ReplitTranvr";
 const OLD_STAGE_SHA="b833c9f52a24a6f953ebf5e2f3df481310b6bedd25a1d41c4f7a5d5833b2e745";
