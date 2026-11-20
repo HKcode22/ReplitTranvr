@@ -7,9 +7,9 @@ import type {P6PostCommittedScope,P6PostPreservationAnchor} from "./phase6Actual
 import type {Phase7DerivedReleaseContract} from "./phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "./phase7ReviewedSourceTransformation_v39";
 import type {Phase7StoredPreFragment} from "./phase7FinalGroupAssembly_v39";
-import {readPhase7PostScopedGroup} from "./phase7PostScopedGroup_v39";
+import {readPhase7PostScopedGroup,preflightPhase7PostScopedReader} from "./phase7PostScopedGroup_v39";
 import {verifyPhase7SignedPostSettlement,readPhase7PostReviewerPublicKey} from "./phase7SignedPostReview_v39";
-import {hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle} from "./phase7DurableDerivedBundleCandidate_v39";
+import {hashPhase7DurableCandidate,writeReviewedPhase7DurableBundle,preflightPhase7DurableBundleActors} from "./phase7DurableDerivedBundleCandidate_v39";
 import {phase7AuditedPreservationGroups,type Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_SIGNED_POST_CONSUMER_"+s);};
 export interface Phase7PrivateOutcomeReviewTransport{
@@ -35,6 +35,8 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
  return {policySha256,
   async preflight(p){
    if(admittedRequest!==null||p.manifestSha256!==d.env.V39_P5_MANIFEST_SHA256||p.reviewedSourceRightsSha256!==d.env.V39_P5_RIGHTS_SHA256)hold("REQUEST_SCOPE");
+   await preflightPhase7PostScopedReader(d.scopedReader,d.scopedReaderRole,d.contract);
+   await preflightPhase7DurableBundleActors(d.bundleWriter,d.bundleReader,d.contract,{writerRole:d.bundleWriterRole,readerRole:d.bundleReaderRole});
    const r=await d.transport.preflight(p);
    if(r?.providerCalls!==0||r.writeAuthority!==false||r.independentReviewerAvailable!==true)hold("REVIEW_TRANSPORT");
    admittedRequest=p.requestSha256;

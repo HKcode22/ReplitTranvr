@@ -88,6 +88,16 @@ async function actor(c:import("pg").PoolClient,expected:string,readOnly:boolean,
  need(q[0].db_clock instanceof Date&&Number.isFinite(q[0].db_clock.getTime())&&q[0].db_clock.getTime()<Date.parse(expiryUtc),"database-research-expired");
 }
 function roles(a:Actor){need(roleName(a.writerRole)&&roleName(a.readerRole)&&a.writerRole!==a.readerRole,"distinct-roles")}
+/** Inspect real grants without inserting anything. Writer transaction rolls
+ * back; independent readback actor is separately read-only. */
+export async function preflightPhase7DurableBundleActors(writer:Pool,reader:Pool,contract:Phase7DerivedReleaseContract,a:Actor){
+ roles(a);need(writer!==reader,"distinct-connections");
+ for(const [pool,expected,ro] of [[writer,a.writerRole,false],[reader,a.readerRole,true]] as const){
+  const c=await pool.connect();
+  try{await c.query(ro?"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY":"BEGIN");await c.query("SET LOCAL statement_timeout='12000ms'");await actor(c,expected,ro,contract.researchExpiryUtc);}
+  finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ }
+}
 async function independentReadback(reader:Pool,v:Verified,a:Actor){
  const c=await reader.connect();
  try{
