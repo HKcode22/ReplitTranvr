@@ -5,7 +5,7 @@
  * link, provider identifier, extra role, retention extension or writes.
  */
 import {createHash} from "node:crypto";
-import type {Pool} from "pg";
+import type {Pool,PoolClient} from "pg";
 import {P7_PRESERVATION_ACTORS,verifyP7PreservationLogin} from "../../../scripts/v39_phase7_preservation_logins_owner_v39.mjs";
 import {P7_INERT_ROLES} from "./phase7InertStorageCommission_v39";
 import {serializePhase7DerivedReleasePacket,type Phase7DerivedReleasePacket} from "./phase6DerivedTrainingReleasePacket_v39";
@@ -75,7 +75,7 @@ export function summarizePhase7RetainedPreCoverage(contract:Phase7DerivedRelease
  * on an inconsistent snapshot. Exact SQL reads only durable tables. */
 export async function readPhase7RetainedPreCoverage(preReader:Pool,bundleReader:Pool,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,s:Scope){
  checkScope(contract,s);need(preReader!==bundleReader,"DISTINCT_READERS");
- const p=await preReader.connect();let b:Awaited<ReturnType<Pool["connect"]>>|undefined;
+ const p=await preReader.connect();let b:PoolClient|undefined;
  try {
   b=await bundleReader.connect();
   const actor=(role:string)=>P7_PRESERVATION_ACTORS.find(x=>x.role===role)!;
