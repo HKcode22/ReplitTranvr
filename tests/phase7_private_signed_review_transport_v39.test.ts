@@ -60,6 +60,14 @@ active("real private custody signed-review transport",()=>{
    expect([...(await readP7PrivateSignedReviews(reader,trust,[f.a,f.b,f.c])).values()]).toEqual([f.aw,f.bw,f.cw]);
    const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
    const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') GROUP BY kind ORDER BY kind");expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
+   // Direct restricted INSERT must not smuggle source-shaped values into the
+   // short operational kind even when bypassing the JS publisher completely.
+   const badRecovery=wire({...f.recoveryPayload,originalAuditSha256:{flight:"synthetic-not-a-digest"}},post);
+   const badFence={schema:"v39.phase7.operational-recovery-issued-fence.v1",receiptPathSha256:h("path"),hardNotAfterUtc:f.validUntilUtc,extra:"synthetic-source"};
+   for(const [kind,value] of [["PHASE7_RECOVERY_RECEIPT",badRecovery],["PHASE7_RECOVERY_FENCE",badFence]] as const){
+    const bytes=Buffer.from(JSON.stringify(value)),d=createHash("sha256").update(bytes).digest("hex");
+    await expect(publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,$2,31,1,$3,$4,$5,$6,$6,$7,$8,$9,NULL)",["data-collection/phase5/frozen/p7review_"+h(kind)+".json",kind,code,manifest,rights,d,f.recoveryPayload.reviewedAtUtc,f.validUntilUtc,bytes])).rejects.toMatchObject({code:"23514"});
+   }
    await expect(readP7PrivateSignedReviews(reader,trust,[{...f.a,scopeSha256:h("absent")}])).rejects.toThrow("MISSING_EXACT_REVIEW_NO_FALLBACK");
    await expect(readP7PrivateSignedReviews(publisher,trust,[f.a])).rejects.toThrow();
    await expect(publisher.query("UPDATE phase6_private.frozen_native_packet_v39 SET retention_not_after_utc=clock_timestamp()+interval '1 day' WHERE logical_path=$1",[p7ReviewPath(f.a)])).rejects.toThrow();

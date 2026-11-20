@@ -56,15 +56,36 @@ ALTER TABLE phase6_private.frozen_native_packet_v39
   (kind='PHASE7_SIGNED_REVIEW' AND review_wire_bytes IS NULL AND retention_not_after_utc<=externally_reviewed_at_utc+interval '24 hours') OR
   -- Distinguish operational metadata from source-bearing settlement wires.
   -- SQL enforces the bounded recovery shape as well as the JS signer/readback.
-  (kind='PHASE7_RECOVERY_RECEIPT' AND review_wire_bytes IS NULL AND octet_length(payload_bytes)<=8192
+  (CASE WHEN kind='PHASE7_RECOVERY_RECEIPT' THEN coalesce(
+    review_wire_bytes IS NULL AND octet_length(payload_bytes)<=8192
     AND retention_not_after_utc<=externally_reviewed_at_utc+interval '2 minutes'
-    AND coalesce((convert_from(payload_bytes,'UTF8')::jsonb - 'payloadBase64' - 'signatureBase64')='{}'::jsonb,false)
-    AND coalesce(jsonb_typeof(convert_from(payload_bytes,'UTF8')::jsonb->'payloadBase64')='string',false)
-    AND coalesce(jsonb_typeof(convert_from(payload_bytes,'UTF8')::jsonb->'signatureBase64')='string',false)
-    AND coalesce((convert_from(decode(convert_from(payload_bytes,'UTF8')::jsonb->>'payloadBase64','base64'),'UTF8')::jsonb - 'schema' - 'policySha256' - 'committedScopeSha256' - 'originalAuditSha256' - 'originalAuditAtUtc' - 'originalAvailableAtUtc' - 'reviewedAtUtc' - 'validUntilUtc')='{}'::jsonb,false)
-    AND coalesce(convert_from(decode(convert_from(payload_bytes,'UTF8')::jsonb->>'payloadBase64','base64'),'UTF8')::jsonb->>'schema'='v39.phase7.committed-post-recovery-receipt.v2',false)) OR
-  (kind='PHASE7_RECOVERY_FENCE' AND review_wire_bytes IS NULL AND octet_length(payload_bytes)<=512
-    AND external_review_sha256=content_sha256 AND retention_not_after_utc<=externally_reviewed_at_utc+interval '10 minutes') OR
+    AND (convert_from(payload_bytes,'UTF8')::jsonb) ?& ARRAY['payloadBase64','signatureBase64'] AND (convert_from(payload_bytes,'UTF8')::jsonb - 'payloadBase64' - 'signatureBase64')='{}'::jsonb
+    AND jsonb_typeof((convert_from(payload_bytes,'UTF8')::jsonb)->'payloadBase64')='string' AND ((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64') ~ '^[A-Za-z0-9+/]+={0,2}$'
+    AND jsonb_typeof((convert_from(payload_bytes,'UTF8')::jsonb)->'signatureBase64')='string' AND ((convert_from(payload_bytes,'UTF8')::jsonb)->>'signatureBase64') ~ '^[A-Za-z0-9+/]{86}==$'
+    AND (convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb) ?& ARRAY['schema','policySha256','committedScopeSha256','originalAuditSha256','originalAuditAtUtc','originalAvailableAtUtc','reviewedAtUtc','validUntilUtc'] AND (convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb - 'schema' - 'policySha256' - 'committedScopeSha256' - 'originalAuditSha256' - 'originalAuditAtUtc' - 'originalAvailableAtUtc' - 'reviewedAtUtc' - 'validUntilUtc')='{}'::jsonb
+    AND (convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'schema'='v39.phase7.committed-post-recovery-receipt.v2'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'policySha256')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'policySha256') ~ '^[a-f0-9]{64}$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'committedScopeSha256')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'committedScopeSha256') ~ '^[a-f0-9]{64}$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'originalAuditSha256')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAuditSha256') ~ '^[a-f0-9]{64}$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'originalAuditAtUtc')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAuditAtUtc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'originalAvailableAtUtc')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAvailableAtUtc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'reviewedAtUtc')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'reviewedAtUtc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+    AND jsonb_typeof((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->'validUntilUtc')='string' AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'validUntilUtc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+    AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'reviewedAtUtc')::timestamptz=externally_reviewed_at_utc
+    AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'validUntilUtc')::timestamptz=retention_not_after_utc
+    AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAvailableAtUtc')::timestamptz<= ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAuditAtUtc')::timestamptz
+    AND ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAuditAtUtc')::timestamptz<=externally_reviewed_at_utc
+    AND retention_not_after_utc<= ((convert_from(decode((convert_from(payload_bytes,'UTF8')::jsonb)->>'payloadBase64','base64'),'UTF8')::jsonb)->>'originalAvailableAtUtc')::timestamptz+interval '10 minutes',
+    false) ELSE false END) OR
+  (CASE WHEN kind='PHASE7_RECOVERY_FENCE' THEN coalesce(
+    review_wire_bytes IS NULL AND octet_length(payload_bytes)<=512
+    AND external_review_sha256=content_sha256 AND retention_not_after_utc<=externally_reviewed_at_utc+interval '10 minutes'
+    AND (convert_from(payload_bytes,'UTF8')::jsonb) ?& ARRAY['schema','receiptPathSha256','hardNotAfterUtc'] AND (convert_from(payload_bytes,'UTF8')::jsonb - 'schema' - 'receiptPathSha256' - 'hardNotAfterUtc')='{}'::jsonb
+    AND (convert_from(payload_bytes,'UTF8')::jsonb)->>'schema'='v39.phase7.operational-recovery-issued-fence.v1'
+    AND jsonb_typeof((convert_from(payload_bytes,'UTF8')::jsonb)->'receiptPathSha256')='string' AND ((convert_from(payload_bytes,'UTF8')::jsonb)->>'receiptPathSha256') ~ '^[a-f0-9]{64}$'
+    AND jsonb_typeof((convert_from(payload_bytes,'UTF8')::jsonb)->'hardNotAfterUtc')='string' AND ((convert_from(payload_bytes,'UTF8')::jsonb)->>'hardNotAfterUtc') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+    AND ((convert_from(payload_bytes,'UTF8')::jsonb)->>'hardNotAfterUtc')::timestamptz=retention_not_after_utc,
+    false) ELSE false END) OR
   (kind NOT IN ('SOURCE_DAY_PREPARE_REVIEW','T24_PRE_DAY_REGISTRY','T24_WITNESS_RECEIPT_CANDIDATE','T24_PRE_PACKET','PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT','PHASE7_RECOVERY_FENCE') AND
    (review_wire_bytes IS NULL OR
     (kind IN ('SOURCE_QUERY_PACKET','POST_PACKET') AND octet_length(review_wire_bytes) BETWEEN 100 AND 4096))));
