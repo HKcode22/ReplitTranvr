@@ -299,12 +299,13 @@ export function openP7StoredPostRecoveryTransport(env:NodeJS.ProcessEnv,scope:Re
 
 /** Actual restricted publisher + separate reader. No signer, paid reserve,
  * owner or research writer capability in this process. No automatic replay. */
-async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean,mode:"pre"|"recovery"){
+async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean,mode:"pre"|"recovery"|"post"){
  const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
  validateTrust(trust);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
   (mode==="recovery"?(env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||s.kind!=="POST_RECOVERY"):
+   mode==="post"?(env.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||s.kind!=="POST_SETTLEMENT"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA):
    (env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
     (s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":s.kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1":true)))||typeof existing!=="boolean"||Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
@@ -326,7 +327,7 @@ async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSel
   if(existing){
    const again=(await readP7PrivateSignedReviews(reader,trust,[s])).get(s.scopeSha256);
    if(!again||JSON.stringify(again)!==JSON.stringify(wire))hold("EXISTING_WIRE_DRIFT");
-   return {status:mode==="recovery"?"P7_EXISTING_RECOVERY_WIRE_EXACT_READBACK_NO_REPLAY":"P7_EXISTING_PRE_WIRE_EXACT_READBACK_NO_REPLAY",providerCalls:0,phase6PaidGo:false};
+   return {status:mode==="recovery"?"P7_EXISTING_RECOVERY_WIRE_EXACT_READBACK_NO_REPLAY":mode==="post"?"P7_EXISTING_POST_SETTLEMENT_WIRE_EXACT_READBACK_NO_REPLAY":"P7_EXISTING_PRE_WIRE_EXACT_READBACK_NO_REPLAY",providerCalls:0,phase6PaidGo:false};
   }
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
   return await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:s,wire});
@@ -336,6 +337,13 @@ async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSel
 /** Existing public recovery interface, no behavior or authority expansion. */
 export function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean){
  return publishP7WireFromProtectedEnv(env,s,wire,existing,"recovery");
+}
+/** Existing private custody for independently signed POST settlement.
+ * Exact input group and signature are verified again by the consumer.
+ * Publisher authority never includes the independent signing key or GET. */
+export function publishP7PostSettlementWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:Readonly<P6PostCommittedScope>,a:Readonly<P6PostPreservationAnchor>,f:readonly Phase7StoredPreFragment[],wire:unknown,existing:boolean){
+ if(s.packet.manifestSha256!==env.V39_P5_MANIFEST_SHA256||s.packet.reviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256||a.manifestSha256!==s.packet.manifestSha256||a.rightsSha256!==s.packet.reviewedSourceRightsSha256||a.runDayIndex!==s.packet.runDayIndex||a.airportIcao!==s.packet.airportIcao||a.frameSha256!==s.packet.reviewedFrameSha256||a.ambiguousIdentity)hold("POST_SETTLEMENT_SCOPE");
+ return publishP7WireFromProtectedEnv(env,postSettlementReviewSelector(s,a,f),wire,existing,"post");
 }
 /** Separate publisher capability for exact independently signed PRE evidence.
  * The signer cannot call it with its key exposed. No permits or source values

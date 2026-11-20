@@ -310,3 +310,60 @@ describe("read-only committed POST recovery candidate",()=>{
  });
 
 });
+
+import {createP7IndependentPostSettlementIssuer} from "../server/lib/disruption/phase7IndependentPostSettlementIssuer_v39";
+import {P7_POST_SCOPED_GROUP_SQL} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {buildPhase7DerivedReleasePacket} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
+import {serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
+import {verifyPhase7SignedPostSettlement} from "../server/lib/disruption/phase7SignedPostReview_v39";
+import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
+import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
+describe("independent committed POST unverified-label settlement issuer",()=>{
+ function make(){
+  const f=fixture(),keys=generateKeyPairSync("ed25519"),now="2027-02-02T12:04:00.000Z",code="c".repeat(40),role="phase7_post_scoped_prod20261120";
+  const h=(s:string)=>sha("post-fixture:"+s);
+  const shared={version:"v01",featureDictionarySha256:h("dictionary"),termsReviewSha256:h("terms"),derivedWorkReviewSha256:h("derived")};
+  const contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z",cohortBucketCount:31,features:[{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:h("feature"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:4,fieldClass:"approved_derived",transformEvidenceSha256:h("label"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
+  const profile:Phase7ReviewedTransformationProfile={schema:"v39.phase7.reviewed-source-transformation.v1",...shared,mappingExpiryHours:24,approvedForUse:true,fields:[{sourceField:"origin_metar_wind_kt",outputField:"context_bin",role:"feature",kind:"numeric_threshold_bucket",bucketCount:3,boundaries:[5,15],categories:null,transformEvidenceSha256:h("feature"),nonReconstructable:true},{sourceField:"gate_out_delay_minutes",outputField:"delay_bin",role:"label",kind:"numeric_threshold_bucket",bucketCount:4,boundaries:[0,15,60],categories:null,transformEvidenceSha256:h("label"),nonReconstructable:true}]};
+  const native=Buffer.from(JSON.stringify({schema:"v39.phase6.native-post-physical-window-policy.v1",independentPostRequestGeometryApproved:true,manifestSha256:f.p.manifestSha256,rightsSha256:f.p.reviewedSourceRightsSha256,reviewedCodeSha:code,followupAfterPartitionEndSeconds:3600,dispatchWindowSeconds:1200,expectedApiUnitsPerGet:2,reviewedFrameSha256:f.p.reviewedFrameSha256,reviewedProviderContractSha256:f.p.reviewedProviderContractSha256,reviewedProviderPriceSha256:f.p.reviewedProviderPriceSha256,reviewedCategoryBudgetSha256:f.p.reviewedCategoryBudgetSha256}));
+  const policy=Buffer.from(JSON.stringify({schema:"v39.phase7.independent-post-settlement-policy.v1",manifestSha256:f.p.manifestSha256,rightsSha256:f.p.reviewedSourceRightsSha256,prePolicySha256:h("pre-policy"),contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),nativePostPolicySha256:sha(native),validFromUtc:"2027-02-01T00:00:00.000Z",validUntilUtc:"2027-02-04T00:00:00.000Z",unverifiedLabelDisposition:"CENSOR_AFTER_REVIEWED_POST_OBSERVATION",independentBoundedSettlementApproved:true,sourceParityReviewSha256:h("parity"),reconstructionReviewSha256:h("reconstruction"),fieldReviewSha256:h("field"),associationReviewSha256:h("association"),continuousTargetReviewSha256:h("continuous"),minTargetMinutes:-120,maxTargetMinutes:2880}));
+  const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:code,V39_P5_POST_APPROVED_CODE_SHA:code,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED:"1",P6_PHASE7_POST_STORAGE_APPROVED:"1",V39_P5_MANIFEST_SHA256:f.p.manifestSha256,V39_P5_RIGHTS_SHA256:f.p.reviewedSourceRightsSha256,P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:h("pre-policy"),P6_PHASE7_POST_PRESERVATION_POLICY_BASE64:policy.toString("base64"),P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha(policy),P6_PHASE7_POST_CONTRACT_SHA256:hashPhase7DurableCandidate(contract),P6_PHASE7_POST_PROFILE_SHA256:hashPhase7DurableCandidate(profile),P6_NATIVE_POST_POLICY_BASE64:native.toString("base64"),P6_NATIVE_POST_POLICY_SHA256:sha(native),P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64"),P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:sha(keys.publicKey.export({type:"spki",format:"der"}))};
+  const prior=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre()],f.clock),anchor=prior.privatePreservationAnchors[0],packet=buildPhase7DerivedReleasePacket(contract,[{horizon:"T-6h",cohortBucket:0,split:"train",featureBuckets:{context_bin:1},labelBuckets:{delay_bin:null},missingness:{context_bin:false,delay_bin:true},qualityFlags:0,censoring:"not_due"}]),bytes=Buffer.from(serializePhase7DerivedReleasePacket(contract,packet));
+  const fragment={groupId:"12345678-1234-4123-8123-123456789abc",contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),packetSha256:sha(bytes),packet};
+  const statements:string[]=[];
+  const source={connect:async()=>({query:async(sql:string)=>{
+   statements.push(sql);if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(now)}]};
+   if(sql.startsWith("SELECT r.population_query_id"))return {rowCount:1,rows:[f.row]};
+   if(sql===P6_POST_PARTITION_PRE_SQL)return {rowCount:1,rows:[f.pre()]};return {rows:[]};},release:()=>{}})};
+  const scopedReader={connect:async()=>({query:async(sql:string)=>{
+   statements.push(sql);if(sql.startsWith("SELECT current_user"))return {rows:[{actor:role,login:role,db:"neondb",ro:"on",version:160016,replica:false,at:new Date(now),rolsuper:false,rolcreaterole:false,rolcreatedb:false,rolbypassrls:false,rolreplication:false,member:false,can_use:true,can_scope:true,can_create:false,can_direct:false}]};
+   if(sql===P7_POST_SCOPED_GROUP_SQL)return {rowCount:1,rows:[{group_id:fragment.groupId,contract_sha256:fragment.contractSha256,profile_sha256:fragment.profileSha256,packet_sha256:fragment.packetSha256,packet_bytes:bytes}]};
+   if(sql.startsWith("SELECT clock_timestamp"))return {rows:[{at:new Date(now)}]};return {rows:[]};},release:()=>{}})};
+  const receipt=Buffer.from(JSON.stringify({schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256,originalAvailableAtUtc:f.row.available_at,committedScopeSha256:hashPhase7DurableCandidate(f.s),originalAuditSha256:phase7CommittedPostAuditIdentity(prior),originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:05:01.000Z"}));
+  const wire={payloadBase64:receipt.toString("base64"),signatureBase64:sign(null,receipt,keys.privateKey).toString("base64")};
+  const deps={env,signer:keys.privateKey,source:source as any,scopedReader:scopedReader as any,scopedReaderRole:role,contract,profile,readExactRecoveryReceipt:async()=>wire};
+  return {f,env,anchor,fragment,now,statements,contract,profile,deps};
+ }
+ it("rereads the real-shaped committed original and exact group before issuing a censored-only wire",async()=>{
+  const x=make(),r=createP7IndependentPostSettlementIssuer(x.deps);
+  await r.preflight();expect(await r.prepare(x.f.s)).toEqual({providerCalls:0,databaseWrites:0,eligibleGroups:1});
+  const input={committed:x.f.s,anchor:x.anchor,fragments:[x.fragment],observedDbClockUtc:x.now};
+  const signed=await r.issue(input);
+  expect(signed.numericalGateOutLabels).toBe(0);expect(JSON.stringify(signed)).not.toContain("payloadBase64");
+  const v=verifyPhase7SignedPostSettlement({env:x.env,wire:signed.privateWire,anchor:x.anchor,committed:x.f.s,fragments:[x.fragment],contract:x.contract,profile:x.profile,observedDbClockUtc:x.now});
+  expect(v.bundle.continuous.rows[0]).toMatchObject({value:null,censoring:"censored"});
+  expect(v.bundle.packet.rows.find(z=>z.horizon==="T-6h")?.featureBuckets).toEqual({context_bin:1});
+  expect(x.statements.some(s=>s===P6_POST_PARTITION_PRE_SQL)).toBe(true);expect(x.statements.some(s=>s===P7_POST_SCOPED_GROUP_SQL)).toBe(true);
+  expect(x.statements.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  await expect(r.issue(input)).rejects.toThrow("GROUP_ALREADY_ISSUED_NO_REPLAY");
+ });
+ it("rejects policy drift, paid credentials, caller anchor drift and forged recovery receipt",async()=>{
+  const x=make();
+  expect(()=>createP7IndependentPostSettlementIssuer({...x.deps,env:{...x.env,AERODATABOX_API_KEY:"fixture"}})).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
+  expect(()=>createP7IndependentPostSettlementIssuer({...x.deps,env:{...x.env,P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha("wrong")}})).toThrow("REVIEW_BYTES");
+  const bad=createP7IndependentPostSettlementIssuer({...x.deps,readExactRecoveryReceipt:async()=>({})});await expect(bad.prepare(x.f.s)).rejects.toThrow("WIRE");
+  const r=createP7IndependentPostSettlementIssuer(x.deps);await r.prepare(x.f.s);
+  const input={committed:x.f.s,anchor:{...x.anchor,snapshotId:"2"},fragments:[x.fragment],observedDbClockUtc:x.now};
+  await expect(r.issue(input)).rejects.toThrow("EXACT_LIVE_ANCHOR");
+ });
+});
