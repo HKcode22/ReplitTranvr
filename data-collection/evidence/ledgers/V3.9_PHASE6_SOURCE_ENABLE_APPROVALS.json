@@ -142,6 +142,11 @@
       "evidenceId": "RUN-20261119-CURRENTFIDSPRICE",
       "path": "data-collection/phase5/evidence/2026-11-19_current_marketplace_fids_range_cost_NOT_RIGHTS_NO_GO.json",
       "sha256": "f6463a2befcfc4e6b6ea9c7ae78383d05055785b4461da8bc573827b9c8dcbe1"
+    },
+    {
+      "evidenceId": "DEC-20261119-ADBBOUNDEDSOURCE",
+      "path": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
+      "sha256": "0e921e6e945637d8eaae52a7e523de3da6b11b7c21124e6b807de993dd849e13"
     }
   ],
   "approvals": []
