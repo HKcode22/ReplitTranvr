@@ -4,7 +4,7 @@
  * Unknown commit => keep exact local recovery file; never rotate on replay. */
 import pg from "pg";
 import {randomBytes,createHash} from "node:crypto";
-import {execFileSync,spawnSync} from "node:child_process";
+import {spawnSync} from "node:child_process";
 import {mkdtempSync,writeFileSync,readFileSync,lstatSync,rmSync,realpathSync} from "node:fs";
 import {join,resolve,dirname} from "node:path";
 import {homedir} from "node:os";
@@ -51,6 +51,13 @@ export async function inspectP7PreservationActors(c,{newLogins,expiryLogins=true
  (SELECT count(*)::int FROM phase7_private.pre_source_link_v39) AS l,
  (SELECT count(*)::int FROM phase7_private.pre_preservation_policy_v39) AS r`)).rows[0];
  if(q?.f!==7||[q.b,q.p,q.l,q.r].some(v=>v!==0))hold("EXACT_EMPTY_INSTALLED_SCHEMA");
+ const pubs=(await c.query(`SELECT (SELECT count(*)::int FROM pg_namespace n
+ CROSS JOIN LATERAL aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a WHERE n.nspname='phase7_private' AND a.grantee=0) n,
+ (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE n.nspname='phase7_private' AND c.relkind='r' AND a.grantee=0) t,
+ (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+ CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE n.nspname='phase7_private' AND a.grantee=0) f`)).rows[0];
+ if(Object.values(pubs??{}).length!==3||Object.values(pubs).some(v=>v!==0))hold("PUBLIC_GRANT");
  for(const a of P7_PRESERVATION_ACTORS)await privileges(c,a,newLogins);
  for(const a of E)await privileges(c,a,expiryLogins);
  return {existingRoles:6,preservationLogins:newLogins?4:0,expiryLogins:expiryLogins?2:0,empty:true};
@@ -97,7 +104,13 @@ function ownerUrl(raw){
  return u;
 }
 async function disabled(c,lock){
- if(lock)await c.query("LOCK TABLE clean.adb_phase6_authorization,clean.adb_collection_batches,clean.adb_collection_segments,clean.adb_collection_subs IN SHARE ROW EXCLUSIVE MODE");
+ if(lock){
+  // Lock before the first SERIALIZABLE data read; share the existing provider
+  // mutation fence, not a private advisory key that other workers ignore.
+  await c.query("LOCK TABLE clean.adb_phase6_authorization,clean.adb_collection_batches,clean.adb_collection_segments,clean.adb_collection_subs IN SHARE ROW EXCLUSIVE MODE");
+  const a=(await c.query("SELECT pg_try_advisory_xact_lock(hashtext('v39-phase6-provider-mutation')::bigint) ok")).rows[0];
+  if(a?.ok!==true)hold("PROVIDER_MUTATION_FENCE");
+ }
  const q=(await c.query("SELECT current_user actor,session_user login,current_database() db,current_setting('server_version_num')::int ver,pg_is_in_recovery() replica")).rows[0];
  if(q?.actor!=="neondb_owner"||q.actor!==q.login||q.db!=="neondb"||q.ver<160000||q.ver>=170000||q.replica!==false)hold("EXACT_OWNER");
  const a=(await c.query("SELECT enabled,revoked_at_utc,code_sha,manifest_sha256 FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
@@ -129,7 +142,7 @@ async function cli(){
    recovery=join(dir,"recovery.json");
    writeFileSync(recovery,JSON.stringify({stage:OWNER_STAGE,endpoint,passwords}),{mode:0o600,flag:"wx"});
    if(main()!==OWNER_STAGE)hold("MAIN_CHANGED");
-   await commissionP7PreservationActors(c,passwords,async client=>{await client.query("SELECT pg_advisory_xact_lock(390020,706)");await disabled(client,true);});
+   await commissionP7PreservationActors(c,passwords,client=>disabled(client,true));
    committed=true;
   }else{
    const p=resolve(arg),st=lstatSync(p),dir=lstatSync(dirname(p));
@@ -148,7 +161,11 @@ async function cli(){
    urls.push([a.secret,u.toString()]);
   }
   const before=safeMetadata();
-  for(const [name,url] of urls)if(!before.has(name))gh(["secret","set",name,"-R",REPO],url);
+  if(mode==="commission"&&urls.some(([name])=>before.has(name)))hold("SECRET_APPEARED_AFTER_COMMIT_RECONCILE");
+  // Recover mode authenticates the saved exact passwords first, then restores
+  // those same bytes, including any prior unknown GitHub-secret write ACK.
+  // Never ALTER ROLE in recovery and never infer a secret value from its name.
+  for(const [name,url] of urls)gh(["secret","set",name,"-R",REPO],url);
   const after=safeMetadata();if(urls.some(([name])=>!after.has(name)))hold("SECRET_NAME_READBACK");
   rmSync(dirname(recovery),{recursive:true,force:true});recovery="";
   console.log(JSON.stringify({status:"P7_FOUR_PRESERVATION_LOGINS_AUTHENTICATED_AND_SECRET_NAMES_PRESENT_NO_GO",authenticated:4,secretNames:urls.map(x=>x[0]),expiryCredentialsUntouched:true,policyRows:0,providerCalls:0,phase6PaidGo:false}));

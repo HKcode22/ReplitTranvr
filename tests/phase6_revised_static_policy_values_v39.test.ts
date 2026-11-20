@@ -3,6 +3,7 @@ import {createHash} from "node:crypto";
 import {it,expect} from "vitest";
 import {prepareP6ActualReviewInput,compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {buildRevisedStaticValues,bindMondayPolicyStage} from "../review-tools/p6_nov20_finalize_recovered_policies_v39";
+import {compileP6ProspectiveDisabledStageRevisionV39} from "../server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39";
 // Independent replay using public planning metadata only. The exact stage hash
 // is the owner-confirmed revised packet, not a new authorization or DB action.
 it("replays the actual revised 6144-query compiler against the exact owner stage and all committed plans",()=>{
@@ -59,4 +60,27 @@ it("binds the Monday six-policy statics to the real recompiled stage and tail, n
  expect(()=>buildRevisedStaticValues({...p,outcomeTailUtc:"2026-12-26T04:00:00.000Z"},w,stage,h("price"),b)).toThrow("STATIC_MONDAY_BINDING");
  expect(()=>buildRevisedStaticValues(p,w,stage,h("price"))).toThrow("STATIC_EXACT_REVISED_PINS");
  expect(()=>bindMondayPolicyStage(stage,manifest+" ",config,eb,tb)).toThrow("MONDAY_EXACT_COMPILER_AND_MANIFEST");
+},30000);
+
+it("passes the exact Nov22 to Monday calendar through the actual multi-day disabled restage compiler",()=>{
+ const h=(v:string|Buffer)=>createHash("sha256").update(v).digest("hex"),json=(v:unknown)=>JSON.stringify(v),digest=(v:unknown)=>h(json(v));
+ const oldReview=prepareP6ActualReviewInput("c".repeat(40),0,"COMPACT_NOV22");
+ const nextReview=prepareP6ActualReviewInput("d".repeat(40),0,"COMPACT_MONDAY_NOV23");
+ function build(review:typeof oldReview,variant:"COMPACT_NOV22"|"COMPACT_MONDAY_NOV23",priorManifest?:string){
+  const cfg={schema:"v39.phase6.synthetic-restage-config.v1",calendarRowsSha256:review.externalCandidate.expectedCalendarRowsSha256,frameSha256:review.frameEvidence.frameHash,phase6PaidGo:false};
+  const manifest={schema:"v39.phase6.synthetic-restage-manifest.v1",calendarRowsSha256:cfg.calendarRowsSha256,configSha256:digest(cfg),scientificFreezeApproved:true,sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,phase6PaidGo:false,...(priorManifest?{originalFrozenPacketPreserved:true,originalFrozenManifestSha256:priorManifest}:{})};
+  const rec=review.concreteReviewRecommendation,timingSha=h("synthetic timing");
+  const external={...review.externalCandidate,manifestSha256:digest(manifest),calendarSha256:cfg.calendarRowsSha256,configSha256:digest(cfg),phase6AuthorizationId:"AUTH-20261120-CIRESTAGE",predecessorEvidenceIds:["CI-ONLY-RESTAGE-NOT-APPROVAL"],alertSafety:rec.proposedAlertSafety,providerRangeEvidenceSha256:h("synthetic range"),timingEvidenceSha256:timingSha,cycleRestCeilingUnits:rec.netRestCeilingUnits,jointBudgetReview:rec.jointBudgetReview};
+  const eb=Buffer.from(json(external)),tb=Buffer.from(json({...review.timingCandidate,timingEvidenceSha256:timingSha}));
+  const out=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:h(eb),timingBytes:tb,expectedTimingFileSha256:h(tb),calendarVariant:variant});
+  const raw=out.files[31].bytes,input=JSON.parse(raw),stageSha=h(raw),costSha=out.summary.unsignedCostOnlyEnvelopeSha256;
+  const stageReview={expectedSignedStagePacketSha256:stageSha,expectedExactWriterRole:"phase5_b0062_prelaunch_stage_ci20261120",independentCalendarTreatmentReviewApproved:true as const,independentProviderAccountAndRestBudgetReviewApproved:true as const,narrowPrelaunchOwnerApproved:true as const};
+  const freezeReview={expectedStagedB0062PacketSha256:stageSha,expectedSignedSevenCategoryCostSha256:costSha,expectedExactBudgetWriterRole:"phase5_fids_budget_freeze_ci_20261120",independentProspectiveCalendarAndTreatmentApproved:true as const,independentRealProviderRangeAndRestBudgetApproved:true as const,independentSourceContentsRightsForIntendedUseApproved:false as const,sourceUseDeferredToPhase6Activation:true as const,exactRestrictedNoProviderBudgetFreezeApproved:true as const};
+  return {input,stageSha,costSha,stageReview,freezeReview,manifestRaw:json(manifest)};
+ }
+ const old=build(oldReview,"COMPACT_NOV22"),next=build(nextReview,"COMPACT_MONDAY_NOV23",old.input.manifestSha256);
+ const ctx={oldInput:old.input,oldStageReview:old.stageReview,oldFreezeReview:old.freezeReview,newInput:next.input,newStageReview:next.stageReview,newFreezeReview:next.freezeReview,newManifestRaw:next.manifestRaw,review:{schema:"v39.phase6.prospective-disabled-stage-revision-review.v2" as const,expectedOldStageInputSha256:old.stageSha,expectedOldCostEnvelopeSha256:old.costSha,expectedNewStageInputSha256:next.stageSha,expectedNewCostEnvelopeSha256:next.costSha,expectedOriginalFrozenManifestSha256:old.input.manifestSha256,expectedNewManifestSha256:next.input.manifestSha256,expectedPriorCodeSha40:old.input.codeSha40,expectedCurrentCodeSha40:next.input.codeSha40,reviewedCalendarRevisionEvidenceSha256:h("synthetic date review"),independentProspectiveRevisionApproved:true as const,originalScientificDesignPreserved:true as const,oldStageRemainsArchivedEvidence:true as const,noBackfillApproved:true as const},now:new Date("2026-11-20T10:00:00.000Z")};
+ const c=compileP6ProspectiveDisabledStageRevisionV39(ctx);
+ expect(c.changedParentDays).toBe(31);expect(c.firstOldServiceUtc).toBe("2026-11-22T00:00:00.000Z");expect(c.firstNewServiceUtc).toBe("2026-11-25T00:00:00.000Z");expect(c.phase6PaidGo).toBe(false);
+ expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...ctx,now:new Date("2026-11-23T23:10:00.000Z")})).toThrow("FIRST_PROSPECTIVE_T24_WINDOW_ALREADY_DUE");
 },30000);
