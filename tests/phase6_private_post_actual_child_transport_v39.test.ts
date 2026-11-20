@@ -140,6 +140,21 @@ describe("signed due POST backlog",()=>{
    privateRoutingCandidates:result.privateRoutingCandidates,getFrozen:(path:string)=>bytes.get(path)!};
   Object.defineProperty(handoff,"privateAllDuePostRoutingCandidates",{value:result.privateAllDuePostRoutingCandidates,enumerable:false});
   expect(bindP6PostPrivateDayRoute(handoff,ctx).route.shardIndex).toBe(6);
+  const atClock=(clock:string)=>planP6ThirtyOneDaySignedShardHandoffs(raw,index,{expectedIndexSha256:digest,
+   exactExternallyReviewedIndexSha256:digest,expectedManifestSha256:h,expectedCalendarSha256:h,expectedCodeSha:code,
+   expectedReleaseSha256:h,expectedRightsSha256:h,observedDbClockUtc:clock},path=>bytes.get(path)!);
+  const after=atClock("2026-11-22T00:30:01.000Z");
+  expect(after.privateAllDuePostRoutingCandidates).toHaveLength(0);
+  expect(after.privateRoutingCandidates.filter(r=>r.lane==="POST")).toHaveLength(0);
+  expect(after.privateRecoverablePostRoutingCandidates).toHaveLength(6);
+  expect(after.privateRecoverablePostRoutingCandidates[5]).toEqual(last);
+  expect(JSON.stringify(after)).not.toContain("privateRecoverablePostRoutingCandidates");
+  expect(atClock("2026-11-22T00:40:00.000Z").privateRecoverablePostRoutingCandidates).toHaveLength(0);
+  expect(atClock("2026-11-21T23:59:59.000Z").privateRecoverablePostRoutingCandidates).toHaveLength(0);
+  const closed={...handoff,privateRoutingCandidates:after.privateRoutingCandidates};
+  Object.defineProperty(closed,"privateAllDuePostRoutingCandidates",{value:after.privateAllDuePostRoutingCandidates,enumerable:false});
+  Object.defineProperty(closed,"privateRecoverablePostRoutingCandidates",{value:after.privateRecoverablePostRoutingCandidates,enumerable:false});
+  expect(()=>bindP6PostPrivateDayRoute(closed,ctx)).toThrow("EXACT_DUE_POST_ROUTE_MISSING");
  });
 });
 

@@ -54,7 +54,7 @@ function checkedUTC(s:string){
 }
 function validateDueShard(
  s:P5Phase6DueShard,lane:Lane,now:number,
- used:Set<string>
+ used:Set<string>,recoveryOnly=false
 ):P6ProspectiveShardHandoff{
  if(!s||s.lane!==lane||
     !Number.isSafeInteger(s.runDayIndex)||s.runDayIndex<1||
@@ -65,7 +65,7 @@ function validateDueShard(
     !SHA.test(s.fileSha256??"")||
     used.has([lane,s.runDayIndex,s.shardIndex].join(":"))||
     checkedUTC(s.notBeforeUtc)>now||
-    now>=checkedUTC(s.hardLatestUtc)||
+    now>=checkedUTC(s.hardLatestUtc)+(recoveryOnly&&lane==="POST"?600000:0)||
     checkedUTC(s.hardLatestUtc)<=checkedUTC(s.notBeforeUtc))
   forbid("UNTRUSTED_OR_NO_LONGER_DUE_INDEX_SHARD");
  if(lane==="SOURCE"){
@@ -185,9 +185,17 @@ export function planP6ThirtyOneDaySignedShardHandoffs(
  if(allDuePost.length!==validated.dueShardCounts.POST||
     JSON.stringify(allDuePost.slice(0,4))!==JSON.stringify(candidates.filter(c=>c.lane==="POST")))
   forbid("ALL_DUE_POST_AUDIT_COUNT_DRIFT");
+ // Only the separate nonpaid recovery admission may use recently closed
+ // routes. This does not change due counts, paid selectors, or dispatch.
+ const recoveryUsed=new Set<string>();
+ const recoverable=index.entries.filter(e=>e.lane==="POST"&&
+  checkedUTC(e.notBeforeUtc)<=now&&now<checkedUTC(e.hardLatestUtc)+600000)
+  .map(e=>validateDueShard(e,"POST",now,recoveryUsed,true));
  const output={operatorSummary,privateRoutingCandidates:candidates,
   verifiedExistingShardIndexResult:validated};
- return Object.defineProperty(output,"privateAllDuePostRoutingCandidates",{
-  enumerable:false,value:Object.freeze(allDuePost.map(c=>Object.freeze(c)))
- }) as typeof output & {readonly privateAllDuePostRoutingCandidates:readonly P6ProspectiveShardHandoff[]};
+ return Object.defineProperties(output,{
+  privateAllDuePostRoutingCandidates:{enumerable:false,value:Object.freeze(allDuePost.map(c=>Object.freeze(c)))},
+  privateRecoverablePostRoutingCandidates:{enumerable:false,value:Object.freeze(recoverable.map(c=>Object.freeze(c)))}
+ }) as typeof output & {readonly privateAllDuePostRoutingCandidates:readonly P6ProspectiveShardHandoff[];
+  readonly privateRecoverablePostRoutingCandidates:readonly P6ProspectiveShardHandoff[]};
 }
