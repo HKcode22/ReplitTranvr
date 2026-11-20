@@ -280,14 +280,17 @@ export function openP7StoredPostRecoveryTransport(env:NodeJS.ProcessEnv,scope:Re
 
 /** Actual restricted publisher + separate reader. No signer, paid reserve,
  * owner or research writer capability in this process. No automatic replay. */
-export async function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean){
+async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean,mode:"pre"|"recovery"){
  const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
  validateTrust(trust);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
-  env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
-  s.kind!=="POST_RECOVERY"||typeof existing!=="boolean"||Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
+  env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
+  (mode==="recovery"?(env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||s.kind!=="POST_RECOVERY"):
+   (env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+    (s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":s.kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1":true)))||typeof existing!=="boolean"||Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
-   env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL].some(Boolean))hold("PUBLISHER_RECOVERY_ONLY");
+   env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,
+   env.P5_V39_PREPARE_DATABASE_URL,env.P5_V39_T24_WITNESS_DATABASE_URL,env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64].some(Boolean))hold("PUBLISHER_PROTECTED_SCOPE");
  const source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");
  function url(name:string,login:string){
   const u=new URL(env[name]??"");
@@ -297,16 +300,34 @@ export async function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEn
    (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))hold("RESTRICTED_PUBLISHER_TLS");
   u.searchParams.set("sslmode","verify-full");return u.toString();
  }
- const reader=new Client({connectionString:url("P6_PRIVATE_READER_DATABASE_URL",trust.expectedReaderSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_recovery_wire_readback"});
- const publisher=new Client({connectionString:url("P6_PRIVATE_PUBLISHER_DATABASE_URL",trust.expectedPublisherSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_recovery_wire_publisher"});
+ const reader=new Client({connectionString:url("P6_PRIVATE_READER_DATABASE_URL",trust.expectedReaderSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_independent_wire_readback"});
+ const publisher=new Client({connectionString:url("P6_PRIVATE_PUBLISHER_DATABASE_URL",trust.expectedPublisherSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_independent_wire_publisher"});
  try{
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   if(existing){
    const again=(await readP7PrivateSignedReviews(reader,trust,[s])).get(s.scopeSha256);
    if(!again||JSON.stringify(again)!==JSON.stringify(wire))hold("EXISTING_WIRE_DRIFT");
-   return {status:"P7_EXISTING_RECOVERY_WIRE_EXACT_READBACK_NO_REPLAY",providerCalls:0,phase6PaidGo:false};
+   return {status:mode==="recovery"?"P7_EXISTING_RECOVERY_WIRE_EXACT_READBACK_NO_REPLAY":"P7_EXISTING_PRE_WIRE_EXACT_READBACK_NO_REPLAY",providerCalls:0,phase6PaidGo:false};
   }
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
   return await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:s,wire});
  }finally{await Promise.allSettled([reader.end(),publisher.end()])}
+}
+
+/** Existing public recovery interface, no behavior or authority expansion. */
+export function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean){
+ return publishP7WireFromProtectedEnv(env,s,wire,existing,"recovery");
+}
+/** Separate publisher capability for exact independently signed PRE evidence.
+ * The signer cannot call it with its key exposed. No permits or source values
+ * are written by the custody transport. On an unknown commit, only exact
+ * existing-wire readback is allowed, never a regenerated receipt. The caller
+ * must obtain the original immutable prospective permit via a private handoff.
+ */
+export function publishP7PreEvidenceWireFromProtectedEnv(env:NodeJS.ProcessEnv,p:Readonly<P5Stage14SingleFlightPrePermit>,kind:"PRE_PROOF"|"PRE_LANE_RECEIPT",wire:unknown,existing:boolean){
+ if(kind!=="PRE_PROOF"&&kind!=="PRE_LANE_RECEIPT")return hold("PRE_PUBLISH_KIND");
+ const policy=parsePhase7ProtectedPrePolicy(env);
+ if(p.manifestSha256!==env.V39_P5_MANIFEST_SHA256||p.expectedReviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256)hold("PRE_PUBLISH_SCOPE");
+ if(kind==="PRE_PROOF")verifyPhase7SignedPreFieldProof(env,p,policy.reviewSha256,policy.dispositions,wire);
+ return publishP7WireFromProtectedEnv(env,kind==="PRE_PROOF"?preProofReviewSelector(p):preLaneReceiptSelector(p),wire,existing,"pre");
 }

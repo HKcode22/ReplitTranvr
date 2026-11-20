@@ -11,7 +11,7 @@ import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS} from "./phase5Stage28D
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39";
 import {createPhase7IndependentPreProofPort,type Phase7AuthenticatedLaneReceipt} from "./phase7IndependentPreProofIssuer_v39";
-import {readP7ExactSelectedFeatures} from "./phase7IndependentPreSourceReader_v39";
+import {readP7ExactSelectedFeatures,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
 import {verifyP7NoaaExactPreLaneEvidence,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -87,6 +87,7 @@ function decodeReceipt(w:unknown):Phase7AuthenticatedLaneReceipt{
 export function reconcileP7ActualSourceLaneReceipt(input:{env:NodeJS.ProcessEnv;permit:Readonly<P5Stage14SingleFlightPrePermit>;
  dispositions:ReturnType<typeof parsePhase7ProtectedPrePolicy>["dispositions"];source:Awaited<ReturnType<typeof readP7ExactSelectedFeatures>>;archive:Input}){
  const {env,permit:p,source:s,archive:a}=input;
+ requireP7ActualSourceReadback(s);
  if(s.permitSha256!==hashPhase7DurableCandidate(p)||Object.getOwnPropertyDescriptor(s,"privateSelectedFeatures")?.enumerable!==false||
   !a||!Array.isArray(a.weatherArtifacts)||a.weatherArtifacts.length>128)hold("EXACT_ARCHIVE_INPUT");
  const receipt=decodeReceipt(a.wire);

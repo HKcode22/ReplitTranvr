@@ -7,7 +7,9 @@
  * hold, rather than being silently omitted or self-attested.
  *
  * This process holds the lane authority key, never the PRE proof signing
- * key, roster/key publisher, paid/provider or source-mutating credentials.
+ * key, roster/key publisher or paid/provider credentials. The existing
+ * SOURCE login retains its prior grants; this process opens READ ONLY
+ * transactions and never performs a SOURCE mutation.
  */
 import {createHash,createPublicKey,randomUUID,sign,type KeyObject} from "node:crypto";
 import {Pool} from "pg";
