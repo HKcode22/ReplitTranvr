@@ -5,7 +5,9 @@
 import {describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {exerciseNativePostPublication} from "./phase6_native_post_real_publication_fixture_v39";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
+import {discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,phase7CommittedPostAuditIdentity,recoverPhase7CommittedPost} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
+import type {Phase7PostConsumer} from "../server/lib/disruption/phase7PostPreservationBridge_v39";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {p5V0083FuturePostReservationSha256,auditP5FuturePostActualPriorPre,auditP5FuturePostActualPriorPreBatch,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {readP6CommittedPostOutcomeObservability} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
@@ -99,6 +101,27 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    expect(report.byHorizon["T-6h"]).toMatchObject({retainedCutoffSafePre:2,matchedNativePost:1,postAbsent:1,actualGateOutNumericCandidates:0});
    expect(report.uniqueRetainedPreFlights).toBe(2);
    expect(report.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:2,retainedT6UniquePre:2,retainedT90UniquePre:0,t6OnlyAmongRetainedHorizons:2,retainedConsistentT6T90Pairs:0,actualPhysicalLabelPairsCertified:0});
+   // Exercise the real restricted SQL recovery lookup and receipt validation.
+   // The signer and consumer are disposable CI fixtures, not production proof.
+   expect(await discoverPhase7CommittedPostScope(restricted as any,p)).toEqual(scope);
+   await expect(discoverPhase7CommittedPostScope(restricted as any,{...p,githubRunId:"1234567891"})).rejects.toThrow("DISCOVERY_NO_UNIQUE_LIVE_ORIGINAL_NO_REPLAY");
+   const {privateKey,publicKey}=generateKeyPairSync("ed25519");
+   const recoveryEnv={V39_P5_MANIFEST_SHA256:p.manifestSha256,V39_P5_RIGHTS_SHA256:rights,
+    P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED:"1",P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha("ci-recovery-policy"),
+    P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:sha(publicKey.export({type:"spki",format:"der"})),
+    P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+   const recoveryReceipt=await issuePhase7CommittedPostRecoveryReceipt({env:recoveryEnv,source:restricted as any,scope,
+    priorAudit:{sha256:phase7CommittedPostAuditIdentity(report),observedAtUtc:report.privateObservedDbClockUtc},signer:privateKey});
+   expect(JSON.stringify(recoveryReceipt)).not.toContain("payloadBase64");
+   let consumed=0;
+   const recoveryConsumer:Phase7PostConsumer={policySha256:recoveryEnv.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256,
+    preflight:async()=>{},preserveCommitted:async(s,a)=>{
+     expect(s).toEqual(scope);expect(a.uniqueRetainedPreFlights).toBe(2);consumed++;
+     return {independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,verifiedGroupCount:2,heldGroupCount:0,excludedAmbiguousGroupCount:0,accountedRetainedFlightCount:2};
+    }};
+   const recovered=await recoverPhase7CommittedPost({env:recoveryEnv,scope,wire:recoveryReceipt.privateWire,source:restricted as any,consumer:recoveryConsumer});
+   expect(recovered).toMatchObject({status:"COMMITTED_POST_RECOVERY_INDEPENDENT_READBACK_NO_GET",verifiedGroupCount:2,paidReservations:0,providerCalls:0,phase6PaidGo:false});
+   expect(consumed).toBe(1);
    const hint=await readP6PostSourceQueryHints({sourcePool:restricted,trust:{manifestSha256:p.manifestSha256},runDayIndex:1,queryDigests:[query],frameSha256:p.reviewedFrameSha256});
    expect(hint.hintCount).toBe(1);
    expect(hint.privateHints[0].committedPreHintCount).toBe(2);
@@ -148,6 +171,10 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    expect(paired.pairedHorizonObservability).toMatchObject({retainedUniqueFlightCandidates:2,retainedT6UniquePre:2,retainedT90UniquePre:1,retainedT24UniquePre:0,
     retainedConsistentT6T90Pairs:1,sameNativeReportedPostT6T90PairsAfterScheduledT:1,t6OnlyAmongRetainedHorizons:1,
     retainedConsistentT6T24Pairs:0,actualPhysicalLabelPairsCertified:0,fullStudyDenominatorCertified:false});
+   // A later change in the retained denominator must never be silently settled.
+   await expect(recoverPhase7CommittedPost({env:recoveryEnv,scope,wire:recoveryReceipt.privateWire,source:restricted as any,consumer:recoveryConsumer})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+   expect(consumed).toBe(1);
+   console.log("P7_COMMITTED_POST_RECOVERY_REAL_SOURCE_SQL_CI_SIGNER_AND_CONSUMER_ONLY_NO_GET_PASS");
    const priorPaired=await auditP5FuturePostActualPriorPre(restricted as any,p,[query,query90]);
    expect(priorPaired.observedValidHorizons).toEqual(["T-6h","T-90m"]);
    expect(priorPaired.missingPreHorizons).toEqual(["T-24h"]);
