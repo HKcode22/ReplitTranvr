@@ -1,16 +1,22 @@
-import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
 import {describe,it,expect} from "vitest";
 import {
   P6_HISTORICAL_STAGE_RECOVERY_V39,
   buildHistoricalRecoveryCommandReviewV39,
   patchHistoricalPrepareHelperV39,
+  gitBlobSha,
 } from "../review-tools/p6_recover_exact_historical_stage_packet_no_provider_v39.mjs";
 
-function gitBlobSha(b){
-  return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex");
-}
 
 describe("historical exact Phase-5 stage packet recovery review",()=>{
+  it("matches actual Git object hashing for empty, text, and binary bytes",()=>{
+    for(const bytes of [Buffer.alloc(0),Buffer.from("hello\n"),Buffer.from([0,255,10,0])]){
+      const actual=execFileSync("git",["hash-object","--stdin"],{input:bytes,encoding:"utf8"}).trim();
+      expect(gitBlobSha(bytes)).toBe(actual);
+    }
+    expect(gitBlobSha(Buffer.alloc(0))).toBe("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+  });
+
   it("pins the exact immutable historical/current identities and remains no-provider/no-db/no-go",()=>{
     expect(P6_HISTORICAL_STAGE_RECOVERY_V39).toMatchObject({
       currentMain:"0a7b1a28f243de76d4c83026d15f585265ef6f7b",
