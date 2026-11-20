@@ -1,0 +1,1249 @@
+{
+  "schema": "v39.phase6.monday-prospective-calendar-geometry-review.v1",
+  "status": "MONDAY_NOV23_PREFERRED_FALLBACK_NOT_STAGED_NO_GO",
+  "basisCommit": "9988d77f44c6f5f2165bdd628735c69f0ee5877e",
+  "originalCalendarHash": "9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6",
+  "basis": "Independent enumeration of actual committed day31 full envelope; previous checkpoint read all 31 plan files. Current production compiler and actual quota not yet rebound.",
+  "originalTreatmentAssignmentsUnchanged": true,
+  "scopedClassChanges": [
+    "pair-1",
+    "pair-4"
+  ],
+  "ownerDatePreference": "November 23 2026 Pacific, conditional on actual readiness",
+  "quotaResetInstantUtc": "2026-12-04T02:21:21.000Z",
+  "firstSourceUtc": "2026-11-23T23:45:00.000Z",
+  "authorizationDeadlineUtc": "2026-11-23T23:10:00.000Z",
+  "lastSourceUtc": "2026-12-27T02:00:00.000Z",
+  "firstServiceUtc": "2026-11-25T00:00:00.000Z",
+  "lastServiceEndUtc": "2026-12-27T04:00:00.000Z",
+  "outcomeTailEndUtc": "2026-12-29T04:00:00.000Z",
+  "templates": 6144,
+  "totalReservedUnits": 36740,
+  "maxUtcDayUnits": 1280,
+  "chargeDates": 37,
+  "categories": {
+    "base": 11904,
+    "split": 384,
+    "retry": 1260,
+    "validation": 496,
+    "post": 22400,
+    "diagnostic": 296,
+    "history": 0
+  },
+  "sourceUnitsBeforeResetInstant": 3416,
+  "sourceUnitsAfterResetInstant": 8872,
+  "reservedBeforeResetUtcDate": 9716,
+  "reservedOnResetUtcDate": 1158,
+  "reservedAfterResetUtcDate": 25866,
+  "pairs": [
+    {
+      "pairId": "pair-1",
+      "days": [
+        1,
+        7
+      ],
+      "previous": "weekend",
+      "proposed": "weekday"
+    },
+    {
+      "pairId": "pair-2",
+      "days": [
+        2,
+        8
+      ],
+      "previous": "weekday",
+      "proposed": "weekday"
+    },
+    {
+      "pairId": "pair-3",
+      "days": [
+        3,
+        9
+      ],
+      "previous": "weekday",
+      "proposed": "weekday"
+    },
+    {
+      "pairId": "pair-4",
+      "days": [
+        4,
+        10
+      ],
+      "previous": "weekday",
+      "proposed": "weekend"
+    },
+    {
+      "pairId": "pair-5",
+      "days": [
+        5,
+        11
+      ],
+      "previous": "weekday",
+      "proposed": "weekday"
+    }
+  ],
+  "rows": [
+    {
+      "runDayIndex": 1,
+      "startUtc": "2026-11-25T00:00:00.000Z",
+      "endUtc": "2026-11-25T04:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "00:00",
+      "pairId": "pair-1",
+      "crossoverPeriod": 1,
+      "pairRole": "control",
+      "pairedAirportCandidates": {
+        "HUB": "OMAA",
+        "MID_A": "OMSJ",
+        "MID_B": "SPJC",
+        "REGIONAL": "KDEC"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-11-25T00:00:00.000Z",
+          "endUtc": "2026-11-25T04:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 2,
+      "startUtc": "2026-11-26T04:00:00.000Z",
+      "endUtc": "2026-11-26T08:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "04:00",
+      "pairId": "pair-2",
+      "crossoverPeriod": 1,
+      "pairRole": "control",
+      "pairedAirportCandidates": {
+        "HUB": "WSSS",
+        "MID_A": "SBFL",
+        "MID_B": "TJSJ",
+        "REGIONAL": "LSZB"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-11-26T04:00:00.000Z",
+          "endUtc": "2026-11-26T08:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 3,
+      "startUtc": "2026-11-27T08:00:00.000Z",
+      "endUtc": "2026-11-27T13:00:00.000Z",
+      "partition": "train",
+      "windowShape": "2x2h",
+      "utcSlot": "08:00",
+      "pairId": "pair-3",
+      "crossoverPeriod": 1,
+      "pairRole": "alternative",
+      "pairedAirportCandidates": {
+        "HUB": "YSSY",
+        "MID_A": "KBUF",
+        "MID_B": "LFQQ",
+        "REGIONAL": "NZNP"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-11-27T08:00:00.000Z",
+          "endUtc": "2026-11-27T10:00:00.000Z"
+        },
+        {
+          "segmentIndex": 2,
+          "startUtc": "2026-11-27T11:00:00.000Z",
+          "endUtc": "2026-11-27T13:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 4,
+      "startUtc": "2026-11-28T12:00:00.000Z",
+      "endUtc": "2026-11-28T16:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "12:00",
+      "pairId": "pair-4",
+      "crossoverPeriod": 1,
+      "pairRole": "control",
+      "pairedAirportCandidates": {
+        "HUB": "SKBO",
+        "MID_A": "EBAW",
+        "MID_B": "NZNS",
+        "REGIONAL": "RJNK"
+      },
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-11-28T12:00:00.000Z",
+          "endUtc": "2026-11-28T16:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 5,
+      "startUtc": "2026-11-30T16:00:00.000Z",
+      "endUtc": "2026-11-30T22:00:00.000Z",
+      "partition": "train",
+      "windowShape": "up-to-6h",
+      "utcSlot": "16:00",
+      "pairId": "pair-5",
+      "crossoverPeriod": 1,
+      "pairRole": "alternative",
+      "pairedAirportCandidates": {
+        "HUB": "SKBO",
+        "MID_A": "YBUD",
+        "MID_B": "RKTU",
+        "REGIONAL": "FAKM"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-11-30T16:00:00.000Z",
+          "endUtc": "2026-11-30T22:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 288
+    },
+    {
+      "runDayIndex": 6,
+      "startUtc": "2026-12-01T20:00:00.000Z",
+      "endUtc": "2026-12-02T00:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "20:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-01T20:00:00.000Z",
+          "endUtc": "2026-12-02T00:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 7,
+      "startUtc": "2026-12-02T00:00:00.000Z",
+      "endUtc": "2026-12-02T05:00:00.000Z",
+      "partition": "train",
+      "windowShape": "2x2h",
+      "utcSlot": "00:00",
+      "pairId": "pair-1",
+      "crossoverPeriod": 2,
+      "pairRole": "alternative",
+      "pairedAirportCandidates": {
+        "HUB": "OMAA",
+        "MID_A": "OMSJ",
+        "MID_B": "SPJC",
+        "REGIONAL": "KDEC"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-02T00:00:00.000Z",
+          "endUtc": "2026-12-02T02:00:00.000Z"
+        },
+        {
+          "segmentIndex": 2,
+          "startUtc": "2026-12-02T03:00:00.000Z",
+          "endUtc": "2026-12-02T05:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 8,
+      "startUtc": "2026-12-03T04:00:00.000Z",
+      "endUtc": "2026-12-03T09:00:00.000Z",
+      "partition": "train",
+      "windowShape": "2x2h",
+      "utcSlot": "04:00",
+      "pairId": "pair-2",
+      "crossoverPeriod": 2,
+      "pairRole": "alternative",
+      "pairedAirportCandidates": {
+        "HUB": "WSSS",
+        "MID_A": "SBFL",
+        "MID_B": "TJSJ",
+        "REGIONAL": "LSZB"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-03T04:00:00.000Z",
+          "endUtc": "2026-12-03T06:00:00.000Z"
+        },
+        {
+          "segmentIndex": 2,
+          "startUtc": "2026-12-03T07:00:00.000Z",
+          "endUtc": "2026-12-03T09:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 9,
+      "startUtc": "2026-12-04T08:00:00.000Z",
+      "endUtc": "2026-12-04T12:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "08:00",
+      "pairId": "pair-3",
+      "crossoverPeriod": 2,
+      "pairRole": "control",
+      "pairedAirportCandidates": {
+        "HUB": "YSSY",
+        "MID_A": "KBUF",
+        "MID_B": "LFQQ",
+        "REGIONAL": "NZNP"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-04T08:00:00.000Z",
+          "endUtc": "2026-12-04T12:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 10,
+      "startUtc": "2026-12-05T12:00:00.000Z",
+      "endUtc": "2026-12-05T18:00:00.000Z",
+      "partition": "train",
+      "windowShape": "up-to-6h",
+      "utcSlot": "12:00",
+      "pairId": "pair-4",
+      "crossoverPeriod": 2,
+      "pairRole": "alternative",
+      "pairedAirportCandidates": {
+        "HUB": "SKBO",
+        "MID_A": "EBAW",
+        "MID_B": "NZNS",
+        "REGIONAL": "RJNK"
+      },
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-05T12:00:00.000Z",
+          "endUtc": "2026-12-05T18:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 288
+    },
+    {
+      "runDayIndex": 11,
+      "startUtc": "2026-12-07T16:00:00.000Z",
+      "endUtc": "2026-12-07T20:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "16:00",
+      "pairId": "pair-5",
+      "crossoverPeriod": 2,
+      "pairRole": "control",
+      "pairedAirportCandidates": {
+        "HUB": "SKBO",
+        "MID_A": "YBUD",
+        "MID_B": "RKTU",
+        "REGIONAL": "FAKM"
+      },
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-07T16:00:00.000Z",
+          "endUtc": "2026-12-07T20:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 12,
+      "startUtc": "2026-12-08T20:00:00.000Z",
+      "endUtc": "2026-12-09T00:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "20:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-08T20:00:00.000Z",
+          "endUtc": "2026-12-09T00:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 13,
+      "startUtc": "2026-12-09T00:00:00.000Z",
+      "endUtc": "2026-12-09T04:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "00:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-09T00:00:00.000Z",
+          "endUtc": "2026-12-09T04:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 14,
+      "startUtc": "2026-12-10T04:00:00.000Z",
+      "endUtc": "2026-12-10T08:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "04:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-10T04:00:00.000Z",
+          "endUtc": "2026-12-10T08:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 15,
+      "startUtc": "2026-12-11T08:00:00.000Z",
+      "endUtc": "2026-12-11T12:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "08:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-11T08:00:00.000Z",
+          "endUtc": "2026-12-11T12:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 16,
+      "startUtc": "2026-12-12T12:00:00.000Z",
+      "endUtc": "2026-12-12T16:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "12:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-12T12:00:00.000Z",
+          "endUtc": "2026-12-12T16:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 17,
+      "startUtc": "2026-12-13T16:00:00.000Z",
+      "endUtc": "2026-12-13T20:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "16:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-13T16:00:00.000Z",
+          "endUtc": "2026-12-13T20:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 18,
+      "startUtc": "2026-12-14T20:00:00.000Z",
+      "endUtc": "2026-12-15T00:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "20:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-14T20:00:00.000Z",
+          "endUtc": "2026-12-15T00:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 19,
+      "startUtc": "2026-12-15T00:00:00.000Z",
+      "endUtc": "2026-12-15T04:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "00:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-15T00:00:00.000Z",
+          "endUtc": "2026-12-15T04:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 20,
+      "startUtc": "2026-12-16T04:00:00.000Z",
+      "endUtc": "2026-12-16T08:00:00.000Z",
+      "partition": "train",
+      "windowShape": "4h",
+      "utcSlot": "04:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-16T04:00:00.000Z",
+          "endUtc": "2026-12-16T08:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 21,
+      "startUtc": "2026-12-17T08:00:00.000Z",
+      "endUtc": "2026-12-17T12:00:00.000Z",
+      "partition": "validation",
+      "windowShape": "4h",
+      "utcSlot": "08:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-17T08:00:00.000Z",
+          "endUtc": "2026-12-17T12:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 22,
+      "startUtc": "2026-12-18T12:00:00.000Z",
+      "endUtc": "2026-12-18T16:00:00.000Z",
+      "partition": "validation",
+      "windowShape": "4h",
+      "utcSlot": "12:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-18T12:00:00.000Z",
+          "endUtc": "2026-12-18T16:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 23,
+      "startUtc": "2026-12-19T16:00:00.000Z",
+      "endUtc": "2026-12-19T20:00:00.000Z",
+      "partition": "validation",
+      "windowShape": "4h",
+      "utcSlot": "16:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-19T16:00:00.000Z",
+          "endUtc": "2026-12-19T20:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 24,
+      "startUtc": "2026-12-20T20:00:00.000Z",
+      "endUtc": "2026-12-21T00:00:00.000Z",
+      "partition": "validation",
+      "windowShape": "4h",
+      "utcSlot": "20:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-20T20:00:00.000Z",
+          "endUtc": "2026-12-21T00:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 25,
+      "startUtc": "2026-12-21T00:00:00.000Z",
+      "endUtc": "2026-12-21T04:00:00.000Z",
+      "partition": "validation",
+      "windowShape": "4h",
+      "utcSlot": "00:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-21T00:00:00.000Z",
+          "endUtc": "2026-12-21T04:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 26,
+      "startUtc": "2026-12-22T04:00:00.000Z",
+      "endUtc": "2026-12-22T08:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "04:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-22T04:00:00.000Z",
+          "endUtc": "2026-12-22T08:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 27,
+      "startUtc": "2026-12-23T08:00:00.000Z",
+      "endUtc": "2026-12-23T12:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "08:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekend",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-23T08:00:00.000Z",
+          "endUtc": "2026-12-23T12:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 28,
+      "startUtc": "2026-12-24T12:00:00.000Z",
+      "endUtc": "2026-12-24T16:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "12:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-24T12:00:00.000Z",
+          "endUtc": "2026-12-24T16:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 29,
+      "startUtc": "2026-12-25T16:00:00.000Z",
+      "endUtc": "2026-12-25T20:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "16:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekday",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-25T16:00:00.000Z",
+          "endUtc": "2026-12-25T20:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 30,
+      "startUtc": "2026-12-26T20:00:00.000Z",
+      "endUtc": "2026-12-27T00:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "20:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-26T20:00:00.000Z",
+          "endUtc": "2026-12-27T00:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    },
+    {
+      "runDayIndex": 31,
+      "startUtc": "2026-12-27T00:00:00.000Z",
+      "endUtc": "2026-12-27T04:00:00.000Z",
+      "partition": "test",
+      "windowShape": "4h",
+      "utcSlot": "00:00",
+      "pairId": null,
+      "crossoverPeriod": null,
+      "pairRole": null,
+      "pairedAirportCandidates": null,
+      "weekdayClass": "weekend",
+      "previousWeekdayClass": "weekday",
+      "activeSegments": [
+        {
+          "segmentIndex": 1,
+          "startUtc": "2026-12-27T00:00:00.000Z",
+          "endUtc": "2026-12-27T04:00:00.000Z"
+        }
+      ],
+      "plannedRequestTemplates": 192
+    }
+  ],
+  "budget": [
+    {
+      "dateUtc": "2026-11-23",
+      "units": 18,
+      "base": 8,
+      "split": 0,
+      "retry": 2,
+      "validation": 0,
+      "post": 0,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-24",
+      "units": 344,
+      "base": 304,
+      "split": 0,
+      "retry": 32,
+      "validation": 0,
+      "post": 0,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-25",
+      "units": 964,
+      "base": 272,
+      "split": 0,
+      "retry": 28,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-26",
+      "units": 1008,
+      "base": 312,
+      "split": 0,
+      "retry": 32,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-27",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-28",
+      "units": 946,
+      "base": 256,
+      "split": 0,
+      "retry": 26,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-29",
+      "units": 860,
+      "base": 128,
+      "split": 64,
+      "retry": 20,
+      "validation": 0,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-11-30",
+      "units": 1236,
+      "base": 392,
+      "split": 128,
+      "retry": 52,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-01",
+      "units": 1280,
+      "base": 560,
+      "split": 0,
+      "retry": 56,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-02",
+      "units": 956,
+      "base": 264,
+      "split": 0,
+      "retry": 28,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-03",
+      "units": 1016,
+      "base": 320,
+      "split": 0,
+      "retry": 32,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-04",
+      "units": 1158,
+      "base": 384,
+      "split": 64,
+      "retry": 46,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-05",
+      "units": 1088,
+      "base": 256,
+      "split": 128,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-06",
+      "units": 790,
+      "base": 128,
+      "split": 0,
+      "retry": 14,
+      "validation": 0,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-07",
+      "units": 1096,
+      "base": 392,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-08",
+      "units": 1280,
+      "base": 560,
+      "split": 0,
+      "retry": 56,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-09",
+      "units": 964,
+      "base": 272,
+      "split": 0,
+      "retry": 28,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-10",
+      "units": 1008,
+      "base": 312,
+      "split": 0,
+      "retry": 32,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-11",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-12",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-13",
+      "units": 1096,
+      "base": 392,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-14",
+      "units": 1280,
+      "base": 560,
+      "split": 0,
+      "retry": 56,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-15",
+      "units": 964,
+      "base": 272,
+      "split": 0,
+      "retry": 28,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-16",
+      "units": 1008,
+      "base": 312,
+      "split": 0,
+      "retry": 32,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-17",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-18",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-19",
+      "units": 1096,
+      "base": 392,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-20",
+      "units": 1280,
+      "base": 560,
+      "split": 0,
+      "retry": 56,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-21",
+      "units": 964,
+      "base": 272,
+      "split": 0,
+      "retry": 28,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-22",
+      "units": 1008,
+      "base": 312,
+      "split": 0,
+      "retry": 32,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-23",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-24",
+      "units": 1088,
+      "base": 384,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-25",
+      "units": 1096,
+      "base": 392,
+      "split": 0,
+      "retry": 40,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-26",
+      "units": 1280,
+      "base": 560,
+      "split": 0,
+      "retry": 56,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-27",
+      "units": 744,
+      "base": 72,
+      "split": 0,
+      "retry": 8,
+      "validation": 16,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-28",
+      "units": 648,
+      "base": 0,
+      "split": 0,
+      "retry": 0,
+      "validation": 0,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    },
+    {
+      "dateUtc": "2026-12-29",
+      "units": 648,
+      "base": 0,
+      "split": 0,
+      "retry": 0,
+      "validation": 0,
+      "post": 640,
+      "diagnostic": 8,
+      "history": 0
+    }
+  ],
+  "calendarCompiledByProductionCompiler": false,
+  "actualQuotaReverified": false,
+  "productionStageChanged": false,
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}
