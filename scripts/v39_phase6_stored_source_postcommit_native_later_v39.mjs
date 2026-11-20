@@ -22,7 +22,7 @@ import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Sta
 import {openP7StoredPreProofPort} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39.ts";
 import {openP7LocalPrivatePreHandoff,p7LocalPreSocketPaths,callP7LocalPreRole,makeP7LocalPreRequest} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
-import {checkPhase7PrePolicyStructure,inspectPhase7PreWriterRole} from "../server/lib/disruption/phase7PrePolicyCommission_v39.ts";
+import {checkPhase7PrePolicyStructure,checkPhase7NativePrePolicySupport,inspectPhase7PreWriterRole} from "../server/lib/disruption/phase7PrePolicyCommission_v39.ts";
 import {openPhase7ProtectedPreResolver,parsePhase7ProtectedPrePolicy} from "../server/lib/disruption/phase7ProtectedPreResolver_v39.ts";
 const H=/^[a-f0-9]{64}$/,LOGIN=/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/;
 const hold=s=>{throw Error("HOLD_P6_NATIVE_LATER_RUNTIME_"+s);};
@@ -153,6 +153,7 @@ export async function preflightP6NativeLaterRuntime(env){
    if(Date.parse(clock)>=Date.parse(p.validUntilUtc)||(!actorOnly&&Date.parse(clock)<Date.parse(p.validFromUtc)))hold("NATIVE_POLICY_CLOCK");
   }
   checkPhase7PrePolicyStructure(policy,clock);
+  checkPhase7NativePrePolicySupport(policy);
   const reader=await opened.preflight();
   if(reader.ready!==true)hold("PRE_FRAGMENT_READER");
   for(const path of Object.values(local.roles))await callP7LocalPreRole(path,makeP7LocalPreRequest(local.scope,"ready"),5000);

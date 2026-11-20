@@ -39,6 +39,25 @@ export function checkPhase7PrePolicyStructure(p:ReturnType<typeof parsePhase7Pro
  need(dispositions.every(x=>H.test(x.reviewSha256)&&!/^([a-f0-9])\1{63}$/.test(x.reviewSha256))&&
   profile.fields.filter(f=>f.role==="label").some(f=>f.sourceField==="gate_out_delay_minutes"),"EXACT_FIELD_AND_TARGET_REVIEW");
 }
+/** Validate the six native FIDS dispositions against the existing real
+ * producer's actual supported routes, not an all-missing structural probe.
+ * This is capability compatibility, NOT approval of a derived transform,
+ * source rights or prediction parity. Optional external lanes are unchanged. */
+export function checkPhase7NativePrePolicySupport(p:ReturnType<typeof parsePhase7ProtectedPrePolicy>){
+ const byField=new Map(p.dispositions.map(x=>[x.field,x]));
+ for(const field of ["origin_icao","destination_icao","operating_carrier"] as const){
+  const d=byField.get(field);
+  need(d?.disposition==="PURPOSE_BOUND_REFERENCE_LANE"&&d.outputField===null,"NATIVE_REFERENCE_ROUTE");
+ }
+ for(const field of ["scheduled_arrival_utc","provider_revised_departure_utc","reported_pre_departure_status"] as const){
+  const d=byField.get(field),f=p.profile.fields.find(x=>x.role==="feature"&&x.sourceField===field);
+  // The actual lane authority has no independent separate port for these
+  // native FIDS values. The reviewer must approve a supported transform;
+  // present native source values may not be dropped to pass commissioning.
+  need(d?.disposition==="REVIEWED_DERIVED_BUCKET"&&f&&f.outputField===d.outputField&&
+   (field==="reported_pre_departure_status"?f.kind==="categorical_dictionary":f.kind==="frozen_native_t_delta_bucket"),"NATIVE_TRANSFORM_ROUTE");
+ }
+}
 export function compilePhase7PrePolicyCommission(raw:Buffer,scope:Phase7PrePolicyCommissionScope){
  need(Buffer.isBuffer(raw)&&raw.length>0&&raw.length<=36000&&sha(raw)===scope.policyBytesSha256&&
   [scope.manifestSha256,scope.rightsSha256,scope.policyBytesSha256,scope.policyReviewSha256].every(x=>H.test(x)&&!/^([a-f0-9])\1{63}$/.test(x)),"EXACT_REVIEWED_BYTES");

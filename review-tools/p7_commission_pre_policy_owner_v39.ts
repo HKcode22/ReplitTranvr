@@ -14,7 +14,9 @@ import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_sta
 import {verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
 import {verifyP6ActualCommittedPlanParity} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
-import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,type Phase7PrePolicyCommissionScope} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
+import {compilePhase7PrePolicyCommission,checkPhase7NativePrePolicySupport,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,type Phase7PrePolicyCommissionScope} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
+import {parsePhase7ProtectedPrePolicy} from "../server/lib/disruption/phase7ProtectedPreResolver_v39";
+import {parseP7ReferenceLinkPolicy} from "../server/lib/disruption/phase7ExactPreLaneEvidenceAuthority_v39";
 const REPO="HKcode22/ReplitTranvr",H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 export const P7_MONDAY_FIRST_SOURCE="2026-11-23T23:45:00.000Z",P7_MONDAY_AUTH_DEADLINE="2026-11-23T23:10:00.000Z",P7_MONDAY_OUTCOME_TAIL="2026-12-29T04:00:00.000Z";
 const TERMS="data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md";
@@ -27,13 +29,27 @@ const cmd=(c:string,a:string[])=>execFileSync(c,a,{encoding:"utf8",stdio:["ignor
 const remote=()=>cmd("gh",["api","repos/"+REPO+"/git/ref/heads/main","--jq",".object.sha"]);
 const gitBytes=(head:string,p:string)=>execFileSync("git",["show",head+":"+p],{stdio:["ignore","pipe","ignore"],timeout:20000,maxBuffer:2*1024*1024});
 export type P7OwnerPolicyStageScope={stageCode:string;stageSha256:string;costSha256:string;manifestSha256:string;boundedTermsSha256:string};
-export function validateP7OwnerPolicyDecision(raw:Buffer,expectedSha:string,stage:P7OwnerPolicyStageScope,policy:Buffer,now:Date):Phase7PrePolicyCommissionScope{
+export function validateP7OwnerPolicyDecision(raw:Buffer,expectedSha:string,stage:P7OwnerPolicyStageScope,policy:Buffer,now:Date):Phase7PrePolicyCommissionScope&{referencePolicyBytesSha256:string}{
  need(Buffer.isBuffer(raw)&&raw.length>0&&raw.length<=16000&&digest(expectedSha)&&sha(raw)===expectedSha,"EXACT_COMMITTED_DECISION");
  const d=JSON.parse(raw.toString("utf8"));
- const keys=["schema","stageCode","stageSha256","costSha256","manifestSha256","boundedTermsSha256","rightsSha256","policyBytesSha256","policyReviewSha256","validFromUtc","validUntilUtc","firstSourceUtc","outcomeTailUtc","reviewedAtUtc","reviewedBy","independentFieldProfileApproved","independentMappingAndReconstructionReviewApproved","originalScientificDesignPreserved","sourceUseDeferred","phase6PaidGo"];
- need(d&&Object.keys(d).length===keys.length&&keys.every(k=>Object.hasOwn(d,k))&&d.schema==="v39.phase7.pre-policy-owner-commission-review.v1"&&Object.entries(stage).every(([k,v])=>d[k]===v)&&C.test(stage.stageCode)&&[stage.stageSha256,stage.costSha256,stage.manifestSha256,stage.boundedTermsSha256,d.rightsSha256,d.policyBytesSha256,d.policyReviewSha256].every(digest)&&sha(policy)===d.policyBytesSha256&&d.firstSourceUtc===P7_MONDAY_FIRST_SOURCE&&d.outcomeTailUtc===P7_MONDAY_OUTCOME_TAIL&&typeof d.reviewedBy==="string"&&/^[\x20-\x7e]{3,120}$/.test(d.reviewedBy)&&d.reviewedBy.trim().length>=3&&d.independentFieldProfileApproved===true&&d.independentMappingAndReconstructionReviewApproved===true&&d.originalScientificDesignPreserved===true&&d.sourceUseDeferred===true&&d.phase6PaidGo===false,"INDEPENDENT_SCOPE");
+ const keys=["schema","stageCode","stageSha256","costSha256","manifestSha256","boundedTermsSha256","rightsSha256","policyBytesSha256","policyReviewSha256","referencePolicyBytesSha256","validFromUtc","validUntilUtc","firstSourceUtc","outcomeTailUtc","reviewedAtUtc","reviewedBy","independentFieldProfileApproved","independentMappingAndReconstructionReviewApproved","originalScientificDesignPreserved","sourceUseDeferred","phase6PaidGo"];
+ need(d&&Object.keys(d).length===keys.length&&keys.every(k=>Object.hasOwn(d,k))&&d.schema==="v39.phase7.pre-policy-owner-commission-review.v1"&&Object.entries(stage).every(([k,v])=>d[k]===v)&&C.test(stage.stageCode)&&[stage.stageSha256,stage.costSha256,stage.manifestSha256,stage.boundedTermsSha256,d.rightsSha256,d.policyBytesSha256,d.policyReviewSha256,d.referencePolicyBytesSha256].every(digest)&&sha(policy)===d.policyBytesSha256&&d.firstSourceUtc===P7_MONDAY_FIRST_SOURCE&&d.outcomeTailUtc===P7_MONDAY_OUTCOME_TAIL&&typeof d.reviewedBy==="string"&&/^[\x20-\x7e]{3,120}$/.test(d.reviewedBy)&&d.reviewedBy.trim().length>=3&&d.independentFieldProfileApproved===true&&d.independentMappingAndReconstructionReviewApproved===true&&d.originalScientificDesignPreserved===true&&d.sourceUseDeferred===true&&d.phase6PaidGo===false,"INDEPENDENT_SCOPE");
  const n=now.getTime();need(Number.isFinite(n)&&at(d.reviewedAtUtc)<=n&&at(d.reviewedAtUtc)<at(P7_MONDAY_AUTH_DEADLINE),"REVIEW_CLOCK");
- return {manifestSha256:d.manifestSha256,rightsSha256:d.rightsSha256,policyBytesSha256:d.policyBytesSha256,policyReviewSha256:d.policyReviewSha256,validFromUtc:d.validFromUtc,validUntilUtc:d.validUntilUtc,firstSourceUtc:d.firstSourceUtc,outcomeTailUtc:d.outcomeTailUtc};
+ return {manifestSha256:d.manifestSha256,rightsSha256:d.rightsSha256,policyBytesSha256:d.policyBytesSha256,policyReviewSha256:d.policyReviewSha256,referencePolicyBytesSha256:d.referencePolicyBytesSha256,validFromUtc:d.validFromUtc,validUntilUtc:d.validUntilUtc,firstSourceUtc:d.firstSourceUtc,outcomeTailUtc:d.outcomeTailUtc};
+}
+/** The one existing decision binds both PRE and reference-link policy bytes.
+ * Check the actual producer routes and study validity BEFORE any owner SQL.
+ * Purpose approval is not extended or inferred from this structural check. */
+export function validateP7OwnerReferencePolicy(policy:Buffer,reference:Buffer,scope:Phase7PrePolicyCommissionScope&{referencePolicyBytesSha256:string}){
+ need(Buffer.isBuffer(reference)&&reference.length>0&&reference.length<=15000&&digest(scope.referencePolicyBytesSha256)&&sha(reference)===scope.referencePolicyBytesSha256,"EXACT_REFERENCE_POLICY_BYTES");
+ const env={V39_P5_MANIFEST_SHA256:scope.manifestSha256,V39_P5_RIGHTS_SHA256:scope.rightsSha256,
+  P6_PHASE7_PRE_POLICY_BASE64:policy.toString("base64"),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:scope.policyReviewSha256,
+  P6_PHASE7_PRE_REFERENCE_LINK_POLICY_BASE64:reference.toString("base64"),P6_PHASE7_PRE_REFERENCE_LINK_POLICY_SHA256:scope.referencePolicyBytesSha256};
+ const p=parsePhase7ProtectedPrePolicy(env);
+ checkPhase7NativePrePolicySupport(p);
+ const link=parseP7ReferenceLinkPolicy(env,p.profile.termsReviewSha256,p.dispositions);
+ need(at(link.validFromUtc)<=at(scope.firstSourceUtc)&&at(link.validUntilUtc)>at(scope.outcomeTailUtc),"REFERENCE_STUDY_WINDOW");
+ return {referencePolicyBytesSha256:scope.referencePolicyBytesSha256,referenceFieldCount:link.fields.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }
 function ownPrivate(p:string,max=2*1024*1024){
  const f=resolve(p),s=lstatSync(f),home=realpathSync(process.env.HOME!);
@@ -41,8 +57,8 @@ function ownPrivate(p:string,max=2*1024*1024){
  return readFileSync(f);
 }
 async function main(){
- const [mode,dir,policyFile,decisionPath,decisionSha]=process.argv.slice(2);
- need(process.argv.length===7&&["--apply-reviewed","--inspect"].includes(mode)&&process.env.GITHUB_ACTIONS!=="true"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&![process.env.AERODATABOX_API_KEY,process.env.RAPIDAPI_KEY,process.env.AERODATABOX_WEBHOOK_SECRET,process.env.V39_DATABASE_RUNTIME_URL].some(Boolean),"OWNER_NO_PROVIDER_SCOPE");
+ const [mode,dir,policyFile,referenceFile,decisionPath,decisionSha]=process.argv.slice(2);
+ need(process.argv.length===8&&["--apply-reviewed","--inspect"].includes(mode)&&process.env.GITHUB_ACTIONS!=="true"&&process.env.ADB_AUTO_COLLECT==="0"&&process.env.V39_PHASE6_PROCESS_ARMED==="0"&&process.env.V39_PHASE6_OWNER_APPROVED==="0"&&process.env.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&![process.env.AERODATABOX_API_KEY,process.env.RAPIDAPI_KEY,process.env.AERODATABOX_WEBHOOK_SECRET,process.env.V39_DATABASE_RUNTIME_URL].some(Boolean),"OWNER_NO_PROVIDER_SCOPE");
  const head=cmd("git",["rev-parse","HEAD"]);
  need(C.test(head)&&head===remote()&&realpathSync(process.cwd())===realpathSync(cmd("git",["rev-parse","--show-toplevel"]))&&cmd("git",["status","--porcelain","--untracked-files=no"])==="","EXACT_CLEAN_MAIN");
  const root=resolve(dir),st=lstatSync(root);need(root.startsWith(realpathSync(process.env.HOME!)+"/.travnr-phase6-monday-")&&realpathSync(root)===root&&st.isDirectory()&&!st.isSymbolicLink()&&st.uid===process.getuid?.()&&(st.mode&0o077)===0,"PRIVATE_STAGE_DIRECTORY");
@@ -55,6 +71,7 @@ async function main(){
  const raw=gitBytes(head,decisionPath),policy=ownPrivate(policyFile,36000),scope=validateP7OwnerPolicyDecision(raw,decisionSha,{stageCode:pin.stageCode,stageSha256:pin.stageSha,costSha256:pin.costSha,manifestSha256:pin.manifestSha,boundedTermsSha256:sha(gitBytes(head,TERMS))},policy,new Date());
  need(raw.equals(readFileSync(decisionPath)),"DECISION_WORKTREE_DRIFT");
  const compiled=compilePhase7PrePolicyCommission(policy,scope);
+ const reference=validateP7OwnerReferencePolicy(policy,ownPrivate(referenceFile,15000),scope);
  const admitted=admitP6InertOwnerReadback({...process.env,V39_P5_APPROVED_CODE_SHA:pin.stageCode},stage.toString("utf8"),pin.stageSha,pin.costSha,pin.stageCode);
  const u=new URL(process.env.DATABASE_URL??"");need(decodeURIComponent(u.username)==="neondb_owner"&&u.searchParams.getAll("sslmode").length===1,"EXISTING_OWNER");
  const pool=new Pool({connectionString:u.toString(),max:2,connectionTimeoutMillis:8000,query_timeout:35000,application_name:"p7_pre_policy_owner_commission"});
@@ -77,7 +94,7 @@ async function main(){
    };
    const receipt=await installPhase7PrePolicyOnce(pool,policy,scope,guard);console.log(JSON.stringify(receipt));
   }
-  const final=await inspectPhase7PrePolicyCommission(pool,compiled);console.log(JSON.stringify({...final,manifestSha256:pin.manifestSha,stageSha256:pin.stageSha,costSha256:pin.costSha,decisionSha256:decisionSha,main:head,policyBytesSha256:scope.policyBytesSha256}));
+  const final=await inspectPhase7PrePolicyCommission(pool,compiled);console.log(JSON.stringify({...final,manifestSha256:pin.manifestSha,stageSha256:pin.stageSha,costSha256:pin.costSha,decisionSha256:decisionSha,main:head,policyBytesSha256:scope.policyBytesSha256,referencePolicyBytesSha256:reference.referencePolicyBytesSha256,referenceFieldCount:reference.referenceFieldCount}));
  }finally{await pool.end()}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(e=>{const m=String(e?.message??"");console.error(/^HOLD_P7_[A-Z0-9_]+$/.test(m)?m:"HOLD_P7_OWNER_POLICY_REDACTED_INSPECT_NO_REPLAY");process.exitCode=2});

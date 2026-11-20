@@ -1,9 +1,10 @@
+import {validateP7OwnerReferencePolicy} from "../review-tools/p7_commission_pre_policy_owner_v39";
 import {inspectPhase7PreFragmentReader} from "../server/lib/disruption/phase7PreFragmentTransaction_v39";
 import {createHash,randomUUID} from "node:crypto";
 import {readPhase7RetainedPreCoverage} from "../server/lib/disruption/phase7RetainedPreCoverage_v39";
 import {createPhase7DerivedReleasePacket,serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
 import {assemblePhase7FinalGroupCandidate} from "../server/lib/disruption/phase7FinalGroupAssembly_v39";
-import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,inspectPhase7PreWriterRole,checkPhase7PrePolicyStructure} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
+import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,inspectPhase7PreWriterRole,checkPhase7PrePolicyStructure,checkPhase7NativePrePolicySupport} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
 import {P5_STAGE28_GROUPS} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
@@ -38,6 +39,37 @@ it("compiles exact existing PRE policy bytes only; refuses wrong hashes or a sho
  expect(()=>compilePhase7PrePolicyCommission(raw,{...scope,validUntilUtc:scope.outcomeTailUtc})).toThrow("WINDOW_NOT_FULL_STUDY");
 });
 
+it("requires native routes and binds the existing purpose-link review before owner commissioning",()=>{
+ const {raw,scope}=policyFixture(),p=JSON.parse(raw.toString("utf8"));
+ const h=(s:string|Buffer)=>createHash("sha256").update(s).digest("hex");
+ // Empty probe is valid in the existing fixture but it cannot produce
+ // present native schedule/status evidence. It must not arm SOURCE.
+ expect(()=>checkPhase7NativePrePolicySupport(p)).toThrow("NATIVE_TRANSFORM_ROUTE");
+ // Synthetic supported shapes only; these bucket boundaries and category
+ // mappings are NOT a production reconstruction or rights decision.
+ for(const [field,output,kind,boundaries,categories] of [
+  ["scheduled_arrival_utc","duration_bin","frozen_native_t_delta_bucket",[60,180],null],
+  ["provider_revised_departure_utc","revision_bin","frozen_native_t_delta_bucket",[0,15],null],
+  ["reported_pre_departure_status","state_bin","categorical_dictionary",null,["SyntheticA","SyntheticB"]]
+ ] as const){
+  const evidence=h("synthetic transform "+field),count=categories?categories.length:boundaries!.length+1;
+  p.contract.features.push({name:output,bucketCount:count,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true});
+  p.profile.fields.push({sourceField:field,outputField:output,role:"feature",kind,bucketCount:count,boundaries,categories,transformEvidenceSha256:evidence,nonReconstructable:true});
+  Object.assign(p.dispositions.find((x:any)=>x.field===field),{disposition:"REVIEWED_DERIVED_BUCKET",outputField:output,reviewSha256:evidence});
+ }
+ p.review.contractSha256=hashPhase7DurableCandidate(p.contract);p.review.profileSha256=hashPhase7DurableCandidate(p.profile);p.review.dispositionsSha256=hashPhase7DurableCandidate(p.dispositions);p.reviewSha256=hashPhase7DurableCandidate(p.review);
+ const reviewed=Buffer.from(JSON.stringify(p));
+ const link={schema:"v39.phase7.pre-reference-link-purpose-policy.v1",manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,prePolicySha256:p.reviewSha256,
+  termsReviewSha256:p.profile.termsReviewSha256,independentPurposeReviewSha256:h("synthetic purpose"),validFromUtc:scope.validFromUtc,validUntilUtc:scope.validUntilUtc,scope:"SINGLE_ORIGINAL_MEMBER_LINK_ONLY",allowSubstituteCompilation:false,allowPerFlightTrainingLink:false,
+  fields:p.dispositions.filter((x:any)=>x.disposition==="PURPOSE_BOUND_REFERENCE_LANE").map((x:any)=>({field:x.field,kind:x.field==="operating_carrier"?"airline_icao":"airport_icao",purpose:"link",fieldReviewSha256:x.reviewSha256}))};
+ const reference=Buffer.from(JSON.stringify(link)),s={...scope,policyBytesSha256:h(reviewed),policyReviewSha256:p.reviewSha256,referencePolicyBytesSha256:h(reference)};
+ expect(validateP7OwnerReferencePolicy(reviewed,reference,s)).toMatchObject({referenceFieldCount:3,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+ expect(()=>validateP7OwnerReferencePolicy(reviewed,Buffer.concat([reference,Buffer.from(" ")]),s)).toThrow("EXACT_REFERENCE_POLICY_BYTES");
+ const bad=Buffer.from(JSON.stringify({...link,allowPerFlightTrainingLink:true}));
+ expect(()=>validateP7OwnerReferencePolicy(reviewed,bad,{...s,referencePolicyBytesSha256:h(bad)})).toThrow("REFERENCE_PURPOSE_SCOPE");
+ const short=Buffer.from(JSON.stringify({...link,validUntilUtc:s.outcomeTailUtc}));
+ expect(()=>validateP7OwnerReferencePolicy(reviewed,short,{...s,referencePolicyBytesSha256:h(short)})).toThrow("REFERENCE_STUDY_WINDOW");
+});
 const url=process.env.P7_INERT_DISPOSABLE_URL;
 describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable"||process.env.GITHUB_ACTIONS!=="true")("atomic inert PostgreSQL16 install",()=>{
  it("installs exact tables and only narrow NOLOGIN actors; rejects duplicate install",async()=>{
