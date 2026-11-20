@@ -6,6 +6,8 @@ on:
       - 'review-tools/p6_nov20_runtime_repin_evidence*'
       - 'review-tools/p6_nov20_unattended_readiness_readonly*'
       - 'review-tools/p6_nov20_final_*repin*'
+      - 'review-tools/p6_nov20_prepare_runtime_plan_rebind_v39.ts'
+      - 'tests/phase6_nov20_runtime_plan_rebind_review_v39.test.ts'
       - '.github/workflows/phase6-nov20-runtime-repin-review.yml'
 permissions:
   contents: read
@@ -21,9 +23,12 @@ env:
 jobs:
   review-only:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
       - name: Verify syntax and pure receipt and STOP boundaries
         run: |
           set -Eeuo pipefail
@@ -35,3 +40,6 @@ jobs:
           test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           echo NOV20_RUNTIME_REPIN_REVIEW_COMPLETE_NO_PROVIDER_NO_GO
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact real revised compiler and 31 immutable daily plans
+        run: npx --no-install vitest run tests/phase6_nov20_runtime_plan_rebind_review_v39.test.ts
