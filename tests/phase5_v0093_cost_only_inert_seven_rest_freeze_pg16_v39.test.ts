@@ -3,8 +3,9 @@
  * DO NOT use fixture source, dates, airport selection or budget in production.
  * No provider keys, no paid GET, no production DB credential.
  */
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
+import {primaryDeadlineSqlForFunction,P5_PRIMARY_MARGIN_PROFILE,P5_PRIMARY_MARGIN_SQL} from "../scripts/v39_phase5_primary_fids_expiry_github_v39.mjs";
 import {URL as NodeFileURL} from "node:url";
 import {Pool} from "pg";
 import {describe,it,expect,beforeAll,afterAll} from "vitest";
@@ -582,6 +583,57 @@ suite("P5 V0093 B0062 + typed COST_ONLY pre-GO freeze real disposable PG16",()=>
   expect((await counts()).auth).toBe(1);
   expect((await counts()).v82).toBe(1);
  });
+ it("V0107 exact prospective upgrade gives verified future POST a 23h cleanup margin without changing other original lifecycles",async()=>{
+  // All rows, ledger and DDL below are rolled back in one LOCAL disposable
+  // transaction. Real V0079/V0083/V0103/V0104/B0062 schema and functions;
+  // fake provider rows and a simulated old OUTCOME ledger reservation.
+  const c=await admin.connect();
+  const path=P5_PRIMARY_MARGIN_SQL;
+  const originalFunctions=async()=> (await c.query("SELECT oid::text,proname,prosrc,proacl::text,proowner::text FROM pg_proc WHERE oid=ANY(ARRAY['clean.phase5_primary_fids_expiry_status_v39()'::regprocedure,'clean.phase5_primary_fids_expiry_sweep_v39(integer)'::regprocedure,'clean.phase5_primary_fids_expiry_receipt_v39(text)'::regprocedure,'clean.phase5_primary_fids_expiry_stop_v39(text)'::regprocedure]) ORDER BY proname")).rows;
+  const status=async()=> (await c.query("SELECT clean.phase5_primary_fids_expiry_status_v39() r")).rows[0].r;
+  const oldEligibility=(await admin.query("SELECT clean.phase5_primary_fids_expiry_status_v39() r")).rows[0].r;
+  expect(oldEligibility.liveOriginals).toBe(0);
+  try{
+   await c.query("BEGIN");
+   const old=await originalFunctions();
+   const upgrade=readFileSync(path,"utf8").replace(/^BEGIN;$/m,"").replace(/^COMMIT;\s*$/m,"");
+   await c.query(upgrade);
+   const current=await originalFunctions();
+   expect(current.map(({prosrc,...q})=>q)).toEqual(old.map(({prosrc,...q})=>q));
+   for(let i=0;i<old.length;i++){
+    const name=old[i].proname.includes("_status_")?"status":old[i].proname.includes("_sweep_")?"sweep":old[i].proname.includes("_receipt_")?"receipt":"stop";
+    const expected=readFileSync(primaryDeadlineSqlForFunction(name,P5_PRIMARY_MARGIN_PROFILE),"utf8").split("AS $"+name+"$")[1].split("$"+name+"$;")[0];
+    expect(current[i].prosrc).toBe(expected);
+    expect(current[i].prosrc===old[i].prosrc).toBe(name==="receipt"||name==="stop");
+   }
+   const now=(await c.query("SELECT clock_timestamp() at")).rows[0].at.getTime(),age=now-23.5*H,at=iso(age),reservedAt=iso(age-1000),day=reservedAt.slice(0,10);
+   const req=digest("synthetic future POST"),res=digest("synthetic reserved POST"),unbound=digest("not reserved"),rights=sha("d"),price=sha("f");
+   const release=(await c.query("SELECT manifest_sha256,reviewed_category_budget_sha256 FROM clean.phase5_fids_seven_rest_release_v39")).rows[0];
+   await c.query("UPDATE clean.adb_phase6_authorization SET enabled=true");
+   await c.query("INSERT INTO clean.phase5_other_rest_reviewed_call_v39(request_sha256,manifest_sha256,rest_category,planned_charge_day_utc,earliest_dispatch_utc,hard_latest_dispatch_utc,github_run_id,rights_review_sha256,provider_price_sha256,reviewed_request_context_sha256,reviewed_category_budget_sha256,api_units_per_get) VALUES($1,$2,'OUTCOME_REST_UNIT_BUDGET',$3::date,$4,$4,'12345678910',$5,$6,$7,$8,2)",[req,release.manifest_sha256,day,reservedAt,rights,price,digest("context"),release.reviewed_category_budget_sha256]);
+   await c.query("INSERT INTO clean.phase5_other_rest_physical_reservation_v39(reservation_sha256,request_sha256,manifest_sha256,rest_category,charged_utc_date,approved_api_units,previous_reserved_units,github_run_id,rights_review_sha256,provider_price_sha256,reserved_at_utc) VALUES($1,$2,$3,'OUTCOME_REST_UNIT_BUDGET',$4::date,2,0,'12345678910',$5,$6,$7)",[res,req,release.manifest_sha256,day,rights,price,reservedAt]);
+   await c.query("UPDATE clean.adb_phase6_authorization SET enabled=false");
+   const raw=(token:string,nested=token)=>({phase5PostPurpose:"FUTURE_POST_SOURCE_OBSERVATION_NOT_AN_ACTUAL_PHYSICAL_LABEL",phase5PostReservationSha256:token,fidsRequestContract:{phase5PostReservationSha256:nested},originalDecodedEntityBodyPreserved:true,synthetic:true});
+   const make=async(payload:object,when:string,batch?:string)=>{
+    const id=randomUUID(),member=randomUUID(),identity="leg:synthetic:margin:"+id,hash=digest(id),from=iso(Date.parse(when)-H),to=iso(Date.parse(when)+H);
+    await c.query("INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS','Departure',$2,$3,$4,$5,'Asia/Singapore',$6,$6,$6,$7,$8::jsonb,'ci','ci',$9)",[id,from,to,from.slice(0,16),to.slice(0,16),when,hash,JSON.stringify(payload),sha("e")]);
+    if(batch)await c.query("INSERT INTO clean.flight_population(batch_id,source_airport_icao,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256,population_member_id,dep_scheduled_utc,provider_record_key) VALUES($1,'WSSS',$2,$3,$4,'fids',$5,$6,$6,'requested_airport_primary','confirmed_core',$4,$7,'CI1','Departure',$8,$9,'Asia/Singapore','confirmed_operating_leg',$4,'ci','ci',$10,$11,$2,$6)",[batch,from,to,when,id,identity,hash,from.slice(0,16),to.slice(0,16),sha("e"),member]);
+    return {id,member};
+   };
+   const yes=await make(raw(res),at,res),other=await make({synthetic:true},at),forged=await make(raw(unbound),at,unbound),bad=await make(raw(res,unbound),at,res),wrongChild=await make(raw(res),at,unbound),fresh=await make(raw(res),iso(now-22.5*H),res);
+   // Same reservation appears in multiple fixtures solely to challenge
+   // classification; the exact valid row plus a deliberately fresh row
+   // must have different time eligibility. No production ledger is used.
+   expect(await status()).toMatchObject({liveOriginals:6,eligibleOriginals:1,hardDueOriginals:0});
+   const swept=(await c.query("SELECT clean.phase5_primary_fids_expiry_sweep_v39(1) r")).rows[0].r;
+   expect(swept).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,remainingEligibleAtCutoff:0,remainingHardDueAtCutoff:0});
+   expect((await c.query("SELECT raw_payload IS NULL AND raw_expired_at_utc IS NOT NULL AND response_hash IS NULL AS done FROM clean.fids_query_response WHERE population_query_id=$1",[yes.id])).rows[0].done).toBe(true);
+   expect((await c.query("SELECT count(*)::int n FROM clean.population_research_membership WHERE population_member_id=$1",[yes.member])).rows[0].n).toBe(1);
+   expect((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE population_query_id=ANY($1::uuid[]) AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL",[[other.id,forged.id,bad.id,wrongChild.id,fresh.id]])).rows[0].n).toBe(5);
+   expect((await c.query("SELECT clean.phase5_primary_fids_expiry_receipt_v39($1) r",[swept.runId])).rows[0].r).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,nonemptyPrimaryReceiptVerified:true});
+  }finally{await c.query("ROLLBACK");c.release()}
+  expect((await admin.query("SELECT clean.phase5_primary_fids_expiry_status_v39() r")).rows[0].r.liveOriginals).toBe(0);
+ },30000);
  it("enables the exact approved existing authorization once with a durable marker but no source or Alert call",async()=>{
   const r=budgetReview(),ctx={input,review,freezeReview:r.permit};
   const now=Date.now();
