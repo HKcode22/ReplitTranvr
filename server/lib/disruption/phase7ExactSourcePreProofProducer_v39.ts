@@ -11,7 +11,7 @@ import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS} from "./phase5Stage28D
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39";
 import {createPhase7IndependentPreProofPort,type Phase7AuthenticatedLaneReceipt} from "./phase7IndependentPreProofIssuer_v39";
-import {readP7ExactSelectedFeatures,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
+import {readP7ExactSelectedFeatures,readP7ExactSelectedFeaturesPage,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
 import {verifyP7NoaaExactPreLaneEvidence,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -26,6 +26,7 @@ export interface P7IndependentLaneArchivePort{
   * by the separately approved source authority. Never a caller's booleans
   * or a proof generated from the PRE permit itself. */
  readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<Input>;
+ readExactSignedLaneReceiptPage?(permits:readonly P5Stage14SingleFlightPrePermit[]):Promise<ReadonlyMap<string,Input>>;
 }
 function publicKey(v:string|undefined){
  if(!v||v.length>5500||!/^[A-Za-z0-9+/]+={0,2}$/.test(v))return hold("AUTHORITY_PUBLIC_KEY");
@@ -120,6 +121,19 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
      const receipt=await archive.readExactSignedLaneReceipt(p);
      const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
      return reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual,archive:receipt});
+    },
+    async readExactLaneEvidencePage(permits){
+     const keys=permits.map(hashPhase7DurableCandidate);
+     let receipts:ReadonlyMap<string,Input>;
+     if(typeof archive.readExactSignedLaneReceiptPage==="function")receipts=await archive.readExactSignedLaneReceiptPage(permits);
+     else{
+      const m=new Map<string,Input>();
+      for(let i=0;i<permits.length;i++)m.set(keys[i],await archive.readExactSignedLaneReceipt(permits[i]));
+      receipts=m;
+     }
+     if(!(receipts instanceof Map)||receipts.size!==keys.length||keys.some(k=>!receipts.has(k)))hold("EXACT_INDEPENDENT_RECEIPT_PAGE");
+     const actual=await readP7ExactSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256);
+     return new Map(permits.map((p,i)=>[keys[i],reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual[i],archive:receipts.get(keys[i])!})]));
     },
     readDatabaseClockUtc:()=>readP7RestrictedSourceClock(pool)
    }});

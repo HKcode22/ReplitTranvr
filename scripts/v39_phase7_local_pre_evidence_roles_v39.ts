@@ -102,6 +102,7 @@ async function start(role:P7LocalPreRole){
  }catch(err){try{child.kill("SIGTERM")}catch{}throw err}
 }
 async function serve(role:P7LocalPreRole){
+ process.umask(0o077);
  const e=process.env,paths=p7LocalPreSocketPaths(e,false);
  let clean:()=>Promise<unknown>=async()=>{};
  let handler:Parameters<typeof listenP7LocalPreRole>[0]["handler"];
@@ -109,8 +110,9 @@ async function serve(role:P7LocalPreRole){
   if(role==="lane"){
    const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]));clean=a.close;await a.preflight();
    handler=async q=>{
-    const wires=[];for(const permit of q.permits){const x=await a.issueExactLaneReceipt(permit);wires.push({permitSha256:hashPhase7DurableCandidate(permit),wire:x.privateWire});}
-    return {wires,committedCount:0};
+    const issued=await a.issueExactLaneReceiptPage(q.permits);
+    if(issued.length!==q.permits.length)hold("EXACT_LANE_PAGE");
+    return {wires:q.permits.map((permit,i)=>({permitSha256:hashPhase7DurableCandidate(permit),wire:issued[i].privateWire})),committedCount:0};
    };
   }else if(role==="proof"){
    const archive=openP7StoredPreLaneArchivePort(e);await archive.inspect();

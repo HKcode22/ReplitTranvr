@@ -240,6 +240,15 @@ export function openP7StoredPreLaneArchivePort(env:NodeJS.ProcessEnv,publicWeath
   if(!wire)hold("MISSING_PRE_LANE_RECEIPT");
   const weatherArtifacts=publicWeatherPort?await publicWeatherPort.readExactReviewedWeatherArtifacts(p):[];
   return {wire,weatherArtifacts};
+ },async readExactSignedLaneReceiptPage(permits:readonly P5Stage14SingleFlightPrePermit[]){
+  const selectors=permits.map(preLaneReceiptSelector),wires=await r.read(selectors);
+  const out=new Map<string,{wire:P7Wire;weatherArtifacts:readonly import("./phase7IndependentNoaaReceipt_v39").P7SignedPublicNoaaArtifact[]}>();
+  for(let i=0;i<permits.length;i++){
+   const k=selectors[i].scopeSha256,wire=wires.get(k);
+   if(!wire)hold("MISSING_PRE_LANE_RECEIPT");
+   out.set(k,{wire:wire!,weatherArtifacts:publicWeatherPort?await publicWeatherPort.readExactReviewedWeatherArtifacts(permits[i]):[]});
+  }
+  return out;
  }};
 }
 export function openP7StoredPreProofPort(env:NodeJS.ProcessEnv){

@@ -43,6 +43,9 @@ export interface Phase7IndependentPreLaneReader{
   selectedFeatures:readonly PreFeatureInput[];
   wire:unknown;
  }>;
+ /** Optional bounded independent exact page: one immutable source read and
+  * one signed lane receipt page, never a caller-provided source cache. */
+ readExactLaneEvidencePage?(permits:readonly P5Stage14SingleFlightPrePermit[]):Promise<ReadonlyMap<string,{selectedFeatures:readonly PreFeatureInput[];wire:unknown}>>;
  readDatabaseClockUtc():Promise<string>;
 }
 type Settings={
@@ -87,12 +90,12 @@ export function createPhase7IndependentPreProofPort(d:Settings){
   proofFp!==env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256||
   [...d.forbiddenSignerFingerprints].some(x=>x===fp||x===proofFp))hold("DISTINCT_PINNED_ISSUERS");
  const byField=new Map(dispositions.map(x=>[x.field,x]));
- async function one(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<Phase7SignedPreFieldProofWire>{
+ async function one(p:Readonly<P5Stage14SingleFlightPrePermit>,prepared?:{selectedFeatures:readonly PreFeatureInput[];wire:unknown},pageClock?:string):Promise<Phase7SignedPreFieldProofWire>{
   const permitSha=hashPhase7DurableCandidate(p);
   if(!digest(permitSha)||p.manifestSha256!==env.V39_P5_MANIFEST_SHA256||p.expectedReviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256||
     !Object.hasOwn(horizonMs,p.horizon))hold("PERMIT_SCOPE");
   const cutoff=clock(p.selectedTNativeUtc)-horizonMs[p.horizon];
-  const result=await reader.readExactLaneEvidence(Object.freeze(structuredClone(p)));
+  const result=prepared??await reader.readExactLaneEvidence(Object.freeze(structuredClone(p)));
   if(!result||!exact(result.wire,["payloadBase64","signatureBase64"])||!Array.isArray(result.selectedFeatures)||
     result.selectedFeatures.length>16||new Set(result.selectedFeatures.map(f=>f.featureName)).size!==result.selectedFeatures.length)hold("EVIDENCE_WIRE_OR_SELECTION");
   const w=result.wire as {payloadBase64:string;signatureBase64:string},raw=bytes(w.payloadBase64,20000),sig=bytes(w.signatureBase64,64);
@@ -103,7 +106,7 @@ export function createPhase7IndependentPreProofPort(d:Settings){
    x.schema!=="v39.phase7.independent-pre-lane-readback.v1"||x.manifestSha256!==p.manifestSha256||
    x.rightsSha256!==p.expectedReviewedSourceRightsSha256||x.policySha256!==policySha256||x.permitSha256!==permitSha||
    !Array.isArray(x.fields)||x.fields.length>16||new Set(x.fields.map(f=>f.field)).size!==x.fields.length)hold("EXACT_LANE_RECEIPT");
-  const at=await reader.readDatabaseClockUtc(),now=clock(at),reviewed=clock(x.reviewedAtUtc),expiry=clock(x.sourceExpiresAtUtc),until=clock(x.validUntilUtc);
+  const at=pageClock??await reader.readDatabaseClockUtc(),now=clock(at),reviewed=clock(x.reviewedAtUtc),expiry=clock(x.sourceExpiresAtUtc),until=clock(x.validUntilUtc);
   if(reviewed>now||now>=until||cutoff<=now+900000||cutoff>until||until>expiry||cutoff-now>86400000||
     until-reviewed>86400000)hold("PROSPECTIVE_LANE_CLOCK");
   const present=result.selectedFeatures.filter(f=>{
@@ -137,10 +140,19 @@ export function createPhase7IndependentPreProofPort(d:Settings){
    if(!Array.isArray(permits)||permits.length<1||permits.length>96)hold("PERMIT_BATCH");
    const keys=permits.map(hashPhase7DurableCandidate);
    if(new Set(keys).size!==keys.length)hold("DUPLICATE_PERMIT");
-   // Bounded serial read preserves reader isolation; the existing native
-   // publication rechecks the fresh clock and exact set before signing.
    const wires=new Map<string,Phase7SignedPreFieldProofWire>();
-   for(let i=0;i<permits.length;i++)wires.set(keys[i],await one(permits[i]));
+   if(typeof reader.readExactLaneEvidencePage==="function"){
+    const prepared=await reader.readExactLaneEvidencePage(Object.freeze(permits.map(p=>Object.freeze(structuredClone(p)))));
+    if(!(prepared instanceof Map)||prepared.size!==keys.length||keys.some(k=>!prepared.has(k)))hold("EXACT_INDEPENDENT_LANE_PAGE");
+    const at=await reader.readDatabaseClockUtc();
+    for(let i=0;i<permits.length;i++)wires.set(keys[i],await one(permits[i],prepared.get(keys[i])!,at));
+    const end=clock(await reader.readDatabaseClockUtc());
+    if(end<clock(at)||permits.some(p=>clock(p.selectedTNativeUtc)-horizonMs[p.horizon]<=end+900000))hold("PAGE_COMPLETION_CLOCK");
+   }else{
+    // Legacy single evidence reader remains available for exact individual
+    // use; autonomous production supplies the independent page port.
+    for(let i=0;i<permits.length;i++)wires.set(keys[i],await one(permits[i]));
+   }
    return wires;
   }
  });

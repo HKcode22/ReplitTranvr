@@ -72,6 +72,25 @@ describe("independent source-lane receipt into exact PRE proof",()=>{
   expect(proof.fields[0].independentEvidenceSha256).not.toBe(x.receipt.fields[0].durableEvidenceSha256);
   await expect(port.readExactPermitProofs([x.f.p,x.f.p])).rejects.toThrow("DUPLICATE_PERMIT");
  });
+ it("issues a bounded exact page using one independent page read and two fresh completion clocks, with no per-permit SQL fallback",async()=>{
+  const x=setup(),p2={...x.f.p,flightInstanceId:"leg:second-synthetic"};
+  const permits=[x.f.p,p2],keys=permits.map(hashPhase7DurableCandidate);
+  let pages=0,clocks=0;
+  // The fixture reader's signature wire is asynchronous. Construct the exact
+  // signed map before invocation using the real independent key.
+  const signed=new Map<string,{selectedFeatures:typeof x.f.feature[];wire:unknown}>();
+  for(const k of keys)signed.set(k,await x.reader({...x.receipt,permitSha256:k}).readExactLaneEvidence());
+  const actual=createPhase7IndependentPreProofPort({...x.args,reader:{
+   async readExactLaneEvidence(){throw Error("MUST_NOT_REQUERY_SINGLE");},
+   async readExactLaneEvidencePage(p){pages++;expect(p.map(hashPhase7DurableCandidate)).toEqual(keys);return signed;},
+   readDatabaseClockUtc:async()=>{clocks++;return "2027-01-02T05:15:00.000Z";}
+  }});
+  const wires=await actual.readExactPermitProofs(permits);
+  expect(wires.size).toBe(2);expect(pages).toBe(1);expect(clocks).toBe(2);
+  for(const [i,k] of keys.entries())expect(verifyPhase7SignedPreFieldProof(x.env,permits[i],x.f.policy,x.f.dispositions,wires.get(k)).permitSha256).toBe(k);
+  const bad=createPhase7IndependentPreProofPort({...x.args,reader:{...x.reader(),readExactLaneEvidencePage:async()=>new Map([[keys[0],signed.get(keys[0])!]])}});
+  await expect(bad.readExactPermitProofs(permits)).rejects.toThrow("EXACT_INDEPENDENT_LANE_PAGE");
+ });
  it("does not sign for an omitted present field, wrong issuer, changed value, late source or training use of reference-only data",async()=>{
   const x=setup();
   const fail=(reader:ReturnType<typeof x.reader>)=>createPhase7IndependentPreProofPort({...x.args,reader}).readExactPermitProofs([x.f.p]);
