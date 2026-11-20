@@ -10,6 +10,9 @@
 const SHA256 = /^[a-f0-9]{64}$/i;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_NAME = /^[a-z][a-z0-9_]{2,80}$/;
+// Conservative Packet B hold: identifier-shaped names stay rejected until a
+// separately reviewed Article 5.8 reference-identifier profile exists. This is
+// not a rule for Packet A, which retains operational identity and timestamps.
 const FORBIDDEN_NAME = /(flight|carrier|callsign|tail|registration|airport|icao|iata|route|provider|adb|raw|payload|response|query|hash|timestamp|time|date|schedule|identity|origin|destination|latitude|longitude|coordinate|serial|record|instance)/i;
 const HORIZONS = ["T-24h", "T-6h", "T-90m"] as const;
 const FIELD_CLASSES = ["source_independent", "approved_derived", "external_supplement"] as const;
