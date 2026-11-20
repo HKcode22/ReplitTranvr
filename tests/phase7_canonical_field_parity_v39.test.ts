@@ -2,7 +2,7 @@ import {describe,it,expect} from "vitest";
 import {createHash} from "node:crypto";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import {buildPhase7PairedDerivedCandidate} from "../server/lib/disruption/phase7PairedDerivedReleaseCandidate_v39";
-import {auditCanonicalPhase7FieldParity,type Phase7CanonicalFieldDisposition,type Phase7CanonicalParityInput} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
+import {auditCanonicalPhase7FieldParity,auditCanonicalPrePreservationWindow,type Phase7CanonicalFieldDisposition,type Phase7CanonicalParityInput} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
 import type {Phase7DerivedReleaseContract,Phase6ReleaseHorizon} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ApprovedDerivedInput} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
 import type {Phase7DurableDerivedBundle} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
@@ -38,5 +38,15 @@ describe("canonical scientific denominator parity during still-live custody",()=
   expect(auditCanonicalPhase7FieldParity(contract,bundle,dispositions,wrong,now).continuousMismatch).toBe(1);
   bundle.continuous.rows=[{...bundle.continuous.rows[0],value:3.75}];
   expect(auditCanonicalPhase7FieldParity(contract,bundle,dispositions,inputs,now).continuousMismatch).toBe(1);
+ });
+});
+
+describe("separate PRE custody window",()=>{
+ it("audits T24 before its original expires without requiring the later outcome",()=>{
+  const {bundle,dispositions,inputs}=fixture(),x=inputs[0],r=bundle.packet.rows[0];
+  const pre={horizon:x.horizon,issuedAtUtc:x.issuedAtUtc,sourceExpiresAtUtc:"2026-11-22T05:00:00.000Z",sourceFields:x.sourceFields,separatelyVerifiedFields:x.separatelyVerifiedFields,derivedFeatureBuckets:r.featureBuckets};
+  const v=auditCanonicalPrePreservationWindow(contract,dispositions,[pre],"2026-11-21T06:01:00.000Z");
+  expect(v.horizon).toBe("T-24h");expect(v.counts.origin_icao.lost).toBe(1);expect(v.counts.airport_congestion_1h.preserved).toBe(1);
+  expect(()=>auditCanonicalPrePreservationWindow(contract,dispositions,[pre],now)).toThrow(/pre-custody-expired/);
  });
 });
