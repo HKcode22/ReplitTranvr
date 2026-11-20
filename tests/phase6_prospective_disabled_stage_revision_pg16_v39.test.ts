@@ -165,7 +165,16 @@ function revise(old:any){
  return {input,raw};
 }
 
-describe("Phase6 disabled prospective stage revision real disposable PG16",()=>{
+const RUN_DISPOSABLE_P6_RESTAGE =
+ process.env.GITHUB_ACTIONS==="true" &&
+ process.env.V39_P6_PROSPECTIVE_RESTAGE_PG16==="1" &&
+ process.env.DATABASE_URL===URL &&
+ !process.env.AERODATABOX_API_KEY &&
+ process.env.V39_PHASE6_PROCESS_ARMED==="0" &&
+ process.env.V39_PHASE6_OWNER_APPROVED==="0";
+const describeDisposable = RUN_DISPOSABLE_P6_RESTAGE ? describe : describe.skip;
+
+describeDisposable("Phase6 disabled prospective stage revision real disposable PG16",()=>{
  const old=makeInput(),oldReview=stageReview(old),oldBudget=budgetReview(old,oldReview);
  const next=revise(old),nextReview=stageReview(next.input),nextBudget=budgetReview(next.input,nextReview);
  const review={schema:"v39.phase6.prospective-disabled-stage-revision-review.v1" as const,
@@ -185,9 +194,7 @@ describe("Phase6 disabled prospective stage revision real disposable PG16",()=>{
   newManifestRaw:next.raw,review,now:new Date("2026-11-20T00:00:00.000Z")};
  let admin:Pool,writer:Pool,budgetWriter:Pool;
  beforeAll(async()=>{
-  if(process.env.GITHUB_ACTIONS!=="true"||process.env.V39_P6_PROSPECTIVE_RESTAGE_PG16!=="1"||
-     process.env.DATABASE_URL!==URL||process.env.AERODATABOX_API_KEY||
-     process.env.V39_PHASE6_PROCESS_ARMED!=="0"||process.env.V39_PHASE6_OWNER_APPROVED!=="0")
+  if(!RUN_DISPOSABLE_P6_RESTAGE)
    throw Error("REFUSED_P6_PROSPECTIVE_RESTAGE_NONDISPOSABLE_TEST");
   admin=new Pool({connectionString:URL});
   await admin.query("CREATE ROLE "+ROLE+" LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEROLE NOCREATEDB NOINHERIT");
