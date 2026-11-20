@@ -21,6 +21,7 @@ import {inspectP6DayEpochExistingShardSemanticsNoGo} from "../server/lib/disrupt
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 import {openP7StoredPreProofPort} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39.ts";
 import {openP7LocalPrivatePreHandoff,p7LocalPreSocketPaths} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts";
+import {openP7LocalPublicNoaaSnapshotPort} from "../server/lib/disruption/phase7LocalPublicNoaaSnapshot_v39.ts";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
 const H=/^[a-f0-9]{64}$/,LOGIN=/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/;
 const hold=s=>{throw Error("HOLD_P6_NATIVE_LATER_RUNTIME_"+s);};
@@ -247,7 +248,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64||env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64)hold("NATIVE_PUBLISHER_HAS_INDEPENDENT_KEY");
   const local=p7LocalPreSocketPaths(env,false),stored=openP7StoredPreProofPort(env);
   const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits)});
-  console.log(JSON.stringify(await runP6NativeLaterRuntime(env,port)));
+  const weather=openP7LocalPublicNoaaSnapshotPort(env);
+  console.log(JSON.stringify(await runP6NativeLaterRuntime(env,{...port,readReviewedWeatherArtifacts:weather.readReviewedWeatherArtifacts})));
  }
  catch(e){const s=String(e?.message??"");console.error(/^HOLD_(?:P6|P5)_[A-Z0-9_]+$/.test(s)?s:"HOLD_P6_NATIVE_LATER_RUNTIME_REDACTED_NO_REPLAY");process.exitCode=2;}
 }

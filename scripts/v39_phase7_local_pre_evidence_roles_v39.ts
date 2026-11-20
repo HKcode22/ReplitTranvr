@@ -14,6 +14,7 @@ import {openP7ActualPreLaneEvidenceAuthority} from "../server/lib/disruption/pha
 import {openP7ExactSourcePreProofProducer} from "../server/lib/disruption/phase7ExactSourcePreProofProducer_v39";
 import {inspectP7PreEvidenceBatchPublisher,openP7StoredPreLaneArchivePort,publishP7PreEvidenceBatchFromProtectedEnv} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {openP7LocalPublicNoaaSnapshotPort,removeP7LocalPublicNoaaSnapshot} from "../server/lib/disruption/phase7LocalPublicNoaaSnapshot_v39";
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39";
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "../server/lib/disruption/phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_LOCAL_PRE_ROLE_"+s)};
@@ -24,7 +25,7 @@ const common=["PATH","HOME","TMPDIR","RUNNER_TEMP","RUNNER_TRACKING_ID","GITHUB_
  "P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED","P6_PHASE7_PRE_POLICY_BASE64","P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256",
  "P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256","P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64",
  "P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64",
- "P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256","P6_PHASE7_PRE_PROOF_ISSUER_APPROVED","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED"];
+ "P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256","P6_PHASE7_PRE_PROOF_ISSUER_APPROVED","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED","P6_PHASE7_NOAA_ARCHIVE_ISSUER_APPROVED","P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256"];
 const daily=["P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_DAILY_POLICY_SHA256"];
 const reader=["P6_PRIVATE_READER_DATABASE_URL","P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED","P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN","P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN"];
 const laneKey="P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64",proofKey="P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64";
@@ -95,14 +96,16 @@ async function serve(role:P7LocalPreRole){
  let handler:Parameters<typeof listenP7LocalPreRole>[0]["handler"];
  try{
   if(role==="lane"){
-   const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]));clean=a.close;await a.preflight();
+   const weather=openP7LocalPublicNoaaSnapshotPort(e);
+   const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]),weather);clean=a.close;await a.preflight();
    handler=async q=>{
     const issued=await a.issueExactLaneReceiptPage(q.permits);
     if(issued.length!==q.permits.length)hold("EXACT_LANE_PAGE");
     return {wires:q.permits.map((permit,i)=>({permitSha256:hashPhase7DurableCandidate(permit),wire:issued[i].privateWire})),committedCount:0};
    };
   }else if(role==="proof"){
-   const archive=openP7StoredPreLaneArchivePort(e);await archive.inspect();
+   const weather=openP7LocalPublicNoaaSnapshotPort(e);
+   const archive=openP7StoredPreLaneArchivePort(e,weather);await archive.inspect();
    const a=openP7ExactSourcePreProofProducer(e,key(e[proofKey]),archive);clean=a.close;await a.preflight();
    handler=async q=>{
     const m=await a.port.readExactPermitProofs(q.permits);
@@ -142,6 +145,7 @@ async function stop(){
   await new Promise(resolve=>setTimeout(resolve,50));
  }
  try{inspectEndpoint(x.dir);unlinkSync(endpointFile(x.dir))}catch(err){if((err as NodeJS.ErrnoException).code!=="ENOENT")throw err}
+ removeP7LocalPublicNoaaSnapshot(x.dir);
  rmdirSync(x.dir);console.log(JSON.stringify({status:"P7_LOCAL_PRE_ROLES_STOPPED",providerCalls:0,phase6PaidGo:false}));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
