@@ -1,13 +1,15 @@
 /** Detached OWNER inert DDL only. Reuses the exact 36/36-green candidate
  * storage implementation; leaves main, paid flags, existing data and the
  * disabled stage alone. Do not use as a runtime deployment mechanism. */
-import {createHash} from "node:crypto";
-import {execFileSync} from "node:child_process";
-import {realpathSync} from "node:fs";
+import {createHash,randomBytes} from "node:crypto";
+import {execFileSync,spawnSync} from "node:child_process";
+import {realpathSync,mkdtempSync,writeFileSync,rmSync} from "node:fs";
+import {homedir} from "node:os";
 import {createRequire} from "node:module";
 import {resolve} from "node:path";
 import {pathToFileURL,fileURLToPath} from "node:url";
 const REPO="HKcode22/ReplitTranvr", BASE="0a7b1a28f243de76d4c83026d15f585265ef6f7b", HEAD="e91536badf97fdf6302fc3db52c1e9e864dfb6c0";
+const EXPIRY_REVIEW_HEAD="ba892cd3036cf06e8e103635bbcf2a38670ee067";
 const RUN_IDS=[44687814263,44687814276,44687814277,44687814278,44687814280,44687814352,44687814361,44687814362,44687814363,44687814396,44687814407,44687814446,44687814447,44687814463,44687814483,44687814484,44687814486,44687814488,44687814498,44687814504,44687814511,44687814513,44687814530,44687814558,44687814562,44687814567,44687814570,44687814576,44687814579,44687814585,44687814594,44687814599,44687814620,44687814674,44687814717,44687814732];
 const S={auth:"AUTH-20261119-P5INERTFREEZE",manifest:"3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",calendar:"9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6",config:"001a3f0634cc41b8d1327be36404efa74feaaea21fe4ef6eead7e993acaf4c88"};
 const STOP_AT=Date.parse("2026-11-20T02:23:21.671Z");
@@ -32,14 +34,23 @@ export function checkStop(secrets,vars){
  const p=vars.find(x=>x.name==="P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256")?.value;
  need(/^[a-f0-9]{64}$/.test(p??""),"EXISTING_ENDPOINT_PIN");return p;
 }
-function verifyOwnerScope(){
+function verifyOwnerScope(expiry=false){
  const e=process.env;
  need(e.GITHUB_ACTIONS!=="true"&&e.ADB_AUTO_COLLECT==="0"&&e.V39_PHASE6_PROCESS_ARMED==="0"&&e.V39_PHASE6_OWNER_APPROVED==="0"&&e.NODE_TLS_REJECT_UNAUTHORIZED!=="0"&&["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET","V39_DATABASE_RUNTIME_URL"].every(k=>!e[k]),"NO_PROVIDER_OWNER_ONLY");
  need(cmd("git",["rev-parse","HEAD"])===HEAD&&cmd("git",["status","--porcelain","--untracked-files=no"])==="","EXACT_CLEAN_DETACHED_CHECKOUT");
  const p=api("pulls/925"),m=api("git/ref/heads/main").object.sha;
  const result=api("actions/runs?head_sha="+HEAD+"&event=pull_request&per_page=100");
  need(result.total_count===RUN_IDS.length,"NO_UNREVIEWED_RERUNS");
- checkExactCandidate(m,p,result.workflow_runs);
+ if(expiry){
+  // Only the already installed schema, no changed runtime files or API calls.
+  // Old immutable candidate is green; current draft adds only scientific
+  // POST accounting improvements and cannot alter this maintenance step.
+  need(p.head.sha===EXPIRY_REVIEW_HEAD,"EXPIRY_REVIEW_HEAD_DRIFT");
+  const cmp=api("compare/"+HEAD+"..."+EXPIRY_REVIEW_HEAD);
+  const expected=["server/lib/disruption/phase6ActualPostOutcomeObservability_v39.ts","server/lib/disruption/phase7PostPreservationBridge_v39.ts","server/lib/disruption/phase7SignedPostConsumer_v39.ts","tests/phase6_actual_post_outcome_observability_v39.test.ts","tests/phase7_post_preservation_bridge_v39.test.ts"].sort();
+  need(cmp.status==="ahead"&&cmp.ahead_by===1&&cmp.behind_by===0&&JSON.stringify(cmp.files.map(x=>x.filename).sort())===JSON.stringify(expected),"INSTALLED_EXPIRY_IMPLEMENTATION_CHANGED");
+  checkExactCandidate(m,{...p,head:{...p.head,sha:HEAD}},result.workflow_runs);
+ }else checkExactCandidate(m,p,result.workflow_runs);
  const endpoint=checkStop(pages("actions/secrets","secrets"),pages("actions/variables","variables"));
  const u=new URL(e.DATABASE_URL??"");
  need(["postgres:","postgresql:"].includes(u.protocol)&&decodeURIComponent(u.username)==="neondb_owner"&&u.password&&u.pathname==="/neondb"&&u.hostname.endsWith(".neon.tech")&&(u.port===""||u.port==="5432")&&!u.hash&&u.searchParams.getAll("sslmode").length===1&&["require","verify-full"].includes(u.searchParams.get("sslmode"))&&[...u.searchParams.keys()].every(k=>["sslmode","channel_binding"].includes(k))&&sha(u.host.toLowerCase()+u.pathname)===endpoint,"EXACT_EXISTING_OWNER_ENDPOINT");
@@ -79,14 +90,99 @@ export async function loadExactInertImplementation(root){
  need(typeof Pool==="function"&&typeof m.installP7InertStorage==="function"&&typeof m.inspectP7InertStorage==="function"&&m.compileP7InertStorageSql().length===3,"CANDIDATE_LOADER");
  return {Pool,installP7InertStorage:m.installP7InertStorage,inspectP7InertStorage:m.inspectP7InertStorage};
 }
+const EXPIRY_ROLES=["phase7_expiry_reader_prod20261120","phase7_expiry_writer_prod20261120"];
+const EXPIRY_SECRETS=["P7_EXPIRY_READER_DATABASE_URL","P7_EXPIRY_WRITER_DATABASE_URL"];
+const EXPIRY_FUNCTIONS=["phase7_private.pre_link_expiry_status_v39()","phase7_private.research_expiry_status_v39()","phase7_private.sweep_due_pre_links_v39(integer)","phase7_private.sweep_due_research_outputs_v39(integer)"];
+export function verifyExpiryLoginCatalog(rows,login){
+ need(rows.length===2&&EXPIRY_ROLES.every((role,i)=>{
+  const x=rows.find(y=>y.rolname===role);
+  return x&&x.canlogin===login&&x.canuse===true&&x.excess===false&&x.cancreate===false&&x.dbcreate===false&&
+   Array.isArray(x.exec)&&JSON.stringify(x.exec)==JSON.stringify(EXPIRY_FUNCTIONS.map((_,j)=>i===0?j<2:j>=2))&&
+   ["super","createdb","createrole","replication","bypassrls","inherit","member"].every(k=>x[k]===false);
+ }),"EXPIRY_ACTOR_PRIVILEGE_DRIFT");
+}
+async function expiryCatalog(c,login){
+ const rows=(await c.query(`SELECT r.rolname,rolcanlogin canlogin,rolsuper super,rolcreatedb createdb,rolcreaterole createrole,rolreplication replication,rolbypassrls bypassrls,rolinherit inherit,
+ EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) member,
+ has_schema_privilege(r.oid,'phase7_private','USAGE') canuse,has_schema_privilege(r.oid,'phase7_private','CREATE') cancreate,
+ has_database_privilege(r.oid,'neondb','CREATE') dbcreate,
+ ARRAY(SELECT has_function_privilege(r.oid,f,'EXECUTE') FROM unnest($2::text[]) WITH ORDINALITY u(f,n) ORDER BY n) exec,
+ EXISTS(SELECT 1 FROM pg_class t JOIN pg_namespace ns ON ns.oid=t.relnamespace WHERE ns.nspname NOT IN ('pg_catalog','information_schema') AND ns.nspname NOT LIKE 'pg_toast%' AND ns.nspname NOT LIKE 'pg_temp%' AND t.relkind IN ('r','p','v','m','f') AND (has_table_privilege(r.oid,t.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') OR has_any_column_privilege(r.oid,t.oid,'SELECT,INSERT,UPDATE,REFERENCES'))) excess
+ FROM pg_roles r WHERE r.rolname=ANY($1::text[])`,[EXPIRY_ROLES,EXPIRY_FUNCTIONS])).rows;
+ verifyExpiryLoginCatalog(rows,login);
+}
+function expiryUnconfigured(){
+ const names=pages("actions/secrets","secrets"),vars=pages("actions/variables","variables");
+ need(EXPIRY_SECRETS.every(n=>!names.some(x=>x.name===n))&&vars.every(x=>!["P7_EXPIRY_ENABLED","P7_EXPIRY_APPROVAL","P7_EXPIRY_APPROVED_MAIN_SHA"].includes(x.name)),"EXPIRY_ALREADY_OR_PARTIALLY_CONFIGURED_NO_REPLAY");
+}
+async function commissionExpiryOnly(pool,ownerUrl,inspectP7InertStorage){
+ // No runtime grant, PRE policy, source permission, deletion or scheduling.
+ expiryUnconfigured();
+ await inspectP7InertStorage(pool);
+ const passwords=EXPIRY_ROLES.map(()=>randomBytes(36).toString("base64url"));
+ const urls=EXPIRY_ROLES.map((role,i)=>{const u=new URL(ownerUrl);u.username=role;u.password=passwords[i];return u.toString()});
+ const dir=mkdtempSync(resolve(homedir(),".travnr-p7-expiry-"));
+ const file=resolve(dir,"expiry-recovery-PRIVATE.json");
+ writeFileSync(file,JSON.stringify({roles:EXPIRY_ROLES,urls,base:BASE,installedCandidate:HEAD}),{mode:0o600,flag:"wx"});
+ let commit=false,ack=false;
+ try{
+  const c=await pool.connect();
+  try{
+   await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+   await c.query("SET LOCAL statement_timeout='20000ms'; SET LOCAL lock_timeout='2000ms'");
+   await inspectDisabled(c,true);await expiryCatalog(c,false);
+   for(let i=0;i<2;i++){
+    const lit=(await c.query("SELECT quote_literal($1) lit",[passwords[i]])).rows[0].lit;
+    need(/^'[A-Za-z0-9_-]{48}'$/.test(lit),"CREDENTIAL_QUOTE");
+    await c.query("ALTER ROLE "+EXPIRY_ROLES[i]+" LOGIN PASSWORD "+lit);
+    await c.query("GRANT CONNECT ON DATABASE neondb TO "+EXPIRY_ROLES[i]);
+   }
+   await expiryCatalog(c,true);await inspectDisabled(c,true);
+   need(api("git/ref/heads/main").object.sha===BASE&&api("pulls/925").head.sha===EXPIRY_REVIEW_HEAD,"PRECOMMIT_DRIFT");
+   checkStop(pages("actions/secrets","secrets"),pages("actions/variables","variables"));
+   expiryUnconfigured();commit=true;await c.query("COMMIT");ack=true;
+  }finally{if(!commit)await c.query("ROLLBACK").catch(()=>{});c.release(commit&&!ack?Error("P7_EXPIRY_LOGIN_COMMIT_UNKNOWN"):undefined)}
+  const {Pool}=createRequire(resolve(realpathSync(process.cwd()),"package.json"))("pg");
+  const reader=new Pool({connectionString:urls[0],max:1,connectionTimeoutMillis:8000,query_timeout:20000});
+  const writer=new Pool({connectionString:urls[1],max:1,connectionTimeoutMillis:8000,query_timeout:20000});
+  try{
+   const runner=await import(pathToFileURL(resolve(realpathSync(process.cwd()),"server/lib/disruption/phase7ExpiryRunner_v39.ts")).href);
+   const v=await runner.readP7ExpiryStatus(reader);
+   need(v.liveLinks===0&&v.dueLinks===0&&v.dueBundles===0&&v.dueFragments===0&&v.liveLinksOnDueFragments===0,"UNEXPECTED_RESEARCH_ROWS");
+   const w=await writer.connect();try{
+    await w.query("BEGIN");const x=(await w.query("SELECT current_user actor,session_user login, current_setting('transaction_read_only') ro")).rows[0];
+    need(x.actor===EXPIRY_ROLES[1]&&x.login===x.actor&&x.ro==="off","WRITER_AUTHENTICATION");
+    await w.query("ROLLBACK");
+   }finally{await w.query("ROLLBACK").catch(()=>{});w.release()}
+   const oc=await pool.connect();try{await oc.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await inspectDisabled(oc,false);await expiryCatalog(oc,true);await oc.query("ROLLBACK");}finally{await oc.query("ROLLBACK").catch(()=>{});oc.release()}
+  }finally{await Promise.allSettled([reader.end(),writer.end()])}
+  need(api("git/ref/heads/main").object.sha===BASE&&api("pulls/925").head.sha===EXPIRY_REVIEW_HEAD,"POSTCOMMIT_DRIFT");
+  expiryUnconfigured();
+  // Secrets are uploaded through stdin to the existing authorized repo;
+  // no credentials in argv, Git, logs, output or chat.
+  for(let i=0;i<2;i++){
+   const result=spawnSync("gh",["secret","set",EXPIRY_SECRETS[i],"-R",REPO],{input:urls[i],stdio:["pipe","pipe","pipe"],timeout:30000});
+   need(!result.error&&result.status===0,"SECRET_UPLOAD_UNKNOWN_NO_REPLAY");
+  }
+  const names=pages("actions/secrets","secrets"),vars=pages("actions/variables","variables");
+  need(EXPIRY_SECRETS.every(n=>names.filter(x=>x.name===n).length===1)&&vars.every(x=>!["P7_EXPIRY_ENABLED","P7_EXPIRY_APPROVAL","P7_EXPIRY_APPROVED_MAIN_SHA"].includes(x.name)),"SECRET_METADATA_OR_STOP_DRIFT");
+  checkStop(names,vars);
+  rmSync(dir,{recursive:true,force:true});
+  console.log(JSON.stringify({status:"P7_TWO_FUNCTION_ONLY_EXPIRY_LOGINS_AND_SECRETS_COMMISSIONED_NO_GO",loginRolesActivated:2,readerAuthenticated:true,writerAuthenticated:true,secretMetadataReadback:2,scopeVerified:true,scheduledApplyEnabled:false,providerCalls:0,phase6PaidGo:false}));
+ }catch(e){
+  console.error(JSON.stringify({status:"P7_EXPIRY_COMMISSION_PARTIAL_INSPECT_NO_REPLAY",databaseCommitAttempted:commit,databaseCommitAcknowledged:ack,recoveryDirectory:dir,providerCalls:0,phase6PaidGo:false}));throw e;
+ }
+}
 async function main(){
  const [mode]=process.argv.slice(2);
- need(process.argv.length===3&&["--inspect","--install-inert"].includes(mode),"MODE");
+ need(process.argv.length===3&&["--inspect","--install-inert","--commission-expiry"].includes(mode),"MODE");
+ need(mode!=="--commission-expiry"||process.env.P7_OWNER_EXPIRY_APPROVAL==="COMMISSION_TWO_EXISTING_EXPIRY_ACTORS_NO_PAID_NO_SCHEDULE","OWNER_EXPLICIT_EXPIRY_APPROVAL");
  need(mode!=="--install-inert"||process.env.P7_OWNER_INERT_SCHEMA_APPROVAL==="INSTALL_EXACT_INERT_SCHEMA_AND_NOLOGIN_ROLES_NO_PAID","OWNER_EXPLICIT_INERT_APPROVAL");
- const u=verifyOwnerScope(),root=realpathSync(process.cwd());
+ const u=verifyOwnerScope(mode==="--commission-expiry"),root=realpathSync(process.cwd());
  const {Pool,installP7InertStorage,inspectP7InertStorage}=await loadExactInertImplementation(root);
  const pool=new Pool({connectionString:u,max:2,connectionTimeoutMillis:8000,query_timeout:35000,application_name:"phase7_detached_inert_only"});
  try{
+  if(mode==="--commission-expiry"){await commissionExpiryOnly(pool,u,inspectP7InertStorage);return;}
   const probe=await pool.connect();let state,present;
   try{await probe.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");state=await inspectDisabled(probe,false);present=(await probe.query("SELECT to_regnamespace('phase7_private') IS NOT NULL present")).rows[0].present;await probe.query("ROLLBACK");}finally{await probe.query("ROLLBACK").catch(()=>{});probe.release()}
   if(present){
