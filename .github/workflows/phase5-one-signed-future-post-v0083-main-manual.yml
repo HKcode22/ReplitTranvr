@@ -47,6 +47,8 @@ on:
       - 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs'
       - 'tests/phase6_private_post_actual_child_transport_v39.test.ts'
       - 'server/lib/disruption/phase7StoredPostRecoveryAdmission_v39.ts'
+      - '.github/workflows/phase6-stored-post-recovery-no-provider.yml'
+      - 'scripts/v39_phase7_stored_post_recovery_github_v39.ts'
       - 'server/lib/disruption/phase7PrivateSignedReviewTransport_v39.ts'
       - 'migrations/staged/V0106__phase7_signed_review_transport_existing_custody_inert_v39.sql'
       - 'tests/phase7_private_signed_review_transport_v39.test.ts'

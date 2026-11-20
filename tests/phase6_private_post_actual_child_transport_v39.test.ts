@@ -215,7 +215,7 @@ describe("exact protected research storage POST resolver",()=>{
  });
 });
 
-import {admitP7StoredPostRecovery,selectP7RecoverablePostRoute,verifyP7OriginalPostRun,readP7OriginalPostRun} from "../server/lib/disruption/phase7StoredPostRecoveryAdmission_v39";
+import {admitP7StoredPostRecovery,selectP7RecoverablePostRoute,verifyP7OriginalPostRun,readP7OriginalPostRun,discoverP7WorkflowRunRecoverySelector} from "../server/lib/disruption/phase7StoredPostRecoveryAdmission_v39";
 describe("nonpaid recovery of the original signed POST route",()=>{
  const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
  const raw=Buffer.from("{\"synthetic\":\"post packet\"}"),source=Buffer.from("{\"synthetic\":\"source registry\"}");
@@ -258,6 +258,14 @@ describe("nonpaid recovery of the original signed POST route",()=>{
   expect(()=>selectP7RecoverablePostRoute(handoff(receipt,[route,route]),selector)).toThrow("EXACT_RECOVERY_ROUTE");
   expect(()=>selectP7RecoverablePostRoute(handoff(receipt,[{...route,boundSourceRegistrySha256:h}]),selector)).toThrow("RECOVERY_EXACT_BYTES");
   expect(()=>selectP7RecoverablePostRoute({...handoff(),privateRecoverablePostRoutingCandidates:[route]},selector)).toThrow("AUTHENTICATED_RECOVERY_INDEX");
+ });
+ it("completion-event admission retains separate recovery scope and rejects fake or replayed completion IDs",async()=>{
+  const e={...recoveryEnv(),GITHUB_EVENT_NAME:"workflow_run"};
+  expect(admitP7StoredPostRecovery(e,selector).providerCalls).toBe(0);
+  await expect(discoverP7WorkflowRunRecoverySelector({...e,GITHUB_EVENT_NAME:"workflow_dispatch"},selector.originalGithubRunId)).rejects.toThrow("COMPLETION_EVENT_REQUIRED");
+  for(const delta of [{GITHUB_RUN_ATTEMPT:"2"},{GITHUB_RUN_ID:selector.originalGithubRunId},{P6_PRIVATE_PUBLISHER_DATABASE_URL:"forbidden"},{AERODATABOX_API_KEY:"forbidden"}]){
+   await expect(discoverP7WorkflowRunRecoverySelector({...e,...delta},selector.originalGithubRunId)).rejects.toThrow("EXACT_NO_PAID_SCOPE");
+  }
  });
  it("requires actual terminal first-attempt original run, exact signed packet title and window; GET only",async()=>{
   const e=recoveryEnv();

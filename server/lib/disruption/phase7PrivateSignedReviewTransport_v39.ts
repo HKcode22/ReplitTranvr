@@ -15,6 +15,8 @@ import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import type {P6PostCommittedScope,P6PostPreservationAnchor} from "./phase6ActualPostOutcomeObservability_v39";
 import type {Phase7StoredPreFragment} from "./phase7FinalGroupAssembly_v39";
+import type {Phase7PrivateOutcomeReviewTransport} from "./phase7SignedPostConsumer_v39";
+import type {P5ReviewedFuturePostOneGet} from "./phase5V0083FuturePostOriginalDb_v39";
 import type {Phase7RecoveryReceiptCustodyPort} from "./phase7CommittedPostRecovery_v39";
 const TABLE="phase6_private.frozen_native_packet_v39";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
@@ -36,7 +38,7 @@ function validateTrust(t:P7ReviewTrust){
  const e=t?.env;
  if(!e||e.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED!=="1"||
   e.ADB_AUTO_COLLECT!=="0"||e.DATABASE_URL||e.V39_DATABASE_RUNTIME_URL||e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
-  !C.test(e.GITHUB_SHA??"")||e.GITHUB_SHA!==e.V39_P5_APPROVED_CODE_SHA||
+  !C.test(e.GITHUB_SHA??"")||e.GITHUB_SHA!==(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA)||
   ![e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256].every(digest)||
   !/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(t.expectedReaderSessionLogin)||
   !/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/.test(t.expectedPublisherSessionLogin)||
@@ -167,4 +169,30 @@ export function openP7StoredRecoveryReceiptPort(env:NodeJS.ProcessEnv):Phase7Rec
   const s=postRecoveryReviewSelector(scope);return (await r.read([s])).get(s.scopeSha256);
  }
  return {readExactRecoveryReceipt:read,readOrRecordExactRecoveryReceipt:input=>read(input.committed)};
+}
+
+/** Recovery only: actual signed original receipt is already present. The
+ * normal paid child MUST NOT use this port as a pre-spend readiness claim.
+ * No new receipt is manufactured; every subsequent read reauthenticates it. */
+export function openP7StoredPostRecoveryTransport(env:NodeJS.ProcessEnv,scope:Readonly<P6PostCommittedScope>):Phase7PrivateOutcomeReviewTransport{
+ if(env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||
+  [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P6_PRIVATE_PUBLISHER_DATABASE_URL].some(Boolean))hold("RECOVERY_ONLY");
+ const reader=openP7PrivateSignedReviewReader(env),custody=openP7StoredRecoveryReceiptPort(env);
+ const scopeSha=hashPhase7DurableCandidate(scope),packetSha=hashPhase7DurableCandidate(scope.packet);
+ function check(s:Readonly<P6PostCommittedScope>){if(hashPhase7DurableCandidate(s)!==scopeSha)hold("RECOVERY_ORIGINAL_DRIFT")}
+ const read=async(s:Readonly<P6PostCommittedScope>)=>{check(s);return custody.readExactRecoveryReceipt(s)};
+ return {
+  async preflight(p:Readonly<P5ReviewedFuturePostOneGet>){
+   if(hashPhase7DurableCandidate(p)!==packetSha)hold("RECOVERY_PACKET_DRIFT");
+   await read(scope);
+   return {providerCalls:0,writeAuthority:false,independentReviewerAvailable:true,recoveryReceiptCustodyAvailable:true};
+  },
+  readExactRecoveryReceipt:read,
+  readOrRecordExactRecoveryReceipt:input=>read(input.committed),
+  async readExactReview(input){
+   check(input.committed);
+   const s=postSettlementReviewSelector(input.committed,input.anchor,input.fragments);
+   return (await reader.read([s])).get(s.scopeSha256);
+  }
+ };
 }
