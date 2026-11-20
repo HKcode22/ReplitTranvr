@@ -19,6 +19,8 @@ import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7Durable
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const P7=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1";
 const P7READER="phase7_pre_fragment_ci_reader";
+const P7SCOPED="phase7_post_group_ci_reader";
+import {readPhase7PostScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit
@@ -43,7 +45,7 @@ type Claim={id:string;flight_instance_id:string;horizon:"T-24h";
  generation:number;owner:string;lease_until:string};
 active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",()=>{
  let admin:Pool,writer:Pool,legacy:Pool|undefined,permit:P5Stage14SingleFlightPrePermit;
- let cutoffMs=0,p7Reader:Pool|undefined;
+ let cutoffMs=0,p7Reader:Pool|undefined,p7Scoped:Pool|undefined;
  let p7:NonNullable<NonNullable<Parameters<typeof persistP5V0079SingleBoundFlightPre>[2]>["phase7PrePreservation"]>|undefined;
  beforeAll(async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||
@@ -198,6 +200,8 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    await admin.query("GRANT SELECT ON phase7_private.pre_fragment_v39 TO "+P7READER);
    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz) TO "+ROLE);
    p7Reader=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7READER),max:2});
+   await admin.query("CREATE ROLE "+P7SCOPED+" LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT USAGE ON SCHEMA phase7_private TO "+P7SCOPED+"; GRANT EXECUTE ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) TO "+P7SCOPED);
+   p7Scoped=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7SCOPED),max:1});
    const shared={version:"v01",featureDictionarySha256:sha("synthetic dictionary"),termsReviewSha256:sha("synthetic terms"),derivedWorkReviewSha256:sha("synthetic derived review")};
    const expires=iso(now+7*86400000);
    const p7Contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:expires,cohortBucketCount:31,features:[{name:"status_bin",bucketCount:2,fieldClass:"approved_derived",transformEvidenceSha256:sha("status"),nonReconstructable:true},{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("context"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("target"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
@@ -390,6 +394,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
  });
  afterAll(async()=>{
   if(p7Reader)await p7Reader.end();
+  if(p7Scoped)await p7Scoped.end();
   if(writer)await writer.end();
   if(admin)await admin.end();
  });
@@ -576,12 +581,26 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    expect(pre[0].expires_at_utc.getTime()).toBeLessThanOrEqual(pre[0].source_expires_at_utc.getTime());
    await expect(p7Reader!.query("SELECT * FROM phase7_private.pre_source_link_v39")).rejects.toMatchObject({code:"42501"});
    await expect(writer.query("SELECT * FROM phase7_private.pre_fragment_v39")).rejects.toMatchObject({code:"42501"});
+   // Actual scoped function, not a mocked result. It may read only through
+   // the still-live exact source link and returns no source identity.
+   const anchor={manifestSha256:permit.manifestSha256,rightsSha256:permit.expectedReviewedSourceRightsSha256,
+    queryDigestSha256:permit.queryDigestSha256,snapshotId:saved.committedSnapshotId,runDayIndex:permit.runDayIndex,
+    airportIcao:permit.airportIcao,frameSha256:permit.reviewedFrameSha256,flightInstanceId:permit.flightInstanceId,
+    horizon:permit.horizon,selectedNativeTUtc:permit.selectedTNativeUtc,preIssuedAtUtc:memberAt,
+    originalSourceAvailableAtUtc:memberAt,sourceExpiresAtUtc:pre[0].source_expires_at_utc.toISOString(),
+    sourceResponseSha256:permit.expectedSourceResponseSha256,ambiguousIdentity:false};
+   const group=await readPhase7PostScopedGroup(p7Scoped!,P7SCOPED,p7.contract,p7.profile,anchor);
+   expect(group.fragments).toHaveLength(1);
+   expect(group.fragments[0].packet.rows[0]).toEqual(row);
+   await expect(readPhase7PostScopedGroup(p7Scoped!,P7SCOPED,p7.contract,p7.profile,{...anchor,queryDigestSha256:sha("wrong query")})).rejects.toThrow();
+   await expect(p7Scoped!.query("SELECT * FROM phase7_private.pre_fragment_v39")).rejects.toMatchObject({code:"42501"});
    expect((await admin.query("SELECT phase7_private.sweep_due_pre_links_v39(10) n")).rows[0].n).toBe(0);
    // Synthetic forced expiry only, proves deletion is restricted to links
    // and that an earlier derived row survives original-link expiry.
    await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
    expect((await admin.query("SELECT phase7_private.sweep_due_pre_links_v39(10) n")).rows[0].n).toBe(1);
    expect((await admin.query("SELECT count(*)::int n FROM phase7_private.pre_fragment_v39")).rows[0].n).toBe(1);
+   await expect(readPhase7PostScopedGroup(p7Scoped!,P7SCOPED,p7.contract,p7.profile,anchor)).rejects.toThrow();
    console.log("P7_STAGE14_ATOMIC_PRE_FRAGMENT_INDEPENDENT_READBACK_EXPIRED_LINK_REMOVED_NO_GO");
   }
   const features=(await admin.query(
