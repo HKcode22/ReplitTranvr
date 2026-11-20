@@ -7,7 +7,7 @@ import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSign
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {readP6PrivateDeadlinePressure,P6_PRIVATE_DEADLINE_PRESSURE_SQL} from "../server/lib/disruption/phase6PrivateDeadlinePressure_v39";
 const h=(s:string)=>createHash("sha256").update(s).digest("hex");
-const pre=generateKeyPairSync("ed25519"),post=generateKeyPairSync("ed25519");
+const pre=generateKeyPairSync("ed25519"),post=generateKeyPairSync("ed25519"),lane=generateKeyPairSync("ed25519");
 const publicPin=(k:typeof pre)=>createHash("sha256").update(k.publicKey.export({type:"spki",format:"der"})).digest("hex");
 const pub=(k:typeof pre)=>Buffer.from(k.publicKey.export({type:"spki",format:"pem"})).toString("base64");
 const wire=(x:unknown,k:typeof pre)=>{const raw=Buffer.from(JSON.stringify(x));return {payloadBase64:raw.toString("base64"),signatureBase64:sign(null,raw,k.privateKey).toString("base64")}};
@@ -16,6 +16,7 @@ const code="c".repeat(40),manifest=h("ci manifest"),rights=h("ci rights"),prePol
 const trust={expectedReaderSessionLogin:readerLogin,expectedPublisherSessionLogin:publisherLogin,env:{ADB_AUTO_COLLECT:"0",GITHUB_SHA:code,V39_P5_APPROVED_CODE_SHA:code,
  V39_P5_MANIFEST_SHA256:manifest,V39_P5_RIGHTS_SHA256:rights,P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED:"1",
  P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:prePolicy,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:publicPin(pre),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:pub(pre),
+ P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:publicPin(lane),P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:pub(lane),
  P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:postPolicy,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:publicPin(post),P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:pub(post)}};
 function fixtures(now:number){
  const issuedAtUtc=new Date(now-5000).toISOString(),validUntilUtc=new Date(now+90000).toISOString(),clock=new Date(now).toISOString();
@@ -32,12 +33,18 @@ function fixtures(now:number){
   scope:{groupId:"12345678-1234-4123-8123-123456789abc",associationReviewSha256,outcomeReviewSha256:h("outcome"),groupSettlementDue:true,evidence:{"T-6h":null}},
   assemblyIds:{continuousPacketId:"12345678-1234-4123-8123-123456789abd",missingPreRows:{}},
   approval:{schema:"v39.phase7.durable-derived-bundle-independent-review.v1",contractSha256:h("contract"),bundleSha256:h("bundle"),sourceParityReviewSha256:h("parity"),reconstructionReviewSha256:h("reconstruction"),fieldReviewSha256:h("fields"),associationReviewSha256,continuousTargetReviewSha256:h("target"),approvedForDurableStorage:true,sourceMappingPersisted:false,minTargetMinutes:-120,maxTargetMinutes:2880}};
- return {clock,validUntilUtc,a,b,c,prePayload,recoveryPayload,settlementPayload,aw:wire(prePayload,pre),bw:wire(recoveryPayload,post),cw:wire(settlementPayload,post)};
+ const d:P7ReviewSelector={...a,kind:"PRE_LANE_RECEIPT"};
+ const lanePayload={schema:"v39.phase7.independent-pre-lane-readback.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:prePolicy,permitSha256:d.scopeSha256,sourceExpiresAtUtc:new Date(now+3600000).toISOString(),reviewedAtUtc:issuedAtUtc,validUntilUtc,fields:[{field:"origin_icao",disposition:"PURPOSE_BOUND_REFERENCE_LANE",purpose:"link",fieldReviewSha256:h("reference-review"),selectedFeatureSha256:h("selected-reference"),durableEvidenceSha256:h("durable-reference-fixture"),durableReadAtUtc:issuedAtUtc}]};
+ return {clock,validUntilUtc,a,b,c,d,lanePayload,prePayload,recoveryPayload,settlementPayload,aw:wire(prePayload,pre),bw:wire(recoveryPayload,post),cw:wire(settlementPayload,post),dw:wire(lanePayload,lane)};
 }
 it("authenticates exact signed scope, separate key, study and short-lived clock before storage",()=>{
  const f=fixtures(Date.parse("2027-01-01T00:00:00.000Z"));
  for(const [s,w] of [[f.a,f.aw],[f.b,f.bw],[f.c,f.cw]] as const)expect(verifyP7StoredWire(trust,s,w,f.clock).wire).toEqual(w);
- expect(new Set([f.a,f.b,f.c].map(p7ReviewPath).concat(p7RecoveryFencePath(f.b))).size).toBe(4);
+ expect(new Set([f.a,f.b,f.c,f.d].map(p7ReviewPath).concat(p7RecoveryFencePath(f.b))).size).toBe(5);
+ expect(verifyP7StoredWire(trust,f.d,f.dw,f.clock).wire).toEqual(f.dw);
+ expect(()=>verifyP7StoredWire(trust,f.d,wire(f.lanePayload,pre),f.clock)).toThrow("SIGNATURE");
+ expect(()=>verifyP7StoredWire(trust,f.a,f.dw,f.clock)).toThrow("SIGNATURE");
+ expect(()=>verifyP7StoredWire(trust,f.d,wire({...f.lanePayload,fields:[{...f.lanePayload.fields[0],value:"synthetic raw code"}]},lane),f.clock)).toThrow("FIELD_EVIDENCE_OR_PURPOSE");
  expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,originalAvailableAtUtc:"2026-12-31T23:45:00.000Z"},post),f.clock)).toThrow("RECOVERY_ORIGINAL_WINDOW");
  expect(()=>verifyP7StoredWire(trust,f.a,wire(f.prePayload,post),f.clock)).toThrow("SIGNATURE");
  const field={field:"origin_icao",selectedFeatureSha256:h("selected"),independentEvidenceSha256:h("independent")};
@@ -95,6 +102,11 @@ active("real private custody signed-review transport",()=>{
    expect(JSON.stringify(pressure)).not.toContain(p7ReviewPath(f.a));
    expect(P6_PRIVATE_DEADLINE_PRESSURE_SQL).not.toMatch(/payload_bytes|review_wire_bytes|logical_path|content_sha256/);
    await expect(readP6PrivateDeadlinePressure(publisher,publisherLogin,manifest)).rejects.toThrow("NOT_RESTRICTED_REAL_NEON_PG16_ROLE_OR_ACL");
+   // Independent authority proof is stored separately from the signer proof,
+   // even when both bind the same exact prospective permit.
+   await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.d,wire:f.dw})).resolves.toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+   expect((await readP7PrivateSignedReviews(reader,trust,[f.d])).get(f.d.scopeSha256)).toEqual(f.dw);
+   expect((await readP7PrivateSignedReviews(reader,trust,[f.a])).get(f.a.scopeSha256)).toEqual(f.aw);
    // Direct restricted INSERT must not smuggle source-shaped values into the
    // short operational kind even when bypassing the JS publisher completely.
    const badRecovery=wire({...f.recoveryPayload,originalAuditSha256:{flight:"synthetic-not-a-digest"}},post);

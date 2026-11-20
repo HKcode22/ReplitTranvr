@@ -12,6 +12,7 @@ import {readP6DayEpochRestrictedReaderClock,readP6DayEpochRestrictedPublisherClo
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import {assertPhase7PostSettlementCustodyShape,readPhase7PostReviewerPublicKey,phase7PostFragmentsDigest} from "./phase7SignedPostReview_v39";
 import {assertPhase7PreProofMetadataShape,verifyPhase7SignedPreFieldProof,type Phase7SignedPreFieldProofWire} from "./phase7SignedPreFieldProof_v39";
+import {assertP7IndependentLaneReceiptMetadata} from "./phase7IndependentPreProofIssuer_v39";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39";
 import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -30,10 +31,11 @@ const iso=(d:unknown)=>{if(!(d instanceof Date)||!Number.isFinite(d.getTime()))r
 const digest=(s:unknown):s is string=>typeof s==="string"&&H.test(s)&&!/^([a-f0-9])\1{63}$/.test(s);
 function b64(v:unknown,max:number){if(typeof v!=="string"||v.length>Math.ceil(max/3)*4||!(/^[A-Za-z0-9+/]+={0,2}$/).test(v))return hold("ENCODING");const b=Buffer.from(v,"base64");if(b.length>max||b.toString("base64")!==v)hold("ENCODING");return b}
 type DB={query:(sql:string,args?:any[])=>Promise<any>};
-export type P7ReviewSelector={kind:"PRE_PROOF"|"POST_RECOVERY"|"POST_SETTLEMENT";runDayIndex:number;scopeSha256:string};
+export type P7ReviewSelector={kind:"PRE_PROOF"|"PRE_LANE_RECEIPT"|"POST_RECOVERY"|"POST_SETTLEMENT";runDayIndex:number;scopeSha256:string};
 export type P7Wire=Phase7SignedPreFieldProofWire;
 export type P7ReviewTrust={env:NodeJS.ProcessEnv;expectedReaderSessionLogin:string;expectedPublisherSessionLogin:string};
 export function preProofReviewSelector(p:P5Stage14SingleFlightPrePermit):P7ReviewSelector{return {kind:"PRE_PROOF",runDayIndex:p.runDayIndex,scopeSha256:hashPhase7DurableCandidate(p)}}
+export function preLaneReceiptSelector(p:P5Stage14SingleFlightPrePermit):P7ReviewSelector{return {...preProofReviewSelector(p),kind:"PRE_LANE_RECEIPT"}}
 export function postRecoveryReviewSelector(s:Readonly<P6PostCommittedScope>):P7ReviewSelector{return {kind:"POST_RECOVERY",runDayIndex:s.packet.runDayIndex,scopeSha256:hashPhase7DurableCandidate(s)}}
 export function postSettlementReviewSelector(s:Readonly<P6PostCommittedScope>,a:Readonly<P6PostPreservationAnchor>,f:readonly Phase7StoredPreFragment[]):P7ReviewSelector{return {kind:"POST_SETTLEMENT",runDayIndex:s.packet.runDayIndex,scopeSha256:hashPhase7DurableCandidate({committedPostSha256:hashPhase7DurableCandidate(s),anchorSha256:hashPhase7DurableCandidate(a),fragmentsSha256:phase7PostFragmentsDigest(f)})}}
 function validateTrust(t:P7ReviewTrust){
@@ -48,7 +50,7 @@ function validateTrust(t:P7ReviewTrust){
  return e;
 }
 export function p7ReviewPath(s:P7ReviewSelector){
- if(!s||!["PRE_PROOF","POST_RECOVERY","POST_SETTLEMENT"].includes(s.kind)||!Number.isSafeInteger(s.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||!digest(s.scopeSha256))hold("SELECTOR");
+ if(!s||!["PRE_PROOF","PRE_LANE_RECEIPT","POST_RECOVERY","POST_SETTLEMENT"].includes(s.kind)||!Number.isSafeInteger(s.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||!digest(s.scopeSha256))hold("SELECTOR");
  return "data-collection/phase5/frozen/p7review_"+sha(JSON.stringify([s.kind,s.runDayIndex,s.scopeSha256]))+".json";
 }
 export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unknown,dbClock:string){
@@ -62,6 +64,13 @@ export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unkno
   key=createPublicKey(pem);
   const fp=sha(key.export({type:"spki",format:"der"}));
   if(fp!==env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256||fp===env.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256)hold("PRE_REVIEWER");
+ }else if(s.kind==="PRE_LANE_RECEIPT"){
+  const pem=b64(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64,4096).toString("utf8");
+  if(!pem.startsWith("-----BEGIN PUBLIC KEY-----")||!digest(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256))hold("LANE_AUTHORITY");
+  key=createPublicKey(pem);
+  const fp=sha(key.export({type:"spki",format:"der"}));
+  if(fp!==env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256||
+   [env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,env.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256].includes(fp))hold("LANE_AUTHORITY");
  }else key=readPhase7PostReviewerPublicKey(env);
  if(key.asymmetricKeyType!=="ed25519"||signature.length!==64||!verify(null,raw,key,signature))hold("SIGNATURE");
  const x=JSON.parse(raw.toString("utf8"));
@@ -70,14 +79,17 @@ export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unkno
  if(s.kind==="PRE_PROOF"){
   if(raw.length>16384)hold("PRE_PROOF_BYTES");
   assertPhase7PreProofMetadataShape(x);
+ }else if(s.kind==="PRE_LANE_RECEIPT"){
+  if(raw.length>20000)hold("PRE_LANE_BYTES");
+  assertP7IndependentLaneReceiptMetadata(x);
  }else if(s.kind==="POST_SETTLEMENT")assertPhase7PostSettlementCustodyShape(x);
- const schema=s.kind==="PRE_PROOF"?"v39.phase7.separate-pre-field-proof.v1":s.kind==="POST_RECOVERY"?"v39.phase7.committed-post-recovery-receipt.v2":"v39.phase7.exact-post-group-settlement.v1";
- const scope=s.kind==="PRE_PROOF"?x.permitSha256:s.kind==="POST_RECOVERY"?x.committedScopeSha256:hashPhase7DurableCandidate({committedPostSha256:x.committedPostSha256,anchorSha256:x.anchorSha256,fragmentsSha256:x.fragmentsSha256});
- const policy=s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256;
+ const schema=s.kind==="PRE_PROOF"?"v39.phase7.separate-pre-field-proof.v1":s.kind==="PRE_LANE_RECEIPT"?"v39.phase7.independent-pre-lane-readback.v1":s.kind==="POST_RECOVERY"?"v39.phase7.committed-post-recovery-receipt.v2":"v39.phase7.exact-post-group-settlement.v1";
+ const scope=s.kind==="PRE_PROOF"||s.kind==="PRE_LANE_RECEIPT"?x.permitSha256:s.kind==="POST_RECOVERY"?x.committedScopeSha256:hashPhase7DurableCandidate({committedPostSha256:x.committedPostSha256,anchorSha256:x.anchorSha256,fragmentsSha256:x.fragmentsSha256});
+ const policy=s.kind==="PRE_PROOF"||s.kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256;
  if(x.schema!==schema||!digest(policy)||x.policySha256!==policy||scope!==s.scopeSha256||
   (s.kind!=="POST_RECOVERY"&&(x.manifestSha256!==env.V39_P5_MANIFEST_SHA256||x.rightsSha256!==env.V39_P5_RIGHTS_SHA256)))hold("EXACT_SIGNED_SCOPE");
  const reviewed=s.kind==="PRE_PROOF"?x.issuedAtUtc:x.reviewedAtUtc,from=at(reviewed),until=at(x.validUntilUtc);
- if(from>now||now>=until||until-from>(s.kind==="PRE_PROOF"?86400000:s.kind==="POST_SETTLEMENT"?21600000:600000))hold("LIVE_REVIEW");
+ if(from>now||now>=until||until-from>(s.kind==="PRE_PROOF"||s.kind==="PRE_LANE_RECEIPT"?86400000:s.kind==="POST_SETTLEMENT"?21600000:600000))hold("LIVE_REVIEW");
  // The receipt remains valid at most two minutes. The separate issuance
  // fence contains only bounded operational metadata, not the signed wire.
  if(s.kind==="POST_RECOVERY"&&(!exact(x,["schema","policySha256","committedScopeSha256","originalAuditSha256","originalAuditAtUtc","originalAvailableAtUtc","reviewedAtUtc","validUntilUtc"])||
@@ -201,6 +213,24 @@ export function openP7PrivateSignedReviewReader(env:NodeJS.ProcessEnv){
   finally{await c.end().catch(()=>{})}
  }
  return {read};
+}
+/** The source-lane authority and proof signer are distinct keys and roles
+ * in the workflow. The producer independently reads this exact authority
+ * receipt, then recomputes actual V0079 fields. Never substitute PRE proof
+ * for lane receipt. Weather artifacts require a separately verified public
+ * archive; optional absence cannot be made into evidence for a present field. */
+export function openP7StoredPreLaneArchivePort(env:NodeJS.ProcessEnv,publicWeatherPort?:{
+ readExactReviewedWeatherArtifacts(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<readonly import("./phase7IndependentNoaaReceipt_v39").P7SignedPublicNoaaArtifact[]>
+}){
+ if([env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P6_PRIVATE_PUBLISHER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL].some(Boolean))hold("PRE_LANE_READER_SCOPE");
+ const r=openP7PrivateSignedReviewReader(env);
+ return {async readExactSignedLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
+  const s=preLaneReceiptSelector(p);
+  const wire=(await r.read([s])).get(s.scopeSha256);
+  if(!wire)hold("MISSING_PRE_LANE_RECEIPT");
+  const weatherArtifacts=publicWeatherPort?await publicWeatherPort.readExactReviewedWeatherArtifacts(p):[];
+  return {wire,weatherArtifacts};
+ }};
 }
 export function openP7StoredPreProofPort(env:NodeJS.ProcessEnv){
  if(env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET)hold("PRE_NO_PROVIDER");

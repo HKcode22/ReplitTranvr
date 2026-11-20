@@ -6,7 +6,7 @@
  */
 import {createHash,createPublicKey,sign,verify,type KeyObject} from "node:crypto";
 import type {PreFeatureInput} from "./preSnapshotBuilder_v3";
-import type {P5EPreField} from "./phase5AmendmentEAsOfFeatureSelectionOffline_v39";
+import {P5_E_ALLOWED_PRE_FEATURES,type P5EPreField} from "./phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
 import {phase7SelectedFeatureDigest,verifyPhase7SignedPreFieldProof,type Phase7SignedPreFieldProofWire,type Phase7VerifiedPreFieldProof} from "./phase7SignedPreFieldProof_v39";
@@ -51,6 +51,26 @@ type Settings={
  reader:Phase7IndependentPreLaneReader;
 };
 const fieldKeys=["field","disposition","purpose","fieldReviewSha256","selectedFeatureSha256","durableEvidenceSha256","durableReadAtUtc"] as const;
+/** A separate authority receipt may be kept in the existing private signed
+ * review mailbox. Only bounded digest/clock metadata is permitted. A valid
+ * signature never authorizes storing arbitrary provider content. */
+export function assertP7IndependentLaneReceiptMetadata(x:unknown): asserts x is Phase7AuthenticatedLaneReceipt{
+ const v=x as Phase7AuthenticatedLaneReceipt;
+ if(!exact(v,["schema","manifestSha256","rightsSha256","policySha256","permitSha256","sourceExpiresAtUtc","reviewedAtUtc","validUntilUtc","fields"])||
+  v.schema!=="v39.phase7.independent-pre-lane-readback.v1"||
+  ![v.manifestSha256,v.rightsSha256,v.policySha256,v.permitSha256].every(digest)||
+  !Array.isArray(v.fields)||v.fields.length>16)hold("LANE_METADATA");
+ const reviewed=clock(v.reviewedAtUtc),until=clock(v.validUntilUtc),expiry=clock(v.sourceExpiresAtUtc),seen=new Set<string>();
+ if(reviewed>=until||until>expiry||until-reviewed>86400000)hold("LANE_METADATA_CLOCK");
+ for(const f of v.fields){
+  if(!exact(f,fieldKeys)||!P5_E_ALLOWED_PRE_FEATURES.includes(f.field)||seen.has(f.field)||
+   ![f.fieldReviewSha256,f.selectedFeatureSha256,f.durableEvidenceSha256].every(digest)||
+   (f.disposition==="INDEPENDENT_SOURCE_EXACT_LANE"?f.purpose!=="independent_research":
+    f.disposition!=="PURPOSE_BOUND_REFERENCE_LANE"||!["identify","link","retrieve"].includes(f.purpose))||
+   clock(f.durableReadAtUtc)>reviewed)hold("FIELD_EVIDENCE_OR_PURPOSE");
+  seen.add(f.field);
+ }
+}
 export function createPhase7IndependentPreProofPort(d:Settings){
  const {env,policySha256,dispositions,reader}=d;
  if(env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1"||env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET||
@@ -77,7 +97,8 @@ export function createPhase7IndependentPreProofPort(d:Settings){
     result.selectedFeatures.length>16||new Set(result.selectedFeatures.map(f=>f.featureName)).size!==result.selectedFeatures.length)hold("EVIDENCE_WIRE_OR_SELECTION");
   const w=result.wire as {payloadBase64:string;signatureBase64:string},raw=bytes(w.payloadBase64,20000),sig=bytes(w.signatureBase64,64);
   if(sig.length!==64||!verify(null,raw,authority,sig))hold("LANE_SIGNATURE");
-  const x=JSON.parse(raw.toString("utf8")) as Phase7AuthenticatedLaneReceipt;
+  const x:unknown=JSON.parse(raw.toString("utf8"));
+  assertP7IndependentLaneReceiptMetadata(x);
   if(!exact(x,["schema","manifestSha256","rightsSha256","policySha256","permitSha256","sourceExpiresAtUtc","reviewedAtUtc","validUntilUtc","fields"])||
    x.schema!=="v39.phase7.independent-pre-lane-readback.v1"||x.manifestSha256!==p.manifestSha256||
    x.rightsSha256!==p.expectedReviewedSourceRightsSha256||x.policySha256!==policySha256||x.permitSha256!==permitSha||
