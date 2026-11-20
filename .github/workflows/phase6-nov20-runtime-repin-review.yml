@@ -1,0 +1,35 @@
+name: Phase6 Nov20 runtime repin review (NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/p6_nov20_runtime_repin_evidence*'
+      - 'review-tools/p6_nov20_final_*repin*'
+      - '.github/workflows/phase6-nov20-runtime-repin-review.yml'
+permissions:
+  contents: read
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  AERODATABOX_API_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
+  RAPIDAPI_KEY: ''
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+jobs:
+  review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify syntax and pure receipt and STOP boundaries
+        run: |
+          set -Eeuo pipefail
+          node --check review-tools/p6_nov20_runtime_repin_evidence.cjs
+          node --check review-tools/p6_nov20_final_main_nine_pin_repin.cjs
+          node --check review-tools/p6_nov20_final_primary_relay_repin.cjs
+          node --test review-tools/p6_nov20_runtime_repin_evidence.test.cjs review-tools/p6_nov20_final_primary_relay_repin.test.cjs
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          echo NOV20_RUNTIME_REPIN_REVIEW_COMPLETE_NO_PROVIDER_NO_GO
