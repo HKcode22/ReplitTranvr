@@ -33,6 +33,12 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
  expect(new Set([f.a,f.b,f.c].map(p7ReviewPath).concat(p7RecoveryFencePath(f.b))).size).toBe(4);
  expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,originalAvailableAtUtc:"2026-12-31T23:45:00.000Z"},post),f.clock)).toThrow("RECOVERY_ORIGINAL_WINDOW");
  expect(()=>verifyP7StoredWire(trust,f.a,wire(f.prePayload,post),f.clock)).toThrow("SIGNATURE");
+ const field={field:"origin_icao",selectedFeatureSha256:h("selected"),independentEvidenceSha256:h("independent")};
+ expect(verifyP7StoredWire(trust,f.a,wire({...f.prePayload,fields:[field]},pre),f.clock).storageKind).toBe("PHASE7_SIGNED_REVIEW");
+ for(const fields of [[{...field,value:"synthetic raw source field"}],[{...field,field:"unreviewed_field"}],[field,field],[{...field,selectedFeatureSha256:"not a digest"}],[null]]){
+  expect(()=>verifyP7StoredWire(trust,f.a,wire({...f.prePayload,fields},pre),f.clock)).toThrow("METADATA_FIELD_SCOPE");
+ }
+ expect(()=>verifyP7StoredWire(trust,f.a,wire({...f.prePayload,sourceContent:"synthetic source body"},pre),f.clock)).toThrow("METADATA_SHAPE");
  expect(()=>verifyP7StoredWire(trust,f.a,wire({...f.prePayload,manifestSha256:h("foreign")},pre),f.clock)).toThrow("EXACT_SIGNED_SCOPE");
  expect(()=>verifyP7StoredWire(trust,f.b,f.bw,f.validUntilUtc)).toThrow("LIVE_REVIEW");
  expect(verifyP7StoredWire(trust,f.b,f.bw,f.clock).storageKind).toBe("PHASE7_RECOVERY_RECEIPT");
@@ -52,6 +58,10 @@ active("real private custody signed-review transport",()=>{
   try{
    await reader.connect();await publisher.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
    const now=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime(),f=fixtures(now);
+   // A valid signature must not make an out-of-contract provider value storable.
+   const badPre=wire({...f.prePayload,sourceContent:"synthetic source body"},pre);
+   await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.a,wire:badPre})).rejects.toThrow("METADATA_SHAPE");
+   expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(f.a)])).rows[0].n).toBe(0);
    for(const [s,w] of [[f.a,f.aw],[f.b,f.bw],[f.c,f.cw]] as const){
     const args={client:publisher,reader,trust,selector:s,wire:w};
     expect(await publishP7PrivateSignedReviewOnce(args)).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO",providerCalls:0});

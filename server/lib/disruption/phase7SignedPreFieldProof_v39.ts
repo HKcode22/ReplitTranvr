@@ -28,6 +28,26 @@ export interface Phase7VerifiedPreFieldProof{
  manifestSha256:string;rightsSha256:string;policySha256:string;permitSha256:string;
  issuedAtUtc:string;validUntilUtc:string;fields:readonly FieldProof[];
 }
+/** Exact signed PRE proof shape, checked before private mailbox storage.
+ * Only canonical field names and digests are permitted; a signed extra
+ * source value is not a field proof. This is not independent evidence or
+ * field-policy approval. The consumer still binds the permit and policy. */
+export function assertPhase7PreProofMetadataShape(input:unknown): asserts input is Phase7VerifiedPreFieldProof {
+ const x=input as Phase7VerifiedPreFieldProof;
+ if(!exact(x,["schema","manifestSha256","rightsSha256","policySha256","permitSha256","issuedAtUtc","validUntilUtc","fields"])||
+  x.schema!=="v39.phase7.separate-pre-field-proof.v1"||
+  ![x.manifestSha256,x.rightsSha256,x.policySha256,x.permitSha256].every(digest)||
+  !Array.isArray(x.fields)||x.fields.length>16)hold("METADATA_SHAPE");
+ const fields=new Set<string>();
+ for(const f of x.fields){
+  if(!exact(f,["field","selectedFeatureSha256","independentEvidenceSha256"])||
+   !P5_E_ALLOWED_PRE_FEATURES.includes(f.field)||fields.has(f.field)||
+   !digest(f.selectedFeatureSha256)||!digest(f.independentEvidenceSha256))hold("METADATA_FIELD_SCOPE");
+  fields.add(f.field);
+ }
+ const from=clock(x.issuedAtUtc),until=clock(x.validUntilUtc);
+ if(from>=until||until-from>24*3600000)hold("METADATA_WINDOW");
+}
 export function phase7SelectedFeatureDigest(f:PreFeatureInput){
  if(!P5_E_ALLOWED_PRE_FEATURES.includes(f.featureName as P5EPreField)||
   f.value===null||f.value===undefined||!["string","number","boolean"].includes(typeof f.value)||
