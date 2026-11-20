@@ -117,6 +117,7 @@ export async function readP7PrivateSignedReviews(c:DB,t:P7ReviewTrust,selectors:
 export async function publishP7PrivateSignedReviewOnce(input:{client:DB;reader:DB;trust:P7ReviewTrust;selector:P7ReviewSelector;wire:unknown}){
  const {client:c,reader,trust:t,selector:s,wire}=input,e=validateTrust(t);
  if(c===reader||e.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
+ Object.entries(e).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
  [e.AERODATABOX_API_KEY,e.RAPIDAPI_KEY,e.AERODATABOX_WEBHOOK_SECRET,e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P5_V39_PRE_DATABASE_URL,e.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL].some(Boolean))hold("PUBLISHER_NO_PAID_SCOPE");
  let tx=false,commitAttempted=false;
  try{await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");tx=true;await c.query("SET LOCAL statement_timeout='10000ms'");await c.query("SET LOCAL lock_timeout='2000ms'");
@@ -195,4 +196,37 @@ export function openP7StoredPostRecoveryTransport(env:NodeJS.ProcessEnv,scope:Re
    return (await reader.read([s])).get(s.scopeSha256);
   }
  };
+}
+
+/** Actual restricted publisher + separate reader. No signer, paid reserve,
+ * owner or research writer capability in this process. No automatic replay. */
+export async function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean){
+ const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
+ validateTrust(trust);
+ if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
+  env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
+  s.kind!=="POST_RECOVERY"||typeof existing!=="boolean"||Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
+  [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
+   env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL].some(Boolean))hold("PUBLISHER_RECOVERY_ONLY");
+ const source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");
+ function url(name:string,login:string){
+  const u=new URL(env[name]??"");
+  if(!sameP6NeonDatabaseEndpoint(source,u)||decodeURIComponent(u.username)!==login||!u.password||u.username===source.username||
+   u.searchParams.getAll("sslmode").length!==1||!["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
+   [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+   (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))hold("RESTRICTED_PUBLISHER_TLS");
+  u.searchParams.set("sslmode","verify-full");return u.toString();
+ }
+ const reader=new Client({connectionString:url("P6_PRIVATE_READER_DATABASE_URL",trust.expectedReaderSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_recovery_wire_readback"});
+ const publisher=new Client({connectionString:url("P6_PRIVATE_PUBLISHER_DATABASE_URL",trust.expectedPublisherSessionLogin),connectionTimeoutMillis:8000,query_timeout:15000,application_name:"p7_recovery_wire_publisher"});
+ try{
+  await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+  if(existing){
+   const again=(await readP7PrivateSignedReviews(reader,trust,[s])).get(s.scopeSha256);
+   if(!again||JSON.stringify(again)!==JSON.stringify(wire))hold("EXISTING_WIRE_DRIFT");
+   return {status:"P7_EXISTING_RECOVERY_WIRE_EXACT_READBACK_NO_REPLAY",providerCalls:0,phase6PaidGo:false};
+  }
+  await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+  return await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:s,wire});
+ }finally{await Promise.allSettled([reader.end(),publisher.end()])}
 }

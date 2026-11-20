@@ -100,9 +100,6 @@ jobs:
       P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
       P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
       P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 }}
-      P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
-      P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL }}
-      P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,8 +122,36 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Reconcile exact committed original and durable research groups only
+      - name: Independently reread original and issue or authenticate recovery receipt
+        env:
+          P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
         run: |
           set -Eeuo pipefail
           set +x
-          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts
+          umask 077
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts issue
+      - name: Publish signed receipt and independently read back exact private bytes
+        env:
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          umask 077
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts publish
+      - name: Reconcile exact committed original and durable research groups only
+        env:
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts settle
+      - name: Remove private runner handoff (never upload)
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts cleanup

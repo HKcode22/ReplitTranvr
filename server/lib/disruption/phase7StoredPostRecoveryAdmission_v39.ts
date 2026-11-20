@@ -5,7 +5,7 @@
  * bound, and only an actual committed original + independent receipt may
  * pass the subsequent recovery readback. No workflow inputs are authority.
  */
-import {createHash} from "node:crypto";
+import {createHash,type KeyObject} from "node:crypto";
 import {Client,Pool} from "pg";
 import {readP6StablePostTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
@@ -14,9 +14,10 @@ import {readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39
 import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
 import {admitP5FuturePostFrozenForReadOnly} from "./phase5FuturePostGithubReadonlyRelease_v39";
 import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v39";
-import {discoverPhase7CommittedPostScope,recoverPhase7CommittedPost} from "./phase7CommittedPostRecovery_v39";
+import {readP6CommittedPostOutcomeObservability} from "./phase6ActualPostOutcomeObservability_v39";
+import {discoverPhase7CommittedPostScope,recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity,issuePhase7CommittedPostRecoveryReceipt,verifyPhase7RecoveryReceiptForAudit} from "./phase7CommittedPostRecovery_v39";
 import {openPhase7ProtectedPostConsumer} from "./phase7ProtectedPostResolver_v39";
-import {openP7StoredPostRecoveryTransport} from "./phase7PrivateSignedReviewTransport_v39";
+import {openP7StoredPostRecoveryTransport,openP7StoredRecoveryReceiptPort,postRecoveryReviewSelector} from "./phase7PrivateSignedReviewTransport_v39";
 import {readP6DayEpochRestrictedReaderClock} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import type {Phase7PostConsumer} from "./phase7PostPreservationBridge_v39";
 import type {P6PostCommittedScope} from "./phase6ActualPostOutcomeObservability_v39";
@@ -224,5 +225,37 @@ export async function executeP7StoredPostRecovery(env:NodeJS.ProcessEnv,selector
   const opened=openPhase7ProtectedPostConsumer(env,transport);
   try{return await recoverPhase7CommittedPost({env,scope,wire,source,consumer:opened.consumer})}
   finally{await opened.close()}
+ }finally{await pool.end()}
+}
+
+/** Actual independent first observation or existing receipt reconciliation.
+ * The prior observation here is the real first recovery read, never a
+ * fabricated timestamp of the failed paid process. Previous group writes
+ * require a receipt before any write; never replace an existing receipt. */
+export async function prepareP7RecoveryReceiptFromOriginal(env:NodeJS.ProcessEnv,selector:P7RecoverySelector,signer:KeyObject){
+ const a=admitP7StoredPostRecovery(env,selector);
+ if(env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL)HOLD("INDEPENDENT_REVIEWER_ONLY");
+ const packet=(await readP7StoredPostRecoveryPacket(env,selector)).privatePacket;
+ const pool=new Pool({connectionString:a.privateSourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_independent_receipt_issuer"});
+ try{
+  const source=makeP5Stage28DedicatedRolePool(pool,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107"});
+  const scope=await discoverPhase7CommittedPostScope(source,packet);
+  const audit=await readP6CommittedPostOutcomeObservability(source,scope);
+  const transport=openP7StoredRecoveryReceiptPort(env);
+  let wire:unknown,existing=true;
+  try{wire=await transport.readExactRecoveryReceipt(scope)}
+  catch(err){
+   // Specifically an absent exact row, NOT an expired, malformed, changed
+   // or unavailable receipt. No replacement after unknown read/commit.
+   if((err as Error)?.message!=="HOLD_P7_PRIVATE_REVIEW_TRANSPORT_MISSING_EXACT_REVIEW_NO_FALLBACK")throw err;
+   existing=false;
+   const issued=await issuePhase7CommittedPostRecoveryReceipt({env,source,scope,
+    priorAudit:{sha256:phase7CommittedPostAuditIdentity(audit),observedAtUtc:audit.privateObservedDbClockUtc},signer});
+   wire=issued.privateWire;
+  }
+  const fresh=await readP6CommittedPostOutcomeObservability(source,scope);
+  verifyPhase7RecoveryReceiptForAudit(env,scope,fresh,wire,fresh.privateObservedDbClockUtc);
+  // No original raw body, flight identifier or denominator in handoff.
+  return {selector:postRecoveryReviewSelector(scope),wire,existing};
  }finally{await pool.end()}
 }

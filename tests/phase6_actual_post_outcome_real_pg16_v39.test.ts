@@ -3,7 +3,8 @@
  * No production migration, charge, provider, or independently verified label.
  */
 import {describe,it,expect} from "vitest";
-import {Pool} from "pg";
+import {Pool,Client} from "pg";
+import {publishP7PrivateSignedReviewOnce,readP7PrivateSignedReviews,postRecoveryReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {exerciseNativePostPublication} from "./phase6_native_post_real_publication_fixture_v39";
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,phase7CommittedPostAuditIdentity,recoverPhase7CommittedPost} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
@@ -37,7 +38,7 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    const dispatch=Math.max(midnight,base-60000),latest=Math.min(midnight+86400000-1000,dispatch+180000);
    const retrieved=iso(Math.max(dispatch,now-1000)),available=iso(now);
    const p:P5ReviewedFuturePostOneGet={schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",
-    manifestSha256:h("a"),requestSha256:h("b"),githubRunId:"1234567890",reviewedSourceRightsSha256:h("c"),
+    manifestSha256:sha("ci-post-actual-manifest"),requestSha256:h("b"),githubRunId:"1234567890",reviewedSourceRightsSha256:sha("ci-post-actual-rights"),
     reviewedProviderPriceSha256:h("d"),reviewedCategoryBudgetSha256:h("e"),reviewedRequestContextSha256:h("f"),
     reviewedProviderContractSha256:h("9"),reviewedFrameSha256:h("8"),runDayIndex:1,slot:"HUB",airportIcao:"WSSS",
     flightInstanceId:"leg:ci:post:001",expectedSelectedTNativeUtc:iso(t),plannedSourceFromUtc:iso(from),plannedSourceToUtc:iso(to),
@@ -113,13 +114,30 @@ active("actual V0079 + POST original on disposable PostgreSQL16",()=>{
    const recoveryReceipt=await issuePhase7CommittedPostRecoveryReceipt({env:recoveryEnv,source:restricted as any,scope,
     priorAudit:{sha256:phase7CommittedPostAuditIdentity(report),observedAtUtc:report.privateObservedDbClockUtc},signer:privateKey});
    expect(JSON.stringify(recoveryReceipt)).not.toContain("payloadBase64");
+   // End-to-end actual SOURCE audit -> independent signature -> real private
+   // publisher -> separate reader -> no-GET consumer, all disposable.
+   const readerLogin="phase6_private_reader_login_ci_epoch",publisherLogin="phase6_private_publisher_login_ci_epoch";
+   const reader=new Client({connectionString:"postgresql://"+readerLogin+":ci-only-day-read@localhost:5432/neondb?sslmode=disable"});
+   const publisher=new Client({connectionString:"postgresql://"+publisherLogin+":ci-only-day-pub@localhost:5432/neondb?sslmode=disable"});
+   const code="c".repeat(40),selector=postRecoveryReviewSelector(scope);
+   const trust={expectedReaderSessionLogin:readerLogin,expectedPublisherSessionLogin:publisherLogin,env:{...recoveryEnv,
+    ADB_AUTO_COLLECT:"0",GITHUB_SHA:code,V39_P5_POST_APPROVED_CODE_SHA:code,P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED:"1"}};
+   let stored:unknown;
+   try{
+    await reader.connect();await publisher.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+    expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector,wire:recoveryReceipt.privateWire})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO",providerCalls:0});
+    stored=(await readP7PrivateSignedReviews(reader,trust,[selector])).get(selector.scopeSha256);
+    expect(stored).toEqual(recoveryReceipt.privateWire);
+    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector,wire:recoveryReceipt.privateWire})).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
+    expect((await readP7PrivateSignedReviews(reader,trust,[selector])).get(selector.scopeSha256)).toEqual(stored);
+   }finally{await Promise.allSettled([reader.end(),publisher.end()])}
    let consumed=0;
    const recoveryConsumer:Phase7PostConsumer={policySha256:recoveryEnv.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256,
     preflight:async()=>{},preserveCommitted:async(s,a)=>{
      expect(s).toEqual(scope);expect(a.uniqueRetainedPreFlights).toBe(2);consumed++;
      return {independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,verifiedGroupCount:2,heldGroupCount:0,excludedAmbiguousGroupCount:0,accountedRetainedFlightCount:2};
     }};
-   const recovered=await recoverPhase7CommittedPost({env:recoveryEnv,scope,wire:recoveryReceipt.privateWire,source:restricted as any,consumer:recoveryConsumer});
+   const recovered=await recoverPhase7CommittedPost({env:recoveryEnv,scope,wire:stored,source:restricted as any,consumer:recoveryConsumer});
    expect(recovered).toMatchObject({status:"COMMITTED_POST_RECOVERY_INDEPENDENT_READBACK_NO_GET",verifiedGroupCount:2,paidReservations:0,providerCalls:0,phase6PaidGo:false});
    expect(consumed).toBe(1);
    const hint=await readP6PostSourceQueryHints({sourcePool:restricted,trust:{manifestSha256:p.manifestSha256},runDayIndex:1,queryDigests:[query],frameSha256:p.reviewedFrameSha256});

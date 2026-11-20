@@ -56,6 +56,12 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
      h.airportIcao!==c.packet.airportIcao||h.runDayIndex!==c.packet.runDayIndex||h.frameSha256!==c.packet.reviewedFrameSha256)hold("CROSS_PARTITION");
    }
    const {eligible:byLeg,excluded}=phase7AuditedPreservationGroups(a);
+   // Record before reading group reviews. A crash after the first group write must have an independently signed,
+   // exact original denominator receipt to reconcile without another GET.
+   // Also require the receipt for a zero-group/excluded-only result.
+   await requirePhase7RecoveryReceiptBeforeSettlement({env:d.env,scope:c,audit:a,custody:d.transport,
+    readRestrictedClock:()=>preflightPhase7PostScopedReader(d.scopedReader,d.scopedReaderRole,d.contract)});
+
    const seenGroups=new Set<string>();
    // Validate all reviews before any write. This avoids a missing review in
    // the middle silently turning a partial group denominator into success.
@@ -82,11 +88,6 @@ export function createPhase7SignedPostConsumer(d:Deps):Phase7PostConsumer{
     }
     pending.push({verified:v,anchor,wire,fragmentsSha256:hashPhase7DurableCandidate(fresh.fragments)});
    }
-   // A crash after the first group write must have an independently signed,
-   // exact original denominator receipt to reconcile without another GET.
-   // Also require the receipt for a zero-group/excluded-only result.
-   await requirePhase7RecoveryReceiptBeforeSettlement({env:d.env,scope:c,audit:a,custody:d.transport,
-    readRestrictedClock:()=>preflightPhase7PostScopedReader(d.scopedReader,d.scopedReaderRole,d.contract)});
    let verifiedGroupCount=0;
    for(const item of pending){
     // The earlier validation may precede many other group reviews. Check
