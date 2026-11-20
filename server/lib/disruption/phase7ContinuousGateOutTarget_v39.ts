@@ -273,6 +273,9 @@ export function buildPhase7ContinuousGateOutTargetV39(
      !UUID.test(packetId))throw new Error("PHASE7_CONTINUOUS_GATEOUT_REJECTED:packet-shape");
 
   const rowById=new Map(derivedPacket.rows.map(row=>[row.releaseRowId,row]));
+  if(rowById.size!==derivedPacket.rows.length)
+    throw new Error("PHASE7_CONTINUOUS_GATEOUT_REJECTED:duplicate-packet-row-id");
+  const expectedT6Ids=new Set(derivedPacket.rows.filter(row=>row.horizon==="T-6h").map(row=>row.releaseRowId));
   const seen=new Set<string>();
   const rows:Phase7ContinuousGateOutTargetPacketV39["rows"][number][]=[];
   const ephemeralReceipts:Phase7ContinuousGateOutEphemeralReceiptV39[]=[];
@@ -301,6 +304,10 @@ export function buildPhase7ContinuousGateOutTargetV39(
       longLivedRelease:false,
     }));
   }
+  // Every T-6 release row, including missing/censored/not-due, must be represented.
+  // This is packet-local denominator parity, not proof of acquisition completeness.
+  if(seen.size!==expectedT6Ids.size||[...expectedT6Ids].some(id=>!seen.has(id)))
+    throw new Error("PHASE7_CONTINUOUS_GATEOUT_REJECTED:t6-denominator-incomplete");
   const packet:Phase7ContinuousGateOutTargetPacketV39=Object.freeze({
     schema:"v39.phase7.continuous-gate-out-target-packet.v1",
     packetId,
