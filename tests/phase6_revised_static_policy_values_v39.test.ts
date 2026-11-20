@@ -84,3 +84,11 @@ it("passes the exact Nov22 to Monday calendar through the actual multi-day disab
  expect(c.changedParentDays).toBe(31);expect(c.firstOldServiceUtc).toBe("2026-11-22T00:00:00.000Z");expect(c.firstNewServiceUtc).toBe("2026-11-25T00:00:00.000Z");expect(c.phase6PaidGo).toBe(false);
  expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...ctx,now:new Date("2026-11-23T23:10:00.000Z")})).toThrow("FIRST_PROSPECTIVE_T24_WINDOW_ALREADY_DUE");
 },30000);
+
+import {validateP6MondayDateDecision} from "../review-tools/p6_nov23_prospective_revision_owner_v39";
+it("requires the real exact separately reviewed Monday scope, not the unsigned geometry receipt",()=>{
+ const h=(s:string)=>createHash("sha256").update(s).digest("hex"),expected={reviewDigest:h("scope"),dateReceiptSha256:h("date"),oldStageSha256:h("old"),sourceInventorySha256:h("source")};
+ const synthetic={schema:"v39.phase6.monday-prospective-date-independent-review.v1",...expected,reviewedBy:"CI synthetic reviewer only",reviewedAtUtc:"2026-11-20T10:00:00.000Z",independentProspectiveRevisionApproved:true,originalScientificDesignPreserved:true,oldStageRemainsArchivedEvidence:true,noBackfillApproved:true,sourceUseDeferredToPhase6Activation:true,phase6PaidGo:false};
+ const now=new Date("2026-11-20T10:01:00.000Z");expect(validateP6MondayDateDecision(synthetic,expected,now)).toBe(true);
+ for(const bad of [{...synthetic,independentProspectiveRevisionApproved:false},{...synthetic,reviewDigest:h("other")},{...synthetic,sourceInventorySha256:h("other")},{...synthetic,phase6PaidGo:true},{...synthetic,reviewedAtUtc:"2026-11-23T23:10:00.000Z"}])expect(()=>validateP6MondayDateDecision(bad,expected,now)).toThrow("EXACT_INDEPENDENT_DATE_DECISION_REQUIRED");
+});
