@@ -6,7 +6,7 @@ import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {replayP6CompactNov21Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {replayP6CompactNov21Review,replayP6CompactNov22Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -29,6 +29,50 @@ function actualPreview(){
  return x.result;
 }
 const actual=()=>actualPreview().calendarDraft;
+describe("postponed Nov20 SOURCE start compact calendar replay",()=>{
+ it("replays the already-reviewed second compact case without changing seed/treatment or granting release",()=>{
+  const x=replayP6CompactNov22Review();
+  const digest=(v:unknown)=>hash(Buffer.from(JSON.stringify(v)));
+  expect(x.revision.firstServiceUtc).toBe("2026-11-22T00:00:00.000Z");
+  expect(x.revision.firstSourceUtc).toBe("2026-11-20T23:45:00.000Z");
+  expect(x.revision.lastServiceEndUtc).toBe("2026-12-24T04:00:00.000Z");
+  expect(x.calendarDraft.calendarDays).toHaveLength(31);
+  expect(x.shapeEnvelope.days).toHaveLength(31);
+  expect(x.revision.originalTreatmentAssignmentSha256).toBe(x.shapeEnvelope.claimedTreatmentAssignmentSha256);
+  expect(x.revision.independentDateRevisionApproved).toBe(false);
+  expect(x.revision.phase6PaidGo).toBe(false);
+  const receipt=JSON.parse(readFileSync("data-collection/phase5/evidence/2026-11-17_compact_actual_shape_calendar_REVIEW_ONLY.json","utf8")).cases[1];
+  expect(receipt.sourceTemplates).toBe(6144);
+  expect(receipt.totalReserve).toBe(36740);
+  expect(receipt.peakDailyReserve).toBe(1280);
+  expect(receipt.strictAuthBeforeUtc).toBe("2026-11-20T23:10:00.000Z");
+  console.log("P5_COMPACT_NOV22_REVIEW_DIGESTS "+JSON.stringify({
+   draftSha256:digest(x.calendarDraft),rowsSha256:x.calendarDraft.proposedCalendarRowsSha256,
+   shapeSha256:x.shapeEnvelope.shapeEnvelopeSha256,dateMapSha256:x.shapeEnvelope.dateMapSha256
+  }));
+ });
+ it("pins the second compact case as an exact no-refill candidate without changing paid GO",()=>{
+  const x=replayP6CompactNov22Review();
+  const b=proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_NOV22");
+  expect(b.calendarDraftJsonSha256).toBe("ba6ce0f7ca6f63b154d2d5c3d8d85ccdcd2baf7f7b0a56f2cedc8d7feb136049");
+  expect(b.calendarRowsSha256).toBe("9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6");
+  expect(b.totalReservedUnits).toBe(36740);
+  expect(b.peakDailyUnits).toBe(1280);
+  expect(b.renewal.sourceBeforeReset).toBe(4352);
+  expect(b.renewal.sourceAfterReset).toBe(7936);
+  expect(b.renewal.conservativePriorCycleMax).toBe(13848);
+  expect(b.renewal.conservativeNextCycleMax).toBe(23988);
+  const review=prepareP6ActualReviewInput("e".repeat(40),0,"COMPACT_NOV22");
+  expect(review.externalCandidate.expectedCalendarRowsSha256).toBe(b.calendarRowsSha256);
+  expect(review.proposedSourceQueries).toBe(6144);
+  expect(review.proposedTotalReservedUnits).toBe(36740);
+  expect(review.proposedPeakDailyUnits).toBe(1280);
+  expect(review.calendarRevisionReview.firstSourceUtc).toBe("2026-11-20T23:45:00.000Z");
+  expect(review.calendarRevisionReview.independentDateRevisionApproved).toBe(false);
+  expect(review.phase6PaidGo).toBe(false);
+ });
+});
+
 describe("original actual first randomization and seven-category cap PROPOSAL",()=>{
  it("reproduces the expired-artifact-independent exact preview, no new seed",()=>{
   const x=actual();expect(x.calendarDays).toHaveLength(31);expect(x.futureOrdinaryAirportsSelected).toBe(0);
