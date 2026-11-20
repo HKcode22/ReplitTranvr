@@ -46,6 +46,8 @@ export function recomputeP7ExactSelectedFeatures(p:Readonly<P5Stage14SingleFligh
  return Object.freeze(Object.defineProperties(out,{privateSelectedFeatures:{value:Object.freeze(selected),enumerable:false},
   privateWeatherScope:{value:Object.freeze({flightInstanceId:p.flightInstanceId,originIcao:p.airportIcao,destinationIcao:destination,memberAvailableAtUtc:available,observedDbClockUtc:read.observedDbClockUtc}),enumerable:false}})) as typeof out&{readonly privateSelectedFeatures:readonly PreFeatureInput[];readonly privateWeatherScope:Readonly<{flightInstanceId:string;originIcao:string;destinationIcao:string|null;memberAvailableAtUtc:string;observedDbClockUtc:string}>};
 }
+const actualSourceReadbacks=new WeakSet<object>();
+export function requireP7ActualSourceReadback(x:object){if(!actualSourceReadbacks.has(x))hold("ACTUAL_SOURCE_READBACK_REQUIRED");}
 export async function readP7ExactSelectedFeatures(pool:P5EReadOnlyPgPool,p:Readonly<P5Stage14SingleFlightPrePermit>,externalContentUseReviewSha256:string){
  if(!p||!Object.hasOwn(offset,p.horizon)||!H.test(externalContentUseReviewSha256))hold("PERMIT");
  const cutoff=new Date(clock(p.selectedTNativeUtc)-offset[p.horizon]).toISOString();
@@ -54,5 +56,6 @@ export async function readP7ExactSelectedFeatures(pool:P5EReadOnlyPgPool,p:Reado
   expectedForecastCutoffUtc:cutoff,expectedOriginIcao:p.airportIcao,externalContentUseReviewSha256,
   permitSourceScope:{runDayIndex:p.runDayIndex,slot:p.slot,horizon:p.horizon,githubRunId:p.expectedGithubSourceRunId,releaseSha256:p.expectedReviewedReleaseSha256,providerContractSha256:p.expectedProviderContractSha256,earlyDrawSha256:p.expectedEarlyDrawSha256}});
  if(a.status!=="EXACT_SOURCE_COVERED_FEATURE_PACKET_DRAFT_NOT_SIGNED"||!a.privateReadback||Object.getOwnPropertyDescriptor(a,"privateReadback")?.enumerable!==false||a.providerCalls!==0||a.dbWrites!==0)hold("ACTUAL_SOURCE_READBACK");
- return recomputeP7ExactSelectedFeatures(p,a.bundle,a.privateReadback!,externalContentUseReviewSha256);
+ const out=recomputeP7ExactSelectedFeatures(p,a.bundle,a.privateReadback!,externalContentUseReviewSha256);
+ actualSourceReadbacks.add(out);return out;
 }

@@ -32,16 +32,16 @@ function publicKey(v:string|undefined){
  const b=Buffer.from(v,"base64");if(b.toString("base64")!==v||!b.toString("utf8").startsWith("-----BEGIN PUBLIC KEY-----"))hold("AUTHORITY_PUBLIC_KEY");
  return createPublicKey(b);
 }
-export function admitP7ExactSourcePreProducer(env:NodeJS.ProcessEnv){
+export function admitP7ExactSourcePreProducer(env:NodeJS.ProcessEnv,mode:"proof"|"lane"="proof"){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_RUN_ATTEMPT!=="1"||!C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
-  env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1"||env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||
+  (mode==="proof"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1")||env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||
   env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,
    env.P6_PRIVATE_PUBLISHER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P5_V39_PREPARE_DATABASE_URL,
    env.P5_V39_T24_WITNESS_DATABASE_URL,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,
    env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,
-   env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64,env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64].some(Boolean))hold("EXACT_NO_PROVIDER_ISSUER");
+   env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64,mode==="proof"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64:env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64].some(Boolean))hold("EXACT_NO_PROVIDER_ISSUER");
  const policy=parsePhase7ProtectedPrePolicy(env);
  const raw=env.P6_NONPAID_DAILY_POLICY_BASE64??"";
  if(raw.length>46668||!raw||!/^[A-Za-z0-9+/]+={0,2}$/.test(raw))hold("DAILY_POLICY");
