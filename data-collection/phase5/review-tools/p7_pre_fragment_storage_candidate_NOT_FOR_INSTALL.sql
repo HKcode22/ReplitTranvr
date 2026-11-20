@@ -101,11 +101,11 @@ BEGIN
  WHERE x.id=p_snapshot AND x.prediction_state='PRE_DEPARTURE'
  AND b.manifest_sha256=p_manifest AND b.query_digest=p_query
  AND b.rights_review_sha256=p_rights
- AND b.source_expires_at_utc=p_source_expiry;
+ AND date_trunc('milliseconds',b.source_expires_at_utc)=p_source_expiry;
  -- The tuple must have been inserted by this very transaction. A delayed
  -- replay of an old PRE row cannot become a newly approved durable fragment.
  IF NOT EXISTS(SELECT 1 FROM clean.flight_snapshots x WHERE x.id=p_snapshot
- AND x.xmin=pg_current_xact_id()::xid) OR p_issue<transaction_timestamp() OR p_issue<s.bound_at_utc OR p_issue>v_at
+ AND x.xmin=pg_current_xact_id()::xid) OR p_issue<date_trunc('milliseconds',transaction_timestamp()) OR p_issue<date_trunc('milliseconds',s.bound_at_utc) OR p_issue>v_at
  OR s.prediction_cutoff_utc<=v_at OR s.source_expires_at_utc<=v_at THEN
   RAISE EXCEPTION 'P7_PRE_NOT_SAME_LIVE_TRANSACTION'; END IF;
  PERFORM pg_advisory_xact_lock(hashtext('p7-pre-group'),hashtext(s.flight_instance_id));
@@ -139,7 +139,7 @@ BEGIN
  AND (f.cohort_bucket<>v_cohort OR f.split<>v_split OR f.contract_sha256<>p_contract
  OR f.profile_sha256<>p_profile OR f.research_expiry_utc<>p_research_expiry))
  THEN RAISE EXCEPTION 'P7_PRE_GROUP_PROFILE_OR_SPLIT_DRIFT'; END IF;
- v_expiry:=least(s.source_expires_at_utc,p_issue+make_interval(hours=>p_mapping_hours),pol.valid_until_utc,p_research_expiry);
+ v_expiry:=least(p_source_expiry,s.source_expires_at_utc,p_issue+make_interval(hours=>p_mapping_hours),pol.valid_until_utc,p_research_expiry);
  IF v_expiry<=v_at THEN RAISE EXCEPTION 'P7_PRE_LINK_EXPIRED'; END IF;
  INSERT INTO phase7_private.pre_fragment_v39(row_id,group_id,horizon,cohort_bucket,split,contract_sha256,profile_sha256,research_expiry_utc,packet_sha256,packet_bytes)
  VALUES(p_row,v_group,s.horizon,v_cohort,v_split,p_contract,p_profile,p_research_expiry,p_packet_sha,p_packet);
