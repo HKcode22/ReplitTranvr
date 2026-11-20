@@ -3,7 +3,7 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {Client} from "pg";
-import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
+import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,publishP7PreEvidenceBatchOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {readP6PrivateDeadlinePressure,P6_PRIVATE_DEADLINE_PRESSURE_SQL} from "../server/lib/disruption/phase6PrivateDeadlinePressure_v39";
 const h=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -107,6 +107,21 @@ active("real private custody signed-review transport",()=>{
    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.d,wire:f.dw})).resolves.toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
    expect((await readP7PrivateSignedReviews(reader,trust,[f.d])).get(f.d.scopeSha256)).toEqual(f.dw);
    expect((await readP7PrivateSignedReviews(reader,trust,[f.a])).get(f.a.scopeSha256)).toEqual(f.aw);
+   // Bound page of digest-only PRE evidence: one atomic insert and one
+   // independent readback. A bad signature or already-published selector
+   // cannot leave a partially committed page.
+   const batchSelectors=[1,2,3].map(n=>({...f.a,scopeSha256:h("batch-permit-"+n)}));
+   const items=batchSelectors.map(selector=>({selector,wire:wire({...f.prePayload,permitSha256:selector.scopeSha256},pre)}));
+   const notPresent=async()=>Number((await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=ANY($1::text[])",[batchSelectors.map(p7ReviewPath)])).rows[0].n);
+   await expect(publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items:[items[0],{...items[1],wire:wire({...f.prePayload,permitSha256:items[1].selector.scopeSha256},post)},items[2]]})).rejects.toThrow("SIGNATURE");
+   expect(await notPresent()).toBe(0);
+   await expect(publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items})).resolves.toMatchObject({status:"P7_PRE_BATCH_COMMITTED_INDEPENDENT_READBACK_NO_GO",committedCount:3,providerCalls:0});
+   expect(await notPresent()).toBe(3);
+   expect([...(await readP7PrivateSignedReviews(reader,trust,batchSelectors)).values()]).toEqual(items.map(x=>x.wire));
+   const unseen={selector:{...f.a,scopeSha256:h("unseen")},wire:wire({...f.prePayload,permitSha256:h("unseen")},pre)};
+   await expect(publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items:[unseen,items[0]]})).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
+   expect((await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(unseen.selector)])).rows[0].n).toBe(0);
+   await expect(publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items:[items[0],{selector:f.d,wire:f.dw}]})).rejects.toThrow("PRE_BATCH_SELECTOR");
    // Direct restricted INSERT must not smuggle source-shaped values into the
    // short operational kind even when bypassing the JS publisher completely.
    const badRecovery=wire({...f.recoveryPayload,originalAuditSha256:{flight:"synthetic-not-a-digest"}},post);

@@ -331,3 +331,83 @@ export function publishP7PreEvidenceWireFromProtectedEnv(env:NodeJS.ProcessEnv,p
  if(kind==="PRE_PROOF")verifyPhase7SignedPreFieldProof(env,p,policy.reviewSha256,policy.dispositions,wire);
  return publishP7WireFromProtectedEnv(env,kind==="PRE_PROOF"?preProofReviewSelector(p):preLaneReceiptSelector(p),wire,existing,"pre");
 }
+
+/** One bounded PRE proof page, not a new provider request or source archive.
+ * All signed metadata wires commit together; an ambiguous commit or failed
+ * independent readback is a HOLD for the whole page, never a retry. Recovery
+ * receipts/fences remain on the separate existing single-wire protocol. */
+export async function publishP7PreEvidenceBatchOnce(input:{client:DB;reader:DB;trust:P7ReviewTrust;items:readonly {selector:P7ReviewSelector;wire:unknown}[]}){
+ const {client:c,reader,trust:t,items}=input,e=validateTrust(t);
+ if(c===reader||e.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
+  Object.entries(e).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
+  [e.AERODATABOX_API_KEY,e.RAPIDAPI_KEY,e.AERODATABOX_WEBHOOK_SECRET,e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P5_V39_PRE_DATABASE_URL,e.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,e.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,e.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64].some(Boolean)||
+  !Array.isArray(items)||items.length<1||items.length>96)hold("PRE_BATCH_PUBLISHER_SCOPE");
+ const selectors=items.map(x=>x.selector),paths=selectors.map(p7ReviewPath);
+ if(!["PRE_PROOF","PRE_LANE_RECEIPT"].includes(selectors[0].kind)||
+  selectors.some(s=>s.kind!==selectors[0].kind||s.runDayIndex!==selectors[0].runDayIndex)||
+  new Set(paths).size!==paths.length||new Set(selectors.map(s=>s.scopeSha256)).size!==selectors.length)hold("PRE_BATCH_SELECTOR");
+ let tx=false,commitAttempted=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");tx=true;
+  await c.query("SET LOCAL statement_timeout='15000ms'");await c.query("SET LOCAL lock_timeout='2000ms'");
+  const now=await readP6DayEpochRestrictedPublisherClock(c,t.expectedPublisherSessionLogin);await checkInstalled(c);
+  const verified=items.map(x=>verifyP7StoredWire(t,x.selector,x.wire,now));
+  const q=await c.query("SELECT count(*)::int AS n FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[paths]);
+  if(q.rowCount!==1||q.rows[0]?.n!==0)hold("ALREADY_PRESENT_READ_ONLY_RECONCILE");
+  const args:unknown[]=[];
+  const rows=verified.map((w,i)=>{
+   const j=args.length,ss=selectors[i];args.push(w.path,w.storageKind,ss.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes);
+   return "($"+(j+1)+",$"+(j+2)+",$"+(j+3)+",1,$"+(j+4)+",$"+(j+5)+",$"+(j+6)+",$"+(j+7)+",$"+(j+8)+",$"+(j+9)+",$"+(j+10)+",$"+(j+11)+",NULL)";
+  });
+  const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES "+rows.join(","),args);
+  if(z.rowCount!==items.length)hold("PRE_BATCH_INSERT_COUNT");
+  const end=await readP6DayEpochRestrictedPublisherClock(c,t.expectedPublisherSessionLogin);
+  for(const x of items)verifyP7StoredWire(t,x.selector,x.wire,end);
+  commitAttempted=true;await c.query("COMMIT");tx=false;
+ }catch(err){if(commitAttempted)hold("UNKNOWN_COMMIT_READ_ONLY_RECONCILE");throw err}
+ finally{if(tx)await c.query("ROLLBACK").catch(()=>{});}
+ const recovered=await readP7PrivateSignedReviews(reader,t,selectors);
+ if(recovered.size!==items.length||items.some(x=>JSON.stringify(recovered.get(x.selector.scopeSha256))!==JSON.stringify(x.wire)))hold("PRE_BATCH_INDEPENDENT_READBACK_DRIFT");
+ return {status:"P7_PRE_BATCH_COMMITTED_INDEPENDENT_READBACK_NO_GO" as const,committedCount:items.length,providerCalls:0 as const,phase6PaidGo:false as const};
+}
+function preBatchTrust(env:NodeJS.ProcessEnv,kind:"PRE_LANE_RECEIPT"|"PRE_PROOF"){
+ const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
+ validateTrust(trust);
+ if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
+  env.GITHUB_RUN_ATTEMPT!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+  env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
+  (kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1":true)||
+  Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
+  [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,env.P5_V39_PREPARE_DATABASE_URL,env.P5_V39_T24_WITNESS_DATABASE_URL,env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64].some(Boolean))hold("PRE_BATCH_PROTECTED_SCOPE");
+ return trust;
+}
+/** Publication process receives only approved signer output and exact permit
+ * selectors. Neither reviewer private key nor the actual SOURCE password
+ * need be available; endpoint-only URL suffices for continuity check. */
+export async function publishP7PreEvidenceBatchFromProtectedEnv(env:NodeJS.ProcessEnv,permits:readonly P5Stage14SingleFlightPrePermit[],kind:"PRE_LANE_RECEIPT"|"PRE_PROOF",wires:ReadonlyMap<string,P7Wire>){
+ const trust=preBatchTrust(env,kind),policy=parsePhase7ProtectedPrePolicy(env);
+ if(!Array.isArray(permits)||permits.length<1||permits.length>96||!(wires instanceof Map)||wires.size!==permits.length)hold("PRE_BATCH_PERMITS");
+ const items=permits.map(p=>{
+  if(p.manifestSha256!==env.V39_P5_MANIFEST_SHA256||p.expectedReviewedSourceRightsSha256!==env.V39_P5_RIGHTS_SHA256)hold("PRE_PUBLISH_SCOPE");
+  const selector=kind==="PRE_PROOF"?preProofReviewSelector(p):preLaneReceiptSelector(p),wire=wires.get(selector.scopeSha256);
+  if(!wire)hold("PRE_BATCH_EXACT_WIRE");
+  if(kind==="PRE_PROOF")verifyPhase7SignedPreFieldProof(env,p,policy.reviewSha256,policy.dispositions,wire);
+  return {selector,wire};
+ });
+ const source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");
+ function url(name:string,login:string){
+  const u=new URL(env[name]??"");
+  if(!sameP6NeonDatabaseEndpoint(source,u)||decodeURIComponent(u.username)!==login||!u.password||u.username===source.username||
+   u.searchParams.getAll("sslmode").length!==1||!["require","verify-full"].includes(u.searchParams.get("sslmode")??"")||
+   [...u.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+   (u.searchParams.has("channel_binding")&&(u.searchParams.getAll("channel_binding").length!==1||u.searchParams.get("channel_binding")!=="require")))hold("RESTRICTED_PUBLISHER_TLS");
+  u.searchParams.set("sslmode","verify-full");return u.toString();
+ }
+ const reader=new Client({connectionString:url("P6_PRIVATE_READER_DATABASE_URL",trust.expectedReaderSessionLogin),connectionTimeoutMillis:8000,query_timeout:20000,application_name:"p7_batch_wire_readback"});
+ const publisher=new Client({connectionString:url("P6_PRIVATE_PUBLISHER_DATABASE_URL",trust.expectedPublisherSessionLogin),connectionTimeoutMillis:8000,query_timeout:20000,application_name:"p7_batch_wire_publisher"});
+ try{
+  await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+  await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+  return await publishP7PreEvidenceBatchOnce({client:publisher,reader,trust,items});
+ }finally{await Promise.allSettled([reader.end(),publisher.end()])}
+}
