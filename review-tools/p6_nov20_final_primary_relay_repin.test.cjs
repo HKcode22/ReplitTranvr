@@ -154,3 +154,18 @@ test("variable equality checks exact keyset and values",()=>{
 });
 
 test("Nov20 executable base and old scheduler pin are intentionally distinct",()=>{assert.equal(FINAL_EXECUTABLE_BASE,"0a7b1a28f243de76d4c83026d15f585265ef6f7b");assert.equal(INITIAL_SCHEDULER_PIN,"70580b3749544dfcbeff39da181b2aa42b1b4476");assert.notEqual(FINAL_EXECUTABLE_BASE,INITIAL_SCHEDULER_PIN);});
+
+test("maintenance is current executable base only and later approved evidence descendant can repin it once",()=>{
+ const now=Date.parse("2026-11-20T04:10:00.000Z"),head=FINAL_EXECUTABLE_BASE;
+ const p={P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_EXPIRY_APPROVAL:"APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",P6_PRIVATE_EPOCH_EXPIRY_MODE:"COMMISSION_VERIFY_ONLY",P5_RETENTION_READONLY_MONITOR_ENABLED:"true",P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256:"a".repeat(64),P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:INITIAL_SCHEDULER_PIN};
+ const rr={TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_VERIFY",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"0",TRAVNR_CRON_RELAY_SHA:RELAY,TRAVNR_TARGET_FORWARD_ENV_READY:"1",TRAVNR_RELAY_ROLLING_SINCE_UTC:new Date(now-3*3600000).toISOString(),TRAVNR_RELAY_PRIMARY_SINCE_UTC:new Date(now-3600000).toISOString(),TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID:"123",TRAVNR_APPROVED_TARGET_MAIN_SHA:INITIAL_SCHEDULER_PIN};
+ assert.equal(classify(p,rr,head,null,now,true),"TRANSITION");
+ assert.throws(()=>classify(p,rr,head,null,now),/EXACT_FINAL_MAIN/);
+ assert.throws(()=>classify(p,rr,"b".repeat(40),null,now,true),/EXACT_FINAL_MAIN/);
+ assert.throws(()=>classify({...p,P6_PRIVATE_EPOCH_EXPIRY_MODE:"APPLY_DUE_ONLY"},rr,head,null,now,true),/EXISTING_PRIMARY_CONFIG/);
+ assert.throws(()=>classify({...p,P6_PRIVATE_EPOCH_EXPIRY_APPROVAL:"unexpected"},rr,head,null,now,true),/EXISTING_PRIMARY_CONFIG/);
+ const doneP={...p,P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:head},doneR={...rr,TRAVNR_APPROVED_TARGET_MAIN_SHA:head};
+ assert.throws(()=>classify(doneP,doneR,head,null,now,true),/NONINITIAL_PIN_STATE_INSPECT_NO_REPLAY/);
+ assert.equal(classify(doneP,doneR,"b".repeat(40),null,now),"TRANSITION");
+ assert.throws(()=>classify(doneP,rr,"b".repeat(40),null,now),/NONINITIAL_PIN_STATE_INSPECT_NO_REPLAY/);
+});
