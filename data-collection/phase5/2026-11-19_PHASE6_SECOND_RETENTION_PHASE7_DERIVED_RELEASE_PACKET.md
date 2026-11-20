@@ -7,17 +7,20 @@ provider reply.
 
 ## Decision
 
-Travnr keeps two deliberately different products:
+Travnr keeps two deliberately different representations of the same
+study pipeline:
 
-| Product | What it does | Retention rule |
+| Representation | What it does | Retention rule |
 | --- | --- | --- |
-| Existing source-custody packet | Collects the operational evidence needed to construct PRE/POST observations, reconcile failures, and enforce source expiry | Existing FIDS/raw/source-linked expiry controls remain authoritative. It may contain provider Contents and must not be copied into a long-lived research archive by renaming or hashing fields. |
-| New Phase 7 derived-release packet | Carries only approved bucketed features/labels, horizon, grouped split, missingness, censoring, and quality state for model training/evaluation | A separate research lifecycle applies only after field-level terms/Derived-Work review. It contains no source-to-row mapping and does not change source TTLs. |
+| Existing Phase 6 operational/source-custody packet | Holds the full study fields needed to identify operating legs, join airports/carriers/routes, anchor exact PRE cutoffs, connect PRE→POST/webhook/AIRBORNE, prevent duplicate GETs, and audit budgets, retries, expiry, censoring, and missingness | It may contain provider Contents and source-linked fields while the applicable account/source/backup policy permits them. Existing expiry controls remain authoritative until a documented rights decision changes them. |
+| New Phase 7 derived-release packet | Downstream model/research representation produced from the operational packet after the full feature/label view and parity checks exist | It carries only fields whose exact long-term classification is approved. The strict writer rejects source-shaped fields by design; this does not delete them from the operational packet. |
 
-“Second packet” means a second, narrower release representation—not a second
-collector, second database, duplicated provider archive, or bypass around the
-existing expiry worker. The original source packet stays intact and is not
-reclassified by this change.
+“Second packet” means a second representation and retention boundary. It is
+not a second collector, an alternate database, a duplicated permanent provider
+archive, or a bypass around the expiry worker. The full operational fields
+remain necessary for Phase 6 and are preserved in the source-bound lane. The
+correction and field-classification table are recorded in
+`2026-11-19_PHASE6_FIELD_PRESERVATION_AND_ACCOUNT_EVIDENCE_CORRECTION.md`.
 
 ## Why the provider reply is not a project hold
 
@@ -28,14 +31,20 @@ packet was reviewed against the pre-merge baseline
 `main` at `3ecefd427433d48e73de86caeff8e3a6d313cd90`; the source authorization
 and paid collection remain disabled. No reply is treated as no approval.
 
-The provider's current public materials say that seven days is the default
-caching limit, that some named plans have extended caching, and that a genuine
-Derived Work may be treated differently only when it is not still “Contents.”
-They also distinguish lightly changed/reformatted provider data from a true
-derived work. The account-specific RapidAPI plan, any grandfathered exception,
-the permitted research purpose, backup treatment, and exact field-level
-classification remain unverified in this project. Therefore this packet is a
-safe engineering boundary, not a legal conclusion:
+The repository already contains the account/quota evidence: legacy
+RapidAPI Team Ultra/owner-attested $32 renewal, an observed 60,000-unit
+entitlement, a separate 50,000-unit project ceiling, 1,830 Alert credits, and
+the November 18 timestamped account readback. That account-identification work
+is complete and must not be repeated.
+
+The remaining question is narrower: whether the exact account/purpose permits
+the full linked per-flight Contents and its backup/PITR/replica/log surfaces to
+remain for the entire study lifecycle. The public materials say that seven
+days is the default caching limit, that some named plans have extended
+caching, and that a genuine Derived Work may be treated differently only when
+it is not still “Contents.” Therefore this packet is an engineering boundary
+and field-classification record, not a claim that quota alone authorizes a
+31-day linked archive:
 
 - [AeroDataBox terms update and transition](https://aerodatabox.com/2026-09-terms-update)
 - [AeroDataBox pricing and caching/Derived Work guidance](https://aerodatabox.com/pricing)
@@ -63,18 +72,25 @@ The packet also binds a versioned feature dictionary and separate terms and
 Derived-Work review evidence hashes. Those hashes provide audit references;
 they do not grant a license, prove a transformation, or enable collection.
 
-## What it rejects and never retains
+## What the derived-release validator rejects
 
-The validator rejects extra keys and source-shaped names. A packet row cannot
-contain a flight number, callsign, tail/registration, airport, route, exact
-timestamp/date/schedule, provider/query/response hash, raw payload, or source
-identity. A UUID v4 row ID is only a fresh packet-local identifier; it is not a
-claim that a value is anonymous or non-reconstructable.
+The validator rejects extra keys and source-shaped names **in the long-lived
+Phase 7 derived-release packet**. That means a derived row cannot contain a
+flight number, callsign, tail/registration, airport, route, exact timestamp/
+date/schedule, provider/query/response hash, raw payload, or source identity.
 
-Temporary source-to-row linkage, if a future reviewed writer ever needs it,
-must remain in the existing short-lived source-custody layer and expire no
-later than the strict source boundary. It is never placed in this packet and
-cannot be used to join a retained row back to an expired provider record.
+This is not a Phase 6 collection prohibition. The private operational packet
+must retain those fields while they are needed for identity resolution,
+cutoff-safe joins, PRE/POST linkage, duplicate prevention, and target
+construction, subject to the applicable source and backup policy. A UUID v4
+row ID is only a fresh packet-local identifier; it is not a claim that a value
+is anonymous or non-reconstructable.
+
+Temporary source-to-row linkage remains in the operational/source-custody
+layer. Before it expires, the pipeline must either produce a rights-approved
+long-term representation or record that the corresponding field is
+`LONG_TERM_RIGHTS_REQUIRED`; it must not silently delete an ML-critical field
+and claim the original study was preserved.
 
 ## Relationship to the existing retention matrix
 
@@ -86,13 +102,25 @@ they are not automatically Derived Works or approved training inputs. The new
 packet is the only surface that may be considered for long-lived model use,
 and only after the exact field contract and independent terms review pass.
 
-The packet therefore protects scientific continuity without creating a false
-choice between “keep raw provider rows forever” and “lose every model-useful
-signal.” If a future rights review permits the source-linked corpus, the
-existing source packet may support a reviewed transform. If it does not, the
-source packet still expires under its current rules while independently
-approved transformed outputs, external supplemental sources, aggregates, and
-model/calibration artifacts can follow their own lawful lifecycle.
+The packet therefore protects scientific continuity without changing
+the original study fields. Flight identifiers, airports, carriers, routes,
+legs, and exact timestamps remain in the operational lane because the study
+cannot construct its PRE/POST chain without them. They are not automatically
+removed from Phase 6.
+
+Before any of those fields expire, the pipeline must run the full-to-derived
+parity check: coverage, label counts, censoring, missingness, calibration,
+discrimination, and airport/carrier/route performance. If the derived packet
+materially changes the study result, the field is held as
+`LONG_TERM_RIGHTS_REQUIRED`; the project must obtain the needed retention scope
+or explicitly change the estimand. It must not silently substitute a coarse
+bucket and call it equivalent.
+
+If the rights review permits the source-linked corpus, the operational packet
+can support the complete reviewed training dataset. If it does not, only the
+lawfully approved transformed outputs, external supplemental sources,
+aggregates, and model/calibration artifacts may continue after source expiry,
+and the resulting scientific limitation must be recorded.
 
 ## Failure disposition carried forward
 

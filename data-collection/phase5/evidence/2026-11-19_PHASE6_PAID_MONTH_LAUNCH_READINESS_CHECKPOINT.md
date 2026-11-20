@@ -40,9 +40,15 @@ source-to-row linkage. Existing source expiry remains authoritative.
 
 1. **Source-enable approval ledger:** 28 evidence records and zero approvals.
    This is a deliberate HOLD, not a software crash.
-2. **Provider response:** no affirmative account-specific retention/source-use
-   reply is recorded. The project continues all nonpaid work; no reply is not
-   converted into permission.
+2. **Account/rights distinction:** the account identity and observed
+   quota are already evidenced: legacy RapidAPI Team Ultra, owner-attested
+   $32 renewal, observed 60,000 units, separate 50,000-unit project ceiling,
+   1,830 Alert credits, and the November 18 readback. Do not repeat account
+   discovery. The remaining review is narrower: whether the exact account,
+   purpose, and backup/PITR/replica/log surfaces permit retaining the full
+   linked per-flight operational corpus for the study lifecycle. No provider
+   reply is required for engineering, but silence is not converted into a
+   retention grant.
 3. **Native GitHub schedule:** the latest coverage review found only one of five
    eligible slots successful, with severe delay/missing slots. Native cron alone
    is not sufficient for the month run.
@@ -55,18 +61,20 @@ source-to-row linkage. Existing source expiry remains authoritative.
 6. **Historical first CI failure on #890:** strict TypeScript null/numeric checks
    failed, were corrected, and all PR and post-merge checks subsequently passed.
    It is closed and is not a current launch failure.
-7. **Phase 7 transformation:** the fail-closed packet writer is implemented,
-   but there is no approved field-by-field transformation dictionary and no live
-   source adapter. Launching without that reviewed adapter would risk source
-   expiry before model-safe Phase 7 inputs are preserved.
+7. **Phase 7 transformation:** the fail-closed Packet B writer is
+   implemented, but the full Phase 6 operational fields remain required in
+   Packet A. The concrete Packet B dictionary is proposed and the full-to-
+   derived parity check still must be run before any ML-critical operational
+   field expires.
 
 ## Exact remaining activation chain
 
 These are sequential gates, not unfinished Phase 5 work:
 
-1. Commit current account-specific source-use/retention evidence and an
-   independent field-level decision covering the actual PRE/POST use and the
-   exact derived-release representation.
+1. Bind the already-recorded account/quota evidence to the exact
+   Phase 6 operational field inventory and complete the separate field-level
+   decision for the full linked corpus, purpose, source TTL, and backup/PITR/
+   replica/log surfaces. This is not another account-identification check.
 2. Freeze the exact feature/label dictionary, source class, transformation,
    bucket boundaries, reconstruction-risk rationale, and retention lifecycle.
    Implement and test the source adapter against the writer's already-approved
@@ -130,6 +138,12 @@ The worksheet records the exact current state and the required evidence for:
 - daily Day 1–Day 31 fail-closed continuation checks.
 
 It is an unarmed worksheet. It does not add an approval, enable a source, arm a process, dispatch a worker, or create a provider call. The current decision remains `PAID_PHASE6_GO=false`, `SOURCE_ENABLE=false`, `PROCESS_ARMED=false`, and `APPROVAL_LEDGER_APPROVALS=0`.
+
+## Field-preservation correction added
+
+The prior wording about “excluded” fields was too broad. PR work on the correction branch records that flight/service identifiers, operating-leg identity, origin/destination airports, operating/marketing carrier, route/segment links, exact schedule/observation/event timestamps, source bindings, PRE/POST links, and Amendment E evidence are required in the private Phase 6 operational/source-custody lane.
+
+Those fields are not removed from Phase 6 and are not rejected by the operational study tables. The strict rejection applies only to the long-lived Phase 7 derived-release packet. The repository already contains the account/quota evidence; the remaining review concerns field-level long-term retention, purpose, and backup/PITR/replica/log treatment. Full-to-derived parity must run before any operational field expires.
 
 ## Handoff
 

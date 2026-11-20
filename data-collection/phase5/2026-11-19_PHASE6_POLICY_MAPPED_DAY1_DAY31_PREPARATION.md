@@ -29,7 +29,7 @@ No paid provider call, source enable, scheduler arm, or Day 1 collection is acti
 | **B. Phase 7 derived release** | Model-ready representation that preserves predictive signal without source identity, exact time, raw response, or record linkage | Only after field-level review confirms non-reconstructability and permitted use | Yes, narrowly | Reviewed transformation profile with approval evidence |
 | **C. Model/control artifacts** | Model parameters, aggregate metrics, calibration summaries, parity results, deletion receipts, and release hashes | Retain only what is not a provider record and cannot reconstruct one | Yes, with no raw rows | Offline QA and provenance review |
 
-The existing source-custody package is not replaced or copied. The second packet is a separate representation produced from an approved transformation boundary. Source-shaped records stay in Lane A and are not silently promoted into Lane B.
+The existing source-custody package is not replaced or copied. The Phase 6 operational packet remains the full-fidelity study lane, including the identities and timestamps required for PRE/POST linkage. The second packet is a separate representation produced from a reviewed transformation boundary. Source-shaped records stay in Lane A unless an explicit field-level decision permits a field to continue in Lane B.
 
 ## 3. Day 0 through Day 31 operating shape
 
@@ -107,19 +107,27 @@ This is the **engineering dictionary** for review. It is intentionally marked `P
 
 Exact bin boundaries and category mappings are part of the reviewable transformation profile. The values above are concrete engineering candidates so the implementation and QA can be built now; they are not a claim that AeroDataBox has approved them.
 
-### 4.3 Explicitly excluded from the long-lived derived packet
+### 4.3 Fields that are required operationally but not automatically long-term
 
-The following remain source custody or control-plane data and must not be copied into the Phase 7 release packet:
+The following fields are **required in the private Phase 6 operational/source-custody packet** and are not being removed from the study:
 
-- origin, destination, carrier, tail, flight number, flight instance, or other source identifiers;
-- exact scheduled, revised, observation, request, or gate-out timestamps;
+- origin, destination, operating carrier, marketing carrier, tail/callsign where needed for identity;
+- flight/service and operating-leg identifiers;
+- route, segment, codeshare, and source-to-population relationships;
+- exact scheduled, revised, observation, request, gate-out, airborne, arrival, and webhook timestamps;
+- source query, physical-attempt, original-response, normalized-population, PRE, POST, and outcome bindings.
+
+They are separated from the Phase 7 derived-release packet because a long-lived row containing these values may remain a provider Contents record or permit reconstruction of a specific record. That is a classification question, not a statement that the study does not need them.
+
+The following are excluded from the long-lived derived packet unless separately approved:
+
 - raw or complete provider response bodies;
 - provider request URLs, query parameters, credentials, account identifiers, or rate-limit state;
-- source response IDs, source row keys, exact source hashes, or direct source-to-output linkage;
+- direct source-to-output linkage and source-shaped response metadata;
 - a normalized row that merely reformats or renames one provider record;
 - any field or combination that lets a recipient identify, reconstruct, or determine the value of one provider Contents record.
 
-A source-bound field may still be used in the short-lived feature-building lane when the account-specific permission allows it. If it is necessary for model performance, the project must either (a) keep it only within the permitted source-custody window, (b) replace it with a reviewed non-reconstructive transformation, or (c) obtain explicit permission for the longer retention. The second packet cannot conceal that decision.
+Before operational fields expire, the pipeline must run a full-to-derived parity check. If removing an airport, carrier, flight, route, leg, or exact-time field materially changes the model study, mark that field `LONG_TERM_RIGHTS_REQUIRED` and do not silently claim the derived packet is equivalent.
 
 ## 5. Model-preservation safeguards
 
@@ -152,7 +160,7 @@ The repository should move through these gates in order:
 10. **Days 2–31:** continue only while the daily rights, budget, schema, quality, and deletion gates pass.
 11. **Closeout:** stop, delete/expire source custody, seal derived/control artifacts, and retain the final audit evidence.
 
-The current implementation is deliberately able to complete steps 1, 5-preparation, 6-preparation, and 7 offline without a provider reply. Steps 2–4 and 8–11 require real account/runtime evidence and must not be represented as complete early.
+The current implementation has already recorded the account identity/quota evidence and can complete the field-classification, source-readback preparation, relay preparation, and zero-provider steps without a provider reply. The remaining rights question is the long-term treatment of the linked operational fields and backup/PITR surfaces, not account discovery. Steps requiring live source/runtime authorization and the separate paid GO must not be represented as complete early.
 
 ## 7. Published-policy mapping used for this preparation
 
