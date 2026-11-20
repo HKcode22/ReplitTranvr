@@ -13,6 +13,7 @@ import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
 import type {VerifiedAuthFile} from "./v39_paid_guard_v39";
 import {verifyP6SourceEnableAuthFile,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE,P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS} from "./v39_phase6_source_enable_approval_ledger_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge} from "./v39_phase6_revised_stage_executable_bridge_v39";
 import {admitP6InertOwnerReadback} from "./v39_phase6_inert_release_stage_manual_v39.mjs";
 import {compileP5V0093CostOnlySevenRestReview} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
@@ -366,7 +367,30 @@ async function main(){
  if(!ancestor){
   try{execFileSync("git",["merge-base","--is-ancestor",stageCode,head],{stdio:["ignore","ignore","ignore"],timeout:15000});ancestor=true;}catch{}
  }
- if(stageCode===POST_STAGE_REVIEWED_BRIDGE_STAGE&&head!==stageCode){
+ if(stageCode===P6_NOV22_STAGE_CODE&&head!==stageCode){
+  // The Nov22 stage is already independently installed. Permit only an
+  // actual operational release review whose bytes are pinned by the
+  // verified SOURCE AUTH ledger, with an exact non-evidence blob list.
+  // No new approval is manufactured, no old manifest or stage rewritten.
+  const exactAuth=verifyP6SourceEnableAuthFile(authPath,head);
+  if(exactAuth.verdict.verified!==true||exactAuth.artifactHash!==authSha)
+   hold("EXACT_APPROVED_EXISTING_LEDGER_AUTH_REQUIRED");
+  const raw=execFileSync("git",["show",head+":"+P6_NOV22_BRIDGE_REVIEW_PATH],{
+   stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:200000});
+  let reviewedCommit:string;
+  try{reviewedCommit=JSON.parse(raw.toString("utf8")).reviewedExecutableCommit;}catch{hold("EXECUTABLE_BRIDGE_REVIEW_JSON");}
+  if(!CODE.test(reviewedCommit!))hold("EXECUTABLE_BRIDGE_REVIEW_COMMIT");
+  let reviewedAncestor=false;
+  try{execFileSync("git",["merge-base","--is-ancestor",stageCode,reviewedCommit!],{stdio:["ignore","ignore","ignore"],timeout:15000});
+   execFileSync("git",["merge-base","--is-ancestor",reviewedCommit!,head],{stdio:["ignore","ignore","ignore"],timeout:15000});reviewedAncestor=true;}catch{}
+  const paths=(end:string)=>cmd("git",["diff","--no-renames","--name-only",stageCode,end]).split("\n").filter(Boolean);
+  verifyP6RevisedExecutableBridge({stageCode,stageSha,costSha,currentHead:head,reviewBytes:raw,
+   expectedOperationalEvidenceSha256:(exactAuth.record as any).releaseActivation.operationalReleaseEvidenceSha256,
+   now:new Date(),stageIsAncestor:ancestor,reviewedCommitIsAncestor:reviewedAncestor,
+   reviewedDiff:paths(reviewedCommit!),currentDiff:paths(head),
+   readReviewedBlob:p=>cmd("git",["rev-parse",reviewedCommit!+":"+p]),
+   readCurrentBlob:p=>cmd("git",["rev-parse",head+":"+p])});
+ }else if(stageCode===POST_STAGE_REVIEWED_BRIDGE_STAGE&&head!==stageCode){
   const changed=cmd("git",["diff","--no-renames","--name-only",stageCode,head]).split("\n").filter(Boolean);
   const currentBridgeBlobs=Object.fromEntries(Object.keys(P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS).map(p=>
    [p,cmd("git",["rev-parse",head+":"+p])]));
