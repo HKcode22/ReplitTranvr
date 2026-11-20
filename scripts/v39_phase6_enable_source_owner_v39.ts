@@ -34,20 +34,23 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="f40a14fbc8a6c371e8f53c2ae1e8ed50ab96f462735a15838dbf13fe75dc5266";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="7bd4da0c2b9b6c8fcf8dccca455a1946f5625cea894ab874d06ff87ccdb21c1c";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"b5f4795874bafbd67a53cd6b008b9d78c00e3276",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"630a1a79b31b22b422248ce028e7c0cb49020914",
  "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011",
- "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"7c01a7f4a67ff72888f63b7dce23621092af4c68",
+ "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"4c2e80bdc564e919a8c7e7ea9faede18d0421a7a",
  "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
  "tests/phase6_derived_training_release_contract_v39.test.ts":"834b53e5e061d3caf924b916e059f7fd3afb7d26",
  "tests/phase6_derived_training_release_packet_v39.test.ts":"2721708b73e719a58bf4667b37e3e60a65c10ad9",
- "data-collection/phase5/2026-11-19_PHASE6_EPHEMERAL_SOURCE_AND_PHASE7_MODEL_RELEASE_PROFILE_DRAFT.md":"b2a47de5570158e67edd01c64c034fc1c0111fee",
- "data-collection/phase5/2026-11-19_PHASE6_SECOND_RETENTION_PHASE7_DERIVED_RELEASE_PACKET.md":"c0d8e2230aa31705e0c942b4402043d021f73972",
+ "data-collection/phase5/2026-11-19_PHASE6_EPHEMERAL_SOURCE_AND_PHASE7_MODEL_RELEASE_PROFILE_DRAFT.md":"aad0485431a95147662d8d0ee2b755e264a0b1d8",
+ "data-collection/phase5/2026-11-19_PHASE6_SECOND_RETENTION_PHASE7_DERIVED_RELEASE_PACKET.md":"01fa2c56ff00976dcbb2274c5aee09366655c87f",
+ "data-collection/phase5/2026-11-19_PHASE6_FIELD_PRESERVATION_AND_ACCOUNT_EVIDENCE_CORRECTION.md":"63e694a4dab410e6df965faa2105a7044f4c2400",
+ "data-collection/phase5/2026-11-19_PHASE6_POLICY_MAPPED_DAY1_DAY31_PREPARATION.md":"9ae7c6eaad5340fb632f59487d468b0949c07b45",
+ "data-collection/phase5/README.md":"c77975b5085745506303233226dda09b3be06381",
  "server/lib/disruption/phase7DerivedReleaseWriter_v39.ts":"3cb110701d01c2ca733509c373b57dcb9ffb0071",
  "tests/phase7_derived_release_writer_v39.test.ts":"8388385f85cb90311daf218d2d0c21155fc7f458",
- "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"287171f485dd0435f39dbfd59c66771a6e9e1e48",
+ "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts":"18ddf2f5ae277a671c0104ccf8fe4bdf4d8e5055",
  "tests/phase7_reviewed_source_transformation_v39.test.ts":"1382be1bcc0f70a5fe45c20921f70840118dd574"
 });
 const POST_STAGE_REVIEWED_BRIDGE_SCRIPT="scripts/v39_phase6_enable_source_owner_v39.ts";
