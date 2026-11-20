@@ -227,12 +227,16 @@ async function inspectExactStagedRows(pool,p,c,excludedActors,calendarOnly){
     providerCalls:0,databaseWrites:0,phase5ScientificFreeze:false,phase6PaidGo:false
    };
   }
+  // A prospective disabled-stage revision preserves the previous immutable
+  // V0093 release row under its old manifest. Always read the exact manifest
+  // being verified instead of assuming the audit table has only one row.
   const rel=await one(
    "SELECT manifest_sha256,budget_release_mode,"+
    "reviewed_source_request_grid_sha256,reviewed_cost_envelope_sha256,"+
    "reviewed_provider_range_sha256,verified_provider_max_range_minutes,"+
    "reviewed_category_budget_sha256 "+
-   "FROM clean.phase5_fids_seven_rest_release_v39"
+   "FROM clean.phase5_fids_seven_rest_release_v39 WHERE manifest_sha256=$1",
+   [c.manifestSha256]
   );
   if(rel.manifest_sha256!==c.manifestSha256||
      rel.budget_release_mode!=="COST_UPPER_BOUND"||
