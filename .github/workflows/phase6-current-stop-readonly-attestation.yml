@@ -6,6 +6,9 @@ on:
       - review/phase6-current-stop-attestation-20261119
     paths:
       - '.github/workflows/phase6-current-stop-readonly-attestation.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/phase6-current-stop-readonly-attestation.yml'
 
 permissions:
   contents: read
