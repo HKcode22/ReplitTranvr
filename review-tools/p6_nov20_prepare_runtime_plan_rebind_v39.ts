@@ -5,7 +5,7 @@ import {execFileSync} from "node:child_process";
 import {lstatSync,readFileSync,realpathSync,mkdirSync,writeFileSync} from "node:fs";
 import {resolve,dirname,join,relative,isAbsolute} from "node:path";
 import {fileURLToPath} from "node:url";
-import {compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {compileP6ActualCandidateExport,replayP6CompactNov21Review,replayP6CompactNov22Review} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 const BASE="0a7b1a28f243de76d4c83026d15f585265ef6f7b";
 const SHA={
  stage:"6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc",
@@ -36,7 +36,25 @@ export function verifyDayPlanGeometry(old:any,next:any,day:number){
   need(H.test(clone[section]?.[key]??"")&&H.test(next[section]?.[key]??""),"REVIEW_EVIDENCE_DIGEST");
   clone[section][key]=next[section][key];
  }
- need(JSON.stringify(clone)===JSON.stringify(next),"UNAPPROVED_PLAN_GEOMETRY_DRIFT");
+ // Ordinary-day plans embed the ENTIRE 31-day envelope, not just their
+ // own day's geometry. Changing Day 1 invalidates all those embedded
+ // copies and their digest, including otherwise unchanged ordinary days.
+ // Verify each against the existing independently replayed exact variants;
+ // do not accept arbitrary replacements or omit the nested envelope.
+ if(old.pairedIcaos===null){
+  const prior=replayP6CompactNov21Review().shapeEnvelope;
+  const revised=replayP6CompactNov22Review().shapeEnvelope;
+  const expected=(e:typeof prior)=>({envelope:e,independentlyReviewedShapeEnvelopeSha256:e.shapeEnvelopeSha256});
+  need(JSON.stringify(old.reviewedOrdinaryDayEnvelope)===JSON.stringify(expected(prior)),"OLD_ORDINARY_ENVELOPE_DRIFT");
+  need(JSON.stringify(next.reviewedOrdinaryDayEnvelope)===JSON.stringify(expected(revised)),"NEW_ORDINARY_ENVELOPE_DRIFT");
+  clone.reviewedOrdinaryDayEnvelope=expected(revised);
+ }
+ if(JSON.stringify(clone)!==JSON.stringify(next)){
+  // Report only the day number and top-level field names; no private bytes.
+  const fields=[...new Set([...Object.keys(clone),...Object.keys(next)])].filter(k=>JSON.stringify(clone[k])!==JSON.stringify(next[k]));
+  console.error(JSON.stringify({status:"P6_PLAN_GEOMETRY_MISMATCH",runDayIndex:day,fields:fields.filter(k=>/^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(k)).slice(0,12)}));
+  hold("UNAPPROVED_PLAN_GEOMETRY_DRIFT");
+ }
 }
 type Exported=ReturnType<typeof compileP6ActualCandidateExport>;
 export function verifyRuntimePlans(result:Exported,stageRaw:string,readCommitted:(p:string)=>Buffer){
