@@ -24,7 +24,13 @@ function fixtures(now:number){
  const c:P7ReviewSelector={kind:"POST_SETTLEMENT",runDayIndex:31,scopeSha256:hashPhase7DurableCandidate(postScope)};
  const prePayload={schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:prePolicy,permitSha256:a.scopeSha256,issuedAtUtc,validUntilUtc,fields:[]};
  const recoveryPayload={schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:postPolicy,originalAvailableAtUtc:new Date(now-10000).toISOString(),committedScopeSha256:b.scopeSha256,originalAuditSha256:h("audit"),originalAuditAtUtc:issuedAtUtc,reviewedAtUtc:issuedAtUtc,validUntilUtc};
- const settlementPayload={schema:"v39.phase7.exact-post-group-settlement.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:postPolicy,...postScope,reviewedAtUtc:issuedAtUtc,validUntilUtc,scope:{synthetic:true}};
+ // A structurally complete synthetic, censored review: no observed label or
+ // claim of genuine production evidence. Full consumer tests use real groups.
+ const associationReviewSha256=h("association");
+ const settlementPayload={schema:"v39.phase7.exact-post-group-settlement.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:postPolicy,...postScope,reviewedAtUtc:issuedAtUtc,validUntilUtc,releasedAtUtc:issuedAtUtc,
+  scope:{groupId:"12345678-1234-4123-8123-123456789abc",associationReviewSha256,outcomeReviewSha256:h("outcome"),groupSettlementDue:true,evidence:{"T-6h":null}},
+  assemblyIds:{continuousPacketId:"12345678-1234-4123-8123-123456789abd",missingPreRows:{}},
+  approval:{schema:"v39.phase7.durable-derived-bundle-independent-review.v1",contractSha256:h("contract"),bundleSha256:h("bundle"),sourceParityReviewSha256:h("parity"),reconstructionReviewSha256:h("reconstruction"),fieldReviewSha256:h("fields"),associationReviewSha256,continuousTargetReviewSha256:h("target"),approvedForDurableStorage:true,sourceMappingPersisted:false,minTargetMinutes:-120,maxTargetMinutes:2880}};
  return {clock,validUntilUtc,a,b,c,prePayload,recoveryPayload,settlementPayload,aw:wire(prePayload,pre),bw:wire(recoveryPayload,post),cw:wire(settlementPayload,post)};
 }
 it("authenticates exact signed scope, separate key, study and short-lived clock before storage",()=>{
@@ -45,6 +51,9 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
  expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,flightInstanceId:"unexpected source content"},post),f.clock)).toThrow("RECOVERY_METADATA_ONLY");
  expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,originalAuditSha256:"not-a-digest"},post),f.clock)).toThrow("RECOVERY_METADATA_ONLY");
  expect(()=>verifyP7StoredWire(trust,{...f.c,scopeSha256:h("wrong")},f.cw,f.clock)).toThrow("EXACT_SIGNED_SCOPE");
+ expect(()=>verifyP7StoredWire(trust,f.c,wire({...f.settlementPayload,providerBody:"synthetic raw body"},post),f.clock)).toThrow("CUSTODY_ENVELOPE");
+ expect(()=>verifyP7StoredWire(trust,f.c,wire({...f.settlementPayload,scope:{...f.settlementPayload.scope,evidence:{"T-6h":null,unreviewed:null}}},post),f.clock)).toThrow("CUSTODY_SCOPE");
+ expect(()=>verifyP7StoredWire(trust,f.c,wire({...f.settlementPayload,approval:{...f.settlementPayload.approval,sourceMappingPersisted:true}},post),f.clock)).toThrow("CUSTODY_APPROVAL_SHAPE");
  expect(()=>verifyP7StoredWire({...trust,env:{...trust.env,P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"0"}},f.a,f.aw,f.clock)).toThrow("PROTECTED_STUDY");
 });
 const url="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -62,6 +71,9 @@ active("real private custody signed-review transport",()=>{
    const badPre=wire({...f.prePayload,sourceContent:"synthetic source body"},pre);
    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.a,wire:badPre})).rejects.toThrow("METADATA_SHAPE");
    expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(f.a)])).rows[0].n).toBe(0);
+   const badPost=wire({...f.settlementPayload,providerBody:"synthetic raw body"},post);
+   await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.c,wire:badPost})).rejects.toThrow("CUSTODY_ENVELOPE");
+   expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(f.c)])).rows[0].n).toBe(0);
    for(const [s,w] of [[f.a,f.aw],[f.b,f.bw],[f.c,f.cw]] as const){
     const args={client:publisher,reader,trust,selector:s,wire:w};
     expect(await publishP7PrivateSignedReviewOnce(args)).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO",providerCalls:0});

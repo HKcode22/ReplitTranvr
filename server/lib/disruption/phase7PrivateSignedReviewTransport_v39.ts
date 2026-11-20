@@ -10,7 +10,7 @@ import {createHash,createPublicKey,verify} from "node:crypto";
 import {Client} from "pg";
 import {readP6DayEpochRestrictedReaderClock,readP6DayEpochRestrictedPublisherClock} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
-import {readPhase7PostReviewerPublicKey,phase7PostFragmentsDigest} from "./phase7SignedPostReview_v39";
+import {assertPhase7PostSettlementCustodyShape,readPhase7PostReviewerPublicKey,phase7PostFragmentsDigest} from "./phase7SignedPostReview_v39";
 import {assertPhase7PreProofMetadataShape,verifyPhase7SignedPreFieldProof,type Phase7SignedPreFieldProofWire} from "./phase7SignedPreFieldProof_v39";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39";
 import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
@@ -70,7 +70,7 @@ export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unkno
  if(s.kind==="PRE_PROOF"){
   if(raw.length>16384)hold("PRE_PROOF_BYTES");
   assertPhase7PreProofMetadataShape(x);
- }
+ }else if(s.kind==="POST_SETTLEMENT")assertPhase7PostSettlementCustodyShape(x);
  const schema=s.kind==="PRE_PROOF"?"v39.phase7.separate-pre-field-proof.v1":s.kind==="POST_RECOVERY"?"v39.phase7.committed-post-recovery-receipt.v2":"v39.phase7.exact-post-group-settlement.v1";
  const scope=s.kind==="PRE_PROOF"?x.permitSha256:s.kind==="POST_RECOVERY"?x.committedScopeSha256:hashPhase7DurableCandidate({committedPostSha256:x.committedPostSha256,anchorSha256:x.anchorSha256,fragmentsSha256:x.fragmentsSha256});
  const policy=s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256;

@@ -2,6 +2,7 @@
  * No paid worker signing authority. Missing or unverified evidence cannot
  * be promoted to a physical gate-out or a completed research group. */
 import {createHash,createPublicKey,verify} from "node:crypto";
+import {assessP5AmendmentEGateOutDelayCandidate} from "./phase5AmendmentEGateOutDelayLabel_v39";
 import type {P6PostCommittedScope,P6PostPreservationAnchor} from "./phase6ActualPostOutcomeObservability_v39";
 import type {Phase7DerivedReleaseContract} from "./phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "./phase7ReviewedSourceTransformation_v39";
@@ -23,6 +24,49 @@ export interface Phase7SignedPostSettlement{
  reviewedAtUtc:string;validUntilUtc:string;releasedAtUtc:string;
  scope:Phase7GroupOutcomeScope;assemblyIds:Phase7FinalAssemblyIds;
  approval:Phase7DurableBundleApproval;
+}
+/** Storage-boundary validation of the existing signed operational wire.
+ * It deliberately retains exact same-leg clocks and identities in authorized
+ * temporary custody, rather than stripping them from an attested outcome.
+ * No source membership, real observation or durable rights are certified by
+ * this shape check; full consumer verification still follows independently. */
+export function assertPhase7PostSettlementCustodyShape(input:unknown): asserts input is Phase7SignedPostSettlement {
+ const x=input as Phase7SignedPostSettlement;
+ const horizons=["T-24h","T-6h","T-90m"];
+ const uuid=(v:unknown)=>typeof v==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v);
+ const horizonMap=(v:unknown)=>!!v&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).every(k=>horizons.includes(k));
+ if(!exact(x,["schema","policySha256","manifestSha256","rightsSha256","anchorSha256","committedPostSha256","fragmentsSha256","reviewedAtUtc","validUntilUtc","releasedAtUtc","scope","assemblyIds","approval"])||
+  x.schema!=="v39.phase7.exact-post-group-settlement.v1"||
+  ![x.policySha256,x.manifestSha256,x.rightsSha256,x.anchorSha256,x.committedPostSha256,x.fragmentsSha256].every(digest))hold("CUSTODY_ENVELOPE");
+ const reviewed=clock(x.reviewedAtUtc),until=clock(x.validUntilUtc),released=clock(x.releasedAtUtc);
+ if(released>reviewed||reviewed>=until||until-reviewed>21600000)hold("CUSTODY_CLOCK");
+ const s=x.scope;
+ if(!exact(s,["groupId","associationReviewSha256","outcomeReviewSha256","groupSettlementDue","evidence"])||
+  !uuid(s.groupId)||!digest(s.associationReviewSha256)||!digest(s.outcomeReviewSha256)||s.groupSettlementDue!==true||!horizonMap(s.evidence))hold("CUSTODY_SCOPE");
+ const ids=x.assemblyIds;
+ if(!exact(ids,["continuousPacketId","missingPreRows"])||!uuid(ids.continuousPacketId)||!horizonMap(ids.missingPreRows)||
+  !Object.values(ids.missingPreRows).every(uuid))hold("CUSTODY_IDS");
+ const idsAll=[s.groupId,ids.continuousPacketId,...Object.values(ids.missingPreRows)];
+ if(new Set(idsAll).size!==idsAll.length)hold("CUSTODY_IDS");
+ const a=x.approval;
+ if(!exact(a,["schema","contractSha256","bundleSha256","sourceParityReviewSha256","reconstructionReviewSha256","fieldReviewSha256","associationReviewSha256","continuousTargetReviewSha256","approvedForDurableStorage","sourceMappingPersisted","minTargetMinutes","maxTargetMinutes"])||
+  a.schema!=="v39.phase7.durable-derived-bundle-independent-review.v1"||a.approvedForDurableStorage!==true||a.sourceMappingPersisted!==false||
+  ![a.contractSha256,a.bundleSha256,a.sourceParityReviewSha256,a.reconstructionReviewSha256,a.fieldReviewSha256,a.associationReviewSha256,a.continuousTargetReviewSha256].every(digest)||
+  a.associationReviewSha256!==s.associationReviewSha256||
+  !Number.isFinite(a.minTargetMinutes)||!Number.isFinite(a.maxTargetMinutes)||a.minTargetMinutes>=a.maxTargetMinutes)hold("CUSTODY_APPROVAL_SHAPE");
+ let leg:string|null=null,native:string|null=null;
+ for(const [h,e] of Object.entries(s.evidence)){
+  if(e===null)continue;
+  if(!e||!exact(e,["schema","frozenSourceOriginalSha256","flightInstanceId","horizon","selectedNativeTUtc","preIssuedAtUtc","originalSourceAvailableAtUtc","operatingLegIdentityExternallyVerified","scheduled","outcome"])||
+   e.horizon!==h||!exact(e.scheduled,["utc","milestone","externallyVerifiedGateOutMeaning","evidenceSha256"])||
+   !exact(e.outcome,["operation","event","actualUtc","firstAvailableAtUtc","externallyVerifiedActualOnly","evidenceSha256","recoveryGraceElapsed"]))hold("CUSTODY_EVIDENCE_SHAPE");
+  // Existing Amendment E validation, not a proxy or an independent attestation.
+  const result=assessP5AmendmentEGateOutDelayCandidate(e);
+  if(result.status==="PENDING_GATE_OUT_EVIDENCE"||(!result.hasNumericalCandidate&&result.status!=="CANCELLATION_SEPARATE_OUTCOME"&&!e.outcome.recoveryGraceElapsed)||
+   (e.outcome.firstAvailableAtUtc!==null&&clock(e.outcome.firstAvailableAtUtc)>released)||
+   (leg!==null&&(e.flightInstanceId!==leg||e.selectedNativeTUtc!==native)))hold("CUSTODY_UNSETTLED_OR_CROSS_LEG");
+  leg=e.flightInstanceId;native=e.selectedNativeTUtc;
+ }
 }
 export function phase7PostFragmentsDigest(fragments:readonly Phase7StoredPreFragment[]){
  return hashPhase7DurableCandidate(fragments.map(f=>({groupId:f.groupId,contractSha256:f.contractSha256,profileSha256:f.profileSha256,packetSha256:f.packetSha256})).sort((a,b)=>a.packetSha256.localeCompare(b.packetSha256)));
