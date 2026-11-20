@@ -312,6 +312,18 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
    }
   }
   const result=inputs.length?compileP5AmendmentEFidsOriginalFeatureBatchV39(inputs):null;
+  // Preserve the exact original-matched route only inside the private
+  // native review handoff. Independent weather readers receive public
+  // station selectors, never the flight identity, native ID or original.
+  const inputById=new Map(inputs.map(x=>[x.flightInstanceId,x]));
+  const privateDecisions=(result?.privateDecisions??[]).map(d=>{
+   if(d.status!=="MATCHED_NATIVE_ORIGINAL")return d;
+   const x=inputById.get(d.flightInstanceId)!;
+   return Object.freeze(Object.defineProperty({...d},"privateWeatherJoinScope",{value:Object.freeze({
+    originIcao:x.normalizedOriginIcao,destinationIcao:x.normalizedDestinationIcao,
+    selectedNativeTUtc:x.originalSelectedDepartureUtc,memberAvailableAtUtc:x.normalizedAvailableAtUtc
+   }),enumerable:false}));
+  });
   // Do not label the time at the beginning of this read transaction as
   // completion. Actual packet/reviewer and PRE later recheck fresh clocks.
   await c.query("ROLLBACK");began=false;
@@ -319,7 +331,7 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
    observedDbClockUtc:new Date(clock).toISOString(),selectedCount:s.selected.length,noLongerEligibleOrChangedCount:rejected,
    matchedCount:result?.matchedCount??0,nativeOriginalCensoredCount:result?.censoredCount??0,originalBodyReadCount:inputs.length?1:0,
    providerCalls:0,dbWrites:0,sourceRightsAuthenticatedHere:false,physicalGateOutCertified:false,phase6PaidGo:false};
-  return Object.freeze(Object.defineProperty(summary,"privateDecisions",{value:result?.privateDecisions??[],enumerable:false})) as typeof summary&
+  return Object.freeze(Object.defineProperty(summary,"privateDecisions",{value:Object.freeze(privateDecisions),enumerable:false})) as typeof summary&
    {readonly privateDecisions:NonNullable<typeof result>["privateDecisions"]};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }

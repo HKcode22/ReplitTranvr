@@ -99,3 +99,58 @@ export function mergeP7VerifiedNoaaIntoBoundPreBundle(bundle:P5EReviewedSuppleme
  const out={weatherFieldsPresent:selected.length,ambiguousFields,weatherFieldsMissing:4-selected.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperty(out,"privateBundle",{value:merged.bundle,enumerable:false})) as typeof out&{readonly privateBundle:P5EReviewedSupplementalBundle};
 }
+
+/** Actual native-review handoff. Public weather source lookup has only a
+ * station set and as-of clock, not flight IDs or any source-record scope.
+ * A missing optional source stays missing; malformed or mismatched signed
+ * evidence never becomes a prediction. The original matched flight count
+ * is unchanged. No provider fetch, private packet write or signature here. */
+export async function enrichP7NativeFeatureReviewWithNoaa(input:{
+ env:NodeJS.ProcessEnv;handoff:any;featureReview:any;
+ port:{readReviewedWeatherArtifacts:(scope:Readonly<{airports:readonly string[];observedDbClockUtc:string}>)=>Promise<readonly P7SignedPublicNoaaArtifact[]>};
+ forbiddenSignerFingerprints:readonly string[];
+}){
+ const {env,handoff:h,featureReview:f,port}=input;
+ if(!f||f.status!=="EXACT_BOUND_ORIGINAL_NATIVE_FEATURE_BATCH_NOT_SIGNED"||h?.status!=="UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED"||
+  f.horizon!==h.horizon||f.runDayIndex!==h.runDayIndex||f.providerCalls!==0||f.dbWrites!==0||f.phase6PaidGo!==false||
+  Object.getOwnPropertyDescriptor(f,"privateDecisions")?.enumerable!==false||Object.getOwnPropertyDescriptor(h,"privateReviewEntries")?.enumerable!==false||
+  !Array.isArray(f.privateDecisions)||!Array.isArray(h.privateReviewEntries)||f.privateDecisions.length>2500||h.privateReviewEntries.length>2500||
+  typeof port?.readReviewedWeatherArtifacts!=="function"||input.forbiddenSignerFingerprints.includes(env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256??""))HOLD("NATIVE_REVIEW_HANDOFF");
+ const now=at(f.observedDbClockUtc),byId=new Map<string,any>(h.privateReviewEntries.map((e:any)=>[e.source.flightInstanceId,e.source]));
+ if(byId.size!==h.privateReviewEntries.length)HOLD("DUPLICATE_NATIVE_SELECTION");
+ const stations=new Set<string>(),scopes=new Map<string,P7WeatherJoinScope>(),seen=new Set<string>();
+ let late=0,matched=0;
+ for(const d of f.privateDecisions){
+  const s=byId.get(d.flightInstanceId);
+  if(!s||seen.has(d.flightInstanceId))HOLD("CROSS_NATIVE_SELECTION");
+  seen.add(d.flightInstanceId);
+  if(d.status!=="MATCHED_NATIVE_ORIGINAL")continue;
+  matched++;
+  const x=d.privateWeatherJoinScope,b=d.compiled?.bundle;
+  if(!x||Object.getOwnPropertyDescriptor(d,"privateWeatherJoinScope")?.enumerable!==false||
+   d.compiled?.sourceBodyAndCanonicalEnvelopeIntegrityVerified!==true||d.compiled?.sameOriginalNativeOperatingLegBoundOnly!==true||
+   b?.flightInstanceId!==d.flightInstanceId||b.populationQueryId!==s.expectedSourcePopulationQueryId||b.originalResponseSha256!==s.expectedSourceResponseSha256||
+   x.originIcao!==s.airportIcao||x.selectedNativeTUtc!==s.selectedTNativeUtc||x.memberAvailableAtUtc!==s.sourceMemberAvailableAtUtc||
+   !ICAO.test(x.originIcao)||!ICAO.test(x.destinationIcao))HOLD("MATCHED_ORIGINAL_ROUTE");
+  const cutoff=at(s.ownPreCutoffUtc);
+  if(now>=cutoff){late++;continue;}
+  stations.add(x.originIcao);stations.add(x.destinationIcao);
+  scopes.set(d.flightInstanceId,{flightInstanceId:d.flightInstanceId,originIcao:x.originIcao,destinationIcao:x.destinationIcao,selectedNativeTUtc:x.selectedNativeTUtc,ownCutoffUtc:s.ownPreCutoffUtc,observedDbClockUtc:f.observedDbClockUtc});
+ }
+ if(matched!==f.matchedCount||stations.size>2501)HOLD("NATIVE_REVIEW_DENOMINATOR");
+ const raw=scopes.size?await port.readReviewedWeatherArtifacts(Object.freeze({airports:Object.freeze([...stations].sort()),observedDbClockUtc:f.observedDbClockUtc})):[];
+ if(!Array.isArray(raw)||raw.length>128)HOLD("WEATHER_ARTIFACT_SET");
+ const weather=raw.map(v=>verifyP7IndependentPublicNoaaArtifact(env,v,f.observedDbClockUtc));
+ // Artifact may serve multiple airports; require that it intersects this
+ // exact request. Avoid unrelated global material in this native handoff.
+ if(weather.some(a=>!a.privateReceipt.requestedAirports.some(v=>stations.has(v)))||new Set(weather.map(a=>a.receiptSha256)).size!==weather.length)HOLD("WEATHER_ARTIFACT_SCOPE");
+ const counts={weatherArtifactCount:weather.length,weatherEligibleFlightCount:scopes.size,weatherLateFlightCount:late,weatherPresentFields:0,weatherMissingFields:0,weatherAmbiguousFields:0};
+ const decisions=f.privateDecisions.map((d:any)=>{
+  const scope=scopes.get(d.flightInstanceId);if(!scope)return d;
+  const relevant=weather.filter(a=>a.privateReceipt.requestedAirports.includes(scope.originIcao)||(scope.destinationIcao!==null&&a.privateReceipt.requestedAirports.includes(scope.destinationIcao)));
+  const m=mergeP7VerifiedNoaaIntoBoundPreBundle(d.compiled.bundle,scope,relevant);
+  counts.weatherPresentFields+=m.weatherFieldsPresent;counts.weatherMissingFields+=m.weatherFieldsMissing;counts.weatherAmbiguousFields+=m.ambiguousFields;
+  return Object.freeze(Object.defineProperty({...d,compiled:{...d.compiled,bundle:m.privateBundle}},"privateWeatherJoinScope",{value:d.privateWeatherJoinScope,enumerable:false}));
+ });
+ return Object.freeze(Object.defineProperty({...f,...counts},"privateDecisions",{value:Object.freeze(decisions),enumerable:false}));
+}

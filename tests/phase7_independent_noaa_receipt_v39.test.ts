@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
+import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,enrichP7NativeFeatureReviewWithNoaa,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
 const sha=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const now="2026-11-25T00:00:00.000Z",t="2026-11-25T06:15:00.000Z",scope={flightInstanceId:"leg:fixture:001",originIcao:"WSSS",destinationIcao:"YSSY",selectedNativeTUtc:t,ownCutoffUtc:"2026-11-25T00:15:00.000Z",observedDbClockUtc:now};
 const key=generateKeyPairSync("ed25519"),env={P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(key.publicKey.export({format:"pem",type:"spki"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:sha(key.publicKey.export({format:"der",type:"spki"})),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:sha("synthetic policy"),V39_P5_MANIFEST_SHA256:sha("synthetic manifest"),V39_P5_RIGHTS_SHA256:sha("synthetic rights")};
@@ -36,4 +36,18 @@ describe("independent public NOAA artifact to actual source-bound PRE supplement
   expect(()=>mergeP7VerifiedNoaaIntoBoundPreBundle(bundle(),{...scope,ownCutoffUtc:now},[a])).toThrow("BOUND_PRE_SCOPE");
   expect(()=>mergeP7VerifiedNoaaIntoBoundPreBundle(bundle(),{...scope,flightInstanceId:"leg:other"},[a])).toThrow("BOUND_PRE_SCOPE");
  });
+});
+
+it("native publisher handoff requests only public stations, keeps private FIDS bytes and cohort denominator",async()=>{
+ const b=bundle(),s={flightInstanceId:scope.flightInstanceId,expectedSourcePopulationQueryId:b.populationQueryId,expectedSourceResponseSha256:b.originalResponseSha256,airportIcao:scope.originIcao,selectedTNativeUtc:t,ownPreCutoffUtc:scope.ownCutoffUtc,sourceMemberAvailableAtUtc:"2026-11-24T23:10:00.000Z"};
+ const h=Object.defineProperty({status:"UNSIGNED_PRE_REVIEW_HANDOFF_NOT_AUTHORIZED",runDayIndex:1,horizon:"T-6h"},"privateReviewEntries",{value:[{source:s}]});
+ const d=Object.defineProperty({flightInstanceId:scope.flightInstanceId,status:"MATCHED_NATIVE_ORIGINAL",compiled:{bundle:b,sourceBodyAndCanonicalEnvelopeIntegrityVerified:true,sameOriginalNativeOperatingLegBoundOnly:true}},"privateWeatherJoinScope",{value:{originIcao:scope.originIcao,destinationIcao:scope.destinationIcao,selectedNativeTUtc:t,memberAvailableAtUtc:s.sourceMemberAvailableAtUtc}});
+ const f=Object.defineProperty({status:"EXACT_BOUND_ORIGINAL_NATIVE_FEATURE_BATCH_NOT_SIGNED",runDayIndex:1,horizon:"T-6h",providerCalls:0,dbWrites:0,phase6PaidGo:false,observedDbClockUtc:now,matchedCount:1},"privateDecisions",{value:[d]});
+ const port={readReviewedWeatherArtifacts:async(x:any)=>{expect(x).toEqual({airports:["WSSS","YSSY"],observedDbClockUtc:now});expect(JSON.stringify(x)).not.toContain("leg:");return [fixture("METAR",[metar])]}};
+ const x=await enrichP7NativeFeatureReviewWithNoaa({env,handoff:h,featureReview:f,port,forbiddenSignerFingerprints:[]});
+ expect(x).toMatchObject({matchedCount:1,weatherPresentFields:2,weatherMissingFields:2});
+ expect(JSON.stringify(x)).not.toContain("leg:fixture");
+ expect(x.privateDecisions[0].compiled.bundle.observations).toHaveLength(3);
+ expect(b.observations).toHaveLength(1);
+ await expect(enrichP7NativeFeatureReviewWithNoaa({env,handoff:h,featureReview:f,port,forbiddenSignerFingerprints:[env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256]})).rejects.toThrow("NATIVE_REVIEW_HANDOFF");
 });

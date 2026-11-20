@@ -13,6 +13,7 @@ import {readP6PendingLaterT24EvidencePage} from "../server/lib/disruption/phase6
 import {pageP5UnsignedNativePreReviewDossier} from "../server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {signP6DelegatedNativeLaterReviewPage} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {resolveP7PublicationProofs} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
+import {enrichP7NativeFeatureReviewWithNoaa} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39.ts";
 import {runP6DelegatedReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
@@ -148,13 +149,23 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
   await publisher.query("SELECT pg_advisory_lock(('x'||$1)::bit(64)::bigint)",[lockId]);
   await publisher.query("RESET lock_timeout");
   const actual=await runP6PostcommitNativeAudit(x.auditEnv);
-  const handoff=actual.privateUnsignedPreReview,features=actual.privateNativeFeatureReview;
+  const handoff=actual.privateUnsignedPreReview;
+  let features=actual.privateNativeFeatureReview;
   if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
   const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
    candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
    missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false};
   if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
    return {...report,sourceAuditOnly:true};
+  // Reuse genuine independently archived public weather if its reader is
+  // commissioned. Optional absent observations remain explicit missingness;
+  // an invalid signed source is not downgraded to missing.
+  const forbidden=[v.laterReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256];
+  if(typeof phase7ProofPort.readReviewedWeatherArtifacts==="function"){
+   features=await enrichP7NativeFeatureReviewWithNoaa({env,handoff,featureReview:features,port:phase7ProofPort,forbiddenSignerFingerprints:forbidden});
+   for(const k of ["weatherArtifactCount","weatherEligibleFlightCount","weatherLateFlightCount","weatherPresentFields","weatherMissingFields","weatherAmbiguousFields"])report[k]=features[k];
+   report.weatherSourceStatus="INDEPENDENT_ARCHIVE_READ_AND_ASOF_CLASSIFIED";
+  }else report.weatherSourceStatus="INDEPENDENT_ARCHIVE_READER_NOT_COMMISSIONED";
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   const resolveProofs=preview=>resolveP7PublicationProofs({preview,env,port:phase7ProofPort,readClock:async()=>new Date((await reader.query("SELECT clock_timestamp() AS at")).rows[0].at).toISOString(),forbiddenSignerFingerprints:[v.laterReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256]});
   if(handoff.horizon==="T-24h"){
