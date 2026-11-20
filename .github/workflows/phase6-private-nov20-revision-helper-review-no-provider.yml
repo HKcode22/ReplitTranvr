@@ -1,0 +1,36 @@
+name: Phase6 private Nov20 revision helper review (NO PROVIDER)
+
+on:
+  push:
+    branches:
+      - phase6/nov20-private-revision-owner-helper
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review-helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      V39_PHASE6_OWNER_APPROVED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: TypeScript repository check
+        run: npm run check
+      - name: Helper must fail closed without explicit mode
+        run: |
+          set +e
+          npx --no-install tsx review-tools/p6_nov20_prospective_revision_owner_v39.ts > /tmp/p6-helper.out 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          grep -q '^HOLD_P6_NOV20_PRIVATE_REVISION_USAGE$' /tmp/p6-helper.out
