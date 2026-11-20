@@ -2,6 +2,7 @@
  * operates on AeroDataBox originals or source tables. Direct narrow actors
  * only, no new provider access, no same-run retry on unknown commit. */
 import type {Pool,PoolClient} from "pg";
+import {performance} from "node:perf_hooks";
 import {P7_INERT_ROLES} from "./phase7InertStorageCommission_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P7_EXPIRY_"+s);};
 const statusFns=["phase7_private.pre_link_expiry_status_v39()","phase7_private.research_expiry_status_v39()"];
@@ -51,9 +52,15 @@ export async function runP7ExpiryOnce(reader:Pool,writer:Pool|undefined,mode:Mod
  const before=await readP7ExpiryStatus(reader);
  if(mode==="VERIFY_ONLY")return {status:"P7_EXPIRY_VERIFY_ONLY_NO_GO",before,after:before,deletedLinks:0,deletedBundles:0,deletedFragments:0,providerCalls:0,phase6PaidGo:false};
  let after=before,deletedLinks=0,deletedBundles=0,deletedFragments=0;
- for(let i=0;i<4&&(after.dueLinks+after.dueBundles+after.dueFragments)>0;i++){
+ // Existing installed SQL admits up to 1000 rows per transaction.
+ // A late scheduler can accumulate more than the former 2000-link cap,
+ // blocking otherwise valid PRE globally until another expiry wake.
+ // Drain multiple independently read-back due-only chunks without raising
+ // SQL's limit, changing expiry dates or replaying an uncertain commit.
+ const started=performance.now();
+ for(let i=0;i<8&&performance.now()-started<180000&&(after.dueLinks+after.dueBundles+after.dueFragments)>0;i++){
   if(after.liveLinksOnDueFragments)hold("UNEXPECTED_LIVE_LINK");
-  const q=await oneP7Sweep(writer!,500);
+  const q=await oneP7Sweep(writer!,1000);
   deletedLinks+=q.links;deletedBundles+=q.bundles;deletedFragments+=q.fragments;
   after=await readP7ExpiryStatus(reader);
   if(q.links+q.bundles+q.fragments===0)break;
