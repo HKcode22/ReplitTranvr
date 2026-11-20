@@ -1,3 +1,5 @@
+import {compileP5V0093CostOnlySevenRestReview} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
+import {p6SourceAuthorizationStageContentSha} from "../scripts/v39_phase6_enable_source_owner_v39";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
@@ -63,6 +65,15 @@ it("replays the actual revised 6144-query compiler against the exact owner stage
  const result=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:h(eb),timingBytes:tb,expectedTimingFileSha256:h(tb),calendarVariant:"COMPACT_NOV22"});
  const stage=result.files[31].bytes;
  expect(h(stage)).toBe("6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc");
+ const parsed=JSON.parse(stage),stageSha=h(stage),costSha=result.summary.unsignedCostOnlyEnvelopeSha256;
+ // Pure mechanical comparison with the exact historical stage. The flags
+ // are compiler input, not a decision or proof of current operational GO.
+ const exact=compileP5V0093CostOnlySevenRestReview(parsed,{expectedSignedStagePacketSha256:stageSha,expectedExactWriterRole:"phase5_b0062_prelaunch_stage_prod20261113",independentCalendarTreatmentReviewApproved:true,independentProviderAccountAndRestBudgetReviewApproved:true,narrowPrelaunchOwnerApproved:true},{expectedStagedB0062PacketSha256:stageSha,expectedSignedSevenCategoryCostSha256:costSha,expectedExactBudgetWriterRole:"phase5_fids_budget_freeze_prod20261113",independentProspectiveCalendarAndTreatmentApproved:true,independentRealProviderRangeAndRestBudgetApproved:true,independentSourceContentsRightsForIntendedUseApproved:false,sourceUseDeferredToPhase6Activation:true,exactRestrictedNoProviderBudgetFreezeApproved:true});
+ expect(exact.staged.stagePacketSha256).toBe(stageSha);
+ expect(exact.cost.costOnlyCategoryDraftSha256).toBe(costSha);
+ expect(exact.cost.categoryCaps).toHaveLength(7);
+ const metadata={status:"EXACT_REVISED_STAGE_AUTHORIZATION_METADATA_NOT_APPROVED_NO_GO",stageSha256:stageSha,stageContentSha256:p6SourceAuthorizationStageContentSha(parsed),costEnvelopeSha256:costSha,authorizationId:exact.staged.authorizationId,maxAlertCredits:exact.staged.alertSafety.alertRunSpendCeilingCredits,maxRestUnitsByCategory:Object.fromEntries(exact.cost.categoryCaps.map(x=>[x.category,x.ceilingUnits])),orderedStagedPredecessors:exact.staged.predecessorEvidenceIds,cycleApiCeiling:exact.cost.cycleApiCeiling,protectedFloor:exact.cost.protectedApiFloorUnits,firstServiceUtc:exact.staged.calendarDays[0].startUtc,providerCalls:0,databaseWrites:0,approvalCreated:false,phase6PaidGo:false};
+ console.log(JSON.stringify(metadata));
  const d=verifyRuntimePlans(result,stage,p=>readFileSync(p));
  expect(d).toHaveLength(31);
  expect(d.every(x=>x.changed)).toBe(true);
