@@ -5,6 +5,7 @@ import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {Client} from "pg";
 import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {readP6PrivateDeadlinePressure,P6_PRIVATE_DEADLINE_PRESSURE_SQL} from "../server/lib/disruption/phase6PrivateDeadlinePressure_v39";
 const h=(s:string)=>createHash("sha256").update(s).digest("hex");
 const pre=generateKeyPairSync("ed25519"),post=generateKeyPairSync("ed25519");
 const publicPin=(k:typeof pre)=>createHash("sha256").update(k.publicKey.export({type:"spki",format:"der"})).digest("hex");
@@ -82,6 +83,18 @@ active("real private custody signed-review transport",()=>{
    expect([...(await readP7PrivateSignedReviews(reader,trust,[f.a,f.b,f.c])).values()]).toEqual([f.aw,f.bw,f.cw]);
    const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
    const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') GROUP BY kind ORDER BY kind");expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
+   // Actual PG16 metadata-only census: short signatures and the independent
+   // replay fence fit inside one relay wake interval, not a purge proof.
+   const pressure=await readP6PrivateDeadlinePressure(reader,readerLogin,manifest);
+   expect(pressure).toMatchObject({status:"PRIVATE_DEADLINE_PRESSURE_READONLY_NO_GO",physicalDeletionVerified:false,schedulerLatencyBoundVerified:false,databaseWrites:0,withinExistingFifteenMinuteRelayCadence:true});
+   expect(pressure.groups.find(g=>g.kind==="PHASE7_RECOVERY_RECEIPT"&&g.scope==="CURRENT")).toMatchObject({total:1,due:0,withinTwoMinutes:1,withinFifteenMinutes:1});
+   expect(pressure.groups.find(g=>g.kind==="PHASE7_RECOVERY_FENCE"&&g.scope==="CURRENT")).toMatchObject({total:1,due:0,withinTenMinutes:1,withinFifteenMinutes:1});
+   expect(pressure.groups.find(g=>g.kind==="PHASE7_SIGNED_REVIEW"&&g.scope==="CURRENT")).toMatchObject({total:2,due:0,withinTwoMinutes:2});
+   const foreign=await readP6PrivateDeadlinePressure(reader,readerLogin,h("foreign census"));
+   expect(foreign.otherManifestObjects).toBe(foreign.totals.total);
+   expect(JSON.stringify(pressure)).not.toContain(p7ReviewPath(f.a));
+   expect(P6_PRIVATE_DEADLINE_PRESSURE_SQL).not.toMatch(/payload_bytes|review_wire_bytes|logical_path|content_sha256/);
+   await expect(readP6PrivateDeadlinePressure(publisher,publisherLogin,manifest)).rejects.toThrow("NOT_RESTRICTED_REAL_NEON_PG16_ROLE_OR_ACL");
    // Direct restricted INSERT must not smuggle source-shaped values into the
    // short operational kind even when bypassing the JS publisher completely.
    const badRecovery=wire({...f.recoveryPayload,originalAuditSha256:{flight:"synthetic-not-a-digest"}},post);
