@@ -1,4 +1,5 @@
 import {createHash,generateKeyPairSync} from "node:crypto";
+import {P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL} from "../server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39}
  from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
@@ -220,7 +221,7 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
    expectedPopulationQueryId:qid,expectedResponseSha256:source.original_response_hash,
    externalContentUseReviewSha256:h("d"),selected:[id,missingId].map(flightInstanceId=>({flightInstanceId,
     expectedSelectedNativeTUtc:native,expectedForecastCutoffUtc:cutoff,expectedMemberAvailableUtc:available}))};
-  const calls:string[]=[];let released=0;
+  const calls:string[]=[];let released=0;let aliasConflict=false;
   const db={async connect(){return{async query(sql:string,args?:unknown[]){
    calls.push(sql);let rows:Record<string,unknown>[]=[];
    if(sql.startsWith("SELECT current_user AS actor"))rows=[{actor:"phase5_fids_source_prod_20261107",
@@ -228,9 +229,11 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
    else if(sql===P5_STAGE14_BOUND_SOURCE_SQL){expect(args).toEqual([manifest,query]);rows=[source];}
    else if(sql===P5_E_BATCH_ALL_MEMBERS_SQL){expect(args).toEqual([qid]);rows=members;}
    else if(sql===P5_E_BATCH_ORIGINAL_SQL){expect(args).toEqual([manifest,query,qid]);rows=[f.original];}
+   else if(sql===P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL){expect(args).toEqual([qid,manifest,now,scope.source.providerContractSha256,rights]);rows=members.filter(m=>m.analytic_identity_id.startsWith("leg:p5v1:")).map(m=>({flight_instance_id:m.analytic_identity_id,conflicting_retained_identity:aliasConflict}));}
+   else if(sql==="SELECT clock_timestamp() AS at"){rows=[{at:now}];}
    else if(!/^(BEGIN|SET LOCAL|ROLLBACK)/.test(sql))throw Error("UNEXPECTED_SQL");
    return {rows,rowCount:rows.length};},release(){released++;}}}};
-  return {db,source,members,scope,calls,original:f.original,released:()=>released};
+  return {db,source,members,scope,calls,original:f.original,released:()=>released,setAliasConflict:(x:boolean)=>{aliasConflict=x;}};
  }
  it("reads body once, verifies native operator and feature values, censors missing native key without rewriting other member",async()=>{
   const f=batch(),x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
@@ -242,6 +245,30 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
   expect(f.calls.filter(q=>q===P5_E_BATCH_ALL_MEMBERS_SQL)).toHaveLength(1);
   expect(f.calls.at(-1)).toBe("ROLLBACK");expect(f.released()).toBe(1);
   expect(JSON.stringify(x)).not.toMatch(/leg:ci|operating-flight|observations/);
+ });
+ it("reruns the full-width production identity conflict screen before any raw body transfer",async()=>{
+  const f=batch(),identity="leg:p5v1:"+sha("full width actual identity fixture");
+  Object.assign(f.members[0],{analytic_identity_id:identity,canonical_flight_instance_id:identity});
+  f.scope.selected=[{...f.scope.selected[0],flightInstanceId:identity}];
+  const a=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(a.matchedCount).toBe(1);
+  expect(f.calls).toContain(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL);
+  f.calls.length=0;f.setAliasConflict(true);
+  const b=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(b.matchedCount).toBe(0);expect(f.calls).not.toContain(P5_E_BATCH_ORIGINAL_SQL);
+ });
+ it("rereads exact permit page, keeps member clocks private and compiles the original only once",async()=>{
+  const f=batch(),s=f.scope.source,p={manifestSha256:s.manifestSha256,queryDigestSha256:s.queryDigestSha256,flightInstanceId:id,
+   expectedSourcePopulationQueryId:qid,expectedSourceResponseSha256:f.scope.expectedResponseSha256,expectedReviewedSourceRightsSha256:s.rightsReviewSha256,
+   expectedReviewedReleaseSha256:s.reviewedReleaseSha256,expectedProviderContractSha256:s.providerContractSha256,expectedEarlyDrawSha256:s.earlyDrawSha256,
+   expectedGithubSourceRunId:s.expectedSourceGithubRunId,runDayIndex:s.runDayIndex,slot:s.slot,horizon:s.horizon,airportIcao:s.airportIcao,
+   selectedTNativeUtc:native,maxPopulationStalenessSeconds:s.maxPopulationStalenessSeconds} as P5Stage14SingleFlightPrePermit;
+  f.scope.selected=[{...f.scope.selected[0],expectedMemberAvailableUtc:null}];f.scope.prospectivePermits=[p];
+  const x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(x.privatePermitReadbacks?.[0]).toMatchObject({flightInstanceId:id,observedDbClockUtc:now,sourceExpiresAtUtc:expire});
+  expect(x.originalBodyReadCount).toBe(1);expect(f.calls.filter(q=>q===P5_E_BATCH_ORIGINAL_SQL)).toHaveLength(1);
+  expect(JSON.stringify(x)).not.toContain("normalizedMember");
+  await expect(compileP5EBoundOriginalBatchReadonly(f.db,{...f.scope,prospectivePermits:[{...p,expectedGithubSourceRunId:"9999999"}]})).rejects.toThrow("CROSS_ORIGINAL_EXACT_PRE_PERMIT_PAGE");
  });
  it("does not transfer original if pending selections are stale or changed",async()=>{
   const f=batch();f.scope.source.maxPopulationStalenessSeconds=1800;

@@ -4,7 +4,7 @@
  * publisher. This reads a genuine current original; it does not certify
  * that a separate archive has retained a field. That authority is distinct.
  */
-import {compileP5EOneBoundOriginalReadonly,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
+import {compileP5EOneBoundOriginalReadonly,compileP5EBoundOriginalBatchReadonly,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {selectP5EStage14BoundRouteFeatures} from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
 import {selectP5EReviewedSupplementalFeatures,type P5EReviewedSupplementalBundle} from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {phase7SelectedFeatureDigest} from "./phase7SignedPreFieldProof_v39";
@@ -58,4 +58,31 @@ export async function readP7ExactSelectedFeatures(pool:P5EReadOnlyPgPool,p:Reado
  if(a.status!=="EXACT_SOURCE_COVERED_FEATURE_PACKET_DRAFT_NOT_SIGNED"||!a.privateReadback||Object.getOwnPropertyDescriptor(a,"privateReadback")?.enumerable!==false||a.providerCalls!==0||a.dbWrites!==0)hold("ACTUAL_SOURCE_READBACK");
  const out=recomputeP7ExactSelectedFeatures(p,a.bundle,a.privateReadback!,externalContentUseReviewSha256);
  actualSourceReadbacks.add(out);return out;
+}
+
+/** Same independent exact source/Stage14 guards, one full original and
+ * normalized population read for the entire existing 96-permit page. Both
+ * reviewer processes will execute this independently; no shared trust or
+ * original cache between signers. */
+export async function readP7ExactSelectedFeaturesPage(pool:P5EReadOnlyPgPool,permits:readonly P5Stage14SingleFlightPrePermit[],externalContentUseReviewSha256:string){
+ if(!Array.isArray(permits)||permits.length<1||permits.length>96||!H.test(externalContentUseReviewSha256))hold("PAGE_SCOPE");
+ const p=permits[0];
+ const a=await compileP5EBoundOriginalBatchReadonly(pool,{source:{
+  manifestSha256:p.manifestSha256,queryDigestSha256:p.queryDigestSha256,reviewedReleaseSha256:p.expectedReviewedReleaseSha256,
+  rightsReviewSha256:p.expectedReviewedSourceRightsSha256,providerContractSha256:p.expectedProviderContractSha256,earlyDrawSha256:p.expectedEarlyDrawSha256,
+  runDayIndex:p.runDayIndex,slot:p.slot,horizon:p.horizon,airportIcao:p.airportIcao,expectedSourceGithubRunId:p.expectedGithubSourceRunId,maxPopulationStalenessSeconds:p.maxPopulationStalenessSeconds},
+  expectedPopulationQueryId:p.expectedSourcePopulationQueryId,expectedResponseSha256:p.expectedSourceResponseSha256,
+  externalContentUseReviewSha256,prospectivePermits:permits,selected:permits.map(z=>{
+   if(!Object.hasOwn(offset,z.horizon))hold("PERMIT_HORIZON");
+   return {flightInstanceId:z.flightInstanceId,expectedSelectedNativeTUtc:z.selectedTNativeUtc,expectedForecastCutoffUtc:new Date(clock(z.selectedTNativeUtc)-offset[z.horizon]).toISOString(),expectedMemberAvailableUtc:null};
+  })});
+ const reads=a.privatePermitReadbacks;
+ if(a.providerCalls!==0||a.dbWrites!==0||a.originalBodyReadCount!==1||a.matchedCount!==permits.length||
+  !reads||reads.length!==permits.length||Object.getOwnPropertyDescriptor(a,"privatePermitReadbacks")?.enumerable!==false)hold("EXACT_PAGE_SOURCE_READBACK");
+ const out=reads.map((v,i)=>{
+  if(v.flightInstanceId!==permits[i].flightInstanceId)hold("EXACT_PAGE_ORDER");
+  const x=recomputeP7ExactSelectedFeatures(permits[i],v.bundle,v,externalContentUseReviewSha256);
+  actualSourceReadbacks.add(x);return x;
+ });
+ return Object.freeze(out);
 }

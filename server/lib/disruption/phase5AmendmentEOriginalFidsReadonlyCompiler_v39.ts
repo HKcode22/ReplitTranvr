@@ -21,8 +21,8 @@ import {compileP5AmendmentEFidsOriginalFeaturesV39,compileP5AmendmentEFidsOrigin
  * Reuse the identity already pinned in the genuine V0079 SOURCE worker. */
 export const P5_E_V0079_SOURCE_READONLY_LOGIN_V39=
  "phase5_p5_source_login_20261108" as const;
-import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,auditP5ActualSourceFlightCandidates,
- type P5ActualSourceCandidateScope,type P5ActualBoundOriginalRow,type P5ActualFlightPopulationRow}
+import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,p5ProspectiveFullWidthMemberIds,auditP5ActualSourceFlightCandidates,
+ type P5ActualSourceCandidateScope,type P5ActualBoundOriginalRow,type P5ActualFlightPopulationRow,type P5RetainedCrossOriginalIdentityRow}
  from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
 const SHA=/^[0-9a-f]{64}$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
@@ -255,13 +255,16 @@ export const P5_E_BATCH_ORIGINAL_SQL=[
 ].join(" ");
 export interface P5ESelectedNativeReviewMember{
  flightInstanceId:string;expectedSelectedNativeTUtc:string;expectedForecastCutoffUtc:string;
- expectedMemberAvailableUtc:string;
+ expectedMemberAvailableUtc:string|null;
 }
 export interface P5EOriginalBatchReadScope{
  source:P5ActualSourceCandidateScope;
  expectedPopulationQueryId:string;expectedResponseSha256:string;
  externalContentUseReviewSha256:string;
  selected:readonly P5ESelectedNativeReviewMember[];
+ /** Exact independent PRE page mode. No source clock or field value may
+  * be invented by the caller; member availability is reread from SQL. */
+ prospectivePermits?:readonly P5Stage14SingleFlightPrePermit[];
 }
 /** Independently fresh readback of an exact already committed original, no
  * extra provider request, no PRE mutation. Zero eligible selections skip
@@ -276,13 +279,29 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
     !UUID.test(s.expectedPopulationQueryId??"")||!["T-24h","T-6h","T-90m"].includes(scope.horizon)||
     !Array.isArray(s.selected)||s.selected.length<1||s.selected.length>2500||
     typeof pool?.connect!=="function")hold("UNREVIEWED_OR_UNBOUNDED_BATCH_SCOPE");
+ const permits=new Map<string,P5Stage14SingleFlightPrePermit>();
+ if(s.prospectivePermits!==undefined){
+  if(!Array.isArray(s.prospectivePermits)||s.prospectivePermits.length!==s.selected.length||s.prospectivePermits.length>96)hold("EXACT_PRE_PERMIT_PAGE_BOUND");
+  for(const p of s.prospectivePermits){
+   if(!p||permits.has(p.flightInstanceId)||p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+      p.manifestSha256!==scope.manifestSha256||p.queryDigestSha256!==scope.queryDigestSha256||
+      p.expectedReviewedReleaseSha256!==scope.reviewedReleaseSha256||p.expectedReviewedSourceRightsSha256!==scope.rightsReviewSha256||
+      p.expectedProviderContractSha256!==scope.providerContractSha256||p.expectedEarlyDrawSha256!==scope.earlyDrawSha256||
+      p.runDayIndex!==scope.runDayIndex||p.slot!==scope.slot||p.horizon!==scope.horizon||p.airportIcao!==scope.airportIcao||
+      p.expectedGithubSourceRunId!==scope.expectedSourceGithubRunId||p.maxPopulationStalenessSeconds!==scope.maxPopulationStalenessSeconds||
+      p.expectedSourcePopulationQueryId!==s.expectedPopulationQueryId||p.expectedSourceResponseSha256!==s.expectedResponseSha256)
+    hold("CROSS_ORIGINAL_EXACT_PRE_PERMIT_PAGE");
+   permits.set(p.flightInstanceId,p);
+  }
+ }
  const ids=new Set<string>();
  const offset=scope.horizon==="T-24h"?86400000:scope.horizon==="T-6h"?21600000:5400000;
  for(const member of s.selected){
   if(!member||!/^leg:[a-zA-Z0-9:|._-]{5,196}$/.test(member.flightInstanceId??"")||
      ids.has(member.flightInstanceId)||
      exact(member.expectedSelectedNativeTUtc)-exact(member.expectedForecastCutoffUtc)!==offset||
-     exact(member.expectedMemberAvailableUtc)>exact(member.expectedForecastCutoffUtc))
+     (member.expectedMemberAvailableUtc===null?!permits.has(member.flightInstanceId):exact(member.expectedMemberAvailableUtc)>exact(member.expectedForecastCutoffUtc))||
+     (permits.size>0&&permits.get(member.flightInstanceId)?.selectedTNativeUtc!==member.expectedSelectedNativeTUtc))
    hold("BATCH_MEMBER_SCOPE_OR_CUTOFF_DRIFT");
   ids.add(member.flightInstanceId);
  }
@@ -302,8 +321,15 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
   if(originals.length!==1||originals[0].population_query_id!==s.expectedPopulationQueryId||
      originals[0].original_response_hash!==s.expectedResponseSha256)hold("BATCH_BOUND_ORIGINAL_SCOPE_DRIFT");
   const members=(await c.query(P5_E_BATCH_ALL_MEMBERS_SQL,[s.expectedPopulationQueryId])).rows;
+  // The production leg:p5v1 identity requires the retained cross-original
+  // conflict screen. Reuse the same exact restricted query in this same
+  // snapshot. The previous helper called the auditor without these rows:
+  // real full-width identities would HOLD even though legacy CI IDs passed.
+  const typedMembers=members as unknown as P5ActualFlightPopulationRow[];
+  const retained=p5ProspectiveFullWidthMemberIds(typedMembers).length?
+   (await c.query(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL,[s.expectedPopulationQueryId,scope.manifestSha256,new Date(clock).toISOString(),scope.providerContractSha256,scope.rightsReviewSha256])).rows as unknown as P5RetainedCrossOriginalIdentityRow[]:undefined;
   const audit=auditP5ActualSourceFlightCandidates(scope,originals as unknown as P5ActualBoundOriginalRow[],
-   members as unknown as P5ActualFlightPopulationRow[],new Date(clock));
+   typedMembers,new Date(clock),retained);
   const candidateById=new Map(audit.candidates.map(a=>[a.flightInstanceId,a]));
   const memberById=new Map(members.map(m=>[String(m.analytic_identity_id),m]));
   const inputs:P5EOriginalFidsCompilerInput[]=[];
@@ -317,10 +343,19 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
    const a=candidateById.get(sel.flightInstanceId);
    return a?.status==="ACTUAL_SOURCE_CANDIDATE_INDEPENDENT_REVIEW_REQUIRED"&&
     a.selectedTNativeUtc===sel.expectedSelectedNativeTUtc&&a.ownCutoffUtc===sel.expectedForecastCutoffUtc&&
-    a.actualMemberAvailableUtc===sel.expectedMemberAvailableUtc&&
+    (sel.expectedMemberAvailableUtc===null?permits.has(sel.flightInstanceId):a.actualMemberAvailableUtc===sel.expectedMemberAvailableUtc)&&
     (nativeCounts.get(String(memberById.get(sel.flightInstanceId)?.provider_record_key??""))??0)<=1;
   });
   const rejected=s.selected.length-selected.length;
+  if(permits.size&&(rejected!==0||selected.length!==permits.size))hold("EXACT_PRE_PAGE_MEMBER_NO_LONGER_ELIGIBLE");
+  if(permits.size)for(const sel of selected){
+   const p=permits.get(sel.flightInstanceId)!;
+   const rows=members.filter(m=>m.analytic_identity_id===sel.flightInstanceId);
+   // Preserve all existing Stage14 source/run/member/cutoff rules as an
+   // independent read, not just the bulk candidate audit.
+   const v=verifyP5Stage14SourceBindingForIndependentRead(p,originals[0],rows,new Date(clock));
+   if(v.cutoffUtc!==sel.expectedForecastCutoffUtc||rows[0].query_direction!=="Departure"||time(rows[0].dep_scheduled_utc)!==exact(sel.expectedSelectedNativeTUtc))hold("EXACT_PRE_PAGE_BINDING_DRIFT");
+  }
   if(selected.length){
    const rr=(await c.query(P5_E_BATCH_ORIGINAL_SQL,[scope.manifestSha256,scope.queryDigestSha256,s.expectedPopulationQueryId])).rows;
    if(rr.length!==1||rr[0].population_query_id!==s.expectedPopulationQueryId||rr[0].stored_response_hash!==s.expectedResponseSha256||
@@ -337,7 +372,7 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
      populationQueryId:s.expectedPopulationQueryId,flightInstanceId:sel.flightInstanceId,
      providerRecordKey:String(m.provider_record_key??""),normalizedOperatingFlightNumber:String(m.flight_number??""),
      originalSelectedDepartureUtc:sel.expectedSelectedNativeTUtc,normalizedOriginIcao:scope.airportIcao,
-     normalizedDestinationIcao:String(m.arr_airport_icao??""),normalizedAvailableAtUtc:sel.expectedMemberAvailableUtc,
+     normalizedDestinationIcao:String(m.arr_airport_icao??""),normalizedAvailableAtUtc:new Date(time(m.available_at)).toISOString(),
      externallyReviewedSourceAndContentsSha256:s.externalContentUseReviewSha256});
    }
   }
@@ -354,14 +389,32 @@ export async function compileP5EBoundOriginalBatchReadonly(pool:P5EReadOnlyPgPoo
     selectedNativeTUtc:x.originalSelectedDepartureUtc,memberAvailableAtUtc:x.normalizedAvailableAtUtc
    }),enumerable:false}));
   });
-  // Do not label the time at the beginning of this read transaction as
-  // completion. Actual packet/reviewer and PRE later recheck fresh clocks.
+  // Exact producer page records a fresh database clock only after the
+  // original was compiled once for the whole page. No retrospective PRE.
+  type PrivatePermitReadback={flightInstanceId:string;bundle:ReturnType<typeof compileP5AmendmentEFidsOriginalFeaturesV39>["bundle"];normalizedMember:Readonly<Record<string,unknown>>;observedDbClockUtc:string;sourceExpiresAtUtc:string};
+  let privatePermitReadbacks:readonly PrivatePermitReadback[]|null=null;
+  if(permits.size){
+   if(result?.matchedCount!==permits.size)hold("EXACT_PRE_PAGE_ORIGINAL_MEMBER_MISMATCH");
+   const z=(await c.query("SELECT clock_timestamp() AS at")).rows,end=time(z[0]?.at);
+   if(z.length!==1||end<clock)hold("EXACT_PRE_PAGE_COMPLETION_CLOCK");
+   privatePermitReadbacks=Object.freeze(s.selected.map(sel=>{
+    const p=permits.get(sel.flightInstanceId)!,m=memberById.get(sel.flightInstanceId)!;
+    const v=verifyP5Stage14SourceBindingForIndependentRead(p,originals[0],[m],new Date(end));
+    const d=result!.privateDecisions.find(x=>x.flightInstanceId===sel.flightInstanceId);
+    if(d?.status!=="MATCHED_NATIVE_ORIGINAL"||v.cutoffUtc!==sel.expectedForecastCutoffUtc||end+900000>=exact(v.cutoffUtc))return hold("EXACT_PRE_PAGE_COMPLETION_TOO_LATE_OR_CHANGED");
+    return Object.freeze({flightInstanceId:sel.flightInstanceId,bundle:d.compiled.bundle,normalizedMember:Object.freeze({...m}),
+     observedDbClockUtc:new Date(end).toISOString(),sourceExpiresAtUtc:v.sourceExpiresAtUtc});
+   }));
+  }
+  // The earlier clock remains the legacy audit's observation, not a
+  // claim of completion. Exact independent page uses fresh private clocks.
   await c.query("ROLLBACK");began=false;
   const summary={status:"EXACT_BOUND_ORIGINAL_NATIVE_FEATURE_BATCH_NOT_SIGNED",runDayIndex:scope.runDayIndex,horizon:scope.horizon,
    observedDbClockUtc:new Date(clock).toISOString(),selectedCount:s.selected.length,noLongerEligibleOrChangedCount:rejected,
    matchedCount:result?.matchedCount??0,nativeOriginalCensoredCount:result?.censoredCount??0,originalBodyReadCount:inputs.length?1:0,
    providerCalls:0,dbWrites:0,sourceRightsAuthenticatedHere:false,physicalGateOutCertified:false,phase6PaidGo:false};
-  return Object.freeze(Object.defineProperty(summary,"privateDecisions",{value:Object.freeze(privateDecisions),enumerable:false})) as typeof summary&
-   {readonly privateDecisions:NonNullable<typeof result>["privateDecisions"]};
+  return Object.freeze(Object.defineProperties(summary,{privateDecisions:{value:Object.freeze(privateDecisions),enumerable:false},
+   privatePermitReadbacks:{value:privatePermitReadbacks,enumerable:false}})) as typeof summary&
+   {readonly privateDecisions:NonNullable<typeof result>["privateDecisions"];readonly privatePermitReadbacks:readonly PrivatePermitReadback[]|null};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
