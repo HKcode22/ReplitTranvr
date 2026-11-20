@@ -1,0 +1,28 @@
+name: Phase7 detached inert owner preflight (NO PROVIDER)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'review-tools/p7_nov20_detached_inert_owner.mjs'
+      - 'review-tools/p7_nov20_detached_inert_owner.test.mjs'
+      - '.github/workflows/phase7-detached-inert-owner-review.yml'
+permissions:
+  contents: read
+jobs:
+  native-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: node --check review-tools/p7_nov20_detached_inert_owner.mjs
+      - run: node --test review-tools/p7_nov20_detached_inert_owner.test.mjs
