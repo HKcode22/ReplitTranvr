@@ -203,6 +203,7 @@ export async function discoverP7WorkflowRunRecoverySelector(env:NodeJS.ProcessEn
   if(!d||d.enumerable!==false||!Array.isArray(d.value)||d.value.length>1024)HOLD("NO_AUTHENTICATED_RECOVERY_ROUTES");
   const hits=d!.value.filter((x:P6ProspectiveShardHandoff)=>x.lane==="POST"&&x.runDayIndex===row.run_day_index&&x.shardIndex===row.shard_index&&x.signedFrozenSha256===packetSha256);
   if(hits.length!==1)HOLD("NO_EXACT_RECOVERABLE_ROUTE");
+  if(typeof z.indexRevision!=="number"||!integer(z.indexRevision,1024)||typeof z.externallySignedDayEpochIndexSha256!=="string"||!H.test(z.externallySignedDayEpochIndexSha256)||typeof z.observedRealPgClockUtc!=="string")return HOLD("CURRENT_SIGNED_INDEX_SCOPE");
   const selector:P7RecoverySelector={runDayIndex:row.run_day_index,indexRevision:z.indexRevision,indexSha256:z.externallySignedDayEpochIndexSha256,
    shardIndex:row.shard_index,packetSha256,routingIntentSha256:hits[0].routingIntentSha256,originalGithubRunId};
   const route=selectP7RecoverablePostRoute(handoff,selector);
