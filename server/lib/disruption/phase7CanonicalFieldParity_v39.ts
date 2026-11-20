@@ -92,3 +92,43 @@ export function auditCanonicalPhase7FieldParity(contract:Phase7DerivedReleaseCon
  const falsePresence=Object.values(counters).flatMap(x=>Object.values(x)).reduce((a,x)=>a+x.sourceMissingOutputPresent,0);
  return {schema:"v39.phase7.canonical-field-parity-audit.v1",rows:rows.size,groups:seenLeg.size,fields:expected.size,byHorizon:counters,fieldsRequiringRights,sourcePresentLost:losses,sourceMissingPromoted:falsePresence,continuousObserved:labelObserved,continuousMissing:labelMissing,continuousMismatch:labelMismatch,structuralCoverageParity:losses===0&&falsePresence===0&&labelMismatch===0&&fieldsRequiringRights.length===0,actualPredictiveModelParityCertified:false,reconstructionRiskCertified:false,sourceMembershipAuthenticatedHere:false,sourceValuesPersisted:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }
+
+/** PRE-time audit for one horizon batch. Execute while each original is
+ * live; retain only approved aggregate review evidence, never the source
+ * crosswalk. It deliberately does not require T24 to survive until POST.
+ * An actual source-bound transform/persist integration and approved
+ * grouping lifecycle remain necessary. */
+export function auditCanonicalPrePreservationWindow(
+ contract:Phase7DerivedReleaseContract,
+ dispositions:readonly Phase7CanonicalFieldDisposition[],
+ rows:readonly {horizon:Phase6ReleaseHorizon;issuedAtUtc:string;sourceExpiresAtUtc:string;sourceFields:Phase7CanonicalParityInput["sourceFields"];separatelyVerifiedFields:readonly P5EPreField[];derivedFeatureBuckets:Readonly<Record<string,number|null>>}[],
+ nowUtc:string
+){
+ const now=clock(nowUtc),expected=new Set<string>(P5_E_ALLOWED_PRE_FEATURES);
+ need(dispositions.length===expected.size&&new Set(dispositions.map(x=>x.field)).size===expected.size&&dispositions.every(x=>expected.has(x.field)&&H.test(x.reviewSha256)),"pre-complete-field-inventory");
+ need(rows.length>0&&rows.length<=100000&&horizons.includes(rows[0].horizon)&&rows.every(x=>x.horizon===rows[0].horizon),"pre-single-horizon-window");
+ const byField=new Map(dispositions.map(x=>[x.field,x])),mapped=new Set<string>();
+ for(const d of dispositions){
+  need(["REVIEWED_DERIVED_BUCKET","INDEPENDENT_SOURCE_EXACT_LANE","PURPOSE_BOUND_REFERENCE_LANE","LONG_TERM_RIGHTS_REQUIRED"].includes(d.disposition),"pre-disposition");
+  if(d.disposition==="REVIEWED_DERIVED_BUCKET"){need(typeof d.outputField==="string"&&contract.features.some(f=>f.name===d.outputField)&&!mapped.has(d.outputField),"pre-derived-output");mapped.add(d.outputField!)}
+  else need(d.outputField===null,"pre-separate-lane");
+ }
+ need(mapped.size===contract.features.length,"pre-unmapped-output");
+ const counts=Object.fromEntries(P5_E_ALLOWED_PRE_FEATURES.map(f=>[f,{present:0,preserved:0,lost:0,falsePresence:0}])) as Record<P5EPreField,{present:number;preserved:number;lost:number;falsePresence:number}>;
+ for(const r of rows){
+  const issued=clock(r.issuedAtUtc);
+  need(issued<=now&&now<clock(r.sourceExpiresAtUtc),"pre-custody-expired");
+  need(r.sourceFields.length===expected.size&&new Set(r.sourceFields.map(f=>f.field)).size===expected.size&&r.sourceFields.every(f=>expected.has(f.field)),"pre-source-denominator");
+  need(Object.keys(r.derivedFeatureBuckets).length===mapped.size&&[...mapped].every(k=>Object.hasOwn(r.derivedFeatureBuckets,k)),"pre-output-denominator");
+  need(new Set(r.separatelyVerifiedFields).size===r.separatelyVerifiedFields.length&&r.separatelyVerifiedFields.every(f=>expected.has(f)&&["INDEPENDENT_SOURCE_EXACT_LANE","PURPOSE_BOUND_REFERENCE_LANE"].includes(byField.get(f)!.disposition)),"pre-separate-lane-scope");
+  for(const f of r.sourceFields){
+   const d=byField.get(f.field)!,present=f.present&&f.availableAtUtc!==null&&clock(f.availableAtUtc)<=issued;
+   need(!f.present||present,"pre-feature-after-issue");
+   const bucket=d.outputField===null?null:r.derivedFeatureBuckets[d.outputField];
+   if(d.outputField!==null)need(bucket===null||Number.isSafeInteger(bucket)&&bucket!>=0&&bucket!<contract.features.find(x=>x.name===d.outputField)!.bucketCount,"pre-output-bucket");
+   const out=d.disposition==="REVIEWED_DERIVED_BUCKET"?bucket!==null:d.disposition==="LONG_TERM_RIGHTS_REQUIRED"?false:r.separatelyVerifiedFields.includes(f.field);
+   const c=counts[f.field];if(present)c.present++;if(out)c.preserved++;if(present&&!out)c.lost++;if(!present&&out)c.falsePresence++;
+  }
+ }
+ return {schema:"v39.phase7.pre-custody-window-field-preservation.v1",horizon:rows[0].horizon,rows:rows.length,fields:expected.size,counts,sourceValuesPersisted:false,sourceMappingPersisted:false,sourceMembershipAuthenticatedHere:false,actualPredictiveParityCertified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+}
