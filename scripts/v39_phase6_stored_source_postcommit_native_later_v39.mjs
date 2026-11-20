@@ -12,6 +12,7 @@ import {admitP6PostcommitNativeAudit,runP6PostcommitNativeAudit} from "./v39_pha
 import {readP6PendingLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts";
 import {pageP5UnsignedNativePreReviewDossier} from "../server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {signP6DelegatedNativeLaterReviewPage} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {resolveP7PublicationProofs} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
 import {runP6DelegatedReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
@@ -128,7 +129,8 @@ export function planP6NativeLaterAppendScope(handoff,current,policy,pageIndex){
   proposedLaterRegistryFilePath:path,shardIndex},
   expectedSourceReviewEvidenceSha256:src[0].reviewEvidenceSha256};
 }
-export async function runP6NativeLaterRuntime(env){
+export async function runP6NativeLaterRuntime(env,phase7ProofPort){
+ if(typeof phase7ProofPort?.readExactPermitProofs!=="function")hold("INDEPENDENT_PRE_PROOF_PORT_NOT_COMMISSIONED");
  const x=admitP6NativeLaterRuntime(env),t=x.c.trust,v=x.v;
  const publisher=new pg.Client({connectionString:x.publisherUrl,connectionTimeoutMillis:8000,query_timeout:35000,
   application_name:"p6_native_later_registry_publication"});
@@ -154,6 +156,7 @@ export async function runP6NativeLaterRuntime(env){
   if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
    return {...report,sourceAuditOnly:true};
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+  const resolveProofs=preview=>resolveP7PublicationProofs({preview,env,port:phase7ProofPort,readClock:async()=>new Date((await reader.query("SELECT clock_timestamp() AS at")).rows[0].at).toISOString(),forbiddenSignerFingerprints:[v.laterReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256]});
   if(handoff.horizon==="T-24h"){
    if(v.independentT24WitnessProtocolReviewed!==true||v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107")hold("T24_WITNESS_PROTOCOL_NOT_APPROVED");
    const trust={...t,independentNativeT24RegistryApproved:true,
@@ -165,7 +168,9 @@ export async function runP6NativeLaterRuntime(env){
    const maxPages=Math.ceil(handoff.reviewEntryCount/96);
    for(let i=0;i<maxPages;i++){
     const current=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});
-    const proposal=buildP6DelegatedT24PrivateRegistry({handoff,features,authority:x.authority,current,trust});
+    const args={handoff,features,authority:x.authority,current,trust};
+    const preview=buildP6DelegatedT24PrivateRegistry({...args,phase7ProofScope:{phase7ProofPreviewOnly:true}});
+    const proposal=preview.phase7ProofPreviewOnly===true?buildP6DelegatedT24PrivateRegistry({...args,phase7ProofScope:await resolveProofs(preview)}):preview;
     if(!proposal.packetCount){
      report.heldPages+=Number(proposal.censored>0);break;
     }
@@ -197,7 +202,9 @@ export async function runP6NativeLaterRuntime(env){
    const current=await readCurrent(reader,t,d.runDayIndex);
    const planned=planP6NativeLaterAppendScope(handoff,current,x,page.pageIndex);
    if(!planned){report.heldPages++;continue;}
-   const signed=signP6DelegatedNativeLaterReviewPage({handoff,featureReview:features,evidence,authority:x.authority,scope:planned.scope});
+   const args={handoff,featureReview:features,evidence,authority:x.authority};
+   const preview=signP6DelegatedNativeLaterReviewPage({...args,scope:{...planned.scope,phase7ProofPreviewOnly:true}});
+   const signed=preview.phase7ProofPreviewOnly===true?signP6DelegatedNativeLaterReviewPage({...args,scope:{...planned.scope,...await resolveProofs(preview)}}):preview;
    report.reviewedCount+=signed.reviewedCount;
    report.missingNativeOriginal+=signed.missingNativeOriginal;
    report.unresolvedT24+=signed.unresolvedT24;
