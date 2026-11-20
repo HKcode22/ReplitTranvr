@@ -50,6 +50,12 @@ describe("final group assembly preserves actual PRE IDs and conditional primary 
   expect(a.packet.rows[1].qualityFlags&P7_CANCELLED_SEPARATE_OUTCOME).toBe(P7_CANCELLED_SEPARATE_OUTCOME);
   expect(a.continuous.rows[0].value).toBeNull();
  });
+ it("rejects malformed database group identifiers before assembly",()=>{
+  const f=pre("T-6h");
+  for(const groupId of ["not-a-uuid","00000000-0000-1000-8000-000000000000","00000000-0000-4000-0000-000000000000"]){
+   expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[{...f,groupId}],{...scope,groupId,evidence:{}},now)).toThrow("PHASE7_FINAL_GROUP_REJECTED:scope");
+  }
+ });
  it("rejects duplicate/different groups, future outcomes, mismatched legs, absent-horizon evidence and early finalization",()=>{
   const f=pre("T-6h"),t=pre("T-90m"),e=outcome("T-6h"),q=outcome("T-90m");
   expect(()=>assemblePhase7FinalGroupCandidate(contract,profile,[f,f],{...scope,evidence:{}},now)).toThrow();

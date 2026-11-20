@@ -12,6 +12,7 @@ import {transformPhase7ReviewedSourceDecisions} from "./phase7ReviewedSourceTran
 import {assessP5AmendmentEGateOutDelayCandidate,type P5EGateOutFirstCycleInput} from "./phase5AmendmentEGateOutDelayLabel_v39";
 import {hashPhase7DurableCandidate,type Phase7DurableDerivedBundle} from "./phase7DurableDerivedBundleCandidate_v39";
 const H=/^[a-f0-9]{64}$/,UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+const isGroupUuid=(value:string): value is ReturnType<typeof randomUUID>=>UUID.test(value);
 const hs=["T-24h","T-6h","T-90m"] as const;
 const need=(v:unknown,s:string)=>{if(!v)throw Error("PHASE7_FINAL_GROUP_REJECTED:"+s)};
 const sha=(s:string)=>createHash("sha256").update(s,"utf8").digest("hex");
@@ -37,8 +38,10 @@ export interface Phase7GroupOutcomeScope{
  evidence:Readonly<Partial<Record<Phase6ReleaseHorizon,P5EGateOutFirstCycleInput|null>>>;
 }
 export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,fragments:readonly Phase7StoredPreFragment[],scope:Phase7GroupOutcomeScope,releasedAtUtc:string){
+ const groupId=scope.groupId;
+ if(!isGroupUuid(groupId))throw Error("PHASE7_FINAL_GROUP_REJECTED:scope");
  const now=clock(releasedAtUtc),contractSha=hashPhase7DurableCandidate(contract),profileSha=hashPhase7DurableCandidate(profile);
- need(now<clock(contract.researchExpiryUtc)&&scope.groupSettlementDue===true&&UUID.test(scope.groupId)&&validHash(scope.associationReviewSha256)&&validHash(scope.outcomeReviewSha256)&&fragments.length>=1&&fragments.length<=3&&hs.every(h=>contract.allowedHorizons.includes(h))&&contract.allowedHorizons.length===3,"scope");
+ need(now<clock(contract.researchExpiryUtc)&&scope.groupSettlementDue===true&&validHash(scope.associationReviewSha256)&&validHash(scope.outcomeReviewSha256)&&fragments.length>=1&&fragments.length<=3&&hs.every(h=>contract.allowedHorizons.includes(h))&&contract.allowedHorizons.length===3,"scope");
  need(Object.keys(scope.evidence).every(k=>hs.includes(k as Phase6ReleaseHorizon)),"unrecognized-horizon");
  const byHorizon=new Map<Phase6ReleaseHorizon,Phase7DerivedReleaseRow>(),rowIds=new Set<string>();
  for(const f of fragments){
@@ -86,7 +89,7 @@ export function assemblePhase7FinalGroupCandidate(contract:Phase7DerivedReleaseC
   // Feature values, IDs, cohort and split remain exactly as committed PRE.
   rows.push({...r,labelBuckets:labels,missingness:{...Object.fromEntries(Object.entries(r.featureBuckets).map(([k,v])=>[k,v===null])),...Object.fromEntries(Object.entries(labels).map(([k,v])=>[k,v===null]))},qualityFlags:flags,censoring});
  }
- const packet=createPhase7DerivedReleasePacket(contract,rows,scope.groupId);
+ const packet=createPhase7DerivedReleasePacket(contract,rows,groupId);
  const packetSha=sha(serializePhase7DerivedReleasePacket(contract,packet)),t6=rows[1];
  const continuous:Phase7DurableDerivedBundle["continuous"]={schema:"v39.phase7.continuous-gate-out-target-packet.v1",packetId:randomUUID(),derivedPacketSha256:packetSha,targetName:"gate_out_delay_minutes",unit:"minutes",primaryHorizon:"T-6h",rows:[{releaseRowId:t6.releaseRowId,value:labelByHorizon.get("T-6h")??null,censoring:t6.censoring}]};
  return {packet,association:{schema:"v39.phase7.paired-derived-association-candidate.v1" as const,packetSha256:packetSha,reviewEvidenceSha256:scope.associationReviewSha256,groups:[{groupId:scope.groupId,split:anchor.split,rows:rows.map(r=>({horizon:r.horizon,releaseRowId:r.releaseRowId}))}],sourceMappingPersisted:false as const,approvedForUse:false as const},continuous,denominator:{present,primaryPrePresent:present["T-6h"],primaryNumeric:labelByHorizon.get("T-6h")!==null&&present["T-6h"],pairedT6T90Numerical:present["T-6h"]&&present["T-90m"]&&labelByHorizon.get("T-6h")!==null&&labelByHorizon.get("T-90m")!==null,t24ComparatorNumerical:present["T-24h"]&&labelByHorizon.get("T-24h")!==null},sourceMembershipAuthenticatedHere:false,sourceValuesPersisted:false,approvedForDurableStorage:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
