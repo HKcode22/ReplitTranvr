@@ -3,7 +3,7 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {Client} from "pg";
-import {p7ReviewPath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
+import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 const h=(s:string)=>createHash("sha256").update(s).digest("hex");
 const pre=generateKeyPairSync("ed25519"),post=generateKeyPairSync("ed25519");
@@ -23,14 +23,15 @@ function fixtures(now:number){
  const postScope={committedPostSha256:h("committed"),anchorSha256:h("anchor"),fragmentsSha256:h("fragments")};
  const c:P7ReviewSelector={kind:"POST_SETTLEMENT",runDayIndex:31,scopeSha256:hashPhase7DurableCandidate(postScope)};
  const prePayload={schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:prePolicy,permitSha256:a.scopeSha256,issuedAtUtc,validUntilUtc,fields:[]};
- const recoveryPayload={schema:"v39.phase7.committed-post-recovery-receipt.v1",policySha256:postPolicy,committedScopeSha256:b.scopeSha256,originalAuditSha256:h("audit"),originalAuditAtUtc:issuedAtUtc,reviewedAtUtc:issuedAtUtc,validUntilUtc};
+ const recoveryPayload={schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:postPolicy,originalAvailableAtUtc:new Date(now-10000).toISOString(),committedScopeSha256:b.scopeSha256,originalAuditSha256:h("audit"),originalAuditAtUtc:issuedAtUtc,reviewedAtUtc:issuedAtUtc,validUntilUtc};
  const settlementPayload={schema:"v39.phase7.exact-post-group-settlement.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:postPolicy,...postScope,reviewedAtUtc:issuedAtUtc,validUntilUtc,scope:{synthetic:true}};
  return {clock,validUntilUtc,a,b,c,prePayload,recoveryPayload,settlementPayload,aw:wire(prePayload,pre),bw:wire(recoveryPayload,post),cw:wire(settlementPayload,post)};
 }
 it("authenticates exact signed scope, separate key, study and short-lived clock before storage",()=>{
  const f=fixtures(Date.parse("2027-01-01T00:00:00.000Z"));
  for(const [s,w] of [[f.a,f.aw],[f.b,f.bw],[f.c,f.cw]] as const)expect(verifyP7StoredWire(trust,s,w,f.clock).wire).toEqual(w);
- expect(new Set([f.a,f.b,f.c].map(p7ReviewPath)).size).toBe(3);
+ expect(new Set([f.a,f.b,f.c].map(p7ReviewPath).concat(p7RecoveryFencePath(f.b))).size).toBe(4);
+ expect(()=>verifyP7StoredWire(trust,f.b,wire({...f.recoveryPayload,originalAvailableAtUtc:"2026-12-31T23:45:00.000Z"},post),f.clock)).toThrow("RECOVERY_ORIGINAL_WINDOW");
  expect(()=>verifyP7StoredWire(trust,f.a,wire(f.prePayload,post),f.clock)).toThrow("SIGNATURE");
  expect(()=>verifyP7StoredWire(trust,f.a,wire({...f.prePayload,manifestSha256:h("foreign")},pre),f.clock)).toThrow("EXACT_SIGNED_SCOPE");
  expect(()=>verifyP7StoredWire(trust,f.b,f.bw,f.validUntilUtc)).toThrow("LIVE_REVIEW");
@@ -59,6 +60,20 @@ active("real private custody signed-review transport",()=>{
    await expect(readP7PrivateSignedReviews(publisher,trust,[f.a])).rejects.toThrow();
    await expect(publisher.query("UPDATE phase6_private.frozen_native_packet_v39 SET retention_not_after_utc=clock_timestamp()+interval '1 day' WHERE logical_path=$1",[p7ReviewPath(f.a)])).rejects.toThrow();
    await expect(reader.query("DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(f.a)])).rejects.toThrow();
+   // Simulate the original short-lived receipt being physically deleted,
+   // keeping the independently read immutable issuance fence. A fresh wire
+   // for the same original must never get a second committed receipt.
+   const owner=new Client({connectionString:url});
+   try{
+    await owner.connect();
+    const q2=await owner.query("SELECT kind,retention_not_after_utc,payload_bytes FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7RecoveryFencePath(f.b)]);
+    expect(q2.rows[0].kind).toBe("PHASE7_RECOVERY_FENCE");
+    expect(q2.rows[0].retention_not_after_utc.toISOString()).toBe(new Date(Date.parse(f.recoveryPayload.originalAvailableAtUtc)+600000).toISOString());
+    expect(q2.rows[0].payload_bytes.toString()).not.toContain(f.bw.payloadBase64);
+    await owner.query("DELETE FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1",[p7ReviewPath(f.b)]);
+    await expect(readP7PrivateSignedReviews(reader,trust,[f.b])).rejects.toThrow("RECOVERY_PREVIOUSLY_ISSUED_NO_REISSUE");
+    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust,selector:f.b,wire:f.bw})).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
+   }finally{await owner.end()}
    console.log("P7_PRIVATE_SIGNED_REVIEW_REAL_PG16_EXACT_READBACK_PASS_SYNTHETIC_ONLY");
   }finally{await Promise.allSettled([reader.end(),publisher.end()])}
  },30000);

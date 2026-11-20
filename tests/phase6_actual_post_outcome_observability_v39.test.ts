@@ -214,9 +214,9 @@ describe("read-only committed POST recovery candidate",()=>{
    P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:fp,
    P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
   const prior=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre()],f.clock);
-  const receipt={schema:"v39.phase7.committed-post-recovery-receipt.v1",policySha256:policy,
+  const receipt={schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:policy,originalAvailableAtUtc:f.row.available_at,
    committedScopeSha256:hashPhase7DurableCandidate(f.s),originalAuditSha256:phase7CommittedPostAuditIdentity(prior),
-   originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:08:00.000Z"};
+   originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:05:01.000Z"};
   const wire=(patch:Record<string,unknown>={})=>{const b=Buffer.from(JSON.stringify({...receipt,...patch}));return {payloadBase64:b.toString("base64"),signatureBase64:sign(null,b,keys.privateKey).toString("base64")};};
   const consumer={policySha256:policy,preflight:vi.fn().mockResolvedValue(undefined),
    preserveCommitted:vi.fn().mockResolvedValue({independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,
@@ -274,6 +274,10 @@ describe("read-only committed POST recovery candidate",()=>{
   const receipt=await issuePhase7CommittedPostRecoveryReceipt(args);
   expect(receipt.status).toBe("INDEPENDENT_COMMITTED_POST_RECOVERY_RECEIPT_ISSUED_NO_GO");
   expect(JSON.stringify(receipt)).not.toContain("payloadBase64");
+  const signed=JSON.parse(Buffer.from(receipt.privateWire.payloadBase64,"base64").toString("utf8"));
+  expect(signed.originalAvailableAtUtc).toBe(x.f.row.available_at);
+  expect(Date.parse(signed.validUntilUtc)).toBeLessThanOrEqual(Date.parse(signed.originalAvailableAtUtc)+600000);
+  await expect(recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire({originalAvailableAtUtc:"2027-02-02T12:02:29.000Z"}),source:source as any,consumer:x.consumer})).rejects.toThrow("LIVE_AUDIT_DRIFT");
   const out=await recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:receipt.privateWire,consumer:x.consumer});
   expect(out.verifiedGroupCount).toBe(1);
   await expect(issuePhase7CommittedPostRecoveryReceipt({...args,env:{...env,P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:"synthetic"}})).rejects.toThrow("INDEPENDENT_RECOVERY_ISSUER_SCOPE");
@@ -288,7 +292,7 @@ describe("read-only committed POST recovery candidate",()=>{
   expect(out).toEqual({status:"EXACT_SIGNED_RECOVERY_RECEIPT_READBACK_BEFORE_SETTLEMENT",providerCalls:0});
   expect(record).toHaveBeenCalledOnce();expect(read).toHaveBeenCalledOnce();expect(clock).toHaveBeenCalledTimes(2);
   expect(record.mock.calls[0][0].priorAudit).toEqual({sha256:phase7CommittedPostAuditIdentity(x.prior),observedAtUtc:x.f.clock});
-  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>x.wire({validUntilUtc:"2027-02-02T12:07:00.000Z"})}})).rejects.toThrow("RECOVERY_CUSTODY_READBACK_DRIFT");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>x.wire({validUntilUtc:"2027-02-02T12:05:00.000Z"})}})).rejects.toThrow("RECOVERY_CUSTODY_READBACK_DRIFT");
   await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,readRestrictedClock:async()=>"2027-02-02T12:08:00.000Z"})).rejects.toThrow("LIVE_AUDIT_DRIFT");
   await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readOrRecordExactRecoveryReceipt:async()=>({})}})).rejects.toThrow("WIRE");
   await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>{throw Error("readback unavailable")}}})).rejects.toThrow("readback unavailable");

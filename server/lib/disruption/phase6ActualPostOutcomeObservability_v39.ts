@@ -333,10 +333,11 @@ export function auditP6ActualPostOutcomeObservability(s:P6PostCommittedScope,row
   retainedEvidenceOnly:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperties(out,{
   privateObservedDbClockUtc:{value:clockUtc,enumerable:false},
+  privateOriginalAvailableAtUtc:{value:iso(available),enumerable:false},
   privateDecisions:{value:Object.freeze(privateDecisions),enumerable:false},
   privatePreservationAnchors:{value:Object.freeze(privatePreservationAnchors),enumerable:false},
   privateAmbiguousPreservationFlightIds:{value:Object.freeze(privateAmbiguousPreservationFlightIds),enumerable:false}
- })) as typeof out&{readonly privateObservedDbClockUtc:string;readonly privateDecisions:typeof privateDecisions;readonly privatePreservationAnchors:readonly P6PostPreservationAnchor[];readonly privateAmbiguousPreservationFlightIds:readonly string[]};
+ })) as typeof out&{readonly privateObservedDbClockUtc:string;readonly privateOriginalAvailableAtUtc:string;readonly privateDecisions:typeof privateDecisions;readonly privatePreservationAnchors:readonly P6PostPreservationAnchor[];readonly privateAmbiguousPreservationFlightIds:readonly string[]};
 }
 /** Fresh restricted DB read immediately after original+members COMMIT.
  * No logging raw bytes or private decisions. Failure is an audit failure

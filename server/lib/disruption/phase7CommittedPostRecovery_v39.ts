@@ -19,7 +19,8 @@ function decode(v:unknown,max:number){
  const b=Buffer.from(v,"base64");if(b.length>max||b.toString("base64")!==v)hold("WIRE");return b;
 }
 export interface Phase7CommittedPostRecoveryReceipt{
- schema:"v39.phase7.committed-post-recovery-receipt.v1";
+ schema:"v39.phase7.committed-post-recovery-receipt.v2";
+ originalAvailableAtUtc:string;
  policySha256:string;
  committedScopeSha256:string;
  originalAuditSha256:string;
@@ -35,7 +36,7 @@ export function phase7CommittedPostAuditIdentity(a:Phase7PostAudit){
  // Include the entire private denominator, not just counts or a chosen
  // anchor. Sorting removes only query ordering differences.
  const sort=(v:readonly unknown[])=>v.map(hashPhase7DurableCandidate).sort();
- return hashPhase7DurableCandidate({publicAudit:{...a},anchors:sort(a.privatePreservationAnchors),
+ return hashPhase7DurableCandidate({originalAvailableAtUtc:a.privateOriginalAvailableAtUtc,publicAudit:{...a},anchors:sort(a.privatePreservationAnchors),
   decisions:sort(a.privateDecisions),ambiguous:[...a.privateAmbiguousPreservationFlightIds].sort()});
 }
 function verifyReceipt(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,wire:unknown){
@@ -44,12 +45,13 @@ function verifyReceipt(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,wire:unknown
  const raw=decode(w.payloadBase64,4096),sig=decode(w.signatureBase64,64);
  if(sig.length!==64||!verify(null,raw,readPhase7PostReviewerPublicKey(env),sig))hold("SIGNATURE");
  const x=JSON.parse(raw.toString("utf8")) as Phase7CommittedPostRecoveryReceipt;
- if(!exact(x,["schema","policySha256","committedScopeSha256","originalAuditSha256","originalAuditAtUtc","reviewedAtUtc","validUntilUtc"])||
-  x.schema!=="v39.phase7.committed-post-recovery-receipt.v1"||
+ if(!exact(x,["schema","policySha256","committedScopeSha256","originalAuditSha256","originalAuditAtUtc","originalAvailableAtUtc","reviewedAtUtc","validUntilUtc"])||
+  x.schema!=="v39.phase7.committed-post-recovery-receipt.v2"||
   x.policySha256!==env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256||
   x.committedScopeSha256!==hashPhase7DurableCandidate(s)||!H.test(x.originalAuditSha256))hold("EXACT_SCOPE");
  const prior=clock(x.originalAuditAtUtc),reviewed=clock(x.reviewedAtUtc),until=clock(x.validUntilUtc);
- if(prior>reviewed||reviewed>=until||until-prior>600000)hold("REVIEW_WINDOW");
+ const available=clock(x.originalAvailableAtUtc);
+ if(available>prior||prior>reviewed||reviewed>=until||until-reviewed>120000||until>available+600000)hold("REVIEW_WINDOW");
  return x;
 }
 /** Authenticate an independently stored recovery wire against the current
@@ -57,7 +59,7 @@ function verifyReceipt(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,wire:unknown
  * audit timestamp is not replaced by the recovery/re-read time. */
 export function verifyPhase7RecoveryReceiptForAudit(env:NodeJS.ProcessEnv,s:P6PostCommittedScope,a:Phase7PostAudit,wire:unknown,observedDbClockUtc:string){
  const x=verifyReceipt(env,s,wire),now=clock(observedDbClockUtc),auditAt=clock(a.privateObservedDbClockUtc);
- if(clock(x.originalAuditAtUtc)>auditAt||auditAt>now||
+ if(x.originalAvailableAtUtc!==a.privateOriginalAvailableAtUtc||clock(x.originalAuditAtUtc)>auditAt||auditAt>now||
     now<clock(x.reviewedAtUtc)||now>=clock(x.validUntilUtc)||
     x.originalAuditSha256!==phase7CommittedPostAuditIdentity(a))hold("LIVE_AUDIT_DRIFT");
  return x;
@@ -170,9 +172,12 @@ export async function issuePhase7CommittedPostRecoveryReceipt(input:{
  if(now<prior||now>=prior+600000||phase7CommittedPostAuditIdentity(a)!==priorAudit.sha256)hold("ISSUER_PRIOR_AUDIT_DRIFT");
  // This is only a short-lived reviewer receipt, never an outcome label.
  // Bound additionally by every live anchor, and by the prior audit window.
- const until=Math.min(prior+600000,now+120000,...a.privatePreservationAnchors.map(h=>clock(h.sourceExpiresAtUtc)));
+ const available=clock(a.privateOriginalAvailableAtUtc);
+ if(available>prior||now>=available+600000)hold("ISSUER_ORIGINAL_WINDOW_CLOSED");
+ const until=Math.min(prior+600000,available+600000,now+120000,...a.privatePreservationAnchors.map(h=>clock(h.sourceExpiresAtUtc)));
  if(until<=now)hold("ISSUER_EXPIRED");
- const receipt:Phase7CommittedPostRecoveryReceipt={schema:"v39.phase7.committed-post-recovery-receipt.v1",
+ const receipt:Phase7CommittedPostRecoveryReceipt={schema:"v39.phase7.committed-post-recovery-receipt.v2",
+  originalAvailableAtUtc:a.privateOriginalAvailableAtUtc,
   policySha256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256!,committedScopeSha256:hashPhase7DurableCandidate(s),
   originalAuditSha256:priorAudit.sha256,originalAuditAtUtc:priorAudit.observedAtUtc,
   reviewedAtUtc:a.privateObservedDbClockUtc,validUntilUtc:new Date(until).toISOString()};

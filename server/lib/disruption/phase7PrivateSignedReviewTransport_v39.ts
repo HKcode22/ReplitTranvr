@@ -63,25 +63,50 @@ export function verifyP7StoredWire(t:P7ReviewTrust,s:P7ReviewSelector,wire:unkno
  }else key=readPhase7PostReviewerPublicKey(env);
  if(key.asymmetricKeyType!=="ed25519"||signature.length!==64||!verify(null,raw,key,signature))hold("SIGNATURE");
  const x=JSON.parse(raw.toString("utf8"));
- const schema=s.kind==="PRE_PROOF"?"v39.phase7.separate-pre-field-proof.v1":s.kind==="POST_RECOVERY"?"v39.phase7.committed-post-recovery-receipt.v1":"v39.phase7.exact-post-group-settlement.v1";
+ const schema=s.kind==="PRE_PROOF"?"v39.phase7.separate-pre-field-proof.v1":s.kind==="POST_RECOVERY"?"v39.phase7.committed-post-recovery-receipt.v2":"v39.phase7.exact-post-group-settlement.v1";
  const scope=s.kind==="PRE_PROOF"?x.permitSha256:s.kind==="POST_RECOVERY"?x.committedScopeSha256:hashPhase7DurableCandidate({committedPostSha256:x.committedPostSha256,anchorSha256:x.anchorSha256,fragmentsSha256:x.fragmentsSha256});
  const policy=s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256;
  if(x.schema!==schema||!digest(policy)||x.policySha256!==policy||scope!==s.scopeSha256||
   (s.kind!=="POST_RECOVERY"&&(x.manifestSha256!==env.V39_P5_MANIFEST_SHA256||x.rightsSha256!==env.V39_P5_RIGHTS_SHA256)))hold("EXACT_SIGNED_SCOPE");
  const reviewed=s.kind==="PRE_PROOF"?x.issuedAtUtc:x.reviewedAtUtc,from=at(reviewed),until=at(x.validUntilUtc);
  if(from>now||now>=until||until-from>(s.kind==="PRE_PROOF"?86400000:s.kind==="POST_SETTLEMENT"?21600000:600000))hold("LIVE_REVIEW");
+ // The receipt remains valid at most two minutes. The separate issuance
+ // fence contains only bounded operational metadata, not the signed wire.
+ const originalAvailable=s.kind==="POST_RECOVERY"?at(x.originalAvailableAtUtc):null;
+ if(originalAvailable!==null&&(originalAvailable>at(x.originalAuditAtUtc)||at(x.originalAuditAtUtc)>from||until-from>120000||until>originalAvailable+600000))hold("RECOVERY_ORIGINAL_WINDOW");
  const bytes=Buffer.from(JSON.stringify(w));
  if(bytes.length<100||bytes.length>65000)hold("BYTES");
- return {path,wire:Object.freeze({...w}),bytes,contentSha256:sha(bytes),externalReviewSha256:sha(raw),reviewedAtUtc:reviewed,validUntilUtc:x.validUntilUtc as string};
+ return {path,wire:Object.freeze({...w}),bytes,contentSha256:sha(bytes),externalReviewSha256:sha(raw),reviewedAtUtc:reviewed,validUntilUtc:x.validUntilUtc as string,recoveryFenceUntilUtc:originalAvailable===null?null:new Date(originalAvailable+600000).toISOString()};
+}
+/** Separate path domain; the marker is not a scientific result or a receipt. */
+export function p7RecoveryFencePath(s:P7ReviewSelector){
+ if(s.kind!=="POST_RECOVERY")hold("FENCE_SELECTOR");p7ReviewPath(s);
+ return "data-collection/phase5/frozen/p7review_"+sha(JSON.stringify(["POST_RECOVERY_ISSUED",s.runDayIndex,s.scopeSha256]))+".json";
+}
+function recoveryFence(s:P7ReviewSelector,w:ReturnType<typeof verifyP7StoredWire>){
+ if(s.kind!=="POST_RECOVERY"||!w.recoveryFenceUntilUtc)return hold("FENCE_SELECTOR");
+ // No provider body, private anchor, flight ID, signed wire or denominator.
+ const bytes=Buffer.from(JSON.stringify({schema:"v39.phase7.operational-recovery-issued-fence.v1",receiptPathSha256:sha(w.path),hardNotAfterUtc:w.recoveryFenceUntilUtc}));
+ return {path:p7RecoveryFencePath(s),bytes,contentSha256:sha(bytes),until:w.recoveryFenceUntilUtc};
 }
 async function checkInstalled(c:DB){
- const z=await c.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid=$1::regclass AND convalidated AND conname='p6_v0101_kind_allowed' AND pg_get_constraintdef(oid) LIKE '%PHASE7_SIGNED_REVIEW%'",[TABLE]);
+ const z=await c.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid=$1::regclass AND convalidated AND conname='p6_v0101_kind_allowed' AND pg_get_constraintdef(oid) LIKE '%PHASE7_SIGNED_REVIEW%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_FENCE%'",[TABLE]);
  if(z.rowCount!==1||z.rows[0]?.n!==1)hold("SCHEMA_NOT_COMMISSIONED");
 }
 async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector[],clock:string){
  const e=validateTrust(t),paths=selectors.map(p7ReviewPath);
  if(paths.length<1||paths.length>96||new Set(paths).size!==paths.length)hold("BATCH");
  const z=await c.query("SELECT logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes,review_wire_bytes FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[paths]);
+ // Inspect the exact issuance fence in the same snapshot, including when
+ // the short-lived signed wire has already been physically removed.
+ const recovery=selectors.filter(s=>s.kind==="POST_RECOVERY");
+ const fenceRows=recovery.length?(await c.query("SELECT logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,committed_at_utc,payload_bytes,review_wire_bytes FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[recovery.map(p7RecoveryFencePath)])).rows:[];
+ for(const s of recovery){
+  const hits=fenceRows.filter((v:any)=>v.logical_path===p7RecoveryFencePath(s));
+  const present=z.rows.some((v:any)=>v.logical_path===p7ReviewPath(s));
+  if(!present&&hits.length!==0)hold("RECOVERY_PREVIOUSLY_ISSUED_NO_REISSUE");
+  if(present&&hits.length!==1)hold("RECOVERY_FENCE_MISSING_OR_AMBIGUOUS");
+ }
  if(z.rowCount!==selectors.length||z.rows.length!==selectors.length)hold("MISSING_EXACT_REVIEW_NO_FALLBACK");
  const results=new Map<string,P7Wire>();
  for(let i=0;i<selectors.length;i++){
@@ -93,6 +118,14 @@ async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector
   if(w.path!==v.logical_path||!w.bytes.equals(v.payload_bytes)||w.contentSha256!==v.content_sha256||w.externalReviewSha256!==v.external_review_sha256||
    w.reviewedAtUtc!==iso(v.externally_reviewed_at_utc)||w.validUntilUtc!==iso(v.retention_not_after_utc)||
    at(iso(v.committed_at_utc))<at(w.reviewedAtUtc)||at(iso(v.committed_at_utc))>at(clock))hold("EXACT_DURABLE_WIRE");
+  if(s.kind==="POST_RECOVERY"){
+   const f=recoveryFence(s,w),v2=fenceRows.find((v:any)=>v.logical_path===f.path);
+   if(!v2||v2.kind!=="PHASE7_RECOVERY_FENCE"||v2.run_day_index!==s.runDayIndex||v2.shard_index!==1||
+    v2.reviewed_code_sha!==e.GITHUB_SHA||v2.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v2.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
+    v2.review_wire_bytes!==null||!Buffer.isBuffer(v2.payload_bytes)||!v2.payload_bytes.equals(f.bytes)||v2.content_sha256!==f.contentSha256||
+    v2.external_review_sha256!==f.contentSha256||iso(v2.externally_reviewed_at_utc)!==w.reviewedAtUtc||iso(v2.retention_not_after_utc)!==f.until||
+    at(iso(v2.committed_at_utc))<at(w.reviewedAtUtc)||at(iso(v2.committed_at_utc))>at(clock)||at(clock)>=at(f.until))hold("RECOVERY_FENCE_DRIFT");
+  }
   results.set(s.scopeSha256,w.wire);
  }
  if(results.size!==selectors.length)hold("DUPLICATE_SCOPE");
@@ -123,10 +156,17 @@ export async function publishP7PrivateSignedReviewOnce(input:{client:DB;reader:D
  try{await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");tx=true;await c.query("SET LOCAL statement_timeout='10000ms'");await c.query("SET LOCAL lock_timeout='2000ms'");
   const now=await readP6DayEpochRestrictedPublisherClock(c,t.expectedPublisherSessionLogin);await checkInstalled(c);
   const w=verifyP7StoredWire(t,s,wire,now);
-  const q=await c.query("SELECT count(*)::int AS n FROM "+TABLE+" WHERE logical_path=$1",[w.path]);
+  const f=s.kind==="POST_RECOVERY"?recoveryFence(s,w):null;
+  const q=await c.query("SELECT count(*)::int AS n FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[f?[w.path,f.path]:[w.path]]);
   if(q.rowCount!==1||q.rows[0]?.n!==0)hold("ALREADY_PRESENT_READ_ONLY_RECONCILE");
   const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',$2,1,$3,$4,$5,$6,$7,$8,$9,$10,NULL)",[w.path,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes]);
   if(z.rowCount!==1)hold("INSERT_COUNT");
+  // Atomic with the immutable receipt: a committed fence survives physical
+  // deletion of the short-lived proof until the original read window closes.
+  if(f){
+   const marker=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_RECOVERY_FENCE',$2,1,$3,$4,$5,$6,$6,$7,$8,$9,NULL)",[f.path,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,f.contentSha256,w.reviewedAtUtc,f.until,f.bytes]);
+   if(marker.rowCount!==1)hold("FENCE_INSERT_COUNT");
+  }
   verifyP7StoredWire(t,s,wire,await readP6DayEpochRestrictedPublisherClock(c,t.expectedPublisherSessionLogin));
   commitAttempted=true;await c.query("COMMIT");tx=false;
  }catch(err){if(commitAttempted)hold("UNKNOWN_COMMIT_READ_ONLY_RECONCILE");throw err}
