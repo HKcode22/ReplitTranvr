@@ -503,6 +503,18 @@ function strictMember(rows:Record<string,unknown>[],
    hold("MEMBER_NOT_KNOWN_AT_OWN_CUTOFF");
  return member;
 }
+/** Reuse the unchanged Stage14 original and member checks for an
+ * independent prospective source reread. Unlike the writer's due window,
+ * this is intentionally earlier than actual PRE issuance; never writes. */
+export function verifyP5Stage14SourceBindingForIndependentRead(p:P5Stage14SingleFlightPrePermit,source:Record<string,unknown>,members:Record<string,unknown>[],observedDbClock:Date){
+ const native=instant(p.selectedTNativeUtc,"INDEPENDENT_NATIVE_T");
+ if(!Object.hasOwn(PRE_HORIZON_OFFSET_MIN,p.horizon)||!Number.isSafeInteger(p.maxPopulationStalenessSeconds)||p.maxPopulationStalenessSeconds<1||p.maxPopulationStalenessSeconds>86400)hold("INDEPENDENT_HORIZON_SCOPE");
+ const cutoff=new Date(native.getTime()-PRE_HORIZON_OFFSET_MIN[p.horizon]*60000);
+ if(observedDbClock.getTime()>=cutoff.getTime())hold("INDEPENDENT_READ_AFTER_CUTOFF");
+ const s=exactSource(source,p,cutoff,observedDbClock,native);
+ strictMember(members,p,cutoff,s.available);
+ return {sourceExpiresAtUtc:new Date(s.expires).toISOString(),cutoffUtc:cutoff.toISOString()};
+}
 function due(cutoff:Date,now:Date){
  const left=cutoff.getTime()-now.getTime();
  if(left<=COMMIT_MARGIN_MS)hold("MISSED_OWN_FLIGHT_PRE_CUTOFF_NO_BACKFILL");

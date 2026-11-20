@@ -54,7 +54,7 @@ export async function readP7ExactSelectedFeatures(pool:P5EReadOnlyPgPool,p:Reado
  const a=await compileP5EOneBoundOriginalReadonly(pool,{manifestSha256:p.manifestSha256,queryDigestSha256:p.queryDigestSha256,flightInstanceId:p.flightInstanceId,
   expectedPopulationQueryId:p.expectedSourcePopulationQueryId,expectedResponseSha256:p.expectedSourceResponseSha256,expectedRightsReviewSha256:p.expectedReviewedSourceRightsSha256,expectedSelectedNativeTUtc:p.selectedTNativeUtc,
   expectedForecastCutoffUtc:cutoff,expectedOriginIcao:p.airportIcao,externalContentUseReviewSha256,
-  permitSourceScope:{runDayIndex:p.runDayIndex,slot:p.slot,horizon:p.horizon,githubRunId:p.expectedGithubSourceRunId,releaseSha256:p.expectedReviewedReleaseSha256,providerContractSha256:p.expectedProviderContractSha256,earlyDrawSha256:p.expectedEarlyDrawSha256}});
+  prospectivePermit:p});
  if(a.status!=="EXACT_SOURCE_COVERED_FEATURE_PACKET_DRAFT_NOT_SIGNED"||!a.privateReadback||Object.getOwnPropertyDescriptor(a,"privateReadback")?.enumerable!==false||a.providerCalls!==0||a.dbWrites!==0)hold("ACTUAL_SOURCE_READBACK");
  const out=recomputeP7ExactSelectedFeatures(p,a.bundle,a.privateReadback!,externalContentUseReviewSha256);
  actualSourceReadbacks.add(out);return out;

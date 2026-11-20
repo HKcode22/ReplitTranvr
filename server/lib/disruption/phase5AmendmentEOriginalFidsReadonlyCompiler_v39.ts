@@ -11,7 +11,7 @@
  * Any unavailable/expired original or permission mismatch fails closed.
  */
 import {
- P5_STAGE14_BOUND_SOURCE_SQL,P5_STAGE14_PHYSICAL_MEMBER_SQL
+ P5_STAGE14_BOUND_SOURCE_SQL,P5_STAGE14_PHYSICAL_MEMBER_SQL,verifyP5Stage14SourceBindingForIndependentRead,type P5Stage14SingleFlightPrePermit
 } from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_STAGE28_GROUPS}
  from "./phase5Stage28DedicatedRolePool_v39";
@@ -79,10 +79,7 @@ export interface P5EV0079BoundFeatureReadScope{
  expectedOriginIcao:string;
  /** Optional exact prospective permit provenance; legacy read-only callers
   * remain unchanged. Never infer these values from a permit digest. */
- permitSourceScope?:{
-  runDayIndex:number;slot:string;horizon:string;githubRunId:string;
-  releaseSha256:string;providerContractSha256:string;earlyDrawSha256:string;
- };
+ prospectivePermit?:P5Stage14SingleFlightPrePermit;
  /** Already independently authenticated (not created by this function). */
  externalContentUseReviewSha256:string;
 }
@@ -177,14 +174,18 @@ export async function compileP5EOneBoundOriginalReadonly(
      time(raw.dep_scheduled_utc)!==target||
      time(raw.member_available_at)!==time(member.available_at))
    hold("V0079_ORIGINAL_NORMALIZED_IDENTITY_OR_LICENSE_DRIFT");
-  const permit=s.permitSourceScope;
-  if(permit&&(Number(src.run_day_index)!==permit.runDayIndex||src.slot_id!==permit.slot||
-     src.horizon!==permit.horizon||src.github_run_id!==permit.githubRunId||
-     src.attempt_run_id!==permit.githubRunId||src.reviewed_release_sha256!==permit.releaseSha256||
-     src.provider_contract_sha256!==permit.providerContractSha256||src.early_draw_sha256!==permit.earlyDrawSha256||
-     member.provider_content_expired_at_utc!==null||member.query_direction!=="Departure"||
-     target<time(src.service_window_start_utc)||target>=time(src.service_window_end_utc)))
-   hold("EXACT_PROSPECTIVE_PERMIT_SOURCE_SCOPE");
+  const permit=s.prospectivePermit;
+  if(permit){
+   if(permit.manifestSha256!==s.manifestSha256||permit.queryDigestSha256!==s.queryDigestSha256||
+      permit.expectedSourcePopulationQueryId!==s.expectedPopulationQueryId||permit.expectedSourceResponseSha256!==s.expectedResponseSha256||
+      permit.expectedReviewedSourceRightsSha256!==s.expectedRightsReviewSha256||permit.flightInstanceId!==s.flightInstanceId||
+      permit.airportIcao!==s.expectedOriginIcao||permit.selectedTNativeUtc!==s.expectedSelectedNativeTUtc||
+      permit.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+      member.query_direction!=="Departure"||member.arr_airport_icao!==raw.arr_airport_icao)
+    hold("EXACT_PROSPECTIVE_PERMIT_SOURCE_SCOPE");
+   const verified=verifyP5Stage14SourceBindingForIndependentRead(permit,src,m,new Date(dbNow));
+   if(verified.cutoffUtc!==s.expectedForecastCutoffUtc||time(verified.sourceExpiresAtUtc)!==time(raw.source_expires_at_utc))hold("EXACT_PROSPECTIVE_PERMIT_SOURCE_SCOPE");
+  }
   if(time(src.source_expires_at_utc)<=dbNow||
      time(src.source_expires_at_utc)<=cutoff||
      time(raw.source_expires_at_utc)<=cutoff||
