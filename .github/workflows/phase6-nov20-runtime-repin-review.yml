@@ -7,6 +7,7 @@ on:
       - 'review-tools/p6_nov20_unattended_readiness_readonly*'
       - 'review-tools/p6_nov20_final_*repin*'
       - 'review-tools/p6_nov20_prepare_runtime_plan_rebind_v39.ts'
+      - 'review-tools/p6_nov20_recover_six_policy_inputs.cjs'
       - 'tests/phase6_nov20_runtime_plan_rebind_review_v39.test.ts'
       - '.github/workflows/phase6-nov20-runtime-repin-review.yml'
 permissions:
@@ -36,6 +37,8 @@ jobs:
           node --check review-tools/p6_nov20_final_main_nine_pin_repin.cjs
           node --check review-tools/p6_nov20_final_primary_relay_repin.cjs
           node --check review-tools/p6_nov20_unattended_readiness_readonly.mjs
+          node --check review-tools/p6_nov20_recover_six_policy_inputs.cjs
+          if node review-tools/p6_nov20_recover_six_policy_inputs.cjs; then exit 2; fi
           node --test review-tools/p6_nov20_runtime_repin_evidence.test.cjs review-tools/p6_nov20_final_primary_relay_repin.test.cjs review-tools/p6_nov20_unattended_readiness_readonly.test.mjs
           test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL$V39_DATABASE_RUNTIME_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
