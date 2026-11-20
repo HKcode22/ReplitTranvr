@@ -34,10 +34,10 @@ const requiredEvidence=P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS;
 const POST_STAGE_APPROVAL_LEDGER_PATH="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json";
 const POST_STAGE_EVIDENCE_PATH=/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/;
 const POST_STAGE_REVIEWED_BRIDGE_STAGE="ae0915d1eb0c37651d280ff3f178efdb640ed509";
-export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="f2829194c44922ce7adb744f33ca6d77208c62a35f77d07f4e67b7e71a9f843d";
+export const P6_POST_STAGE_REVIEWED_BRIDGE_SELF_SHA256="f77c1732513f4773bf5950c6e043481468e24eeab60c4e902392607dbabc54c3";
 export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  "tests/phase5_source_rights_deferred_to_phase6_activation_v39.test.mjs":"3d5f3826e00ea5b18dbf31b223900d660afa553e",
- "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"87985a3f903fedd16e6c71cb4d4baeb53350f72d",
+ "tests/phase6_poststage_evidence_only_main_advance_v39.test.ts":"3b1634cb09892de164b3a3cabf145d6a5c5b29b5",
  "tests/phase5_v0093_cost_only_inert_seven_rest_freeze_pg16_v39.test.ts":"da7d8533facd594c3f47fcc926051b507df4e011",
  "server/lib/disruption/phase6DerivedTrainingReleaseContract_v39.ts":"4c2e80bdc564e919a8c7e7ea9faede18d0421a7a",
  "server/lib/disruption/phase6DerivedTrainingReleasePacket_v39.ts":"83053982738a2f57162bf2aa491841c1edfd355b",
@@ -54,7 +54,7 @@ export const P6_POST_STAGE_REVIEWED_BRIDGE_COMPANION_BLOBS=Object.freeze({
  ".github/workflows/phase5-actual-nov22-budget-proposal-no-provider.yml":"155802406f483f651337ec6694c890d7352bb9eb",
  "server/lib/disruption/retentionDeployment_v39.ts":"f0670ab604a563e3d516485a4f1ea8f665d40179",
  "tests/retention_deployment_v39.test.ts":"1798537f1766e58b952e96c623541a20ee780226",
- "server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts":"7e5e06a4308b88a459e7c9aac26ee68e5b588d01",
+ "server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts":"4e83a44708a7a019f350fc974c931d3fa855bdc3",
  "server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs":"e270ca8fdc5dea422412aa76e7537d49f5df4fd4",
  "tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts":"0a9084041bc4b747f4ca00b61c152a9fb321efac",
  ".github/workflows/phase6-prospective-disabled-stage-revision-pg16.yml":"4bbe0816309dbcf0c7af2e90049ecf9b8eb6ec08",
