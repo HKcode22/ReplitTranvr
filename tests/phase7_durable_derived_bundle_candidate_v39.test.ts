@@ -62,6 +62,18 @@ describe.skipIf(db!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmo
    await expect(writer.query("SELECT count(*) FROM phase7_private.derived_release_bundle_v39")).rejects.toThrow();
    await expect(reader.query("DELETE FROM phase7_private.derived_release_bundle_v39")).rejects.toThrow();
    expect((await reader.query("SELECT count(*)::int n FROM phase7_private.derived_release_bundle_v39")).rows[0].n).toBe(1);
+   // Real due-only research expiry, separate from original source custody.
+   await admin.query(readFileSync("data-collection/phase5/review-tools/p7_pre_fragment_storage_candidate_NOT_FOR_INSTALL.sql","utf8"));
+   await admin.query(readFileSync("data-collection/phase5/review-tools/p7_research_expiry_candidate_NOT_FOR_INSTALL.sql","utf8"));
+   const another=fixture();
+   await writeReviewedPhase7DurableBundle(writer,reader,contract,another.bundle,another.approval,actors,now);
+   await admin.query("UPDATE phase7_private.derived_release_bundle_v39 SET created_at_utc=clock_timestamp()-interval '2 days',research_expiry_utc=clock_timestamp()-interval '1 day' WHERE packet_id=$1",[bundle.packet.packetId]);
+   expect((await admin.query("SELECT phase7_private.research_expiry_status_v39() AS s")).rows[0].s).toMatchObject({dueBundles:1,dueFragments:0,dueLinks:0});
+   await expect(reader.query("SELECT phase7_private.sweep_due_research_outputs_v39(1)")).rejects.toThrow();
+   await expect(admin.query("SELECT phase7_private.sweep_due_research_outputs_v39(0)")).rejects.toThrow("P7_RESEARCH_SWEEP_LIMIT");
+   expect((await admin.query("SELECT * FROM phase7_private.sweep_due_research_outputs_v39(1)")).rows[0]).toEqual({bundle_rows:1,fragment_rows:0});
+   expect((await reader.query("SELECT packet_id::text FROM phase7_private.derived_release_bundle_v39")).rows).toEqual([{packet_id:another.bundle.packet.packetId}]);
+   expect((await admin.query("SELECT phase7_private.research_expiry_status_v39() AS s")).rows[0].s).toMatchObject({dueBundles:0,dueFragments:0,dueLinks:0});
   }finally{await Promise.all([writer.end(),reader.end(),admin.end()])}
  },30000);
 });
