@@ -79,11 +79,15 @@ function buildPrivatePackage(oldStagePath:string){
   const review=prepareP6ActualReviewInput(currentHead,0,"COMPACT_NOV22");
   const identity=prepareP6ActualReleaseIdentityReview(currentHead,0,"COMPACT_NOV22");
   const rec=review.concreteReviewRecommendation;
-  if(review.calendarRevisionReview?.changedParentDays!==1||
-     review.calendarRevisionReview?.firstOldServiceUtc!=="2026-11-21T00:00:00.000Z"||
-     review.calendarRevisionReview?.firstNewServiceUtc!=="2026-11-22T00:00:00.000Z"||
+  const revision=review.calendarRevisionReview;
+  if(revision?.status!=="PROSPECTIVE_COMPACT_REVIEW_NOT_SIGNED"||
+     revision?.firstServiceUtc!=="2026-11-22T00:00:00.000Z"||
+     revision?.firstSourceUtc!=="2026-11-20T23:45:00.000Z"||
+     revision?.lastServiceEndUtc!=="2026-12-24T04:00:00.000Z"||
+     revision?.originalTreatmentAssignmentSha256!==review.shapeEnvelope.claimedTreatmentAssignmentSha256||
+     review.calendarDraft.calendarDays.length!==31||
      review.proposedSourceQueries!==6144||review.proposedTotalReservedUnits!==36740||
-     identity.geometry.totalQueries!==6144||identity.geometry.totalReservedUnits!==36740)
+     identity.geometry.dayPlanCount!==31||identity.geometry.totalQueries!==6144||identity.geometry.totalReservedUnits!==36740)
     HOLD("COMPACT_NOV22_REVIEW_GEOMETRY_DRIFT");
 
   const dateReviewSha=hash(readFileSync(DATE_REVIEW_PATH));
