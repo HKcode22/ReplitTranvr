@@ -38,13 +38,14 @@ function selectorOK(s:P7RecoverySelector){
  [s.indexSha256,s.packetSha256,s.routingIntentSha256].every(x=>H.test(x??""))&&RUN.test(s.originalGithubRunId??"");
 }
 const readonlyScope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
-function admitRecoveryBase(env:NodeJS.ProcessEnv,originalGithubRunId:string){
+function admitRecoveryBase(env:NodeJS.ProcessEnv,originalGithubRunId:string,mode:"recovery"|"same-run"="recovery"){
+ const same=mode==="same-run";
  if(!RUN.test(originalGithubRunId)||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
   !["workflow_dispatch","schedule","workflow_run"].includes(env.GITHUB_EVENT_NAME??"")||env.GITHUB_RUN_ATTEMPT!=="1"||
   !C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
-  !RUN.test(env.GITHUB_RUN_ID??"")||env.GITHUB_RUN_ID===originalGithubRunId||
-  env.ADB_AUTO_COLLECT!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
+  !RUN.test(env.GITHUB_RUN_ID??"")||(same?env.GITHUB_RUN_ID!==originalGithubRunId||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_WORKFLOW_REF!==REPO+"/"+WORKFLOW+"@refs/heads/main":env.GITHUB_RUN_ID===originalGithubRunId)||
+  env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,
    env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
    env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P6_PRIVATE_PUBLISHER_DATABASE_URL,
@@ -71,9 +72,9 @@ function admitRecoveryBase(env:NodeJS.ProcessEnv,originalGithubRunId:string){
   privateReaderUrl:{value:reader.toString(),enumerable:false},privateSourceUrl:{value:source.toString(),enumerable:false}
  })) as typeof out&{readonly privateReaderUrl:string;readonly privateSourceUrl:string};
 }
-export function admitP7StoredPostRecovery(env:NodeJS.ProcessEnv,s:P7RecoverySelector){
+export function admitP7StoredPostRecovery(env:NodeJS.ProcessEnv,s:P7RecoverySelector,mode:"recovery"|"same-run"="recovery"){
  if(!selectorOK(s))HOLD("EXACT_NO_PAID_SCOPE");
- const a=admitRecoveryBase(env,s.originalGithubRunId);
+ const a=admitRecoveryBase(env,s.originalGithubRunId,mode);
  return Object.freeze(Object.defineProperties({...a,selector:s},{
   privateReaderUrl:{value:a.privateReaderUrl,enumerable:false},privateSourceUrl:{value:a.privateSourceUrl,enumerable:false}
  })) as typeof a&{selector:P7RecoverySelector};
@@ -120,8 +121,8 @@ export async function readP7OriginalPostRun(env:NodeJS.ProcessEnv,s:P7RecoverySe
  if(!response.ok)HOLD("ORIGINAL_GITHUB_READ");
  return verifyP7OriginalPostRun(await response.json(),s,route,env.GITHUB_SHA!,clock);
 }
-export async function readP7StoredPostRecoveryPacket(env:NodeJS.ProcessEnv,s:P7RecoverySelector,fetcher:typeof fetch=fetch){
- const a=admitP7StoredPostRecovery(env,s),t=a.trust,c=new Client({connectionString:a.privateReaderUrl,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_recovery_original_read"});
+export async function readP7StoredPostRecoveryPacket(env:NodeJS.ProcessEnv,s:P7RecoverySelector,fetcher:typeof fetch=fetch,mode:"recovery"|"same-run"="recovery"){
+ const a=admitP7StoredPostRecovery(env,s,mode),t=a.trust,c=new Client({connectionString:a.privateReaderUrl,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_recovery_original_read"});
  try{
   await c.connect();await c.query("SET ROLE phase6_private_frozen_reader_v39");
   const day=await readP6StoredPrivateReviewOnce({client:c,trust:t,scope:readonlyScope,selector:{kind:"EXACT_DAY",runDayIndex:s.runDayIndex,indexRevision:s.indexRevision,indexSha256:s.indexSha256}});
@@ -137,7 +138,7 @@ export async function readP7StoredPostRecoveryPacket(env:NodeJS.ProcessEnv,s:P7R
    at(z.observedDatabaseClockUtc)-at(handoff.redactedSummary.observedRealPgClockUtc)>120000||
    at(z.observedDatabaseClockUtc)>=at(route.hardLatestUtc)+600000||
    at(z.observedDatabaseClockUtc)>=at(day.wire.review.validUntilUtc)||at(z.observedDatabaseClockUtc)>=at(day.wire.review.retentionNotAfterUtc))HOLD("LIVE_RETAINED_POST_PACKET");
-  const originalRun=await readP7OriginalPostRun(env,s,route,z.observedDatabaseClockUtc,fetcher);
+  const originalRun=mode==="same-run"?env.GITHUB_RUN_ID!:await readP7OriginalPostRun(env,s,route,z.observedDatabaseClockUtc,fetcher);
   const packet=JSON.parse(read.privateBytes.toString("utf8"));
   const p=admitP5FuturePostFrozenForReadOnly(read.privateBytes,packet,{
     frozenPacketPath:route.signedFrozenPath,expectedPacketSha256:s.packetSha256,approvedCodeSha:t.reviewedCodeSha,currentGithubRunId:originalRun,
@@ -213,14 +214,14 @@ export async function discoverP7WorkflowRunRecoverySelector(env:NodeJS.ProcessEn
  }finally{await c.end().catch(()=>{})}
 }
 /** Actual recovery process; no paid child or its environment. */
-export async function executeP7StoredPostRecovery(env:NodeJS.ProcessEnv,selector:P7RecoverySelector){
+export async function executeP7StoredPostRecovery(env:NodeJS.ProcessEnv,selector:P7RecoverySelector,liveTransport?:import("./phase7SignedPostConsumer_v39").Phase7PrivateOutcomeReviewTransport){
  const a=admitP7StoredPostRecovery(env,selector);
  const packet=(await readP7StoredPostRecoveryPacket(env,selector)).privatePacket;
  const pool=new Pool({connectionString:a.privateSourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_post_recovery_execution"});
  try{
   const source=makeP5Stage28DedicatedRolePool(pool,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",forbiddenApplicationLogin:"phase5_p30_prepare_login_20261107"});
   const scope=await discoverPhase7CommittedPostScope(source,packet);
-  const transport=openP7StoredPostRecoveryTransport(env,scope);
+  const transport=liveTransport??openP7StoredPostRecoveryTransport(env,scope);
   const wire=await transport.readExactRecoveryReceipt(scope);
   const opened=openPhase7ProtectedPostConsumer(env,transport);
   try{return await recoverPhase7CommittedPost({env,scope,wire,source,consumer:opened.consumer})}

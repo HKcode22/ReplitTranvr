@@ -97,7 +97,7 @@ function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
  }else if(!Array.isArray(x.wires)||x.wires.length!==0||x.committedCount!==0)hold("CONTROL_RESPONSE");
  return x;
 }
-function readFrame(socket:Socket,timeoutMs:number):Promise<unknown>{
+export function readP7BoundedLocalFrame(socket:Socket,timeoutMs:number):Promise<unknown>{
  return new Promise((resolve,reject)=>{
   let parts:Buffer[]=[],size=0,finished=false;
   const timer=setTimeout(()=>finish(new Error("HOLD_P7_LOCAL_PRE_HANDOFF_TIMEOUT_NO_REPLAY")),timeoutMs);
@@ -117,7 +117,7 @@ export async function callP7LocalPreRole(path:string,q:P7LocalPreRequest,timeout
  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>240000)hold("TIME_BOUND");
  const socket=createConnection({path});socket.on("error",()=>{}); // never print route/bytes
  try{
-  const reading=readFrame(socket,timeoutMs);
+  const reading=readP7BoundedLocalFrame(socket,timeoutMs);
   socket.write(frame(q));
   return validateResponse(await reading,q);
  }finally{socket.destroy();}
@@ -134,7 +134,7 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
   let req:P7LocalPreRequest|undefined;
   void (async()=>{
    try{
-    const raw=await readFrame(socket,15000);validateP7LocalPreRequest(raw,scope,role);req=raw;
+    const raw=await readP7BoundedLocalFrame(socket,15000);validateP7LocalPreRequest(raw,scope,role);req=raw;
     let payload:Payload={wires:[],committedCount:0};
     if(req.op!=="ready"&&req.op!=="stop"){
      if(seen.size>=MAX_REQUESTS||seen.has(req.requestSha256))hold("DUPLICATE_OR_MAX_REQUESTS_NO_REPLAY");

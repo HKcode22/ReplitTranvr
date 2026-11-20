@@ -335,6 +335,36 @@ async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSel
 }
 
 /** Existing public recovery interface, no behavior or authority expansion. */
+/** POST publication process has only exact signed digest selectors and
+ * restricted publisher/readback capabilities. No signer or source password.
+ * Reuse the immutable V0106 single-wire/fence transaction. */
+export function openP7PostWirePublisher(env:NodeJS.ProcessEnv){
+ const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
+ validateTrust(trust);
+ if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
+  env.GITHUB_RUN_ATTEMPT!=="1"||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||env.V39_PHASE6_PROCESS_ARMED!=="0"||
+  env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||
+  env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||Object.entries(env).some(([k,v])=>k.includes("PRIVATE_KEY")&&v)||
+  [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_SCOPED_DATABASE_URL].some(Boolean))hold("POST_PUBLISHER_SCOPE");
+ // Endpoint-only pointer matches the existing SOURCE, not a live credential.
+ const base=new URL(env.V39_P5_SOURCE_DATABASE_URL??"");
+ if(base.password||decodeURIComponent(base.username)!=="phase5_p5_source_login_20261108")hold("POST_PUBLISHER_SOURCE_PASSWORD");
+ const reader=openP7PrivateSignedReviewReader(env);
+ return {async preflight(){
+  return withP7PreEvidenceEndpoints(env,trust,async(p,r,t)=>{
+   await r.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   try{await readP6DayEpochRestrictedReaderClock(r,t.expectedReaderSessionLogin);await checkInstalled(r)}finally{await r.query("ROLLBACK")}
+   await p.query("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE");
+   try{await readP6DayEpochRestrictedPublisherClock(p,t.expectedPublisherSessionLogin);await checkInstalled(p)}finally{await p.query("ROLLBACK")}
+   return {ready:true as const,providerCalls:0 as const,databaseWrites:0 as const};
+  });
+ },async publish(s:P7ReviewSelector,w:unknown){
+  if(!["POST_RECOVERY","POST_SETTLEMENT"].includes(s.kind))hold("POST_PUBLISH_KIND");
+  // Unknown/duplicate write is never retried. Existing wire reconciliation
+  // is a separate exact reader operation by the consumer.
+  return withP7PreEvidenceEndpoints(env,trust,(p,r,t)=>publishP7PrivateSignedReviewOnce({client:p,reader:r,trust:t,selector:s,wire:w}));
+ },read:reader.read};
+}
 export function publishP7RecoveryWireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSelector,wire:unknown,existing:boolean){
  return publishP7WireFromProtectedEnv(env,s,wire,existing,"recovery");
 }
