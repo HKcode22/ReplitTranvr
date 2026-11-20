@@ -3,7 +3,7 @@
  * Closing the pool is mandatory. No provider request or policy signing. */
 import {Pool} from "pg";
 import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
-import {checkProspectivePrePolicy,type Phase7BoundPreTransactionInput} from "./phase7PreFragmentTransaction_v39";
+import {checkProspectivePrePolicy,inspectPhase7PreFragmentReader,type Phase7BoundPreTransactionInput} from "./phase7PreFragmentTransaction_v39";
 import {verifyPhase7SignedPreFieldProof} from "./phase7SignedPreFieldProof_v39";
 import type {P5CdPhase7PreResolver} from "./phase5CdGithubBoundedPreTick_v39";
 type Static=Pick<Phase7BoundPreTransactionInput,"contract"|"profile"|"dispositions"|"review"|"reviewSha256">;
@@ -35,5 +35,5 @@ export function openPhase7ProtectedPreResolver(env:NodeJS.ProcessEnv){
   const proof=verifyPhase7SignedPreFieldProof(env,packet.permit,policy.reviewSha256,policy.dispositions,packet.phase7FieldProof);
   return {packetSha256:packet.packetSha256,integration:{...policy,reader,expectedReaderRole:role,separatelyVerifiedFields:proof.fields.map(f=>f.field),signedSeparateFieldProof:packet.phase7FieldProof}};
  };
- return {resolver,close:()=>reader.end()};
+ return {resolver,preflight:()=>inspectPhase7PreFragmentReader(reader,role),close:()=>reader.end()};
 }

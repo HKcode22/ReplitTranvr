@@ -1,8 +1,9 @@
+import {inspectPhase7PreFragmentReader} from "../server/lib/disruption/phase7PreFragmentTransaction_v39";
 import {createHash,randomUUID} from "node:crypto";
 import {readPhase7RetainedPreCoverage} from "../server/lib/disruption/phase7RetainedPreCoverage_v39";
 import {createPhase7DerivedReleasePacket,serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
 import {assemblePhase7FinalGroupCandidate} from "../server/lib/disruption/phase7FinalGroupAssembly_v39";
-import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
+import {compilePhase7PrePolicyCommission,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,inspectPhase7PreWriterRole,checkPhase7PrePolicyStructure} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
 import {P5_STAGE28_GROUPS} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
@@ -90,6 +91,13 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
    const compiled=compilePhase7PrePolicyCommission(fx.raw,fx.scope);
    expect(await inspectPhase7PrePolicyCommission(pool,compiled)).toMatchObject({policyRows:1,databaseWrites:0,phase6PaidGo:false});
    await expect(installPhase7PrePolicyOnce(pool,fx.raw,fx.scope,disposableGuard)).rejects.toThrow("PRE_ROLE_SCOPE");
+   await pool.query("CREATE ROLE phase5_p30_pre_login_20261107 LOGIN NOINHERIT PASSWORD 'ci-pre-only'; GRANT "+P5_STAGE28_GROUPS.pre+" TO phase5_p30_pre_login_20261107 WITH ADMIN FALSE, INHERIT FALSE, SET TRUE");
+   const preLogin=new Pool({connectionString:url!.replace("postgres:postgres@","phase5_p30_pre_login_20261107:ci-pre-only@"),max:1});
+   const scopedPre={connect:async()=>{const c=await preLogin.connect();try{await c.query("SET ROLE "+P5_STAGE28_GROUPS.pre);return c;}catch(e){c.release(true);throw e}}};
+   try{expect(await inspectPhase7PreWriterRole(scopedPre)).toMatchObject({providerCalls:0,databaseWrites:0});
+    await expect(inspectPhase7PreWriterRole(pool)).rejects.toThrow("RESTRICTED_ACTUAL_WRITER");}
+   finally{await preLogin.end();}
+   checkPhase7PrePolicyStructure(JSON.parse(fx.raw.toString("utf8")),fx.scope.firstSourceUtc);
    await pool.query("GRANT SELECT ON phase7_private.pre_fragment_v39 TO "+P5_STAGE28_GROUPS.pre);
    await expect(inspectPhase7PrePolicyCommission(pool,compiled)).rejects.toThrow("NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
    await pool.query("REVOKE SELECT ON phase7_private.pre_fragment_v39 FROM "+P5_STAGE28_GROUPS.pre);
@@ -155,6 +163,8 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
     const pre=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.preReader+":"+passwords[P7_INERT_ROLES.preReader]+"@"),max:1});
     const bundleRead=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.bundleReader+":"+passwords[P7_INERT_ROLES.bundleReader]+"@"),max:1});
     try{
+     expect(await inspectPhase7PreFragmentReader(pre,P7_INERT_ROLES.preReader)).toEqual({ready:true,providerCalls:0,databaseWrites:0});
+     await expect(inspectPhase7PreFragmentReader(bundleRead,P7_INERT_ROLES.preReader)).rejects.toThrow("independent-reader-privileges");
      const result=await readPhase7RetainedPreCoverage(pre,bundleRead,contract,profile,scope);
      expect(result).toMatchObject({samePrimarySnapshot:true,retainedPreFragments:3,retainedGroups:2,settledGroups:1,unsettledGroups:1,unsettledT24OnlyGroups:1,primaryObserved:0,retainedByHorizon:{"T-24h":2,"T-6h":1,"T-90m":0},finalizedByHorizon:{"T-24h":1,"T-6h":1,"T-90m":0},unsettledByHorizon:{"T-24h":1,"T-6h":0,"T-90m":0},expiredSourceLinksRead:false,providerCalls:0,databaseWrites:0});
      expect(JSON.stringify(result)).not.toContain(g1);expect(JSON.stringify(result)).not.toContain(g2);

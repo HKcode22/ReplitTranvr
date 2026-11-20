@@ -22,28 +22,31 @@ export interface Phase7PrePolicyCommissionScope{
  manifestSha256:string;rightsSha256:string;policyBytesSha256:string;policyReviewSha256:string;
  validFromUtc:string;validUntilUtc:string;firstSourceUtc:string;outcomeTailUtc:string;
 }
-export function compilePhase7PrePolicyCommission(raw:Buffer,scope:Phase7PrePolicyCommissionScope){
- need(Buffer.isBuffer(raw)&&raw.length>0&&raw.length<=36000&&sha(raw)===scope.policyBytesSha256&&
-  [scope.manifestSha256,scope.rightsSha256,scope.policyBytesSha256,scope.policyReviewSha256].every(x=>H.test(x)&&!/^([a-f0-9])\1{63}$/.test(x)),"EXACT_REVIEWED_BYTES");
- const p=parsePhase7ProtectedPrePolicy({P6_PHASE7_PRE_POLICY_BASE64:raw.toString("base64"),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:scope.policyReviewSha256,V39_P5_MANIFEST_SHA256:scope.manifestSha256,V39_P5_RIGHTS_SHA256:scope.rightsSha256});
- const {contract,profile,review,dispositions}=p;
+/** Same full field/transform validation in owner commissioning and runtime
+ * read-only readiness. The synthetic empty probe is not source evidence. */
+export function checkPhase7PrePolicyStructure(p:ReturnType<typeof parsePhase7ProtectedPrePolicy>,issuedAtUtc:string){
+ const {contract,profile,dispositions}=p;
  need(validatePhase7DerivedReleaseContract(contract).pass&&validatePhase7ReviewedTransformationProfile(profile).pass&&
   contract.cohortBucketCount>=31&&contract.allowedHorizons.length===3&&
   ["T-24h","T-6h","T-90m"].every(h=>contract.allowedHorizons.includes(h as typeof contract.allowedHorizons[number])),"CONTRACT_PROFILE");
- const from=clock(scope.validFromUtc),first=clock(scope.firstSourceUtc),tail=clock(scope.outcomeTailUtc),until=clock(scope.validUntilUtc);
- need(from<=first&&first<tail&&tail<until&&until<=clock(contract.researchExpiryUtc),"WINDOW_NOT_FULL_STUDY");
- // Reuse the actual transform and full Amendment E denominator validator
- // without claiming any observation. Every field is missing in this
- // structural probe, and no result is persisted or treated as real proof.
- const issuedAtUtc=scope.firstSourceUtc;
- const sourceExpiresAtUtc=new Date(first+3600000).toISOString();
+ const issued=clock(issuedAtUtc);need(issued<clock(contract.researchExpiryUtc),"RESEARCH_EXPIRY");
+ const sourceExpiresAtUtc=new Date(issued+3600000).toISOString();
  for(const horizon of ["T-24h","T-6h","T-90m"] as const){
-  const selectedNativeTUtc=new Date(first+({"T-24h":1440,"T-6h":360,"T-90m":90}[horizon])*60000).toISOString();
+  const selectedNativeTUtc=new Date(issued+({"T-24h":1440,"T-6h":360,"T-90m":90}[horizon])*60000).toISOString();
   const probe=preparePhase7BoundPrePreservation(contract,profile,{horizon,selectedNativeTUtc,cutoffUtc:issuedAtUtc,issuedAtUtc,transformedAtUtc:issuedAtUtc,sourceExpiresAtUtc,split:"train",cohortBucket:0,features:[],dispositions,separatelyVerifiedFields:[]});
   need(Object.values(probe.audit.counts).every(v=>v.present===0&&v.preserved===0&&v.lost===0&&v.falsePresence===0),"EMPTY_STRUCTURAL_PROBE");
  }
  need(dispositions.every(x=>H.test(x.reviewSha256)&&!/^([a-f0-9])\1{63}$/.test(x.reviewSha256))&&
   profile.fields.filter(f=>f.role==="label").some(f=>f.sourceField==="gate_out_delay_minutes"),"EXACT_FIELD_AND_TARGET_REVIEW");
+}
+export function compilePhase7PrePolicyCommission(raw:Buffer,scope:Phase7PrePolicyCommissionScope){
+ need(Buffer.isBuffer(raw)&&raw.length>0&&raw.length<=36000&&sha(raw)===scope.policyBytesSha256&&
+  [scope.manifestSha256,scope.rightsSha256,scope.policyBytesSha256,scope.policyReviewSha256].every(x=>H.test(x)&&!/^([a-f0-9])\1{63}$/.test(x)),"EXACT_REVIEWED_BYTES");
+ const p=parsePhase7ProtectedPrePolicy({P6_PHASE7_PRE_POLICY_BASE64:raw.toString("base64"),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:scope.policyReviewSha256,V39_P5_MANIFEST_SHA256:scope.manifestSha256,V39_P5_RIGHTS_SHA256:scope.rightsSha256});
+ const {contract,review}=p;
+ const from=clock(scope.validFromUtc),first=clock(scope.firstSourceUtc),tail=clock(scope.outcomeTailUtc),until=clock(scope.validUntilUtc);
+ need(from<=first&&first<tail&&tail<until&&until<=clock(contract.researchExpiryUtc),"WINDOW_NOT_FULL_STUDY");
+ checkPhase7PrePolicyStructure(p,scope.firstSourceUtc);
  const limits=(fs:typeof contract.features)=>Object.fromEntries(fs.map(f=>[f.name,f.bucketCount]));
  const values=[scope.manifestSha256,review.contractSha256,review.profileSha256,scope.rightsSha256,scope.policyReviewSha256,scope.validFromUtc,scope.validUntilUtc,contract.featureDictionarySha256,contract.version,JSON.stringify(limits(contract.features)),JSON.stringify(limits(contract.labels)),review.mappingHours,contract.researchExpiryUtc] as const;
  return {scope:{...scope},rowValues:values,policyReviewSha256:p.reviewSha256,rowSha256:hashPhase7DurableCandidate(values),phase6PaidGo:false as const};
@@ -57,6 +60,20 @@ async function roleBoundary(c:PoolClient,installed:boolean){
  const direct=(await c.query("SELECT count(*)::int n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$2 AND c.relkind IN ('r','p','v','m','f') AND (has_any_column_privilege($1,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege($1,c.oid,'DELETE,TRUNCATE,TRIGGER'))",[ROLE,SCHEMA])).rows[0];
  const funcs=(await c.query("SELECT p.oid=to_regprocedure($3)::oid target,has_function_privilege($1,p.oid,'EXECUTE') ok,has_function_privilege($1,p.oid,'EXECUTE WITH GRANT OPTION') can_grant FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$2",[ROLE,SCHEMA,FN])).rows;
  need(direct.n===0&&funcs.length===7&&funcs.filter(x=>x.target).length===1&&funcs.every(x=>x.ok===(installed&&x.target)&&x.can_grant===false),"NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
+}
+/** Real PRE writer-role check, without executing the writer on fake data
+ * or granting direct policy table access. Caller uses existing Stage28. */
+export async function inspectPhase7PreWriterRole(pool:Pick<Pool,"connect">){
+ const c=await pool.connect();
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  const z=(await c.query("SELECT current_database() db,current_user actor,session_user login,current_setting('transaction_read_only') ro,current_setting('server_version_num')::int ver,pg_is_in_recovery() replica,clock_timestamp() at")).rows;
+  const a=z[0];need(z.length===1&&a.db==="neondb"&&a.actor===ROLE&&a.login==="phase5_p30_pre_login_20261107"&&a.ro==="on"&&a.ver>=160000&&a.ver<170000&&a.replica===false&&a.at instanceof Date&&Number.isFinite(a.at.getTime()),"RESTRICTED_ACTUAL_WRITER");
+  await roleBoundary(c,true);
+  await c.query("ROLLBACK");
+  return {observedDbClockUtc:a.at.toISOString() as string,providerCalls:0 as const,databaseWrites:0 as const};
+ }finally{await c.query("ROLLBACK").catch(()=>{});c.release()}
 }
 async function checked(c:PoolClient,p:Compiled,installed:boolean){
  await roleBoundary(c,installed);

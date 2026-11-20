@@ -65,6 +65,23 @@ export async function persistPhase7BoundPreFragmentInTransaction(c:PoolClient,x:
  need(Date.parse(expiry)<=Math.min(Date.parse(x.sourceExpiresAtUtc),Date.parse(x.issuedAtUtc)+x.review.mappingHours*3600000,Date.parse(x.review.researchExpiryUtc))&&Date.parse(expiry)>Date.parse(at),"mapping-clock");
  return {rowId,groupId:z.group_id,packetSha256,bytes,researchExpiryUtc:x.review.researchExpiryUtc,temporaryLinkExpiresAtUtc:expiry};
 }
+async function requirePhase7PreFragmentReaderPrivileges(c:PoolClient,expectedReaderRole:string){
+  const q=(await c.query("SELECT current_user AS actor,session_user AS login,current_setting('transaction_read_only') AS ro,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) AS member,has_table_privilege(current_user,'phase7_private.pre_fragment_v39','SELECT') AS can_read,has_any_column_privilege(current_user,'phase7_private.pre_fragment_v39','INSERT,UPDATE') AS can_write,has_table_privilege(current_user,'phase7_private.pre_fragment_v39','DELETE,TRUNCATE,TRIGGER') AS can_mutate,has_any_column_privilege(current_user,'phase7_private.pre_source_link_v39','SELECT,INSERT,UPDATE,REFERENCES') AS can_link,has_table_privilege(current_user,'phase7_private.pre_source_link_v39','DELETE,TRUNCATE,TRIGGER') AS can_mutate_link,has_schema_privilege(current_user,'phase7_private','CREATE') AS can_create FROM pg_roles r WHERE r.rolname=current_user")).rows;
+  const a=q[0];need(q.length===1&&a.actor===expectedReaderRole&&a.login===expectedReaderRole&&a.ro==="on"&&a.replica===false&&a.can_read===true&&["rolsuper","rolcreaterole","rolcreatedb","rolbypassrls","rolreplication","member","can_write","can_mutate","can_link","can_mutate_link","can_create"].every(k=>a[k]===false),"independent-reader-privileges");
+
+}
+/** Read-only reader preflight before SOURCE, without a fake fragment. */
+export async function inspectPhase7PreFragmentReader(reader:Pool,expectedReaderRole:string){
+ need(/^phase7_pre_reader_[a-z0-9_]{6,40}$/.test(expectedReaderRole),"reader-role");
+ const c=await reader.connect();
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  await requirePhase7PreFragmentReaderPrivileges(c,expectedReaderRole);
+  await c.query("ROLLBACK");
+  return {ready:true as const,providerCalls:0 as const,databaseWrites:0 as const};
+ }finally{await c.query("ROLLBACK").catch(()=>{});c.release()}
+}
 /** Separate restricted reader. No temporary source linkage permission is
  * necessary; failures after the original commit are reconcile/no-replay. */
 export async function verifyPhase7PreFragmentReadback(reader:Pool,expectedReaderRole:string,receipt:Phase7PreFragmentReceipt){
@@ -73,8 +90,7 @@ export async function verifyPhase7PreFragmentReadback(reader:Pool,expectedReader
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   await c.query("SET LOCAL statement_timeout='12000ms'");
-  const q=(await c.query("SELECT current_user AS actor,session_user AS login,current_setting('transaction_read_only') AS ro,pg_is_in_recovery() replica,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) AS member,has_table_privilege(current_user,'phase7_private.pre_fragment_v39','SELECT') AS can_read,has_any_column_privilege(current_user,'phase7_private.pre_fragment_v39','INSERT,UPDATE') AS can_write,has_table_privilege(current_user,'phase7_private.pre_fragment_v39','DELETE,TRUNCATE,TRIGGER') AS can_mutate,has_any_column_privilege(current_user,'phase7_private.pre_source_link_v39','SELECT,INSERT,UPDATE,REFERENCES') AS can_link,has_table_privilege(current_user,'phase7_private.pre_source_link_v39','DELETE,TRUNCATE,TRIGGER') AS can_mutate_link,has_schema_privilege(current_user,'phase7_private','CREATE') AS can_create FROM pg_roles r WHERE r.rolname=current_user")).rows;
-  const a=q[0];need(q.length===1&&a.actor===expectedReaderRole&&a.login===expectedReaderRole&&a.ro==="on"&&a.replica===false&&a.can_read===true&&["rolsuper","rolcreaterole","rolcreatedb","rolbypassrls","rolreplication","member","can_write","can_mutate","can_link","can_mutate_link","can_create"].every(k=>a[k]===false),"independent-reader-privileges");
+  await requirePhase7PreFragmentReaderPrivileges(c,expectedReaderRole);
   const z=(await c.query("SELECT group_id::text AS group_id,packet_sha256,packet_bytes,research_expiry_utc FROM phase7_private.pre_fragment_v39 WHERE row_id=$1::uuid AND research_expiry_utc>clock_timestamp()",[receipt.rowId])).rows;
   need(z.length===1&&z[0].group_id===receipt.groupId&&z[0].packet_sha256===receipt.packetSha256&&Buffer.isBuffer(z[0].packet_bytes)&&z[0].packet_bytes.equals(Buffer.from(receipt.bytes))&&iso(z[0].research_expiry_utc)===receipt.researchExpiryUtc,"independent-fragment-readback");
   await c.query("ROLLBACK");
