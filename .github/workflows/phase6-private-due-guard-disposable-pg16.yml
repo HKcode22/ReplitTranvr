@@ -1,0 +1,45 @@
+name: Phase6 private custody due guard (disposable PG16 NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'data-collection/phase5/review-tools/p6_private_due_physical_rest_guard_candidate_NOT_FOR_INSTALL.sql'
+      - 'tests/phase6_private_due_physical_guard_disposable_pg16_v39.test.mjs'
+      - '.github/workflows/phase6-private-due-guard-disposable-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  disposable-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: neondb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      P6_PRIVATE_GUARD_DISPOSABLE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Exact existing V0104 plus additive private due guard in disposable PG16
+        run: node --test tests/phase6_private_due_physical_guard_disposable_pg16_v39.test.mjs
