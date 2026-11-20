@@ -2,7 +2,7 @@
  * Same trusted ephemeral runner, role-scoped credentials, no raw body or
  * wire in GitHub outputs/artifacts. Not hostile-OS-user isolation. */
 import {createConnection,createServer,type Socket} from "node:net";
-import {chmodSync,lstatSync,mkdirSync,realpathSync,unlinkSync} from "node:fs";
+import {chmodSync,lstatSync,mkdirSync,realpathSync,unlinkSync,readFileSync} from "node:fs";
 import {join} from "node:path";
 import {hashPhase7DurableCandidate as hash} from "./phase7DurableDerivedBundleCandidate_v39";
 import {readP7BoundedLocalFrame} from "./phase7LocalPrivatePreHandoff_v39";
@@ -44,7 +44,7 @@ function assertCommitted(s:Scope,c:P6PostCommittedScope){
   c.packet.githubRunId!==s.originalRunId||!H.test(c.reservationSha256??"")||!H.test(c.responseSha256??""))hold("COMMITTED_SCOPE");
 }
 function validate(q:Request,s:Scope,role?:PostRole){
- if(!exact(q,["scope","op","body","sha256"])||hash(q.scope)!==hash(s)||hash({scope:q.scope,op:q.op,body:q.body})!==q.sha256)hold("REQUEST_SCOPE");
+ if(!exact(q,["scope","op","body","sha256"])||Buffer.byteLength(JSON.stringify(q))>1024*1024||hash(q.scope)!==hash(s)||hash({scope:q.scope,op:q.op,body:q.body})!==q.sha256)hold("REQUEST_SCOPE");
  if(q.op==="ready"||q.op==="stop"){if(q.body!==null)hold("CONTROL");return;}
  if(q.op==="publish"){
   if(role==="reviewer"||!exact(q.body,["selector","wire"]))hold("PUBLISH_SCOPE");
@@ -67,7 +67,7 @@ export async function callP7PostRole(path:string,scope:Scope,op:Op,body:any=null
  }finally{s.destroy()}
 }
 export async function listenP7PostRole(path:string,scope:Scope,role:PostRole,handler:(q:Request)=>Promise<any>){
- let busy=false,closed=false;const seen=new Set<string>(),sockets=new Set<Socket>();
+ let busy=false,closed=false,failed=false;const seen=new Set<string>(),sockets=new Set<Socket>();
  let done!:()=>void;const finished=new Promise<void>(r=>{done=r});
  const server=createServer({allowHalfOpen:true},s=>{
   sockets.add(s);s.on("error",()=>{});s.once("close",()=>sockets.delete(s));
@@ -75,13 +75,14 @@ export async function listenP7PostRole(path:string,scope:Scope,role:PostRole,han
   void(async()=>{let q:Request|undefined;
    try{q=await readP7BoundedLocalFrame(s,10000) as Request;validate(q,scope,role);
     let value:any=null;
+    if(q.op==="ready"&&failed)hold("ROLE_HELD");
     if(q.op!=="ready"&&q.op!=="stop"){
-     if(seen.has(q.sha256)||seen.size>=2600)hold("NO_REPLAY");
+     if(failed||seen.has(q.sha256)||seen.size>=2600)hold("NO_REPLAY");
      seen.add(q.sha256);value=await handler(q);
     }
     const response={request:q.sha256,ok:true,value};
     if(q.op==="stop")s.end(bytes(response),()=>{void close()});else s.end(bytes(response));
-   }catch{if(q)s.end(bytes({request:q.sha256,ok:false,value:null}));else s.destroy();}
+   }catch{failed=true;if(q)s.end(bytes({request:q.sha256,ok:false,value:null}));else s.destroy();}
    finally{busy=false}
   })();
  });
@@ -90,6 +91,19 @@ export async function listenP7PostRole(path:string,scope:Scope,role:PostRole,han
  chmodSync(path,0o600);const timer=setTimeout(()=>{void close()},14*60000);
  server.on("error",()=>{void close()});
  return {closed:finished,close};
+}
+/** Recovery completion event has no workflow input selector. Reuse the
+ * existing private, exact recovery handoff created by the independently
+ * authenticated discovery step; never trust public event payload data. */
+export function withP7PostRecoverySelector(e:NodeJS.ProcessEnv):NodeJS.ProcessEnv{
+ if(e.P6_PHASE7_POST_RECOVERY_CONFIRM!=="RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER")return e;
+ if(!R.test(e.GITHUB_RUN_ID??"")||!e.RUNNER_TEMP||realpathSync(e.RUNNER_TEMP)!==e.RUNNER_TEMP)hold("RECOVERY_HANDOFF_ROOT");
+ const path=join(e.RUNNER_TEMP,"p7-recovery-"+e.GITHUB_RUN_ID+".json"),st=lstatSync(path);
+ if(!st.isFile()||st.isSymbolicLink()||st.uid!==process.getuid?.()||st.nlink!==1||(st.mode&0o077)!==0||st.size<100||st.size>14000)hold("RECOVERY_HANDOFF_FILE");
+ const w=JSON.parse(readFileSync(path,"utf8")),s=w.selector as P7RecoverySelector;
+ if(w.schema!=="v39.phase7.recovery-runner-wire.v1"||w.runId!==e.GITHUB_RUN_ID||s?.originalGithubRunId!==e.P6_PHASE7_ORIGINAL_POST_RUN_ID)hold("RECOVERY_HANDOFF_SCOPE");
+ return {...e,P6_PRIVATE_POST_DAY:String(s.runDayIndex),P6_PRIVATE_POST_REVISION:String(s.indexRevision),P6_PRIVATE_POST_INDEX_SHA:s.indexSha256,
+  P6_PRIVATE_POST_SHARD:String(s.shardIndex),P6_PRIVATE_POST_PACKET_SHA:s.packetSha256,P6_PRIVATE_POST_ROUTE_SHA:s.routingIntentSha256};
 }
 export function exactPostLocalSelector(e:NodeJS.ProcessEnv):P7RecoverySelector{
  const x=postLocalScope(e);

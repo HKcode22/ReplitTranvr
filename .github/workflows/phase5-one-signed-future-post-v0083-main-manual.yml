@@ -47,6 +47,9 @@ on:
       - 'server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs'
       - 'tests/phase6_private_post_actual_child_transport_v39.test.ts'
       - 'server/lib/disruption/phase7StoredPostRecoveryAdmission_v39.ts'
+      - 'server/lib/disruption/phase7LocalPrivatePostHandoff_v39.ts'
+      - 'scripts/v39_phase7_local_post_review_roles_v39.ts'
+      - 'server/lib/disruption/phase7IndependentPostSettlementIssuer_v39.ts'
       - '.github/workflows/phase6-stored-post-recovery-no-provider.yml'
       - 'scripts/v39_phase7_stored_post_recovery_github_v39.ts'
       - 'server/lib/disruption/phase7PrivateSignedReviewTransport_v39.ts'
@@ -148,6 +151,21 @@ jobs:
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       DATABASE_URL: ''
       V39_DATABASE_RUNTIME_URL: ''
+      P6_PHASE7_POST_RECOVERY_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_RECOVERY_APPROVED || '' }}
+      P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED || '' }}
+      P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED || '' }}
+      P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN || '' }}
+      P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN || '' }}
+      P6_PHASE7_PRE_POLICY_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_POLICY_BASE64 || '' }}
+      P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 || '' }}
+      P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 || '' }}
+      P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 || '' }}
+      P6_PHASE7_POST_STORAGE_APPROVED: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_STORAGE_APPROVED || '' }}
+      P6_PHASE7_POST_CONTRACT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_CONTRACT_SHA256 || '' }}
+      P6_PHASE7_POST_PROFILE_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_PROFILE_SHA256 || '' }}
+      P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 || '' }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 || '' }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -209,6 +227,46 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Start independent POST reviewer (restricted no-provider process)
+        if: ${{ success() && (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') }}
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          GITHUB_TOKEN: ${{ github.token }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start reviewer
+      - name: Start independent POST publisher (restricted no-provider process)
+        if: ${{ success() && (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') }}
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          V39_P5_SOURCE_DATABASE_URL: ''
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ''
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start publisher
       - name: Exactly one future V0083 reviewed OUTCOME GET plus source original
         env:
           RELEASE_FILE: ${{ inputs.frozen_future_post_packet }}
@@ -234,6 +292,18 @@ jobs:
             npx tsx scripts/v39_phase5_one_signed_future_post_outcome_v0083_owner_v39.ts "$RELEASE_FILE"
           fi
           echo 'ONE_FUTURE_POST_ORIGINAL_NO_MODEL_LABEL_AND_NO_AUTOMATIC_RETRY'
+
+      - name: Stop independent POST role processes (no replay)
+        if: ${{ always() && (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') }}
+        env:
+          V39_PHASE6_PROCESS_ARMED: '0'
+          AERODATABOX_API_KEY: ''
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts stop
 
   actual-post-partition-disposable-pg16:
     if: ${{ github.event_name == 'pull_request' }}

@@ -234,7 +234,7 @@ describe("nonpaid recovery of the original signed POST route",()=>{
   event:"workflow_dispatch",run_attempt:1,status:"completed",conclusion:"failure",display_title:"P5 POST "+selector.packetSha256,
   created_at:"2026-11-22T00:25:00Z",run_started_at:"2026-11-22T00:26:00Z",updated_at:"2026-11-22T00:30:30Z"};
  function recoveryEnv(){
-  return {...env(),AERODATABOX_API_KEY:"",P6_PHASE7_POST_RECOVERY_APPROVED:"1",
+  return {...env(),AERODATABOX_API_KEY:"",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_POST_RECOVERY_APPROVED:"1",
    GITHUB_RUN_ID:"1234567891",GITHUB_TOKEN:"synthetic-no-real-token",
    V39_P5_POST_CATEGORY_BUDGET_SHA256:h,V39_P5_POST_PROVIDER_CONTRACT_SHA256:h,V39_P5_FRAME_HASH:h,V39_P5_POST_PRICE_SHA256:h};
  }
@@ -250,6 +250,13 @@ describe("nonpaid recovery of the original signed POST route",()=>{
    {GITHUB_RUN_ID:selector.originalGithubRunId},{P6_PHASE7_POST_RECOVERY_APPROVED:"0"},{P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64:"forbidden"},
    {V39_P5_SOURCE_DATABASE_URL:e.V39_P5_SOURCE_DATABASE_URL!.replace("ep-test","ep-other")}])
    expect(()=>admitP7StoredPostRecovery({...e,...delta},selector)).toThrow();
+ });
+ it("same-run reviewer admission is no-provider, disarmed, separate from terminal recovery",()=>{
+  const e={...recoveryEnv(),GITHUB_RUN_ID:selector.originalGithubRunId,GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml@refs/heads/main"};
+  expect(admitP7StoredPostRecovery(e,selector,"same-run").providerCalls).toBe(0);
+  expect(()=>admitP7StoredPostRecovery(e,selector)).toThrow();
+  for(const delta of [{V39_PHASE6_PROCESS_ARMED:"1"},{GITHUB_WORKFLOW_REF:"wrong"},{AERODATABOX_API_KEY:"no"},{GITHUB_RUN_ATTEMPT:"2"}])
+   expect(()=>admitP7StoredPostRecovery({...e,...delta},selector,"same-run")).toThrow();
  });
  it("selects already closed retained original separately from paid dispatch and refuses future/expired/tampered scope",()=>{
   expect(selectP7RecoverablePostRoute(handoff(),selector)).toEqual(route);

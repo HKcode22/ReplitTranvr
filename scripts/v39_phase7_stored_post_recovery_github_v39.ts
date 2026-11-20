@@ -6,6 +6,7 @@ import {createPrivateKey} from "node:crypto";
 import {lstatSync,readFileSync,writeFileSync,realpathSync,unlinkSync} from "node:fs";
 import {join,resolve} from "node:path";
 import {admitP7StoredPostRecovery,discoverP7WorkflowRunRecoverySelector,prepareP7RecoveryReceiptFromOriginal,executeP7StoredPostRecovery,type P7RecoverySelector} from "../server/lib/disruption/phase7StoredPostRecoveryAdmission_v39";
+import {openP7LocalPostTransport,withP7PostRecoverySelector} from "../server/lib/disruption/phase7LocalPrivatePostHandoff_v39";
 import {p7ReviewPath,publishP7RecoveryWireFromProtectedEnv,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 const e=process.env;
 const hold=(s:string):never=>{throw Error("HOLD_P7_RECOVERY_"+s)};
@@ -74,6 +75,7 @@ async function main(){
   return;
  }
  admitP7StoredPostRecovery(e,w.selector);
- console.log(JSON.stringify(await executeP7StoredPostRecovery(e,w.selector)));
+ const local=withP7PostRecoverySelector(e);
+ console.log(JSON.stringify(await executeP7StoredPostRecovery(local,w.selector,openP7LocalPostTransport(local))));
 }
 main().catch(err=>{const s=String(err?.message??"");console.error(/^HOLD_P7_[A-Z0-9_]+$/.test(s)?s:"HOLD_P7_RECOVERY_REDACTED_NO_PAID_REPLAY");process.exitCode=2});

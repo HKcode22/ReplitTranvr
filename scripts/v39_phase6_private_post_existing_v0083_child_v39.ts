@@ -14,6 +14,7 @@ import {admitP5SignedFuturePostGitHub,runP5SignedFuturePost,type P5SignedFutureP
 import {requirePhase7PostConsumer,type Phase7PostConsumer} from "../server/lib/disruption/phase7PostPreservationBridge_v39";
 import {openPhase7ProtectedPostConsumer} from "../server/lib/disruption/phase7ProtectedPostResolver_v39";
 import type {Phase7PrivateOutcomeReviewTransport} from "../server/lib/disruption/phase7SignedPostConsumer_v39";
+import {openP7LocalPostTransport} from "../server/lib/disruption/phase7LocalPrivatePostHandoff_v39";
 import {readActualValidPreAndClock} from "./v39_phase5_future_post_github_child_dispatcher_v39";
 const SHA=/^[a-f0-9]{64}$/;
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
@@ -219,7 +220,7 @@ export async function runP6PrivatePostWithIndependentTransport(env:NodeJS.Proces
  finally{await opened.close();}
 }
 if(process.env.P6_PRIVATE_POST_CHILD_ENTRYPOINT==="1"){
- runP6PrivatePostExistingV0083Child(process.env).then(x=>{
+ Promise.resolve().then(()=>runP6PrivatePostWithIndependentTransport(process.env,openP7LocalPostTransport(process.env))).then(x=>{
   console.log(JSON.stringify(x));
   if(x.status!=="ONE_FUTURE_POST_SOURCE_ORIGINAL_DURABLE_NOT_PHYSICAL_LABEL")process.exitCode=3;
  }).catch(()=>{console.error("HOLD_P6_PRIVATE_POST_CHILD_REDACTED_NO_RETRY");process.exitCode=2;});

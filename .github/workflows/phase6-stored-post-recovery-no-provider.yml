@@ -100,6 +100,8 @@ jobs:
       P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
       P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
       P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 }}
+      P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}
+      P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -140,6 +142,44 @@ jobs:
           set +x
           umask 077
           npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts publish
+      - name: Start independent POST reviewer (restricted no-provider process)
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          GITHUB_TOKEN: ${{ github.token }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start reviewer
+      - name: Start independent POST publisher (restricted no-provider process)
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          V39_P5_SOURCE_DATABASE_URL: ''
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ''
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start publisher
       - name: Reconcile exact committed original and durable research groups only
         env:
           P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
@@ -149,6 +189,12 @@ jobs:
           set -Eeuo pipefail
           set +x
           npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts settle
+      - name: Stop independent POST role processes (no replay)
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts stop
       - name: Remove private runner handoff (never upload)
         if: always()
         run: |
