@@ -69,7 +69,7 @@ export function preparePhase7BoundPrePreservation(contract:Phase7DerivedReleaseC
   sourceDecisions.set(field,{sourceField:field,value:hasValue?f!.value:null,availableAtUtc:hasValue?available!.toISOString():null,missingReason:hasValue?null:"SOURCE_VALUE_MISSING",rightsDisposition:hasValue&&byDisposition.get(field)?.disposition==="REVIEWED_DERIVED_BUCKET"?"EXTERNALLY_REVIEWED_ALLOW":"HOLD_UNVERIFIED"});
  }
  const decisions=features.map(f=>sourceDecisions.get(f.sourceField as P5EPreField)!);
- const transformed=transformPhase7ReviewedSourceDecisions(profile,contract,decisions,{horizon:req.horizon,cohortBucket:req.cohortBucket,split:req.split,censoring:"not_due",issuedAtUtc:req.issuedAtUtc,releasedAtUtc:req.transformedAtUtc});
+ const transformed=transformPhase7ReviewedSourceDecisions(profile,contract,decisions,{horizon:req.horizon,cohortBucket:req.cohortBucket,split:req.split,censoring:"not_due",issuedAtUtc:req.issuedAtUtc,releasedAtUtc:req.transformedAtUtc},{selectedNativeTUtc:req.selectedNativeTUtc,cutoffUtc:req.cutoffUtc});
  const audit=auditCanonicalPrePreservationWindow(contract,req.dispositions,[{
   horizon:req.horizon,issuedAtUtc:req.issuedAtUtc,sourceExpiresAtUtc:req.sourceExpiresAtUtc,
   sourceFields:sourceFields.map(field=>({field,present:sourceDecisions.get(field)!.value!==null,availableAtUtc:sourceDecisions.get(field)!.availableAtUtc})),

@@ -225,3 +225,38 @@ describe("handoff from actual Stage14 source selectors before original expiry",(
   ])expect(()=>preparePhase7BoundPrePreservation(contract(),profile(),changed)).toThrow(/PHASE7_BOUND_PRE_PRESERVATION_REJECTED/);
  });
 });
+
+describe("explicit frozen-native clock difference candidate (synthetic review only)",()=>{
+ const make=()=>{
+  const c=contract(),p=profile(),evidence=sha("synthetic duration review"),revision=sha("synthetic revision review");
+  c.features=[...c.features,{name:"duration_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true},{name:"revision_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:revision,nonReconstructable:true}];
+  p.fields=[...p.fields,{sourceField:"scheduled_arrival_utc",outputField:"duration_bin",role:"feature",kind:"frozen_native_t_delta_bucket",bucketCount:3,boundaries:[60,180],categories:null,transformEvidenceSha256:evidence,nonReconstructable:true},{sourceField:"provider_revised_departure_utc",outputField:"revision_bin",role:"feature",kind:"frozen_native_t_delta_bucket",bucketCount:3,boundaries:[0,15],categories:null,transformEvidenceSha256:revision,nonReconstructable:true}];
+  const clock={selectedNativeTUtc:"2026-11-19T06:30:00.000Z",cutoffUtc:context.issuedAtUtc};
+  const d:Phase7SourceDecision[]=[...decisions(),{sourceField:"scheduled_arrival_utc",value:"2026-11-19T09:00:00.000Z",availableAtUtc:context.issuedAtUtc,missingReason:null,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"},{sourceField:"provider_revised_departure_utc",value:"2026-11-19T06:20:00.000Z",availableAtUtc:context.issuedAtUtc,missingReason:null,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"}];
+  return {c,p,clock,d};
+ };
+ it("derives only the reviewed buckets from a genuine frozen PRE clock; no exact timestamp or delta emitted",()=>{
+  const {c,p,clock,d}=make();
+  const out=transformPhase7ReviewedSourceDecisions(p,c,d,context,clock);
+  expect(out.input.featureBuckets).toEqual({congestion_bin:1,duration_bin:1,revision_bin:0});
+  expect(JSON.stringify(out)).not.toMatch(/2026-11-19|scheduled_arrival_utc|provider_revised_departure_utc/);
+  expect(out.phase6PaidGo).toBe(false);
+  const v=d.map(x=>x.sourceField==="scheduled_arrival_utc"?{...x,value:"2026-11-19T06:29:00.000Z"}:x);
+  expect(transformPhase7ReviewedSourceDecisions(p,c,v,context,clock).input.featureBuckets.duration_bin).toBeNull();
+ });
+ it("refuses an unbound or retimed anchor and never admits post-issue evidence",()=>{
+  const {c,p,clock,d}=make();
+  expect(()=>transformPhase7ReviewedSourceDecisions(p,c,d,context)).toThrow("NATIVE_DELTA_ANCHOR_REQUIRED");
+  expect(()=>transformPhase7ReviewedSourceDecisions(p,c,d,context,{...clock,selectedNativeTUtc:"2026-11-19T06:31:00.000Z"})).toThrow("NATIVE_DELTA_ANCHOR");
+  const late=d.map(x=>x.sourceField==="provider_revised_departure_utc"?{...x,availableAtUtc:"2026-11-19T00:30:00.001Z"}:x);
+  expect(transformPhase7ReviewedSourceDecisions(p,c,late,context,clock).input.featureBuckets.revision_bin).toBeNull();
+  const invalid={...p,fields:p.fields.map(f=>f.outputField==="duration_bin"?{...f,sourceField:"operating_carrier"}:f)};
+  expect(validatePhase7ReviewedTransformationProfile(invalid).failures).toContain("native-delta-source-scope-invalid:duration_bin");
+ });
+ it("does not require ephemeral PRE time again for POST-only label transform",()=>{
+  const {c,p,d}=make();
+  const out=transformPhase7ReviewedSourceDecisions(p,c,d.filter(x=>x.sourceField==="gate_out_delay_minutes"),context);
+  expect(out.input.featureBuckets).toEqual({congestion_bin:null,duration_bin:null,revision_bin:null});
+  expect(out.input.labelBuckets.delay_bin).toBe(2);
+ });
+});
