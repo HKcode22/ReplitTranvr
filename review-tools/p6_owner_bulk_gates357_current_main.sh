@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Phase 6 owner-local bulk continuation for fixed Gates 3/5/7.
-# No SOURCE enable, no AeroDataBox/RapidAPI call, no paid GO.
+# Phase 6 owner-local bulk continuation for fixed Gates 3/5/7 plus a final
+# FREE account/subscription observation for Gate 8. No SOURCE enable/FIDS/paid GO.
 set -Eeuo pipefail
 set +x
 umask 077
@@ -43,6 +43,7 @@ if(!rows.some(r=>r.status==="completed"&&r.conclusion==="success")){
 }
 NODE
 
+ACCOUNT_READ_KEY="${AERODATABOX_API_KEY:-}"
 export ADB_AUTO_COLLECT=0
 export V39_PHASE6_PROCESS_ARMED=0
 export V39_PHASE6_OWNER_APPROVED=0
@@ -238,11 +239,34 @@ else
   echo '{"status":"GATE7_RELAY_FORWARD_SKIPPED_REVIEW_REQUIRED","providerCallsByRelay":0,"databaseWritesByRelay":0,"phase6PaidGo":false}'
 fi
 
-rm -f "/tmp/p6-before.$$" "/tmp/p6-after.$$" "/tmp/p6-new.$$" "/tmp/p6-primary.log.$$"       "/tmp/p6-relay-before.$$" "/tmp/p6-relay-after.$$" "/tmp/p6-relay-new.$$" "/tmp/p6-relay.log.$$"
+rm -f "/tmp/p6-before.$" "/tmp/p6-after.$" "/tmp/p6-new.$" "/tmp/p6-primary.log.$"       "/tmp/p6-relay-before.$" "/tmp/p6-relay-after.$" "/tmp/p6-relay-new.$" "/tmp/p6-relay.log.$"
+
+# ---------------- Gate 8 freshness: FREE account + subscription observation ----------------
+ACCOUNT_STATUS="NOT_RUN_API_KEY_MISSING"
+if [[ -n "$ACCOUNT_READ_KEY" ]]; then
+  set +e
+  env -u DATABASE_URL -u V39_DATABASE_RUNTIME_URL -u RAPIDAPI_KEY -u AERODATABOX_WEBHOOK_SECRET \
+    ADB_AUTO_COLLECT=0 V39_PHASE6_PROCESS_ARMED=0 V39_PHASE6_OWNER_APPROVED=0 \
+    AERODATABOX_API_KEY="$ACCOUNT_READ_KEY" \
+    node review-tools/p6_launch_free_account_prearm_current_v39.mjs \
+    >"$OUT/fresh-account-prearm.json" 2>"$OUT/fresh-account-prearm.err"
+  ACCOUNT_RC=$?
+  set -e
+  if [[ "$ACCOUNT_RC" -eq 0 ]]; then
+    ACCOUNT_STATUS="PASS"
+    cat "$OUT/fresh-account-prearm.json"
+  else
+    ACCOUNT_STATUS="HOLD"
+    cat "$OUT/fresh-account-prearm.err" >&2
+  fi
+fi
+unset ACCOUNT_READ_KEY
 
 echo "P6_OWNER_BULK_COMPLETE"
 echo "MAIN=$PIN"
 echo "MONDAY_PACKAGE=$OUT"
 echo "PRIMARY_VERIFY_RUN=$RUN"
 echo "RELAY_OBSERVATION_RUN=$RRUN"
-echo "NO_SOURCE_ENABLE_NO_PROVIDER_CALL_NO_PAID_GO"
+echo "GATE8_FREE_ACCOUNT_PREARM=$ACCOUNT_STATUS"
+echo "NO_SOURCE_ENABLE_NO_FIDS_CALL_NO_PAID_GO"
+[[ "$ACCOUNT_STATUS" != "HOLD" ]] || exit 2
