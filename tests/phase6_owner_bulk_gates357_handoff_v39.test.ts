@@ -15,6 +15,8 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
     expect(s).toContain("PRIMARY_BACKSTOP");
     expect(s).toContain("unset AERODATABOX_API_KEY RAPIDAPI_KEY AERODATABOX_WEBHOOK_SECRET");
     expect(s).toContain("NO_SOURCE_ENABLE_NO_FIDS_CALL_NO_PAID_GO");
+    expect(s).toContain("split(/\\r?\\n/)");
+    expect(s).not.toContain("split(/\\\\r?\\\\n/)");
     expect(s).not.toContain("ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET");
     expect(s).not.toContain("P6_SOURCE_AUTH_ENABLED_INDEPENDENT_READBACK");
     expect(s).not.toContain("v39_phase6_start_owner_v39");
