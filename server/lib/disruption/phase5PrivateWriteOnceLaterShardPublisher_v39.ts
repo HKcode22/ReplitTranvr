@@ -38,14 +38,16 @@ function strictRoot(root:string,publicCheckout:string){
   fail("ABSOLUTE_PRIVATE_ROOT_AND_PUBLIC_CHECKOUT_REQUIRED");
  const dir=resolve(root);
  const checkout=resolve(publicCheckout);
- let st:ReturnType<typeof lstatSync>,real:string;
+ let st:ReturnType<typeof lstatSync>,real:string,checkoutReal:string;
  try{st=lstatSync(dir);real=realpathSync(dir);}
  catch{return fail("PRIVATE_ROOT_ABSENT_NOT_AUTO_CREATED");}
- if(!st.isDirectory()||st.isSymbolicLink()||real!==dir||
+ try{checkoutReal=realpathSync(checkout);}
+ catch{return fail("PUBLIC_CHECKOUT_REALPATH_UNAVAILABLE");}
+ if(!st.isDirectory()||st.isSymbolicLink()||
     (st.mode&0o777)!==0o700||
     (typeof process.getuid==="function"&&st.uid!==process.getuid())||
-    real===checkout||real.startsWith(checkout+sep)||
-    checkout.startsWith(real+sep)||
+    real===checkoutReal||real.startsWith(checkoutReal+sep)||
+    checkoutReal.startsWith(real+sep)||
     real==="/"||real.startsWith("/proc/")||real.startsWith("/sys/"))
   fail("PRIVATE_ROOT_NOT_OWNED_0700_OUTSIDE_PUBLIC_CHECKOUT");
  return dir;
