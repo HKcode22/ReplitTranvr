@@ -36,6 +36,9 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
     expect(s).toContain('"V3.9 Offline Safety"');
     expect(s).toContain('RELAY_PIN="214ede4895c6e6cdae5f124a85a323783251ea60"');
     expect(s).toContain('[[ "$(remote_relay)" == "$RELAY_PIN" ]] || hold RELAY_MAIN_CHANGED');
+    expect(s).toContain("MAIN_CHANGED_BEFORE_PRIMARY_REPIN");
+    expect(s).toContain("MAIN_CHANGED_BEFORE_RELAY_REPIN");
+    expect(s).toContain("FINAL_PIN_DRIFT");
     expect(s).toContain("data-collection/phase5/evidence/2026-11-21_monday_exact_machine_bound_date_decision.json");
   });
 });
