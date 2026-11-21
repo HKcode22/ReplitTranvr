@@ -6,6 +6,8 @@ import {describe, expect, it} from 'vitest';
 import {
   transformPhase7ReviewedSourceDecisions,
   validatePhase7ReviewedTransformationProfile,
+  P7_NATIVE_STATUS_DOMAIN,
+  P7_NATIVE_STATUS_CONTRACT_SHA256,
   type Phase7ReviewedTransformationProfile,
   type Phase7SourceDecision,
 } from '../server/lib/disruption/phase7ReviewedSourceTransformation_v39';
@@ -262,37 +264,46 @@ describe("explicit frozen-native clock difference candidate (synthetic review on
 });
 
 
-describe("native FIDS status grouping candidate: no one-to-one source status encoding",()=>{
+describe("native FIDS status grouping candidate: exact public contract domain, no one-to-one source status encoding",()=>{
+ const groups=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Canceled","Diverted","CanceledUncertain"]];
  const make=()=>{
-  const c=contract(),p=profile(),evidence=sha("synthetic grouped status review");
-  c.features=[...c.features,{name:"state_bin",bucketCount:2,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true}];
-  p.fields=[...p.fields,{sourceField:"reported_pre_departure_status",outputField:"state_bin",role:"feature",kind:"categorical_group_dictionary",bucketCount:2,boundaries:null,categories:[["SyntheticA","SyntheticB"],["SyntheticC","SyntheticD"]],transformEvidenceSha256:evidence,nonReconstructable:true}];
+  const c=contract(),p=profile(),evidence=sha("synthetic review of grouped public enum");
+  c.features=[...c.features,{name:"state_bin",bucketCount:groups.length,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true}];
+  p.fields=[...p.fields,{sourceField:"reported_pre_departure_status",outputField:"state_bin",role:"feature",kind:"categorical_group_dictionary",bucketCount:groups.length,boundaries:null,categories:groups.map(g=>[...g]),transformEvidenceSha256:evidence,nonReconstructable:true}];
   const status=(value:string):Phase7SourceDecision=>({sourceField:"reported_pre_departure_status",value,availableAtUtc:context.issuedAtUtc,missingReason:null,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"});
   return {c,p,status};
  };
- it("maps two distinct possible status inputs to each bucket without copying provider tokens",()=>{
+ it("covers every recovered public enum exactly once; at least two input possibilities per bucket",()=>{
+  expect(P7_NATIVE_STATUS_CONTRACT_SHA256).toBe("63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09");
+  expect([...P7_NATIVE_STATUS_DOMAIN].sort()).toEqual(groups.flat().sort());
+  expect(P7_NATIVE_STATUS_DOMAIN).toHaveLength(13);
   const {c,p,status}=make();
-  for(const [source,bucket] of [["SyntheticA",0],["SyntheticB",0],["SyntheticC",1],["SyntheticD",1]] as const){
-   const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status(source)],context);
-   expect(out.input.featureBuckets.state_bin).toBe(bucket);
-   expect(out.input.missingness.state_bin).toBe(false);
-   expect(JSON.stringify(out)).not.toContain(source);
-   expect(out.phase6PaidGo).toBe(false);
+  for(const [bucket,group] of groups.entries()){
+   expect(group.length).toBeGreaterThanOrEqual(2);
+   for(const source of group){
+    const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status(source)],context);
+    expect(out.input.featureBuckets.state_bin).toBe(bucket);
+    expect(out.input.missingness.state_bin).toBe(false);
+    expect(JSON.stringify(out)).not.toContain(source);
+    expect(out.phase6PaidGo).toBe(false);
+   }
   }
  });
  it("unrecognized status is invalid/missing, never automatically assigned to another group",()=>{
   const {c,p,status}=make(),out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status("SyntheticUnknown")],context);
   expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.missingness.state_bin).toBe(true);expect(out.input.qualityFlags & 4).toBe(4);
  });
- it("rejects invertible original-status codes, singleton groups, duplicate membership, or wrong scope",()=>{
+ it("rejects partial enum coverage, foreign tokens, reversible codes, singleton groups, duplicate membership, or wrong scope",()=>{
   const {p}=make(),field=p.fields.at(-1)!;
   for(const bad of [
-   {...field,kind:"categorical_dictionary",categories:["SyntheticA","SyntheticB"]},
-   {...field,categories:[["SyntheticA"],["SyntheticB","SyntheticC"]]},
-   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticB","SyntheticC"]]},
-   {...field,categories:[["SyntheticA","SyntheticA"],["SyntheticC","SyntheticD"]]},
-   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticC"," "]]},
-   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticC","SyntheticD"]],boundaries:[1]},
+   {...field,kind:"categorical_dictionary",bucketCount:13,categories:[...P7_NATIVE_STATUS_DOMAIN]},
+   {...field,categories:[["Unknown"],...groups.slice(1)]},
+   {...field,categories:[["Unknown"],["Expected",...groups[1]],...groups.slice(2)]},
+   {...field,categories:[["Unknown","Expected"],["Expected",...groups[1]],...groups.slice(2)]},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1).map(g=>[...g]),["Extra","Another"]],bucketCount:5},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1,3),["Delayed","Canceled","Diverted"]]},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1,3),["Delayed","Canceled","Diverted","unknown"]]},
+   {...field,boundaries:[1]},
    {...field,sourceField:"origin_taf_flight_category"},
    {...field,role:"label"},
    {...field,bucketCount:3},
@@ -304,7 +315,7 @@ describe("native FIDS status grouping candidate: no one-to-one source status enc
  it("keeps the independent approval and as-of fences",()=>{
   const {c,p,status}=make();
   expect(validatePhase7ReviewedTransformationProfile({...p,approvedForUse:false}).pass).toBe(false);
-  const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),{...status("SyntheticA"),availableAtUtc:"2026-11-19T00:30:00.001Z"}],context);
+  const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),{...status("Expected"),availableAtUtc:"2026-11-19T00:30:00.001Z"}],context);
   expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.qualityFlags & 32).toBe(32);
  });
 });
