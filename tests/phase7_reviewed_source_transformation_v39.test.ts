@@ -287,6 +287,27 @@ describe("review-only grouped native status (not a production taxonomy or rights
     expect(a.sourceValuesPersisted).toBe(false);
     expect(a.phase6PaidGo).toBe(false);
   });
+  it("counts a present but unrecognized native status as lost in the actual bound PRE preservation denominator",()=>{
+    const {p,c}=setup();
+    const issue="2026-11-21T05:59:00.000Z";
+    const dispositions:Phase7BoundPrePreservationRequest["dispositions"]=P5_E_ALLOWED_PRE_FEATURES.map(field=>({
+      field,disposition:field==="reported_pre_departure_status"?"REVIEWED_DERIVED_BUCKET":"LONG_TERM_RIGHTS_REQUIRED",
+      outputField:field==="reported_pre_departure_status"?"progress_bin":null,
+      reviewSha256:field==="reported_pre_departure_status"?sha("feature"):sha(field)
+    }));
+    const run=(value:string|null)=>preparePhase7BoundPrePreservation(c,p,{
+      horizon:"T-24h",selectedNativeTUtc:"2026-11-22T06:00:00.000Z",cutoffUtc:"2026-11-21T06:00:00.000Z",
+      issuedAtUtc:issue,transformedAtUtc:"2026-11-21T05:59:01.000Z",sourceExpiresAtUtc:"2026-11-22T05:30:00.000Z",
+      split:"train",cohortBucket:1,dispositions,separatelyVerifiedFields:[],
+      features:[{featureName:"reported_pre_departure_status",value,informationAvailableAt:new Date(issue),
+        source:"AERODATABOX_FIDS",sourceVersion:sha("synthetic original")}]
+    });
+    expect(run("synthetic_a").audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:1,lost:0});
+    expect(run("synthetic_unknown").audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:0,lost:1});
+    expect(run(null).audit.counts.reported_pre_departure_status).toMatchObject({present:0,preserved:0,lost:0});
+    // The production transaction's existing zero-lost/zero-false-presence guard
+    // rejects the second result rather than writing an apparently missing value.
+  });
   it("rejects singletons, duplicate or overlapping source categories, missing groups, unauthorized field scope and malformed policy",()=>{
     const {p}=setup(),f=p.fields[0];
     for(const changed of [
