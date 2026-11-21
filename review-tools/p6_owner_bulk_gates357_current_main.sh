@@ -14,6 +14,8 @@ PRIMARY_WF="phase5-primary-fids-expiry-no-provider.yml"
 RELAY_WF="external-clock.yml"
 
 hold(){ echo "HOLD_P6_OWNER_BULK_$1" >&2; exit 2; }
+cleanup(){ rm -f "/tmp/p6-v0107-review.$" "/tmp/p6-v0107-review-err.$" "/tmp/p6-before.$" "/tmp/p6-after.$" "/tmp/p6-new.$" "/tmp/p6-primary.log.$" "/tmp/p6-relay-before.$" "/tmp/p6-relay-after.$" "/tmp/p6-relay-new.$" "/tmp/p6-relay.log.$"; }
+trap cleanup EXIT
 [[ -d "$ROOT/.git" || -f "$ROOT/.git" ]] || ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [[ -n "$ROOT" && -e "$ROOT/.git" ]] || hold NO_REPO
 cd "$ROOT"
@@ -51,8 +53,6 @@ DECISION_SHA="$(sha256sum "$DECISION" | awk '{print $1}')"
 [[ "$DECISION_SHA" =~ ^[0-9a-f]{64}$ ]] || hold DATE_DECISION_SHA
 
 OUT="${HOME}/.travnr-phase6-monday-${PIN:0:12}"
-mkdir -p "$(dirname "$OUT")"
-chmod 700 "$(dirname "$OUT")"
 
 # ---------------- Gate 5: exact disabled Monday stage ----------------
 if [[ ! -e "$OUT" ]]; then
@@ -61,7 +61,7 @@ else
   [[ -d "$OUT" && -f "$OUT/prospective-revision-package.json" && -f "$OUT/new-stage-input.json" ]] || hold PARTIAL_MONDAY_PACKAGE
 fi
 
-STAGE_STATE="$(node --input-type=module "$OUT/new-stage-input.json" <<'NODE'
+STAGE_STATE="$(node --input-type=module - "$OUT/new-stage-input.json" <<'NODE'
 import pg from "pg";import fs from "node:fs";
 const p=process.argv[2],stage=JSON.parse(fs.readFileSync(p,"utf8"));
 const c=new pg.Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:20000});
@@ -86,7 +86,7 @@ elif [[ "$STAGE_STATE" != "MONDAY_STAGE_ALREADY_PRESENT" ]]; then
   hold MONDAY_STAGE_PRECHECK_RESULT
 fi
 
-node --input-type=module "$OUT/new-stage-input.json" <<'NODE'
+node --input-type=module - "$OUT/new-stage-input.json" <<'NODE'
 import pg from "pg";import fs from "node:fs";import crypto from "node:crypto";
 const stageRaw=fs.readFileSync(process.argv[2]),stage=JSON.parse(stageRaw);
 const c=new pg.Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:20000});
@@ -179,8 +179,7 @@ NODE
 gh run view "$RUN" -R "$REPO" --job "$JOB" --log >"/tmp/p6-primary.log.$$"
 node - "$PIN" "$RUN" "/tmp/p6-primary.log.$$" <<'NODE'
 const fs=require("fs"),[pin,id,f]=process.argv.slice(2),rows=[];
-for(const l of fs.readFileSync(f,"utf8").split(/?
-/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x?.status==="PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES")rows.push(x)}catch{}}
+for(const l of fs.readFileSync(f,"utf8").split(/\\r?\\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x?.status==="PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES")rows.push(x)}catch{}}
 if(rows.length!==1)process.exit(2);
 const x=rows[0],b=x.before,keys=["liveOriginals","eligibleOriginals","hardDueOriginals","eligibleNextHour","hardDueNextHour","unboundLiveOriginals","markedExpiredPayloadPresent","unlinkedUnexpiredPopulation","unexpiredPopulationWithoutLiveOriginal"];
 if(x.reviewedMainSha!==pin||x.providerCalls!==0||x.databaseWrites!==0||x.objectDeletions!==0||x.phase6PaidGo!==false||
@@ -228,8 +227,7 @@ then
   gh run view "$RRUN" -R "$RELAY_REPO" --job "$RJOB" --log >"/tmp/p6-relay.log.$$"
   node - "$PIN" "$RRUN" "/tmp/p6-relay.log.$$" <<'NODE'
 const fs=require("fs"),[pin,id,f]=process.argv.slice(2),rows=[];
-for(const l of fs.readFileSync(f,"utf8").split(/?
-/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x&&Object.hasOwn(x,"providerCallsByRelay"))rows.push(x)}catch{}}
+for(const l of fs.readFileSync(f,"utf8").split(/\\r?\\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x&&Object.hasOwn(x,"providerCallsByRelay"))rows.push(x)}catch{}}
 if(rows.length!==1)process.exit(2);const x=rows[0];
 if(x.relayRunId!==Number(id)||x.mode!=="PRIMARY_BACKSTOP"||x.providerCallsByRelay!==0||x.databaseReadsByRelay!==0||x.databaseWritesByRelay!==0||x.paidAuthorityGranted!==false)process.exit(2);
 const allowed=["TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF","DEFER_RECENT_PRIMARY_STEP_NOT_DELETION_PROOF","DEFER_TARGET_ALREADY_ACTIVE","EXTERNAL_WAKE_PREFLIGHT_DEFERRED_NO_POST"];
