@@ -34,6 +34,16 @@ export type Phase7ReviewedTransformationKind =
   | 'categorical_dictionary'
   | 'categorical_group_dictionary';
 
+/** Exact public OpenAPI RapidAPI FlightStatus enum, v1.15.4.0.
+ * Owner recovered and SHA256-verified 2026-11-21:
+ * Enum metadata is not flight Contents,
+ * nor a provider grant or scientific approval of any particular grouping. */
+export const P7_NATIVE_STATUS_CONTRACT_SHA256 = "63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09";
+export const P7_NATIVE_STATUS_DOMAIN = Object.freeze([
+  "Unknown","Expected","EnRoute","CheckIn","Boarding","GateClosed","Departed",
+  "Delayed","Approaching","Arrived","Canceled","Diverted","CanceledUncertain"
+] as const);
+
 export type Phase7ReviewedTransformationRole = 'feature' | 'label';
 export type Phase7ReviewedRightsDisposition =
   | 'EXTERNALLY_REVIEWED_ALLOW'
@@ -244,7 +254,8 @@ export function validatePhase7ReviewedTransformationProfile(
               if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value) || names.has(value)) return false;
               names.add(value); return true;
             });
-          }) || names.size > 256) {
+          }) || names.size !== P7_NATIVE_STATUS_DOMAIN.length ||
+          !P7_NATIVE_STATUS_DOMAIN.every(value => names.has(value))) {
         failures.push('categorical-group-definition-invalid:' + String(field.outputField));
       }
     } else if (field.kind === 'categorical_dictionary') {
