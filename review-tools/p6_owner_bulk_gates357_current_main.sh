@@ -160,7 +160,7 @@ NODE
   node scripts/v39_phase5_v0107_owner_upgrade_v39.mjs commission
   unset P5_V0107_OWNER_APPROVAL P5_V0107_OWNER_REVIEW_SHA256
 else
-  ERR="$(tail -n 1 "/tmp/p6-v0107-review-err.$")"
+  ERR="$(tail -n 1 "/tmp/p6-v0107-review-err.$$")"
   [[ "$ERR" == "HOLD_V0107_OWNER_ALREADY_UPGRADED_DO_NOT_REPLAY" ]] || {
     printf '%s\n' "$ERR" >&2
     hold V0107_REVIEW
@@ -221,7 +221,6 @@ gh variable set P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO" --body "V0107_VERIFI
 var(){ gh variable get "$1" -R "$2"; }
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_EXPIRY_DISABLED
 [[ "$(var P5_PRIMARY_FIDS_BACKSTOP_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_BACKSTOP_DISABLED
-[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
 [[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
 gh variable set P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$PIN"
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" == "$PIN" ]] || hold PRIMARY_PIN_READBACK
