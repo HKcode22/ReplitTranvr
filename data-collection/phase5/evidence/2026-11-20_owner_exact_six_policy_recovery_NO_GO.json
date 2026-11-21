@@ -1,0 +1,19 @@
+{
+  "schema": "v39.phase6.owner-exact-policy-recovery-evidence.v1",
+  "status": "OWNER_EXACT_POLICY_WORKPAPER_RECOVERED_NO_GO",
+  "main": "0a7b1a28f243de76d4c83026d15f585265ef6f7b",
+  "observedAtUtc": "2026-11-20T04:45:48.440Z",
+  "workpaperSha256": "7925dca816933a401ec97f1d3a1f920b881c8f1e296ab8f70f0563c19cf13b0e",
+  "catalogSha256": "4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534",
+  "contractSha256": "63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09",
+  "stageSha256": "6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc",
+  "staticCandidateSha256": "f185326d728c0e88e6cdf864e17b7fd2bff7d7d1c8af07713efddc2572621524",
+  "catalogAirports": 1017,
+  "catalogGroups": 168,
+  "policyInstalled": false,
+  "independentPolicyApproval": false,
+  "providerApiCalls": 0,
+  "databaseWrites": 0,
+  "githubWritesByOwnerRecovery": 0,
+  "phase6PaidGo": false
+}

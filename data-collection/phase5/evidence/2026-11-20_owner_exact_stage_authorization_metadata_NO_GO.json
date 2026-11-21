@@ -1,0 +1,90 @@
+{
+  "schema": "v39.phase6.owner-exact-stage-auth-metadata.v1",
+  "evidenceOrigin": "Owner terminal output from read-only exact private packet compiler and production schema catalog, Nov19 Pacific; no provider values or private package bytes copied",
+  "status": "P6_EXACT_AUTH_METADATA_VERIFIED_NO_GO",
+  "authorizationId": "AUTH-20261119-P5INERTFREEZE",
+  "codeSha40": "0a7b1a28f243de76d4c83026d15f585265ef6f7b",
+  "stagePacketSha256": "6d06cd56f3cf09b7d4f5a6033b70f253e6247a9e1b27dbb839b0080a66e771fc",
+  "stageContentSha256": "cc539692f41f7ae39b12b89a6815eb47913c4a84319545dab1e48b4c1e39d4cf",
+  "costEnvelopeSha256": "a3d3525a890bfe542f9588b18d3b5d9367ba657ccae2c1c0401edc625ac46124",
+  "manifestSha256": "3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",
+  "predecessorEvidenceIds": [
+    "RUN-20261116-OWNERREVIEW112557",
+    "RUN-20261116-PREARMCLOCK43832469501",
+    "RUN-20261116-QUOTA091844",
+    "RUN-20261116-BTSOVERLAP14198898471",
+    "RUN-20261116-SOURCEGAPSENSITIVITY",
+    "RUN-20261116-HISTORICALFIDSCLEAR",
+    "RUN-20261116-V0103VERIFY43987495623",
+    "RUN-20261116-HISTORICALPREINVENTORY",
+    "RUN-20261116-V0104OWNERINSTALL",
+    "RUN-20261116-HEARTBEAT43992105353",
+    "RUN-20261116-PRIMARYEXPIRY43997742324",
+    "RUN-20261116-HISTORICALPRECLASSIFICATION015741",
+    "RUN-20261119-FRESHACCOUNT033903",
+    "RUN-20261119-SCIENTIFICSCOPEREVIEW",
+    "RUN-20261119-FRESHBUDGETRECONCILED",
+    "RUN-20261119-OPERATIONALSCOPEREVIEW",
+    "RUN-20261119-EXACTCOMPACTCOST",
+    "RUN-20261119-NATIVEPOSTGEOMETRY",
+    "RUN-20261119-ACTUALSIGNERALIASES",
+    "RUN-20261119-ACTUALPOLICYRECOVERY",
+    "RUN-20261119-ACTUALOWNERRECOVERY",
+    "DEC-20261119-OWNERPRESERVEF8",
+    "RUN-20261119-EXISTINGSTOPGUARDEVIDENCE",
+    "RUN-20261119-FINALOWNERMETADATA",
+    "RUN-20261119-NATIVECOREPREARMREVIEW",
+    "RUN-20261119-CURRENTGITHUBSTOP",
+    "RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED"
+  ],
+  "maxAlertCredits": 680,
+  "maxRestUnitsByCategory": {
+    "FIDS_BASE_UNITS": 11904,
+    "FIDS_SPLIT_UNITS": 384,
+    "FIDS_RETRY_UNIT_BUDGET": 1260,
+    "VALIDATION_UNIT_BUDGET": 496,
+    "OUTCOME_REST_UNIT_BUDGET": 22400,
+    "HISTORY_BOOTSTRAP_UNIT_BUDGET": 0,
+    "DIAGNOSTIC_UNIT_BUDGET": 296
+  },
+  "totalRestReserved": 36740,
+  "schemaCensus": {
+    "physicalTables": 146,
+    "physicalColumns": 2445,
+    "bySchema": {
+      "clean": {
+        "tables": 83,
+        "columns": 1388
+      },
+      "phase6_private": {
+        "tables": 3,
+        "columns": 31
+      },
+      "public": {
+        "tables": 28,
+        "columns": 342
+      },
+      "stripe": {
+        "tables": 29,
+        "columns": 667
+      },
+      "_system": {
+        "tables": 1,
+        "columns": 5
+      },
+      "drizzle": {
+        "tables": 1,
+        "columns": 3
+      },
+      "v39_meta": {
+        "tables": 1,
+        "columns": 9
+      }
+    },
+    "dataRowsRetrieved": 0
+  },
+  "scope": "The compiled ceiling is not authority to start legacy Alerts or dispatch paid REST. Full table counts are catalog metadata only, not field-level rights or ML parity.",
+  "providerCalls": 0,
+  "databaseWrites": 0,
+  "phase6PaidGo": false
+}

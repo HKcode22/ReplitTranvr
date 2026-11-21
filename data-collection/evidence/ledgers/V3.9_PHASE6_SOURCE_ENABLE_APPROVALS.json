@@ -147,6 +147,36 @@
       "evidenceId": "DEC-20261119-ADBBOUNDEDSOURCE",
       "path": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
       "sha256": "0e921e6e945637d8eaae52a7e523de3da6b11b7c21124e6b807de993dd849e13"
+    },
+    {
+      "evidenceId": "RUN-20261120-CURRENTGITHUBSTOP",
+      "path": "data-collection/phase5/evidence/2026-11-20_current_phase6_github_stop_attestation_NO_GO.json",
+      "sha256": "75ebdd9f3e832f9236624221839ed035788288c31b91d08ea0052516f3b43646"
+    },
+    {
+      "evidenceId": "RUN-20261120-OWNERRESTAGEACCOUNT",
+      "path": "data-collection/phase5/evidence/2026-11-20_owner_restaged_calendar_and_free_account_receipts_NO_GO.json",
+      "sha256": "eebe936341421cdbffc372ed99af5f9c1dd385bec34a118953fe957d16637207"
+    },
+    {
+      "evidenceId": "DEC-20261120-REVISIONREVIEW",
+      "path": "data-collection/phase5/evidence/2026-11-20_phase6_nov20_date_revision_second_agent_review_NO_GO.md",
+      "sha256": "ab1d74a1cd78cae39da3d7b140cdf8153b7cd51401f165eeb5e2c3d32f6b4f76"
+    },
+    {
+      "evidenceId": "DEC-20261120-PITRRECOVERY",
+      "path": "data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md",
+      "sha256": "191cae2e3f10de529c3c65613c06a3d88d2cd4b349e1520039ebc083b9a69d6d"
+    },
+    {
+      "evidenceId": "RUN-20261120-OWNEREXACTAUTHMETA",
+      "path": "data-collection/phase5/evidence/2026-11-20_owner_exact_stage_authorization_metadata_NO_GO.json",
+      "sha256": "c0f533a9a341cc6cf4069313733817c66681471492b4a5b54ae57e40a719f85e"
+    },
+    {
+      "evidenceId": "RUN-20261120-PRODCATALOGRECONCILE",
+      "path": "data-collection/phase5/evidence/2026-11-20_production_schema_reconciliation_AND_EXPIRY_HANDOFF_NO_GO.md",
+      "sha256": "f80e972db07d60e110ac8118aa1582a623cfd275e272afc6c87e6760cc50b5c7"
     }
   ],
   "approvals": []
