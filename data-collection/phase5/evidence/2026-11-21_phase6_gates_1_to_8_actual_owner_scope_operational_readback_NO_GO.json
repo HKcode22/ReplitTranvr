@@ -54,15 +54,19 @@
         "production V0107 STOPPED installed and read back",
         "primary protected child run 44915360246 succeeded",
         "primary protected child run 44917214631 succeeded",
-        "retention read-only sentinel run 44921362060 NO_OVERDUE_REFERENCES 838/838 verified"
+        "retention read-only sentinel run 44921362060 NO_OVERDUE_REFERENCES 838/838 verified",
+        "Nov19 owner observed Replit PITR enabled, ordinary rotation window seven days (168h), scheduled backups off; recovery-only control reviewed and destructive restore drill expressly not required"
       ],
       "open": [
         "physical source object deletion before deadline under positive nonempty workload",
-        "backup/PITR rotation and restore/log custody proof"
+        "non-PITR physical object/log/replica custody and any genuine eventual due-item deletion under hard source TTL"
       ],
       "knownCaveats": {
         "primaryObjectPresenceChecked": false,
-        "backupOrPitrRetentionVerified": false
+        "backupOrPitrRetentionVerified": false,
+        "pitrControlPolicyPreviouslyReviewed": true,
+        "pitrConsoleIndependentlyReexecutedByAssistant": false,
+        "noProductionRestoreDrillRequired": true
       }
     },
     {
@@ -153,7 +157,9 @@
     "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921362060",
     "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921364637",
     "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921807603",
-    "https://github.com/HKcode22/ReplitTranvr/pull/936"
+    "https://github.com/HKcode22/ReplitTranvr/pull/936",
+    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md",
+    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_owner_inert_freeze_and_pitr_console_observation_NO_PHASE6_GO.json"
   ],
   "sourceRightsReview": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
   "retentionCertification": false,
