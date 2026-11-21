@@ -183,6 +183,14 @@ fi
 rm -f "/tmp/p6-v0107-review.$$" "/tmp/p6-v0107-review-err.$$"
 unset P5_V0107_OWNER_APPROVED_MAIN_SHA
 
+# The scheduled primary verifier must switch atomically in operational intent
+# from V0103 to the just-observed exact V0107 bodies. Do not change scope,
+# expiry enablement, or any private APPLY permissions.
+PREVIOUS_PROFILE="$(gh variable get P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO" 2>/dev/null || true)"
+[[ "$PREVIOUS_PROFILE" == "V0103" || "$PREVIOUS_PROFILE" == "V0107_VERIFIED_FUTURE_POST_23H_MARGIN" || -z "$PREVIOUS_PROFILE" ]] || hold UNRECOGNIZED_PRIMARY_DEADLINE_PROFILE
+gh variable set P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO" --body "V0107_VERIFIED_FUTURE_POST_23H_MARGIN"
+[[ "$(gh variable get P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO")" == "V0107_VERIFIED_FUTURE_POST_23H_MARGIN" ]] || hold V0107_DEADLINE_PROFILE_READBACK
+
 # ---------------- Gate 3/7: exact current-main primary retention VERIFY ----------------
 var(){ gh variable get "$1" -R "$2"; }
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_EXPIRY_DISABLED
