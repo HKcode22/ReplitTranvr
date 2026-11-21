@@ -2,6 +2,8 @@
 
 Date: 2026-11-20 UTC. **DRAFT / NO GO.** PR #926 (includes superseded #925), production main remains `0a7b1a28f243de76d4c83026d15f585265ef6f7b`. This checkpoint records implemented candidate code versus actual production deployment. It is not a paid authorization, field-rights review, signed stage, or future observation.
 
+**Historical-scope notice:** this older checkpoint contains a nine-heading historical table. Current execution is controlled only by [the fixed eight-gate register](2026-11-20_FIXED_PHASE6_LAUNCH_COMPLETION_REGISTER_NO_GO.md); the historical ninth heading is folded into Gate 8 and is not an additional gate or new workstream.
+
 ## Sources and invariants
 - [Monday exact plan and launch gate register](../../phase5/evidence/2026-11-20_MONDAY_EXACT_PLAN_ADOPTION_LAUNCH_GATE_REGISTER_NO_GO.md)
 - [Phase 5 completion versus runtime blockers](../../phase5/evidence/2026-11-20_PHASE5_COMPLETION_VS_PHASE6_RUNTIME_BLOCKERS.md)
