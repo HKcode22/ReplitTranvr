@@ -5,6 +5,7 @@ import {Pool} from "pg";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {buildFidsRequestContractV39} from "../server/lib/disruption/fidsCensus_v3";
+import {expectedV0107Bodies} from "../scripts/v39_phase5_v0107_owner_upgrade_v39.mjs";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const enabled=process.env.P5_V0107_DISPOSABLE_PG16==="1";
 const suite=enabled?describe:describe.skip;
@@ -54,7 +55,14 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
   expect(v.db).toBe("neondb");expect(v.ver).toBeGreaterThanOrEqual(160000);expect(v.ver).toBeLessThan(170000);expect(v.replica).toBe(false);
   expect(await status()).toMatchObject({liveOriginals:0,eligibleOriginals:0,hardDueOriginals:0});
   // The exact staged SQL performs an atomic stopped/no-live-original preflight.
-  await db.query(readFileSync(sql,"utf8"));
+  const upgradeSql=readFileSync(sql,"utf8");
+  await db.query(upgradeSql);
+  const bodies=expectedV0107Bodies(upgradeSql);
+  const installed=(await db.query(`SELECT proname,prosrc FROM pg_proc WHERE oid=ANY(ARRAY[
+   'clean.phase5_primary_fids_expiry_status_v39()'::regprocedure,
+   'clean.phase5_primary_fids_expiry_sweep_v39(integer)'::regprocedure])`)).rows;
+  expect(installed.find(x=>x.proname.endsWith('status_v39'))?.prosrc).toBe(bodies.status);
+  expect(installed.find(x=>x.proname.endsWith('sweep_v39'))?.prosrc).toBe(bodies.sweep);
   expect(await status()).toMatchObject({liveOriginals:0,eligibleOriginals:0,hardDueOriginals:0});
  });
  afterAll(async()=>{await db?.end()});
