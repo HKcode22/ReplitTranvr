@@ -160,7 +160,7 @@ NODE
   node scripts/v39_phase5_v0107_owner_upgrade_v39.mjs commission
   unset P5_V0107_OWNER_APPROVAL P5_V0107_OWNER_REVIEW_SHA256
 else
-  ERR="$(cat "/tmp/p6-v0107-review-err.$$")"
+  ERR="$(tail -n 1 "/tmp/p6-v0107-review-err.$")"
   [[ "$ERR" == "HOLD_V0107_OWNER_ALREADY_UPGRADED_DO_NOT_REPLAY" ]] || {
     printf '%s\n' "$ERR" >&2
     hold V0107_REVIEW
