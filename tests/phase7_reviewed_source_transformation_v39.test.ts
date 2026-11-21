@@ -260,3 +260,51 @@ describe("explicit frozen-native clock difference candidate (synthetic review on
   expect(out.input.labelBuckets.delay_bin).toBe(2);
  });
 });
+
+
+describe("native FIDS status grouping candidate: no one-to-one source status encoding",()=>{
+ const make=()=>{
+  const c=contract(),p=profile(),evidence=sha("synthetic grouped status review");
+  c.features=[...c.features,{name:"state_bin",bucketCount:2,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true}];
+  p.fields=[...p.fields,{sourceField:"reported_pre_departure_status",outputField:"state_bin",role:"feature",kind:"categorical_group_dictionary",bucketCount:2,boundaries:null,categories:[["SyntheticA","SyntheticB"],["SyntheticC","SyntheticD"]],transformEvidenceSha256:evidence,nonReconstructable:true}];
+  const status=(value:string):Phase7SourceDecision=>({sourceField:"reported_pre_departure_status",value,availableAtUtc:context.issuedAtUtc,missingReason:null,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"});
+  return {c,p,status};
+ };
+ it("maps two distinct possible status inputs to each bucket without copying provider tokens",()=>{
+  const {c,p,status}=make();
+  for(const [source,bucket] of [["SyntheticA",0],["SyntheticB",0],["SyntheticC",1],["SyntheticD",1]] as const){
+   const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status(source)],context);
+   expect(out.input.featureBuckets.state_bin).toBe(bucket);
+   expect(out.input.missingness.state_bin).toBe(false);
+   expect(JSON.stringify(out)).not.toContain(source);
+   expect(out.phase6PaidGo).toBe(false);
+  }
+ });
+ it("unrecognized status is invalid/missing, never automatically assigned to another group",()=>{
+  const {c,p,status}=make(),out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status("SyntheticUnknown")],context);
+  expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.missingness.state_bin).toBe(true);expect(out.input.qualityFlags & 4).toBe(4);
+ });
+ it("rejects invertible original-status codes, singleton groups, duplicate membership, or wrong scope",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  for(const bad of [
+   {...field,kind:"categorical_dictionary",categories:["SyntheticA","SyntheticB"]},
+   {...field,categories:[["SyntheticA"],["SyntheticB","SyntheticC"]]},
+   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticB","SyntheticC"]]},
+   {...field,categories:[["SyntheticA","SyntheticA"],["SyntheticC","SyntheticD"]]},
+   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticC"," "]]},
+   {...field,categories:[["SyntheticA","SyntheticB"],["SyntheticC","SyntheticD"]],boundaries:[1]},
+   {...field,sourceField:"origin_taf_flight_category"},
+   {...field,role:"label"},
+   {...field,bucketCount:3},
+  ]){
+   const changed={...p,fields:[...p.fields.slice(0,-1),bad]};
+   expect(validatePhase7ReviewedTransformationProfile(changed).pass).toBe(false);
+  }
+ });
+ it("keeps the independent approval and as-of fences",()=>{
+  const {c,p,status}=make();
+  expect(validatePhase7ReviewedTransformationProfile({...p,approvedForUse:false}).pass).toBe(false);
+  const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),{...status("SyntheticA"),availableAtUtc:"2026-11-19T00:30:00.001Z"}],context);
+  expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.qualityFlags & 32).toBe(32);
+ });
+});
