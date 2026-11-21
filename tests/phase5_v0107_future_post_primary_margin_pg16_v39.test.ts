@@ -50,7 +50,8 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
  });
  afterAll(async()=>{await db?.end()});
  it("does not grant PUBLIC access or permit blind reinstall of V0107",async()=>{
-  const rows=(await db.query("SELECT has_function_privilege('public',$1,'EXECUTE') AS status,has_function_privilege('public',$2,'EXECUTE') AS sweep",[F+"status_v39()",F+"sweep_v39(integer)"])).rows[0];
+  await db.query("CREATE ROLE ci_v0107_unprivileged NOLOGIN");
+  const rows=(await db.query("SELECT has_function_privilege('ci_v0107_unprivileged',$1,'EXECUTE') AS status,has_function_privilege('ci_v0107_unprivileged',$2,'EXECUTE') AS sweep",[F+"status_v39()",F+"sweep_v39(integer)"])).rows[0];
   expect(rows).toEqual({status:false,sweep:false});
   await expect(db.query(readFileSync(sql,"utf8"))).rejects.toThrow(/P5_V0107_REQUIRES_EMPTY_STOPPED_EXACT_V0103_OWNER_NO_REPLAY/);
  });
@@ -63,6 +64,7 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
   const wrongInner=await reservation(23.5);
   const wrongDirection=await reservation(23.5);
   const duplicate=await reservation(23.5);
+  const unmarked=await reservation(23.5);
   const held=[
    await original(23.5,{ref:wrongCost.id}),
    await original(23.5,{ref:wrongTime.id}),
@@ -72,7 +74,7 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
    await original(23.5,{ref:duplicate.id}),
    await original(23.5,{ref:duplicate.id}),
    await original(23.5,{ref:hash("not-reserved")}),
-   await original(23.5,{ref:good.id,marked:false})
+   await original(23.5,{ref:unmarked.id,marked:false})
   ];
   expect(await status()).toMatchObject({liveOriginals:10,eligibleOriginals:1,hardDueOriginals:0,unboundLiveOriginals:10});
   expect(await isLive(accepted)).toBe(true);
