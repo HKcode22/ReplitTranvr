@@ -153,6 +153,7 @@ unset P5_V0107_OWNER_APPROVED_MAIN_SHA
 var(){ gh variable get "$1" -R "$2"; }
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_EXPIRY_DISABLED
 [[ "$(var P5_PRIMARY_FIDS_BACKSTOP_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_BACKSTOP_DISABLED
+[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
 gh variable set P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$PIN"
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" == "$PIN" ]] || hold PRIMARY_PIN_READBACK
 
@@ -189,6 +190,7 @@ console.log(JSON.stringify({status:"GATE3_CURRENT_MAIN_PRIMARY_RETENTION_VERIFY_
 NODE
 
 # ---------------- Gate 7: current target + relay pins, bounded no-provider observation ----------------
+[[ "$(remote_main)" == "$PIN" && "$(remote_relay)" == "$RELAY_PIN" ]] || hold MAIN_CHANGED_BEFORE_RELAY_REPIN
 [[ "$(var TRAVNR_RELAY_MODE "$RELAY_REPO")" == "MULTI_LANE" ]] || hold RELAY_MODE
 [[ "$(var TRAVNR_RELAY_PRIMARY_ENABLED "$RELAY_REPO")" == "1" ]] || hold RELAY_PRIMARY_DISABLED
 [[ "$(var TRAVNR_RELAY_ROLLING_ENABLED "$RELAY_REPO")" == "1" ]] || hold RELAY_ROLLING_DISABLED
@@ -268,5 +270,6 @@ echo "MONDAY_PACKAGE=$OUT"
 echo "PRIMARY_VERIFY_RUN=$RUN"
 echo "RELAY_OBSERVATION_RUN=$RRUN"
 echo "GATE8_FREE_ACCOUNT_PREARM=$ACCOUNT_STATUS"
+[[ "$(remote_main)" == "$PIN" && "$(remote_relay)" == "$RELAY_PIN" ]] || hold FINAL_PIN_DRIFT
 echo "NO_SOURCE_ENABLE_NO_FIDS_CALL_NO_PAID_GO"
 [[ "$ACCOUNT_STATUS" != "HOLD" ]] || exit 2
