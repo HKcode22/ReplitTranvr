@@ -16,6 +16,8 @@ on:
       - 'server/lib/disruption/phase7ProtectedPreResolver_v39.ts'
       - 'server/lib/disruption/phase7SignedPostReview_v39.ts'
       - 'server/lib/disruption/phase7SignedPostConsumer_v39.ts'
+      - 'server/lib/disruption/phase7LocalPrivatePostHandoff_v39.ts'
+      - 'scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts'
       - 'tests/phase7_signed_pre_field_proof_v39.test.ts'
       - 'tests/phase7_post_preservation_bridge_v39.test.ts'
       - 'tests/phase7_post_scoped_group_v39.test.ts'
@@ -64,3 +66,18 @@ jobs:
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           npx --no-install vitest run tests/phase7_durable_derived_bundle_candidate_v39.test.ts tests/phase7_canonical_field_parity_v39.test.ts tests/phase7_reviewed_source_transformation_v39.test.ts tests/phase7_final_group_assembly_v39.test.ts tests/phase7_signed_pre_field_proof_v39.test.ts tests/phase7_post_preservation_bridge_v39.test.ts tests/phase7_post_scoped_group_v39.test.ts
           echo PHASE7_DURABLE_BUNDLE_DISPOSABLE_PG16_NO_GO
+      - name: Synthetic POST reviewer role in separate runner step
+        env:
+          P7_POST_CI_ROLE_MARKER: reviewer
+        run: node --import tsx scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts start reviewer
+      - name: Synthetic POST publisher role in separate runner step
+        env:
+          P7_POST_CI_ROLE_MARKER: publisher
+        run: node --import tsx scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts start publisher
+      - name: Rehearse normal and recovery POST IPC, exact scope and fail-closed replay
+        run: node --import tsx scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts run
+      - name: Always stop both synthetic POST roles and remove scratch
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          test ! -d "$RUNNER_TEMP/p7-post-ci-$GITHUB_RUN_ID" || node --import tsx scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts stop
