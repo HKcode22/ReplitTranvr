@@ -43,13 +43,15 @@ jobs:
              p.dateReceiptSha256!=="2d760133b7f881e9233f645756b0b6cf1f57464a3800c1442e3d0c39a5e722e6"||
              p.sourceInventorySha256!=="70c7b655c09ae5bca086f553c709d8e7c53e2384003e092587b9e0c587f01c1f")
             throw Error("HOLD_GATE5_EVIDENCE_ONLY_DIGEST_CHANGED");
-          const mod=await import(pathToFileURL(process.env.VALIDATOR_MODULE!).href);
-          const d=JSON.parse(readFileSync(process.env.DECISION_PATH!,"utf8"));
-          mod.validateP6MondayDateDecision(d,{
-            reviewDigest:p.reviewDigest,dateReceiptSha256:p.dateReceiptSha256,
-            oldStageSha256:p.oldStageSha256,sourceInventorySha256:p.sourceInventorySha256
-          },new Date());
-          console.log(JSON.stringify({status:"GATE5_MACHINE_BOUND_DATE_DECISION_VALIDATED_NO_GO",
-            reviewDigest:p.reviewDigest,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          (async()=>{
+            const mod=await import(pathToFileURL(process.env.VALIDATOR_MODULE!).href);
+            const d=JSON.parse(readFileSync(process.env.DECISION_PATH!,"utf8"));
+            mod.validateP6MondayDateDecision(d,{
+              reviewDigest:p.reviewDigest,dateReceiptSha256:p.dateReceiptSha256,
+              oldStageSha256:p.oldStageSha256,sourceInventorySha256:p.sourceInventorySha256
+            },new Date());
+            console.log(JSON.stringify({status:"GATE5_MACHINE_BOUND_DATE_DECISION_VALIDATED_NO_GO",
+              reviewDigest:p.reviewDigest,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          })().catch(e=>{console.error(e);process.exit(2)});
           TS
           npx --no-install tsx /tmp/validate_gate5_decision.ts
