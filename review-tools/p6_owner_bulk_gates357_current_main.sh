@@ -222,7 +222,6 @@ var(){ gh variable get "$1" -R "$2"; }
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_EXPIRY_DISABLED
 [[ "$(var P5_PRIMARY_FIDS_BACKSTOP_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_BACKSTOP_DISABLED
 [[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
-[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
 gh variable set P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$PIN"
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" == "$PIN" ]] || hold PRIMARY_PIN_READBACK
 
