@@ -33,6 +33,7 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
   it("uses exact current main and reviewed relay identity fail-closed",()=>{
     const s=shell();
     expect(s).toContain('PIN="$(git rev-parse HEAD)"');
+    expect(s).toContain("git status --porcelain --untracked-files=no");
     expect(s).toContain('"V3.9 Offline Safety"');
     expect(s).toContain('RELAY_PIN="214ede4895c6e6cdae5f124a85a323783251ea60"');
     expect(s).toContain('[[ "$(remote_relay)" == "$RELAY_PIN" ]] || hold RELAY_MAIN_CHANGED');
