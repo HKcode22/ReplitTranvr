@@ -131,3 +131,11 @@ test("later append takes original signed-source evidence and next shard; does no
  assert.equal(planP6NativeLaterAppendScope(handoff,current,x,1),null);
  assert.throws(()=>planP6NativeLaterAppendScope({...handoff,privateSourceRegistryPath:"unrelated"},current,x,1),/ORIGINAL_SOURCE_NOT_CURRENTLY_INDEXED/);
 });
+
+test("separate disarmed readiness admission never accepts the actor confirmation for actual committed read",()=>{
+ const f=runtimeFixture(),e={...f.withPolicy(),V39_P5_CHILD_CONFIRM:"ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER",P6_NATIVE_LATER_RUNTIME_ENABLED:"0",P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED:"0",P6_PRIVATE_DAY_INDEX_SHA256:"",P6_PRIVATE_DAY_INDEX_REVISION:""};
+ assert.equal(admitP6NativeLaterRuntime(e,()=>plan,"actor-preflight").c.actorPreflightOnly,true);
+ assert.throws(()=>admitP6NativeLaterRuntime(e,()=>plan));
+ assert.throws(()=>admitP6NativeLaterRuntime({...e,AERODATABOX_API_KEY:"no"},()=>plan,"actor-preflight"));
+ assert.throws(()=>admitP6NativeLaterRuntime(f.withPolicy(),()=>plan,"actor-preflight"));
+});

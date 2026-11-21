@@ -1,14 +1,15 @@
-import {createHash} from "node:crypto";
-import {describe,it,expect} from "vitest";
+import {createHash,generateKeyPairSync,sign} from "node:crypto";
+import {describe,it,expect,vi} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {p5V0083FuturePostReservationSha256,type P5ReviewedFuturePostOneGet} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {auditP6ActualPostOutcomeObservability,readP6CommittedPostOutcomeObservability,P6_POST_PARTITION_PRE_SQL} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 const H=(x:string)=>x.repeat(64),sha=(x:Buffer|string)=>createHash("sha256").update(x).digest("hex");
-function fixture(){
+function fixture(realDigestShape=false){
+ const D=(x:string)=>realDigestShape?sha('synthetic-post-pin:'+x):H(x);
  const p:P5ReviewedFuturePostOneGet={
-  schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",manifestSha256:H("a"),requestSha256:H("b"),
-  githubRunId:"1234567890",reviewedSourceRightsSha256:H("c"),reviewedProviderPriceSha256:H("d"),reviewedCategoryBudgetSha256:H("e"),
-  reviewedRequestContextSha256:H("f"),reviewedProviderContractSha256:H("9"),reviewedFrameSha256:H("8"),
+  schema:"v39.phase5.future-post-reviewed-outcome-one-get.v1",manifestSha256:D("a"),requestSha256:D("b"),
+  githubRunId:"1234567890",reviewedSourceRightsSha256:D("c"),reviewedProviderPriceSha256:D("d"),reviewedCategoryBudgetSha256:D("e"),
+  reviewedRequestContextSha256:D("f"),reviewedProviderContractSha256:D("9"),reviewedFrameSha256:D("8"),
   runDayIndex:1,slot:"HUB",airportIcao:"WSSS",flightInstanceId:"leg:synthetic:001",
   expectedSelectedTNativeUtc:"2027-02-02T10:00:00.000Z",plannedSourceFromUtc:"2027-02-02T09:00:00.000Z",plannedSourceToUtc:"2027-02-02T11:00:00.000Z",
   fromLocal:"2027-02-02T17:00",toLocal:"2027-02-02T19:00",airportIanaTimezone:"Asia/Singapore",
@@ -50,6 +51,16 @@ function fixture(){
  return {p,clock,flight,move,original,pre,...original()};
 }
 describe("actual POST outcome observability, original cutoff-safe retained PRE partition",()=>{
+ it("hands off exact live PRE scopes including unmatched POST without serializing source identities",()=>{
+  const f=fixture(),a=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre(),f.pre("T-90m",2,"other-native","leg:synthetic:002")],f.clock);
+  expect(a.privatePreservationAnchors).toHaveLength(2);
+  expect(a.privatePreservationAnchors[0]).toMatchObject({snapshotId:"1",manifestSha256:f.p.manifestSha256,
+   rightsSha256:f.p.reviewedSourceRightsSha256,queryDigestSha256:H("1"),horizon:"T-6h"});
+  expect(a.privatePreservationAnchors[1]).toMatchObject({snapshotId:"2",horizon:"T-90m"});
+  expect(Object.getOwnPropertyDescriptor(a,"privatePreservationAnchors")?.enumerable).toBe(false);
+  expect(JSON.stringify(a)).not.toContain("leg:synthetic");
+  expect(JSON.stringify(a)).not.toContain("snapshotId");
+ });
  it("matches each retained horizon without declaring revised or runway time actual gate-out",()=>{
   const f=fixture(),a=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre(),f.pre("T-90m",2)],f.clock);
   expect(a).toMatchObject({uniqueRetainedPreFlights:1,actualGateOutNumericCandidates:0,physicalGateOutLabels:0,physicalRunwayLabels:0,
@@ -161,6 +172,10 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   expect(ambiguous.pairedHorizonObservability).toMatchObject({retainedKeysWithPotentialCrossKeyServiceAlias:2,retainedConsistentT6T90Pairs:0});
   expect(ambiguous.byHorizon["T-6h"]).toMatchObject({potentialCrossKeyServiceAlias:2,ambiguousIdentity:2,matchedNativePost:0});
   expect(ambiguous.privateDecisions).toHaveLength(0);
+  expect(new Set(ambiguous.privateAmbiguousPreservationFlightIds)).toEqual(new Set([aKey,bKey]));
+  expect(ambiguous.privatePreservationAnchors.every(h=>h.ambiguousIdentity)).toBe(true);
+  expect(Object.getOwnPropertyDescriptor(ambiguous,"privateAmbiguousPreservationFlightIds")?.enumerable).toBe(false);
+  expect(JSON.stringify(ambiguous)).not.toContain(aKey);
  });
  it("keeps retimed reported schedule and cancellation separate; never changes original T",()=>{
   const f=fixture(),r=f.original([f.move("native-001","Canceled","2027-02-02T10:15:00.000Z")]);
@@ -187,5 +202,169 @@ describe("actual POST outcome observability, original cutoff-safe retained PRE p
   const a=await readP6CommittedPostOutcomeObservability(pool as any,f.s);
   expect(a.byHorizon["T-6h"]).toMatchObject({matchedNativePost:1,postAbsent:1,retainedCutoffSafePre:2});
   expect(sqls).toContain("ROLLBACK");expect(sqls.every(x=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(x))).toBe(true);
+ });
+});
+
+import {recoverPhase7CommittedPost,phase7CommittedPostAuditIdentity,discoverPhase7CommittedPostScope,issuePhase7CommittedPostRecoveryReceipt,recoverPhase7PostByOriginalReservation,requirePhase7RecoveryReceiptBeforeSettlement} from "../server/lib/disruption/phase7CommittedPostRecovery_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+describe("read-only committed POST recovery candidate",()=>{
+ function recoveryFixture(){
+  const f=fixture(),keys=generateKeyPairSync("ed25519");
+  const policy="ae".repeat(32),fp=sha(keys.publicKey.export({type:"spki",format:"der"}));
+  const env={V39_P5_MANIFEST_SHA256:f.p.manifestSha256,V39_P5_RIGHTS_SHA256:f.p.reviewedSourceRightsSha256,
+   P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:fp,
+   P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+  const prior=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre()],f.clock);
+  const receipt={schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:policy,originalAvailableAtUtc:f.row.available_at,
+   committedScopeSha256:hashPhase7DurableCandidate(f.s),originalAuditSha256:phase7CommittedPostAuditIdentity(prior),
+   originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:05:01.000Z"};
+  const wire=(patch:Record<string,unknown>={})=>{const b=Buffer.from(JSON.stringify({...receipt,...patch}));return {payloadBase64:b.toString("base64"),signatureBase64:sign(null,b,keys.privateKey).toString("base64")};};
+  const consumer={policySha256:policy,preflight:vi.fn().mockResolvedValue(undefined),
+   preserveCommitted:vi.fn().mockResolvedValue({independentlyReadBack:true,sourceMappingPersisted:false,providerCalls:0,
+    verifiedGroupCount:1,heldGroupCount:0,excludedAmbiguousGroupCount:0,accountedRetainedFlightCount:1})};
+  const sqls:string[]=[];
+  const pool=(rows=[f.pre()],now="2027-02-02T12:04:00.000Z")=>({connect:vi.fn(async()=>({query:async(sql:string)=>{
+   sqls.push(sql);
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(now)}]};
+   if(sql.startsWith("SELECT r.population_query_id::text AS id"))return {rowCount:1,rows:[{id:f.s.populationQueryId,response_hash:f.s.responseSha256,members:f.s.normalizedMembers}]};
+   if(sql.startsWith("SELECT r.population_query_id"))return {rowCount:1,rows:[f.row]};
+   if(sql===P6_POST_PARTITION_PRE_SQL)return {rowCount:rows.length,rows};
+   return {rowCount:0,rows:[]};},release:()=>sqls.push("released")}))});
+  return {f,env,consumer,wire,pool,sqls,prior,keys};
+ }
+ it("recovers an exact prior committed scope, with no paid capability or private fields in the receipt",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const out=await recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer});
+  expect(out).toMatchObject({status:"COMMITTED_POST_RECOVERY_INDEPENDENT_READBACK_NO_GET",verifiedGroupCount:1,paidReservations:0,providerCalls:0,phase6PaidGo:false});
+  expect(x.consumer.preflight).toHaveBeenCalledOnce();expect(x.consumer.preserveCommitted).toHaveBeenCalledOnce();
+  expect(x.sqls.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  expect(JSON.stringify(out)).not.toContain(x.f.p.flightInstanceId);
+  expect(JSON.stringify(x.prior)).not.toContain("privateObservedDbClockUtc");
+ });
+ it("holds a changed private denominator even when the total count is unchanged",async()=>{
+  const x=recoveryFixture(),source=x.pool([x.f.pre("T-6h",2)]);
+  await expect(recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
+ });
+ it("refuses a paid credential, forged wire, prior run drift and expired review",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const base={env:x.env,scope:x.f.s,wire:x.wire(),source:source as any,consumer:x.consumer};
+  await expect(recoverPhase7CommittedPost({...base,env:{...x.env,AERODATABOX_API_KEY:"synthetic"}})).rejects.toThrow("RECOVERY_ONLY");
+  await expect(recoverPhase7CommittedPost({...base,wire:{...x.wire(),signatureBase64:Buffer.alloc(64).toString("base64")}})).rejects.toThrow("SIGNATURE");
+  await expect(recoverPhase7CommittedPost({...base,wire:x.wire({committedScopeSha256:"ba".repeat(32)})})).rejects.toThrow("EXACT_SCOPE");
+  expect(source.connect).not.toHaveBeenCalled();
+  await expect(recoverPhase7CommittedPost({...base,source:x.pool(undefined,"2027-02-02T12:08:00.000Z") as any})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
+ });
+ it("discovers original committed scope by the original run reservation, not the restart run ID",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const found=await discoverPhase7CommittedPostScope(source as any,x.f.p);
+  expect(found).toEqual(x.f.s);
+  const out=await recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:x.wire(),consumer:x.consumer});
+  expect(out).toMatchObject({verifiedGroupCount:1,providerCalls:0,paidReservations:0});
+  expect(x.sqls.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  const other={...x.f.p,githubRunId:"1234567899"};
+  await expect(recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:other,wire:x.wire(),consumer:x.consumer})).rejects.toThrow("EXACT_SCOPE");
+  expect(x.consumer.preserveCommitted).toHaveBeenCalledOnce();
+ });
+ it("issued recovery wire requires fresh actual audit, pinned independent key and issuer-only credentials",async()=>{
+  const x=recoveryFixture(),source=x.pool();
+  const env={...x.env,P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED:"1"};
+  const priorAudit={sha256:phase7CommittedPostAuditIdentity(x.prior),observedAtUtc:x.f.clock};
+  const args={env,source:source as any,scope:x.f.s,priorAudit,signer:x.keys.privateKey};
+  const receipt=await issuePhase7CommittedPostRecoveryReceipt(args);
+  expect(receipt.status).toBe("INDEPENDENT_COMMITTED_POST_RECOVERY_RECEIPT_ISSUED_NO_GO");
+  expect(JSON.stringify(receipt)).not.toContain("payloadBase64");
+  const signed=JSON.parse(Buffer.from(receipt.privateWire.payloadBase64,"base64").toString("utf8"));
+  expect(signed.originalAvailableAtUtc).toBe(x.f.row.available_at);
+  expect(Date.parse(signed.validUntilUtc)).toBeLessThanOrEqual(Date.parse(signed.originalAvailableAtUtc)+600000);
+  await expect(recoverPhase7CommittedPost({env:x.env,scope:x.f.s,wire:x.wire({originalAvailableAtUtc:"2027-02-02T12:02:29.000Z"}),source:source as any,consumer:x.consumer})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  const out=await recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:receipt.privateWire,consumer:x.consumer});
+  expect(out.verifiedGroupCount).toBe(1);
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,env:{...env,P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:"synthetic"}})).rejects.toThrow("INDEPENDENT_RECOVERY_ISSUER_SCOPE");
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,signer:generateKeyPairSync("ed25519").privateKey})).rejects.toThrow("ISSUER_PIN");
+  await expect(issuePhase7CommittedPostRecoveryReceipt({...args,source:x.pool([x.f.pre("T-6h",2)]) as any})).rejects.toThrow("ISSUER_PRIOR_AUDIT_DRIFT");
+ });
+ it("requires signed exact custody readback before settlement",async()=>{
+  const x=recoveryFixture(),wire=x.wire(),now="2027-02-02T12:04:00.000Z";
+  const record=vi.fn().mockResolvedValue(wire),read=vi.fn().mockResolvedValue({...wire}),clock=vi.fn().mockResolvedValue(now);
+  const args={env:x.env,scope:x.f.s,audit:x.prior,custody:{readOrRecordExactRecoveryReceipt:record,readExactRecoveryReceipt:read},readRestrictedClock:clock};
+  const out=await requirePhase7RecoveryReceiptBeforeSettlement(args);
+  expect(out).toEqual({status:"EXACT_SIGNED_RECOVERY_RECEIPT_READBACK_BEFORE_SETTLEMENT",providerCalls:0});
+  expect(record).toHaveBeenCalledOnce();expect(read).toHaveBeenCalledOnce();expect(clock).toHaveBeenCalledTimes(2);
+  expect(record.mock.calls[0][0].priorAudit).toEqual({sha256:phase7CommittedPostAuditIdentity(x.prior),observedAtUtc:x.f.clock});
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>x.wire({validUntilUtc:"2027-02-02T12:05:00.000Z"})}})).rejects.toThrow("RECOVERY_CUSTODY_READBACK_DRIFT");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,readRestrictedClock:async()=>"2027-02-02T12:08:00.000Z"})).rejects.toThrow("LIVE_AUDIT_DRIFT");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readOrRecordExactRecoveryReceipt:async()=>({})}})).rejects.toThrow("WIRE");
+  await expect(requirePhase7RecoveryReceiptBeforeSettlement({...args,custody:{...args.custody,readExactRecoveryReceipt:async()=>{throw Error("readback unavailable")}}})).rejects.toThrow("readback unavailable");
+ });
+ it("does not substitute a missing or duplicate source original after a process interruption",async()=>{
+  const x=recoveryFixture();
+  for(const n of [0,2]){
+   const source={connect:async()=>({query:async(sql:string)=>{
+    if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(x.f.clock)}]};
+    if(sql.startsWith("SELECT r.population_query_id::text AS id"))return {rowCount:n,rows:Array.from({length:n},()=>({id:x.f.s.populationQueryId,response_hash:x.f.s.responseSha256,members:1}))};
+    return {rowCount:0,rows:[]};},release:()=>{}})};
+   await expect(recoverPhase7PostByOriginalReservation({env:x.env,source:source as any,packet:x.f.p,wire:x.wire(),consumer:x.consumer})).rejects.toThrow("DISCOVERY_NO_UNIQUE_LIVE_ORIGINAL_NO_REPLAY");
+  }
+  expect(x.consumer.preserveCommitted).not.toHaveBeenCalled();
+ });
+
+});
+
+import {createP7IndependentPostSettlementIssuer} from "../server/lib/disruption/phase7IndependentPostSettlementIssuer_v39";
+import {P7_POST_SCOPED_GROUP_SQL} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {buildPhase7DerivedReleasePacket} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
+import {serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
+import {verifyPhase7SignedPostSettlement} from "../server/lib/disruption/phase7SignedPostReview_v39";
+import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
+import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
+describe("independent committed POST unverified-label settlement issuer",()=>{
+ function make(){
+  const f=fixture(true),keys=generateKeyPairSync("ed25519"),now="2027-02-02T12:04:00.000Z",code="c".repeat(40),role="phase7_post_scoped_prod20261120";
+  const h=(s:string)=>sha("post-fixture:"+s);
+  const shared={version:"v01",featureDictionarySha256:h("dictionary"),termsReviewSha256:h("terms"),derivedWorkReviewSha256:h("derived")};
+  const contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z",cohortBucketCount:31,features:[{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:h("feature"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:4,fieldClass:"approved_derived",transformEvidenceSha256:h("label"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
+  const profile:Phase7ReviewedTransformationProfile={schema:"v39.phase7.reviewed-source-transformation.v1",...shared,mappingExpiryHours:24,approvedForUse:true,fields:[{sourceField:"origin_metar_wind_kt",outputField:"context_bin",role:"feature",kind:"numeric_threshold_bucket",bucketCount:3,boundaries:[5,15],categories:null,transformEvidenceSha256:h("feature"),nonReconstructable:true},{sourceField:"gate_out_delay_minutes",outputField:"delay_bin",role:"label",kind:"numeric_threshold_bucket",bucketCount:4,boundaries:[0,15,60],categories:null,transformEvidenceSha256:h("label"),nonReconstructable:true}]};
+  const native=Buffer.from(JSON.stringify({schema:"v39.phase6.native-post-physical-window-policy.v1",independentPostRequestGeometryApproved:true,manifestSha256:f.p.manifestSha256,rightsSha256:f.p.reviewedSourceRightsSha256,reviewedCodeSha:code,followupAfterPartitionEndSeconds:3600,dispatchWindowSeconds:1200,expectedApiUnitsPerGet:2,reviewedFrameSha256:f.p.reviewedFrameSha256,reviewedProviderContractSha256:f.p.reviewedProviderContractSha256,reviewedProviderPriceSha256:f.p.reviewedProviderPriceSha256,reviewedCategoryBudgetSha256:f.p.reviewedCategoryBudgetSha256}));
+  const policy=Buffer.from(JSON.stringify({schema:"v39.phase7.independent-post-settlement-policy.v1",manifestSha256:f.p.manifestSha256,rightsSha256:f.p.reviewedSourceRightsSha256,prePolicySha256:h("pre-policy"),contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),nativePostPolicySha256:sha(native),validFromUtc:"2027-02-01T00:00:00.000Z",validUntilUtc:"2027-02-04T00:00:00.000Z",unverifiedLabelDisposition:"CENSOR_AFTER_REVIEWED_POST_OBSERVATION",independentBoundedSettlementApproved:true,sourceParityReviewSha256:h("parity"),reconstructionReviewSha256:h("reconstruction"),fieldReviewSha256:h("field"),associationReviewSha256:h("association"),continuousTargetReviewSha256:h("continuous"),minTargetMinutes:-120,maxTargetMinutes:2880}));
+  const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:code,V39_P5_POST_APPROVED_CODE_SHA:code,ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED:"1",P6_PHASE7_POST_STORAGE_APPROVED:"1",V39_P5_MANIFEST_SHA256:f.p.manifestSha256,V39_P5_RIGHTS_SHA256:f.p.reviewedSourceRightsSha256,P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:h("pre-policy"),P6_PHASE7_POST_PRESERVATION_POLICY_BASE64:policy.toString("base64"),P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha(policy),P6_PHASE7_POST_CONTRACT_SHA256:hashPhase7DurableCandidate(contract),P6_PHASE7_POST_PROFILE_SHA256:hashPhase7DurableCandidate(profile),P6_NATIVE_POST_POLICY_BASE64:native.toString("base64"),P6_NATIVE_POST_POLICY_SHA256:sha(native),P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64"),P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:sha(keys.publicKey.export({type:"spki",format:"der"}))};
+  const prior=auditP6ActualPostOutcomeObservability(f.s,f.row,[f.pre()],f.clock),anchor=prior.privatePreservationAnchors[0],packet=buildPhase7DerivedReleasePacket(contract,[{horizon:"T-6h",cohortBucket:0,split:"train",featureBuckets:{context_bin:1},labelBuckets:{delay_bin:null},missingness:{context_bin:false,delay_bin:true},qualityFlags:0,censoring:"not_due"}]),bytes=Buffer.from(serializePhase7DerivedReleasePacket(contract,packet));
+  const fragment={groupId:"12345678-1234-4123-8123-123456789abc",contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),packetSha256:sha(bytes),packet};
+  const statements:string[]=[];
+  const source={connect:async()=>({query:async(sql:string)=>{
+   statements.push(sql);if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160016,replica:false,now:new Date(now)}]};
+   if(sql.startsWith("SELECT r.population_query_id"))return {rowCount:1,rows:[f.row]};
+   if(sql===P6_POST_PARTITION_PRE_SQL)return {rowCount:1,rows:[f.pre()]};return {rows:[]};},release:()=>{}})};
+  const scopedReader={connect:async()=>({query:async(sql:string)=>{
+   statements.push(sql);if(sql.startsWith("SELECT current_user"))return {rows:[{actor:role,login:role,db:"neondb",ro:"on",version:160016,replica:false,at:new Date(now),rolsuper:false,rolcreaterole:false,rolcreatedb:false,rolbypassrls:false,rolreplication:false,member:false,can_use:true,can_scope:true,can_create:false,can_direct:false}]};
+   if(sql===P7_POST_SCOPED_GROUP_SQL)return {rowCount:1,rows:[{group_id:fragment.groupId,contract_sha256:fragment.contractSha256,profile_sha256:fragment.profileSha256,packet_sha256:fragment.packetSha256,packet_bytes:bytes}]};
+   if(sql.startsWith("SELECT clock_timestamp"))return {rows:[{at:new Date(now)}]};return {rows:[]};},release:()=>{}})};
+  const receipt=Buffer.from(JSON.stringify({schema:"v39.phase7.committed-post-recovery-receipt.v2",policySha256:env.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256,originalAvailableAtUtc:f.row.available_at,committedScopeSha256:hashPhase7DurableCandidate(f.s),originalAuditSha256:phase7CommittedPostAuditIdentity(prior),originalAuditAtUtc:f.clock,reviewedAtUtc:"2027-02-02T12:03:01.000Z",validUntilUtc:"2027-02-02T12:05:01.000Z"}));
+  const wire={payloadBase64:receipt.toString("base64"),signatureBase64:sign(null,receipt,keys.privateKey).toString("base64")};
+  const deps={env,signer:keys.privateKey,source:source as any,scopedReader:scopedReader as any,scopedReaderRole:role,contract,profile,readExactRecoveryReceipt:async()=>wire};
+  return {f,env,anchor,fragment,now,statements,contract,profile,deps};
+ }
+ it("rereads the real-shaped committed original and exact group before issuing a censored-only wire",async()=>{
+  const x=make(),r=createP7IndependentPostSettlementIssuer(x.deps);
+  await r.preflight();expect(await r.prepare(x.f.s)).toEqual({providerCalls:0,databaseWrites:0,eligibleGroups:1});
+  const input={committed:x.f.s,anchor:x.anchor,fragments:[x.fragment],observedDbClockUtc:x.now};
+  const signed=await r.issue(input);
+  expect(signed.numericalGateOutLabels).toBe(0);expect(JSON.stringify(signed)).not.toContain("payloadBase64");
+  const v=verifyPhase7SignedPostSettlement({env:x.env,wire:signed.privateWire,anchor:x.anchor,committed:x.f.s,fragments:[x.fragment],contract:x.contract,profile:x.profile,observedDbClockUtc:x.now});
+  expect(v.bundle.continuous.rows[0]).toMatchObject({value:null,censoring:"censored"});
+  expect(v.bundle.packet.rows.find(z=>z.horizon==="T-6h")?.featureBuckets).toEqual({context_bin:1});
+  expect(x.statements.some(s=>s===P6_POST_PARTITION_PRE_SQL)).toBe(true);expect(x.statements.some(s=>s===P7_POST_SCOPED_GROUP_SQL)).toBe(true);
+  expect(x.statements.every(s=>!/^INSERT|^UPDATE|^DELETE|^COMMIT/.test(s))).toBe(true);
+  await expect(r.issue(input)).rejects.toThrow("GROUP_ALREADY_ISSUED_NO_REPLAY");
+ });
+ it("rejects policy drift, paid credentials, caller anchor drift and forged recovery receipt",async()=>{
+  const x=make();
+  expect(()=>createP7IndependentPostSettlementIssuer({...x.deps,env:{...x.env,AERODATABOX_API_KEY:"fixture"}})).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
+  expect(()=>createP7IndependentPostSettlementIssuer({...x.deps,env:{...x.env,P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha("wrong")}})).toThrow("REVIEW_BYTES");
+  const bad=createP7IndependentPostSettlementIssuer({...x.deps,readExactRecoveryReceipt:async()=>({})});await expect(bad.prepare(x.f.s)).rejects.toThrow("WIRE");
+  const r=createP7IndependentPostSettlementIssuer(x.deps);await r.prepare(x.f.s);
+  const input={committed:x.f.s,anchor:{...x.anchor,snapshotId:"2"},fragments:[x.fragment],observedDbClockUtc:x.now};
+  await expect(r.issue(input)).rejects.toThrow("EXACT_LIVE_ANCHOR");
  });
 });

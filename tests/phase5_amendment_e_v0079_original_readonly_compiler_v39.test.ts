@@ -1,4 +1,5 @@
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
+import {P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL} from "../server/lib/disruption/phase5ActualSourceNativeFlightCandidateAudit_v39";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39}
  from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
@@ -89,6 +90,7 @@ function fixture(){
     if(sql.startsWith("SELECT current_user AS actor"))
      return{rows:[{actor:role,session_login:login,db:"neondb",version:160000,ro:"on",
       replica:false,now}],rowCount:1};
+    if(sql==="SELECT clock_timestamp() AS at")return {rows:[{at:now}],rowCount:1};
     if(sql===P5_STAGE14_BOUND_SOURCE_SQL)
      return{rows:[source],rowCount:1};
     if(sql===P5_STAGE14_PHYSICAL_MEMBER_SQL)
@@ -219,7 +221,7 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
    expectedPopulationQueryId:qid,expectedResponseSha256:source.original_response_hash,
    externalContentUseReviewSha256:h("d"),selected:[id,missingId].map(flightInstanceId=>({flightInstanceId,
     expectedSelectedNativeTUtc:native,expectedForecastCutoffUtc:cutoff,expectedMemberAvailableUtc:available}))};
-  const calls:string[]=[];let released=0;
+  const calls:string[]=[];let released=0;let aliasConflict=false;
   const db={async connect(){return{async query(sql:string,args?:unknown[]){
    calls.push(sql);let rows:Record<string,unknown>[]=[];
    if(sql.startsWith("SELECT current_user AS actor"))rows=[{actor:"phase5_fids_source_prod_20261107",
@@ -227,9 +229,11 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
    else if(sql===P5_STAGE14_BOUND_SOURCE_SQL){expect(args).toEqual([manifest,query]);rows=[source];}
    else if(sql===P5_E_BATCH_ALL_MEMBERS_SQL){expect(args).toEqual([qid]);rows=members;}
    else if(sql===P5_E_BATCH_ORIGINAL_SQL){expect(args).toEqual([manifest,query,qid]);rows=[f.original];}
+   else if(sql===P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL){expect(args).toEqual([qid,manifest,now,scope.source.providerContractSha256,rights]);rows=members.filter(m=>m.analytic_identity_id.startsWith("leg:p5v1:")).map(m=>({flight_instance_id:m.analytic_identity_id,conflicting_retained_identity:aliasConflict}));}
+   else if(sql==="SELECT clock_timestamp() AS at"){rows=[{at:now}];}
    else if(!/^(BEGIN|SET LOCAL|ROLLBACK)/.test(sql))throw Error("UNEXPECTED_SQL");
    return {rows,rowCount:rows.length};},release(){released++;}}}};
-  return {db,source,members,scope,calls,original:f.original,released:()=>released};
+  return {db,source,members,scope,calls,original:f.original,released:()=>released,setAliasConflict:(x:boolean)=>{aliasConflict=x;}};
  }
  it("reads body once, verifies native operator and feature values, censors missing native key without rewriting other member",async()=>{
   const f=batch(),x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
@@ -241,6 +245,30 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
   expect(f.calls.filter(q=>q===P5_E_BATCH_ALL_MEMBERS_SQL)).toHaveLength(1);
   expect(f.calls.at(-1)).toBe("ROLLBACK");expect(f.released()).toBe(1);
   expect(JSON.stringify(x)).not.toMatch(/leg:ci|operating-flight|observations/);
+ });
+ it("reruns the full-width production identity conflict screen before any raw body transfer",async()=>{
+  const f=batch(),identity="leg:p5v1:"+sha("full width actual identity fixture");
+  Object.assign(f.members[0],{analytic_identity_id:identity,canonical_flight_instance_id:identity});
+  f.scope.selected=[{...f.scope.selected[0],flightInstanceId:identity}];
+  const a=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(a.matchedCount).toBe(1);
+  expect(f.calls).toContain(P5_ACTUAL_SOURCE_RETAINED_ALIAS_READONLY_SQL);
+  f.calls.length=0;f.setAliasConflict(true);
+  const b=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(b.matchedCount).toBe(0);expect(f.calls).not.toContain(P5_E_BATCH_ORIGINAL_SQL);
+ });
+ it("rereads exact permit page, keeps member clocks private and compiles the original only once",async()=>{
+  const f=batch(),s=f.scope.source,p={manifestSha256:s.manifestSha256,queryDigestSha256:s.queryDigestSha256,flightInstanceId:id,
+   expectedSourcePopulationQueryId:qid,expectedSourceResponseSha256:f.scope.expectedResponseSha256,expectedReviewedSourceRightsSha256:s.rightsReviewSha256,
+   expectedReviewedReleaseSha256:s.reviewedReleaseSha256,expectedProviderContractSha256:s.providerContractSha256,expectedEarlyDrawSha256:s.earlyDrawSha256,
+   expectedGithubSourceRunId:s.expectedSourceGithubRunId,runDayIndex:s.runDayIndex,slot:s.slot,horizon:s.horizon,airportIcao:s.airportIcao,
+   selectedTNativeUtc:native,maxPopulationStalenessSeconds:s.maxPopulationStalenessSeconds} as P5Stage14SingleFlightPrePermit;
+  f.scope.selected=[{...f.scope.selected[0],expectedMemberAvailableUtc:null}];f.scope.prospectivePermits=[p];
+  const x=await compileP5EBoundOriginalBatchReadonly(f.db,f.scope);
+  expect(x.privatePermitReadbacks?.[0]).toMatchObject({flightInstanceId:id,observedDbClockUtc:now,sourceExpiresAtUtc:expire});
+  expect(x.originalBodyReadCount).toBe(1);expect(f.calls.filter(q=>q===P5_E_BATCH_ORIGINAL_SQL)).toHaveLength(1);
+  expect(JSON.stringify(x)).not.toContain("normalizedMember");
+  await expect(compileP5EBoundOriginalBatchReadonly(f.db,{...f.scope,prospectivePermits:[{...p,expectedGithubSourceRunId:"9999999"}]})).rejects.toThrow("CROSS_ORIGINAL_EXACT_PRE_PERMIT_PAGE");
  });
  it("does not transfer original if pending selections are stale or changed",async()=>{
   const f=batch();f.scope.source.maxPopulationStalenessSeconds=1800;
@@ -255,5 +283,62 @@ describe("Amendment E shared original batch under existing restricted SOURCE ses
   const g=batch();g.scope.selected=[g.scope.selected[0],g.scope.selected[0]];
   await expect(compileP5EBoundOriginalBatchReadonly(g.db,g.scope)).rejects.toThrow("BATCH_MEMBER_SCOPE_OR_CUTOFF_DRIFT");
   expect(g.calls).toHaveLength(0);
+ });
+});
+
+import {readP7ExactSelectedFeatures,recomputeP7ExactSelectedFeatures,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
+import {signP7ActualPreLaneReceipt,parseP7ReferenceLinkPolicy} from "../server/lib/disruption/phase7ExactPreLaneEvidenceAuthority_v39";
+import {createPhase7IndependentPreProofPort} from "../server/lib/disruption/phase7IndependentPreProofIssuer_v39";
+import {verifyPhase7SignedPreFieldProof,verifyPhase7SelectedFieldProofs} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
+import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
+describe("independent actual-source PRE lane authority and separate proof signer (synthetic SQL fixture)",()=>{
+ async function setup(){
+  const f=fixture(),man=sha("study"),right=sha("rights"),purpose=sha("independent purpose"),prePolicy=sha("field policy"),terms=sha("terms");
+  Object.assign(f.source,{manifest_sha256:man,bound_rights:right,rights_review_sha256:right,run_day_index:1,slot_id:"HUB",horizon:"T-6h",airport_icao:"WSSS",github_run_id:"1234567",attempt_run_id:"1234567",
+   early_draw_sha256:sha("draw"),reviewed_release_sha256:sha("release"),provider_contract_sha256:sha("contract"),service_window_start_utc:"2035-11-25T11:00:00.000Z",service_window_end_utc:"2035-11-25T13:00:00.000Z",
+   reserved_at:"2035-11-25T05:00:00.000Z",fids_retrieval_utc:"2035-11-25T05:01:00.000Z",raw_persisted_at_utc:available,bound_at_utc:"2035-11-25T05:03:00.000Z"});
+  Object.assign(f.member,{source_airport_icao:"WSSS",arr_airport_icao:"YSSY",population_member_id:"fixture-member",provider_content_expired_at_utc:null,query_direction:"Departure"});
+  Object.assign(f.original,{binding_rights:right});Object.assign(f.scope,{manifestSha256:man,expectedRightsReviewSha256:right,externalContentUseReviewSha256:purpose});
+  const o=await compileP5EOneBoundOriginalReadonly(f.db,f.scope);
+  const permit={manifestSha256:man,queryDigestSha256:query,flightInstanceId:id,expectedSourcePopulationQueryId:qid,expectedSourceResponseSha256:f.scope.expectedResponseSha256,
+   expectedReviewedSourceRightsSha256:right,expectedReviewedReleaseSha256:sha("release"),expectedProviderContractSha256:sha("contract"),expectedEarlyDrawSha256:sha("draw"),expectedGithubSourceRunId:"1234567",runDayIndex:1,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",selectedTNativeUtc:native,maxPopulationStalenessSeconds:3600,reviewedSupplementalFeatureBundle:o.bundle} as P5Stage14SingleFlightPrePermit;
+  const dispositions:Phase7CanonicalFieldDisposition[]=[
+   ...(["origin_icao","destination_icao","operating_carrier"] as const).map(field=>({field,disposition:"PURPOSE_BOUND_REFERENCE_LANE" as const,outputField:null,reviewSha256:sha("review "+field)})),
+   ...(["scheduled_arrival_utc","provider_revised_departure_utc","reported_pre_departure_status"] as const).map(field=>({field,disposition:"REVIEWED_DERIVED_BUCKET" as const,outputField:"synthetic_bucket_"+field,reviewSha256:sha("review "+field)}))];
+  const lane=generateKeyPairSync("ed25519"),proof=generateKeyPairSync("ed25519");
+  const fp=(k:typeof lane)=>sha(k.publicKey.export({type:"spki",format:"der"}));
+  const referencePolicy={schema:"v39.phase7.pre-reference-link-purpose-policy.v1",manifestSha256:man,rightsSha256:right,prePolicySha256:prePolicy,termsReviewSha256:terms,independentPurposeReviewSha256:sha("link scope review"),
+   validFromUtc:"2035-11-25T00:00:00.000Z",validUntilUtc:expire,scope:"SINGLE_ORIGINAL_MEMBER_LINK_ONLY",allowSubstituteCompilation:false,allowPerFlightTrainingLink:false,
+   fields:dispositions.filter(d=>d.disposition==="PURPOSE_BOUND_REFERENCE_LANE").map(d=>({field:d.field,kind:d.field==="operating_carrier"?"airline_icao":"airport_icao",purpose:"link",fieldReviewSha256:d.reviewSha256}))};
+  const bytes=Buffer.from(JSON.stringify(referencePolicy)),env={V39_P5_MANIFEST_SHA256:man,V39_P5_RIGHTS_SHA256:right,
+   P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:prePolicy,P6_PHASE7_PRE_REFERENCE_LINK_POLICY_BASE64:bytes.toString("base64"),P6_PHASE7_PRE_REFERENCE_LINK_POLICY_SHA256:sha(bytes),
+   P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",P6_PHASE7_PRE_PROOF_ISSUER_APPROVED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp(lane),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:fp(proof),
+   P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(proof.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+  const refPolicy=parseP7ReferenceLinkPolicy(env,terms,dispositions);
+  const config={env,signer:lane.privateKey,termsReviewSha256:terms,dispositions,referencePolicy:refPolicy};
+  return {f,permit,dispositions,config,proof,lane,env,purpose,terms,prePolicy};
+ }
+ it("authenticates exact original and purpose-only reference links, then independently reselects and verifies proof",async()=>{
+  const x=await setup(),a=await readP7ExactSelectedFeatures(x.f.db,x.permit,x.purpose);
+  expect(a.selectedCount).toBe(6);expect(JSON.stringify(a)).not.toContain("WSSS");
+  const receipt=signP7ActualPreLaneReceipt(x.config,x.permit,a,[]);
+  expect(receipt).toMatchObject({referenceLinkFields:3,independentExactFields:0,longTermReferenceTrainingUseApproved:false,providerCalls:0,databaseWrites:0});
+  expect(JSON.stringify(receipt)).not.toContain("payloadBase64");
+  const port=createPhase7IndependentPreProofPort({env:x.env,policySha256:x.prePolicy,dispositions:x.dispositions,evidenceAuthorityPublicKey:x.lane.publicKey,proofSigningKey:x.proof.privateKey,forbiddenSignerFingerprints:[],
+   reader:{readExactLaneEvidence:async p=>({selectedFeatures:(await readP7ExactSelectedFeatures(x.f.db,p,x.purpose)).privateSelectedFeatures,wire:receipt.privateWire}),readDatabaseClockUtc:async()=>now}});
+  const wires=await port.readExactPermitProofs([x.permit]),proof=verifyPhase7SignedPreFieldProof(x.env,x.permit,x.prePolicy,x.dispositions,wires.get(hashPhase7DurableCandidate(x.permit)));
+  expect(verifyPhase7SelectedFieldProofs(proof,a.privateSelectedFeatures,"2035-11-25T05:59:00.000Z",expire)).toEqual(["origin_icao","destination_icao","operating_carrier"]);
+  expect(()=>requireP7ActualSourceReadback({...a})).toThrow("ACTUAL_SOURCE_READBACK_REQUIRED");
+  expect(x.f.observed.every(q=>!/^(INSERT|UPDATE|DELETE|ALTER|GRANT|CREATE)/i.test(q))).toBe(true);
+ });
+ it("refuses drifted original run, stale cutoff, foreign signer or unapproved reference training purpose",async()=>{
+  const x=await setup(),a=await readP7ExactSelectedFeatures(x.f.db,x.permit,x.purpose);
+  expect(()=>signP7ActualPreLaneReceipt({...x.config,signer:x.proof.privateKey},x.permit,a,[])).toThrow("DISTINCT_ACTUAL_AUTHORITY");
+  const rp={...x.config.referencePolicy,allowPerFlightTrainingLink:true},b=Buffer.from(JSON.stringify(rp));
+  expect(()=>parseP7ReferenceLinkPolicy({...x.env,P6_PHASE7_PRE_REFERENCE_LINK_POLICY_BASE64:b.toString("base64"),P6_PHASE7_PRE_REFERENCE_LINK_POLICY_SHA256:sha(b)},x.terms,x.dispositions)).toThrow("REFERENCE_PURPOSE_SCOPE");
+  await expect(readP7ExactSelectedFeatures(x.f.db,{...x.permit,expectedGithubSourceRunId:"9999999"},x.purpose)).rejects.toThrow("MISSING_OR_CHANGED_AUTHENTIC_BOUND_ORIGINAL");
+  await expect(readP7ExactSelectedFeatures(x.f.db,{...x.permit,maxPopulationStalenessSeconds:1},x.purpose)).rejects.toThrow("SOURCE_CLOCK_STALE_RIGHTS_OR_CUTOFF_INVALID");
  });
 });

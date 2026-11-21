@@ -11,6 +11,10 @@ import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6Stor
 import {hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly} from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {readP6PrivateSourcePostOnce} from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
 import {admitP5SignedFuturePostGitHub,runP5SignedFuturePost,type P5SignedFuturePostPacket} from "./v39_phase5_one_signed_future_post_outcome_v0083_owner_v39";
+import {requirePhase7PostConsumer,type Phase7PostConsumer} from "../server/lib/disruption/phase7PostPreservationBridge_v39";
+import {openPhase7ProtectedPostConsumer} from "../server/lib/disruption/phase7ProtectedPostResolver_v39";
+import type {Phase7PrivateOutcomeReviewTransport} from "../server/lib/disruption/phase7SignedPostConsumer_v39";
+import {openP7LocalPostTransport} from "../server/lib/disruption/phase7LocalPrivatePostHandoff_v39";
 import {readActualValidPreAndClock} from "./v39_phase5_future_post_github_child_dispatcher_v39";
 const SHA=/^[a-f0-9]{64}$/;
 const hash=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
@@ -189,7 +193,8 @@ export function deriveP6PostOriginalLocalEnv(env:NodeJS.ProcessEnv,
   V39_P5_POST_REVIEWED_REQUEST_SHA256:packet.reviewed.requestSha256,
   V39_P5_POST_CONTEXT_SHA256:packet.reviewed.reviewedRequestContextSha256});
 }
-export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
+export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv,phase7Consumer?:Phase7PostConsumer){
+ requirePhase7PostConsumer(env,phase7Consumer);
  const ctx=admitP6PrivatePostChildTransport(env),s=ctx.selector;
  // An admitted child can finish with its exact retained append-only revision
  // even if the current index gained other routes; it is not a new planner.
@@ -204,10 +209,18 @@ export async function runP6PrivatePostExistingV0083Child(env:NodeJS.ProcessEnv){
   hold("ORIGINAL_SAME_FLIGHT_PRE_OUTSIDE_SIGNED_SOURCE_OR_TIME");
  // Existing child rechecks same bound SOURCE PRE, original V0083 review
  // and irreversible exact budget reservation, one GET and atomic custody.
- return runP5SignedFuturePost(local,raw,packet,bound.route.signedFrozenPath,bound.sourceDigests);
+ return runP5SignedFuturePost(local,raw,packet,bound.route.signedFrozenPath,bound.sourceDigests,phase7Consumer);
+}
+/** A commissioned caller supplies the independent wire transport, not a
+ * caller-created approval. Owns the three restricted pool lifetimes. */
+export async function runP6PrivatePostWithIndependentTransport(env:NodeJS.ProcessEnv,transport:Phase7PrivateOutcomeReviewTransport){
+ admitP6PrivatePostChildTransport(env);
+ const opened=openPhase7ProtectedPostConsumer(env,transport);
+ try{return await runP6PrivatePostExistingV0083Child(env,opened.consumer);}
+ finally{await opened.close();}
 }
 if(process.env.P6_PRIVATE_POST_CHILD_ENTRYPOINT==="1"){
- runP6PrivatePostExistingV0083Child(process.env).then(x=>{
+ Promise.resolve().then(()=>runP6PrivatePostWithIndependentTransport(process.env,openP7LocalPostTransport(process.env))).then(x=>{
   console.log(JSON.stringify(x));
   if(x.status!=="ONE_FUTURE_POST_SOURCE_ORIGINAL_DURABLE_NOT_PHYSICAL_LABEL")process.exitCode=3;
  }).catch(()=>{console.error("HOLD_P6_PRIVATE_POST_CHILD_REDACTED_NO_RETRY");process.exitCode=2;});

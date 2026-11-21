@@ -27,7 +27,7 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
  it("requires exact false for checkout-local, exact true for protected private",()=>{
   const a=getMode(job(LEGACY)),b=getMode(job(PRIVATE));
   expect(a?.modes).toEqual(["false"]);
-  expect(b?.modes).toEqual(["true","stored"]);
+  expect(b?.modes).toEqual(["true","stored","stored"]);
   for(const x of [a,b]){
    expect(x?.condition).toContain("github.ref == 'refs/heads/main'");
    expect(x?.condition).toContain("github.event_name == 'workflow_dispatch'");
@@ -35,10 +35,17 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
     "inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'");
    expect(x?.condition).not.toMatch(/private_transport\s*!=/);
   }
-  for(const transport of ["false","true","stored","", "missing","unexpected"]){
+  // Assert the exact Boolean branches, not merely occurrences of transport
+  // strings. The second stored branch is DISARMED actor-only admission.
+  const main="github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ";
+  const paid="inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'";
+  const pre="inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'";
+  expect(a?.condition).toBe(main+paid+" && inputs.private_transport == 'false'");
+  expect(b?.condition).toBe(main+"(("+paid+" && (inputs.private_transport == 'true' || inputs.private_transport == 'stored')) || ("+pre+" && inputs.private_transport == 'stored'))");
+  const transports=["false","true","stored","","missing","unexpected"];
+  for(const transport of transports){
    const selected=[a,b].filter(x=>x?.modes.includes(transport));
-   expect(selected.length).toBe(
-    ["false","true","stored"].includes(transport)?1:0);
+   expect(selected.length).toBe(["false","true","stored"].includes(transport)?1:0);
   }
  });
  it("rechecks exact mode BEFORE setup-node or any paid worker",()=>{
@@ -59,6 +66,34 @@ describe("original SOURCE one-paid-GET jobs remain mutually exclusive",()=>{
    expect(block).toContain("test \"$V39_PHASE5_FREEZE_SIGNED\" = '1'");
    expect(block).toContain("test \"$V39_PHASE5_SOURCE_RIGHTS_APPROVED\" = '1'");
   }
+ });
+ it("actor-only confirmation cannot reach any provider credential or actual observation",()=>{
+  const b=job(PRIVATE),steps=b.split(/\n {6}- (?:name: |uses: )/).slice(1);
+  const paid="inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'";
+  const pre="inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'";
+  const providerSteps=steps.filter(x=>x.includes("secrets.AERODATABOX_API_KEY")||x.includes("v39_phase6_private_source_one_original_child_github_v39.mjs"));
+  expect(providerSteps).toHaveLength(2);
+  for(const step of providerSteps){expect(step).toContain(paid);expect(step).not.toContain(pre);}
+  expect(b.slice(0,b.indexOf("    steps:"))).not.toContain("secrets.AERODATABOX_API_KEY");
+  const only=steps.find(x=>x.startsWith("Admission for real actor preflight ONLY"));
+  expect(only).toContain(pre);
+  expect(only).toContain('test "$V39_PHASE6_PROCESS_ARMED" = 0');
+  expect(only).not.toContain("secrets.");
+  for(const step of steps.filter(x=>x.startsWith("Independently read actual committed")||x.startsWith("Review and publish later PRE"))){expect(step).toContain(paid);expect(step).not.toContain(pre);}
+ });
+ it("stored paid SOURCE cannot bypass native PRE readiness; actor-only uses no provider",()=>{
+  const b=job(PRIVATE);
+  const gate=b.slice(b.indexOf("Reject unfinished release BEFORE"),b.indexOf("Admission for real actor preflight ONLY"));
+  expect(gate).toContain('test "$P6_NATIVE_LATER_RUNTIME_ENABLED" = 1');
+  expect(gate).toContain('test "$P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED" = 1');
+  const ready=b.indexOf("Validate native PRE publication readiness BEFORE SOURCE");
+  expect(ready).toBeGreaterThan(b.indexOf("Preflight independent PRE publisher role"));
+  expect(ready).toBeLessThan(b.indexOf("Authenticate real private PG16 signed index"));
+  const step=b.slice(ready,b.indexOf("Authenticate real private PG16 signed index"));
+  expect(step).toContain("ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER");
+  expect(step).toContain(" --preflight");
+  expect(step).not.toContain("secrets.AERODATABOX_API_KEY");
+  expect(step).toContain("P6_PHASE7_PRE_READBACK_DATABASE_URL");
  });
  it("private mode never falls back to old packet files and retains own PG16 review",()=>{
   const old=job(LEGACY),privateJob=job(PRIVATE);

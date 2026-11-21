@@ -136,14 +136,14 @@ function budgetReview(input:any,review:any){
   sourceUseDeferredToPhase6Activation:true as const,
   exactRestrictedNoProviderBudgetFreezeApproved:true as const}};
 }
-function revise(old:any){
+function revise(old:any,offsets=Array.from({length:31},(_,i)=>i===0?1:0),code="e".repeat(40)){
  const input=structuredClone(old);
- input.codeSha40="e".repeat(40);
- input.calendarDays[0].startUtc=iso(Date.parse(input.calendarDays[0].startUtc)+24*H);
+ input.codeSha40=code;
+ input.calendarDays.forEach((d:any,i:number)=>d.startUtc=iso(Date.parse(d.startUtc)+offsets[i]*D));
  input.phase6StartDateUtc=input.calendarDays[0].startUtc.slice(0,10);
  input.calendarSha256=digest(input.calendarDays);
  input.configSha256=sha("9");
- input.slotBudgetInput.calendarDays[0].startUtc=input.calendarDays[0].startUtc;
+ input.slotBudgetInput.calendarDays.forEach((d:any,i:number)=>d.startUtc=input.calendarDays[i].startUtc);
  input.slotBudgetInput.calendarSha256=input.calendarSha256;
  input.slotBudgetInput.configSha256=input.configSha256;
  input.slotBudgetInput.restOtherByUtcDate=sourceDates(input.calendarDays).map(chargeDayUtc=>({
@@ -276,5 +276,30 @@ describeDisposable("Phase6 disabled prospective stage revision real disposable P
  it("refuses replay once the current stage no longer matches the archived disabled stage",async()=>{
   await expect(commitP6ProspectiveDisabledStageRevisionOnceV39(admin,ctx))
    .rejects.toThrow(/OLD_DISABLED_AUTH_NOT_IDENTICAL|NEW_MANIFEST_OR_REVISION_ALREADY_PRESENT/);
+ });
+
+ it("prospectively moves all 31 days under an exact new review without resetting past evidence or enabling SOURCE",async()=>{
+  const third=revise(next.input,Array(31).fill(3),"a".repeat(40));
+  const thirdReview=stageReview(third.input),thirdBudget=budgetReview(third.input,thirdReview);
+  const ctx2={oldInput:next.input,oldStageReview:nextReview,oldFreezeReview:nextBudget.permit,
+   newInput:third.input,newStageReview:thirdReview,newFreezeReview:thirdBudget.permit,
+   newManifestRaw:third.raw,now:ctx.now,review:{...review,
+    schema:"v39.phase6.prospective-disabled-stage-revision-review.v2" as const,
+    expectedOldStageInputSha256:digest(next.input),
+    expectedOldCostEnvelopeSha256:nextBudget.cost.costOnlyCategoryDraftSha256,
+    expectedNewStageInputSha256:digest(third.input),
+    expectedNewCostEnvelopeSha256:thirdBudget.cost.costOnlyCategoryDraftSha256,
+    expectedOriginalFrozenManifestSha256:next.input.manifestSha256,
+    expectedNewManifestSha256:third.input.manifestSha256,
+    expectedPriorCodeSha40:next.input.codeSha40,expectedCurrentCodeSha40:third.input.codeSha40
+   }};
+  expect(compileP6ProspectiveDisabledStageRevisionV39(ctx2).changedParentDays).toBe(31);
+  expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...ctx2,review:{...ctx2.review,schema:review.schema}}))
+   .toThrow("DATE_REVISION_OUTSIDE_REVIEWED_FORWARD_BOUND");
+  const receipt=await commitP6ProspectiveDisabledStageRevisionOnceV39(admin,ctx2);
+  expect(receipt).toMatchObject({changedParentDays:31,oldCostRowsPreserved:true,databaseAuthorizationEnabled:false,providerCalls:0,phase6PaidGo:false});
+  expect((await admin.query("SELECT COUNT(*)::int n FROM clean.phase5_fids_seven_rest_release_v39")).rows[0].n).toBe(3);
+  expect(await verifyP6ProspectiveDisabledStageRevisionReadOnlyV39(admin,ctx2,receipt))
+   .toMatchObject({exactNewStage:true,archivedOldCostPreserved:true,verifiedReadOnly:true,phase6PaidGo:false});
  });
 });

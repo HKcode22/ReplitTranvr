@@ -1,0 +1,66 @@
+name: Phase5 V0107 selective POST original expiry disposable PG16 (NO GO)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql'
+      - 'tests/phase5_v0107_future_post_primary_margin_pg16_v39.test.ts'
+      - '.github/workflows/phase5-v0107-future-post-primary-margin-pg16.yml'
+permissions:
+  contents: read
+jobs:
+  v0107-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: neondb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GITHUB_ACTIONS: 'true'
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      V39_DATABASE_RUNTIME_URL: 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+      P5_V0107_DISPOSABLE_PG16: '1'
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Install exact predecessor and V0083 dependencies on disposable localhost only
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_ACTIONS" = 'true'
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable'
+          test "$ADB_AUTO_COLLECT" = '0'
+          test "$V39_PHASE6_PROCESS_ARMED" = '0'
+          test "$V39_PHASE6_OWNER_APPROVED" = '0'
+          test -z "$AERODATABOX_API_KEY$AERODATABOX_WEBHOOK_SECRET$RAPIDAPI_KEY"
+          npx --no-install tsx scripts/apply_boot_migrations_v39.ts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0082__phase5_seven_rest_categories_exposed_partition_hold_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0083__phase5_nonfids_five_category_physical_rest_reservation_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql
+      - name: Verify exact stopped upgrade and positive/negative 23h cleanup on real PG16
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase5_v0107_future_post_primary_margin_pg16_v39.test.ts
+          npm run v39:typecheck
+          echo 'P5_V0107_DISPOSABLE_POST_EXPIRY_REGRESSION_PASS_NO_PRODUCTION_NO_PROVIDER_NO_GO'

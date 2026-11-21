@@ -140,6 +140,21 @@ describe("signed due POST backlog",()=>{
    privateRoutingCandidates:result.privateRoutingCandidates,getFrozen:(path:string)=>bytes.get(path)!};
   Object.defineProperty(handoff,"privateAllDuePostRoutingCandidates",{value:result.privateAllDuePostRoutingCandidates,enumerable:false});
   expect(bindP6PostPrivateDayRoute(handoff,ctx).route.shardIndex).toBe(6);
+  const atClock=(clock:string)=>planP6ThirtyOneDaySignedShardHandoffs(raw,index,{expectedIndexSha256:digest,
+   exactExternallyReviewedIndexSha256:digest,expectedManifestSha256:h,expectedCalendarSha256:h,expectedCodeSha:code,
+   expectedReleaseSha256:h,expectedRightsSha256:h,observedDbClockUtc:clock},path=>bytes.get(path)!);
+  const after=atClock("2026-11-22T00:30:01.000Z");
+  expect(after.privateAllDuePostRoutingCandidates).toHaveLength(0);
+  expect(after.privateRoutingCandidates.filter(r=>r.lane==="POST")).toHaveLength(0);
+  expect(after.privateRecoverablePostRoutingCandidates).toHaveLength(6);
+  expect(after.privateRecoverablePostRoutingCandidates[5]).toEqual(last);
+  expect(JSON.stringify(after)).not.toContain("privateRecoverablePostRoutingCandidates");
+  expect(atClock("2026-11-22T00:40:00.000Z").privateRecoverablePostRoutingCandidates).toHaveLength(0);
+  expect(atClock("2026-11-21T23:59:59.000Z").privateRecoverablePostRoutingCandidates).toHaveLength(0);
+  const closed={...handoff,privateRoutingCandidates:after.privateRoutingCandidates};
+  Object.defineProperty(closed,"privateAllDuePostRoutingCandidates",{value:after.privateAllDuePostRoutingCandidates,enumerable:false});
+  Object.defineProperty(closed,"privateRecoverablePostRoutingCandidates",{value:after.privateRecoverablePostRoutingCandidates,enumerable:false});
+  expect(()=>bindP6PostPrivateDayRoute(closed,ctx)).toThrow("EXACT_DUE_POST_ROUTE_MISSING");
  });
 });
 
@@ -170,5 +185,104 @@ describe("native POST binding is carried into original actual PRE check",()=>{
   expect(()=>bind({queryDigestSha256:"f".repeat(64)})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
   expect(()=>bind({sourceRegistrySha256:h})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
   expect(()=>bind({anchorBoundPreRetentionNotAfterUtc:"2027-02-10T12:59:00.000Z"})).toThrow("DELEGATED_NATIVE_POST_SOURCE_BINDING_DRIFT");
+ });
+});
+
+import {admitPhase7ProtectedPostResolver,openPhase7ProtectedPostConsumer,P7_POST_ACTORS} from "../server/lib/disruption/phase7ProtectedPostResolver_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+describe("exact protected research storage POST resolver",()=>{
+ const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
+ function protectedEnv(){
+  const e=env(),outcome=key(),pre=key(),manifest=sha("manifest"),rights=sha("rights");
+  e.V39_P5_MANIFEST_SHA256=manifest;e.V39_P5_RIGHTS_SHA256=rights;
+  const stable=JSON.parse(Buffer.from(e.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64!,"base64").toString());
+  e.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64=b64({...stable,manifestSha256:manifest,rightsSha256:rights});
+  const contract={sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z"},profile={mappingExpiryHours:24},dispositions=[];
+  const review={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:manifest,rightsSha256:rights,contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:contract.researchExpiryUtc,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const reviewSha256=hashPhase7DurableCandidate(review);
+  return {...e,P6_PHASE7_POST_STORAGE_APPROVED:"1",P6_PHASE7_PRE_POLICY_BASE64:b64({contract,profile,dispositions,review,reviewSha256}),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:reviewSha256,P6_PHASE7_POST_CONTRACT_SHA256:review.contractSha256,P6_PHASE7_POST_PROFILE_SHA256:review.profileSha256,P6_PHASE7_POST_PRESERVATION_POLICY_SHA256:sha("post policy"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:pre.fp,P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:outcome.fp,P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(outcome.pem).toString("base64"),...Object.fromEntries(Object.values(P7_POST_ACTORS).map(a=>[a.secret,"postgresql://"+a.role+":fixture@ep-test.neon.tech/neondb?sslmode=verify-full"]))};
+ }
+ it("matches existing exact role credentials and reuses the PRE dictionary without exposing URL or policy bytes",async()=>{
+  const e=protectedEnv(),r=admitPhase7ProtectedPostResolver(e);
+  expect(r.providerCalls).toBe(0);expect(JSON.stringify(r)).not.toMatch(/postgresql|fixture|contract/);
+  const transport={preflight:async()=>({providerCalls:0 as const,writeAuthority:false as const,independentReviewerAvailable:true as const,recoveryReceiptCustodyAvailable:true as const}),readExactReview:async()=>{throw Error("fixture transport never called")},readOrRecordExactRecoveryReceipt:async()=>{throw Error("fixture transport never called")},readExactRecoveryReceipt:async()=>{throw Error("fixture transport never called")}};
+  const x=openPhase7ProtectedPostConsumer(e,transport);expect(x.consumer.policySha256).toBe(e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256);await x.close();
+ });
+ it("rejects missing authority, wrong endpoint, broader role, native key alias and an uncommissioned port",()=>{
+  const e=protectedEnv();
+  for(const delta of [{P6_PHASE7_POST_STORAGE_APPROVED:"0"},{P6_PHASE7_POST_CONTRACT_SHA256:sha("different")},{P6_PHASE7_POST_SCOPED_DATABASE_URL:e.P6_PHASE7_POST_SCOPED_DATABASE_URL.replace("ep-test","ep-other")},{P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL:e.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL},{P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256:p.fp},{P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64:"forbidden"}])expect(()=>admitPhase7ProtectedPostResolver({...e,...delta})).toThrow();
+  expect(()=>openPhase7ProtectedPostConsumer(e,undefined as any)).toThrow("INDEPENDENT_TRANSPORT_UNCOMMISSIONED");
+ });
+});
+
+import {admitP7StoredPostRecovery,selectP7RecoverablePostRoute,verifyP7OriginalPostRun,readP7OriginalPostRun,discoverP7WorkflowRunRecoverySelector} from "../server/lib/disruption/phase7StoredPostRecoveryAdmission_v39";
+describe("nonpaid recovery of the original signed POST route",()=>{
+ const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+ const raw=Buffer.from("{\"synthetic\":\"post packet\"}"),source=Buffer.from("{\"synthetic\":\"source registry\"}");
+ const selector={runDayIndex:1,indexRevision:2,indexSha256:h,shardIndex:3,packetSha256:sha(raw),routingIntentSha256:h,originalGithubRunId:"1234567890"};
+ const route={lane:"POST" as const,runDayIndex:1,shardIndex:3,signedFrozenPath:"data-collection/phase5/frozen/post_synthetic_scope.json",
+  signedFrozenSha256:sha(raw),boundSourceRegistryPath:"data-collection/phase5/frozen/source_synthetic_scope.json",
+  boundSourceRegistrySha256:sha(source),notBeforeUtc:"2026-11-22T00:00:00.000Z",hardLatestUtc:"2026-11-22T00:30:00.000Z",
+  routingIntentSha256:h,mustUseExistingChildAdmission:"EXISTING_V0083_POST_EXTERNAL_RIGHTS_ORIGINAL_CALLBACK_NO_RETRY",
+  independentlyAuthenticatedGHHistoryRequired:true as const,privateBytesOnlyFromRestrictedReader:true as const,newPaidDispatchAuthorizedHere:false as const};
+ const clock="2026-11-22T00:31:00.000Z";
+ const receipt={status:"ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO",runDayIndex:1,indexRevision:2,
+  externallySignedDayEpochIndexSha256:h,reviewedEd25519SourceWasOriginalDayBytes:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false,
+  observedRealPgClockUtc:clock};
+ const originalRun={id:1234567890,repository:{full_name:"HKcode22/ReplitTranvr"},head_repository:{full_name:"HKcode22/ReplitTranvr"},
+  path:".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",head_branch:"main",head_sha:code,
+  event:"workflow_dispatch",run_attempt:1,status:"completed",conclusion:"failure",display_title:"P5 POST "+selector.packetSha256,
+  created_at:"2026-11-22T00:25:00Z",run_started_at:"2026-11-22T00:26:00Z",updated_at:"2026-11-22T00:30:30Z"};
+ function recoveryEnv(){
+  return {...env(),AERODATABOX_API_KEY:"",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_POST_RECOVERY_APPROVED:"1",
+   GITHUB_RUN_ID:"1234567891",GITHUB_TOKEN:"synthetic-no-real-token",
+   V39_P5_POST_CATEGORY_BUDGET_SHA256:h,V39_P5_POST_PROVIDER_CONTRACT_SHA256:h,V39_P5_FRAME_HASH:h,V39_P5_POST_PRICE_SHA256:h};
+ }
+ const handoff=(r=receipt,items=[route])=>{
+  const x={redactedSummary:r,privateRoutingCandidates:[],getFrozen:(p:string)=>p===route.signedFrozenPath?raw:source};
+  return Object.defineProperty(x,"privateRecoverablePostRoutingCandidates",{value:items,enumerable:false});
+ };
+ it("admits exact no-provider recovery and original role/endpoint, refuses paid capability",()=>{
+  const e=recoveryEnv(),a=admitP7StoredPostRecovery(e,selector);
+  expect(a.privateSourceUrl).toContain("sslmode=verify-full");
+  expect(JSON.stringify(a)).not.toContain("postgresql");
+  for(const delta of [{AERODATABOX_API_KEY:"forbidden"},{RAPIDAPI_KEY:"forbidden"},{P5_V39_OTHER_REST_RESERVE_DATABASE_URL:"forbidden"},
+   {GITHUB_RUN_ID:selector.originalGithubRunId},{P6_PHASE7_POST_RECOVERY_APPROVED:"0"},{P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64:"forbidden"},
+   {V39_P5_SOURCE_DATABASE_URL:e.V39_P5_SOURCE_DATABASE_URL!.replace("ep-test","ep-other")}])
+   expect(()=>admitP7StoredPostRecovery({...e,...delta},selector)).toThrow();
+ });
+ it("same-run reviewer admission is no-provider, disarmed, separate from terminal recovery",()=>{
+  const e={...recoveryEnv(),GITHUB_RUN_ID:selector.originalGithubRunId,GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml@refs/heads/main"};
+  expect(admitP7StoredPostRecovery(e,selector,"same-run").providerCalls).toBe(0);
+  expect(()=>admitP7StoredPostRecovery(e,selector)).toThrow();
+  for(const delta of [{V39_PHASE6_PROCESS_ARMED:"1"},{GITHUB_WORKFLOW_REF:"wrong"},{AERODATABOX_API_KEY:"no"},{GITHUB_RUN_ATTEMPT:"2"}])
+   expect(()=>admitP7StoredPostRecovery({...e,...delta},selector,"same-run")).toThrow();
+ });
+ it("selects already closed retained original separately from paid dispatch and refuses future/expired/tampered scope",()=>{
+  expect(selectP7RecoverablePostRoute(handoff(),selector)).toEqual(route);
+  expect(()=>selectP7RecoverablePostRoute(handoff({...receipt,observedRealPgClockUtc:"2026-11-22T00:40:00.000Z"}),selector)).toThrow("RECOVERY_ROUTE_WINDOW");
+  expect(()=>selectP7RecoverablePostRoute(handoff({...receipt,observedRealPgClockUtc:"2026-11-21T23:59:00.000Z"}),selector)).toThrow("RECOVERY_ROUTE_WINDOW");
+  expect(()=>selectP7RecoverablePostRoute(handoff(receipt,[route,route]),selector)).toThrow("EXACT_RECOVERY_ROUTE");
+  expect(()=>selectP7RecoverablePostRoute(handoff(receipt,[{...route,boundSourceRegistrySha256:h}]),selector)).toThrow("RECOVERY_EXACT_BYTES");
+  expect(()=>selectP7RecoverablePostRoute({...handoff(),privateRecoverablePostRoutingCandidates:[route]},selector)).toThrow("AUTHENTICATED_RECOVERY_INDEX");
+ });
+ it("completion-event admission retains separate recovery scope and rejects fake or replayed completion IDs",async()=>{
+  const e={...recoveryEnv(),GITHUB_EVENT_NAME:"workflow_run"};
+  expect(admitP7StoredPostRecovery(e,selector).providerCalls).toBe(0);
+  await expect(discoverP7WorkflowRunRecoverySelector({...e,GITHUB_EVENT_NAME:"workflow_dispatch"},selector.originalGithubRunId)).rejects.toThrow("COMPLETION_EVENT_REQUIRED");
+  for(const delta of [{GITHUB_RUN_ATTEMPT:"2"},{GITHUB_RUN_ID:selector.originalGithubRunId},{P6_PRIVATE_PUBLISHER_DATABASE_URL:"forbidden"},{AERODATABOX_API_KEY:"forbidden"}]){
+   await expect(discoverP7WorkflowRunRecoverySelector({...e,...delta},selector.originalGithubRunId)).rejects.toThrow("EXACT_NO_PAID_SCOPE");
+  }
+ });
+ it("requires actual terminal first-attempt original run, exact signed packet title and window; GET only",async()=>{
+  const e=recoveryEnv();
+  expect(verifyP7OriginalPostRun(originalRun,selector,route,code,clock)).toBe(selector.originalGithubRunId);
+  for(const delta of [{run_attempt:2},{status:"in_progress"},{display_title:"P5 POST "+h},{head_sha:"c".repeat(40)},
+   {created_at:"2026-11-22T00:31:00Z"},{run_started_at:"2026-11-22T00:31:00Z"},{conclusion:"skipped"},{id:1234567891}])
+   expect(()=>verifyP7OriginalPostRun({...originalRun,...delta},selector,route,code,clock)).toThrow();
+  let calls=0;
+  const fetcher=async(u:any,i:any)=>{calls++;expect(u).toBe("https://api.github.com/repos/HKcode22/ReplitTranvr/actions/runs/"+selector.originalGithubRunId);expect(i.method).toBe("GET");expect(i.redirect).toBe("error");return new Response(JSON.stringify(originalRun),{status:200});};
+  expect(await readP7OriginalPostRun(e,selector,route,clock,fetcher as typeof fetch)).toBe(selector.originalGithubRunId);
+  expect(calls).toBe(1);
  });
 });

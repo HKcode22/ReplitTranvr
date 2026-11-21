@@ -14,6 +14,9 @@ import {auditP5RealSourceToNativeFlightCandidatesReadonly}
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
 import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning} from "./phase5IndependentLaterPrePacketCompletion_v39.ts";
+import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39.ts";
+import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39.ts";
+import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39.ts";
 import {proposeP5ReviewedLaterPacketsAsUnsignedDayShard} from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39.ts";
 import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
 const SHA=/^[a-f0-9]{64}$/;
@@ -348,15 +351,26 @@ export function completeP6PostcommitReviewedPreBatch(handoff,scope,reviews){
      !iso(v.reviewedAtUtc)||Date.parse(v.reviewedAtUtc)>Date.parse(scope.observedDbClockUtc))
    fail("REVIEW_BATCH_UNSELECTED_DUPLICATE_OR_POLICY_DRIFT");
   seen.add(id);
-  const packet=d.horizon==="T-24h"?
+  let packet=d.horizon==="T-24h"?
    completeP5NativeT24PrePacketForIndependentSigning(d,e,item.reviewBytes,v,item.pins):
    completeP5NativeLaterPrePacketForIndependentSigning(d,e,item.reviewBytes,v,item.pins);
   if(Date.parse(e.source.ownPreCutoffUtc)<=Date.parse(scope.observedDbClockUtc)+900000){late++;continue;}
+  // Real independent input must be attached BEFORE a registry is proposed
+  // or a shard is signed. No proof = no Phase6 preservation packet.
+  if(scope.phase7ProofPreviewOnly===true&&(scope.phase7ProofRequired===true||scope.phase7IndependentProofsByPermitSha256!==undefined||scope.phase7ProtectedEnv!==undefined))fail("PHASE7_MIXED_PROOF_MODE");
+   if(scope.phase7ProofRequired===true){
+   const policy=parsePhase7ProtectedPrePolicy(scope.phase7ProtectedEnv??{});
+   const key=hashPhase7DurableCandidate(packet.packet.prePermit);
+   if(!(scope.phase7IndependentProofsByPermitSha256 instanceof Map)||!scope.phase7IndependentProofsByPermitSha256.has(key))
+    fail("PHASE7_ACTUAL_INDEPENDENT_FIELD_PROOF_MISSING");
+   packet=attachPhase7SignedProofBeforeRoster(packet,scope.phase7ProtectedEnv,policy.reviewSha256,policy.dispositions,scope.phase7IndependentProofsByPermitSha256.get(key));
+  }else if(scope.phase7IndependentProofsByPermitSha256!==undefined||scope.phase7ProtectedEnv!==undefined)
+   fail("PHASE7_MIXED_PROOF_MODE");
   completed.push({proposedFilePath:item.proposedFilePath,
    expectedExternallyPinnedReviewArtifactSha256:item.pins.expectedReviewArtifactSha256,completed:packet});
  }
  let plan=null;
- if(d.horizon!=="T-24h"&&completed.length){
+ if(scope.phase7ProofPreviewOnly!==true&&d.horizon!=="T-24h"&&completed.length){
   plan=proposeP5ReviewedLaterPacketsAsUnsignedDayShard(raw,JSON.parse(raw.toString("utf8")),{
    expectedExternallyApprovedSourceRegistrySha256:d.sourceDayRegistrySha256,sourceRegistryFilePath:path,
    proposedLaterRegistryFilePath:scope.proposedLaterRegistryFilePath,reviewedMainCodeSha:d.reviewedMainCodeSha,
@@ -509,7 +523,11 @@ export function signP6DelegatedNativeLaterReviewPage({handoff,featureReview,evid
   signatureIssued:false,humanReviewPerformed:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  if(!reviews.length)return Object.freeze(result);
  const completed=completeP6PostcommitReviewedPreBatch(handoff,scope,reviews),plan=completed.privateLaterRegistryPlan;
- if(!plan||completed.completedPacketCount!==reviews.length||completed.privateCompletedPackets.some(x=>
+ if(scope.phase7ProofPreviewOnly===true){
+   if(completed.completedPacketCount!==reviews.length||plan!==null)fail("PHASE7_PREVIEW_DRIFT");
+   return Object.freeze(Object.defineProperty({...result,phase7ProofPreviewOnly:true},"privateCompletedPackets",{value:completed.privateCompletedPackets,enumerable:false}));
+  }
+  if(!plan||completed.completedPacketCount!==reviews.length||completed.privateCompletedPackets.some(x=>
   !x.completed.packet.prePermit.reviewedSupplementalFeatureBundle))
   fail("DELEGATED_NATIVE_REVIEW_ORIGINAL_PACKET_COMPLETION_DRIFT");
  const evidenceDigest=hash(Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-later-shard-review-evidence.v1",

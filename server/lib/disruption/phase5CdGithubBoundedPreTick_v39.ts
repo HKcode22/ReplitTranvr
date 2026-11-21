@@ -21,7 +21,7 @@ import {
  persistP5V0079SingleBoundFlightPre,
  preflightP5Stage14ReviewedPermitV39,
  type P5Stage14SingleFlightPrePermit,
- type P5Stage14SingleFlightPreResult
+ type P5Stage14SingleFlightPreResult,type Phase7PreIntegration,requirePhase7GhPreIntegration
 } from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {
  requireP5CdGithubPreRelease,type P5CdGithubPreRelease
@@ -56,6 +56,8 @@ export interface P5CdVerifiedTaskPacket{
  /** Only present when an independently frozen T24 Stage17 witness is
   * paired to this exact source-bound T24 packet; no fabricated receipt. */
  witnessReview?:P5IndependentT24WitnessReview;
+ /** Private proof bytes included in the original exact signed roster packet. */
+ phase7FieldProof?:unknown;
 }
 export function verifyP5CdFrozenRoster(
  raw:Buffer,roster:P5CdFrozenRoster,entries:P5CdFrozenRosterEntry[],
@@ -137,7 +139,8 @@ export function verifyP5CdFrozenRoster(
   }
   packets.set(expected.packetSha256,{
    packetSha256:expected.packetSha256,permit:pre,
-   ...(witnessReview?{witnessReview}:{})
+   ...(witnessReview?{witnessReview}:{}),
+   ...(packet.phase7FieldProof!==undefined?{phase7FieldProof:packet.phase7FieldProof}:{})
   });
  }
  return packets;
@@ -165,11 +168,30 @@ export function bindP5CdTaskToFrozenPermit(
   hold("QUEUE_CUTOFF_OR_NATIVE_T_CHANGED");
  return p;
 }
+/** Resolver is run for each exact authenticated packet, before reaping or
+ * claiming work. A commissioning caller must supply a genuine independent
+ * evidence resolver; the worker never synthesizes separate field proofs. */
+export type P5CdPhase7PreResolver=(packet:Readonly<P5CdVerifiedTaskPacket>)=>Promise<{
+ packetSha256:string;integration:Phase7PreIntegration;
+}>;
+export async function resolveP5CdPhase7Pre(env:NodeJS.ProcessEnv,release:P5CdGithubPreRelease,packet:P5CdVerifiedTaskPacket,resolver?:P5CdPhase7PreResolver){
+ if(release.releaseMode==="PHASE5_CANARY"){
+  if(resolver)hold("PHASE5_CANARY_CANNOT_USE_PHASE6_PRESERVATION_RESOLVER");
+  return undefined;
+ }
+ if(release.releaseMode!=="PHASE6_APPROVED"||typeof resolver!=="function")
+  hold("PHASE6_P7_PRESERVATION_RESOLVER_REQUIRED_BEFORE_QUEUE");
+ const got=await resolver(packet);
+ if(!got||got.packetSha256!==packet.packetSha256)
+  hold("P7_PRESERVATION_PROOF_WRONG_EXACT_PACKET");
+ return requirePhase7GhPreIntegration(env,packet.permit,got.integration);
+}
 export interface P5CdTickDeps{
  /** Already scoped to Stage28 dedicated PRE role, never application runtime. */
  db:P5CdTaskExecutor;
  pool:Pick<Pool,"connect">;
  packets:Map<string,P5CdVerifiedTaskPacket>;
+ phase7PreResolver?:P5CdPhase7PreResolver;
 }
 export interface P5CdTickRecord{
  taskId:string;
@@ -255,6 +277,11 @@ export async function runP5CdGithubPreTick(
   if(permit.reviewedStandaloneLaterNoT24)
    preflightP5Stage14ReviewedPermitV39(permit,release.independentlyApprovedStandaloneProtocolSha256);
  }
+ const preservation=new Map<string,Phase7PreIntegration>();
+ for(const record of deps.packets.values()){
+  const policy=await resolveP5CdPhase7Pre(env,release,record,deps.phase7PreResolver);
+  if(policy)preservation.set(record.packetSha256,policy);
+ }
  const reap=await reapP5CdExpiredLeasesOnceV39(deps.db,64);
  const tasks=await claimP5CdSignedRosterDueTasksV39(
   deps.db,opts.owner,[...deps.packets.keys()],
@@ -265,8 +292,11 @@ export async function runP5CdGithubPreTick(
   // avoid any further writes when the reviewed process gate is absent.
   const liveRelease=requireP5CdGithubPreRelease(env);
   let permit:P5Stage14SingleFlightPrePermit;
+  let phase7:Phase7PreIntegration|undefined;
   try{
    permit=bindP5CdTaskToFrozenPermit(task,deps.packets);
+   if(liveRelease.releaseMode==="PHASE6_APPROVED")
+    phase7=requirePhase7GhPreIntegration(env,permit,preservation.get(task.packetSha256));
    // A source packet with extra features must not be marked WRITE_STARTED
    // when the independently reviewed feature-release is still disabled.
    if(permit.reviewedSupplementalFeatureBundle&&
@@ -298,6 +328,7 @@ export async function runP5CdGithubPreTick(
     deps.pool,permit,{
      ...(permit.reviewedStandaloneLaterNoT24?{
       independentlyApprovedStandaloneProtocolSha256:liveRelease.independentlyApprovedStandaloneProtocolSha256}:{}),
+     ...(phase7?{phase7PrePreservation:phase7}:{}),
      realV0088QueueFenceGh:{
       taskId:task.taskId,owner:task.leaseOwner,
       generation:task.leaseGeneration,packetSha256:task.packetSha256
@@ -305,6 +336,8 @@ export async function runP5CdGithubPreTick(
      ...(env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED==="1"
        ?{amendmentENativeRouteBoundGh:true as const}:{})
     });
+   if(phase7&&saved.phase7DerivedPreFragmentIndependentlyVerified!==true)
+    hold("P7_DURABLE_PRE_READBACK_NOT_VERIFIED_NO_ACK");
    const receipt=await independentPostCommitReadback(deps.db,task,saved);
    const ack=await acknowledgeP5CdStage14PostCommitV39(
     deps.db,task,saved.committedSnapshotId,receipt);

@@ -6,7 +6,7 @@ import {readFileSync,mkdtempSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {replayP6CompactNov21Review,replayP6CompactNov22Review,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
+import {replayP6CompactNov21Review,replayP6CompactNov22Review,replayP6CompactMondayReview,compileP6ActualCandidateExport,writeP6ActualCandidateExport,prepareP6ActualReviewInput,prepareP6ActualReleaseIdentityReview,inspectP6ExactReviewCheckout,verifyP6ActualCommittedPlanParity,verifyP6ActualCommittedCheckout} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {admitP6InertReleaseStage} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
@@ -495,4 +495,85 @@ describe("actual first seed to original B0062 and 31-day plan compilers",()=>{
    scientificFreezeApproved:false,phase6PaidGo:false});
  },20000);
 
+});
+
+describe("Monday exact prospective calendar compiler replay (NO GO)",()=>{
+ it("rebuilds all 31 windows, original treatment, full request time geometry and unsigned pins",()=>{
+  const old=replayP6CompactNov22Review(),next=replayP6CompactMondayReview(),r=next.revision;
+  const count:Record<string,number>={};let first=Infinity,last=-Infinity,templates=0;
+  const charge=new Map<string,number>(),keys=new Set<string>();
+  const iso=(ms:number)=>new Date(ms).toISOString();
+  for(let i=0;i<31;i++){
+   const a=old.calendarDraft.calendarDays[i],b=next.calendarDraft.calendarDays[i],d=next.shapeEnvelope.days[i];
+   const delta=Date.parse(b.startUtc)-Date.parse(a.startUtc);
+   expect(delta).toBe((i>=4&&i<=6?4:3)*86400000);
+   expect({...b,startUtc:a.startUtc,budgetDayId:a.budgetDayId}).toEqual(a);
+   count[d.partition]=(count[d.partition]??0)+1;
+   const p=JSON.parse(readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json","utf8"));
+   // Current tracked bytes now represent the adopted Monday calendar.
+   expect(p.expectedServiceStartUtc).toBe(b.startUtc);
+   for(const t of p.templates){
+    expect(keys.has(t.queryKey)).toBe(false);keys.add(t.queryKey);templates++;
+    const req=Date.parse(t.scheduledRequestUtc),cut=Date.parse(t.earliestPlannedCutoffUtc);
+    const start=Date.parse(t.serviceWindowStartUtc),end=Date.parse(t.serviceWindowEndUtc);
+    expect(old.shapeEnvelope.days[i].activeSegments.some(s=>start-delta>=Date.parse(s.startUtc)&&end-delta<=Date.parse(s.endUtc))).toBe(true);
+    expect(cut-req).toBe(900000);
+    expect(d.activeSegments.some(s=>start>=Date.parse(s.startUtc)&&end<=Date.parse(s.endUtc))).toBe(true);
+    expect(t.apiUnitsPerAttempt*t.maxAttempts).toBe(2);
+    const day=iso(req).slice(0,10);expect(day).toBe(t.physicalChargeDayUtc);
+    charge.set(day,(charge.get(day)??0)+2);first=Math.min(first,req);last=Math.max(last,req);
+   }
+  }
+  expect(count).toEqual({train:20,validation:5,test:6});expect(templates).toBe(6144);
+  expect([...charge.values()].reduce((a,b)=>a+b,0)).toBe(12288);
+  expect(iso(first)).toBe(r.firstSourceUtc);expect(iso(last)).toBe("2026-12-27T02:00:00.000Z");
+  expect(r.allocatedOutcomeTailUtc).toBe("2026-12-29T04:00:00.000Z");
+  expect(r.originalTreatmentAssignmentSha256).toBe(old.revision.originalTreatmentAssignmentSha256);
+  expect(r.independentDateRevisionApproved).toBe(false);expect(r.phase6PaidGo).toBe(false);
+  expect(r.calendarRowsSha256).not.toBe(old.revision.calendarRowsSha256);
+  console.log("P6_MONDAY_UNSIGNED_REPLAY_DIGESTS "+JSON.stringify(r));
+ });
+});
+
+describe("Monday prospective release candidate compiler (unsigned, no GO)",()=>{
+ it("recompiles actual 31-day cost envelope against the unshifted provider renewal",()=>{
+  const x=replayP6CompactMondayReview();
+  const b=proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_MONDAY_NOV23");
+  expect(b.calendarRowsSha256).toBe("55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b");
+  expect(b.totalReservedUnits).toBe(36740);
+  expect(b.peakDailyUnits).toBe(1280);
+  expect(b.physicalUtcRows).toHaveLength(37);
+  expect(b.renewal.sourceBeforeReset).toBe(3416);
+  expect(b.renewal.sourceAfterReset).toBe(8872);
+  expect(b.renewal.conservativePriorCycleMax).toBe(10874);
+  expect(b.renewal.conservativeNextCycleMax).toBe(27024);
+  expect(()=>proposeP5ActualNov22Budget(x.calendarDraft,"COMPACT_NOV22")).toThrow();
+  expect(()=>proposeP5ActualNov22Budget(replayP6CompactNov22Review().calendarDraft,"COMPACT_MONDAY_NOV23")).toThrow();
+  const review=prepareP6ActualReviewInput("e".repeat(40),0,"COMPACT_MONDAY_NOV23");
+  expect(review).toMatchObject({proposedSourceQueries:6144,proposedTotalReservedUnits:36740,proposedPeakDailyUnits:1280,sourceRightsApproved:false,actualBudgetReviewApproved:false,phase6PaidGo:false});
+  expect(review.externalCandidate.phase6AuthorizationId).toBeNull();
+  expect(review.quotaEvidence.currentBalanceRevalidated).toBe(false);
+ });
+ it("regenerates all unsigned source plan digests from the real compiler with no authorization",()=>{
+  const code=execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim();
+  const x=prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23",true);
+  const plans=x.reviewOnlyDayPlanExport!;
+  expect(plans).toMatchObject({status:"UNSIGNED_METADATA_ONLY_NOT_STAGED_NO_GO",phase6PaidGo:false,calendarRowsSha256:"55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b"});
+  expect(plans.plans).toHaveLength(31);
+  expect(plans.plans.every((f,i)=>f.path==="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"&&hash(f.bytes)===f.sha256&&f.sha256===x.geometry.dayPlanSha256s[i].sha256&&readFileSync(f.path).equals(Buffer.from(f.bytes)))).toBe(true);
+  const parsed=plans.plans.map(f=>JSON.parse(f.bytes));
+  expect(parsed[0].expectedServiceStartUtc).toBe("2026-11-25T00:00:00.000Z");
+  expect(parsed[0].templates[0].scheduledRequestUtc).toBe("2026-11-23T23:45:00.000Z");
+  expect(parsed.reduce((n,p)=>n+p.templates.length,0)).toBe(6144);
+  expect(parsed[30].expectedServiceStartUtc).toBe("2026-12-27T00:00:00.000Z");
+  expect(prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_MONDAY_NOV23").reviewOnlyDayPlanExport).toBeUndefined();
+  expect(()=>prepareP6ActualReleaseIdentityReview(code,0,"COMPACT_NOV22",true)).toThrow("MONDAY_REVIEW_PLAN_EXPORT_SCOPE");
+  expect(x.geometry).toMatchObject({dayPlanCount:31,totalQueries:6144,totalReservedUnits:36740});
+  expect(x.geometry.dayPlanSha256s).toHaveLength(31);
+  expect(x.geometry.dayPlanSha256s.every((v,i)=>v.runDayIndex===i+1&&/^[a-f0-9]{64}$/.test(v.sha256))).toBe(true);
+  expect(x.manifestCandidate.content.calendarRowsSha256).toBe("55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b");
+  expect(x.manifestCandidate.content.calendarRevisionReceipt?.sha256).toBe("2d760133b7f881e9233f645756b0b6cf1f57464a3800c1442e3d0c39a5e722e6");
+  expect(x).toMatchObject({actualAuthorizationId:null,stagePacketExported:false,candidateDigestsApproved:false,sourceRightsApproved:false,scientificFreezeApproved:false,phase6PaidGo:false});
+  console.log("P6_MONDAY_RELEASE_COMPILER_REVIEW "+JSON.stringify({manifest:x.manifestCandidate.sha256,config:x.configCandidate.sha256,calendar:x.calendarRowsDigestCandidate,geometry:x.geometry,timing:x.timingEvidenceCandidate.sha256,range:x.rangeEvidenceCandidate.sha256,phase6PaidGo:false}));
+ },20000);
 });

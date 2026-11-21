@@ -13,6 +13,10 @@ on:
       - 'data-collection/phase5/evidence/2026-11-16_prearm_clock_43832469501.json'
       - 'scripts/v39_phase5_prospective_seed_to_calendar_preview_v39.mjs'
       - 'scripts/v39_phase6_actual_release_candidate_export_v39.ts'
+      - 'scripts/v39_phase6_revised_stage_executable_bridge_v39.ts'
+      - 'review-tools/p6_nov20_finalize_recovered_policies_v39.ts'
+      - 'tests/phase6_revised_stage_executable_bridge_v39.test.ts'
+      - 'tests/phase6_revised_static_policy_values_v39.test.ts'
 permissions:
   contents: read
 jobs:
@@ -36,7 +40,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts
+      - run: npx --no-install vitest run tests/phase5_actual_nov22_budget_proposal_v39.test.ts tests/phase6_revised_stage_executable_bridge_v39.test.ts tests/phase6_revised_static_policy_values_v39.test.ts
       - name: Produce exact metadata-only review packet, not a runnable release
         run: |
           set -Eeuo pipefail
@@ -49,7 +53,11 @@ jobs:
           npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-compact-nov22-no-refill "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/compact-nov22-review-only.json"
           sha256sum "$RUNNER_TEMP/phase6-actual-review/compact-nov22-review-only.json"
           node -e 'const r=require(process.argv[1]),g=r.releaseIdentityReview.geometry,c=r.calendarRevisionReview; if(g.totalQueries!==6144||g.totalReservedUnits!==36740||g.dayPlanCount!==31||c.firstSourceUtc!=="2026-11-20T23:45:00.000Z"||c.firstServiceUtc!=="2026-11-22T00:00:00.000Z"||r.phase6PaidGo!==false||r.releaseIdentityReview.stagePacketExported!==false||c.independentDateRevisionApproved!==false)process.exit(2); console.log(JSON.stringify({status:"COMPACT_NOV22_DATED_REVIEW_NO_GO",geometry:g,calendarRowsDigestCandidate:r.releaseIdentityReview.calendarRowsDigestCandidate,manifestCandidateSha256:r.releaseIdentityReview.manifestCandidate.sha256,configCandidateSha256:r.releaseIdentityReview.configCandidate.sha256,phase6PaidGo:false}))' "$RUNNER_TEMP/phase6-actual-review/compact-nov22-review-only.json"
-          node -e 'const fs=require("node:fs"),crypto=require("node:crypto"),r=require(process.argv[1]),plans=r.releaseIdentityReview.geometry.dayPlanSha256s; if(plans.length!==31)process.exit(2); for(const [i,d] of plans.entries()){if(d.runDayIndex!==i+1)process.exit(2);const p="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json";if(crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")!==d.sha256)throw Error("COMPACT_PLAN_BYTES_DIFFER_"+(i+1))}console.log("COMPACT_COMMITTED_METADATA_DAY_PLAN_PARITY_31_OF_31_NO_GO")' "$RUNNER_TEMP/phase6-actual-review/compact-review-only.json"
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-compact-monday-nov23-no-refill "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/compact-monday-review-only.json"
+          sha256sum "$RUNNER_TEMP/phase6-actual-review/compact-monday-review-only.json"
+          node -e 'const r=require(process.argv[1]),i=r.releaseIdentityReview,c=r.calendarRevisionReview,g=i.geometry;if(g.totalQueries!==6144||g.totalReservedUnits!==36740||g.dayPlanCount!==31||i.calendarRowsDigestCandidate!=="55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b"||c.firstSourceUtc!=="2026-11-23T23:45:00.000Z"||c.authorizationDeadlineUtc!=="2026-11-23T23:10:00.000Z"||c.firstServiceUtc!=="2026-11-25T00:00:00.000Z"||c.lastServiceEndUtc!=="2026-12-27T04:00:00.000Z"||c.allocatedOutcomeTailUtc!=="2026-12-29T04:00:00.000Z"||r.phase6PaidGo!==false||i.stagePacketExported!==false||c.independentDateRevisionApproved!==false)process.exit(2);console.log(JSON.stringify({status:"COMPACT_MONDAY_EXACT_IDENTITY_REVIEW_NO_GO",calendarRowsDigestCandidate:i.calendarRowsDigestCandidate,manifestCandidateSha256:i.manifestCandidate.sha256,configCandidateSha256:i.configCandidate.sha256,sourceInventorySha256:i.manifestCandidate.content.sourceInventorySha256,dateMapSha256:c.dateMapSha256,phase6PaidGo:false}))' "$RUNNER_TEMP/phase6-actual-review/compact-monday-review-only.json"
+          npx --no-install tsx scripts/v39_phase6_actual_release_candidate_export_v39.ts --review-only-compact-monday-nov23-day-plans "$GITHUB_SHA" > "$RUNNER_TEMP/phase6-actual-review/compact-monday-review-only-day-plans.json"
+          node -e 'const fs=require("node:fs"),crypto=require("node:crypto"),old=require(process.argv[1]).releaseIdentityReview.geometry.dayPlanSha256s,m=require(process.argv[2]),sha=b=>crypto.createHash("sha256").update(b).digest("hex");if(m.status!=="UNSIGNED_METADATA_ONLY_NOT_STAGED_NO_GO"||m.phase6PaidGo!==false||m.calendarRowsSha256!=="55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b"||old.length!==31||m.plans.length!==31)process.exit(2);let oldMatches=0,mondayMatches=0,queries=0;for(const [i,f] of m.plans.entries()){const p="data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json";if(f.path!==p||old[i].runDayIndex!==i+1||sha(f.bytes)!==f.sha256)process.exit(2);const v=JSON.parse(f.bytes);if(v.runDayIndex!==i+1||!Array.isArray(v.templates))process.exit(2);queries+=v.templates.length;const h=sha(fs.readFileSync(p));oldMatches+=Number(h===old[i].sha256);mondayMatches+=Number(h===f.sha256)}if(queries!==6144||oldMatches!==0||mondayMatches!==31)throw Error("MONDAY_EXACT_COMMITTED_PLAN_BYTES_REQUIRED");console.log(JSON.stringify({status:"EXACT_COMMITTED_PLAN_CALENDAR_CLASSIFIED_NO_GO",oldMatches,mondayMatches,queries,phase6PaidGo:false}))' "$RUNNER_TEMP/phase6-actual-review/compact-nov22-review-only.json" "$RUNNER_TEMP/phase6-actual-review/compact-monday-review-only-day-plans.json"
       - uses: actions/upload-artifact@v4
         with:
           name: phase6-actual-first-seed-review-only

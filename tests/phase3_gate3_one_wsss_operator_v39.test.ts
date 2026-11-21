@@ -1,4 +1,6 @@
 import {describe,expect,it} from "vitest";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
 import {
   GATE3_OPERATOR_ONE_CANARY_SCOPE_V39,
   GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39,
@@ -40,7 +42,7 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
   it("requires authenticated GitHub API capacity before reserving a paid session",async()=>{
     const names=["V39_DATABASE_TARGET_CONFIRM","V39_DATABASE_RUNTIME_URL",
       "AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET",
-      "WEBHOOK_BASE_URL","GITHUB_TOKEN","GH_TOKEN"] as const;
+      "WEBHOOK_BASE_URL","GITHUB_TOKEN","GH_TOKEN","GH_CONFIG_DIR","GH_HOST"] as const;
     const previous=Object.fromEntries(names.map(k=>[k,process.env[k]]));
     process.env.V39_DATABASE_TARGET_CONFIRM="production";
     process.env.V39_DATABASE_RUNTIME_URL="synthetic-offline-no-connection";
@@ -49,6 +51,11 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
     delete process.env.WEBHOOK_BASE_URL;
     delete process.env.GITHUB_TOKEN;
     delete process.env.GH_TOKEN;
+    // Keep this offline assertion independent of a developer's local `gh auth`
+    // session. Production code may still discover an already-authenticated CLI
+    // token when the owner actually invokes the paid operator.
+    process.env.GH_CONFIG_DIR=join(tmpdir(),"v39-no-gh-auth-config");
+    process.env.GH_HOST="offline.invalid";
     try{
       await expect(executeOneWsssGate3OperatorV39(flags))
         .rejects.toThrow("GATE3_OPERATOR_AUTHENTICATED_GITHUB_API_REQUIRED");

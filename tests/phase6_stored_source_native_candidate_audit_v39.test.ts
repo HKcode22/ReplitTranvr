@@ -5,7 +5,7 @@ import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,aud
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
  const trust={independentStudyTrustPinsApproved:true,reviewedCodeSha:"a".repeat(40),
-  manifestSha256:H("a"),rightsSha256:H("b"),releaseSha256:H("c"),calendarSha256:H("d")};
+  manifestSha256:h("synthetic manifest"),rightsSha256:h("synthetic rights"),releaseSha256:H("c"),calendarSha256:H("d")};
  const q={schema:"v39.phase5.github-source-one-query-template.v2",manifestSha256:trust.manifestSha256,
   queryDigestSha256:H("e"),plan:{independentlyApprovedSourceAndRetention:true,githubOnlyOwnerApproved:true,
    reviewedProviderRightsSha256:trust.rightsSha256,reviewedReleaseSha256:trust.releaseSha256,
@@ -372,5 +372,47 @@ describe("current private T24 registry routing into the existing queue",()=>{
   expect(deriveP6T24QueueTrust(a)).toMatchObject({expectedSelectedTVersion:f.trust.expectedSelectedTVersion,expectedT24ReviewerFingerprintSha256:f.trust.expectedT24ReviewerFingerprintSha256});
   expect(()=>deriveP6T24QueueTrust({...a,expectedPolicySha256:H("8")})).toThrow("UNPINNED_POLICY");
   expect(()=>deriveP6T24QueueTrust({...a,reviewerPublicKeyPem:generateKeyPairSync("ed25519").publicKey.export({type:"spki",format:"pem"})})).toThrow("WRONG_REVIEWER_KEY");
+ });
+});
+
+describe("independent PRE proof publication boundary",()=>{
+ it("previews both permit types without a publishable registry or signature",()=>{
+  const later=delegatedNativeFixture();
+  const p=signP6DelegatedNativeLaterReviewPage({...later.args,scope:{...later.args.scope,phase7ProofPreviewOnly:true}} as any) as any;
+  expect(p).toMatchObject({phase7ProofPreviewOnly:true,signatureIssued:false});expect(p.privateCompletedPackets).toHaveLength(1);expect(p.privatePlan).toBeUndefined();expect(JSON.stringify(p)).not.toContain("flight_new");
+  const f=t24RegistryFixture(),q=buildP6DelegatedT24PrivateRegistry({...f,phase7ProofScope:{phase7ProofPreviewOnly:true}} as any) as any;
+  expect(q).toMatchObject({phase7ProofPreviewOnly:true,packetCount:0,proofRequestCount:1});expect(q.privateCompletedPackets).toHaveLength(1);expect(q.privateWire).toBeUndefined();expect(JSON.stringify(q)).not.toContain(f.id);
+ });
+ it("rejects a mixed preview and proof-required invocation",()=>{
+  const f=delegatedNativeFixture();expect(()=>signP6DelegatedNativeLaterReviewPage({...f.args,scope:{...f.args.scope,phase7ProofPreviewOnly:true,phase7ProofRequired:true}} as any)).toThrow("PHASE7_MIXED_PROOF_MODE");
+ });
+});
+
+import {resolveP7PublicationProofs} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {sign as signProof} from "node:crypto";
+describe("private publication with independently signed test proof wires",()=>{
+ it("attaches the exact wire to both horizons and rejects missing or stale proof sets",async()=>{
+  for(const horizon of ["T24","LATER"]){
+   const f=horizon==="T24"?t24RegistryFixture():delegatedNativeFixture().args;
+   const call=(scope:any)=>horizon==="T24"?buildP6DelegatedT24PrivateRegistry({...f,phase7ProofScope:scope} as any):signP6DelegatedNativeLaterReviewPage({...f,scope:{...(f as any).scope,...scope}} as any);
+   const preview=call({phase7ProofPreviewOnly:true}) as any;
+   const permit=preview.privateCompletedPackets[0].completed.packet.prePermit,digest=hashPhase7DurableCandidate(permit);
+   const key=generateKeyPairSync("ed25519"),publicKey=key.publicKey.export({format:"pem",type:"spki"});
+   // Synthetic proof transport only; this fixture certifies no actual source or field.
+   const contract={sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2027-12-31T00:00:00.000Z"},profile={mappingExpiryHours:24},dispositions=[];
+   const review={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:permit.manifestSha256,rightsSha256:permit.expectedReviewedSourceRightsSha256,contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:contract.researchExpiryUtc,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+   const policy={contract,profile,dispositions,review,reviewSha256:hashPhase7DurableCandidate(review)};
+   const env={P6_PHASE7_PRE_POLICY_BASE64:Buffer.from(JSON.stringify(policy)).toString("base64"),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policy.reviewSha256,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:h(key.publicKey.export({format:"der",type:"spki"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(publicKey).toString("base64"),V39_P5_MANIFEST_SHA256:permit.manifestSha256,V39_P5_RIGHTS_SHA256:permit.expectedReviewedSourceRightsSha256};
+   const bytes=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:permit.manifestSha256,rightsSha256:permit.expectedReviewedSourceRightsSha256,policySha256:policy.reviewSha256,permitSha256:digest,issuedAtUtc:"2027-02-10T04:42:00.000Z",validUntilUtc:"2027-02-10T05:04:00.000Z",fields:[]}));
+   const wire={payloadBase64:bytes.toString("base64"),signatureBase64:signProof(null,bytes,key.privateKey).toString("base64")};
+   const port={readExactPermitProofs:async()=>new Map([[digest,wire]])};
+   const p=await resolveP7PublicationProofs({preview,env,port,readClock:async()=>"2027-02-10T04:43:00.000Z"});
+   const signed=call(p) as any;
+   const packet=horizon==="T24"?signed.privateFiles[0].bytes:signed.privatePlan.proposedPacketFiles[0].bytes;
+   expect(JSON.parse(packet.toString()).phase7FieldProof).toEqual(wire);
+   await expect(resolveP7PublicationProofs({preview,env,port:{readExactPermitProofs:async()=>new Map()},readClock:async()=>"2027-02-10T04:43:00.000Z"})).rejects.toThrow("EXACT_PROOF_SET_MISSING");
+   await expect(resolveP7PublicationProofs({preview,env,port,readClock:async()=>"2027-02-10T05:04:00.000Z"})).rejects.toThrow("STALE_OR_LATE_PROOF");
+  }
  });
 });

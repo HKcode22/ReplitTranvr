@@ -1,0 +1,203 @@
+name: Phase6 committed POST recovery (NO PROVIDER)
+run-name: P7 POST recovery ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.original_run_id }}
+on:
+  workflow_run:
+    workflows: ["Phase5 one signed future POST (V0083, PAID ONLY AFTER PHASE6 GO)"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        description: "Original paid POST run ID"
+        type: string
+        required: true
+      run_day:
+        description: "Exact signed day"
+        type: string
+        required: true
+      index_revision:
+        description: "Exact retained index revision"
+        type: string
+        required: true
+      index_sha256:
+        description: "Exact index SHA"
+        type: string
+        required: true
+      shard_index:
+        description: "Exact shard"
+        type: string
+        required: true
+      post_packet_sha256:
+        description: "Exact signed POST SHA"
+        type: string
+        required: true
+      route_sha256:
+        description: "Exact routing digest"
+        type: string
+        required: true
+      confirm:
+        description: "RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER"
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p7-recover-original-${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.original_run_id }}
+  cancel-in-progress: false
+jobs:
+  recover-existing-original:
+    if: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE7_POST_RECOVERY_ENABLED == '1' && ((github.event_name == 'workflow_run' && github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_repository.full_name == github.repository && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'timed_out')) || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+      P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+      P5_V39_PRE_DATABASE_URL: ''
+      P5_V39_PREPARE_DATABASE_URL: ''
+      P5_V39_T24_WITNESS_DATABASE_URL: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+      GITHUB_TOKEN: ${{ github.token }}
+      P6_PHASE7_POST_RECOVERY_CONFIRM: ${{ github.event_name == 'workflow_run' && 'RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER' || inputs.confirm }}
+      P6_PHASE7_ORIGINAL_POST_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.original_run_id }}
+      P6_PRIVATE_POST_DAY: ${{ inputs.run_day || '' }}
+      P6_PRIVATE_POST_REVISION: ${{ inputs.index_revision || '' }}
+      P6_PRIVATE_POST_INDEX_SHA: ${{ inputs.index_sha256 || '' }}
+      P6_PRIVATE_POST_SHARD: ${{ inputs.shard_index || '' }}
+      P6_PRIVATE_POST_PACKET_SHA: ${{ inputs.post_packet_sha256 || '' }}
+      P6_PRIVATE_POST_ROUTE_SHA: ${{ inputs.route_sha256 || '' }}
+      P6_PHASE7_POST_RECOVERY_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_APPROVED }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 }}
+      V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
+      V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED }}
+      P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN }}
+      P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN }}
+      P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
+      P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 }}
+      P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 }}
+      P6_PHASE7_POST_STORAGE_APPROVED: ${{ secrets.P6_PHASE7_POST_STORAGE_APPROVED }}
+      P6_PHASE7_POST_CONTRACT_SHA256: ${{ secrets.P6_PHASE7_POST_CONTRACT_SHA256 }}
+      P6_PHASE7_POST_PROFILE_SHA256: ${{ secrets.P6_PHASE7_POST_PROFILE_SHA256 }}
+      P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 }}
+      P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}
+      P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Exact main and no paid capability
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
+          test "$P6_PHASE7_POST_RECOVERY_APPROVED" = 1
+          test "$P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED" = 1
+          test "$P6_PHASE7_POST_STORAGE_APPROVED" = 1
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P5_V39_OTHER_REST_RESERVE_DATABASE_URL$P5_V39_OTHER_REST_REVIEW_DATABASE_URL$P6_PRIVATE_PUBLISHER_DATABASE_URL"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Independently reread original and issue or authenticate recovery receipt
+        env:
+          P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          umask 077
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts issue
+      - name: Publish signed receipt and independently read back exact private bytes
+        env:
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          umask 077
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts publish
+      - name: Start independent POST reviewer (restricted no-provider process)
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          GITHUB_TOKEN: ${{ github.token }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start reviewer
+      - name: Start independent POST publisher (restricted no-provider process)
+        env:
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          V39_PHASE6_PROCESS_ARMED: '0'
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ''
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ''
+          V39_P5_SOURCE_DATABASE_URL: ''
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ''
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts start publisher
+      - name: Reconcile exact committed original and durable research groups only
+        env:
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts settle
+      - name: Stop independent POST role processes (no replay)
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_local_post_review_roles_v39.ts stop
+      - name: Remove private runner handoff (never upload)
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          set +x
+          npx --no-install tsx scripts/v39_phase7_stored_post_recovery_github_v39.ts cleanup

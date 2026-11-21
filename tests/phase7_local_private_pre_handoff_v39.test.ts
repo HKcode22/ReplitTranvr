@@ -1,0 +1,82 @@
+import {describe,it,expect} from "vitest";
+import {createHash} from "node:crypto";
+import {mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {callP7LocalPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,openP7LocalPrivatePreHandoff,validateP7LocalPreRequest,type P7LocalPreRole,type P7LocalPreScope} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
+import type {P7Wire} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
+const h=(x:string)=>createHash("sha256").update(x).digest("hex");
+const scope:P7LocalPreScope={codeSha:"a".repeat(40),runId:"1234567",runDayIndex:2,queryDigestSha256:h("query"),manifestSha256:h("manifest"),rightsSha256:h("rights"),releaseSha256:h("release"),providerContractSha256:h("contract")};
+const permit=(n:number)=>({manifestSha256:scope.manifestSha256,expectedReviewedSourceRightsSha256:scope.rightsSha256,expectedReviewedReleaseSha256:scope.releaseSha256,expectedProviderContractSha256:scope.providerContractSha256,expectedGithubSourceRunId:scope.runId,runDayIndex:scope.runDayIndex,queryDigestSha256:scope.queryDigestSha256,horizon:"T-6h",selectedTNativeUtc:"2035-11-25T12:00:00.000Z",flightInstanceId:"leg:synthetic-"+n} as P5Stage14SingleFlightPrePermit);
+const wires=(p:P5Stage14SingleFlightPrePermit[],kind:string)=>p.map(x=>({permitSha256:hashPhase7DurableCandidate(x),wire:{payloadBase64:Buffer.from(kind+":"+hashPhase7DurableCandidate(x)).toString("base64"),signatureBase64:Buffer.alloc(64,1).toString("base64")}}));
+describe("private same-runner PRE handoff transport",()=>{
+ it("rejects changed run, query, duplicate permit, role alias and JSON digest drift",()=>{
+  const p=permit(1),q=makeP7LocalPreRequest(scope,"issue_lane",[p]);
+  expect(()=>validateP7LocalPreRequest(q,scope,"proof")).toThrow("ROLE_OPERATION");
+  expect(()=>validateP7LocalPreRequest({...q,permits:[permit(2)]},scope,"lane")).toThrow("REQUEST_DIGEST");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[{...p,expectedGithubSourceRunId:"7654321"}])).toThrow("EXACT_PERMIT_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[p,p])).toThrow("DUPLICATE_PERMIT");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[{...p,optionalUnexpected:undefined} as P5Stage14SingleFlightPrePermit])).toThrow();
+ });
+ it("uses actual Unix sockets for one exact page, invokes separate handlers in order, refuses replay and checks stored wires",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"p7h-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+  const servers:Awaited<ReturnType<typeof listenP7LocalPreRole>>[]=[],events:string[]=[],stored=new Map<string,P7Wire>(),lane=new Map<string,P7Wire>();
+  const ps=[permit(1),permit(2)];
+  try{
+   for(const role of ["lane","proof","publisher"] as P7LocalPreRole[])servers.push(await listenP7LocalPreRole({path:paths[role],role,scope,maxLifetimeMs:30000,handler:async q=>{
+    events.push(q.op);
+    if(q.op==="issue_lane")return {wires:wires(q.permits,"lane"),committedCount:0};
+    if(q.op==="issue_proof"){
+     expect(q.permits.every(p=>lane.has(hashPhase7DurableCandidate(p)))).toBe(true);
+     return {wires:wires(q.permits,"proof"),committedCount:0};
+    }
+    for(const x of q.wires)(q.op==="publish_lane"?lane:stored).set(x.permitSha256,x.wire);
+    return {wires:[],committedCount:q.permits.length};
+   }}));
+   const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async p=>new Map(p.map(x=>[hashPhase7DurableCandidate(x),stored.get(hashPhase7DurableCandidate(x))!]))});
+   expect((await port.readExactPermitProofs(ps)).size).toBe(2);
+   expect(events).toEqual(["issue_lane","publish_lane","issue_proof","publish_proof"]);
+   await expect(port.readExactPermitProofs(ps)).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+   expect(events).toHaveLength(4);
+   await expect(callP7LocalPreRole(paths.proof,makeP7LocalPreRequest(scope,"issue_lane",ps))).rejects.toThrow();
+  }finally{await Promise.all(servers.map(x=>x.close()));rmSync(dir,{recursive:true,force:true});}
+ });
+ it("stops after an unknown publication and never calls signer or publisher again",async()=>{
+  const steps:string[]=[];
+  const fake=async(_path:string,q:ReturnType<typeof makeP7LocalPreRequest>)=>{
+   steps.push(q.op);if(q.op==="publish_lane")throw Error("UNKNOWN_COMMIT");
+   return {schema:"v39.phase7.local-pre-handoff-response.v1" as const,requestSha256:q.requestSha256,ok:true as const,wires:wires(q.permits,"lane"),committedCount:0};
+  };
+  const port=openP7LocalPrivatePreHandoff({scope,paths:{lane:"l",proof:"p",publisher:"w"},call:fake,readStored:async()=>{throw Error("MUST_NOT_READ")}});
+  await expect(port.readExactPermitProofs([permit(1)])).rejects.toThrow("UNKNOWN_COMMIT");
+  expect(steps).toEqual(["issue_lane","publish_lane"]);
+ });
+});
+
+import {projectP7LocalRoleEnvironment} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
+describe("actual protected role credential projection",()=>{
+ const base:NodeJS.ProcessEnv={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",
+  GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main",GITHUB_SHA:scope.codeSha,V39_P5_APPROVED_CODE_SHA:scope.codeSha,
+  GITHUB_RUN_ID:scope.runId,P5_SOURCE_BATCH_RUN_DAY_INDEX:String(scope.runDayIndex),P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST:scope.queryDigestSha256,V39_P5_MANIFEST_SHA256:scope.manifestSha256,V39_P5_RIGHTS_SHA256:scope.rightsSha256,V39_P5_RELEASE_SHA256:scope.releaseSha256,V39_P5_PROVIDER_CONTRACT_SHA256:scope.providerContractSha256,
+  ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0",P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED:"1",RUNNER_TRACKING_ID:"synthetic-tracking-id",
+  P6_NONPAID_DAILY_POLICY_BASE64:"synthetic-policy",P6_NONPAID_DAILY_POLICY_SHA256:h("daily"),GITHUB_TOKEN:"must-not-forward",ACTIONS_RUNTIME_TOKEN:"must-not-forward"};
+ const source="postgresql://phase5_p5_source_login_20261108:fake@ep-ci.example.neon.tech/neondb?sslmode=require";
+ const endpoint=new URL(source);endpoint.password="";
+ const lane={...base,V39_P5_SOURCE_DATABASE_URL:source,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64:"synthetic-lane-key",P6_PHASE7_PRE_REFERENCE_LINK_POLICY_BASE64:"synthetic-link-policy",P6_PHASE7_PRE_REFERENCE_LINK_POLICY_SHA256:h("link")};
+ const proof={...base,V39_P5_SOURCE_DATABASE_URL:source,P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64:"synthetic-proof-key",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",
+  P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
+ const publisher={...base,P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",P6_PRIVATE_PUBLISHER_DATABASE_URL:"synthetic-publisher-url",P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
+ it("does not forward other keys, tokens, or the source password to publisher",()=>{
+  const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
+  expect(l.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64).toBe("synthetic-lane-key");expect(l.P6_PRIVATE_READER_DATABASE_URL).toBeUndefined();
+  expect(p.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64).toBe("synthetic-proof-key");expect(p.P6_PRIVATE_PUBLISHER_DATABASE_URL).toBeUndefined();
+  expect(new URL(w.V39_P5_SOURCE_DATABASE_URL!).password).toBe("");
+  for(const x of [l,p,w]){expect(x.GITHUB_TOKEN).toBeUndefined();expect(x.ACTIONS_RUNTIME_TOKEN).toBeUndefined();}
+  expect(Object.keys(w).filter(k=>k.includes("PRIVATE_KEY"))).toEqual([]);
+  expect(()=>projectP7LocalRoleEnvironment({...lane,P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64:"not allowed"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...publisher,V39_P5_SOURCE_DATABASE_URL:source},"publisher",endpoint.toString())).toThrow("PUBLISHER_SOURCE_CREDENTIAL");
+  expect(()=>projectP7LocalRoleEnvironment({...proof,AERODATABOX_API_KEY:"not allowed"},"proof")).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
+ });
+});

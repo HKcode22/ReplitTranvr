@@ -29,6 +29,7 @@ const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 export type Phase7ReviewedTransformationKind =
   | 'numeric_threshold_bucket'
+  | 'frozen_native_t_delta_bucket'
   | 'boolean_bucket'
   | 'categorical_dictionary';
 
@@ -68,11 +69,22 @@ export interface Phase7SourceDecision {
   rightsDisposition: Phase7ReviewedRightsDisposition;
 }
 
+/** Exact in-memory clock context supplied by the already-bound PRE writer.
+ * Only the resulting reviewed bucket may enter the downstream packet. */
+export interface Phase7FrozenNativeDeltaAnchor {
+  selectedNativeTUtc: string;
+  cutoffUtc: string;
+}
+
 export interface Phase7TransformationContext {
   horizon: Phase6ReleaseHorizon;
   cohortBucket: number;
   split: Phase7ReleaseSplit;
   censoring: Phase7ReleaseCensoring;
+  /** Actual PRE issuance, not a later processing or export time. */
+  issuedAtUtc: string;
+  /** Time at which the bounded custody transformation is performed. */
+  releasedAtUtc: string;
 }
 
 export interface Phase7TransformationVerdict {
@@ -101,13 +113,14 @@ const FIELD_KEYS = [
 const DECISION_KEYS = [
   'sourceField', 'value', 'availableAtUtc', 'missingReason', 'rightsDisposition',
 ] as const;
-const CONTEXT_KEYS = ['horizon', 'cohortBucket', 'split', 'censoring'] as const;
+const CONTEXT_KEYS = ['horizon', 'cohortBucket', 'split', 'censoring', 'issuedAtUtc', 'releasedAtUtc'] as const;
 const SOURCE_RIGHTS_ALLOW = 'EXTERNALLY_REVIEWED_ALLOW' as const;
 const QUALITY_MISSING = 1;
 const QUALITY_UNAPPROVED = 2;
 const QUALITY_INVALID_VALUE = 4;
 const QUALITY_NO_AS_OF_TIME = 8;
 const QUALITY_CENSORED_LABEL = 16;
+const QUALITY_NOT_AVAILABLE_AS_OF = 32;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -187,7 +200,7 @@ export function validatePhase7ReviewedTransformationProfile(
     if (field.role !== 'feature' && field.role !== 'label') failures.push('field-role-invalid');
     if (field.role === 'feature') featureCount++;
     if (field.role === 'label') labelCount++;
-    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary') {
+    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary') {
       failures.push('field-kind-invalid');
     }
     if (typeof field.bucketCount !== 'number' || !Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
@@ -196,7 +209,10 @@ export function validatePhase7ReviewedTransformationProfile(
     if (!isSha(field.transformEvidenceSha256)) failures.push('field-transform-evidence-invalid');
     if (field.nonReconstructable !== true) failures.push('field-reconstruction-review-required');
 
-    if (field.kind === 'numeric_threshold_bucket') {
+    if (field.kind === 'frozen_native_t_delta_bucket' && (field.role !== 'feature' || !['scheduled_arrival_utc','provider_revised_departure_utc'].includes(String(field.sourceField)))) {
+      failures.push('native-delta-source-scope-invalid:' + String(field.outputField));
+    }
+    if (field.kind === 'numeric_threshold_bucket' || field.kind === 'frozen_native_t_delta_bucket') {
       if (!Array.isArray(field.boundaries) || field.boundaries.length !== (field.bucketCount as number) - 1 ||
           field.boundaries.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
           field.boundaries.some((value, index, values) => index > 0 && value <= values[index - 1])) {
@@ -255,10 +271,18 @@ function validateContext(context: unknown): Phase7TransformationVerdict {
   if (!Number.isInteger(contextRecord.cohortBucket) || (contextRecord.cohortBucket as number) < 0) failures.push('context-cohort-invalid');
   if (contextRecord.split !== 'train' && contextRecord.split !== 'validation' && contextRecord.split !== 'test') failures.push('context-split-invalid');
   if (contextRecord.censoring !== 'observed' && contextRecord.censoring !== 'censored' && contextRecord.censoring !== 'missing' && contextRecord.censoring !== 'not_due') failures.push('context-censoring-invalid');
+  if (!isUtc(contextRecord.issuedAtUtc) || !isUtc(contextRecord.releasedAtUtc) ||
+      Date.parse(contextRecord.issuedAtUtc as string) > Date.parse(contextRecord.releasedAtUtc as string)) failures.push('context-clock-invalid');
   return fail({pass: false, failures});
 }
 
-function fieldBucket(field: Phase7ReviewedTransformationField, value: unknown): number | null {
+function fieldBucket(field: Phase7ReviewedTransformationField, value: unknown, native?: Phase7FrozenNativeDeltaAnchor): number | null {
+  if (field.kind === 'frozen_native_t_delta_bucket') {
+    if (!native || !isUtc(value)) return null;
+    const minutes=(Date.parse(value)-Date.parse(native.selectedNativeTUtc))/60000;
+    if (!Number.isFinite(minutes) || (field.sourceField === 'scheduled_arrival_utc' && minutes<=0)) return null;
+    return (field.boundaries as readonly number[]).reduce((bucket,boundary)=>bucket+(minutes>=boundary?1:0),0);
+  }
   if (field.kind === 'numeric_threshold_bucket') {
     if (typeof value !== 'number' || !Number.isFinite(value)) return null;
     return (field.boundaries as readonly number[]).reduce((bucket, boundary) => bucket + (value >= boundary ? 1 : 0), 0);
@@ -291,12 +315,23 @@ export function transformPhase7ReviewedSourceDecisions(
   contract: Phase7DerivedReleaseContract,
   decisions: readonly Phase7SourceDecision[],
   context: Phase7TransformationContext,
+  native?: Phase7FrozenNativeDeltaAnchor,
 ): Phase7ApprovedTransformationResult {
   requireValid(validatePhase7ReviewedTransformationProfile(profile), 'PHASE7_TRANSFORM_REJECTED_PROFILE');
   requireValid(validatePhase7DerivedReleaseContract(contract), 'PHASE7_TRANSFORM_REJECTED_CONTRACT');
   requireValid(validateDecisions(decisions), 'PHASE7_TRANSFORM_REJECTED_DECISIONS');
   requireValid(validateContext(context), 'PHASE7_TRANSFORM_REJECTED_CONTEXT');
+  if (native !== undefined) {
+    const offset = {'T-24h':1440,'T-6h':360,'T-90m':90}[context.horizon]*60000;
+    if (!isPlainRecord(native) || !hasExactKeys(native,['selectedNativeTUtc','cutoffUtc']) || !isUtc(native.selectedNativeTUtc) || !isUtc(native.cutoffUtc) || Date.parse(native.selectedNativeTUtc)-Date.parse(native.cutoffUtc)!==offset || Date.parse(context.issuedAtUtc)>Date.parse(native.cutoffUtc))
+      throw new Error('PHASE7_TRANSFORM_REJECTED_NATIVE_DELTA_ANCHOR');
+  }
 
+  if (profile.featureDictionarySha256 !== contract.featureDictionarySha256 ||
+      profile.termsReviewSha256 !== contract.termsReviewSha256 ||
+      profile.derivedWorkReviewSha256 !== contract.derivedWorkReviewSha256 ||
+      profile.mappingExpiryHours !== contract.sourceToReleaseMappingExpiryHours)
+    throw new Error('PHASE7_TRANSFORM_REJECTED_REVIEW_BINDING_MISMATCH');
   if (!contract.allowedHorizons.includes(context.horizon)) throw new Error('PHASE7_TRANSFORM_REJECTED_HORIZON');
   if (context.cohortBucket >= contract.cohortBucketCount) throw new Error('PHASE7_TRANSFORM_REJECTED_COHORT');
   const names = contractFieldNames(contract);
@@ -311,6 +346,8 @@ export function transformPhase7ReviewedSourceDecisions(
     if (field.role === 'label' && !names.labels.includes(field.outputField)) throw new Error('PHASE7_TRANSFORM_REJECTED_LABEL_FIELD_MISMATCH');
     const contractField = [...contract.features, ...contract.labels].find(candidate => candidate.name === field.outputField);
     if (contractField?.bucketCount !== field.bucketCount) throw new Error('PHASE7_TRANSFORM_REJECTED_BUCKET_COUNT_MISMATCH');
+    if (contractField?.transformEvidenceSha256 !== field.transformEvidenceSha256)
+      throw new Error('PHASE7_TRANSFORM_REJECTED_FIELD_REVIEW_BINDING_MISMATCH');
   }
 
   const bySource = new Map(decisions.map(decision => [decision.sourceField, decision]));
@@ -329,11 +366,16 @@ export function transformPhase7ReviewedSourceDecisions(
     } else if (decision.availableAtUtc === null) {
       missing = true;
       qualityFlags |= QUALITY_NO_AS_OF_TIME;
+    } else if (Date.parse(decision.availableAtUtc) > Date.parse(field.role === 'feature' ? context.issuedAtUtc : context.releasedAtUtc)) {
+      missing = true;
+      qualityFlags |= QUALITY_NOT_AVAILABLE_AS_OF;
     } else if (decision.missingReason !== null || decision.value === null || decision.value === undefined) {
       missing = true;
       qualityFlags |= QUALITY_MISSING;
     } else {
-      bucket = fieldBucket(field, decision.value);
+      if (field.kind === 'frozen_native_t_delta_bucket' && native === undefined)
+        throw new Error('PHASE7_TRANSFORM_REJECTED_NATIVE_DELTA_ANCHOR_REQUIRED');
+      bucket = fieldBucket(field, decision.value,native);
       if (bucket === null) {
         missing = true;
         qualityFlags |= QUALITY_INVALID_VALUE;

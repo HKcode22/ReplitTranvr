@@ -36,7 +36,7 @@ const utcDate=(x:unknown)=>{
 };
 
 export interface P6ProspectiveDisabledStageRevisionReviewV39{
- schema:"v39.phase6.prospective-disabled-stage-revision-review.v1";
+ schema:"v39.phase6.prospective-disabled-stage-revision-review.v1"|"v39.phase6.prospective-disabled-stage-revision-review.v2";
  expectedOldStageInputSha256:string;
  expectedOldCostEnvelopeSha256:string;
  expectedNewStageInputSha256:string;
@@ -105,7 +105,7 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
  now?:Date;
 }){
  const r=input.review;
- if(!r||r.schema!=="v39.phase6.prospective-disabled-stage-revision-review.v1"||
+ if(!r||!["v39.phase6.prospective-disabled-stage-revision-review.v1","v39.phase6.prospective-disabled-stage-revision-review.v2"].includes(r.schema)||
     ![r.expectedOldStageInputSha256,r.expectedOldCostEnvelopeSha256,
       r.expectedNewStageInputSha256,r.expectedNewCostEnvelopeSha256,
       r.expectedOriginalFrozenManifestSha256,r.expectedNewManifestSha256,
@@ -144,21 +144,54 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
       (id:string,i:number)=>input.newInput.predecessorEvidenceIds[i]!==id))
   hold("FROZEN_IDENTITY_ALERT_OR_PREDECESSOR_CHANGED");
 
+ const legacy=r.schema==="v39.phase6.prospective-disabled-stage-revision-review.v1";
  let changed=0;
  for(let i=0;i<31;i++){
   const oldDay=a.calendarDays[i],newDay=b.calendarDays[i];
   if(!same(scientificDayIdentity(oldDay),scientificDayIdentity(newDay)))
    hold("SCIENTIFIC_DAY_IDENTITY_CHANGED");
   const delta=Date.parse(newDay.startUtc)-Date.parse(oldDay.startUtc);
-  if(!Number.isFinite(delta)||delta<0||delta>24*H)
+  // A prospective date revision preserves each frozen UTC slot. It can
+  // move several days together before ANY collection, not just one day.
+  // Existing exact stage/cost hashes and independent review still bind it.
+  if(!Number.isFinite(delta)||delta<0||delta%(24*H)!==0||(legacy&&delta>24*H))
    hold("DATE_REVISION_OUTSIDE_REVIEWED_FORWARD_BOUND");
+  if(i>0&&utcDate(newDay.startUtc)!<=utcDate(b.calendarDays[i-1].startUtc)!)
+   hold("REVISED_DATE_ORDER");
   if(delta!==0)changed++;
  }
- // Current reviewed case2 is intentionally minimal: only Day 1 moves +24h.
- if(changed!==1||
+ if(legacy){
+  // Historical approved boundary remains exactly reproducible.
+  if(changed!==1||
     Date.parse(b.calendarDays[0].startUtc)-Date.parse(a.calendarDays[0].startUtc)!==24*H||
     b.calendarDays.slice(1).some((d:any,i:number)=>d.startUtc!==a.calendarDays[i+1].startUtc))
-  hold("NOT_EXACT_REVIEWED_DAY1_PLUS_24H_REVISION");
+   hold("NOT_EXACT_REVIEWED_DAY1_PLUS_24H_REVISION");
+ }else{
+  if(changed===0)hold("NO_PROSPECTIVE_DATE_CHANGE");
+  const weekend=(d:any)=>[0,6].includes(new Date(d.startUtc).getUTCDay());
+  const pairedWeekendCount=(days:any[])=>{
+   const groups=new Map<string,any[]>();
+   for(const d of days)if(d.pairId!==null){const rows=groups.get(d.pairId)??[];rows.push(d);groups.set(d.pairId,rows);}
+   if(groups.size!==5||[...groups.values()].some(rows=>rows.length!==2||weekend(rows[0])!==weekend(rows[1])))
+    hold("REVISED_WITHIN_PAIR_WEEKDAY_MATCH");
+   return [...groups.values()].filter(rows=>weekend(rows[0])).length;
+  };
+  // Pair assignments/order/airports/time/splits are immutable above.
+  // A prospective shift may exchange which pair is on a weekend, provided
+  // every pair remains internally matched and the design's total weekend
+  // pair count is preserved. Existing stage compiler validates full cost.
+  if(pairedWeekendCount(a.calendarDays)!==pairedWeekendCount(b.calendarDays))
+   hold("REVISED_WEEKEND_PAIR_COUNT");
+  const lastEndByAirport=new Map<string,number>();
+  for(const d of b.calendarDays){
+   const start=Date.parse(d.startUtc),end=start+(d.windowShape==="up-to-6h"?6:d.windowShape==="2x2h"?5:4)*H;
+   for(const x of Object.values(d.pairAirportSet??{}) as Array<{icao:string}>){
+    const prior=lastEndByAirport.get(x.icao);
+    if(prior!==undefined&&start-prior<24*H)hold("REVISED_KNOWN_AIRPORT_WASHOUT");
+    lastEndByAirport.set(x.icao,end);
+   }
+  }
+ }
 
  const now=(input.now??new Date()).getTime();
  if(!Number.isFinite(now)||!UTC.test(b.calendarDays[0].startUtc)||
@@ -171,7 +204,7 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
   schema:"v39.phase6.prospective-disabled-stage-revision.v1" as const,
   old:oldCompiled,new:next,
   newManifestSha256:r.expectedNewManifestSha256,
-  changedParentDays:1 as const,
+  changedParentDays:changed,
   firstOldServiceUtc:a.calendarDays[0].startUtc,
   firstNewServiceUtc:b.calendarDays[0].startUtc,
   sourceQueriesExistingRequired:0 as const,
@@ -345,7 +378,7 @@ export async function commitP6ProspectiveDisabledStageRevisionOnceV39(
    oldStagePacketSha256:old.stagePacketSha256,newStagePacketSha256:next.stagePacketSha256,
    oldCostEnvelopeSha256:compiled.old.cost.costOnlyCategoryDraftSha256,
    newCostEnvelopeSha256:cost.costOnlyCategoryDraftSha256,
-   oldCostRowsPreserved:true,changedParentDays:1,
+   oldCostRowsPreserved:true,changedParentDays:compiled.changedParentDays,
    firstOldServiceUtc:compiled.firstOldServiceUtc,firstNewServiceUtc:compiled.firstNewServiceUtc,
    providerCalls:0,databaseAuthorizationEnabled:false,databaseWrites:"bounded-atomic-revision",
    phase6PaidGo:false

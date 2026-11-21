@@ -15,8 +15,8 @@ import {
  type P5CdTaskExecutor
 } from "./phase5CdDurableQueueClient_v39";
 import {
- verifyP5CdFrozenRoster,bindP5CdTaskToFrozenPermit,
- type P5CdFrozenRoster,type P5CdFrozenRosterEntry
+ verifyP5CdFrozenRoster,bindP5CdTaskToFrozenPermit,resolveP5CdPhase7Pre,
+ type P5CdFrozenRoster,type P5CdFrozenRosterEntry,type P5CdPhase7PreResolver
 } from "./phase5CdGithubBoundedPreTick_v39";
 import {requireP5CdGithubPreRelease}
  from "./phase5CdGithubPreReleaseGate_v39";
@@ -60,6 +60,7 @@ export interface P5CdT24Deps{
  rosterBytes:Buffer;
  roster:P5CdFrozenRoster;
  files:P5CdFrozenRosterEntry[];
+ phase7PreResolver?:P5CdPhase7PreResolver;
 }
 export interface P5CdT24QueuedResult{
  schema:"v39.phase5.queued-t24-pre-independent-v0081-witness.v1";
@@ -105,6 +106,7 @@ export async function runP5CdOneQueuedT24Witness(
      env.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED!=="1"))
   deny("SUPPLEMENTAL_FEATURES_NOT_APPROVED_BEFORE_QUEUE_WRITE_START");
  preflightP5Stage14ReviewedPermitV39(expected.permit);
+ const phase7=await resolveP5CdPhase7Pre(env,released,expected,deps.phase7PreResolver);
  const reaped=await reapP5CdExpiredLeasesOnceV39(deps.preDb,16);
  if(reaped.some(x=>x.state==="QUARANTINED"))
   deny("PRIOR_UNKNOWN_TASK_QUARANTINED_NO_AUTORETRY");
@@ -142,6 +144,7 @@ export async function runP5CdOneQueuedT24Witness(
  try{
   const durable=await persistP5ReviewedT24PreAndIndependentWitness(
    deps.prePool,deps.witnessPool,permit,witnessReview,{
+    ...(phase7?{phase7PrePreservation:phase7}:{}),
     realV0088QueueFenceGh:{
      taskId:task.taskId,owner:task.leaseOwner,
      generation:task.leaseGeneration,packetSha256:task.packetSha256
@@ -149,6 +152,8 @@ export async function runP5CdOneQueuedT24Witness(
     ...(env.P5_CD_GH_E_ROUTE_FEATURES_APPROVED==="1"?
       {amendmentENativeRouteBoundGh:true as const}:{})
    });
+  if(phase7&&durable.phase7DerivedPreFragmentIndependentlyVerified!==true)
+   deny("P7_DURABLE_PRE_READBACK_NOT_VERIFIED_NO_ACK");
   const id=durable.committedSnapshotId;
   // Witness role has SELECT on the existing V0081 witness and the
   // immutable pre snapshot; use a new connection after both commits.

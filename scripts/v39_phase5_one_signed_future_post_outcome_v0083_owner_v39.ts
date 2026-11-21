@@ -13,6 +13,7 @@ import {fileURLToPath} from "node:url";
 import {createHash} from "node:crypto";
 import {Pool} from "pg";
 import {readP6CommittedPostOutcomeObservability} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
+import {requirePhase7PostConsumer,consumeCommittedPhase7Post,type Phase7PostConsumer} from "../server/lib/disruption/phase7PostPreservationBridge_v39";
 import {fetchFidsAirport} from
  "../server/lib/disruption/aerodataboxLimiter_v3";
 import {fetchFidsPopulation,persistFidsObservation,
@@ -120,9 +121,12 @@ export function admitP5SignedFuturePostGitHub(
 }
 export async function runP5SignedFuturePost(
  env:NodeJS.ProcessEnv,bytes:Buffer,packet:P5SignedFuturePostPacket,
- file:string,boundSourceQueryDigests?:readonly string[]
+ file:string,boundSourceQueryDigests?:readonly string[],phase7Consumer?:Phase7PostConsumer
 ){
  const p=admitP5SignedFuturePostGitHub(env,bytes,packet,file);
+ const preservation=requirePhase7PostConsumer(env,phase7Consumer);
+ // Verify independent consumer scope and commissioning before any paid reservation.
+ await preservation.preflight(p);
  const reservePool=new Pool({
   connectionString:env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
   max:1,connectionTimeoutMillis:8000,
@@ -230,24 +234,22 @@ export async function runP5SignedFuturePost(
   // Use the already committed original, not another provider fetch.
   // A readback/label audit failure must not change a confirmed capture into
   // an invitation to spend again. Log aggregates (or a redacted HOLD) only.
-  const outcomeObservability=await readP6CommittedPostOutcomeObservability(source,{
-   packet:p,populationQueryId:result.populationQueryId,responseSha256:result.responseHash,
-   normalizedMembers:result.persistedPopulationRows,reservationSha256:attempt.reservationSha256
-  }).then(({privateDecisions:_,...aggregate})=>aggregate).catch(e=>{
-   const msg=e instanceof Error?e.message:"";
-   return {status:"POST_CAPTURE_COMMITTED_OUTCOME_AUDIT_UNAVAILABLE_NO_REPLAY",
-    reason:/^HOLD_P6_ACTUAL_POST_OBSERVABILITY_[A-Z0-9_]+$/.test(msg)?msg:"POST_OUTCOME_AUDIT_REDACTED",
-    physicalGateOutLabels:0,physicalRunwayLabels:0,providerCalls:0,databaseWrites:0};
-  });
+  const committedScope={packet:p,populationQueryId:result.populationQueryId,responseSha256:result.responseHash,
+   normalizedMembers:result.persistedPopulationRows,reservationSha256:attempt.reservationSha256};
+  const audited=await readP6CommittedPostOutcomeObservability(source,committedScope)
+   .then(async a=>({outcomeObservability:{...a},preservation:await consumeCommittedPhase7Post(preservation,committedScope,a)}))
+   .catch(()=>({outcomeObservability:{status:"POST_CAPTURE_COMMITTED_OUTCOME_AUDIT_OR_PRESERVATION_HOLD_NO_REPLAY",
+    physicalGateOutLabels:0,physicalRunwayLabels:0,providerCalls:0},preservation:null}));
   return{
    schema:"v39.phase5.github-one-future-post-result.v1" as const,
-   status:"ONE_FUTURE_POST_SOURCE_ORIGINAL_DURABLE_NOT_PHYSICAL_LABEL" as const,
+   status:audited.preservation?"ONE_FUTURE_POST_SOURCE_ORIGINAL_DURABLE_NOT_PHYSICAL_LABEL" as const:
+    "POST_ORIGINAL_DURABLE_PHASE7_PRESERVATION_HOLD_NO_REPLAY" as const,
    manifestSha256:p.manifestSha256,requestSha256:p.requestSha256,
    flightPreReferenceCount:pre.observedValidHorizonCount,
    missingPreHorizonCount:pre.missingPreHorizons.length,
    reservedApiUnits:2,providerOriginalCommitted:true,
    normalizedPopulationRows:result.persistedPopulationRows,
-   outcomeObservability,
+   outcomeObservability:audited.outcomeObservability,phase7Preservation:audited.preservation,
    actualPhysicalEventCertified:false,phase6DataCollectionComplete:false
   };
  }finally{

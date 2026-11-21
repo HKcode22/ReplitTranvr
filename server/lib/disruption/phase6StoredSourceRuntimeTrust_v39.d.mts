@@ -12,3 +12,9 @@ export function readP6StableSourceTrust(env:NodeJS.ProcessEnv):Readonly<{
  queryReviewerFingerprintSha256:string;
  queryReviewerPublicKeyPem:string;
 }>;
+
+export function readP6StablePostTrust(env:NodeJS.ProcessEnv):Readonly<ReturnType<typeof readP6StableSourceTrust>&{
+ independentPostReviewerPinsApproved:true;
+ postReviewerFingerprintSha256:string;
+ postReviewerPublicKeyPem:string;
+}>;

@@ -11,6 +11,8 @@ on:
       - '.github/workflows/phase5-v0093-cost-only-seven-freeze-real-pg16.yml'
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'migrations/staged/V0104__phase5_physical_rest_live_authority_retention_guard_v39.sql'
+      - 'migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql'
+      - 'scripts/v39_phase5_primary_fids_expiry_github_v39.mjs'
   push:
     branches: [main]
     paths:

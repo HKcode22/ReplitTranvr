@@ -1,6 +1,16 @@
 name: Phase4 Gate5 Free NOAA Weather Receipt (No Paid Provider)
 
 on:
+  # Public actual capture is opt-in after the first verified canary; avoid
+  # two NOAA requests on every unrelated PR revision.
+  pull_request:
+    types: [labeled]
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-free-noaa-weather-receipt.yml"
+      - "server/lib/disruption/phase7NoaaPublicArchive_v39.ts"
+      - "scripts/v39_phase7_noaa_public_archive_canary_v39.ts"
+      - "tests/phase7_noaa_public_archive_v39.test.ts"
   push:
     branches: [main]
     paths:
@@ -100,3 +110,72 @@ jobs:
         run: |
           echo 'NOAA METAR free source provenance + artifact readback, not AeroDataBox flight FIDS or actual runway.' >> "$GITHUB_STEP_SUMMARY"
           echo 'No physical flight denominator, no persisted PRE, no Gate5 scientific PASS and no Phase5/Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"
+
+  p7-noaa-public-capture:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'phase7-noaa-public-canary' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.archive.outputs.artifact-id }}
+      artifact_digest: ${{ steps.archive.outputs.artifact-digest }}
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      P7_NOAA_CODE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx --no-install vitest run tests/phase7_noaa_public_archive_v39.test.ts tests/phase7_independent_noaa_receipt_v39.test.ts
+      - name: Two bounded public NOAA GETs, no aviation flight data
+        run: npx --no-install tsx scripts/v39_phase7_noaa_public_archive_canary_v39.ts capture
+      - id: archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-p7-noaa-public-source-canary
+          path: /tmp/p7-noaa-public-canary/
+          retention-days: 3
+          if-no-files-found: error
+
+  p7-noaa-public-verify:
+    needs: [p7-noaa-public-capture]
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'phase7-noaa-public-canary' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'phase6/nov23-exact-calendar-compiler-review' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      actions: read
+    env:
+      ADB_AUTO_COLLECT: "0"
+      V39_PHASE6_PROCESS_ARMED: "0"
+      P7_NOAA_CODE_SHA: ${{ github.event.pull_request.head.sha }}
+      P7_NOAA_ARTIFACT_ID: ${{ needs.p7-noaa-public-capture.outputs.artifact_id }}
+      P7_NOAA_ARTIFACT_DIGEST: ${{ needs.p7-noaa-public-capture.outputs.artifact_digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Independently download and hash exact GitHub ZIP and both public source bodies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx --no-install tsx scripts/v39_phase7_noaa_public_archive_canary_v39.ts review
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v39-p7-noaa-public-source-canary-review
+          path: /tmp/p7-noaa-public-canary/review.json
+          retention-days: 3
+          if-no-files-found: error

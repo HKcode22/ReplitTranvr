@@ -16,6 +16,12 @@ export const P5_PRIMARY_WRITER="phase5_primary_fids_expiry_prod20261116";
 export const P5_PRIMARY_READER="phase5_retention_reader_prod20261114";
 export const P5_PRIMARY_APPLY="APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER";
 export const P5_PRIMARY_SQL="migrations/staged/V0103__phase5_bounded_primary_fids_expiry_inert_v39.sql";
+export const P5_PRIMARY_MARGIN_SQL="migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql";
+export const P5_PRIMARY_MARGIN_PROFILE="V0107_VERIFIED_FUTURE_POST_23H_MARGIN";
+export function primaryDeadlineSqlForFunction(name,profile="V0103"){
+ if(!["V0103",P5_PRIMARY_MARGIN_PROFILE].includes(profile))HOLD("UNKNOWN_PRIMARY_DEADLINE_PROFILE");
+ return profile===P5_PRIMARY_MARGIN_PROFILE&&["status","sweep"].includes(name)?P5_PRIMARY_MARGIN_SQL:P5_PRIMARY_SQL;
+}
 const F="phase5_primary_fids_expiry_";
 const PREFIX="P5-PRIMARY-FIDS-SWEEP-";
 const RUN=new RegExp("^"+PREFIX+"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$");
@@ -90,11 +96,18 @@ export function admitP5PrimaryExpiryGithub(env){
  if(!["0","1"].includes(backup)||backup==="1"&&(env.GITHUB_EVENT_NAME!=="workflow_dispatch"||mode!=="APPLY_DUE_ONLY"||
     env.P5_PRIMARY_FIDS_BACKSTOP_ENABLED!=="true"||env.P6_PRIVATE_EPOCH_EXPIRY_MODE!=="COMMISSION_VERIFY_ONLY"||
     env.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256||env.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL))HOLD("BACKSTOP_PRIMARY_ONLY_SCOPE");
+ // Preserve the prior PRIMARY-ONLY wake; full retention has separate approval.
+ const full=env.P6_FULL_RETENTION_BACKSTOP_REQUEST??"0";
+ if(!["0","1"].includes(full)||full==="1"&&(backup!=="0"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||mode!=="APPLY_DUE_ONLY"||
+  env.P5_PRIMARY_FIDS_BACKSTOP_ENABLED!=="true"||env.P6_FULL_RETENTION_BACKSTOP_ENABLED!=="true"||
+  env.P6_PRIVATE_EPOCH_EXPIRY_MODE!=="APPLY_DUE_ONLY"||env.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL!==P6_PRIVATE_EXPIRY_APPLY||
+  !/^[a-f0-9]{64}$/.test(env.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256??"")))HOLD("FULL_RETENTION_BACKSTOP_SEPARATE_SCOPE");
  const w=scopedUrl(env.P5_PRIMARY_FIDS_SWEEP_DATABASE_URL,P5_PRIMARY_WRITER);
  const r=scopedUrl(env.P5_RETENTION_READER_DATABASE_URL,P5_PRIMARY_READER);
  if(w.endpoint!==r.endpoint||hash(w.endpoint)!==env.P5_PRIMARY_FIDS_EXPECTED_ENDPOINT_SHA256)
    HOLD("EXACT_SAME_EXISTING_ENDPOINT_REQUIRED");
  return {apply:mode==="APPLY_DUE_ONLY",writerUrl:w.url,readerUrl:r.url,sha,
+  primaryDeadlineProfile:(()=>{const p=env.P5_PRIMARY_FIDS_DEADLINE_PROFILE||"V0103";primaryDeadlineSqlForFunction("status",p);return p})(),
   privateExpiry:admitP6PrivateExpiryExtension(env,mode==="APPLY_DUE_ONLY")};
 }
 function verifyTls(c){
@@ -107,7 +120,7 @@ function verifyTls(c){
 /** Review actual production function definitions and all granted authority.
  * Disposable bypass of TLS/role names strictly gated on test-only URL.
  */
-export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false,privateCommission=false}={}){
+export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner="neondb_owner",writerRole=P5_PRIMARY_WRITER,readerRole=P5_PRIMARY_READER,privateExpiry=false,privateCommission=false,primaryDeadlineProfile="V0103"}={}){
  if(!["writer","reader"].includes(actor)||typeof privateExpiry!=="boolean"||typeof privateCommission!=="boolean"||privateExpiry&&privateCommission||test&&!disposable())HOLD("ACTOR_TEST_SCOPE");
  const expected=test?role:actor==="writer"?P5_PRIMARY_WRITER:P5_PRIMARY_READER;
  if(!test){owner="neondb_owner";writerRole=P5_PRIMARY_WRITER;readerRole=P5_PRIMARY_READER;verifyTls(c);}
@@ -126,7 +139,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
     a.ro!=="on"||a.replica!==false||a.rolcanlogin!==true||a.usage!==true||
     [a.rolsuper,a.rolcreatedb,a.rolcreaterole,a.rolreplication,a.rolbypassrls,a.rolinherit,a.member,a.schema_create,a.db_create].some(v=>v!==false))
     HOLD("UNEXPECTED_ACTOR_OR_DB");
-  const src=readFileSync(P5_PRIMARY_SQL,"utf8");
+  primaryDeadlineSqlForFunction("status",primaryDeadlineProfile);
   const extensionSrc=privateExpiry||privateCommission?readFileSync(P6_PRIVATE_EXPIRY_SQL,"utf8"):"";
   const activeDefs=privateExpiry||privateCommission?[...defs,...privateDefs]:defs;
   const rows=(await c.query(`SELECT p.proname name,oidvectortypes(p.proargtypes) args,
@@ -156,7 +169,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
   const callable=d=>!d.privateExpiry||privateState==="GRANTED";
   for(const d of checkedDefs){
    const q=rows.find(q=>q.name===fn(d));
-   const m=(d.privateExpiry?extensionSrc:src).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
+   const m=(d.privateExpiry?extensionSrc:readFileSync(primaryDeadlineSqlForFunction(d.name,primaryDeadlineProfile),"utf8")).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
    const config=["search_path=pg_catalog, pg_temp",...(d.lock?["lock_timeout=3s"]:[])].sort();
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
@@ -215,14 +228,16 @@ async function readOnly(pool,sql,args=[]){
  }
 }
 const status=p=>readOnly(p,"SELECT clean."+F+"status_v39() v").then(checkStatus);
-function checkSweep(v,limit){
+function checkSweep(v,limit,deadlineProfile){
  if(!v||v.schema!=="v39.phase5.primary-fids-expiry-sweep.v1"||v.status!=="PRIMARY_FIDS_SWEEP_IN_TRANSACTION_NOT_COMMIT_PROOF"||
     !RUN.test(v.runId??"")||!["originalsCleared","populationCleared","tombstones","remainingEligibleAtCutoff","remainingHardDueAtCutoff"].every(k=>n(v[k]))||
     v.originalsCleared>limit||v.tombstones!==v.originalsCleared+v.populationCleared||
     v.remainingHardDueAtCutoff>v.remainingEligibleAtCutoff||v.providerCalls!==0||v.objectDeletions!==0||
     v.phase6PaidGo!==false||v.completeRetentionDeploymentVerified!==false||v.backupOrPitrVerified!==false)
   HOLD("INVALID_SWEEP_RECEIPT");
- return {runId:v.runId,originalsCleared:v.originalsCleared,populationCleared:v.populationCleared,tombstones:v.tombstones,remainingEligibleAtCutoff:v.remainingEligibleAtCutoff,remainingHardDueAtCutoff:v.remainingHardDueAtCutoff};
+ const margin=deadlineProfile===P5_PRIMARY_MARGIN_PROFILE;
+ if(margin&&(v.originalsCleared===0?v.earliestClearedHardDeadlineUtc!==null:typeof v.earliestClearedHardDeadlineUtc!=="string"||!Number.isFinite(Date.parse(v.earliestClearedHardDeadlineUtc))))HOLD("MISSING_CLEARED_HARD_DEADLINE");
+ return {runId:v.runId,originalsCleared:v.originalsCleared,populationCleared:v.populationCleared,tombstones:v.tombstones,remainingEligibleAtCutoff:v.remainingEligibleAtCutoff,remainingHardDueAtCutoff:v.remainingHardDueAtCutoff,...(margin?{earliestClearedHardDeadlineUtc:v.earliestClearedHardDeadlineUtc}: {})};
 }
 async function verifyReceipt(reader,r){
  const v=await readOnly(reader,"SELECT clean."+F+"receipt_v39($1) v",[r.runId]);
@@ -238,14 +253,14 @@ async function uncertainStop(writer,reader,runId){
  }catch{HOLD("UNCERTAINTY_STOP_UNVERIFIED_NO_REPLAY");}
  HOLD("UNCERTAINTY_STOP_RECORDED_NO_REPLAY");
 }
-async function oneSweep(writer,reader,limit){
+async function oneSweep(writer,reader,limit,deadlineProfile){
  const c=await writer.connect();let batch,attempted=false,ack=false,poison=false;
  try{
   await c.query("BEGIN");
   await c.query("SET LOCAL statement_timeout='20000ms'");
   await c.query("SET LOCAL lock_timeout='3000ms'");
   const z=await c.query("SELECT clean."+F+"sweep_v39($1) v",[limit]);
-  batch=checkSweep(z.rows[0]?.v,limit);
+  batch=checkSweep(z.rows[0]?.v,limit,deadlineProfile);
   attempted=true;await c.query("COMMIT");ack=true;
  }catch(e){
   if(!attempted){try{await c.query("ROLLBACK");}catch{poison=true;}throw e;}
@@ -259,9 +274,21 @@ async function oneSweep(writer,reader,limit){
  }catch{await uncertainStop(writer,reader,batch.runId);}
  return {...batch,commitAck:ack,independentReadback:true};
 }
+/** Reader statement time is AFTER the independent committed tombstone receipt.
+ * This is a conservative upper bound on commit time; a late readback does not
+ * prove a late commit, but it cannot certify the hard deadline either. */
+export function primaryDeadlineUnprovenAfterSweep(receipt,readback){
+ if(receipt.remainingHardDueAtCutoff>0||readback.hardDueOriginals>0)return true;
+ if(receipt.originalsCleared===0||!Object.hasOwn(receipt,"earliestClearedHardDeadlineUtc"))return false;
+ const deadline=Date.parse(receipt.earliestClearedHardDeadlineUtc),at=Date.parse(readback.observedAtUtc);
+ return !Number.isFinite(deadline)||!Number.isFinite(at)||at>=deadline;
+}
 export async function runP5PrimaryExpiry({writer,reader,apply=false,verify=verifyP5PrimaryExpiryActor,verifyOptions={},limit=BATCH,maxBatches=MAX_BATCHES}){
  if(writer===reader||typeof apply!=="boolean"||!n(limit)||limit<1||limit>BATCH||
     !n(maxBatches)||maxBatches<1||maxBatches>MAX_BATCHES)HOLD("RUNTIME_SCOPE");
+ const deadlineProfile=verifyOptions.writer?.primaryDeadlineProfile??"V0103";
+ if(deadlineProfile!==(verifyOptions.reader?.primaryDeadlineProfile??"V0103"))HOLD("PRIMARY_DEADLINE_PROFILE_MISMATCH");
+ primaryDeadlineSqlForFunction("sweep",deadlineProfile);
  const states=[];
  for(const [pool,actor] of [[writer,"writer"],[reader,"reader"]]){
   const c=await pool.connect();try{states.push(await verify(c,actor,verifyOptions[actor]));}finally{c.release();}
@@ -274,15 +301,18 @@ export async function runP5PrimaryExpiry({writer,reader,apply=false,verify=verif
  const base={providerCalls:0,objectDeletions:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false,distinctDbActorsVerified:true,...(transition?{privateCommissionState:states[0]}:{})};
  if(!apply)return {status:"PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES",before,...base,databaseWrites:0};
  if(before.deletionStopUnresolved||bad(before))HOLD("PRIMARY_STATUS_OR_DELETION_STOP_REVIEW_REQUIRED");
- const receipts=[];let current=before;
+ const receipts=[];let current=before,deadlineEvidenceHold=before.hardDueOriginals>0;
  for(let i=0;i<maxBatches&&current.eligibleOriginals>0;i++){
-  const r=await oneSweep(writer,reader,limit);receipts.push(r);
+  const r=await oneSweep(writer,reader,limit,deadlineProfile);
   current=await status(reader);
+  const unproven=primaryDeadlineUnprovenAfterSweep(r,current);
+  deadlineEvidenceHold=deadlineEvidenceHold||unproven;
+  receipts.push({...r,readbackObservedAtUtc:current.observedAtUtc,deadlineEvidenceHold:unproven});
   if(bad(current)||current.deletionStopUnresolved)HOLD("PRIMARY_STATUS_AFTER_SWEEP_REVIEW_REQUIRED");
   if(r.originalsCleared===0)break;
  }
  return {...base,status:current.eligibleOriginals===0?"PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED":"PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS",
-  before,after:current,receipts,databaseWritesPossible:receipts.some(x=>x.originalsCleared>0)};
+  before,after:current,receipts,deadlineEvidenceHold,databaseWritesPossible:receipts.some(x=>x.originalsCleared>0)};
 }
 async function main(){
  const a=admitP5PrimaryExpiryGithub(process.env);
@@ -291,11 +321,12 @@ async function main(){
  const reader=new pg.Pool({...config,connectionString:a.readerUrl,options:"-c default_transaction_read_only=on",application_name:"p5_fids_expiry_reader"});
  try{
   const extension=a.privateExpiry;
-  const verifyOptions=extension.enabled?{writer:{privateExpiry:true},reader:{privateExpiry:true}}:extension.commission?{writer:{privateCommission:true},reader:{privateCommission:true}}:{};
+  const actorOptions={primaryDeadlineProfile:a.primaryDeadlineProfile,...(extension.enabled?{privateExpiry:true}:extension.commission?{privateCommission:true}:{})};
+  const verifyOptions={writer:actorOptions,reader:{...actorOptions}};
   const result=await runP5PrimaryExpiry({writer,reader,apply:a.apply,verifyOptions});
-  console.log(JSON.stringify({...result,reviewedMainSha:a.sha}));
+  console.log(JSON.stringify({...result,reviewedMainSha:a.sha,primaryDeadlineProfile:a.primaryDeadlineProfile}));
   const primaryHold=result.status==="PRIMARY_FIDS_ELIGIBLE_BACKLOG_REMAINS"||
-    result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0;
+    result.before.deletionStopUnresolved||bad(result.before)||result.before.hardDueOriginals>0||result.deadlineEvidenceHold===true;
   if(primaryHold)process.exitCode=2;
   // Primary cleanup executes first. A private failure cannot undo its
   // acknowledged commit or convert its independent receipt into a failure.
