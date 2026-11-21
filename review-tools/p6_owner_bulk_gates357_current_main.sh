@@ -62,49 +62,83 @@ else
   [[ -d "$OUT" && -f "$OUT/prospective-revision-package.json" && -f "$OUT/new-stage-input.json" ]] || hold PARTIAL_MONDAY_PACKAGE
 fi
 
-STAGE_STATE="$(node --input-type=module - "$OUT/new-stage-input.json" <<'NODE'
-import pg from "pg";import fs from "node:fs";
-const p=process.argv[2],stage=JSON.parse(fs.readFileSync(p,"utf8"));
+STAGE_STATE="$(node --input-type=module - "$OUT/prospective-revision-package.json" <<'NODE'
+import pg from "pg";
+import {readFileSync} from "node:fs";
+const ctx=JSON.parse(readFileSync(process.argv[2],"utf8"));
 const c=new pg.Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:20000});
+const same=(a,x)=>a.authorization_id===x.phase6AuthorizationId&&a.manifest_sha256===x.manifestSha256&&
+ a.calendar_hash===x.calendarSha256&&a.config_hash===x.configSha256&&a.code_sha===x.codeSha40;
 try{
- await c.connect();await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
- const q=(await c.query(`SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,enabled,revoked_at_utc
- FROM clean.adb_phase6_authorization WHERE singleton_key=true`)).rows;
+ await c.connect();
+ await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+ const q=(await c.query("SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,enabled,revoked_at_utc FROM clean.adb_phase6_authorization")).rows;
  const a=q[0];
- if(q.length!==1||a.enabled!==false||a.revoked_at_utc!==null){console.error("HOLD_STAGE_AUTH_NOT_DISABLED");process.exit(2)}
- const exact=a.manifest_sha256===stage.manifestSha256&&a.calendar_hash===stage.calendarSha256&&a.config_hash===stage.configSha256&&a.code_sha===stage.codeSha40;
- console.log(exact?"MONDAY_STAGE_ALREADY_PRESENT":"MONDAY_STAGE_NEEDS_APPLY");
+ if(q.length!==1||a.enabled!==false||a.revoked_at_utc!==null)throw Error("HOLD_STAGE_AUTH_NOT_DISABLED");
+ if(same(a,ctx.oldInput))console.log("MONDAY_STAGE_NEEDS_APPLY");
+ else if(same(a,ctx.newInput))console.log("MONDAY_STAGE_ALREADY_PRESENT");
+ else throw Error("HOLD_UNRECOGNIZED_STAGE_NO_REPLAY");
  await c.query("ROLLBACK");
-}finally{await c.end().catch(()=>{})}
+}catch(e){
+ console.error(/^HOLD_[A-Z_]+$/.test(e.message??"")?e.message:"HOLD_STAGE_OWNER_READONLY_RECONCILE");
+ process.exitCode=2;
+}finally{await c.query("ROLLBACK").catch(()=>{});await c.end().catch(()=>{})}
 NODE
 )" || hold MONDAY_STAGE_PRECHECK
 
 if [[ "$STAGE_STATE" == "MONDAY_STAGE_NEEDS_APPLY" ]]; then
   export P6_MONDAY_OWNER_APPLY_APPROVAL="APPLY_EXACT_REVIEWED_DISABLED_MONDAY_STAGE_ONLY_NO_PROVIDER"
-  npx --no-install tsx review-tools/p6_nov23_prospective_revision_owner_v39.ts     --apply-reviewed     RECOVER_EXACT_NOV22_FROM_COMMITTED_EVIDENCE     "$DECISION" "$DECISION_SHA" "$OUT"
+  npx --no-install tsx review-tools/p6_nov23_prospective_revision_owner_v39.ts \
+    --apply-reviewed \
+    RECOVER_EXACT_NOV22_FROM_COMMITTED_EVIDENCE \
+    "$DECISION" "$DECISION_SHA" "$OUT"
   unset P6_MONDAY_OWNER_APPLY_APPROVAL
 elif [[ "$STAGE_STATE" != "MONDAY_STAGE_ALREADY_PRESENT" ]]; then
   hold MONDAY_STAGE_PRECHECK_RESULT
 fi
 
-node --input-type=module - "$OUT/new-stage-input.json" <<'NODE'
-import pg from "pg";import fs from "node:fs";import crypto from "node:crypto";
-const stageRaw=fs.readFileSync(process.argv[2]),stage=JSON.parse(stageRaw);
-const c=new pg.Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:20000});
+# Independent exact built-in readback even after an earlier ACK or interrupted
+# owner session. The archived old cost and the committed stage marker must match.
+node --import tsx --input-type=module - "$OUT/prospective-revision-package.json" <<'NODE'
+import pg from "pg";
+import {readFileSync} from "node:fs";
+import {
+ compileP6ProspectiveDisabledStageRevisionV39,
+ verifyP6ProspectiveDisabledStageRevisionReadOnlyV39
+} from "./server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts";
+const ctx=JSON.parse(readFileSync(process.argv[2],"utf8"));
+const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:2,connectionTimeoutMillis:8000,
+ query_timeout:30000,options:"-c default_transaction_read_only=on"});
 try{
- await c.connect();await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
- const a=(await c.query(`SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,enabled,revoked_at_utc
- FROM clean.adb_phase6_authorization WHERE singleton_key=true`)).rows[0];
- const x=(await c.query(`SELECT
-  (SELECT count(*) FROM clean.adb_collection_subs WHERE ended_at IS NULL)::int subs,
-  (SELECT count(*) FROM clean.adb_collection_batches WHERE status='ACTIVE')::int batches,
-  (SELECT count(*) FROM clean.adb_incident_stop WHERE NOT resolved)::int incidents`)).rows[0];
- if(!a||a.enabled!==false||a.revoked_at_utc!==null||a.manifest_sha256!==stage.manifestSha256||
-    a.calendar_hash!==stage.calendarSha256||a.config_hash!==stage.configSha256||a.code_sha!==stage.codeSha40||
-    Object.values(x).some(v=>v!==0))throw Error("HOLD_GATE5_READBACK");
- console.log(JSON.stringify({status:"GATE5_DISABLED_MONDAY_STAGE_EXACT_READBACK_PASS",stageSha256:crypto.createHash("sha256").update(stageRaw).digest("hex"),calendarSha256:stage.calendarSha256,manifestSha256:stage.manifestSha256,authorizationEnabled:false,...x,providerCalls:0,phase6PaidGo:false}));
- await c.query("ROLLBACK");
-}finally{await c.end().catch(()=>{})}
+ const compiled=compileP6ProspectiveDisabledStageRevisionV39(ctx);
+ const key="phase6_disabled_stage_revision:"+compiled.new.staged.stagePacketSha256;
+ const c=await pool.connect();
+ let rows;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  rows=(await c.query("SELECT value FROM clean.adb_collection_meta WHERE key=$1",[key])).rows;
+  await c.query("ROLLBACK");
+ }finally{await c.query("ROLLBACK").catch(()=>{});c.release()}
+ if(rows.length!==1)throw Error("HOLD_STAGE_REVISION_ACK_MISSING");
+ const receipt=JSON.parse(rows[0].value);
+ if(receipt.status!=="DISABLED_STAGE_MOVED_PROSPECTIVELY_NO_SOURCE_NO_PAID_GO"||
+    receipt.newStagePacketSha256!==compiled.new.staged.stagePacketSha256||
+    receipt.oldStagePacketSha256!==compiled.old.staged.stagePacketSha256||
+    receipt.phase6PaidGo!==false||receipt.databaseAuthorizationEnabled!==false||
+    receipt.providerCalls!==0)throw Error("HOLD_STAGE_REVISION_RECEIPT_SCOPE");
+ const verified=await verifyP6ProspectiveDisabledStageRevisionReadOnlyV39(pool,ctx,receipt);
+ if(verified.status!=="P6_PROSPECTIVE_DISABLED_STAGE_REVISION_READBACK_PASS_NO_GO"||
+    verified.providerCalls!==0||verified.databaseWrites!==0||verified.phase6PaidGo!==false)
+  throw Error("HOLD_STAGE_REVISION_INDEPENDENT_READBACK");
+ console.log(JSON.stringify({status:"GATE5_EXACT_MONDAY_DISABLED_STAGE_AND_ARCHIVED_COST_VERIFIED",
+  newStageSha256:compiled.new.staged.stagePacketSha256,
+  calendarSha256:compiled.new.staged.calendarSha256,
+  originalCostPreserved:verified.archivedOldCostPreserved,
+  authorizationEnabled:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+}catch(e){
+ console.error(/^HOLD_[A-Z_]+$/.test(e.message??"")?e.message:"HOLD_STAGE_REVISION_READBACK_RECONCILE");
+ process.exitCode=2;
+}finally{await pool.end().catch(()=>{})}
 NODE
 
 # ---------------- Gate 3: V0107 exact stopped commission/readback ----------------
