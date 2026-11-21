@@ -137,7 +137,17 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
    const writer=new Pool({connectionString:url!.replace("postgres:postgres@",P7_INERT_ROLES.expiryWriter+":disposable-only@"),max:1});
    try{
     expect(await runP7ExpiryOnce(reader,undefined,"VERIFY_ONLY")).toMatchObject({status:"P7_EXPIRY_VERIFY_ONLY_NO_GO",deletedLinks:0});
-    expect(await runP7ExpiryOnce(reader,writer,"APPLY_DUE_ONLY")).toMatchObject({status:"P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK",deletedFragments:0});
+    expect(await runP7ExpiryOnce(reader,writer,"APPLY_DUE_ONLY")).toMatchObject({status:"P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK",deletedFragments:0,writerActorVerified:true});
+    // Zero work is not evidence that a lazy writer pool can authenticate.
+    // Wrong actor and scope drift must fail before ANY due synthetic rows
+    // exist, not only during a later mutation.
+    await expect(runP7ExpiryOnce(reader,pool,"APPLY_DUE_ONLY")).rejects.toThrow("DISTINCT_RESTRICTED_ACTOR");
+    await pool.query("GRANT SELECT ON phase7_private.pre_fragment_v39 TO "+P7_INERT_ROLES.expiryWriter);
+    try{
+     await expect(runP7ExpiryOnce(reader,writer,"APPLY_DUE_ONLY")).rejects.toThrow("DISTINCT_RESTRICTED_ACTOR");
+     expect(await runP7ExpiryOnce(reader,undefined,"VERIFY_ONLY")).toMatchObject({status:"P7_EXPIRY_VERIFY_ONLY_NO_GO",deletedFragments:0});
+    }finally{await pool.query("REVOKE SELECT ON phase7_private.pre_fragment_v39 FROM "+P7_INERT_ROLES.expiryWriter)}
+    expect(await runP7ExpiryOnce(reader,writer,"APPLY_DUE_ONLY")).toMatchObject({writerActorVerified:true,deletedFragments:0});
     await expect(reader.query("SELECT phase7_private.sweep_due_pre_links_v39(1)")).rejects.toThrow();
     await expect(writer.query("SELECT * FROM phase7_private.pre_source_link_v39")).rejects.toThrow();
     await expect(runP7ExpiryOnce(writer,reader,"APPLY_DUE_ONLY")).rejects.toThrow("DISTINCT_RESTRICTED_ACTOR");
