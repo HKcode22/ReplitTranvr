@@ -161,23 +161,48 @@ NODE
   unset P5_V0107_OWNER_APPROVAL P5_V0107_OWNER_REVIEW_SHA256
 else
   ERR="$(cat "/tmp/p6-v0107-review-err.$$")"
-  [[ "$ERR" == "HOLD_V0107_OWNER_ALREADY_UPGRADED_DO_NOT_REPLAY" ]] || { printf '%s
-' "$ERR" >&2; hold V0107_REVIEW; }
+  [[ "$ERR" == "HOLD_V0107_OWNER_ALREADY_UPGRADED_DO_NOT_REPLAY" ]] || {
+    printf '%s\n' "$ERR" >&2
+    hold V0107_REVIEW
+  }
   node --input-type=module <<'NODE'
-import pg from "pg";import fs from "node:fs";
+import pg from "pg";
+import fs from "node:fs";
 import {expectedV0107Bodies} from "./scripts/v39_phase5_v0107_owner_upgrade_v39.mjs";
-const sql=fs.readFileSync("migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql","utf8"),e=expectedV0107Bodies(sql);
+const sql=fs.readFileSync("migrations/staged/V0107__phase5_verified_future_post_primary_expiry_margin_v39.sql","utf8");
+const expected=expectedV0107Bodies(sql);
 const c=new pg.Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:20000});
 try{
- await c.connect();await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
- const f=(await c.query(`SELECT proname,prosrc FROM pg_proc WHERE oid=ANY(ARRAY[
- 'clean.phase5_primary_fids_expiry_status_v39()'::regprocedure,
- 'clean.phase5_primary_fids_expiry_sweep_v39(integer)'::regprocedure])`)).rows;
- const m=Object.fromEntries(f.map(x=>[x.proname.endsWith("status_v39")?"status":"sweep",x.prosrc]));
- if(m.status!==e.status||m.sweep!==e.sweep)throw Error("HOLD_V0107_BODY_DRIFT");
- console.log(JSON.stringify({status:"GATE3_V0107_ALREADY_COMMISSIONED_EXACT_READBACK_PASS",providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+ await c.connect();
+ await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+ const state=(await c.query(
+  "SELECT (SELECT count(*)::int FROM clean.adb_phase6_authorization WHERE enabled) auth,"+
+  "(SELECT count(*)::int FROM clean.adb_collection_batches WHERE status='ACTIVE') batches,"+
+  "(SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) subs,"+
+  "(SELECT count(*)::int FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved) stops,"+
+  "(SELECT count(*)::int FROM clean.fids_query_response WHERE raw_payload IS NOT NULL) originals"
+ )).rows;
+ const functions=(await c.query(
+  "SELECT p.proname,p.prosrc,pg_get_userbyid(p.proowner) owner,p.prosecdef,p.provolatile "+
+  "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "+
+  "WHERE n.nspname='clean' AND p.oid=ANY(ARRAY["+
+  "'clean.phase5_primary_fids_expiry_status_v39()'::regprocedure,"+
+  "'clean.phase5_primary_fids_expiry_sweep_v39(integer)'::regprocedure])"
+ )).rows;
+ const m=Object.fromEntries(functions.map(x=>[x.proname.endsWith("status_v39")?"status":"sweep",x]));
+ if(state.length!==1||Object.values(state[0]).some(x=>x!==0)||
+    functions.length!==2||m.status?.prosrc!==expected.status||m.sweep?.prosrc!==expected.sweep||
+    m.status?.owner!=="neondb_owner"||m.sweep?.owner!=="neondb_owner"||
+    m.status?.prosecdef!==true||m.sweep?.prosecdef!==true||
+    m.status?.provolatile!=="s"||m.sweep?.provolatile!=="v")
+   throw Error("HOLD_V0107_STOPPED_FUNCTION_SCOPE_DRIFT");
+ console.log(JSON.stringify({status:"GATE3_V0107_ALREADY_COMMISSIONED_EXACT_READBACK_PASS",
+  providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
  await c.query("ROLLBACK");
-}finally{await c.end().catch(()=>{})}
+}catch(e){
+ console.error(/^HOLD_[A-Z_]+$/.test(e.message??"")?e.message:"HOLD_V0107_READONLY_RECONCILE");
+ process.exitCode=2;
+}finally{await c.query("ROLLBACK").catch(()=>{});await c.end().catch(()=>{})}
 NODE
 fi
 rm -f "/tmp/p6-v0107-review.$$" "/tmp/p6-v0107-review-err.$$"
@@ -188,6 +213,7 @@ unset P5_V0107_OWNER_APPROVED_MAIN_SHA
 # expiry enablement, or any private APPLY permissions.
 PREVIOUS_PROFILE="$(gh variable get P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO" 2>/dev/null || true)"
 [[ "$PREVIOUS_PROFILE" == "V0103" || "$PREVIOUS_PROFILE" == "V0107_VERIFIED_FUTURE_POST_23H_MARGIN" || -z "$PREVIOUS_PROFILE" ]] || hold UNRECOGNIZED_PRIMARY_DEADLINE_PROFILE
+[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_RETENTION_REPIN
 gh variable set P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO" --body "V0107_VERIFIED_FUTURE_POST_23H_MARGIN"
 [[ "$(gh variable get P5_PRIMARY_FIDS_DEADLINE_PROFILE -R "$REPO")" == "V0107_VERIFIED_FUTURE_POST_23H_MARGIN" ]] || hold V0107_DEADLINE_PROFILE_READBACK
 
@@ -196,11 +222,13 @@ var(){ gh variable get "$1" -R "$2"; }
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_EXPIRY_DISABLED
 [[ "$(var P5_PRIMARY_FIDS_BACKSTOP_ENABLED "$REPO")" == "true" ]] || hold PRIMARY_BACKSTOP_DISABLED
 [[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
+[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_REPIN
 gh variable set P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$PIN"
 [[ "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" == "$PIN" ]] || hold PRIMARY_PIN_READBACK
 
 API="repos/$REPO/actions/workflows/$PRIMARY_WF/runs?event=workflow_dispatch&branch=main&per_page=100"
 gh api "$API" --jq '.workflow_runs[].id' | sort -n >"/tmp/p6-before.$$"
+[[ "$(remote_main)" == "$PIN" ]] || hold MAIN_CHANGED_BEFORE_PRIMARY_DISPATCH
 gh workflow run "$PRIMARY_WF" -R "$REPO" --ref main   -f confirm=VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES   -f approved_main_sha="$PIN"
 RUN=""
 for _ in $(seq 1 45); do
@@ -236,6 +264,7 @@ NODE
 [[ "$(var TRAVNR_RELAY_MODE "$RELAY_REPO")" == "MULTI_LANE" ]] || hold RELAY_MODE
 [[ "$(var TRAVNR_RELAY_PRIMARY_ENABLED "$RELAY_REPO")" == "1" ]] || hold RELAY_PRIMARY_DISABLED
 [[ "$(var TRAVNR_RELAY_ROLLING_ENABLED "$RELAY_REPO")" == "1" ]] || hold RELAY_ROLLING_DISABLED
+[[ "$(remote_main)" == "$PIN" && "$(remote_relay)" == "$RELAY_PIN" ]] || hold MAIN_OR_RELAY_CHANGED_BEFORE_REPIN
 gh variable set TRAVNR_RELAY_PRIMARY_VERIFY_RUN_ID -R "$RELAY_REPO" --body "$RUN"
 gh variable set TRAVNR_APPROVED_TARGET_MAIN_SHA -R "$RELAY_REPO" --body "$PIN"
 gh variable set TRAVNR_CRON_RELAY_SHA -R "$RELAY_REPO" --body "$RELAY_PIN"
@@ -245,6 +274,7 @@ gh variable set TRAVNR_CRON_RELAY_SHA -R "$RELAY_REPO" --body "$RELAY_PIN"
 
 RAPI="repos/$RELAY_REPO/actions/workflows/$RELAY_WF/runs?event=workflow_dispatch&branch=main&per_page=100"
 gh api "$RAPI" --jq '.workflow_runs[].id' | sort -n >"/tmp/p6-relay-before.$$"
+[[ "$(remote_main)" == "$PIN" && "$(remote_relay)" == "$RELAY_PIN" ]] || hold MAIN_OR_RELAY_CHANGED_BEFORE_DISPATCH
 gh workflow run "$RELAY_WF" -R "$RELAY_REPO" --ref main -f lane=PRIMARY_BACKSTOP
 RRUN=""
 for _ in $(seq 1 45); do
