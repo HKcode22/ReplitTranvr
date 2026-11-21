@@ -9,6 +9,7 @@ import {mkdtempSync,writeFileSync,readFileSync,lstatSync,rmSync,realpathSync} fr
 import {join,resolve,dirname} from "node:path";
 import {homedir} from "node:os";
 import {fileURLToPath} from "node:url";
+import {P7_MONDAY_OWNER_STAGE,assertP7MondayDisabledAuthorization} from "./v39_phase7_monday_owner_stage_binding_v39.mjs";
 export const P7_PRESERVATION_ACTORS=Object.freeze([
  {role:"phase7_pre_reader_prod20261120",secret:"P6_PHASE7_PRE_READBACK_DATABASE_URL",table:"pre_fragment_v39",privilege:"SELECT"},
  {role:"phase7_post_scoped_prod20261120",secret:"P6_PHASE7_POST_SCOPED_DATABASE_URL",fn:"read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)"},
@@ -18,7 +19,7 @@ export const P7_PRESERVATION_ACTORS=Object.freeze([
 const E=[{role:"phase7_expiry_reader_prod20261120",functions:["pre_link_expiry_status_v39()","research_expiry_status_v39()"]},{role:"phase7_expiry_writer_prod20261120",functions:["sweep_due_pre_links_v39(integer)","sweep_due_research_outputs_v39(integer)"]}];
 const TABLES=["derived_release_bundle_v39","pre_fragment_v39","pre_source_link_v39","pre_preservation_policy_v39"];
 const FNS=["canonical_pre_jsonb_v39(jsonb)","persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz)","read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)",...E.flatMap(x=>x.functions)];
-const REPO="HKcode22/ReplitTranvr",OWNER_STAGE="0a7b1a28f243de76d4c83026d15f585265ef6f7b",MANIFEST="3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7";
+const REPO="HKcode22/ReplitTranvr",OWNER_STAGE=P7_MONDAY_OWNER_STAGE.codeSha;
 const hold=s=>{throw Error("HOLD_P7_PRESERVATION_LOGINS_"+s)};
 const sha=s=>createHash("sha256").update(s).digest("hex");
 const validPassword=s=>typeof s==="string"&&/^[A-Za-z0-9_-]{48}$/.test(s);
@@ -115,9 +116,10 @@ async function disabled(c,lock){
  }
  const q=(await c.query("SELECT current_user actor,session_user login,current_database() db,current_setting('server_version_num')::int ver,pg_is_in_recovery() replica")).rows[0];
  if(q?.actor!=="neondb_owner"||q.actor!==q.login||q.db!=="neondb"||q.ver<160000||q.ver>=170000||q.replica!==false)hold("EXACT_OWNER");
- const a=(await c.query("SELECT enabled,revoked_at_utc,code_sha,manifest_sha256 FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
+ const a=(await c.query("SELECT enabled,revoked_at_utc,code_sha,manifest_sha256,calendar_hash,config_hash FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
  const b=(await c.query("SELECT (SELECT count(*)::int FROM clean.adb_collection_batches WHERE status='ACTIVE') b,(SELECT count(*)::int FROM clean.adb_collection_segments WHERE status='ACTIVE') g,(SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) s")).rows[0];
- if(a.length!==1||a[0].enabled!==false||a[0].revoked_at_utc!==null||a[0].code_sha!==OWNER_STAGE||a[0].manifest_sha256!==MANIFEST||Object.values(b).some(x=>x!==0))hold("EXACT_DISABLED_STAGE");
+ if(a.length!==1||Object.values(b).some(x=>x!==0))hold("EXACT_DISABLED_STAGE");
+ assertP7MondayDisabledAuthorization(a[0]);
 }
 function safeMetadata(){
  if(main()!==OWNER_STAGE)hold("MAIN_CHANGED");
