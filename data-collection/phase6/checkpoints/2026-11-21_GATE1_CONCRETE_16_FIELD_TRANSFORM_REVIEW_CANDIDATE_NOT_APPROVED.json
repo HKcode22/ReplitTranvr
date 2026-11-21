@@ -1,0 +1,355 @@
+{
+  "schema": "travnr.phase7.unapproved-field-decision-candidate.v1",
+  "status": "REVIEW_ONLY_NOT_RUNTIME_NOT_APPROVED",
+  "stageCode": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+  "stageSha256": "a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682",
+  "sourceCodeCandidate": "c967cd16d7fc6cf078d01376619fc029d6fc4b52",
+  "nativeStatusContractSha256": "63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09",
+  "approvedForUse": false,
+  "nonReconstructable": null,
+  "reviewer": null,
+  "reviewSha256": null,
+  "rightsSha256": null,
+  "validFromUtc": null,
+  "validUntilUtc": null,
+  "researchExpiryUtc": null,
+  "sourceToReleaseMappingExpiryHoursMaximum": 24,
+  "horizons": [
+    "T-24h",
+    "T-6h",
+    "T-90m"
+  ],
+  "cohortBucketCount": 31,
+  "fields": [
+    {
+      "field": "origin_icao",
+      "source": "AERODATABOX_FIDS",
+      "disposition": "PURPOSE_BOUND_REFERENCE_LANE",
+      "output": null,
+      "referenceKind": "airport_icao",
+      "purpose": "link",
+      "allowPerFlightTrainingLink": false,
+      "allowSubstituteCompilation": false,
+      "independentApproval": false
+    },
+    {
+      "field": "destination_icao",
+      "source": "AERODATABOX_FIDS",
+      "disposition": "PURPOSE_BOUND_REFERENCE_LANE",
+      "output": null,
+      "referenceKind": "airport_icao",
+      "purpose": "link",
+      "allowPerFlightTrainingLink": false,
+      "allowSubstituteCompilation": false,
+      "independentApproval": false
+    },
+    {
+      "field": "operating_carrier",
+      "source": "AERODATABOX_FIDS",
+      "disposition": "PURPOSE_BOUND_REFERENCE_LANE",
+      "output": null,
+      "referenceKind": "airline_icao",
+      "purpose": "link",
+      "allowPerFlightTrainingLink": false,
+      "allowSubstituteCompilation": false,
+      "independentApproval": false
+    },
+    {
+      "field": "scheduled_arrival_utc",
+      "output": "duration_bin",
+      "source": "AERODATABOX_FIDS",
+      "unit": "minutes after frozen native scheduled departure",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "frozen_native_t_delta_bucket",
+      "boundaries": [
+        60,
+        180,
+        360,
+        720
+      ],
+      "categories": null,
+      "bucketCount": 5,
+      "fieldClass": "approved_derived",
+      "reason": "Coarse duration bands; positive elapsed time only; not actual duration.",
+      "independentApproval": false
+    },
+    {
+      "field": "provider_revised_departure_utc",
+      "output": "revision_bin",
+      "source": "AERODATABOX_FIDS",
+      "unit": "minutes relative to frozen native scheduled departure",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "frozen_native_t_delta_bucket",
+      "boundaries": [
+        -30,
+        0,
+        15,
+        60,
+        180
+      ],
+      "categories": null,
+      "bucketCount": 6,
+      "fieldClass": "approved_derived",
+      "reason": "Early/unchanged-or-small/15+/60+/180+ revised schedule signals; never actual gate-out.",
+      "independentApproval": false
+    },
+    {
+      "field": "reported_pre_departure_status",
+      "output": "state_bin",
+      "source": "AERODATABOX_FIDS",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "categorical_group_dictionary",
+      "boundaries": null,
+      "categories": [
+        [
+          "Unknown",
+          "Expected"
+        ],
+        [
+          "CheckIn",
+          "Boarding",
+          "GateClosed"
+        ],
+        [
+          "Departed",
+          "EnRoute",
+          "Approaching",
+          "Arrived"
+        ],
+        [
+          "Delayed",
+          "Canceled",
+          "Diverted",
+          "CanceledUncertain"
+        ]
+      ],
+      "bucketCount": 4,
+      "fieldClass": "approved_derived",
+      "reason": "Exact public 13-value contract, many-to-one groups; unknown future values hold. Group-level cancellation is not a cancellation label.",
+      "independentApproval": false
+    },
+    {
+      "field": "origin_metar_visibility_m",
+      "output": "visibility_bin",
+      "source": "NOAA_METAR",
+      "unit": "meters",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        800,
+        1609,
+        4828,
+        8047
+      ],
+      "categories": null,
+      "bucketCount": 5,
+      "fieldClass": "external_supplement",
+      "reason": "Candidate coarse visibility bands near half/one/three/five statute miles; not a full flight-category decision.",
+      "independentApproval": false
+    },
+    {
+      "field": "origin_metar_wind_kt",
+      "output": "wind_bin",
+      "source": "NOAA_METAR",
+      "unit": "knots",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        10,
+        20,
+        30,
+        50
+      ],
+      "categories": null,
+      "bucketCount": 5,
+      "fieldClass": "external_supplement",
+      "reason": "Candidate wind magnitude bands; not runway-specific crosswind.",
+      "independentApproval": false
+    },
+    {
+      "field": "origin_taf_flight_category",
+      "output": "wx_departure_bin",
+      "source": "NOAA_TAF",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "categorical_dictionary",
+      "boundaries": null,
+      "categories": [
+        "LIFR",
+        "IFR",
+        "MVFR",
+        "VFR"
+      ],
+      "bucketCount": 4,
+      "fieldClass": "external_supplement",
+      "reason": "Exact categories are reversible here; separate public NOAA source review must explicitly permit this encoding; not a claim of ADB-derived non-reconstruction.",
+      "independentApproval": false
+    },
+    {
+      "field": "destination_taf_flight_category",
+      "output": "wx_arrival_bin",
+      "source": "NOAA_TAF",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "categorical_dictionary",
+      "boundaries": null,
+      "categories": [
+        "LIFR",
+        "IFR",
+        "MVFR",
+        "VFR"
+      ],
+      "bucketCount": 4,
+      "fieldClass": "external_supplement",
+      "reason": "Same source review; prevailing issued forecast valid at required time, not later observed weather.",
+      "independentApproval": false
+    },
+    {
+      "field": "prior_aircraft_turnaround_minutes",
+      "output": "turn_bin",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "unit": "minutes",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        30,
+        60,
+        120,
+        240,
+        480
+      ],
+      "categories": null,
+      "bucketCount": 6,
+      "fieldClass": "approved_derived",
+      "reason": "Candidate as-of prior leg arrival to planned next departure buffer, not a realized turnaround.",
+      "independentApproval": false
+    },
+    {
+      "field": "prior_aircraft_adsb_not_ground_reported",
+      "output": "prior_airborne_bin",
+      "source": "ADSB_LOL",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "boolean_bucket",
+      "boundaries": null,
+      "categories": [
+        "false",
+        "true"
+      ],
+      "bucketCount": 2,
+      "fieldClass": "external_supplement",
+      "reason": "Reversible boolean; independent ADSB.lol source/license review required; not proof of actual gate-out.",
+      "independentApproval": false
+    },
+    {
+      "field": "prior_aircraft_adsb_position_age_seconds",
+      "output": "prior_age_bin",
+      "source": "ADSB_LOL",
+      "unit": "seconds",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        30,
+        120,
+        300,
+        900
+      ],
+      "categories": null,
+      "bucketCount": 5,
+      "fieldClass": "external_supplement",
+      "reason": "Candidate recency bands; existing exact as-of/source freshness rules remain.",
+      "independentApproval": false
+    },
+    {
+      "field": "prior_route_departure_delay_median_minutes",
+      "output": "corridor_delay_bin",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "unit": "minutes",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        -15,
+        0,
+        15,
+        30,
+        60,
+        120
+      ],
+      "categories": null,
+      "bucketCount": 7,
+      "fieldClass": "approved_derived",
+      "reason": "Historical median of independently approved past observations. Exact metric, sample denominator, source ownership, and no future leakage required.",
+      "independentApproval": false
+    },
+    {
+      "field": "prior_airport_departure_delay_median_minutes",
+      "output": "local_delay_bin",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "unit": "minutes",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        -15,
+        0,
+        15,
+        30,
+        60,
+        120
+      ],
+      "categories": null,
+      "bucketCount": 7,
+      "fieldClass": "approved_derived",
+      "reason": "Same past-only source and denominator limitations, separately bound airport scope.",
+      "independentApproval": false
+    },
+    {
+      "field": "airport_congestion_1h",
+      "output": "congestion_bin",
+      "source": "REVIEWED_HISTORIC_CONTEXT",
+      "unit": "existing reviewed metric, exact unit pending evidence",
+      "disposition": "REVIEWED_DERIVED_BUCKET",
+      "kind": "numeric_threshold_bucket",
+      "boundaries": [
+        1,
+        5,
+        15,
+        30,
+        60
+      ],
+      "categories": null,
+      "bucketCount": 6,
+      "fieldClass": "approved_derived",
+      "reason": "Illustrative thresholds only if reviewed producer confirms this is a one-hour count. Do not use these thresholds with an unverified metric.",
+      "independentApproval": false,
+      "candidateUsableOnlyIf": "Verified count definition, time window, eligible movement denominator and source rights."
+    }
+  ],
+  "label": {
+    "field": "gate_out_delay_minutes",
+    "output": "delay_bin",
+    "source": "INDEPENDENT_ACTUAL_GATE_OUT",
+    "unit": "minutes",
+    "disposition": "REVIEWED_DERIVED_BUCKET",
+    "kind": "numeric_threshold_bucket",
+    "boundaries": [
+      0,
+      15,
+      30,
+      60,
+      120
+    ],
+    "categories": null,
+    "bucketCount": 6,
+    "fieldClass": "approved_derived",
+    "reason": "Secondary bucket only; continuous T−6 target remains primary. Same-leg independently attested schedule and actual gate-out or censor.",
+    "independentApproval": false,
+    "preserveContinuousConditionalPrimary": true
+  },
+  "reviewLimits": [
+    "All thresholds are concrete proposals, not empirically fitted or approved.",
+    "Three reference proofs preserve bounded item linkage only; cannot establish unrestricted long-term route/carrier training or identical scientific parity.",
+    "Native per-field many-to-one transforms do not prove joint non-reconstruction with public schedules, cohort, horizon, optional weather and paired outputs.",
+    "Before approval, independent reviewer must explicitly assess public-schedule linkage and candidate equivalence, sample support and singleton classes; no production evidence is asserted.",
+    "No source-present unsupported value may be silently nulled. Genuine source-absent values remain missing. Keep all required Packet A fields during lawful custody.",
+    "No field or label may be shipped as production policy by replacing false/null flags with true/hash placeholders."
+  ],
+  "authorizationEnabled": false,
+  "phase6PaidGo": false
+}

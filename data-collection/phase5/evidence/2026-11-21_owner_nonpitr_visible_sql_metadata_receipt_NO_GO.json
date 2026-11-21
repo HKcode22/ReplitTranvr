@@ -1,0 +1,66 @@
+{
+  "evidenceKind": "owner-supplied terminal output, not independent reexecution",
+  "helperGitBlob": "7b55a456f55b68587693175780952ac7ceedab18",
+  "checkedMain": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+  "receipt": {
+    "schema": "travnr.phase6.nonpitr-visible-sql-metadata.v1",
+    "status": "OWNER_VISIBLE_SQL_METADATA_ONLY_MANAGED_CUSTODY_OPEN_NO_GO",
+    "observedAtUtc": "2026-11-21T17:46:22.650Z",
+    "settings": {
+      "visibility": "VISIBLE_SQL_METADATA_ONLY",
+      "value": {
+        "archive_mode": "off",
+        "log_min_duration_sample": "-1",
+        "log_min_duration_statement": "-1",
+        "log_min_error_statement": "panic",
+        "log_min_messages": "warning",
+        "log_parameter_max_length": "-1",
+        "log_parameter_max_length_on_error": "0",
+        "log_statement": "none",
+        "log_statement_sample_rate": "1",
+        "log_transaction_sample_rate": "0",
+        "logging_collector": "off",
+        "wal_level": "replica"
+      }
+    },
+    "unobservedSettings": [],
+    "replica": {
+      "senderSessions": {
+        "visibility": "VISIBLE_SQL_METADATA_ONLY",
+        "value": {
+          "total": 0
+        }
+      },
+      "receiverSessions": {
+        "visibility": "VISIBLE_SQL_METADATA_ONLY",
+        "value": {
+          "total": 0
+        }
+      },
+      "slots": {
+        "visibility": "VISIBLE_SQL_METADATA_ONLY",
+        "value": {
+          "total": 2,
+          "physical": 2,
+          "logical": 0,
+          "active": 1
+        }
+      }
+    },
+    "findings": [
+      "VISIBLE_REPLICATION_RESOURCE_REVIEW"
+    ],
+    "managedReadReplicasVerified": false,
+    "managedLogRotationVerified": false,
+    "managedLogAccessIamVerified": false,
+    "replitObjectBucketIamVerified": false,
+    "pitrReviewRepeated": false,
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "sourceRowsRead": 0,
+    "exactDisabledStageReadback": true,
+    "sourceEnabled": false,
+    "phase6PaidGo": false
+  },
+  "interpretation": "All 12 settings visible. Ordinary statement/duration logging disabled, error parameter length zero, error statement threshold panic. Managed log retention/access and object IAM cannot be inferred. Two physical slots (one active), no visible senders/receivers, no logical slots; classify managed recovery purpose/rotation, never drop slots. SSL warning is advisory, not a failure. No repeat of this query required."
+}
