@@ -174,8 +174,25 @@
   ],
   "sourceRightsReview": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
   "retentionCertification": false,
-  "fullyAutonomousThreeHopCertified": true,
+  "fullyAutonomousThreeHopCertified": false,
   "derivedResearchRightsIndependentlyApproved": false,
   "sourceAuthorizationGranted": false,
-  "phase6PaidGo": false
+  "phase6PaidGo": false,
+  "boundedNoProviderThreeHopRehearsal": {
+    "certified": true,
+    "scope": "ACTUAL_GITHUB_READONLY_HANDOFF_NO_PROVIDER_NO_DB_NO_COLLECTION",
+    "runIds": [
+      44925689007,
+      44925734532,
+      44925786837
+    ],
+    "chainId": "190c7d6fa707fd3ddd7409bb9a9d5d55",
+    "waves": 6,
+    "rehearsalDispatches": 2,
+    "providerCalls": 0,
+    "databaseReads": 0,
+    "databaseWrites": 0,
+    "collectionDispatches": 0,
+    "integratedPaidOperationCertified": false
+  }
 }
