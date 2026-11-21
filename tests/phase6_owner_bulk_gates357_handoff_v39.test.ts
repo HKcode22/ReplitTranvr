@@ -14,10 +14,19 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
     expect(s).toContain("VERIFY_PRIMARY_FIDS_ONLY_NO_WRITES");
     expect(s).toContain("PRIMARY_BACKSTOP");
     expect(s).toContain("unset AERODATABOX_API_KEY RAPIDAPI_KEY AERODATABOX_WEBHOOK_SECRET");
-    expect(s).toContain("NO_SOURCE_ENABLE_NO_PROVIDER_CALL_NO_PAID_GO");
+    expect(s).toContain("NO_SOURCE_ENABLE_NO_FIDS_CALL_NO_PAID_GO");
     expect(s).not.toContain("ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET");
     expect(s).not.toContain("P6_SOURCE_AUTH_ENABLED_INDEPENDENT_READBACK");
     expect(s).not.toContain("v39_phase6_start_owner_v39");
+    const account=readFileSync("review-tools/p6_launch_free_account_prearm_current_v39.mjs","utf8");
+    expect(account).toContain('"/subscriptions/balance"');
+    expect(account).toContain('"/subscriptions/webhook"');
+    expect(account).toContain('method:"GET"');
+    expect(account).toContain("providerPaidGets:0");
+    expect(account).toContain("sourceFidsCalls:0");
+    expect(account).not.toContain('method:"POST"');
+    expect(account).not.toContain('method:"DELETE"');
+    expect(account).not.toContain("/flights/");
   });
   it("uses exact current main and reviewed relay identity fail-closed",()=>{
     const s=shell();
