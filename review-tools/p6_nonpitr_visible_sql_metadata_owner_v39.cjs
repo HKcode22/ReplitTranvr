@@ -62,6 +62,8 @@ async function review(c){
   await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');began=true;
   await c.query("SET LOCAL statement_timeout='8000ms'");
   const observedAtUtc=checkIdentity((await c.query(identitySql)).rows);
+  const gate=(await c.query("SELECT count(*)::int total,count(*) FILTER(WHERE singleton_key=true AND code_sha=$1 AND manifest_sha256=$2 AND enabled=false AND revoked_at_utc IS NULL)::int exact FROM clean.adb_phase6_authorization",["781140cde71af3b72376c2db9f0fdb84204a2b7c","b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4"])).rows;
+  if(gate.length!==1||gate[0].total!==1||gate[0].exact!==1)HOLD('DISABLED_STAGE_DRIFT');
   const log=await optionalRead(c,settingSql,[Object.keys(settings)],parseSettings);
   const replica={};
   for(const [name,query] of Object.entries(queries))replica[name]=await optionalRead(c,query,[],rows=>parseCounts(rows,name));
@@ -77,7 +79,7 @@ async function review(c){
   if(Object.values(replica).some(x=>x.value&&x.value.total>0)) findings.push('VISIBLE_REPLICATION_RESOURCE_REVIEW');
   if(v.archive_mode&&v.archive_mode!=='off') findings.push('VISIBLE_WAL_ARCHIVE_MODE_REVIEW');
   await c.query('ROLLBACK');began=false;
-  return {schema:'travnr.phase6.nonpitr-visible-sql-metadata.v1',status:'OWNER_VISIBLE_SQL_METADATA_ONLY_MANAGED_CUSTODY_OPEN_NO_GO',observedAtUtc,settings:log,unobservedSettings,replica,findings,managedReadReplicasVerified:false,managedLogRotationVerified:false,managedLogAccessIamVerified:false,replitObjectBucketIamVerified:false,pitrReviewRepeated:false,providerCalls:0,databaseWrites:0,sourceRowsRead:0,sourceEnabled:false,phase6PaidGo:false};
+  return {schema:'travnr.phase6.nonpitr-visible-sql-metadata.v1',status:'OWNER_VISIBLE_SQL_METADATA_ONLY_MANAGED_CUSTODY_OPEN_NO_GO',observedAtUtc,settings:log,unobservedSettings,replica,findings,managedReadReplicasVerified:false,managedLogRotationVerified:false,managedLogAccessIamVerified:false,replitObjectBucketIamVerified:false,pitrReviewRepeated:false,providerCalls:0,databaseWrites:0,sourceRowsRead:0,exactDisabledStageReadback:true,sourceEnabled:false,phase6PaidGo:false};
  }finally{if(began)await c.query('ROLLBACK').catch(()=>{});}
 }
 async function main(){
