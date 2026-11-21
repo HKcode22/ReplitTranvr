@@ -17,7 +17,7 @@ describe("Phase5 V3 reviewed callback receiver / expiry VERIFY_ONLY release",()=
   expect(source).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(source).toContain('phase6_paid_launch_authorized:false');
   expect(source).toContain('phase5_freeze_passed:false');
-  expect(cfg).toContain('build = ["bash", "scripts/v39_phase5_callback_release_v4_reviewed_build_v39.sh"]');
+  expect(cfg).toContain('build = ["bash", "scripts/v39_phase5_callback_release_v5_reviewed_build_v39.sh"]');
   expect(cfg).not.toContain('build = ["bash", "'+FILE+'"]');
   expect(cfg).not.toContain('P5_RECURRING_EXPIRY_HTTP_ENABLED');
   for(const bad of ["AERODATABOX_API_KEY","DATABASE_URL","gh workflow run","db:push","replit publish"])
