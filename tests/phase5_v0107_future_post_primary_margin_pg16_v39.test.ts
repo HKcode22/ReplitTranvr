@@ -86,6 +86,30 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
   expect(rec).toMatchObject({originalsCleared:1,tombstones:1,nonemptyPrimaryReceiptVerified:true,databaseWrites:0});
   expect(await status()).toMatchObject({liveOriginals:9,eligibleOriginals:0,hardDueOriginals:0});
  });
+ /** The genuine V0083 source hook requires every normalized row to carry
+  * the same reservation digest. Test both accepted and wrong-batch variants
+  * with actual B0062 population/membership triggers and tombstones. */
+ it("physically clears exact matching normalized POST members, but never accelerates a wrong-batch member",async()=>{
+  async function member(pid:string,reservationSha256:string,match:boolean){
+   const q=(await db.query("SELECT source_airport_icao,service_window_start_utc,service_window_end_utc,fids_retrieval_utc,from_local,to_local,response_hash,openapi_sha256 FROM clean.fids_query_response WHERE population_query_id=$1",[pid])).rows[0];
+   const id="leg:ci:v0107:"+randomUUID(),memberId=randomUUID();
+   await db.query("INSERT INTO clean.flight_population(source_airport_icao,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256,population_member_id,dep_scheduled_utc,provider_record_key,batch_id) VALUES('WSSS',$1,$2,$3,'fids',$4,$5,$5,'requested_airport_primary','confirmed_core',$3,$6,'CI-V0107','Departure',$7,$8,'Asia/Singapore','confirmed_operating_leg',$3,'ci','ci',$9,$10,$1,$5,$11)",[q.service_window_start_utc,q.service_window_end_utc,q.fids_retrieval_utc,pid,id,q.response_hash,q.from_local,q.to_local,q.openapi_sha256,memberId,match?reservationSha256:hash("different batch "+memberId)]);
+   return memberId;
+  }
+  const good=await reservation(23.5),bad=await reservation(23.5);
+  const accepted=await original(23.5,{ref:good.id}),excluded=await original(23.5,{ref:bad.id});
+  const kept=await member(accepted,good.id,true),unmatched=await member(excluded,bad.id,false);
+  expect(await status()).toMatchObject({eligibleOriginals:1,hardDueOriginals:0});
+  const r=await sweep(1);
+  expect(r).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,remainingEligibleAtCutoff:0,remainingHardDueAtCutoff:0,providerCalls:0,phase6PaidGo:false});
+  expect(await isLive(accepted)).toBe(false);
+  expect(await isLive(excluded)).toBe(true);
+  const cell=(await db.query("SELECT population_query_id IS NULL AS unlinked,flight_number IS NULL AS content_cleared,provider_content_expired_at_utc IS NOT NULL AS expired FROM clean.flight_population WHERE population_member_id=$1",[kept])).rows[0];
+  expect(cell).toEqual({unlinked:true,content_cleared:true,expired:true});
+  expect((await db.query("SELECT count(*)::integer AS n FROM clean.population_research_membership WHERE population_member_id=$1",[kept])).rows[0].n).toBe(1);
+  expect((await db.query("SELECT batch_id FROM clean.flight_population WHERE population_member_id=$1",[unmatched])).rows[0].batch_id).not.toBe(bad.id);
+  expect((await db.query("SELECT "+F+"receipt_v39($1) AS r",[r.runId])).rows[0].r).toMatchObject({originalsCleared:1,populationCleared:1,tombstones:2,nonemptyPrimaryReceiptVerified:true});
+ });
  it("keeps hard 24h expiry independent of the 23h selective early margin",async()=>{
   const old=await original(24.5,{ref:hash("unknown V0083")});
   const before=await status();
