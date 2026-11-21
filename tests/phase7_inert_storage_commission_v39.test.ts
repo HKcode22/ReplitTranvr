@@ -50,7 +50,7 @@ it("requires native routes and binds the existing purpose-link review before own
  for(const [field,output,kind,boundaries,categories] of [
   ["scheduled_arrival_utc","duration_bin","frozen_native_t_delta_bucket",[60,180],null],
   ["provider_revised_departure_utc","revision_bin","frozen_native_t_delta_bucket",[0,15],null],
-  ["reported_pre_departure_status","state_bin","categorical_group_dictionary",null,[["SyntheticA","SyntheticB"],["SyntheticC","SyntheticD"]]]
+  ["reported_pre_departure_status","state_bin","categorical_group_dictionary",null,[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Canceled","Diverted","CanceledUncertain"]]]
  ] as const){
   const evidence=h("synthetic transform "+field),count=categories?categories.length:boundaries!.length+1;
   p.contract.features.push({name:output,bucketCount:count,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true});
