@@ -297,6 +297,37 @@ test("transient exact GET count mismatch can recover without accepting incomplet
  assert.equal(recovered,1);assert.equal(calls,22);
  assert.equal(result.plan.assessments.length,P6_ROLLING_ROUTES.length);
 });
+test("rechecks a successful but transient Actions-list count mismatch over four status transitions",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
+ let first=null,inconsistent=0,calls=0;
+ const outcome=await readP6RollingGithubSnapshot({...cfg,fetcher:async(url,opt)=>{
+  assert.equal(opt.method,"GET");calls++;
+  if(first===null)first=url;
+  if(url===first&&inconsistent<4){
+   inconsistent++;
+   return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+  }
+  return {ok:true,status:200,json:async()=>({total_count:0,workflow_runs:[]})};
+ }});
+ assert.equal(inconsistent,4);
+ assert.equal(calls,25);
+ assert.equal(outcome.plan.assessments.length,P6_ROLLING_ROUTES.length);
+ assert.equal(outcome.plan.dispatchCount,0);
+});
+test("count mismatch never authorizes unverified empty history after six exact attempts",async()=>{
+ const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
+ let repeated=0;
+ await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async(url,opt)=>{
+  assert.equal(opt.method,"GET");
+  const u=new URL(url);
+  if(u.searchParams.has("status")){
+   repeated++;
+   return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+  }
+  return {ok:true,status:200,json:async()=>({total_count:0,workflow_runs:[]})};
+ }}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT/);
+ assert.equal(repeated,6);
+});
 test("persistent inconsistent active history or out-of-scope count remains a hard hold",async()=>{
  const cfg={sha,epoch,token:"synthetic-mock-token-123",now:()=>clock,sleep:async()=>{}};
  let retries=0;
@@ -305,6 +336,6 @@ test("persistent inconsistent active history or out-of-scope count remains a har
   if(new URL(url).searchParams.has("status")){retries++;return {ok:true,json:async()=>({total_count:1,workflow_runs:[]})};}
   return {ok:true,json:async()=>({total_count:0,workflow_runs:[]})};
  }}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT/);
- assert.equal(retries,3);
+ assert.equal(retries,6);
  await assert.rejects(readP6RollingGithubSnapshot({...cfg,fetcher:async()=>({ok:true,json:async()=>({total_count:101,workflow_runs:[]})})}),/GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ROUTE_HISTORY_LIMIT/);
 });
