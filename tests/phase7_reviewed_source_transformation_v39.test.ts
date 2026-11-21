@@ -1,3 +1,6 @@
+import type {PoolClient} from "pg";
+import {persistPhase7BoundPreFragmentInTransaction,type Phase7ProspectivePrePreservationPolicy,type Phase7BoundPreTransactionInput} from "../server/lib/disruption/phase7PreFragmentTransaction_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {preparePhase7BoundPrePreservation,type Phase7BoundPrePreservationRequest} from "../server/lib/disruption/phase7BoundPrePreservation_v39";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import {selectP5EStage14BoundRouteFeatures} from "../server/lib/disruption/phase5AmendmentEStage14BoundRouteFeatures_v39";
@@ -311,6 +314,32 @@ describe("native FIDS status grouping candidate: exact public contract domain, n
    const changed={...p,fields:[...p.fields.slice(0,-1),bad]};
    expect(validatePhase7ReviewedTransformationProfile(changed).pass).toBe(false);
   }
+ });
+ it("present out-of-domain native status is counted as lost and aborts the real PRE persistence function before any INSERT",async()=>{
+  const {c,p}=make();
+  c.cohortBucketCount=31;
+  const issuedAtUtc="2026-11-21T05:59:00.000Z",selectedNativeTUtc="2026-11-22T06:00:00.000Z",cutoffUtc="2026-11-21T06:00:00.000Z",sourceExpiresAtUtc="2026-11-22T05:30:00.000Z";
+  const transformedAtUtc="2026-11-21T05:59:01.000Z";
+  const dispositions:Phase7BoundPrePreservationRequest["dispositions"]=P5_E_ALLOWED_PRE_FEATURES.map(field=>{
+   const f=p.fields.find(v=>v.role==="feature"&&v.sourceField===field);
+   return f?{field,disposition:"REVIEWED_DERIVED_BUCKET",outputField:f.outputField,reviewSha256:f.transformEvidenceSha256}:{field,disposition:"INDEPENDENT_SOURCE_EXACT_LANE",outputField:null,reviewSha256:sha("synthetic lane "+field)};
+  });
+  const features:Phase7BoundPrePreservationRequest["features"]=[{featureName:"reported_pre_departure_status",value:"FutureNewStatus",informationAvailableAt:new Date("2026-11-21T05:30:00.000Z"),source:"AERODATABOX_FIDS",sourceVersion:sha("synthetic bound original")}];
+  const request:Phase7BoundPrePreservationRequest={horizon:"T-24h",selectedNativeTUtc,cutoffUtc,issuedAtUtc,transformedAtUtc,sourceExpiresAtUtc,split:"train",cohortBucket:0,features,dispositions,separatelyVerifiedFields:[]};
+  const audit=preparePhase7BoundPrePreservation(c,p,request);
+  expect(audit.audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:0,lost:1,falsePresence:0});
+  const manifestSha256=sha("synthetic manifest"),rightsSha256=sha("synthetic rights");
+  const review:Phase7ProspectivePrePreservationPolicy={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256,rightsSha256,contractSha256:hashPhase7DurableCandidate(c),profileSha256:hashPhase7DurableCandidate(p),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:c.researchExpiryUtc,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const x:Phase7BoundPreTransactionInput={contract:c,profile:p,review,reviewSha256:hashPhase7DurableCandidate(review),dispositions,manifestSha256,queryDigestSha256:sha("synthetic query"),rightsSha256,snapshotId:"1",runDayIndex:1,selectedNativeTUtc,cutoffUtc,issuedAtUtc,sourceExpiresAtUtc,horizon:"T-24h",features,separatelyVerifiedFields:[]};
+  const queries:string[]=[];
+  const db={query:async(sql:string)=>{queries.push(sql);if(queries.length!==1)throw Error("UNEXPECTED_WRITE");return {rows:[{at:new Date(transformedAtUtc),isolation:"serializable",ro:"off"}]}}} as unknown as PoolClient;
+  await expect(persistPhase7BoundPreFragmentInTransaction(db,x)).rejects.toThrow("unpreserved-present-field");
+  expect(queries).toHaveLength(1);
+  expect(queries[0]).toMatch(/^SELECT clock_timestamp/);
+  const known=preparePhase7BoundPrePreservation(c,p,{...request,features:features.map(f=>({...f,value:"Boarding"}))});
+  expect(known.audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:1,lost:0,falsePresence:0});
+  const absent=preparePhase7BoundPrePreservation(c,p,{...request,features:[]});
+  expect(absent.audit.counts.reported_pre_departure_status).toMatchObject({present:0,preserved:0,lost:0,falsePresence:0});
  });
  it("keeps the independent approval and as-of fences",()=>{
   const {c,p,status}=make();
