@@ -307,7 +307,7 @@ if(rows.length!==1)process.exit(2);const x=rows[0];
 if(x.relayRunId!==Number(id)||x.mode!=="PRIMARY_BACKSTOP"||x.providerCallsByRelay!==0||x.databaseReadsByRelay!==0||x.databaseWritesByRelay!==0||x.paidAuthorityGranted!==false)process.exit(2);
 const allowed=["TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF","DEFER_RECENT_PRIMARY_STEP_NOT_DELETION_PROOF","DEFER_TARGET_ALREADY_ACTIVE","EXTERNAL_WAKE_PREFLIGHT_DEFERRED_NO_POST"];
 if(!allowed.includes(x.status))process.exit(2);
-console.log(JSON.stringify({status:"GATE7_CURRENT_MAIN_RELAY_PIN_AND_NO_PROVIDER_OBSERVATION_PASS",relayDisposition:x.status,relayRunId:Number(id),targetRunId:x.targetRunId??null,targetMain:pin,providerCallsByRelay:0,databaseWritesByRelay:0,phase6PaidGo:false}));
+console.log(JSON.stringify({status:x.status==="TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF"?"GATE7_PRIMARY_RELAY_ACK_VERIFIED_PARTIAL_NOT_FULL_REHEARSAL":"GATE7_PRIMARY_RELAY_DEFERRED_NO_POST_NOT_REHEARSAL",relayDisposition:x.status,relayRunId:Number(id),targetRunId:x.targetRunId??null,targetMain:pin,providerCallsByRelay:0,databaseWritesByRelay:0,fullGate7RehearsalCertified:false,phase6PaidGo:false}));
 NODE
 else
   echo '{"status":"GATE7_RELAY_FORWARD_SKIPPED_REVIEW_REQUIRED","providerCallsByRelay":0,"databaseWritesByRelay":0,"phase6PaidGo":false}'
@@ -341,6 +341,7 @@ echo "MAIN=$PIN"
 echo "MONDAY_PACKAGE=$OUT"
 echo "PRIMARY_VERIFY_RUN=$RUN"
 echo "RELAY_OBSERVATION_RUN=$RRUN"
+echo "GATE7_FULL_AUTONOMOUS_REHEARSAL=NOT_YET_PROVEN"
 echo "GATE8_FREE_ACCOUNT_PREARM=$ACCOUNT_STATUS"
 [[ "$(remote_main)" == "$PIN" && "$(remote_relay)" == "$RELAY_PIN" ]] || hold FINAL_PIN_DRIFT
 echo "NO_SOURCE_ENABLE_NO_FIDS_CALL_NO_PAID_GO"
