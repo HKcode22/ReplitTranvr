@@ -4,6 +4,7 @@ import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool} from "pg";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
+import {buildFidsRequestContractV39} from "../server/lib/disruption/fidsCensus_v3";
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const enabled=process.env.P5_V0107_DISPOSABLE_PG16==="1";
 const suite=enabled?describe:describe.skip;
@@ -32,10 +33,18 @@ suite("V0107 actual PG16 selective 23-hour future POST physical expiry (disposab
  async function original(ageHours:number,options:{ref?:string;purpose?:string;inner?:string;direction?:string;marked?:boolean}={}){
   const n=++serial,pid=randomUUID(),at=iso((await now())-ageHours*3600_000);
   const start=iso(Date.parse(at)+3*3600_000),end=iso(Date.parse(at)+5*3600_000);
+  // Real production FIDS request-frame compiler generates the nested
+  // reservation marker, not a hand-authored SQL-fixture-only mirror.
+  const ref=options.ref??hash("unknown ref "+n),contract=hash("contract "+n);
+  const frame=buildFidsRequestContractV39({airportIcao:"WSSS",fromLocal:start.slice(0,16),toLocal:end.slice(0,16),
+   ianaTimezone:"Asia/Singapore",withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,
+   direction:"Departure",restCategory:"outcome",phase5PostReservationSha256:ref,
+   serviceWindowStartUtc:new Date(start),serviceWindowEndUtc:new Date(end),cutoffUtc:new Date(at),
+   providerApiVersion:"ci",fidsProtocolVersion:"ci",openapiSha256:contract});
   const raw:any={synthetic:true,originalDecodedEntityBodyPreserved:options.marked??true,
-   phase5PostPurpose:options.purpose??purpose,phase5PostReservationSha256:options.ref??hash("unknown ref "+n),
-   fidsRequestContract:{phase5PostReservationSha256:options.inner??options.ref??hash("unknown ref "+n)}};
-  await db.query("INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS',$2,$3,$4,$5,$6,'Asia/Singapore',$7,$7,$7,$8,$9::jsonb,'ci','ci',$10)",[pid,options.direction??"Departure",start,end,start.slice(0,16),end.slice(0,16),at,hash("raw "+n),JSON.stringify(raw),hash("contract "+n)]);
+   phase5PostPurpose:options.purpose??purpose,phase5PostReservationSha256:ref,
+   fidsRequestContract:options.inner?{...frame,phase5PostReservationSha256:options.inner}:frame};
+  await db.query("INSERT INTO clean.fids_query_response(population_query_id,source_airport_icao,query_direction,service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,available_at,response_hash,raw_payload,provider_api_version,fids_protocol_version,openapi_sha256) VALUES($1,'WSSS',$2,$3,$4,$5,$6,'Asia/Singapore',$7,$7,$7,$8,$9::jsonb,'ci','ci',$10)",[pid,options.direction??"Departure",start,end,start.slice(0,16),end.slice(0,16),at,hash("raw "+n),JSON.stringify(raw),contract]);
   return pid;
  }
  beforeAll(async()=>{
