@@ -14,6 +14,21 @@ import {compileP6ProspectiveDisabledStageRevisionV39,commitP6ProspectiveDisabled
 import {P5_TWO_STAGE_ROLES} from "../scripts/v39_phase5_two_stage_logins_independent_live_readonly_once.mjs";
 import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_MONDAY_CALENDAR_ROWS_SHA} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const REPO="HKcode22/ReplitTranvr",OLD_MANIFEST="3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",OLD_CONFIG="001a3f0634cc41b8d1327be36404efa74feaaea21fe4ef6eead7e993acaf4c88",ORIGINAL_MANIFEST="bd14ff3e558b975a889741380da807644ca9d3573a23e2416986ee6f71e1e41f";
+const RECOVER_NOV22="RECOVER_EXACT_NOV22_FROM_COMMITTED_EVIDENCE";
+const NOV22_CALENDAR="9ee062ab6d82de8b3949f88ba390d4bcb9121890be592797ec0b4c498ff289a6";
+const NOV22_RANGE="cde412a012e912f9fbe42cd29375ddbaf674054d11af45fe6d2a8eab36c81bb3";
+const NOV22_TIMING="88cbedd1ec867a6372f69c2708e180509f849d71a34963d4fb5ac851d6e30be5";
+const NOV22_PREDECESSORS=Object.freeze([
+ "RUN-20261116-OWNERREVIEW112557","RUN-20261116-PREARMCLOCK43832469501","RUN-20261116-QUOTA091844",
+ "RUN-20261116-BTSOVERLAP14198898471","RUN-20261116-SOURCEGAPSENSITIVITY","RUN-20261116-HISTORICALFIDSCLEAR",
+ "RUN-20261116-V0103VERIFY43987495623","RUN-20261116-HISTORICALPREINVENTORY","RUN-20261116-V0104OWNERINSTALL",
+ "RUN-20261116-HEARTBEAT43992105353","RUN-20261116-PRIMARYEXPIRY43997742324","RUN-20261116-HISTORICALPRECLASSIFICATION015741",
+ "RUN-20261119-FRESHACCOUNT033903","RUN-20261119-SCIENTIFICSCOPEREVIEW","RUN-20261119-FRESHBUDGETRECONCILED",
+ "RUN-20261119-OPERATIONALSCOPEREVIEW","RUN-20261119-EXACTCOMPACTCOST","RUN-20261119-NATIVEPOSTGEOMETRY",
+ "RUN-20261119-ACTUALSIGNERALIASES","RUN-20261119-ACTUALPOLICYRECOVERY","RUN-20261119-ACTUALOWNERRECOVERY",
+ "DEC-20261119-OWNERPRESERVEF8","RUN-20261119-EXISTINGSTOPGUARDEVIDENCE","RUN-20261119-FINALOWNERMETADATA",
+ "RUN-20261119-NATIVECOREPREARMREVIEW","RUN-20261119-CURRENTGITHUBSTOP","RUN-20261119-PUBLISHEDGITHUBSTOPCOMBINED"
+]);
 const DATE="data-collection/phase5/evidence/2026-11-20_nov23_monday_exact_geometry_budget_REVIEW_ONLY.json";
 const RIGHTS="data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",PITR="data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
@@ -37,6 +52,35 @@ export function validateP6MondayDateDecision(x:any,expected:{reviewDigest:string
     Date.parse(x.reviewedAtUtc)>now.getTime()||Date.parse(x.reviewedAtUtc)>=Date.parse("2026-11-23T23:10:00.000Z")||
     ["independentProspectiveRevisionApproved","originalScientificDesignPreserved","oldStageRemainsArchivedEvidence","noBackfillApproved","sourceUseDeferredToPhase6Activation"].some(k=>x[k]!==true)||x.phase6PaidGo!==false)hold("EXACT_INDEPENDENT_DATE_DECISION_REQUIRED");
  return true;
+}
+export function recoverP6Nov22StageInputFromCommittedEvidence(){
+ const r=prepareP6ActualReviewInput(P6_NOV22_STAGE_CODE,0,"COMPACT_NOV22"),rec=r.concreteReviewRecommendation;
+ if(r.externalCandidate.expectedCalendarRowsSha256!==NOV22_CALENDAR||r.proposedSourceQueries!==6144||
+    r.proposedTotalReservedUnits!==36740||r.proposedPeakDailyUnits!==1280||
+    r.frameEvidence.frameHash!=="02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94"||
+    rec.netRestCeilingUnits!==49468||!same(rec.proposedAlertSafety,{
+     unsettledBurstMarginCredits:50,protectedAlertFloorCredits:1000,alertRunSpendCeilingCredits:680,
+     dailySoftStopMarginCredits:150,productionReconcileToleranceCredits:0,startAdmissionToleranceSeconds:120,
+     safetyWatchdogPollMs:5000,settlementInitialWaitSeconds:30,settlementPollIntervalSeconds:10,
+     settlementStableReadCount:3,settlementTimeoutSeconds:600}))hold("RECOVERED_NOV22_PUBLIC_EVIDENCE_DRIFT");
+ const external={...r.externalCandidate,manifestSha256:OLD_MANIFEST,calendarSha256:NOV22_CALENDAR,
+  configSha256:OLD_CONFIG,frameSha256:r.frameEvidence.frameHash,codeSha40:P6_NOV22_STAGE_CODE,
+  phase6AuthorizationId:"AUTH-20261119-P5INERTFREEZE",predecessorEvidenceIds:[...NOV22_PREDECESSORS],
+  alertSafety:rec.proposedAlertSafety,providerRangeEvidenceSha256:NOV22_RANGE,timingEvidenceSha256:NOV22_TIMING,
+  cycleRestCeilingUnits:rec.netRestCeilingUnits,jointBudgetReview:rec.jointBudgetReview};
+ const timing={...r.timingCandidate,timingEvidenceSha256:NOV22_TIMING};
+ const eb=Buffer.from(JSON.stringify(external)),tb=Buffer.from(JSON.stringify(timing));
+ const result=compileP6ActualCandidateExport({externalBytes:eb,expectedExternalFileSha256:sha(eb),
+  timingBytes:tb,expectedTimingFileSha256:sha(tb),calendarVariant:"COMPACT_NOV22"});
+ const stage=result.files.find(x=>x.path==="unsigned-stage-input.json");
+ if(!stage||result.summary.unsignedStageInputSha256!==P6_NOV22_STAGE_SHA||stage.sha256!==P6_NOV22_STAGE_SHA||
+    result.summary.unsignedCostOnlyEnvelopeSha256!==P6_NOV22_COST_SHA)hold("RECOVERED_NOV22_EXACT_HASH_MISMATCH");
+ const input=JSON.parse(stage.bytes);
+ if(hash(input)!==P6_NOV22_STAGE_SHA||input.manifestSha256!==OLD_MANIFEST||input.configSha256!==OLD_CONFIG||
+    input.calendarSha256!==NOV22_CALENDAR||input.codeSha40!==P6_NOV22_STAGE_CODE||
+    input.phase6AuthorizationId!=="AUTH-20261119-P5INERTFREEZE"||
+    !same(input.predecessorEvidenceIds,NOV22_PREDECESSORS))hold("RECOVERED_NOV22_STAGE_SCOPE");
+ return {input,costSha256:result.summary.unsignedCostOnlyEnvelopeSha256,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
 }
 function oldPackage(dir:string){
  const old=privateRead(join(dir,"new-stage-input.json"),P6_NOV22_STAGE_SHA,48000),m=privateRead(join(dir,"new-manifest.json"),OLD_MANIFEST),c=privateRead(join(dir,"new-config.json"),OLD_CONFIG);
@@ -87,7 +131,7 @@ function save(p:string,files:Record<string,string>){
 async function main(){
  const [mode,oldDir,decisionPath,decisionSha,outOrPackage]=process.argv.slice(2),head=exactCheckout();
  if(!["--preview","--prepare-reviewed","--apply-reviewed"].includes(mode)||process.env.GITHUB_ACTIONS==="true"||process.env.ADB_AUTO_COLLECT!=="0"||process.env.V39_PHASE6_PROCESS_ARMED!=="0"||process.env.V39_PHASE6_OWNER_APPROVED!=="0"||[process.env.AERODATABOX_API_KEY,process.env.AERODATABOX_WEBHOOK_SECRET,process.env.RAPIDAPI_KEY].some(Boolean))hold("OWNER_NO_PROVIDER_SCOPE");
- const old=oldPackage(privateDir(oldDir)),b=baseReview(head,old);
+ const old=oldDir===RECOVER_NOV22?recoverP6Nov22StageInputFromCommittedEvidence().input:oldPackage(privateDir(oldDir)),b=baseReview(head,old);
  if(mode==="--preview"){
   if(process.argv.length!==4)hold("PREVIEW_ARGUMENTS");
   console.log(JSON.stringify({status:"MONDAY_EXACT_REVIEW_SCOPE_NOT_APPROVED_NO_GO",...b.scope,reviewDigest:b.reviewDigest,independentDateRevisionApproved:false,providerCalls:0,databaseWrites:0}));
