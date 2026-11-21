@@ -164,6 +164,24 @@ describe('Phase 7 reviewed source transformation boundary', () => {
     expect(validatePhase7ReviewedTransformationProfile(unsafe).pass).toBe(false);
   });
 
+  it('rejects reversible boolean and categorical encodings even when metadata claims reconstruction review', () => {
+    const categorical = {
+      ...profile(),
+      fields: [{...profile().fields[0], kind: 'categorical_dictionary' as const, bucketCount: 2,
+        boundaries: null, categories: ['low', 'high']}, profile().fields[1]],
+    };
+    expect(validatePhase7ReviewedTransformationProfile(categorical).failures)
+      .toContain('categorical-dictionary-reconstructible:congestion_bin');
+
+    const boolean = {
+      ...profile(),
+      fields: [{...profile().fields[0], kind: 'boolean_bucket' as const, bucketCount: 2,
+        boundaries: null, categories: ['false', 'true']}, profile().fields[1]],
+    };
+    expect(validatePhase7ReviewedTransformationProfile(boolean).failures)
+      .toContain('boolean-bucket-reconstructible:congestion_bin');
+  });
+
   it('never admits future PRE features or POST labels unavailable at release', () => {
     const input = decisions();
     input[0] = {...input[0], availableAtUtc: '2026-11-19T00:30:00.001Z'};

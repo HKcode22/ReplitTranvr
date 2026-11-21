@@ -13,7 +13,7 @@ import {readFileSync} from "node:fs";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
 import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
-import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
+import {P7_NATIVE_STATUS_DOMAIN,type Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
 import type {Phase7ProspectivePrePreservationPolicy} from "../server/lib/disruption/phase7PreFragmentTransaction_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -86,7 +86,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   const dispatch=new Date(now-15*60_000);
   const arr=Array.from({length:FLIGHTS},(_,i)=>({
    flight:"CD"+String(i+1).padStart(3,"0"),
-   status:"SCHEDULED"
+   status:"Boarding"
   }));
   const payload=Buffer.from(JSON.stringify({departures:arr}));
   const bodyHash=createHash("sha256").update(payload).digest("hex");
@@ -204,9 +204,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    p7Scoped=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7SCOPED),max:1});
    const shared={version:"v01",featureDictionarySha256:sha("synthetic dictionary"),termsReviewSha256:sha("synthetic terms"),derivedWorkReviewSha256:sha("synthetic derived review")};
    const expires=iso(now+7*86400000);
-   const p7Contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:expires,cohortBucketCount:31,features:[{name:"status_bin",bucketCount:2,fieldClass:"approved_derived",transformEvidenceSha256:sha("status"),nonReconstructable:true},{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("context"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("target"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
+   const statusGroups=[P7_NATIVE_STATUS_DOMAIN.slice(0,2),P7_NATIVE_STATUS_DOMAIN.slice(2,5),P7_NATIVE_STATUS_DOMAIN.slice(5,9),P7_NATIVE_STATUS_DOMAIN.slice(9)];
+   const p7Contract:Phase7DerivedReleaseContract={schema:"v39.phase6.phase7-derived-release-contract.v2",...shared,sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:expires,cohortBucketCount:31,features:[{name:"status_bin",bucketCount:4,fieldClass:"approved_derived",transformEvidenceSha256:sha("status"),nonReconstructable:true},{name:"context_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("context"),nonReconstructable:true}],labels:[{name:"delay_bin",bucketCount:3,fieldClass:"approved_derived",transformEvidenceSha256:sha("target"),nonReconstructable:true}],allowedHorizons:["T-24h","T-6h","T-90m"]};
    const profile:Phase7ReviewedTransformationProfile={schema:"v39.phase7.reviewed-source-transformation.v1",...shared,mappingExpiryHours:24,approvedForUse:true,fields:[
-    {sourceField:"reported_pre_departure_status",outputField:"status_bin",role:"feature",kind:"categorical_dictionary",bucketCount:2,boundaries:null,categories:["SCHEDULED","OTHER"],transformEvidenceSha256:sha("status"),nonReconstructable:true},
+    {sourceField:"reported_pre_departure_status",outputField:"status_bin",role:"feature",kind:"categorical_group_dictionary",bucketCount:4,boundaries:null,categories:statusGroups,transformEvidenceSha256:sha("status"),nonReconstructable:true},
     {sourceField:"prior_route_departure_delay_median_minutes",outputField:"context_bin",role:"feature",kind:"numeric_threshold_bucket",bucketCount:3,boundaries:[10,20],categories:null,transformEvidenceSha256:sha("context"),nonReconstructable:true},
     {sourceField:"gate_out_delay_minutes",outputField:"delay_bin",role:"label",kind:"numeric_threshold_bucket",bucketCount:3,boundaries:[0,15],categories:null,transformEvidenceSha256:sha("target"),nonReconstructable:true}
    ]};
@@ -216,7 +217,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    });
    const review:Phase7ProspectivePrePreservationPolicy={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:manifest,rightsSha256:rights,contractSha256:hashPhase7DurableCandidate(p7Contract),profileSha256:hashPhase7DurableCandidate(profile),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:expires,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
    const reviewSha256=hashPhase7DurableCandidate(review);
-   await admin.query("INSERT INTO phase7_private.pre_preservation_policy_v39(manifest_sha256,contract_sha256,profile_sha256,rights_sha256,policy_review_sha256,valid_from_utc,valid_until_utc,feature_dictionary_sha256,contract_version,feature_bucket_limits,label_bucket_limits,mapping_hours,research_expiry_utc) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13)",[manifest,review.contractSha256,review.profileSha256,rights,reviewSha256,iso(now-60000),iso(now+86400000),shared.featureDictionarySha256,shared.version,JSON.stringify({status_bin:2,context_bin:3}),JSON.stringify({delay_bin:3}),24,expires]);
+   await admin.query("INSERT INTO phase7_private.pre_preservation_policy_v39(manifest_sha256,contract_sha256,profile_sha256,rights_sha256,policy_review_sha256,valid_from_utc,valid_until_utc,feature_dictionary_sha256,contract_version,feature_bucket_limits,label_bucket_limits,mapping_hours,research_expiry_utc) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13)",[manifest,review.contractSha256,review.profileSha256,rights,reviewSha256,iso(now-60000),iso(now+86400000),shared.featureDictionarySha256,shared.version,JSON.stringify({status_bin:4,context_bin:3}),JSON.stringify({delay_bin:3}),24,expires]);
    p7={contract:p7Contract,profile,review,reviewSha256,dispositions,separatelyVerifiedFields:["origin_icao","destination_icao"],reader:p7Reader,expectedReaderRole:P7READER};
   }
   if(SCOPED){
@@ -523,7 +524,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
   const observations=[
    {flightInstanceId:permit.flightInstanceId,
-    field:"reported_pre_departure_status" as const,value:"SCHEDULED",
+    field:"reported_pre_departure_status" as const,value:"Boarding",
     source:"AERODATABOX_FIDS" as const,sourceRecordId:response,
     observedAtUtc:memberAt,availableAtUtc:memberAt,
     rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const},
@@ -574,10 +575,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    const pre=(await admin.query("SELECT f.packet_bytes,l.expires_at_utc,b.source_expires_at_utc FROM phase7_private.pre_fragment_v39 f JOIN phase7_private.pre_source_link_v39 l ON l.row_id=f.row_id JOIN clean.flight_snapshots s ON s.id=l.snapshot_id JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id WHERE l.snapshot_id=$1",[saved.committedSnapshotId])).rows;
    expect(pre).toHaveLength(1);
    const bytes=pre[0].packet_bytes.toString("utf8"),row=JSON.parse(bytes).rows[0];
-   expect(row.featureBuckets).toEqual({status_bin:0,context_bin:1});
+   expect(row.featureBuckets).toEqual({status_bin:1,context_bin:1});
    expect(row.labelBuckets).toEqual({delay_bin:null});
    expect(row.censoring).toBe("not_due");
-   expect(bytes).not.toMatch(/WSSS|YSSY|leg:ci:cd|SCHEDULED|2026-|population_query_id/);
+   expect(bytes).not.toMatch(/WSSS|YSSY|leg:ci:cd|Boarding|2026-|population_query_id/);
    expect(pre[0].expires_at_utc.getTime()).toBeLessThanOrEqual(pre[0].source_expires_at_utc.getTime());
    await expect(p7Reader!.query("SELECT * FROM phase7_private.pre_source_link_v39")).rejects.toMatchObject({code:"42501"});
    await expect(writer.query("SELECT * FROM phase7_private.pre_fragment_v39")).rejects.toMatchObject({code:"42501"});
@@ -609,7 +610,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   expect(features.features_json).toEqual([
    {name:"origin_icao",value:"WSSS"},
    {name:"destination_icao",value:"YSSY"},
-   {name:"reported_pre_departure_status",value:"SCHEDULED"},
+   {name:"reported_pre_departure_status",value:"Boarding"},
    {name:"prior_route_departure_delay_median_minutes",value:13}
   ]);
   expect(features.missingness_flags).toMatchObject({
