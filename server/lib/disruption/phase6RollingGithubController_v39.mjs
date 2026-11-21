@@ -270,7 +270,12 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
  laneHistoryEpoch(P6_ROLLING_ROUTES.find(r=>r.lane==="EARLY_DRAW"),{epoch,clock:started,directRecovery,earlyDrawHistoryEpoch});
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
  async function get(path,key){
-  for(let attempt=0;attempt<3;attempt++){
+  // GitHub can temporarily expose a list total_count that disagrees with
+  // rows while runs change state. Re-read precisely the SAME GET; never
+  // accept partial active history or infer that the status is empty.
+  // The original three-attempt transport/HTTP fault budget remains fixed.
+  const EXACT_COUNT_RETRY_LIMIT=6;
+  for(let attempt=0;attempt<EXACT_COUNT_RETRY_LIMIT;attempt++){
    let res;
    try{res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});}
    catch{if(attempt===2)hold("GITHUB_HISTORY_TRANSPORT_UNAVAILABLE");await sleep(500*(attempt+1));continue;}
@@ -288,11 +293,14 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
    if(v.total_count>100)
     hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_"+scope+"_LIMIT");
    if(v[key].length!==v.total_count){
-    if(attempt<2&&now()-started<110000){await sleep(500*(attempt+1));continue;}
+    if(attempt<EXACT_COUNT_RETRY_LIMIT-1&&now()-started<105000){await sleep(750*(attempt+1));continue;}
     hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_"+scope+"_COUNT");
    }
    return v[key];
   }
+  // Defensive terminal guard if an unexpected response type ever exhausts
+  // the finite retry loop without returning a fully verified list.
+  hold("GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_RETRY_EXHAUSTED");
  }
  async function history(route){
   const out=[],routeEpoch=laneHistoryEpoch(route,{epoch,clock:started,directRecovery,earlyDrawHistoryEpoch});
