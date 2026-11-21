@@ -30,6 +30,23 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
     expect(account).not.toContain('method:"DELETE"');
     expect(account).not.toContain("/flights/");
   });
+  it("checks every embedded owner Node program before any production access",()=>{
+    const bodies=[...shell().matchAll(/<<'NODE'\n([\s\S]*?)\nNODE/g)].map(m=>m[1]);
+    expect(bodies.length).toBeGreaterThanOrEqual(7);
+    for(const b of bodies)
+      expect(()=>execFileSync("node",["--input-type=module","--check"],{
+        input:b,stdio:["pipe","pipe","pipe"]
+      })).not.toThrow();
+  });
+  it("uses exact official post-stage verifier and commissioned retention profile",()=>{
+    const s=shell();
+    expect(s).toContain("verifyP6ProspectiveDisabledStageRevisionReadOnlyV39");
+    expect(s).toContain("MONDAY_STAGE_ALREADY_PRESENT");
+    expect(s).toContain("V0107_VERIFIED_FUTURE_POST_23H_MARGIN");
+    expect(s).toContain("HOLD MAIN_CHANGED_BEFORE_RETENTION_REPIN".replace("HOLD ","hold "));
+    expect(s).not.toContain("singleton_key=true");
+    expect(s).toContain("GATE7_FULL_AUTONOMOUS_REHEARSAL=NOT_YET_PROVEN");
+  });
   it("uses exact current main and reviewed relay identity fail-closed",()=>{
     const s=shell();
     expect(s).toContain('PIN="$(git rev-parse HEAD)"');
