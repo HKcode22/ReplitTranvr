@@ -80,7 +80,7 @@ export function gate05OnePaidLaunchReceiptChecksV39(
    run?.head_sha===head&&run?.head_branch==="main"&&
    run?.event==="workflow_dispatch"&&run?.run_attempt===1&&
    typeof run?.path==="string"&&
-   run.path.includes("phase3-gate05-science-exact-owned-stop.yml")&&
+   run.path.includes("phase3-gate05-science-exact-owned-stop-retry4.yml")&&
    run?.display_title==="Gate05 Science STOP "+m.scope;
  const stepValid=Array.isArray(jobs?.jobs)&&jobs.jobs.some(
    (j:any)=>j.name==="exact-owned-stop"&&j.status==="in_progress"&&
