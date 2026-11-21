@@ -1,0 +1,45 @@
+name: Phase6 free account launch prearm review (NO PAID PROVIDER)
+
+on:
+  pull_request:
+    paths:
+      - "review-tools/p6_launch_free_account_prearm_v39.mjs"
+      - ".github/workflows/phase6-free-account-prearm-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax
+        run: node --check review-tools/p6_launch_free_account_prearm_v39.mjs
+      - name: Static free-read boundary
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const p='review-tools/p6_launch_free_account_prearm_v39.mjs';
+          const s=fs.readFileSync(p,'utf8');
+          const required=[
+            '"/subscriptions/balance"',
+            '"/subscriptions/webhook"',
+            'method:"GET"',
+            'providerPaidGets:0',
+            'providerMutations:0',
+            'sourceFidsCalls:0',
+            'databaseWrites:0',
+            'sourceContentsRetrieved:false',
+            'phase6PaidGo:false'
+          ];
+          for(const x of required) if(!s.includes(x)) throw Error('missing '+x);
+          for(const bad of ['/flights/','/fids/','method:"POST"','method:"DELETE"','pg"','DATABASE_URL'])
+            if(s.includes(bad)) throw Error('forbidden '+bad);
+          console.log('FREE_ACCOUNT_PREARM_STATIC_BOUNDARY_PASS');
+          NODE
