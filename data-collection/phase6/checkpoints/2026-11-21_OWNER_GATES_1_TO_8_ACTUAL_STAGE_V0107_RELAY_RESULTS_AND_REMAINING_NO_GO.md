@@ -134,3 +134,14 @@ Actual separate relay GitHub Actions were inspected **after** the first successf
 - These are observed **post-repin** safeguards and one more actual protected target child, stronger than a single root ACK. They do not prove the 10-minute cadence across future paid SOURCE windows, managed cron/HTTP identity, continuous native scheduled wake, backup/PITR, or complete PRE/POST integrated rehearsal. Keep Gate 7 IN PROGRESS and Gate 3 physical deadline/PITR OPEN.
 
 No main, database, provider or GitHub protected configuration was mutated by this audit.
+
+## Newly discovered Gate 1/2 owner-only deployment blocker — technical correction under review, not production
+
+**Actual current-main source inspection** discovered two trusted owner-only Phase7 installer/commissioner entrypoints still binding their **Nov22** stage `0a7b1a28f243de76d4c83026d15f585265ef6f7b` and manifest `3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7`:
+- `scripts/v39_phase7_inert_storage_owner_v39.ts` permits `--inspect` without that old disabled-authority check but its **`--install-inert`** route would reject the current actual Monday stage.
+- `scripts/v39_phase7_preservation_logins_owner_v39.mjs` requires the Nov22 pins even in `safeMetadata()` for `commission` and `recover`; any existing partial credential recovery must never be blindly retried.
+- These two are specifically the Phase7 schema/roles/login path; the established Phase6 transport reader/publisher and Gate5/V0107 commissioning are **not** invalidated. Do not infer that `phase7_private` is absent without a fresh **read-only schema and role inventory**.
+
+An **independent engineering correction** is now prepared in [review-only PR #935](https://github.com/HKcode22/ReplitTranvr/pull/935), candidate head initially `919e232ff8176aa5f74903ed458acfeac0942ad7`. A shared immutable four-key Monday authority accepts only `codeSha=781140c...`, `manifest=b2a691...`, `calendar=55ea0...`, `config=ee4ec...` with `enabled=false` and `revoked=null`, preserving source/PG/STOP guards. Both owner tools and disposable PG16 workflow were updated; negative tests explicitly reject stale Nov22, partial drift, enabled or revoked authority. **Candidate CI/review is not a production receipt or actual role commission**.
+
+Crucially, **merging executable PR #935 changes GitHub main SHA** while the existing production stage authorizes old main; that requires a separate independently reviewed prospective disabled-stage/code rebind, avoiding any accidental active SOURCE or arbitrary date rewrite. Until that transition and actual schema inventory, keep #935 unmerged and **do not invoke** the two stale original current-main owner installers for production writes. This is a preexisting *Gate1/Gate2 commissioning subtask*, not an invented ninth gate, and does not change the original scientific design or any paid budget.
