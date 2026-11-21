@@ -100,12 +100,13 @@ export function withP7PostRecoverySelector(e:NodeJS.ProcessEnv):NodeJS.ProcessEn
  const runId=e.GITHUB_RUN_ID;
  const temp=e.RUNNER_TEMP;
  if(typeof runId!=="string"||!R.test(runId)||typeof temp!=="string")hold("RECOVERY_HANDOFF_ROOT");
- const root=temp;
+ const root: string=temp!;
+ const safeRunId: string=runId!;
  if(realpathSync(root)!==root)hold("RECOVERY_HANDOFF_ROOT");
- const path=join(root,"p7-recovery-"+runId+".json"),st=lstatSync(path);
+ const path=join(root,"p7-recovery-"+safeRunId+".json"),st=lstatSync(path);
  if(!st.isFile()||st.isSymbolicLink()||st.uid!==process.getuid?.()||st.nlink!==1||(st.mode&0o077)!==0||st.size<100||st.size>14000)hold("RECOVERY_HANDOFF_FILE");
  const w=JSON.parse(readFileSync(path,"utf8")),s=w.selector as P7RecoverySelector;
- if(w.schema!=="v39.phase7.recovery-runner-wire.v1"||w.runId!==runId||s?.originalGithubRunId!==e.P6_PHASE7_ORIGINAL_POST_RUN_ID)hold("RECOVERY_HANDOFF_SCOPE");
+ if(w.schema!=="v39.phase7.recovery-runner-wire.v1"||w.runId!==safeRunId||s?.originalGithubRunId!==e.P6_PHASE7_ORIGINAL_POST_RUN_ID)hold("RECOVERY_HANDOFF_SCOPE");
  return {...e,P6_PRIVATE_POST_DAY:String(s.runDayIndex),P6_PRIVATE_POST_REVISION:String(s.indexRevision),P6_PRIVATE_POST_INDEX_SHA:s.indexSha256,
   P6_PRIVATE_POST_SHARD:String(s.shardIndex),P6_PRIVATE_POST_PACKET_SHA:s.packetSha256,P6_PRIVATE_POST_ROUTE_SHA:s.routingIntentSha256};
 }
