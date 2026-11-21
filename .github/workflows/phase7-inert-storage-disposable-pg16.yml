@@ -7,6 +7,9 @@ on:
       - 'scripts/v39_phase7_inert_storage_owner_v39.ts'
       - 'scripts/v39_phase7_expiry_github_v39.ts'
       - 'scripts/v39_phase7_preservation_logins_owner_v39.mjs'
+      - 'scripts/v39_phase7_monday_owner_stage_binding_v39.mjs'
+      - 'scripts/v39_phase7_monday_owner_stage_binding_v39.d.mts'
+      - 'tests/phase7_monday_owner_stage_binding_v39.test.mjs'
       - 'server/lib/disruption/phase7ExpiryRunner_v39.ts'
       - '.github/workflows/phase5-primary-fids-expiry-no-provider.yml'
       - 'tests/phase7_inert_storage_commission_v39.test.ts'
@@ -50,4 +53,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '20', cache: npm}
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Frozen Monday owner-stage guarded unit test (no provider/no DB)
+        run: node --test tests/phase7_monday_owner_stage_binding_v39.test.mjs
       - run: npx --no-install vitest run tests/phase7_inert_storage_commission_v39.test.ts tests/phase7_pre_policy_owner_scope_v39.test.ts tests/phase7_independent_noaa_receipt_v39.test.ts
