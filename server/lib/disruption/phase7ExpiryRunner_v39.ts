@@ -33,6 +33,22 @@ export async function readP7ExpiryStatus(reader:Pool){
   return {observedAtUtc:new Date(s.observedAtUtc).toISOString(),liveLinks:l.liveLinks,dueLinks:Math.max(l.dueLinks,s.dueLinks),dueNextHour:l.dueNextHour,dueBundles:s.dueBundles,dueFragments:s.dueFragments,liveLinksOnDueFragments:s.liveLinksOnDueFragments};
  }finally{await c.query("ROLLBACK").catch(()=>{});c.release()}
 }
+/** Even an empty APPLY must authenticate the narrow writer on the primary.
+ * Pool construction is lazy; a zero backlog must not mask invalid credentials
+ * or privilege drift. SELECT catalog metadata only, always roll back. No
+ * sweep function is invoked by this preflight. */
+async function preflightP7ExpiryWriter(writer:Pool){
+ const c=await writer.connect();let rolledBack=false;
+ try{
+  await c.query("BEGIN READ WRITE");
+  await c.query("SET LOCAL statement_timeout='15000ms'; SET LOCAL lock_timeout='1500ms'");
+  await actor(c,false);
+  await c.query("ROLLBACK");rolledBack=true;
+ }finally{
+  if(!rolledBack){try{await c.query("ROLLBACK");rolledBack=true}catch{}}
+  c.release(rolledBack?undefined:Error("P7_EXPIRY_WRITER_PREFLIGHT_ROLLBACK_UNKNOWN"));
+ }
+}
 async function oneP7Sweep(writer:Pool,limit:number){
  const c=await writer.connect();let commit=false,ack=false;
  try{
@@ -49,6 +65,9 @@ async function oneP7Sweep(writer:Pool,limit:number){
 export async function runP7ExpiryOnce(reader:Pool,writer:Pool|undefined,mode:Mode){
  if(!["VERIFY_ONLY","APPLY_DUE_ONLY"].includes(mode)||(mode==="VERIFY_ONLY"&&writer!==undefined)||
   (mode==="APPLY_DUE_ONLY"&&(!writer||writer===reader)))hold("MODE");
+ // Authenticate the writer before the independent final initial read; the
+ // VERIFY path never receives or connects to it.
+ if(mode==="APPLY_DUE_ONLY")await preflightP7ExpiryWriter(writer!);
  const before=await readP7ExpiryStatus(reader);
  if(mode==="VERIFY_ONLY")return {status:"P7_EXPIRY_VERIFY_ONLY_NO_GO",before,after:before,deletedLinks:0,deletedBundles:0,deletedFragments:0,providerCalls:0,phase6PaidGo:false};
  let after=before,deletedLinks=0,deletedBundles=0,deletedFragments=0;
@@ -65,5 +84,5 @@ export async function runP7ExpiryOnce(reader:Pool,writer:Pool|undefined,mode:Mod
   after=await readP7ExpiryStatus(reader);
   if(q.links+q.bundles+q.fragments===0)break;
  }
- return {status:after.dueLinks+after.dueBundles+after.dueFragments===0?"P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK":"P7_EXPIRY_BACKLOG_HOLD",before,after,deletedLinks,deletedBundles,deletedFragments,providerCalls:0,phase6PaidGo:false};
+ return {status:after.dueLinks+after.dueBundles+after.dueFragments===0?"P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK":"P7_EXPIRY_BACKLOG_HOLD",before,after,deletedLinks,deletedBundles,deletedFragments,writerActorVerified:true,providerCalls:0,phase6PaidGo:false};
 }
