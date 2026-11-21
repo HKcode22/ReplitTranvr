@@ -30,7 +30,8 @@
         "four restricted preservation actors authenticated Nov20",
         "canonical sixteen-field mechanical policy route inventory",
         "Review-only PR #937 exact head 5a91d846202cbccdf352f379e9f4648d6d9e6570 implements explicit non-injective native status candidate with synthetic tests; not real production mapping, joint reconstruction or scientific parity approval",
-        "Owner recovered exact public OpenAPI 1.15.4.0 SHA256 63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09: all 13 FlightStatus values, no paid request. PR #937 exact head 535c61f02aa87790d92000c1a976abe95617882e validates exhaustive non-injective review candidate; focused disposable PG16 workflows 44928946763 and 44928946847 passed, full CI pending."
+        "Owner recovered exact public OpenAPI 1.15.4.0 SHA256 63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09: all 13 FlightStatus values, no paid request. PR #937 exact head 535c61f02aa87790d92000c1a976abe95617882e validates exhaustive non-injective review candidate; focused disposable PG16 workflows 44928946763 and 44928946847 passed, full CI pending.",
+        "Exact status-domain PR #937 predecessor 535c61f02aa87790d92000c1a976abe95617882e all seven workflows passed; newer head includes Gate3 writer preflight, separate CI."
       ],
       "open": [
         "independently reviewed actual as-of source transform, non-reconstruction, source-reference purpose policy bytes",
@@ -63,7 +64,8 @@
         "V0107 positive disposable PG16 expiry behavior, run 44875915991: four tests passed",
         "additional current-main primary-only protected children 44923949897 and 44926668721 succeeded; latter actual job 136914155002 verified V0107 23h margin, no due originals, no STOP, no writes possible",
         "Owner set only P7_EXPIRY_APPROVED_MAIN_SHA to exact current main; restricted Phase7 read-only job 136918090173/run 44927953065 PASS at 2026-11-21T17:04:09.820Z, 0 live/due links, 0 due bundles/fragments, 0 deletions/provider calls; primary sibling skipped",
-        "Owner configured exact Monday manifest b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4, private APPLY_DUE_ONLY, P7 due-only and full-retention backstop flags; actual full-scope run 44929165704 both jobs succeeded. Primary job 136921785419 at DB 17:17:19.117Z primary V0107, 0 due/live originals, distinct actors, no STOP, 0 deletions, no writes possible; private at 17:17:19.359567Z 0 due packets/indexes/foreign, claims 0, no STOP or writes possible. P7 job 136921785702 at 17:17:16.274Z 0 due links/fragments/bundles, no deletions/provider calls. Exact main remains 781140cde71af3b72376c2db9f0fdb84204a2b7c. No replay."
+        "Owner configured exact Monday manifest b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4, private APPLY_DUE_ONLY, P7 due-only and full-retention backstop flags; actual full-scope run 44929165704 both jobs succeeded. Primary job 136921785419 at DB 17:17:19.117Z primary V0107, 0 due/live originals, distinct actors, no STOP, 0 deletions, no writes possible; private at 17:17:19.359567Z 0 due packets/indexes/foreign, claims 0, no STOP or writes possible. P7 job 136921785702 at 17:17:16.274Z 0 due links/fragments/bundles, no deletions/provider calls. Exact main remains 781140cde71af3b72376c2db9f0fdb84204a2b7c. No replay.",
+        "PR #937 successor 17b15859a5523a2bcd5d4a86775b7c0ae1dffca5 preflight verifies expiry writer in zero-work APPLY (catalog-only rollback). Disposable PG16 run 44929557491 job 136922968937: 10 tests, 3 files PASS incl wrong writer and ACL drift, no new roles, migration or actual production mutation; exact new full safety pending."
       ],
       "open": [
         "P7 zero-work APPLY authenticates reader but writer connection is lazy until actual due items; retain existing login evidence and distinguish no-op from writer execution",
@@ -123,12 +125,13 @@
         "12 external relay wake observations with 599–601s spacing, 14:38–16:28 UTC",
         "Relay review-only PR #24 exact head 4dedbdbe751726af864a5c811f41d75f2a009ad0 4/4 CI passed: proposed Dec30 08Z clock lease covers Dec29 04Z POST tail plus 28h; no schedule mutation",
         "Relay review-only PR #23 exact head 14a6c56f5918c9b07a17618d455b7ce52c4940bf CI run 44928254780 passed: rejects primary-only bootstrap and requires actual native private APPLY receipt for full-retention classification",
-        "Actual manually dispatched full-retention baseline 44929165704, both jobs and all three scope receipts PASS; not autonomous recurrence. Relay #23 candidate parser revised to actual projected private receipt format at 7c33c81ab076239834574161432b3fb8564a4f5c; new CI required."
+        "Actual manually dispatched full-retention baseline 44929165704, both jobs and all three scope receipts PASS; not autonomous recurrence. Relay #23 candidate parser revised to actual projected private receipt format at 7c33c81ab076239834574161432b3fb8564a4f5c; new CI required.",
+        "Consolidated relay PR #23 at e6bd8dfac19c42b4e979d398c5a6f977424c145e: all five CI workflows PASS (44929498575,44929498600,44929498579,44929498590,44929498594), relay unit 54/54, lease 8/8. Exact #24 files incorporated, extra released-Monday lease regression; #24 closed superseded, #23 ready. Scoped technical COMMENT 6006942140; no independent APPROVE minted. Production primary-only external run 44929378382 -> 44929410835 job 136922540439 at 17:20:05.943Z succeeded after full target commissioning, zero due/live, private GRANTED, research sibling skipped."
       ],
       "open": [
         "four-hour native schedule recovery: six-slot diagnostic 2/6 observed success",
         "live PRE POST budget STOP actor and emergency recovery rehearsal",
-        "Review/merge exact relay candidates and separate protected full-retention scope, current relay policy pin and lease continuity through actual outcome tail; no mutation or integrated proof yet"
+        "One coordinated normal merge + exact relay audit re-pin + full-retention opt-in on existing pair; do not reset history or reconfigure cron. Require actual recurrent evidence and deadline assurance."
       ],
       "failedRun": {
         "id": 44921364637,
@@ -185,7 +188,11 @@
     "https://github.com/HKcode22/TravnrClockRelay/pull/24",
     "https://github.com/HKcode22/ReplitTranvr/pull/937",
     "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929165704",
-    "https://github.com/HKcode22/ReplitTranvr/commit/535c61f02aa87790d92000c1a976abe95617882e"
+    "https://github.com/HKcode22/ReplitTranvr/commit/535c61f02aa87790d92000c1a976abe95617882e",
+    "https://github.com/HKcode22/TravnrClockRelay/actions/runs/44929498600",
+    "https://github.com/HKcode22/TravnrClockRelay/actions/runs/44929498579",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929410835",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929557491"
   ],
   "sourceRightsReview": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
   "retentionCertification": false,
