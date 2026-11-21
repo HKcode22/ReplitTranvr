@@ -24,7 +24,7 @@ gh auth status --hostname github.com >/dev/null 2>&1 || hold GH_AUTH
 remote_main(){ gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha'; }
 remote_relay(){ gh api "repos/$RELAY_REPO/git/ref/heads/main" --jq '.object.sha'; }
 
-[[ -z "$(git status --porcelain)" ]] || hold WORKTREE_DIRTY
+[[ -z "$(git status --porcelain --untracked-files=no)" ]] || hold TRACKED_WORKTREE_DIRTY
 git fetch --quiet origin main
 git switch main >/dev/null 2>&1 || hold SWITCH_MAIN
 git merge --ff-only origin/main >/dev/null || hold FAST_FORWARD
