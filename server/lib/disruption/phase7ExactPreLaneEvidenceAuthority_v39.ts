@@ -30,9 +30,18 @@ const digest=(s:unknown):s is string=>typeof s==="string"&&H.test(s)&&!/^([a-f0-
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const clock=(s:string)=>{const t=Date.parse(s);if(!Number.isFinite(t)||new Date(t).toISOString()!==s)hold("CLOCK");return t};
 const offset={"T-24h":86400000,"T-6h":21600000,"T-90m":5400000} as const;
-const referenceKinds={origin_icao:"airport_icao",destination_icao:"airport_icao",operating_carrier:"airline_icao"} as const;
+/** Reviewed provider carrier code format is explicit. Existing signed Amendment E
+ * FIDS fixtures contain both two-letter IATA (SQ) and three-letter ICAO (SIA).
+ * Do not silently infer or rewrite a source code; the exact field policy
+ * authorizes one supported kind and the value is validated against that kind. */
+const referenceKinds={
+ origin_icao:["airport_icao"],
+ destination_icao:["airport_icao"],
+ operating_carrier:["airline_iata","airline_icao"]
+} as const;
 type ReferenceField=keyof typeof referenceKinds;
-type ReferenceReview={field:ReferenceField;kind:typeof referenceKinds[ReferenceField];purpose:"link";fieldReviewSha256:string};
+type ReferenceKind=(typeof referenceKinds)[ReferenceField][number];
+type ReferenceReview={field:ReferenceField;kind:ReferenceKind;purpose:"link";fieldReviewSha256:string};
 export type P7ReferenceLinkPolicy={schema:"v39.phase7.pre-reference-link-purpose-policy.v1";manifestSha256:string;rightsSha256:string;prePolicySha256:string;termsReviewSha256:string;independentPurposeReviewSha256:string;validFromUtc:string;validUntilUtc:string;scope:"SINGLE_ORIGINAL_MEMBER_LINK_ONLY";allowSubstituteCompilation:false;allowPerFlightTrainingLink:false;fields:ReferenceReview[]};
 const exact=(o:unknown,ks:string[])=>!!o&&typeof o==="object"&&!Array.isArray(o)&&Object.keys(o).length===ks.length&&ks.every(k=>Object.hasOwn(o,k));
 /** The approved field profile alone is not authority to use identifiers for
@@ -54,7 +63,7 @@ export function parseP7ReferenceLinkPolicy(env:NodeJS.ProcessEnv,termsReviewSha2
   new Set(x.fields.map(f=>f.field)).size!==x.fields.length)hold("REFERENCE_PURPOSE_SCOPE");
  const expected=dispositions.filter(d=>d.disposition==="PURPOSE_BOUND_REFERENCE_LANE");
  if(expected.length!==x.fields.length||x.fields.some(f=>!exact(f,["field","kind","purpose","fieldReviewSha256"])||
-  !Object.hasOwn(referenceKinds,f.field)||f.kind!==referenceKinds[f.field]||f.purpose!=="link"||!digest(f.fieldReviewSha256)||
+  !Object.hasOwn(referenceKinds,f.field)||!(referenceKinds[f.field] as readonly string[]).includes(f.kind)||f.purpose!=="link"||!digest(f.fieldReviewSha256)||
   !expected.some(d=>d.field===f.field&&d.reviewSha256===f.fieldReviewSha256&&d.outputField===null)))hold("REFERENCE_PURPOSE_FIELD_DENOMINATOR");
  return Object.freeze(x);
 }
