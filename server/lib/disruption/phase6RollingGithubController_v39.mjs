@@ -278,7 +278,7 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
   for(let attempt=0;attempt<EXACT_COUNT_RETRY_LIMIT;attempt++){
    let res;
    try{res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});}
-   catch{if(attempt===2)hold("GITHUB_HISTORY_TRANSPORT_UNAVAILABLE");await sleep(500*(attempt+1));continue;}
+   catch{if(attempt>=2)hold("GITHUB_HISTORY_TRANSPORT_UNAVAILABLE");await sleep(500*(attempt+1));continue;}
    if([429,502,503,504].includes(res.status)&&attempt<2){await sleep(500*(attempt+1));continue;}
    if(!res.ok)hold("GITHUB_HISTORY_HTTP_"+res.status);
    let v;
