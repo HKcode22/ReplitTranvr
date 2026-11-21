@@ -254,6 +254,7 @@ for(const l of fs.readFileSync(f,"utf8").split(/\r?\n/)){const i=l.indexOf("{");
 if(rows.length!==1)process.exit(2);
 const x=rows[0],b=x.before,keys=["liveOriginals","eligibleOriginals","hardDueOriginals","eligibleNextHour","hardDueNextHour","unboundLiveOriginals","markedExpiredPayloadPresent","unlinkedUnexpiredPopulation","unexpiredPopulationWithoutLiveOriginal"];
 if(x.reviewedMainSha!==pin||x.providerCalls!==0||x.databaseWrites!==0||x.objectDeletions!==0||x.phase6PaidGo!==false||
+ x.privateCommissionState!=="GRANTED"||x.distinctDbActorsVerified!==true||
  !b||keys.some(k=>b[k]!==0)||b.deletionStopUnresolved!==false)process.exit(2);
 console.log(JSON.stringify({status:"GATE3_CURRENT_MAIN_PRIMARY_RETENTION_VERIFY_PASS",runId:Number(id),reviewedMainSha:pin,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
 NODE
