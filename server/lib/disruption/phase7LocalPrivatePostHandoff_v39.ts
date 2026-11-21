@@ -99,7 +99,7 @@ export function withP7PostRecoverySelector(e:NodeJS.ProcessEnv):NodeJS.ProcessEn
  if(e.P6_PHASE7_POST_RECOVERY_CONFIRM!=="RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER")return e;
  const runId=e.GITHUB_RUN_ID;
  const temp=e.RUNNER_TEMP;
- if(!R.test(runId??"")||!temp||realpathSync(temp)!==temp)hold("RECOVERY_HANDOFF_ROOT");
+ if(!runId||!R.test(runId)||!temp||realpathSync(temp)!==temp)hold("RECOVERY_HANDOFF_ROOT");
  const path=join(temp,"p7-recovery-"+runId+".json"),st=lstatSync(path);
  if(!st.isFile()||st.isSymbolicLink()||st.uid!==process.getuid?.()||st.nlink!==1||(st.mode&0o077)!==0||st.size<100||st.size>14000)hold("RECOVERY_HANDOFF_FILE");
  const w=JSON.parse(readFileSync(path,"utf8")),s=w.selector as P7RecoverySelector;
