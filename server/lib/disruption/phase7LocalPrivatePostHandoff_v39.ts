@@ -97,9 +97,10 @@ export async function listenP7PostRole(path:string,scope:Scope,role:PostRole,han
  * authenticated discovery step; never trust public event payload data. */
 export function withP7PostRecoverySelector(e:NodeJS.ProcessEnv):NodeJS.ProcessEnv{
  if(e.P6_PHASE7_POST_RECOVERY_CONFIRM!=="RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER")return e;
+ const runId=e.GITHUB_RUN_ID;
  const temp=e.RUNNER_TEMP;
- if(!R.test(e.GITHUB_RUN_ID??"")||!temp||realpathSync(temp)!==temp)hold("RECOVERY_HANDOFF_ROOT");
- const path=join(temp,"p7-recovery-"+e.GITHUB_RUN_ID+".json"),st=lstatSync(path);
+ if(!R.test(runId??"")||!temp||realpathSync(temp)!==temp)hold("RECOVERY_HANDOFF_ROOT");
+ const path=join(temp,"p7-recovery-"+runId+".json"),st=lstatSync(path);
  if(!st.isFile()||st.isSymbolicLink()||st.uid!==process.getuid?.()||st.nlink!==1||(st.mode&0o077)!==0||st.size<100||st.size>14000)hold("RECOVERY_HANDOFF_FILE");
  const w=JSON.parse(readFileSync(path,"utf8")),s=w.selector as P7RecoverySelector;
  if(w.schema!=="v39.phase7.recovery-runner-wire.v1"||w.runId!==e.GITHUB_RUN_ID||s?.originalGithubRunId!==e.P6_PHASE7_ORIGINAL_POST_RUN_ID)hold("RECOVERY_HANDOFF_SCOPE");
