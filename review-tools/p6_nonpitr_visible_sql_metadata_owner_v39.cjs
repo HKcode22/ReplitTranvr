@@ -82,13 +82,38 @@ async function review(c){
   return {schema:'travnr.phase6.nonpitr-visible-sql-metadata.v1',status:'OWNER_VISIBLE_SQL_METADATA_ONLY_MANAGED_CUSTODY_OPEN_NO_GO',observedAtUtc,settings:log,unobservedSettings,replica,findings,managedReadReplicasVerified:false,managedLogRotationVerified:false,managedLogAccessIamVerified:false,replitObjectBucketIamVerified:false,pitrReviewRepeated:false,providerCalls:0,databaseWrites:0,sourceRowsRead:0,exactDisabledStageReadback:true,sourceEnabled:false,phase6PaidGo:false};
  }finally{if(began)await c.query('ROLLBACK').catch(()=>{});}
 }
+// Follow-up only: identify known infrastructure slots without exporting any
+// raw slot names, PID, endpoints, LSNs, or repeating the 12-setting inventory.
+// A name match is evidence of a documented convention, NOT proof of remote
+// retention, actual ownership, or absence of provider-managed read replicas.
+const slotClassSql="SELECT count(*)::int total,count(*) FILTER(WHERE slot_name='wal_proposer_slot' AND slot_type='physical')::int proposer,count(*) FILTER(WHERE slot_name='wal_proposer_slot' AND slot_type='physical' AND active)::int proposer_active,count(*) FILTER(WHERE slot_name='wal_retention_slot' AND slot_type='physical')::int retention,count(*) FILTER(WHERE slot_name='wal_retention_slot' AND slot_type='physical' AND active)::int retention_active,count(*) FILTER(WHERE slot_type='logical')::int logical,count(*) FILTER(WHERE slot_type='physical' AND slot_name NOT IN ('wal_proposer_slot','wal_retention_slot'))::int other_physical FROM pg_catalog.pg_replication_slots";
+function parseSlotClasses(rows){
+ const a=rows?.[0],keys=['total','proposer','proposer_active','retention','retention_active','logical','other_physical'];
+ if(rows?.length!==1||!a||Object.keys(a).sort().join('|')!==[...keys].sort().join('|')||keys.some(k=>!Number.isSafeInteger(a[k])||a[k]<0||a[k]>a.total)||a.proposer>1||a.retention>1||a.proposer_active>a.proposer||a.retention_active>a.retention||a.proposer+a.retention+a.logical+a.other_physical!==a.total)HOLD('SLOT_CLASS_COUNT_SHAPE');
+ return Object.fromEntries(keys.map(k=>[k,a[k]]));
+}
+async function classifySlots(c){
+ let began=false;
+ try{
+  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');began=true;
+  await c.query("SET LOCAL statement_timeout='8000ms'");
+  const observedAtUtc=checkIdentity((await c.query(identitySql)).rows);
+  const gate=(await c.query("SELECT count(*)::int total,count(*) FILTER(WHERE singleton_key=true AND code_sha=$1 AND manifest_sha256=$2 AND enabled=false AND revoked_at_utc IS NULL)::int exact FROM clean.adb_phase6_authorization",["781140cde71af3b72376c2db9f0fdb84204a2b7c","b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4"])).rows;
+  if(gate.length!==1||gate[0].total!==1||gate[0].exact!==1)HOLD('DISABLED_STAGE_DRIFT');
+  const slotClasses=await optionalRead(c,slotClassSql,[],parseSlotClasses);
+  await c.query('ROLLBACK');began=false;
+  const a=slotClasses.value;
+  return {schema:'travnr.phase6.physical-slot-name-classification.v1',status:'OWNER_PHYSICAL_SLOT_CLASSIFICATION_ONLY_NO_GO',observedAtUtc,slotClasses,allVisibleSlotsMatchDocumentedInternalNames:a!==null&&a.total===2&&a.proposer===1&&a.retention===1&&a.logical===0&&a.other_physical===0,managedOwnershipOrRotationVerified:false,managedReadReplicasVerified:false,sourceRowsRead:0,providerCalls:0,databaseWrites:0,exactDisabledStageReadback:true,sourceEnabled:false,phase6PaidGo:false};
+ }finally{if(began)await c.query('ROLLBACK').catch(()=>{});}
+}
 async function main(){
- if(process.argv.length!==2||process.env.GITHUB_ACTIONS==='true'||process.env.ADB_AUTO_COLLECT!=='0'||process.env.V39_PHASE6_PROCESS_ARMED!=='0'||process.env.V39_PHASE6_OWNER_APPROVED!=='0'||process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0'||[process.env.AERODATABOX_API_KEY,process.env.RAPIDAPI_KEY,process.env.AERODATABOX_WEBHOOK_SECRET,process.env.V39_DATABASE_RUNTIME_URL].some(Boolean))HOLD('DISARMED_OWNER_NO_PROVIDER');
+ const slotOnly=process.argv.length===3&&process.argv[2]==='--classify-slots';
+ if((process.argv.length!==2&&!slotOnly)||process.env.GITHUB_ACTIONS==='true'||process.env.ADB_AUTO_COLLECT!=='0'||process.env.V39_PHASE6_PROCESS_ARMED!=='0'||process.env.V39_PHASE6_OWNER_APPROVED!=='0'||process.env.NODE_TLS_REJECT_UNAUTHORIZED==='0'||[process.env.AERODATABOX_API_KEY,process.env.RAPIDAPI_KEY,process.env.AERODATABOX_WEBHOOK_SECRET,process.env.V39_DATABASE_RUNTIME_URL].some(Boolean))HOLD('DISARMED_OWNER_NO_PROVIDER');
  const u=new URL(process.env.DATABASE_URL??'');
  if(!['postgres:','postgresql:'].includes(u.protocol)||decodeURIComponent(u.username)!=='neondb_owner'||!u.password||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb'||u.searchParams.getAll('sslmode').length!==1||!['require','verify-full'].includes(u.searchParams.get('sslmode')))HOLD('EXISTING_TLS_DB');
  const {Client}=require(require.resolve('pg',{paths:[process.cwd()]}));
  const c=new Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:12000,options:'-c default_transaction_read_only=on',application_name:'p6_nonpitr_metadata_review'});
- try{await c.connect();console.log(JSON.stringify(await review(c)));}finally{await c.end().catch(()=>{})}
+ try{await c.connect();console.log(JSON.stringify(await (slotOnly?classifySlots(c):review(c))));}finally{await c.end().catch(()=>{})}
 }
-module.exports={review,checkIdentity,parseSettings,parseCounts,settings,queries};
+module.exports={review,classifySlots,parseSlotClasses,slotClassSql,checkIdentity,parseSettings,parseCounts,settings,queries};
 if(require.main===module)main().catch(e=>{const m=String(e?.message??'');console.error(/^HOLD_P6_NONPITR_[A-Z_]+$/.test(m)?m:'HOLD_P6_NONPITR_REDACTED');process.exitCode=2;});
