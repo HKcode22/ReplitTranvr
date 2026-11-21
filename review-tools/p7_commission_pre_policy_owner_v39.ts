@@ -11,7 +11,8 @@ import {fileURLToPath} from "node:url";
 import {Pool,type PoolClient} from "pg";
 import {bindMondayPolicyStage} from "./p6_nov20_finalize_recovered_policies_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
-import {verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
+import {p6SourceAuthorizationStageContentSha,verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
+import {P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 import {verifyP6ActualCommittedPlanParity} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 import {compilePhase7PrePolicyCommission,checkPhase7NativePrePolicySupport,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,type Phase7PrePolicyCommissionScope} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
@@ -29,13 +30,16 @@ const cmd=(c:string,a:string[])=>execFileSync(c,a,{encoding:"utf8",stdio:["ignor
 const remote=()=>cmd("gh",["api","repos/"+REPO+"/git/ref/heads/main","--jq",".object.sha"]);
 const gitBytes=(head:string,p:string)=>execFileSync("git",["show",head+":"+p],{stdio:["ignore","pipe","ignore"],timeout:20000,maxBuffer:2*1024*1024});
 export type P7OwnerPolicyStageScope={stageCode:string;stageSha256:string;costSha256:string;manifestSha256:string;boundedTermsSha256:string};
-export function validateP7OwnerPolicyDecision(raw:Buffer,expectedSha:string,stage:P7OwnerPolicyStageScope,policy:Buffer,now:Date):Phase7PrePolicyCommissionScope&{referencePolicyBytesSha256:string}{
+export type P7OwnerPolicyDecisionScope=Phase7PrePolicyCommissionScope&{referencePolicyBytesSha256:string;operationalBridgeReviewSha256?:string};
+export function validateP7OwnerPolicyDecision(raw:Buffer,expectedSha:string,stage:P7OwnerPolicyStageScope,policy:Buffer,now:Date):P7OwnerPolicyDecisionScope{
  need(Buffer.isBuffer(raw)&&raw.length>0&&raw.length<=16000&&digest(expectedSha)&&sha(raw)===expectedSha,"EXACT_COMMITTED_DECISION");
  const d=JSON.parse(raw.toString("utf8"));
  const keys=["schema","stageCode","stageSha256","costSha256","manifestSha256","boundedTermsSha256","rightsSha256","policyBytesSha256","policyReviewSha256","referencePolicyBytesSha256","validFromUtc","validUntilUtc","firstSourceUtc","outcomeTailUtc","reviewedAtUtc","reviewedBy","independentFieldProfileApproved","independentMappingAndReconstructionReviewApproved","originalScientificDesignPreserved","sourceUseDeferred","phase6PaidGo"];
- need(d&&Object.keys(d).length===keys.length&&keys.every(k=>Object.hasOwn(d,k))&&d.schema==="v39.phase7.pre-policy-owner-commission-review.v1"&&Object.entries(stage).every(([k,v])=>d[k]===v)&&C.test(stage.stageCode)&&[stage.stageSha256,stage.costSha256,stage.manifestSha256,stage.boundedTermsSha256,d.rightsSha256,d.policyBytesSha256,d.policyReviewSha256,d.referencePolicyBytesSha256].every(digest)&&sha(policy)===d.policyBytesSha256&&d.firstSourceUtc===P7_MONDAY_FIRST_SOURCE&&d.outcomeTailUtc===P7_MONDAY_OUTCOME_TAIL&&typeof d.reviewedBy==="string"&&/^[\x20-\x7e]{3,120}$/.test(d.reviewedBy)&&d.reviewedBy.trim().length>=3&&d.independentFieldProfileApproved===true&&d.independentMappingAndReconstructionReviewApproved===true&&d.originalScientificDesignPreserved===true&&d.sourceUseDeferred===true&&d.phase6PaidGo===false,"INDEPENDENT_SCOPE");
+ const bridged=d?.schema==="v39.phase7.pre-policy-owner-commission-review.v2";
+ if(bridged)keys.push("operationalBridgeReviewSha256");
+ need(d&&Object.keys(d).length===keys.length&&keys.every(k=>Object.hasOwn(d,k))&&(d.schema==="v39.phase7.pre-policy-owner-commission-review.v1"||bridged)&&(!bridged||digest(d.operationalBridgeReviewSha256))&&Object.entries(stage).every(([k,v])=>d[k]===v)&&C.test(stage.stageCode)&&[stage.stageSha256,stage.costSha256,stage.manifestSha256,stage.boundedTermsSha256,d.rightsSha256,d.policyBytesSha256,d.policyReviewSha256,d.referencePolicyBytesSha256].every(digest)&&sha(policy)===d.policyBytesSha256&&d.firstSourceUtc===P7_MONDAY_FIRST_SOURCE&&d.outcomeTailUtc===P7_MONDAY_OUTCOME_TAIL&&typeof d.reviewedBy==="string"&&/^[\x20-\x7e]{3,120}$/.test(d.reviewedBy)&&d.reviewedBy.trim().length>=3&&d.independentFieldProfileApproved===true&&d.independentMappingAndReconstructionReviewApproved===true&&d.originalScientificDesignPreserved===true&&d.sourceUseDeferred===true&&d.phase6PaidGo===false,"INDEPENDENT_SCOPE");
  const n=now.getTime();need(Number.isFinite(n)&&at(d.reviewedAtUtc)<=n&&at(d.reviewedAtUtc)<at(P7_MONDAY_AUTH_DEADLINE),"REVIEW_CLOCK");
- return {manifestSha256:d.manifestSha256,rightsSha256:d.rightsSha256,policyBytesSha256:d.policyBytesSha256,policyReviewSha256:d.policyReviewSha256,referencePolicyBytesSha256:d.referencePolicyBytesSha256,validFromUtc:d.validFromUtc,validUntilUtc:d.validUntilUtc,firstSourceUtc:d.firstSourceUtc,outcomeTailUtc:d.outcomeTailUtc};
+ return {manifestSha256:d.manifestSha256,rightsSha256:d.rightsSha256,policyBytesSha256:d.policyBytesSha256,policyReviewSha256:d.policyReviewSha256,referencePolicyBytesSha256:d.referencePolicyBytesSha256,validFromUtc:d.validFromUtc,validUntilUtc:d.validUntilUtc,firstSourceUtc:d.firstSourceUtc,outcomeTailUtc:d.outcomeTailUtc,...(bridged?{operationalBridgeReviewSha256:d.operationalBridgeReviewSha256}:{})};
 }
 /** The one existing decision binds both PRE and reference-link policy bytes.
  * Check the actual producer routes and study validity BEFORE any owner SQL.
@@ -64,12 +68,22 @@ async function main(){
  const root=resolve(dir),st=lstatSync(root);need(root.startsWith(realpathSync(process.env.HOME!)+"/.travnr-phase6-monday-")&&realpathSync(root)===root&&st.isDirectory()&&!st.isSymbolicLink()&&st.uid===process.getuid?.()&&(st.mode&0o077)===0,"PRIVATE_STAGE_DIRECTORY");
  const stage=ownPrivate(join(root,"new-stage-input.json"),48000),manifest=ownPrivate(join(root,"new-manifest.json")),cfg=ownPrivate(join(root,"new-config.json")),external=ownPrivate(join(root,"new-external.json")),timing=ownPrivate(join(root,"new-timing.json"));
  const pin=bindMondayPolicyStage(stage.toString("utf8"),manifest.toString("utf8"),cfg.toString("utf8"),external,timing);
- let ancestor=false;try{execFileSync("git",["merge-base","--is-ancestor",pin.stageCode,head],{stdio:"ignore",timeout:10000});ancestor=true}catch{}
- verifyP6PostStageEvidenceOnlyMainAdvance(pin.stageCode,head,cmd("git",["diff","--no-renames","--name-only",pin.stageCode,head]).split("\n").filter(Boolean),ancestor);
- verifyP6ActualCommittedPlanParity(pin.result,p=>gitBytes(head,p),p=>readFileSync(p));
  need(/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.json$/.test(decisionPath??""),"DECISION_PATH");
  const raw=gitBytes(head,decisionPath),policy=ownPrivate(policyFile,36000),scope=validateP7OwnerPolicyDecision(raw,decisionSha,{stageCode:pin.stageCode,stageSha256:pin.stageSha,costSha256:pin.costSha,manifestSha256:pin.manifestSha,boundedTermsSha256:sha(gitBytes(head,TERMS))},policy,new Date());
  need(raw.equals(readFileSync(decisionPath)),"DECISION_WORKTREE_DRIFT");
+ const ancestor=(a:string,b:string)=>{try{execFileSync("git",["merge-base","--is-ancestor",a,b],{stdio:"ignore",timeout:10000});return true}catch{return false}};
+ const diff=(end:string)=>cmd("git",["diff","--no-renames","--name-only",pin.stageCode,end]).split("\n").filter(Boolean);
+ // v1 stays strictly evidence-only. A v2 independently reviewed PRE decision
+ // must bind the exact operational bridge bytes before any owner SQL. This
+ // is a disarmed commissioning scope, NOT an early SOURCE AUTH approval.
+ if(scope.operationalBridgeReviewSha256){
+  const reviewBytes=gitBytes(head,P6_MONDAY_BRIDGE_REVIEW_PATH);
+  need(sha(reviewBytes)===scope.operationalBridgeReviewSha256&&reviewBytes.equals(readFileSync(P6_MONDAY_BRIDGE_REVIEW_PATH)),"BRIDGE_BYTES_DRIFT");
+  const reviewed=JSON.parse(reviewBytes.toString("utf8")).reviewedExecutableCommit;
+  need(C.test(reviewed??""),"BRIDGE_COMMIT");
+  verifyP6MondayRevisedExecutableBridge({stageCode:pin.stageCode,stageSha:pin.stageSha,costSha:pin.costSha,currentHead:head,reviewBytes,expectedOperationalEvidenceSha256:scope.operationalBridgeReviewSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:diff(head),readReviewedBlob:p=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:p=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]},stage.toString("utf8"),p6SourceAuthorizationStageContentSha(JSON.parse(stage.toString("utf8"))),scope.costSha256);
+ }else verifyP6PostStageEvidenceOnlyMainAdvance(pin.stageCode,head,diff(head),ancestor(pin.stageCode,head));
+ verifyP6ActualCommittedPlanParity(pin.result,p=>gitBytes(head,p),p=>readFileSync(p));
  const compiled=compilePhase7PrePolicyCommission(policy,scope);
  const reference=validateP7OwnerReferencePolicy(policy,ownPrivate(referenceFile,15000),scope);
  const admitted=admitP6InertOwnerReadback({...process.env,V39_P5_APPROVED_CODE_SHA:pin.stageCode},stage.toString("utf8"),pin.stageSha,pin.costSha,pin.stageCode);
@@ -94,7 +108,7 @@ async function main(){
    };
    const receipt=await installPhase7PrePolicyOnce(pool,policy,scope,guard);console.log(JSON.stringify(receipt));
   }
-  const final=await inspectPhase7PrePolicyCommission(pool,compiled);console.log(JSON.stringify({...final,manifestSha256:pin.manifestSha,stageSha256:pin.stageSha,costSha256:pin.costSha,decisionSha256:decisionSha,main:head,policyBytesSha256:scope.policyBytesSha256,referencePolicyBytesSha256:reference.referencePolicyBytesSha256,referenceFieldCount:reference.referenceFieldCount}));
+  const final=await inspectPhase7PrePolicyCommission(pool,compiled);console.log(JSON.stringify({...final,manifestSha256:pin.manifestSha,stageSha256:pin.stageSha,costSha256:pin.costSha,decisionSha256:decisionSha,main:head,policyBytesSha256:scope.policyBytesSha256,referencePolicyBytesSha256:reference.referencePolicyBytesSha256,referenceFieldCount:reference.referenceFieldCount,operationalBridgeReviewSha256:scope.operationalBridgeReviewSha256??null}));
  }finally{await pool.end()}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(e=>{const m=String(e?.message??"");console.error(/^HOLD_P7_[A-Z0-9_]+$/.test(m)?m:"HOLD_P7_OWNER_POLICY_REDACTED_INSPECT_NO_REPLAY");process.exitCode=2});

@@ -38,6 +38,13 @@ export function verifyP6RevisedExecutableBridge(input:BridgeInput){
  * whose full bytes and cost are independently bound by the SOURCE ledger.
  * Never accept an alternative date map or a caller-supplied generic bypass. */
 export const P6_MONDAY_CALENDAR_ROWS_SHA="55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b";
+// Actual already-commissioned disabled Monday stage, independently read back
+// 2026-11-21. Unlike the predecessor, its 31 day-plan files are already
+// committed at the stage SHA. Requiring them to change again would force
+// unnecessary calendar churn. This exception is exact-stage-only.
+export const P6_COMMISSIONED_MONDAY_STAGE_CODE="781140cde71af3b72376c2db9f0fdb84204a2b7c";
+export const P6_COMMISSIONED_MONDAY_STAGE_SHA="a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682";
+export const P6_COMMISSIONED_MONDAY_COST_SHA="ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e";
 export const P6_MONDAY_BRIDGE_REVIEW_PATH="data-collection/phase5/evidence/2026-11-23_phase6_revised_executable_bridge_review.json";
 export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw:string,approvedStageContentSha256:string,approvedCostSha256:string){
  let s:any;try{s=JSON.parse(stageRaw)}catch{fail("MONDAY_STAGE_JSON")}
@@ -48,21 +55,36 @@ export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw
    s.calendarDays[0].startUtc==="2026-11-25T00:00:00.000Z"&&s.calendarDays[30].startUtc==="2026-12-27T00:00:00.000Z"&&
    SHA.test(approvedStageContentSha256)&&sha(Buffer.from(JSON.stringify(content)))===approvedStageContentSha256&&
    SHA.test(approvedCostSha256)&&input.costSha===approvedCostSha256,"MONDAY_EXACT_APPROVED_STAGE");
+ if(input.stageCode===P6_COMMISSIONED_MONDAY_STAGE_CODE||input.stageSha===P6_COMMISSIONED_MONDAY_STAGE_SHA)
+  return verifyP6CommissionedMondayExecutableBridge(input);
  return verifyExactBridge(input);
 }
-function verifyExactBridge(input:BridgeInput){
+/** Only after the canonical Monday packet/full content and cost have been
+ * validated by the caller. Exact git diffs from that stage must leave EVERY
+ * frozen day plan unchanged. Reviewed-only evidence and exact changed blobs
+ * are still mandatory; never grants SOURCE or rewrites the committed stage. */
+export function verifyP6CommissionedMondayExecutableBridge(input:BridgeInput){
+ need(input.stageCode===P6_COMMISSIONED_MONDAY_STAGE_CODE&&input.stageSha===P6_COMMISSIONED_MONDAY_STAGE_SHA&&input.costSha===P6_COMMISSIONED_MONDAY_COST_SHA,"COMMISSIONED_MONDAY_SCOPE");
+ return verifyExactBridge(input,false);
+}
+function verifyExactBridge(input:BridgeInput,dayPlansMustChange=true){
  need(CODE.test(input.stageCode)&&SHA.test(input.stageSha)&&SHA.test(input.costSha)&&CODE.test(input.currentHead)&&input.stageIsAncestor===true&&input.reviewedCommitIsAncestor===true,"STAGE_OR_ANCESTRY");
  need(Buffer.isBuffer(input.reviewBytes)&&input.reviewBytes.length>100&&input.reviewBytes.length<=200000&&SHA.test(input.expectedOperationalEvidenceSha256)&&sha(input.reviewBytes)===input.expectedOperationalEvidenceSha256,"OPERATIONAL_EVIDENCE_HASH");
  let x:any;try{x=JSON.parse(input.reviewBytes.toString("utf8"))}catch{fail("REVIEW_JSON")}
  need(Buffer.from(JSON.stringify(x,null,2)+"\n").equals(input.reviewBytes)&&exact(x,["schema","stageCodeSha","stagePacketSha256","costEnvelopeSha256","reviewedExecutableCommit","changedBlobs","reviewedBy","reviewedAtUtc","independentOperationalReleaseApproved","phase6PaidGo"])&&x.schema==="v39.phase6.revised-stage-executable-bridge-review.v1"&&x.stageCodeSha===input.stageCode&&x.stagePacketSha256===input.stageSha&&x.costEnvelopeSha256===input.costSha&&CODE.test(x.reviewedExecutableCommit)&&x.reviewedExecutableCommit!==input.stageCode&&x.independentOperationalReleaseApproved===true&&x.phase6PaidGo===false&&typeof x.reviewedBy==="string"&&x.reviewedBy.trim().length>=3&&typeof x.reviewedAtUtc==="string"&&Number.isFinite(Date.parse(x.reviewedAtUtc))&&new Date(x.reviewedAtUtc).toISOString()===x.reviewedAtUtc&&Date.parse(x.reviewedAtUtc)<=input.now.getTime(),"REVIEW_SCOPE");
  const b=x as P6ReviewedExecutableBridge;
- need(Array.isArray(b.changedBlobs)&&b.changedBlobs.length>=31&&b.changedBlobs.length<=200&&b.changedBlobs.every(v=>exact(v,["path","blobSha","mode"])&&pathOk(v.path)&&CODE.test(v.blobSha)&&["100644","100755"].includes(v.mode)),"EXACT_BLOB_LIST");
+ need(Array.isArray(b.changedBlobs)&&b.changedBlobs.length>=(dayPlansMustChange?31:1)&&b.changedBlobs.length<=200&&b.changedBlobs.every(v=>exact(v,["path","blobSha","mode"])&&pathOk(v.path)&&CODE.test(v.blobSha)&&["100644","100755"].includes(v.mode)),"EXACT_BLOB_LIST");
  const paths=b.changedBlobs.map(v=>v.path);
  need(new Set(paths).size===paths.length&&JSON.stringify(paths)===JSON.stringify([...paths].sort()),"CANONICAL_PATH_LIST");
  const actual=(d:readonly string[])=>{need(new Set(d).size===d.length&&d.every(p=>evidence(p)||pathOk(p)),"DIFF_PATHS");return d.filter(p=>!evidence(p)).sort()};
  need(JSON.stringify(actual(input.reviewedDiff))===JSON.stringify(paths)&&JSON.stringify(actual(input.currentDiff))===JSON.stringify(paths),"UNREVIEWED_EXECUTABLE_DIFF");
  for(const v of b.changedBlobs)need(input.readReviewedBlob(v.path)===v.mode+" blob "+v.blobSha&&input.readCurrentBlob(v.path)===v.mode+" blob "+v.blobSha,"BLOB_DRIFT");
- // Every day plan is part of the exact reviewed code transition.
- for(let i=1;i<=31;i++)need(paths.includes("data-collection/phase5/planning/phase6-source-day-"+String(i).padStart(2,"0")+".json"),"MISSING_DAY_PLAN");
+ // Historical recovery needed all 31 revised plans. The installed Monday
+ // stage already has those plans, so exact stage-to-head diffs must instead
+ // prove none changed. No generic relaxation for different stage identities.
+ for(let i=1;i<=31;i++){
+  const path="data-collection/phase5/planning/phase6-source-day-"+String(i).padStart(2,"0")+".json";
+  need(paths.includes(path)===dayPlansMustChange,dayPlansMustChange?"MISSING_DAY_PLAN":"COMMISSIONED_MONDAY_DAY_PLAN_DRIFT");
+ }
  return {stageCode:input.stageCode,currentHead:input.currentHead,reviewedExecutableCommit:b.reviewedExecutableCommit,reviewedExecutablePaths:paths.length,operationalEvidenceSha256:input.expectedOperationalEvidenceSha256,phase6PaidGo:false};
 }

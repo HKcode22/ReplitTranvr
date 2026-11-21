@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,verifyP6RevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,verifyP6RevisedExecutableBridge,P6_COMMISSIONED_MONDAY_STAGE_CODE,P6_COMMISSIONED_MONDAY_STAGE_SHA,P6_COMMISSIONED_MONDAY_COST_SHA,verifyP6CommissionedMondayExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const reviewed="b".repeat(40),head="c".repeat(40);
 const plan=Array.from({length:31},(_,i)=>"data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json");
 const code="scripts/v39_phase6_enable_source_owner_v39.ts",paths=[...plan,code].sort(),blobs=Object.fromEntries(paths.map((p,i)=>[p,createHash("sha1").update(p).digest("hex")]));
@@ -27,4 +27,19 @@ describe("exact approved executable succession, no staged-byte rewrite",()=>{
   raw=bytes({...review,changedBlobs});
   expect(()=>verifyP6RevisedExecutableBridge({...request,reviewBytes:raw,expectedOperationalEvidenceSha256:sha(raw),reviewedDiff:rest,currentDiff:rest})).toThrow(/MISSING_DAY_PLAN/);
  });
+});
+
+// Synthetic review bytes only; exact actual stage identities, no production DB.
+it("admits only exact commissioned Monday succession with all 31 plans unchanged",()=>{
+ const {review,request}=fixture();
+ const changedBlobs=review.changedBlobs.filter(v=>v.path===code);
+ const scope={stageCode:P6_COMMISSIONED_MONDAY_STAGE_CODE,stageSha:P6_COMMISSIONED_MONDAY_STAGE_SHA,costSha:P6_COMMISSIONED_MONDAY_COST_SHA};
+ const x={...review,stageCodeSha:scope.stageCode,stagePacketSha256:scope.stageSha,costEnvelopeSha256:scope.costSha,changedBlobs};
+ const raw=Buffer.from(JSON.stringify(x,null,2)+"\n");
+ const input={...request,...scope,reviewBytes:raw,expectedOperationalEvidenceSha256:sha(raw),reviewedDiff:[code],currentDiff:[code,evidence]};
+ expect(verifyP6CommissionedMondayExecutableBridge(input)).toMatchObject({reviewedExecutablePaths:1,stageCode:scope.stageCode,phase6PaidGo:false});
+ for(const bad of [{...input,stageSha:sha(Buffer.from("different stage"))},{...input,costSha:sha(Buffer.from("different cost"))},{...input,currentDiff:[code,evidence,plan[0]]},{...input,reviewedCommitIsAncestor:false},{...input,readCurrentBlob:()=>"100644 blob "+"e".repeat(40)},{...input,expectedOperationalEvidenceSha256:sha(Buffer.from("wrong review"))}])expect(()=>verifyP6CommissionedMondayExecutableBridge(bad)).toThrow(/HOLD_P6_EXACT_SOURCE_AUTH_EXECUTABLE_BRIDGE/);
+ const changedPlan={...x,changedBlobs:[...changedBlobs,{path:plan[0],blobSha:blobs[plan[0]],mode:"100644"}].sort((a,b)=>a.path.localeCompare(b.path))};
+ const b=Buffer.from(JSON.stringify(changedPlan,null,2)+"\n");
+ expect(()=>verifyP6CommissionedMondayExecutableBridge({...input,reviewBytes:b,expectedOperationalEvidenceSha256:sha(b),reviewedDiff:[code,plan[0]],currentDiff:[code,plan[0],evidence]})).toThrow("COMMISSIONED_MONDAY_DAY_PLAN_DRIFT");
 });
