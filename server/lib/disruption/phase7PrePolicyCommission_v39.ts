@@ -55,7 +55,7 @@ export function checkPhase7NativePrePolicySupport(p:ReturnType<typeof parsePhase
   // native FIDS values. The reviewer must approve a supported transform;
   // present native source values may not be dropped to pass commissioning.
   need(d?.disposition==="REVIEWED_DERIVED_BUCKET"&&f&&f.outputField===d.outputField&&
-   (field==="reported_pre_departure_status"?f.kind==="categorical_dictionary":f.kind==="frozen_native_t_delta_bucket"),"NATIVE_TRANSFORM_ROUTE");
+   (field==="reported_pre_departure_status"?(f.kind==="categorical_dictionary"||f.kind==="categorical_grouped_dictionary"):f.kind==="frozen_native_t_delta_bucket"),"NATIVE_TRANSFORM_ROUTE");
  }
 }
 export function compilePhase7PrePolicyCommission(raw:Buffer,scope:Phase7PrePolicyCommissionScope){
