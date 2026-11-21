@@ -45,6 +45,8 @@ describe("Phase6 owner bulk Gates 3/5/7 handoff contract",()=>{
     expect(s).toContain("V0107_VERIFIED_FUTURE_POST_23H_MARGIN");
     expect(s).toContain("HOLD MAIN_CHANGED_BEFORE_RETENTION_REPIN".replace("HOLD ","hold "));
     expect(s).not.toContain("singleton_key=true");
+    expect(s).toContain('ERR="$(tail -n 1 "/tmp/p6-v0107-review-err.$")"');
+    expect(s).not.toContain('/tmp/p6-v0107-review-err.$"');
     expect(s).toContain("GATE7_FULL_AUTONOMOUS_REHEARSAL=NOT_YET_PROVEN");
   });
   it("uses exact current main and reviewed relay identity fail-closed",()=>{
