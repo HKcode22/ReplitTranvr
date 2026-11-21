@@ -260,3 +260,46 @@ describe("explicit frozen-native clock difference candidate (synthetic review on
   expect(out.input.labelBuckets.delay_bin).toBe(2);
  });
 });
+
+
+describe("review-only grouped native status (not a production taxonomy or rights decision)",()=>{
+  const setup=()=>{
+    const c=contract(),p=profile();
+    c.features=[{...c.features[0],name:"progress_bin",bucketCount:2}];
+    p.fields=[{...p.fields[0],sourceField:"reported_pre_departure_status",outputField:"progress_bin",
+      kind:"categorical_grouped_dictionary",bucketCount:2,boundaries:null,categories:null,
+      categoryGroups:[["synthetic_a","synthetic_b"],["synthetic_c","synthetic_d"]]},p.fields[1]];
+    return {p,c};
+  };
+  it("maps multiple distinct original status values to the same reviewed output; never outputs the source",()=>{
+    const {p,c}=setup();
+    const run=(value:string)=>transformPhase7ReviewedSourceDecisions(p,c,[
+      {...decisions()[0],sourceField:"reported_pre_departure_status",value},decisions()[1]
+    ],context);
+    expect(validatePhase7ReviewedTransformationProfile(p).pass).toBe(true);
+    const a=run("synthetic_a"),b=run("synthetic_b"),d=run("synthetic_d");
+    expect(a.input.featureBuckets).toEqual({progress_bin:0});
+    expect(a.input).toEqual(b.input);
+    expect(d.input.featureBuckets).toEqual({progress_bin:1});
+    expect(run("synthetic_unknown").input.featureBuckets).toEqual({progress_bin:null});
+    expect(run("synthetic_unknown").input.missingness.progress_bin).toBe(true);
+    expect(JSON.stringify(a)).not.toMatch(/synthetic_a|synthetic_b|reported_pre_departure_status/);
+    expect(a.sourceValuesPersisted).toBe(false);
+    expect(a.phase6PaidGo).toBe(false);
+  });
+  it("rejects singletons, duplicate or overlapping source categories, missing groups, unauthorized field scope and malformed policy",()=>{
+    const {p}=setup(),f=p.fields[0];
+    for(const changed of [
+      {...f,categoryGroups:[["a"],["b","c"]]},
+      {...f,categoryGroups:[["a","a"],["b","c"]]},
+      {...f,categoryGroups:[["a","b"],["b","c"]]},
+      {...f,categoryGroups:[["a","b"]]},
+      {...f,categoryGroups:[["a","b"],[" c","d"]]},
+      {...f,categoryGroups:[["a","b"],null]},
+      {...f,categoryGroups:undefined},
+      {...f,sourceField:"airport_congestion_1h"},
+      {...f,categories:["a","b"]},
+      {...f,kind:"categorical_dictionary",categories:["a","b"]},
+    ])expect(validatePhase7ReviewedTransformationProfile({...p,fields:[changed,p.fields[1]]}).pass).toBe(false);
+  });
+});
