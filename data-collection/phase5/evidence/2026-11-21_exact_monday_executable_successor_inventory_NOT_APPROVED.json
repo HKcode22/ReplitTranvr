@@ -1,0 +1,122 @@
+{
+  "schema": "travnr.phase6.executable-succession-review-inventory.NOT_APPROVED.v1",
+  "stageCodeSha": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+  "stagePacketSha256": "a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682",
+  "costEnvelopeSha256": "ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e",
+  "reviewCandidateHead": "c967cd16d7fc6cf078d01376619fc029d6fc4b52",
+  "changedBlobs": [
+    {
+      "path": ".github/workflows/phase7-durable-derived-bundle-disposable-pg16.yml",
+      "blobSha": "57e897a02a57c154e657bda8d6076e596dceaa72",
+      "mode": "100644"
+    },
+    {
+      "path": "review-tools/p7_commission_pre_policy_owner_v39.ts",
+      "blobSha": "bc3d620020e9c886a3106ebcca92b02fcf2473fe",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase6_revised_stage_executable_bridge_v39.ts",
+      "blobSha": "8f011ceb5f661039b887dc4cc28485fc8936ea8f",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase7_local_post_role_runner_rehearsal_v39.ts",
+      "blobSha": "e9d5ed24d639707280e0e205a9dab863b5b1964c",
+      "mode": "100644"
+    },
+    {
+      "path": "server/lib/disruption/phase7ExpiryRunner_v39.ts",
+      "blobSha": "48cb881f159a499f8c57f66ffe7e38ccc185ade5",
+      "mode": "100644"
+    },
+    {
+      "path": "server/lib/disruption/phase7PrePolicyCommission_v39.ts",
+      "blobSha": "055fc101ea7d53a99e1c6163cae62a925ca495cb",
+      "mode": "100644"
+    },
+    {
+      "path": "server/lib/disruption/phase7ReviewedSourceTransformation_v39.ts",
+      "blobSha": "54d385e0ad039ec5fd14b2cdd53023fb7d9e7a72",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase6_revised_stage_executable_bridge_v39.test.ts",
+      "blobSha": "1df27689ccefdec38b687be4be79171519b30fa5",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase7_inert_storage_commission_v39.test.ts",
+      "blobSha": "5a67273d407e46f66b05e810868cc81f757f0c92",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase7_pre_policy_owner_scope_v39.test.ts",
+      "blobSha": "c40e91bb7273a32ff813d0cf584b432d5cbb78d8",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase7_reviewed_source_transformation_v39.test.ts",
+      "blobSha": "7d0fcf3e7335dc420be6a1fd101845284ccf3fc6",
+      "mode": "100644"
+    }
+  ],
+  "dayPlanChangedCount": 0,
+  "reviewCandidateAheadCommits": 14,
+  "reviewedExecutableCommit": null,
+  "reviewedBy": null,
+  "reviewedAtUtc": null,
+  "independentOperationalReleaseApproved": false,
+  "checks": [
+    {
+      "name": "V3.9 Offline Safety",
+      "runId": 44931465262,
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "name": "YSSY P25 Public Receiver Identity (Read-Only, No Provider)",
+      "runId": 44931465322,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Phase5 public GitHub forbids private frozen AeroDataBox flight packets",
+      "runId": 44931465233,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Phase7 exact inert storage commissioning (disposable PG16 NO GO)",
+      "runId": 44931465515,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Phase5 first actual seed and seven-category budget proposal (NO PROVIDER)",
+      "runId": 44931465261,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "YSSY P25 Real PG Receiver Faults (No Paid Provider)",
+      "runId": 44931465217,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "YSSY P25 Focused Release — No Provider",
+      "runId": 44931465333,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Phase7 durable derived bundle (disposable PG16 NO GO)",
+      "runId": 44931465306,
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "note": "Inventory only, not executable bridge approval. Recompute after merge and use the actual reviewed main descendant and exact blob modes, with genuine independent approval. No paid authority.",
+  "phase6PaidGo": false
+}
