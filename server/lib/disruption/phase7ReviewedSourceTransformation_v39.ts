@@ -233,11 +233,9 @@ export function validatePhase7ReviewedTransformationProfile(
       }
       if (field.categories !== null) failures.push('numeric-categories-must-be-null:' + String(field.outputField));
     } else if (field.kind === 'boolean_bucket') {
-      if (field.bucketCount !== 2 || field.boundaries !== null ||
-          !Array.isArray(field.categories) || field.categories.length !== 2 ||
-          field.categories[0] !== 'false' || field.categories[1] !== 'true') {
-        failures.push('boolean-definition-invalid:' + String(field.outputField));
-      }
+      // A two-value bucket reproduces the original boolean exactly. The
+      // nonReconstructable marker is evidence metadata, not a transformation.
+      failures.push('boolean-bucket-reconstructible:' + String(field.outputField));
     } else if (field.kind === 'categorical_group_dictionary') {
       // A distinct integer per original status is an invertible code. For the
       // native FIDS status only, accept a strictly many-to-one, explicit closed
@@ -259,13 +257,9 @@ export function validatePhase7ReviewedTransformationProfile(
         failures.push('categorical-group-definition-invalid:' + String(field.outputField));
       }
     } else if (field.kind === 'categorical_dictionary') {
-      if (field.sourceField === 'reported_pre_departure_status') failures.push('native-status-one-to-one-reconstructible:' + String(field.outputField));
-      if (field.boundaries !== null || !Array.isArray(field.categories) ||
-          field.categories.length !== field.bucketCount ||
-          field.categories.some(value => typeof value !== 'string' || value.length === 0) ||
-          new Set(field.categories).size !== field.categories.length) {
-        failures.push('categorical-definition-invalid:' + String(field.outputField));
-      }
+      // A distinct output for each input category is reversible. Packet B
+      // accepts categorical fields only through an explicit many-to-one group.
+      failures.push('categorical-dictionary-reconstructible:' + String(field.outputField));
     }
   }
   if (featureCount < 1) failures.push('feature-fields-required');
