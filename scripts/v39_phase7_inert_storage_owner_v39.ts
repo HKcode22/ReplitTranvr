@@ -6,6 +6,7 @@ import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {Pool,type PoolClient} from "pg";
 import {installP7InertStorage,inspectP7InertStorage} from "../server/lib/disruption/phase7InertStorageCommission_v39";
+import {assertP7MondayDisabledAuthorization} from "./v39_phase7_monday_owner_stage_binding_v39.mjs";
 const hold=(s:string):never=>{throw Error("HOLD_P7_OWNER_STORAGE_"+s);};
 const run=(c:string,a:string[])=>execFileSync(c,a,{encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:20000}).trim();
 const code=/^[a-f0-9]{40}$/;
@@ -15,9 +16,10 @@ async function assertDisabled(c:PoolClient){
  const lock=(await c.query("SELECT pg_try_advisory_xact_lock(hashtext('v39-phase6-provider-mutation')::bigint) ok")).rows[0];
  if(lock?.ok!==true)hold("PROVIDER_MUTATION_LOCK");
  await c.query("LOCK TABLE clean.adb_phase6_authorization,clean.adb_collection_subs,clean.adb_collection_batches IN SHARE ROW EXCLUSIVE MODE");
- const a=(await c.query("SELECT code_sha,manifest_sha256,enabled,revoked_at_utc FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
+ const a=(await c.query("SELECT code_sha,manifest_sha256,calendar_hash,config_hash,enabled,revoked_at_utc FROM clean.adb_phase6_authorization WHERE singleton_key=true")).rows;
  const b=(await c.query("SELECT (SELECT count(*)::int FROM clean.adb_collection_subs WHERE ended_at IS NULL) subs,(SELECT count(*)::int FROM clean.adb_collection_batches WHERE status='ACTIVE') batches")).rows[0];
- if(a.length!==1||a[0].enabled!==false||a[0].revoked_at_utc!==null||a[0].code_sha!=="0a7b1a28f243de76d4c83026d15f585265ef6f7b"||a[0].manifest_sha256!=="3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7"||Object.values(b).some(n=>n!==0))hold("EXACT_DISABLED_STAGE_REQUIRED");
+ if(a.length!==1||Object.values(b).some(n=>n!==0))hold("EXACT_DISABLED_STAGE_REQUIRED");
+ assertP7MondayDisabledAuthorization(a[0]);
 }
 async function main(){
  const [mode,pin]=process.argv.slice(2);
