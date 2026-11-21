@@ -14,7 +14,7 @@ PRIMARY_WF="phase5-primary-fids-expiry-no-provider.yml"
 RELAY_WF="external-clock.yml"
 
 hold(){ echo "HOLD_P6_OWNER_BULK_$1" >&2; exit 2; }
-cleanup(){ rm -f "/tmp/p6-v0107-review.$" "/tmp/p6-v0107-review-err.$" "/tmp/p6-before.$" "/tmp/p6-after.$" "/tmp/p6-new.$" "/tmp/p6-primary.log.$" "/tmp/p6-relay-before.$" "/tmp/p6-relay-after.$" "/tmp/p6-relay-new.$" "/tmp/p6-relay.log.$"; }
+cleanup(){ rm -f "/tmp/p6-v0107-review.$$" "/tmp/p6-v0107-review-err.$$" "/tmp/p6-before.$$" "/tmp/p6-after.$$" "/tmp/p6-new.$$" "/tmp/p6-primary.log.$$" "/tmp/p6-relay-before.$$" "/tmp/p6-relay-after.$$" "/tmp/p6-relay-new.$$" "/tmp/p6-relay.log.$$"; }
 trap cleanup EXIT
 [[ -d "$ROOT/.git" || -f "$ROOT/.git" ]] || ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [[ -n "$ROOT" && -e "$ROOT/.git" ]] || hold NO_REPO
@@ -180,7 +180,7 @@ NODE
 gh run view "$RUN" -R "$REPO" --job "$JOB" --log >"/tmp/p6-primary.log.$$"
 node - "$PIN" "$RUN" "/tmp/p6-primary.log.$$" <<'NODE'
 const fs=require("fs"),[pin,id,f]=process.argv.slice(2),rows=[];
-for(const l of fs.readFileSync(f,"utf8").split(/\\r?\\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x?.status==="PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES")rows.push(x)}catch{}}
+for(const l of fs.readFileSync(f,"utf8").split(/\r?\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x?.status==="PRIMARY_FIDS_VERIFY_ONLY_NO_WRITES")rows.push(x)}catch{}}
 if(rows.length!==1)process.exit(2);
 const x=rows[0],b=x.before,keys=["liveOriginals","eligibleOriginals","hardDueOriginals","eligibleNextHour","hardDueNextHour","unboundLiveOriginals","markedExpiredPayloadPresent","unlinkedUnexpiredPopulation","unexpiredPopulationWithoutLiveOriginal"];
 if(x.reviewedMainSha!==pin||x.providerCalls!==0||x.databaseWrites!==0||x.objectDeletions!==0||x.phase6PaidGo!==false||
@@ -228,7 +228,7 @@ then
   gh run view "$RRUN" -R "$RELAY_REPO" --job "$RJOB" --log >"/tmp/p6-relay.log.$$"
   node - "$PIN" "$RRUN" "/tmp/p6-relay.log.$$" <<'NODE'
 const fs=require("fs"),[pin,id,f]=process.argv.slice(2),rows=[];
-for(const l of fs.readFileSync(f,"utf8").split(/\\r?\\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x&&Object.hasOwn(x,"providerCallsByRelay"))rows.push(x)}catch{}}
+for(const l of fs.readFileSync(f,"utf8").split(/\r?\n/)){const i=l.indexOf("{");if(i<0)continue;try{const x=JSON.parse(l.slice(i).trim());if(x&&Object.hasOwn(x,"providerCallsByRelay"))rows.push(x)}catch{}}
 if(rows.length!==1)process.exit(2);const x=rows[0];
 if(x.relayRunId!==Number(id)||x.mode!=="PRIMARY_BACKSTOP"||x.providerCallsByRelay!==0||x.databaseReadsByRelay!==0||x.databaseWritesByRelay!==0||x.paidAuthorityGranted!==false)process.exit(2);
 const allowed=["TARGET_ACK_AND_RUN_IDENTITY_VERIFIED_NOT_COLLECTION_PROOF","DEFER_RECENT_PRIMARY_STEP_NOT_DELETION_PROOF","DEFER_TARGET_ALREADY_ACTIVE","EXTERNAL_WAKE_PREFLIGHT_DEFERRED_NO_POST"];
@@ -239,7 +239,7 @@ else
   echo '{"status":"GATE7_RELAY_FORWARD_SKIPPED_REVIEW_REQUIRED","providerCallsByRelay":0,"databaseWritesByRelay":0,"phase6PaidGo":false}'
 fi
 
-rm -f "/tmp/p6-before.$" "/tmp/p6-after.$" "/tmp/p6-new.$" "/tmp/p6-primary.log.$"       "/tmp/p6-relay-before.$" "/tmp/p6-relay-after.$" "/tmp/p6-relay-new.$" "/tmp/p6-relay.log.$"
+rm -f "/tmp/p6-before.$$" "/tmp/p6-after.$$" "/tmp/p6-new.$$" "/tmp/p6-primary.log.$$"       "/tmp/p6-relay-before.$$" "/tmp/p6-relay-after.$$" "/tmp/p6-relay-new.$$" "/tmp/p6-relay.log.$$"
 
 # ---------------- Gate 8 freshness: FREE account + subscription observation ----------------
 ACCOUNT_STATUS="NOT_RUN_API_KEY_MISSING"
