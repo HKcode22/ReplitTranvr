@@ -1,7 +1,8 @@
 name: Phase6 Gate5 exact Monday machine preview (no provider)
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - phase6/owner-current-main-continuation
     paths:
       - '.github/workflows/phase6-gate5-exact-machine-preview-no-provider.yml'
 permissions:
