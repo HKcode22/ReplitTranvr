@@ -31,7 +31,8 @@ export type Phase7ReviewedTransformationKind =
   | 'numeric_threshold_bucket'
   | 'frozen_native_t_delta_bucket'
   | 'boolean_bucket'
-  | 'categorical_dictionary';
+  | 'categorical_dictionary'
+  | 'categorical_grouped_dictionary';
 
 export type Phase7ReviewedTransformationRole = 'feature' | 'label';
 export type Phase7ReviewedRightsDisposition =
@@ -46,6 +47,9 @@ export interface Phase7ReviewedTransformationField {
   bucketCount: number;
   boundaries: readonly number[] | null;
   categories: readonly string[] | null;
+  /** Only the grouped native-status transform may use this exact policy key.
+   * Each disjoint group must contain multiple source values; no inferred map. */
+  categoryGroups?: readonly (readonly string[])[];
   transformEvidenceSha256: string;
   nonReconstructable: true;
 }
@@ -183,7 +187,8 @@ export function validatePhase7ReviewedTransformationProfile(
       failures.push('field-not-object');
       continue;
     }
-    if (!hasExactKeys(raw, FIELD_KEYS)) failures.push('field-extra-or-missing-keys');
+    const grouped = raw.kind === 'categorical_grouped_dictionary';
+    if (!hasExactKeys(raw, grouped ? [...FIELD_KEYS, 'categoryGroups'] : FIELD_KEYS)) failures.push('field-extra-or-missing-keys');
     const field = raw as Partial<Phase7ReviewedTransformationField>;
     if (typeof field.sourceField !== 'string' || !SOURCE_FIELD.test(field.sourceField)) failures.push('source-field-invalid');
     if (typeof field.outputField !== 'string' || !SAFE_OUTPUT.test(field.outputField) || FORBIDDEN_OUTPUT.test(field.outputField)) {
@@ -200,7 +205,7 @@ export function validatePhase7ReviewedTransformationProfile(
     if (field.role !== 'feature' && field.role !== 'label') failures.push('field-role-invalid');
     if (field.role === 'feature') featureCount++;
     if (field.role === 'label') labelCount++;
-    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary') {
+    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary' && field.kind !== 'categorical_grouped_dictionary') {
       failures.push('field-kind-invalid');
     }
     if (typeof field.bucketCount !== 'number' || !Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
@@ -224,6 +229,21 @@ export function validatePhase7ReviewedTransformationProfile(
           !Array.isArray(field.categories) || field.categories.length !== 2 ||
           field.categories[0] !== 'false' || field.categories[1] !== 'true') {
         failures.push('boolean-definition-invalid:' + String(field.outputField));
+      }
+    } else if (field.kind === 'categorical_grouped_dictionary') {
+      // A one-to-one dictionary is reversible. Allow an explicitly reviewed
+      // many-to-one native status taxonomy without changing the Packet A field.
+      // Local ambiguity is necessary here, not proof of whole-row anonymity.
+      const groups = field.categoryGroups;
+      if (field.role !== 'feature' || field.sourceField !== 'reported_pre_departure_status' ||
+          field.boundaries !== null || field.categories !== null || !Array.isArray(groups) ||
+          groups.length !== field.bucketCount || groups.length > 64 ||
+          groups.some(g => !Array.isArray(g) || g.length < 2 || g.length > 64 ||
+            g.some((v: unknown) => typeof v !== 'string' || v.length < 1 || v.length > 160 || v.trim() !== v))) {
+        failures.push('grouped-categorical-definition-invalid:' + String(field.outputField));
+      } else {
+        const members = groups.flat();
+        if (new Set(members).size !== members.length) failures.push('grouped-categorical-overlap:' + String(field.outputField));
       }
     } else if (field.kind === 'categorical_dictionary') {
       if (field.boundaries !== null || !Array.isArray(field.categories) ||
@@ -294,6 +314,10 @@ function fieldBucket(field: Phase7ReviewedTransformationField, value: unknown, n
     return null;
   }
   if (typeof value !== 'string') return null;
+  if (field.kind === 'categorical_grouped_dictionary') {
+    const index = field.categoryGroups!.findIndex(group => group.includes(value));
+    return index < 0 ? null : index;
+  }
   const index = (field.categories as readonly string[]).indexOf(value);
   return index < 0 ? null : index;
 }
