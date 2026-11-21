@@ -31,7 +31,8 @@ export type Phase7ReviewedTransformationKind =
   | 'numeric_threshold_bucket'
   | 'frozen_native_t_delta_bucket'
   | 'boolean_bucket'
-  | 'categorical_dictionary';
+  | 'categorical_dictionary'
+  | 'categorical_group_dictionary';
 
 export type Phase7ReviewedTransformationRole = 'feature' | 'label';
 export type Phase7ReviewedRightsDisposition =
@@ -45,7 +46,9 @@ export interface Phase7ReviewedTransformationField {
   kind: Phase7ReviewedTransformationKind;
   bucketCount: number;
   boundaries: readonly number[] | null;
-  categories: readonly string[] | null;
+  /** Nested groups are allowed only for the reviewed native status transform.
+   * A group is a many-to-one candidate, not proof of rights or joint non-reconstruction. */
+  categories: readonly string[] | readonly (readonly string[])[] | null;
   transformEvidenceSha256: string;
   nonReconstructable: true;
 }
@@ -200,7 +203,7 @@ export function validatePhase7ReviewedTransformationProfile(
     if (field.role !== 'feature' && field.role !== 'label') failures.push('field-role-invalid');
     if (field.role === 'feature') featureCount++;
     if (field.role === 'label') labelCount++;
-    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary') {
+    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary' && field.kind !== 'categorical_group_dictionary') {
       failures.push('field-kind-invalid');
     }
     if (typeof field.bucketCount !== 'number' || !Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
@@ -225,7 +228,27 @@ export function validatePhase7ReviewedTransformationProfile(
           field.categories[0] !== 'false' || field.categories[1] !== 'true') {
         failures.push('boolean-definition-invalid:' + String(field.outputField));
       }
+    } else if (field.kind === 'categorical_group_dictionary') {
+      // A distinct integer per original status is an invertible code. For the
+      // native FIDS status only, accept a strictly many-to-one, explicit closed
+      // dictionary; reject singleton groups and duplicate/mixed inputs. A
+      // structural pass is NOT a legal or joint-reconstruction determination.
+      const groups = field.categories;
+      const names = new Set<string>();
+      if (field.sourceField !== 'reported_pre_departure_status' || field.role !== 'feature' ||
+          field.boundaries !== null || !Array.isArray(groups) || groups.length !== field.bucketCount ||
+          groups.length < 2 || groups.length > 32 ||
+          !groups.every(group => {
+            if (!Array.isArray(group) || group.length < 2 || group.length > 64) return false;
+            return group.every(value => {
+              if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value) || names.has(value)) return false;
+              names.add(value); return true;
+            });
+          }) || names.size > 256) {
+        failures.push('categorical-group-definition-invalid:' + String(field.outputField));
+      }
     } else if (field.kind === 'categorical_dictionary') {
+      if (field.sourceField === 'reported_pre_departure_status') failures.push('native-status-one-to-one-reconstructible:' + String(field.outputField));
       if (field.boundaries !== null || !Array.isArray(field.categories) ||
           field.categories.length !== field.bucketCount ||
           field.categories.some(value => typeof value !== 'string' || value.length === 0) ||
@@ -294,6 +317,10 @@ function fieldBucket(field: Phase7ReviewedTransformationField, value: unknown, n
     return null;
   }
   if (typeof value !== 'string') return null;
+  if (field.kind === 'categorical_group_dictionary') {
+    const index = (field.categories as readonly (readonly string[])[]).findIndex(group => group.includes(value));
+    return index < 0 ? null : index;
+  }
   const index = (field.categories as readonly string[]).indexOf(value);
   return index < 0 ? null : index;
 }
