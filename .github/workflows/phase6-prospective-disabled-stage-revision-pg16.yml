@@ -6,6 +6,8 @@ on:
       - 'server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts'
       - 'server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs'
       - 'tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts'
+      - 'tests/phase6_nov23_old_stage_recovery_v39.test.ts'
+      - 'review-tools/p6_nov23_prospective_revision_owner_v39.ts'
       - '.github/workflows/phase6-prospective-disabled-stage-revision-pg16.yml'
       - 'scripts/v39_phase6_enable_source_owner_v39.ts'
       - 'tests/phase6_poststage_evidence_only_main_advance_v39.test.ts'
@@ -15,6 +17,8 @@ on:
       - 'server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39.ts'
       - 'server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs'
       - 'tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts'
+      - 'tests/phase6_nov23_old_stage_recovery_v39.test.ts'
+      - 'review-tools/p6_nov23_prospective_revision_owner_v39.ts'
       - '.github/workflows/phase6-prospective-disabled-stage-revision-pg16.yml'
 permissions:
   contents: read
@@ -73,6 +77,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -z "${AERODATABOX_API_KEY}"
-          npx vitest run tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts
+          npx vitest run tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts tests/phase6_nov23_old_stage_recovery_v39.test.ts
           npm run v39:typecheck
           echo 'P6_PROSPECTIVE_DISABLED_STAGE_REVISION_PG16=PASS PROVIDER_CALLS=0 PHASE6_GO=0'
