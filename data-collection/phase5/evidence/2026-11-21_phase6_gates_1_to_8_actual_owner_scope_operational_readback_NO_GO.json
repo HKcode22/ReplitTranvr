@@ -32,7 +32,8 @@
       ],
       "open": [
         "independently reviewed actual as-of source transform, non-reconstruction, source-reference purpose policy bytes",
-        "production PRE policy row readback, signer authority and disarmed integrated native proof"
+        "production PRE policy row readback, signer authority and disarmed integrated native proof",
+        "current native status categorical_dictionary maps each distinct string to a unique index; known dictionary permits exact inversion. Independent field-specific derived-work and reconstruction review, not a mere categorical encoding, is needed; no changing the frozen estimand or deleting Packet A fields"
       ]
     },
     {
@@ -43,8 +44,8 @@
         "two additional Phase6 production private transport logins independently verified read-only, GitHub Actions run 44917566057"
       ],
       "open": [
-        "POST independent outcome reviewer and signed publisher actual policy/actor rehearsal",
-        "final same-leg actual gate-out or explicit censored normal/recovery settlement chain"
+        "POST independently reviewed policy bytes and restricted actor readiness; current issuer supports explicit censor after reviewed observation, not numerical truth issuance",
+        "genuine same-leg continuous actual gate-out outcome where independently attested; otherwise explicit censoring; production actual positive outcome is post-GO evidence, not a prelaunch fabricated row"
       ]
     },
     {
@@ -55,11 +56,14 @@
         "primary protected child run 44915360246 succeeded",
         "primary protected child run 44917214631 succeeded",
         "retention read-only sentinel run 44921362060 NO_OVERDUE_REFERENCES 838/838 verified",
-        "Nov19 owner observed Replit PITR enabled, ordinary rotation window seven days (168h), scheduled backups off; recovery-only control reviewed and destructive restore drill expressly not required"
+        "Nov19 owner observed Replit PITR enabled, ordinary rotation window seven days (168h), scheduled backups off; recovery-only control reviewed and destructive restore drill expressly not required",
+        "Nov14 exact 65 historical primary bucket objects physically absent after separately authorized deletion; 838 verified reference markers, not 838 individual physical examinations",
+        "V0107 positive disposable PG16 expiry behavior, run 44875915991: four tests passed",
+        "additional current-main primary-only protected children 44923949897 and 44926668721 succeeded; latter actual job 136914155002 verified V0107 23h margin, no due originals, no STOP, no writes possible"
       ],
       "open": [
-        "physical source object deletion before deadline under positive nonempty workload",
-        "non-PITR physical object/log/replica custody and any genuine eventual due-item deletion under hard source TTL"
+        "independent Phase7 research/link expiry restricted reader (not exercised by the successful primary-only runs; sibling skipped), and non-PITR object IAM/log/replica controls",
+        "future genuine positive due-item deletion observation and recurring deadline enforcement under live load; not a repeat of historical 65 deletions"
       ],
       "knownCaveats": {
         "primaryObjectPresenceChecked": false,
@@ -109,10 +113,11 @@
         "direct read-only clock probe run 44917568249 succeeded",
         "nine external relay ROLLING_ROOT wakes 14:38:17–15:58:18 UTC, consecutive creation intervals 599–601 sec",
         "two protected primary FIDS child executions success",
-        "PR #936 review-only count-mismatch patch 9/9 exact-head CI success"
+        "PR #936 review-only count-mismatch patch 9/9 exact-head CI success",
+        "actual owner-dispatched three-hop no-provider chain 190c7d6fa707fd3ddd7409bb9a9d5d55 succeeded on current main: 44925689007 -> 44925734532 -> 44925786837; six real read-only waves, exactly two acknowledged successors, terminal no successor, zero provider/DB/collection dispatches",
+        "12 external relay wake observations with 599–601s spacing, 14:38–16:28 UTC"
       ],
       "open": [
-        "actual 3-hop no-provider successive handoff success under real GitHub readbacks",
         "four-hour native schedule recovery: six-slot diagnostic 2/6 observed success",
         "live PRE POST budget STOP actor and emergency recovery rehearsal"
       ],
@@ -159,11 +164,17 @@
     "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921807603",
     "https://github.com/HKcode22/ReplitTranvr/pull/936",
     "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md",
-    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_owner_inert_freeze_and_pitr_console_observation_NO_PHASE6_GO.json"
+    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_owner_inert_freeze_and_pitr_console_observation_NO_PHASE6_GO.json",
+    "https://github.com/HKcode22/ReplitTranvr/issues/413#issuecomment-6877828297",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44875915991",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925689007",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925734532",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925786837",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44926668721"
   ],
   "sourceRightsReview": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
   "retentionCertification": false,
-  "fullyAutonomousThreeHopCertified": false,
+  "fullyAutonomousThreeHopCertified": true,
   "derivedResearchRightsIndependentlyApproved": false,
   "sourceAuthorizationGranted": false,
   "phase6PaidGo": false
