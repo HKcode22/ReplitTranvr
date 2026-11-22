@@ -90,4 +90,25 @@ readv(){
    "$(readv TRAVNR_RELAY_ROLLING_ROUTE)" == "$ROUTE" ]] || hold READBACK_SCOPE
 # A future-root route is staged, NOT proven active. No G10 target approval
 # or protected runtime permission is installed or asserted here.
+
+# Narrow G10 metadata inventory only: no approval values, credentials, logs,
+# database SQL or reviewer identities are changed by this Gate9 command.
+gh api "repos/$TARGET/actions/variables?per_page=100" \
+ --paginate --jq '.variables[].name' > "$TMP/target_vars" || hold TARGET_VAR_READ
+gh api "repos/$TARGET/actions/secrets?per_page=100" \
+ --paginate --jq '.secrets[].name' > "$TMP/target_secrets" || hold TARGET_SECRET_NAMES_READ
+for key in P6_ROLLING_CONTROLLER_ENABLED P6_ROLLING_SCHEDULED_ROOT_ENABLED P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED P6_ROLLING_WINDOW_CUSTODY_ENABLED; do
+ if grep -Fxq "$key" "$TMP/target_vars"; then
+  echo "P6_GATE10_VAR_NAME_PRESENT=$key"
+ else
+  echo "P6_GATE10_VAR_NAME_MISSING=$key"
+ fi
+done
+for key in P6_ROLLING_SESSION_APPROVED P6_ROLLING_WINDOW_CUSTODY_APPROVED P6_ROLLING_WINDOW_AUTHORIZATION_ID P6_ROLLING_WINDOW_EXPECTED_LOGIN P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL; do
+ if grep -Fxq "$key" "$TMP/target_secrets"; then
+  echo "P6_GATE10_SECRET_NAME_PRESENT=$key"
+ else
+  echo "P6_GATE10_SECRET_NAME_MISSING=$key"
+ fi
+done
 echo '{"status":"P6_GATE9_EXISTING_FUTURE_DURABLE_ROOT_ROUTE_REPO_VARIABLES_STAGED_NO_PAID_GO","relayRoute":"DURABLE_ROOT","fromUtc":"2026-11-23T21:50:00.000Z","untilUtc":"2026-12-29T04:00:00.000Z","existingRelayMain":"c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed","targetMain":"b432eb9a5bac7bc3c4537249e75ec7df41e8727c","paidGo":false,"providerCalls":0,"databaseReads":0,"databaseWrites":0,"cronWrites":0,"targetDispatches":0}'
