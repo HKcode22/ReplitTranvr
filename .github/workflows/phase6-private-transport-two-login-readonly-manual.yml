@@ -1,100 +1,329 @@
-name: Phase6 private transport credentials — main-only real READ ONLY (No Provider)
+name: P6 detached final protected readback NO GO
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        type: string
         required: true
+        type: string
       approved_main_sha:
-        type: string
         required: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: phase6-private-transport-readonly-commission
+  group: p6-detached-final-protected-readback
   cancel-in-progress: false
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  V39_PHASE6_OWNER_APPROVED: '0'
+  DATABASE_URL: ''
+  V39_DATABASE_RUNTIME_URL: ''
+  AERODATABOX_API_KEY: ''
+  RAPIDAPI_KEY: ''
+  AERODATABOX_WEBHOOK_SECRET: ''
 jobs:
-  verify-reader:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+  verify-exact-static-values:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-protected-final-readback-no-go' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
-    env:
-      ADB_AUTO_COLLECT: '0'
-      V39_PHASE6_PROCESS_ARMED: '0'
-      V39_PHASE6_OWNER_APPROVED: '0'
-      DATABASE_URL: ''
-      V39_DATABASE_RUNTIME_URL: ''
-      AERODATABOX_API_KEY: ''
-      AERODATABOX_WEBHOOK_SECRET: ''
-      RAPIDAPI_KEY: ''
-      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
-      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+    timeout-minutes: 4
     steps:
-      - uses: actions/checkout@v4
-        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
-      - name: Actual independent restricted reader login and empty ACL readback
+        with: {node-version: '22'}
+      - name: Hash exact installed 31 static values, without exposing values
+        env:
+          V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+          P6_NONPAID_SOURCE_APPROVED_MAIN_SHA: ${{ secrets.P6_NONPAID_SOURCE_APPROVED_MAIN_SHA }}
+          V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA }}
+          P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+          V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+          P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA: ${{ secrets.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA }}
+          V39_P5_QUEUE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_QUEUE_APPROVED_CODE_SHA }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+          V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+          V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+          V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+          V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+          V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+          P6_INERT_STAGE_INPUT_JSON: ${{ secrets.P6_INERT_STAGE_INPUT_JSON }}
+          P6_INERT_STAGE_INPUT_SHA256: ${{ secrets.P6_INERT_STAGE_INPUT_SHA256 }}
+          P6_INERT_COST_ENVELOPE_SHA256: ${{ secrets.P6_INERT_COST_ENVELOPE_SHA256 }}
+          P6_PRIVATE_POST_OUTCOME_TAIL_HOURS: ${{ secrets.P6_PRIVATE_POST_OUTCOME_TAIL_HOURS }}
+          V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
+          V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
+          V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
+          P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_SIGNING_POLICY_BASE64: ${{ secrets.P6_NONPAID_SIGNING_POLICY_BASE64 }}
+          P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 }}
+          P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 }}
+          P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          P6_NONPAID_SIGNING_POLICY_SHA256: ${{ secrets.P6_NONPAID_SIGNING_POLICY_SHA256 }}
+          P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
         run: |
           set -Eeuo pipefail
           set +x
-          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -n "$P6_PRIVATE_READER_DATABASE_URL"
-          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_PUBLISHER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node --input-type=module <<'JS'
-          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
-          try{
-            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_READER_DATABASE_URL,ENTRIES[0]);
-            console.log(JSON.stringify({status:"P6_PRIVATE_READER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
-          }catch(e){
-            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_READER_SESSION_OR_DATABASE";
-            console.error(code);process.exitCode=2;
-          }
+          import {createHash} from 'node:crypto';
+          const names=["V39_P5_APPROVED_CODE_SHA","P6_NONPAID_SOURCE_APPROVED_MAIN_SHA","V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA","P5_CD_GH_PRE_APPROVED_CODE_SHA","V39_P5_POST_APPROVED_CODE_SHA","P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA","V39_P5_QUEUE_APPROVED_CODE_SHA","V39_P5_MANIFEST_SHA256","V39_P5_CALENDAR_HASH","V39_P5_CONFIG_HASH","V39_P5_FRAME_HASH","V39_P5_RELEASE_SHA256","V39_P5_RIGHTS_SHA256","V39_P5_PROVIDER_CONTRACT_SHA256","P6_INERT_STAGE_INPUT_JSON","P6_INERT_STAGE_INPUT_SHA256","P6_INERT_COST_ENVELOPE_SHA256","P6_PRIVATE_POST_OUTCOME_TAIL_HOURS","V39_P5_POST_PROVIDER_CONTRACT_SHA256","V39_P5_POST_CATEGORY_BUDGET_SHA256","V39_P5_POST_PRICE_SHA256","P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64","P6_PRIVATE_POST_REVIEWER_TRUST_BASE64","P6_NATIVE_POST_POLICY_BASE64","P6_NONPAID_DAILY_POLICY_SHA256","P6_NONPAID_SIGNING_POLICY_SHA256","P6_NONPAID_TRANSPORT_TRUST_SHA256","P6_NATIVE_POST_POLICY_SHA256"];
+          const values=Object.fromEntries(names.map(k=>[k,process.env[k]]));
+          const digest=createHash('sha256').update(JSON.stringify(values)).digest('hex');
+          if(names.some(k=>!values[k])||digest!=='a1637fa624ec3a85c3eb21b9f68f9978f078b4f9911197a5fcd640fdcfb1c66f')throw Error('HOLD_P6_STATIC_SECRET_BYTES_DRIFT');
+          console.log(JSON.stringify({status:'P6_ACTUAL_PROTECTED_31_VALUE_READBACK_PASS',staticCount:31,staticValuesSha256:digest,main:'e058b9d0817151d4b10282c9242c6c8ebeef7814',providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
           JS
-  verify-publisher:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+  verify-reviewer-key-challenges:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-protected-final-readback-no-go' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 6
-    env:
-      ADB_AUTO_COLLECT: '0'
-      V39_PHASE6_PROCESS_ARMED: '0'
-      V39_PHASE6_OWNER_APPROVED: '0'
-      DATABASE_URL: ''
-      V39_DATABASE_RUNTIME_URL: ''
-      AERODATABOX_API_KEY: ''
-      AERODATABOX_WEBHOOK_SECRET: ''
-      RAPIDAPI_KEY: ''
-      P6_PRIVATE_READER_DATABASE_URL: ''
-      P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
-      - name: Actual independent restricted publisher login and empty ACL readback
+        with: {node-version: '22'}
+      - name: Verify daily signer with a random non-observation challenge
+        env:
+          P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64 }}
         run: |
           set -Eeuo pipefail
           set +x
-          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -n "$P6_PRIVATE_PUBLISHER_DATABASE_URL"
-          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_READER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
           node --input-type=module <<'JS'
-          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
-          try{
-            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_PUBLISHER_DATABASE_URL,ENTRIES[1]);
-            console.log(JSON.stringify({status:"P6_PRIVATE_PUBLISHER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
-          }catch(e){
-            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_PUBLISHER_SESSION_OR_DATABASE";
-            console.error(code);process.exitCode=2;
-          }
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'daily',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify query signer with a random non-observation challenge
+        env:
+          P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'query',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify registry signer with a random non-observation challenge
+        env:
+          P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'registry',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify day signer with a random non-observation challenge
+        env:
+          P6_PRIVATE_DAY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'day',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify later signer with a random non-observation challenge
+        env:
+          P6_PRIVATE_LATER_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="de37f2d4f8736cb92c04a31c94d3d252482667f937ce80a0f65b09df5293e733";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'later',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify post signer with a random non-observation challenge
+        env:
+          P6_PRIVATE_POST_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PRIVATE_POST_REVIEWER_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'post',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify custody signer with a random non-observation challenge
+        env:
+          P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected="5d002b5a2cede6da00aab6d3b516aa4766f58858b252ba85e1c67049dd08d23f";
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected)throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'custody',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify pre-proof signer with a random non-observation challenge
+        env:
+          P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected=process.env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected||!createPublicKey(Buffer.from(process.env.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64??'','base64')).export({type:'spki',format:'der'}).equals(der))throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'pre-proof',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify post-outcome signer with a random non-observation challenge
+        env:
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
+          P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected=process.env.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256;
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected||!createPublicKey(Buffer.from(process.env.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64??'','base64')).export({type:'spki',format:'der'}).equals(der))throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'post-outcome',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+      - name: Verify pre-lane-authority signer with a random non-observation challenge
+        env:
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash,randomBytes,sign,verify} from 'node:crypto';
+          const k=createPrivateKey(Buffer.from(process.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64??'','base64')),p=createPublicKey(k),der=p.export({type:'spki',format:'der'}),fp=createHash('sha256').update(der).digest('hex');
+          const expected=process.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256;
+          if(k.asymmetricKeyType!=='ed25519'||fp!==expected||!createPublicKey(Buffer.from(process.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64??'','base64')).export({type:'spki',format:'der'}).equals(der))throw Error('HOLD_P6_REVIEWER_KEY_IDENTITY');
+          const challenge=randomBytes(32);if(!verify(null,challenge,p,sign(null,challenge,k)))throw Error('HOLD_P6_REVIEWER_CHALLENGE');
+          console.log(JSON.stringify({status:'P6_PROTECTED_KEY_CHALLENGE_PASS',reviewer:'pre-lane-authority',fingerprintSha256:fp,actualObservationSigned:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+          JS
+  verify-four-existing-preservation-logins:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-protected-final-readback-no-go' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e058b9d0817151d4b10282c9242c6c8ebeef7814
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify existing preservation actor 1 without mutation
+        env:
+          P6_PHASE7_PRE_READBACK_DATABASE_URL: ${{ secrets.P6_PHASE7_PRE_READBACK_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          import {P7_PRESERVATION_ACTORS,verifyP7PreservationLogin} from './scripts/v39_phase7_preservation_logins_owner_v39.mjs';
+          const a=P7_PRESERVATION_ACTORS[0],u=new URL(process.env.P6_PHASE7_PRE_READBACK_DATABASE_URL??'');
+          if(a.secret!=='P6_PHASE7_PRE_READBACK_DATABASE_URL'||decodeURIComponent(u.username)!==a.role||u.searchParams.get('sslmode')!=='verify-full'||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb')throw Error('HOLD_P7_ACTOR_TLS');
+          const c=new pg.Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:20000});
+          try{await c.connect();await verifyP7PreservationLogin(c,a);console.log(JSON.stringify({status:'P7_PROTECTED_EXISTING_ACTOR_ACL_READBACK_PASS',role:a.role,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));}catch{console.error('HOLD_P7_ACTOR_AUTH_OR_ACL');process.exitCode=2}finally{await c.end().catch(()=>{})}
+          JS
+      - name: Verify existing preservation actor 2 without mutation
+        env:
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          import {P7_PRESERVATION_ACTORS,verifyP7PreservationLogin} from './scripts/v39_phase7_preservation_logins_owner_v39.mjs';
+          const a=P7_PRESERVATION_ACTORS[1],u=new URL(process.env.P6_PHASE7_POST_SCOPED_DATABASE_URL??'');
+          if(a.secret!=='P6_PHASE7_POST_SCOPED_DATABASE_URL'||decodeURIComponent(u.username)!==a.role||u.searchParams.get('sslmode')!=='verify-full'||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb')throw Error('HOLD_P7_ACTOR_TLS');
+          const c=new pg.Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:20000});
+          try{await c.connect();await verifyP7PreservationLogin(c,a);console.log(JSON.stringify({status:'P7_PROTECTED_EXISTING_ACTOR_ACL_READBACK_PASS',role:a.role,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));}catch{console.error('HOLD_P7_ACTOR_AUTH_OR_ACL');process.exitCode=2}finally{await c.end().catch(()=>{})}
+          JS
+      - name: Verify existing preservation actor 3 without mutation
+        env:
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          import {P7_PRESERVATION_ACTORS,verifyP7PreservationLogin} from './scripts/v39_phase7_preservation_logins_owner_v39.mjs';
+          const a=P7_PRESERVATION_ACTORS[2],u=new URL(process.env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL??'');
+          if(a.secret!=='P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL'||decodeURIComponent(u.username)!==a.role||u.searchParams.get('sslmode')!=='verify-full'||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb')throw Error('HOLD_P7_ACTOR_TLS');
+          const c=new pg.Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:20000});
+          try{await c.connect();await verifyP7PreservationLogin(c,a);console.log(JSON.stringify({status:'P7_PROTECTED_EXISTING_ACTOR_ACL_READBACK_PASS',role:a.role,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));}catch{console.error('HOLD_P7_ACTOR_AUTH_OR_ACL');process.exitCode=2}finally{await c.end().catch(()=>{})}
+          JS
+      - name: Verify existing preservation actor 4 without mutation
+        env:
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          import {P7_PRESERVATION_ACTORS,verifyP7PreservationLogin} from './scripts/v39_phase7_preservation_logins_owner_v39.mjs';
+          const a=P7_PRESERVATION_ACTORS[3],u=new URL(process.env.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL??'');
+          if(a.secret!=='P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL'||decodeURIComponent(u.username)!==a.role||u.searchParams.get('sslmode')!=='verify-full'||!u.hostname.endsWith('.neon.tech')||u.pathname!=='/neondb')throw Error('HOLD_P7_ACTOR_TLS');
+          const c=new pg.Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:20000});
+          try{await c.connect();await verifyP7PreservationLogin(c,a);console.log(JSON.stringify({status:'P7_PROTECTED_EXISTING_ACTOR_ACL_READBACK_PASS',role:a.role,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));}catch{console.error('HOLD_P7_ACTOR_AUTH_OR_ACL');process.exitCode=2}finally{await c.end().catch(()=>{})}
+          JS
+  verify-post-policy-binding:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-protected-final-readback-no-go' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify exact same PRE contract profile and bounded censoring policy
+        env:
+          P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
+          P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 }}
+          P6_PHASE7_POST_CONTRACT_SHA256: ${{ secrets.P6_PHASE7_POST_CONTRACT_SHA256 }}
+          P6_PHASE7_POST_PROFILE_SHA256: ${{ secrets.P6_PHASE7_POST_PROFILE_SHA256 }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --input-type=module <<'JS'
+          import {createHash} from 'node:crypto';
+          const e=process.env,sha=b=>createHash('sha256').update(b).digest('hex'),hash=x=>sha(JSON.stringify(x));
+          const pre=JSON.parse(Buffer.from(e.P6_PHASE7_PRE_POLICY_BASE64,'base64')),bytes=Buffer.from(e.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64,'base64'),p=JSON.parse(bytes);
+          if(sha(bytes)!==e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256||pre.reviewSha256!==e.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256||hash(pre.contract)!==e.P6_PHASE7_POST_CONTRACT_SHA256||hash(pre.profile)!==e.P6_PHASE7_POST_PROFILE_SHA256||p.prePolicySha256!==pre.reviewSha256||p.contractSha256!==hash(pre.contract)||p.profileSha256!==hash(pre.profile)||p.manifestSha256!==e.V39_P5_MANIFEST_SHA256||p.rightsSha256!==e.V39_P5_RIGHTS_SHA256||p.nativePostPolicySha256!==e.P6_NATIVE_POST_POLICY_SHA256||p.unverifiedLabelDisposition!=='CENSOR_AFTER_REVIEWED_POST_OBSERVATION'||p.schema!=='v39.phase7.independent-post-settlement-policy.v1')throw Error('HOLD_P7_EXACT_POST_POLICY_BINDING');
+          console.log(JSON.stringify({status:'P7_PROTECTED_POST_POLICY_BINDING_PASS',policySha256:sha(bytes),numericalLabelsCertified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
           JS
