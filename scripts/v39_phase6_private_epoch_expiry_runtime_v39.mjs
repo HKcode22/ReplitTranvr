@@ -25,13 +25,21 @@ async function ro(pool,sql,args){
   if(poison)hold("READONLY_ROLLBACK_UNKNOWN");
  }
 }
-async function status(reader,m){
+export const P6_PRIVATE_METADATA_PROFILE="V0108_RECOVERY_METADATA_ONLY";
+export function privateExpiryDeadlineEvidence(v,profile="V0105"){
+ if(!["V0105",P6_PRIVATE_METADATA_PROFILE].includes(profile)||STATUS.some(k=>!n(v?.[k])))hold("INVALID_DEADLINE_COUNTS");
+ const metadata=profile===P6_PRIVATE_METADATA_PROFILE?v.dueOperationalMetadataPackets:0;
+ if(!n(metadata)||metadata>v.duePackets)hold("INVALID_METADATA_COUNTS");
+ return {dueOperationalMetadataPackets:metadata,deadlineDueObservedAtInitialRead:v.duePackets-metadata+v.dueIndexes+v.foreignDuePackets+v.foreignDueIndexes>0};
+}
+async function status(reader,m,profile){
  const v=await ro(reader,"SELECT "+F+"status_v39($1) v",[m]);
- if(!v||v.schema!=="v39.phase6.private-epoch-expiry-status.v1"||STATUS.some(k=>!n(v[k]))||
+ if(!v||v.schema!==(profile===P6_PRIVATE_METADATA_PROFILE?"v39.phase6.private-epoch-expiry-status.v2":"v39.phase6.private-epoch-expiry-status.v1")||STATUS.some(k=>!n(v[k]))||
     v.claims>31||v.expiredHeads>v.claims||v.expiredHeads>v.dueIndexes||!clock(v.observedAtUtc)||
     typeof v.deletionStopUnresolved!=="boolean"||v.providerCalls!==0||v.databaseWrites!==0||
     v.backupOrPitrVerified!==false||v.phase6PaidGo!==false)hold("INVALID_STATUS");
- return {observedAtUtc:v.observedAtUtc,...Object.fromEntries(STATUS.map(k=>[k,v[k]])),deletionStopUnresolved:v.deletionStopUnresolved};
+ const evidence=privateExpiryDeadlineEvidence(v,profile);
+ return {observedAtUtc:v.observedAtUtc,...Object.fromEntries(STATUS.map(k=>[k,v[k]])),...(profile===P6_PRIVATE_METADATA_PROFILE?{dueOperationalMetadataPackets:evidence.dueOperationalMetadataPackets}:{}),deletionStopUnresolved:v.deletionStopUnresolved};
 }
 function sweepReceipt(v,limit){
  if(!v||v.schema!=="v39.phase6.private-epoch-expiry-sweep.v1"||
@@ -52,18 +60,18 @@ async function independentReceipt(reader,m,r){
  if(v.committedAggregateReceiptFound&&(v.observedAtUtc!==r.observedAtUtc||
     RECEIPT.some(k=>v[k]!==r[k])||v.backupOrPitrVerified!==false))hold("RECEIPT_MISMATCH");
 }
-async function stop(writer,reader,m,r){
+async function stop(writer,reader,m,r,profile){
  try{
   const c=await writer.connect();
   try{
    const z=await c.query("SELECT "+F+"stop_v39($1) v",[r.runId]);
    if(z.rows.length!==1||z.rows[0].v!==true)hold("STOP_NOT_ACKNOWLEDGED");
   }finally{c.release();}
-  if((await status(reader,m)).deletionStopUnresolved!==true)hold("STOP_NOT_READ_BACK");
+  if((await status(reader,m,profile)).deletionStopUnresolved!==true)hold("STOP_NOT_READ_BACK");
  }catch{hold("STOP_UNVERIFIED_NO_REPLAY");}
  hold("STOP_RECORDED_NO_REPLAY");
 }
-async function one(writer,reader,m,limit){
+async function one(writer,reader,m,limit,profile){
  const c=await writer.connect();let r,attempted=false,ack=false,poison=false;
  try{
   await c.query("BEGIN");
@@ -78,7 +86,7 @@ async function one(writer,reader,m,limit){
  try{
   if(!ack&&r.packets+r.indexRevisions===0)hold("ZERO_WORK_COMMIT_UNKNOWN");
   await independentReceipt(reader,m,r);
- }catch{await stop(writer,reader,m,r);}
+ }catch{await stop(writer,reader,m,r,profile);}
  return {...r,commitAck:ack,independentAggregateReceiptVerified:r.packets+r.indexRevisions>0};
 }
 /** Run only AFTER exact separate actor/ACL/body authentication by the
@@ -86,22 +94,23 @@ async function one(writer,reader,m,limit){
  * At most 4 invocations, each at most 128 packets + one 1024-revision epoch.
  * Actual production throughput and deadlines are NOT certified here.
  */
-export async function runP6PrivateEpochExpiryCore({writer,reader,manifest,apply=false,limit=128,maxBatches=4}){
+export async function runP6PrivateEpochExpiryCore({writer,reader,manifest,apply=false,limit=128,maxBatches=4,privateDeadlineProfile="V0105"}){
  if(!writer||!reader||writer===reader||!SHA.test(manifest??"")||
     typeof apply!=="boolean"||!n(limit)||limit<1||limit>128||
     !n(maxBatches)||maxBatches<1||maxBatches>4)hold("INVALID_SCOPE");
- const before=await status(reader,manifest);
+ if(!["V0105",P6_PRIVATE_METADATA_PROFILE].includes(privateDeadlineProfile))hold("INVALID_PRIVATE_DEADLINE_PROFILE");
+ const before=await status(reader,manifest,privateDeadlineProfile);
  // Due at the signed retention_not_after boundary is evidence requiring
  // deadline review even if a later recovery sweep clears everything.
  // Do not report deletion recovery as on-time physical retention.
- const base={before,deadlineDueObservedAtInitialRead:before.duePackets+before.dueIndexes+before.foreignDuePackets+before.foreignDueIndexes>0,
+ const base={before,...privateExpiryDeadlineEvidence(before,privateDeadlineProfile),
   providerCalls:0,backupOrPitrVerified:false,completeRetentionDeploymentVerified:false,phase6PaidGo:false};
  if(!apply)return {...base,status:"PRIVATE_EXPIRY_VERIFY_ONLY_NO_WRITES",databaseWrites:0};
  if(before.deletionStopUnresolved)hold("DELETION_STOP");
  const receipts=[];let current=before;
  for(let i=0;i<maxBatches&&(current.duePackets||current.dueIndexes);i++){
-  const r=await one(writer,reader,manifest,limit);receipts.push(r);
-  current=await status(reader,manifest);
+  const r=await one(writer,reader,manifest,limit,privateDeadlineProfile);receipts.push(r);
+  current=await status(reader,manifest,privateDeadlineProfile);
   if(current.deletionStopUnresolved)hold("DELETION_STOP_AFTER_SWEEP");
   if(r.packets+r.indexRevisions===0)break;
  }
