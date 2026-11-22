@@ -1,0 +1,116 @@
+{
+  "schema": "v39.phase6.unsigned-operational-release-review-inventory.v1",
+  "reviewStatus": "UNSIGNED_REVIEW_INPUT_NOT_APPROVAL",
+  "stageCodeSha": "795ace55984b44a3d0bffa886d33a5ec11d31927",
+  "stagePacketSha256": "8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc",
+  "costEnvelopeSha256": "cef58dcc4e8009d46e686bb555faab0fe952b9921e8aa3aa13d610ea443e3bf9",
+  "candidateExecutableCommit": "6daa7156f9f987201959b3f4157adb9a15e58828",
+  "baseMainSha": "e058b9d0817151d4b10282c9242c6c8ebeef7814",
+  "changedBlobs": [
+    {
+      "path": ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
+      "blobSha": "b915a6ceb3194fb088518c8508b6d1cec32b033e",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml",
+      "blobSha": "1687e3f0bed99074ec51622b7c0497521b295f57",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+      "blobSha": "a60c3ea3d5567b606b445451e5fa6d899f6c6904",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",
+      "blobSha": "84722af32a5115c37a48f9a59d6f65ec9de650fa",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",
+      "blobSha": "5d25b201b25799d919100c72c88e8ee3d9cb4687",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+      "blobSha": "deb1c15e068789db37c8775dbe5fc682877d110c",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase6-direct-recovery-tick.yml",
+      "blobSha": "1df85747b0343e879f911dfb427ae5d0206f1630",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",
+      "blobSha": "3e745cb0930b1ca47ca5ee958d915cfadef375d5",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase6-private-later-enrollment.yml",
+      "blobSha": "26f5f939b85042b466bfdfbaca2d569ea5849129",
+      "mode": "100644"
+    },
+    {
+      "path": ".github/workflows/phase6-stored-post-recovery-no-provider.yml",
+      "blobSha": "d7ac97b54df2f56f90af93b8a7ac3fe13bd6d337",
+      "mode": "100644"
+    },
+    {
+      "path": "review-tools/p6_nov20_finalize_recovered_policies_v39.ts",
+      "blobSha": "6a18ea4aee56df8d902fc6e93d4be5e3c995ac2d",
+      "mode": "100644"
+    },
+    {
+      "path": "review-tools/p7_commission_pre_policy_owner_v39.ts",
+      "blobSha": "851002381e5ee713501033b46296e3265443fb20",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs",
+      "blobSha": "5d2a0b194b3f4fa8ea89fd6de1221305bd5b8389",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase6_enable_source_owner_v39.ts",
+      "blobSha": "11caa80823c19390a6d04ff6274ca97618ebbf0f",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase6_revised_stage_executable_bridge_v39.ts",
+      "blobSha": "a042160d3d58f7eb87383fee39440ca696640f56",
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/v39_phase7_post_actor_preflight_v39.ts",
+      "blobSha": "642d5d58b9feca90a6441fff62f7b022a3c97c18",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase6_direct_recovery_tick_v39.test.mjs",
+      "blobSha": "b18f28e40c9e6720eaa40326168b9b871ff76f5e",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase6_revised_stage_executable_bridge_v39.test.ts",
+      "blobSha": "fd6b409d14f68d7ac813da3bc4d6d72d44b02138",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase7_post_actor_preflight_v39.test.ts",
+      "blobSha": "421546075e3926c800e6ce1e1308ff6c3bd3e4af",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/phase7_private_signed_review_transport_v39.test.ts",
+      "blobSha": "b3f2b547375f321c735756328c2f6d1243865cd6",
+      "mode": "100644"
+    }
+  ],
+  "unchangedDayPlans": 31,
+  "priorCheckpointChanges": 0,
+  "deletedPaths": 0,
+  "independentOperationalReleaseApproved": false,
+  "phase6PaidGo": false
+}
