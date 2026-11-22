@@ -1,0 +1,96 @@
+name: P6 G8 owner sealed existing policy successor (NO PROVIDER)
+on:
+  push:
+    branches:
+      - phase6/20261122-g8-502-readback-evidence
+    paths:
+      - 'data-collection/phase6/checkpoints/p6_g8_owner_seal_request.json'
+permissions:
+  contents: read
+concurrency:
+  group: p6-g8-owner-once-sealed-successor
+  cancel-in-progress: false
+jobs:
+  one-owner-sealed-successor:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.actor == 'HKcode22' &&
+      github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' &&
+      github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      AERODATABOX_API_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      P6_G8_OWNER_SEAL_TRIGGER: 'OWNER_REVIEWED_ENCRYPTED_SECRET_SUCCESSOR_ONLY_NO_GO'
+      GH_TOKEN: ${{ github.token }}
+      V39_P5_APPROVED_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      P6_NONPAID_SOURCE_APPROVED_MAIN_SHA: ${{ secrets.P6_NONPAID_SOURCE_APPROVED_MAIN_SHA }}
+      V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA: ${{ secrets.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA }}
+      P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+      V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA: ${{ secrets.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA }}
+      V39_P5_QUEUE_APPROVED_CODE_SHA: ${{ secrets.V39_P5_QUEUE_APPROVED_CODE_SHA }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
+      V39_P5_CONFIG_HASH: ${{ secrets.V39_P5_CONFIG_HASH }}
+      V39_P5_FRAME_HASH: ${{ secrets.V39_P5_FRAME_HASH }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
+      P6_INERT_STAGE_INPUT_JSON: ${{ secrets.P6_INERT_STAGE_INPUT_JSON }}
+      P6_INERT_STAGE_INPUT_SHA256: ${{ secrets.P6_INERT_STAGE_INPUT_SHA256 }}
+      P6_INERT_COST_ENVELOPE_SHA256: ${{ secrets.P6_INERT_COST_ENVELOPE_SHA256 }}
+      P6_PRIVATE_POST_OUTCOME_TAIL_HOURS: ${{ secrets.P6_PRIVATE_POST_OUTCOME_TAIL_HOURS }}
+      V39_P5_POST_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_POST_PROVIDER_CONTRACT_SHA256 }}
+      V39_P5_POST_CATEGORY_BUDGET_SHA256: ${{ secrets.V39_P5_POST_CATEGORY_BUDGET_SHA256 }}
+      V39_P5_POST_PRICE_SHA256: ${{ secrets.V39_P5_POST_PRICE_SHA256 }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_NONPAID_SIGNING_POLICY_BASE64: ${{ secrets.P6_NONPAID_SIGNING_POLICY_BASE64 }}
+      P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 }}
+      P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+      P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+      P6_NONPAID_SIGNING_POLICY_SHA256: ${{ secrets.P6_NONPAID_SIGNING_POLICY_SHA256 }}
+      P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 }}
+      P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+      P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+      P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact branch source, current main and pinned historic pure validator
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs)" = f962af815026bcaa689d7e6ecfba15d2b0150328
+          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq .object.sha)" = b432eb9a5bac7bc3c4537249e75ec7df41e8727c
+          gh api repos/HKcode22/ReplitTranvr/git/blobs/34156ac65811165c0d217e7175f8643eeef55761 --jq .content | base64 --decode > "$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
+          test "$(git hash-object "$RUNNER_TEMP/p6-g8-original-final-validator.cjs")" = 34156ac65811165c0d217e7175f8643eeef55761
+          node --check data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs
+          node --check "$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
+      - name: Validate old and current policies and seal only 11 successor secrets to owner's ephemeral key
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          export P6_G8_PINNED_VALIDATOR_PATH="$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
+          node data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs
+      - name: Preserve only the AEAD-encrypted owner successor for 1 day
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-g8-owner-encrypted-successor-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-g8-owner-sealed-policy-successor.json
+          retention-days: 1
+          if-no-files-found: error
