@@ -169,5 +169,17 @@
       "sha256": "d18c40640096f09a7a72c27e05fa63c227336849d11db7c266dbb6b2cb067fa9"
     }
   ],
-  "approvals": []
+  "approvals": [
+    {
+      "authorizationId": "AUTH-20261122-P6SOURCE",
+      "artifactSha256": "8b1e3782d95db532195e626c41c603b00f58467505f368193930617b3c7fd297",
+      "predecessorEvidenceIds": [
+        "DEC-20261119-ADBBOUNDEDSOURCE",
+        "DEC-20261122-SCIENTIFICFREEZE",
+        "DEC-20261122-ACCOUNTBUDGET",
+        "DEC-20261122-PUBLISHEDSTOP",
+        "DEC-20261123-OPERATIONALBRIDGE"
+      ]
+    }
+  ]
 }
