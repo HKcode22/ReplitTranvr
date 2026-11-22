@@ -106,14 +106,24 @@ async function readback(connectionString,head,sql){
   if(res?.schema!==(state==="V0108_EXACT_INSTALLED"?"v39.phase6.private-epoch-expiry-status.v2":"v39.phase6.private-epoch-expiry-status.v1")||
     res.providerCalls!==0||res.databaseWrites!==0||res.phase6PaidGo!==false)
     fail("EXACT_RUNTIME_STATUS_DRIFT");
-  return {state,codeBound:auth[0].code_sha===head,sourceEnabled:auth[0].enabled,
+  // The original immutable SOURCE stage deliberately retains its older code
+  // SHA after reviewed successors. Never demand a second SOURCE-enable write.
+  // A successor must have an actual ancestor path AND an explicit exact-head
+  // owner release authorization; ancestry alone is not a paid-GO approval.
+  let reviewedCodeAncestor=auth[0].code_sha===head;
+  if(!reviewedCodeAncestor){
+   try{git("git","merge-base","--is-ancestor",auth[0].code_sha,head);
+     reviewedCodeAncestor=true;}catch{}
+  }
+  return {state,reviewedCodeAncestor,sourceAuthCodeSha:auth[0].code_sha,
+   sourceManifestSha256:auth[0].manifest_sha256,sourceEnabled:auth[0].enabled,
    packets:counts.packets,indexes:counts.indexes,deletionStops:counts.deletion_stops,
    functionAcl:funcs.map(x=>x.acl),observedDbClockUtc:res.observedAtUtc};
  }finally{if(tx)await c.query("ROLLBACK").catch(()=>{});await c.end().catch(()=>{});}
 }
 export function reviewP6V0108Apply(pre,head,env){
- if(pre.state!=="V0105_EXACT_PREDECESSOR"||pre.codeBound!==true||
-    pre.packets!==0||pre.indexes!==0||pre.deletionStops!==0)
+ if(pre.state!=="V0105_EXACT_PREDECESSOR"||pre.reviewedCodeAncestor!==true||
+    pre.sourceEnabled!==true||pre.packets!==0||pre.indexes!==0||pre.deletionStops!==0)
    fail("STOPPED_EMPTY_CURRENT_MAIN_PREDECESSOR_REQUIRED");
  if(env.P6_V0108_REVIEWED_MAIN_SHA!==head||
     env.P6_V0108_OWNER_APPROVAL!==P6_V0108_APPLY_APPROVAL||
@@ -144,7 +154,10 @@ async function main(){
  finally{await c.end().catch(()=>{});}
  if(!attempted)fail("NO_COMMISSION");
  const after=await readback(url,head,sql);
- if(after.state!=="V0108_EXACT_INSTALLED"||!after.codeBound||
+ if(after.state!=="V0108_EXACT_INSTALLED"||!after.reviewedCodeAncestor||
+    after.sourceAuthCodeSha!==pre.sourceAuthCodeSha||
+    after.sourceManifestSha256!==pre.sourceManifestSha256||
+    after.sourceEnabled!==pre.sourceEnabled||
     after.packets!==0||after.indexes!==0||after.deletionStops!==0||
     JSON.stringify(after.functionAcl)!==JSON.stringify(pre.functionAcl))
     fail("POSTCOMMIT_EXACT_INDEPENDENT_READBACK_HOLD");
