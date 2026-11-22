@@ -38,13 +38,14 @@ describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
    [full[0],{...full[1],definer:false}]
   ])expect(()=>classifyP6V0108Bodies(corrupted,sql)).toThrow();
  });
- it("allows APPLY admission only at exact reconciled main, empty custody, with deliberate no-paid approval",()=>{
-  const pre={state:"V0105_EXACT_PREDECESSOR",codeBound:true,packets:0,indexes:0,deletionStops:0};
+ it("allows APPLY for an approved descendant of the already enabled immutable SOURCE stage, but never replays SOURCE",()=>{
+  const pre={state:"V0105_EXACT_PREDECESSOR",reviewedCodeAncestor:true,
+   sourceEnabled:true,sourceAuthCodeSha:"b".repeat(40),packets:0,indexes:0,deletionStops:0};
   const env={P6_V0108_REVIEWED_MAIN_SHA:code,P6_V0108_OWNER_APPROVAL:P6_V0108_APPLY_APPROVAL,
    ADB_AUTO_COLLECT:"0",V39_PHASE6_PROCESS_ARMED:"0"};
   expect(()=>reviewP6V0108Apply(pre,code,env)).not.toThrow();
   for(const corrupted of [
-   {...pre,state:"V0108_EXACT_INSTALLED"},{...pre,codeBound:false},
+   {...pre,state:"V0108_EXACT_INSTALLED"},{...pre,reviewedCodeAncestor:false},{...pre,sourceEnabled:false},
    {...pre,packets:1},{...pre,indexes:1},{...pre,deletionStops:1}
   ])expect(()=>reviewP6V0108Apply(corrupted,code,env)).toThrow();
   for(const corrupted of [
