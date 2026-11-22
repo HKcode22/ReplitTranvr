@@ -2,6 +2,7 @@ import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {
  exactP6V0108Sql,classifyP6V0108Bodies,reviewP6V0108Apply,
+ requireP6V0108RelayCompatibleBlob,P6_V0108_RELAY_COMPAT_BLOB,
  P6_V0108_APPLY_APPROVAL,P6_V0108_MIGRATION
 } from "../scripts/v39_phase6_v0108_owner_once_v39.mjs";
 const code="a".repeat(40);
@@ -37,6 +38,11 @@ describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
    [full[0],{...full[1],config:"search_path=public"}],
    [full[0],{...full[1],definer:false}]
   ])expect(()=>classifyP6V0108Bodies(corrupted,sql)).toThrow();
+ });
+ it("blocks V0108 owner installation until the exact reviewed relay runtime is deployed",()=>{
+  expect(()=>requireP6V0108RelayCompatibleBlob(P6_V0108_RELAY_COMPAT_BLOB)).not.toThrow();
+  for(const wrong of [undefined,"", "a".repeat(40),P6_V0108_RELAY_COMPAT_BLOB.toUpperCase()])
+   expect(()=>requireP6V0108RelayCompatibleBlob(wrong)).toThrow("RELAY_BACKSTOP_COMPATIBILITY_NOT_DEPLOYED");
  });
  it("allows APPLY for an approved descendant of the already enabled immutable SOURCE stage, but never replays SOURCE",()=>{
   const pre={state:"V0105_EXACT_PREDECESSOR",reviewedCodeAncestor:true,
