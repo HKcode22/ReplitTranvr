@@ -47,8 +47,8 @@ export function exactP6V0108Sql(read=(p)=>readFileSync(p)){
 export function classifyP6V0108Bodies(functions,sql){
  if(!Array.isArray(functions)||functions.length!==2||
     !functions.every(f=>f&&f.definer===true&&f.owner==="neondb_owner"&&
-      typeof f.acl==="string"||f&&f.acl===null&&f.definer===true&&f.owner==="neondb_owner"))
-    fail("CATALOG_SHAPE");
+     typeof f.acl==="string"&&f.acl.length>0&&f.publicExec===false))
+    fail("CATALOG_SECURITY_DEFINER_ACL");
  const a=functions[0],b=functions[1];
  if(a.vol!=="s"||b.vol!=="v"||
     ![a,b].every(f=>f.config==="search_path=pg_catalog, pg_temp"))
@@ -97,7 +97,7 @@ async function readback(connectionString,head,sql){
   const counts=(await c.query("SELECT (SELECT count(*)::integer FROM phase6_private.frozen_native_packet_v39) packets,(SELECT count(*)::integer FROM phase6_private.signed_run_day_index_revision_v39) indexes,(SELECT count(*)::integer FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved) deletion_stops")).rows[0];
   const funcs=[];
   for(const reg of [STATUS,SWEEP]){
-   const f=(await c.query("SELECT p.prosrc body,p.prosecdef definer,pg_get_userbyid(p.proowner) owner,p.provolatile vol,coalesce(array_to_string(p.proconfig,','),'') config,coalesce(p.proacl::text,'') acl FROM pg_proc p WHERE p.oid=$1::regprocedure",[reg])).rows;
+   const f=(await c.query("SELECT p.prosrc body,p.prosecdef definer,pg_get_userbyid(p.proowner) owner,p.provolatile vol,coalesce(array_to_string(p.proconfig,','),'') config,coalesce(p.proacl::text,'') acl,EXISTS(SELECT 1 FROM pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) x WHERE x.grantee=0 AND x.privilege_type='EXECUTE') "publicExec" FROM pg_proc p WHERE p.oid=$1::regprocedure",[reg])).rows;
    if(f.length!==1)fail("FUNCTION_MISSING");
    funcs.push(f[0]);
   }
