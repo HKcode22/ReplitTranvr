@@ -42,7 +42,7 @@ test "$(git rev-parse HEAD)" = "$PIN"
 test "$(remote "$REPO")" = "$PIN"
 # Current actual STOP variables, not secret values. Existing committed STOP
 # secret attestations and published receiver review remain the adopted basis.
-gh variable list -R "$REPO" --limit 200 --json name,value > "$TMP/vars.json"
+gh variable list -R "$REPO" --json name,value > "$TMP/vars.json"
 node --input-type=module - "$TMP/vars.json" <<'JS'
 import fs from 'node:fs';
 const a=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
@@ -112,7 +112,7 @@ const previous=[...s.predecessorEvidenceIds,...old.record.predecessorEvidenceIds
 need(new Set(previous).size===previous.length&&previous.length<=128&&!ledger.evidence.some(x=>x.evidenceId===id)&&!ledger.approvals.some(x=>x.authorizationId===compiled.staged.authorizationId),'CANDIDATE_LEDGER_SCOPE');
 const evidence=Object.fromEntries(P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS.map(k=>[k,oldRel[k]]));
 need(Object.values(evidence).every(v=>H.test(v)),'ADOPTED_FIVE_EVIDENCE_HASHES');
-const candidate={authorizationId:compiled.staged.authorizationId,phaseGate:old.record.phaseGate,airportFilterWindow:old.record.airportFilterWindow,maxAlertCredits:compiled.staged.alertSafety.alertRunSpendCeilingCredits,maxRestUnitsByCategory:Object.fromEntries(compiled.cost.categoryCaps.map(x=>[x.category,x.ceilingUnits])),startNotBeforeUtc:observedIso,expiresAtUtc:new Date(deadline).toISOString(),cleanupOwner:old.record.cleanupOwner,predecessorEvidenceIds:previous,releaseActivation:{schema:'v39.phase6.exact-source-activation-review.v1',stageContentSha256:contentSha,costEnvelopeSha256:cost,...evidence,independentScientificFreezeApproved:true,independentSourceUseApproved:true,independentOperationalReleaseApproved:true,currentAccountAndBudgetApproved:true,legacyPublishedAutoCollectVerifiedOff:true,githubPaidDispatchFlagsVerifiedOff:true,activeBillableSubscriptionsVerifiedZero:true,separatePaidDispatchStillRequired:true,legacyAlertStartApproved:false,accountObservedAtUtc:observedIso,accountEvidenceValidUntilUtc:new Date(validity).toISOString()}};
+const candidate={authorizationId:compiled.staged.authorizationId,phaseGate:old.record.phaseGate,airportFilterWindow:old.record.airportFilterWindow,maxAlertCredits:compiled.staged.alertSafety.alertRunSpendCeilingCredits,maxRestUnitsByCategory:Object.fromEntries(compiled.cost.categoryCaps.map(x=>[x.category,x.ceilingUnits])),startNotBeforeUtc:observedIso,expiresAtUtc:new Date(deadline).toISOString(),cleanupOwner:typeof old.record.cleanupOwner==='string'&&old.record.cleanupOwner.trim().length>=6?old.record.cleanupOwner:'HKcode22 existing owner STOP and cleanup',predecessorEvidenceIds:previous,releaseActivation:{schema:'v39.phase6.exact-source-activation-review.v1',stageContentSha256:contentSha,costEnvelopeSha256:cost,...evidence,independentScientificFreezeApproved:true,independentSourceUseApproved:true,independentOperationalReleaseApproved:true,currentAccountAndBudgetApproved:true,legacyPublishedAutoCollectVerifiedOff:true,githubPaidDispatchFlagsVerifiedOff:true,activeBillableSubscriptionsVerifiedZero:true,separatePaidDispatchStillRequired:true,legacyAlertStartApproved:false,accountObservedAtUtc:observedIso,accountEvidenceValidUntilUtc:new Date(validity).toISOString()}};
 const candidateRaw=Buffer.from(JSON.stringify(candidate,null,2)+'\n'),artifact=sha(candidateRaw);
 ledger.evidence.push({evidenceId:id,path:receiptPath,sha256:sha(receiptRaw)});
 ledger.approvals.push({authorizationId:candidate.authorizationId,artifactSha256:artifact,predecessorEvidenceIds:previous});
@@ -172,12 +172,167 @@ git diff --cached --check
 git -c user.name='Travnr owner commissioning' -c user.email='HKcode22@users.noreply.github.com' commit -m "Bind exact installed Phase 6 AUTH and fresh free account receipt (NO PAID GO)"
 test "$(remote "$REPO")" = "$PIN" || hold MAIN_MOVED
 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin "HEAD:refs/heads/$BRANCH"
-gh pr create -R "$REPO" --base main --head "$BRANCH" \
+PR_URL="$(gh pr create -R "$REPO" --base main --head "$BRANCH" \
   --title "Phase 6: exact installed SOURCE AUTH identity and fresh account binding (NO GO)" \
-  --body "Only scoped ledger and two sanitized receipts. Exact stage ID, 27 original ordered predecessors extended by the adopted five release decisions and genuine fresh free account observation; actual full activation and bridge preflight, six policy dry assembly and 31 static names validated. No private AUTH bytes, no code change, no source enable, paid dispatch, provider paid GET or DB write. Old approval preserved historically; current stage is untouched."
+  --body "Only scoped ledger and two sanitized receipts. Exact stage ID, 27 original ordered predecessors extended by the adopted five release decisions and genuine fresh free account observation; actual full activation and bridge preflight, six policy dry assembly and 31 static names validated. No private AUTH bytes, no code change, no source enable, paid dispatch, provider paid GET or DB write. Old approval preserved historically; current stage is untouched.")"
+echo "$PR_URL"
 echo "P6_EXACT_AUTH_REPAIR_PR_CREATED_NO_GO"
 echo "P6_CORRECTED_PRIVATE_AUTH=$ROOT/auth.json"
 echo "P6_CORRECTED_AUTH_SHA=$(sha "$ROOT/auth.json")"
 echo "P6_REVIEW_BRANCH=$BRANCH"
+echo "SOURCE_REMAINS_DISABLED"
+echo "PAID_GO=false"
+
+# Bulk continuation: one evidence-only merge, no executable drift, then
+# current-main due-only retention backstop, direct-readonly clock, exact statics.
+HEAD="$(git rev-parse HEAD)"
+TREE="$(git rev-parse HEAD^{tree})"
+test "$(gh pr view "$PR_URL" -R "$REPO" --json headRefOid --jq '.headRefOid')" = "$HEAD"
+test "$(remote "$REPO")" = "$PIN"
+wait_offline(){
+ local commit="$1" run="" count
+ for _ in $(seq 1 36); do
+  gh run list -R "$REPO" --commit "$commit" --limit 50 --json databaseId,headSha,workflowName --jq ".[] | select(.headSha==\"$commit\" and .workflowName==\"V3.9 Offline Safety\") | .databaseId" > "$TMP/offline-run"
+  count="$(wc -l < "$TMP/offline-run" | tr -d ' ')"
+  [ "$count" -le 1 ] || return 2
+  if [ "$count" = 1 ]; then run="$(cat "$TMP/offline-run")"; break; fi
+  sleep 5
+ done
+ [[ "$run" =~ ^[0-9]+$ ]] || return 2
+ gh run watch "$run" -R "$REPO" --exit-status >&2
+ printf '%s\n' "$run"
+}
+PR_CI="$(wait_offline "$HEAD")" || hold PR_OFFLINE_NOT_PASS
+echo "P6_AUTH_PR_OFFLINE_PASS=$PR_CI"
+gh pr checks "$PR_URL" -R "$REPO" --watch --fail-fast
+test "$(remote "$REPO")" = "$PIN" || hold MAIN_MOVED
+test "$(gh pr view "$PR_URL" -R "$REPO" --json headRefOid --jq '.headRefOid')" = "$HEAD"
+gh pr merge "$PR_URL" -R "$REPO" --merge --match-head-commit "$HEAD"
+git fetch origin main
+NEW="$(remote "$REPO")"
+test "$NEW" = "$(git rev-parse origin/main)"
+test "$NEW" = "$(gh pr view "$PR_URL" -R "$REPO" --json mergeCommit --jq '.mergeCommit.oid')"
+test "$(git rev-parse "$NEW^{tree}")" = "$TREE" || hold MERGED_TREE_DRIFT
+echo "P6_CORRECTED_LEDGER_MERGED_MAIN=$NEW"
+
+# Rebind only already-enabled retention controls to the exact reviewed tree.
+# All SOURCE and paid controls remain STOPPED; no retention mode is disabled.
+var(){ gh variable get "$1" -R "$2"; }
+test "$(var P5_PRIMARY_FIDS_EXPIRY_ENABLED "$REPO")" = true
+test "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVAL "$REPO")" = APPLY_REVIEWED_PRIMARY_FIDS_EXPIRY_ONLY_NO_PROVIDER
+test "$(var P5_PRIMARY_FIDS_BACKSTOP_ENABLED "$REPO")" = true
+test "$(var P6_FULL_RETENTION_BACKSTOP_ENABLED "$REPO")" = true
+test "$(var P6_PRIVATE_EPOCH_EXPIRY_MODE "$REPO")" = APPLY_DUE_ONLY
+test "$(var P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 "$REPO")" = a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e
+test "$(var P6_PRIVATE_EPOCH_EXPIRY_APPROVAL "$REPO")" = APPLY_REVIEWED_PRIVATE_EPOCH_EXPIRY_ONLY_NO_PROVIDER
+test "$(var P7_EXPIRY_ENABLED "$REPO")" = true
+test "$(var P7_EXPIRY_APPROVAL "$REPO")" = APPLY_P7_DUE_ONLY_NO_PROVIDER
+test "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" = "$PIN"
+test "$(var P7_EXPIRY_APPROVED_MAIN_SHA "$REPO")" = "$PIN"
+test "$(remote "$REPO")" = "$NEW"
+gh variable set P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$NEW"
+gh variable set P7_EXPIRY_APPROVED_MAIN_SHA -R "$REPO" --body "$NEW"
+test "$(var P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$REPO")" = "$NEW"
+test "$(var P7_EXPIRY_APPROVED_MAIN_SHA "$REPO")" = "$NEW"
+test "$(remote "$RELAY")" = "$RELAY_PIN"
+A="$(var TRAVNR_CRON_RELAY_SHA "$RELAY")"
+case "$A" in 214ede4895c6e6cdae5f124a85a323783251ea60|"$RELAY_PIN") ;; *) hold RELAY_AUDIT_UNKNOWN_PIN;; esac
+gh variable set TRAVNR_CRON_RELAY_SHA -R "$RELAY" --body "$RELAY_PIN"
+echo 'P6_EXISTING_RETENTION_AND_RELAY_AUDIT_PINS_READBACK_PASS'
+
+# Existing reviewed full-retention mode, not an expansion of deletion scope.
+# Dispatch once and prove both job executions and their actual receipts.
+API="repos/$REPO/actions/workflows/phase5-primary-fids-expiry-no-provider.yml/runs?event=workflow_dispatch&branch=main&per_page=100"
+gh api "$API" --jq '.workflow_runs[].id' | sort -n > "$TMP/before-runs"
+test "$(remote "$REPO")" = "$NEW"
+gh workflow run phase5-primary-fids-expiry-no-provider.yml -R "$REPO" --ref main \
+  -f confirm=APPLY_REVIEWED_FULL_RETENTION_BACKSTOP_NO_PROVIDER -f approved_main_sha="$NEW"
+FULL=""
+for _ in $(seq 1 45); do
+ gh api "$API" --jq ".workflow_runs[] | select(.head_sha==\"$NEW\" and .run_attempt==1 and .display_title==\"P5 FULL RETENTION BACKSTOP CHILD\") | .id" | sort -n > "$TMP/current-runs"
+ comm -13 "$TMP/before-runs" "$TMP/current-runs" > "$TMP/new-runs"
+ N="$(wc -l < "$TMP/new-runs" | tr -d ' ')"
+ [ "$N" -le 1 ] || hold MULTIPLE_RETENTION_DISPATCHES
+ if [ "$N" = 1 ]; then FULL="$(cat "$TMP/new-runs")"; break; fi
+ sleep 2
+done
+[[ "$FULL" =~ ^[0-9]+$ ]] || hold RETENTION_DISPATCH_ACK_UNKNOWN_NO_REPLAY
+echo "P6_FULL_RETENTION_BASELINE_RUN=$FULL"
+gh run watch "$FULL" -R "$REPO" --exit-status
+gh api "repos/$REPO/actions/runs/$FULL/jobs?per_page=100" > "$TMP/retention-jobs.json"
+node --input-type=module - "$TMP/retention-jobs.json" "$NEW" <<'JS' > "$TMP/retention-job-ids"
+import fs from 'node:fs';
+const q=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),pin=process.argv[3];
+if(q.total_count!==2||q.jobs.length!==2||q.jobs.some(x=>x.head_sha!==pin||x.run_attempt!==1||x.status!=='completed'||x.conclusion!=='success'))throw Error('HOLD_P6_FULL_RETENTION_JOB_IDENTITY');
+for(const name of ['primary-fids-expiry','phase7-expiry']){const a=q.jobs.filter(x=>x.name===name);if(a.length!==1)throw Error('HOLD_P6_FULL_RETENTION_JOB_NAME');console.log(a[0].id)}
+JS
+mapfile -t JOBS < "$TMP/retention-job-ids"
+gh run view "$FULL" -R "$REPO" --job "${JOBS[0]}" --log > "$TMP/primary.log"
+gh run view "$FULL" -R "$REPO" --job "${JOBS[1]}" --log > "$TMP/p7.log"
+node --input-type=module - "$TMP/primary.log" "$TMP/p7.log" "$NEW" "$FULL" <<'JS'
+import fs from 'node:fs';
+const [p,q,pin,rid]=process.argv.slice(2);
+const parse=f=>fs.readFileSync(f,'utf8').split(/\r?\n/).flatMap(l=>{const i=l.indexOf('{');if(i<0)return [];try{return [JSON.parse(l.slice(i))]}catch{return []}});
+const only=(a,s)=>{const z=a.filter(x=>x?.status===s);if(z.length!==1)throw Error('HOLD_P6_RETENTION_RECEIPT_'+s);return z[0]};
+const a=only(parse(p),'PRIMARY_FIDS_ELIGIBLE_AT_READBACK_CLEARED'),b=only(parse(p),'PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED'),c=only(parse(q),'P7_EXPIRY_DUE_ONLY_INDEPENDENT_READBACK');
+if([a,b,c].some(x=>x.providerCalls!==0||x.phase6PaidGo!==false)||a.reviewedMainSha!==pin||b.reviewedMainSha!==pin||a.deadlineEvidenceHold===true||b.deadlineDueObservedAtInitialRead!==false||a.after?.deletionStopUnresolved!==false||b.after?.deletionStopUnresolved!==false||a.after?.eligibleOriginals!==0||a.after?.hardDueOriginals!==0||['duePackets','dueIndexes','expiredHeads','foreignDuePackets','foreignDueIndexes'].some(k=>b.after?.[k]!==0)||['dueLinks','dueBundles','dueFragments','liveLinksOnDueFragments'].some(k=>c.after?.[k]!==0))throw Error('HOLD_P6_RETENTION_CURRENT_BASELINE_READBACK');
+console.log(JSON.stringify({status:'P6_CURRENT_MAIN_FULL_RETENTION_BASELINE_PASS',runId:Number(rid),providerCalls:0,hardDuePrimary:0,duePrivate:0,dueResearch:0,phase6PaidGo:false}));
+JS
+# Opt in to the previously reviewed relay full-scope lane only now that
+# exact-current-main full-retention proof exists. Keep original lane history.
+test "$(remote "$REPO")" = "$NEW"
+test "$(remote "$RELAY")" = "$RELAY_PIN"
+test "$(var TRAVNR_RELAY_MODE "$RELAY")" = MULTI_LANE
+test "$(var TRAVNR_RELAY_PRIMARY_ENABLED "$RELAY")" = 1
+test "$(var TRAVNR_RELAY_ROLLING_ENABLED "$RELAY")" = 1
+test "$(var TRAVNR_APPROVED_TARGET_MAIN_SHA "$RELAY")" = "$PIN"
+gh variable set TRAVNR_APPROVED_TARGET_MAIN_SHA -R "$RELAY" --body "$NEW"
+gh variable set TRAVNR_RELAY_FULL_RETENTION_APPROVED -R "$RELAY" --body 1
+test "$(var TRAVNR_APPROVED_TARGET_MAIN_SHA "$RELAY")" = "$NEW"
+test "$(var TRAVNR_RELAY_FULL_RETENTION_APPROVED "$RELAY")" = 1
+echo "P6_EXISTING_FULL_RETENTION_RELAY_CONFIGURED_NO_PAID_GO"
+# Only the expired readonly clock verification route, never a paid tick.
+if [ "$(var TRAVNR_RELAY_ROLLING_ROUTE "$RELAY")" = DIRECT_VERIFY ] && [ "$(var TRAVNR_RELAY_DIRECT_TICK_APPROVED "$RELAY")" = 0 ] && [ "$(var P6_ROLLING_DIRECT_RECOVERY_ENABLED "$REPO" 2>/dev/null || true)" != 1 ]; then
+ CURRENT_SINCE="$(var TRAVNR_RELAY_ROLLING_SINCE_UTC "$RELAY")"
+ test "$CURRENT_SINCE" = 2026-11-19T01:36:16.466Z || hold UNCERTAIN_DIRECT_VERIFY_EPOCH
+ SINCE="$(node -e 'console.log(new Date().toISOString())')"
+ gh variable set TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$RELAY" --body "$SINCE"
+ gh workflow run external-clock.yml -R "$RELAY" --ref main -f lane=ROLLING_ROOT
+ echo "P6_DIRECT_READONLY_CLOCK_RENEWED=$SINCE"
+fi
+
+# Current-main full safety for the exact reviewed merged tree.
+MAIN_CI="$(wait_offline "$NEW")" || hold MERGED_MAIN_OFFLINE_NOT_PASS
+echo "P6_FINAL_MAIN_OFFLINE_PASS=$MAIN_CI"
+test "$(remote "$REPO")" = "$NEW"
+# Reuse the original exact reviewed statics installer, changing only
+# verified main and AUTH pins and removing already-completed account/relay
+# operations. It will independently run the actual finalizer on final main.
+OLD_HELPER=9de13178bf55411108aa5b8eed99039b4bf5c65b
+gh api "repos/$REPO/git/blobs/$OLD_HELPER" --jq '.content' | base64 --decode > "$TMP/previous-static.sh"
+test "$(git hash-object "$TMP/previous-static.sh")" = "$OLD_HELPER"
+python3 - "$TMP/previous-static.sh" "$TMP/new-static.sh" "$NEW" "$ROOT/auth.json" "$(sha "$ROOT/auth.json")" <<'PY'
+import sys,pathlib,re
+src,dst,new,auth,digest=sys.argv[1:]
+assert re.fullmatch('[0-9a-f]{40}',new) and re.fullmatch('[0-9a-f]{64}',digest)
+s=pathlib.Path(src).read_text()
+a=s.index('# Gate 8 fresh free-read check')
+b=s.index('# Independently validate cross-binding',a)
+s=s[:a]+s[b:]
+old='AUTH="$HOME/.travnr-phase6-source-auth-20261122/auth.json"'
+assert s.count(old)==1 and auth.endswith('/auth.json') and "'" not in auth and '\n' not in auth
+s=s.replace(old,"AUTH='"+auth+"'")
+s=s.replace('27074feda386247c4faf3877bd5349e696cde8a9',new)
+s=s.replace('27074fed',new[:8])
+# Keep the recovered six-candidate location exactly as previously verified.
+s=s.replace('.travnr-phase6-six-policy-exact-recovered-'+new[:8],'.travnr-phase6-six-policy-exact-recovered-27074fed')
+s=s.replace('8b1e3782d95db532195e626c41c603b00f58467505f368193930617b3c7fd297',digest).replace('AUTH-20261122-P6SOURCE','AUTH-20261119-P5INERTFREEZE')
+pathlib.Path(dst).write_text(s)
+PY
+bash -n "$TMP/new-static.sh"
+cd "${RUNTIME%/node_modules}"
+bash "$TMP/new-static.sh"
+echo "P6_FINAL_LEDGER_AND_STATIC_COMMISSIONING_COMMAND_COMPLETE"
+echo "FINAL_MAIN=$NEW"
 echo "SOURCE_REMAINS_DISABLED"
 echo "PAID_GO=false"
