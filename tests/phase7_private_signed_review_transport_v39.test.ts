@@ -153,6 +153,13 @@ active("real private custody signed-review transport",()=>{
     const stillLiveWire=wire(stillLivePayload,post),stillLiveBytes=Buffer.from(JSON.stringify(stillLiveWire));
     const stillLiveHash=createHash("sha256").update(stillLiveBytes).digest("hex");
     await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[stillLivePath,code,m,rights,stillLiveHash,g.prePayload.issuedAtUtc,stillLiveUntil,stillLiveBytes]);
+    // Existing restricted, no-payload deadline-pressure reader warns about
+    // signed future contents even though the due-only sweep must not touch them.
+    const pressureBefore=await readP6PrivateDeadlinePressure(reader,readerLogin,m);
+    const nearSource=pressureBefore.groups.find(x=>x.kind==="PHASE7_SIGNED_REVIEW"&&x.scope==="CURRENT");
+    expect(nearSource).toBeDefined();
+    expect(nearSource?.withinOneHour).toBeGreaterThanOrEqual(1);
+    expect(pressureBefore.deadlineDueObserved).toBe(false);
     const early=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
     expect(early).toMatchObject({status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED",receipts:[],deadlineDueObservedAtInitialRead:false});
     expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[stillLivePath,stillLiveUntil])).rows[0].n).toBe(1);
