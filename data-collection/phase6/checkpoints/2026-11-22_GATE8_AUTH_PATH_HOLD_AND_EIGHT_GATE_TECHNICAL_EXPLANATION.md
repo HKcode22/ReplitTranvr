@@ -47,3 +47,9 @@ C. Fresh account/STOP/budget and policyUntil bound for the frozen approved perio
 D. After actual Gate 8 success, append a **final** exact live GO checkpoint on GitHub with run IDs, owner receipts, first paid event (when observed), dates, and honest unknowns. Do not call this interim checkpoint a final GO.
 
 **No paid action or production secret edit was performed in writing this checkpoint.**
+
+## 2026-11-22 subsequent owner read-only local file inventory
+
+Owner ran a bounded `find` on `/home/runner` and `~/workspace` (maxdepth 5, four expected basenames). Terminal printed `HOME=/home/runner`, `USER=runner`, `P6_GATE8_READONLY_LOCAL_EVIDENCE_INVENTORY_COMPLETE` and **no candidate paths**. This is stronger evidence of lost/relocated owner-local private artifacts but not a comprehensive search of other directories, prior sessions or GitHub Actions protected secret values (which are write-only and cannot be downloaded from GitHub). The previous exact 31-value static SHA evidence and earlier CI receipts remain historical evidence, **not** the actual plaintext needed for a safe rebind. Do not bypass the full validator, invent AUTH or re-enable SOURCE. Gate 8 remains HOLD until private original evidence can be recovered or a separately independently reviewed bounded successor process is explicitly authorized. Avoid claiming paid GO or sending an unverified full-month worker.
+
+**Phase5 vs Phase6 clarification:** Gate1 did not rebuild Phase5 PRE, and Gate7—not Gate1—commissioned autonomous scheduling. Gate1 specifically connected the already-designed leakage protections, exact T−24/T−6/T−90 feature policies and restricted PRE roles to a real disarmed production admission. Similar distinction across G2–G7: implementation in Phase5 versus production acceptance and operational proof in Phase6. Repeating already-settled requirements and re-pinning after many merges materially delayed closure.
