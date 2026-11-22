@@ -15,10 +15,10 @@ SEAL_COMMIT="18b8b506ab21c09d30c7f56d4970fa0cb70d3ead"
 SEAL_RUN="45026584506"
 DECODER_BLOB="ddc7e497f019b881d7dc41e636fae2dd01c36b1f"
 READBACK_WF=".github/workflows/phase6-g8-exact-main-secret-scopes-postinstall-no-provider.yml"
-READBACK_WF_BLOB="d4d19b24a128ef2117f4fdcef5b556e131101eb0"
+READBACK_WF_BLOB="e3fcd143e10a4935b652b2f00e17f5bc3c36fa49"
 TRIGGER="data-collection/phase6/evidence/p6_g8_oneuse_postinstall_readback.json"
 REQUEST="data-collection/phase6/checkpoints/p6_g8_owner_seal_request.json"
-READBACK_TITLE="P6 G8 exact current successor secret scopes postinstall readback NO PROVIDER"
+READBACK_TITLE="P6 G8 exact current repository policy postinstall readback NO PROVIDER"
 POST_WF="phase5-one-signed-future-post-v0083-main-manual.yml"
 
 hold(){ printf 'HOLD_P6_G8_EXISTING_SEAL_DUAL_SCOPE_%s\n' "$1" >&2; exit 2; }
@@ -75,8 +75,11 @@ node "$TMP/resume-decoder.cjs" --apply "$DIR/owner-private.pem" "$ENVELOPE" "$DI
  hold UNKNOWN_OR_PARTIAL_SECRET_INSTALL_PAID_OFF_NO_BLIND_REPLAY
 assert_main
 
-# Receipt must be verified by a NEW Action reading the actual installed
-# secrets in two independent contexts, not just GH CLI secret-write acknowledgments.
+# Read back all 31 actual repository policy values and repo STOP=0 with a
+# branch-only no-provider job. Protected environment refuses evidence-branch
+# jobs (run 45027633216, failure before any steps); the existing main-only
+# POST actor preflight below is the effective protected-env verifier, and
+# explicitly enforces BOTH paid STOP flags 0 there.
 printf '{"schema":"v39.phase6.g8.postinstall-scope-readback.v1","approvedMainSha":"%s","sealedRunId":%s,"expectedStaticSha256":"%s","expectedPostSha256":"%s","paidGo":false}\n' \
  "$MAIN" "$SEAL_RUN" \
  "3bb538896d2023ed1ff54b1b0d914a8a134299eac3a5068827e93d82400864b0" \
@@ -111,15 +114,16 @@ gh api "repos/$R/actions/runs/$READBACK" |
  ' >/dev/null || hold READBACK_MAIN_IDENTITY
 gh api "repos/$R/actions/runs/$READBACK/jobs?filter=latest&per_page=100" |
  jq -e '
- .total_count==2 and (.jobs|length)==2 and
- ([.jobs[]|.name]|sort)==["protected-environment-secret-readback","repository-secret-readback"] and
- all(.jobs[]; .status=="completed" and .conclusion=="success" and
-   ([.steps[]|select(.name=="Check 31 canonical installed policy values and both OFF switches in THIS scope" and .conclusion=="success")]|length)==1)
- ' >/dev/null || hold BOTH_SCOPES_NOT_ACTUALLY_PROVEN
+ .total_count==1 and (.jobs|length)==1 and
+ ([.jobs[]|select(.name=="repository-secret-readback" and
+   .status=="completed" and .conclusion=="success" and
+   ([.steps[]|select(.name=="Check 31 canonical installed policy values and both OFF switches in THIS scope" and .conclusion=="success")]|length)==1)]|length)==1
+ ' >/dev/null || hold REPOSITORY_CURRENT_POLICY_NOT_ACTUALLY_PROVEN
 assert_main
-echo "P6_G8_EFFECTIVE_REPOSITORY_AND_ENVIRONMENT_CURRENT_31_POLICY_DIGEST_AND_DUAL_PAID_STOPS_PASS"
+echo "P6_G8_REPOSITORY_CURRENT_31_POLICY_DIGEST_AND_REPO_PAID_STOPS_PASS_PENDING_PROTECTED_MAIN_ACTOR_PREFLIGHT"
 
-# One existing actor-only protected workflow; no POST observation or provider.
+# One existing MAIN-only protected actor workflow verifies effective ENV STOP=0
+# and the actual bound POST reviewer/publisher/storage with no provider GET.
 Q="repos/$R/actions/workflows/$POST_WF/runs?branch=main&event=workflow_dispatch&per_page=100"
 gh api "$Q" --jq '.workflow_runs[].id' | sort -n > "$TMP/post-before" || hold POST_BEFORE_INVENTORY
 gh workflow run "$POST_WF" -R "$R" --ref main \
@@ -159,4 +163,4 @@ gh api "repos/$R/actions/runs/$POST/jobs?filter=latest&per_page=100" |
   .name=="Preflight exact independent bundle storage actors"))]|length)==4)
  ' >/dev/null || hold ALL_FOUR_POST_ACTOR_STEPS_NOT_VERIFIED
 assert_main
-echo "{\"status\":\"P6_G8_EXISTING_SEAL_DUAL_SCOPE_PAID_OFF_SUCCESSOR_AND_CURRENT_MAIN_PROTECTED_POST_ACTORS_PASS\",\"sealedRunId\":$SEAL_RUN,\"readbackRunId\":$READBACK,\"postRunId\":$POST,\"providerCalls\":0,\"paidGo\":false}"
+echo "{\"status\":\"P6_G8_EXISTING_SEAL_REPOSITORY_POLICY_DIGEST_AND_MAIN_PROTECTED_ENV_POST_ACTORS_PASS_PAID_OFF\",\"sealedRunId\":$SEAL_RUN,\"repoReadbackRunId\":$READBACK,\"protectedMainPostRunId\":$POST,\"providerCalls\":0,\"paidGo\":false}"
