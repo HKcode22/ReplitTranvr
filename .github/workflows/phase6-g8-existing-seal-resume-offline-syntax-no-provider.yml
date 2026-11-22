@@ -1,0 +1,54 @@
+name: P6 G8 existing owner seal dual-scope resume offline syntax NO PROVIDER
+on:
+  push:
+    branches:
+      - phase6/20261122-g8-502-readback-evidence
+    paths:
+      - '.github/workflows/phase6-g8-existing-seal-resume-offline-syntax-no-provider.yml'
+      - 'data-collection/phase6/checkpoints/p6_g8_owner_resume_exact_dual_stop_existing_seal_no_paid_go.cjs'
+      - 'data-collection/phase6/checkpoints/p6_g8_owner_resume_exact_seal_dual_scope_verify_post_no_paid_go.sh'
+      - 'data-collection/phase6/checkpoints/p6_g8_current_main_effective_secrets_readback_no_provider.cjs'
+permissions:
+  contents: read
+jobs:
+  no-provider-no-secrets-syntax:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' &&
+      github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      DATABASE_URL: ''
+      ADB_AUTO_COLLECT: '0'
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      GITHUB_TOKEN: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Syntax check exact owner continuation and two secret-readback programs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          bash -n data-collection/phase6/checkpoints/p6_g8_owner_resume_exact_seal_dual_scope_verify_post_no_paid_go.sh
+          node --check data-collection/phase6/checkpoints/p6_g8_owner_resume_exact_dual_stop_existing_seal_no_paid_go.cjs
+          node --check data-collection/phase6/checkpoints/p6_g8_current_main_effective_secrets_readback_no_provider.cjs
+      - name: Ensure exact dual STOP and 11 repo-only scope logic without live credentials
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node <<'JS'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const p='data-collection/phase6/checkpoints/p6_g8_owner_resume_exact_dual_stop_existing_seal_no_paid_go.cjs';
+          const src=fs.readFileSync(p,'utf8');
+          assert(src.includes('stopKeys.every(k=>secrets.has(k)&&shadow.has(k))'));
+          assert(src.includes('keys.every(k=>secrets.has(k)&&!shadow.has(k))'));
+          assert(src.includes('gh(["secret","set",k,"-R",repo,"-e","phase6-protected-runtime"],Buffer.from("0"))'));
+          assert(src.indexOf('gh(["secret","set",k,"-R",repo,"-e"')<src.indexOf('for(const name of keys)'));
+          assert(src.includes('const expectedStatic="3bb538896d2023ed1ff54b1b0d914a8a134299eac3a5068827e93d82400864b0"'));
+          assert(src.includes('const expectedPost="0916015a99b379d4ff703f59530794577c5c5ab2404e6cdfc1112921f165b54d"'));
+          console.log('P6_G8_DUAL_SCOPE_STOP_FIRST_AND_11_REPO_ONLY_STATIC_GUARD_PASS_NO_PROVIDER');
+          JS
