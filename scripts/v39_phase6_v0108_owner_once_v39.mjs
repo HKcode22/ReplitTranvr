@@ -15,6 +15,7 @@ import {fileURLToPath} from "node:url";
 
 export const P6_V0108_MIGRATION="migrations/staged/V0108__phase6_private_operational_metadata_expiry_class_v39.sql";
 export const P6_V0108_GIT_BLOB="ee626ee1ad90b6c7e281565ade5a79930eeeb74b";
+export const P6_V0108_RELAY_COMPAT_BLOB="66e10596b138a9c6d0b2872586d8448126dc26fc";
 const V0105="migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql";
 export const P6_V0108_APPLY_APPROVAL="INSTALL_EXACT_V0108_EMPTY_CUSTODY_NO_PROVIDER_AND_READBACK";
 const STATUS="clean.phase6_private_epoch_expiry_status_v39(text)";
@@ -60,6 +61,14 @@ export function classifyP6V0108Bodies(functions,sql){
 }
 function git(...a){return execFileSync(a[0],a.slice(1),{
  encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:1048576}).trim();}
+export function requireP6V0108RelayCompatibleBlob(sha){
+ if(sha!==P6_V0108_RELAY_COMPAT_BLOB)fail("RELAY_BACKSTOP_COMPATIBILITY_NOT_DEPLOYED");
+}
+function relayMainCompat(){
+ const sha=git("gh","api","repos/HKcode22/TravnrClockRelay/contents/relay.mjs?ref=main",
+  "--jq",".sha");
+ requireP6V0108RelayCompatibleBlob(sha);
+}
 function exactMain(){
  const local=git("git","rev-parse","HEAD"),remote=git("gh","api",
   "repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha");
@@ -142,6 +151,9 @@ async function main(){
    mainSha:head,...pre,providerCalls:0,databaseWrites:0,paidGo:false}));return;
  }
  reviewP6V0108Apply(pre,head,process.env);
+ // The companion relay must first be merged at the exact reviewed runtime
+ // blob. Its V0105 fallback is safe during rollout; the reverse is not.
+ relayMainCompat();
  const c=new pg.Client({connectionString:url,connectionTimeoutMillis:8000,query_timeout:35000,
   application_name:"p6_v0108_owner_single_atomic_install"});
  let attempted=false;
