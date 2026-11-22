@@ -63,6 +63,7 @@ unset KEY
 for spec in \
   '3f20569309057ca818d433e271d7771983e60e0c scope.md' \
   '2155629d90b522bbd5defb7a195697bc2e0a91c8 pre-receipt.md' \
+  '7bbc9e30addc2b27b3180543a9e33eecbecd0b27 integrity-checkpoint.md' \
   'cf9463ae4c078cf178acd350fbe510cd4d371591 assembler.cjs' \
   '34156ac65811165c0d217e7175f8643eeef55761 validator.cjs'; do
  read -r blob name <<< "$spec"
@@ -151,7 +152,7 @@ console.log(JSON.stringify(summary));
 console.log(JSON.stringify({status:'P6_SIX_POLICY_DRY_ASSEMBLY_VALIDATED',policyDigests:checked.policyDigests,staticCount:31,baseMain:main,staticInstalled:false,phase6PaidGo:false}));
 JS
 # GitHub evidence only; never upload private AUTH/policy/keys or DB URLs.
-# Verify count and type of the exact three paths, then publish an auditable
+# Verify count and type of the exact six paths, then publish an auditable
 # PR for the corrected authorization ledger. No merge while CI unverified.
 PUBLISH="$ROOT/publish-metadata.json"
 BRANCH="$(node -p "require(process.argv[1]).branch" "$PUBLISH")"
@@ -166,15 +167,22 @@ git switch -c "$BRANCH"
 cp "$ROOT/candidate-ledger.json" "$LEDGER"
 cp "$ROOT/candidate-account-evidence.json" "$RECEIPT"
 cp "$ROOT/checkpoint.json" "$CHECKPOINT"
-git add -- "$LEDGER" "$RECEIPT" "$CHECKPOINT"
-test "$(git diff --cached --name-only | wc -l | tr -d ' ')" = 3 || hold ONLY_THREE_REVIEW_METADATA_FILES
+SCOPE_PATH="data-collection/phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md"
+PRE_RECEIPT_PATH="data-collection/phase5/evidence/2026-11-22_PHASE6_GATE1_COMMISSIONED_RETENTION_REPIN_PASS.md"
+INTEGRITY_PATH="data-collection/phase5/evidence/2026-11-22T040630_P6_GATE2_3_6_7_8_AUTH_INTEGRITY_AND_RETENTION_REUSE.md"
+for dest in "$SCOPE_PATH" "$PRE_RECEIPT_PATH" "$INTEGRITY_PATH"; do test ! -e "$dest" || hold CHECKPOINT_ALREADY_EXISTS; done
+cp "$TMP/scope.md" "$SCOPE_PATH"
+cp "$TMP/pre-receipt.md" "$PRE_RECEIPT_PATH"
+cp "$TMP/integrity-checkpoint.md" "$INTEGRITY_PATH"
+git add -- "$LEDGER" "$RECEIPT" "$CHECKPOINT" "$SCOPE_PATH" "$PRE_RECEIPT_PATH" "$INTEGRITY_PATH"
+test "$(git diff --cached --name-only | wc -l | tr -d ' ')" = 6 || hold ONLY_SIX_REVIEW_METADATA_FILES
 git diff --cached --check
 git -c user.name='Travnr owner commissioning' -c user.email='HKcode22@users.noreply.github.com' commit -m "Bind exact installed Phase 6 AUTH and fresh free account receipt (NO PAID GO)"
 test "$(remote "$REPO")" = "$PIN" || hold MAIN_MOVED
 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin "HEAD:refs/heads/$BRANCH"
 PR_URL="$(gh pr create -R "$REPO" --base main --head "$BRANCH" \
   --title "Phase 6: exact installed SOURCE AUTH identity and fresh account binding (NO GO)" \
-  --body "Only scoped ledger and two sanitized receipts. Exact stage ID, 27 original ordered predecessors extended by the adopted five release decisions and genuine fresh free account observation; actual full activation and bridge preflight, six policy dry assembly and 31 static names validated. No private AUTH bytes, no code change, no source enable, paid dispatch, provider paid GET or DB write. Old approval preserved historically; current stage is untouched.")"
+  --body "Only scoped ledger, two sanitized receipts and three exact existing review/checkpoint documents. Exact stage ID, 27 original ordered predecessors extended by the adopted five release decisions and genuine fresh free account observation; actual full activation and bridge preflight, six policy dry assembly and 31 static names validated. No private AUTH bytes, no code change, no source enable, paid dispatch, provider paid GET or DB write. Old approval preserved historically; current stage is untouched.")"
 echo "$PR_URL"
 echo "P6_EXACT_AUTH_REPAIR_PR_CREATED_NO_GO"
 echo "P6_CORRECTED_PRIVATE_AUTH=$ROOT/auth.json"
