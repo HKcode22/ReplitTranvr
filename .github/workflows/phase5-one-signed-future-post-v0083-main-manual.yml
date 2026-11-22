@@ -465,6 +465,11 @@ jobs:
           # Boot schema in CI belongs to postgres, not neondb_owner. Production uses the existing owner.
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "GRANT SELECT, UPDATE ON clean.adb_phase6_authorization TO neondb_owner"
           psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0106__phase7_signed_review_transport_existing_custody_inert_v39.sql
+          # V0105 and V0106 must coexist on the disposable database: exercise actual
+          # due-only removal and separate receipt readback, not owner DELETE alone.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "GRANT CREATE ON SCHEMA clean TO neondb_owner; GRANT SELECT, INSERT ON clean.adb_collection_meta, clean.adb_incident_stop TO neondb_owner; GRANT USAGE ON SEQUENCE clean.adb_incident_stop_id_seq TO neondb_owner"
+          psql "$owner" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE ci_p6_expiry_writer LOGIN NOINHERIT PASSWORD 'ci-expiry-write'; CREATE ROLE ci_p6_expiry_reader LOGIN NOINHERIT PASSWORD 'ci-expiry-read'; GRANT USAGE ON SCHEMA clean TO ci_p6_expiry_writer,ci_p6_expiry_reader; GRANT EXECUTE ON FUNCTION clean.phase6_private_epoch_expiry_sweep_v39(text,integer),clean.phase6_private_epoch_expiry_stop_v39(text) TO ci_p6_expiry_writer; GRANT EXECUTE ON FUNCTION clean.phase6_private_epoch_expiry_status_v39(text),clean.phase6_private_epoch_expiry_receipt_v39(text,text) TO ci_p6_expiry_reader"
       - name: Actual restricted SOURCE-role PRE partition, POST original SQL and signed publication recovery
         run: |
           npx --no-install vitest run tests/phase6_actual_post_outcome_real_pg16_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts
