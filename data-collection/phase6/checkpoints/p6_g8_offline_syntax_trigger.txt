@@ -1,0 +1,1 @@
+Phase 6 Gate 8 evidence-branch syntax + synthetic X25519/AES-GCM test only; no secrets, provider, DB, main commit, or paid GO.
