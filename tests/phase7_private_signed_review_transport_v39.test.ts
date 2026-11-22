@@ -126,16 +126,27 @@ active("real private custody signed-review transport",()=>{
    expect(()=>verifyP7StoredWire(scoped,selector,retry,new Date(fenceDeadline).toISOString())).toThrow("LIVE_REVIEW");
    expect(second.completeRetentionDeploymentVerified).toBe(false);
    if(profile===P6_PRIVATE_METADATA_PROFILE){
-    // Other signed-review kinds are deliberately NOT in the metadata
-    // exception, even when the test fixture has no nonempty field payload.
+    // Valid digest-only PRE, lane and all-null POST reviews must not
+    // make the normal expiry worker fail. A direct malformed/extra source
+    // value in that generic kind stays hard (SQL storage permits the kind).
     const genericNow=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
-    const genericDeadline=genericNow+2000, g=fixtures(genericNow);
-    const genericWire=wire({...g.prePayload,manifestSha256:m,validUntilUtc:new Date(genericDeadline).toISOString()},pre);
-    expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector:g.a,wire:genericWire})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+    const genericDeadline=genericNow+3000, g=fixtures(genericNow), until=new Date(genericDeadline).toISOString();
+    for(const [selector,payload,key] of [[g.a,g.prePayload,pre],[g.d,g.lanePayload,lane],[g.c,g.settlementPayload,post]] as const){
+     const w=wire({...payload,manifestSha256:m,validUntilUtc:until},key);
+     expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:w})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+    }
+    const malformed=[{...g.prePayload,manifestSha256:m,validUntilUtc:until,extraSourceValue:"CI synthetic should remain hard"},
+     {...g.settlementPayload,manifestSha256:m,validUntilUtc:until,scope:{...g.settlementPayload.scope,evidence:{"T-6h":{flightInstanceId:"CI synthetic non-null source evidence"}}}}];
+    for(let i=0;i<malformed.length;i++){
+     const w=wire(malformed[i],post), b=Buffer.from(JSON.stringify(w)),d=createHash("sha256").update(b).digest("hex");
+     await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",["data-collection/phase5/frozen/p7review_"+h("malformed ci "+i)+".json",code,m,rights,d,g.prePayload.issuedAtUtc,until,b]);
+    }
     await afterClock(genericDeadline);
-    const hard=await sweep();
-    expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:0,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
-    expect(hard.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
+    const snapshot=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:false,privateDeadlineProfile:profile});
+    expect(snapshot).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,before:{duePackets:5}});
+    const hard=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
+    expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
+    expect(hard.receipts[0]).toMatchObject({packets:5,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
    }
    console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
