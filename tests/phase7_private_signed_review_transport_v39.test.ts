@@ -83,7 +83,7 @@ active("real private custody signed-review transport",()=>{
    await owner.connect();await reader.connect();await publisher.connect();
    await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
    expect((await owner.query("SELECT count(*)::int n FROM clean.adb_phase6_authorization")).rows[0].n).toBe(0);
-   await owner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids) VALUES('CI_ONLY',$1,$2,$3,$4,'v39',CURRENT_DATE,1,0,1000,false,$5::jsonb)",[m,h("ci calendar"),h("ci config"),code,JSON.stringify(["ci-only"])]);
+   await owner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids) VALUES('CI_ONLY',$1,$2,$3,$4,'v39',CURRENT_DATE,1900,0,1000,false,$5::jsonb)",[m,h("ci calendar"),h("ci config"),code,JSON.stringify(["ci-only"])]);
    const who=await expiryReader.query("SELECT current_user AS actor,has_function_privilege(current_user,'clean.phase6_private_epoch_expiry_sweep_v39(text,integer)','EXECUTE') AS can_sweep");
    expect(who.rows[0]).toEqual({actor:"ci_p6_expiry_reader",can_sweep:false});
    expect((await expiryWriter.query("SELECT current_user AS actor,has_function_privilege(current_user,'clean.phase6_private_epoch_expiry_receipt_v39(text,text)','EXECUTE') AS can_read")).rows[0]).toEqual({actor:"ci_p6_expiry_writer",can_read:false});
