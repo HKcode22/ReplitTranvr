@@ -49,6 +49,8 @@ on:
       - 'server/lib/disruption/phase7StoredPostRecoveryAdmission_v39.ts'
       - 'server/lib/disruption/phase7LocalPrivatePostHandoff_v39.ts'
       - 'scripts/v39_phase7_local_post_review_roles_v39.ts'
+      - 'scripts/v39_phase7_post_actor_preflight_v39.ts'
+      - 'tests/phase7_post_actor_preflight_v39.test.ts'
       - 'server/lib/disruption/phase7IndependentPostSettlementIssuer_v39.ts'
       - '.github/workflows/phase6-stored-post-recovery-no-provider.yml'
       - 'scripts/v39_phase7_stored_post_recovery_github_v39.ts'
@@ -103,8 +105,90 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts tests/phase6_actual_post_outcome_observability_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts
+          npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts tests/phase6_actual_post_outcome_observability_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts tests/phase7_post_actor_preflight_v39.test.ts
           echo P5_V0083_POST_SIGNED_OWNER_OFFLINE_CI_NO_SOURCE_USE_RIGHTS_OR_PAID_GO
+  exact-main-post-actors-only:
+    environment: phase6-protected-runtime
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'ONLY_POST_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' && inputs.frozen_future_post_packet == 'ACTOR_PREFLIGHT_ONLY' && inputs.private_transport == 'checkout' && inputs.post_packet_sha256 == '' && inputs.run_day == '' && inputs.index_revision == '' && inputs.index_sha256 == '' && inputs.shard_index == '' && inputs.route_sha256 == '' && inputs.private_confirm == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    env:
+      ADB_AUTO_COLLECT: '0'
+      P6_POST_ACTOR_PREFLIGHT_CONFIRM: ${{ inputs.confirm }}
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      V39_P5_POST_APPROVED_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+      V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      V39_PHASE6_OWNER_APPROVED: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+      P6_PHASE7_POST_RECOVERY_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_APPROVED }}
+      P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}
+      P6_PHASE7_POST_STORAGE_APPROVED: ${{ secrets.P6_PHASE7_POST_STORAGE_APPROVED }}
+      P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED }}
+      P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN }}
+      P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN }}
+      P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 }}
+      P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
+      P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_PUBLIC_KEY_BASE64 }}
+      P6_PHASE7_POST_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
+      P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      P6_PRIVATE_POST_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_POST_STORED_REVIEW_APPROVED }}
+      P6_PRIVATE_POST_REVIEWER_TRUST_BASE64: ${{ secrets.P6_PRIVATE_POST_REVIEWER_TRUST_BASE64 }}
+      P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
+      P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 }}
+      P6_PHASE7_POST_CONTRACT_SHA256: ${{ secrets.P6_PHASE7_POST_CONTRACT_SHA256 }}
+      P6_PHASE7_POST_PROFILE_SHA256: ${{ secrets.P6_PHASE7_POST_PROFILE_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact disarmed POST actor admission
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Preflight actual independent POST reviewer no observation
+        env:
+          V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_POST_PRESERVATION_POLICY_BASE64: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_BASE64: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+          P6_NATIVE_POST_POLICY_SHA256: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+        run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts reviewer
+      - name: Preflight actual restricted POST publisher and deadline clock
+        env:
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED }}
+        run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts publisher
+      - name: Preflight exact independent bundle storage actors
+        env:
+          P6_PHASE7_POST_SCOPED_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_SCOPED_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL }}
+          P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
+        run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts storage
+      - name: Cleanup endpoint-only scratch
+        if: always()
+        run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts cleanup
   exact-signed-one-v0083-future-post:
     environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY' }}
