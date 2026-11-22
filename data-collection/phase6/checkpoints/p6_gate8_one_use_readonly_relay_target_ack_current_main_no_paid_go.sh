@@ -58,7 +58,7 @@ done
 Q="repos/$RELAY/actions/workflows/$WF/runs?branch=main&event=workflow_dispatch&per_page=100"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-gh api "$Q" --jq '.workflow_runs[].id' | sort -n > "$TMP/before" ||
+gh api "$Q" --jq '.workflow_runs[] | select(.display_title=="TRAVNR EXTERNAL CLOCK ROLLING_ROOT" and .head_sha=="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed") | .id' | sort -n > "$TMP/before" ||
   hold PRE_DISPATCH_INVENTORY
 check_sha
 NOW="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
@@ -78,7 +78,7 @@ gh workflow run "$WF" -R "$RELAY" --ref main -f lane=ROLLING_ROOT ||
 
 RID=""
 for i in $(seq 1 30); do
-  gh api "$Q" --jq '.workflow_runs[].id' | sort -n > "$TMP/after" ||
+  gh api "$Q" --jq '.workflow_runs[] | select(.display_title=="TRAVNR EXTERNAL CLOCK ROLLING_ROOT" and .head_sha=="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed") | .id' | sort -n > "$TMP/after" ||
     hold RELAY_ACK_READBACK
   comm -13 "$TMP/before" "$TMP/after" > "$TMP/new"
   N="$(wc -l < "$TMP/new" | tr -d ' ')"
