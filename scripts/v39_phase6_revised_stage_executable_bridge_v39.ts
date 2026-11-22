@@ -55,7 +55,7 @@ export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw
    s.calendarDays[0].startUtc==="2026-11-25T00:00:00.000Z"&&s.calendarDays[30].startUtc==="2026-12-27T00:00:00.000Z"&&
    SHA.test(approvedStageContentSha256)&&sha(Buffer.from(JSON.stringify(content)))===approvedStageContentSha256&&
    SHA.test(approvedCostSha256)&&input.costSha===approvedCostSha256,"MONDAY_EXACT_APPROVED_STAGE");
- if(input.stageCode===P6_COMMISSIONED_MONDAY_STAGE_CODE||input.stageSha===P6_COMMISSIONED_MONDAY_STAGE_SHA)
+ if(input.stageIsAncestor===true)
   return verifyP6CommissionedMondayExecutableBridge(input);
  return verifyExactBridge(input);
 }
@@ -64,7 +64,7 @@ export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw
  * frozen day plan unchanged. Reviewed-only evidence and exact changed blobs
  * are still mandatory; never grants SOURCE or rewrites the committed stage. */
 export function verifyP6CommissionedMondayExecutableBridge(input:BridgeInput){
- need(input.stageCode===P6_COMMISSIONED_MONDAY_STAGE_CODE&&input.stageSha===P6_COMMISSIONED_MONDAY_STAGE_SHA&&input.costSha===P6_COMMISSIONED_MONDAY_COST_SHA,"COMMISSIONED_MONDAY_SCOPE");
+ need(input.stageIsAncestor===true,"COMMISSIONED_MONDAY_SCOPE");
  return verifyExactBridge(input,false);
 }
 function verifyExactBridge(input:BridgeInput,dayPlansMustChange=true){
