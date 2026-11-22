@@ -33,7 +33,7 @@ need(e.GITHUB_ACTIONS==="true"&&e.GITHUB_REPOSITORY==="HKcode22/ReplitTranvr"&&
  e.GITHUB_EVENT_NAME==="push"&&e.GITHUB_RUN_ATTEMPT==="1"&&e.GITHUB_ACTOR==="HKcode22"&&
  e.ADB_AUTO_COLLECT==="0"&&e.V39_PHASE6_PROCESS_ARMED==="0"&&e.V39_PHASE6_OWNER_APPROVED==="0"&&
  !e.AERODATABOX_API_KEY&&!e.RAPIDAPI_KEY&&!e.DATABASE_URL&&names.length===31&&
- new Set(names).size===31&&e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_REVIEWED_ENCRYPTED_SECRET_SUCCESSOR_ONLY_NO_GO",
+ new Set(names).size===31&&["OWNER_REVIEWED_ENCRYPTED_SECRET_SUCCESSOR_ONLY_NO_GO","OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO"].includes(e.P6_G8_OWNER_SEAL_TRIGGER),
  "HOST_AND_STOP_SCOPE");
 const v=Object.fromEntries(names.map(k=>[k,e[k]]));
 need(Object.values(v).every(x=>typeof x==="string"&&x.length>0&&Buffer.byteLength(x)<60000),
@@ -148,6 +148,15 @@ changes[postH]=hash(targetPost);
 need(Object.keys(changes).length===11,"EXACT_ELEVEN_SECRET_WRITES");
 const currentStaticDigest=hash(successor);
 
+if(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO"){
+ console.log(JSON.stringify({status:"P6_G8_REAL_EXISTING_POLICY_SUCCESSOR_VALIDATED_IN_MEMORY_ONLY_NO_GO",
+ historical31DigestExact:true,originalAndCurrentFullValidatorPassed:true,
+ expectedSecretChanges:Object.keys(changes).length,
+ successorStaticSha256:currentStaticDigest,
+ successorPostPolicySha256:changes[postH],
+ repoSecretsNeverModified:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+ process.exit(0);
+}
 const reqPath="data-collection/phase6/checkpoints/p6_g8_owner_seal_request.json";
 let req;try{req=JSON.parse(fs.readFileSync(reqPath,"utf8"));}catch{hold("EXACT_OWNER_REQUEST_ABSENT")}
 need(req.schema==="v39.phase6.gate8.owner-seal-request.v1"&&req.mainSha===pin&&
