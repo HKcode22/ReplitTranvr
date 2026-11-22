@@ -202,6 +202,7 @@ jobs:
           echo P5_CD_QUEUED_T24_PRE_V0081_SEPARATE_WITNESS_ATTEMPT_NO_PAID
 
   current-private-native-t24:
+    environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER' && inputs.frozen_roster == '')) && vars.P6_PRIVATE_T24_EXECUTION_ENABLED == '1' && vars.P5_CD_GH_T24_SCHEDULE_ENABLED == '1' && vars.P5_T24_AUTO_DISPATCH_ENABLED != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 16
