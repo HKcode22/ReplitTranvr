@@ -1,0 +1,36 @@
+name: Phase6 owner bulk handoff review (NO PROVIDER)
+on:
+  pull_request:
+    paths:
+      - 'review-tools/p6_owner_bulk_gates357_current_main.sh'
+      - 'review-tools/p6_launch_free_account_prearm_current_v39.mjs'
+      - 'tests/phase6_owner_bulk_gates357_handoff_v39.test.ts'
+      - '.github/workflows/phase6-owner-bulk-handoff-review.yml'
+permissions:
+  contents: read
+jobs:
+  handoff-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Syntax and exact no-provider handoff contract
+        run: |
+          set -Eeuo pipefail
+          bash -n review-tools/p6_owner_bulk_gates357_current_main.sh
+          node --check review-tools/p6_launch_free_account_prearm_current_v39.mjs
+          npx vitest run tests/phase6_owner_bulk_gates357_handoff_v39.test.ts
+          echo 'P6_OWNER_BULK_HANDOFF_REVIEW=PASS PROVIDER_CALLS=0 DB_WRITES=0 PAID_GO=0'
