@@ -1,0 +1,58 @@
+name: P6 G8 owner sealed successor offline syntax and crypto (NO PROVIDER)
+on:
+  push:
+    branches:
+      - phase6/20261122-g8-502-readback-evidence
+    paths:
+      - 'data-collection/phase6/checkpoints/p6_g8_*'
+permissions:
+  contents: read
+jobs:
+  no-secrets-no-provider-syntax-and-crypto:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GITHUB_TOKEN: ''
+      ADB_AUTO_COLLECT: '0'
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check exact owner scripts without secrets or dynamic execution
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node --check data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs
+          node --check data-collection/phase6/checkpoints/p6_g8_owner_verify_and_apply_sealed_policy_successor_no_paid_go.cjs
+          bash -n data-collection/phase6/checkpoints/p6_g8_owner_oneuse_seal_rebind_post_actor_no_paid_go.sh
+      - name: Standalone X25519 plus HKDF plus AES-GCM self-test on synthetic bytes only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          node <<'JS'
+          const c=require('node:crypto'),assert=require('node:assert/strict');
+          const recipient=c.generateKeyPairSync('x25519'),sender=c.generateKeyPairSync('x25519');
+          const shared1=c.diffieHellman({privateKey:sender.privateKey,publicKey:recipient.publicKey});
+          const shared2=c.diffieHellman({privateKey:recipient.privateKey,publicKey:sender.publicKey});
+          assert(shared1.equals(shared2));
+          const salt=c.randomBytes(32),iv=c.randomBytes(12),aad=Buffer.from('P6 G8 synthetic fixed scope');
+          const info=Buffer.from('Travnr Phase6 G8 x25519-aes256gcm successor v1');
+          const k1=c.hkdfSync('sha256',shared1,salt,info,32),k2=c.hkdfSync('sha256',shared2,salt,info,32);
+          const msg=Buffer.from(JSON.stringify({syntheticOnly:true,secret:'not a production secret'}));
+          const enc=c.createCipheriv('aes-256-gcm',k1,iv,{authTagLength:16});enc.setAAD(aad);
+          const encrypted=Buffer.concat([enc.update(msg),enc.final()]);
+          const dec=c.createDecipheriv('aes-256-gcm',k2,iv,{authTagLength:16});
+          dec.setAAD(aad);dec.setAuthTag(enc.getAuthTag());
+          assert.deepEqual(Buffer.concat([dec.update(encrypted),dec.final()]),msg);
+          const bad=c.createDecipheriv('aes-256-gcm',k2,iv,{authTagLength:16});
+          bad.setAAD(Buffer.from('wrong scope'));bad.setAuthTag(enc.getAuthTag());
+          assert.throws(()=>Buffer.concat([bad.update(encrypted),bad.final()]));
+          console.log('P6_G8_SYNTHETIC_X25519_HKDF_AEAD_VERIFY_PASS_NO_PROVIDER');
+          JS
