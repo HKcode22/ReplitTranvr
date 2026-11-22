@@ -155,10 +155,20 @@ active("real private custody signed-review transport",()=>{
     await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[stillLivePath,code,m,rights,stillLiveHash,g.prePayload.issuedAtUtc,stillLiveUntil,stillLiveBytes]);
     // Existing restricted, no-payload deadline-pressure reader warns about
     // signed future contents even though the due-only sweep must not touch them.
+    // In addition to a non-null signed POST review, guard an actual
+    // SOURCE_QUERY_PACKET kind (synthetic original-shaped fixture only).
+    const sourcePath="data-collection/phase5/frozen/sourceq_"+h("ci synthetic source still needed")+".json";
+    const sourceBytes=Buffer.from(JSON.stringify({schema:"CI_SYNTHETIC_SOURCE_PACKET_ONLY",flightNumber:"CI123",scheduledDepartureUtc:new Date(genericNow).toISOString(),
+     operatingCarrier:"CI",sourceCustodyRequiredForActivePREPOST:true,neverActualAeroDataBoxResponse:true}));
+    const sourceHash=createHash("sha256").update(sourceBytes).digest("hex");
+    await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'SOURCE_QUERY_PACKET',31,2,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[sourcePath,code,m,rights,sourceHash,g.prePayload.issuedAtUtc,stillLiveUntil,sourceBytes]);
     const pressureBefore=await readP6PrivateDeadlinePressure(reader,readerLogin,m);
     const nearSource=pressureBefore.groups.find(x=>x.kind==="PHASE7_SIGNED_REVIEW"&&x.scope==="CURRENT");
     expect(nearSource).toBeDefined();
     expect(nearSource?.withinOneHour).toBeGreaterThanOrEqual(1);
+    const nearQuery=pressureBefore.groups.find(x=>x.kind==="SOURCE_QUERY_PACKET"&&x.scope==="CURRENT");
+    expect(nearQuery?.withinOneHour).toBe(1);
+    expect(nearQuery?.due).toBe(0);
     expect(pressureBefore.deadlineDueObserved).toBe(false);
     const early=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
     expect(early).toMatchObject({status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED",receipts:[],deadlineDueObservedAtInitialRead:false});
@@ -176,6 +186,10 @@ active("real private custody signed-review transport",()=>{
     expect(liveReadback.rowCount).toBe(1);
     expect(liveReadback.rows[0].payload_bytes).toEqual(stillLiveBytes);
     expect(liveReadback.rows[0].content_sha256).toBe(stillLiveHash);
+    const sourceReadback=await reader.query("SELECT payload_bytes,content_sha256 FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[sourcePath,stillLiveUntil]);
+    expect(sourceReadback.rowCount).toBe(1);
+    expect(sourceReadback.rows[0].payload_bytes).toEqual(sourceBytes);
+    expect(sourceReadback.rows[0].content_sha256).toBe(sourceHash);
    }
    console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
