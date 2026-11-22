@@ -3,10 +3,16 @@
   "stageCodeSha": "795ace55984b44a3d0bffa886d33a5ec11d31927",
   "stagePacketSha256": "8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc",
   "costEnvelopeSha256": "cef58dcc4e8009d46e686bb555faab0fe952b9921e8aa3aa13d610ea443e3bf9",
-  "reviewedExecutableCommit": "3e8141e2aa1e9b45cdc65c902427f0853266ea69",
-  "changedBlobs": [],
-  "reviewedBy": "Independent reviewer session (OpenCode agent), 2026-11-22: empty-diff bridge review (installed stage equals frozen head), INV-NO-MERGE guard verified",
-  "reviewedAtUtc": "2026-11-22T01:40:36.025Z",
+  "reviewedExecutableCommit": "812d778a19cd0a6fff5a7f091a59cf089844444d",
+  "changedBlobs": [
+    {
+      "path": "scripts/v39_phase6_revised_stage_executable_bridge_v39.ts",
+      "blobSha": "b25f980cb67d562fa610c2f2ff7de61ba98d05f2",
+      "mode": "100644"
+    }
+  ],
+  "reviewedBy": "Independent reviewer session (OpenCode agent), 2026-11-22: 1-blob bridge review (verifier empty-diff allowance), INV-NO-MERGE guard verified",
+  "reviewedAtUtc": "2026-11-22T01:42:40.079Z",
   "independentOperationalReleaseApproved": true,
   "phase6PaidGo": false
 }
