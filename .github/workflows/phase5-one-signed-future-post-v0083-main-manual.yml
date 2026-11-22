@@ -472,4 +472,6 @@ jobs:
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "CREATE ROLE ci_p6_expiry_writer LOGIN NOINHERIT PASSWORD 'ci-expiry-write'; CREATE ROLE ci_p6_expiry_reader LOGIN NOINHERIT PASSWORD 'ci-expiry-read'; GRANT USAGE ON SCHEMA clean TO ci_p6_expiry_writer,ci_p6_expiry_reader; GRANT EXECUTE ON FUNCTION clean.phase6_private_epoch_expiry_sweep_v39(text,integer),clean.phase6_private_epoch_expiry_stop_v39(text) TO ci_p6_expiry_writer; GRANT EXECUTE ON FUNCTION clean.phase6_private_epoch_expiry_status_v39(text),clean.phase6_private_epoch_expiry_receipt_v39(text,text) TO ci_p6_expiry_reader"
       - name: Actual restricted SOURCE-role PRE partition, POST original SQL and signed publication recovery
         run: |
+          # V0108 must be tested before other disposable fixtures populate private custody.
+          P6_PRIVATE_V0108_REGRESSION=1 npx --no-install vitest run tests/phase7_private_signed_review_transport_v39.test.ts -t 'V0108_RECOVERY_METADATA_ONLY retires'
           npx --no-install vitest run tests/phase6_actual_post_outcome_real_pg16_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts
