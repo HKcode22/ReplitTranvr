@@ -52,7 +52,7 @@ export function classifyP6V0108Bodies(functions,sql){
     fail("CATALOG_SECURITY_DEFINER_ACL");
  const a=functions[0],b=functions[1];
  if(a.vol!=="s"||b.vol!=="v"||
-    ![a,b].every(f=>f.config==="search_path=pg_catalog, pg_temp"))
+    ![a,b].every(f=>typeof f.config==="string"&&f.config.replace(/\s/g,"")==="search_path=pg_catalog,pg_temp"))
     fail("CATALOG_FUNCTION_FLAGS");
  const old=a.body===sql.oldStatus&&b.body===sql.oldSweep,
   installed=a.body===sql.newStatus&&b.body===sql.newSweep;
