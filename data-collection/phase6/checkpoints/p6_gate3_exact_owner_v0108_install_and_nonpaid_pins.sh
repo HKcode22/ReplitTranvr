@@ -38,7 +38,15 @@ for key in P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA P7_EXPIRY_APPROVED_MAIN_SHA;
  old_or_new "$value"
 done
 P_CURRENT="$(gh api "repos/$R/actions/variables/P6_PRIVATE_EPOCH_DEADLINE_PROFILE" --jq .value 2>/dev/null || true)"
-[[ -z "$P_CURRENT" || "$P_CURRENT" == V0105 || "$P_CURRENT" == "$PROFILE" ]] || hold UNREVIEWED_EXPIRY_PROFILE
+# This exact reviewed main only implements V0105 and
+# V0108_RECOVERY_METADATA_ONLY. An unsupported legacy value cannot execute
+# private retention (it fails the runtime profile allowlist). It is NOT a
+# license to clear a deliberate safety STOP or to bypass an unknown marker.
+if [[ -n "$P_CURRENT" && "$P_CURRENT" != V0105 && "$P_CURRENT" != "$PROFILE" ]]; then
+  [[ ${#P_CURRENT} -le 100 && "$P_CURRENT" =~ ^[a-zA-Z0-9_.:-]+$ ]] || hold INVALID_PROFILE_VALUE_SHAPE
+  [[ ! "$P_CURRENT" =~ (STOP|HOLD|DISABLED|QUARANTINE|NO_GO|DO_NOT|PAUSE|FREEZE|CANCEL|INHIBIT|BLOCKED) ]] || hold EXPLICIT_SAFETY_STOP_PROFILE
+  printf '%s\n' '{"status":"P6_G3_UNSUPPORTED_LEGACY_PROFILE_DETECTED","action":"REPAIR_ONLY_AFTER_EXACT_V0108_OWNER_READBACK","databaseWrites":0,"phase6PaidGo":false}'
+fi
 R_REPO="$(gh api "repos/$RELAY/actions/variables/TRAVNR_APPROVED_TARGET_MAIN_SHA" --jq .value 2>/dev/null || true)"
 R_ENV="$(gh api "repos/$RELAY/environments/travnr-target-forward/variables/TRAVNR_APPROVED_TARGET_MAIN_SHA" --jq .value 2>/dev/null || true)"
 [[ -n "$R_REPO" || -n "$R_ENV" ]] || hold NO_EXISTING_RELAY_PIN
@@ -75,6 +83,9 @@ pin
 # Only fixed nonpaid retention/profile vars. Do not mutate private 31-value
 # SOURCE/PRE/POST secrets or protected review approvals.
 if [[ "$P_CURRENT" != "$PROFILE" ]]; then
+  # Fail closed if another owner changed the variable during Neon install.
+  live="$(gh api "repos/$R/actions/variables/P6_PRIVATE_EPOCH_DEADLINE_PROFILE" --jq .value 2>/dev/null || true)"
+  [[ "$live" == "$P_CURRENT" ]] || hold CONCURRENT_PROFILE_REVIEW_REQUIRED
   gh variable set P6_PRIVATE_EPOCH_DEADLINE_PROFILE --body "$PROFILE" -R "$R" || hold PROFILE_WRITE
 fi
 for key in P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA P7_EXPIRY_APPROVED_MAIN_SHA; do
