@@ -69,7 +69,7 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
 const url="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const active=process.env.P6_POST_OUTCOME_DISPOSABLE_PG16==="1"?describe:describe.skip;
 active("real private custody signed-review transport",()=>{
- it.each(["V0105",P6_PRIVATE_METADATA_PROFILE])("%s retires expired V0106 receipt before its replay fence via separate restricted actors",async(profile)=>{
+ it.each(process.env.P6_PRIVATE_V0108_REGRESSION==="1"?[P6_PRIVATE_METADATA_PROFILE]:["V0105"])("%s retires expired V0106 receipt before its replay fence via separate restricted actors",async(profile)=>{
   if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==url||process.env.V39_DATABASE_RUNTIME_URL!==url||
      process.env.AERODATABOX_API_KEY||process.env.RAPIDAPI_KEY||process.env.ADB_AUTO_COLLECT!=="0"||process.env.V39_PHASE6_PROCESS_ARMED!=="0")throw Error("DISPOSABLE_ONLY");
   const owner=new Client({connectionString:url});
