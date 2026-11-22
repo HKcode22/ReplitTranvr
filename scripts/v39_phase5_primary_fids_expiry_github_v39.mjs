@@ -178,7 +178,7 @@ export async function verifyP5PrimaryExpiryActor(c,actor,{test=false,role,owner=
   const callable=d=>!d.privateExpiry||privateState==="GRANTED";
   for(const d of checkedDefs){
    const q=rows.find(q=>q.name===fn(d));
-   const m=(d.privateExpiry?(d.name==="status"?privateStatusSrc:extensionSrc):readFileSync(primaryDeadlineSqlForFunction(d.name,primaryDeadlineProfile),"utf8")).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
+   const m=(d.privateExpiry?(["status","sweep"].includes(d.name)?privateStatusSrc:extensionSrc):readFileSync(primaryDeadlineSqlForFunction(d.name,primaryDeadlineProfile),"utf8")).match(new RegExp("AS \\$"+d.name+"\\$([\\s\\S]*?)\\$"+d.name+"\\$;"));
    const config=["search_path=pg_catalog, pg_temp",...(d.lock?["lock_timeout=3s"]:[])].sort();
    if(!m||!q||q.args!==d.args||q.result!==d.result||q.vol!==d.vol||q.definer!==true||
      q.owner!==owner||q.body!==m[1]||!Array.isArray(q.config)||
@@ -346,7 +346,7 @@ async function main(){
     const p=await runP6PrivateEpochExpiryCore({writer,reader,manifest:extension.manifest,apply:extension.apply,privateDeadlineProfile:extension.privateDeadlineProfile??"V0105"});
     console.log(JSON.stringify({...p,reviewedMainSha:a.sha}));
     if(p.status==="PRIVATE_EXPIRY_BACKLOG_REMAINS"||p.before.deletionStopUnresolved||
-       p.deadlineDueObservedAtInitialRead)process.exitCode=2;
+       (p.deadlineDueObservedAtInitialRead||p.deadlineDueObservedDuringSweep===true))process.exitCode=2;
    }
   }
  }finally{await Promise.all([writer.end().catch(()=>{}),reader.end().catch(()=>{})]);}

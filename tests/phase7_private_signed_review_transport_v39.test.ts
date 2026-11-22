@@ -80,11 +80,12 @@ active("real private custody signed-review transport",()=>{
   const m=h("isolated ci expiry manifest"), scoped={...trust,env:{...trust.env,V39_P5_MANIFEST_SHA256:m}};
   const selector:P7ReviewSelector={kind:"POST_RECOVERY",runDayIndex:31,scopeSha256:h("isolated expiry original")};
   const paths=[p7ReviewPath(selector),p7RecoveryFencePath(selector)];
-  let oldDefinition:string|undefined;
+  let oldDefinition:string|undefined,oldSweepDefinition:string|undefined;
   try{
    await owner.connect();await reader.connect();await publisher.connect();
    if(profile===P6_PRIVATE_METADATA_PROFILE){
     oldDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_status_v39(text)'::regprocedure) AS body")).rows[0].body;
+    oldSweepDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_sweep_v39(text,integer)'::regprocedure) AS body")).rows[0].body;
     await owner.query("SET ROLE neondb_owner");
     try{await owner.query(readFileSync("migrations/staged/V0108__phase6_private_operational_metadata_expiry_class_v39.sql","utf8"));}
     finally{await owner.query("ROLLBACK");await owner.query("RESET ROLE");}
@@ -109,6 +110,7 @@ active("real private custody signed-review transport",()=>{
    expect(first.deadlineDueObservedAtInitialRead).toBe(profile==="V0105");
    expect(first.dueOperationalMetadataPackets).toBe(profile==="V0105"?0:1);
    expect(first.receipts).toHaveLength(1);
+   if(profile===P6_PRIVATE_METADATA_PROFILE)expect(first).toMatchObject({deadlineDueObservedDuringSweep:false,receipts:[{hardDueAtSweep:0}]});
    expect(first.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
    expect(await present()).toEqual([paths[1]]);
    await expect(readP7PrivateSignedReviews(reader,scoped,[selector])).rejects.toThrow("RECOVERY_PREVIOUSLY_ISSUED_NO_REISSUE");
@@ -146,12 +148,13 @@ active("real private custody signed-review transport",()=>{
     expect(snapshot).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,before:{duePackets:5}});
     const hard=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
     expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
-    expect(hard.receipts[0]).toMatchObject({packets:5,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
+    expect(hard).toMatchObject({deadlineDueObservedDuringSweep:true});
+    expect(hard.receipts[0]).toMatchObject({packets:5,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true,hardDueAtSweep:2});
    }
    console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
    await owner.query("DELETE FROM clean.adb_phase6_authorization WHERE authorization_id='CI_ONLY' AND manifest_sha256=$1",[m]).catch(()=>{});
-   try{if(oldDefinition)await owner.query(oldDefinition);}
+   try{if(oldSweepDefinition)await owner.query(oldSweepDefinition);if(oldDefinition)await owner.query(oldDefinition);}
    finally{await Promise.allSettled([owner.end(),reader.end(),publisher.end(),expiryWriter.end(),expiryReader.end()]);}
   }
  },40000);

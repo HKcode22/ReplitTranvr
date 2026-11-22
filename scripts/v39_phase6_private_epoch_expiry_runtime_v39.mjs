@@ -41,7 +41,7 @@ async function status(reader,m,profile){
  const evidence=privateExpiryDeadlineEvidence(v,profile);
  return {observedAtUtc:v.observedAtUtc,...Object.fromEntries(STATUS.map(k=>[k,v[k]])),...(profile===P6_PRIVATE_METADATA_PROFILE?{dueOperationalMetadataPackets:evidence.dueOperationalMetadataPackets}:{}),deletionStopUnresolved:v.deletionStopUnresolved};
 }
-function sweepReceipt(v,limit){
+function sweepReceipt(v,limit,profile){
  if(!v||v.schema!=="v39.phase6.private-epoch-expiry-sweep.v1"||
     v.status!=="PRIVATE_DUE_ONLY_IN_TX_NOT_COMMIT_PROOF"||!RUN.test(v.runId??"")||
     !clock(v.observedAtUtc)||RECEIPT.some(k=>!n(v[k]))||v.packets>limit||
@@ -49,16 +49,17 @@ function sweepReceipt(v,limit){
     v.claimsPreserved>31||v.remainingExpiredHeads>v.claimsPreserved||
     v.providerCalls!==0||v.backupOrPitrVerified!==false||v.phase6PaidGo!==false)
   hold("INVALID_SWEEP_RESULT");
- return {runId:v.runId,observedAtUtc:v.observedAtUtc,...Object.fromEntries(RECEIPT.map(k=>[k,v[k]]))};
+ if(profile===P6_PRIVATE_METADATA_PROFILE&&!n(v.hardDueAtSweep))hold("INVALID_SWEEP_HARD_COUNT");
+ return {runId:v.runId,observedAtUtc:v.observedAtUtc,...Object.fromEntries(RECEIPT.map(k=>[k,v[k]])),...(profile===P6_PRIVATE_METADATA_PROFILE?{hardDueAtSweep:v.hardDueAtSweep}:{})};
 }
-async function independentReceipt(reader,m,r){
+async function independentReceipt(reader,m,r,profile){
  const v=await ro(reader,"SELECT "+F+"receipt_v39($1,$2) v",[m,r.runId]);
  if(!v||v.schema!=="v39.phase6.private-epoch-expiry-receipt.v1"||
     v.runId!==r.runId||v.providerCalls!==0||v.databaseWrites!==0||v.phase6PaidGo!==false||
     v.committedAggregateReceiptFound!==(r.packets+r.indexRevisions>0))
   hold("RECEIPT_MISMATCH");
  if(v.committedAggregateReceiptFound&&(v.observedAtUtc!==r.observedAtUtc||
-    RECEIPT.some(k=>v[k]!==r[k])||v.backupOrPitrVerified!==false))hold("RECEIPT_MISMATCH");
+    RECEIPT.some(k=>v[k]!==r[k])||(profile===P6_PRIVATE_METADATA_PROFILE&&v.hardDueAtSweep!==r.hardDueAtSweep)||v.backupOrPitrVerified!==false))hold("RECEIPT_MISMATCH");
 }
 async function stop(writer,reader,m,r,profile){
  try{
@@ -77,7 +78,7 @@ async function one(writer,reader,m,limit,profile){
   await c.query("BEGIN");
   await c.query("SET LOCAL statement_timeout='20000ms'");
   await c.query("SET LOCAL lock_timeout='3000ms'");
-  r=sweepReceipt((await c.query("SELECT "+F+"sweep_v39($1,$2) v",[m,limit])).rows[0]?.v,limit);
+  r=sweepReceipt((await c.query("SELECT "+F+"sweep_v39($1,$2) v",[m,limit])).rows[0]?.v,limit,profile);
   attempted=true;await c.query("COMMIT");ack=true;
  }catch(e){
   if(!attempted){try{await c.query("ROLLBACK");}catch{poison=true;}throw e;}
@@ -85,7 +86,7 @@ async function one(writer,reader,m,limit,profile){
  if(!r)hold("NO_BATCH_RESULT");
  try{
   if(!ack&&r.packets+r.indexRevisions===0)hold("ZERO_WORK_COMMIT_UNKNOWN");
-  await independentReceipt(reader,m,r);
+  await independentReceipt(reader,m,r,profile);
  }catch{await stop(writer,reader,m,r,profile);}
  return {...r,commitAck:ack,independentAggregateReceiptVerified:r.packets+r.indexRevisions>0};
 }
@@ -116,5 +117,5 @@ export async function runP6PrivateEpochExpiryCore({writer,reader,manifest,apply=
  }
  const due=current.duePackets+current.dueIndexes+current.foreignDuePackets+current.foreignDueIndexes;
  return {...base,status:due?"PRIVATE_EXPIRY_BACKLOG_REMAINS":"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED",
-  after:current,receipts,databaseWritesPossible:receipts.some(r=>r.packets+r.indexRevisions>0)};
+  after:current,receipts,...(privateDeadlineProfile===P6_PRIVATE_METADATA_PROFILE?{deadlineDueObservedDuringSweep:receipts.some(r=>r.hardDueAtSweep>0)}:{}),databaseWritesPossible:receipts.some(r=>r.packets+r.indexRevisions>0)};
 }
