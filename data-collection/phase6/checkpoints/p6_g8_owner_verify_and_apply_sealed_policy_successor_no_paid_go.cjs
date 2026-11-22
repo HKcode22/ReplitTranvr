@@ -14,6 +14,8 @@ const sha=b=>createHash("sha256").update(b).digest("hex"),hash=x=>sha(JSON.strin
 const repo="HKcode22/ReplitTranvr";
 const pin="b432eb9a5bac7bc3c4537249e75ec7df41e8727c";
 const prior="7e07047d7173cbcf84e966ab869d66477efef36df38c83c58325396f31b83728";
+const expectedStatic="3bb538896d2023ed1ff54b1b0d914a8a134299eac3a5068827e93d82400864b0";
+const expectedPost="0916015a99b379d4ff703f59530794577c5c5ab2404e6cdfc1112921f165b54d";
 const keys=[
 "P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_NONPAID_DAILY_POLICY_BASE64",
 "P6_NONPAID_SIGNING_POLICY_BASE64","P6_NONPAID_TRANSPORT_TRUST_BASE64",
@@ -39,6 +41,7 @@ need(req.schema==="v39.phase6.gate8.owner-seal-request.v1"&&
  e.alg==="X25519-HKDF-SHA256-AES-256-GCM"&&e.mainSha===pin&&
  e.historicalDigest===prior&&e.ownerRequestNonce===req.nonce&&
  e.recipientSpkiSha256===sha(pubRaw)&&req.recipientPublicSpkiBase64===pubRaw.toString("base64")&&
+ e.successorStaticDigest===expectedStatic&&
  /^[a-f0-9]{64}$/.test(e.successorStaticDigest),"SCOPE_AND_RECIPIENT");
 const decode=(k,expectLen)=>{
  const s=e[k];need(typeof s==="string"&&/^[A-Za-z0-9+/]+={0,2}$/.test(s),"ENVELOPE_BASE64");
@@ -70,6 +73,7 @@ need(changes&&typeof changes==="object"&&!Array.isArray(changes)&&
  receipt?.status==="P6_G8_ELEVEN_EXISTING_POLICY_SUCCESSOR_VALUES_VALIDATED_NO_PAID_GO"&&
  receipt.mainSha===pin&&receipt.priorStaticSha256===prior&&
  receipt.successorStaticSha256===e.successorStaticDigest&&
+ receipt.successorPostPolicySha256===expectedPost&&
  JSON.stringify(receipt.changesNames)===JSON.stringify(keys)&&
  receipt.phase6PaidGo===false&&receipt.sourceAuthReenabled===false&&
  receipt.dbWrites===0&&receipt.providerCalls===0,
