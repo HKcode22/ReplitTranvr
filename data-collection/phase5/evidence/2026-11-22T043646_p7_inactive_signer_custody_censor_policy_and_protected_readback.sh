@@ -121,7 +121,30 @@ JS
 # Its jobs receive only step-scoped secret values; no source/paid authority.
 test "$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')" = "$PIN"
 test "$(gh api "repos/$REPO/git/ref/heads/$AUDIT_BRANCH" --jq '.object.sha')" = "$AUDIT_HEAD"
-gh workflow run phase6-private-transport-two-login-readonly-manual.yml -R "$REPO" --ref "$AUDIT_BRANCH" -f confirm=VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE -f approved_main_sha="$PIN"
-echo P7_PROTECTED_READBACK_DISPATCHED_NO_GO
+# Do not replay an already acknowledged protected readback of this exact audit head.
+API="repos/$REPO/actions/workflows/phase6-private-transport-two-login-readonly-manual.yml/runs?event=workflow_dispatch&branch=$AUDIT_BRANCH&per_page=100"
+find_readback() {
+ gh api "$API" --jq ".workflow_runs[] | select(.head_sha==\"$AUDIT_HEAD\" and .run_attempt==1) | .id"
+}
+mapfile -t EXISTING < <(find_readback)
+if [ "${#EXISTING[@]}" -gt 1 ]; then echo 'HOLD_MULTIPLE_PROTECTED_READBACK_RUNS_NO_REPLAY'; exit 2; fi
+if [ "${#EXISTING[@]}" = 1 ]; then RID="${EXISTING[0]}"; else
+ gh workflow run phase6-private-transport-two-login-readonly-manual.yml -R "$REPO" --ref "$AUDIT_BRANCH" -f confirm=VERIFY_EXACT_FINAL_STATIC_AND_REVIEWER_ACTORS_NO_PROVIDER_NO_WRITE -f approved_main_sha="$PIN"
+ RID=""
+ for _ in $(seq 1 40); do
+  mapfile -t MATCHES < <(find_readback)
+  [ "${#MATCHES[@]}" -le 1 ] || { echo 'HOLD_MULTIPLE_PROTECTED_READBACK_RUNS_NO_REPLAY'; exit 2; }
+  if [ "${#MATCHES[@]}" = 1 ]; then RID="${MATCHES[0]}"; break; fi
+  sleep 2
+ done
+fi
+[[ "$RID" =~ ^[0-9]+$ ]] || { echo 'HOLD_PROTECTED_READBACK_ACK_UNKNOWN_NO_REPLAY'; exit 2; }
+echo "P7_PROTECTED_READBACK_RUN=$RID"
+if gh run watch "$RID" -R "$REPO" --exit-status; then
+ echo "P7_PROTECTED_READBACK_WORKFLOW_SUCCESS=$RID"
+else
+ echo "HOLD_P7_PROTECTED_READBACK_RUN_REQUIRES_EXACT_JOB_REVIEW=$RID"
+ exit 2
+fi
 echo SOURCE_REMAINS_DISABLED
 echo PAID_GO=false
