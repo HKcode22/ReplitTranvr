@@ -50,6 +50,7 @@ jobs:
           npx --no-install vitest run tests/phase5_cd_github_lease_watchdog_offline_v39.test.ts
           echo P5_CD_EXISTING_QUEUE_WATCHDOG_OFFLINE_NO_PROVIDER_PASS
   reviewed-existing-queue-watchdog:
+    environment: phase6-protected-runtime
     if: >-
       ${{ github.ref == 'refs/heads/main'
           && vars.P5_CD_GH_WATCHDOG_ENABLED == '1'
