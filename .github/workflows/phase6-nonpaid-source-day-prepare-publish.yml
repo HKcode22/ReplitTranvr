@@ -63,6 +63,7 @@ jobs:
           npx --no-install tsx --test tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs
           npx --no-install vitest run tests/phase6_compact_airport_timezone_policy_v39.test.ts
   protected-main-one-day-nonpaid:
+    environment: phase6-protected-runtime
     if: >-
       ${{ github.ref == 'refs/heads/main' &&
         ((github.event_name == 'schedule' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true') ||
