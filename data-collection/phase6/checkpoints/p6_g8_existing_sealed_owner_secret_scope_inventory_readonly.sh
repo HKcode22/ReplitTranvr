@@ -10,7 +10,6 @@ RELAY="HKcode22/TravnrClockRelay"
 PIN="b432eb9a5bac7bc3c4537249e75ec7df41e8727c"
 RELAY_PIN="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed"
 ENVIRONMENT="phase6-protected-runtime"
-PRIVATE="$HOME/.travnr-g8-seal-CbyqP2xW"
 hold() { printf 'HOLD_P6_G8_SCOPE_READONLY_%s\n' "$1" >&2; exit 2; }
 
 [[ "$#" == 1 && "$1" == "EXISTING_G8_SEALED_ARTIFACT_SCOPE_NAMES_READONLY_NO_REPLAY" ]] || hold CONFIRM
@@ -24,10 +23,8 @@ gh api "repos/$REPO/actions/runs/45026584506" |
     .run_attempt==1 and .event=="push"
   ' >/dev/null || hold OWNER_SEALED_RUN
 
-[[ -d "$PRIVATE" && ! -L "$PRIVATE" ]] || hold PRIVATE_DIRECTORY_MISSING
-[[ -f "$PRIVATE/request.json" && -f "$PRIVATE/owner-private.pem" &&
-   -f "$PRIVATE/artifact/p6-g8-owner-sealed-policy-successor.json" ]] ||
-  hold ORIGINAL_PRIVATE_EVIDENCE_MISSING
+# This diagnostic intentionally does not open the owner's existing private key,
+# authenticated ciphertext, or any raw secret value; preserve them separately.
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
