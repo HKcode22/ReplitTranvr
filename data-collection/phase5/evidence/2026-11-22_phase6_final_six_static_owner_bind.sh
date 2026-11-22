@@ -82,7 +82,7 @@ const compatibleUntil='2027-01-31T00:00:00.000Z';
 const decision={schema:'v39.phase5.final-six-policy-binding-decisions.v1',phase6PaidGo:false,authorizationId:a.record.authorizationId,authArtifactSha256:a.artifactHash,reviewedMainSha:main,manifestSha256:s.manifestSha256,configSha256:s.configSha256,rightsSha256:release.sourceRightsEvidenceSha256,costSha256:release.costEnvelopeSha256,
 reviewedBy:'Owner-delegated technical review (not independent human)',reviewedAtUtc:now,decisions:Object.fromEntries(flags.map(k=>[k,true])),
 releaseSha256:hash(tmp+'/scope.md'),externalContentUseReviewSha256:hash(rights),builderSha256:hash(builder),runAndRetentionEvidenceSha256:hash(tmp+'/pre-receipt.md'),
-selectedTArtifactHash:hash(rec+'/public-provider-contract-CANDIDATE.json'),selectedTSemanticsEvidenceSha256:hash('data-collection/phase5/2026-11-16_FINAL_EXIT_SCIENCE_AND_COMMISSIONING_CROSSWALK.md'),t24CustodyPolicySha256:hash('migrations/staged/V0101__phase6_private_t24_packet_and_witness_transport_inert_v39.sql'),
+selectedTArtifactHash:hash(rec+'/public-provider-contract-CANDIDATE.json'),selectedTSemanticsEvidenceSha256:hash('data-collection/phase5/2026-11-16_FINAL_EXIT_SCIENCE_AND_COMMISSIONING_CROSSWALK.md'),t24CustodyPolicySha256:hash(tmp+'/scope.md'),
 reviewedProviderPriceSha256:hash('data-collection/phase5/evidence/2026-11-19_current_marketplace_fids_range_cost_NOT_RIGHTS_NO_GO.json'),externalPostContentsAndBudgetEvidenceSha256:hash(tmp+'/scope.md'),
 validFromUtc:'2026-11-22T00:00:00.000Z',validUntilUtc:compatibleUntil,builderFrozenAtUtc:builderClock,selectedTVersion:'AeroDataBox-OpenAPI-1.15.4.0-native-scheduled-departure',standaloneNoT24ProtocolSha256:null};
 need(Object.entries(decision).filter(([k])=>k.endsWith('Sha256')).every(([,v])=>H.test(v)),'DIGEST');
@@ -104,6 +104,28 @@ fi
   8b1e3782d95db532195e626c41c603b00f58467505f368193930617b3c7fd297 \
   "$DEC/reviewed-final-policy-binding-decisions.json" \
   "$(hash "$DEC/reviewed-final-policy-binding-decisions.json")" "$OUT"
+# Gate 8 fresh free-read check (no paid provider request).
+if [ -n "$ACCOUNT_READ_KEY" ]; then
+ env -u DATABASE_URL -u V39_DATABASE_RUNTIME_URL -u RAPIDAPI_KEY -u AERODATABOX_WEBHOOK_SECRET \
+   AERODATABOX_API_KEY="$ACCOUNT_READ_KEY" node review-tools/p6_launch_free_account_prearm_current_v39.mjs || echo 'P6_FREE_ACCOUNT_PREARM_HOLD_REVIEW_REQUIRED'
+else
+ echo 'P6_FREE_ACCOUNT_KEY_NOT_PRESENT_NO_READ'
+fi
+unset ACCOUNT_READ_KEY
+# Renew only existing DIRECT_VERIFY, never direct paid tick.
+route="$(gh variable get TRAVNR_RELAY_ROLLING_ROUTE -R "$RELAY")"
+if [ "$route" = DIRECT_VERIFY ] && [ "$(gh variable get TRAVNR_RELAY_DIRECT_TICK_APPROVED -R "$RELAY" 2>/dev/null || true)" != 1 ] && [ "$(gh variable get P6_ROLLING_DIRECT_RECOVERY_ENABLED -R "$REPO" 2>/dev/null || true)" != 1 ]; then
+ test "$(gh variable get TRAVNR_APPROVED_TARGET_MAIN_SHA -R "$RELAY")" = "$PIN"
+ test "$(main)" = "$PIN"
+ SINCE="$(node -e 'console.log(new Date().toISOString())')"
+ gh variable set TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$RELAY" --body "$SINCE"
+ test "$(gh variable get TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$RELAY")" = "$SINCE"
+ gh workflow run external-clock.yml -R "$RELAY" --ref main -f lane=ROLLING_ROOT
+ echo "P6_RELAY_DIRECT_READONLY_EPOCH_RENEWED=$SINCE"
+else
+ echo "P6_RELAY_ROUTE_NOT_DIRECT_VERIFY=$route"
+fi
+
 # Independently validate cross-binding of all emitted bytes and confirm exact
 # namespace/capacity. Only config values are written; no arming flags.
 export P6_FINAL_BUNDLE_DIR="$OUT"
@@ -122,7 +144,7 @@ const vars=JSON.parse(gh(['variable','list','-R',repo,'--json','name,value']));
 const dangerouslyArmed=vars.filter(x=>['P6_ROLLING_DIRECT_RECOVERY_ENABLED','P6_ROLLING_CONTROLLER_ENABLED','P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED','P6_PHASE7_POST_RECOVERY_ENABLED','V39_PHASE6_PROCESS_ARMED','V39_PHASE6_OWNER_APPROVED'].includes(x.name)&&!['','0','false','OFF'].includes(x.value));
 need(!dangerouslyArmed.length,'ACTIVE_RUNTIME_VARIABLES');
 const seen=()=>{const a=JSON.parse(gh(['api','repos/'+repo+'/actions/secrets?per_page=100']));need(a.total_count===a.secrets.length,'SECRET_METADATA_INCOMPLETE');return new Map(a.secrets.map(x=>[x.name,x.updated_at]))};
-let present=seen();const missing=names.filter(n=>!present.has(n));need(present.size+missing.length<=100,'SECRET_CAPACITY_NO_MUTATION');
+let present=seen();const missing=names.filter(n=>!present.has(n));console.log(JSON.stringify({status:'P6_STATIC_SECRET_CAPACITY_CHECK',existing:present.size,additional:missing.length,maximum:100}));need(present.size+missing.length<=100,'SECRET_CAPACITY_NO_MUTATION');
 console.log(JSON.stringify({status:'P6_SIX_POLICY_EXACT_BYTE_CROSS_BIND_REVIEW_PASS',policies:6,staticCount:31,missingStaticNames:missing.length,repoSecretsBefore:present.size,bytesReviewedUnderOwnerDelegation:true,independentHumanReview:false,phase6PaidGo:false}));
 let written=0;
 for(const n of names){need(live()===pin,'MAIN_MOVED_DURING_INSTALL');gh(['secret','set',n,'-R',repo],v[n]);written++;console.log('P6_STATIC_INSTALLED '+n);}
@@ -145,27 +167,6 @@ for(const [n,p] of [['pre-proof','P6_PHASE7_PRE_PROOF_REVIEWER'],['post-outcome'
  console.log(JSON.stringify({status:'P7_EXISTING_KEY_PAIR_METADATA',key:n,pairMatch:pair,fingerprintSha256:fp,priorPublicPinJournalMatch:journalMatch,privateKeyUploaded:false}));
 }
 JS
-# Gate 8 fresh free-read check (no paid provider request).
-if [ -n "$ACCOUNT_READ_KEY" ]; then
- env -u DATABASE_URL -u V39_DATABASE_RUNTIME_URL -u RAPIDAPI_KEY -u AERODATABOX_WEBHOOK_SECRET \
-   AERODATABOX_API_KEY="$ACCOUNT_READ_KEY" node review-tools/p6_launch_free_account_prearm_current_v39.mjs
-else
- echo 'P6_FREE_ACCOUNT_KEY_NOT_PRESENT_NO_READ'
-fi
-unset ACCOUNT_READ_KEY
-# Renew only existing DIRECT_VERIFY, never direct paid tick.
-route="$(gh variable get TRAVNR_RELAY_ROLLING_ROUTE -R "$RELAY")"
-if [ "$route" = DIRECT_VERIFY ] && [ "$(gh variable get TRAVNR_RELAY_DIRECT_TICK_APPROVED -R "$RELAY" 2>/dev/null || true)" != 1 ] && [ "$(gh variable get P6_ROLLING_DIRECT_RECOVERY_ENABLED -R "$REPO" 2>/dev/null || true)" != 1 ]; then
- test "$(gh variable get TRAVNR_APPROVED_TARGET_MAIN_SHA -R "$RELAY")" = "$PIN"
- test "$(main)" = "$PIN"
- SINCE="$(node -e 'console.log(new Date().toISOString())')"
- gh variable set TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$RELAY" --body "$SINCE"
- test "$(gh variable get TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$RELAY")" = "$SINCE"
- gh workflow run external-clock.yml -R "$RELAY" --ref main -f lane=ROLLING_ROOT
- echo "P6_RELAY_DIRECT_READONLY_EPOCH_RENEWED=$SINCE"
-else
- echo "P6_RELAY_ROUTE_NOT_DIRECT_VERIFY=$route"
-fi
 echo "P6_RUNTIME_BINDING_OWNER_COMMAND_COMPLETE"
 echo "PRIVATE_FINAL_BUNDLE=$OUT"
 echo "SOURCE_REMAINS_DISABLED"
