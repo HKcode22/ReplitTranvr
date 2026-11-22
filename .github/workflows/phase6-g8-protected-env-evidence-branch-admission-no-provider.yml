@@ -1,0 +1,42 @@
+name: P6 G8 protected environment evidence branch admission (NO PROVIDER)
+on:
+  push:
+    branches:
+      - phase6/20261122-g8-502-readback-evidence
+    paths:
+      - '.github/workflows/phase6-g8-protected-env-evidence-branch-admission-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  disarmed-protected-environment-branch-admission:
+    if: >-
+      github.repository == 'HKcode22/ReplitTranvr' &&
+      github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' &&
+      github.event_name == 'push' && github.run_attempt == 1
+    environment: phase6-protected-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      DATABASE_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+    steps:
+      - name: Verify branch deployment allowed without reading environment secrets or data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/phase6/20261122-g8-502-readback-evidence
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$ADB_AUTO_COLLECT" = 0
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test "$V39_PHASE6_OWNER_APPROVED" = 0
+          test -z "$DATABASE_URL"
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$RAPIDAPI_KEY"
+          echo P6_G8_PROTECTED_ENVIRONMENT_EVIDENCE_BRANCH_ADMISSION_PASS_NO_PROVIDER_NO_SECRETS
