@@ -53,6 +53,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -77,6 +78,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -z "${AERODATABOX_API_KEY}"
+          export P6_EXACT_MONDAY_FIXTURE_PAIR="$RUNNER_TEMP/p6-exact-monday-fixture-pair"
+          bash review-tools/p6_exact_monday_historical_fixture_pair_v39.sh "$P6_EXACT_MONDAY_FIXTURE_PAIR"
           npx vitest run tests/phase6_prospective_disabled_stage_revision_pg16_v39.test.ts tests/phase6_nov23_old_stage_recovery_v39.test.ts
           npm run v39:typecheck
           echo 'P6_PROSPECTIVE_DISABLED_STAGE_REVISION_PG16=PASS PROVIDER_CALLS=0 PHASE6_GO=0'

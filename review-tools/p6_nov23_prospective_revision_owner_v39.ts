@@ -102,7 +102,7 @@ function approvedDecision(path:string,expectedSha:string,expected:Parameters<typ
  if(!raw.equals(tracked)||sha(raw)!==expectedSha)hold("COMMITTED_DATE_DECISION_BYTES");
  const x=JSON.parse(raw.toString("utf8"));validateP6MondayDateDecision(x,expected,new Date());return x;
 }
-function prepared(old:any,head:string,b:ReturnType<typeof baseReview>,decisionSha:string,now?:Date){
+function prepared(old:any,head:string,b:ReturnType<typeof baseReview>,decisionSha:string){
  const {r,identity,scope}=b;
  const config={...identity.configCandidate.content,status:"REVIEWED_PROSPECTIVE_MONDAY_SUCCESSOR_NOT_SOURCE_AUTH",originalFrozenPacketPreserved:true,originalFrozenManifestSha256:OLD_MANIFEST,ancestralOriginalFrozenManifestSha256:ORIGINAL_MANIFEST,prospectiveDateRevisionApproved:true,prospectiveDateRevisionEvidenceSha256:decisionSha,boundedSourceUseEvidenceSha256:scope.boundedSourceUseEvidenceSha256,recoveryControlEvidenceSha256:scope.recoveryControlEvidenceSha256,reviewApproved:true,sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,legacyAlertStartApproved:false,phase6PaidGo:false};
  const configSha=hash(config),manifest={...identity.manifestCandidate.content,status:"SCIENTIFIC_FREEZE_PROSPECTIVE_MONDAY_SUCCESSOR_APPROVED_NO_GO",originalCandidateConfigSha256:identity.configCandidate.sha256,configCandidateSha256:configSha,originalFrozenPacketPreserved:true,originalFrozenManifestSha256:OLD_MANIFEST,ancestralOriginalFrozenManifestSha256:ORIGINAL_MANIFEST,prospectiveDateRevisionApproved:true,prospectiveDateRevisionEvidenceSha256:decisionSha,boundedSourceUseEvidenceSha256:scope.boundedSourceUseEvidenceSha256,recoveryControlEvidenceSha256:scope.recoveryControlEvidenceSha256,calendarRowsSha256:scope.calendarRowsSha256,configSha256:configSha,finalPredecessorsApproved:false,scientificFreezeApproved:true,sourceRightsApproved:false,sourceUseDeferredToPhase6Activation:true,phase6PaidGo:false};
@@ -117,18 +117,9 @@ function prepared(old:any,head:string,b:ReturnType<typeof baseReview>,decisionSh
  const fr=(stage:string,cost:string)=>({expectedStagedB0062PacketSha256:stage,expectedSignedSevenCategoryCostSha256:cost,expectedExactBudgetWriterRole:budget,independentProspectiveCalendarAndTreatmentApproved:true as const,independentRealProviderRangeAndRestBudgetApproved:true as const,independentSourceContentsRightsForIntendedUseApproved:false as const,sourceUseDeferredToPhase6Activation:true as const,exactRestrictedNoProviderBudgetFreezeApproved:true as const});
  const review:P6ProspectiveDisabledStageRevisionReviewV39={schema:"v39.phase6.prospective-disabled-stage-revision-review.v2",expectedOldStageInputSha256:P6_NOV22_STAGE_SHA,expectedOldCostEnvelopeSha256:P6_NOV22_COST_SHA,expectedNewStageInputSha256:stageSha,expectedNewCostEnvelopeSha256:costSha,expectedOriginalFrozenManifestSha256:OLD_MANIFEST,expectedNewManifestSha256:input.manifestSha256,expectedPriorCodeSha40:P6_NOV22_STAGE_CODE,expectedCurrentCodeSha40:head,reviewedCalendarRevisionEvidenceSha256:decisionSha,independentProspectiveRevisionApproved:true,originalScientificDesignPreserved:true,oldStageRemainsArchivedEvidence:true,noBackfillApproved:true};
  const ctx={oldInput:old,oldStageReview:sr(P6_NOV22_STAGE_SHA),oldFreezeReview:fr(P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA),newInput:input,newStageReview:sr(stageSha),newFreezeReview:fr(stageSha,costSha),newManifestRaw:manifestRaw,review};
- const compiled=compileP6ProspectiveDisabledStageRevisionV39({...ctx,now});
+ const compiled=compileP6ProspectiveDisabledStageRevisionV39(ctx);
  if(compiled.changedParentDays!==31||compiled.firstNewServiceUtc!==scope.firstServiceUtc)hold("EXACT_TRANSITION");
  return {ctx,result,manifest,config,external,timing,stageSha,costSha,reviewDigest:b.reviewDigest};
-}
-/** Review-only historical reconstruction, no git/DB mutation. The caller
- * still pins the resulting complete stage/cost/manifest/config bytes. */
-export function reconstructP6ExactMondayHistoricalCandidate(head:string,decisionRaw:string,now:Date){
- const old=recoverP6Nov22StageInputFromCommittedEvidence().input,b=baseReview(head,old);
- validateP6MondayDateDecision(JSON.parse(decisionRaw),{reviewDigest:b.reviewDigest,
-  dateReceiptSha256:b.scope.dateReceiptSha256,oldStageSha256:P6_NOV22_STAGE_SHA,
-  sourceInventorySha256:b.scope.sourceInventorySha256},now);
- return prepared(old,head,b,sha(decisionRaw),now);
 }
 function save(p:string,files:Record<string,string>){
  const d=resolve(p),home=realpathSync(process.env.HOME!);
