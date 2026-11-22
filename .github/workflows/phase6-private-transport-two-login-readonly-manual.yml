@@ -74,3 +74,70 @@ jobs:
             console.log('P7_PROOF_READER_DIAGNOSTIC_ALL_CHECKS_PASS_NO_GO');
           }catch{console.error('HOLD_P7_PROOF_READER_DIAGNOSTIC_'+stage);process.exitCode=2;}finally{if(c)await c.end().catch(()=>{});}
           JS
+  verify-proof-constructor:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-pre-proof-readonly-diagnostic' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'DIAGNOSE_PRE_PROOF_READER_ONLY_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ADB_AUTO_COLLECT: '0'
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      DATABASE_URL: ''
+      V39_DATABASE_RUNTIME_URL: ''
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      AERODATABOX_WEBHOOK_SECRET: ''
+      P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ''
+      P6_PRIVATE_READER_DATABASE_URL: ''
+    steps:
+      - name: Verify live main remains pinned
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq '.object.sha')" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+      - uses: actions/checkout@v4
+        with:
+          ref: 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Validate exact proof constructor without DB or observation signing
+        env:
+          P6_PHASE7_PRE_POLICY_BASE64: ${{ secrets.P6_PHASE7_PRE_POLICY_BASE64 }}
+          P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64 }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64 }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64: ${{ secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64 }}
+          P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256: ${{ secrets.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256 }}
+          P6_PHASE7_PRE_PROOF_ISSUER_APPROVED: ${{ secrets.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --import tsx --input-type=module <<'JS'
+          import {createPrivateKey,createPublicKey,createHash} from 'node:crypto';
+          import {parsePhase7ProtectedPrePolicy} from './server/lib/disruption/phase7ProtectedPreResolver_v39.ts';
+          import {createPhase7IndependentPreProofPort} from './server/lib/disruption/phase7IndependentPreProofIssuer_v39.ts';
+          const e=process.env;let stage='START';
+          const need=b=>{if(!b)throw Error('CHECK_FAILED')};
+          const pass=s=>console.log(JSON.stringify({stage:s,pass:true,providerCalls:0,databaseWrites:0,observationSigned:false,phase6PaidGo:false}));
+          try{
+            stage='CONSTRUCTOR_NO_DATABASE_OR_PROVIDER';need(!e.DATABASE_URL&&!e.V39_DATABASE_RUNTIME_URL&&!e.V39_P5_SOURCE_DATABASE_URL&&!e.P6_PRIVATE_READER_DATABASE_URL&&!e.P6_PRIVATE_PUBLISHER_DATABASE_URL&&!e.AERODATABOX_API_KEY&&!e.RAPIDAPI_KEY&&!e.AERODATABOX_WEBHOOK_SECRET);pass(stage);
+            stage='EXACT_PRE_POLICY';const policy=parsePhase7ProtectedPrePolicy(e);pass(stage);
+            stage='DAILY_POLICY_AND_FORBIDDEN_SIGNERS';const raw=Buffer.from(e.P6_NONPAID_DAILY_POLICY_BASE64??'','base64');need(raw.toString('base64')===e.P6_NONPAID_DAILY_POLICY_BASE64&&createHash('sha256').update(raw).digest('hex')===e.P6_NONPAID_DAILY_POLICY_SHA256);const d=JSON.parse(raw.toString('utf8'));need(d.approvedCodeSha==='e058b9d0817151d4b10282c9242c6c8ebeef7814');const forbidden=[d.nativeLaterReview?.laterReviewerFingerprintSha256,d.nativeLaterReview?.dayAppendPolicy?.dayReviewerFingerprintSha256,d.nativeLaterReview?.dayAppendPolicy?.queryReviewerFingerprintSha256,e.P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256];need(forbidden.every(x=>/^[a-f0-9]{64}$/.test(x??''))&&new Set(forbidden).size===4);pass(stage);
+            stage='PROOF_KEY_PARSE';const b=Buffer.from(e.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64??'','base64');let k;try{need(b.toString('base64')===e.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64);k=createPrivateKey(b);}finally{b.fill(0)}const authority=createPublicKey(Buffer.from(e.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64??'','base64'));pass(stage);
+            stage='EXACT_PROOF_CONSTRUCTOR';const never=async()=>{throw Error('DIAGNOSTIC_NEVER_READ_OR_SIGN')};createPhase7IndependentPreProofPort({env:e,policySha256:policy.reviewSha256,dispositions:policy.dispositions,evidenceAuthorityPublicKey:authority,proofSigningKey:k,forbiddenSignerFingerprints:forbidden,reader:{readExactLaneEvidence:never,readDatabaseClockUtc:never}});pass(stage);
+            console.log('P7_PROOF_CONSTRUCTOR_DIAGNOSTIC_ALL_CHECKS_PASS_NO_GO');
+          }catch{console.error('HOLD_P7_PROOF_CONSTRUCTOR_DIAGNOSTIC_'+stage);process.exitCode=2;}
+          JS
