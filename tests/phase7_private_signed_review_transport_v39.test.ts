@@ -87,7 +87,15 @@ active("real private custody signed-review transport",()=>{
     oldDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_status_v39(text)'::regprocedure) AS body")).rows[0].body;
     oldSweepDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_sweep_v39(text,integer)'::regprocedure) AS body")).rows[0].body;
     await owner.query("SET ROLE neondb_owner");
-    try{await owner.query(readFileSync("migrations/staged/V0108__phase6_private_operational_metadata_expiry_class_v39.sql","utf8"));}
+    try{
+     await owner.query(readFileSync("migrations/staged/V0108__phase6_private_operational_metadata_expiry_class_v39.sql","utf8"));
+     const actual=(await owner.query("SELECT p.proname name,p.proconfig settings FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='clean' AND p.proname IN ('phase6_private_epoch_expiry_status_v39','phase6_private_epoch_expiry_sweep_v39') ORDER BY p.proname")).rows;
+     expect(actual).toHaveLength(2);
+     const norm=(x:any)=>(x.settings as string[]).map(s=>s.replace(/\s/g,"")).sort();
+     const byName=new Map(actual.map(x=>[x.name,norm(x)]));
+     expect(byName.get("phase6_private_epoch_expiry_status_v39")).toEqual(["search_path=pg_catalog,pg_temp"]);
+     expect(byName.get("phase6_private_epoch_expiry_sweep_v39")).toEqual(["lock_timeout=3s","search_path=pg_catalog,pg_temp"]);
+    }
     finally{await owner.query("ROLLBACK");await owner.query("RESET ROLE");}
    }
    await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
