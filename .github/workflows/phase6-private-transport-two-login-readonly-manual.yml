@@ -1,4 +1,4 @@
-name: Phase6 private transport credentials — main-only real READ ONLY (No Provider)
+name: Phase6 PRE proof restricted reader diagnostic (NO GO)
 on:
   workflow_dispatch:
     inputs:
@@ -14,8 +14,8 @@ concurrency:
   group: phase6-private-transport-readonly-commission
   cancel-in-progress: false
 jobs:
-  verify-reader:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
+  verify-proof-reader:
+    if: ${{ github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-pre-proof-readonly-diagnostic' && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 && inputs.confirm == 'DIAGNOSE_PRE_PROOF_READER_ONLY_NO_PROVIDER_NO_WRITE' && inputs.approved_main_sha == 'e058b9d0817151d4b10282c9242c6c8ebeef7814' }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     env:
@@ -25,76 +25,52 @@ jobs:
       DATABASE_URL: ''
       V39_DATABASE_RUNTIME_URL: ''
       AERODATABOX_API_KEY: ''
-      AERODATABOX_WEBHOOK_SECRET: ''
       RAPIDAPI_KEY: ''
-      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      AERODATABOX_WEBHOOK_SECRET: ''
       P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
+      V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
+      P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+      P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN }}
+      P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN }}
+      P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED: ${{ secrets.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED }}
     steps:
+      - name: Verify live main remains pinned
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq '.object.sha')" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
       - uses: actions/checkout@v4
-        with: {persist-credentials: false}
+        with:
+          ref: 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - name: Actual independent restricted reader login and empty ACL readback
+      - name: Isolate actual proof reader failure without signing or issuance
         run: |
           set -Eeuo pipefail
           set +x
-          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -n "$P6_PRIVATE_READER_DATABASE_URL"
-          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_PUBLISHER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
-          node --input-type=module <<'JS'
-          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
+          test "$(git rev-parse HEAD)" = 'e058b9d0817151d4b10282c9242c6c8ebeef7814'
+          node --import tsx --input-type=module <<'JS'
+          import {Client} from 'pg';
+          import {sameP6NeonDatabaseEndpoint} from './server/lib/disruption/phase6SameNeonEndpoint_v39.ts';
+          import {readP6DayEpochRestrictedReaderClock} from './server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs';
+          const e=process.env;
+          let stage='START',c;
+          const need=b=>{if(!b)throw Error('CHECK_FAILED')};
+          const pass=s=>console.log(JSON.stringify({stage:s,pass:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
           try{
-            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_READER_DATABASE_URL,ENTRIES[0]);
-            console.log(JSON.stringify({status:"P6_PRIVATE_READER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
-          }catch(e){
-            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_READER_SESSION_OR_DATABASE";
-            console.error(code);process.exitCode=2;
-          }
-          JS
-  verify-publisher:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'VERIFY_ONLY_TWO_PRIVATE_TRANSPORT_LOGINS_EMPTY_NO_PROVIDER' && inputs.approved_main_sha == github.sha }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    env:
-      ADB_AUTO_COLLECT: '0'
-      V39_PHASE6_PROCESS_ARMED: '0'
-      V39_PHASE6_OWNER_APPROVED: '0'
-      DATABASE_URL: ''
-      V39_DATABASE_RUNTIME_URL: ''
-      AERODATABOX_API_KEY: ''
-      AERODATABOX_WEBHOOK_SECRET: ''
-      RAPIDAPI_KEY: ''
-      P6_PRIVATE_READER_DATABASE_URL: ''
-      P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-        with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
-      - name: Actual independent restricted publisher login and empty ACL readback
-        run: |
-          set -Eeuo pipefail
-          set +x
-          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -n "$P6_PRIVATE_PUBLISHER_DATABASE_URL"
-          test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$P6_PRIVATE_READER_DATABASE_URL$AERODATABOX_API_KEY$RAPIDAPI_KEY"
-          node --input-type=module <<'JS'
-          import {ENTRIES,verifyP6PrivateTransportSession} from "./scripts/v39_phase6_private_transport_two_logins_owner_once.mjs";
-          try{
-            const result=await verifyP6PrivateTransportSession(process.env.P6_PRIVATE_PUBLISHER_DATABASE_URL,ENTRIES[1]);
-            console.log(JSON.stringify({status:"P6_PRIVATE_PUBLISHER_GITHUB_READONLY_PASS",...result,phase6PaidGo:false}));
-          }catch(e){
-            const code=/^HOLD_P6_PRIVATE_TRANSPORT_LOGINS_[A-Z0-9_]+$/.test(e?.message??"")?e.message:"HOLD_P6_PRIVATE_PUBLISHER_SESSION_OR_DATABASE";
-            console.error(code);process.exitCode=2;
-          }
+            stage='DISARMED_SCOPE';need(e.ADB_AUTO_COLLECT==='0'&&e.V39_PHASE6_PROCESS_ARMED==='0'&&e.V39_PHASE6_OWNER_APPROVED==='0'&&!e.DATABASE_URL&&!e.V39_DATABASE_RUNTIME_URL&&!e.P6_PRIVATE_PUBLISHER_DATABASE_URL&&!e.AERODATABOX_API_KEY&&!e.RAPIDAPI_KEY&&!e.AERODATABOX_WEBHOOK_SECRET);pass(stage);
+            stage='ROLE_ALIASES';const r=e.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN,p=e.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN;need(e.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED==='1'&&/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(r??'')&&/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/.test(p??'')&&r!==p);pass(stage);
+            stage='READER_URL_IDENTITY_TLS';const base=new URL(e.V39_P5_SOURCE_DATABASE_URL??''),u=new URL(e.P6_PRIVATE_READER_DATABASE_URL??'');need(sameP6NeonDatabaseEndpoint(base,u)&&decodeURIComponent(u.username)===r&&u.username!==base.username&&!!u.password&&u.searchParams.getAll('sslmode').length===1&&['require','verify-full'].includes(u.searchParams.get('sslmode'))&&[...u.searchParams.keys()].every(k=>['sslmode','channel_binding'].includes(k))&&(!u.searchParams.has('channel_binding')||(u.searchParams.getAll('channel_binding').length===1&&u.searchParams.get('channel_binding')==='require')));u.searchParams.set('sslmode','verify-full');pass(stage);
+            stage='READER_TLS_CONNECT';c=new Client({connectionString:u.toString(),connectionTimeoutMillis:8000,query_timeout:15000,application_name:'p7_proof_readonly_diagnostic',options:'-c default_transaction_read_only=on'});await c.connect();pass(stage);
+            stage='READER_SET_ROLE';await c.query('SET ROLE phase6_private_frozen_reader_v39');pass(stage);
+            stage='READER_CLOCK_AND_ACL';await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await c.query("SET LOCAL statement_timeout='10000ms'");await readP6DayEpochRestrictedReaderClock(c,r);pass(stage);
+            stage='V0106_EXACT_CUSTODY_CONSTRAINT';const z=await c.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid=$1::regclass AND convalidated AND conname='p6_v0101_kind_allowed' AND pg_get_constraintdef(oid) LIKE '%PHASE7_SIGNED_REVIEW%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_FENCE%' AND pg_get_constraintdef(oid) LIKE '%PHASE7_RECOVERY_RECEIPT%'",['phase6_private.frozen_native_packet_v39']);need(z.rowCount===1&&z.rows[0]?.n===1);pass(stage);
+            stage='ROLLBACK';await c.query('ROLLBACK');pass(stage);
+            console.log('P7_PROOF_READER_DIAGNOSTIC_ALL_CHECKS_PASS_NO_GO');
+          }catch{console.error('HOLD_P7_PROOF_READER_DIAGNOSTIC_'+stage);process.exitCode=2;}finally{if(c)await c.end().catch(()=>{});}
           JS
