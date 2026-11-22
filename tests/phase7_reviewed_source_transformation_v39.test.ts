@@ -1,3 +1,6 @@
+import type {PoolClient} from "pg";
+import {persistPhase7BoundPreFragmentInTransaction,type Phase7ProspectivePrePreservationPolicy,type Phase7BoundPreTransactionInput} from "../server/lib/disruption/phase7PreFragmentTransaction_v39";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {preparePhase7BoundPrePreservation,type Phase7BoundPrePreservationRequest} from "../server/lib/disruption/phase7BoundPrePreservation_v39";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
 import {selectP5EStage14BoundRouteFeatures} from "../server/lib/disruption/phase5AmendmentEStage14BoundRouteFeatures_v39";
@@ -6,6 +9,8 @@ import {describe, expect, it} from 'vitest';
 import {
   transformPhase7ReviewedSourceDecisions,
   validatePhase7ReviewedTransformationProfile,
+  P7_NATIVE_STATUS_DOMAIN,
+  P7_NATIVE_STATUS_CONTRACT_SHA256,
   type Phase7ReviewedTransformationProfile,
   type Phase7SourceDecision,
 } from '../server/lib/disruption/phase7ReviewedSourceTransformation_v39';
@@ -159,6 +164,24 @@ describe('Phase 7 reviewed source transformation boundary', () => {
     expect(validatePhase7ReviewedTransformationProfile(unsafe).pass).toBe(false);
   });
 
+  it('rejects reversible boolean and categorical encodings even when metadata claims reconstruction review', () => {
+    const categorical = {
+      ...profile(),
+      fields: [{...profile().fields[0], kind: 'categorical_dictionary' as const, bucketCount: 2,
+        boundaries: null, categories: ['low', 'high']}, profile().fields[1]],
+    };
+    expect(validatePhase7ReviewedTransformationProfile(categorical).failures)
+      .toContain('categorical-dictionary-reconstructible:congestion_bin');
+
+    const boolean = {
+      ...profile(),
+      fields: [{...profile().fields[0], kind: 'boolean_bucket' as const, bucketCount: 2,
+        boundaries: null, categories: ['false', 'true']}, profile().fields[1]],
+    };
+    expect(validatePhase7ReviewedTransformationProfile(boolean).failures)
+      .toContain('boolean-bucket-reconstructible:congestion_bin');
+  });
+
   it('never admits future PRE features or POST labels unavailable at release', () => {
     const input = decisions();
     input[0] = {...input[0], availableAtUtc: '2026-11-19T00:30:00.001Z'};
@@ -258,5 +281,109 @@ describe("explicit frozen-native clock difference candidate (synthetic review on
   const out=transformPhase7ReviewedSourceDecisions(p,c,d.filter(x=>x.sourceField==="gate_out_delay_minutes"),context);
   expect(out.input.featureBuckets).toEqual({congestion_bin:null,duration_bin:null,revision_bin:null});
   expect(out.input.labelBuckets.delay_bin).toBe(2);
+ });
+});
+
+
+describe("native FIDS status grouping candidate: exact public contract domain, no one-to-one source status encoding",()=>{
+ const groups=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Diverted"],["Canceled"],["CanceledUncertain"]];
+ const make=()=>{
+  const c=contract(),p=profile(),evidence=sha("synthetic review of grouped public enum");
+  c.features=[...c.features,{name:"state_bin",bucketCount:groups.length,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true}];
+  p.fields=[...p.fields,{sourceField:"reported_pre_departure_status",outputField:"state_bin",role:"feature",kind:"categorical_group_dictionary",bucketCount:groups.length,boundaries:null,categories:groups.map(g=>[...g]),transformEvidenceSha256:evidence,nonReconstructable:true}];
+  const status=(value:string):Phase7SourceDecision=>({sourceField:"reported_pre_departure_status",value,availableAtUtc:context.issuedAtUtc,missingReason:null,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"});
+  return {c,p,status};
+ };
+ it("covers every recovered public enum exactly once; at least two input possibilities per bucket",()=>{
+  expect(P7_NATIVE_STATUS_CONTRACT_SHA256).toBe("63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09");
+  expect([...P7_NATIVE_STATUS_DOMAIN].sort()).toEqual(groups.flat().sort());
+  expect(P7_NATIVE_STATUS_DOMAIN).toHaveLength(13);
+  const {c,p,status}=make();
+  for(const [bucket,group] of groups.entries()){
+   // Only the canonically protected cancellation states may stand alone.
+   if(group.length===1)expect(["Canceled","CanceledUncertain"]).toContain(group[0]);
+   else expect(group.length).toBeGreaterThanOrEqual(2);
+   for(const source of group){
+    const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status(source)],context);
+    expect(out.input.featureBuckets.state_bin).toBe(bucket);
+    expect(out.input.missingness.state_bin).toBe(false);
+    expect(JSON.stringify(out)).not.toContain(source);
+    expect(out.phase6PaidGo).toBe(false);
+   }
+  }
+ });
+ it("unrecognized status is invalid/missing, never automatically assigned to another group",()=>{
+  const {c,p,status}=make(),out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status("SyntheticUnknown")],context);
+  expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.missingness.state_bin).toBe(true);expect(out.input.qualityFlags & 4).toBe(4);
+ });
+ it("rejects partial enum coverage, foreign tokens, reversible codes, singleton groups, duplicate membership, or wrong scope",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  for(const bad of [
+   {...field,kind:"categorical_dictionary",bucketCount:13,categories:[...P7_NATIVE_STATUS_DOMAIN]},
+   {...field,categories:[["Unknown"],...groups.slice(1)]},
+   {...field,categories:[["Unknown"],["Expected",...groups[1]],...groups.slice(2)]},
+   {...field,categories:[["Unknown","Expected"],["Expected",...groups[1]],...groups.slice(2)]},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1).map(g=>[...g]),["Extra","Another"]],bucketCount:5},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1,3),["Delayed","Canceled","Diverted"]]},
+   {...field,categories:[["Unknown","Expected"],...groups.slice(1,3),["Delayed","Canceled","Diverted","unknown"]]},
+   {...field,boundaries:[1]},
+   {...field,sourceField:"origin_taf_flight_category"},
+   {...field,role:"label"},
+   {...field,bucketCount:3},
+  ]){
+   const changed={...p,fields:[...p.fields.slice(0,-1),bad]};
+   expect(validatePhase7ReviewedTransformationProfile(changed).pass).toBe(false);
+  }
+ });
+ it("rejects the canonical INV-NO-MERGE violation even when the grouping is structurally valid",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  // 13/13 coverage, disjoint, no singleton, bucketCount matches: structurally valid.
+  const merged=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Canceled","Diverted","CanceledUncertain"]];
+  const changed={...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:merged.length,categories:merged}]};
+  const verdict=validatePhase7ReviewedTransformationProfile(changed);
+  expect(verdict.pass).toBe(false);
+  expect(verdict.failures).toContain("categorical-group-canonical-merge-forbidden:state_bin");
+  // Splitting the pair is what makes the same candidate admissible.
+  const split=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Diverted"],["Canceled"],["CanceledUncertain"]];
+  expect(validatePhase7ReviewedTransformationProfile({...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:split.length,categories:split}]}).pass).toBe(true);
+ });
+ it("still rejects a singleton bucket for any state that is not canonically protected",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  const bad=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed"],["Diverted"],["Canceled"],["CanceledUncertain"]];
+  const verdict=validatePhase7ReviewedTransformationProfile({...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:bad.length,categories:bad}]});
+  expect(verdict.pass).toBe(false);
+  expect(verdict.failures).toContain("categorical-group-definition-invalid:state_bin");
+ });
+ it("present out-of-domain native status is counted as lost and aborts the real PRE persistence function before any INSERT",async()=>{
+  const {c,p}=make();
+  c.cohortBucketCount=31;
+  const issuedAtUtc="2026-11-21T05:59:00.000Z",selectedNativeTUtc="2026-11-22T06:00:00.000Z",cutoffUtc="2026-11-21T06:00:00.000Z",sourceExpiresAtUtc="2026-11-22T05:30:00.000Z";
+  const transformedAtUtc="2026-11-21T05:59:01.000Z";
+  const dispositions:Phase7BoundPrePreservationRequest["dispositions"]=P5_E_ALLOWED_PRE_FEATURES.map(field=>{
+   const f=p.fields.find(v=>v.role==="feature"&&v.sourceField===field);
+   return f?{field,disposition:"REVIEWED_DERIVED_BUCKET",outputField:f.outputField,reviewSha256:f.transformEvidenceSha256}:{field,disposition:"INDEPENDENT_SOURCE_EXACT_LANE",outputField:null,reviewSha256:sha("synthetic lane "+field)};
+  });
+  const features:Phase7BoundPrePreservationRequest["features"]=[{featureName:"reported_pre_departure_status",value:"FutureNewStatus",informationAvailableAt:new Date("2026-11-21T05:30:00.000Z"),source:"AERODATABOX_FIDS",sourceVersion:sha("synthetic bound original")}];
+  const request:Phase7BoundPrePreservationRequest={horizon:"T-24h",selectedNativeTUtc,cutoffUtc,issuedAtUtc,transformedAtUtc,sourceExpiresAtUtc,split:"train",cohortBucket:0,features,dispositions,separatelyVerifiedFields:[]};
+  const audit=preparePhase7BoundPrePreservation(c,p,request);
+  expect(audit.audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:0,lost:1,falsePresence:0});
+  const manifestSha256=sha("synthetic manifest"),rightsSha256=sha("synthetic rights");
+  const review:Phase7ProspectivePrePreservationPolicy={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256,rightsSha256,contractSha256:hashPhase7DurableCandidate(c),profileSha256:hashPhase7DurableCandidate(p),dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:c.researchExpiryUtc,approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const x:Phase7BoundPreTransactionInput={contract:c,profile:p,review,reviewSha256:hashPhase7DurableCandidate(review),dispositions,manifestSha256,queryDigestSha256:sha("synthetic query"),rightsSha256,snapshotId:"1",runDayIndex:1,selectedNativeTUtc,cutoffUtc,issuedAtUtc,sourceExpiresAtUtc,horizon:"T-24h",features,separatelyVerifiedFields:[]};
+  const queries:string[]=[];
+  const db={query:async(sql:string)=>{queries.push(sql);if(queries.length!==1)throw Error("UNEXPECTED_WRITE");return {rows:[{at:new Date(transformedAtUtc),isolation:"serializable",ro:"off"}]}}} as unknown as PoolClient;
+  await expect(persistPhase7BoundPreFragmentInTransaction(db,x)).rejects.toThrow("unpreserved-present-field");
+  expect(queries).toHaveLength(1);
+  expect(queries[0]).toMatch(/^SELECT clock_timestamp/);
+  const known=preparePhase7BoundPrePreservation(c,p,{...request,features:features.map(f=>({...f,value:"Boarding"}))});
+  expect(known.audit.counts.reported_pre_departure_status).toMatchObject({present:1,preserved:1,lost:0,falsePresence:0});
+  const absent=preparePhase7BoundPrePreservation(c,p,{...request,features:[]});
+  expect(absent.audit.counts.reported_pre_departure_status).toMatchObject({present:0,preserved:0,lost:0,falsePresence:0});
+ });
+ it("keeps the independent approval and as-of fences",()=>{
+  const {c,p,status}=make();
+  expect(validatePhase7ReviewedTransformationProfile({...p,approvedForUse:false}).pass).toBe(false);
+  const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),{...status("Expected"),availableAtUtc:"2026-11-19T00:30:00.001Z"}],context);
+  expect(out.input.featureBuckets.state_bin).toBeNull();expect(out.input.qualityFlags & 32).toBe(32);
  });
 });

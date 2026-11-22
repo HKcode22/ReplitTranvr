@@ -31,7 +31,33 @@ export type Phase7ReviewedTransformationKind =
   | 'numeric_threshold_bucket'
   | 'frozen_native_t_delta_bucket'
   | 'boolean_bucket'
-  | 'categorical_dictionary';
+  | 'categorical_dictionary'
+  | 'categorical_group_dictionary';
+
+/** Exact public OpenAPI RapidAPI FlightStatus enum, v1.15.4.0.
+ * Owner recovered and SHA256-verified 2026-11-21:
+ * Enum metadata is not flight Contents,
+ * nor a provider grant or scientific approval of any particular grouping. */
+export const P7_NATIVE_STATUS_CONTRACT_SHA256 = "63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09";
+export const P7_NATIVE_STATUS_DOMAIN = Object.freeze([
+  "Unknown","Expected","EnRoute","CheckIn","Boarding","GateClosed","Departed",
+  "Delayed","Approaching","Arrived","Canceled","Diverted","CanceledUncertain"
+] as const);
+
+/** Canonical invariant INV-NO-MERGE (server/lib/disruption/canonicalRules.ts,
+ * required): "CanceledUncertain not merged with Canceled". A grouped
+ * dictionary is a coarsening, so it must not silently erase a frozen canonical
+ * distinction. This is a structural guard only; it is not a rights,
+ * reconstruction or scientific determination about any admitted grouping. */
+export const P7_FORBIDDEN_STATUS_MERGES = Object.freeze([
+  Object.freeze(["Canceled","CanceledUncertain"] as const),
+] as const);
+
+/** States that must stay distinguishable even when every other token in the
+ * domain is coarsened. They may therefore appear as an explicit singleton
+ * group. Every other singleton group stays rejected: one value per bucket is a
+ * reversible copy of the native status, not a derived work. */
+export const P7_CANONICAL_SINGLETON_TOKENS = Object.freeze(["Canceled","CanceledUncertain"] as const);
 
 export type Phase7ReviewedTransformationRole = 'feature' | 'label';
 export type Phase7ReviewedRightsDisposition =
@@ -45,7 +71,9 @@ export interface Phase7ReviewedTransformationField {
   kind: Phase7ReviewedTransformationKind;
   bucketCount: number;
   boundaries: readonly number[] | null;
-  categories: readonly string[] | null;
+  /** Nested groups are allowed only for the reviewed native status transform.
+   * A group is a many-to-one candidate, not proof of rights or joint non-reconstruction. */
+  categories: readonly string[] | readonly (readonly string[])[] | null;
   transformEvidenceSha256: string;
   nonReconstructable: true;
 }
@@ -200,7 +228,7 @@ export function validatePhase7ReviewedTransformationProfile(
     if (field.role !== 'feature' && field.role !== 'label') failures.push('field-role-invalid');
     if (field.role === 'feature') featureCount++;
     if (field.role === 'label') labelCount++;
-    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary') {
+    if (field.kind !== 'numeric_threshold_bucket' && field.kind !== 'frozen_native_t_delta_bucket' && field.kind !== 'boolean_bucket' && field.kind !== 'categorical_dictionary' && field.kind !== 'categorical_group_dictionary') {
       failures.push('field-kind-invalid');
     }
     if (typeof field.bucketCount !== 'number' || !Number.isInteger(field.bucketCount) || field.bucketCount < 2 || field.bucketCount > 4096) {
@@ -220,18 +248,45 @@ export function validatePhase7ReviewedTransformationProfile(
       }
       if (field.categories !== null) failures.push('numeric-categories-must-be-null:' + String(field.outputField));
     } else if (field.kind === 'boolean_bucket') {
-      if (field.bucketCount !== 2 || field.boundaries !== null ||
-          !Array.isArray(field.categories) || field.categories.length !== 2 ||
-          field.categories[0] !== 'false' || field.categories[1] !== 'true') {
-        failures.push('boolean-definition-invalid:' + String(field.outputField));
+      // A two-value bucket reproduces the original boolean exactly. The
+      // nonReconstructable marker is evidence metadata, not a transformation.
+      failures.push('boolean-bucket-reconstructible:' + String(field.outputField));
+    } else if (field.kind === 'categorical_group_dictionary') {
+      // A distinct integer per original status is an invertible code. For the
+      // native FIDS status only, accept a strictly many-to-one, explicit closed
+      // dictionary; reject singleton groups and duplicate/mixed inputs, except
+      // the canonically protected cancellation states that INV-NO-MERGE forbids
+      // merging into any other bucket. A structural pass is NOT a legal or
+      // joint-reconstruction determination.
+      const groups = field.categories;
+      const names = new Set<string>();
+      if (field.sourceField !== 'reported_pre_departure_status' || field.role !== 'feature' ||
+          field.boundaries !== null || !Array.isArray(groups) || groups.length !== field.bucketCount ||
+          groups.length < 2 || groups.length > 32 ||
+          !groups.every(group => {
+            if (!Array.isArray(group) || group.length > 64) return false;
+            if (group.length < 2 &&
+                (group.length !== 1 ||
+                 !(P7_CANONICAL_SINGLETON_TOKENS as readonly unknown[]).includes(group[0]))) return false;
+            return group.every(value => {
+              if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value) || names.has(value)) return false;
+              names.add(value); return true;
+            });
+          }) || names.size !== P7_NATIVE_STATUS_DOMAIN.length ||
+          !P7_NATIVE_STATUS_DOMAIN.every(value => names.has(value))) {
+        failures.push('categorical-group-definition-invalid:' + String(field.outputField));
+      }
+      // Structural validity is not enough: a fully covered, many-to-one
+      // grouping can still merge the two canonical cancellation states.
+      if (Array.isArray(groups) && groups.some(group =>
+          Array.isArray(group) &&
+          P7_FORBIDDEN_STATUS_MERGES.some(pair => pair.every(name => group.includes(name))))) {
+        failures.push('categorical-group-canonical-merge-forbidden:' + String(field.outputField));
       }
     } else if (field.kind === 'categorical_dictionary') {
-      if (field.boundaries !== null || !Array.isArray(field.categories) ||
-          field.categories.length !== field.bucketCount ||
-          field.categories.some(value => typeof value !== 'string' || value.length === 0) ||
-          new Set(field.categories).size !== field.categories.length) {
-        failures.push('categorical-definition-invalid:' + String(field.outputField));
-      }
+      // A distinct output for each input category is reversible. Packet B
+      // accepts categorical fields only through an explicit many-to-one group.
+      failures.push('categorical-dictionary-reconstructible:' + String(field.outputField));
     }
   }
   if (featureCount < 1) failures.push('feature-fields-required');
@@ -294,6 +349,10 @@ function fieldBucket(field: Phase7ReviewedTransformationField, value: unknown, n
     return null;
   }
   if (typeof value !== 'string') return null;
+  if (field.kind === 'categorical_group_dictionary') {
+    const index = (field.categories as readonly (readonly string[])[]).findIndex(group => group.includes(value));
+    return index < 0 ? null : index;
+  }
   const index = (field.categories as readonly string[]).indexOf(value);
   return index < 0 ? null : index;
 }
