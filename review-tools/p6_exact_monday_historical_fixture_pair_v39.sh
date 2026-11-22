@@ -55,5 +55,10 @@ TS
  )
 }
 recover old 781140cde71af3b72376c2db9f0fdb84204a2b7c data-collection/phase5/evidence/2026-11-21_monday_exact_machine_bound_date_decision.json a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682 ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e
+if [ "${2:-}" = "--old-only" ]; then
+ echo 'P6_OLD_HISTORICAL_PACKAGE_EXACT_NO_GO'
+ exit 0
+fi
+test -z "${2:-}"
 recover new 795ace55984b44a3d0bffa886d33a5ec11d31927 data-collection/phase5/evidence/2026-11-22_monday_exact_machine_bound_date_decision.json 8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc cef58dcc4e8009d46e686bb555faab0fe952b9921e8aa3aa13d610ea443e3bf9
 echo 'P6_BOTH_HISTORICAL_FIXTURES_EXACT_NO_GO'
