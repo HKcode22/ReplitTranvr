@@ -143,6 +143,19 @@ active("real private custody signed-review transport",()=>{
      const w=wire(malformed[i],post), b=Buffer.from(JSON.stringify(w)),d=createHash("sha256").update(b).digest("hex");
      await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",["data-collection/phase5/frozen/p7review_"+h("malformed ci "+i)+".json",code,m,rights,d,g.prePayload.issuedAtUtc,until,b]);
     }
+    // Still-needed source-bearing custody is never eligible before its
+    // independently signed cutoff: a neighboring populated cleanup cannot
+    // silently replace missing final-consumer evidence with early DELETE.
+    const stillLiveUntil=new Date(genericNow+45*60000).toISOString();
+    const stillLivePath="data-collection/phase5/frozen/p7review_"+h("ci still-live source gate out")+".json";
+    const stillLivePayload={...g.settlementPayload,manifestSha256:m,validUntilUtc:stillLiveUntil,
+     scope:{...g.settlementPayload.scope,evidence:{"T-6h":{flightInstanceId:"CI synthetic still-live gate out"}}}};
+    const stillLiveWire=wire(stillLivePayload,post),stillLiveBytes=Buffer.from(JSON.stringify(stillLiveWire));
+    const stillLiveHash=createHash("sha256").update(stillLiveBytes).digest("hex");
+    await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[stillLivePath,code,m,rights,stillLiveHash,g.prePayload.issuedAtUtc,stillLiveUntil,stillLiveBytes]);
+    const early=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
+    expect(early).toMatchObject({status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED",receipts:[],deadlineDueObservedAtInitialRead:false});
+    expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[stillLivePath,stillLiveUntil])).rows[0].n).toBe(1);
     await afterClock(genericDeadline);
     const snapshot=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:false,privateDeadlineProfile:profile});
     expect(snapshot).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,before:{duePackets:5}});
