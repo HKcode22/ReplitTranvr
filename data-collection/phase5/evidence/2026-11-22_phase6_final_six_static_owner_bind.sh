@@ -151,21 +151,57 @@ for(const n of names){need(live()===pin,'MAIN_MOVED_DURING_INSTALL');gh(['secret
 present=seen();need(names.every(n=>present.has(n))&&live()===pin,'POST_INSTALL_METADATA');
 console.log(JSON.stringify({status:'P6_ALL_31_STATIC_VALUES_INSTALLED_METADATA_PASS_NO_GO',written,policyBundleSha256:b.policyBundleSha256,staticValuesSha256:b.staticValuesSha256,secretValuesReadBack:false,repoSecretsAfter:present.size,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
 JS
-# Locate previously generated exact keys. Never print PEM or create keys.
+# Reuse prior exact local keypairs only if the existing public pins can be
+# reconciled against the original owner receipt. No key creation or rotation.
 node --input-type=module - "$KEYDIR" <<'JS'
 import fs from 'node:fs';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';
-const d=process.argv[2],exists=fs.existsSync(d);
-if(!exists){console.log(JSON.stringify({status:'P7_EXISTING_KEY_DIRECTORY_NOT_PRESENT',path:d}));process.exit(0)}
-const h=x=>crypto.createHash('sha256').update(x).digest('hex'),repo='HKcode22/ReplitTranvr';
-const a=JSON.parse(execFileSync('gh',['api','repos/'+repo+'/actions/secrets?per_page=100'],{encoding:'utf8'})),m=new Map(a.secrets.map(x=>[x.name,x.updated_at]));
-const j=JSON.parse(fs.readFileSync(d+'/public-pin-receipt.json','utf8'));
-for(const [n,p] of [['pre-proof','P6_PHASE7_PRE_PROOF_REVIEWER'],['post-outcome','P6_PHASE7_POST_OUTCOME_REVIEWER'],['pre-lane-authority','P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY']]){
- const priv=d+'/'+n+'.private.pem',pub=d+'/'+n+'.public.pem';if(!fs.existsSync(priv)||!fs.existsSync(pub)){console.log(JSON.stringify({status:'P7_EXISTING_KEY_PAIR_MISSING',key:n}));continue}
- const k=crypto.createPrivateKey(fs.readFileSync(priv)),q=crypto.createPublicKey(fs.readFileSync(pub));const fp=h(q.export({format:'der',type:'spki'}));
- const pair=k.asymmetricKeyType==='ed25519'&&crypto.createPublicKey(k).export({format:'der',type:'spki'}).equals(q.export({format:'der',type:'spki'}));
- const journal=j.installed?.[p+'_FINGERPRINT_SHA256'];const journalMatch=!!journal&&journal.valueSha256===h(fp)&&journal.updatedAt===m.get(p+'_FINGERPRINT_SHA256');
- console.log(JSON.stringify({status:'P7_EXISTING_KEY_PAIR_METADATA',key:n,pairMatch:pair,fingerprintSha256:fp,priorPublicPinJournalMatch:journalMatch,privateKeyUploaded:false}));
+const d=process.argv[2],repo='HKcode22/ReplitTranvr',pin='27074feda386247c4faf3877bd5349e696cde8a9';
+const h=x=>crypto.createHash('sha256').update(x).digest('hex');
+const gh=(args,input)=>execFileSync('gh',args,{encoding:'utf8',input,stdio:[input===undefined?'ignore':'pipe','pipe','pipe'],timeout:45000,maxBuffer:2*1024*1024});
+const need=(ok,s)=>{if(!ok)throw Error('HOLD_P7_EXISTING_KEYS_'+s)};
+const live=()=>gh(['api','repos/'+repo+'/git/ref/heads/main','--jq','.object.sha']).trim();
+const read=f=>{const s=fs.lstatSync(f);need(s.isFile()&&!s.isSymbolicLink()&&s.uid===process.getuid()&&(s.mode&0o077)===0&&s.nlink===1&&s.size<=20000,'PRIVATE_FILE');return fs.readFileSync(f)};
+const inventory=()=>{const x=JSON.parse(gh(['api','repos/'+repo+'/actions/secrets?per_page=100']));need(x.total_count===x.secrets.length,'METADATA');return new Map(x.secrets.map(y=>[y.name,y.updated_at]))};
+let m=inventory();
+const output={status:'P7_EXISTING_KEY_STAGE_SUMMARY_NO_GO',privateKeysStaged:0,approvalFlagsChanged:false,phase6PaidGo:false};
+if(!fs.existsSync(d)){console.log(JSON.stringify({status:'P7_EXISTING_KEY_DIRECTORY_NOT_PRESENT',path:d}));process.exit(0)}
+const ds=fs.lstatSync(d);need(ds.isDirectory()&&!ds.isSymbolicLink()&&ds.uid===process.getuid()&&(ds.mode&0o077)===0&&fs.realpathSync(d)===d,'PRIVATE_DIR');
+const j=JSON.parse(read(d+'/public-pin-receipt.json'));
+need(j.schema==='v39.phase7.inactive-owner-reviewer-public-pins.v1'&&j.repo===repo,'RECEIPT_SCOPE');
+const other=new Set(['7639dcd0773f7b21e1194c91e19a941589ac361621a1cadd31edd10c832c7744','80d59db77bec734d4e34eb43ed8dfa92ceb220a1ef82a8f4a06a55a30e08b5b2','60538d4035f3bb3132cad7ccd2b459242e5fa9e949aea43cabe974bb29519e67','de37f2d4f8736cb92c04a31c94d3d252482667f937ce80a0f65b09df5293e733','4c0e85e2834b217eeeb3d96d8f350f6d5c844ea6b29cfa0fb449683db251846b','5d002b5a2cede6da00aab6d3b516aa4766f58858b252ba85e1c67049dd08d23f']);
+const desired={};
+for(const [name,prefix,privName] of [
+ ['pre-proof','P6_PHASE7_PRE_PROOF_REVIEWER','P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64'],
+ ['post-outcome','P6_PHASE7_POST_OUTCOME_REVIEWER','P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64'],
+ ['pre-lane-authority','P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY','P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64']]){
+ const prv=read(d+'/'+name+'.private.pem'),pub=read(d+'/'+name+'.public.pem'),k=crypto.createPrivateKey(prv),q=crypto.createPublicKey(pub),der=q.export({format:'der',type:'spki'}),fp=h(der);
+ need(k.asymmetricKeyType==='ed25519'&&q.asymmetricKeyType==='ed25519'&&crypto.createPublicKey(k).export({format:'der',type:'spki'}).equals(der)&&!other.has(fp),'PAIR_OR_ALIAS');other.add(fp);
+ const pins=[[prefix+'_FINGERPRINT_SHA256',fp],[prefix+'_PUBLIC_KEY_BASE64',pub.toString('base64')]];
+ for(const [n,v] of pins){
+   const journal=j.installed?.[n];
+   if(name!=='pre-lane-authority')need(journal&&journal.valueSha256===h(v)&&journal.updatedAt===m.get(n),'ORIGINAL_PUBLIC_PIN_DRIFT');
+   else if(m.has(n)){const staged=fs.existsSync(d+'/phase6-final-key-staging-receipt.json')?JSON.parse(read(d+'/phase6-final-key-staging-receipt.json')).installed?.[n]:null;need(staged?.valueSha256===h(v)&&staged.updatedAt===m.get(n),'UNKNOWN_LANE_PUBLIC_PIN');}
+   else desired[n]=v;
+ }
+ desired[privName]=prv.toString('base64');
+ console.log(JSON.stringify({status:'P7_EXISTING_KEY_PAIR_VALIDATED',key:name,fingerprintSha256:fp,originalPublicPinJournalMatch:name!=='pre-lane-authority'}));
 }
+desired.P6_PHASE7_PRE_READBACK_ROLE='phase7_pre_reader_prod20261120';
+const newNames=Object.keys(desired).filter(n=>!m.has(n));
+if(m.size+newNames.length>100){console.log(JSON.stringify({status:'P7_KEY_STAGE_CAPACITY_HOLD',existing:m.size,additional:newNames.length}));process.exit(0)}
+const statePath=d+'/phase6-final-key-staging-receipt.json',state=fs.existsSync(statePath)?JSON.parse(read(statePath)):{schema:'v39.phase7.final-key-staging-receipt.v1',installed:{}};
+for(const [n,v] of Object.entries(desired)){
+ need(live()===pin,'MAIN_MOVED');
+ if(state.installed[n]){need(state.installed[n].valueSha256===h(v)&&state.installed[n].updatedAt===m.get(n),'STAGING_RECEIPT_DRIFT');continue;}
+ need(!m.has(n),'UNKNOWN_PRIOR_VALUE_NO_OVERWRITE');
+ gh(['secret','set',n,'-R',repo],v);m=inventory();
+ need(typeof m.get(n)==='string','INSTALL_METADATA');
+ state.installed[n]={valueSha256:h(v),updatedAt:m.get(n)};
+ const tmp=statePath+'.'+crypto.randomBytes(6).toString('hex');fs.writeFileSync(tmp,JSON.stringify(state),{flag:'wx',mode:0o600});fs.renameSync(tmp,statePath);
+ if(n.endsWith('PRIVATE_KEY_BASE64'))output.privateKeysStaged++;
+ console.log('P7_EXISTING_KEY_OR_STATIC_VALUE_STAGED '+n);
+}
+console.log(JSON.stringify({...output,protectedNamesVerified:Object.keys(desired).length,privateKeyValuesReadBack:false,providerCalls:0,databaseWrites:0}));
 JS
 echo "P6_RUNTIME_BINDING_OWNER_COMMAND_COMPLETE"
 echo "PRIVATE_FINAL_BUNDLE=$OUT"
