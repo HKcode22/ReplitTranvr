@@ -1,0 +1,19 @@
+{
+  "schema": "v39.phase6.launch-free-account-prearm.v2",
+  "status": "FREE_ACCOUNT_PREARM_STABLE_ZERO_ACTIVE_SUBSCRIPTIONS_NO_PAID_PROVIDER",
+  "observedAtUtc": "2026-11-22T04:11:55.525Z",
+  "apiUnitsLimit": 60000,
+  "apiUnitsRemaining": 59968,
+  "requestsRemaining": 239962,
+  "alertCreditsRemaining": 1830,
+  "balancesStable": true,
+  "activeBillableSubscriptions": 0,
+  "totalSubscriptionRecords": 0,
+  "providerFreeReads": 3,
+  "providerPaidGets": 0,
+  "providerMutations": 0,
+  "sourceFidsCalls": 0,
+  "databaseWrites": 0,
+  "sourceContentsRetrieved": false,
+  "phase6PaidGo": false
+}
