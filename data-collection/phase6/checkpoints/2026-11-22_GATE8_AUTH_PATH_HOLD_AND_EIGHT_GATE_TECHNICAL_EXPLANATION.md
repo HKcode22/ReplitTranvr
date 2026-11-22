@@ -1,0 +1,49 @@
+# Phase 6 eight-gate technical retrospective and Gate 8 owner AUTH path HOLD
+
+**Date:** 2026-11-22 UTC. **Production main:** `dfa7221990e21deacb45fdbacbaadc64a73bc907`. **State:** Gates 1–7 remain bounded CLOSED per latest register; Gate 8 OPEN, paid GO not evidenced. This checkpoint is written on the existing **evidence branch**, not production main. It does not authorize a paid call or claim a successful live release.
+
+## Latest owner evidence and exact failure
+
+Owner executed reviewed Git blob `88f9fc6c0f1537e2ecfb22dda709990aacc9b441` with `REBIND_ONLY_REVIEWED_FINAL_MAIN_PINS_NO_PAID_GO`. The hash and bash syntax checks passed. It stopped at:
+
+```text
+sha256sum: /home/runner/.travnr-phase6-source-auth-exact-962-3ae55fabcc03ac41/auth.json: No such file or directory
+HOLD_P6_FINAL_PIN_REBIND_AUTH
+```
+
+The helper uses `AUTH="$HOME/.travnr-phase6-source-auth-exact-962-3ae55fabcc03ac41/auth.json"` and tests the SHA256 `3ae55fabcc03ac4112c7b7d07c63e2454dc3242fe3f1cafd67026722346e482c`. The path is **not present in this Replit session**. This failure occurred before temporary validator download, policy scan, global STOP secret writes, protected code/policy rebind, POST actor workflow dispatch or paid activation. No evidence of a revoked production SOURCE authorization follows from this missing owner-local file. **Do not recreate or replay SOURCE enable, cron commissioning, DB migrations, or earlier gate actors.** Investigate existing private file location, earlier retained owner artifacts, or independent ledger/readback proof. A prior local policy search also found zero local private candidates; do not presume the policy bundle is available. No bypass of the exact signed 31-value policy validation.
+
+## Gate definitions, controls and why each exists
+
+| Gate | Technical scope | Failure prevented | Evidence and current boundary |
+|---|---|---|---|
+| 1 — independent PRE | Horizon-specific predictor features, restricted independent PRE reader/writer, signed pre-cutoff provenance, feature-category policies | Leakage from actual outcomes, later updates or post-departure information into prediction-time features | Commissioned protected PRE policies/actors, prior exact-main disarmed checks; closed in fixed register, not a guarantee of future feature completeness |
+| 2 — independent POST | Separate independent actual-outcome reviewer/publisher/storage, signed source-of-truth outcome provenance, immutable separation from PRE, POST recovery without repeat paid GET | Training on estimated departure/runway timestamps misrepresented as actual gate-out, or fabricated labels | Actual POST actor first-attempt checks passed on preceding main; Amendment E T−6 continuous actual gate-out delay remains conditional on independently attested actual same-leg gate-out. Unverified outcomes censored; actual label yield not known before collection |
+| 3 — physical retention and expiry | Source-bearing content/packet/index custody, signed per-record expiry, PostgreSQL due-only sweeps, restricted deletes, primary FIDS expiry, PITR/recovery-only, native and relay independent backstops, V0108 metadata classification | Retaining licensed source content too long or deleting live PRE/POST inputs prematurely | Historical 65/65 primary provider objects absent; V0108 owner installed and verified; exact-main nonpaid retention workflow 45012576758 passed. Bounded acceptance is **not** a universal deletion SLA; future per-object due records still fail closed |
+| 4 — executable review and merge | Frozen 31-day calendar, cost/query arithmetic, exact executable SHA, CI, controlled PR review, merge and production main identity | Deploying untested code, mismatched day plans, unreviewed moving SHA | Reviewed PR #962/#963/#964 succession and CI, production main dfa722; code SHA advance requires narrowly updating dependent protected bindings |
+| 5 — disabled study stage | Owner installs frozen calendar/cost/manifest in existing production Neon database with collection disabled, independently reads back | A live runtime operating on wrong or stale study instructions | Frozen 31-day stage already commissioned; no reinstall required |
+| 6 — protected runtime policies | Six protected policy objects, 31-value bundle, repo/environment secret scopes, restricted DB actors, signing trust, code SHA and budget bindings, global disarmed STOP | Correct software running with wrong permissions, keys, budget, or unapproved code | Previously successful exact 31-value readback at preceding main SHA fe3fef5d; static digest 7e07047d7173cbcf84e966ab869d66477efef36df38c83c58325396f31b83728. G8 successor rebind to dfa722 is now pending; do not reopen G6 |
+| 7 — autonomous no-provider rehearsal | Rolling root, bounded child workers, GitHub Actions cron, external clock relay, native+external retention recovery, duplicate and STOP protections | Missed horizon captures, duplicate paid GETs, uncontrolled retry, or assuming GitHub schedule has hard punctuality | No-provider relay and controller rehearsals passed; cron-job.org existing jobs 8890475/8890476 commissioned; no re-create or new GO |
+| 8 — SOURCE and paid activation | Existing independently reviewed SOURCE enable/readback, fresh account/budget/STOP, final code/policy rebind, bounded paid window, distinct owner paid GO and first real SOURCE receipts | Spending before approvals, code/policy mismatch, expired license scope or uncapped charges | SOURCE already enabled/read back at ~06:11Z. Paid GO remains false; owner helper stopped before rebind due to missing historical local AUTH file |
+
+## Scientific design preserved
+
+Amendments A/B/C/D1/D2/E and original f.8 stay frozen. T−6 continuous actual gate-out delay is the conditional first-cycle primary, T−90 update, T−24 comparator; arrival post-takeoff target separate. No substitution of revised/estimated departure, runway/airborne ADS-B for actual gate-out. Missing genuine actual evidence is censored. The 31-day calendar has 6,144 planned source opportunities, 36,740 reserved REST units, peak 1,280/day, 1,900/day ceiling, 1,000 protective floor; first planned SOURCE 2026-11-23T23:45Z, prearm 22:15Z and watcher 21:50Z, not proof those future events occurred. Rights profile is bounded ordinary AeroDataBox Content custody, not a blanket personalized exception. Source-bearing signed deadlines and downstream consumer disposition remain binding.
+
+## Why completion was slow: technical and process causes
+
+1. Exact-main SHA pinning protects against running unreviewed bytes, but each merge invalidated dependent GitHub secret pins. The release process should have isolated code changes and minimized final-main churn.
+2. Separate PRE/POST actors, source-rights policies, PostgreSQL ACLs, retention and external clocks genuinely require independent readback; CI alone is not production commissioning.
+3. A real populated-data retention ambiguity (source-bearing deadline versus metadata recovery receipt) required V0108 and a corrected V0105 `proconfig` verifier; earlier tests could not be treated as production proof.
+4. GitHub Actions scheduling exhibited large gaps, requiring an independent external backstop and observed recovery, not blind reliance on cron.
+5. Avoidable process drag included repeated gate expansion, repeated policy review of settled decisions, oversized workflows, moving SHA review loops, and shell helpers assuming owner-local private files persisted. This latest missing `auth.json` is an **owner environment path error**, not a new scientific gate.
+6. Automated agent technical reviews are not interchangeable with genuinely independent human approvals where the release standard requires them. Preserve accurate provenance.
+
+## Exact next Gate 8 sequence, no new gates
+
+A. Read-only locate/reconcile existing owner AUTH evidence, including exact hash and file permissions; do not synthesize authorization. Separately verify availability of original private 31-value bundle and POST preservation policy; if absent, use existing protected repository/environment metadata and original validator for a safe recovery path, never guessed values.
+B. Run the narrow reviewed final-main code/policy rebind only after all existing immutable approvals, rights, calendar, cost, and signed identities are verified. Keep global paid switches 0; validate exact SHA successor and independent POST actor preflight.
+C. Fresh account/STOP/budget and policyUntil bound for the frozen approved period; separately record owner paid GO and arm approved switches. Verify actual first provider receipt later; do not invent it or require future observations before GO.
+D. After actual Gate 8 success, append a **final** exact live GO checkpoint on GitHub with run IDs, owner receipts, first paid event (when observed), dates, and honest unknowns. Do not call this interim checkpoint a final GO.
+
+**No paid action or production secret edit was performed in writing this checkpoint.**
