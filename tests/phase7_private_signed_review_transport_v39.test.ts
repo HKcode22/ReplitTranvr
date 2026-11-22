@@ -141,8 +141,8 @@ active("real private custody signed-review transport",()=>{
     await expect(publishP7PrivateSignedReviewOnce(args)).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
    }
    expect([...(await readP7PrivateSignedReviews(reader,trust,[f.a,f.b,f.c])).values()]).toEqual([f.aw,f.bw,f.cw]);
-   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
-   const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') GROUP BY kind ORDER BY kind");expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
+   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz AND manifest_sha256=$2",[f.validUntilUtc,manifest]);expect(q.rows[0].n).toBe(3);
+   const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND manifest_sha256=$1 GROUP BY kind ORDER BY kind",[manifest]);expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
    // Actual PG16 metadata-only census: short signatures and the independent
    // replay fence fit inside one relay wake interval, not a purge proof.
    const pressure=await readP6PrivateDeadlinePressure(reader,readerLogin,manifest);
