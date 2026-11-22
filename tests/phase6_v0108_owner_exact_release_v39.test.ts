@@ -8,7 +8,7 @@ import {
 const code="a".repeat(40);
 const granted="{neondb_owner=X/neondb_owner,phase6_private_expiry_reader_v39=X/neondb_owner}";
 const f=(body:string,vol:string)=>({body,vol,owner:"neondb_owner",definer:true,
- config:"search_path=pg_catalog, pg_temp",acl:granted,publicExec:false});
+ config:"search_path=pg_catalog, pg_temp",acl:granted,public_exec:false});
 describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
  it("pins the reviewed SQL byte-for-byte and distinguishes both function bodies",()=>{
   const sql=exactP6V0108Sql();
@@ -31,7 +31,7 @@ describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
    [f(sql.newStatus,"s"),f(sql.oldSweep,"v")],
    [f(sql.oldStatus,"s"),f(sql.newSweep,"v")],
    [{...full[0],body:sql.newStatus+" unsafe"},full[1]],
-   [{...full[0],publicExec:true},full[1]],
+   [{...full[0],public_exec:true},full[1]],
    [{...full[0],acl:""},full[1]],
    [{...full[0],owner:"postgres"},full[1]],
    [full[0],{...full[1],vol:"s"}],
