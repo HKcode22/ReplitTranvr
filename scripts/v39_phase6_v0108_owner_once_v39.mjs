@@ -86,7 +86,7 @@ function authenticatedMainRead(path){
   path===V0105?V0105_GIT_BLOB:null;
  if(!expected||currentMainFileBlob(path)!==expected)fail("EXACT_MAIN_SQL_BLOB_DRIFT");
  const payload=github("repos/"+TARGET+"/git/blobs/"+expected,"--jq",".content");
- const b=Buffer.from(payload.replace(/\\s/g,""),"base64");
+ const b=Buffer.from(payload.replace(/\s/g,""),"base64");
  if(blob(b)!==expected)fail("REMOTE_GIT_BLOB_BYTES_DRIFT");
  return b;
 }
