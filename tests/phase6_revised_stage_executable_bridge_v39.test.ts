@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,verifyP6RevisedExecutableBridge,P6_COMMISSIONED_MONDAY_STAGE_CODE,P6_COMMISSIONED_MONDAY_STAGE_SHA,P6_COMMISSIONED_MONDAY_COST_SHA,verifyP6CommissionedMondayExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,verifyP6RevisedExecutableBridge,P6_COMMISSIONED_MONDAY_STAGE_CODE,P6_COMMISSIONED_MONDAY_STAGE_SHA,P6_COMMISSIONED_MONDAY_COST_SHA,verifyP6CommissionedMondayExecutableBridge,readP6MondayExactBridgeReview,P6_MONDAY_BRIDGE_REVIEW_PATH} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const reviewed="b".repeat(40),head="c".repeat(40);
 const plan=Array.from({length:31},(_,i)=>"data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json");
 const code="scripts/v39_phase6_enable_source_owner_v39.ts",paths=[...plan,code].sort(),blobs=Object.fromEntries(paths.map((p,i)=>[p,createHash("sha1").update(p).digest("hex")]));
@@ -42,4 +42,30 @@ it("admits only exact commissioned Monday succession with all 31 plans unchanged
  const changedPlan={...x,changedBlobs:[...changedBlobs,{path:plan[0],blobSha:blobs[plan[0]],mode:"100644"}].sort((a,b)=>a.path.localeCompare(b.path))};
  const b=Buffer.from(JSON.stringify(changedPlan,null,2)+"\n");
  expect(()=>verifyP6CommissionedMondayExecutableBridge({...input,reviewBytes:b,expectedOperationalEvidenceSha256:sha(b),reviewedDiff:[code,plan[0]],currentDiff:[code,plan[0],evidence]})).toThrow("COMMISSIONED_MONDAY_DAY_PLAN_DRIFT");
+});
+
+describe("immutable Monday bridge evidence succession",()=>{
+ const legacy=Buffer.from(JSON.stringify({synthetic:"old",pad:"a".repeat(150)},null,2)+"\n");
+ const next=Buffer.from(JSON.stringify({synthetic:"new",pad:"b".repeat(150)},null,2)+"\n");
+ const nextPath="data-collection/phase5/evidence/phase6-operational-bridge-"+sha(next)+".json";
+ it("keeps the historical path and reads only the exact digest on succession",()=>{
+  const reads:string[]=[];
+  const read=(p:string)=>{reads.push(p);if(p===P6_MONDAY_BRIDGE_REVIEW_PATH)return legacy;if(p===nextPath)return next;throw Error("unexpected path")};
+  expect(readP6MondayExactBridgeReview(sha(legacy),read)).toEqual({path:P6_MONDAY_BRIDGE_REVIEW_PATH,bytes:legacy});
+  expect(reads).toEqual([P6_MONDAY_BRIDGE_REVIEW_PATH]);reads.length=0;
+  expect(readP6MondayExactBridgeReview(sha(next),read)).toEqual({path:nextPath,bytes:next});
+  expect(reads).toEqual([P6_MONDAY_BRIDGE_REVIEW_PATH,nextPath]);
+ });
+ it("refuses missing, drifted, malformed or unrelated successor evidence",()=>{
+  expect(()=>readP6MondayExactBridgeReview("../other",()=>legacy)).toThrow("OPERATIONAL_EVIDENCE_HASH");
+  expect(()=>readP6MondayExactBridgeReview(sha(next),p=>{if(p===P6_MONDAY_BRIDGE_REVIEW_PATH)return legacy;throw Error("not found")})).toThrow("not found");
+  expect(()=>readP6MondayExactBridgeReview(sha(next),()=>legacy)).toThrow("SUCCESSOR_BRIDGE_BYTES");
+  expect(()=>readP6MondayExactBridgeReview(sha(next),p=>p===P6_MONDAY_BRIDGE_REVIEW_PATH?Buffer.alloc(0):next)).toThrow("LEGACY_BRIDGE_BYTES");
+ });
+ it("does not confer approval merely because successor bytes exist",()=>{
+  const {review,request}=fixture();
+  const denied=Buffer.from(JSON.stringify({...review,independentOperationalReleaseApproved:false},null,2)+"\n");
+  const found=readP6MondayExactBridgeReview(sha(denied),p=>p===P6_MONDAY_BRIDGE_REVIEW_PATH?legacy:denied);
+  expect(()=>verifyP6RevisedExecutableBridge({...request,reviewBytes:found.bytes,expectedOperationalEvidenceSha256:sha(denied)})).toThrow("REVIEW_SCOPE");
+ });
 });

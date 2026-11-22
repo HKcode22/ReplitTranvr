@@ -12,7 +12,7 @@ import {Pool,type PoolClient} from "pg";
 import {bindMondayPolicyStage} from "./p6_nov20_finalize_recovered_policies_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {p6SourceAuthorizationStageContentSha,verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
-import {P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
+import {readP6MondayExactBridgeReview,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 import {verifyP6ActualCommittedPlanParity} from "../scripts/v39_phase6_actual_release_candidate_export_v39";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
 import {compilePhase7PrePolicyCommission,checkPhase7NativePrePolicySupport,installPhase7PrePolicyOnce,inspectPhase7PrePolicyCommission,type Phase7PrePolicyCommissionScope} from "../server/lib/disruption/phase7PrePolicyCommission_v39";
@@ -77,8 +77,8 @@ async function main(){
  // must bind the exact operational bridge bytes before any owner SQL. This
  // is a disarmed commissioning scope, NOT an early SOURCE AUTH approval.
  if(scope.operationalBridgeReviewSha256){
-  const reviewBytes=gitBytes(head,P6_MONDAY_BRIDGE_REVIEW_PATH);
-  need(sha(reviewBytes)===scope.operationalBridgeReviewSha256&&reviewBytes.equals(readFileSync(P6_MONDAY_BRIDGE_REVIEW_PATH)),"BRIDGE_BYTES_DRIFT");
+  const {path:reviewPath,bytes:reviewBytes}=readP6MondayExactBridgeReview(scope.operationalBridgeReviewSha256,p=>gitBytes(head,p));
+  need(sha(reviewBytes)===scope.operationalBridgeReviewSha256&&reviewBytes.equals(readFileSync(reviewPath)),"BRIDGE_BYTES_DRIFT");
   const reviewed=JSON.parse(reviewBytes.toString("utf8")).reviewedExecutableCommit;
   need(C.test(reviewed??""),"BRIDGE_COMMIT");
   verifyP6MondayRevisedExecutableBridge({stageCode:pin.stageCode,stageSha:pin.stageSha,costSha:pin.costSha,currentHead:head,reviewBytes,expectedOperationalEvidenceSha256:scope.operationalBridgeReviewSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:diff(head),readReviewedBlob:p=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:p=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]},stage.toString("utf8"),p6SourceAuthorizationStageContentSha(JSON.parse(stage.toString("utf8"))),pin.costSha);

@@ -13,7 +13,7 @@ import {fileURLToPath} from "node:url";
 import {Pool} from "pg";
 import type {VerifiedAuthFile} from "./v39_paid_guard_v39";
 import {verifyP6SourceEnableAuthFile,P6_SOURCE_AUTH_PHASE,P6_SOURCE_AUTH_SCOPE,P6_SOURCE_RELEASE_EVIDENCE_HASH_FIELDS} from "./v39_phase6_source_enable_approval_ledger_v39";
-import {P6_NOV22_STAGE_CODE,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "./v39_phase6_revised_stage_executable_bridge_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,readP6MondayExactBridgeReview,verifyP6MondayRevisedExecutableBridge} from "./v39_phase6_revised_stage_executable_bridge_v39";
 import {admitP6InertOwnerReadback} from "./v39_phase6_inert_release_stage_manual_v39.mjs";
 import {compileP5V0093CostOnlySevenRestReview} from "../server/lib/disruption/phase5V0093CostOnlySevenRestFreezeWriter_v39.mjs";
 import {inspectP5V0093IndependentExactPostStage} from "../server/lib/disruption/phase5V0093IndependentPostStageReadback_v39.mjs";
@@ -377,8 +377,10 @@ async function main(){
   const exactAuth=verifyP6SourceEnableAuthFile(authPath,head);
   if(exactAuth.verdict.verified!==true||exactAuth.artifactHash!==authSha)
    hold("EXACT_APPROVED_EXISTING_LEDGER_AUTH_REQUIRED");
-  const raw=execFileSync("git",["show",head+":"+(monday?P6_MONDAY_BRIDGE_REVIEW_PATH:P6_NOV22_BRIDGE_REVIEW_PATH)],{
+  const readBridge=(p:string)=>execFileSync("git",["show",head+":"+p],{
    stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:200000});
+  const raw=monday?readP6MondayExactBridgeReview((exactAuth.record as any).releaseActivation.operationalReleaseEvidenceSha256,readBridge).bytes:
+   readBridge(P6_NOV22_BRIDGE_REVIEW_PATH);
   let reviewedCommit:string;
   try{reviewedCommit=JSON.parse(raw.toString("utf8")).reviewedExecutableCommit;}catch{hold("EXECUTABLE_BRIDGE_REVIEW_JSON");}
   if(!CODE.test(reviewedCommit!))hold("EXECUTABLE_BRIDGE_REVIEW_COMMIT");
