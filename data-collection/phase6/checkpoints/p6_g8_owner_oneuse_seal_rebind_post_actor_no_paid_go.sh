@@ -13,7 +13,7 @@ RELAY_SHA="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed"
 PRIOR="7e07047d7173cbcf84e966ab869d66477efef36df38c83c58325396f31b83728"
 REQUEST="data-collection/phase6/checkpoints/p6_g8_owner_seal_request.json"
 SEALED="P6 G8 owner sealed existing policy successor (NO PROVIDER)"
-DECODER_BLOB="f54bb91138fba5ca22c4b16caac695d365ba0670"
+DECODER_BLOB="c20607af21a6ed174b24f5e5843c5f5629b4cbfe"
 POST_WF="phase5-one-signed-future-post-v0083-main-manual.yml"
 hold(){ echo "HOLD_P6_G8_OWNER_ENCRYPTED_REBIND_$1" >&2; exit 2; }
 [[ $# -eq 1 && "$1" == EXACT_EXISTING_POLICY_OWNER_SEALED_REBIND_AND_POST_PREFLIGHT_NO_PAID_GO ]] || hold CONFIRM
@@ -24,8 +24,9 @@ pin(){
 }
 pin
 [[ "$(gh api "repos/$R/actions/runs/45024854391" --jq .conclusion)" == success ]] || hold PREVIOUS_31_VALUE_PROOF
-[[ "$(gh api -X GET "repos/$R/contents/.github/workflows/phase6-g8-seal-existing-repo-policy-successor-owner-only.yml" -f "ref=$BR" --jq .sha)" == f93b205384940c490e29e37d15ec1e1694a2fcfe ]] || hold WORKFLOW_CHANGED
-[[ "$(gh api -X GET "repos/$R/contents/data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs" -f "ref=$BR" --jq .sha)" == f962af815026bcaa689d7e6ecfba15d2b0150328 ]] || hold SEAL_TRANSFORM_CHANGED
+[[ "$(gh api "repos/$R/actions/runs/45025941764" --jq .conclusion)" == success ]] || hold CURRENT_SUCCESSOR_FULL_VALIDATOR_PROOF
+[[ "$(gh api -X GET "repos/$R/contents/.github/workflows/phase6-g8-seal-existing-repo-policy-successor-owner-only.yml" -f "ref=$BR" --jq .sha)" == 5f8acf7ad11ac8d078c79f66bc625ad20023b321 ]] || hold WORKFLOW_CHANGED
+[[ "$(gh api -X GET "repos/$R/contents/data-collection/phase6/checkpoints/p6_g8_seal_existing_policy_successor_no_paid_go.cjs" -f "ref=$BR" --jq .sha)" == 4ad29844ab5db782c11f0d62489f457a31972b76 ]] || hold SEAL_TRANSFORM_CHANGED
 names="$(gh api -X GET "repos/$R/contents/data-collection/phase6/checkpoints" -f "ref=$BR" --jq '.[].name')" || hold BRANCH_LIST_UNREADABLE
 ! grep -Fxq p6_g8_owner_seal_request.json <<< "$names" || hold REQUEST_ALREADY_EXISTS_NO_REPLAY
 
