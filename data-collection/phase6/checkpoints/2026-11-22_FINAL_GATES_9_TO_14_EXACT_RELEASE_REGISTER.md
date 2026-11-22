@@ -1,5 +1,15 @@
 # PHASE 6 — FINAL GATES 9–14 (frozen paid-month launch release register)
 
+## FINAL TIMING READBACK — why no owner shell command is needed on Sunday
+
+**Verified directly in current relay `HKcode22/TravnrClockRelay@c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed` source `relay.mjs`:** the shared pulse admission tests `since>start` and throws `HOLD_EXTERNAL_CLOCK_MODE_CLOCK` (lines ~247–252); the actual DIRECT_TICK path additionally requires signed `since>=policyFrom`, and safely defers while `now<policyFrom` (lines ~304–313). Therefore **turning on DIRECT_TICK today with tomorrow's future `since=2026-11-23T23:45:00Z` would create a failed clock run**, not early autonomous readiness. Do not do so. The pre-GO state of `DIRECT_VERIFY`/approved=0 is the correct intentional STOP posture.
+
+**Only two owner action moments remain, and neither is due on Sun November 22:**
+1. **Monday Nov 23, 13:50–strictly before 15:10 Pacific / 21:50–23:10Z:** one existing reviewed, one-use **Gate13 explicit owner GO** with internally executed exact fresh Gate11/12 free-provider quota and READ ONLY PG16 deletion STOP/expiry census, requiring genuine owner consent, no change of approved source calendar or 36740-unit cost ceiling. Source Git blob `9e01e4ece4fbd56634a9ec9c0d68422671e6f410`. Future script has not been executed and may fail closed on new real evidence.
+2. **Monday Nov 23, **at/after 15:45 Pacific / 23:45Z**, only after successful separate owner GO:** one existing reviewed **Gate9 relay DIRECT_TICK activation**, Git blob `1270e03024d44edfc7fb6757b2642a25c6cd1fa8`; then independently review the next actual relay→protected target ACK, SOURCE charge, original/PRE/POST outcome or censored status. No source receipts can be promised before they exist. Existing primary retention relay is not touched.
+
+**No command now; do not rerun today's successful Gate9/10 preparation.** No new gate, feature engineering, optional V0102, provider experiment, cron, secret repair or development CI is needed on current evidence. The 90-minute T−90 prearm at 22:15Z is an already planned separate native event; don't claim it executed before its scheduled future time.
+
 ## FINAL OWNER-FACING COMPLETION CLASSIFICATION — NO ADDED ENGINEERING GATES
 
 The six named Gates 9–14 are a **release execution and acceptance checklist**, not six additional engineering defects discovered after closing Gates 1–8. Some follow-up observations were incorrectly counted as incomplete pre-launch engineering. This resolves that ambiguity without changing their underlying strict criteria:
