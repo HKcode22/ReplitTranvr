@@ -13,7 +13,7 @@
  "validUntilUtc": "2027-01-31T00:00:00.000Z",
  "firstSourceUtc": "2026-11-23T23:45:00.000Z",
  "outcomeTailUtc": "2026-12-29T04:00:00.000Z",
- "reviewedAtUtc": "2026-11-22T02:00:00.000Z",
+ "reviewedAtUtc": "2026-11-22T01:00:00.000Z",
  "reviewedBy": "Independent reviewer session (OpenCode agent), 2026-11-22",
  "independentFieldProfileApproved": true,
  "independentMappingAndReconstructionReviewApproved": true,
