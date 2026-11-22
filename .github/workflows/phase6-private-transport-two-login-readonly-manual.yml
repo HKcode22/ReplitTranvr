@@ -322,7 +322,9 @@ jobs:
           set +x
           node --input-type=module <<'JS'
           import {createHash} from 'node:crypto';
-          const e=process.env,sha=b=>createHash('sha256').update(b).digest('hex'),hash=x=>sha(JSON.stringify(x));
+          const e=process.env,sha=b=>createHash('sha256').update(b).digest('hex');
+          const canonical=x=>x===null||typeof x!=='object'?JSON.stringify(x):Array.isArray(x)?'['+x.map(canonical).join(',')+']':'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';
+          const hash=x=>sha(canonical(x));
           const pre=JSON.parse(Buffer.from(e.P6_PHASE7_PRE_POLICY_BASE64,'base64')),bytes=Buffer.from(e.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64,'base64'),p=JSON.parse(bytes);
           if(sha(bytes)!==e.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256||pre.reviewSha256!==e.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256||hash(pre.contract)!==e.P6_PHASE7_POST_CONTRACT_SHA256||hash(pre.profile)!==e.P6_PHASE7_POST_PROFILE_SHA256||p.prePolicySha256!==pre.reviewSha256||p.contractSha256!==hash(pre.contract)||p.profileSha256!==hash(pre.profile)||p.manifestSha256!==e.V39_P5_MANIFEST_SHA256||p.rightsSha256!==e.V39_P5_RIGHTS_SHA256||p.nativePostPolicySha256!==e.P6_NATIVE_POST_POLICY_SHA256||p.unverifiedLabelDisposition!=='CENSOR_AFTER_REVIEWED_POST_OBSERVATION'||p.schema!=='v39.phase7.independent-post-settlement-policy.v1')throw Error('HOLD_P7_EXACT_POST_POLICY_BINDING');
           console.log(JSON.stringify({status:'P7_PROTECTED_POST_POLICY_BINDING_PASS',policySha256:sha(bytes),numericalLabelsCertified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
