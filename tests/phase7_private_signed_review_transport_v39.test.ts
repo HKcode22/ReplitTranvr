@@ -3,7 +3,8 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {Client,Pool} from "pg";
-import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
+import {readFileSync} from "node:fs";
+import {runP6PrivateEpochExpiryCore,P6_PRIVATE_METADATA_PROFILE} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
 import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,publishP7PreEvidenceBatchOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {readP6PrivateDeadlinePressure,P6_PRIVATE_DEADLINE_PRESSURE_SQL} from "../server/lib/disruption/phase6PrivateDeadlinePressure_v39";
@@ -68,7 +69,7 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
 const url="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const active=process.env.P6_POST_OUTCOME_DISPOSABLE_PG16==="1"?describe:describe.skip;
 active("real private custody signed-review transport",()=>{
- it("V0105 actually retires expired V0106 receipt before its replay fence via separate restricted actors",async()=>{
+ it.each(process.env.P6_PRIVATE_V0108_REGRESSION==="1"?[P6_PRIVATE_METADATA_PROFILE]:["V0105"])("%s retires expired V0106 receipt before its replay fence via separate restricted actors",async(profile)=>{
   if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==url||process.env.V39_DATABASE_RUNTIME_URL!==url||
      process.env.AERODATABOX_API_KEY||process.env.RAPIDAPI_KEY||process.env.ADB_AUTO_COLLECT!=="0"||process.env.V39_PHASE6_PROCESS_ARMED!=="0")throw Error("DISPOSABLE_ONLY");
   const owner=new Client({connectionString:url});
@@ -79,8 +80,16 @@ active("real private custody signed-review transport",()=>{
   const m=h("isolated ci expiry manifest"), scoped={...trust,env:{...trust.env,V39_P5_MANIFEST_SHA256:m}};
   const selector:P7ReviewSelector={kind:"POST_RECOVERY",runDayIndex:31,scopeSha256:h("isolated expiry original")};
   const paths=[p7ReviewPath(selector),p7RecoveryFencePath(selector)];
+  let oldDefinition:string|undefined,oldSweepDefinition:string|undefined;
   try{
    await owner.connect();await reader.connect();await publisher.connect();
+   if(profile===P6_PRIVATE_METADATA_PROFILE){
+    oldDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_status_v39(text)'::regprocedure) AS body")).rows[0].body;
+    oldSweepDefinition=(await owner.query("SELECT pg_get_functiondef('clean.phase6_private_epoch_expiry_sweep_v39(text,integer)'::regprocedure) AS body")).rows[0].body;
+    await owner.query("SET ROLE neondb_owner");
+    try{await owner.query(readFileSync("migrations/staged/V0108__phase6_private_operational_metadata_expiry_class_v39.sql","utf8"));}
+    finally{await owner.query("ROLLBACK");await owner.query("RESET ROLE");}
+   }
    await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
    expect((await owner.query("SELECT count(*)::int n FROM clean.adb_phase6_authorization")).rows[0].n).toBe(0);
    await owner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids) VALUES('CI_ONLY',$1,$2,$3,$4,'v39',CURRENT_DATE,1900,0,1000,false,$5::jsonb)",[m,h("ci calendar"),h("ci config"),code,JSON.stringify(["ci-only"])]);
@@ -92,14 +101,16 @@ active("real private custody signed-review transport",()=>{
    const f=fixtures(now),payload={...f.recoveryPayload,committedScopeSha256:selector.scopeSha256,originalAvailableAtUtc:new Date(fenceDeadline-600000).toISOString(),validUntilUtc:new Date(receiptDeadline).toISOString()};
    const signed=wire(payload,post);
    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:signed})).resolves.toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
-   const sweep=()=>runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:1,maxBatches:1});
+   const sweep=()=>runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:1,maxBatches:1,privateDeadlineProfile:profile});
    const present=async()=> (await reader.query("SELECT logical_path FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=ANY($1::text[]) ORDER BY logical_path",[paths])).rows.map(r=>r.logical_path);
    expect((await sweep()).receipts).toEqual([]);expect(await present()).toEqual([...paths].sort());
    const afterClock=async(ms:number)=>{await reader.query("SELECT pg_sleep(greatest(0,extract(epoch FROM ($1::timestamptz-clock_timestamp()))+0.05))",[new Date(ms).toISOString()]);};
    await afterClock(receiptDeadline);
    const first=await sweep();
-   expect(first.deadlineDueObservedAtInitialRead).toBe(true);
+   expect(first.deadlineDueObservedAtInitialRead).toBe(profile==="V0105");
+   expect(first.dueOperationalMetadataPackets).toBe(profile==="V0105"?0:1);
    expect(first.receipts).toHaveLength(1);
+   if(profile===P6_PRIVATE_METADATA_PROFILE)expect(first).toMatchObject({deadlineDueObservedDuringSweep:false,receipts:[{hardDueAtSweep:0}]});
    expect(first.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
    expect(await present()).toEqual([paths[1]]);
    await expect(readP7PrivateSignedReviews(reader,scoped,[selector])).rejects.toThrow("RECOVERY_PREVIOUSLY_ISSUED_NO_REISSUE");
@@ -109,15 +120,82 @@ active("real private custody signed-review transport",()=>{
    await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:retry})).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
    await afterClock(fenceDeadline);
    const second=await sweep();
+   expect(second.deadlineDueObservedAtInitialRead).toBe(profile==="V0105");
+   expect(second.dueOperationalMetadataPackets).toBe(profile==="V0105"?0:1);
    expect(second.receipts).toHaveLength(1);
    expect(second.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
    expect(await present()).toEqual([]);
    expect(()=>verifyP7StoredWire(scoped,selector,retry,new Date(fenceDeadline).toISOString())).toThrow("LIVE_REVIEW");
    expect(second.completeRetentionDeploymentVerified).toBe(false);
-   console.log("P6_V0105_V0106_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
+   if(profile===P6_PRIVATE_METADATA_PROFILE){
+    // Valid digest-only PRE, lane and all-null POST reviews must not
+    // make the normal expiry worker fail. A direct malformed/extra source
+    // value in that generic kind stays hard (SQL storage permits the kind).
+    const genericNow=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
+    const genericDeadline=genericNow+8000, g=fixtures(genericNow), until=new Date(genericDeadline).toISOString();
+    for(const [selector,payload,key] of [[g.a,g.prePayload,pre],[g.d,g.lanePayload,lane],[g.c,g.settlementPayload,post]] as const){
+     const w=wire({...payload,manifestSha256:m,validUntilUtc:until},key);
+     expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:w})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+    }
+    const malformed=[{...g.prePayload,manifestSha256:m,validUntilUtc:until,extraSourceValue:"CI synthetic should remain hard"},
+     {...g.settlementPayload,manifestSha256:m,validUntilUtc:until,scope:{...g.settlementPayload.scope,evidence:{"T-6h":{flightInstanceId:"CI synthetic non-null source evidence"}}}}];
+    for(let i=0;i<malformed.length;i++){
+     const w=wire(malformed[i],post), b=Buffer.from(JSON.stringify(w)),d=createHash("sha256").update(b).digest("hex");
+     await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",["data-collection/phase5/frozen/p7review_"+h("malformed ci "+i)+".json",code,m,rights,d,g.prePayload.issuedAtUtc,until,b]);
+    }
+    // Still-needed source-bearing custody is never eligible before its
+    // independently signed cutoff: a neighboring populated cleanup cannot
+    // silently replace missing final-consumer evidence with early DELETE.
+    const stillLiveUntil=new Date(genericNow+45*60000).toISOString();
+    const stillLivePath="data-collection/phase5/frozen/p7review_"+h("ci still-live source gate out")+".json";
+    const stillLivePayload={...g.settlementPayload,manifestSha256:m,validUntilUtc:stillLiveUntil,
+     scope:{...g.settlementPayload.scope,evidence:{"T-6h":{flightInstanceId:"CI synthetic still-live gate out"}}}};
+    const stillLiveWire=wire(stillLivePayload,post),stillLiveBytes=Buffer.from(JSON.stringify(stillLiveWire));
+    const stillLiveHash=createHash("sha256").update(stillLiveBytes).digest("hex");
+    await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_SIGNED_REVIEW',31,1,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[stillLivePath,code,m,rights,stillLiveHash,g.prePayload.issuedAtUtc,stillLiveUntil,stillLiveBytes]);
+    // Existing restricted, no-payload deadline-pressure reader warns about
+    // signed future contents even though the due-only sweep must not touch them.
+    // In addition to a non-null signed POST review, guard an actual
+    // SOURCE_QUERY_PACKET kind (synthetic original-shaped fixture only).
+    const sourcePath="data-collection/phase5/frozen/sourceq_"+h("ci synthetic source still needed")+".json";
+    const sourceBytes=Buffer.from(JSON.stringify({schema:"CI_SYNTHETIC_SOURCE_PACKET_ONLY",flightNumber:"CI123",scheduledDepartureUtc:new Date(genericNow).toISOString(),
+     operatingCarrier:"CI",sourceCustodyRequiredForActivePREPOST:true,neverActualAeroDataBoxResponse:true}));
+    const sourceHash=createHash("sha256").update(sourceBytes).digest("hex");
+    await publisher.query("INSERT INTO phase6_private.frozen_native_packet_v39 (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'SOURCE_QUERY_PACKET',31,2,$2,$3,$4,$5,$5,$6,$7,$8,NULL)",[sourcePath,code,m,rights,sourceHash,g.prePayload.issuedAtUtc,stillLiveUntil,sourceBytes]);
+    const pressureBefore=await readP6PrivateDeadlinePressure(reader,readerLogin,m);
+    const nearSource=pressureBefore.groups.find(x=>x.kind==="PHASE7_SIGNED_REVIEW"&&x.scope==="CURRENT");
+    expect(nearSource).toBeDefined();
+    expect(nearSource?.withinOneHour).toBeGreaterThanOrEqual(1);
+    const nearQuery=pressureBefore.groups.find(x=>x.kind==="SOURCE_QUERY_PACKET"&&x.scope==="CURRENT");
+    expect(nearQuery?.withinOneHour).toBe(1);
+    expect(nearQuery?.due).toBe(0);
+    expect(pressureBefore.deadlineDueObserved).toBe(false);
+    const early=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
+    expect(early).toMatchObject({status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED",receipts:[],deadlineDueObservedAtInitialRead:false});
+    expect((await reader.query("SELECT count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[stillLivePath,stillLiveUntil])).rows[0].n).toBe(1);
+    await afterClock(genericDeadline);
+    const snapshot=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:false,privateDeadlineProfile:profile});
+    expect(snapshot).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,before:{duePackets:5}});
+    const hard=await runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:8,maxBatches:1,privateDeadlineProfile:profile});
+    expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
+    expect(hard).toMatchObject({deadlineDueObservedDuringSweep:true});
+    expect(hard.receipts[0]).toMatchObject({packets:5,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true,hardDueAtSweep:2});
+    // All five expired neighbors cleared, but the signed future source
+    // still exists, unmodified, for its legitimate remaining PRE/POST use.
+    const liveReadback=await reader.query("SELECT payload_bytes,content_sha256 FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[stillLivePath,stillLiveUntil]);
+    expect(liveReadback.rowCount).toBe(1);
+    expect(liveReadback.rows[0].payload_bytes).toEqual(stillLiveBytes);
+    expect(liveReadback.rows[0].content_sha256).toBe(stillLiveHash);
+    const sourceReadback=await reader.query("SELECT payload_bytes,content_sha256 FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[sourcePath,stillLiveUntil]);
+    expect(sourceReadback.rowCount).toBe(1);
+    expect(sourceReadback.rows[0].payload_bytes).toEqual(sourceBytes);
+    expect(sourceReadback.rows[0].content_sha256).toBe(sourceHash);
+   }
+   console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
    await owner.query("DELETE FROM clean.adb_phase6_authorization WHERE authorization_id='CI_ONLY' AND manifest_sha256=$1",[m]).catch(()=>{});
-   await Promise.allSettled([owner.end(),reader.end(),publisher.end(),expiryWriter.end(),expiryReader.end()]);
+   try{if(oldSweepDefinition)await owner.query(oldSweepDefinition);if(oldDefinition)await owner.query(oldDefinition);}
+   finally{await Promise.allSettled([owner.end(),reader.end(),publisher.end(),expiryWriter.end(),expiryReader.end()]);}
   }
  },40000);
  it("publishes immutable exact wires and independently reads them via restricted roles, no fallback",async()=>{

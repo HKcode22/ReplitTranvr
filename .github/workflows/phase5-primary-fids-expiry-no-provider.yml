@@ -81,6 +81,7 @@ jobs:
       # A separately approved PRIMARY-ONLY backstop must never inherit private APPLY authority.
       # Native schedule/manual ordinary APPLY retains the configured V0105 extension unchanged.
       # Manual VERIFY still stays read-only in the runner.
+      P6_PRIVATE_EPOCH_DEADLINE_PROFILE: ${{ vars.P6_PRIVATE_EPOCH_DEADLINE_PROFILE }}
       P6_PRIVATE_EPOCH_EXPIRY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION' && 'COMMISSION_VERIFY_ONLY' || vars.P6_PRIVATE_EPOCH_EXPIRY_MODE }}
       P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256: ${{ (github.event_name != 'workflow_dispatch' || inputs.confirm != 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION') && vars.P6_PRIVATE_EPOCH_EXPIRY_MANIFEST_SHA256 || '' }}
       P6_PRIVATE_EPOCH_EXPIRY_APPROVAL: ${{ (github.event_name != 'workflow_dispatch' || inputs.confirm != 'APPLY_REVIEWED_PRIMARY_FIDS_BACKSTOP_NO_PRIVATE_MUTATION') && vars.P6_PRIVATE_EPOCH_EXPIRY_APPROVAL || '' }}
