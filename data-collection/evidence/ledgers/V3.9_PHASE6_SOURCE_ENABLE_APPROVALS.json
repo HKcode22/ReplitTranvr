@@ -147,6 +147,26 @@
       "evidenceId": "DEC-20261119-ADBBOUNDEDSOURCE",
       "path": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
       "sha256": "0e921e6e945637d8eaae52a7e523de3da6b11b7c21124e6b807de993dd849e13"
+    },
+    {
+      "evidenceId": "DEC-20261122-SCIENTIFICFREEZE",
+      "path": "data-collection/phase5/evidence/2026-11-22_phase6_scientific_freeze_adoption.md",
+      "sha256": "84111365bae6a42f073067484cf46287d8ca2a2687eabf0e5b7e86e193d2420b"
+    },
+    {
+      "evidenceId": "APP-20261122-ACCOUNTBUDGET",
+      "path": "data-collection/phase5/evidence/2026-11-22_phase6_provider_account_and_budget_approval.md",
+      "sha256": "f810be984c16760ceaa04864ed34fe8120969fb29bce50ee650ff6ea2cc43a69"
+    },
+    {
+      "evidenceId": "APP-20261122-PUBLISHEDSTOP",
+      "path": "data-collection/phase5/evidence/2026-11-22_phase6_published_and_github_stop_approval.md",
+      "sha256": "ed676e5ddb5d81cb21d3fbff8bb09ca8c4f352a473ab28c5c13d0033ccf39995"
+    },
+    {
+      "evidenceId": "REV-20261123-OPERATIONALBRIDGE",
+      "path": "data-collection/phase5/evidence/2026-11-23_phase6_revised_executable_bridge_review.json",
+      "sha256": "d18c40640096f09a7a72c27e05fa63c227336849d11db7c266dbb6b2cb067fa9"
     }
   ],
   "approvals": []
