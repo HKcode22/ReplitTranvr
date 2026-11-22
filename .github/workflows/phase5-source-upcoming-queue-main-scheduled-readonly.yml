@@ -784,6 +784,7 @@ jobs:
           echo 'AUTHENTIC_PRIVATE_SOURCE_DAY_AND_ORIGINAL_DB_DUE_READONLY_NO_PROVIDER_NO_DISPATCH_NO_GO' >> "$GITHUB_STEP_SUMMARY"
 
   separately-authorized-stored-source-children:
+    environment: phase6-protected-runtime
     # Reuses the same scheduler + existing SOURCE one-GET workflow.
     # Both legacy and stored enabled => neither dispatcher runs.
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_PARENT' || (inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_POST_CYCLE' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1')))) && vars.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED == 'true' && vars.P6_PRIVATE_SOURCE_REVIEW_MODE == 'stored' && vars.P5_AUTO_SOURCE_DISPATCH_ENABLED != 'true' }}
@@ -900,6 +901,7 @@ jobs:
         run: echo 'ACKNOWLEDGED_NOT_PAID_RECEIPT'
 
   separately-authorized-current-private-post-children:
+    environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.confirm == 'RUN_CURRENT_SIGNED_POST_PARENT' || (inputs.confirm == 'RUN_CURRENT_SIGNED_SOURCE_POST_CYCLE' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1')))) && vars.P6_PRIVATE_POST_PARENT_ENABLED == 'true' && vars.P5_POST_AUTO_DISPATCH_ENABLED != 'true' }}
     permissions:
       contents: read
@@ -1007,6 +1009,7 @@ jobs:
         run: echo 'ACKNOWLEDGED_NOT_PAID_RECEIPT'
 
   separately-authorized-native-post-producer:
+    environment: phase6-protected-runtime
     # Original ten-minute scheduler, one bounded producer.
     # This does NOT dispatch a paid child. Existing POST parent and V0083
     # one-shot reservation remain separately gated. No provider key here.
