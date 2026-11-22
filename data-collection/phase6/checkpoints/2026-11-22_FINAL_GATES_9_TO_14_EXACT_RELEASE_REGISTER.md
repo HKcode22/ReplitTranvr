@@ -1,5 +1,28 @@
 # PHASE 6 — FINAL GATES 9–14 (frozen paid-month launch release register)
 
+## FINAL OWNER-FACING COMPLETION CLASSIFICATION — NO ADDED ENGINEERING GATES
+
+The six named Gates 9–14 are a **release execution and acceptance checklist**, not six additional engineering defects discovered after closing Gates 1–8. Some follow-up observations were incorrectly counted as incomplete pre-launch engineering. This resolves that ambiguity without changing their underlying strict criteria:
+
+| Gate | Engineering/setup work already finished | What can legitimately finish only later | Pre-GO hold today? |
+| --- | --- | --- | --- |
+| **9** | **YES: existing independent external clock installed, original dual cron commissioned, exact future DIRECT recovery window staged and read back by owner.** | The single already-prepared switch from disarmed DIRECT_VERIFY to bounded DIRECT_TICK after explicit paid GO, plus first real relay/target ACK. | **No further engineering work.** Must perform scheduled after-GO switch before claiming unattended collection working. |
+| **10** | **YES: original protected target actor/source/POST and signed policies verified; direct controller flags, future epoch, protected direct approval name staged/read back by owner.** | Protected direct tick can only execute and prove effective protected admission after paid GO. | **No additional pre-GO setup task.** Actual proof is post-GO. |
+| **11** | **YES: 2026-11-22T14:07:27Z real free provider metadata PASS.** 59,968 REST units against 36,740 reserved; 1,830 Alert credits separate, 1,000 protected floor, zero active subscriptions. | One same reviewed 3-free-GET check at the actual GO time, since provider balance changes. | **No engineering work**, only mandatory fresh operational assertion at GO. |
+| **12** | **YES: bounded provider-use rights determination, V0108 installed, real current-main restricted dual-job retention backstop, 7-day recovery-only PITR review and no-destructive-restore decision are already complete.** | One actual near-GO scoped read-only packet/index deadline and deletion incident STOP census; later populated-source expiry is an operating SLA, not an invented before-first-source test. | **No engineering work**, only mandatory fresh operational assertion at GO. |
+| **13** | **YES: exact future one-use explicit owner GO command prepared, immutable code SHA, no secrets printed.** | Owner's *actual explicit* separate paid GO is authorized only inside Monday Nov23 21:50–23:10Z, with fresh Gate11/12 PASS and effective 4 paid controls. | **YES: intentionally leave GO OFF until Monday safe window**. |
+| **14** | **YES: source/worker/retention/clock monitoring mechanisms already built and previous nonpaid tests/production actor preflights passed.** | The actual first future paid SOURCE request, billed-unit reconciliation, live PRE/outcome and recurring operational health cannot exist before Mon Nov23 23:45Z. | **NO: post-launch acceptance**, not prelaunch permission or another paid dry-run. |
+
+**Summary:** **All six have their required *engineering/preparation* work finished as of this checkpoint**, insofar as can be completed without the future signed authorization. However **none is falsely declared end-to-end paid launch executed**. The entire remaining pre-GO sequence is **one future fresh existing read-only safety check + one future explicit owner's G13 paid GO**, then one already-prepared direct relay switch and real observation at/after the calendar. The previous exhaustive register's descriptions `G9/10 OPEN` mean future *runtime acceptance*, not unimplemented controller code or required optional V0102. No new fix or Gate15 is justified by the existing green receipts.
+
+**Why discovered late:** Gates9–14 were the owner's requested explicit labels for previously planned Gate8 handoff, Monday activation and subsequent operational acceptance. They should have been shown as the final launch sequence from the start, rather than repeatedly presented as newly found blockers. The existing implementation already separates these duties; the outstanding statuses reflect the future schedule, not six fresh project defects. These are not six new prelaunch gates in addition to original Gates1–8.
+
+**Safe timing:** current timestamp Sun Nov22 local. DO NOT run G13 before Mon Nov23 21:50Z or at/after 23:10Z; DO NOT run G9 live route switch before signed 23:45Z AND previous owner GO; do not trigger test paid provider calls merely to close G14. Real GO signoff must use original source/rights/credits/retention and normal worker admission, no scope/credit cap changes. Prior signed gate-out label/flight identity decisions stay untouched.
+
+---
+
+
+
 **Recorded:** Sunday, November 22, 2026 UTC after the owner's actual `2026-11-22T14:07:27.370Z` free-provider account receipt. **Scope locked:** exactly six operational release/acceptance checks numbered **9–14** at owner's request. This **does not reopen the completed engineering Gates 1–8**, change f.8/amendments A–E, or add a seventh check. No GO in this checkpoint. Distinguish source evidence from future approval; every state below is as-of this observation, not a claim of future continuous health.
 
 **Pinned production target:** `HKcode22/ReplitTranvr@b432eb9a5bac7bc3c4537249e75ec7df41e8727c`. **Pinned independent relay:** `HKcode22/TravnrClockRelay@c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed`. Never merge documentation onto frozen `main` just to record a checkpoint.
