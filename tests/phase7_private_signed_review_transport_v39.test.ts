@@ -125,6 +125,18 @@ active("real private custody signed-review transport",()=>{
    expect(await present()).toEqual([]);
    expect(()=>verifyP7StoredWire(scoped,selector,retry,new Date(fenceDeadline).toISOString())).toThrow("LIVE_REVIEW");
    expect(second.completeRetentionDeploymentVerified).toBe(false);
+   if(profile===P6_PRIVATE_METADATA_PROFILE){
+    // Other signed-review kinds are deliberately NOT in the metadata
+    // exception, even when the test fixture has no nonempty field payload.
+    const genericNow=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
+    const genericDeadline=genericNow+2000, g=fixtures(genericNow);
+    const genericWire=wire({...g.prePayload,manifestSha256:m,validUntilUtc:new Date(genericDeadline).toISOString()},pre);
+    expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector:g.a,wire:genericWire})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+    await afterClock(genericDeadline);
+    const hard=await sweep();
+    expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:0,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
+    expect(hard.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
+   }
    console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
    await owner.query("DELETE FROM clean.adb_phase6_authorization WHERE authorization_id='CI_ONLY' AND manifest_sha256=$1",[m]).catch(()=>{});
