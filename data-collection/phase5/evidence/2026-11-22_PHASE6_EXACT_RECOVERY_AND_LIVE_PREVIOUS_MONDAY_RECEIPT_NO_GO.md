@@ -1,0 +1,12 @@
+# Phase 6 — exact private successor recovered; earlier Monday production stage confirmed
+
+Owner supplied Replit output (2026-11-22 UTC, recovery run after minimal runtime repair on PR #959). Not an independent reexecution by this session. No provider requests, no database writes.
+
+- P6_EXACT_PRIVATE_STAGE_RECOVERED_NO_GO: stage code 795ace55984b44a3d0bffa886d33a5ec11d31927; stage SHA256 8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc; cost cef58dcc4e8009d46e686bb555faab0fe952b9921e8aa3aa13d610ea443e3bf9; manifest a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e; config 9f181bbc70a378f41b85ecd70cd8bc05d8bf4ef76398b0225400c4c21abccebe. All 31 plan hashes verified, 6144 templates, 36740 reserved units. Existing private package at ~/.travnr-phase6-monday-795ace55. No repeat.
+- PRE policy, reference policy and AUTH exactMatches=0 in Replit top-level private directories; previous checkpoint identifies Mac-local paths. Do not infer absent everywhere.
+- P6_OWNER_STAGE_IDENTITY_READONLY_NO_GO: actual PG16 160016, owner identity true, transaction read only, not replica. Earlier Monday code 781140cde71af3b72376c2db9f0fdb84204a2b7c, manifest b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4, calendar 55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b, config ee4ec9f6ca3e0f123512c8aa463cadd07a8892a3fedc4c316fe0c1b64731457c, cost ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e, COST_UPPER_BOUND, enabled false, revoked false. Calendar 31; draws, day budgets, allowed queries, partitions, physical/other attempts, batches, subscriptions all zero.
+- Exact installed manifest SHA256: b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4.
+
+## Decision
+
+Both stages use the same Monday calendar. Gate 5 calendar installation is accomplished historically; current release identity remains mismatched. Do not replay the Nov22 predecessor-to-Monday date shift or cold-start installer; neither matches the actual database. A narrowly bounded exact same-calendar successor is preferable if it preserves all budget economics and retains the older manifest/cost rows, because the reviewed Gate 1 and Gate 8 artifacts already bind the recovered successor. If this cannot be proven, retain the installed stage and explicitly rebind policy/AUTH; no calendar shift. No new gate. The existing owner risk-adoption does not certify runtime commissioning. Gates 1,2,3,6,7,8 retain their actual outstanding evidence; no paid GO.
