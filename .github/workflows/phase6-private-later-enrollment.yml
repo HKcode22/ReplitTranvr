@@ -46,6 +46,7 @@ jobs:
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx --no-install vitest run tests/phase6_private_restartable_later_enrollment_v39.test.ts tests/phase5_cd_github_prepare_source_registration_offline_v39.test.ts tests/phase6_private_later_queue_roster_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts
   enroll-current-signed-day:
+    environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_LATER_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && (inputs.confirm == 'REGISTER_CURRENT_SIGNED_LATER_DAY_NO_PROVIDER' || ((inputs.confirm == 'ENROLL_DUE_CURRENT_SIGNED_LATER_NO_PROVIDER' || (inputs.confirm == 'ENROLL_DUE_CURRENT_SIGNED_PRE_CYCLE_NO_PROVIDER' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1')) && inputs.run_days == '' && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1'))) || (github.event_name == 'schedule' && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED == '1')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -111,6 +112,7 @@ jobs:
       - run: npx --no-install tsx scripts/v39_phase6_private_later_restartable_enrollment_v39.ts
 
   enroll-current-signed-t24-day:
+    environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && vars.P6_PRIVATE_T24_ENROLL_ENABLED == '1' && ((github.event_name == 'workflow_dispatch' && (inputs.confirm == 'REGISTER_CURRENT_SIGNED_T24_DAY_NO_PROVIDER' || ((inputs.confirm == 'ENROLL_DUE_CURRENT_SIGNED_T24_NO_PROVIDER' || (inputs.confirm == 'ENROLL_DUE_CURRENT_SIGNED_PRE_CYCLE_NO_PROVIDER' && vars.P6_ROLLING_CONTROLLER_ENABLED == '1')) && inputs.run_days == '' && vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED == '1'))) || (github.event_name == 'schedule' && vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED == '1')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 6

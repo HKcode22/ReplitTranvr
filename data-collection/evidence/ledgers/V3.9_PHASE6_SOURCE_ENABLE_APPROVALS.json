@@ -172,6 +172,16 @@
       "evidenceId": "RUN-20261122-P6FRESH041155525",
       "path": "data-collection/phase5/evidence/20261122T041155525Z_P6_FRESH_FREE_ACCOUNT_NO_PAID_GO.json",
       "sha256": "722c398e9476f73b550abe854ed5b5e3bc616774d770dbb332d82166d39da5eb"
+    },
+    {
+      "evidenceId": "DEC-20261122-P962OWNERADOPT",
+      "path": "data-collection/phase5/evidence/phase6-operational-bridge-ac3eefb6cc7bc016347d10d94e6f8a7e5d71f11357a730422b9c50e3f45ff655.json",
+      "sha256": "ac3eefb6cc7bc016347d10d94e6f8a7e5d71f11357a730422b9c50e3f45ff655"
+    },
+    {
+      "evidenceId": "RUN-20261122-P962PRIORAUTHARCHIVE",
+      "path": "data-collection/phase5/evidence/phase6-prior-source-approval-ddf585e17c0f112910bda842aeeb008983d3ec4ff641377fcdc49d0a943810cc.json",
+      "sha256": "ddf585e17c0f112910bda842aeeb008983d3ec4ff641377fcdc49d0a943810cc"
     }
   ],
   "approvals": [
@@ -188,7 +198,7 @@
     },
     {
       "authorizationId": "AUTH-20261119-P5INERTFREEZE",
-      "artifactSha256": "4da414a46138060a66104fa1885a8ba5c32e513908bae1c28a84f51eef2da106",
+      "artifactSha256": "3ae55fabcc03ac4112c7b7d07c63e2454dc3242fe3f1cafd67026722346e482c",
       "predecessorEvidenceIds": [
         "RUN-20261116-OWNERREVIEW112557",
         "RUN-20261116-PREARMCLOCK43832469501",
@@ -222,7 +232,9 @@
         "DEC-20261122-ACCOUNTBUDGET",
         "DEC-20261122-PUBLISHEDSTOP",
         "DEC-20261123-OPERATIONALBRIDGE",
-        "RUN-20261122-P6FRESH041155525"
+        "RUN-20261122-P6FRESH041155525",
+        "DEC-20261122-P962OWNERADOPT",
+        "RUN-20261122-P962PRIORAUTHARCHIVE"
       ]
     }
   ]

@@ -2,7 +2,8 @@
  * schema and real restricted reader/publisher roles. Keys/receipts are CI-only. */
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {Client} from "pg";
+import {Client,Pool} from "pg";
+import {runP6PrivateEpochExpiryCore} from "../scripts/v39_phase6_private_epoch_expiry_runtime_v39.mjs";
 import {p7ReviewPath,p7RecoveryFencePath,verifyP7StoredWire,publishP7PrivateSignedReviewOnce,publishP7PreEvidenceBatchOnce,readP7PrivateSignedReviews,type P7ReviewSelector} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {readP6PrivateDeadlinePressure,P6_PRIVATE_DEADLINE_PRESSURE_SQL} from "../server/lib/disruption/phase6PrivateDeadlinePressure_v39";
@@ -67,6 +68,58 @@ it("authenticates exact signed scope, separate key, study and short-lived clock 
 const url="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
 const active=process.env.P6_POST_OUTCOME_DISPOSABLE_PG16==="1"?describe:describe.skip;
 active("real private custody signed-review transport",()=>{
+ it("V0105 actually retires expired V0106 receipt before its replay fence via separate restricted actors",async()=>{
+  if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==url||process.env.V39_DATABASE_RUNTIME_URL!==url||
+     process.env.AERODATABOX_API_KEY||process.env.RAPIDAPI_KEY||process.env.ADB_AUTO_COLLECT!=="0"||process.env.V39_PHASE6_PROCESS_ARMED!=="0")throw Error("DISPOSABLE_ONLY");
+  const owner=new Client({connectionString:url});
+  const reader=new Client({connectionString:"postgresql://"+readerLogin+":ci-only-day-read@localhost:5432/neondb?sslmode=disable"});
+  const publisher=new Client({connectionString:"postgresql://"+publisherLogin+":ci-only-day-pub@localhost:5432/neondb?sslmode=disable"});
+  const expiryWriter=new Pool({connectionString:"postgresql://ci_p6_expiry_writer:ci-expiry-write@localhost:5432/neondb?sslmode=disable",max:1});
+  const expiryReader=new Pool({connectionString:"postgresql://ci_p6_expiry_reader:ci-expiry-read@localhost:5432/neondb?sslmode=disable",max:1});
+  const m=h("isolated ci expiry manifest"), scoped={...trust,env:{...trust.env,V39_P5_MANIFEST_SHA256:m}};
+  const selector:P7ReviewSelector={kind:"POST_RECOVERY",runDayIndex:31,scopeSha256:h("isolated expiry original")};
+  const paths=[p7ReviewPath(selector),p7RecoveryFencePath(selector)];
+  try{
+   await owner.connect();await reader.connect();await publisher.connect();
+   await reader.query("SET ROLE phase6_private_frozen_reader_v39");await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+   expect((await owner.query("SELECT count(*)::int n FROM clean.adb_phase6_authorization")).rows[0].n).toBe(0);
+   await owner.query("INSERT INTO clean.adb_phase6_authorization(authorization_id,manifest_sha256,calendar_hash,config_hash,code_sha,schema_version,phase6_start_date,alert_cap_per_parent_day,unsettled_burst_margin_credits,protected_alert_floor,enabled,predecessor_evidence_ids) VALUES('CI_ONLY',$1,$2,$3,$4,'v39',CURRENT_DATE,1900,0,1000,false,$5::jsonb)",[m,h("ci calendar"),h("ci config"),code,JSON.stringify(["ci-only"])]);
+   const who=await expiryReader.query("SELECT current_user AS actor,has_function_privilege(current_user,'clean.phase6_private_epoch_expiry_sweep_v39(text,integer)','EXECUTE') AS can_sweep");
+   expect(who.rows[0]).toEqual({actor:"ci_p6_expiry_reader",can_sweep:false});
+   expect((await expiryWriter.query("SELECT current_user AS actor,has_function_privilege(current_user,'clean.phase6_private_epoch_expiry_receipt_v39(text,text)','EXECUTE') AS can_read")).rows[0]).toEqual({actor:"ci_p6_expiry_writer",can_read:false});
+   const now=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
+   const receiptDeadline=now+4000,fenceDeadline=now+16000;
+   const f=fixtures(now),payload={...f.recoveryPayload,committedScopeSha256:selector.scopeSha256,originalAvailableAtUtc:new Date(fenceDeadline-600000).toISOString(),validUntilUtc:new Date(receiptDeadline).toISOString()};
+   const signed=wire(payload,post);
+   await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:signed})).resolves.toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
+   const sweep=()=>runP6PrivateEpochExpiryCore({writer:expiryWriter,reader:expiryReader,manifest:m,apply:true,limit:1,maxBatches:1});
+   const present=async()=> (await reader.query("SELECT logical_path FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=ANY($1::text[]) ORDER BY logical_path",[paths])).rows.map(r=>r.logical_path);
+   expect((await sweep()).receipts).toEqual([]);expect(await present()).toEqual([...paths].sort());
+   const afterClock=async(ms:number)=>{await reader.query("SELECT pg_sleep(greatest(0,extract(epoch FROM ($1::timestamptz-clock_timestamp()))+0.05))",[new Date(ms).toISOString()]);};
+   await afterClock(receiptDeadline);
+   const first=await sweep();
+   expect(first.deadlineDueObservedAtInitialRead).toBe(true);
+   expect(first.receipts).toHaveLength(1);
+   expect(first.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
+   expect(await present()).toEqual([paths[1]]);
+   await expect(readP7PrivateSignedReviews(reader,scoped,[selector])).rejects.toThrow("RECOVERY_PREVIOUSLY_ISSUED_NO_REISSUE");
+   const retryNow=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
+   expect(retryNow).toBeLessThan(fenceDeadline-1000);
+   const retry=wire({...payload,reviewedAtUtc:new Date(retryNow-50).toISOString(),validUntilUtc:new Date(fenceDeadline-100).toISOString()},post);
+   await expect(publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:retry})).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
+   await afterClock(fenceDeadline);
+   const second=await sweep();
+   expect(second.receipts).toHaveLength(1);
+   expect(second.receipts[0]).toMatchObject({packets:1,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true});
+   expect(await present()).toEqual([]);
+   expect(()=>verifyP7StoredWire(scoped,selector,retry,new Date(fenceDeadline).toISOString())).toThrow("LIVE_REVIEW");
+   expect(second.completeRetentionDeploymentVerified).toBe(false);
+   console.log("P6_V0105_V0106_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
+  }finally{
+   await owner.query("DELETE FROM clean.adb_phase6_authorization WHERE authorization_id='CI_ONLY' AND manifest_sha256=$1",[m]).catch(()=>{});
+   await Promise.allSettled([owner.end(),reader.end(),publisher.end(),expiryWriter.end(),expiryReader.end()]);
+  }
+ },40000);
  it("publishes immutable exact wires and independently reads them via restricted roles, no fallback",async()=>{
   if(process.env.GITHUB_ACTIONS!=="true"||process.env.DATABASE_URL!==url||process.env.V39_DATABASE_RUNTIME_URL!==url||
      process.env.AERODATABOX_API_KEY||process.env.RAPIDAPI_KEY||process.env.ADB_AUTO_COLLECT!=="0"||process.env.V39_PHASE6_PROCESS_ARMED!=="0")throw Error("DISPOSABLE_ONLY");
@@ -88,8 +141,8 @@ active("real private custody signed-review transport",()=>{
     await expect(publishP7PrivateSignedReviewOnce(args)).rejects.toThrow("ALREADY_PRESENT_READ_ONLY_RECONCILE");
    }
    expect([...(await readP7PrivateSignedReviews(reader,trust,[f.a,f.b,f.c])).values()]).toEqual([f.aw,f.bw,f.cw]);
-   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz",[f.validUntilUtc]);expect(q.rows[0].n).toBe(3);
-   const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') GROUP BY kind ORDER BY kind");expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
+   const q=await reader.query("SELECT count(*)::int AS n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND retention_not_after_utc=$1::timestamptz AND manifest_sha256=$2",[f.validUntilUtc,manifest]);expect(q.rows[0].n).toBe(3);
+   const kinds=await reader.query("SELECT kind,count(*)::int n FROM phase6_private.frozen_native_packet_v39 WHERE kind IN ('PHASE7_SIGNED_REVIEW','PHASE7_RECOVERY_RECEIPT') AND manifest_sha256=$1 GROUP BY kind ORDER BY kind",[manifest]);expect(kinds.rows).toEqual([{kind:"PHASE7_RECOVERY_RECEIPT",n:1},{kind:"PHASE7_SIGNED_REVIEW",n:2}]);
    // Actual PG16 metadata-only census: short signatures and the independent
    // replay fence fit inside one relay wake interval, not a purge proof.
    const pressure=await readP6PrivateDeadlinePressure(reader,readerLogin,manifest);

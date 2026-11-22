@@ -46,6 +46,22 @@ export const P6_COMMISSIONED_MONDAY_STAGE_CODE="781140cde71af3b72376c2db9f0fdb84
 export const P6_COMMISSIONED_MONDAY_STAGE_SHA="a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682";
 export const P6_COMMISSIONED_MONDAY_COST_SHA="ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e";
 export const P6_MONDAY_BRIDGE_REVIEW_PATH="data-collection/phase5/evidence/2026-11-23_phase6_revised_executable_bridge_review.json";
+/** Preserve the historical reviewed bytes. A successor is selected only by
+ * the exact approved operational evidence digest, never a "latest" filename.
+ * The existing verifier still checks schema, approval, stage, cost, ancestry,
+ * exact changed blobs and all 31 day plans. No approval is granted here.
+ */
+export function readP6MondayExactBridgeReview(expected:unknown,read:(path:string)=>Buffer):{path:string;bytes:Buffer}{
+ if(typeof expected!=="string"||!SHA.test(expected))return fail("OPERATIONAL_EVIDENCE_HASH");
+ const check=(b:Buffer)=>Buffer.isBuffer(b)&&b.length>100&&b.length<=200000;
+ const old=read(P6_MONDAY_BRIDGE_REVIEW_PATH);
+ need(check(old),"LEGACY_BRIDGE_BYTES");
+ if(sha(old)===expected)return {path:P6_MONDAY_BRIDGE_REVIEW_PATH,bytes:old};
+ const path="data-collection/phase5/evidence/phase6-operational-bridge-"+expected+".json";
+ const bytes=read(path);
+ need(check(bytes)&&sha(bytes)===expected,"SUCCESSOR_BRIDGE_BYTES");
+ return {path,bytes};
+}
 export function verifyP6MondayRevisedExecutableBridge(input:BridgeInput,stageRaw:string,approvedStageContentSha256:string,approvedCostSha256:string){
  let s:any;try{s=JSON.parse(stageRaw)}catch{fail("MONDAY_STAGE_JSON")}
  const {codeSha40,...content}=s??{};

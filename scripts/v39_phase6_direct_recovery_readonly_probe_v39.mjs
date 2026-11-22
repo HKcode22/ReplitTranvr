@@ -3,6 +3,7 @@
  * paths and actual GitHub history endpoints used by the proposed scheduler.
  */
 import {readFileSync} from "node:fs";
+import {fileURLToPath} from "node:url";
 import {P6_ROLLING_ROUTES,readP6RollingGithubSnapshot} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const REPO="HKcode22/ReplitTranvr",ROOT="https://api.github.com/repos/"+REPO;
 const hold=s=>{throw Error("HOLD_P6_DIRECT_VERIFY_"+s);},MIN=60000;
@@ -10,6 +11,20 @@ const e=process.env,mode=e.GITHUB_EVENT_NAME;
 const isPr=mode==="pull_request",isMain=mode==="workflow_dispatch";
 const confirm="VERIFY_DIRECT_RECOVERY_CLOCK_NO_PROVIDER_NO_DB_NO_DISPATCH";
 const forbidden=["AERODATABOX_API_KEY","RAPIDAPI_KEY","AERODATABOX_WEBHOOK_SECRET","DATABASE_URL","V39_DATABASE_RUNTIME_URL","V39_P5_SOURCE_DATABASE_URL","P5_V39_PRE_DATABASE_URL","P5_V39_PREPARE_DATABASE_URL","P5_V39_T24_WITNESS_DATABASE_URL","P6_PRIVATE_READER_DATABASE_URL","P6_PRIVATE_PUBLISHER_DATABASE_URL","P5_V39_OTHER_REST_REVIEW_DATABASE_URL","P5_V39_OTHER_REST_RESERVE_DATABASE_URL","P6_ROLLING_WINDOW_CUSTODY_DATABASE_URL"];
+/** Retry only a discarded, inconsistent READ-ONLY history snapshot.
+ * The caller retains the original overall GET/time budget and main pin.
+ * Never resume partial history, retry dispatch, or suppress a second HOLD.
+ * The protected dispatch controller is deliberately unchanged. */
+export async function readP6DirectReadonlySnapshot(read,{now=()=>Date.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),started=now()}={}){
+ try{return {snapshot:await read(),snapshotAttempts:1}}
+ catch(err){
+  if(err?.message!=="HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT"||
+     now()<started||now()-started>60000)throw err;
+  await sleep(1500);
+  if(now()<started||now()-started>60000)throw err;
+  return {snapshot:await read(),snapshotAttempts:2};
+ }
+}
 async function probe(){
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!==REPO||e.GITHUB_RUN_ATTEMPT!=="1"||
     !(isPr&&/^refs\/pull\/[1-9]\d*\/merge$/.test(e.GITHUB_REF??"")||
@@ -68,7 +83,8 @@ async function probe(){
   }
   counts.push({conclusion:status,totalCount:r.total_count,matchingExistingWorkerCount:matched,complete:r.total_count<=100});
  }
- const snap=await readP6RollingGithubSnapshot({sha,epoch,token:e.GITHUB_TOKEN,fetcher:api});
+ const {snapshot:snap,snapshotAttempts}=await readP6DirectReadonlySnapshot(
+  ()=>readP6RollingGithubSnapshot({sha,epoch,token:e.GITHUB_TOKEN,fetcher:api}),{started:start});
  if((await get("/git/ref/heads/main"))?.object?.sha!==sha)hold("MAIN_CHANGED_DURING_PROBE");
  // Actual committed plan geometry, no future flight identities and no paid
  // admission. These are nominal SOURCE timing opportunities, not a forecast.
@@ -127,7 +143,7 @@ async function probe(){
   sourcePerTickCapReviewOnly:8,sourceInFlightCapReviewOnly:24,cadenceScenarios,actualCapacityOrCadenceProven:false};
  console.log(JSON.stringify({status:"ACTUAL_DIRECT_CLOCK_READONLY_METADATA_AND_PLAN_PROBE_NO_GO",runId:Number(e.GITHUB_RUN_ID),event:mode,
   observedMainSha:sha,actualRunHeadSha:runHead,actualCheckoutSha:e.GITHUB_SHA,routeStates,negativeHistory:counts,previewStatus:snap.plan.status,
-  assessments:snap.plan.assessments.map(x=>({lane:x.lane,state:x.state})),sourceTiming,githubReads:reads,
+  assessments:snap.plan.assessments.map(x=>({lane:x.lane,state:x.state})),sourceTiming,githubReads:reads,snapshotAttempts,
   providerCalls:0,databaseReads:0,databaseWrites:0,dispatches:0,phase6PaidGo:false}));
 }
-probe().catch(err=>{console.error(/^HOLD_[A-Z0-9_]{1,150}$/.test(err?.message??"")?err.message:"HOLD_P6_DIRECT_VERIFY_REDACTED");process.exitCode=2;});
+if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1])probe().catch(err=>{console.error(/^HOLD_[A-Z0-9_]{1,150}$/.test(err?.message??"")?err.message:"HOLD_P6_DIRECT_VERIFY_REDACTED");process.exitCode=2;});

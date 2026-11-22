@@ -137,6 +137,7 @@ jobs:
           echo 'P5_SIGNED_SOURCE_CHILD_DONE_ONE_PHYSICAL_FIDS_GET_MAX_NO_PRE_OR_POST_CLAIM'
 
   exact-private-source-existing-one-get-child:
+    environment: phase6-protected-runtime
     # Strictly distinct from the checkout-local legacy child: no private
     # SOURCE request can run both original paid jobs.
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ((inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && (inputs.private_transport == 'true' || inputs.private_transport == 'stored')) || (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' && inputs.private_transport == 'stored')) }}

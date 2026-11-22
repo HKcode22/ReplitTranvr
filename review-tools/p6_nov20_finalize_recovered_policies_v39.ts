@@ -13,7 +13,7 @@ import {compileP6ActualCandidateExport} from "../scripts/v39_phase6_actual_relea
 import {verifyP6SourceEnableAuthFile} from "../scripts/v39_phase6_source_enable_approval_ledger_v39";
 import {admitP6InertOwnerReadback} from "../scripts/v39_phase6_inert_release_stage_manual_v39.mjs";
 import {verifyP6SourceActivationReview,verifyP6PostStageEvidenceOnlyMainAdvance} from "../scripts/v39_phase6_enable_source_owner_v39";
-import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,P6_MONDAY_BRIDGE_REVIEW_PATH,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
+import {P6_NOV22_STAGE_CODE,P6_NOV22_STAGE_SHA,P6_NOV22_COST_SHA,P6_NOV22_BRIDGE_REVIEW_PATH,verifyP6RevisedExecutableBridge,P6_MONDAY_CALENDAR_ROWS_SHA,readP6MondayExactBridgeReview,verifyP6MondayRevisedExecutableBridge} from "../scripts/v39_phase6_revised_stage_executable_bridge_v39";
 const REPO="HKcode22/ReplitTranvr";
 const WORK="7925dca816933a401ec97f1d3a1f920b881c8f1e296ab8f70f0563c19cf13b0e";
 const CATALOG="4264ae7d2d7efc784ae0deab0354c506a943fa51b4a8649d020422853d798534";
@@ -103,7 +103,7 @@ async function run(){
  const evidenceOnly=isMonday&&changes.every(p=>p==="data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json"||/^data-collection\/phase5\/evidence\/[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(?:json|md)$/.test(p));
  if(evidenceOnly)verifyP6PostStageEvidenceOnlyMainAdvance(pin.stageCode,head,changes,ancestor(pin.stageCode,head));
  else{
-  const raw=gitRaw(head,isMonday?P6_MONDAY_BRIDGE_REVIEW_PATH:P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
+  const raw=isMonday?readP6MondayExactBridgeReview(release.operationalReleaseEvidenceSha256,p=>gitRaw(head,p)).bytes:gitRaw(head,P6_NOV22_BRIDGE_REVIEW_PATH),b=JSON.parse(raw.toString("utf8")),reviewed=b.reviewedExecutableCommit;
   need(C.test(reviewed),"REVIEWED_EXECUTABLE_COMMIT");
   const bridge={stageCode:pin.stageCode,stageSha:stage.sha256,costSha:pin.costSha,currentHead:head,reviewBytes:raw,expectedOperationalEvidenceSha256:release.operationalReleaseEvidenceSha256,now:new Date(),stageIsAncestor:ancestor(pin.stageCode,head),reviewedCommitIsAncestor:ancestor(pin.stageCode,reviewed)&&ancestor(reviewed,head),reviewedDiff:diff(reviewed),currentDiff:changes,readReviewedBlob:(p:string)=>cmd("git",["ls-tree",reviewed,"--",p]).split("\t")[0],readCurrentBlob:(p:string)=>cmd("git",["ls-tree",head,"--",p]).split("\t")[0]};
   if(isMonday)verifyP6MondayRevisedExecutableBridge(bridge,stage.raw.toString("utf8"),release.stageContentSha256,release.costEnvelopeSha256);

@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {execFileSync} from "node:child_process";
 import {runDirectTick,directDisposition,readDirectReceipt,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {readP6DirectReadonlySnapshot} from "../scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
 const iso=t=>new Date(t).toISOString(),digest=b=>createHash("sha256").update(b).digest("hex");
@@ -251,4 +252,23 @@ test("unreviewed extended history is refused on non-direct assessment",()=>{
  const r=P6_ROLLING_ROUTES.find(x=>x.lane==="EARLY_DRAW");
  const snap={workflow:r.workflow,complete:true,runs:[],active:[]};
  assert.throws(()=>assessP6RollingRoute(r,snap,{sha,epoch:start-3*H,clock:start,earlyDrawHistoryEpoch:start-4*H}),/BAD_EARLY_DRAW_HISTORY_SCOPE/);
+});
+
+test("read-only probe discards a transient inconsistent active-count snapshot and retries once",async()=>{
+ const err=new Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT");
+ let attempts=0,clock=start;
+ const complete={plan:{status:"REVIEWED_ROLLING_WAVE_PLAN_NO_GO"}};
+ const result=await readP6DirectReadonlySnapshot(async()=>{if(++attempts===1)throw err;return complete},
+  {started:start,now:()=>clock,sleep:async ms=>{clock+=ms}});
+ assert.equal(attempts,2);assert.equal(clock,start+1500);
+ assert.deepEqual(result,{snapshot:complete,snapshotAttempts:2});
+});
+test("read-only snapshot retry is bounded and preserves persistent or unrelated HOLD",async()=>{
+ const transient=new Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT");
+ for(const [err,elapsed,wanted] of [[transient,0,2],[transient,60000,1],[new Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED"),0,1]]){
+  let attempts=0,clock=start+elapsed;
+  await assert.rejects(readP6DirectReadonlySnapshot(async()=>{attempts++;throw err},
+   {started:start,now:()=>clock,sleep:async ms=>{clock+=ms}}),e=>e===err);
+  assert.equal(attempts,wanted);
+ }
 });
