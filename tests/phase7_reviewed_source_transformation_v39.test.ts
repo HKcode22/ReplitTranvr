@@ -286,7 +286,7 @@ describe("explicit frozen-native clock difference candidate (synthetic review on
 
 
 describe("native FIDS status grouping candidate: exact public contract domain, no one-to-one source status encoding",()=>{
- const groups=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Canceled","Diverted","CanceledUncertain"]];
+ const groups=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Diverted"],["Canceled"],["CanceledUncertain"]];
  const make=()=>{
   const c=contract(),p=profile(),evidence=sha("synthetic review of grouped public enum");
   c.features=[...c.features,{name:"state_bin",bucketCount:groups.length,fieldClass:"approved_derived",transformEvidenceSha256:evidence,nonReconstructable:true}];
@@ -300,7 +300,9 @@ describe("native FIDS status grouping candidate: exact public contract domain, n
   expect(P7_NATIVE_STATUS_DOMAIN).toHaveLength(13);
   const {c,p,status}=make();
   for(const [bucket,group] of groups.entries()){
-   expect(group.length).toBeGreaterThanOrEqual(2);
+   // Only the canonically protected cancellation states may stand alone.
+   if(group.length===1)expect(["Canceled","CanceledUncertain"]).toContain(group[0]);
+   else expect(group.length).toBeGreaterThanOrEqual(2);
    for(const source of group){
     const out=transformPhase7ReviewedSourceDecisions(p,c,[...decisions(),status(source)],context);
     expect(out.input.featureBuckets.state_bin).toBe(bucket);
@@ -332,6 +334,25 @@ describe("native FIDS status grouping candidate: exact public contract domain, n
    const changed={...p,fields:[...p.fields.slice(0,-1),bad]};
    expect(validatePhase7ReviewedTransformationProfile(changed).pass).toBe(false);
   }
+ });
+ it("rejects the canonical INV-NO-MERGE violation even when the grouping is structurally valid",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  // 13/13 coverage, disjoint, no singleton, bucketCount matches: structurally valid.
+  const merged=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Canceled","Diverted","CanceledUncertain"]];
+  const changed={...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:merged.length,categories:merged}]};
+  const verdict=validatePhase7ReviewedTransformationProfile(changed);
+  expect(verdict.pass).toBe(false);
+  expect(verdict.failures).toContain("categorical-group-canonical-merge-forbidden:state_bin");
+  // Splitting the pair is what makes the same candidate admissible.
+  const split=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed","Diverted"],["Canceled"],["CanceledUncertain"]];
+  expect(validatePhase7ReviewedTransformationProfile({...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:split.length,categories:split}]}).pass).toBe(true);
+ });
+ it("still rejects a singleton bucket for any state that is not canonically protected",()=>{
+  const {p}=make(),field=p.fields.at(-1)!;
+  const bad=[["Unknown","Expected"],["CheckIn","Boarding","GateClosed"],["Departed","EnRoute","Approaching","Arrived"],["Delayed"],["Diverted"],["Canceled"],["CanceledUncertain"]];
+  const verdict=validatePhase7ReviewedTransformationProfile({...p,fields:[...p.fields.slice(0,-1),{...field,bucketCount:bad.length,categories:bad}]});
+  expect(verdict.pass).toBe(false);
+  expect(verdict.failures).toContain("categorical-group-definition-invalid:state_bin");
  });
  it("present out-of-domain native status is counted as lost and aborts the real PRE persistence function before any INSERT",async()=>{
   const {c,p}=make();

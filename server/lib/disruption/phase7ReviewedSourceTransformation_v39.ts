@@ -44,6 +44,21 @@ export const P7_NATIVE_STATUS_DOMAIN = Object.freeze([
   "Delayed","Approaching","Arrived","Canceled","Diverted","CanceledUncertain"
 ] as const);
 
+/** Canonical invariant INV-NO-MERGE (server/lib/disruption/canonicalRules.ts,
+ * required): "CanceledUncertain not merged with Canceled". A grouped
+ * dictionary is a coarsening, so it must not silently erase a frozen canonical
+ * distinction. This is a structural guard only; it is not a rights,
+ * reconstruction or scientific determination about any admitted grouping. */
+export const P7_FORBIDDEN_STATUS_MERGES = Object.freeze([
+  Object.freeze(["Canceled","CanceledUncertain"] as const),
+] as const);
+
+/** States that must stay distinguishable even when every other token in the
+ * domain is coarsened. They may therefore appear as an explicit singleton
+ * group. Every other singleton group stays rejected: one value per bucket is a
+ * reversible copy of the native status, not a derived work. */
+export const P7_CANONICAL_SINGLETON_TOKENS = Object.freeze(["Canceled","CanceledUncertain"] as const);
+
 export type Phase7ReviewedTransformationRole = 'feature' | 'label';
 export type Phase7ReviewedRightsDisposition =
   | 'EXTERNALLY_REVIEWED_ALLOW'
@@ -239,15 +254,20 @@ export function validatePhase7ReviewedTransformationProfile(
     } else if (field.kind === 'categorical_group_dictionary') {
       // A distinct integer per original status is an invertible code. For the
       // native FIDS status only, accept a strictly many-to-one, explicit closed
-      // dictionary; reject singleton groups and duplicate/mixed inputs. A
-      // structural pass is NOT a legal or joint-reconstruction determination.
+      // dictionary; reject singleton groups and duplicate/mixed inputs, except
+      // the canonically protected cancellation states that INV-NO-MERGE forbids
+      // merging into any other bucket. A structural pass is NOT a legal or
+      // joint-reconstruction determination.
       const groups = field.categories;
       const names = new Set<string>();
       if (field.sourceField !== 'reported_pre_departure_status' || field.role !== 'feature' ||
           field.boundaries !== null || !Array.isArray(groups) || groups.length !== field.bucketCount ||
           groups.length < 2 || groups.length > 32 ||
           !groups.every(group => {
-            if (!Array.isArray(group) || group.length < 2 || group.length > 64) return false;
+            if (!Array.isArray(group) || group.length > 64) return false;
+            if (group.length < 2 &&
+                (group.length !== 1 ||
+                 !(P7_CANONICAL_SINGLETON_TOKENS as readonly unknown[]).includes(group[0]))) return false;
             return group.every(value => {
               if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value) || names.has(value)) return false;
               names.add(value); return true;
@@ -255,6 +275,13 @@ export function validatePhase7ReviewedTransformationProfile(
           }) || names.size !== P7_NATIVE_STATUS_DOMAIN.length ||
           !P7_NATIVE_STATUS_DOMAIN.every(value => names.has(value))) {
         failures.push('categorical-group-definition-invalid:' + String(field.outputField));
+      }
+      // Structural validity is not enough: a fully covered, many-to-one
+      // grouping can still merge the two canonical cancellation states.
+      if (Array.isArray(groups) && groups.some(group =>
+          Array.isArray(group) &&
+          P7_FORBIDDEN_STATUS_MERGES.some(pair => pair.every(name => group.includes(name))))) {
+        failures.push('categorical-group-canonical-merge-forbidden:' + String(field.outputField));
       }
     } else if (field.kind === 'categorical_dictionary') {
       // A distinct output for each input category is reversible. Packet B
