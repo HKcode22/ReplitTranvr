@@ -43,7 +43,7 @@ export const P6_EXACT_MONDAY_IDENTITY_SUCCESSOR=Object.freeze({
  oldCode:"781140cde71af3b72376c2db9f0fdb84204a2b7c",
  oldStage:"a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682",
  oldCost:"ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e",
- oldManifest:"b2a691cb411af61c2bfdc42c55506e0ee45bfa3e22b420bbd738dc98ee4e4",
+ oldManifest:"b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4",
  oldConfig:"ee4ec9f6ca3e0f123512c8aa463cadd07a8892a3fedc4c316fe0c1b64731457c",
  newCode:"795ace55984b44a3d0bffa886d33a5ec11d31927",
  newStage:"8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc",
