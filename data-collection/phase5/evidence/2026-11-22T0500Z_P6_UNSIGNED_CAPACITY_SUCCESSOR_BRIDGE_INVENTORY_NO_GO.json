@@ -1,0 +1,106 @@
+{
+  "schema": "travnr.phase6.unsigned_operational_bridge_inventory.v1",
+  "approval": false,
+  "phase6PaidGo": false,
+  "stageCodeSha": "795ace55984b44a3d0bffa886d33a5ec11d31927",
+  "stagePacketSha256": "8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc",
+  "observedMainSha": "e058b9d0817151d4b10282c9242c6c8ebeef7814",
+  "reviewCandidateSha": "e61e067de26e0944bdab2d6d6865d1bd930c1654",
+  "reviewCandidateTreeSha": "4f78f831da2336a21c2a84b0221f0b590ce8ade6",
+  "changes": [
+    {
+      "path": ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
+      "blobSha": "b915a6ceb3194fb088518c8508b6d1cec32b033e",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml",
+      "blobSha": "1687e3f0bed99074ec51622b7c0497521b295f57",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+      "blobSha": "a60c3ea3d5567b606b445451e5fa6d899f6c6904",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",
+      "blobSha": "84722af32a5115c37a48f9a59d6f65ec9de650fa",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",
+      "blobSha": "d31a285718668d282e4053ac97b2247e61151983",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+      "blobSha": "deb1c15e068789db37c8775dbe5fc682877d110c",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase6-direct-recovery-tick.yml",
+      "blobSha": "1df85747b0343e879f911dfb427ae5d0206f1630",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",
+      "blobSha": "3e745cb0930b1ca47ca5ee958d915cfadef375d5",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase6-private-later-enrollment.yml",
+      "blobSha": "26f5f939b85042b466bfdfbaca2d569ea5849129",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": ".github/workflows/phase6-stored-post-recovery-no-provider.yml",
+      "blobSha": "d7ac97b54df2f56f90af93b8a7ac3fe13bd6d337",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": "review-tools/p6_nov20_finalize_recovered_policies_v39.ts",
+      "blobSha": "6a18ea4aee56df8d902fc6e93d4be5e3c995ac2d",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": "review-tools/p7_commission_pre_policy_owner_v39.ts",
+      "blobSha": "851002381e5ee713501033b46296e3265443fb20",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": "scripts/v39_phase6_enable_source_owner_v39.ts",
+      "blobSha": "11caa80823c19390a6d04ff6274ca97618ebbf0f",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": "scripts/v39_phase6_revised_stage_executable_bridge_v39.ts",
+      "blobSha": "a042160d3d58f7eb87383fee39440ca696640f56",
+      "mode": "100644",
+      "status": "modified"
+    },
+    {
+      "path": "tests/phase6_revised_stage_executable_bridge_v39.test.ts",
+      "blobSha": "fd6b409d14f68d7ac813da3bc4d6d72d44b02138",
+      "mode": "100644",
+      "status": "modified"
+    }
+  ],
+  "excludedExistingApprovalLedger": "data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json",
+  "oldApprovalLedgerUnmodifiedRelativeToMain": true,
+  "oldEvidenceFilesUnmodifiedRelativeToMain": true,
+  "notes": "Inventory only; not the approved bridge schema, not AUTH or a signed review. Independent review must bind exact candidate/cost/stage/lineage and actual owner authorization separately."
+}
