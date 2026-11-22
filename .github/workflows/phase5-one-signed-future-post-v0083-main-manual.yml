@@ -106,6 +106,7 @@ jobs:
           npx vitest run tests/phase5_v0083_future_post_real_db_adapter_v39.test.ts tests/phase5_v0083_future_post_manual_owner_v39.test.ts tests/phase6_private_post_actual_child_transport_v39.test.ts tests/phase6_actual_post_outcome_observability_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts
           echo P5_V0083_POST_SIGNED_OWNER_OFFLINE_CI_NO_SOURCE_USE_RIGHTS_OR_PAID_GO
   exact-signed-one-v0083-future-post:
+    environment: phase6-protected-runtime
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
