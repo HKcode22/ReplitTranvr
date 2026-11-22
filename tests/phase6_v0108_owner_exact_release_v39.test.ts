@@ -8,7 +8,9 @@ import {
 const code="a".repeat(40);
 const granted="{neondb_owner=X/neondb_owner,phase6_private_expiry_reader_v39=X/neondb_owner}";
 const f=(body:string,vol:string)=>({body,vol,owner:"neondb_owner",definer:true,
- config:"search_path=pg_catalog, pg_temp",acl:granted,public_exec:false});
+ config:vol==="v"?["search_path=pg_catalog, pg_temp","lock_timeout=3s"]:
+  ["search_path=pg_catalog, pg_temp"],
+ acl:granted,public_exec:false});
 describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
  it("pins the reviewed SQL byte-for-byte and distinguishes both function bodies",()=>{
   const sql=exactP6V0108Sql();
@@ -18,6 +20,8 @@ describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
   expect(classifyP6V0108Bodies([f(sql.oldStatus,"s"),f(sql.oldSweep,"v")],sql))
    .toBe("V0105_EXACT_PREDECESSOR");
   expect(classifyP6V0108Bodies([f(sql.newStatus,"s"),f(sql.newSweep,"v")],sql))
+   .toBe("V0108_EXACT_INSTALLED");
+  expect(classifyP6V0108Bodies([f(sql.newStatus,"s"),{...f(sql.newSweep,"v"),config:["lock_timeout=3s","search_path=pg_catalog,pg_temp"]}],sql))
    .toBe("V0108_EXACT_INSTALLED");
   expect(()=>exactP6V0108Sql(p=>{
    const b=readFileSync(p);
@@ -36,6 +40,10 @@ describe("Gate 3 V0108 exact owner migration, NO provider or paid GO",()=>{
    [{...full[0],owner:"postgres"},full[1]],
    [full[0],{...full[1],vol:"s"}],
    [full[0],{...full[1],config:"search_path=public"}],
+   [full[0],{...full[1],config:["search_path=pg_catalog, pg_temp"]}],
+   [full[0],{...full[1],config:["search_path=pg_catalog, pg_temp","lock_timeout=30s"]}],
+   [full[0],{...full[1],config:["search_path=pg_catalog, pg_temp","lock_timeout=3s","work_mem=1GB"]}],
+   [{...full[0],config:["search_path=pg_catalog, pg_temp","lock_timeout=3s"]},full[1]],
    [full[0],{...full[1],definer:false}]
   ])expect(()=>classifyP6V0108Bodies(corrupted,sql)).toThrow();
  });

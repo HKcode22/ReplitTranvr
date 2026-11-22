@@ -54,9 +54,17 @@ export function classifyP6V0108Bodies(functions,sql){
      typeof f.acl==="string"&&f.acl.length>0&&f.public_exec===false))
     fail("CATALOG_SECURITY_DEFINER_ACL");
  const a=functions[0],b=functions[1];
+ // Existing V0105 grants sweep only with bounded 3s function lock timeout.
+ // pg_proc.proconfig is an array of *settings*, not one flattened string:
+ // search_path contains its own comma and must never be split or dropped.
+ const configMatches=(got,required)=>Array.isArray(got)&&
+   got.length===required.length&&got.every(x=>typeof x==="string")&&
+   JSON.stringify(got.map(x=>x.replace(/\s/g,"")).sort())===
+    JSON.stringify(required.map(x=>x.replace(/\s/g,"")).sort());
  if(a.vol!=="s"||b.vol!=="v"||
-    ![a,b].every(f=>typeof f.config==="string"&&f.config.replace(/\s/g,"")==="search_path=pg_catalog,pg_temp"))
-    fail("CATALOG_FUNCTION_FLAGS");
+   !configMatches(a.config,["search_path=pg_catalog, pg_temp"])||
+   !configMatches(b.config,["search_path=pg_catalog, pg_temp","lock_timeout=3s"]))
+   fail("CATALOG_FUNCTION_FLAGS");
  const old=a.body===sql.oldStatus&&b.body===sql.oldSweep,
   installed=a.body===sql.newStatus&&b.body===sql.newSweep;
  if(!old&&!installed)fail("MIXED_OR_UNKNOWN_FUNCTION_BODY_NO_REPLAY");
@@ -131,7 +139,7 @@ async function readback(connectionString,head,sql){
   const counts=(await c.query("SELECT (SELECT count(*)::integer FROM phase6_private.frozen_native_packet_v39) packets,(SELECT count(*)::integer FROM phase6_private.signed_run_day_index_revision_v39) indexes,(SELECT count(*)::integer FROM clean.adb_incident_stop WHERE cause='deletion' AND NOT resolved) deletion_stops")).rows[0];
   const funcs=[];
   for(const reg of [STATUS,SWEEP]){
-   const f=(await c.query("SELECT p.prosrc body,p.prosecdef definer,pg_get_userbyid(p.proowner) owner,p.provolatile vol,coalesce(array_to_string(p.proconfig,','),'') config,coalesce(p.proacl::text,'') acl,EXISTS(SELECT 1 FROM pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) x WHERE x.grantee=0 AND x.privilege_type='EXECUTE') public_exec FROM pg_proc p WHERE p.oid=$1::regprocedure",[reg])).rows;
+   const f=(await c.query("SELECT p.prosrc body,p.prosecdef definer,pg_get_userbyid(p.proowner) owner,p.provolatile vol,p.proconfig config,coalesce(p.proacl::text,'') acl,EXISTS(SELECT 1 FROM pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) x WHERE x.grantee=0 AND x.privilege_type='EXECUTE') public_exec FROM pg_proc p WHERE p.oid=$1::regprocedure",[reg])).rows;
    if(f.length!==1)fail("FUNCTION_MISSING");
    funcs.push(f[0]);
   }
