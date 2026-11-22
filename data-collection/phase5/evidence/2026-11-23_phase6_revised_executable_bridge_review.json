@@ -3,7 +3,7 @@
   "stageCodeSha": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
   "stagePacketSha256": "a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682",
   "costEnvelopeSha256": "ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e",
-  "reviewedExecutableCommit": "01e1a879a9d5f377ced23d5ba8d998418579674a",
+  "reviewedExecutableCommit": "fc1607288adccd787d792619b96fdc27e908e097",
   "changedBlobs": [
     {
       "path": ".github/workflows/phase6-owner-bulk-handoff-review.yml",
@@ -37,7 +37,7 @@
     },
     {
       "path": "scripts/v39_phase6_revised_stage_executable_bridge_v39.ts",
-      "blobSha": "8f011ceb5f661039b887dc4cc28485fc8936ea8f",
+      "blobSha": "4e824ab89e9e660a3acddbf36958e77b703f2cf9",
       "mode": "100644"
     },
     {
@@ -91,8 +91,8 @@
       "mode": "100644"
     }
   ],
-  "reviewedBy": "Independent reviewer session (OpenCode agent), 2026-11-22: exact 17-blob hash review, INV-NO-MERGE guard verified; reviewed commit 01e1a879",
-  "reviewedAtUtc": "2026-11-22T01:23:20.646Z",
+  "reviewedBy": "Independent reviewer session (OpenCode agent), 2026-11-22: exact blob-hash review, INV-NO-MERGE guard + ancestor-bound bridge verified",
+  "reviewedAtUtc": "2026-11-22T01:38:51.755Z",
   "independentOperationalReleaseApproved": true,
   "phase6PaidGo": false
 }
