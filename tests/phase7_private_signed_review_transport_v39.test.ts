@@ -132,7 +132,7 @@ active("real private custody signed-review transport",()=>{
     // make the normal expiry worker fail. A direct malformed/extra source
     // value in that generic kind stays hard (SQL storage permits the kind).
     const genericNow=(await reader.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
-    const genericDeadline=genericNow+3000, g=fixtures(genericNow), until=new Date(genericDeadline).toISOString();
+    const genericDeadline=genericNow+8000, g=fixtures(genericNow), until=new Date(genericDeadline).toISOString();
     for(const [selector,payload,key] of [[g.a,g.prePayload,pre],[g.d,g.lanePayload,lane],[g.c,g.settlementPayload,post]] as const){
      const w=wire({...payload,manifestSha256:m,validUntilUtc:until},key);
      expect(await publishP7PrivateSignedReviewOnce({client:publisher,reader,trust:scoped,selector,wire:w})).toMatchObject({status:"P7_SIGNED_WIRE_COMMITTED_INDEPENDENT_READBACK_NO_GO"});
@@ -163,6 +163,12 @@ active("real private custody signed-review transport",()=>{
     expect(hard).toMatchObject({deadlineDueObservedAtInitialRead:true,dueOperationalMetadataPackets:3,status:"PRIVATE_EXPIRY_DUE_AT_READBACK_CLEARED"});
     expect(hard).toMatchObject({deadlineDueObservedDuringSweep:true});
     expect(hard.receipts[0]).toMatchObject({packets:5,indexRevisions:0,commitAck:true,independentAggregateReceiptVerified:true,hardDueAtSweep:2});
+    // All five expired neighbors cleared, but the signed future source
+    // still exists, unmodified, for its legitimate remaining PRE/POST use.
+    const liveReadback=await reader.query("SELECT payload_bytes,content_sha256 FROM phase6_private.frozen_native_packet_v39 WHERE logical_path=$1 AND retention_not_after_utc=$2::timestamptz",[stillLivePath,stillLiveUntil]);
+    expect(liveReadback.rowCount).toBe(1);
+    expect(liveReadback.rows[0].payload_bytes).toEqual(stillLiveBytes);
+    expect(liveReadback.rows[0].content_sha256).toBe(stillLiveHash);
    }
    console.log(profile+"_REAL_PG16_DUE_ONLY_RECEIPT_FENCE_ORDER_PASS_CI_ONLY");
   }finally{
