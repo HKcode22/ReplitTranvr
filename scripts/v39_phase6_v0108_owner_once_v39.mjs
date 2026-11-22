@@ -17,6 +17,9 @@ export const P6_V0108_MIGRATION="migrations/staged/V0108__phase6_private_operati
 export const P6_V0108_GIT_BLOB="ee626ee1ad90b6c7e281565ade5a79930eeeb74b";
 export const P6_V0108_RELAY_COMPAT_BLOB="66e10596b138a9c6d0b2872586d8448126dc26fc";
 const V0105="migrations/staged/V0105__phase6_bounded_private_epoch_expiry_inert_v39.sql";
+const V0105_GIT_BLOB="861229c4c264ed9a47d005f2a96c25cf1c800615";
+const SELF_PATH="scripts/v39_phase6_v0108_owner_once_v39.mjs";
+const TARGET="HKcode22/ReplitTranvr";
 export const P6_V0108_APPLY_APPROVAL="INSTALL_EXACT_V0108_EMPTY_CUSTODY_NO_PROVIDER_AND_READBACK";
 const STATUS="clean.phase6_private_epoch_expiry_status_v39(text)";
 const SWEEP="clean.phase6_private_epoch_expiry_sweep_v39(text,integer)";
@@ -69,14 +72,36 @@ function relayMainCompat(){
   "--jq",".sha");
  requireP6V0108RelayCompatibleBlob(sha);
 }
+function github(...args){
+ return execFileSync("gh",["api",...args],{
+  encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:12000000}).trim();
+}
+function currentMainFileBlob(path){
+ const sha=github("repos/"+TARGET+"/contents/"+path+"?ref=main","--jq",".sha");
+ if(!SHA.test(sha))fail("GITHUB_FILE_SHA_INVALID");
+ return sha;
+}
+function authenticatedMainRead(path){
+ const expected=path===P6_V0108_MIGRATION?P6_V0108_GIT_BLOB:
+  path===V0105?V0105_GIT_BLOB:null;
+ if(!expected||currentMainFileBlob(path)!==expected)fail("EXACT_MAIN_SQL_BLOB_DRIFT");
+ const payload=github("repos/"+TARGET+"/git/blobs/"+expected,"--jq",".content");
+ const b=Buffer.from(payload.replace(/\\s/g,""),"base64");
+ if(blob(b)!==expected)fail("REMOTE_GIT_BLOB_BYTES_DRIFT");
+ return b;
+}
 function exactMain(){
- const local=git("git","rev-parse","HEAD"),remote=git("gh","api",
-  "repos/HKcode22/ReplitTranvr/git/ref/heads/main","--jq",".object.sha");
- if(!SHA.test(local)||local!==remote)fail("REPO_MAIN_HEAD_CHANGED");
- if(git("git","hash-object",P6_V0108_MIGRATION)!==P6_V0108_GIT_BLOB||
-    git("git","rev-parse","HEAD:"+P6_V0108_MIGRATION)!==P6_V0108_GIT_BLOB)
-   fail("LOCAL_V0108_NOT_EXACT_COMMITTED_MAIN");
- return local;
+ const head=github("repos/"+TARGET+"/git/ref/heads/main","--jq",".object.sha");
+ if(!SHA.test(head)||process.env.P6_V0108_REVIEWED_MAIN_SHA!==head)
+  fail("EXACT_PRODUCTION_MAIN_PIN");
+ // No git pull/reset, no transient worktree, and no local static-policy copy.
+ // The same bytes executed by this owner are verified against current main.
+ if(currentMainFileBlob(SELF_PATH)!==blob(readFileSync(fileURLToPath(import.meta.url))))
+  fail("OWNER_SCRIPT_NOT_EXACT_REVIEWED_MAIN");
+ if(currentMainFileBlob(P6_V0108_MIGRATION)!==P6_V0108_GIT_BLOB||
+    currentMainFileBlob(V0105)!==V0105_GIT_BLOB)
+  fail("REMOTE_MIGRATION_OR_PREDECESSOR_DRIFT");
+ return head;
 }
 function ownerUrl(env){
  if(env.NODE_TLS_REJECT_UNAUTHORIZED==="0")fail("TLS_DISABLED");
@@ -121,8 +146,11 @@ async function readback(connectionString,head,sql){
   // owner release authorization; ancestry alone is not a paid-GO approval.
   let reviewedCodeAncestor=auth[0].code_sha===head;
   if(!reviewedCodeAncestor){
-   try{git("git","merge-base","--is-ancestor",auth[0].code_sha,head);
-     reviewedCodeAncestor=true;}catch{}
+   // Existing immutable SOURCE authorization predates this release; check
+   // actual remote ancestry instead of relying on Replit's local checkout.
+   try{const status=github("repos/"+TARGET+"/compare/"+auth[0].code_sha+"..."+head,
+     "--jq",".status");
+    reviewedCodeAncestor=status==="ahead";}catch{}
   }
   return {state,reviewedCodeAncestor,sourceAuthCodeSha:auth[0].code_sha,
    sourceManifestSha256:auth[0].manifest_sha256,sourceEnabled:auth[0].enabled,
@@ -142,8 +170,8 @@ export function reviewP6V0108Apply(pre,head,env){
 async function main(){
  if(process.argv.length>3||!["review","apply"].includes(process.argv[2]||"review"))
    fail("OWNER_MODE");
- const mode=process.argv[2]||"review",sql=exactP6V0108Sql(),head=exactMain(),
-  url=ownerUrl(process.env);
+ const mode=process.argv[2]||"review",head=exactMain(),
+  sql=exactP6V0108Sql(authenticatedMainRead),url=ownerUrl(process.env);
  const pre=await readback(url,head,sql);
  if(mode==="review"||pre.state==="V0108_EXACT_INSTALLED"){
   console.log(JSON.stringify({status:pre.state==="V0108_EXACT_INSTALLED"?
