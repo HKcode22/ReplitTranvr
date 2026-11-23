@@ -708,7 +708,7 @@ This is a standard temporal data-engineering distinction between **observation t
 
 | Phase | Scientifically meaningful artifact | Integrity control and failure interpretation |
 |---|---|---|
-| **Prospective day selection** | Planned signed day plus four scoped airports (HUB, MID_A, MID_B, REGIONAL) | First ten paired days show candidates; **21 adaptive ordinary days require prospective authenticated DB draw**. Candidate airport labels in static JSON are not a signed realized draw |
+| **Prospective day selection** | Planned signed day plus four scoped airports (HUB, MID_A, MID_B, REGIONAL) | The ten paired-design days show candidate airports; **21 adaptive ordinary days require prospective authenticated DB draw**. Candidate airport labels in static JSON are not a signed realized draw |
 | **FIDS SOURCE GET** | Bound original response bytes, authenticated query ID/scope, return/observed time, billed charge attempt, normalization | Physical GET is allowed only under exact signed approval and cap. `maxAttempts=1` is not a license to replay a lost billed response |
 | **Stable flight registration** | Carrier/airport/flight identity and externally frozen scheduled departure time T | Never remove needed identities for research. Do not cross-match a different flight or change T after an outcome becomes known |
 | **PRE at T−24h, T−6h, T−90m** | Per-flight snapshot as of strictly admissible forecast information | Check actual source availability, arrival/commit clocks and per-flight cutoff independently. Late/unavailable = **missing/censored**, not retrospective synthetic on-time data |
@@ -726,7 +726,7 @@ This is a standard temporal data-engineering distinction between **observation t
 - Gaps between service cohorts do **not** mean all workflows are off: early draw, next-day SOURCE preparation, POST due processing, custody recovery and monitoring can overlap or occur on dates without a new service cohort.
 - The signed external control/relay period in the original release guide extends to **2026-12-29 04:00Z = Dec 28 8:00 PM PST**. That is a reviewed **control boundary**, **not** a new guaranteed source window or a guarantee that all flight outcomes have settled. The Dec 27–28 calendar entries are therefore labeled **conditional follow-up**, with NO invented fixed GET/POST time.
 
-**The **dates on a personal calendar** are based on `America/Los_Angeles` local midnight; a cohort's **budget day** is an authenticated UTC charge day and is *not* always the same as its California day or UTC future service date. This is why time zones and physical charge-day accounting matter independently.**
+**Calendar dates** use `America/Los_Angeles` local midnight. A cohort's **budget day** is an authenticated UTC charge day and is *not* always the same as its California date or UTC future service date. That is why physical charge-day accounting is independent of the study-day label.
 
 ### J.7 Budget and retry math: why overlapping is not automatically overbilling
 
