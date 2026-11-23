@@ -1,3 +1,15 @@
+## 2026-11-23 06:41Z — G12 RECOVERY COMPLETE AND INDEPENDENTLY VERIFIED
+
+**G12 CLOSED PASS. DO NOT RUN ANY G12 SCRIPT AGAIN.** Owner successfully executed the protected-only SHA repair; command returned `P6_G12_PROTECTED_C8_POST_FOUR_STEPS_PASS_PAID_OFF`, repository readback #45123278530, protected main run #45125753815, paidGo false. Independently inspected [actual new POST run #45125753815](https://github.com/HKcode22/ReplitTranvr/actions/runs/45125753815): workflow_dispatch on production main c8, attempt 1, entire `exact-main-post-actors-only` SUCCESS, all FOUR required admission/reviewer/publisher/storage steps SUCCESS, paid V0083 worker SKIPPED. The old failed #45123332394 stays historic only. See [G12 independent closure checkpoint](2026-11-23_G12_PROTECTED_POST_FOUR_ACTOR_INDEPENDENT_ACCEPTANCE_PASS.md).
+
+**Next ONLY:** original Command 2 / G13 explicit paid GO in the signed Monday Nov 23 21:50Z–strictly before 23:10Z window (1:50–3:10 PM PST), preferably before 22:15Z. Do not run GO now. The pinned G13 helper checks fresh provider account, 31-day policy, newly successful protected G12 steps, retained repo/relay SHAs, environment/STOP metadata, budget and production retention. A HOLD means NO GO, not an invitation to manually override. No further PRE-GO protected SHA or code changes needed.
+
+**After G13 actually PASS only:** original Command 3 / G9 DIRECT_TICK at/after Monday 23:45Z (3:45 PM PST). First authentic paid SOURCE receipt and downstream PRE/POST must still be audited; green clock alone is not evidence. No changes to Gates1–8, study design, or new gates.
+
+**Earlier 'repair prepared/not executed' instructions below are historical and superseded. The original G12 Command 1 was one-use and must never be rerun.**
+
+---
+
 ## UPDATE 2026-11-23 06:40 UTC — G12 environment shadow repair prepared, NOT executed
 
 **This supersedes the already-attempted Command 1 below.** Installed G12 repository 31-value readback [45123278530](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123278530) passed. Protected POST preflight [45123332394](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123332394) failed its initial admission, before reviewer/publisher/storage tests. The original G12 17-repository-secret installer never updated the protected-environment copy of the approved POST code SHA; its timestamp predates the new current-main release. Paid GO is OFF.
