@@ -2,7 +2,7 @@
 
 **This supersedes the already-attempted Command 1 below.** Installed G12 repository 31-value readback [45123278530](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123278530) passed. Protected POST preflight [45123332394](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123332394) failed its initial admission, before reviewer/publisher/storage tests. The original G12 17-repository-secret installer never updated the protected-environment copy of the approved POST code SHA; its timestamp predates the new current-main release. Paid GO is OFF.
 
-Prepared bounded, pre-GO, nonpaid **owner recovery helper** Git blob **0da37473f3563e54c0df83dfd2b55921061d16ea**: [p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh](p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh). This checks the existing G12 PASS, reasserts both global paid STOP controls zero at both scopes, updates **only** the protected-environment POST-approved SHA to current main, and dispatches the original protected main actor preflight. It requires all four role steps PASS; no 31-day policy, signed science, provider, DB, cron or production-code mutation. It has NOT been owner-executed. Detailed [source and evidence checkpoint](2026-11-23_G12_PROTECTED_POST_SHA_SHADOW_RECONCILIATION_NO_GO.md).
+Prepared bounded, pre-GO, nonpaid **owner recovery helper** Git blob **1eec51c1a58503f8e6850dc76080cf85a25e7e85**: [p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh](p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh). This checks the existing G12 PASS, reasserts both global paid STOP controls zero at both scopes, updates **only** the protected-environment POST-approved SHA to current main, and dispatches the original protected main actor preflight. It requires all four role steps PASS; no 31-day policy, signed science, provider, DB, cron or production-code mutation. It has NOT been owner-executed. Detailed [source and evidence checkpoint](2026-11-23_G12_PROTECTED_POST_SHA_SHADOW_RECONCILIATION_NO_GO.md).
 
 **Run once in the owner's Replit Shell before Monday 21:50Z; on HOLD do not run GO or repeat the G12 one-use installer:**
 
@@ -13,7 +13,7 @@ set -Eeuo pipefail
 set +x
 umask 077
 REPO="HKcode22/ReplitTranvr"
-BLOB="0da37473f3563e54c0df83dfd2b55921061d16ea"
+BLOB="1eec51c1a58503f8e6850dc76080cf85a25e7e85"
 TMP="$(mktemp --suffix=.sh "$PWD/scripts/.p6_g12_env_post_XXXXXXXX")"
 trap 'rm -f "$TMP"' EXIT
 gh api "repos/$REPO/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
