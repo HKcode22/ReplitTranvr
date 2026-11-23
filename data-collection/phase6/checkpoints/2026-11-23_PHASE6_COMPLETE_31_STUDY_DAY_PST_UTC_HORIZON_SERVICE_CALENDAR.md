@@ -1,6 +1,6 @@
 # Phase 6 — COMPLETE 31-STUDY-DAY SOURCE / PRE / POST SCHEDULE (California PST + UTC)
 
-**ONE authoritative operator calendar for all 31 study days, with corrected full AM/PM tables and the simplified 36-event Google/Notion display.** Prepared 2026-11-23 PST from frozen **production main `c8e065d665ccacb6d2575070e94c5500b7583044`**. This file is an explanatory view of already reviewed signed plans, not a change to the frozen study, not paid GO, not proof of collection. Kept on **documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`**, not production main. If the signed release identity changes, STOP and independently review rather than silently rewrite these slots.
+**ONE authoritative operator calendar for all 31 study days, with corrected full AM/PM tables and the latest 72-entry, two-layer Google/Notion calendar view.** Prepared 2026-11-23 PST from frozen **production main `c8e065d665ccacb6d2575070e94c5500b7583044`**. This file is an explanatory view of already reviewed signed plans, not a change to the frozen study, not paid GO, not proof of collection. Kept on **documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`**, not production main. If the signed release identity changes, STOP and independently review rather than silently rewrite these slots.
 
 ## Start here — the three different notions of "schedule"
 
@@ -598,7 +598,7 @@ The external rolling relay and primary retention backstop are distinct; a green 
 
 ## I. CURRENT CLEAN GOOGLE + NOTION CALENDAR — verified November 23, 2026 California PST
 
-**Latest verified state overrides the former 138-event creation count.** The user's Google primary calendar originally received exactly 138 correct-timestamp events (34 service segments, 102 individual SOURCE horizon blocks, two launch owner actions), but that was too crowded in Notion Calendar. On the owner's explicit request, all 34 original service events were **updated in place** with concise `P6 Day 01` through `P6 Day 31` titles and comprehensive descriptions listing every T−24h, T−6h, T−90m FIRST/LAST clock slot, separate segments, mandatory 1h break, candidate/adaptive ICAOs, selection eligibility and source evidence. The 102 redundant calendar-only SOURCE display blocks were deleted. The independent Google Calendar readback returned exactly **36 live P6 events: 34 descriptive service-window events and both original Gate13/Gate9 owner actions**, 31 unique study-day labels, 0 residual separate SOURCE event blocks, no pagination. Days 03, 07 and 08 intentionally have **two service events each**, not duplicates. Nothing else in the user's calendar was changed.
+**Historical cleanup snapshot (before daily gray all-day agendas were added; the LATEST status is in J.8/J.10 below).** The user's Google primary calendar originally received exactly 138 correct-timestamp events (34 service segments, 102 individual SOURCE horizon blocks, two launch owner actions), but that was too crowded in Notion Calendar. On the owner's explicit request, all 34 original service events were **updated in place** with concise `P6 Day 01` through `P6 Day 31` titles and comprehensive descriptions listing every T−24h, T−6h, T−90m FIRST/LAST clock slot, separate segments, mandatory 1h break, candidate/adaptive ICAOs, selection eligibility and source evidence. The 102 redundant calendar-only SOURCE display blocks were deleted. The independent Google Calendar readback returned exactly **36 live P6 events: 34 descriptive service-window events and both original Gate13/Gate9 owner actions**, 31 unique study-day labels, 0 residual separate SOURCE event blocks, no pagination. Days 03, 07 and 08 intentionally have **two service events each**, not duplicates. Nothing else in the user's calendar was changed.
 
 The old 102 SOURCE calendar events were **not** API jobs or database data and their removal cannot cancel an autonomous flight collection task. All 6,144 planned source slots still exist in the original pinned GitHub machine-readable planning files and sections A/B/C/F of this checkpoint, and the respective three horizon windows now appear within each retained service event description. A real paid GET, cutoff-safe flight PRE or actual POST remains independently verified in the database, not implied by calendar presence.
 
@@ -609,3 +609,159 @@ The old 102 SOURCE calendar events were **not** API jobs or database data and th
 **Formatting repaired in this GitHub file:** all compact `a`/`p` suffixes have been expanded to **AM**/**PM**, and 31-row split-segment tables A/B/C now use `;` **inside cells** instead of unescaped Markdown pipe delimiters; each row has exactly its expected 7, 4 or 5 columns. The former split-day column drift was a Markdown-display defect, **not a change in signed source planning or exclusion intervals**.
 
 **No production changes:** This checkpoint remains on documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`; production `main` remains pinned to `c8e065d665ccacb6d2575070e94c5500b7583044`. Gate13/Gate9 must not be attempted outside original signed times; calendar simplification does not create a new gate or authorize paid calls.
+
+
+---
+
+## J. Engineering deep dive: why the calendars overlap and what each time REALLY does
+
+This section is written to help an owner explain the Phase 6 schedule to another software engineer, data scientist, research reviewer or supervisor without confusing **planned request times, actual workflow executions, flight prediction cutoffs and outcome labels**. It is derived from the **pinned production `main` (`c8e065d665ccacb6d2575070e94c5500b7583044`)**, especially the reviewed 31-day geometry and the 31 individual signed day-plan files. **Do not treat a calendar event as proof of execution.**
+
+### J.1 The simplest mental model: three independently timed layers
+
+| Layer | The question it answers | When it happens | What an event means | What it does NOT prove |
+|---|---|---|---|---|
+| **Flight-service exposure / research cohort** | *Which departing flights are scientifically in scope?* | Specific UTC service windows, e.g. four hours, two separated two-hour segments, or approved six-hour exposure | A **selection/exposure window**, not a provider polling interval | No flight observed or outcome labeled merely because the window exists |
+| **SOURCE FIDS provider request templates** | *When may we query the provider for a pre-departure view of those scoped flights?* | For each candidate airport, 15-minute slots around T−24h, T−6h, T−90m *relative to the prospective service segments* | A **signed prospective request opportunity**, bounded by cutoff, rights, budget, clock and STOP | Not an actual billed GET, accepted original, flight PRE snapshot or successfully running GitHub job |
+| **Per-flight PRE and independent POST** | *Did we preserve valid inputs before the prediction cutoff? And did we later obtain a valid actual target?* | **Individual flight-dependent** forecast cutoff and later actual-outcome settlement | Only live database custody, original/evidence and temporal validation establish it | A generic wall-clock event cannot predict the actual gate-out time or guarantee a successful scientific row |
+
+**Modeling context:** the amended first-cycle conditional **primary prediction** is continuous **actual gate-out delay in minutes**, with **T−6h** as the primary PRE horizon, T−90m update and T−24h comparator. Actual gate-out must come from a qualified independent POST source after the event. Airport-level FIDS requests are neither the target label nor a substitute for physical gate-out truth. Arrival after takeoff is a separate secondary outcome. These are the existing Phase 5–6 research rules; the calendar does not change the scientific design.
+
+### J.2 Deriving the request schedule mathematically — not an arbitrary cron
+
+Let a reviewed active service segment be `[S,E)` in UTC (start inclusive, end exclusive). The segment lasts `L = E − S` minutes. For a horizon `H` (1440 minutes for T−24h, 360 minutes for T−6h, 90 minutes for T−90m), the **reviewed planning templates** are:
+
+```text
+N = (E − S) / 15 minutes
+planned SOURCE clock k = S − H − 15 minutes + (k × 15 minutes)
+                         for k = 0, 1, ... N−1
+first planned SOURCE slot = S − H − 15 minutes
+last  planned SOURCE slot = E − H − 30 minutes
+one slot represents FOUR airport-scoped query templates (HUB / MID_A / MID_B / REGIONAL)
+```
+
+The source interval starts slightly *before* a nominal horizon boundary to give a pre-cutoff opportunity; **this is NOT permission to substitute stale information, cross an individual cutoff or rewrite a flight's T**. Actual success still requires a live authorized response and accepted evidence before that flight's deadline. The frozen planning JSON separately records `scheduledRequestUtc`, `earliestPlannedCutoffUtc`, `maxResponseAndPersistSeconds`, 2-unit planned REST cost and `maxAttempts=1`. A **one-attempt** paid plan is not an automatic retry guarantee.
+
+The arithmetic of the signed 31-day experiment is:
+
+| Service/exposure design | Number of study days | 15-minute positions *per horizon* | Planned SOURCE query templates (3 horizons × 4 airport slots) | Active exposure |
+|---|---:|---:|---:|---:|
+| One 4-hour segment | 26 | 16 | 26 × 16 × 3 × 4 = **4,992** | 104h |
+| Two 2-hour segments, with 1h excluded between | 3 | 8 + 8 = 16 | 3 × 16 × 3 × 4 = **576** | 12h |
+| One approved up-to-6h active exposure | 2 | 24 | 2 × 24 × 3 × 4 = **576** | 12h |
+| **Total** | **31** | — | **6,144 planned templates** | **128h**, across **34 active segments** |
+
+The provider's **verified maximum FIDS query-range width is 240 minutes** (four hours). Therefore, six hours of scientific exposure **does not mean issuing one unsupported six-hour HTTP FIDS request**. The signed six-hour plan uses the reviewed bounded/segmented source geometry. Likewise, a 4-hour *exposure* does not imply that the provider is called only once every four hours: the frozen SOURCE template clock is **15 minutes**, conditionally.
+
+**Evidence:** [Days 01–31 source planning files](https://github.com/HKcode22/ReplitTranvr/tree/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning) (individual links in sections A and F); [Day 01 4h, 192 templates](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-01.json); [Day 03 split 2×2h, 192 templates](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-03.json); [Day 05 6h, 288 templates](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-05.json); [Day 31 signed geometry envelope](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json).
+
+### J.3 Worked example — WEDNESDAY NOVEMBER 25 PST (why distinct days and horizons overlap)
+
+**First, distinguish the labels:** "Study Day 02" is indexed by its UTC flight-service start, **Nov 26 at 04:00Z**, which is **Nov 25 at 8:00 PM in California**. "Study Day 03" is a different cohort, with UTC flight-service start **Nov 27 at 08:00Z**, or **Nov 27 at midnight California time**. A local calendar date can therefore contain SOURCE activity for **more than one future study day**.
+
+| California date/time | Cohort | Planned scientific task | Why it is here |
+|---|---|---|---|
+| Tue **Nov 24, 4:00–8:00 PM** | **Day 01** | Previous cohort's 4h flight-service exposure | It is **Nov 24**, not Nov 25, despite Day 01's UTC label being Nov 25 |
+| Tue **Nov 24, 7:45–11:30 PM** | **Day 02** | Its **T−24h SOURCE** quarter-hour slots | This overlaps the last 15 minutes of Day 01's service exposure; the cohorts have different flight identities/windows |
+| Wed **Nov 25, 1:45–5:30 PM** | **Day 02** | Its **T−6h SOURCE** slots | Advance pre-departure observations for its later service window |
+| Wed **Nov 25, 6:15–10:00 PM** | **Day 02** | Its **T−90m SOURCE** slots | Later updates near each service-bin's departure times |
+| Wed **Nov 25, 8:00 PM–midnight** | **Day 02** | Its **4h flight-service exposure** | **T−90m overlaps 8:00–10:00 PM** because early and late flights in the broad 4h cohort have different native T values |
+| Wed **Nov 25, 11:45 PM** | **Day 03** | **First T−24h SOURCE slot** for the next (split) cohort | Early view for a *different future service window*, not a repeated Day 02 query |
+| Thu **Nov 26, midnight–1:30 AM**, then **2:45–4:30 AM** | **Day 03** | Remainder of its two distinct **T−24h SOURCE segments** | The Day 03 service is **2×2h**, with a one-hour excluded service gap; query slots preserve those separate segments |
+
+In an everyday calendar, it looks contradictory to see **Day 02 T−90m** and **Day 02 service** at 8:00 PM together. In reality, the exposure covers a **range of departing flights** and does not assert that all those flights share a single departure T. For a late flight scheduled near the end of the broad exposure, a 9:45 PM prospective observation may still be before its native T−90m cutoff if the live identity/cutoff checks admit it. For an early flight with a much earlier T, that same late observation **cannot** be backdated into an earlier PRE horizon. The database must decide flight by flight.
+
+This is a standard temporal data-engineering distinction between **observation time**, **event-time/target time**, and **processing/commit time**. The same wall-clock instant can be part of one cohort's late preflight observation and another cohort's early lookahead. The scientifically critical issue is **strict source identity and cutoff integrity**, not forbidding all wall-clock overlap.
+
+**Evidence:** [Day 01 immutable template](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-01.json), [Day 02 immutable template](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-02.json), [Day 03 immutable split-day template](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-03.json), all checked directly against UTC request timestamps, four airport slots and the envelope.
+
+### J.4 Why 2h, 4h, 6h, 15m, 5m, 10m, 60m, 240m and 6+6 are NOT interchangeable
+
+**The project has separate data-plane and control-plane clocks.** A *controller* wake-up may discover nothing due and correctly do zero work; a *SOURCE* planning slot might not execute if STOP, budget, late clock or missing source conditions prevent it; an accepted PRE or qualified POST requires later independent evidence.
+
+| Interval/clock | Exact engineering interpretation | Evidence in pinned code |
+|---|---|---|
+| **15-minute** | Frozen per-horizon per-airport **planned FIDS SOURCE request templates** within signed service segments; 4 airport-specific templates per time | [31 individual Day NN planning JSONs](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json) and other day links |
+| **4-hour** | Common **scientific service-exposure** duration AND separately **maximum allowed provider FIDS query-range width**; not necessarily the time between GETs | [Reviewed day geometry](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json) |
+| **2 × 2h + 1h break** | Days **03, 07, 08** are split service segments with an intentionally excluded one-hour gap; 2 segments per such study day | [Reviewed 31-day geometry](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json) |
+| **Up to 6h** | Days **05 and 10** have six hours of planned active service exposure; use bounded provider query geometry, **not** an unsupported single 6h FIDS range | [Day 05](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-05.json) / [Day 10](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-10.json) |
+| **2-hour** | A reviewed **rolling root clock-scope partition**, which plans bounded control-plane windows when an authenticated DB clock and prior closure allow; **not a 2h provider probe** | [phase6RollingCalendarHints_v39.mjs](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/server/lib/disruption/phase6RollingCalendarHints_v39.mjs) |
+| **10-minute cooldown** | Minimum route spacing for **SOURCE_POST**, **PRE_ENROLLMENT**, **DAILY_PREPARE** (the direct-recovery review may conservatively handle up to 2m wake jitter). It does NOT guarantee a child or GET every 10m | [phase6RollingGithubController_v39.mjs](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/server/lib/disruption/phase6RollingGithubController_v39.mjs) |
+| **5-minute cooldown** | Minimum route spacing for **T24**, **LATER_PRE**, **PRE_RECOVERY**; T24/LATER_PRE have to find actually due and admissible per-flight work | [Reviewed controller routes](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/server/lib/disruption/phase6RollingGithubController_v39.mjs) |
+| **240-minute** | Minimum spacing for a prospective **EARLY_DRAW** opportunity; chooses future four-airport day under separate draw eligibility, NOT a paid FIDS retrieval cadence | [Reviewed controller routes](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/server/lib/disruption/phase6RollingGithubController_v39.mjs) |
+| **60-minute** | **RETENTION_MONITOR** minimum route spacing, a read-only due/rights integrity check, not a SOURCE/POST action | [Reviewed controller routes](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/server/lib/disruption/phase6RollingGithubController_v39.mjs) |
+| **6 primary + 6 contingency at 15s** | The **older Phase 2G/3 callback health observer**, bounded to a 180s wall/cumulative outage envelope. It does NOT automatically retry current Phase 6 GitHub→Neon or billable provider REST GETs | [v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/scripts/v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts) |
+
+**Some actual native GitHub Actions cron schedule expressions — in UTC:**
+
+| Existing reviewed GitHub workflow | UTC cron minutes | Why its presence in GitHub Actions is not a paid receipt |
+|---|---|---|
+| [Upcoming SOURCE/POST parent](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml) | `:05, :15, :25, :35, :45, :55` (10-minute cadence) | Parent can read, hold or request reviewed child; the parent alone has no provider billed original |
+| [SOURCE day prepare/publish (nonpaid)](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase6-nonpaid-source-day-prepare-publish.yml) | `:02, :12, :22, :32, :42, :52` | Day preparation is not a GET |
+| [Private later/T24 enrollment (nonpaid)](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase6-private-later-enrollment.yml) | `:07, :17, :27, :37, :47, :57` | An enrollment or empty due queue is not a PRE commit |
+| [Bounded PRE tick](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase5-cd-github-bounded-pre-tick.yml) | `:01, :06, :11, ... :56` (5-minute grid) | Requires eligible real SOURCE-bound flight and cutoff-safe PRE; cron may skip or run inert |
+| [Private blob retention readonly sentinel](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml) | `:19` each hour | Read-only integrity/expiry observation, not an actual deletion or provider call |
+
+**Important:** A cron expression is an *attempted wake-up schedule*, not a real-time execution guarantee. The actual approved rolling controller may use overlapping guard paths but prevents unreviewed duplicate parent work. Each actor still checks current DB time, signed policy/roles, budget, missingness, STOP and its own allowlist. Do **not** add the above crons as thousands of personal appointments, and do **not** infer scientific success from a green no-provider CI job.
+
+### J.5 What happens to one prospective flight — source data to training label
+
+| Phase | Scientifically meaningful artifact | Integrity control and failure interpretation |
+|---|---|---|
+| **Prospective day selection** | Planned signed day plus four scoped airports (HUB, MID_A, MID_B, REGIONAL) | First ten paired days show candidates; **21 adaptive ordinary days require prospective authenticated DB draw**. Candidate airport labels in static JSON are not a signed realized draw |
+| **FIDS SOURCE GET** | Bound original response bytes, authenticated query ID/scope, return/observed time, billed charge attempt, normalization | Physical GET is allowed only under exact signed approval and cap. `maxAttempts=1` is not a license to replay a lost billed response |
+| **Stable flight registration** | Carrier/airport/flight identity and externally frozen scheduled departure time T | Never remove needed identities for research. Do not cross-match a different flight or change T after an outcome becomes known |
+| **PRE at T−24h, T−6h, T−90m** | Per-flight snapshot as of strictly admissible forecast information | Check actual source availability, arrival/commit clocks and per-flight cutoff independently. Late/unavailable = **missing/censored**, not retrospective synthetic on-time data |
+| **Flight service/actual operation** | The actual future departure that the PRE snapshot was meant to predict | Exposure does not force every scheduled service to exist, operate on time, or furnish outcome evidence |
+| **Independent POST and signed label** | Qualified **actual gate-out** paired to a valid scheduled departure for continuous delay minutes, with appropriate provenance; separate arrival-after-takeoff if available | Actual gate-out is not estimated departure or runway takeoff. A POST label cannot be known or booked to an exact calendar clock before qualifying real observations |
+| **Research dataset/partition** | Train (days 01–20), validation (21–25), test (26–31) with causal PRE/POST separation | Do not leak late-day outcome fields into PRE or silently replace missing labels with zero; split by signed plan and evidence integrity |
+| **Retention, reconciliation and STOP** | Due-only expiry, recorded unresolved incidents, physical UTC-day and month budget ledger | A provider receipt failure, ambiguous billing, revoked rights, hard identity mismatch or unsafe replay is a **STOP/reconciliation**, not a reason to improvise a GET |
+
+**Data path, high-level:** GitHub Actions' scoped producer/worker identities connect to the **existing Neon PostgreSQL 16 `neondb` using protected GitHub database URLs**, rather than routing routine database access through the Replit web app. Provider REST queries go independently to AeroDataBox/RapidAPI where authorized. Replit is an owner/runtime context and optional callback host, **not** a required HTTP hop for each GH→Neon query. An actual restricted SOURCE identity connection was verified without provider calls in [GitHub Actions #45167987718](https://github.com/HKcode22/ReplitTranvr/actions/runs/45167987718); that proves the restricted connection, **not** the first live billed source original or a future GET.
+
+### J.6 Why the project has 31 study days but more than 31 California calendar dates
+
+- The study's 31 **UTC service-day cohorts** run from **Nov 25 to Dec 27 UTC**, and omit new service cohorts on **Nov 29 and Dec 06 UTC**. There are **20 train, 5 validation, 6 test** study-day cohorts. The 34 physical segments total 128h.
+- SOURCE collection **begins before the first service day**: Day 01 T−24h first planned slot is **Mon Nov 23 at 3:45 PM California PST**. The final Day 31 T−90m planned slot is **Sat Dec 26 at 6:00 PM PST**, and Day 31 service exposure ends **Sat Dec 26 at 8:00 PM PST** even though its service date is **Dec 27 UTC**.
+- Gaps between service cohorts do **not** mean all workflows are off: early draw, next-day SOURCE preparation, POST due processing, custody recovery and monitoring can overlap or occur on dates without a new service cohort.
+- The signed external control/relay period in the original release guide extends to **2026-12-29 04:00Z = Dec 28 8:00 PM PST**. That is a reviewed **control boundary**, **not** a new guaranteed source window or a guarantee that all flight outcomes have settled. The Dec 27–28 calendar entries are therefore labeled **conditional follow-up**, with NO invented fixed GET/POST time.
+
+**The **dates on a personal calendar** are based on `America/Los_Angeles` local midnight; a cohort's **budget day** is an authenticated UTC charge day and is *not* always the same as its California day or UTC future service date. This is why time zones and physical charge-day accounting matter independently.**
+
+### J.7 Budget and retry math: why overlapping is not automatically overbilling
+
+The *planned query-template* count is **6,144**. The signed source templates show **2 provider REST units per allowed source attempt**, so their theoretical **one-attempt source-template envelope** is **6,144 × 2 = 12,288 REST units**. That is **NOT** the whole 31-day budget: the protected month ceiling is **36,740 REST units**, with a maximum **1,900 REST units per physical UTC day** and a separate **1,000 Alert-credit floor**. POST/other separately reviewed paid classes and incident/reconciliation policies are distinct. A planned template can be **skipped, held, late, censored or unavailable**, and no one should assert that all 12,288 units were or will be charged.
+
+**Overlapping calendar rectangles do not by themselves duplicate provider work.** Charge identity is tied to the exact signed provider request, horizon, airport, selected cohort/segment, actual authenticated request/attempt ledger and physical UTC billing day. If a paid HTTP request might have reached the provider but the response/commit is uncertain, **do not assume it was free or blindly repeat it**. The old 6+6 health monitor cannot make an uncertain billed GET safe. Distinguish a quick nonpaid database/transport retry from a repeated billable provider request.
+
+### J.8 How to interpret the NEW layered personal calendar without missing anything
+
+**Three event classes remain in your connected Google account, also visible through the linked Notion Calendar app:**
+
+| Calendar appearance | Count | What to look at | Reminders and meaning |
+|---|---:|---|---|
+| **Gray ALL-DAY `P6 AGENDA mm/dd`** | **36**, every California date Nov 23–Dec 28 | Open it for that day's *precise first and last signed SOURCE clock slots*, separated T−24/T−6/T−90 segments, active service, intentional gaps, early-draw eligibility and conditional controller cadence. No hourly blocks added. Last two days are conditional POST/reconciliation only | **No reminders**, private/free; not a dispatch |
+| **Existing timed `P6 Day NN · TRAIN / VALIDATION / TEST`** | **34** | Research flight-service exposure; split days 03/07/08 have **two separate segments** with the 1h gap not filled | No reminders; service selection only |
+| **`P6 OWNER: Gate 13` and `P6 OWNER: Gate 9`** | **2** | Only actual pre-launch owner action reminders; Gate9 is conditional on proven Gate13 GO | Original popup reminders preserved |
+
+**Total: 72 Phase 6 events; NOT the previous 138 overlapping timed blocks.** The 102 old SOURCE timed display blocks were removed *only from personal calendar display*, **not** from GitHub, provider authorization, the Neon database, scientific exposure, the 6,144 planned slots, or autonomous worker schedules. Their exact research clocks still live in sections A/B/C/F and in each gray all-day agenda's description. The gray agenda uses a verified neutral Google event color and does not reserve the user's whole day.
+
+**Important for reading a midnight-spanning wave:** The daily agenda splits the human view at **California midnight** for legibility. For instance Day 03 T−24h begins **Nov 25 11:45 PM** (one quarter-hour slot on the Nov 25 agenda), then continues with **Nov 26 midnight–1:30 AM**, and its second prospective segment **Nov 26 2:45–4:30 AM**. That split is a **display partition only**; the underlying signed scientific Day 03, exact provider request scope, cutoff and exclusion remain unchanged.
+
+### J.9 What the owner should actually do (without inventing extra launch gates)
+
+1. **On Nov 23 only:** use the **existing, reviewed, one-shot Gate13 paid GO** command within its original **1:50 PM to strictly before 3:10 PM PST** window; accept only its exact acknowledged PASS. **Do not run, repeat or override it on calendar authority.** Only with a verified authentic GO, run the original exact **Gate9** controller activation **at or after 3:45 PM PST**, once. See the [same release-day owner guide](https://github.com/HKcode22/ReplitTranvr/blob/phase6/20261122-g8-502-readback-evidence/data-collection/phase6/checkpoints/2026-11-23_ONLY_READ_THIS_PHASE6_PAID_LAUNCH_AND_LIVE_DATA_GUIDE.md).
+2. **After an actual GO:** workers, clock relay, early draws, future-day preparation, SOURCE, PRE and POST remain automatic *only if their already-reviewed exact live gates admit them*. **Do not manually launch a FIDS request at every calendar rectangle.** Green cron/scheduled workflow may legitimately be `skipped`, `NO_DUE_WORK` or `SAFE_PREFLIGHT_HOLD`.
+3. **To check scientific completion**, follow actual live [GitHub Actions](https://github.com/HKcode22/ReplitTranvr/actions) and the existing restricted database evidence/incident ledger: physical charged GET, valid original, stable scoped flight, cutoff-safe PRE by the frozen flight T, later independently verified actual POST label, daily/month budgets and hard STOP. A nominal calendar window is not a completed row.
+4. **If something fails**, distinguish safe *preflight/no-paid* clock/connection failures from **uncertain paid provider HTTP**. Do not manually replay a paid action without billing/original reconciliation and explicit existing reviewed policy. Do not backfill/correct PRE past a missed cutoff; record the expected missingness.
+5. **For daily review** use the single gray date banner to learn "what is planned today," the 34 timed service windows to see "when the exposed flights are in scope," and this single Markdown document for all 31 UTC day details. No new hand-written shell command or extra production gate is required by this documentation/calendar improvement.
+6. **After Dec 26 service and during the conditional Dec 27–28 tail**, inspect actual POST settlement, missing/censored outcomes, data retention, budget/accounting and original provenance. The signed control period's end is **not** itself proof of data completeness or a command to run a last paid call.
+
+### J.10 Audited source-of-truth and proof status (separate planned vs observed)
+
+- **Checked all 31 exact frozen day-plan files, not just a synthetic future calendar:** Days 01–10 contribute **2,112** templates, Days 11–20 **1,920**, Days 21–31 **2,112**, total **6,144**. For each plan, the computed 15-minute slot/horizon/segment timestamp histogram matched the plan's literal `scheduledRequestUtc` histogram **exactly**, with four airport templates per slot, and no mismatch. The geometry reference is the embedded immutable `reviewedOrdinaryDayEnvelope.envelope.days` list in the [Day 31 pinned plan](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json). Validation of planning syntax does **not** verify future payment, booking or labels.
+- **Calendar write/readback:** Google Calendar has **36 existing gray daily agendas** (34 dates of scheduled SOURCE opportunity from **Nov 23–Dec 26 California**, and two conditional POST/reconciliation overview dates **Dec 27–28**), **34 retained timed service segments**, and **2 unchanged Gate13/Gate9 owner reminders**. An independent fresh Google Calendar search found **72/72** entries; a four-batch authenticated read of **all 36** agenda descriptions confirmed **36 distinct consecutive local agenda dates**, no missing date or duplicate, the correct neutral color/no reminders/nonblocking status, an original checkpoint link for every entry, and the aggregate planned daily SOURCE totals **6,144 = 6,144 signed templates**, with no mismatched daily count. There are **0** old, misleading timed SOURCE overlay rectangles. The already-connected Notion Calendar uses the same Google account, and its all-day **Nov 25** banner was independently observed correctly as a **DATE** event with the November 25 local date.
+- **Security and scope:** No POST, provider GET, budget transfer, secret edit, live paid attempt, schema migration, PR merge, production code change, launch GO or release approval was caused by these documentation/calendar writes. The frozen production `main` SHA was reverified as `c8e065d665ccacb6d2575070e94c5500b7583044` before this edit. The only GitHub write is this updated explanation on the existing **documentation/evidence branch**.
+- **Reminder about what remains unknowable before runtime:** Which prospective airports actually get signed on future adaptive days, which flights truly operate, exact per-flight admissible PRE commit times, actual AeroDataBox HTTP returns and charges, true actual gate-out timestamps, and exact POST settlement times. These require later independently observed signed runtime evidence; no calendar can promise them today.
+
+**Practical explanation to give someone:** "We pre-register 31 nonconsecutive UTC flight-service cohorts, with four airport slots and three distinct PRE horizons. For every 15-minute service bin we have separate prospective AeroDataBox FIDS query opportunities at T−24h, T−6h and T−90m, so activity for adjacent cohorts can overlap. A worker waking up every 5 or 10 minutes is just the control plane; it does not necessarily perform a paid GET. Our per-flight PRE and actual POST are accepted only after signed source, identity, cutoff, payment and independent evidence checks. I use one all-day agenda per California date to see all planned query clocks without cluttering the hour-by-hour calendar, while the GitHub JSON remains the source of truth."**
