@@ -11,7 +11,7 @@ RELAY=c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed
 WF=phase5-one-signed-future-post-v0083-main-manual.yml
 WFSHA=348db0b7934b79c90cfb14c7db9d26ff80f0df3e
 G12=45123278530
-hold(){ echo "HOLD_P6_G12_PROTECTED_1_PAID_GO_OFF" >&2; exit 2; }
+hold(){ echo "HOLD_P6_G12_PROTECTED_$1_PAID_GO_OFF" >&2; exit 2; }
 [[ $# -eq 1 && "$1" == ONLY_PROTECTED_POST_C8_SHA_RECONCILE_WITH_PAID_STOPS_ZERO ]] || hold CONFIRM
 for cmd in gh jq git date sort comm; do command -v "$cmd" >/dev/null || hold TOOL; done
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
