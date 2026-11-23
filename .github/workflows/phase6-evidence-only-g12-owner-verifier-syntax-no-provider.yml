@@ -19,8 +19,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_verify_existing_c8_ciphertext_only.cjs)" = ab9d09a4475c2a77943b89d23aaade0a3334603b
-          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh)" = 14afdb4df4c727607cdbd7bba4f41eb7e8b592d0
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh)" = 8526274933156ca5d0c3aa9ec23e1e9719fd7efb
           node --check data-collection/phase6/checkpoints/p6_g12_owner_verify_existing_c8_ciphertext_only.cjs
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_readonly_exact_17_secret_scope_inventory.sh)" = 125b27f1a721f3fe1a931fce66a9163f386bbdcc
+          bash -n data-collection/phase6/checkpoints/p6_g12_owner_readonly_exact_17_secret_scope_inventory.sh
           bash -n data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh
           node --input-type=module <<'NODE'
           import {readFileSync} from 'node:fs';
