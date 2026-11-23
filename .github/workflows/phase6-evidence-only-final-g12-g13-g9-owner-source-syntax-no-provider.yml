@@ -1,0 +1,51 @@
+name: P6 final owner G12 G13 G9 source syntax and bounded admission only (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-final-g12-g13-g9-owner-source-syntax-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  no-secret-no-provider-source:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify immutable owner scripts and syntax, never execute paid controls
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh)" = c67e2bcba2c5c8bf0b8ebe4f34e2c072e2db822b
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g11_g12_final_fresh_quota_retention_readonly_owner.sh)" = e4bae61cf2473674c99066952b0e928091101b4f
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g13_owner_go_after_exact_g12_c8_live_proofs.sh)" = c15ce7bd23b60443d8c0ef3e58f90d41b5f8a517
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g9_activate_direct_tick_after_exact_g12_and_paid_go.sh)" = 6871236a9743b3b84f978c9e3cd9042b2aff2161
+          bash -n data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh
+          bash -n data-collection/phase6/checkpoints/p6_g11_g12_final_fresh_quota_retention_readonly_owner.sh
+          bash -n data-collection/phase6/checkpoints/p6_g13_owner_go_after_exact_g12_c8_live_proofs.sh
+          bash -n data-collection/phase6/checkpoints/p6_g9_activate_direct_tick_after_exact_g12_and_paid_go.sh
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const a=readFileSync('data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh','utf8');
+          const b=readFileSync('data-collection/phase6/checkpoints/p6_g11_g12_final_fresh_quota_retention_readonly_owner.sh','utf8');
+          const c=readFileSync('data-collection/phase6/checkpoints/p6_g13_owner_go_after_exact_g12_c8_live_proofs.sh','utf8');
+          const d=readFileSync('data-collection/phase6/checkpoints/p6_g9_activate_direct_tick_after_exact_g12_and_paid_go.sh','utf8');
+          const hold=x=>{throw Error('HOLD_P6_FINAL_SCRIPT_SCOPE_'+x)};
+          if(!a.includes('g12-install-once.started')||!a.includes('READBACK_TITLE')||
+             !a.includes('P6_G12_CURRENT_C8_31_POLICY_AND_PROTECTED_POST_ACTORS_PASS_PAID_OFF')||
+             a.indexOf('VERIFY_FIRST_SUCCESSFUL_G12_C8_OWNER_ENVELOPE')>a.indexOf('node "$TMP/install.cjs" --apply'))hold('G12_ORDER');
+          if(!b.includes('P6_ROLLING_DIRECT_RECOVERY_ENABLED)" == 0')||
+             b.includes('P6_ROLLING_DIRECT_RECOVERY_ENABLED)" == 1')||
+             !b.includes('UNREVIEWED_MAIN_DELTA'))hold('G11_PREGO_CONTRADICTION');
+          if(!c.includes('CHECK_BLOB="e4bae61cf2473674c99066952b0e928091101b4f"')||
+             !c.includes('CURRENT_C8_31_VALUE_ACTUAL_READBACK_STEP')||
+             !c.includes('CURRENT_C8_PROTECTED_POST_ACTORS_STEPS')||
+             !c.includes('2026-11-23T21:50:00Z')||!c.includes('2026-11-23T23:10:00Z'))hold('G13_GUARDS');
+          if(!d.includes('CURRENT_C8_31_VALUE_ACTUAL_READBACK_STEP')||
+             !d.includes('CURRENT_C8_PROTECTED_POST_ACTORS_STEPS')||
+             !d.includes('2026-11-23T23:45:00.000Z')||
+             !d.includes('G13_OWNER_ISSUE_RECORD_NOT_UNIQUE_OR_ABSENT'))hold('G9_GUARDS');
+          console.log('P6_SOURCE_ONLY_G12_G13_G9_FINAL_LAUNCH_SCRIPT_SYNTAX_AND_GUARDS_PASS_NO_PAID_GO');
+          NODE
