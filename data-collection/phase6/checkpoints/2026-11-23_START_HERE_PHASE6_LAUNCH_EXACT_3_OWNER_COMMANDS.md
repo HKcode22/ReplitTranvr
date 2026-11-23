@@ -1,3 +1,32 @@
+## UPDATE 2026-11-23 06:40 UTC — G12 environment shadow repair prepared, NOT executed
+
+**This supersedes the already-attempted Command 1 below.** Installed G12 repository 31-value readback [45123278530](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123278530) passed. Protected POST preflight [45123332394](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123332394) failed its initial admission, before reviewer/publisher/storage tests. The original G12 17-repository-secret installer never updated the protected-environment copy of the approved POST code SHA; its timestamp predates the new current-main release. Paid GO is OFF.
+
+Prepared bounded, pre-GO, nonpaid **owner recovery helper** Git blob **0da37473f3563e54c0df83dfd2b55921061d16ea**: [p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh](p6_20261123_g12_protected_post_sha_reconcile_no_provider.sh). This checks the existing G12 PASS, reasserts both global paid STOP controls zero at both scopes, updates **only** the protected-environment POST-approved SHA to current main, and dispatches the original protected main actor preflight. It requires all four role steps PASS; no 31-day policy, signed science, provider, DB, cron or production-code mutation. It has NOT been owner-executed. Detailed [source and evidence checkpoint](2026-11-23_G12_PROTECTED_POST_SHA_SHADOW_RECONCILIATION_NO_GO.md).
+
+**Run once in the owner's Replit Shell before Monday 21:50Z; on HOLD do not run GO or repeat the G12 one-use installer:**
+
+```bash
+cd ~/workspace
+bash <<'P6_G12_ENV_POST_ONLY'
+set -Eeuo pipefail
+set +x
+umask 077
+REPO="HKcode22/ReplitTranvr"
+BLOB="0da37473f3563e54c0df83dfd2b55921061d16ea"
+TMP="$(mktemp --suffix=.sh "$PWD/scripts/.p6_g12_env_post_XXXXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$REPO/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" ONLY_PROTECTED_POST_C8_SHA_RECONCILE_WITH_PAID_STOPS_ZERO
+P6_G12_ENV_POST_ONLY
+```
+
+Only accept a fresh status **P6_G12_PROTECTED_C8_POST_FOUR_STEPS_PASS_PAID_OFF** with a real protectedMainPostRunId. Otherwise **G12 HOLD / Gate13 NO GO**. After PASS, the original signed Monday GO window and its fresh budget, rights, retention and four-step checks remain mandatory; DIRECT_TICK only after GO and the first source epoch.
+
+---
+
 # START HERE — Phase 6 31-day paid launch: exactly 3 owner commands, then autonomous
 
 ## STOP / live operator correction after first G12 attempt — 2026-11-23 06:19 UTC (Nov 22 22:19 PST)
