@@ -1,0 +1,78 @@
+{
+  "schema": "v39.phase2g.owner-approved-qualified-pilot-closeout.v1",
+  "approval_date_local": "2026-10-14",
+  "approval_timezone": "America/Los_Angeles",
+  "approval_basis": "Explicit user response in this conversation to requested qualified early-pilot exception; non-cryptographic attribution.",
+  "approved_scope_document": "SEPmd/phase2g/amendments/2026-10-14_APPROVED_PHASE2_QUALIFIED_EARLY_PILOT_EXCEPTION_AND_PHASE3_BOUNDARY.md",
+  "qualified_phase2_pilot": {
+    "status": "CLOSED_WITH_QUALIFICATIONS_BY_OWNER_APPROVAL",
+    "observation_windows_completed": 5,
+    "sites": [
+      "WSSS",
+      "OMAA",
+      "MMUN",
+      "SKBO",
+      "YSSY"
+    ],
+    "paid_phase2_additional_runs_authorized": false,
+    "automatic_stage2_authorized": false
+  },
+  "original_gate2": {
+    "status": "NOT_PASSED_UNCHANGED",
+    "required_formally_eligible_anchors": 5,
+    "verified_formally_eligible_anchors": [
+      "WSSS",
+      "OMAA",
+      "SKBO"
+    ],
+    "failed_capacity": [
+      "MMUN"
+    ],
+    "failed_exact_reconciliation": [
+      "YSSY"
+    ],
+    "backdated_acceptance": false,
+    "final_five_original_certified": false
+  },
+  "yssy": {
+    "probe_id": 19,
+    "original_status": "failed",
+    "original_reconciliation": "DELIVERY_GAP",
+    "research_tier": "B_DEGRADED_OBSERVED_ONLY",
+    "observed_seconds": 7203.639,
+    "sha_verified_original_envelopes": 58,
+    "original_source_bytes": 308832,
+    "internal_saved_item_credit_claims": 229,
+    "settled_provider_billed_credit_units": 231,
+    "unreconciled_units": 2,
+    "provider_attempt_history_available": false,
+    "physical_missing_flights_inferred": false
+  },
+  "phase3": {
+    "offline_engineering_allowed": true,
+    "live_paid_authorized": false,
+    "legacy_gate3_owner_incompatible": true,
+    "new_exact_session_receiver_required": true,
+    "zero_credit_gap_canary_mandatory": true,
+    "fresh_paid_auth_required": true
+  },
+  "lifecycle": {
+    "internal_incident31_open": true,
+    "retained_sources_last_verified": 58,
+    "first_expiration_utc": "2026-10-20T03:06:15.502Z",
+    "final_expiration_utc": "2026-10-20T05:02:12.501Z",
+    "cleanup_and_incident_mutation_authorized": false,
+    "production_subscription_zero_freshly_verified": false
+  },
+  "change_permissions": {
+    "production_deploy": false,
+    "main_merge": false,
+    "paid_provider_calls": false,
+    "provider_subscription_mutation": false,
+    "database_mutation": false,
+    "object_deletion": false,
+    "historical_result_rewrite": false
+  },
+  "predecessor_record": "SEPmd/phase2g/reports/2026-10-14_PHASE2G_TERMINAL_DISPOSITION_AND_ENTRY_EXCEPTION_DRAFT.json",
+  "note": "Approves the qualified exploratory pilot closeout only. Does not assert the strict original Gate2 has passed or automatically satisfy Phase3 live entry."
+}

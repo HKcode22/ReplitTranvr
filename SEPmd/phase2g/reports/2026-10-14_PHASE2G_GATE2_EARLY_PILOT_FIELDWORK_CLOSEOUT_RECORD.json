@@ -1,0 +1,104 @@
+{
+  "schema": "v39.phase2g.gate2-early-pilot-fieldwork-closeout.v1",
+  "evidence_asof_utc": "2026-10-14",
+  "source_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
+  "source_implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md",
+  "pilot_scope_freeze": "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json",
+  "source_repository_main_sha": "f5b1347b7b9aebd6830302394ea2cc5775aedbf4",
+  "operator_snapshot_utc": "2026-10-13T22:18:59.201Z",
+  "fieldwork_closure": {
+    "status": "COMPLETE_5_MEASURED_OBSERVATIONS",
+    "icao_measured": [
+      "WSSS",
+      "OMAA",
+      "MMUN",
+      "SKBO",
+      "YSSY"
+    ],
+    "deferred_unmeasured": [
+      "LKPR"
+    ],
+    "target_window_seconds": 7200,
+    "windows_finished": 5,
+    "known_windows_censored": 0
+  },
+  "original_formal_gate2": {
+    "status": "HOLD_NOT_PASSED",
+    "historical_results_immutable": true,
+    "original_final_five_anchor_confirmation_completed": false,
+    "formally_capacity_eligible": [
+      "WSSS",
+      "OMAA",
+      "SKBO"
+    ],
+    "capacity_ineligible_or_unverified": [
+      "MMUN",
+      "YSSY"
+    ],
+    "capacity_rule_rows_per_hour_at_least": 60,
+    "validity_exception_approval_completed": false
+  },
+  "research_inventory": {
+    "status": "INCLUDED_WITH_DISCLOSED_LIMITATIONS",
+    "YSSY": {
+      "collection_green_check": true,
+      "verified_source_objects": 58,
+      "source_byte_readback_SHA256_verified": true,
+      "verified_source_bytes": 308832,
+      "saved_original_flight_items": 229,
+      "saved_original_explicit_credit_claims": 229,
+      "provider_billed_credit_units": 231,
+      "external_internal_gap_credits": 2,
+      "observed_credit_reconciliation_fraction": 0.9913419913419913,
+      "formal_probe_id": 19,
+      "historical_probe_status": "failed",
+      "historical_reconciliation": "DELIVERY_GAP",
+      "research_tier": "B_DEGRADED_OBSERVED_ONLY",
+      "missingness_mechanism": "UNKNOWN",
+      "independent_attempts_verified": false,
+      "received_originals_SHA_check_performed_in_replit_shell": true
+    },
+    "capacity_control": {
+      "MMUN": {
+        "probe_id": 14,
+        "rows_per_hour": 22.999639033442946,
+        "capacity_result": "FAIL"
+      }
+    }
+  },
+  "stage2": {
+    "conditional_trigger_fewer_than_five_valid": true,
+    "auto_confirmation_retired_for_early_pilot": true,
+    "automatic_paid_authorization": false
+  },
+  "phase3": {
+    "offline_preparation_allowed": true,
+    "paid_gate3_authorized": false,
+    "original_isolated_canary_tolerance_credits": 0,
+    "published_prepaid_callback_compatibility": "NOT_PROVEN_FOR_LEGACY_GATE3_OWNER"
+  },
+  "lifecycle_and_retention": {
+    "incident31_resolution_status": "OPEN",
+    "original_live_source_references_at_last_operator_audit": 58,
+    "verified_active_billable_subscriptions_at_last_operator_audit": 0,
+    "first_source_expires_utc": "2026-10-20T03:06:15.502Z",
+    "last_source_expires_utc": "2026-10-20T05:02:12.501Z",
+    "source_expiry_completion_verified": false,
+    "cleanup_after_expiry_required": true
+  },
+  "required_next_operator_decisions": [
+    "REVIEW_DOCS_ONLY_PR_37_BEFORE_MERGE",
+    "APPROVE_OR_DECLINE_SEPARATE_QUALIFIED_PILOT_GATE2_METHOD_EXCEPTION",
+    "PRESERVE_PERMITTED_DERIVED_EVIDENCE_AND_COMPLETE_TTL_DELETION",
+    "VERIFY_INCIDENT_31_CLOSEOUT_AFTER_SAFE_TOMBSTONES",
+    "DESIGN_AND_TEST_PREPAID_COMPATIBLE_PHASE3_GATE3_CANARY_OFFLINE"
+  ],
+  "safety": {
+    "retroactive_provider_score_override": false,
+    "original_SQL_record_mutations": 0,
+    "paid_provider_calls_from_this_record": 0,
+    "new_paid_probe_authorized": false,
+    "stage2_dispatch_authorized": false,
+    "github_paid_workflow_dispatch_authorized": false
+  }
+}
