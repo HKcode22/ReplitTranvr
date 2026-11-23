@@ -1,5 +1,21 @@
 # START HERE — Phase 6 31-day paid launch: exactly 3 owner commands, then autonomous
 
+## STOP / live operator correction after first G12 attempt — 2026-11-23 06:19 UTC (Nov 22 22:19 PST)
+
+**THIS SECTION OVERRIDES COMMAND 1'S "run now" instruction BELOW.** The owner has **already executed Command 1 at least once**. Its second invocation returned `HOLD_P6_G12_OWNER_CODE_SUCCESSOR_ALREADY_ATTEMPTED_DO_NOT_REPEAT`, which is an intentional one-use refusal. **DO NOT RUN COMMAND 1 AGAIN. Do not remove `g12-install-once.started`, create another public request, download an unrelated artifact, or repeat the 17 secret writes.**
+
+Actual GitHub post-install evidence:
+- [G12 exact installed c8 31-value readback **45123278530**](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123278530) **SUCCESS**, exactly `P6_G12_C8_REPOSITORY_31_CANONICAL_AND_POST_LINKS_VERIFIED_PAID_OFF`, `allCodeBindingsCurrent=true`, `effectivePaidControlsZero=true`. New public-only marker `data-collection/phase6/evidence/p6_g12_oneuse_c8_policy_postinstall_readback.json` exists. This verifies all 31 **repository**-scope canonical policy values but **not** the protected environment effective values.
+- [Actual current-main protected POST preflight **45123332394**](https://github.com/HKcode22/ReplitTranvr/actions/runs/45123332394) **FAILED**; job `exact-main-post-actors-only` failed in FIRST step **Verify exact disarmed POST actor admission**. Following reviewer/publisher/storage preflight steps **SKIPPED**. Step source on current production main tests effective `V39_PHASE6_PROCESS_ARMED=0`, `V39_PHASE6_OWNER_APPROVED=0`, `V39_P5_POST_APPROVED_CODE_SHA=GITHUB_SHA`, then `git rev-parse HEAD = GITHUB_SHA`. GitHub logs do not identify which comparison failed, so **do not assert that the problem is definitively an environment code-SHA shadow**. A subsequent cleanup step also failed due to `npx --no-install tsx` prior to `npm ci`, but that is a secondary diagnostic cleanup failure; don't fix it by changing production main or ignoring the first admission STOP.
+- There is **NO completed G12 protected POST proof**. **G12/13 NO PAID GO**, even if repository readback is green. The current G13 owner GO script is designed to check actual protected POST admission and should not be executed before this is resolved.
+
+**Next safe step** is a **metadata-only owner inventory** of the two effective paid STOP secret names and the approved POST code secret at both repository and `phase6-protected-runtime` scopes. GitHub cannot reveal secret values via REST; gather **only name, scope and updated timestamp**, not plaintext. If protected-environment shadow of `V39_P5_POST_APPROVED_CODE_SHA` exists, reconcile only that exact scope against c8 with separately reviewed owner command **while both paid controls remain OFF**, then independently dispatch one clean protected-only POST preflight. If it does not exist, investigate repo/ENV STOP effective flags without assuming cause. **Do not repeat original G12 17-secret install or create extra gates.** Missing protected acceptance is blocking until a real four-step success.
+
+The three-command table below remains the **conceptual launch lifecycle**, but **Command 1 has already been attempted and is non-repeatable**; use the forthcoming targeted protected recovery, not this old launcher. Command 2 only inside Monday signed GO window after recovered protected PASS; Command 3 only at/after the first signed epoch after actual GO.
+
+---
+
+
 **Current authoritative user-facing launch instructions; Nov 22, 2026 10 PM PST / Nov 23 UTC.** This document supersedes the confusing historic G9–14 narrative and earlier Bash blocks. It makes no attempt to change the completed research design or completed Gates 1–8. **Paid launch is NOT running now.**
 
 **Main:** `HKcode22/ReplitTranvr@c8e065d665ccacb6d2575070e94c5500b7583044`  
