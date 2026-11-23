@@ -1,0 +1,40 @@
+name: P6 G12 exact owner sealed installer and 31-value readback syntax (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-g12-install-readback-syntax-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  no-secret-syntax:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check exact source integrity, syntax and expected admission checks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_replay_safe_exact_c8_code_successor_install_no_paid_go.cjs)" = 6641c5290afbd0a5bbc108177d5a51995c81f9a1
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_c8_installed_31_static_and_post_readback_no_provider.cjs)" = 2b9352c620c66c83c6c350e2dbe5d35658243d81
+          test "$(git hash-object .github/workflows/phase6-g12-c8-installed-code-policy-postinstall-no-provider.yml)" = f0a055696b5a5594baa9861cf90f8f05321235cf
+          node --check data-collection/phase6/checkpoints/p6_g12_owner_replay_safe_exact_c8_code_successor_install_no_paid_go.cjs
+          node --check data-collection/phase6/checkpoints/p6_g12_c8_installed_31_static_and_post_readback_no_provider.cjs
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const i=readFileSync('data-collection/phase6/checkpoints/p6_g12_owner_replay_safe_exact_c8_code_successor_install_no_paid_go.cjs','utf8');
+          const r=readFileSync('data-collection/phase6/checkpoints/p6_g12_c8_installed_31_static_and_post_readback_no_provider.cjs','utf8');
+          const y=readFileSync('.github/workflows/phase6-g12-c8-installed-code-policy-postinstall-no-provider.yml','utf8');
+          const assert=(b,s)=>{if(!b)throw Error('HOLD_P6_G12_SYNTAX_SCOPE_'+s)};
+          assert(i.includes('g12-install-once.started')&&i.includes('phase6-protected-runtime')&&
+          i.includes('EXACT_SEVENTEEN_REPO_ONLY_TWO_DUAL_STOP_SCOPE')&&
+          i.indexOf('for(const k of stop)')<i.indexOf('for(const k of expectedNames)'),'PAID_DISARM_ORDER');
+          assert(r.includes('7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61')&&
+          r.includes('PAID_CONTROLS_NOT_ZERO'),'POSTINSTALL_C8_STATIC_DIGEST');
+          assert(!y.includes('environment: phase6-protected-runtime')&&
+          y.includes('P6 G12 exact current c8 policy postinstall readback NO PROVIDER'),'EVIDENCE_BRANCH_REPO_ONLY');
+          console.log('P6_G12_OWNER_INSTALL_SOURCE_AND_INDEPENDENT_REPO_READBACK_NO_SECRET_SYNTAX_PASS');
+          NODE
