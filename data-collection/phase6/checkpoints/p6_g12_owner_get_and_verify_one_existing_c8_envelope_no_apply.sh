@@ -55,4 +55,13 @@ fi
  hold EXPECTED_ENCRYPTED_ARTIFACT_FILE_MISSING
 node "$TMP/verify.cjs" "$DIR/owner-private.pem" "$ENVELOPE" "$DIR/request.json" ||
  hold OWNER_AEAD_OR_POLICY_VERIFY_FAILED_NO_SECRET_MUTATION
+# The exact 17 new policy/code SHA names must be repo-only, while two
+# global paid STOP names must exist at repo and protected-environment scopes.
+SCOPE_BLOB="125b27f1a721f3fe1a931fce66a9163f386bbdcc"
+gh api "repos/$REPO/git/blobs/$SCOPE_BLOB" --jq .content |
+ base64 --decode > "$TMP/scope.sh" || hold SCOPE_SCRIPT_FETCH
+[[ "$(git hash-object "$TMP/scope.sh")" == "$SCOPE_BLOB" ]] || hold SCOPE_SCRIPT_PIN
+bash -n "$TMP/scope.sh" || hold SCOPE_SCRIPT_SYNTAX
+bash "$TMP/scope.sh" INVENTORY_ONLY_G12_EXISTING_SEVENTEEN_NAMES_AND_DUAL_STOP_NO_GO ||
+ hold CHANGED_POLICY_SECRET_SCOPE_NOT_REVIEWED
 echo '{"status":"P6_G12_FIRST_OWNER_C8_ENCRYPTED_SUCCESSOR_AUTHENTICATED_VERIFY_ONLY_NO_PAID_GO","githubSecretWrites":0,"providerCalls":0,"databaseWrites":0,"paidGo":false,"next":"INDEPENDENT_EXACT_17_SCOPE_AND_INSTALL_REVIEW"}'
