@@ -1,0 +1,36 @@
+name: P6 G12 exact existing owner AEAD verify-only syntax (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-g12-owner-verifier-syntax-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  no-secret-source-audit:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Exact immutable owner no-write verify-only syntax and scope
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_verify_existing_c8_ciphertext_only.cjs)" = ab9d09a4475c2a77943b89d23aaade0a3334603b
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh)" = 14afdb4df4c727607cdbd7bba4f41eb7e8b592d0
+          node --check data-collection/phase6/checkpoints/p6_g12_owner_verify_existing_c8_ciphertext_only.cjs
+          bash -n data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const a=readFileSync('data-collection/phase6/checkpoints/p6_g12_owner_verify_existing_c8_ciphertext_only.cjs','utf8');
+          const b=readFileSync('data-collection/phase6/checkpoints/p6_g12_owner_get_and_verify_one_existing_c8_envelope_no_apply.sh','utf8');
+          if(a.includes('execFileSync')||a.includes('child_process')||a.includes('process.exit(0)')||
+            a.includes('execSync')||a.includes('fs.writeFile')||a.includes('writeFileSync')||
+            b.includes('gh secret set')||b.includes('gh variable set')||b.includes('gh workflow run')||
+            b.includes('gh api -X PUT')||b.includes('gh api -X POST')){
+            throw Error('HOLD_P6_G12_VERIFY_ONLY_SIDE_EFFECT_UNREVIEWED');
+          }
+          console.log('P6_G12_OWNER_VERIFY_ONLY_SOURCE_CHECKS_PASS_NO_PROVIDER_NO_SECRET_MUTATION');
+          NODE
