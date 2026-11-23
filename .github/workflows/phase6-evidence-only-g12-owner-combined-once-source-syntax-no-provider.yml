@@ -1,0 +1,34 @@
+name: P6 G12 exact once owner full install and acceptance source syntax (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-g12-owner-combined-once-source-syntax-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify exact owner source and guarded order syntax
+        run: |
+          set -Eeuo pipefail
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh)" = c67e2bcba2c5c8bf0b8ebe4f34e2c072e2db822b
+          bash -n data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const c=readFileSync('data-collection/phase6/checkpoints/p6_g12_owner_verified_install_and_two_scope_no_paid_proofs.sh','utf8');
+          const assert=(b,k)=>{if(!b)throw Error('HOLD_P6_G12_OWNER_ONCE_SOURCE_'+k)};
+          assert(c.includes('g12-install-once.started')&&c.includes('P6_G12_CURRENT_C8_31_POLICY_AND_PROTECTED_POST_ACTORS_PASS_PAID_OFF'),'ONEUSE');
+          assert(c.indexOf('VERIFY_FIRST_SUCCESSFUL_G12_C8_OWNER_ENVELOPE_NO_SECRET_WRITE_NO_PAID_GO')<
+           c.indexOf('node "$TMP/install.cjs" --apply'),'VERIFY_BEFORE_WRITE');
+          assert(c.indexOf('REPOSITORY_31_CURRENT_DIGEST_FAILED_PAID_OFF')<
+           c.indexOf('gh workflow run "$POST_WF"'),'REPO_BEFORE_PROTECTED');
+          assert(c.includes('futureExplicitOwnerG13StillRequired')&&
+           c.includes('V39_PHASE6')===false,'PAID_STOP_REMAINS_UNCHANGED_BY_WRAPPER');
+          console.log('P6_G12_OWNER_ONEUSE_INSTALL_ACCEPTANCE_SOURCE_GUARDS_SYNTAX_PASS_NO_PROVIDER');
+          NODE
