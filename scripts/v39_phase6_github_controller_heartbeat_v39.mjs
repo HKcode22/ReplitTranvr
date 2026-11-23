@@ -99,7 +99,13 @@ async function main(){
     formatP6ControllerHeartbeatHuman(report)+"\n","utf8");
   // Fail this observation only, never a collector or a paid child, so native
   // GitHub failure notifications can surface actionable current incidents.
-  if(report.activeNotifications.incidentCount>0){
+  // When native schedule is delayed by GitHub cron jitter but an exact current-main
+  // backstop child has actively executed within the window, the warning is surfaced in summary/report
+  // without failing the heartbeat probe.
+  const actionableIncidents = report.activeNotifications.incidents.filter(
+   i => !(i.lane === "PRIMARY_FIDS_EXPIRY" && report.primaryFidsExpiry?.backup?.executedStepVerified && report.primaryFidsExpiry?.backup?.state === "BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF")
+  );
+  if(actionableIncidents.length>0){
    console.error("P6_CONTROLLER_CURRENT_INCIDENT_REVIEW_REQUIRED");
    process.exitCode=2;
   }

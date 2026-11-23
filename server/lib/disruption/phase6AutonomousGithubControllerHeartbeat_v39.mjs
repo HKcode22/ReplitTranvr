@@ -81,9 +81,10 @@ async function observeP6PrimaryBackup(env,readGithub,observedAtUtc){
   if(child.status!=="completed")return {...base,state:"BACKSTOP_CHILD_PENDING"};
   if(child.conclusion!=="success")return {...base,state:"BACKSTOP_CHILD_NOT_SUCCESSFUL"};
   const j=await readGithub(ROOT+"/actions/runs/"+child.id+"/jobs?filter=latest&per_page=10");
-  const job=j?.jobs?.[0],step=job?.steps?.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success");
-  if(j?.total_count!==1||!Array.isArray(j.jobs)||j.jobs.length!==1||
-     !Number.isSafeInteger(job.id)||job.id<1||job.name!=="primary-fids-expiry"||job.run_id!==child.id||job.head_sha!==env.GITHUB_SHA||
+  const job=j?.jobs?.find(x=>x.name==="primary-fids-expiry");
+  const step=job?.steps?.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success");
+  if(!job||!Array.isArray(j?.jobs)||
+     !Number.isSafeInteger(job.id)||job.id<1||job.run_id!==child.id||job.head_sha!==env.GITHUB_SHA||
      job.run_attempt!==1||job.status!=="completed"||job.conclusion!=="success"||step?.length!==1)
    return {...base,state:"BACKSTOP_CHILD_STEP_UNVERIFIED"};
   const completed=Date.parse(job.completed_at);
@@ -169,12 +170,11 @@ async function observeP6PrimaryFidsExpiry(env,readGithub,observedAtUtc){
  else{
   try{
    const j=await readGithub(ROOT+"/actions/runs/"+latest.id+"/jobs?filter=latest&per_page=10");
-   const x=j?.jobs?.[0];
-   if(j?.total_count!==1||!Array.isArray(j.jobs)||j.jobs.length!==1||
-      !x||x.name!=="primary-fids-expiry"||x.run_id!==latest.id||
-      !Number.isSafeInteger(x.id)||x.id<1||x.status!=="completed"||
-      x.conclusion!=="success"||!Array.isArray(x.steps)||
-      x.steps.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success").length!==1)
+   const x=j?.jobs?.find(job=>job.name==="primary-fids-expiry");
+   const step=x?.steps?.filter(s=>s.name===PRIMARY_STEP&&s.status==="completed"&&s.conclusion==="success");
+   if(!x||!Array.isArray(j?.jobs)||
+      x.run_id!==latest.id||!Number.isSafeInteger(x.id)||x.id<1||x.status!=="completed"||
+      x.conclusion!=="success"||!Array.isArray(x.steps)||step?.length!==1)
     state="SCHEDULE_SUCCESS_WITHOUT_EXECUTED_EXPIRY_STEP";
    else{state="SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF";jobExecuted=true;jobId=x.id;}
   }catch{state="SCHEDULE_JOB_EVIDENCE_UNAVAILABLE";}
