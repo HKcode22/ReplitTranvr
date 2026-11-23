@@ -2,6 +2,14 @@
 
 **Date:** Nov 22, 2026 PST / Nov 23 UTC. **Only six fixed operational gates, 9–14. No new gates. No repeat of completed G1–8.** This is the single day-1 command reference. Never reuse older chat Bash blocks or the superseded `b432...` release blobs.
 
+## Additional nonpaid candidate proof — pure source-preserving SHA-link delta (not GO)
+
+Actual [GitHub evidence run 45118463769](https://github.com/HKcode22/ReplitTranvr/actions/runs/45118463769) **completed SUCCESS**, using actual existing repository secrets strictly in runner memory with provider/DB/secret writes all zero. It checked existing canonical Base64 and SHA256 links and computed an *unapplied* proposed successor from `b432...` to `c8e...`. **Exactly six approved/reviewed-code leaves and three cross-policy hash-reference leaves would change**; all 31 existing signed day-plan SHA256 values and all policy schema names are **unchanged**; every other original field was deep-compared unchanged. Receipt `P6_POLICY_SUCCESSOR_PURE_METADATA_REVIEW_CANDIDATE_PASS_NOT_APPROVED`. This strongly narrows the repair but **does not certify cryptographic signer authority, full 31-value policy bundle, environment scope, code/rights approvals or safe installation**. Existing mismatch run 45117949987 remains an active G12/G13 **NO GO** until independent full policy validator and new protected readback PASS.
+
+Prior original Gate8 protected secret successor machinery is documented in [Gate8 existing-envelope checkpoint](2026-11-22_GATE8_BRANCH_PROTECTED_ENV_ADMISSION_STOP_MAIN_POST_ONLY_RECOVERY_NO_GO.md): the pinned pure validator and owner-private X25519 authenticated custody were used before. The frozen G8 code explicitly identifies six old code fields and linked daily/signing/native POST SHA256 propagation. The intended narrow remedy must reuse its **full original-and-successor validator**, not treat this structural delta as the final signer-approved release. No raw key or policy value was printed by the new in-memory audit.
+
+---
+
 ## Immediately actionable status, including newly detected HOLD
 
 **Current target production main:** `c8e065d665ccacb6d2575070e94c5500b7583044`. **Clock relay main:** `c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed`.
