@@ -1,0 +1,118 @@
+name: Phase6 evidence-only old-to-current source policy delta audit (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-policy-successor-delta-audit-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  metadata-only-successor-audit:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      AERODATABOX_API_KEY: ''
+      DATABASE_URL: ''
+      V39_PHASE6_PROCESS_ARMED: '0'
+      V39_PHASE6_OWNER_APPROVED: '0'
+      OLD_SHA: b432eb9a5bac7bc3c4537249e75ec7df41e8727c
+      NEW_SHA: c8e065d665ccacb6d2575070e94c5500b7583044
+      SOURCE: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+      DAILY: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      DAILY_SHA: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+      SIGNING: ${{ secrets.P6_NONPAID_SIGNING_POLICY_BASE64 }}
+      SIGNING_SHA: ${{ secrets.P6_NONPAID_SIGNING_POLICY_SHA256 }}
+      TRANSPORT: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 }}
+      TRANSPORT_SHA: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 }}
+      NATIVE: ${{ secrets.P6_NATIVE_POST_POLICY_BASE64 }}
+      NATIVE_SHA: ${{ secrets.P6_NATIVE_POST_POLICY_SHA256 }}
+      P7_POST: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_BASE64 }}
+      P7_POST_SHA: ${{ secrets.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256 }}
+      REPO_PAID_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      REPO_PAID_OWNER: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+    steps:
+      - name: Decrypt nothing; inspect only canonical secret values in masked in-process environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$DATABASE_URL"
+          node --input-type=module <<'NODE'
+          import {createHash} from 'node:crypto';
+          const hold=x=>{throw Error('HOLD_P6_SECRET_LINK_DELTA_'+x)};
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          const old=process.env.OLD_SHA,newcode=process.env.NEW_SHA;
+          if(process.env.REPO_PAID_ARMED!=='0'||process.env.REPO_PAID_OWNER!=='0')hold('PAID_STOP_NOT_OFF');
+          const encNames=['SOURCE','DAILY','SIGNING','TRANSPORT','NATIVE','P7_POST'];
+          const orig={},cand={};
+          for(const n of encNames){
+            const str=process.env[n]??'',buf=Buffer.from(str,'base64');
+            if(buf.length<50||buf.length>48000||buf.toString('base64')!==str)hold('ENCODING_'+n);
+            const raw=buf.toString('utf8');
+            orig[n]=JSON.parse(raw);
+            if(JSON.stringify(orig[n])!==raw)hold('CANONICAL_'+n);
+            if(n!=='SOURCE'&&sha(buf)!==process.env[n+'_SHA'])hold('HASH_'+n);
+            cand[n]=structuredClone(orig[n]);
+          }
+          const fieldPaths=[
+            ['SOURCE','reviewedCodeSha'],
+            ['DAILY','approvedCodeSha'],
+            ['DAILY','nativeLaterReview','dayAppendPolicy','approvedCodeSha'],
+            ['SIGNING','approvedCodeSha'],
+            ['TRANSPORT','reviewedMainSha'],
+            ['NATIVE','reviewedCodeSha']];
+          const get=(o,p)=>p.reduce((q,k)=>q?.[k],o);
+          const set=(o,p,v)=>{let q=o;for(let i=0;i<p.length-1;i++)q=q[p[i]];q[p.at(-1)]=v};
+          for(const [name,...p] of fieldPaths){
+            if(get(orig[name],p)!==old)hold('PREVIOUS_REVIEWED_MAIN_NOT_EXPECTED_'+name);
+            set(cand[name],p,newcode);
+          }
+          const findOld=(obj,trail=[],out=[])=>{
+            if(obj===old)out.push(trail.join('.'));
+            else if(Array.isArray(obj))obj.forEach((v,i)=>findOld(v,[...trail,i],out));
+            else if(obj&&typeof obj==='object')Object.entries(obj).forEach(([k,v])=>findOld(v,[...trail,k],out));
+            return out;
+          };
+          const remainingOld=encNames.flatMap(n=>findOld(cand[n]).map(p=>n+':'+p));
+          if(remainingOld.length)hold('ADDITIONAL_CODE_REFERENCES_REQUIRE_OWNER_REVIEW');
+          const hash=x=>sha(Buffer.from(JSON.stringify(x),'utf8'));
+          if(orig.TRANSPORT.dailyPolicySha256!==hash(orig.DAILY)||
+             orig.TRANSPORT.signingPolicySha256!==hash(orig.SIGNING)||
+             orig.P7_POST.nativePostPolicySha256!==hash(orig.NATIVE))
+            hold('OLD_CROSS_POLICY_LINK_MISMATCH');
+          cand.TRANSPORT.dailyPolicySha256=hash(cand.DAILY);
+          cand.TRANSPORT.signingPolicySha256=hash(cand.SIGNING);
+          cand.P7_POST.nativePostPolicySha256=hash(cand.NATIVE);
+          const expectedNonCodeChanges=[
+            'TRANSPORT.dailyPolicySha256','TRANSPORT.signingPolicySha256','P7_POST.nativePostPolicySha256'
+          ];
+          const diff=(a,b,path='',out=[])=>{
+            if(JSON.stringify(a)===JSON.stringify(b))return out;
+            if(!a||!b||typeof a!=='object'||typeof b!=='object'){
+              out.push(path);return out;
+            }
+            const keys=new Set([...Object.keys(a),...Object.keys(b)]);
+            for(const k of keys)diff(a[k],b[k],path?path+'.'+k:k,out);
+            return out;
+          };
+          const actual=encNames.flatMap(n=>diff(orig[n],cand[n],n));
+          const allowed=[...fieldPaths.map(([n,...p])=>n+'.'+p.join('.')),...expectedNonCodeChanges].sort();
+          if(JSON.stringify(actual.sort())!==JSON.stringify(allowed))hold('UNREVIEWED_DELTA');
+          const result={
+            status:'P6_EXACT_PREPAID_POLICY_LINKED_CODE_DELTA_METADATA_ONLY',
+            sourceMainBefore:old,proposedSourceMain:newcode,
+            expectedOnlyReviewedCodeFields:fieldPaths.length,
+            expectedOnlyRecomputedCrossHashFields:expectedNonCodeChanges.length,
+            exactlyReviewedMetadataPathsChanged:true,
+            daysUnchanged:JSON.stringify(orig.DAILY.dayPlanSha256s)===JSON.stringify(cand.DAILY.dayPlanSha256s),
+            schemaUnchanged:encNames.every(n=>orig[n].schema===cand[n].schema),
+            candidateValueCount:encNames.length,
+            signedCodeSuccessorNotApprovedOrInstalled:true,
+            futureSourceRightsUnchangedProvedByThisAlone:false,
+            zeroProvider:true,zeroDatabase:true,zeroSecretWrites:true,paidGo:false
+          };
+          if(!result.daysUnchanged||!result.schemaUnchanged)hold('SCIENTIFIC_FRAME_CHANGED');
+          console.log(JSON.stringify(result));
+          console.log('P6_POLICY_SUCCESSOR_PURE_METADATA_REVIEW_CANDIDATE_PASS_NOT_APPROVED');
+          NODE
