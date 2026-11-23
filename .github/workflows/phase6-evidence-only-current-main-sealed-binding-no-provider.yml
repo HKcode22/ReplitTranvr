@@ -1,0 +1,64 @@
+name: Phase6 evidence-only sealed-main binding audit (NO PROVIDER)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - '.github/workflows/phase6-evidence-only-current-main-sealed-binding-no-provider.yml'
+permissions:
+  contents: read
+jobs:
+  sealed-main-binding-readonly:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      EXPECTED_CURRENT_MAIN: c8e065d665ccacb6d2575070e94c5500b7583044
+      AERODATABOX_API_KEY: ''
+      RAPIDAPI_KEY: ''
+      DATABASE_URL: ''
+      P6_REPO_POLICY_B64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+      P6_REPO_POLICY_SHA: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+      P6_REPO_CODE_SHA: ${{ secrets.V39_P5_APPROVED_CODE_SHA }}
+      P6_REPO_POST_CODE_SHA: ${{ secrets.V39_P5_POST_APPROVED_CODE_SHA }}
+      P6_REPO_PAID_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      P6_REPO_PAID_OWNER: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
+    steps:
+      - name: Read only repository secret bindings with no provider / no DB
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$DATABASE_URL"
+          node --input-type=module <<'NODE'
+          import {createHash} from 'node:crypto';
+          let j=null,valid=false,hashOk=false;
+          const b64=process.env.P6_REPO_POLICY_B64??"";
+          try{
+            const b=Buffer.from(b64,"base64");
+            valid=b.length>=100&&b.length<=35000&&b.toString("base64")===b64;
+            if(valid){
+              hashOk=/^[a-f0-9]{64}$/.test(process.env.P6_REPO_POLICY_SHA??"")&&createHash("sha256").update(b).digest("hex")===process.env.P6_REPO_POLICY_SHA;
+              j=JSON.parse(b.toString("utf8"));
+            }
+          }catch{/* fail closed without printing secrets */}
+          const expected=process.env.EXPECTED_CURRENT_MAIN;
+          const report={
+            status:"P6_SEALED_MAIN_BINDING_EVIDENCE_NO_PROVIDER_NO_GO",
+            expectedMain:expected,
+            repoPaidControlsBothOff:process.env.P6_REPO_PAID_ARMED==="0"&&process.env.P6_REPO_PAID_OWNER==="0",
+            policyCanonical:valid,policyHashMatches:hashOk,
+            policySchemaValid:j?.schema==="v39.phase6.delegated-daily-source-review-policy.v1",
+            policyApprovedCodeMatchesMain:j?.approvedCodeSha===expected,
+            repoSourceCodePinMatchesMain:process.env.P6_REPO_CODE_SHA===expected,
+            repoPostCodePinMatchesMain:process.env.P6_REPO_POST_CODE_SHA===expected,
+            policyDayCount:j?.dayPlanSha256s?.length??null,
+            secretValuesLogged:false,providerCalls:0,databaseReads:0,databaseWrites:0,secretWrites:0,
+            protectedEnvironmentValuesNotRead:true,paidGo:false
+          };
+          report.repositoryCodeAndPolicyBindingReady=
+            report.repoPaidControlsBothOff&&report.policyCanonical&&report.policyHashMatches&&report.policySchemaValid&&
+            report.policyApprovedCodeMatchesMain&&report.repoSourceCodePinMatchesMain&&
+            report.repoPostCodePinMatchesMain&&report.policyDayCount===31;
+          console.log(JSON.stringify(report));
+          console.log(report.repositoryCodeAndPolicyBindingReady?"P6_REPO_ONLY_BINDING_PASS":"HOLD_P6_REPO_ONLY_BINDING_REVIEW_NO_GO");
+          NODE
