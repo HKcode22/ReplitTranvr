@@ -1,5 +1,36 @@
 # Phase 6 paid 31-day launch: one authoritative owner Day 1 operator runbook (Gates 9–14)
 
+## Next necessary owner action — original G8-style encrypted c8 successor, fresh public request only
+
+**Preparation now complete, but NOT issued/applied.** The authenticated in-memory original+proposed strict validator [45118733902](https://github.com/HKcode22/ReplitTranvr/actions/runs/45118733902) passed, preserving all 31 day plans. A new owner-only one-use X25519 public request launcher, source Git blob **`7cde993c034f00b3b7bad56e2f227355449bddcd`**, was created on the isolated evidence branch. It pins current target main c8, relay c5, actual strict validator proof, the exact branch-only new no-provider sealing workflow (`8136212fc420a0ea290a8975da6c9c6e87f78a2b`) and full validator-backed builder (`6ee66e47b0db5dc3120713485d41c7df3b6418fe`). The resulting public request is a NEW G12 request and does **not** repeat, overwrite or regenerate the original G8 one-use artifact.
+
+Run **exactly once in owner Replit Shell when ready**, before the future Monday paid GO attempt:
+
+```bash
+cd ~/workspace
+
+bash <<'P6_G12_NEW_OWNER_C8_PUBLIC_REQUEST_ONLY'
+set -Eeuo pipefail
+set +x
+umask 077
+REPO="HKcode22/ReplitTranvr"
+BLOB="7cde993c034f00b3b7bad56e2f227355449bddcd"
+TMP="$(mktemp --suffix=.sh "$PWD/scripts/.p6_g12_public_XXXXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$REPO/git/blobs/$BLOB"   --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" CREATE_ONE_FRESH_G12_OWNER_PUBLIC_KEY_ONLY_AFTER_FULL_VALIDATOR_NO_PAID_GO
+P6_G12_NEW_OWNER_C8_PUBLIC_REQUEST_ONLY
+```
+
+**Expected owner output:** `P6_G12_FRESH_OWNER_PUBLIC_ENCRYPTION_REQUEST_COMMITTED_ONLY_NO_PAID_GO` and a private directory path matching `$HOME/.travnr-g12-seal-*`. Preserve that directory, `owner-private.pem` and `request.json` privately. Do not paste the private key, environment variables or encrypted artifact to ChatGPT, GitHub code, or a public issue; only paste the short JSON status and request commit SHA. The public-key-only GitHub commit triggers the branch no-provider action **`P6 G12 owner sealed exact c8 source code successor (NO PROVIDER)`**. That action uses the exact original full policy validator again, then places **only** AES-GCM encrypted policy successor values in a short-lived owner-only Actions artifact; it makes **no secret updates, provider calls, DB mutations, cron writes, GO or production-main commit**. If the run fails, do not issue another public request blindly. Owner must retrieve and review actual run first.
+
+**Do NOT run the old G8 decrypt/apply command or any G13 paid GO yet.** Once the fresh encrypted successor job actually succeeds, the next separate owner-authenticated step is an exact one-use decryption/full-digest verify-and-install of only the reviewed existing policy/code SHA names under dual-scope paid STOP0, then repository 31-value and original main protected actor revalidation. That owner install command is intentionally **not** supplied until its exact ciphertext receipt, changed name/scope inventory and new SHA256 link set have been independently checked. No plaintext public policies, reissued flight-day plan, changed research label or credential dump is acceptable.
+
+---
+
+
 **Date:** Nov 22, 2026 PST / Nov 23 UTC. **Only six fixed operational gates, 9–14. No new gates. No repeat of completed G1–8.** This is the single day-1 command reference. Never reuse older chat Bash blocks or the superseded `b432...` release blobs.
 
 ## LIVE EVIDENCE UPDATE — external PRIMARY backstop restored, full strict successor validator PASSED
