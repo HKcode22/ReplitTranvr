@@ -1,5 +1,16 @@
 # Phase 6 paid 31-day launch: one authoritative owner Day 1 operator runbook (Gates 9–14)
 
+## **SUPERSEDED OWNER INSTRUCTIONS — USE THE SHORT 3-COMMAND RUNBOOK ABOVE THIS HISTORY**
+
+**2026-11-23 06:02Z correction:** The operator has already SUCCESSFULLY created the single G12 owner public request commit `b98e02617fd1f49389197071904a38972333643e`. [Actual encrypted G12 run 45119501703](https://github.com/HKcode22/ReplitTranvr/actions/runs/45119501703) completed SUCCESS and preserved artifact `14792972040`, expiring Nov24 05:43Z. A SECOND accidental attempt received HTTP 422 `sha wasn't supplied` because it tried to create the exact same request file; it did **NOT** override the first request. **Never run either G12 public-key-request command again; the second local key directory is not authorized recipient.**
+
+**The only current owner launch instructions are in [START HERE — EXACT 3 OWNER COMMANDS](2026-11-23_START_HERE_PHASE6_LAUNCH_EXACT_3_OWNER_COMMANDS.md).** They include (1) NOW authenticated first-key G12 code-only installation + independent 31-value and production protected POST acceptance, (2) Monday 21:50–strictly before 23:10Z explicit owner paid GO only after the exact G12 PASS, and (3) after Mon23 23:45Z paid-GO-gated direct relay activation. **Do not use outdated command hashes elsewhere in this older checkpoint.**
+
+The verified c8 external PRIMARY_BACKSTOP has now forwarded and completed twice: [45118610987](https://github.com/HKcode22/TravnrClockRelay/actions/runs/45118610987) → [45118631787](https://github.com/HKcode22/ReplitTranvr/actions/runs/45118631787), then [45120142743](https://github.com/HKcode22/TravnrClockRelay/actions/runs/45120142743) → [45120165103](https://github.com/HKcode22/ReplitTranvr/actions/runs/45120165103), both target jobs successful. Heartbeat earlier on current main PASS; historical failures remain history, managed-cron evidence audit separate. No paid GO issued. GitHub [owner source-only scripts CI 45121421690](https://github.com/HKcode22/ReplitTranvr/actions/runs/45121421690) PASS. Source-only syntax tests are not a substitute for owner/runtime acceptance.
+
+---
+
+
 ## Next necessary owner action — original G8-style encrypted c8 successor, fresh public request only
 
 **Preparation now complete, but NOT issued/applied.** The authenticated in-memory original+proposed strict validator [45118733902](https://github.com/HKcode22/ReplitTranvr/actions/runs/45118733902) passed, preserving all 31 day plans. A new owner-only one-use X25519 public request launcher, source Git blob **`7cde993c034f00b3b7bad56e2f227355449bddcd`**, was created on the isolated evidence branch. It pins current target main c8, relay c5, actual strict validator proof, the exact branch-only new no-provider sealing workflow (`8136212fc420a0ea290a8975da6c9c6e87f78a2b`) and full validator-backed builder (`6ee66e47b0db5dc3120713485d41c7df3b6418fe`). The resulting public request is a NEW G12 request and does **not** repeat, overwrite or regenerate the original G8 one-use artifact.
