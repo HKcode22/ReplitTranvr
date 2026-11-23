@@ -1,6 +1,6 @@
 # Phase 6 — COMPLETE 31-STUDY-DAY SOURCE / PRE / POST SCHEDULE (California PST + UTC)
 
-**ONE authoritative operator calendar for all 31 study days.** Prepared 2026-11-23 PST from frozen **production main `c8e065d665ccacb6d2575070e94c5500b7583044`**. This file is an explanatory view of already reviewed signed plans, not a change to the frozen study, not paid GO, not proof of collection. Kept on **documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`**, not production main. If the signed release identity changes, STOP and independently review rather than silently rewrite these slots.
+**ONE authoritative operator calendar for all 31 study days, with corrected full AM/PM tables and the simplified 36-event Google/Notion display.** Prepared 2026-11-23 PST from frozen **production main `c8e065d665ccacb6d2575070e94c5500b7583044`**. This file is an explanatory view of already reviewed signed plans, not a change to the frozen study, not paid GO, not proof of collection. Kept on **documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`**, not production main. If the signed release identity changes, STOP and independently review rather than silently rewrite these slots.
 
 ## Start here — the three different notions of "schedule"
 
@@ -20,37 +20,37 @@ For a **6h** exposure, each provider request still uses an approved max **240-mi
 
 | Day | Split | UTC service date | Shape | Flight-service/exposure windows (PST) | Excluded internal break (PST) | SOURCE query templates |
 |---:|---|---|---|---|---|---:|
-| [01](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-01.json) | train | 2026-11-25 UTC | 4h | 11/24 4:00p–11/24 8:00p | None | 192 |
-| [02](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-02.json) | train | 2026-11-26 UTC | 4h | 11/25 8:00p–11/26 12:00a | None | 192 |
-| [03](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-03.json) | train | 2026-11-27 UTC | 2 × 2h | 11/27 12:00a–11/27 2:00a | 11/27 3:00a–11/27 5:00a | 11/27 2:00a–11/27 3:00a | 192 |
-| [04](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-04.json) | train | 2026-11-28 UTC | 4h | 11/28 4:00a–11/28 8:00a | None | 192 |
-| [05](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-05.json) | train | 2026-11-30 UTC | 6h | 11/30 8:00a–11/30 2:00p | None | 288 |
-| [06](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-06.json) | train | 2026-12-01 UTC | 4h | 12/01 12:00p–12/01 4:00p | None | 192 |
-| [07](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-07.json) | train | 2026-12-02 UTC | 2 × 2h | 12/01 4:00p–12/01 6:00p | 12/01 7:00p–12/01 9:00p | 12/01 6:00p–12/01 7:00p | 192 |
-| [08](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-08.json) | train | 2026-12-03 UTC | 2 × 2h | 12/02 8:00p–12/02 10:00p | 12/02 11:00p–12/03 1:00a | 12/02 10:00p–12/02 11:00p | 192 |
-| [09](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-09.json) | train | 2026-12-04 UTC | 4h | 12/04 12:00a–12/04 4:00a | None | 192 |
-| [10](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-10.json) | train | 2026-12-05 UTC | 6h | 12/05 4:00a–12/05 10:00a | None | 288 |
-| [11](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-11.json) | train | 2026-12-07 UTC | 4h | 12/07 8:00a–12/07 12:00p | None | 192 |
-| [12](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-12.json) | train | 2026-12-08 UTC | 4h | 12/08 12:00p–12/08 4:00p | None | 192 |
-| [13](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-13.json) | train | 2026-12-09 UTC | 4h | 12/08 4:00p–12/08 8:00p | None | 192 |
-| [14](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-14.json) | train | 2026-12-10 UTC | 4h | 12/09 8:00p–12/10 12:00a | None | 192 |
-| [15](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-15.json) | train | 2026-12-11 UTC | 4h | 12/11 12:00a–12/11 4:00a | None | 192 |
-| [16](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-16.json) | train | 2026-12-12 UTC | 4h | 12/12 4:00a–12/12 8:00a | None | 192 |
-| [17](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-17.json) | train | 2026-12-13 UTC | 4h | 12/13 8:00a–12/13 12:00p | None | 192 |
-| [18](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-18.json) | train | 2026-12-14 UTC | 4h | 12/14 12:00p–12/14 4:00p | None | 192 |
-| [19](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-19.json) | train | 2026-12-15 UTC | 4h | 12/14 4:00p–12/14 8:00p | None | 192 |
-| [20](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-20.json) | train | 2026-12-16 UTC | 4h | 12/15 8:00p–12/16 12:00a | None | 192 |
-| [21](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-21.json) | validation | 2026-12-17 UTC | 4h | 12/17 12:00a–12/17 4:00a | None | 192 |
-| [22](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-22.json) | validation | 2026-12-18 UTC | 4h | 12/18 4:00a–12/18 8:00a | None | 192 |
-| [23](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-23.json) | validation | 2026-12-19 UTC | 4h | 12/19 8:00a–12/19 12:00p | None | 192 |
-| [24](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-24.json) | validation | 2026-12-20 UTC | 4h | 12/20 12:00p–12/20 4:00p | None | 192 |
-| [25](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-25.json) | validation | 2026-12-21 UTC | 4h | 12/20 4:00p–12/20 8:00p | None | 192 |
-| [26](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-26.json) | test | 2026-12-22 UTC | 4h | 12/21 8:00p–12/22 12:00a | None | 192 |
-| [27](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-27.json) | test | 2026-12-23 UTC | 4h | 12/23 12:00a–12/23 4:00a | None | 192 |
-| [28](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-28.json) | test | 2026-12-24 UTC | 4h | 12/24 4:00a–12/24 8:00a | None | 192 |
-| [29](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-29.json) | test | 2026-12-25 UTC | 4h | 12/25 8:00a–12/25 12:00p | None | 192 |
-| [30](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-30.json) | test | 2026-12-26 UTC | 4h | 12/26 12:00p–12/26 4:00p | None | 192 |
-| [31](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json) | test | 2026-12-27 UTC | 4h | 12/26 4:00p–12/26 8:00p | None | 192 |
+| [01](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-01.json) | train | 2026-11-25 UTC | 4h | 11/24 4:00 PM–11/24 8:00 PM | None | 192 |
+| [02](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-02.json) | train | 2026-11-26 UTC | 4h | 11/25 8:00 PM–11/26 12:00 AM | None | 192 |
+| [03](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-03.json) | train | 2026-11-27 UTC | 2 × 2h | 11/27 12:00 AM–11/27 2:00 AM; 11/27 3:00 AM–11/27 5:00 AM | 11/27 2:00 AM–11/27 3:00 AM | 192 |
+| [04](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-04.json) | train | 2026-11-28 UTC | 4h | 11/28 4:00 AM–11/28 8:00 AM | None | 192 |
+| [05](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-05.json) | train | 2026-11-30 UTC | 6h | 11/30 8:00 AM–11/30 2:00 PM | None | 288 |
+| [06](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-06.json) | train | 2026-12-01 UTC | 4h | 12/01 12:00 PM–12/01 4:00 PM | None | 192 |
+| [07](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-07.json) | train | 2026-12-02 UTC | 2 × 2h | 12/01 4:00 PM–12/01 6:00 PM; 12/01 7:00 PM–12/01 9:00 PM | 12/01 6:00 PM–12/01 7:00 PM | 192 |
+| [08](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-08.json) | train | 2026-12-03 UTC | 2 × 2h | 12/02 8:00 PM–12/02 10:00 PM; 12/02 11:00 PM–12/03 1:00 AM | 12/02 10:00 PM–12/02 11:00 PM | 192 |
+| [09](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-09.json) | train | 2026-12-04 UTC | 4h | 12/04 12:00 AM–12/04 4:00 AM | None | 192 |
+| [10](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-10.json) | train | 2026-12-05 UTC | 6h | 12/05 4:00 AM–12/05 10:00 AM | None | 288 |
+| [11](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-11.json) | train | 2026-12-07 UTC | 4h | 12/07 8:00 AM–12/07 12:00 PM | None | 192 |
+| [12](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-12.json) | train | 2026-12-08 UTC | 4h | 12/08 12:00 PM–12/08 4:00 PM | None | 192 |
+| [13](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-13.json) | train | 2026-12-09 UTC | 4h | 12/08 4:00 PM–12/08 8:00 PM | None | 192 |
+| [14](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-14.json) | train | 2026-12-10 UTC | 4h | 12/09 8:00 PM–12/10 12:00 AM | None | 192 |
+| [15](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-15.json) | train | 2026-12-11 UTC | 4h | 12/11 12:00 AM–12/11 4:00 AM | None | 192 |
+| [16](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-16.json) | train | 2026-12-12 UTC | 4h | 12/12 4:00 AM–12/12 8:00 AM | None | 192 |
+| [17](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-17.json) | train | 2026-12-13 UTC | 4h | 12/13 8:00 AM–12/13 12:00 PM | None | 192 |
+| [18](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-18.json) | train | 2026-12-14 UTC | 4h | 12/14 12:00 PM–12/14 4:00 PM | None | 192 |
+| [19](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-19.json) | train | 2026-12-15 UTC | 4h | 12/14 4:00 PM–12/14 8:00 PM | None | 192 |
+| [20](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-20.json) | train | 2026-12-16 UTC | 4h | 12/15 8:00 PM–12/16 12:00 AM | None | 192 |
+| [21](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-21.json) | validation | 2026-12-17 UTC | 4h | 12/17 12:00 AM–12/17 4:00 AM | None | 192 |
+| [22](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-22.json) | validation | 2026-12-18 UTC | 4h | 12/18 4:00 AM–12/18 8:00 AM | None | 192 |
+| [23](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-23.json) | validation | 2026-12-19 UTC | 4h | 12/19 8:00 AM–12/19 12:00 PM | None | 192 |
+| [24](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-24.json) | validation | 2026-12-20 UTC | 4h | 12/20 12:00 PM–12/20 4:00 PM | None | 192 |
+| [25](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-25.json) | validation | 2026-12-21 UTC | 4h | 12/20 4:00 PM–12/20 8:00 PM | None | 192 |
+| [26](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-26.json) | test | 2026-12-22 UTC | 4h | 12/21 8:00 PM–12/22 12:00 AM | None | 192 |
+| [27](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-27.json) | test | 2026-12-23 UTC | 4h | 12/23 12:00 AM–12/23 4:00 AM | None | 192 |
+| [28](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-28.json) | test | 2026-12-24 UTC | 4h | 12/24 4:00 AM–12/24 8:00 AM | None | 192 |
+| [29](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-29.json) | test | 2026-12-25 UTC | 4h | 12/25 8:00 AM–12/25 12:00 PM | None | 192 |
+| [30](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-30.json) | test | 2026-12-26 UTC | 4h | 12/26 12:00 PM–12/26 4:00 PM | None | 192 |
+| [31](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json) | test | 2026-12-27 UTC | 4h | 12/26 4:00 PM–12/26 8:00 PM | None | 192 |
 
 **Verified geometry:** 31 study days; 20 train + 5 validation + 6 test; 26 ordinary 4h + 3 split 2×2h + 2 six-hour = 128 active exposure hours and 34 active service segments. 6,144 scheduled SOURCE query templates; four airport slots; three horizons. **The 10 paired days show candidate ICAOs, not proof of a completed, signed actual airport draw. The other 21 require prospective DB draws.**
 
@@ -60,37 +60,37 @@ Each cell describes the **first** and **last** exact planned query clock slots, 
 
 | Day | T−24h SOURCE planned slots (PST) | T−6h SOURCE planned slots (PST) | T−90m SOURCE planned slots (PST) |
 |---:|---|---|---|
-| **01** | 11/23 3:45p–11/23 7:30p | 11/24 9:45a–11/24 1:30p | 11/24 2:15p–11/24 6:00p |
-| **02** | 11/24 7:45p–11/24 11:30p | 11/25 1:45p–11/25 5:30p | 11/25 6:15p–11/25 10:00p |
-| **03** | 11/25 11:45p–11/26 1:30a | 11/26 2:45a–11/26 4:30a | 11/26 5:45p–11/26 7:30p | 11/26 8:45p–11/26 10:30p | 11/26 10:15p–11/27 12:00a | 11/27 1:15a–11/27 3:00a |
-| **04** | 11/27 3:45a–11/27 7:30a | 11/27 9:45p–11/28 1:30a | 11/28 2:15a–11/28 6:00a |
-| **05** | 11/29 7:45a–11/29 1:30p | 11/30 1:45a–11/30 7:30a | 11/30 6:15a–11/30 12:00p |
-| **06** | 11/30 11:45a–11/30 3:30p | 12/01 5:45a–12/01 9:30a | 12/01 10:15a–12/01 2:00p |
-| **07** | 11/30 3:45p–11/30 5:30p | 11/30 6:45p–11/30 8:30p | 12/01 9:45a–12/01 11:30a | 12/01 12:45p–12/01 2:30p | 12/01 2:15p–12/01 4:00p | 12/01 5:15p–12/01 7:00p |
-| **08** | 12/01 7:45p–12/01 9:30p | 12/01 10:45p–12/02 12:30a | 12/02 1:45p–12/02 3:30p | 12/02 4:45p–12/02 6:30p | 12/02 6:15p–12/02 8:00p | 12/02 9:15p–12/02 11:00p |
-| **09** | 12/02 11:45p–12/03 3:30a | 12/03 5:45p–12/03 9:30p | 12/03 10:15p–12/04 2:00a |
-| **10** | 12/04 3:45a–12/04 9:30a | 12/04 9:45p–12/05 3:30a | 12/05 2:15a–12/05 8:00a |
-| **11** | 12/06 7:45a–12/06 11:30a | 12/07 1:45a–12/07 5:30a | 12/07 6:15a–12/07 10:00a |
-| **12** | 12/07 11:45a–12/07 3:30p | 12/08 5:45a–12/08 9:30a | 12/08 10:15a–12/08 2:00p |
-| **13** | 12/07 3:45p–12/07 7:30p | 12/08 9:45a–12/08 1:30p | 12/08 2:15p–12/08 6:00p |
-| **14** | 12/08 7:45p–12/08 11:30p | 12/09 1:45p–12/09 5:30p | 12/09 6:15p–12/09 10:00p |
-| **15** | 12/09 11:45p–12/10 3:30a | 12/10 5:45p–12/10 9:30p | 12/10 10:15p–12/11 2:00a |
-| **16** | 12/11 3:45a–12/11 7:30a | 12/11 9:45p–12/12 1:30a | 12/12 2:15a–12/12 6:00a |
-| **17** | 12/12 7:45a–12/12 11:30a | 12/13 1:45a–12/13 5:30a | 12/13 6:15a–12/13 10:00a |
-| **18** | 12/13 11:45a–12/13 3:30p | 12/14 5:45a–12/14 9:30a | 12/14 10:15a–12/14 2:00p |
-| **19** | 12/13 3:45p–12/13 7:30p | 12/14 9:45a–12/14 1:30p | 12/14 2:15p–12/14 6:00p |
-| **20** | 12/14 7:45p–12/14 11:30p | 12/15 1:45p–12/15 5:30p | 12/15 6:15p–12/15 10:00p |
-| **21** | 12/15 11:45p–12/16 3:30a | 12/16 5:45p–12/16 9:30p | 12/16 10:15p–12/17 2:00a |
-| **22** | 12/17 3:45a–12/17 7:30a | 12/17 9:45p–12/18 1:30a | 12/18 2:15a–12/18 6:00a |
-| **23** | 12/18 7:45a–12/18 11:30a | 12/19 1:45a–12/19 5:30a | 12/19 6:15a–12/19 10:00a |
-| **24** | 12/19 11:45a–12/19 3:30p | 12/20 5:45a–12/20 9:30a | 12/20 10:15a–12/20 2:00p |
-| **25** | 12/19 3:45p–12/19 7:30p | 12/20 9:45a–12/20 1:30p | 12/20 2:15p–12/20 6:00p |
-| **26** | 12/20 7:45p–12/20 11:30p | 12/21 1:45p–12/21 5:30p | 12/21 6:15p–12/21 10:00p |
-| **27** | 12/21 11:45p–12/22 3:30a | 12/22 5:45p–12/22 9:30p | 12/22 10:15p–12/23 2:00a |
-| **28** | 12/23 3:45a–12/23 7:30a | 12/23 9:45p–12/24 1:30a | 12/24 2:15a–12/24 6:00a |
-| **29** | 12/24 7:45a–12/24 11:30a | 12/25 1:45a–12/25 5:30a | 12/25 6:15a–12/25 10:00a |
-| **30** | 12/25 11:45a–12/25 3:30p | 12/26 5:45a–12/26 9:30a | 12/26 10:15a–12/26 2:00p |
-| **31** | 12/25 3:45p–12/25 7:30p | 12/26 9:45a–12/26 1:30p | 12/26 2:15p–12/26 6:00p |
+| **01** | 11/23 3:45 PM–11/23 7:30 PM | 11/24 9:45 AM–11/24 1:30 PM | 11/24 2:15 PM–11/24 6:00 PM |
+| **02** | 11/24 7:45 PM–11/24 11:30 PM | 11/25 1:45 PM–11/25 5:30 PM | 11/25 6:15 PM–11/25 10:00 PM |
+| **03** | 11/25 11:45 PM–11/26 1:30 AM; 11/26 2:45 AM–11/26 4:30 AM | 11/26 5:45 PM–11/26 7:30 PM; 11/26 8:45 PM–11/26 10:30 PM | 11/26 10:15 PM–11/27 12:00 AM; 11/27 1:15 AM–11/27 3:00 AM |
+| **04** | 11/27 3:45 AM–11/27 7:30 AM | 11/27 9:45 PM–11/28 1:30 AM | 11/28 2:15 AM–11/28 6:00 AM |
+| **05** | 11/29 7:45 AM–11/29 1:30 PM | 11/30 1:45 AM–11/30 7:30 AM | 11/30 6:15 AM–11/30 12:00 PM |
+| **06** | 11/30 11:45 AM–11/30 3:30 PM | 12/01 5:45 AM–12/01 9:30 AM | 12/01 10:15 AM–12/01 2:00 PM |
+| **07** | 11/30 3:45 PM–11/30 5:30 PM; 11/30 6:45 PM–11/30 8:30 PM | 12/01 9:45 AM–12/01 11:30 AM; 12/01 12:45 PM–12/01 2:30 PM | 12/01 2:15 PM–12/01 4:00 PM; 12/01 5:15 PM–12/01 7:00 PM |
+| **08** | 12/01 7:45 PM–12/01 9:30 PM; 12/01 10:45 PM–12/02 12:30 AM | 12/02 1:45 PM–12/02 3:30 PM; 12/02 4:45 PM–12/02 6:30 PM | 12/02 6:15 PM–12/02 8:00 PM; 12/02 9:15 PM–12/02 11:00 PM |
+| **09** | 12/02 11:45 PM–12/03 3:30 AM | 12/03 5:45 PM–12/03 9:30 PM | 12/03 10:15 PM–12/04 2:00 AM |
+| **10** | 12/04 3:45 AM–12/04 9:30 AM | 12/04 9:45 PM–12/05 3:30 AM | 12/05 2:15 AM–12/05 8:00 AM |
+| **11** | 12/06 7:45 AM–12/06 11:30 AM | 12/07 1:45 AM–12/07 5:30 AM | 12/07 6:15 AM–12/07 10:00 AM |
+| **12** | 12/07 11:45 AM–12/07 3:30 PM | 12/08 5:45 AM–12/08 9:30 AM | 12/08 10:15 AM–12/08 2:00 PM |
+| **13** | 12/07 3:45 PM–12/07 7:30 PM | 12/08 9:45 AM–12/08 1:30 PM | 12/08 2:15 PM–12/08 6:00 PM |
+| **14** | 12/08 7:45 PM–12/08 11:30 PM | 12/09 1:45 PM–12/09 5:30 PM | 12/09 6:15 PM–12/09 10:00 PM |
+| **15** | 12/09 11:45 PM–12/10 3:30 AM | 12/10 5:45 PM–12/10 9:30 PM | 12/10 10:15 PM–12/11 2:00 AM |
+| **16** | 12/11 3:45 AM–12/11 7:30 AM | 12/11 9:45 PM–12/12 1:30 AM | 12/12 2:15 AM–12/12 6:00 AM |
+| **17** | 12/12 7:45 AM–12/12 11:30 AM | 12/13 1:45 AM–12/13 5:30 AM | 12/13 6:15 AM–12/13 10:00 AM |
+| **18** | 12/13 11:45 AM–12/13 3:30 PM | 12/14 5:45 AM–12/14 9:30 AM | 12/14 10:15 AM–12/14 2:00 PM |
+| **19** | 12/13 3:45 PM–12/13 7:30 PM | 12/14 9:45 AM–12/14 1:30 PM | 12/14 2:15 PM–12/14 6:00 PM |
+| **20** | 12/14 7:45 PM–12/14 11:30 PM | 12/15 1:45 PM–12/15 5:30 PM | 12/15 6:15 PM–12/15 10:00 PM |
+| **21** | 12/15 11:45 PM–12/16 3:30 AM | 12/16 5:45 PM–12/16 9:30 PM | 12/16 10:15 PM–12/17 2:00 AM |
+| **22** | 12/17 3:45 AM–12/17 7:30 AM | 12/17 9:45 PM–12/18 1:30 AM | 12/18 2:15 AM–12/18 6:00 AM |
+| **23** | 12/18 7:45 AM–12/18 11:30 AM | 12/19 1:45 AM–12/19 5:30 AM | 12/19 6:15 AM–12/19 10:00 AM |
+| **24** | 12/19 11:45 AM–12/19 3:30 PM | 12/20 5:45 AM–12/20 9:30 AM | 12/20 10:15 AM–12/20 2:00 PM |
+| **25** | 12/19 3:45 PM–12/19 7:30 PM | 12/20 9:45 AM–12/20 1:30 PM | 12/20 2:15 PM–12/20 6:00 PM |
+| **26** | 12/20 7:45 PM–12/20 11:30 PM | 12/21 1:45 PM–12/21 5:30 PM | 12/21 6:15 PM–12/21 10:00 PM |
+| **27** | 12/21 11:45 PM–12/22 3:30 AM | 12/22 5:45 PM–12/22 9:30 PM | 12/22 10:15 PM–12/23 2:00 AM |
+| **28** | 12/23 3:45 AM–12/23 7:30 AM | 12/23 9:45 PM–12/24 1:30 AM | 12/24 2:15 AM–12/24 6:00 AM |
+| **29** | 12/24 7:45 AM–12/24 11:30 AM | 12/25 1:45 AM–12/25 5:30 AM | 12/25 6:15 AM–12/25 10:00 AM |
+| **30** | 12/25 11:45 AM–12/25 3:30 PM | 12/26 5:45 AM–12/26 9:30 AM | 12/26 10:15 AM–12/26 2:00 PM |
+| **31** | 12/25 3:45 PM–12/25 7:30 PM | 12/26 9:45 AM–12/26 1:30 PM | 12/26 2:15 PM–12/26 6:00 PM |
 
 **Read one row example:** Day 01 has 4 airports × 16 quarter-hour positions for T−24h, again for T−6h and T−90m (192 templates). The actual per-flight T−6h PRE must be published before *that individual flight's* native T−6h cutoff, not merely sometime inside this FIDS span.
 
@@ -102,12 +102,12 @@ The UTC values omit the year from each cell (**all dates 2026**); no local time 
 |---:|---|---|---|---|
 | 01 | 11-25 00:00–11-25 04:00 | 11-23 23:45–11-24 03:30 | 11-24 17:45–11-24 21:30 | 11-24 22:15–11-25 02:00 |
 | 02 | 11-26 04:00–11-26 08:00 | 11-25 03:45–11-25 07:30 | 11-25 21:45–11-26 01:30 | 11-26 02:15–11-26 06:00 |
-| 03 | 11-27 08:00–11-27 10:00 ; 11-27 11:00–11-27 13:00 | 11-26 07:45–11-26 09:30 | 11-26 10:45–11-26 12:30 | 11-27 01:45–11-27 03:30 | 11-27 04:45–11-27 06:30 | 11-27 06:15–11-27 08:00 | 11-27 09:15–11-27 11:00 |
+| 03 | 11-27 08:00–11-27 10:00; 11-27 11:00–11-27 13:00 | 11-26 07:45–11-26 09:30; 11-26 10:45–11-26 12:30 | 11-27 01:45–11-27 03:30; 11-27 04:45–11-27 06:30 | 11-27 06:15–11-27 08:00; 11-27 09:15–11-27 11:00 |
 | 04 | 11-28 12:00–11-28 16:00 | 11-27 11:45–11-27 15:30 | 11-28 05:45–11-28 09:30 | 11-28 10:15–11-28 14:00 |
 | 05 | 11-30 16:00–11-30 22:00 | 11-29 15:45–11-29 21:30 | 11-30 09:45–11-30 15:30 | 11-30 14:15–11-30 20:00 |
 | 06 | 12-01 20:00–12-02 00:00 | 11-30 19:45–11-30 23:30 | 12-01 13:45–12-01 17:30 | 12-01 18:15–12-01 22:00 |
-| 07 | 12-02 00:00–12-02 02:00 ; 12-02 03:00–12-02 05:00 | 11-30 23:45–12-01 01:30 | 12-01 02:45–12-01 04:30 | 12-01 17:45–12-01 19:30 | 12-01 20:45–12-01 22:30 | 12-01 22:15–12-02 00:00 | 12-02 01:15–12-02 03:00 |
-| 08 | 12-03 04:00–12-03 06:00 ; 12-03 07:00–12-03 09:00 | 12-02 03:45–12-02 05:30 | 12-02 06:45–12-02 08:30 | 12-02 21:45–12-02 23:30 | 12-03 00:45–12-03 02:30 | 12-03 02:15–12-03 04:00 | 12-03 05:15–12-03 07:00 |
+| 07 | 12-02 00:00–12-02 02:00; 12-02 03:00–12-02 05:00 | 11-30 23:45–12-01 01:30; 12-01 02:45–12-01 04:30 | 12-01 17:45–12-01 19:30; 12-01 20:45–12-01 22:30 | 12-01 22:15–12-02 00:00; 12-02 01:15–12-02 03:00 |
+| 08 | 12-03 04:00–12-03 06:00; 12-03 07:00–12-03 09:00 | 12-02 03:45–12-02 05:30; 12-02 06:45–12-02 08:30 | 12-02 21:45–12-02 23:30; 12-03 00:45–12-03 02:30 | 12-03 02:15–12-03 04:00; 12-03 05:15–12-03 07:00 |
 | 09 | 12-04 08:00–12-04 12:00 | 12-03 07:45–12-03 11:30 | 12-04 01:45–12-04 05:30 | 12-04 06:15–12-04 10:00 |
 | 10 | 12-05 12:00–12-05 18:00 | 12-04 11:45–12-04 17:30 | 12-05 05:45–12-05 11:30 | 12-05 10:15–12-05 16:00 |
 | 11 | 12-07 16:00–12-07 20:00 | 12-06 15:45–12-06 19:30 | 12-07 09:45–12-07 13:30 | 12-07 14:15–12-07 18:00 |
@@ -164,404 +164,404 @@ The external rolling relay and primary retention backstop are distinct; a green 
 
 ### Day 01 — 2026-11-25 UTC — TRAIN — 4h
 **Airports:** HUB OMAA, MID_A OMSJ, MID_B SPJC, REGIONAL KDEC. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 11/24 4:00p–11/24 8:00p.
+**Planned service/exposure (PST):** 11/24 4:00 PM–11/24 8:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/23 3:45p–11/23 7:30p.
-- T−6h: 11/24 9:45a–11/24 1:30p.
-- T−90m: 11/24 2:15p–11/24 6:00p.
+- T−24h: 11/23 3:45 PM–11/23 7:30 PM.
+- T−6h: 11/24 9:45 AM–11/24 1:30 PM.
+- T−90m: 11/24 2:15 PM–11/24 6:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/21 4:00p to 11/23 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/21 4:00 PM to 11/23 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 1 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-01.json).
 
 ### Day 02 — 2026-11-26 UTC — TRAIN — 4h
 **Airports:** HUB WSSS, MID_A SBFL, MID_B TJSJ, REGIONAL LSZB. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 11/25 8:00p–11/26 12:00a.
+**Planned service/exposure (PST):** 11/25 8:00 PM–11/26 12:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/24 7:45p–11/24 11:30p.
-- T−6h: 11/25 1:45p–11/25 5:30p.
-- T−90m: 11/25 6:15p–11/25 10:00p.
+- T−24h: 11/24 7:45 PM–11/24 11:30 PM.
+- T−6h: 11/25 1:45 PM–11/25 5:30 PM.
+- T−90m: 11/25 6:15 PM–11/25 10:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/22 8:00p to 11/24 7:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/22 8:00 PM to 11/24 7:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 2 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-02.json).
 
 ### Day 03 — 2026-11-27 UTC — TRAIN — 2x2h
 **Airports:** HUB YSSY, MID_A KBUF, MID_B LFQQ, REGIONAL NZNP. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 11/27 12:00a–11/27 2:00a | 11/27 3:00a–11/27 5:00a.
-**Intentional exposure break:** 11/27 2:00a–11/27 3:00a PST. No service exposure in this gap.
+**Planned service/exposure (PST):** 11/27 12:00 AM–11/27 2:00 AM | 11/27 3:00 AM–11/27 5:00 AM.
+**Intentional exposure break:** 11/27 2:00 AM–11/27 3:00 AM PST. No service exposure in this gap.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/25 11:45p–11/26 1:30a | 11/26 2:45a–11/26 4:30a.
-- T−6h: 11/26 5:45p–11/26 7:30p | 11/26 8:45p–11/26 10:30p.
-- T−90m: 11/26 10:15p–11/27 12:00a | 11/27 1:15a–11/27 3:00a.
+- T−24h: 11/25 11:45 PM–11/26 1:30 AM | 11/26 2:45 AM–11/26 4:30 AM.
+- T−6h: 11/26 5:45 PM–11/26 7:30 PM | 11/26 8:45 PM–11/26 10:30 PM.
+- T−90m: 11/26 10:15 PM–11/27 12:00 AM | 11/27 1:15 AM–11/27 3:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/24 12:00a to 11/25 11:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/24 12:00 AM to 11/25 11:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 3 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-03.json).
 
 ### Day 04 — 2026-11-28 UTC — TRAIN — 4h
 **Airports:** HUB SKBO, MID_A EBAW, MID_B NZNS, REGIONAL RJNK. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 11/28 4:00a–11/28 8:00a.
+**Planned service/exposure (PST):** 11/28 4:00 AM–11/28 8:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/27 3:45a–11/27 7:30a.
-- T−6h: 11/27 9:45p–11/28 1:30a.
-- T−90m: 11/28 2:15a–11/28 6:00a.
+- T−24h: 11/27 3:45 AM–11/27 7:30 AM.
+- T−6h: 11/27 9:45 PM–11/28 1:30 AM.
+- T−90m: 11/28 2:15 AM–11/28 6:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/25 4:00a to 11/27 3:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/25 4:00 AM to 11/27 3:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 4 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-04.json).
 
 ### Day 05 — 2026-11-30 UTC — TRAIN — up-to-6h
 **Airports:** HUB SKBO, MID_A YBUD, MID_B RKTU, REGIONAL FAKM. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 11/30 8:00a–11/30 2:00p.
+**Planned service/exposure (PST):** 11/30 8:00 AM–11/30 2:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/29 7:45a–11/29 1:30p.
-- T−6h: 11/30 1:45a–11/30 7:30a.
-- T−90m: 11/30 6:15a–11/30 12:00p.
+- T−24h: 11/29 7:45 AM–11/29 1:30 PM.
+- T−6h: 11/30 1:45 AM–11/30 7:30 AM.
+- T−90m: 11/30 6:15 AM–11/30 12:00 PM.
 - **Total** 288 templates (24 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/27 8:00a to 11/29 7:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/27 8:00 AM to 11/29 7:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 5 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-05.json).
 
 ### Day 06 — 2026-12-01 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/01 12:00p–12/01 4:00p.
+**Planned service/exposure (PST):** 12/01 12:00 PM–12/01 4:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/30 11:45a–11/30 3:30p.
-- T−6h: 12/01 5:45a–12/01 9:30a.
-- T−90m: 12/01 10:15a–12/01 2:00p.
+- T−24h: 11/30 11:45 AM–11/30 3:30 PM.
+- T−6h: 12/01 5:45 AM–12/01 9:30 AM.
+- T−90m: 12/01 10:15 AM–12/01 2:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/28 12:00p to 11/30 11:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/28 12:00 PM to 11/30 11:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 6 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-06.json).
 
 ### Day 07 — 2026-12-02 UTC — TRAIN — 2x2h
 **Airports:** HUB OMAA, MID_A OMSJ, MID_B SPJC, REGIONAL KDEC. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 12/01 4:00p–12/01 6:00p | 12/01 7:00p–12/01 9:00p.
-**Intentional exposure break:** 12/01 6:00p–12/01 7:00p PST. No service exposure in this gap.
+**Planned service/exposure (PST):** 12/01 4:00 PM–12/01 6:00 PM | 12/01 7:00 PM–12/01 9:00 PM.
+**Intentional exposure break:** 12/01 6:00 PM–12/01 7:00 PM PST. No service exposure in this gap.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 11/30 3:45p–11/30 5:30p | 11/30 6:45p–11/30 8:30p.
-- T−6h: 12/01 9:45a–12/01 11:30a | 12/01 12:45p–12/01 2:30p.
-- T−90m: 12/01 2:15p–12/01 4:00p | 12/01 5:15p–12/01 7:00p.
+- T−24h: 11/30 3:45 PM–11/30 5:30 PM | 11/30 6:45 PM–11/30 8:30 PM.
+- T−6h: 12/01 9:45 AM–12/01 11:30 AM | 12/01 12:45 PM–12/01 2:30 PM.
+- T−90m: 12/01 2:15 PM–12/01 4:00 PM | 12/01 5:15 PM–12/01 7:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/28 4:00p to 11/30 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/28 4:00 PM to 11/30 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 7 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-07.json).
 
 ### Day 08 — 2026-12-03 UTC — TRAIN — 2x2h
 **Airports:** HUB WSSS, MID_A SBFL, MID_B TJSJ, REGIONAL LSZB. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 12/02 8:00p–12/02 10:00p | 12/02 11:00p–12/03 1:00a.
-**Intentional exposure break:** 12/02 10:00p–12/02 11:00p PST. No service exposure in this gap.
+**Planned service/exposure (PST):** 12/02 8:00 PM–12/02 10:00 PM | 12/02 11:00 PM–12/03 1:00 AM.
+**Intentional exposure break:** 12/02 10:00 PM–12/02 11:00 PM PST. No service exposure in this gap.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/01 7:45p–12/01 9:30p | 12/01 10:45p–12/02 12:30a.
-- T−6h: 12/02 1:45p–12/02 3:30p | 12/02 4:45p–12/02 6:30p.
-- T−90m: 12/02 6:15p–12/02 8:00p | 12/02 9:15p–12/02 11:00p.
+- T−24h: 12/01 7:45 PM–12/01 9:30 PM | 12/01 10:45 PM–12/02 12:30 AM.
+- T−6h: 12/02 1:45 PM–12/02 3:30 PM | 12/02 4:45 PM–12/02 6:30 PM.
+- T−90m: 12/02 6:15 PM–12/02 8:00 PM | 12/02 9:15 PM–12/02 11:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/29 8:00p to 12/01 7:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 11/29 8:00 PM to 12/01 7:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 8 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-08.json).
 
 ### Day 09 — 2026-12-04 UTC — TRAIN — 4h
 **Airports:** HUB YSSY, MID_A KBUF, MID_B LFQQ, REGIONAL NZNP. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 12/04 12:00a–12/04 4:00a.
+**Planned service/exposure (PST):** 12/04 12:00 AM–12/04 4:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/02 11:45p–12/03 3:30a.
-- T−6h: 12/03 5:45p–12/03 9:30p.
-- T−90m: 12/03 10:15p–12/04 2:00a.
+- T−24h: 12/02 11:45 PM–12/03 3:30 AM.
+- T−6h: 12/03 5:45 PM–12/03 9:30 PM.
+- T−90m: 12/03 10:15 PM–12/04 2:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/01 12:00a to 12/02 11:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/01 12:00 AM to 12/02 11:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 9 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-09.json).
 
 ### Day 10 — 2026-12-05 UTC — TRAIN — up-to-6h
 **Airports:** HUB SKBO, MID_A EBAW, MID_B NZNS, REGIONAL RJNK. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 12/05 4:00a–12/05 10:00a.
+**Planned service/exposure (PST):** 12/05 4:00 AM–12/05 10:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/04 3:45a–12/04 9:30a.
-- T−6h: 12/04 9:45p–12/05 3:30a.
-- T−90m: 12/05 2:15a–12/05 8:00a.
+- T−24h: 12/04 3:45 AM–12/04 9:30 AM.
+- T−6h: 12/04 9:45 PM–12/05 3:30 AM.
+- T−90m: 12/05 2:15 AM–12/05 8:00 AM.
 - **Total** 288 templates (24 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/02 4:00a to 12/04 3:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/02 4:00 AM to 12/04 3:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 10 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-10.json).
 
 ### Day 11 — 2026-12-07 UTC — TRAIN — 4h
 **Airports:** HUB SKBO, MID_A YBUD, MID_B RKTU, REGIONAL FAKM. Paired candidate, subject to actual approved prospective DB draw.
-**Planned service/exposure (PST):** 12/07 8:00a–12/07 12:00p.
+**Planned service/exposure (PST):** 12/07 8:00 AM–12/07 12:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/06 7:45a–12/06 11:30a.
-- T−6h: 12/07 1:45a–12/07 5:30a.
-- T−90m: 12/07 6:15a–12/07 10:00a.
+- T−24h: 12/06 7:45 AM–12/06 11:30 AM.
+- T−6h: 12/07 1:45 AM–12/07 5:30 AM.
+- T−90m: 12/07 6:15 AM–12/07 10:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/04 8:00a to 12/06 7:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/04 8:00 AM to 12/06 7:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 11 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-11.json).
 
 ### Day 12 — 2026-12-08 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/08 12:00p–12/08 4:00p.
+**Planned service/exposure (PST):** 12/08 12:00 PM–12/08 4:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/07 11:45a–12/07 3:30p.
-- T−6h: 12/08 5:45a–12/08 9:30a.
-- T−90m: 12/08 10:15a–12/08 2:00p.
+- T−24h: 12/07 11:45 AM–12/07 3:30 PM.
+- T−6h: 12/08 5:45 AM–12/08 9:30 AM.
+- T−90m: 12/08 10:15 AM–12/08 2:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/05 12:00p to 12/07 11:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/05 12:00 PM to 12/07 11:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 12 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-12.json).
 
 ### Day 13 — 2026-12-09 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/08 4:00p–12/08 8:00p.
+**Planned service/exposure (PST):** 12/08 4:00 PM–12/08 8:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/07 3:45p–12/07 7:30p.
-- T−6h: 12/08 9:45a–12/08 1:30p.
-- T−90m: 12/08 2:15p–12/08 6:00p.
+- T−24h: 12/07 3:45 PM–12/07 7:30 PM.
+- T−6h: 12/08 9:45 AM–12/08 1:30 PM.
+- T−90m: 12/08 2:15 PM–12/08 6:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/05 4:00p to 12/07 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/05 4:00 PM to 12/07 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 13 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-13.json).
 
 ### Day 14 — 2026-12-10 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/09 8:00p–12/10 12:00a.
+**Planned service/exposure (PST):** 12/09 8:00 PM–12/10 12:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/08 7:45p–12/08 11:30p.
-- T−6h: 12/09 1:45p–12/09 5:30p.
-- T−90m: 12/09 6:15p–12/09 10:00p.
+- T−24h: 12/08 7:45 PM–12/08 11:30 PM.
+- T−6h: 12/09 1:45 PM–12/09 5:30 PM.
+- T−90m: 12/09 6:15 PM–12/09 10:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/06 8:00p to 12/08 7:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/06 8:00 PM to 12/08 7:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 14 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-14.json).
 
 ### Day 15 — 2026-12-11 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/11 12:00a–12/11 4:00a.
+**Planned service/exposure (PST):** 12/11 12:00 AM–12/11 4:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/09 11:45p–12/10 3:30a.
-- T−6h: 12/10 5:45p–12/10 9:30p.
-- T−90m: 12/10 10:15p–12/11 2:00a.
+- T−24h: 12/09 11:45 PM–12/10 3:30 AM.
+- T−6h: 12/10 5:45 PM–12/10 9:30 PM.
+- T−90m: 12/10 10:15 PM–12/11 2:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/08 12:00a to 12/09 11:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/08 12:00 AM to 12/09 11:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 15 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-15.json).
 
 ### Day 16 — 2026-12-12 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/12 4:00a–12/12 8:00a.
+**Planned service/exposure (PST):** 12/12 4:00 AM–12/12 8:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/11 3:45a–12/11 7:30a.
-- T−6h: 12/11 9:45p–12/12 1:30a.
-- T−90m: 12/12 2:15a–12/12 6:00a.
+- T−24h: 12/11 3:45 AM–12/11 7:30 AM.
+- T−6h: 12/11 9:45 PM–12/12 1:30 AM.
+- T−90m: 12/12 2:15 AM–12/12 6:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/09 4:00a to 12/11 3:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/09 4:00 AM to 12/11 3:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 16 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-16.json).
 
 ### Day 17 — 2026-12-13 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/13 8:00a–12/13 12:00p.
+**Planned service/exposure (PST):** 12/13 8:00 AM–12/13 12:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/12 7:45a–12/12 11:30a.
-- T−6h: 12/13 1:45a–12/13 5:30a.
-- T−90m: 12/13 6:15a–12/13 10:00a.
+- T−24h: 12/12 7:45 AM–12/12 11:30 AM.
+- T−6h: 12/13 1:45 AM–12/13 5:30 AM.
+- T−90m: 12/13 6:15 AM–12/13 10:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/10 8:00a to 12/12 7:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/10 8:00 AM to 12/12 7:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 17 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-17.json).
 
 ### Day 18 — 2026-12-14 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/14 12:00p–12/14 4:00p.
+**Planned service/exposure (PST):** 12/14 12:00 PM–12/14 4:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/13 11:45a–12/13 3:30p.
-- T−6h: 12/14 5:45a–12/14 9:30a.
-- T−90m: 12/14 10:15a–12/14 2:00p.
+- T−24h: 12/13 11:45 AM–12/13 3:30 PM.
+- T−6h: 12/14 5:45 AM–12/14 9:30 AM.
+- T−90m: 12/14 10:15 AM–12/14 2:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/11 12:00p to 12/13 11:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/11 12:00 PM to 12/13 11:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 18 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-18.json).
 
 ### Day 19 — 2026-12-15 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/14 4:00p–12/14 8:00p.
+**Planned service/exposure (PST):** 12/14 4:00 PM–12/14 8:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/13 3:45p–12/13 7:30p.
-- T−6h: 12/14 9:45a–12/14 1:30p.
-- T−90m: 12/14 2:15p–12/14 6:00p.
+- T−24h: 12/13 3:45 PM–12/13 7:30 PM.
+- T−6h: 12/14 9:45 AM–12/14 1:30 PM.
+- T−90m: 12/14 2:15 PM–12/14 6:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/11 4:00p to 12/13 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/11 4:00 PM to 12/13 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 19 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-19.json).
 
 ### Day 20 — 2026-12-16 UTC — TRAIN — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/15 8:00p–12/16 12:00a.
+**Planned service/exposure (PST):** 12/15 8:00 PM–12/16 12:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/14 7:45p–12/14 11:30p.
-- T−6h: 12/15 1:45p–12/15 5:30p.
-- T−90m: 12/15 6:15p–12/15 10:00p.
+- T−24h: 12/14 7:45 PM–12/14 11:30 PM.
+- T−6h: 12/15 1:45 PM–12/15 5:30 PM.
+- T−90m: 12/15 6:15 PM–12/15 10:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/12 8:00p to 12/14 7:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/12 8:00 PM to 12/14 7:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 20 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-20.json).
 
 ### Day 21 — 2026-12-17 UTC — VALIDATION — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/17 12:00a–12/17 4:00a.
+**Planned service/exposure (PST):** 12/17 12:00 AM–12/17 4:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/15 11:45p–12/16 3:30a.
-- T−6h: 12/16 5:45p–12/16 9:30p.
-- T−90m: 12/16 10:15p–12/17 2:00a.
+- T−24h: 12/15 11:45 PM–12/16 3:30 AM.
+- T−6h: 12/16 5:45 PM–12/16 9:30 PM.
+- T−90m: 12/16 10:15 PM–12/17 2:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/14 12:00a to 12/15 11:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/14 12:00 AM to 12/15 11:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 21 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-21.json).
 
 ### Day 22 — 2026-12-18 UTC — VALIDATION — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/18 4:00a–12/18 8:00a.
+**Planned service/exposure (PST):** 12/18 4:00 AM–12/18 8:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/17 3:45a–12/17 7:30a.
-- T−6h: 12/17 9:45p–12/18 1:30a.
-- T−90m: 12/18 2:15a–12/18 6:00a.
+- T−24h: 12/17 3:45 AM–12/17 7:30 AM.
+- T−6h: 12/17 9:45 PM–12/18 1:30 AM.
+- T−90m: 12/18 2:15 AM–12/18 6:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/15 4:00a to 12/17 3:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/15 4:00 AM to 12/17 3:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 22 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-22.json).
 
 ### Day 23 — 2026-12-19 UTC — VALIDATION — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/19 8:00a–12/19 12:00p.
+**Planned service/exposure (PST):** 12/19 8:00 AM–12/19 12:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/18 7:45a–12/18 11:30a.
-- T−6h: 12/19 1:45a–12/19 5:30a.
-- T−90m: 12/19 6:15a–12/19 10:00a.
+- T−24h: 12/18 7:45 AM–12/18 11:30 AM.
+- T−6h: 12/19 1:45 AM–12/19 5:30 AM.
+- T−90m: 12/19 6:15 AM–12/19 10:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/16 8:00a to 12/18 7:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/16 8:00 AM to 12/18 7:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 23 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-23.json).
 
 ### Day 24 — 2026-12-20 UTC — VALIDATION — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/20 12:00p–12/20 4:00p.
+**Planned service/exposure (PST):** 12/20 12:00 PM–12/20 4:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/19 11:45a–12/19 3:30p.
-- T−6h: 12/20 5:45a–12/20 9:30a.
-- T−90m: 12/20 10:15a–12/20 2:00p.
+- T−24h: 12/19 11:45 AM–12/19 3:30 PM.
+- T−6h: 12/20 5:45 AM–12/20 9:30 AM.
+- T−90m: 12/20 10:15 AM–12/20 2:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/17 12:00p to 12/19 11:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/17 12:00 PM to 12/19 11:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 24 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-24.json).
 
 ### Day 25 — 2026-12-21 UTC — VALIDATION — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/20 4:00p–12/20 8:00p.
+**Planned service/exposure (PST):** 12/20 4:00 PM–12/20 8:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/19 3:45p–12/19 7:30p.
-- T−6h: 12/20 9:45a–12/20 1:30p.
-- T−90m: 12/20 2:15p–12/20 6:00p.
+- T−24h: 12/19 3:45 PM–12/19 7:30 PM.
+- T−6h: 12/20 9:45 AM–12/20 1:30 PM.
+- T−90m: 12/20 2:15 PM–12/20 6:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/17 4:00p to 12/19 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/17 4:00 PM to 12/19 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 25 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-25.json).
 
 ### Day 26 — 2026-12-22 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/21 8:00p–12/22 12:00a.
+**Planned service/exposure (PST):** 12/21 8:00 PM–12/22 12:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/20 7:45p–12/20 11:30p.
-- T−6h: 12/21 1:45p–12/21 5:30p.
-- T−90m: 12/21 6:15p–12/21 10:00p.
+- T−24h: 12/20 7:45 PM–12/20 11:30 PM.
+- T−6h: 12/21 1:45 PM–12/21 5:30 PM.
+- T−90m: 12/21 6:15 PM–12/21 10:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/18 8:00p to 12/20 7:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/18 8:00 PM to 12/20 7:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 26 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-26.json).
 
 ### Day 27 — 2026-12-23 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/23 12:00a–12/23 4:00a.
+**Planned service/exposure (PST):** 12/23 12:00 AM–12/23 4:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/21 11:45p–12/22 3:30a.
-- T−6h: 12/22 5:45p–12/22 9:30p.
-- T−90m: 12/22 10:15p–12/23 2:00a.
+- T−24h: 12/21 11:45 PM–12/22 3:30 AM.
+- T−6h: 12/22 5:45 PM–12/22 9:30 PM.
+- T−90m: 12/22 10:15 PM–12/23 2:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/20 12:00a to 12/21 11:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/20 12:00 AM to 12/21 11:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 27 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-27.json).
 
 ### Day 28 — 2026-12-24 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/24 4:00a–12/24 8:00a.
+**Planned service/exposure (PST):** 12/24 4:00 AM–12/24 8:00 AM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/23 3:45a–12/23 7:30a.
-- T−6h: 12/23 9:45p–12/24 1:30a.
-- T−90m: 12/24 2:15a–12/24 6:00a.
+- T−24h: 12/23 3:45 AM–12/23 7:30 AM.
+- T−6h: 12/23 9:45 PM–12/24 1:30 AM.
+- T−90m: 12/24 2:15 AM–12/24 6:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/21 4:00a to 12/23 3:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/21 4:00 AM to 12/23 3:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 28 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-28.json).
 
 ### Day 29 — 2026-12-25 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/25 8:00a–12/25 12:00p.
+**Planned service/exposure (PST):** 12/25 8:00 AM–12/25 12:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/24 7:45a–12/24 11:30a.
-- T−6h: 12/25 1:45a–12/25 5:30a.
-- T−90m: 12/25 6:15a–12/25 10:00a.
+- T−24h: 12/24 7:45 AM–12/24 11:30 AM.
+- T−6h: 12/25 1:45 AM–12/25 5:30 AM.
+- T−90m: 12/25 6:15 AM–12/25 10:00 AM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/22 8:00a to 12/24 7:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/22 8:00 AM to 12/24 7:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 29 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-29.json).
 
 ### Day 30 — 2026-12-26 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/26 12:00p–12/26 4:00p.
+**Planned service/exposure (PST):** 12/26 12:00 PM–12/26 4:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/25 11:45a–12/25 3:30p.
-- T−6h: 12/26 5:45a–12/26 9:30a.
-- T−90m: 12/26 10:15a–12/26 2:00p.
+- T−24h: 12/25 11:45 AM–12/25 3:30 PM.
+- T−6h: 12/26 5:45 AM–12/26 9:30 AM.
+- T−90m: 12/26 10:15 AM–12/26 2:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/23 12:00p to 12/25 11:14a. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/23 12:00 PM to 12/25 11:14 AM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 30 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-30.json).
 
 ### Day 31 — 2026-12-27 UTC — TEST — 4h
 **Airports:** Adaptive prospective draw — ICAOs not frozen. Four airports will be chosen only by the approved future prospective draw; do not invent ICAOs.
-**Planned service/exposure (PST):** 12/26 4:00p–12/26 8:00p.
+**Planned service/exposure (PST):** 12/26 4:00 PM–12/26 8:00 PM.
 **Intentional exposure break:** None within this service span; gaps between separate study days are not failures.
 **Scheduled SOURCE FIDS request slots (PST; one four-airport wave every 15 minutes within each listed segment, not guaranteed actual execution):**
-- T−24h: 12/25 3:45p–12/25 7:30p.
-- T−6h: 12/26 9:45a–12/26 1:30p.
-- T−90m: 12/26 2:15p–12/26 6:00p.
+- T−24h: 12/25 3:45 PM–12/25 7:30 PM.
+- T−6h: 12/26 9:45 AM–12/26 1:30 PM.
+- T−90m: 12/26 2:15 PM–12/26 6:00 PM.
 - **Total** 192 templates (16 distinct timestamps × 4 airport slots × 3 horizons), at most one physical GET per template; original metadata budgets 2 REST units per planned source attempt.
-**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/23 4:00p to 12/25 3:14p. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
+**Approved early four-airport draw eligible interval (PST, separate control-plane workflow, not a paid FIDS call):** 12/23 4:00 PM to 12/25 3:14 PM. Eligibility is NOT proof selection executed; paid GO/actual DB clock/rights also apply.
 **Actual PRE and POST:** derive true individual cutoffs from each admitted flight's frozen scheduled T and independent source evidence. Do not claim snapshot or actual gate-out label solely from these clock slots.
 **Pinned exact source:** [signed Day 31 planning JSON](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/data-collection/phase5/planning/phase6-source-day-31.json).
 
@@ -596,23 +596,16 @@ The external rolling relay and primary retention backstop are distinct; a green 
 **Owner operational next step:** Complete original signed G13 and later G9 only in their approved windows. This checkpoint adds no launch step, no cron, no provider call and no authorized paid retry.
 
 
-## I. Verified Google Calendar creation and independent readback — November 23, 2026 PST
+## I. CURRENT CLEAN GOOGLE + NOTION CALENDAR — verified November 23, 2026 California PST
 
-**Status: CALENDAR POPULATED and independently read back; not a data-collection launch receipt.** The connected Google Calendar primary account `hk84164@gmail.com` was written with **138 actual events**, and a fresh bounded Google Calendar search retrieved **exactly 138**, with **no pagination**. A programmatic one-to-one check of **every** scientific event against the unchanged frozen service/horizon geometry found **0 missing entries and 0 date/time mismatches**:
+**Latest verified state overrides the former 138-event creation count.** The user's Google primary calendar originally received exactly 138 correct-timestamp events (34 service segments, 102 individual SOURCE horizon blocks, two launch owner actions), but that was too crowded in Notion Calendar. On the owner's explicit request, all 34 original service events were **updated in place** with concise `P6 Day 01` through `P6 Day 31` titles and comprehensive descriptions listing every T−24h, T−6h, T−90m FIRST/LAST clock slot, separate segments, mandatory 1h break, candidate/adaptive ICAOs, selection eligibility and source evidence. The 102 redundant calendar-only SOURCE display blocks were deleted. The independent Google Calendar readback returned exactly **36 live P6 events: 34 descriptive service-window events and both original Gate13/Gate9 owner actions**, 31 unique study-day labels, 0 residual separate SOURCE event blocks, no pagination. Days 03, 07 and 08 intentionally have **two service events each**, not duplicates. Nothing else in the user's calendar was changed.
 
-| Class | Actual calendar events | What it signifies |
-|---|---:|---|
-| Flight-service/exposure segments | **34** | 31 study days with three split days represented as two separate service events; excluded 1h breaks are NOT blocked/exposed |
-| Planned T−24h/T−6h/T−90m SOURCE 15m clock-slot windows | **102** | 3 horizon windows for each of the 34 active exposure segments; exactly one event per horizon per segment, with 15m planned request ticks within |
-| Actual owner launch action reminders | **2** | Mon Nov23 G13 1:50–strictly before 3:10 PM PST, then conditional G9 at/after 3:45 PM PST; not automatic paid calls |
-| **TOTAL** | **138** | 138 existing Google Calendar items in the connected primary calendar; 0 schedule-entry mismatches |
+The old 102 SOURCE calendar events were **not** API jobs or database data and their removal cannot cancel an autonomous flight collection task. All 6,144 planned source slots still exist in the original pinned GitHub machine-readable planning files and sections A/B/C/F of this checkpoint, and the respective three horizon windows now appear within each retained service event description. A real paid GET, cutoff-safe flight PRE or actual POST remains independently verified in the database, not implied by calendar presence.
 
-**Find every event:** Open [Google Calendar](https://calendar.google.com/calendar/u/0/r), use **Search → `P6`**, and view Week/Month. Every scientific event title begins `P6 D01` through `P6 D31` and contains either `SERVICE`, `T-24h SOURCE`, `T-6h SOURCE`, or `T-90m SOURCE`. Scientific events have **no automatic reminders**, are **private** and **transparent (free, not blocking other engagements)** and have no attendees or video meeting. The SOURCE window event visual end adds **one final 15-minute display interval** after the last exact signed slot: the event's final minute is **not** another paid FIDS request or a guaranteed PRE.
+**Where to view:** [Google Calendar](https://calendar.google.com/calendar/u/0/r) or the already-connected **Notion Calendar** Mac app, both showing `hk84164@gmail.com`. Use a weekly view and search `P6 Day`; click any study service event to see the exact preceding/during horizon schedule. The two `P6 OWNER:` launch action reminders remain active, including their original popup reminders; all scientific service events are private, transparent (do not block other invitations), and reminder-free. No Notion database duplicates were created.
 
-**Owner action event links:** [G13 owner signed approval, Nov23 1:50–3:10 PM PST](https://www.google.com/calendar/event?eid=dGR0bGJvZzVzNGhibGNoaDdvM2g4bjh2aHMgaGs4NDE2NEBt) (30m and 10m popup reminders); [G9 conditional DIRECT_TICK after actual GO, Nov23 3:45 PM PST](https://www.google.com/calendar/event?eid=ZnRicDFmcThjc202YTVwbXYxb25zY3JuYjQgaGs4NDE2NEBt) (10m popup). The G9 time block **does not authorize running it before confirmed G13 success**.
+**Time zones verified:** Notion Calendar's screenshot visibly shows **PST**, and the original event instants were authored with **`America/Los_Angeles`**. The connected Google account itself continues to report default calendar timezone **`Asia/Karachi`**. The connected Google Calendar and Notion Calendar interfaces available to this assistant permit event read/update/delete, **not changing the account's default or application viewing timezone**. This settings mismatch is therefore **not fixed at account level**; the user must open [Google Calendar Settings](https://calendar.google.com/calendar/u/0/r/settings) → General → Time zone → Primary time zone and select **(GMT-08:00) Pacific Time — Los Angeles** (`America/Los_Angeles`). In Notion Calendar, use the existing **PST** time-zone selector and retain Los Angeles as primary. This changes visual conversion, **not** frozen UTC timestamps or paid clock schedules.
 
-**Important user calendar timezone warning:** The connected Google primary calendar currently has its **default timezone set to `Asia/Karachi` (UTC+05)**, although all 138 entries were created using **`America/Los_Angeles`, PST UTC−08**, for the correct absolute instants. A Google Calendar interface set to Karachi will therefore render e.g. **Nov23 3:45 PM California as Nov24 4:45 AM Karachi**, not as the California clock shown in this file. Set the *calendar viewing time zone* to Los Angeles in Google Calendar settings if you want the UI labels to match this checkpoint. **The tool did not change your existing global calendar settings.**
+**Formatting repaired in this GitHub file:** all compact `a`/`p` suffixes have been expanded to **AM**/**PM**, and 31-row split-segment tables A/B/C now use `;` **inside cells** instead of unescaped Markdown pipe delimiters; each row has exactly its expected 7, 4 or 5 columns. The former split-day column drift was a Markdown-display defect, **not a change in signed source planning or exclusion intervals**.
 
-**Notion Calendar:** These are directly written **Google Calendar** events. If your Notion Calendar app is connected to this same Google calendar, it can display them; that integration was **not independently verified**, and **no duplicate Notion database events** were created. This single GitHub file is the detailed scientific source; the calendar is a human-readable overlay.
-
-**Limit of calendar verification:** This verifies successful *calendar writes*, not that the provider was queried, charged, returned original bytes, or that every prospective aircraft produced a cutoff-safe PRE and qualified actual POST. Actual outcome time cannot be known ahead of each flight and was deliberately **not fabricated** as a pre-dated event. Any future live operational changes need their own independently verified runtime evidence.
+**No production changes:** This checkpoint remains on documentation/evidence branch `phase6/20261122-g8-502-readback-evidence`; production `main` remains pinned to `c8e065d665ccacb6d2575070e94c5500b7583044`. Gate13/Gate9 must not be attempted outside original signed times; calendar simplification does not create a new gate or authorize paid calls.
