@@ -6,7 +6,7 @@ set +x
 umask 077
 T="HKcode22/ReplitTranvr"
 R="HKcode22/TravnrClockRelay"
-PIN="b432eb9a5bac7bc3c4537249e75ec7df41e8727c"
+PIN="c8e065d665ccacb6d2575070e94c5500b7583044"
 RPIN="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed"
 FREE="bf6dff6e0f654836069b4cc289e5c7e750b28213"
 CENSUS="b4c3395eb985f9b3ef408e79827900a4c0331a59"
@@ -53,12 +53,29 @@ jq -e '
 ' "$TMP/census.json" >/dev/null || hold LIVE_EXPIRY_OR_STOP
 gh api "repos/$T/actions/runs/45028157406" |
  jq -e '.conclusion=="success" and .run_attempt==1' >/dev/null || hold PRIOR_POLICY_PROOF
+# Previous protected POST proof remains valid for unchanged POST code, not current
+# paid admission. Exact current-main CI and the newer live expiry backstop below
+# prove the heartbeat-only SHA advance did not replace production worker files.
 gh api "repos/$T/actions/runs/45028187506" |
- jq -e --arg s "$PIN" '.conclusion=="success" and .head_sha==$s and .run_attempt==1' >/dev/null || hold PRIOR_POST_PROOF
+ jq -e --arg s "b432eb9a5bac7bc3c4537249e75ec7df41e8727c" '.conclusion=="success" and .head_sha==$s and .run_attempt==1' >/dev/null || hold PRIOR_POST_PROOF
+for r in 45115427067 45115450162 45115536602; do
+ gh api "repos/$T/actions/runs/$r" |
+ jq -e --arg s "$PIN" '.conclusion=="success" and .head_sha==$s and .run_attempt==1' >/dev/null || hold CURRENT_MAIN_STABILITY
+done
+gh api "repos/$T/compare/b432eb9a5bac7bc3c4537249e75ec7df41e8727c...$PIN" | jq -e '
+ .status=="ahead" and .ahead_by==3 and .behind_by==0 and
+ ([.files[].filename]|sort)==([
+ "data-collection/phase6/checkpoints/2026-11-23_PHASE6_HEARTBEAT_AUTONOMOUS_WORKFLOW_AUDIT.md",
+ "scripts/v39_phase6_github_controller_heartbeat_v39.mjs",
+ "server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs",
+ "tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs"]|sort)
+ ' >/dev/null || hold UNREVIEWED_MAIN_DELTA
 gh api "repos/$R/actions/variables?per_page=100" --paginate --jq '.variables[]|[.name,.value]|@tsv' > "$TMP/relay.tsv" || hold RELAY_VAR_READ
 gh api "repos/$T/actions/variables?per_page=100" --paginate --jq '.variables[]|[.name,.value]|@tsv' > "$TMP/target.tsv" || hold TARGET_VAR_READ
 v(){ awk -F '\t' -v k="$2" '$1==k {print $2}' "$1" | head -n1; }
-[[ "$(v "$TMP/relay.tsv" TRAVNR_ROLLING_POLICY_FROM_UTC)" == 2026-11-23T23:45:00.000Z &&
+[[ "$(v "$TMP/relay.tsv" TRAVNR_APPROVED_TARGET_MAIN_SHA)" == "$PIN" &&
+   "$(v "$TMP/target.tsv" P6_ROLLING_DIRECT_RECOVERY_ENABLED)" == 0 &&
+   "$(v "$TMP/relay.tsv" TRAVNR_ROLLING_POLICY_FROM_UTC)" == 2026-11-23T23:45:00.000Z &&
    "$(v "$TMP/relay.tsv" TRAVNR_ROLLING_POLICY_UNTIL_UTC)" == 2026-12-29T04:00:00.000Z &&
    "$(v "$TMP/target.tsv" P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC)" == 2026-11-23T23:45:00.000Z &&
    "$(v "$TMP/target.tsv" P6_ROLLING_CONTROLLER_ENABLED)" == 1 &&
