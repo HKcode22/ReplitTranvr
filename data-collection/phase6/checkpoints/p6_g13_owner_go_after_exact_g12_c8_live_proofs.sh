@@ -37,7 +37,7 @@ pin
 # installed and independently verified on the repo and MAIN protected actor.
 # The prior historic b432-G8 readback/POST proofs are not sufficient.
 G12_TITLE="P6 G12 exact current c8 policy postinstall readback NO PROVIDER"
-G12_RUNS="$(gh api "repos/$T/actions/runs?per_page=100")" || hold CURRENT_G12_REPOSITORY_EVIDENCE_UNAVAILABLE
+G12_RUNS="$(gh api "repos/$T/actions/runs?branch=phase6%2F20261122-g8-502-readback-evidence&per_page=100")" || hold CURRENT_G12_REPOSITORY_EVIDENCE_UNAVAILABLE
 G12="$(jq -r --arg title "$G12_TITLE" '
  [.workflow_runs[]|select(.name==$title and .head_branch=="phase6/20261122-g8-502-readback-evidence" and
   .event=="push" and .run_attempt==1 and .status=="completed" and .conclusion=="success") ] |
