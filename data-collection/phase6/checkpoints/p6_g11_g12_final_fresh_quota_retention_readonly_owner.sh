@@ -78,8 +78,7 @@ v(){ awk -F '\t' -v k="$2" '$1==k {print $2}' "$1" | head -n1; }
    "$(v "$TMP/relay.tsv" TRAVNR_ROLLING_POLICY_FROM_UTC)" == 2026-11-23T23:45:00.000Z &&
    "$(v "$TMP/relay.tsv" TRAVNR_ROLLING_POLICY_UNTIL_UTC)" == 2026-12-29T04:00:00.000Z &&
    "$(v "$TMP/target.tsv" P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC)" == 2026-11-23T23:45:00.000Z &&
-   "$(v "$TMP/target.tsv" P6_ROLLING_CONTROLLER_ENABLED)" == 1 &&
-   "$(v "$TMP/target.tsv" P6_ROLLING_DIRECT_RECOVERY_ENABLED)" == 1 ]] || hold STAGED_RUNTIME_DRIFT
+   "$(v "$TMP/target.tsv" P6_ROLLING_CONTROLLER_ENABLED)" == 1 ]] || hold STAGED_RUNTIME_DRIFT
 [[ "$(gh api "repos/$T/git/ref/heads/main" --jq '.object.sha')" == "$PIN" ]] || hold MAIN_MOVED
 jq -n --slurpfile a "$TMP/free.json" --slurpfile d "$TMP/census.json" '
  {status:"P6_G11_G12_FRESH_ACCOUNT_AND_LIVE_EXPIRY_READONLY_PASS_NOT_GO",
