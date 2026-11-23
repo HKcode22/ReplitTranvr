@@ -69,7 +69,7 @@ async function observeP6PrimaryBackup(env,readGithub,observedAtUtc){
    "/runs?branch=main&event=workflow_dispatch&per_page="+MAX_PER_WORKFLOW);
   if(!Number.isSafeInteger(h?.total_count)||h.total_count<0||!Array.isArray(h.workflow_runs)||
      h.workflow_runs.length!==Math.min(h.total_count,MAX_PER_WORKFLOW))fail("INVALID_PRIMARY_BACKUP_HISTORY");
-  const children=h.workflow_runs.filter(r=>r?.display_title==="P5 PRIMARY BACKSTOP CHILD")
+  const children=h.workflow_runs.filter(r=>r?.display_title==="P5 PRIMARY BACKSTOP CHILD"||r?.display_title==="P5 FULL RETENTION BACKSTOP CHILD")
    .sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
   if(!children.length)return {...off,state:"NO_BACKSTOP_CHILD_OBSERVED"};
   const child=children[0],when=Date.parse(child.created_at),now=Date.parse(observedAtUtc);

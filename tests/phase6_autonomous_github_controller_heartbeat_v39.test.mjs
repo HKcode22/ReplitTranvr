@@ -302,6 +302,9 @@ test("native primary schedule warning remains while exact current-main backup ch
  const skipped=await check({...child,conclusion:"skipped"},[]);
  assert.equal(skipped.primaryFidsExpiry.backup.state,"BACKSTOP_CHILD_NOT_SUCCESSFUL");
  assert.equal(skipped.primaryFidsExpiry.backup.executedStepVerified,false);
+ const fullBackstop=await check({...child,display_title:"P5 FULL RETENTION BACKSTOP CHILD"});
+ assert.equal(fullBackstop.primaryFidsExpiry.backup.state,"BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF");
+ assert.equal(fullBackstop.primaryFidsExpiry.backup.executedStepVerified,true);
 });
 
 test("native notification branch is dormant before activation and ignores old historical gaps",async()=>{
