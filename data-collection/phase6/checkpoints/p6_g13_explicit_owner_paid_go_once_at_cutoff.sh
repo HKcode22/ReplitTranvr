@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # One-time owner signed paid GO for EXACT frozen 31-day Phase6 stage.
+# Supersedes original b432-pinned predecessor after ONLY heartbeat-and-doc
+# main advance. Detached relay must be repinned independently before GO.
 # NEVER run prior to Monday approved window; requires explicit fresh GO
 # confirmation. Fails closed; on uncertain writes attempts all-four STOP=0.
 set -Eeuo pipefail
@@ -7,10 +9,10 @@ set +x
 umask 077
 T="HKcode22/ReplitTranvr"
 R="HKcode22/TravnrClockRelay"
-SHA="b432eb9a5bac7bc3c4537249e75ec7df41e8727c"
+SHA="c8e065d665ccacb6d2575070e94c5500b7583044"
 RSHA="c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed"
 ENVIRONMENT="phase6-protected-runtime"
-CHECK_BLOB="24acf96e85b10efd823556975494a6ec4cf90c75"
+CHECK_BLOB="d41d63e032fb8470650f9f719d9a7481f2a2158b"
 EPOCH="2026-11-23T23:45:00.000Z"
 WINDOW_START="2026-11-23T21:50:00Z"
 GO_DEADLINE="2026-11-23T23:10:00Z"
@@ -61,7 +63,8 @@ window
 # Already-prepared minimal direct route must remain disarmed until 23:45Z.
 gh api "repos/$R/actions/variables?per_page=100" --paginate --jq '.variables[]|[.name,.value]|@tsv' > "$TMP/relay" || hold RELAY_METADATA
 v(){ awk -F '\t' -v k="$2" '$1==k {print $2}' "$1" | head -n1; }
-[[ "$(v "$TMP/relay" TRAVNR_RELAY_ROLLING_ROUTE)" == DIRECT_VERIFY &&
+[[ "$(v "$TMP/relay" TRAVNR_APPROVED_TARGET_MAIN_SHA)" == "$SHA" &&
+   "$(v "$TMP/relay" TRAVNR_RELAY_ROLLING_ROUTE)" == DIRECT_VERIFY &&
    "$(v "$TMP/relay" TRAVNR_RELAY_DIRECT_TICK_APPROVED)" == 0 &&
    "$(v "$TMP/relay" TRAVNR_ROLLING_POLICY_FROM_UTC)" == "$EPOCH" &&
    "$(v "$TMP/relay" TRAVNR_ROLLING_POLICY_UNTIL_UTC)" == 2026-12-29T04:00:00.000Z ]] || hold RELAY_PREGO_NOT_DISARMED
