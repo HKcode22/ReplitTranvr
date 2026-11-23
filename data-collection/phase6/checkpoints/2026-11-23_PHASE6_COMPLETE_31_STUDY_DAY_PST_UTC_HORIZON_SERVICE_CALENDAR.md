@@ -594,3 +594,25 @@ The external rolling relay and primary retention backstop are distinct; a green 
 **Calendar authoring policy:** Calendar events are **read-only descriptions** of frozen planned SOURCE and service windows, not API dispatches. Each event links back to this ONE checkpoint; exact PST offset is included in title/description. All events are **transparent/free**, with no reminders or Google Meet, and no guests. Calendar events should not create rights, billing, airplane-observation or data-retention privileges.
 
 **Owner operational next step:** Complete original signed G13 and later G9 only in their approved windows. This checkpoint adds no launch step, no cron, no provider call and no authorized paid retry.
+
+
+## I. Verified Google Calendar creation and independent readback — November 23, 2026 PST
+
+**Status: CALENDAR POPULATED and independently read back; not a data-collection launch receipt.** The connected Google Calendar primary account `hk84164@gmail.com` was written with **138 actual events**, and a fresh bounded Google Calendar search retrieved **exactly 138**, with **no pagination**. A programmatic one-to-one check of **every** scientific event against the unchanged frozen service/horizon geometry found **0 missing entries and 0 date/time mismatches**:
+
+| Class | Actual calendar events | What it signifies |
+|---|---:|---|
+| Flight-service/exposure segments | **34** | 31 study days with three split days represented as two separate service events; excluded 1h breaks are NOT blocked/exposed |
+| Planned T−24h/T−6h/T−90m SOURCE 15m clock-slot windows | **102** | 3 horizon windows for each of the 34 active exposure segments; exactly one event per horizon per segment, with 15m planned request ticks within |
+| Actual owner launch action reminders | **2** | Mon Nov23 G13 1:50–strictly before 3:10 PM PST, then conditional G9 at/after 3:45 PM PST; not automatic paid calls |
+| **TOTAL** | **138** | 138 existing Google Calendar items in the connected primary calendar; 0 schedule-entry mismatches |
+
+**Find every event:** Open [Google Calendar](https://calendar.google.com/calendar/u/0/r), use **Search → `P6`**, and view Week/Month. Every scientific event title begins `P6 D01` through `P6 D31` and contains either `SERVICE`, `T-24h SOURCE`, `T-6h SOURCE`, or `T-90m SOURCE`. Scientific events have **no automatic reminders**, are **private** and **transparent (free, not blocking other engagements)** and have no attendees or video meeting. The SOURCE window event visual end adds **one final 15-minute display interval** after the last exact signed slot: the event's final minute is **not** another paid FIDS request or a guaranteed PRE.
+
+**Owner action event links:** [G13 owner signed approval, Nov23 1:50–3:10 PM PST](https://www.google.com/calendar/event?eid=dGR0bGJvZzVzNGhibGNoaDdvM2g4bjh2aHMgaGs4NDE2NEBt) (30m and 10m popup reminders); [G9 conditional DIRECT_TICK after actual GO, Nov23 3:45 PM PST](https://www.google.com/calendar/event?eid=ZnRicDFmcThjc202YTVwbXYxb25zY3JuYjQgaGs4NDE2NEBt) (10m popup). The G9 time block **does not authorize running it before confirmed G13 success**.
+
+**Important user calendar timezone warning:** The connected Google primary calendar currently has its **default timezone set to `Asia/Karachi` (UTC+05)**, although all 138 entries were created using **`America/Los_Angeles`, PST UTC−08**, for the correct absolute instants. A Google Calendar interface set to Karachi will therefore render e.g. **Nov23 3:45 PM California as Nov24 4:45 AM Karachi**, not as the California clock shown in this file. Set the *calendar viewing time zone* to Los Angeles in Google Calendar settings if you want the UI labels to match this checkpoint. **The tool did not change your existing global calendar settings.**
+
+**Notion Calendar:** These are directly written **Google Calendar** events. If your Notion Calendar app is connected to this same Google calendar, it can display them; that integration was **not independently verified**, and **no duplicate Notion database events** were created. This single GitHub file is the detailed scientific source; the calendar is a human-readable overlay.
+
+**Limit of calendar verification:** This verifies successful *calendar writes*, not that the provider was queried, charged, returned original bytes, or that every prospective aircraft produced a cutoff-safe PRE and qualified actual POST. Actual outcome time cannot be known ahead of each flight and was deliberately **not fabricated** as a pre-dated event. Any future live operational changes need their own independently verified runtime evidence.
