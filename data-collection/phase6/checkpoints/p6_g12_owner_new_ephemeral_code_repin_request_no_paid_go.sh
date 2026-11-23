@@ -16,6 +16,10 @@ for x in gh jq node git base64; do command -v "$x" >/dev/null || hold TOOL; done
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
 [[ "$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)" == "$MAIN" ]] || hold TARGET_MAIN_DRIFT
 [[ "$(gh api "repos/HKcode22/TravnrClockRelay/git/ref/heads/main" --jq .object.sha)" == "$RELAY" ]] || hold RELAY_MAIN_DRIFT
+# The public request must be sealed by the exact already-reviewed
+# evidence-branch workflow and code, not a silently replaced branch copy.
+[[ "$(gh api -X GET "repos/$REPO/contents/.github/workflows/phase6-g12-owner-seal-exact-c8-code-successor-no-provider.yml" -f "ref=$BR" --jq .sha)" == "8136212fc420a0ea290a8975da6c9c6e87f78a2b" ]] || hold SEAL_WORKFLOW_DRIFT
+[[ "$(gh api -X GET "repos/$REPO/contents/data-collection/phase6/checkpoints/p6_g12_owner_sealed_exact_code_repin_successor_no_provider.cjs" -f "ref=$BR" --jq .sha)" == "6ee66e47b0db5dc3120713485d41c7df3b6418fe" ]] || hold SEAL_SCRIPT_DRIFT
 gh api "repos/$REPO/actions/runs/45118733902" |
  jq -e '.conclusion=="success" and .run_attempt==1 and .head_branch=="phase6/20261122-g8-502-readback-evidence"' >/dev/null || hold ORIGINAL_STRICT_VALIDATOR_MISSING
 DIR="$(mktemp -d "$HOME/.travnr-g12-seal-XXXXXXXX")"
