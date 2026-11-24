@@ -1,7 +1,8 @@
 "use strict";
-/* Read-only corrected baseline and candidate policy validation. No policy bytes, artifact, or mutations. */
+/* Validate current policies and optionally seal an exact owner-requested successor.
+ * No provider, database, repository secret write, or paid activation. */
 const fs=require("node:fs"),path=require("node:path");
-const {createHash,createPublicKey}=require("node:crypto");
+const {createHash,createPublicKey,generateKeyPairSync,diffieHellman,hkdfSync,randomBytes,createCipheriv}=require("node:crypto");
 const hold=s=>{throw Error("HOLD_P6_G8_SEAL_"+s)};
 const need=(b,s)=>{if(!b)hold(s)};
 const sha=x=>createHash("sha256").update(x).digest("hex");
@@ -35,7 +36,7 @@ const v=Object.fromEntries(names.map(k=>[k,e[k]]));
 need(Object.values(v).every(x=>typeof x==="string"&&x.length>0&&Buffer.byteLength(x)<60000),
  "MISSING_STATIC_SECRET");
 need(/^[a-f0-9]{40}$/.test(pin??"")&&pin!==old,"EXACT_CANDIDATE_SHA");
-need(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO","READ_ONLY_PREFLIGHT_ONLY");
+need(["OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO","OWNER_REVIEWED_ENCRYPTED_G12_CODE_REPIN_SUCCESSOR_NO_PAID_GO"].includes(e.P6_G8_OWNER_SEAL_TRIGGER),"REVIEWED_MODE_ONLY");
 const otherOuter=names.slice(0,7).filter(k=>k!=="V39_P5_POST_APPROVED_CODE_SHA");
 need(otherOuter.every(k=>v[k]===old),"UNEXPECTED_NONPOST_OUTER_PIN");
 const postPin=v.V39_P5_POST_APPROVED_CODE_SHA;
@@ -188,4 +189,21 @@ if(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO
  sourceSuccessorNotSignedOrInstalled:true}));
  process.exit(0);
 }
-hold("READ_ONLY_PREFLIGHT_ONLY");
+const req=JSON.parse(fs.readFileSync("data-collection/phase6/checkpoints/p6_day1_release_owner_request.json","utf8"));
+need(req.schema==="v39.phase6.day1.owner-code-repin-seal-request.v1"&&req.mode==="seal"&&req.mainSha===pin&&req.historicalDigest===prior&&/^[a-f0-9]{32}$/.test(req.nonce)&&Date.now()-Date.parse(req.requestedAtUtc)>=0&&Date.now()-Date.parse(req.requestedAtUtc)<15*60000,"FRESH_OWNER_REQUEST");
+const recipientRaw=Buffer.from(req.recipientPublicSpkiBase64,"base64");
+need(recipientRaw.toString("base64")===req.recipientPublicSpkiBase64&&recipientRaw.length<256,"RECIPIENT_BYTES");
+const recipient=createPublicKey({key:recipientRaw,format:"der",type:"spki"});
+need(recipient.asymmetricKeyType==="x25519","RECIPIENT_TYPE");
+const {publicKey,privateKey}=generateKeyPairSync("x25519");
+const shared=diffieHellman({privateKey,publicKey:recipient});
+const salt=randomBytes(32),nonce=randomBytes(12);
+const aadObj={schema:"v39.phase6.day1.policy-code-repin-envelope.v1",mainSha:pin,historicalDigest:prior,successorStaticDigest:currentStaticDigest,ownerRequestNonce:req.nonce,recipientSpkiSha256:sha(recipientRaw)};
+const key=Buffer.from(hkdfSync("sha256",shared,salt,Buffer.from("Travnr Phase6 Day1 x25519-aes256gcm source-code-repin successor v1"),32));
+const cipher=createCipheriv("aes-256-gcm",key,nonce,{authTagLength:16});
+cipher.setAAD(Buffer.from(JSON.stringify(aadObj)));
+const sealed={changes,receipt:{status:"P6_DAY1_CODE_ONLY_LINKED_SOURCE_SUCCESSOR_VALIDATED_NO_PAID_GO",mainSha:pin,priorStaticSha256:prior,successorStaticSha256:currentStaticDigest,successorPostPolicySha256:changes[postH],changesNames:Object.keys(changes).sort(),policyCount:6,phase6PaidGo:false,sourceAuthReenabled:false,dbWrites:0,providerCalls:0}};
+const ciphertext=Buffer.concat([cipher.update(Buffer.from(JSON.stringify(sealed))),cipher.final()]);
+const out={...aadObj,alg:"X25519-HKDF-SHA256-AES-256-GCM",ephemeralPublicSpkiBase64:publicKey.export({format:"der",type:"spki"}).toString("base64"),saltBase64:salt.toString("base64"),nonceBase64:nonce.toString("base64"),authTagBase64:cipher.getAuthTag().toString("base64"),ciphertextBase64:ciphertext.toString("base64")};
+fs.writeFileSync(path.join(e.RUNNER_TEMP,"p6-day1-owner-sealed-successor.json"),JSON.stringify(out),{flag:"wx",mode:0o600});
+console.log(JSON.stringify({status:"P6_DAY1_OWNER_SEALED_SUCCESSOR_CREATED_NO_GO",targetMain:pin,changesCount:Object.keys(changes).length,recipientSpkiSha256:aadObj.recipientSpkiSha256,secretValuesPrinted:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
