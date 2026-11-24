@@ -152,8 +152,14 @@ async function metadata(){
   const jj=jobs(R,parent.id),requiredJobs=["separately-authorized-stored-source-children","separately-authorized-current-private-post-children","separately-authorized-native-post-producer"];
   const result=requiredJobs.map(n=>({name:n,conclusion:jj.find(j=>j.name===n)?.conclusion??"not_seen",outcome:jj.find(j=>j.name===n)?.steps?.find(s=>s.name.startsWith("Parent outcome ")&&s.conclusion==="success")?.name??null}));
   out("LATEST_SOURCE_POST_PARENT_JOB_EVIDENCE",{run:parent.id,jobs:result});
-  if(!result.every(x=>x.conclusion==="success"))note("SOURCE_POST_REQUIRED_JOB_NOT_ALL_EXECUTED",{run:parent.id});
- }else note("NO_COMPLETED_SOURCE_POST_PARENT_IN_CURRENT_EPOCH");
+  const morning=Date.now()>=Date.parse("2026-11-24T16:15:00Z")&&Date.now()<Date.parse("2026-11-25T03:45:00Z");
+  const badSource=result.some(x=>x.conclusion!=="success"||["Parent outcome SAFE_PREFLIGHT_HOLD","Parent outcome MISSING_EVIDENCE"].includes(x.outcome));
+  if(badSource||morning&&mins(parent)>25){
+   if(morning)issue("SOURCE_POST_PARENT_REVIEW_REQUIRED",{run:parent.id,ageMinutes:mins(parent),jobs:result});
+   else note("SOURCE_POST_REQUIRED_JOB_NOT_ALL_EXECUTED",{run:parent.id});
+  }
+ }else if(Date.now()>=Date.parse("2026-11-24T17:15:00Z"))issue("NO_COMPLETED_SOURCE_POST_PARENT_BEFORE_MORNING_CHECK");
+ else note("NO_COMPLETED_SOURCE_POST_PARENT_IN_CURRENT_EPOCH");
  const d=t.find(x=>x.path===routes[4]&&x.status==="completed"&&x.conclusion==="success");
  if(!d||mins(d)>25)issue("DAILY_PREPARE_STALE",{ageMinutes:d?mins(d):null});
  else {const j=jobs(R,d.id).find(x=>x.name==="protected-main-one-day-nonpaid"&&x.conclusion==="success");if(!j)issue("DAILY_PREPARE_ACTUAL_JOB_MISSING",{run:d.id});else out("DAILY_PREPARE_ACTUAL_JOB_CHECK",{run:d.id,job:j.id,passed:true});}
