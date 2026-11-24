@@ -1,3 +1,40 @@
+# Current update — Monday Nov23, after 4:49 PM PST
+
+**Read this section first; prior guide is preserved verbatim below.** A–D completed; no replay. Paid rolling remains paused. The full paid system is not autonomous for Tuesday yet.
+
+## Command E — run now (not tomorrow morning)
+Consolidated exact incident read-only reconciliation + existing native PRE/POST runtime control staging. The helper verifies original direct failure identity and log, absence of terminal artifact, complete main-branch run history since original activation, exact owner GO and prior independent POST actor/policy receipts, then live restricted READ ONLY database census using original owner-local DATABASE_URL. Checks typed cost mode, zero SOURCE/other REST attempts and unresolved STOPs, Day2 four draw rows. Requires existing actor credentials and policy names; does not fabricate hashes or replace credentials. Only if these checks pass, writes missing exact literal native PRE/POST controls to protected environment. No route enable, provider calls, paid dispatch, database write, or new standalone T24-missing approval. Existing values not overwritten. Any HOLD: paste sanitized output and stop.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_RECONCILE_AND_STAGE_NATIVE'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=32789d80f25bd3ebdab77c09a5f1f2340cffa4b6
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_EXISTING_NATIVE_PRE_POST_ACTOR_STAGING_KEEP_ROUTES_OFF
+P6_RECONCILE_AND_STAGE_NATIVE
+~~~
+
+Expected `P6_EXISTING_NATIVE_PRE_POST_CONTROLS_STAGED_RECONCILED_NO_ROUTE_NO_DISPATCH`. This is staging, not paid collection proof.
+
+## Important correction: V0093 already supports partial cost allocation
+Historical V0082 exact-grid parity applies only to EXACT_SOURCE_GRID. V0093 was actually owner-installed and independently verified Nov12/13, and its COST_UPPER_BOUND mode permits unspent planned source allowance without missing Day1 rows. Thus earlier claims that Day1 missing records necessarily block Day2 are superseded. Command E verifies actual frozen mode/digest live. If confirmed, do not manufacture STOPPED missed query rows just to fill the grid. Original missed template denominator still retained in analysis. Day1 physical reserve V0079 independently retains the strict T24 draw clock; actual Day1 recovery remains separate.
+
+## Verified now
+- [PR #965](https://github.com/HKcode22/ReplitTranvr/pull/965), head 891823b4, dedicated signed incident-scope and prospective classifier [CI 45300082519](https://github.com/HKcode22/ReplitTranvr/actions/runs/45300082519) passed. Draft, not deployed.
+- Original failure 45293307564 actual log shows exact admission HOLD, before any POST in pinned code; zero artifacts, complete 9-run main history at 00:49Z contains only failed root and known non-provider workflows (retention, draw, prep). No paid parent/child runs seen. Fresh owner DB reconciliation in Command E is required to support a prospective restart.
+- Rolling relay 45300114052 skipped; retention continues. No Day2 prepared index receipt yet. Native daily preparation schedule enabled.
+- No G13/G9 re-run. No silent epoch reset, no paid route activation until reviewed successor and runtime proof. No new timed owner command yet beyond E now. Tuesday Day1 T6/T90 remain conditional; protect Day2 independently.
+
+---
+
 # Current update — Nov23 4:45:47 PM PST
 
 **Command D COMPLETE; do not repeat.** Owner receipt `P6_STORED_SOURCE_REQUIRED_CONTROLS_STAGED_NO_ROUTE_NO_DISPATCH` with all eleven protected-scope secret write acknowledgments from 00:45:37Z to 00:45:47Z Nov24. No paid route enabled or workflow dispatched by this command. Values remain write-only; this is installation metadata, not end-to-end SOURCE proof.
