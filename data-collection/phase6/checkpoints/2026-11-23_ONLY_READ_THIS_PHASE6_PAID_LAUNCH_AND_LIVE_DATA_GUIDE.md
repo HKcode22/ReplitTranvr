@@ -1,3 +1,33 @@
+# CURRENT — Monday Nov23 after 8:18 PM PST
+
+**I PASS. Actual later PRE and Day2 no-due preparation passed; no repeats A–I.** Fresh 04:12:25Z DB D2 draw=4 index=0 SOURCE/REST/STOP=0. Latest #966 all 11 CI green. Exact T24 runtime error now reproduced from installed repository policy: **missing nativeLaterReview.maximumT24ExecutionLanes**. [45325433100](https://github.com/HKcode22/ReplitTranvr/actions/runs/45325433100) all other static checks passed, absent field, hypothetical one-lane correction PASS. No production-main change, no DB credential/retention/budget/cutoff change. [New exact incident checkpoint](2026-11-23_EXACT_T24_MISSING_LANE_POLICY_ROOT_CAUSE_AND_NARROW_REPAIR.md).
+
+## Command J — exact policy repair and actual normal restart
+Use existing authenticated G12 local owner artifact; this is NOT repeating G12. Narrow helper verifies the missing field and only writes four linked repo policy values, after fresh zero-genesis/physical/STOP check. Temporarily pauses only nonpaid preparation during linked write; independent retention remains. Then actual main T24 and linked prep verification. On success records prospective epoch and tests original direct controller wave; rolling enabled only after actual successful outcome. No direct provider GET by shell; future native signed routes may spend original approved cap after enable. If HOLD, report stage and do not repeat J. If actual prep publishes, review actual receipt (not failure) and continue without replay.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_T24_POLICY_REPAIR'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=4bbbf326bf94c7f79f20a98bdc181d7f40e7123f
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_MISSING_T24_ONE_LANE_POLICY_AND_PROSPECTIVE_NORMAL_RESTART
+P6_T24_POLICY_REPAIR
+~~~
+
+Expected P6_ACTUAL_T24_CORRECTED_NO_DUE_PASS, P6_ACTUAL_LINKED_DAILY_POLICY_NO_DUE_PASS, P6_T24_POLICY_REPAIRED_ACTUAL_WORKERS_AND_DIRECT_WAVE_PASS_AUTONOMOUS_NORMAL_ROUTES_RESUMED. Day1 late draw remains separate, no backdate. Day2 normal still prospective.
+
+All original and prior content preserved below.
+
+---
+
 # CURRENT — Nov23 after 8:01 PM PST
 
 **H partial progress, DO NOT REPEAT.** Fresh owner 04:00:25Z auth=1 cost=1 SOURCE=0 REST=0 STOP=0 D1=0 D2=4 index=0 and V0108 no due/STOP; 16 protected literal writes acknowledged. Actual T24 run 45323393757 passed scheduler admission and npm but failed worker with generic HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY. H stopped before later PRE, Day2 preparation, audit pin reconciliation or direct root; paid pause attempted. No new epoch. Latest observed external rolling skipped, retention passed. Exact T24 cause not known. Do not change credentials, policy or SHA on guesses. No need to rewrite sixteen values.
