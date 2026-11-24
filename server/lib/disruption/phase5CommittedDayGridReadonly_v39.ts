@@ -10,12 +10,12 @@
  */
 import type {Pool} from "pg";
 import {
- materializeP5DynamicDaySourceGrid,
+ materializeP5DynamicDaySourceGrid,materializeP6Day1LateDynamicGrid,
  P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
  P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
- type P5DynamicDayGridInput,type P5DynamicDayGridResult,
+ type P5DynamicDayGridInput,type P5DynamicDayGridResult,type P6Day1LateGridResult,
 } from "./phase5DynamicDaySourceGrid_v39";
-import {verifyPreparedDailyDraw,
+import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,
  type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
 import {
@@ -29,6 +29,7 @@ import {
  type P5PriorCommittedWashoutAudit
 } from "./phase5PriorCommittedAirportWashoutReadonly_v39";
 
+import {isVerifiedP6Day1LateScope,readVerifiedP6Day1Projection,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const DBROLE=/^[a-z_][a-z0-9_]{3,62}$/;
 function hold(s:string):never{throw Error("REFUSED_P5_COMMITTED_DAY_READBACK_"+s);}
@@ -140,9 +141,11 @@ export interface P5CommittedDayReadonlyResult {
  * Caller must inject separately reviewed restricted SELECT-only PG pool;
  * verify role identity and session readonly state before querying any draw.
  */
-export async function readCommittedP5DayCandidateGrid(
- pool:Pick<Pool,"connect">,scope:P5CommittedDayReadonlyScope,
-):Promise<P5CommittedDayReadonlyResult>{
+export type P6Day1LateReadbackResult=Omit<P5CommittedDayReadonlyResult,"schema"|"status"|"selectedDayCandidateGrid">&{
+ schema:"v39.phase6.day1-remaining-readback.v1";status:"SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED";
+ selectedDayCandidateGrid:P6Day1LateGridResult;remainingPreparationProjectionSha256:string;
+};
+async function readDayCandidateGrid(pool:Pick<Pool,"connect">,scope:P5CommittedDayReadonlyScope,late?:P6Day1LateScope):Promise<P5CommittedDayReadonlyResult|P6Day1LateReadbackResult>{
  if(!scope||![scope.expectedManifestSha256,scope.expectedCalendarSha256,
   scope.expectedConfigSha256,scope.expectedFrameSha256,
   scope.expectedProviderContractSha256,scope.expectedEarlyDrawSha256]
@@ -154,6 +157,10 @@ export async function readCommittedP5DayCandidateGrid(
     (!scope.reviewedOrdinaryDayEnvelope.envelope||
      !SHA.test(scope.reviewedOrdinaryDayEnvelope.independentlyReviewedShapeEnvelopeSha256)))
    hold("UNPINNED_31_DAY_SHAPE_CONTRACT");
+ if(late!==undefined&&(!isVerifiedP6Day1LateScope(late)||scope.runDayIndex!==1||scope.reviewedOrdinaryDayEnvelope||
+   scope.expectedManifestSha256!==late.manifestSha256||scope.expectedCalendarSha256!==late.calendarSha256||
+   scope.expectedConfigSha256!==late.configSha256||scope.expectedFrameSha256!==late.frameSha256))
+   hold("INVALID_LATE_DAY1_READBACK_SCOPE");
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_POOL");
  const client=await pool.connect();
  let tx=false;
@@ -244,11 +251,11 @@ export async function readCommittedP5DayCandidateGrid(
     joinedEarlierDays:prior.rows as P5JoinedPriorDayRow[]
    });
   }
-  const drawProof=verifyPreparedDailyDraw(
-    day,draws.rows as PreparedDrawRow[]);
+  const drawProof=late?verifyP6Day1LateFixedDraw(day,draws.rows as PreparedDrawRow[],late):
+   verifyPreparedDailyDraw(day,draws.rows as PreparedDrawRow[]);
   if(drawProof.stateHash!==scope.expectedEarlyDrawSha256)
     hold("INDEPENDENT_FOUR_SLOT_SELECTION_SHA_DRIFT");
-  const candidates=materializeP5DynamicDaySourceGrid({
+  const input:P5DynamicDayGridInput={
     schema:scope.reviewedSegmentedSource?
       P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
       scope.reviewedRefreshTiming?
@@ -264,7 +271,8 @@ export async function readCommittedP5DayCandidateGrid(
     expectedCommittedEarlyDrawSha256:scope.expectedEarlyDrawSha256,
     day,committedEarlyDrawRows:draws.rows as PreparedDrawRow[],
     templates:scope.templates,
-  });
+  };
+  const candidates=late?materializeP6Day1LateDynamicGrid(input,late):materializeP5DynamicDaySourceGrid(input);
   // Staged source-query prep must finish before first T24 GET; never
   // interpret a post-cutoff DB read as an earlier source prearm.
   if(candidates.committedDrawSha256!==drawProof.stateHash)
@@ -272,19 +280,19 @@ export async function readCommittedP5DayCandidateGrid(
   const soonest=Math.min(...candidates.acquisitions.map(x=>
     new Date(x.scheduledRequestUtc).getTime()));
   if(clock.getTime()>=soonest)hold("EARLIEST_SOURCE_REQUEST_ALREADY_DUE");
+  if(late&&clock.getTime()>=soonest-readVerifiedP6Day1Projection(late).minimumPreparationLeadMinutes*60000)
+   hold("LATE_DAY1_PREPARATION_LEAD_EXPIRED");
   const sampled=new Date(candidates.selectedAtUtc);
   if(sampled.getTime()>clock.getTime())hold("DRAW_NOT_YET_PERSISTED_AT_DB_CLOCK");
   await client.query("COMMIT");tx=false;
-  return {
-    schema:"v39.phase5.db-readback-day-grid.v1",
-    status:"SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED",
+  const common={
     dbClockAtReadUtc:clock.toISOString(),
-    restrictedReaderRoleVerified:true,databaseReadOnlySnapshot:true,
-    databaseWrites:0,providerCalls:0,selectedDayCandidateGrid:candidates,
+    restrictedReaderRoleVerified:true as const,databaseReadOnlySnapshot:true as const,
+    databaseWrites:0 as const,providerCalls:0 as const,
     committedDayAndDrawProof:{
      day,drawRows:draws.rows as PreparedDrawRow[],
      drawStateSha256:drawProof.stateHash,
-     verifiedInsideSameReadOnlyTransaction:true
+     verifiedInsideSameReadOnlyTransaction:true as const
     },
     ...(ordinaryCandidate?{ordinaryDayEnvelopeReadback:{
      schema:"v39.phase5.restricted-db-ordinary-day-envelope-readback.v1" as const,
@@ -297,11 +305,25 @@ export async function readCommittedP5DayCandidateGrid(
      physicalChargeDayBudgetsVerified:false as const,
      phase5FreezePassed:false as const,phase6Go:false as const,
     }}:{}),
-    sourceResponseCaptured:false,flightLevelPreCertified:false,
-    accountRightsCertified:false,phase5FreezePassed:false,phase6Go:false,
+    sourceResponseCaptured:false as const,flightLevelPreCertified:false as const,
+    accountRightsCertified:false as const,phase5FreezePassed:false as const,phase6Go:false as const,
   };
+  if(candidates.status==="DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED")return {...common,
+   schema:"v39.phase6.day1-remaining-readback.v1",status:"SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED",
+   selectedDayCandidateGrid:candidates,remainingPreparationProjectionSha256:candidates.remainingPreparationProjectionSha256};
+  return {...common,schema:"v39.phase5.db-readback-day-grid.v1",status:"SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED",selectedDayCandidateGrid:candidates};
  }catch(e){
   if(tx)await client.query("ROLLBACK").catch(()=>{});
   throw e;
  }finally{client.release();}
+}
+
+/** Normal calendar retains its original result and full on-time checks. */
+export async function readCommittedP5DayCandidateGrid(pool:Pick<Pool,"connect">,scope:P5CommittedDayReadonlyScope):Promise<P5CommittedDayReadonlyResult>{
+ const r=await readDayCandidateGrid(pool,scope);if(r.status!=="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED")return hold("UNEXPECTED_LATE_READBACK");return r;
+}
+/** Incident-only same-snapshot readback, never masquerades as the normal Stage7 result. */
+export async function readCommittedP6Day1LateCandidateGrid(pool:Pick<Pool,"connect">,scope:P5CommittedDayReadonlyScope,late:unknown):Promise<P6Day1LateReadbackResult>{
+ if(!isVerifiedP6Day1LateScope(late))return hold("LATE_SCOPE_NOT_VERIFIED");
+ const r=await readDayCandidateGrid(pool,scope,late);if(r.status!=="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED")return hold("UNEXPECTED_NORMAL_READBACK");return r;
 }

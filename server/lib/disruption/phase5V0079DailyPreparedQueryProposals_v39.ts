@@ -7,18 +7,19 @@
  */
 import {createHash} from "node:crypto";
 import {
-  materializeP5DynamicDaySourceGrid,
+  materializeP5DynamicDaySourceGrid,materializeP6Day1LateDynamicGrid,
   P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
   P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
   type P5DynamicDayGridInput,type P5DaySourcePartitionPin,
   type P5DayReviewedSegmentedSource
 } from "./phase5DynamicDaySourceGrid_v39";
-import type {P5CommittedDayReadonlyResult}
+import type {P5CommittedDayReadonlyResult,P6Day1LateReadbackResult}
  from "./phase5CommittedDayGridReadonly_v39";
-import {verifyPreparedDailyDraw,
+import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,
  type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
 
+import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const HASH=/^[a-f0-9]{64}$/,ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
 const sha=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
@@ -109,11 +110,15 @@ export interface Stage8DayProposalResult {
  independentlyReviewedSourceRights:false;providerOriginalCommitted:false;
  flightLevelPreCertified:false;phase5FreezePassed:false;phase6Go:false;
 }
-export function planStage8P5DayV0079Proposals(
- p:Stage8DayProposalInput
-):Stage8DayProposalResult{
- if(!p||!p.stage7||p.stage7.schema!=="v39.phase5.db-readback-day-grid.v1"||
-   p.stage7.status!=="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"||
+export type P6Day1LateProposalResult=Omit<Stage8DayProposalResult,"schema"|"status">&{
+ schema:"v39.phase6.day1-remaining-stage8-proposals.v1";status:"EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED";
+ plannedQueryDenominator:number;excludedQueryCount:number;remainingPreparationProjectionSha256:string;
+};
+type AnyStage8Input=Omit<Stage8DayProposalInput,"stage7">&{stage7:P5CommittedDayReadonlyResult|P6Day1LateReadbackResult};
+function planStage8(p:AnyStage8Input,late?:P6Day1LateScope):Stage8DayProposalResult|P6Day1LateProposalResult{
+ if(!p||!p.stage7||(late?(!isVerifiedP6Day1LateScope(late)||p.stage7.schema!=="v39.phase6.day1-remaining-readback.v1"||
+   p.stage7.status!=="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED"||p.stage7.remainingPreparationProjectionSha256!==late.remainingPreparationProjectionSha256||p.manifestSha256!==late.manifestSha256):
+   (p.stage7.schema!=="v39.phase5.db-readback-day-grid.v1"||p.stage7.status!=="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"))||
    p.stage7.restrictedReaderRoleVerified!==true||
    p.stage7.databaseReadOnlySnapshot!==true||
    p.stage7.databaseWrites!==0||p.stage7.providerCalls!==0)
@@ -124,18 +129,19 @@ export function planStage8P5DayV0079Proposals(
    refuse("MISSING_FROZEN_SHA_CHAIN");
  const candidate=p.stage7.selectedDayCandidateGrid;
  const segmented=candidate?.schema===
-   "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3";
+   "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3"||
+   (late!==undefined&&candidate?.schema==="v39.phase6.day1-remaining-source-grid.v1");
  const multi=segmented||candidate?.schema===
    "v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2";
  const candidateCount=candidate?.acquisitionCount;
- if(!(multi?(segmented?candidate?.status===
-     "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED":
+ if(!(multi?(segmented?(late?candidate?.status==="DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED":candidate?.status===
+     "DYNAMIC_SEGMENTED_MULTI_REFRESH_CANDIDATES_NOT_RELEASED"):
      candidate?.status===
      "DYNAMIC_MULTI_REFRESH_CANDIDATES_COVER_CUTOFFS_NOT_RELEASED"):
      candidate?.schema==="v39.phase5.early-draw-to-12-source-candidates-result.v1"&&
      candidate.status==="DYNAMIC_DAY_CANDIDATES_MATCH_COMMITTED_DRAW_NOT_RELEASED")||
     !Number.isSafeInteger(candidateCount)||
-    (multi?candidateCount<=12||candidateCount>384:candidateCount!==12)||
+    (multi?candidateCount<=(late?0:12)||candidateCount>384:candidateCount!==12)||
     candidate.plannedPhysicalGetCount!==candidateCount||
     candidate.candidateFidsApiUnits!==candidateCount*2||
     (multi?!candidate.reviewedRefreshTiming:
@@ -154,7 +160,7 @@ export function planStage8P5DayV0079Proposals(
      void icao;void plannedAirportSelectionUtc;
      return rest;
    });
- const verified=materializeP5DynamicDaySourceGrid({
+ const gridInput:P5DynamicDayGridInput={
    schema:segmented?P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA:
       multi?P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA:P5_DYNAMIC_DAY_GRID_SCHEMA,
    ...(multi?{reviewedRefreshTiming:candidate.reviewedRefreshTiming}:{}),
@@ -166,7 +172,8 @@ export function planStage8P5DayV0079Proposals(
    day:p.day,committedEarlyDrawRows:p.savedEarlyDrawRows,
    expectedCommittedEarlyDrawSha256:candidate.committedDrawSha256,
    templates
- });
+ };
+ const verified=late?materializeP6Day1LateDynamicGrid(gridInput,late):materializeP5DynamicDaySourceGrid(gridInput);
  if(verified.sourceCandidateDigestSha256!==candidate.sourceCandidateDigestSha256||
    verified.dynamicTemplateSha256!==candidate.dynamicTemplateSha256||
    verified.committedDrawSha256!==candidate.committedDrawSha256)
@@ -261,7 +268,7 @@ export function planStage8P5DayV0079Proposals(
        b.otherCategoriesReserved-b.existingSourceReserved-
        t.candidateApiUnits};
  });
- return {
+ const common:Stage8DayProposalResult={
    schema:"v39.phase5.stage8.v0079-day-prepared-proposals.v1",
    status:"EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED",
    manifestSha256:p.manifestSha256,runDayIndex:p.day.runDayIndex,
@@ -280,6 +287,14 @@ export function planStage8P5DayV0079Proposals(
    independentlyReviewedSourceRights:false,providerOriginalCommitted:false,
    flightLevelPreCertified:false,phase5FreezePassed:false,phase6Go:false
  };
+ if(verified.status==="DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED")return {...common,
+  schema:"v39.phase6.day1-remaining-stage8-proposals.v1",status:"EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED",
+  plannedQueryDenominator:verified.plannedQueryDenominator,excludedQueryCount:verified.excludedQueryCount,
+  remainingPreparationProjectionSha256:verified.remainingPreparationProjectionSha256};
+ return common;
+}
+export function planStage8P5DayV0079Proposals(p:Stage8DayProposalInput):Stage8DayProposalResult{
+ const r=planStage8(p);if(r.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED")return refuse("UNEXPECTED_LATE_PROPOSAL");return r;
 }
 
 
@@ -320,4 +335,19 @@ export function planP5Stage8FromCommittedDayReadback(
   ...review,stage7,
   day:proof.day,savedEarlyDrawRows:proof.drawRows
  });
+}
+
+/** Reuses the exact normal proposal arithmetic, independently reconstructing the late draw and grid. */
+export function planP6Stage8FromLateCommittedDayReadback(stage7:P6Day1LateReadbackResult,review:P5Stage8SourceReviewWithoutCopiedDraw,scope:unknown):P6Day1LateProposalResult{
+ if(!isVerifiedP6Day1LateScope(scope))return refuse("LATE_SCOPE_NOT_VERIFIED");
+ const proof=stage7?.committedDayAndDrawProof;
+ if(!proof||proof.verifiedInsideSameReadOnlyTransaction!==true||proof.drawRows.length!==4)
+  return refuse("NO_SAME_DB_SNAPSHOT_DAY_DRAW_PROOF");
+ const actual=verifyP6Day1LateFixedDraw(proof.day,proof.drawRows,scope);
+ if(actual.stateHash!==proof.drawStateSha256||actual.stateHash!==stage7.selectedDayCandidateGrid.committedDrawSha256||
+   proof.day.calendarHash!==review.calendarSha256||proof.day.configHash!==review.configSha256||proof.day.frameHash!==review.frameSha256)
+  return refuse("SAVED_DAY_DRAW_OR_FROZEN_SCOPE_CHANGED");
+ const result=planStage8({...review,stage7,day:proof.day,savedEarlyDrawRows:proof.drawRows},scope);
+ if(result.status!=="EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED")return refuse("UNEXPECTED_NORMAL_PROPOSAL");
+ return result;
 }
