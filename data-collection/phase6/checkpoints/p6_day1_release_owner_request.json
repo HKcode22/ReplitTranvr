@@ -3,5 +3,6 @@
   "mode": "post-pin-readback",
   "mainSha": "9c9cddb1aaeb04934d94af2937ee158e6d991f6c",
   "requestedAtUtc": "2026-11-24T05:58:03Z",
-  "historicalDigest": "7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61"
+  "historicalDigest": "7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61",
+  "purpose": "reviewed Day2 preparation interval; timing metadata only; no changes"
 }
