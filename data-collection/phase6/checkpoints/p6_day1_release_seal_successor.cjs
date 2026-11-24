@@ -105,6 +105,22 @@ const ctx={
  maxQueriesPerDay:288,nowUtc:new Date().toISOString(),outcomeTailUtc:tail
 };
 validator.validateFinalPolicies(p,ctx,ops);
+ // Non-sensitive operational dates only, independently bound to the original
+ // plan hash. No serialized policy, signer, private key, URL or secret output.
+ const min=transport.minimumPreparationLeadMinutes,max=transport.maximumPreparationLookaheadMinutes;
+ need(Number.isSafeInteger(min)&&min>=15&&min<=180&&Number.isSafeInteger(max)&&max>=min&&max<=2880,"PREPARATION_CLOCK");
+ const plan2=fs.readFileSync("data-collection/phase5/planning/phase6-source-day-02.json");
+ need(sha(plan2)===daily.dayPlanSha256s.find(x=>x.runDayIndex===2)?.sha256,"DAY2_EXACT_PLAN");
+ const plan=JSON.parse(plan2.toString("utf8"));
+ need(plan.runDayIndex===2&&Array.isArray(plan.templates)&&plan.templates.length===192,"DAY2_PLAN_SHAPE");
+ const first=Math.min(...plan.templates.map(t=>Date.parse(t.scheduledRequestUtc)));
+ need(Number.isFinite(first),"DAY2_FIRST_REQUEST");
+ console.log(JSON.stringify({status:"P6_DAY2_REVIEWED_PREPARATION_CLOCK_METADATA_ONLY",
+  firstRequestUtc:new Date(first).toISOString(),preparationOpensUtc:new Date(first-max*60000).toISOString(),
+  preparationDeadlineUtc:new Date(first-min*60000).toISOString(),
+  eligibleByRunnerClock:Date.now()>=first-max*60000&&Date.now()<first-min*60000,
+  standaloneNoT24ProtocolConfigured:/^[a-f0-9]{64}$/.test(daily.nativeLaterReview?.standaloneNoT24ProtocolSha256??""),
+  providerCalls:0,databaseWrites:0,secretValuesPrinted:false,phase6PaidGo:false}));
 const clone=x=>JSON.parse(JSON.stringify(x));
 const w=Object.fromEntries(policyNames.map(k=>[k,clone(p[k])]));
 const [s2,d2,g2,t2,pt2,n2]=policyNames.map(k=>w[k]);
