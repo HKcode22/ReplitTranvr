@@ -1,0 +1,32 @@
+name: Phase6 historical commissioned-stage archive reconstruction (OFFLINE)
+on:
+  push:
+    branches: ['phase6/20261122-g8-502-readback-evidence']
+    paths:
+      - 'data-collection/phase6/checkpoints/p6_historical_monday_stage_archive_reconstruction.cjs'
+      - '.github/workflows/phase6-historical-stage-archive-reconstruction-offline.yml'
+permissions:
+  contents: read
+jobs:
+  verify-archive-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Preserve archival verifier and check out exact historical source
+        run: |
+          set -Eeuo pipefail
+          cp data-collection/phase6/checkpoints/p6_historical_monday_stage_archive_reconstruction.cjs "$RUNNER_TEMP/archive.cjs"
+          git checkout --detach 795ace55984b44a3d0bffa886d33a5ec11d31927
+          test "$(git rev-parse HEAD)" = 795ace55984b44a3d0bffa886d33a5ec11d31927
+          npm ci --include=dev --no-audit --no-fund
+      - name: Reconstruct historical static bytes and verify exact committed parity
+        run: |
+          set -Eeuo pipefail
+          node "$RUNNER_TEMP/archive.cjs"
