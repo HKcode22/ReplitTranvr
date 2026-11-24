@@ -26,11 +26,12 @@ import {
   type SamplingDecision,
 } from "./phase6SamplingDecision_v39";
 import {
-  verifyPreparedDailyDraw,
+  verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,
   type PreparedDayForReadback,
   type PreparedDrawRow,
 } from "./phase5EarlyPreselectionReadback_v39";
 
+import {verifyP6Day1LateRegistrationScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA = /^[0-9a-f]{64}$/;
 const MIN_LEAD_MS = P5_EARLY_DRAW_MIN_STRICT_LEAD_MS;
 const MAX_LEAD_MS = P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS;
@@ -179,10 +180,15 @@ function safeOutput(
 }
 
 /** One DB-only early decision; call only from future reviewed GitHub owner. */
-export async function commitEarlyPhase5Draw(
-  pool: Pick<Pool,"connect">,
-  pins: EarlyDrawOwnerPins,
-): Promise<EarlyDrawOutcome> {
+type LatePolicyInput=Pick<Parameters<typeof verifyP6Day1LateRegistrationScope>[0],"policyBytes"|"signatureBase64"|"reviewerPublicKeyPem"|"pins"|"dayPlanBytes">;
+type LateVerifiedScope=ReturnType<typeof verifyP6Day1LateRegistrationScope>;
+export interface LateDay1DrawOutcome {
+ status:"DAY1_LATE_FIXED_DRAW_COMMITTED_NOT_SOURCE";runDayIndex:1;
+ selectedAtUtc:string;selectedAirportCount:4;drawSha256:string;frozenCalendarHash:string;
+ policySha256:string;remainingPreparationProjectionSha256:string;
+ flightLevelPreVerified:false;flightAlertSubscriptionsCreated:0;providerCalls:0;
+}
+async function commitDrawInternal(pool:Pick<Pool,"connect">,pins:EarlyDrawOwnerPins,late?:{policy:LatePolicyInput;expectedSessionLogin:string}):Promise<EarlyDrawOutcome|LateDay1DrawOutcome> {
   checkPins(pins);
   const client: PoolClient = await pool.connect();
   let tx = false;
@@ -196,6 +202,13 @@ export async function commitEarlyPhase5Draw(
       "SELECT pg_advisory_xact_lock(hashtext('v39-p5-early-sampling'),$1)",
       [pins.runDayIndex],
     );
+    if(late){
+      if(pins.runDayIndex!==1||!/^phase5_early_draw_[a-z0-9_]{6,48}$/.test(late.expectedSessionLogin))
+        refuse("LATE_DAY1_SCOPED_ROLE_REQUIRED");
+      const who=(await client.query("SELECT current_user actor,session_user login,(SELECT rolcanlogin AND NOT (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls) FROM pg_roles WHERE rolname=current_user) restricted")).rows[0];
+      if(who?.actor!==late.expectedSessionLogin||who.login!==late.expectedSessionLogin||who.restricted!==true)
+        refuse("LATE_DAY1_SCOPED_ROLE_REQUIRED");
+    }
     const auth=await client.query(
       `SELECT authorization_id,manifest_sha256,calendar_hash,config_hash,
               enabled,revoked_at_utc
@@ -236,13 +249,14 @@ export async function commitEarlyPhase5Draw(
       [pins.runDayIndex],
     );
     if(existing.rowCount!==0) {
+      if(late)refuse("LATE_DAY1_EXISTING_DRAW_NO_REPLAY");
       if(existing.rowCount!==4) refuse("PARTIAL_OR_UNKNOWN_EXISTING_DRAW");
       const result=safeOutput(day,existing.rows as PreparedDrawRow[],
         "EARLY_DRAW_IDEMPOTENT_READBACK");
       await client.query("COMMIT");tx=false;
       return result;
     }
-    validateEarlyDrawWindow(now,day.scheduledStartUtc);
+    if(!late)validateEarlyDrawWindow(now,day.scheduledStartUtc);
     const registry=await client.query(
       `SELECT active_frame_version,frame_hash
          FROM clean.adb_sampling_frame_registry
@@ -255,6 +269,23 @@ export async function commitEarlyPhase5Draw(
     await client.query(
       "SELECT icao FROM clean.adb_airport_sampling_state ORDER BY icao FOR UPDATE",
     );
+    let lateScope:LateVerifiedScope|undefined;
+    let lateEvidence:Omit<Parameters<typeof verifyP6Day1LateRegistrationScope>[0],"policyBytes"|"signatureBase64"|"reviewerPublicKeyPem"|"pins"|"dayPlanBytes"|"observedDbUtc">|undefined;
+    if(late){
+      const p=late.policy.pins;
+      if(p.manifestSha256!==pins.expectedManifestSha256||p.calendarSha256!==pins.expectedCalendarHash||
+        p.configSha256!==pins.expectedConfigHash||p.frameSha256!==pins.expectedFrameHash)
+        refuse("LATE_DAY1_RELEASE_PIN_DRIFT");
+      const future=(await client.query("SELECT run_day_index,selected_icao FROM clean.adb_sampling_draw WHERE run_day_index>1 ORDER BY run_day_index,slot_id")).rows;
+      const hist=(await client.query("SELECT (SELECT count(*)::int FROM clean.phase5_fids_physical_attempt_v39 WHERE manifest_sha256=$1) source,(SELECT count(*)::int FROM clean.phase5_other_rest_physical_reservation_v39 WHERE manifest_sha256=$1) rest,(SELECT count(*)::int FROM clean.adb_incident_stop WHERE NOT resolved) stops",[pins.expectedManifestSha256])).rows[0];
+      if(!hist)refuse("LATE_DAY1_MISSING_ATTEMPT_HISTORY");
+      lateEvidence={calendarDay:{runDayIndex:day.runDayIndex,scheduledStartUtc:day.scheduledStartUtc.toISOString(),
+        drawType:day.drawType,calendarHash:day.calendarHash,configHash:day.configHash,frameHash:day.frameHash,
+        slotRegions:day.slotRegions,pairAirportSet:day.pairAirportSet},
+        futureCommittedDraws:future.map(r=>({runDayIndex:Number(r.run_day_index),icao:r.selected_icao})),
+        existingDrawRows:existing.rows,sourceAttempts:hist.source,otherRestReservations:hist.rest,unresolvedStops:hist.stops};
+      lateScope=verifyP6Day1LateRegistrationScope({...late.policy,...lateEvidence,observedDbUtc:now.toISOString()});
+    }
     const candidates=await client.query(
       `SELECT f.icao,f.tier,f.region,f.traffic_prior,f.in_frame,
               f.pre_eligible,f.post_eligible,f.exclusion_reason,
@@ -321,7 +352,16 @@ export async function commitEarlyPhase5Draw(
        new Set(decision.selections.map(s=>s.icao)).size!==4)
       refuse("INVALID_EARLY_DECISION");
     const preparedRows=toStoredRows(decision,day,now);
-    const verified=safeOutput(day,preparedRows,"EARLY_DRAW_COMMITTED");
+    const checkRows=(rows:PreparedDrawRow[]):EarlyDrawOutcome|LateDay1DrawOutcome=>{
+      if(!lateScope)return safeOutput(day,rows,"EARLY_DRAW_COMMITTED");
+      const v=verifyP6Day1LateFixedDraw(day,rows,lateScope);
+      return {status:"DAY1_LATE_FIXED_DRAW_COMMITTED_NOT_SOURCE",runDayIndex:1,
+        selectedAtUtc:v.selectedAtUtc,selectedAirportCount:4,drawSha256:v.stateHash,
+        frozenCalendarHash:day.calendarHash,policySha256:v.policySha256,
+        remainingPreparationProjectionSha256:v.remainingPreparationProjectionSha256,
+        flightLevelPreVerified:false,flightAlertSubscriptionsCreated:0,providerCalls:0};
+    };
+    const verified=checkRows(preparedRows);
     // Each row's selected_at_utc is one DB-observed timestamp taken while
     // holding the transaction lease. All four rows + washout state commit atomically.
     for(const s of decision.selections){
@@ -354,8 +394,7 @@ export async function commitEarlyPhase5Draw(
          FROM clean.adb_sampling_draw WHERE run_day_index=$1`,
       [day.runDayIndex],
     );
-    const verifiedAgain=safeOutput(day,readback.rows as PreparedDrawRow[],
-      "EARLY_DRAW_COMMITTED");
+    const verifiedAgain=checkRows(readback.rows as PreparedDrawRow[]);
     if (verifiedAgain.drawSha256!==verified.drawSha256)
       refuse("POST_WRITE_READBACK_DIGEST_MISMATCH");
     // PRE source owner must still have time to start and persist before
@@ -364,7 +403,11 @@ export async function commitEarlyPhase5Draw(
       (await client.query("SELECT clock_timestamp() AS at")).rows[0].at,
       "COMMIT_CLOCK",
     );
-    validateEarlyDrawWindow(beforeCommit,day.scheduledStartUtc);
+    if(late&&lateScope&&lateEvidence){
+      const fresh=verifyP6Day1LateRegistrationScope({...late.policy,...lateEvidence,observedDbUtc:beforeCommit.toISOString()});
+      if(fresh.candidateQueryCount!==lateScope.candidateQueryCount||fresh.excludedQueryCount!==lateScope.excludedQueryCount)
+        refuse("LATE_DAY1_CUTOFF_ADVANCED_DURING_COMMIT");
+    }else validateEarlyDrawWindow(beforeCommit,day.scheduledStartUtc);
     // No "COMMIT" before the 4-row readback AND DB clock are proven.
     await client.query("COMMIT");tx=false;
     return verifiedAgain;
@@ -375,6 +418,21 @@ export async function commitEarlyPhase5Draw(
   }finally{
     client.release();
   }
+}
+
+/** Existing on-time API remains unchanged. */
+export async function commitEarlyPhase5Draw(pool:Pick<Pool,"connect">,pins:EarlyDrawOwnerPins):Promise<EarlyDrawOutcome>{
+ const r=await commitDrawInternal(pool,pins);
+ if(r.status==="DAY1_LATE_FIXED_DRAW_COMMITTED_NOT_SOURCE")return refuse("UNEXPECTED_LATE_SCOPE");
+ return r;
+}
+/** Incident-only draft entry point. Not wired into a production workflow.
+ * Requires actual scoped actor and history reads within the same transaction.
+ */
+export async function commitP6Day1LateFixedRegistration(pool:Pick<Pool,"connect">,pins:EarlyDrawOwnerPins,policy:LatePolicyInput,expectedSessionLogin:string):Promise<LateDay1DrawOutcome>{
+ const r=await commitDrawInternal(pool,pins,{policy,expectedSessionLogin});
+ if(r.status!=="DAY1_LATE_FIXED_DRAW_COMMITTED_NOT_SOURCE")return refuse("UNEXPECTED_ORDINARY_SCOPE");
+ return r;
 }
 
 /**
