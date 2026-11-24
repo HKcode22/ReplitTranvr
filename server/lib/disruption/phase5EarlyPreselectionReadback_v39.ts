@@ -64,6 +64,7 @@ function verifyDrawCore(
   day: PreparedDayForReadback,
   rows: PreparedDrawRow[],
   lateScope?: P6Day1LateScope,
+  historicalFixedPair=false,
 ): Omit<PreparedReadback,"verifiedCalendarLeadOnly"> {
   if (!Number.isInteger(day.runDayIndex) || day.runDayIndex < 1 || day.runDayIndex > 31)
     refuse("RUN_DAY");
@@ -96,7 +97,9 @@ function verifyDrawCore(
     const selectedAt = dateMs(x.selected_at_utc, "SELECTED");
     times.add(selectedAt);
     // Exact parity with the real DB early-draw owner: >24h45m and <=72h.
-    if(lateScope!==undefined){
+    if(historicalFixedPair){
+      if(selectedAt<start-P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS||selectedAt>=start)refuse("HISTORICAL_FIXED_PAIR_CLOCK");
+    }else if(lateScope!==undefined){
       if(selectedAt!==Date.parse(lateScope.observedDbUtc)||selectedAt<start-P5_EARLY_DRAW_MIN_STRICT_LEAD_MS||selectedAt>=start)
         refuse("LATE_SCOPE_CLOCK_MISMATCH");
     }else{
@@ -228,4 +231,17 @@ export function verifyP6Day1LateFixedDraw(day:PreparedDayForReadback,rows:Prepar
  return {...verifyDrawCore(day,rows,scope),verifiedCalendarLeadOnly:false as const,
   lateFixedPairRegistration:true as const,policySha256:scope.policySha256,
   originalDayPlanSha256:scope.originalDayPlanSha256,remainingPreparationProjectionSha256:scope.remainingPreparationProjectionSha256};
+}
+
+/** Historical washout only: a closed fixed pair may have been registered late.
+ * Validate all actual row semantics, but never present the result as an on-time
+ * draw or use it in current-day SOURCE/PRE admission. */
+export function inspectP6ClosedFixedPairForWashout(day:PreparedDayForReadback,rows:PreparedDrawRow[],observedDbUtc:string){
+ const start=dateMs(day.scheduledStartUtc,"SERVICE_START"),clock=dateMs(observedDbUtc,"OBSERVED");
+ const fixed={HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"};
+ if(day.runDayIndex!==1||day.drawType!=="NEW_TEMPLATE"||start!==Date.parse("2026-11-25T00:00:00.000Z")||
+   clock<start+4*3600000||!day.pairAirportSet||SLOTS.some(s=>day.pairAirportSet?.[s]?.icao!==fixed[s]))
+  refuse("HISTORICAL_DAY1_FIXED_PAIR_SCOPE");
+ return {...verifyDrawCore(day,rows,undefined,true),verifiedCalendarLeadOnly:false as const,
+  historicalWashoutOnly:true as const};
 }

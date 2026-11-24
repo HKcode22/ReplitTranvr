@@ -8,7 +8,7 @@
  * 31-day shape SHA; no provider calls, side effects or Phase6 authorization.
  */
 import {createHash} from "node:crypto";
-import {verifyPreparedDailyDraw,type PreparedDayForReadback,
+import {verifyPreparedDailyDraw,inspectP6ClosedFixedPairForWashout,type PreparedDayForReadback,
  type PreparedDrawRow} from "./phase5EarlyPreselectionReadback_v39";
 import type {P5Adaptive31ShapeEnvelope} from
  "./phase5Prospective31DayShapeEnvelope_v39";
@@ -76,6 +76,9 @@ export interface P5PriorCommittedWashoutInput {
 export interface P5PriorCommittedWashoutAudit {
  status:"ALL_EARLIER_COMMITTED_SITES_WASHOUT_VERIFIED_NOT_SOURCE_GO";
  priorParentDaysVerified:number;
+ /** Unobserved fixed sites conservatively counted as possible exposures, never as committed draws. */
+ priorFixedPairMissingDays?:number[];
+ priorLateFixedPairDays?:number[];
  priorAirportDayObservationsVerified:number;
  currentAirportCount:4;
  minimumRequiredEndToStartHours:24;
@@ -111,7 +114,8 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
  const currentSites=SLOTS.map(slot=>norm(input.currentSelectedIcaos?.[slot]));
  if(new Set(currentSites).size!==4)refuse("CURRENT_DRAW_NOT_UNIQUE");
  if(!Array.isArray(input.joinedEarlierDays)||
-    input.joinedEarlierDays.length!==(input.currentRunDayIndex-1)*4)
+    input.joinedEarlierDays.length>(input.currentRunDayIndex-1)*4||
+    input.joinedEarlierDays.length<input.currentRunDayIndex-1)
   refuse("INCOMPLETE_EARLIER_FOUR_ROW_HISTORY");
  const rowsByDay=new Map<number,P5JoinedPriorDayRow[]>();
  for(const r of input.joinedEarlierDays){
@@ -128,11 +132,13 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
  // Rebuild the entire committed historical prefix, not merely the most
  // recent airport state record: this detects cross-pair and adaptive reuses.
  const lastEndByAirport=new Map<string,number>();
+ const missingFixed:number[]=[],lateFixed:number[]=[];
+ let actualDrawCount=0;
  for(let dayIndex=1;dayIndex<input.currentRunDayIndex;dayIndex++){
   const prior=e.days[dayIndex-1];
   const joined=rowsByDay.get(dayIndex)??refuse("MISSING_PRIOR_FOUR_AIRPORT_DRAW");
-  if(!prior||prior.runDayIndex!==dayIndex||joined.length!==4)
-   refuse("MISSING_PRIOR_FOUR_AIRPORT_DRAW");
+  if(!prior||prior.runDayIndex!==dayIndex||(joined.length!==4&&joined.length!==1))
+   refuse("INCOMPLETE_EARLIER_FOUR_ROW_HISTORY");
   const first=joined[0];
   const start=millis(first.scheduled_start_utc);
   const end=millis(prior.endUtc);
@@ -187,6 +193,19 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
    configHash:String(first.config_hash),
    frameHash:String(first.frame_hash)
   };
+  // Only an exact closed Day1 left-join NULL result is tolerated. Use all
+  // four original frozen sites as conservative possible exposures. No rows
+  // fabricated, no backdated draw, no inferred actual observations.
+  if(joined.length===1){
+   const fixed={HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"};
+   if(dayIndex!==1||start!==Date.parse("2026-11-25T00:00:00.000Z")||clock<end||
+     prior.pairId===null||drawType!=="NEW_TEMPLATE"||!prep.pairAirportSet||
+     SLOTS.some(s=>prep.pairAirportSet?.[s]?.icao!==fixed[s]||prior.pairedAirportCandidates?.[s]!==fixed[s]||prep.pairAirportSet?.[s]?.region!==prep.slotRegions[s])||
+     ["slot_id","target_region","selected_draw_type","selected_icao","selected_draw_seed","selected_at_utc","adaptive_state_hash","probability_vector","airport_layer_design_probability"].some(k=>(first as unknown as Record<string,unknown>)[k]!==null))
+    refuse("INCOMPLETE_EARLIER_FOUR_ROW_HISTORY");
+   for(const icao of Object.values(fixed))lastEndByAirport.set(icao,end);
+   missingFixed.push(dayIndex);continue;
+  }
   const draws:PreparedDrawRow[]=joined.map(r=>({
    slot_id:String(r.slot_id),
    target_region:String(r.target_region),
@@ -199,7 +218,13 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
    airport_layer_design_probability:
     r.airport_layer_design_probability as number|string|null
   }));
-  const checked=verifyPreparedDailyDraw(prep,draws);
+  let checked:ReturnType<typeof verifyPreparedDailyDraw>|ReturnType<typeof inspectP6ClosedFixedPairForWashout>;
+  try{checked=verifyPreparedDailyDraw(prep,draws);}
+  catch(e){
+   if(!(e instanceof Error)||e.message!=="REFUSED_PHASE6_EARLY_DRAW_DRAW_TOO_LATE_FOR_T24_SOURCE"||dayIndex!==1)throw e;
+   checked=inspectP6ClosedFixedPairForWashout(prep,draws,input.dbClockAtReadUtc);lateFixed.push(dayIndex);
+  }
+  actualDrawCount+=4;
   if(millis(checked.selectedAtUtc)>clock)
    refuse("PRIOR_DRAW_FUTURE_DATED_AT_DB_CLOCK");
   if(prior.pairId!==null){
@@ -230,7 +255,9 @@ export function inspectP5PriorCommittedAirportWashoutReadonly(
  return {
   status:"ALL_EARLIER_COMMITTED_SITES_WASHOUT_VERIFIED_NOT_SOURCE_GO",
   priorParentDaysVerified:input.currentRunDayIndex-1,
-  priorAirportDayObservationsVerified:(input.currentRunDayIndex-1)*4,
+  priorAirportDayObservationsVerified:actualDrawCount,
+  ...(missingFixed.length?{priorFixedPairMissingDays:missingFixed}:{}),
+  ...(lateFixed.length?{priorLateFixedPairDays:lateFixed}:{}),
   currentAirportCount:4,minimumRequiredEndToStartHours:24,
   priorWindowEndingSource:"REVIEWED_31_DAY_SHAPE_NOT_LAST_SELECTED_START",
   restrictedSnapshotCallerResponsible:true,
