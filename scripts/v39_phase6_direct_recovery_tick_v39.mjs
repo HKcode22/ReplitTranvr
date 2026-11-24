@@ -36,18 +36,38 @@ export function directDisposition(steps){
     x.filter(a=>a[0].conclusion==="success").length!==1)return null;
  return ["TERMINAL","PREFLIGHT_HOLD","CARRIED"][x.findIndex(a=>a[0].conclusion==="success")];
 }
+// Names only: never serialize env values, credentials, policy bytes, or hashes.
+export function directAdmissionFailures(env,now){
+ const sha=env.GITHUB_SHA,id=Number(env.GITHUB_RUN_ID),since=Date.parse(env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC);
+ const bad=[];
+ const check=(name,ok)=>{if(!ok)bad.push(name);};
+ check("GITHUB_ACTIONS",env.GITHUB_ACTIONS==="true");
+ check("GITHUB_REPOSITORY",env.GITHUB_REPOSITORY===REPO);
+ check("GITHUB_REF",env.GITHUB_REF==="refs/heads/main");
+ check("GITHUB_EVENT_NAME",env.GITHUB_EVENT_NAME==="workflow_dispatch");
+ check("GITHUB_RUN_ATTEMPT",env.GITHUB_RUN_ATTEMPT==="1");
+ check("GITHUB_RUN_ID",/^[1-9][0-9]{0,14}$/.test(env.GITHUB_RUN_ID??"")&&validId(id));
+ check("GITHUB_SHA",/^[a-f0-9]{40}$/.test(sha??""));
+ check("V39_P5_APPROVED_CODE_SHA",env.V39_P5_APPROVED_CODE_SHA===sha);
+ check("P6_ROLLING_REQUESTED_MAIN_SHA",env.P6_ROLLING_REQUESTED_MAIN_SHA===sha);
+ check("P6_ROLLING_SESSION_CONFIRM",env.P6_ROLLING_SESSION_CONFIRM===DIRECT_CONFIRM);
+ for(const k of flagNames)check(k,env[k]==="1");
+ for(const k of conflictNames)check(k,["","0",undefined].includes(env[k]));
+ check("P5_CD_GH_PRE_STOP",env.P5_CD_GH_PRE_STOP==="0");
+ check("ADB_AUTO_COLLECT",env.ADB_AUTO_COLLECT==="0");
+ for(const k of forbidden)check("FORBIDDEN_"+k,!env[k]);
+ check("NODE_TLS_REJECT_UNAUTHORIZED",env.NODE_TLS_REJECT_UNAUTHORIZED!=="0");
+ check("GITHUB_TOKEN_PRESENT",typeof env.GITHUB_TOKEN==="string"&&env.GITHUB_TOKEN.length>=16);
+ check("P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC",Number.isSafeInteger(since)&&iso(since)===env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC&&since%1000===0&&since<=now);
+ return bad;
+}
 export function admitDirectTick(env,now,readPlan){
  const sha=env.GITHUB_SHA,id=Number(env.GITHUB_RUN_ID),since=Date.parse(env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC);
- if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
-  env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||
-  !/^[1-9][0-9]{0,14}$/.test(env.GITHUB_RUN_ID??"")||!validId(id)||
-  !/^[a-f0-9]{40}$/.test(sha??"")||env.V39_P5_APPROVED_CODE_SHA!==sha||env.P6_ROLLING_REQUESTED_MAIN_SHA!==sha||
-  env.P6_ROLLING_SESSION_CONFIRM!==DIRECT_CONFIRM||flagNames.some(k=>env[k]!=="1")||
-  conflictNames.some(k=>!["","0",undefined].includes(env[k]))||
-  env.P5_CD_GH_PRE_STOP!=="0"||env.ADB_AUTO_COLLECT!=="0"||forbidden.some(k=>env[k])||
-  env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||typeof env.GITHUB_TOKEN!=="string"||env.GITHUB_TOKEN.length<16||
-  !Number.isSafeInteger(since)||iso(since)!==env.P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC||since%1000!==0||since>now)
+ const bad=directAdmissionFailures(env,now);
+ if(bad.length){
+  if(env.P6_DIRECT_RECOVERY_ENTRYPOINT==="1")console.error("P6_DIRECT_ADMISSION_FAILED_PREDICATES="+bad.join(","));
   hold("NO_EXACT_SEPARATE_APPROVAL_OR_CONFLICTING_ROOT");
+ }
  const wire=env.P6_NONPAID_DAILY_POLICY_BASE64;
  if(typeof wire!=="string"||wire.length>46668||!/^[A-Za-z0-9+/]+={0,2}$/.test(wire))hold("POLICY_WIRE");
  const policyBytes=Buffer.from(wire,"base64");
