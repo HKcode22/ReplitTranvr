@@ -38,7 +38,13 @@ need(e.GITHUB_ACTIONS==="true"&&e.GITHUB_REPOSITORY==="HKcode22/ReplitTranvr"&&
 const v=Object.fromEntries(names.map(k=>[k,e[k]]));
 need(Object.values(v).every(x=>typeof x==="string"&&x.length>0&&Buffer.byteLength(x)<60000),
  "MISSING_STATIC_SECRET");
-need(/^[a-f0-9]{40}$/.test(pin??"")&&pin!==old&&names.slice(0,7).every(k=>v[k]===old),"EXACT_C8_OUTER_PINS");
+need(/^[a-f0-9]{40}$/.test(pin??"")&&pin!==old,"EXACT_CANDIDATE_SHA");
+if(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO"){
+ const d=JSON.parse(Buffer.from(v.P6_NONPAID_DAILY_POLICY_BASE64,"base64"));
+ const t=JSON.parse(Buffer.from(v.P6_NONPAID_TRANSPORT_TRUST_BASE64,"base64"));
+ console.log(JSON.stringify({status:"P6_DAY1_INSTALLED_POLICY_METADATA_ONLY",outerPins:names.slice(0,7).map(k=>({name:k,equalsFrozenMain:v[k]===old,equalsCandidate:v[k]===pin})),dailyLaneOne:d.nativeLaterReview?.maximumT24ExecutionLanes===1,dailyFromCorrect:d.validFromUtc==="2026-11-22T00:00:00.000Z",dailyUntilCorrect:d.validUntilUtc==="2027-01-20T00:00:00.000Z",dailyDigestMatchesRecorded59Day:v.P6_NONPAID_DAILY_POLICY_SHA256==="c477bb71588352d76383b887cae10c35c02cb4a7fe445cedf8ecda0ac2fe8664",transportDailyLinkMatches:t.dailyPolicySha256===v.P6_NONPAID_DAILY_POLICY_SHA256,providerCalls:0,secretValuesPrinted:false}));
+}
+need(names.slice(0,7).every(k=>v[k]===old),"EXACT_C8_OUTER_PINS");
 const original={...v};
 need(hash(original)===prior,"HISTORICAL_31_VALUE_DIGEST");
 const b64=k=>{
