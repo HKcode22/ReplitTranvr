@@ -5,6 +5,8 @@ on:
     paths:
       - 'server/lib/disruption/phase6Day1ProspectiveRecoveryCandidate_v39.mjs'
       - 'tests/phase6_day1_prospective_recovery_candidate_v39.test.mjs'
+      - 'server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs'
+      - 'tests/phase6_day1_late_registration_scope_v39.test.mjs'
       - '.github/workflows/phase6-day1-recovery-candidate-offline.yml'
 permissions:
   contents: read
@@ -19,4 +21,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/phase6_day1_prospective_recovery_candidate_v39.test.mjs
+      - run: node --test tests/phase6_day1_prospective_recovery_candidate_v39.test.mjs tests/phase6_day1_late_registration_scope_v39.test.mjs
