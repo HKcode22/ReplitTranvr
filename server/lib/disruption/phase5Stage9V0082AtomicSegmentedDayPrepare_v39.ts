@@ -15,13 +15,14 @@
  */
 import {createHash} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
-import {verifyPreparedDailyDraw,type PreparedDayForReadback,
+import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,type PreparedDayForReadback,
  type PreparedDrawRow} from "./phase5EarlyPreselectionReadback_v39";
-import type {Stage8DayProposalResult,Stage8V0079PreparedProposal}
+import type {Stage8DayProposalResult,Stage8V0079PreparedProposal,P6Day1LateProposalResult}
  from "./phase5V0079DailyPreparedQueryProposals_v39";
 
 import {normalizeP5TypedSourceBudgetBinding,matchesP5TypedSourceBudgetReleaseRow,
  P5_TYPED_RELEASE_SELECT_COLUMNS,type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
+import {isVerifiedP6Day1LateScope,readVerifiedP6Day1Projection,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const ROLE=/^phase5_fids_prepare_[a-z0-9_]{6,42}$/;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
@@ -135,6 +136,8 @@ export interface P5V0082AtomicPreparedResult {
  realGithubRunBound:false;sourceOriginalCommitted:false;
  actualFlightPreCertified:false;phase5ScientificFreeze:false;phase6PaidGo:false;
 }
+export type P6Day1LateAtomicReview=Omit<P5V0082AtomicDayReview,"proposal">&{proposal:P6Day1LateProposalResult};
+type AnyAtomicReview=P5V0082AtomicDayReview|P6Day1LateAtomicReview;
 function canonicalPartition(q:Stage8V0079PreparedProposal,pin:P,
  parentStart:number,shape:"4h"|"2x2h"|"up-to-6h",rangeMin:number):boolean{
  const parentMinutes=shape==="up-to-6h"?360:240;
@@ -158,7 +161,7 @@ function canonicalPartition(q:Stage8V0079PreparedProposal,pin:P,
   pin.restCategory===(pin.partitionIndex===1?
    "FIDS_BASE_UNITS":"FIDS_SPLIT_UNITS");
 }
-function checkedProposal(p:P5V0082AtomicDayReview):{
+function checkedProposal(p:AnyAtomicReview,late?:P6Day1LateScope):{
  queries:Stage8V0079PreparedProposal[];pins:P[];shape:"4h"|"2x2h"|"up-to-6h";
  range:number;requestedByCharge:Map<string,Map<string,number>>;
  firstDispatch:number
@@ -167,8 +170,24 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
  if(!x)return hold("NOT_REVIEWED_SEGMENTED_V3_PROPOSAL");
  const shape=x.reviewedSegmentedSource,pins=x.sourcePartitionPins;
  if(!shape||!pins)return hold("NOT_REVIEWED_SEGMENTED_V3_PROPOSAL");
- if(x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
-    x.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"||
+ const projection=late?readVerifiedP6Day1Projection(late):undefined;
+ if(late?(!isVerifiedP6Day1LateScope(late)||
+    x.schema!=="v39.phase6.day1-remaining-stage8-proposals.v1"||
+    x.status!=="EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED"||
+    x.runDayIndex!==1||x.plannedQueryDenominator!==192||
+    x.excludedQueryCount!==late.excludedQueryCount||
+    x.sourceQueryCount!==late.candidateQueryCount||
+    x.remainingPreparationProjectionSha256!==late.remainingPreparationProjectionSha256||
+    p.expectedManifestSha256!==late.manifestSha256||
+    p.expectedCalendarSha256!==late.calendarSha256||
+    p.expectedConfigSha256!==late.configSha256||
+    p.expectedFrameSha256!==late.frameSha256||
+    normalizeP5TypedSourceBudgetBinding(p)?.budgetReleaseMode!=="COST_UPPER_BOUND"||
+    JSON.stringify(shape)!==JSON.stringify(projection!.reviewedSegmentedSource)):
+    (x.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
+     x.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"))
+   hold("WRONG_DAY_PREPARATION_SCOPE");
+ if(
     !["4h","2x2h","up-to-6h"].includes(shape.windowShape)||
     !integral(shape.verifiedProviderMaxRangeMinutes,1,360)||
     !SHA.test(shape.reviewedProviderRangeEvidenceSha256)||
@@ -190,7 +209,7 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
     p.independentRightsReviewApproved!==true||
     p.githubOnlyProspectiveOwnerApproved!==true||
     x.manifestSha256!==p.expectedManifestSha256||
-    x.sourceQueryCount<12||x.sourceQueryCount>384||
+    x.sourceQueryCount<(late?1:12)||x.sourceQueryCount>384||
     x.maximumCandidateGetUnits!==x.sourceQueryCount*2||
     !Number.isSafeInteger(x.runDayIndex)||x.runDayIndex<1||
     x.runDayIndex>31||
@@ -213,7 +232,22 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
  const keySet=new Set<string>(),groupCounts=new Map<string,number>();
  const requested=new Map<string,Map<string,number>>();
  let first=Infinity;
+ const exactTemplates=new Map(projection?.templates.map(t=>[t.queryKey,t])??[]);
+ if(late&&exactTemplates.size!==x.sourceQueryCount)hold("INCOMPLETE_REMAINING_PROJECTION");
  for(const q of x.queries){
+  if(late){
+   const t=exactTemplates.get(q.query_key);
+   if(!t||q.horizon==="T-24h"||q.slot_id!==t.slot||q.horizon!==t.horizon||
+      q.airport_icao!==late.fixedAirports[t.slot]||
+      q.service_window_start_utc!==t.serviceWindowStartUtc||
+      q.service_window_end_utc!==t.serviceWindowEndUtc||
+      q.planned_dispatch_utc!==t.scheduledRequestUtc||
+      q.planned_charge_utc_date!==t.physicalChargeDayUtc||
+      q.prediction_cutoff_utc!==t.earliestPlannedCutoffUtc||
+      dt(q.hard_latest_dispatch_utc)!==Math.min(dt(t.scheduledRequestUtc)+60_000,
+       dt(t.earliestPlannedCutoffUtc)-t.maxResponseAndPersistSeconds*1000-120_000))
+    hold("QUERY_NOT_EXACT_REMAINING_TEMPLATE");
+  }
   if(!SLOTS.includes(q.slot_id as typeof SLOTS[number])||
      !HORIZONS.includes(q.horizon as typeof HORIZONS[number])||
      q.manifest_sha256!==p.expectedManifestSha256||
@@ -258,7 +292,7 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
   const terms=coverage.get(g2)??new Set<string>();
   terms.add(pin.segmentIndex+"|"+pin.partitionIndex);coverage.set(g2,terms);
  }
- if(byDigest.size!==qByDigest.size||coverage.size!==12||
+ if(byDigest.size!==qByDigest.size||(!late&&coverage.size!==12)||
     !Array.isArray(x.actualUtcChargeBudgets)||
     requested.size!==x.actualUtcChargeBudgets.length)
    hold("INCOMPLETE_SIGNED_PARTITION_QUERY_GRID");
@@ -266,7 +300,7 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
     shape.windowShape==="4h"?240:360;
  const childCount=shape.windowShape==="2x2h"?2:1;
  const partCount=Math.ceil(childMin/shape.verifiedProviderMaxRangeMinutes);
- for(const slot of SLOTS)for(const h of HORIZONS){
+ if(!late)for(const slot of SLOTS)for(const h of HORIZONS){
    const got=coverage.get(slot+"|"+h);
    if(!got)return hold("MISSING_SEGMENT_OR_RANGE_PARTITION_COVERAGE");
    if(got.size!==childCount*partCount)
@@ -288,10 +322,10 @@ function checkedProposal(p:P5V0082AtomicDayReview):{
   range:shape.verifiedProviderMaxRangeMinutes,
   requestedByCharge:requested,firstDispatch:first};
 }
-export async function commitStage9P5V0082AtomicSegmentedDay(
- pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview
+async function commitStage9Internal(
+ pool:Pick<Pool,"connect">,review:AnyAtomicReview,late?:P6Day1LateScope
 ):Promise<P5V0082AtomicPreparedResult>{
- const reviewed=checkedProposal(review);
+ const reviewed=checkedProposal(review,late);
  if(!pool||typeof pool.connect!=="function")hold("NO_RESTRICTED_INSERT_ONLY_POOL");
  const client:PoolClient=await pool.connect();
  let started=false,commitAttempted=false;
@@ -368,7 +402,7 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
   if(!scope||Object.values(scope).some(v=>v!==false))
    hold("EXTRA_FROZEN_LEDGER_OR_RAW_PROVIDER_PRIVILEGE");
   const now=dt(actor.at),x=review.proposal;
-  if(now>=reviewed.firstDispatch-120000)
+  if(now>=reviewed.firstDispatch-(late?readVerifiedP6Day1Projection(late).minimumPreparationLeadMinutes*MINUTE:120000))
     hold("PREPARE_AFTER_FIRST_PROSPECTIVE_SOURCE_DEADLINE");
   await client.query(
    "SELECT pg_advisory_xact_lock(hashtext('v39-phase5-prepare-day'),$1)",
@@ -427,7 +461,7 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
    [x.runDayIndex]
   )).rows as PreparedDrawRow[];
   if(draws.length!==4)hold("MISSING_FOUR_REAL_EARLY_AIRPORT_DRAWS");
-  const d=verifyPreparedDailyDraw(day,draws);
+  const d=late?verifyP6Day1LateFixedDraw(day,draws,late):verifyPreparedDailyDraw(day,draws);
   if(d.stateHash!==x.earlyDrawSha256||dt(d.selectedAtUtc)>=now)
     hold("ALTERED_FOUR_SLOT_EARLY_SELECTION");
   const selected=new Map(d.selections.map(v=>[v.slotId,v.icao]));
@@ -594,6 +628,11 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
    if(part.rowCount!==1||part.rows[0]?.query_digest!==q.query_digest)
      hold("V0082_EXACT_PARTITION_INSERT_MISMATCH");
   }
+  if(late){
+   const finalClock=(await client.query("SELECT clock_timestamp() AS at")).rows[0];
+   if(!finalClock||dt(finalClock.at)>=reviewed.firstDispatch-readVerifiedP6Day1Projection(late).minimumPreparationLeadMinutes*MINUTE)
+    hold("LATE_PREPARATION_DEADLINE_PASSED_BEFORE_COMMIT");
+  }
   commitAttempted=true;
   await client.query("COMMIT");started=false;
   return {
@@ -627,11 +666,11 @@ export async function commitStage9P5V0082AtomicSegmentedDay(
  * The existing PREPARE group is reused; a separate connection/snapshot
  * is not a separate reviewer identity or a source-use authorization.
  */
-export async function readBackP5Stage9PreparedDayOnce(
- pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview,
- options?:{distinguishConfirmedEmptyDay:true}
+async function readBackStage9Internal(
+ pool:Pick<Pool,"connect">,review:AnyAtomicReview,
+ options?:{distinguishConfirmedEmptyDay:true},late?:P6Day1LateScope
 ){
- const validated=checkedProposal(review);
+ const validated=checkedProposal(review,late);
  if(!pool||typeof pool.connect!=="function")hold("READBACK_NO_RESTRICTED_POOL");
  const client=await pool.connect();
  let tx=false;
@@ -738,4 +777,29 @@ export async function readBackP5Stage9PreparedDayOnce(
   if(tx)await client.query("ROLLBACK").catch(()=>{});
   client.release();
  }
+}
+
+/** Normal full-grid path remains unchanged. */
+export function commitStage9P5V0082AtomicSegmentedDay(pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview){
+ return commitStage9Internal(pool,review);
+}
+export function readBackP5Stage9PreparedDayOnce(pool:Pick<Pool,"connect">,review:P5V0082AtomicDayReview,options?:{distinguishConfirmedEmptyDay:true}){
+ return readBackStage9Internal(pool,review,options);
+}
+/** Incident-only exact remaining query path; no paid dispatch or ordinary-day certification. */
+export async function commitP6Day1LateStage9(pool:Pick<Pool,"connect">,review:P6Day1LateAtomicReview,scope:unknown){
+ if(!isVerifiedP6Day1LateScope(scope))return hold("LATE_SCOPE_NOT_VERIFIED");
+ const result=await commitStage9Internal(pool,review,scope);
+ return {...result,schema:"v39.phase6.day1-remaining-stage9-prepared.v1" as const,
+  status:"DAY1_REMAINING_V0079_V0082_PREPARED_UNARMED_NOT_SOURCE_GET" as const,
+  plannedQueryDenominator:192,excludedQueryCount:scope.excludedQueryCount,
+  remainingPreparationProjectionSha256:scope.remainingPreparationProjectionSha256};
+}
+export async function readBackP6Day1LateStage9(pool:Pick<Pool,"connect">,review:P6Day1LateAtomicReview,scope:unknown,options?:{distinguishConfirmedEmptyDay:true}){
+ if(!isVerifiedP6Day1LateScope(scope))return hold("LATE_SCOPE_NOT_VERIFIED");
+ const result=await readBackStage9Internal(pool,review,options,scope);
+ return {...result,schema:"v39.phase6.day1-remaining-stage9-readback.v1" as const,
+  status:"EXACT_REMAINING_DAY1_PREPARED_READBACK_NO_PAID_GO" as const,
+  plannedQueryDenominator:192,excludedQueryCount:scope.excludedQueryCount,
+  remainingPreparationProjectionSha256:scope.remainingPreparationProjectionSha256};
 }
