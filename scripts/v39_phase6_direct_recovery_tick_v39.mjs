@@ -78,11 +78,24 @@ export function admitDirectTick(env,now,readPlan){
  if(since<calendar.from||now>=calendar.until||calendar.until-calendar.from>60*24*60*MIN)hold("POLICY_CLOCK");
  return {sha,id,since,calendar};
 }
-function downloadDirectArchive({artifactId,token}){
- try{return execFileSync("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+artifactId+"/zip"],{
-  env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},timeout:30000,
-  maxBuffer:131072,stdio:["ignore","pipe","ignore"]});}
- catch{hold("PREDECESSOR_ARCHIVE_DOWNLOAD");}
+// The artifact GET/redirect is read-only. Retry only that transport, never
+// dispatch POSTs, validation failures, or a changed digest. Three bounded
+// attempts stay inside the predecessor download headroom.
+export async function downloadDirectArchive({artifactId,token,exec=execFileSync,sleep=ms=>new Promise(r=>setTimeout(r,ms))}){
+ if(!validId(artifactId)||typeof token!=="string"||!token)hold("PREDECESSOR_ARCHIVE_ID");
+ for(let i=0;i<3;i++){
+  try{
+   const bytes=exec("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+artifactId+"/zip"],{
+    env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},timeout:15000,
+    maxBuffer:131072,stdio:["ignore","pipe","ignore"]});
+   if(!Buffer.isBuffer(bytes)||!bytes.length)hold("PREDECESSOR_ARCHIVE_EMPTY");
+   return bytes;
+  }catch(e){
+   if(e?.message==="HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_EMPTY")throw e;
+   if(i===2)hold("PREDECESSOR_ARCHIVE_DOWNLOAD");
+   await sleep(1000*(i+1));
+  }
+ }
 }
 export function readDirectReceipt(raw,{run,sha,since,policySha256,clock,epoch,disposition}){
  let x;try{x=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(raw));}catch{hold("PREDECESSOR_RECEIPT_JSON");}
