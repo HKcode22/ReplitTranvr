@@ -1,3 +1,32 @@
+# CURRENT — Nov23 after J pre-write HOLD
+
+**J stopped before all mutation:** owner terminal `HOLD_P6_T24_LANE_REPAIR_ORIGINAL_OWNER_ARTIFACT_ABSENT`. The historical local G12 key/request/encrypted artifact path is unavailable. This does NOT invalidate the actual missing T24 policy lane field diagnosis or indicate another worker failure. J has no secret writes, no new workflow dispatch, no changed epoch, no reenabled routes. Retention run 45325582469 remains successful. Do not repeat J, H, I or the old G12 installer. 
+
+## J2 — fresh four-policy correction without old local artifacts
+
+New owner-only request uses a fresh X25519 key generated locally and an authenticated AES-256-GCM envelope. Only the existing four linked policy values are transferred to the owner encrypted; no provider keys, database credentials or private signing keys are read by the seal workflow. Owner calculates exact one-lane correction locally; original frozen main and all other scientific policy fields retained. The local request directory is preserved for reconciliation, not printed contents. One owner request push, one seal workflow, no need for the old artifact. Then the same fresh DB zero-genesis/physical/STOP check, four narrow writes, actual T24 no-due and linked prep validation, original normal-calendar direct controller attempt; external rolling reenabled only on actual successful custody outcome. No Day1 exceptional registration deployed.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_FRESH_T24_REPAIR'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=f4449b972e0bbfe811e05e5b8820b38d5eb72e68
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_FRESH_T24_POLICY_CORRECTION_AND_PROSPECTIVE_RESTART
+P6_FRESH_T24_REPAIR
+~~~
+
+Expected P6_FRESH_POLICY_ENVELOPE_SELFTEST_PASS, P6_FRESH_OWNER_SEAL_RUN, P6_ACTUAL_T24_CORRECTED_NO_DUE_PASS and final P6_T24_POLICY_REPAIRED_ACTUAL_WORKERS_AND_DIRECT_WAVE_PASS_AUTONOMOUS_NORMAL_ROUTES_RESUMED. If HOLD paste output, do not rerun: new local directory and request are retained for recovery. Paid collection not yet proven. All original and prior content retained below.
+
+---
+
 # CURRENT — Monday Nov23 after 8:18 PM PST
 
 **I PASS. Actual later PRE and Day2 no-due preparation passed; no repeats A–I.** Fresh 04:12:25Z DB D2 draw=4 index=0 SOURCE/REST/STOP=0. Latest #966 all 11 CI green. Exact T24 runtime error now reproduced from installed repository policy: **missing nativeLaterReview.maximumT24ExecutionLanes**. [45325433100](https://github.com/HKcode22/ReplitTranvr/actions/runs/45325433100) all other static checks passed, absent field, hypothetical one-lane correction PASS. No production-main change, no DB credential/retention/budget/cutoff change. [New exact incident checkpoint](2026-11-23_EXACT_T24_MISSING_LANE_POLICY_ROOT_CAUSE_AND_NARROW_REPAIR.md).
