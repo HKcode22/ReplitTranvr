@@ -1,3 +1,53 @@
+# ONLY READ THIS — Phase 6 owner instructions (current first)
+
+**UPDATED Monday November 23, 2026, 4:22 PM California PST (November 24 00:22 UTC).** Mountain House, Tracy and San José use the same clock. This dated section supersedes ALL older instructions below. Older commands are retained for audit only, NOT for execution.
+
+## Current decision: incident open; paid owner GO recorded, autonomous collection NOT operational
+
+- G13 and G9 completed; do not rerun. DIRECT_TICK [45293307564](https://github.com/HKcode22/ReplitTranvr/actions/runs/45293307564) failed before dispatch; the separate rolling relay is paused (0), primary retention remains enabled (1).
+- Budget flag restored in repository and protected environment. Original signed budget 36,740 units; 1,900/day cap; 1,000 Alert floor. Early-draw approval restored. Actual [Day 2 draw 45295746205](https://github.com/HKcode22/ReplitTranvr/actions/runs/45295746205/job/138115547586) committed four airports, zero provider calls.
+- **Owner bulk census COMPLETED** at 4:22:46 PM PST (00:22:46Z). Marker: `P6_OWNER_BULK_METADATA_AND_READONLY_CENSUS_COMPLETE_NOT_GO`. Correct primary neondb, read-only; Day1 draw=0, Day2 draw=4, SOURCE attempts=0, other REST reservations=0, unresolved STOPs=0 for checked scope. 98 repository secret names, 9 protected environment secret names. Required direct secret names present; effective values not proven. Do not rerun this census just because it was previously requested.
+- **New confirmed operational blockers:** the owner census shows missing active-route variables for SOURCE stored dispatch, POST parent/producer, daily prepare, PRE enrollment, T24 witness, later PRE and watchdog. Several corresponding required approvals are absent. Both paid child jobs reference an absent `AERODATABOX_API_KEY` Actions secret; restore only from the owner's existing authenticated provider credential, never paste into chat/logs. Some other absent references are deliberately optional/legacy/conflicting and MUST NOT be populated blindly. Repository secret capacity is near 100; plan verified scope placement rather than adding every name. This is a commissioning/configuration incident, not proof the provider or database failed.
+
+## What YOU need to do — newest instructions
+
+| Local California time | Owner action |
+|---|---|
+| **Now, Monday Nov 23** | Bulk audit already completed. **No additional reviewed write command is available yet.** Do not rerun G13, G9, either flag repair, or the early draw. Keep rolling relay paused; leave primary retention enabled. |
+| **Before sleeping tonight** | Reopen the TOP of this guide and check the latest ChatGPT/issue #413 recovery update. If a new dated, reviewed owner command is posted, run it once and paste only sanitized result. If none is posted, there is no approved new command to execute; collection remains unverified. |
+| **Tuesday Nov 24, ideally by 8 AM (before 9:45 AM)** | Reopen this guide. Check whether the Day1 remaining-horizon exception and configuration recovery have actually been deployed and verified; if not, request urgent review. Optional read-only status command below. Do NOT dispatch paid GETs manually. |
+| **Tuesday 9:45 AM–1:30 PM** | Day1 T−6 primary SOURCE window, conditional on valid preparation and admission. Observe actual receipt; no retrospective acquisition. |
+| **Tuesday 2:15–6 PM** | Day1 T−90 update window, conditional on valid preparation and admission. Check SOURCE and PRE evidence, not merely green workflow. |
+| **Tuesday evening** | Day1 service window 4–8 PM PST; Day2 draw already exists, but signed daily preparation must still be verified before its first SOURCE window. Check Day2 readiness independently even if Day1 cannot be recovered. |
+| **Wednesday Nov 25 onward** | No standing manual paid commands authorized or intended. Once autonomy is demonstrated, check receipts daily when practical. Until then, inspect the latest dated guide and do not assume unattended collection is working. |
+
+### Optional owner status check (read-only; no provider, no dispatch)
+Run only if fresh status is useful. Paste sanitized result, not secret values.
+~~~bash
+cd ~/workspace
+set +x
+TZ=America/Los_Angeles date '+%Y-%m-%d %I:%M:%S %p %Z'
+gh variable get TRAVNR_RELAY_ROLLING_ENABLED -R HKcode22/TravnrClockRelay
+gh variable get TRAVNR_RELAY_PRIMARY_ENABLED -R HKcode22/TravnrClockRelay
+gh run list -R HKcode22/ReplitTranvr --limit 15 --json databaseId,displayTitle,status,conclusion,createdAt
+gh run list -R HKcode22/TravnrClockRelay --limit 10 --json databaseId,displayTitle,status,conclusion,createdAt
+~~~
+
+## Engineering work remaining (NOT owner commands)
+1. Resolve current-mode missing flags/variables against actual workflow predicates, original signed authorization and existing credentials; separate intentional conflicts/legacy from required. Check effective values privately, not name-only. Preserve scope and STOP semantics.
+2. Protect Day2 with genuine nonpaid signed preparation and publication before deadline; do not wait for Day1 recovery to protect Day2.
+3. Day1 exception: fixed OMAA, OMSJ, SPJC, KDEC; original schedule; actual late registration time; still-future T−6/T−90 and any genuinely eligible T−24 only; retain missing denominators, no backdating. Existing whole-day prearm blocks this until reviewed successor is implemented. No executable exception deployed as of this update.
+4. Reconcile failed DIRECT_TICK and complete no-dispatch/charge/overlap evidence; reviewed prospective recovery, no blind rerun or silent epoch reset. Restore rolling only after verified runtime admission and downstream readiness.
+5. Verify actual paid SOURCE bound original and qualified cutoff-safe PRE/POST; then declare autonomy operational. No new gates or reopening completed Gates1–8/G12.
+
+Evidence: [incident checkpoint](2026-11-23_DAY1_LAUNCH_INCIDENT_ROOT_CAUSES_AND_PROSPECTIVE_RECOVERY.md), [Day2 receipt and dependency inventory](2026-11-23_DAY2_DRAW_RECEIPT_AND_RUNTIME_DEPENDENCY_INVENTORY.md), [owner census script](2026-11-23_owner_bulk_runtime_metadata_census.cjs), [master issue #413](https://github.com/HKcode22/ReplitTranvr/issues/413). Do not publish private credentials or raw signed packets.
+
+---
+
+# HISTORICAL ORIGINAL GUIDE — DO NOT EXECUTE OLD LAUNCH COMMANDS
+
+**The following original morning timetable and Commands A/B are retained solely as historical evidence. They have been superseded by the dated current instructions above. G13/G9 are already completed.**
+
 # ONLY READ THIS — Monday Nov 23 Phase 6 paid-month launch & live-data guide
 
 **Owner:** HKcode22 · **Local timezone:** Pacific Standard Time (PST, UTC−08:00). Mountain House, Tracy and San José use the SAME local clock.  
