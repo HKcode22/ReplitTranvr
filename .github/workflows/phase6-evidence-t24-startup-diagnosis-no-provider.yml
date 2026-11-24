@@ -1,0 +1,115 @@
+name: P6 protected T24 startup diagnosis (read-only, no provider)
+on:
+  push:
+    branches: [phase6/20261122-g8-502-readback-evidence]
+    paths: ['.github/workflows/phase6-evidence-t24-startup-diagnosis-no-provider.yml']
+permissions:
+  contents: read
+jobs:
+  exact-frozen-main-pure-admission-diagnostic:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' && github.event_name == 'push' && github.run_attempt == 1
+    environment: phase6-protected-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c8e065d665ccacb6d2575070e94c5500b7583044
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '20', cache: npm}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Diagnose exact startup predicates, never run worker or claims
+        env:
+          ADB_AUTO_COLLECT: '0'
+          AERODATABOX_API_KEY: ''
+          AERODATABOX_WEBHOOK_SECRET: ''
+          DATABASE_URL: ''
+          V39_DATABASE_RUNTIME_URL: ''
+          V39_P5_SOURCE_DATABASE_URL: ''
+          P5_V39_PREPARE_DATABASE_URL: ''
+          P5_V39_OTHER_REST_REVIEW_DATABASE_URL: ''
+          P5_V39_OTHER_REST_RESERVE_DATABASE_URL: ''
+          P6_PRIVATE_T24_EXECUTION_ENABLED: ${{ vars.P6_PRIVATE_T24_EXECUTION_ENABLED }}
+          P5_CD_GH_T24_ONE_FLIGHT_CONFIRM: ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER
+          P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED }}
+          P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
+          P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
+          P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
+          P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
+          P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+          P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
+          P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
+          P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
+          P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
+          P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
+          P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED }}
+          V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
+          V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
+          V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+          V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
+          V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+          P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
+          P5_V39_T24_WITNESS_DATABASE_URL: ${{ secrets.P5_V39_T24_WITNESS_DATABASE_URL }}
+          P6_PHASE7_PRE_POLICY_BASE64: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_POLICY_BASE64 || '' }}
+          P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256 || '' }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 || '' }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64 || '' }}
+          P6_PHASE7_PRE_READBACK_ROLE: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_READBACK_ROLE || '' }}
+          P6_PHASE7_PRE_READBACK_DATABASE_URL: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_READBACK_DATABASE_URL || '' }}
+          P6_T24_CUSTODY_ENABLED: ${{ vars.P6_T24_CUSTODY_ENABLED }}
+          P6_T24_CUSTODY_APPROVED: ${{ secrets.P6_T24_CUSTODY_APPROVED }}
+          P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64 != '' && 'PRESENT_ONLY' || '' }}
+          P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
+          P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL != '' && 'PRESENT_ONLY' || '' }}
+          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+          P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
+          P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM: RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = c8e065d665ccacb6d2575070e94c5500b7583044
+          test -z "$AERODATABOX_API_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL"
+          cat > "$RUNNER_TEMP/p6-t24-startup-diagnosis.mts" <<'P6_DIAG'
+          import {pathToFileURL} from "node:url";
+          import {resolve} from "node:path";
+          const load=p=>import(pathToFileURL(resolve(p)).href);
+          const env={...process.env,GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_SHA:"c8e065d665ccacb6d2575070e94c5500b7583044",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1"};
+          // Simulated event envelope only for read-only admission diagnostics.
+          // Never run the T24 worker, dispatch, claim, sign, publish or mutate.
+          const safe=e=>{
+            const m=typeof e?.message==="string"?e.message:"";
+            return /^(?:HOLD|REFUSED)_[A-Z0-9_]{1,140}$/.test(m)?m:"REDACTED_UNCLASSIFIED";
+          };
+          let failures=0;
+          async function check(name,fn){
+            try{await fn();console.log("P6_DIAG "+name+" PASS");return true;}
+            catch(e){failures++;console.log("P6_DIAG "+name+" FAIL "+safe(e));return false;}
+          }
+          const lineage=await load("server/lib/disruption/phase5CdGithubCodeLineage_v39.ts");
+          const resolver=await load("server/lib/disruption/phase7ProtectedPreResolver_v39.ts");
+          const gate=await load("server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts");
+          const worker=await load("scripts/v39_phase6_private_current_t24_worker_v39.mjs");
+          const enrollment=await load("scripts/v39_phase6_private_t24_restartable_enrollment_v39.mjs");
+          await check("PHASE7_POLICY_AND_READER_URL",async()=>{const r=resolver.openPhase7ProtectedPreResolver(env);await r.close();});
+          await check("EXACT_FROZEN_LINEAGE",()=>lineage.verifyP5CdGithubFrozenCodeLineage(env));
+          await check("T24_SCOPE",()=>gate.requireP5CdGithubCurrentPrivateT24Scope(env));
+          let trust;
+          await check("T24_POLICY_TRUST",()=>{trust=enrollment.readP6T24ProtectedQueueTrust(env);});
+          await check("PRE_URL",()=>enrollment.checkedP6T24TlsUrl(env.P5_V39_PRE_DATABASE_URL,"phase5_p30_pre_login_20261107"));
+          await check("WITNESS_URL",()=>enrollment.checkedP6T24TlsUrl(env.P5_V39_T24_WITNESS_DATABASE_URL,"phase5_p30_witness_login_20261107",new URL(env.P5_V39_PRE_DATABASE_URL)));
+          if(trust)await check("READER_URL",()=>enrollment.checkedP6T24TlsUrl(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin,new URL(env.P5_V39_PRE_DATABASE_URL)));
+          // Additional redacted comparisons, not connection strings.
+          for(const [name,k] of [["PRE","P5_V39_PRE_DATABASE_URL"],["WITNESS","P5_V39_T24_WITNESS_DATABASE_URL"],["READER","P6_PRIVATE_READER_DATABASE_URL"]]){
+            try{const u=new URL(env[k]);const mode=u.searchParams.get("sslmode");console.log("P6_DIAG TLS_MODE_"+name+" "+(mode==="require"?"REQUIRE":mode==="verify-full"?"VERIFY_FULL":"OTHER_OR_ABSENT"));}catch{console.log("P6_DIAG TLS_MODE_"+name+" INVALID");}
+          }
+          await check("PRE_WITNESS_HOST_LITERAL_MATCH",()=>{if(new URL(env.P5_V39_PRE_DATABASE_URL).host!==new URL(env.P5_V39_T24_WITNESS_DATABASE_URL).host)throw Error("HOLD_P6_PRE_WITNESS_HOST_LITERAL_MISMATCH");});
+          await check("FULL_T24_STATIC_ADMISSION",()=>worker.admitP6CurrentT24Worker(env));
+          console.log("P6_DIAG_STATIC_COMPLETE failures="+failures+" providerCalls=0 dbWrites=0 workerInvocations=0");
+          P6_DIAG
+          ./node_modules/.bin/tsx "$RUNNER_TEMP/p6-t24-startup-diagnosis.mts"
