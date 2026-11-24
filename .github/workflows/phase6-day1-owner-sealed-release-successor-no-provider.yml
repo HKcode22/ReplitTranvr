@@ -75,7 +75,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = 3d0f5fb403934aaa6e5dc9ad27c46a9de7692551
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = a543d6df010c13bfdd638dc1c9eb9b2db348e162
           TARGET="$(jq -er '.mainSha' data-collection/phase6/checkpoints/p6_day1_release_owner_request.json)"
           BASE=c8e065d665ccacb6d2575070e94c5500b7583044
           HEAD_PIN=9c9cddb1aaeb04934d94af2937ee158e6d991f6c
