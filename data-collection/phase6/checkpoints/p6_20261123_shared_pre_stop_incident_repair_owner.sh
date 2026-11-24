@@ -34,6 +34,7 @@ pause(){
  gh variable set TRAVNR_RELAY_ROLLING_ENABLED -R "$L" --body 0 >/dev/null || return 1
  setv P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED false || return 1
  setv P6_PRIVATE_POST_PARENT_ENABLED false || return 1
+ setv P6_NATIVE_POST_PRODUCER_ENABLED 0 || return 1
  [[ $(gh variable get TRAVNR_RELAY_ROLLING_ENABLED -R "$L") == 0 ]]
 }
 pause || hold PAUSE_UNKNOWN
@@ -43,7 +44,7 @@ trap 'rc=$?; if [[ "$finished" != 1 ]]; then set +e; pause; echo "P6_PAID_PAUSE_
 # No alternative paid routes, no environment shadows for toggles we change.
 rv="$(gh api "repos/$R/actions/variables?per_page=100" --paginate --jq '.variables[]|[.name,.value]|@tsv')"
 ev="$(gh api "repos/$R/environments/$E/variables?per_page=100" --paginate --jq '.variables[].name')"
-for k in P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED P6_PRIVATE_POST_PARENT_ENABLED P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC P5_AUTO_SOURCE_DISPATCH_ENABLED P5_POST_AUTO_DISPATCH_ENABLED; do
+for k in P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED P6_PRIVATE_POST_PARENT_ENABLED P6_NATIVE_POST_PRODUCER_ENABLED P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC P5_AUTO_SOURCE_DISPATCH_ENABLED P5_POST_AUTO_DISPATCH_ENABLED; do
  if grep -qx "$k" <<< "$ev"; then hold "ENV_SHADOW_$k"; fi
 done
 if grep -Eq '^(P5_AUTO_SOURCE_DISPATCH_ENABLED|P5_POST_AUTO_DISPATCH_ENABLED|P5_T24_AUTO_DISPATCH_ENABLED|P5_LATER_PRE_AUTO_DISPATCH_ENABLED|P5_LATER_PRE_BATCH_AUTO_DISPATCH_ENABLED|P6_ROLLING_SCHEDULED_ROOT_ENABLED|P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED|P6_ROLLING_WINDOW_CUSTODY_ENABLED)[[:space:]]+(1|true)$' <<< "$rv"; then hold CONFLICTING_ROUTE; fi
@@ -73,11 +74,10 @@ for pair in '45307333953 138154266743 Separate STOP-default T24 current registry
   [.jobs[]|select(.id==$j and .conclusion=="failure")|.steps[]|select(.name==$n and .conclusion=="failure")]|length==1' >/dev/null || hold PRE_FAILURE_NOT_ADMISSION
 done
 history(){
- local h
+ local h id p job gate
  h="$(gh api "repos/$R/actions/runs?branch=main&created=%3E%3D2026-11-24T01%3A00%3A52Z&per_page=100")"
  jq -e '.total_count==(.workflow_runs|length) and all(.workflow_runs[];
    (.id==45302763595 or .id==45307333953 or .id==45307652365) or
-   ((.conclusion=="success" or .conclusion=="skipped") and
    (.path|IN(".github/workflows/phase5-primary-fids-expiry-no-provider.yml",
    ".github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml",
    ".github/workflows/phase5-six-slot-approved-early-four-airport-draw.yml",
@@ -86,11 +86,25 @@ history(){
    ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
    ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
    ".github/workflows/phase6-private-later-enrollment.yml",
-   ".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml"))))' <<< "$h" >/dev/null || hold UNRECONCILED_NEW_HISTORY
+   ".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml")) or
+   (.path==".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml" and .conclusion=="skipped"))' <<< "$h" >/dev/null || hold UNRECONCILED_NEW_HISTORY
+ # Allow independent nonpaid running jobs. Every additional negative PRE
+ # result must have the same exact pre-dependency failure; no unknown failures.
+ while IFS=$'\t' read -r id p; do
+  [[ -n "$id" ]] || continue
+  case "$p" in
+   .github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml) job=current-private-native-t24; gate='Separate STOP-default T24 current registry scheduler';;
+   .github/workflows/phase5-cd-github-bounded-pre-tick.yml) job=bounded-reviewed-real-pre; gate='STOP gate before dependencies and before any database connection';;
+   *) hold "UNRECONCILED_FAILURE_$id";;
+  esac
+  gh api "repos/$R/actions/runs/$id/jobs?per_page=100" | jq -e --arg j "$job" --arg g "$gate" --arg s "$S" '
+    .total_count==(.jobs|length) and ([.jobs[]|select(.name==$j and .head_sha==$s and .run_attempt==1 and .conclusion=="failure")|.steps[]|select(.name==$g and .conclusion=="failure")]|length)==1 and
+    all(.jobs[]|select(.name!=$j); .conclusion=="skipped")' >/dev/null || hold "NEW_PRE_FAILURE_NOT_ADMISSION_$id"
+  echo "P6_RECONCILED_ADDITIONAL_NONPAID_GATE_FAILURE=$id"
+ done < <(jq -r '.workflow_runs[]|select(.status=="completed" and .conclusion!="success" and .conclusion!="skipped" and (.id!=45302763595 and .id!=45307333953 and .id!=45307652365))|[.id,.path]|@tsv' <<< "$h")
 }
-# At initial history read, harmless in-flight no-provider jobs may be present:
-# let them finish before changing a secret; never cancel a worker.
 history
+
 census(){
 node <<'P6_RO'
 const {Client}=require("pg");
@@ -158,6 +172,7 @@ gh issue comment 413 -R "$R" --body "PHASE6 OWNER RECONCILED SHARED PRE STOP SUC
 setv P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC "$new" || hold TARGET_EPOCH_WRITE
 gh variable set TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$L" --body "$new" >/dev/null || hold RELAY_EPOCH_WRITE
 [[ $(gh variable get TRAVNR_RELAY_ROLLING_SINCE_UTC -R "$L") == "$new" ]] || hold RELAY_EPOCH_READBACK
+setv P6_NATIVE_POST_PRODUCER_ENABLED 1 || hold POST_PRODUCER_ENABLE
 setv P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED true || hold SOURCE_ENABLE
 setv P6_PRIVATE_POST_PARENT_ENABLED true || hold POST_ENABLE
 gh variable set TRAVNR_RELAY_ROLLING_ENABLED -R "$L" --body 1 >/dev/null || hold RELAY_ENABLE
