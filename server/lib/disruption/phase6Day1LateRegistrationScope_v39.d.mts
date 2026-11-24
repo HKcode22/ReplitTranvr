@@ -38,3 +38,5 @@ export interface P6Day1RemainingProjection {
 export function verifyP6Day1LateRegistrationScope(args:P6Day1LateScopeArgs):P6Day1LateScope;
 export function isVerifiedP6Day1LateScope(scope:unknown):scope is P6Day1LateScope;
 export function readVerifiedP6Day1Projection(scope:unknown):P6Day1RemainingProjection;
+
+export function verifyP6Day1CommittedLateScope(args:P6Day1LateScopeArgs):P6Day1LateScope;

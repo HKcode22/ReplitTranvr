@@ -22,7 +22,7 @@ const time=x=>{const n=Date.parse(x);if(typeof x!=="string"||!Number.isFinite(n)
  * Do not derive pins from the supplied packet. Caller must obtain actual PG clock
  * and durable rows in a restricted transaction; this verifier is not that transaction.
  */
-export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,reviewerPublicKeyPem,pins,dayPlanBytes,observedDbUtc,calendarDay,futureCommittedDraws,existingDrawRows,sourceAttempts,otherRestReservations,unresolvedStops}){
+function verifyScope({policyBytes,signatureBase64,reviewerPublicKeyPem,pins,dayPlanBytes,observedDbUtc,calendarDay,futureCommittedDraws,existingDrawRows,sourceAttempts,otherRestReservations,unresolvedStops},readback=false){
  if(!pins||!SHA.test(pins.policySha256??"")||!SHA.test(pins.reviewerFingerprintSha256??"")||
  !SHA.test(pins.originalDayPlanSha256??"")||!SHA.test(pins.manifestSha256??"")||!SHA.test(pins.calendarSha256??"")||
  !SHA.test(pins.configSha256??"")||!SHA.test(pins.frameSha256??"")||!CODE.test(pins.reviewedCodeSha??"")||
@@ -47,7 +47,13 @@ export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,r
  c.calendarHash!==pins.calendarSha256||c.configHash!==pins.configSha256||c.frameHash!==pins.frameSha256||
  !c.pairAirportSet||Object.keys(c.pairAirportSet).length!==4||
  slots.some(s=>c.pairAirportSet[s]?.icao!==paired[s]||c.pairAirportSet[s]?.region!==c.slotRegions?.[s]))hold("CALENDAR_OR_PAIR");
- if(!Array.isArray(existingDrawRows)||existingDrawRows.length!==0||sourceAttempts!==0||otherRestReservations!==0||unresolvedStops!==0)hold("EXISTING_OR_UNCERTAIN_HISTORY");
+ if(!Array.isArray(existingDrawRows)||sourceAttempts!==0||otherRestReservations!==0||unresolvedStops!==0)hold("EXISTING_OR_UNCERTAIN_HISTORY");
+ if(readback){
+  if(existingDrawRows.length!==4||new Set(existingDrawRows.map(r=>r.slot_id)).size!==4||
+     existingDrawRows.some(r=>!slots.includes(r.slot_id)||r.selected_icao!==paired[r.slot_id]||
+      new Date(r.selected_at_utc).toISOString()!==observedDbUtc))
+   hold("EXACT_REGISTERED_FIXED_PAIR_NOT_READ_BACK");
+ }else if(existingDrawRows.length!==0)hold("EXISTING_OR_UNCERTAIN_HISTORY");
  if(!Array.isArray(futureCommittedDraws)||futureCommittedDraws.length>120||
  futureCommittedDraws.some(r=>!Number.isSafeInteger(r.runDayIndex)||r.runDayIndex<2||r.runDayIndex>31||
  !/^[A-Z]{4}$/.test(r.icao??"")))hold("FUTURE_HISTORY");
@@ -63,3 +69,8 @@ export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,r
  providerCalls:0,databaseWrites:0,authorizesPaidGet:false,requiresRestrictedAtomicRegistration:true});
  issuedScopes.set(result,structuredClone(projection));return result;
 }
+
+export function verifyP6Day1LateRegistrationScope(args){return verifyScope(args,false);}
+/** Rehydrate only from the actual four immutable rows, using their original
+ * transaction clock and the same independently pinned policy. No replay. */
+export function verifyP6Day1CommittedLateScope(args){return verifyScope(args,true);}

@@ -500,8 +500,9 @@ async function commitStage9Internal(
   // Cost-only prelaunch staging cannot bind unknown future ICAOs. Bind
   // a real on-time draw atomically with existing Stage9 rows, via a single
   // narrow nonpaid function. Never give PREPARE direct parent-budget INSERT.
-  // A late incident must use its separately reviewed binding, not this path.
-  if(budgets.length===0&&!late&&normalizeP5TypedSourceBudgetBinding(review)?.budgetReleaseMode==="COST_UPPER_BOUND"){
+  // The incident variant is restricted to the entire remaining 128-query
+  // projection; SQL independently enforces the exact fixed day and clock.
+  if(budgets.length===0&&(!late||(late.candidateQueryCount===128&&late.excludedQueryCount===64))&&normalizeP5TypedSourceBudgetBinding(review)?.budgetReleaseMode==="COST_UPPER_BOUND"){
    const fn=await client.query("SELECT to_regprocedure('clean.bind_phase5_prospective_parent_source_budget_v39(text,integer,text,integer)') IS NOT NULL AS installed");
    if(fn.rows[0]?.installed!==true)hold("PROSPECTIVE_PARENT_BUDGET_BINDER_NOT_INSTALLED");
    const bound=await client.query("SELECT clean.bind_phase5_prospective_parent_source_budget_v39($1,$2,$3,$4) AS bound",

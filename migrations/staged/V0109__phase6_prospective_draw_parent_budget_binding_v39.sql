@@ -19,6 +19,7 @@ DECLARE
  selected_min timestamptz;
  selected_max timestamptz;
  now_at timestamptz;
+ exact_incident boolean;
 BEGIN
  IF p_manifest IS NULL OR p_manifest !~ '^[0-9a-f]{64}$'
     OR p_draw IS NULL OR p_draw !~ '^[0-9a-f]{64}$'
@@ -56,11 +57,18 @@ BEGIN
  INTO n,distinct_slots,distinct_sites,selected_min,selected_max
  FROM clean.adb_sampling_draw WHERE run_day_index=p_day;
  now_at=clock_timestamp();
+ exact_incident=p_manifest='a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e'
+  AND p_day=1 AND p_units=256 AND c.draw_type='NEW_TEMPLATE' AND c.window_shape='4h'
+  AND c.scheduled_start_utc='2026-11-25T00:00:00Z'::timestamptz
+  AND selected_min>='2026-11-24T00:00:00Z'::timestamptz
+  AND now_at<'2026-11-24T17:25:00Z'::timestamptz
+  AND NOT EXISTS(SELECT 1 FROM clean.adb_sampling_draw s WHERE s.run_day_index=1 AND
+    s.selected_icao IS DISTINCT FROM CASE s.slot_id WHEN 'HUB' THEN 'OMAA' WHEN 'MID_A' THEN 'OMSJ' WHEN 'MID_B' THEN 'SPJC' WHEN 'REGIONAL' THEN 'KDEC' ELSE NULL END);
  IF n<>4 OR distinct_slots<>4 OR distinct_sites<>4 OR selected_min IS NULL
     OR selected_min IS DISTINCT FROM selected_max OR selected_min>=now_at
-    OR selected_min>=c.scheduled_start_utc-interval '24 hours 45 minutes'
+    OR (NOT COALESCE(exact_incident,false) AND (selected_min>=c.scheduled_start_utc-interval '24 hours 45 minutes'
     OR selected_min<c.scheduled_start_utc-interval '72 hours'
-    OR now_at>=c.scheduled_start_utc-interval '24 hours 17 minutes'
+    OR now_at>=c.scheduled_start_utc-interval '24 hours 17 minutes'))
     OR EXISTS(SELECT 1 FROM clean.adb_sampling_draw s WHERE s.run_day_index=p_day
       AND (s.frozen_draw_seed IS DISTINCT FROM c.frozen_draw_seed OR s.draw_type IS DISTINCT FROM c.draw_type
        OR s.slot_id NOT IN ('HUB','MID_A','MID_B','REGIONAL')
