@@ -1,3 +1,40 @@
+# CURRENT UPDATE — Monday November 23, 2026, after 4:43 PM PST
+
+**Read this first.** Original guide and earlier instructions are preserved IN FULL below; no earlier command is to be rerun unless expressly called for here. Restored original content from the pre-edit Git revision and verified verbatim. Command C completed, native nonpaid schedule enabled; provider key already restored.
+
+## Command D — run now tonight, not at a future cutoff
+
+Current exact stored SOURCE dispatcher and one-GET worker require 11 specific approval/price/range values that were absent in the owner's prior metadata census. These are distinct from existing static signed policy values. The original signed Day1 plan supplies the exact 240-minute provider range and its evidence digest. The following owner-approved staging helper writes only absent literal controls to the protected runtime environment; it does not overwrite existing values, enable routes, dispatch, spend provider credits or write the database. It checks current main, authenticated owner GO record, prior policy/nonpaid admission receipts, no active paid workers, paused rolling and disabled native paid routes. An ACK is not yet effective runtime proof. No PRE/POST legacy, alternate static transport or standalone protocol hash is fabricated.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_STAGE_SOURCE_CONTROLS'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=a5a4e5503dd2be29156e54ab2bab01d0e8ac33ba
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_EXISTING_SIGNED_SOURCE_ACTOR_CONTROLS_ONLY_KEEP_ALL_PAID_ROUTES_OFF
+P6_STAGE_SOURCE_CONTROLS
+~~~
+
+Expected `P6_STORED_SOURCE_REQUIRED_CONTROLS_STAGED_NO_ROUTE_NO_DISPATCH`. Paste sanitized output. No other timed command validated yet. Do not repeat G13/G9, key restoration or Command C.
+
+## Actual recovery implementation, not only reporting
+
+Draft [PR #965](https://github.com/HKcode22/ReplitTranvr/pull/965) created from exact pinned production main, with new executable Day1 original-plan prospective classifier and tests. Dedicated [offline CI 45299426346](https://github.com/HKcode22/ReplitTranvr/actions/runs/45299426346) SUCCESS. Tests use the actual original 192-template plan and cover future horizon eligibility, exact lead boundary, elapsed-window exclusion and tampering. No production merge/deployment. This is a recovery component, not a complete live repair.
+
+Additional actual code findings: strict early draw and readback clock rejects late Day1; Stage6 full group coverage, Stage7, Stage8, Stage9 and private genesis require explicit recovery semantics. Existing V0082 trigger enforces equality of signed BASE/SPLIT query units on each physical UTC charge date; Day1 T90 and Day2 T24 share Nov25 UTC. Simply dropping missed rows could block otherwise valid Day2. Existing V0079 allows STOPPED rows and reservation requires ACTIVE: investigate full-grid non-dispatchable missed accounting with truthful registration clocks, rather than reduce budget or fabricate old preparation. No unreviewed SQL or policy change. Separate explicit standalone PRE protocol still needed. Controller history contains known pre-dispatch failure; reconcile with fresh no-POST/no-charge/no-overlap evidence and separately reviewed prospective epoch, not rerun attempt 2.
+
+Day1 T6 (Tue 9:45 AM) and T90 (Tue 2:15 PM) still **not operational**; paid rolling paused. Day2 preparation schedule enabled but actual publication pending. The aim is to fix both without shifting the calendar. No new gates.
+
+---
+
 # ONLY READ THIS — Phase 6 current operator guide
 
 **Updated Monday November 23, 2026, 4:35 PM PST (Nov24 00:35Z).** All times below are California PST, including Mountain House, Tracy and San José. This is the current guide. Earlier command blocks were corrupted by a documentation edit and are removed from this version; historical revisions are retained in Git history, not to be executed.
