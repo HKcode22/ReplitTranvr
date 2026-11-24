@@ -42,3 +42,11 @@ test("recent failed native remains a warning even with alternate green",async()=
  };
  assert((await observe(read,sha,now)).lanes.every(l=>l.state==="NATIVE_FAILURE_REVIEW"));
 });
+
+test("only exact watchdog metadata mask with prior admission is allowed",()=>{
+ const lane=LANES[3],r=run(lane),b=jobs(lane,r);
+ b.jobs[0].steps=[step("Stop before dependencies, provider or Neon session"),step("Bounded existing V***87 reaper, UNKNOWN quarantines never replay")];
+ assert.equal(verifyWorker(r,b,lane,sha,now).verified,true);
+ b.jobs[0].steps[0].conclusion="skipped";assert.equal(verifyWorker(r,b,lane,sha,now).verified,false);
+ b.jobs[0].steps[0].conclusion="success";b.jobs[0].steps[1].name="Bounded existing V***99 reaper, UNKNOWN quarantines never replay";assert.equal(verifyWorker(r,b,lane,sha,now).verified,false);
+});
