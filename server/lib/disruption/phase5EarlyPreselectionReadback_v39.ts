@@ -12,6 +12,7 @@ import {
  P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS,
  p5EarlyDrawLeadTimeEligible
 } from "./phase5ProspectiveEarlyDrawClockContract_v39";
+import {isVerifiedP6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 import { excludedFromProspectiveScheduledPassengerScope, type SamplingSelection, type SlotId } from "./phase6SamplingDecision_v39";
 
 const SLOTS: SlotId[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
@@ -59,10 +60,11 @@ function dateMs(value: Date | string, label: string): number {
 function norm(v: string): string { return v.trim().toUpperCase(); }
 
 /** Must be called before any Phase6 balance, sampling write or alert CREATE. */
-export function verifyPreparedDailyDraw(
+function verifyDrawCore(
   day: PreparedDayForReadback,
   rows: PreparedDrawRow[],
-): PreparedReadback {
+  lateScope?: Parameters<typeof isVerifiedP6Day1LateScope>[0],
+): Omit<PreparedReadback,"verifiedCalendarLeadOnly"> {
   if (!Number.isInteger(day.runDayIndex) || day.runDayIndex < 1 || day.runDayIndex > 31)
     refuse("RUN_DAY");
   const start = dateMs(day.scheduledStartUtc, "SERVICE_START");
@@ -70,6 +72,12 @@ export function verifyPreparedDailyDraw(
     refuse("UNPINNED_CALENDAR_CONFIG_OR_FRAME");
   if (!Array.isArray(rows) || rows.length !== 4)
     refuse("MISSING_OR_DUPLICATED_SLOTS");
+  if(lateScope!==undefined&&(!isVerifiedP6Day1LateScope(lateScope)||day.runDayIndex!==1||
+    day.drawType!=="NEW_TEMPLATE"||!day.pairAirportSet||
+    day.calendarHash!==lateScope.calendarSha256||day.configHash!==lateScope.configSha256||
+    day.frameHash!==lateScope.frameSha256||start!==Date.parse("2026-11-25T00:00:00.000Z")||
+    SLOTS.some(s=>day.pairAirportSet?.[s]?.icao!==lateScope.fixedAirports[s])))
+    refuse("INVALID_VERIFIED_DAY1_LATE_SCOPE");
   const slots = new Set<string>();
   const airports = new Set<string>();
   const times = new Set<number>();
@@ -88,12 +96,17 @@ export function verifyPreparedDailyDraw(
     const selectedAt = dateMs(x.selected_at_utc, "SELECTED");
     times.add(selectedAt);
     // Exact parity with the real DB early-draw owner: >24h45m and <=72h.
+    if(lateScope!==undefined){
+      if(selectedAt!==Date.parse(lateScope.observedDbUtc)||selectedAt<start-P5_EARLY_DRAW_MIN_STRICT_LEAD_MS||selectedAt>=start)
+        refuse("LATE_SCOPE_CLOCK_MISMATCH");
+    }else{
     if (selectedAt >= start - P5_EARLY_DRAW_MIN_STRICT_LEAD_MS)
       refuse("DRAW_TOO_LATE_FOR_T24_SOURCE");
     if (selectedAt < start - P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS)
       refuse("DRAW_TOO_EARLY_FOR_PROSPECTIVE_SAMPLING");
     if (!p5EarlyDrawLeadTimeEligible(selectedAt,start))
       refuse("INVALID_SHARED_EARLY_DRAW_CLOCK");
+    }
     if (x.frozen_draw_seed !== day.frozenDrawSeed || x.draw_type !== day.drawType)
       refuse("MISMATCHED_SEED_OR_TEMPLATE");
     if (x.target_region !== day.slotRegions[slot])
@@ -197,7 +210,20 @@ export function verifyPreparedDailyDraw(
   })).digest("hex");
   return {
     selections, stateHash, selectedAtUtc,
-    verifiedCalendarLeadOnly: true,
     verifiedFlightLevelPre: false,
   };
+}
+
+/** Normal study path is unchanged, including the strict T24 lead. */
+export function verifyPreparedDailyDraw(day:PreparedDayForReadback,rows:PreparedDrawRow[]):PreparedReadback{
+ return {...verifyDrawCore(day,rows),verifiedCalendarLeadOnly:true};
+}
+/** Draft incident-only readback. Not interchangeable with on-time evidence.
+ * Requires the exact verified scope in memory and never asserts T24 readiness.
+ */
+export function verifyP6Day1LateFixedDraw(day:PreparedDayForReadback,rows:PreparedDrawRow[],scope:Parameters<typeof isVerifiedP6Day1LateScope>[0]){
+ if(!isVerifiedP6Day1LateScope(scope))refuse("LATE_SCOPE_NOT_VERIFIED");
+ return {...verifyDrawCore(day,rows,scope),verifiedCalendarLeadOnly:false as const,
+  lateFixedPairRegistration:true as const,policySha256:scope.policySha256,
+  originalDayPlanSha256:scope.originalDayPlanSha256,remainingPreparationProjectionSha256:scope.remainingPreparationProjectionSha256};
 }
