@@ -108,7 +108,14 @@ jobs:
             try{const u=new URL(env[k]);const mode=u.searchParams.get("sslmode");console.log("P6_DIAG TLS_MODE_"+name+" "+(mode==="require"?"REQUIRE":mode==="verify-full"?"VERIFY_FULL":"OTHER_OR_ABSENT"));}catch{console.log("P6_DIAG TLS_MODE_"+name+" INVALID");}
           }
           await check("PRE_WITNESS_HOST_LITERAL_MATCH",()=>{if(new URL(env.P5_V39_PRE_DATABASE_URL).host!==new URL(env.P5_V39_T24_WITNESS_DATABASE_URL).host)throw Error("HOLD_P6_PRE_WITNESS_HOST_LITERAL_MISMATCH");});
+          const policy=JSON.parse(Buffer.from(env.P6_NONPAID_DAILY_POLICY_BASE64,"base64").toString("utf8"));
+          const lane=policy?.nativeLaterReview?.maximumT24ExecutionLanes;
+          console.log("P6_DIAG APPROVED_T24_LANE_FIELD "+(lane===undefined?"ABSENT":Number.isSafeInteger(lane)&&lane>=0&&lane<=100?"INTEGER_"+lane:"INVALID_TYPE_OR_RANGE"));
+          // Pure hypothetical policy patch; no installed policy or secret changes.
+          const proposed=structuredClone(policy);proposed.nativeLaterReview.maximumT24ExecutionLanes=1;
+          const bytes=Buffer.from(JSON.stringify(proposed));const hash=(await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
           await check("FULL_T24_STATIC_ADMISSION",()=>worker.admitP6CurrentT24Worker(env));
+          await check("HYPOTHETICAL_SINGLE_LANE_ADMISSION",()=>worker.admitP6CurrentT24Worker({...env,P6_NONPAID_DAILY_POLICY_BASE64:bytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:hash}));
           console.log("P6_DIAG_REPOSITORY_VALUES_SIMULATED_LITERAL_CONTROLS_NOT_PROTECTED_RUNTIME_PROOF failures="+failures+" providerCalls=0 dbWrites=0 workerInvocations=0");
           P6_DIAG
           ./node_modules/.bin/tsx "$RUNNER_TEMP/p6-t24-startup-diagnosis.mts"
