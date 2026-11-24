@@ -136,6 +136,7 @@ const checkMain=()=>{
  need(gh(["api","repos/"+rrepo+"/git/ref/heads/main","--jq",".object.sha"])===rsha,"RELAY_SHA_DRIFT");
 };
 checkMain();
+need(gh(["variable","get","TRAVNR_RELAY_ROLLING_ENABLED","-R",rrepo])==="0"&&gh(["variable","get","P6_NONPAID_SOURCE_SCHEDULE_ENABLED","-R",repo])==="false","COORDINATED_PAUSE_REQUIRED");
 const repoNames=new Set(gh(["api","repos/"+repo+"/actions/secrets?per_page=100","--paginate","--jq",".secrets[].name"]).split("\n").filter(Boolean));
 const envNames=new Set(gh(["api","repos/"+repo+"/environments/"+env+"/secrets?per_page=100","--paginate","--jq",".secrets[].name"]).split("\n").filter(Boolean));
 const stop=["V39_PHASE6_PROCESS_ARMED","V39_PHASE6_OWNER_APPROVED"];
@@ -168,6 +169,7 @@ checkMain();
 console.log(JSON.stringify({
  status:"P6_DAY1_EXACT_EIGHTEEN_LINKED_REPO_VALUES_AND_POST_SHADOW_INSTALLED_PAID_OFF",
  reviewedMainSha:pin,expectedNew31StaticDigest:expectedCurrent,
+ expectedNewPostPolicyDigest:changes.P6_PHASE7_POST_PRESERVATION_POLICY_SHA256,
  existingSecretUpdates:expectedNames.length,paidStopScopesWrittenOff:4,
  providerCalls:0,databaseWrites:0,originalCalendarDayPlansChanged:false,
  independentRepoAndProtectedReadbacksStillRequired:true,
