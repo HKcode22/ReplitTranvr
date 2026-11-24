@@ -2,5 +2,6 @@
   "schema": "v39.phase6.day1.owner-code-repin-seal-request.v1",
   "mode": "preflight",
   "mainSha": "9c9cddb1aaeb04934d94af2937ee158e6d991f6c",
-  "historicalDigest": "7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61"
+  "historicalDigest": "7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61",
+  "diagnosticRevision": 2
 }
