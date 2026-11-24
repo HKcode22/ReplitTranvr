@@ -1,0 +1,37 @@
+name: P6 owner fresh T24 four-policy recovery (NO PROVIDER)
+on:
+  push:
+    branches: [phase6/20261122-g8-502-readback-evidence]
+    paths: ['data-collection/phase6/checkpoints/p6_20261123_fresh_t24_lane_owner_request.json']
+permissions:
+  contents: read
+jobs:
+  owner-sealed-four-policy-values:
+    if: github.actor == 'HKcode22' && github.repository == 'HKcode22/ReplitTranvr' && github.event_name == 'push' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify immutable source and test authenticated envelope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs)" = 071ab654a0dc17f5fd866f5ef9c50ba906a245aa
+          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq .object.sha)" = c8e065d665ccacb6d2575070e94c5500b7583044
+          node --check data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs
+          node data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs selftest
+      - name: Seal exact four installed policy values to authenticated owner recipient
+        env:
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
+          P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 }}
+          P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 }}
+        run: node data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs seal data-collection/phase6/checkpoints/p6_20261123_fresh_t24_lane_owner_request.json "$RUNNER_TEMP/p6-t24-four-policy-envelope.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p6-t24-four-policy-owner-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-t24-four-policy-envelope.json
+          retention-days: 1
+          if-no-files-found: error
