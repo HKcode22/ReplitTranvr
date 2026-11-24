@@ -1,3 +1,13 @@
+# Current update — Nov23 4:45:47 PM PST
+
+**Command D COMPLETE; do not repeat.** Owner receipt `P6_STORED_SOURCE_REQUIRED_CONTROLS_STAGED_NO_ROUTE_NO_DISPATCH` with all eleven protected-scope secret write acknowledgments from 00:45:37Z to 00:45:47Z Nov24. No paid route enabled or workflow dispatched by this command. Values remain write-only; this is installation metadata, not end-to-end SOURCE proof.
+
+Current main unchanged. Day2 nonpaid schedule enabled; actual publication pending. Day1 remaining-horizon PR #965 dedicated test passed. Additional implementation finding: V0079 physical reservation SQL independently requires the actual draw timestamp before service start minus 24h30m, even if the query is T6/T90. Application-level exception alone will not work. V0082 requires full planned physical UTC grid parity. Recovery must preserve these database checks for all ordinary days, and a separately reviewed Day1-only successor must account for non-dispatchable missed records without pretending a historical observation. No ad hoc owner SQL, no blanket bypass.
+
+**Owner action right now:** none additional until a validated recovery command exists. Do not rerun D, G13/G9, or previously completed commands. Retention remains enabled and paid rolling paused. All prior guide content preserved below.
+
+---
+
 # CURRENT UPDATE — Monday November 23, 2026, after 4:43 PM PST
 
 **Read this first.** Original guide and earlier instructions are preserved IN FULL below; no earlier command is to be rerun unless expressly called for here. Restored original content from the pre-edit Git revision and verified verbatim. Command C completed, native nonpaid schedule enabled; provider key already restored.
