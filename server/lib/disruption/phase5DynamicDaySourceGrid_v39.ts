@@ -17,10 +17,11 @@ import {
  P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS
 } from "./phase5ProspectiveEarlyDrawClockContract_v39";
 import {
-  verifyPreparedDailyDraw,
+  verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,
   type PreparedDayForReadback,
   type PreparedDrawRow,
 } from "./phase5EarlyPreselectionReadback_v39";
+import {readVerifiedP6Day1Projection,isVerifiedP6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 import type {
   P5FidsAcquisition, P5Slot, P5FidsHorizon,
 } from "./phase5FidsFreezeGridAdmission_v39";
@@ -114,6 +115,12 @@ export interface P5DynamicDayGridResult {
   phase5FreezePassed:false;
   phase6Go:false;
 }
+export type P6Day1LateGridResult=Omit<P5DynamicDayGridResult,"schema"|"status">&{
+ schema:"v39.phase6.day1-remaining-source-grid.v1";
+ status:"DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED";
+ originalDayPlanSha256:string;remainingPreparationProjectionSha256:string;
+ plannedQueryDenominator:number;excludedQueryCount:number;
+};
 function hold(code:string):never{throw Error("REFUSED_P5_DYNAMIC_DAY_GRID_"+code);}
 function time(v:unknown,label:string):number{
  if(typeof v!=="string"||!ISO.test(v))hold(label+"_FORMAT");
@@ -129,7 +136,7 @@ function digest(o:unknown):string{
  * No database access: the calling release must independently verify these
  * four rows actually came from the frozen committed DB draw, not a fixture.
  */
-export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P5DynamicDayGridResult {
+function materializeGrid(input:P5DynamicDayGridInput,lateScope?:Parameters<typeof isVerifiedP6Day1LateScope>[0]):P5DynamicDayGridResult|P6Day1LateGridResult {
  if(!input||![P5_DYNAMIC_DAY_GRID_SCHEMA,P5_DYNAMIC_DAY_MULTI_GRID_SCHEMA,
    P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA].includes(input.schema))
    hold("SCHEMA");
@@ -174,7 +181,13 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     day.configHash!==input.reviewedConfigSha256||
     day.frameHash!==input.reviewedFrameSha256)
    hold("FROZEN_CALENDAR_CONFIG_FRAME_CONFLICT");
- const draw=verifyPreparedDailyDraw(day,input.committedEarlyDrawRows);
+ const projection=lateScope===undefined?undefined:readVerifiedP6Day1Projection(lateScope);
+ if(projection&&(!segmented||day.runDayIndex!==1||
+   projection.projectionSha256!==lateScope.remainingPreparationProjectionSha256||
+   JSON.stringify(input.templates)!==JSON.stringify(projection.templates)||
+   JSON.stringify(shape)!==JSON.stringify(projection.reviewedSegmentedSource)||
+   JSON.stringify(timing)!==JSON.stringify(projection.reviewedRefreshTiming)))hold("LATE_PROJECTION_DRIFT");
+ const draw=projection?verifyP6Day1LateFixedDraw(day,input.committedEarlyDrawRows,lateScope):verifyPreparedDailyDraw(day,input.committedEarlyDrawRows);
  if(draw.stateHash!==input.expectedCommittedEarlyDrawSha256)
    hold("UNVERIFIED_EARLY_DRAW_READBACK");
  const start=day.scheduledStartUtc.getTime();
@@ -198,10 +211,10 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
  }
  const selected=time(draw.selectedAtUtc,"SELECTED_AT");
  const advance=start-selected;
- if(advance<=MIN_EARLY||advance>MAX_EARLY)
+ if(!projection&&(advance<=MIN_EARLY||advance>MAX_EARLY))
    hold("REAL_EARLY_OWNER_WINDOW");
  if(!Array.isArray(input.templates)||
-   (multi ? input.templates.length<=12||input.templates.length>MAX_QUERIES_PER_DAY :
+   (multi ? input.templates.length<=(projection?0:12)||input.templates.length>MAX_QUERIES_PER_DAY :
      input.templates.length!==12))
    hold("MISSING_OR_EXTRA_SLOT_HORIZON_TEMPLATE");
  const seen=new Set<string>();
@@ -287,12 +300,12 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     plannedAirportSelectionUtc:draw.selectedAtUtc});
  }
  const requiredGroupCount=segmented?12*partitions.length:12;
- if(seen.size!==requiredGroupCount||keys.size!==input.templates.length){
+ if((!projection&&seen.size!==requiredGroupCount)||keys.size!==input.templates.length){
    if(segmented&&seen.size<requiredGroupCount)
      hold("MISSING_MULTI_REFRESH_HORIZON_PARTITION");
    hold("INCOMPLETE_SIGNED_QUERY_SLOTS");
  }
- if(multi&&timing){
+ if(multi&&timing&&!projection){
    const stalenessMs=timing.maxPopulationStalenessSeconds*1000;
    const latencyMs=timing.maxSchedulerSlipSeconds*1000+
      timing.minimumPreCommitMarginSeconds*1000;
@@ -322,7 +335,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
      }
    }
  }
- for(const slot of SLOTS){
+ if(!projection)for(const slot of SLOTS){
   const v=earliestBySlot.get(slot);
   if(!v||!(v["T-24h"]<v["T-6h"]&&v["T-6h"]<v["T-90m"]))
     hold("INCONSISTENT_T24_T6_T90_HORIZONS");
@@ -333,7 +346,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
    a.queryKey.localeCompare(b.queryKey));
  const charges=[...byCharge.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
   .map(([day,physicalRequests])=>({day,physicalRequests,candidateApiUnits:physicalRequests*2}));
- return {
+ const common:P5DynamicDayGridResult={
   schema:segmented?
    "v39.phase5.early-draw-to-segmented-multirefresh-source-candidates-result.v3":
    multi?"v39.phase5.early-draw-to-multirefresh-source-candidates-result.v2":
@@ -351,6 +364,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     ...(timing?{reviewedRefreshTiming:timing}:{}),
     ...(segmented?{reviewedSegmentedSource:shape,
       sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
+    ...(projection?{day1RecoveryProjectionSha256:projection.projectionSha256}:{}),
     templates:requests.map(r=>({...r,icao:undefined,plannedAirportSelectionUtc:undefined}))
   }),
   sourceCandidateDigestSha256:digest({
@@ -358,6 +372,7 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
     ...(timing?{reviewedRefreshTiming:timing}:{}),
     ...(segmented?{reviewedSegmentedSource:shape,
       sourcePartitionPins:requests.map(q=>partitionByKey.get(q.queryKey))}:{}),
+    ...(projection?{day1RecoveryProjectionSha256:projection.projectionSha256}:{}),
     requests
   }),
   acquisitionCount:requests.length,
@@ -371,4 +386,17 @@ export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P
   actualFlightLevelPreCertified:false,authorizedSourceRights:false,
   authorizesPaidGet:false,phase5FreezePassed:false,phase6Go:false
  };
+ if(!projection)return common;
+ return {...common,schema:"v39.phase6.day1-remaining-source-grid.v1",status:"DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED",
+  originalDayPlanSha256:projection.originalDayPlanSha256,remainingPreparationProjectionSha256:projection.projectionSha256,
+  plannedQueryDenominator:projection.plannedQueryDenominator,excludedQueryCount:projection.excluded.length};
+}
+/** Existing full-coverage contract is unchanged. */
+export function materializeP5DynamicDaySourceGrid(input:P5DynamicDayGridInput):P5DynamicDayGridResult{
+ const r=materializeGrid(input);if(r.status==="DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED")return hold("UNEXPECTED_LATE_SCOPE");return r;
+}
+/** Draft-only adapter: partial coverage is explicitly distinguished from normal full coverage. */
+export function materializeP6Day1LateDynamicGrid(input:P5DynamicDayGridInput,scope:Parameters<typeof isVerifiedP6Day1LateScope>[0]):P6Day1LateGridResult{
+ if(!isVerifiedP6Day1LateScope(scope))return hold("LATE_SCOPE_NOT_VERIFIED");
+ const r=materializeGrid(input,scope);if(r.status!=="DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED")return hold("UNEXPECTED_NORMAL_SCOPE");return r;
 }
