@@ -1,0 +1,23 @@
+name: P6 fresh T24 owner repair offline syntax and AEAD test
+on:
+  push:
+    branches: [phase6/20261122-g8-502-readback-evidence]
+    paths:
+      - '.github/workflows/phase6-evidence-fresh-t24-owner-repair-offline.yml'
+      - 'data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs'
+      - 'data-collection/phase6/checkpoints/p6_20261123_fresh_t24_policy_repair_and_restart_owner.sh'
+permissions:
+  contents: read
+jobs:
+  syntax-and-synthetic-envelope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test exact owner helper and synthetic sealed roundtrip (no secrets)
+        run: |
+          set -Eeuo pipefail
+          bash -n data-collection/phase6/checkpoints/p6_20261123_fresh_t24_policy_repair_and_restart_owner.sh
+          node --check data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs
+          node data-collection/phase6/checkpoints/p6_20261123_fresh_four_policy_owner_envelope.cjs selftest
