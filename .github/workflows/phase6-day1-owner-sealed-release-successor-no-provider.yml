@@ -1,4 +1,4 @@
-name: P6 Day1 release owner sealed exact code successor (NO PROVIDER)
+name: P6 Day1 corrected policy read-only release validation (NO PROVIDER)
 on:
   push:
     branches:
@@ -75,7 +75,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = 52ab2bc445b612713b3ad61935a2a79fecc0298a
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = 66280cca6fdf041cdf9db72b96cb6a7e11f0a8c8
           TARGET="$(jq -er '.mainSha' data-collection/phase6/checkpoints/p6_day1_release_owner_request.json)"
           BASE=c8e065d665ccacb6d2575070e94c5500b7583044
           HEAD_PIN=9c9cddb1aaeb04934d94af2937ee158e6d991f6c
@@ -98,18 +98,10 @@ jobs:
           test "$(git hash-object "$RUNNER_TEMP/p6-g8-original-final-validator.cjs")" = 34156ac65811165c0d217e7175f8643eeef55761
           node --check data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs
           node --check "$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
-      - name: Validate old and current policies and seal only exact successor policy values to owner's ephemeral key
+      - name: Validate corrected installed and candidate policies without exporting values
         shell: bash
         run: |
           set -Eeuo pipefail
           set +x
           export P6_G8_PINNED_VALIDATOR_PATH="$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
           node data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs
-      - name: Preserve only the AEAD-encrypted owner successor for 1 day
-        if: env.P6_DAY1_SUCCESSOR_PREFLIGHT != '1'
-        uses: actions/upload-artifact@v4
-        with:
-          name: p6-day1-owner-encrypted-code-successor-${{ github.run_id }}
-          path: ${{ runner.temp }}/p6-day1-owner-sealed-code-repin-successor.json
-          retention-days: 1
-          if-no-files-found: error
