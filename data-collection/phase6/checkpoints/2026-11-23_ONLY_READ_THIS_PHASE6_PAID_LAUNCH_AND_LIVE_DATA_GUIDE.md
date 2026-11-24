@@ -1,3 +1,33 @@
+# CURRENT — Nov23 after 8:01 PM PST
+
+**H partial progress, DO NOT REPEAT.** Fresh owner 04:00:25Z auth=1 cost=1 SOURCE=0 REST=0 STOP=0 D1=0 D2=4 index=0 and V0108 no due/STOP; 16 protected literal writes acknowledged. Actual T24 run 45323393757 passed scheduler admission and npm but failed worker with generic HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY. H stopped before later PRE, Day2 preparation, audit pin reconciliation or direct root; paid pause attempted. No new epoch. Latest observed external rolling skipped, retention passed. Exact T24 cause not known. Do not change credentials, policy or SHA on guesses. No need to rewrite sixteen values.
+
+Read the new standalone [incident postmortem and regression contract](2026-11-23_PHASE6_LAUNCH_INCIDENT_POSTMORTEM_AND_REGRESSION_TEST_CONTRACT.md) before further engineering. It records failures, dates, why previous testing missed them, future tests and safe simplification. PR #966 diagnostics-only (prior revision 11/11 CI green, updated T24 runtime diagnostic and full positive synthetic startup fixture in CI); PR #965 earlier 6/6 green; both draft and not deployed. 
+
+## Next owner action — I: independent Day2 prep and later PRE readiness
+These nonprovider routes are independent. No change to paid flags/epoch; no repeat of T24 failed job. Existing signed lookahead may correctly return no eligible day; not an index proof. Later worker may return empty due or actual failure, neither prevents Day2 from being checked. Fresh read-only DB summary afterward. 
+~~~bash
+cd ~/workspace
+bash <<'P6_INDEPENDENT_DAY2'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=9b97d59dc6e568c42e05d73217c495769ad78014
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP"
+P6_INDEPENDENT_DAY2
+~~~
+Expected markers DAY2_NONPAID_PREP_RUN=..., LATER_PRE_NONPAID_TEST_RUN=...; report actual dispositions and day2_index, not green-only. No provider GET. If dispatch uncertain do not repeat; check actual run. No paid enable from this command. Day1 T24 64 planned opportunities elapsed Mon 3:45–7:30 PM PST; Day1 T6/T90 tomorrow still exceptional, not deployed. Day2 first T24 Tue 7:45 PM, conservative prep check before 4:45 PM. Tomorrow not yet safe. 
+
+All previous guide content retained below; A–H are historical. 
+
+---
+
 # CURRENT INCIDENT UPDATE — November 23, approximately 7:51 PM PST
 
 **G failed at second T24 admission; do not repeat G, F or prior commands.** [Run 45321496617](https://github.com/HKcode22/ReplitTranvr/actions/runs/45321496617/job/138200886569) failed at Separate STOP-default T24 current registry scheduler before npm or DB; G printed PAID_PAUSE_RECHECK_ATTEMPTED_NO_REPLAY. Actual relay 45322009431 skipped after pause; retention 45322139110 success. No paid SOURCE/POST child since restart in observed history. Changing PRE_STOP alone did not repair admission. Values in runner logs masked; cannot identify exact false literal from generic bash test. Root cause of repeated troubleshooting: prior code CI fixtures assumed correct literal settings; 31-value policy check did not check every effective native scheduler value, successful actor-only PRE test bypassed real T24 and later scheduler shell gates, name census did not prove values, previous GO verified writes but not actual controller wave. Existing names PRE_ARMED/PREPARE_ARMED were not rewritten in E because present. Direct controller and PRE both require the global paid and literal approvals; do not infer exact failing secret until runtime proof. No provider attempt from this failed job.
