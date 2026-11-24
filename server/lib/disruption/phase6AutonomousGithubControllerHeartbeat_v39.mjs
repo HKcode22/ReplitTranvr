@@ -8,7 +8,7 @@
  * A conclusion of "skipped" is a deliberately gated workflow, NOT proof
  * of flight collection. GitHub clock NEVER replaces original PG16 cutoff.
  */
-import {observeRecentAlternate} from "./phase6AlternateWorkerHeartbeat_v39.mjs";
+import {observeRecentAlternate,exactHeartbeatWorkerStep} from "./phase6AlternateWorkerHeartbeat_v39.mjs";
 export const P6_AUTO_CONTROL_HEARTBEAT_V39=
  "v39.phase6.github-autonomous-control-plane-heartbeat.v1";
 const SHA=/^[a-f0-9]{40}$/;
@@ -364,7 +364,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    for(const [name,step] of requirements){
     const jobs=body.jobs.filter(j=>j.name===name);
     if(jobs.length!==1||jobs[0].status!=="completed"||jobs[0].conclusion!=="success"||
-       step!==null&&(!Array.isArray(jobs[0].steps)||jobs[0].steps.filter(s=>s.name===step&&s.status==="completed"&&s.conclusion==="success").length!==1)){
+       step!==null&&!exactHeartbeatWorkerStep(jobs[0],step)){
      add("EXPECTED_WORKER_SKIPPED_FAILED_OR_UNVERIFIED",name);continue;
     }
     if(lane==="SOURCE"&&Array.isArray(jobs[0].steps)&&jobs[0].steps.some(s=>
