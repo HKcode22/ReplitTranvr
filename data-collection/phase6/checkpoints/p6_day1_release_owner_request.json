@@ -1,8 +1,1 @@
-{
-  "schema": "v39.phase6.day1.owner-code-repin-seal-request.v1",
-  "mode": "post-pin-readback",
-  "mainSha": "9c9cddb1aaeb04934d94af2937ee158e6d991f6c",
-  "requestedAtUtc": "2026-11-24T05:58:03Z",
-  "historicalDigest": "7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61",
-  "purpose": "reviewed Day2 preparation interval; timing metadata only; no changes"
-}
+{"schema":"v39.phase6.day1.owner-code-repin-seal-request.v1","mode":"seal","mainSha":"9c9cddb1aaeb04934d94af2937ee158e6d991f6c","requestedAtUtc":"2026-11-24T08:58:17.197Z","historicalDigest":"7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61","nonce":"daa71a8cb4b2634b441f8fe4e5ebcfda","recipientPublicSpkiBase64":"MCowBQYDK2VuAyEA18szo45SoS1EkBbFry6FPuW+F6/o3DbLJJZzEewvmnY="}
