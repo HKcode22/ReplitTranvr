@@ -18,8 +18,8 @@ v(){ gh variable get "$2" -R "$1"; }
 setprep(){ gh variable set P6_NONPAID_SOURCE_SCHEDULE_ENABLED -R "$R" --body "$1" >/dev/null && [[ "$(v "$R" P6_NONPAID_SOURCE_SCHEDULE_ENABLED)" == "$1" ]]; }
 cleanup(){
   rc=$?
-  if [[ "$paused" == 1 && "$phase" == verify ]]; then setprep true || echo HOLD_P6_CLOCK_PREP_RESTORE_UNCERTAIN; fi
-  if [[ "$phase" == writing ]]; then echo HOLD_P6_CLOCK_PARTIAL_WRITE_POSSIBLE_DO_NOT_REPLAY; fi
+  if [[ "$paused" == 1 && ( "$phase" == verify || "$phase" == installed || ( "$phase" == writing && ! -e "$D/owner-private.pem.clock.apply.started" ) ) ]]; then setprep true || echo HOLD_P6_CLOCK_PREP_RESTORE_UNCERTAIN; fi
+  if [[ "$phase" == writing && -e "$D/owner-private.pem.clock.apply.started" ]]; then echo HOLD_P6_CLOCK_PARTIAL_WRITE_POSSIBLE_DO_NOT_REPLAY; fi
   git -C "$ROOT" worktree remove --force "$T/tree" >/dev/null 2>&1 || true
   rm -rf "$T"
   exit "$rc"
@@ -27,7 +27,7 @@ cleanup(){
 trap cleanup EXIT
 [[ $# == 1 && "$1" == OWNER_APPROVES_NARROW_59_DAY_DAILY_POLICY_NO_PAID_RESTART ]] || hold CONFIRM
 pin(){
-  [[ "$(gh api user --jq .login)" == HKcode22 ]]
+  [[ "$(gh api user --jq .login)" == HKcode22 ]] &&
   [[ "$(gh api "repos/$R/git/ref/heads/main" --jq .object.sha)" == "$S" ]]
 }
 controls(){
@@ -43,7 +43,8 @@ pin || hold PIN
 controls || hold CONTROLS
 [[ "$(v "$R" P6_NONPAID_SOURCE_SCHEDULE_ENABLED)" == true ]] || hold PREP_EXPECTED_ON
 for f in owner-private.pem request.json p6-t24-four-policy-envelope.json; do [[ -f "$D/$f" ]] || hold LOCAL_ARTIFACT_ABSENT; done
-git -C "$ROOT" cat-file -e "$S^{commit}" 2>/dev/null || git -C "$ROOT" fetch origin main
+[[ ! -e "$D/owner-private.pem.clock.apply.started" ]] || hold PRIOR_CLOCK_WRITE_ATTEMPT_RECONCILE
+ git -C "$ROOT" cat-file -e "$S^{commit}" 2>/dev/null || git -C "$ROOT" fetch origin main
 git -C "$ROOT" worktree add --detach "$T/tree" "$S" >/dev/null
 [[ "$(git -C "$T/tree" rev-parse HEAD)" == "$S" ]] || hold CHECKOUT
 gh api "repos/$R/git/blobs/$B" --jq .content | base64 --decode > "$T/helper.cjs"
@@ -115,8 +116,8 @@ node --check "$T/admit.mjs"
 export P6_CLOCK_TREE="$T/tree" P6_CLOCK_TEST="$T/admit.mjs"
 P6_CLOCK_APPLY=0 node "$T/helper.cjs" verify "$D/owner-private.pem" "$D/request.json" "$D/p6-t24-four-policy-envelope.json"
 # Pause only the daily preparation scheduler while checking/writing linked bytes.
-setprep false || hold PREP_PAUSE
 paused=1
+setprep false || hold PREP_PAUSE
 for status in queued in_progress waiting pending requested; do
  paths="$(gh api "repos/$R/actions/runs?status=$status&per_page=100" --paginate --jq '.workflow_runs[]|select(.head_branch=="main")|.path')"
  if grep -Eq '^\.github/workflows/(phase6-nonpaid-source-day-prepare-publish|phase6-direct-recovery-tick|phase5-source-upcoming-queue|phase5-one-signed-day-source|phase5-one-signed-future-post|phase5-cd-github|phase6-private-later-enrollment)' <<< "$paths"; then hold LIVE_RELEVANT_WORKER; fi
