@@ -5,7 +5,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {execFileSync} from "node:child_process";
-import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,downloadDirectArchive,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,downloadDirectArchive,retryableDirectRouteHistory,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
 import {readP6DirectReadonlySnapshot} from "../scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
@@ -298,4 +298,16 @@ test("exhausted archive GET still fails closed, empty body never becomes a recei
  attempts=0;
  await assert.rejects(downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async()=>{},exec:()=>{attempts++;return Buffer.alloc(0);}}),/HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_EMPTY/);
  assert.equal(attempts,1);
+});
+
+
+test("only the exact route observation race is eligible for fresh GET reconciliation",()=>{
+ const plan=(...states)=>({status:"HOLD_ROLLING_WAVE_NO_DISPATCH",assessments:states.map(state=>({state}))});
+ assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED","ACTIVE_NO_OVERLAP")),true);
+ assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED","HOLD_HISTORY_CHANGED")),true);
+ for(const state of ["HOLD_UNSUCCESSFUL_OR_DRIFTED_ATTEMPT","HOLD_GATED_OR_FAILED_REQUIRED_JOB","HOLD_INERT_REQUIRED_STEP","HOLD_MISSING_JOB_EVIDENCE","HOLD_MISSING_PARENT_OUTCOME"]){
+  assert.equal(retryableDirectRouteHistory(plan(state)),false);
+  assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED",state)),false);
+ }
+ assert.equal(retryableDirectRouteHistory(plan("DUE_REVIEWED_ROUTE")),false);
 });
