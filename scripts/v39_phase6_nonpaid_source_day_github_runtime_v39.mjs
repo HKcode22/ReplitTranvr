@@ -6,7 +6,7 @@
  * Actual checked-in planning files/keys/rights not commissioned here.
  */
 import pg from "pg";
-import {createHash,createPublicKey,createPrivateKey} from "node:crypto";
+import {createHash,createPublicKey,createPrivateKey,sign} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -16,10 +16,14 @@ import {normalizeP5TypedSourceBudgetBinding,sameP5TypedSourceBudgetBinding} from
 import {readP6DayEpochRestrictedReaderClock} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 import {runP6DurableDailySourcePreparation} from "../server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts";
 import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6StoredSourceDayPublicationRuntime_v39.mjs";
+import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts";
+import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
+import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
 const CURRENT_CONFIRM="PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER";
+const DAY1_CONFIRM="RECOVER_EXACT_DAY1_T6_T90_NO_PROVIDER";
 const hold=s=>{throw Error("HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_"+s);};
 const h=b=>createHash("sha256").update(b).digest("hex");
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -54,7 +58,7 @@ function url(raw,login){
  }catch{hold("RESTRICTED_TLS_DATABASE_URL_REQUIRED");}
 }
 const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
- env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":"manual";
+ env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":env.P6_NONPAID_SOURCE_CONFIRM===DAY1_CONFIRM?"day1_recovery":"manual";
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||
@@ -68,7 +72,7 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
- if(mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
+ if(mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
     (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
     env.P6_NONPAID_SOURCE_CONFIRM!==CONFIRM||!/^([1-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""))
   hold("NO_EXACT_MANUAL_OR_SCHEDULE_APPROVAL");
@@ -117,10 +121,13 @@ export function admitP6NonpaidSourceDayGithub(env){
   reader=url(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin),
   publisher=url(env.P6_PRIVATE_PUBLISHER_DATABASE_URL,reviewed.expectedPublisherSessionLogin);
  if(new Set([prepare.endpoint,reader.endpoint,publisher.endpoint]).size!==1)hold("CROSS_DATABASE_ENDPOINT");
- const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:mode==="manual"?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
+ const lateRole=mode==="day1_recovery"?env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:undefined;
+ const late=mode==="day1_recovery"?url(env.V39_P5_EARLY_DRAW_DATABASE_URL,lateRole):undefined;
+ if(late&& (lateRole!=="phase5_early_draw_prod20261115"||late.endpoint!==prepare.endpoint||p.manifestSha256!=="a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e"||budget.budgetReleaseMode!=="COST_UPPER_BOUND"))hold("EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST");
+ const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:mode==="manual"||mode==="day1_recovery"?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
   providerCalls:0,phase6PaidGo:false};
  Object.defineProperties(receipt,Object.fromEntries(Object.entries({p,q,reviewed,policyBytes,signingPolicyBytes,trust,
-  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher.raw,dailyKey,queryKey,registryKey,
+  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
   dailyPolicySha:env.P6_NONPAID_DAILY_POLICY_SHA256,signingPolicySha:env.P6_NONPAID_SIGNING_POLICY_SHA256})
   .map(([k,value])=>[k,{value,enumerable:false}])));
  return Object.freeze(receipt);
@@ -221,6 +228,53 @@ async function indexRead(reader,ctx){
   await reader.query("ROLLBACK");tx=false;return{rows:z.rows,now};
  }finally{if(tx)await reader.query("ROLLBACK").catch(()=>{});}
 }
+/** One explicit owner-approved incident using existing protected credentials.
+ * The existing daily reviewer signs the exact late fixed registration scope
+ * under the successor code pin. No new key, credential or paid dispatch. */
+async function registerOrReadDay1(ctx,plan){
+ const p=ctx.p,lead=Math.max(20,ctx.reviewed.minimumPreparationLeadMinutes);
+ const policy={schema:"v39.phase6.day1-late-registration-policy.v1",runDayIndex:1,incidentRunId:45293307564,
+  originalDayPlanSha256:plan.sha256,manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,
+  frameSha256:p.frameSha256,reviewedCodeSha:ctx.mainSha,reviewerFingerprintSha256:ctx.reviewed.dailyReviewerFingerprintSha256,
+  allowLateFixedPairRegistration:true,allowPaidDispatch:false,allowBackdating:false,missingnessClass:"HONESTLY_UNOBSERVED_NOT_BACKFILLED",
+  validFromUtc:"2026-11-24T00:00:00.000Z",validUntilUtc:"2026-11-25T02:00:00.000Z",minimumPreparationLeadMinutes:lead};
+ const policyBytes=Buffer.from(JSON.stringify(policy)),signed={policyBytes,signatureBase64:sign(null,policyBytes,ctx.dailyKey).toString("base64"),
+  reviewerPublicKeyPem:ctx.reviewed.dailyReviewerPublicKeyPem,pins:{...policy,policySha256:h(policyBytes)},dayPlanBytes:plan.bytes};
+ const pool=new pg.Pool({connectionString:ctx.lateUrl,max:1,connectionTimeoutMillis:8000,query_timeout:40000});
+ const read=async()=>{
+  const c=await pool.connect();let tx=false;
+  try{
+   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+   const now=(await c.query("SELECT current_user actor,session_user login,clock_timestamp() at,current_database() db,pg_is_in_recovery() replica")).rows[0];
+   if(now.actor!==ctx.lateRole||now.login!==ctx.lateRole||now.db!=="neondb"||now.replica!==false||
+      new Date(now.at).getTime()>=Date.parse("2026-11-24T17:45:00.000Z")-lead*60000)hold("DAY1_RECOVERY_PREPARATION_DEADLINE");
+   const x=(await c.query("SELECT run_day_index,scheduled_start_utc,draw_type,calendar_hash,config_hash,frame_hash,slot_regions,pair_airport_set FROM clean.adb_phase6_calendar_day WHERE run_day_index=1")).rows[0];
+   const d=await c.query("SELECT slot_id,selected_icao,selected_at_utc FROM clean.adb_sampling_draw WHERE run_day_index=1 ORDER BY slot_id");
+   const future=await c.query("SELECT run_day_index,selected_icao FROM clean.adb_sampling_draw WHERE run_day_index>1 ORDER BY run_day_index,slot_id");
+   const hist=(await c.query("SELECT (SELECT count(*)::int FROM clean.phase5_fids_physical_attempt_v39 WHERE manifest_sha256=$1) source,(SELECT count(*)::int FROM clean.phase5_other_rest_physical_reservation_v39 WHERE manifest_sha256=$1) rest,(SELECT count(*)::int FROM clean.adb_incident_stop WHERE NOT resolved) stops",[p.manifestSha256])).rows[0];
+   if(!x||!hist||hist.source!==0||hist.rest!==0||hist.stops!==0||![0,4].includes(d.rowCount))hold("DAY1_EXISTING_OR_UNCERTAIN_HISTORY");
+   await c.query("ROLLBACK");tx=false;
+   return {count:d.rowCount,selectedAt:d.rowCount?new Date(d.rows[0].selected_at_utc).toISOString():null,
+    evidence:{calendarDay:{runDayIndex:x.run_day_index,scheduledStartUtc:new Date(x.scheduled_start_utc).toISOString(),drawType:x.draw_type,calendarHash:x.calendar_hash,configHash:x.config_hash,frameHash:x.frame_hash,slotRegions:x.slot_regions,pairAirportSet:x.pair_airport_set},
+     futureCommittedDraws:future.rows.map(r=>({runDayIndex:r.run_day_index,icao:r.selected_icao})),existingDrawRows:d.rows,
+     sourceAttempts:hist.source,otherRestReservations:hist.rest,unresolvedStops:hist.stops}};
+  }finally{if(tx)await c.query("ROLLBACK").catch(()=>{});c.release();}
+ };
+ try{
+  await verifyP5EarlyDrawReadonlyAcl(pool,ctx.lateRole);
+  let observed=await read();
+  if(observed.count===0){
+   await commitP6Day1LateFixedRegistration(pool,{runDayIndex:1,expectedManifestSha256:p.manifestSha256,
+    expectedCalendarHash:p.calendarSha256,expectedConfigHash:p.configSha256,expectedFrameHash:p.frameSha256,
+    phase5FreezeApproved:true,githubOnlyApproved:true},signed,ctx.lateRole);
+   observed=await read();
+  }
+  if(observed.count!==4)hold("DAY1_LATE_COMMIT_READBACK");
+  const scope=verifyP6Day1CommittedLateScope({...signed,...observed.evidence,observedDbUtc:observed.selectedAt});
+  if(scope.candidateQueryCount!==128||scope.excludedQueryCount!==64)hold("DAY1_FULL_REMAINING_HORIZONS_NO_LONGER_PROSPECTIVE");
+  return scope;
+ }finally{await pool.end().catch(()=>{});}
+}
 export async function runP6NonpaidSourceDayGithub(env){
  const ctx=admitP6NonpaidSourceDayGithub(env),plans=loadP6ReviewedDayPlans(ctx);
  const raw=new pg.Pool({connectionString:ctx.prepareUrl,max:1,connectionTimeoutMillis:8000,query_timeout:40000});
@@ -233,7 +287,15 @@ export async function runP6NonpaidSourceDayGithub(env){
   await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   const c=await calendarRead(restricted,ctx),i=await indexRead(reader,ctx);
   if(Math.abs(utc(c.clock)-utc(i.now))>120000)hold("CROSS_SNAPSHOT_DB_CLOCK_DRIFT");
-  const selection=selectP6NonpaidSourceDay(ctx,plans,c.calendar,i.rows,i.now);
+  let selection,lateScope;
+  if(ctx.mode==="day1_recovery"){
+   const d=c.calendar.find(x=>x.run_day_index===1),idx=i.rows.find(x=>x.run_day_index===1);
+   if(!d||!idx||d.calendar_hash!==ctx.p.calendarSha256||d.config_hash!==ctx.p.configSha256||
+      d.frame_hash!==ctx.p.frameSha256||idx.claim_n!==0||idx.index_n!==0)hold("DAY1_ALREADY_INDEXED_OR_UNCERTAIN_NO_REPLAY");
+   const plan=plans[0];
+   lateScope=await registerOrReadDay1(ctx,plan);
+   selection={selected:plan,eligibleDayCount:1,missingDraw:0,tooLate:0,alreadyIndexed:0,missedUnpublishedDays:[],atRiskMissingDrawDays:[],pastIncompleteGenesisDays:[]};
+  }else selection=selectP6NonpaidSourceDay(ctx,plans,c.calendar,i.rows,i.now);
   const base={schema:"v39.phase6.github-nonpaid-source-day-runtime.v1",mainSha:ctx.mainSha,
    eligibleDayCount:selection.eligibleDayCount,missingDrawDayCount:selection.missingDraw,
    tooLateDayCount:selection.tooLate,alreadyIndexedMetadataDayCount:selection.alreadyIndexed,
@@ -258,7 +320,7 @@ export async function runP6NonpaidSourceDayGithub(env){
   const common={existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",
    expectedReaderSessionLogin:ctx.trust.expectedReaderSessionLogin,expectedPublisherSessionLogin:ctx.reviewed.expectedPublisherSessionLogin};
   const prep=await runP6DurableDailySourcePreparation({producer:{readPool:restricted,
-   policyBytes:ctx.policyBytes,dayPlanBytes:plan.bytes,pins:{independent31DayDelegationPolicyApproved:true,
+   policyBytes:ctx.policyBytes,dayPlanBytes:plan.bytes,lateScope,pins:{independent31DayDelegationPolicyApproved:true,
     expectedPolicySha256:ctx.dailyPolicySha,expectedReviewedMainSha:ctx.mainSha,expectedRunDayIndex:plan.runDayIndex,
     noProviderCredentialsInReviewer:true,existingPaidDispatchApproved:false}},
    preparePool:restricted,readerClient:reader,publisherClient:publisher,dailyReviewerKey:ctx.dailyKey,
@@ -268,7 +330,7 @@ export async function runP6NonpaidSourceDayGithub(env){
     registryReviewerFingerprintSha256:ctx.trust.dayReviewerFingerprintSha256,
     registryReviewerPublicKeyPem:ctx.trust.dayReviewerPublicKeyPem},
    signingPolicyBytes:ctx.signingPolicyBytes,expectedSigningPolicySha256:ctx.signingPolicySha,
-   queryKey:ctx.queryKey,registryKey:ctx.registryKey,scope:{...common,independentlyApprovedSourceDayPublicationRuntime:true,
+   queryKey:ctx.queryKey,registryKey:ctx.registryKey,lateScope,scope:{...common,independentlyApprovedSourceDayPublicationRuntime:true,
     independentlyApprovedReadbackRecovery:true}});
   return Object.freeze({...base,status:"ONE_PROSPECTIVE_DAY_PREPARED_AND_PUBLISHED_NO_PAID_GO",runDayIndex:plan.runDayIndex,
    insertedDailyReviewRow:prep.insertedDailyReviewRow,preparedLedgerInserts:prep.preparedLedgerInserts,
