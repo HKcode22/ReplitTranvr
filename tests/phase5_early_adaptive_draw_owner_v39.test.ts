@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  commitEarlyPhase5Draw,
+  commitEarlyPhase5Draw,commitP6Day1LateFixedRegistration,
   earlyDrawReleasePinsFingerprint,
   validateEarlyDrawWindow,
   type EarlyDrawOwnerPins,
 } from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39";
 
+import {createHash,generateKeyPairSync,sign} from "node:crypto";
+import {readFileSync} from "node:fs";
 const start="2026-11-10T14:00:00.000Z";
 const now="2026-11-09T10:00:00.000Z";
 const H=(s:string)=>s.repeat(64);
@@ -36,6 +38,8 @@ function mockDb(opts:{
   partial?:boolean; failAfterInsert?:boolean;
   expireAtCommit?:boolean; mutableReadback?:boolean;
   frameRows?:typeof frame; midARegion?:string; futurePairRows?:Row[];
+  lateDay1?:boolean;lateCommitClock?:string;lateRoleWrong?:boolean;lateHistory?:Row;lateFutureDraws?:Row[];
+
 }={}){
  const queries:string[]=[];
  const initial:Row[]=opts.partial ? [{
@@ -56,6 +60,13 @@ function mockDb(opts:{
    if(sql==="ROLLBACK"){inTx=false;return {rowCount:0,rows:[]};}
    if(sql.startsWith("SET LOCAL")||sql.includes("pg_advisory_xact_lock"))
      return {rowCount:1,rows:[{}]};
+   if(sql.includes("current_user actor,session_user login")){
+     const role=opts.lateRoleWrong?"wrong_role":"phase5_early_draw_test20261123";
+     return {rowCount:1,rows:[{actor:role,login:role,restricted:true}]};
+   }
+   if(sql.includes("phase5_fids_physical_attempt_v39")){
+     return {rowCount:1,rows:[opts.lateHistory??{source:0,rest:0,stops:0}]};
+   }
    if(sql.includes("FROM clean.adb_phase6_authorization"))
      return {rowCount:1,rows:[{
        enabled:!opts.disabled,revoked_at_utc:null,
@@ -69,21 +80,22 @@ function mockDb(opts:{
    }
    if(sql.includes("FROM clean.adb_phase6_calendar_day"))
      return {rowCount:1,rows:[{
-       run_day_index:1,scheduled_start_utc:new Date(start),
-       date_utc:new Date("2026-11-10T00:00:00Z"),
+       run_day_index:1,scheduled_start_utc:new Date(opts.lateDay1?"2026-11-25T00:00:00.000Z":start),
+       date_utc:new Date(opts.lateDay1?"2026-11-25T00:00:00.000Z":"2026-11-10T00:00:00Z"),
        frozen_draw_seed:"early-owner-test-seed",
-       draw_type:"NEW_TEMPLATE",anchor_icao:"WSSS",
-       slot_regions:{HUB:"ASIA",MID_A:opts.midARegion??"MIDDLE_EAST",
+       draw_type:"NEW_TEMPLATE",anchor_icao:opts.lateDay1?"OMAA":"WSSS",
+       slot_regions:opts.lateDay1?{HUB:"MIDDLE_EAST",MID_A:"MIDDLE_EAST",MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"}:{HUB:"ASIA",MID_A:opts.midARegion??"MIDDLE_EAST",
          MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"},
-       pair_airport_set:null,window_shape:"4h",active_duration_minutes:240,
+       pair_airport_set:opts.lateDay1?{HUB:{icao:"OMAA",region:"MIDDLE_EAST"},MID_A:{icao:"OMSJ",region:"MIDDLE_EAST"},MID_B:{icao:"SPJC",region:"SOUTH_AMERICA"},REGIONAL:{icao:"KDEC",region:"NORTH_AMERICA"}}:null,window_shape:"4h",active_duration_minutes:240,
        calendar_hash:opts.wrongCalendar?H("e"):pins.expectedCalendarHash,
        config_hash:pins.expectedConfigHash,frame_hash:pins.expectedFrameHash,
      }]};
    if(sql.includes("clock_timestamp() AS at")){
      clockReads++;
      return {rowCount:1,rows:[{at:new Date(opts.expireAtCommit && clockReads===2
-       ? "2026-11-09T14:00:00.000Z":opts.beforeNow??now)}]};
+       ? "2026-11-09T14:00:00.000Z":opts.lateDay1?(clockReads===2?opts.lateCommitClock??"2026-11-24T04:50:01.000Z":"2026-11-24T04:50:00.000Z"):opts.beforeNow??now)}]};
    }
+   if(sql.includes("FROM clean.adb_sampling_draw")&&sql.includes("run_day_index>1"))return {rowCount:(opts.lateFutureDraws??[]).length,rows:opts.lateFutureDraws??[]};
    if(sql.includes("FROM clean.adb_sampling_draw")){
      const rows=txDraws.map(x=>({...x}));
      if(opts.mutableReadback && rows.length===4 && sql.includes("WHERE run_day_index"))
@@ -260,5 +272,42 @@ describe("Phase5 early adaptive DB owner (mock transaction, no provider)",()=>{
     new Date("2026-11-06T13:59:59.000Z"),new Date(start),
   )).toThrow("PRESELECTION_TOO_EARLY");
   expect(()=>validateEarlyDrawWindow(new Date(now),new Date(start))).not.toThrow();
+ });
+});
+
+describe("Phase6 exact incident-only late fixed pair transaction candidate",()=>{
+ const digest=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+ const plan=readFileSync(new URL("../data-collection/phase5/planning/phase6-source-day-01.json",import.meta.url));
+ const {publicKey,privateKey}=generateKeyPairSync("ed25519");
+ const reviewerFingerprintSha256=digest(publicKey.export({type:"spki",format:"der"}) as Buffer);
+ const role="phase5_early_draw_test20261123";
+ const policy={schema:"v39.phase6.day1-late-registration-policy.v1",runDayIndex:1,incidentRunId:45293307564,
+  originalDayPlanSha256:digest(plan),manifestSha256:pins.expectedManifestSha256,calendarSha256:pins.expectedCalendarHash,
+  configSha256:pins.expectedConfigHash,frameSha256:pins.expectedFrameHash,reviewedCodeSha:"e".repeat(40),reviewerFingerprintSha256,
+  allowLateFixedPairRegistration:true,allowPaidDispatch:false,allowBackdating:false,missingnessClass:"HONESTLY_UNOBSERVED_NOT_BACKFILLED",
+  validFromUtc:"2026-11-24T00:00:00.000Z",validUntilUtc:"2026-11-25T02:00:00.000Z",minimumPreparationLeadMinutes:20};
+ const policyBytes=Buffer.from(JSON.stringify(policy));
+ const signed={policyBytes,signatureBase64:sign(null,policyBytes,privateKey).toString("base64"),
+  reviewerPublicKeyPem:publicKey.export({type:"spki",format:"pem"}),pins:{...policy,policySha256:digest(policyBytes)},dayPlanBytes:plan};
+ const lateFrame=[{...frame[0],icao:"OMAA",region:"MIDDLE_EAST"},{...frame[1],icao:"OMSJ"},
+  {...frame[2],icao:"SPJC"},{...frame[3],icao:"KDEC"}];
+ const base={lateDay1:true,frameRows:lateFrame,lateFutureDraws:[{run_day_index:2,selected_icao:"WSSS"}]};
+ it("registers the exact four sites at actual DB time only, not a backdated on-time draw",async()=>{
+  const m=mockDb(base);
+  const result=await commitP6Day1LateFixedRegistration(m.pool,pins,signed,role);
+  expect(result).toMatchObject({status:"DAY1_LATE_FIXED_DRAW_COMMITTED_NOT_SOURCE",runDayIndex:1,selectedAtUtc:"2026-11-24T04:50:00.000Z",providerCalls:0,flightLevelPreVerified:false});
+  expect(m.db.draws.map(x=>x.selected_icao)).toEqual(["OMAA","OMSJ","SPJC","KDEC"]);
+  expect(m.db.draws.every(x=>new Date(x.selected_at_utc).toISOString()===result.selectedAtUtc)).toBe(true);
+  expect(m.db.updates).toHaveLength(4);expect(m.queries).toContain("COMMIT");
+  await expect(commitP6Day1LateFixedRegistration(m.pool,pins,signed,role)).rejects.toThrow("LATE_DAY1_EXISTING_DRAW_NO_REPLAY");
+  await expect(commitEarlyPhase5Draw(m.pool,pins)).rejects.toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+ });
+ it("rolls back on wrong actor, prior paid history, future site collision and expiry before commit",async()=>{
+  for(const opts of [{lateRoleWrong:true},{lateHistory:{source:1,rest:0,stops:0}},
+   {lateFutureDraws:[{run_day_index:2,selected_icao:"OMAA"}]},{lateCommitClock:"2026-11-25T01:45:00.000Z"},{failAfterInsert:true}]){
+   const m=mockDb({...base,...opts});
+   await expect(commitP6Day1LateFixedRegistration(m.pool,pins,signed,role)).rejects.toThrow();
+   expect(m.db.draws).toHaveLength(0);expect(m.db.updates).toHaveLength(0);expect(m.queries).toContain("ROLLBACK");
+  }
  });
 });
