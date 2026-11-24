@@ -21,8 +21,8 @@ try {
  need(run("git",["hash-object",srcPath])===SOURCE,"SOURCE_BLOB");
  need(run("git",["rev-parse",MAIN])===MAIN,"COMMITTED_EVIDENCE_PRESENT");
  const original=fs.readFileSync(srcPath,"utf8");
- const boundary=original.indexOf("\n const sr=(stage:string)");
- need(boundary>0&&original.indexOf("\n const sr=(stage:string)",boundary+1)<0,"PURE_EXPORT_BOUNDARY");
+ const boundary=original.indexOf("\n const writer=P5_TWO_STAGE_ROLES.find(");
+ need(boundary>0&&original.indexOf("\n const writer=P5_TWO_STAGE_ROLES.find(",boundary+1)<0,"PURE_EXPORT_BOUNDARY");
  // Retain the original static geometry and byte compiler, never the
  // prospective admission or mutation entrypoints. This is a different task:
  // verification/reconstruction of past bytes, not new release admission.
@@ -40,7 +40,7 @@ try {
  const v=prepared(old,historical,b,decisionSha);
  const expected=execFileSync("git",["show",${JSON.stringify(MAIN+":"+EXPECTED)}],{stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:600000});
  const hashes=${JSON.stringify(H)};
- if(!Buffer.from(JSON.stringify(v.input)).equals(expected)||v.stageSha!==hashes[0]||v.costSha!==hashes[1]||sha(v.manifestRaw)!==hashes[2]||hash(v.config)!==hashes[3])hold("ARCHIVE_EXACT_BYTES_DRIFT");
+ if(v.result.files.length!==32||v.result.summary.sourceQueries!==6144||v.result.summary.totalReservedUnits!==36740||v.result.summary.peakDailyUnits!==1280||!Buffer.from(JSON.stringify(v.input)).equals(expected)||v.stageSha!==hashes[0]||v.costSha!==hashes[1]||sha(v.manifestRaw)!==hashes[2]||hash(v.config)!==hashes[3])hold("ARCHIVE_EXACT_BYTES_DRIFT");
  verifyP6ActualCommittedPlanParity(v.result,p=>execFileSync("git",["show",historical+":"+p],{stdio:["ignore","pipe","ignore"],timeout:15000,maxBuffer:600000}),p=>readFileSync(p));
  const receipt={status:"P6_HISTORICAL_STAGE_ARCHIVE_EXACT_BYTES_VERIFIED",archiveOnly:true,stageSha256:v.stageSha,costSha256:v.costSha,manifestSha256:sha(v.manifestRaw),configSha256:hash(v.config),dayPlans:31,sourceQueries:v.result.summary.sourceQueries,reservedUnits:v.result.summary.totalReservedUnits,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  const out=process.env.P6_ARCHIVE_ONLY_OUT;
