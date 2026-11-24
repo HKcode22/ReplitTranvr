@@ -75,18 +75,22 @@ jobs:
           set -Eeuo pipefail
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = a543d6df010c13bfdd638dc1c9eb9b2db348e162
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs)" = 3394967b569a600bfd32b9f70a3936758170e362
           TARGET="$(jq -er '.mainSha' data-collection/phase6/checkpoints/p6_day1_release_owner_request.json)"
           BASE=c8e065d665ccacb6d2575070e94c5500b7583044
           HEAD_PIN=9c9cddb1aaeb04934d94af2937ee158e6d991f6c
           MAIN="$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq .object.sha)"
           MODE="$(jq -er '.mode' data-collection/phase6/checkpoints/p6_day1_release_owner_request.json)"
-          test "$MODE" = preflight || test "$MODE" = post-pin-readback
+          test "$MODE" = preflight || test "$MODE" = post-pin-readback || test "$MODE" = seal
           test "$MAIN" = "$BASE"
           test "$TARGET" = "$HEAD_PIN"
           gh api "repos/HKcode22/ReplitTranvr/pulls/965" | jq -e --arg b "$BASE" --arg h "$HEAD_PIN" '.state=="open" and .base.sha==$b and .head.sha==$h and .mergeable==true' >/dev/null
-          printf '%s\n' 'P6_G8_OWNER_SEAL_TRIGGER=OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO' >> "$GITHUB_ENV"
-          if test "$MODE" = post-pin-readback; then
+          if test "$MODE" = seal; then
+            printf '%s\n' 'P6_G8_OWNER_SEAL_TRIGGER=OWNER_REVIEWED_ENCRYPTED_G12_CODE_REPIN_SUCCESSOR_NO_PAID_GO' >> "$GITHUB_ENV"
+          else
+            printf '%s\n' 'P6_G8_OWNER_SEAL_TRIGGER=OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO' >> "$GITHUB_ENV"
+          fi
+          if test "$MODE" = post-pin-readback || test "$MODE" = seal; then
             printf '%s\n' 'P6_DAY1_REQUIRE_CURRENT_POST_PIN=1' >> "$GITHUB_ENV"
           fi
           printf 'P6_DAY1_SUCCESSOR_TARGET_SHA=%s\n' "$TARGET" >> "$GITHUB_ENV"
@@ -101,3 +105,11 @@ jobs:
           set +x
           export P6_G8_PINNED_VALIDATOR_PATH="$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
           node data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs
+      - name: Preserve encrypted owner handoff for one day
+        if: ${{ hashFiles('data-collection/phase6/checkpoints/p6_day1_release_owner_request.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6-day1-owner-sealed-successor-${{ github.run_id }}
+          path: ${{ runner.temp }}/p6-day1-owner-sealed-successor.json
+          retention-days: 1
+          if-no-files-found: ignore
