@@ -48,9 +48,32 @@ done
 gh api "repos/$R/actions/runs/45326507493" | jq -e --arg s "$S" '.head_sha==$s and .run_attempt==1 and .conclusion=="failure"' >/dev/null || hold INCIDENT_ID
 # Known no-POST failure only; no blanket history deletion or replay.
 h="$(gh api "repos/$R/actions/runs?branch=main&created=%3E%3D2026-11-24T04%3A27%3A10Z&per_page=100")"
-jq -e --arg s "$S" '.total_count==(.workflow_runs|length) and all(.workflow_runs[]; .head_sha==$s and .run_attempt==1 and (.id==45326507493 or ((.conclusion=="success" or .conclusion=="skipped") and (.path|IN(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",".github/workflows/phase5-cd-github-bounded-pre-tick.yml",".github/workflows/phase6-private-later-enrollment.yml",".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml",".github/workflows/phase5-private-blob-retention-readonly-sentinel-no-provider.yml",".github/workflows/phase5-six-slot-approved-early-four-airport-draw.yml",".github/workflows/phase5-autonomous-clock-canary-no-provider.yml",".github/workflows/phase5-primary-fids-expiry-no-provider.yml")))))' <<< "$h" >/dev/null || hold NEW_TARGET_HISTORY
+# Reconcile only relevant controller/collection history; unrelated CI and
+# independent retention do not block a prospective restart.
+jq -e --arg s "$S" '
+ .total_count==(.workflow_runs|length) and
+ all(.workflow_runs[] |
+   select(.path|IN(".github/workflows/phase6-direct-recovery-tick.yml",
+   ".github/workflows/phase6-rolling-controller-bounded-session.yml",
+   ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+   ".github/workflows/phase5-one-signed-day-source.yml",
+   ".github/workflows/phase5-one-signed-future-post.yml",
+   ".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",
+   ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+   ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
+   ".github/workflows/phase6-private-later-enrollment.yml",
+   ".github/workflows/phase5-cd-github-existing-queue-lease-watchdog.yml",
+   ".github/workflows/phase5-six-slot-approved-early-four-airport-draw.yml"));
+   .head_sha==$s and .run_attempt==1 and
+   (.id==45326507493 or
+    (.conclusion=="success" or .conclusion=="skipped")))
+' <<< "$h" >/dev/null || hold NEW_TARGET_HISTORY
 h="$(gh api "repos/$L/actions/runs?branch=main&created=%3E%3D2026-11-24T04%3A27%3A10Z&per_page=100")"
-jq -e --arg s "$LS" '.total_count==(.workflow_runs|length) and all(.workflow_runs[]; .head_sha==$s and .run_attempt==1 and (.conclusion=="success" or .conclusion=="skipped"))' <<< "$h" >/dev/null || hold NEW_RELAY_HISTORY
+jq -e --arg s "$LS" '.total_count==(.workflow_runs|length) and all(.workflow_runs[]|select(.name=="TRAVNR EXTERNAL CLOCK ROLLING_ROOT"); .head_sha==$s and .run_attempt==1 and (.conclusion=="success" or .conclusion=="skipped"))' <<< "$h" >/dev/null || hold NEW_RELAY_HISTORY
+for status in queued in_progress waiting pending requested; do
+  active="$(gh api "repos/$R/actions/runs?branch=main&status=$status&per_page=100" --paginate --jq '.workflow_runs[]|.path')"
+  if grep -Eq '^\.github/workflows/(phase6-direct-recovery-tick|phase6-rolling-controller-bounded-session|phase5-source-upcoming-queue-main-scheduled-readonly|phase5-one-signed-day-source.*|phase5-one-signed-future-post.*)\.yml$' <<< "$active"; then hold ACTIVE_COLLECTION_RECONCILE; fi
+done
 census(){
 node <<'P6_RO'
 const {Client}=require("pg");
