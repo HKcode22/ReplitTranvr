@@ -102,40 +102,40 @@ jobs:
           set +x
           test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
           test "$GITHUB_REF" = refs/heads/main
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$P5_CD_GH_WATCHDOG_ENABLED" = 1
-          test "$P5_CD_GH_WATCHDOG_CONFIRM" = REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER
-          test "$P5_CD_GH_PRE_STOP" = 0
-          test "$P5_CD_GH_PRE_ARMED" = 1
-          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
-          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
+          test "$GITHUB_RUN_ATTEMPT" = 1 || { echo HOLD_P6_LITERAL_GATE_GITHUB_RUN_ATTEMPT >&2; exit 2; }
+          test "$P5_CD_GH_WATCHDOG_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_WATCHDOG_ENABLED >&2; exit 2; }
+          test "$P5_CD_GH_WATCHDOG_CONFIRM" = REAP_EXISTING_CD_LEASES_ONLY_NO_REPLAY_NO_PROVIDER || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_WATCHDOG_CONFIRM >&2; exit 2; }
+          test "$P5_CD_GH_PRE_STOP" = 0 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_STOP >&2; exit 2; }
+          test "$P5_CD_GH_PRE_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_ARMED >&2; exit 2; }
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_SOURCE_RIGHTS_APPROVED >&2; exit 2; }
+          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_APPROVED_CODE_SHA >&2; exit 2; }
           if [[ "$P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED" == 1 ]]; then
-            test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
-            test -z "$P5_CD_GH_PRE_ROSTER_SHA256"
-            test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
-            test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
-            test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64"
-            test -n "$V39_P5_RELEASE_SHA256"
+            test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_MODE >&2; exit 2; }
+            test -z "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
+            test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA" || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_APPROVED_CODE_SHA >&2; exit 2; }
+            test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED >&2; exit 2; }
+            test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 >&2; exit 2; }
+            test -n "$V39_P5_RELEASE_SHA256" || { echo HOLD_P6_PRESENCE_GATE_V39_P5_RELEASE_SHA256 >&2; exit 2; }
           else
-            test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+            test -n "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
           fi
-          test -n "$P5_V39_PRE_DATABASE_URL"
-          test "$ADB_AUTO_COLLECT" = 0
-          test -z "$AERODATABOX_API_KEY"
-          test -z "$AERODATABOX_WEBHOOK_SECRET"
-          test -z "$DATABASE_URL"
-          test -z "$V39_DATABASE_RUNTIME_URL"
-          test -z "$V39_P5_SOURCE_DATABASE_URL"
+          test -n "$P5_V39_PRE_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P5_V39_PRE_DATABASE_URL >&2; exit 2; }
+          test "$ADB_AUTO_COLLECT" = 0 || { echo HOLD_P6_LITERAL_GATE_ADB_AUTO_COLLECT >&2; exit 2; }
+          test -z "$AERODATABOX_API_KEY" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_API_KEY >&2; exit 2; }
+          test -z "$AERODATABOX_WEBHOOK_SECRET" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_WEBHOOK_SECRET >&2; exit 2; }
+          test -z "$DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_DATABASE_URL >&2; exit 2; }
+          test -z "$V39_DATABASE_RUNTIME_URL" || { echo HOLD_P6_PRESENCE_GATE_V39_DATABASE_RUNTIME_URL >&2; exit 2; }
+          test -z "$V39_P5_SOURCE_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_V39_P5_SOURCE_DATABASE_URL >&2; exit 2; }
           case "$P5_CD_GH_PRE_MODE" in
             PHASE5_CANARY)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 0
-              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 0 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
               ;;
             PHASE6_APPROVED)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 1
-              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
               ;;
             *)
               echo HOLD_NO_INDEPENDENT_WATCHDOG_RELEASE
