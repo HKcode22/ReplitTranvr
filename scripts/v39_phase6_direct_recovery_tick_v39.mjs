@@ -130,6 +130,13 @@ export function retryableDirectRouteHistory(plan){
  const blocked=plan?.assessments?.filter(a=>a.state.startsWith("HOLD_"))??[];
  return plan?.status==="HOLD_ROLLING_WAVE_NO_DISPATCH"&&blocked.length>0&&blocked.every(a=>a.state==="HOLD_HISTORY_CHANGED");
 }
+// Only read-only observation failures are eligible for complete-snapshot
+// retry. No replay of a wave, prior ACK or provider action.
+export function retryableDirectObservationError(error){
+ return ["HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
+  "HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED",
+  "HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT"].includes(error?.message);
+}
 export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),fetcher=fetch,readPlan,emit=()=>{},readArchive=downloadDirectArchive}={}){
  const start=now(),a=admitDirectTick(env,start,readPlan),deadline=Math.min(start+7*MIN,a.calendar.until);
  const epoch=Math.max(a.since,Math.floor((start-3*60*MIN)/1000)*1000);
@@ -271,8 +278,9 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
      }
      return {result,snapshots};
     }catch(e){
-     if(i===2||!["HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED","HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED"].includes(e?.message))throw e;
-     await sleep(1000);
+     if(i===2||!retryableDirectObservationError(e)||requests>=360||now()+15000>=deadline-12000)throw e;
+     emit({status:"DIRECT_GET_OBSERVATION_RETRY",attempt:i+1,reason:e.message});
+     await sleep(1000*(i+1));
     }
    }
   }
