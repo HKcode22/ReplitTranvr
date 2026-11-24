@@ -56,8 +56,8 @@ jq -e --arg s "$S" '
    select(.path|IN(".github/workflows/phase6-direct-recovery-tick.yml",
    ".github/workflows/phase6-rolling-controller-bounded-session.yml",
    ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
-   ".github/workflows/phase5-one-signed-day-source.yml",
-   ".github/workflows/phase5-one-signed-future-post.yml",
+   ".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",
+   ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",
    ".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",
    ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
    ".github/workflows/phase5-cd-github-bounded-pre-tick.yml",
@@ -66,7 +66,8 @@ jq -e --arg s "$S" '
    ".github/workflows/phase5-six-slot-approved-early-four-airport-draw.yml"));
    .head_sha==$s and .run_attempt==1 and
    (.id==45326507493 or
-    (.conclusion=="success" or .conclusion=="skipped")))
+    (.conclusion=="success" or .conclusion=="skipped")) and
+   (.path|IN(".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml")|not))
 ' <<< "$h" >/dev/null || hold NEW_TARGET_HISTORY
 h="$(gh api "repos/$L/actions/runs?branch=main&created=%3E%3D2026-11-24T04%3A27%3A10Z&per_page=100")"
 jq -e --arg s "$LS" '.total_count==(.workflow_runs|length) and all(.workflow_runs[]|select(.name=="TRAVNR EXTERNAL CLOCK ROLLING_ROOT"); .head_sha==$s and .run_attempt==1 and (.conclusion=="success" or .conclusion=="skipped"))' <<< "$h" >/dev/null || hold NEW_RELAY_HISTORY
