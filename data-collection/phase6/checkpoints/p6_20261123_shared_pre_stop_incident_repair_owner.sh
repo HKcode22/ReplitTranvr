@@ -11,7 +11,7 @@ E=phase6-protected-runtime
 S=c8e065d665ccacb6d2575070e94c5500b7583044
 LS=c5a8763f2dfd20d9dbe7d6badc7749ed62f43eed
 OLD=2026-11-24T01:00:52.000Z
-hold(){ echo "HOLD_P6_SHARED_STOP_REPAIR_$1"; exit 2; }
+hold(){ echo "HOLD_P6_SHARED_STOP_REPAIR_$1" >&2; exit 2; }
 [[ $# == 1 && "$1" == OWNER_APPROVES_RECONCILED_SHARED_PRE_STOP_REPAIR_AND_PROSPECTIVE_RESTART ]] || hold OWNER_CONFIRM
 pin(){
  [[ $(gh api user --jq .login) == HKcode22 ]] || hold OWNER
@@ -161,6 +161,28 @@ echo "P6_ACTUAL_PRE_GATES_PASS_T24=$t24 LATER=$later"
 # before its signed maximum lookahead. No replay of uncertain genesis.
 prep="$(dispatch_check phase6-nonpaid-source-day-prepare-publish.yml protected-main-one-day-nonpaid 'Prepare and publish at most one eligible independently reviewed future day' -f run_day_index=2 -f confirm=ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH)"
 echo "P6_DAY2_NONPAID_RUN=$prep"
+prep_log="$(gh run view "$prep" -R "$R" --log)"
+if grep -q ONE_PROSPECTIVE_DAY_PREPARED_AND_PUBLISHED_NO_PAID_GO <<< "$prep_log"; then
+ echo P6_DAY2_PREPARATION_PUBLISHED_RECEIPT
+elif grep -q NO_ELIGIBLE_UNPUBLISHED_FUTURE_DAY_NO_WRITE <<< "$prep_log"; then
+ echo P6_DAY2_PREPARATION_NOT_DUE_OR_ALREADY_INDEXED_NO_WRITE
+else hold PREP_RECEIPT_UNKNOWN; fi
+unset prep_log
+# Independent cron audit used obsolete 046d relay pin, while actual 02:49Z
+# PRIMARY pulse was c5. Repair audit-only metadata, not cron jobs/credentials.
+if gh api "repos/$L/compare/046d89d341fa9f24524ea11e2778e273e3f39533...$LS" | jq -e '.status=="ahead" and .ahead_by==3 and .behind_by==0 and ([.files[].filename]|sort)==["relay.mjs","relay.test.mjs"]' >/dev/null &&
+   gh api "repos/$L/actions/runs/45315135919" | jq -e --arg s "$LS" '.head_sha==$s and .run_attempt==1 and .conclusion=="success" and .display_title=="TRAVNR EXTERNAL CLOCK PRIMARY_BACKSTOP"' >/dev/null; then
+  ap="$(gh variable get TRAVNR_CRON_RELAY_SHA -R "$L" 2>/dev/null || true)"
+  ae="$(gh api "repos/$L/environments/travnr-cron-audit/variables?per_page=100" --paginate --jq '.variables[].name')" || hold AUDIT_ENV_READ
+  if grep -qx TRAVNR_CRON_RELAY_SHA <<< "$ae"; then
+   echo P6_CRON_AUDIT_PIN_ENV_SHADOW_REVIEW_SEPARATELY
+  elif [[ "$ap" == 046d89d341fa9f24524ea11e2778e273e3f39533 ]]; then
+   gh variable set TRAVNR_CRON_RELAY_SHA -R "$L" --body "$LS" >/dev/null || hold AUDIT_PIN_WRITE_UNKNOWN
+   [[ $(gh variable get TRAVNR_CRON_RELAY_SHA -R "$L") == "$LS" ]] || hold AUDIT_PIN_READBACK
+   echo P6_CRON_AUDIT_ONLY_PIN_RECONCILED_NO_CRON_MUTATION
+  elif [[ "$ap" == "$LS" ]]; then echo P6_CRON_AUDIT_PIN_ALREADY_CURRENT
+  else echo P6_CRON_AUDIT_PIN_UNKNOWN_REVIEW_SEPARATELY; fi
+fi
 # Fresh physical ledger / no uncertain attempt after both real PRE tests.
 pin
 quiet_paid
