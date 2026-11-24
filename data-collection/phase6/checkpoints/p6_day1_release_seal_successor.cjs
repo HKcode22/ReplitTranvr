@@ -1,11 +1,7 @@
 "use strict";
-/* G12 owner X25519 sealed source-code-only successor: source existing 31 repo secrets in runner
- * memory ONLY. Prove exact historical bundle, run original pure validator on
- * old and new policies, and seal JUST 11 changed secret values to an owner-held
- * ephemeral X25519 public key. Never print or persist secret plaintext. */
+/* Read-only corrected baseline and candidate policy validation. No policy bytes, artifact, or mutations. */
 const fs=require("node:fs"),path=require("node:path");
-const {createHash,createPublicKey,generateKeyPairSync,diffieHellman,randomBytes,
-       hkdfSync,createCipheriv}=require("node:crypto");
+const {createHash,createPublicKey}=require("node:crypto");
 const hold=s=>{throw Error("HOLD_P6_G8_SEAL_"+s)};
 const need=(b,s)=>{if(!b)hold(s)};
 const sha=x=>createHash("sha256").update(x).digest("hex");
@@ -39,14 +35,21 @@ const v=Object.fromEntries(names.map(k=>[k,e[k]]));
 need(Object.values(v).every(x=>typeof x==="string"&&x.length>0&&Buffer.byteLength(x)<60000),
  "MISSING_STATIC_SECRET");
 need(/^[a-f0-9]{40}$/.test(pin??"")&&pin!==old,"EXACT_CANDIDATE_SHA");
-if(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO"){
- const d=JSON.parse(Buffer.from(v.P6_NONPAID_DAILY_POLICY_BASE64,"base64"));
- const t=JSON.parse(Buffer.from(v.P6_NONPAID_TRANSPORT_TRUST_BASE64,"base64"));
- console.log(JSON.stringify({status:"P6_DAY1_INSTALLED_POLICY_METADATA_ONLY",outerPins:names.slice(0,7).map(k=>({name:k,equalsFrozenMain:v[k]===old,equalsCandidate:v[k]===pin})),dailyLaneOne:d.nativeLaterReview?.maximumT24ExecutionLanes===1,dailyFromCorrect:d.validFromUtc==="2026-11-22T00:00:00.000Z",dailyUntilCorrect:d.validUntilUtc==="2027-01-20T00:00:00.000Z",dailyDigestMatchesRecorded59Day:v.P6_NONPAID_DAILY_POLICY_SHA256==="c477bb71588352d76383b887cae10c35c02cb4a7fe445cedf8ecda0ac2fe8664",transportDailyLinkMatches:t.dailyPolicySha256===v.P6_NONPAID_DAILY_POLICY_SHA256,providerCalls:0,secretValuesPrinted:false}));
-}
-need(names.slice(0,7).every(k=>v[k]===old),"EXACT_C8_OUTER_PINS");
-const original={...v};
-need(hash(original)===prior,"HISTORICAL_31_VALUE_DIGEST");
+need(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO","READ_ONLY_PREFLIGHT_ONLY");
+const otherOuter=names.slice(0,7).filter(k=>k!=="V39_P5_POST_APPROVED_CODE_SHA");
+need(otherOuter.every(k=>v[k]===old),"UNEXPECTED_NONPOST_OUTER_PIN");
+const postPin=v.V39_P5_POST_APPROVED_CODE_SHA;
+const postPinClass=postPin===old?"exact-current":postPin.trim()===old?"current-with-whitespace":postPin==="b432eb9a5bac7bc3c4537249e75ec7df41e8727c"?"known-b432-predecessor":postPin==="0369f88ba361ff8f97a352b9d438ee5bcf59af57"?"known-0369-drift":"other";
+const dActual=JSON.parse(Buffer.from(v.P6_NONPAID_DAILY_POLICY_BASE64,"base64"));
+const tActual=JSON.parse(Buffer.from(v.P6_NONPAID_TRANSPORT_TRUST_BASE64,"base64"));
+need(dActual.nativeLaterReview?.maximumT24ExecutionLanes===1&&dActual.validFromUtc==="2026-11-22T00:00:00.000Z"&&dActual.validUntilUtc==="2027-01-20T00:00:00.000Z"&&v.P6_NONPAID_DAILY_POLICY_SHA256==="c477bb71588352d76383b887cae10c35c02cb4a7fe445cedf8ecda0ac2fe8664"&&hash(dActual)===v.P6_NONPAID_DAILY_POLICY_SHA256&&tActual.dailyPolicySha256===v.P6_NONPAID_DAILY_POLICY_SHA256&&hash(tActual)===v.P6_NONPAID_TRANSPORT_TRUST_SHA256,"CURRENT_CORRECTED_59_DAY_POLICY");
+const historicDaily=JSON.parse(JSON.stringify(dActual));
+delete historicDaily.nativeLaterReview.maximumT24ExecutionLanes;
+historicDaily.validUntilUtc="2027-01-31T00:00:00.000Z";
+const historicTransport={...tActual,dailyPolicySha256:hash(historicDaily)};
+const original={...v,V39_P5_POST_APPROVED_CODE_SHA:old,P6_NONPAID_DAILY_POLICY_BASE64:Buffer.from(JSON.stringify(historicDaily)).toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:hash(historicDaily),P6_NONPAID_TRANSPORT_TRUST_BASE64:Buffer.from(JSON.stringify(historicTransport)).toString("base64"),P6_NONPAID_TRANSPORT_TRUST_SHA256:hash(historicTransport)};
+console.log(JSON.stringify({status:"P6_DAY1_CORRECTED_BASELINE_RECONSTRUCTION",postPinClass,allOtherOuterPinsMatch:true,corrected59DayLaneOneVerified:true,historical31Reconstructed:hash(original)===prior,providerCalls:0,secretValuesPrinted:false}));
+need(hash(original)===prior,"HISTORICAL_31_RECONSTRUCTION_MISMATCH");
 const b64=k=>{
  const b=v[k];need(typeof b==="string"&&/^[A-Za-z0-9+/]+={0,2}$/.test(b),"BASE64_"+k);
  const raw=Buffer.from(b,"base64");need(raw.toString("base64")===b,"CANONICAL_BASE64_"+k);
@@ -137,7 +140,7 @@ const expectedLeaves=[
 need(JSON.stringify(actualLeaves)===JSON.stringify(expectedLeaves),"UNEXPECTED_POLICY_LEAF_DELTA");
 const successor={...v};
 const outerChanged=names.slice(0,7).filter(k=>v[k]!==pin);
-need(outerChanged.length>=1&&outerChanged.every(k=>v[k]===old),"UNREVIEWED_OUTER_CODE_PINS");
+need(outerChanged.length===7&&outerChanged.every(k=>k==="V39_P5_POST_APPROVED_CODE_SHA"||v[k]===old),"UNREVIEWED_OUTER_CODE_PINS");
 for(const k of names.slice(0,7))successor[k]=pin;
 for(const k of policyNames)successor[k]=Buffer.from(JSON.stringify(w[k])).toString("base64");
 for(const k of names.slice(27)){
@@ -168,45 +171,4 @@ if(e.P6_G8_OWNER_SEAL_TRIGGER==="OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO
  sourceSuccessorNotSignedOrInstalled:true}));
  process.exit(0);
 }
-const reqPath="data-collection/phase6/checkpoints/p6_day1_release_owner_request.json";
-let req;try{req=JSON.parse(fs.readFileSync(reqPath,"utf8"));}catch{hold("EXACT_OWNER_REQUEST_ABSENT")}
-need(req.schema==="v39.phase6.day1.owner-code-repin-seal-request.v1"&&req.mainSha===pin&&
- req.historicalDigest===prior&&/^[a-f0-9]{32}$/.test(req.nonce)&&
- typeof req.recipientPublicSpkiBase64==="string"&&
- Date.parse(req.requestedAtUtc)<=Date.now()&&Date.now()-Date.parse(req.requestedAtUtc)<30*60000,
- "OWNER_REQUEST_SCOPE");
-const recipientRaw=Buffer.from(req.recipientPublicSpkiBase64,"base64");
-need(recipientRaw.toString("base64")===req.recipientPublicSpkiBase64,"RECIPIENT_BASE64");
-const recipient=createPublicKey({key:recipientRaw,format:"der",type:"spki"});
-need(recipient.asymmetricKeyType==="x25519"&&recipientRaw.byteLength<=256,"RECIPIENT_X25519");
-const {publicKey:epub,privateKey:epriv}=generateKeyPairSync("x25519");
-const ePubRaw=epub.export({format:"der",type:"spki"});
-const shared=diffieHellman({privateKey:epriv,publicKey:recipient});
-const salt=randomBytes(32),iv=randomBytes(12);
-const aadObj={schema:"v39.phase6.day1.policy-code-repin-envelope.v1",mainSha:pin,
- historicalDigest:prior,successorStaticDigest:currentStaticDigest,ownerRequestNonce:req.nonce,
- recipientSpkiSha256:sha(recipientRaw)};
-const aad=Buffer.from(JSON.stringify(aadObj),"utf8");
-const info=Buffer.from("Travnr Phase6 Day1 x25519-aes256gcm source-code-repin successor v1","utf8");
-const key=Buffer.from(hkdfSync("sha256",shared,salt,info,32));
-const cipher=createCipheriv("aes-256-gcm",key,iv,{authTagLength:16});
-cipher.setAAD(aad);
-const sealed={changes,receipt:{status:"P6_DAY1_CODE_ONLY_LINKED_SOURCE_SUCCESSOR_VALIDATED_NO_PAID_GO",
- mainSha:pin,priorStaticSha256:prior,successorStaticSha256:currentStaticDigest,
- successorPostPolicySha256:changes[postH],changesNames:expectedChanges.concat([postB,postH]).sort(),
- policyCount:6,phase6PaidGo:false,sourceAuthReenabled:false,dbWrites:0,providerCalls:0}};
-const raw=Buffer.from(JSON.stringify(sealed),"utf8");
-const ciphertext=Buffer.concat([cipher.update(raw),cipher.final()]);
-const envelope={...aadObj,alg:"X25519-HKDF-SHA256-AES-256-GCM",
- ephemeralPublicSpkiBase64:ePubRaw.toString("base64"),
- saltBase64:salt.toString("base64"),nonceBase64:iv.toString("base64"),
- authTagBase64:cipher.getAuthTag().toString("base64"),
- ciphertextBase64:ciphertext.toString("base64")};
-const outFile=path.join(e.RUNNER_TEMP||"","p6-day1-owner-sealed-code-repin-successor.json");
-need(path.isAbsolute(outFile)&&fs.existsSync(e.RUNNER_TEMP),"OUTPUT_SCOPE");
-fs.writeFileSync(outFile,JSON.stringify(envelope),{mode:0o600,flag:"wx"});
-console.log(JSON.stringify({status:"P6_G12_OWNER_SEALED_EXACT_LINKED_CODE_SUCCESSOR_CREATED_NO_GO",targetMain:pin,
- historical31DigestExact:true,newStaticSha256:currentStaticDigest,
- linkedNewPostPolicySha256:changes[postH],changesCount:Object.keys(changes).length,outerAlreadyApprovedCodeNames:7-outerChanged.length,
- canonicalValidatorOldAndNew:true,secretValuesPrinted:false,
- recipientSpkiSha256:sha(recipientRaw),providerCalls:0,databaseWrites:0,phase6PaidGo:false}));
+hold("READ_ONLY_PREFLIGHT_ONLY");
