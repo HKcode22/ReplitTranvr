@@ -47,6 +47,10 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   lines.push("","**Direct external recovery (separate observation):** "+heartbeat.directRecovery.state,
    "Native schedule gaps remain visible; a controller marker is not an actual SOURCE/PRE/POST receipt.");
  }
+ if(heartbeat.activeNotifications?.alternateExecutionWarnings?.length){
+  lines.push("","**Recent alternate execution — native schedule gap retained:**");
+  for(const i of heartbeat.activeNotifications.alternateExecutionWarnings)lines.push("- "+i.lane+": "+i.reason+" — [alternate run "+i.alternateRunId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.alternateRunId+")");
+ }
  if(heartbeat.activeNotifications?.incidentCount){
   lines.push("","**Current operational incident — review required:**");
   for(const i of heartbeat.activeNotifications.incidents)lines.push("- "+i.lane+": "+i.reason+(i.runId?" — [run "+i.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.runId+")":""));
@@ -102,7 +106,7 @@ async function main(){
   // When native schedule is delayed by GitHub cron jitter but an exact current-main
   // backstop child has actively executed within the window, the warning is surfaced in summary/report
   // without failing the heartbeat probe.
-  const actionableIncidents = report.activeNotifications.incidents.filter(
+  const actionableIncidents = (report.activeNotifications.unresolvedIncidents??report.activeNotifications.incidents).filter(
    i => !(i.lane === "PRIMARY_FIDS_EXPIRY" && report.primaryFidsExpiry?.backup?.executedStepVerified && report.primaryFidsExpiry?.backup?.state === "BACKSTOP_CHILD_STEP_RECENT_NOT_DELETION_PROOF")
   );
   if(actionableIncidents.length>0){
