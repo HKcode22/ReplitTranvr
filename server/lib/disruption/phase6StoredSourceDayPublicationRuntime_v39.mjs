@@ -20,7 +20,7 @@ const hold=s=>{throw Error("HOLD_P6_SOURCE_DAY_PUBLICATION_RUNTIME_"+s);};
 const shared=["reviewedCodeSha","manifestSha256","calendarSha256","releaseSha256","rightsSha256"];
 export async function runP6StoredSourceDayPublication({
  readerClient,publisherClient,prepareReadPool,dailyTrust,sourceTrust,
- signingPolicyBytes,expectedSigningPolicySha256,queryKey,registryKey,scope
+ signingPolicyBytes,expectedSigningPolicySha256,queryKey,registryKey,scope,lateScope
 }){
  if(scope?.independentlyApprovedSourceDayPublicationRuntime!==true||
     scope.independentlyApprovedReadbackRecovery!==true||
@@ -84,7 +84,7 @@ export async function runP6StoredSourceDayPublication({
  // immutable rows, and creates NEW wires only for missing rows.
  const signed=await recoverP6ReviewedPreparedSourceDayFromCommittedPackets({
   readPool:prepareReadPool,policyBytes:signingPolicyBytes,dailyPreparePacketBytes:daily.privatePacketBytes,
-  pins,queryKey,registryKey,readerClient,expectedReaderSessionLogin:scope.expectedReaderSessionLogin});
+  pins,queryKey,registryKey,readerClient,expectedReaderSessionLogin:scope.expectedReaderSessionLogin,lateScope});
  let queries=0,registries=0,verified=0;
  for(const shard of signed.privateSignedShards){
   const r=shard.registryReviewWire.review;

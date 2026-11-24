@@ -10,11 +10,11 @@
  */
 import {createHash} from "node:crypto";
 import type {Pool} from "pg";
-import {verifyPreparedDailyDraw,type PreparedDayForReadback,type PreparedDrawRow}
+import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
-import {readCommittedP5DayCandidateGrid,type P5CommittedDayReadonlyScope}
+import {readCommittedP5DayCandidateGrid,readCommittedP6Day1LateCandidateGrid,type P5CommittedDayReadonlyScope}
  from "./phase5CommittedDayGridReadonly_v39";
-import {planP5Stage8FromCommittedDayReadback,type P5Stage8SourceReviewWithoutCopiedDraw}
+import {planP5Stage8FromCommittedDayReadback,planP6Stage8FromLateCommittedDayReadback,type P5Stage8SourceReviewWithoutCopiedDraw}
  from "./phase5V0079DailyPreparedQueryProposals_v39";
 import {phase5Stage9ExactWholeUnit} from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
 import type {P5SignedOneDayPreparePacket}
@@ -22,6 +22,7 @@ import type {P5SignedOneDayPreparePacket}
 
 import {normalizeP5TypedSourceBudgetBinding,matchesP5TypedSourceBudgetReleaseRow,
  P5_TYPED_RELEASE_SELECT_COLUMNS,type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
+import {isVerifiedP6Day1LateScope,readVerifiedP6Day1Projection,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_DAILY_REVIEW_PRODUCER_"+s);};
 const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
@@ -104,9 +105,9 @@ export function resolveP6DailyAirportTimezoneCatalog(p:Pick<Policy,"airportFrame
  return frames;
 }
 export async function produceP6DelegatedDailySourceReview({
- readPool,policyBytes,dayPlanBytes,pins
+ readPool,policyBytes,dayPlanBytes,pins,lateScope
 }:{
- readPool:Pick<Pool,"connect">;policyBytes:Buffer;dayPlanBytes:Buffer;pins:Pins
+ readPool:Pick<Pool,"connect">;policyBytes:Buffer;dayPlanBytes:Buffer;pins:Pins;lateScope?:P6Day1LateScope
 }){
  if(!pins||pins.independent31DayDelegationPolicyApproved!==true||
     pins.noProviderCredentialsInReviewer!==true||pins.existingPaidDispatchApproved!==false||
@@ -141,6 +142,8 @@ export async function produceP6DelegatedDailySourceReview({
       SLOTS.some(s=>! /^[A-Z]{4}$/.test(plan.pairedIcaos![s]??""))||
       new Set(SLOTS.map(s=>plan.pairedIcaos![s])).size!==4))
   hold("UNAPPROVED_DAILY_PLAN_OR_WASHOUT_SCOPE");
+ if(lateScope!==undefined&&(!isVerifiedP6Day1LateScope(lateScope)||plan.runDayIndex!==1||lateScope.manifestSha256!==p.manifestSha256||lateScope.originalDayPlanSha256!==hash(dayPlanBytes)||lateScope.reviewedCodeSha!==p.approvedCodeSha||lateScope.candidateQueryCount!==128||lateScope.excludedQueryCount!==64))hold("EXACT_DAY1_LATE_SCOPE_REQUIRED");
+ const templates=lateScope?readVerifiedP6Day1Projection(lateScope).templates:plan.templates;
  const segmented=plan.reviewedSegmentedSource??hold("MISSING_APPROVED_SEGMENTED_SOURCE");
  const timing=plan.reviewedRefreshTiming??hold("MISSING_APPROVED_REFRESH_TIMING");
  const from=at(p.validFromUtc),until=at(p.validUntilUtc);
@@ -183,7 +186,7 @@ export async function produceP6DelegatedDailySourceReview({
   const draw=await client.query("SELECT slot_id,target_region,draw_type,selected_icao,frozen_draw_seed,"+
    "selected_at_utc,adaptive_state_hash,probability_vector,airport_layer_design_probability "+
    "FROM clean.adb_sampling_draw WHERE run_day_index=$1 ORDER BY slot_id",[plan.runDayIndex]);
-  const actual=verifyPreparedDailyDraw(day,draw.rows as PreparedDrawRow[]);
+  const actual=lateScope?verifyP6Day1LateFixedDraw(day,draw.rows as PreparedDrawRow[],lateScope):verifyPreparedDailyDraw(day,draw.rows as PreparedDrawRow[]);
   if(actual.selectedAtUtc>=observed||
      (plan.pairedIcaos&&actual.selections.some(s=>plan.pairedIcaos![s.slotId]!==s.icao)))
    hold("ACTUAL_DRAW_NOT_APPROVED_OR_PERSISTED");
@@ -209,7 +212,7 @@ export async function produceP6DelegatedDailySourceReview({
      !int(b.other_category_reserved_units)||!int(b.protected_api_floor_units,p.minimumProtectedFloor,50000)||
      !int(b.physically_reserved_units))
    hold("CYCLE_BUDGET_NOT_APPROVED");
-  const dates=[...new Set(plan.templates.map(q=>q.physicalChargeDayUtc))].sort();
+  const dates=[...new Set(templates.map(q=>q.physicalChargeDayUtc))].sort();
   if(dates.length<1||dates.length>4||dates.some(d=>!/^\d{4}-\d\d-\d\d$/.test(d)))
    hold("UNBOUNDED_PHYSICAL_CHARGE_DATES");
   const budgets=await client.query("SELECT charge_day_utc::text AS day,daily_api_ceiling,"+
@@ -239,7 +242,7 @@ export async function produceP6DelegatedDailySourceReview({
    expectedConfigSha256:p.configSha256,expectedFrameSha256:p.frameSha256,
    expectedProviderContractSha256:p.providerContractSha256,expectedEarlyDrawSha256:actual.stateHash,
    expectedRestrictedReaderRole:p.expectedPrepareRole,runDayIndex:plan.runDayIndex,
-   templates:plan.templates,reviewedRefreshTiming:timing,
+   templates,reviewedRefreshTiming:timing,
    reviewedSegmentedSource:segmented,
    ...(plan.reviewedOrdinaryDayEnvelope?{reviewedOrdinaryDayEnvelope:plan.reviewedOrdinaryDayEnvelope}:{})};
   sourceReview={manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,
@@ -249,10 +252,10 @@ export async function produceP6DelegatedDailySourceReview({
     Number(b.protected_api_floor_units)-Number(b.physically_reserved_units)};
   await client.query("ROLLBACK");tx=false;
  }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});client.release();}
- const saved=await readCommittedP5DayCandidateGrid(readPool,readScope);
+ const saved=lateScope?await readCommittedP6Day1LateCandidateGrid(readPool,readScope,lateScope):await readCommittedP5DayCandidateGrid(readPool,readScope);
  if(saved.dbClockAtReadUtc<observed!||saved.dbClockAtReadUtc>=until)
   hold("SECOND_READ_OUTSIDE_APPROVED_CLOCK");
- const proposal=planP5Stage8FromCommittedDayReadback(saved,sourceReview);
+ const proposal=lateScope&&saved.status==="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED"?planP6Stage8FromLateCommittedDayReadback(saved,sourceReview,lateScope):saved.status==="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"?planP5Stage8FromCommittedDayReadback(saved,sourceReview):hold("DAY1_DAILY_REVIEW_SCOPE_DRIFT");
  if(proposal.sourceQueryCount>p.maxQueriesPerDay)
   hold("QUERY_COUNT_EXCEEDS_DELEGATION");
  const packet:P5SignedOneDayPreparePacket={

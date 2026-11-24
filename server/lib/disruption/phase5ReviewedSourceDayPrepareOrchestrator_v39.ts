@@ -13,19 +13,20 @@
  */
 import type {Pool} from "pg";
 import {
- readCommittedP5DayCandidateGrid,
+ readCommittedP5DayCandidateGrid,readCommittedP6Day1LateCandidateGrid,
  type P5CommittedDayReadonlyScope
 } from "./phase5CommittedDayGridReadonly_v39";
 import {
- planP5Stage8FromCommittedDayReadback,
+ planP5Stage8FromCommittedDayReadback,planP6Stage8FromLateCommittedDayReadback,
  type P5Stage8SourceReviewWithoutCopiedDraw
 } from "./phase5V0079DailyPreparedQueryProposals_v39";
 import {
- commitStage9P5V0082AtomicSegmentedDay,readBackP5Stage9PreparedDayOnce,
+ commitStage9P5V0082AtomicSegmentedDay,readBackP5Stage9PreparedDayOnce,commitP6Day1LateStage9,readBackP6Day1LateStage9,
  type P5V0082AtomicDayReview
 } from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
-import {planP6StoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
+import {planP6StoredSourceDraftShards,planP6Day1LateStoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
 import {normalizeP5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
+import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const hold=(m:string):never=>{
  throw Error("REFUSED_P5_SOURCE_DAY_REVIEWED_PIPELINE_"+m);
@@ -191,4 +192,33 @@ export async function resumeP5ReviewedSourceDayPreparation(
   verifiedQueryCount:proof.verifiedQueryCount,verifiedPartitionCount:proof.verifiedPartitionCount,
   databaseInserts:0,providerCalls:0 as const,phase6PaidGo:false as const
  });
+}
+
+/** Exact incident adapter for already-authenticated durable daily review.
+ * Independent SQL readback determines empty vs committed, never retry unknown. */
+export async function resumeP6Day1LateReviewedSourceDayPreparation(
+ readOnlyPool:Pick<Pool,"connect">,insertOnlyPool:Pick<Pool,"connect">,
+ input:P5ReviewedDaySourcePreparationInput,scope:unknown){
+ if(!isVerifiedP6Day1LateScope(scope)||scope.candidateQueryCount!==128||scope.excludedQueryCount!==64)
+  return hold("LATE_DAY1_SCOPE_NOT_VERIFIED");
+ const r=input?.readScope,p=input?.sourceReview,z=input?.stage9Review;
+ if(!r||!p||!z||r.runDayIndex!==1||z.expectedManifestSha256!==scope.manifestSha256)hold("LATE_DAY1_DURABLE_SCOPE");
+ const saved=await readCommittedP6Day1LateCandidateGrid(readOnlyPool,r,scope);
+ const proposal=planP6Stage8FromLateCommittedDayReadback(saved,p,scope);
+ if(proposal.dayProposalSha256!==z.expectedProposalSha256||
+    saved.selectedDayCandidateGrid.sourceCandidateDigestSha256!==z.expectedSourceCandidateDigestSha256)hold("DURABLE_REVIEW_PROPOSAL_DRIFT");
+ planP6Day1LateStoredSourceDraftShards(saved,proposal,{expectedDayProposalSha256:z.expectedProposalSha256,
+  expectedCandidateGridSha256:z.expectedSourceCandidateDigestSha256,expectedManifestSha256:z.expectedManifestSha256},scope);
+ const review={...z,proposal};
+ let proof,inserted=0;
+ try{proof=await readBackP6Day1LateStage9(insertOnlyPool,review,scope,{distinguishConfirmedEmptyDay:true});}
+ catch(e){
+  if(!(e instanceof Error)||e.message!=="REFUSED_P5_V0082_ATOMIC_DAY_PREPARE_READBACK_CONFIRMED_EMPTY_DAY")throw e;
+  const result=await commitP6Day1LateStage9(insertOnlyPool,review,scope);
+  inserted=result.databaseInserts;
+  proof=await readBackP6Day1LateStage9(insertOnlyPool,review,scope);
+ }
+ return Object.freeze({status:inserted?"DAY1_REMAINING_INITIAL_PREPARED_AND_READ_BACK":"DAY1_REMAINING_EXISTING_READBACK_NO_REPLAY",
+  runDayIndex:1,preparedProposalSha256:proof.sourceProposalSha256,verifiedQueryCount:proof.verifiedQueryCount,
+  verifiedPartitionCount:proof.verifiedPartitionCount,databaseInserts:inserted,providerCalls:0,phase6PaidGo:false});
 }

@@ -6,7 +6,7 @@
 import {createHash,createPublicKey,sign,type KeyObject} from "node:crypto";
 import type {Pool} from "pg";
 import {produceP6DelegatedDailySourceReview} from "./phase6DelegatedDailySourceReviewProducer_v39";
-import {resumeP5ReviewedSourceDayPreparation} from "./phase5ReviewedSourceDayPrepareOrchestrator_v39";
+import {resumeP5ReviewedSourceDayPreparation,resumeP6Day1LateReviewedSourceDayPreparation} from "./phase5ReviewedSourceDayPrepareOrchestrator_v39";
 import {readP6DayEpochRestrictedReaderClock} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {p6DailyPrepareReviewPreimage,P6_DAILY_PREPARE_REVIEW_SCHEMA,
  publishP6DailyPrepareReviewOnce,readP6DailyPrepareReviewOnce}
@@ -98,7 +98,7 @@ export async function runP6DurableDailySourcePreparation({
      !durable.privatePacketBytes.equals(bytes))
    hold("NEW_COMMIT_INDEPENDENT_READBACK_DRIFT");
  }
- const prepared=await resumeP5ReviewedSourceDayPreparation(producer.readPool,preparePool,
+ const prepared=producer.lateScope?await resumeP6Day1LateReviewedSourceDayPreparation(producer.readPool,preparePool,durable.privatePacket.reviewedPrepareInput,producer.lateScope):await resumeP5ReviewedSourceDayPreparation(producer.readPool,preparePool,
   durable.privatePacket.reviewedPrepareInput,{
    authenticatedExactDurableReviewReadbackApproved:true,
    existingPaidDispatchApproved:false,separatePreparationScopeApproved:true});

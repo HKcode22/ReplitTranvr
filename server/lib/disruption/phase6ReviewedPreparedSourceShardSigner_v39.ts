@@ -11,10 +11,10 @@
 import {createHash,createPublicKey,sign,type KeyObject} from "node:crypto";
 import type {Pool} from "pg";
 import type {P5SignedOneDayPreparePacket} from "../../../scripts/v39_phase5_one_signed_day_source_prepare_github_owner_v39";
-import {readCommittedP5DayCandidateGrid} from "./phase5CommittedDayGridReadonly_v39";
-import {planP5Stage8FromCommittedDayReadback} from "./phase5V0079DailyPreparedQueryProposals_v39";
-import {readBackP5Stage9PreparedDayOnce} from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
-import {planP6StoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
+import {readCommittedP5DayCandidateGrid,readCommittedP6Day1LateCandidateGrid} from "./phase5CommittedDayGridReadonly_v39";
+import {planP5Stage8FromCommittedDayReadback,planP6Stage8FromLateCommittedDayReadback} from "./phase5V0079DailyPreparedQueryProposals_v39";
+import {readBackP5Stage9PreparedDayOnce,readBackP6Day1LateStage9} from "./phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
+import {planP6StoredSourceDraftShards,planP6Day1LateStoredSourceDraftShards} from "./phase6StoredSourceDraftShardPlanner_v39";
 import {
  P6_SOURCE_POST_REVIEW_SCHEMA,P6_SOURCE_POST_REVIEW_AUDIENCE,
  signedP6PrivateSourcePostReviewBytes,verifyP6ExternalSourcePostReview
@@ -29,6 +29,7 @@ import {
 } from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {normalizeP5TypedSourceBudgetBinding,sameP5TypedSourceBudgetBinding,
  type P5TypedSourceBudgetBinding} from "./phase5TypedSourceBudgetBinding_v39.mjs";
+import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const ROLE=/^phase5_fids_prepare_[a-z0-9_]{6,42}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_REVIEWED_SOURCE_SIGNER_"+s);};
@@ -73,10 +74,10 @@ function keyInfo(key:KeyObject,fp:string){
  }catch{return hold("SIGNER_KEY_NOT_APPROVED_BY_POLICY");}
 }
 export async function signP6ReviewedPreparedSourceDay({
- readPool,policyBytes,dailyPreparePacketBytes,pins,queryKey,registryKey
+ readPool,policyBytes,dailyPreparePacketBytes,pins,queryKey,registryKey,lateScope
 }:{
  readPool:Pick<Pool,"connect">;policyBytes:Buffer;dailyPreparePacketBytes:Buffer;
- pins:Pins;queryKey:KeyObject;registryKey:KeyObject
+ pins:Pins;queryKey:KeyObject;registryKey:KeyObject;lateScope?:P6Day1LateScope
 }){
  if(!pins||pins.independentExactPolicyAndDailyReviewApproved!==true||
     pins.existingPaidDispatchApproved!==false||pins.noProviderCredentialsInSigner!==true||
@@ -129,18 +130,21 @@ export async function signP6ReviewedPreparedSourceDay({
  const from=utc(p.validFromUtc),until=utc(p.validUntilUtc);
  if(until<=from)hold("INVALID_POLICY_VALIDITY");
  // Reconstruct from REAL DB, never caller-supplied stage7/8/drafts.
- const stage7=await readCommittedP5DayCandidateGrid(readPool,r);
- const stage8=planP5Stage8FromCommittedDayReadback(stage7,s);
+ if(lateScope!==undefined&&(!isVerifiedP6Day1LateScope(lateScope)||day.runDayIndex!==1||lateScope.manifestSha256!==p.manifestSha256||lateScope.reviewedCodeSha!==p.approvedCodeSha||lateScope.candidateQueryCount!==128))hold("LATE_DAY1_SIGNER_SCOPE");
+ const stage7=lateScope?await readCommittedP6Day1LateCandidateGrid(readPool,r,lateScope):await readCommittedP5DayCandidateGrid(readPool,r);
+ const stage8=lateScope&&stage7.status==="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED"?planP6Stage8FromLateCommittedDayReadback(stage7,s,lateScope):stage7.status==="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"?planP5Stage8FromCommittedDayReadback(stage7,s):hold("LATE_DAY1_SIGNER_REVIEW_DRIFT");
  if(stage8.sourceQueryCount>p.maxQueriesPerDay||
     stage8.dayProposalSha256!==z.expectedProposalSha256||
     stage7.selectedDayCandidateGrid.sourceCandidateDigestSha256!==z.expectedSourceCandidateDigestSha256)
   hold("ACTUAL_DYNAMIC_DAY_NOT_IN_EXACT_REVIEW");
- const drafts=planP6StoredSourceDraftShards(stage7,stage8,{
-  expectedDayProposalSha256:z.expectedProposalSha256,
-  expectedCandidateGridSha256:z.expectedSourceCandidateDigestSha256,
-  expectedManifestSha256:p.manifestSha256
- });
- const proof=await readBackP5Stage9PreparedDayOnce(readPool,{...z,proposal:stage8});
+ const draftReview={expectedDayProposalSha256:z.expectedProposalSha256,expectedCandidateGridSha256:z.expectedSourceCandidateDigestSha256,expectedManifestSha256:p.manifestSha256};
+ const drafts=lateScope&&stage7.status==="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED"&&stage8.status==="EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED"?
+  planP6Day1LateStoredSourceDraftShards(stage7,stage8,draftReview,lateScope):
+  stage7.status==="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"&&stage8.status==="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"?
+   planP6StoredSourceDraftShards(stage7,stage8,draftReview):hold("LATE_DAY1_DRAFT_SCOPE_DRIFT");
+ const proof=lateScope&&stage8.status==="EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED"?
+  await readBackP6Day1LateStage9(readPool,{...z,proposal:stage8},lateScope):
+  stage8.status==="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"?await readBackP5Stage9PreparedDayOnce(readPool,{...z,proposal:stage8}):hold("LATE_DAY1_PREPARED_SCOPE_DRIFT");
  const now=utc(proof.observedDatabaseClockUtc);
  const expiry=Math.min(until,now+p.maximumReviewRetentionHours*3600000,
   pins.maximumRetentionNotAfterUtc===undefined?Infinity:utc(pins.maximumRetentionNotAfterUtc));
