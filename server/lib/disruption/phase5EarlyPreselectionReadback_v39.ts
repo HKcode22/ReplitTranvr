@@ -12,7 +12,7 @@ import {
  P5_EARLY_DRAW_MAX_INCLUSIVE_LEAD_MS,
  p5EarlyDrawLeadTimeEligible
 } from "./phase5ProspectiveEarlyDrawClockContract_v39";
-import {isVerifiedP6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
+import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 import { excludedFromProspectiveScheduledPassengerScope, type SamplingSelection, type SlotId } from "./phase6SamplingDecision_v39";
 
 const SLOTS: SlotId[] = ["HUB", "MID_A", "MID_B", "REGIONAL"];
@@ -63,7 +63,7 @@ function norm(v: string): string { return v.trim().toUpperCase(); }
 function verifyDrawCore(
   day: PreparedDayForReadback,
   rows: PreparedDrawRow[],
-  lateScope?: Parameters<typeof isVerifiedP6Day1LateScope>[0],
+  lateScope?: P6Day1LateScope,
 ): Omit<PreparedReadback,"verifiedCalendarLeadOnly"> {
   if (!Number.isInteger(day.runDayIndex) || day.runDayIndex < 1 || day.runDayIndex > 31)
     refuse("RUN_DAY");
