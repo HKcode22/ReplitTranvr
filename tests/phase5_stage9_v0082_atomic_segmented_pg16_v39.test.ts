@@ -229,7 +229,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "INSERT INTO clean.phase5_fids_cycle_budget_v39 "+
    "(manifest_sha256,cycle_api_ceiling,other_category_reserved_units,"+
    "protected_api_floor_units) VALUES ($1,50000,0,100)",[manifest]);
-  await admin.query(
+  if(!costMode)await admin.query(
    "INSERT INTO clean.phase5_fids_day_budget_v39 "+
    "(manifest_sha256,run_day_index,budget_day_utc,calendar_hash,"+
    "config_hash,frame_hash,early_draw_sha256,daily_api_ceiling,"+
@@ -307,6 +307,7 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "GRANT INSERT ON clean.phase5_fids_allowed_query_v39,"+
    "clean.phase5_fids_exact_query_partition_v39 TO "+USER
   );
+  if(costMode)await admin.query("GRANT EXECUTE ON FUNCTION clean.bind_phase5_prospective_parent_source_budget_v39(text,integer,text,integer) TO "+USER);
   writer=new Pool({connectionString:WURL,max:2});
  });
  afterAll(async()=>{if(writer)await writer.end();if(admin)await admin.end();});
@@ -430,6 +431,8 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   await expect(commitStage9P5V0082AtomicSegmentedDay(writer,review))
    .rejects.toThrow("CYCLE_SEVEN_REST_CATEGORY_CEILING_MISMATCH");
   expect(await counts()).toEqual({q:0,p:0,a:0,o:0});
+  if(costMode)expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_fids_day_budget_v39")).rows[0].n).toBe(0);
+
   const days=[...new Set(review.proposal.queries.map(q=>q.planned_charge_utc_date))];
   for(const day of days)await admin.query(
    "INSERT INTO clean.phase5_fids_utc_rest_category_budget_v39 "+
@@ -598,6 +601,20 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
    "FROM clean.phase5_fids_allowed_query_v39"
   )).rows[0];
   expect(meta.prepared).toBe(96);
+ });
+ it("authentic cost-only preparation created exactly one source-only parent binding, never direct INSERT authority",async()=>{
+  const r=await admin.query("SELECT early_draw_sha256,daily_api_ceiling,daily_other_reserved_units,daily_source_reserved_units FROM clean.phase5_fids_day_budget_v39 WHERE manifest_sha256=$1 AND run_day_index=1",[manifest]);
+  expect(r.rowCount).toBe(1);
+  expect(r.rows[0]).toMatchObject({early_draw_sha256:review.proposal.earlyDrawSha256,
+   daily_api_ceiling:costMode?review.proposal.maximumCandidateGetUnits:1900,daily_other_reserved_units:0,daily_source_reserved_units:0});
+  expect((await writer.query("SELECT has_table_privilege(current_user,'clean.phase5_fids_day_budget_v39','INSERT') AS allowed")).rows[0].allowed).toBe(false);
+  if(costMode){
+   const c=await writer.connect();
+   try{
+    await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+    await expect(c.query("SELECT clean.bind_phase5_prospective_parent_source_budget_v39($1,1,$2,192)",[manifest,review.proposal.earlyDrawSha256])).rejects.toThrow("P6_PARENT_BUDGET_NO_REPLAY");
+   }finally{await c.query("ROLLBACK");c.release();}
+  }
  });
  it("resumes an exact existing daily preparation without any repeated INSERT",async()=>{
   const {proposal,...stage9Review}=review;void proposal;
