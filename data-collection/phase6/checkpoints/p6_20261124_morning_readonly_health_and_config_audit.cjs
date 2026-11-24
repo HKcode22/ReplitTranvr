@@ -142,8 +142,17 @@ async function metadata(){
  if(!rb.incomplete&&!eb.incomplete)for(const [k,v] of Object.entries(required))exact(rb,eb,k,v);
  if(!rb.incomplete&&!eb.incomplete)for(const k of ["P5_AUTO_SOURCE_DISPATCH_ENABLED","P5_POST_AUTO_DISPATCH_ENABLED","P5_T24_AUTO_DISPATCH_ENABLED"])absentOr(rb,eb,k,["","0","false"]);
  if(!rb.incomplete&&!eb.incomplete)for(const k of ["P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"])absentOr(rb,eb,k,["","0"]);
- const relayRequired={TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ENABLED:"1",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"1",TRAVNR_RELAY_FULL_RETENTION_APPROVED:"1",TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_TICK",TRAVNR_APPROVED_TARGET_MAIN_SHA:S,TRAVNR_TARGET_FORWARD_ENV_READY:"1"};
- if(!lb.incomplete&&!le.incomplete)for(const [k,v] of Object.entries(relayRequired))exact(lb,le,k,v);
+ const relayRequired={TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ENABLED:"1",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"1",TRAVNR_RELAY_FULL_RETENTION_APPROVED:"1",TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_TICK",TRAVNR_APPROVED_TARGET_MAIN_SHA:S};
+ if(!lb.incomplete&&!le.incomplete){
+  for(const [k,v] of Object.entries(relayRequired))exact(lb,le,k,v);
+  // external-clock.yml target-forward step uses the protected environment.
+  // This is not a job-level repository gate and must not require duplication.
+  const k="TRAVNR_TARGET_FORWARD_ENV_READY";
+  const scoped=actual(le,k),repoValue=actual(lb,k);
+  if(scoped!=="1")issue("RELAY_ENVIRONMENT_COMMISSION_MISMATCH",{name:k,environmentPresent:scoped!==undefined,expected:"1"});
+  else out("RELAY_ENVIRONMENT_COMMISSION_VERIFIED",{name:k,environment:"travnr-target-forward",repositoryPresent:repoValue!==undefined});
+  if(repoValue!==undefined&&repoValue!==scoped)issue("CRITICAL_VARIABLE_SCOPE_CONFLICT",{name:k});
+ }
  const getEpoch=(a,repo,k)=>actual(a,k)??gh("variable","get",k,"-R",repo).trim();
  const epoch=getEpoch(rb,R,"P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"),relayEpoch=getEpoch(lb,L,"TRAVNR_RELAY_ROLLING_SINCE_UTC");
  if(typeof epoch!=="string"||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z$/.test(epoch)||!Number.isFinite(Date.parse(epoch))||Date.parse(epoch)>Date.now()||epoch!==relayEpoch){issue("EPOCH_MISMATCH");return;}
