@@ -34,3 +34,35 @@ export function classifyP6Day1Recovery({dayPlanBytes,expectedDayPlanSha256,obser
  const byHorizon=Object.fromEntries(horizons.map(h=>[h,{planned:64,prospectiveCandidates:eligible.filter(q=>q.horizon===h).length,excluded:missed.filter(q=>q.horizon===h).length}]));
  return {schema:"v39.phase6.day1-prospective-recovery-candidate.v1",runDayIndex:1,originalDayPlanSha256:expectedDayPlanSha256,observedDbUtc,minimumPreparationLeadMinutes,planned:192,eligible,missed,byHorizon,maximumCandidateApiUnits:eligible.length*2,authorizesPaidGet:false,databaseWrites:0,providerCalls:0};
 }
+
+/** Materialize the surviving original templates for a future preparation
+ * adapter. This is not a new calendar plan and cannot be passed as one.
+ * The digest binds the original plan, actual observed clock, full original
+ * denominator, and exact excluded identities. No request is rescheduled.
+ */
+export function projectP6Day1RemainingPreparation(input){
+ const classified=classifyP6Day1Recovery(input);
+ const original=JSON.parse(input.dayPlanBytes.toString("utf8"));
+ const eligible=new Set(classified.eligible.map(x=>x.queryKey));
+ const templates=original.templates.filter(q=>eligible.has(q.queryKey));
+ const excluded=classified.missed.map(q=>({queryKey:q.queryKey,slot:q.slot,
+  horizon:q.horizon,scheduledRequestUtc:q.scheduledRequestUtc,
+  earliestPlannedCutoffUtc:q.earliestPlannedCutoffUtc,reason:q.reason}));
+ const counts=new Map();
+ for(const q of templates){
+  const n=counts.get(q.physicalChargeDayUtc)??{physicalChargeDayUtc:q.physicalChargeDayUtc,
+   plannedPhysicalGets:0,maximumCandidateApiUnits:0};
+  n.plannedPhysicalGets++;n.maximumCandidateApiUnits+=q.apiUnitsPerAttempt;
+  counts.set(q.physicalChargeDayUtc,n);
+ }
+ const projection={schema:"v39.phase6.day1-remaining-preparation-projection.v1",
+  runDayIndex:1,originalDayPlanSha256:classified.originalDayPlanSha256,
+  observedDbUtc:classified.observedDbUtc,minimumPreparationLeadMinutes:classified.minimumPreparationLeadMinutes,
+  pairedIcaos:original.pairedIcaos,expectedServiceStartUtc:original.expectedServiceStartUtc,
+  reviewedSegmentedSource:original.reviewedSegmentedSource,reviewedRefreshTiming:original.reviewedRefreshTiming,
+  plannedQueryDenominator:classified.planned,byHorizon:classified.byHorizon,
+  templates,excluded,actualChargeDayUtcCounts:[...counts.values()].sort((a,b)=>a.physicalChargeDayUtc.localeCompare(b.physicalChargeDayUtc)),
+  maximumCandidateApiUnits:classified.maximumCandidateApiUnits};
+ return {...projection,projectionSha256:sha(Buffer.from(JSON.stringify(projection))),
+  authorizesPaidGet:false,databaseWrites:0,providerCalls:0};
+}
