@@ -181,8 +181,9 @@ function materializeGrid(input:P5DynamicDayGridInput,lateScope?:Parameters<typeo
     day.configHash!==input.reviewedConfigSha256||
     day.frameHash!==input.reviewedFrameSha256)
    hold("FROZEN_CALENDAR_CONFIG_FRAME_CONFLICT");
+ if(lateScope!==undefined&&!isVerifiedP6Day1LateScope(lateScope))hold("LATE_SCOPE_NOT_VERIFIED");
  const projection=lateScope===undefined?undefined:readVerifiedP6Day1Projection(lateScope);
- if(projection&&(!segmented||day.runDayIndex!==1||
+ if(projection&&(!isVerifiedP6Day1LateScope(lateScope)||!segmented||day.runDayIndex!==1||
    projection.projectionSha256!==lateScope.remainingPreparationProjectionSha256||
    JSON.stringify(input.templates)!==JSON.stringify(projection.templates)||
    JSON.stringify(shape)!==JSON.stringify(projection.reviewedSegmentedSource)||
