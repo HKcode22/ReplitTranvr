@@ -9,6 +9,7 @@ import {
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {verifyP6Day1LateRegistrationScope,readVerifiedP6Day1Projection} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
+import {commitP6Day1LateStage9,readBackP6Day1LateStage9,commitStage9P5V0082AtomicSegmentedDay,type P6Day1LateAtomicReview} from "../server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39";
 import {readCommittedP6Day1LateCandidateGrid} from "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
 import {planP6Stage8FromLateCommittedDayReadback,planP5Stage8FromCommittedDayReadback} from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {materializeP6Day1LateDynamicGrid,materializeP5DynamicDaySourceGrid,P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA} from "../server/lib/disruption/phase5DynamicDaySourceGrid_v39";
@@ -353,6 +354,37 @@ describe("Phase6 exact incident-only late fixed pair transaction candidate",()=>
    plannedQueryDenominator:192,excludedQueryCount:64,sourceQueryCount:128,maximumCandidateGetUnits:256,
    databaseWrites:0,providerCalls:0,phase6Go:false});
   expect(proposal.sourcePartitionPins).toHaveLength(128);
+  const h=(x:unknown)=>digest(Buffer.from(JSON.stringify(x)));
+  const atomic:P6Day1LateAtomicReview={proposal,expectedProposalSha256:proposal.dayProposalSha256,
+   expectedSourceCandidateDigestSha256:grid.sourceCandidateDigestSha256,
+   expectedManifestSha256:review.manifestSha256,expectedCalendarSha256:review.calendarSha256,
+   expectedConfigSha256:review.configSha256,expectedFrameSha256:review.frameSha256,
+   expectedProviderContractSha256:review.providerContractSha256,expectedRightsReviewSha256:review.rightsReviewSha256,
+   expectedReleaseSha256:review.reviewedReleaseSha256,expectedRestrictedWriterRole:"phase5_fids_prepare_test20261123",
+   expectedChargeDayBudgetHashSha256:h(proposal.actualUtcChargeBudgets),
+   reviewedCategoryBudgetSha256:H("2"),budgetReleaseMode:"COST_UPPER_BOUND",reviewed31DaySourceRequestGridSha256:null,
+   reviewedCostEnvelopeSha256:H("3"),independentFreezeApproved:true,independentRightsReviewApproved:true,githubOnlyProspectiveOwnerApproved:true};
+  let connects=0;
+  const dbBoundary={connect:async()=>{connects++;throw Error("TEST_SQL_BOUNDARY");}} as any;
+  // Positive exact packet reaches restricted SQL, ordinary and tampered paths do not.
+  await expect(commitP6Day1LateStage9(dbBoundary,atomic,scope)).rejects.toThrow("TEST_SQL_BOUNDARY");
+  await expect(readBackP6Day1LateStage9(dbBoundary,atomic,scope)).rejects.toThrow("TEST_SQL_BOUNDARY");
+  expect(connects).toBe(2);
+  await expect(commitP6Day1LateStage9(dbBoundary,atomic,{...scope})).rejects.toThrow("LATE_SCOPE_NOT_VERIFIED");
+  await expect(commitStage9P5V0082AtomicSegmentedDay(dbBoundary,atomic as any)).rejects.toThrow("WRONG_DAY_PREPARATION_SCOPE");
+  await expect(commitP6Day1LateStage9(dbBoundary,{...atomic,budgetReleaseMode:"EXACT_SOURCE_GRID",reviewed31DaySourceRequestGridSha256:H("4"),reviewedCostEnvelopeSha256:null},scope)).rejects.toThrow("WRONG_DAY_PREPARATION_SCOPE");
+  // Rehashing the entire packet cannot authorize a changed acquisition time.
+  const changed=structuredClone(proposal);
+  const q=changed.queries[0];
+  q.planned_dispatch_utc=new Date(Date.parse(q.planned_dispatch_utc)+1000).toISOString();
+  const {query_digest:oldDigest,...without}=q;
+  q.query_digest=h({schema:"v39.phase5.v0079.query-prepared-proposal.v1",...without});
+  changed.sourcePartitionPins!.find(p=>p.queryDigest===oldDigest)!.queryDigest=q.query_digest;
+  changed.dayProposalSha256=h({manifest:atomic.expectedManifestSha256,source:atomic.expectedSourceCandidateDigestSha256,
+   proposals:changed.queries,checked:changed.actualUtcChargeBudgets,reviewedSegmentedSource:changed.reviewedSegmentedSource,sourcePartitionPins:changed.sourcePartitionPins});
+  await expect(commitP6Day1LateStage9(dbBoundary,{...atomic,proposal:changed,expectedProposalSha256:changed.dayProposalSha256},scope)).rejects.toThrow("QUERY_NOT_EXACT_REMAINING_TEMPLATE");
+  expect(connects).toBe(2);
+
   expect(proposal.queries.every(q=>q.state==="PREPARED"&&q.horizon!=="T-24h"&&q.github_run_id==="00000")).toBe(true);
   expect(()=>planP5Stage8FromCommittedDayReadback(saved as any,review)).toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
   expect(()=>planP6Stage8FromLateCommittedDayReadback(saved,review,{...scope})).toThrow("LATE_SCOPE_NOT_VERIFIED");
