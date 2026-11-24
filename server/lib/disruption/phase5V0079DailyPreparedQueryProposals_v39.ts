@@ -19,7 +19,7 @@ import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw,
  type PreparedDayForReadback,type PreparedDrawRow}
  from "./phase5EarlyPreselectionReadback_v39";
 
-import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
+import {isVerifiedP6Day1LateScope,readVerifiedP6Day1Projection,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const HASH=/^[a-f0-9]{64}$/,ISO=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
 const sha=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
@@ -154,7 +154,7 @@ function planStage8(p:AnyStage8Input,late?:P6Day1LateScope):Stage8DayProposalRes
  if(stamp(p.stage7.dbClockAtReadUtc)>=Math.min(
     ...candidate.acquisitions.map(a=>stamp(a.scheduledRequestUtc))))
     refuse("SAVED_DAY_READBACK_AFTER_FIRST_GET");
- const templates:P5DynamicDayGridInput["templates"]=
+ const templates:P5DynamicDayGridInput["templates"]=late?readVerifiedP6Day1Projection(late).templates:
    candidate.acquisitions.map(q=>{
      const {icao,plannedAirportSelectionUtc,...rest}=q;
      void icao;void plannedAirportSelectionUtc;

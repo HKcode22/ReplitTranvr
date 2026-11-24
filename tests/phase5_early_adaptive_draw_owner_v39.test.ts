@@ -9,6 +9,8 @@ import {
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {verifyP6Day1LateRegistrationScope,readVerifiedP6Day1Projection} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
+import {readCommittedP6Day1LateCandidateGrid} from "../server/lib/disruption/phase5CommittedDayGridReadonly_v39";
+import {planP6Stage8FromLateCommittedDayReadback,planP5Stage8FromCommittedDayReadback} from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {materializeP6Day1LateDynamicGrid,materializeP5DynamicDaySourceGrid,P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA} from "../server/lib/disruption/phase5DynamicDaySourceGrid_v39";
 const start="2026-11-10T14:00:00.000Z";
 const now="2026-11-09T10:00:00.000Z";
@@ -40,7 +42,7 @@ function mockDb(opts:{
   partial?:boolean; failAfterInsert?:boolean;
   expireAtCommit?:boolean; mutableReadback?:boolean;
   frameRows?:typeof frame; midARegion?:string; futurePairRows?:Row[];
-  lateDay1?:boolean;lateCommitClock?:string;lateRoleWrong?:boolean;lateHistory?:Row;lateFutureDraws?:Row[];
+  lateDay1?:boolean;lateCommitClock?:string;lateReadClock?:string;lateRoleWrong?:boolean;lateHistory?:Row;lateFutureDraws?:Row[];
 
 }={}){
  const queries:string[]=[];
@@ -62,6 +64,7 @@ function mockDb(opts:{
    if(sql==="ROLLBACK"){inTx=false;return {rowCount:0,rows:[]};}
    if(sql.startsWith("SET LOCAL")||sql.includes("pg_advisory_xact_lock"))
      return {rowCount:1,rows:[{}]};
+   if(sql.includes("current_user AS reader_role"))return {rowCount:1,rows:[{reader_role:"phase5_fids_prepare_test20261123",read_only:"on",at:new Date(opts.lateReadClock??"2026-11-24T04:51:00.000Z")}]};
    if(sql.includes("current_user actor,session_user login")){
      const role=opts.lateRoleWrong?"wrong_role":"phase5_early_draw_test20261123";
      return {rowCount:1,rows:[{actor:role,login:role,restricted:true}]};
@@ -327,6 +330,32 @@ describe("Phase6 exact incident-only late fixed pair transaction candidate",()=>
    authorizesPaidGet:false,actualFlightLevelPreCertified:false});
   expect(grid.acquisitions.every(q=>q.horizon!=="T-24h"&&q.plannedAirportSelectionUtc===result.selectedAtUtc)).toBe(true);
   expect(grid.remainingPreparationProjectionSha256).toBe(result.remainingPreparationProjectionSha256);
+  const saved=await readCommittedP6Day1LateCandidateGrid(m.pool,{
+   expectedManifestSha256:pins.expectedManifestSha256,expectedCalendarSha256:day.calendarHash,
+   expectedConfigSha256:day.configHash,expectedFrameSha256:day.frameHash,
+   expectedProviderContractSha256:H("f"),expectedEarlyDrawSha256:result.drawSha256,
+   expectedRestrictedReaderRole:"phase5_fids_prepare_test20261123",runDayIndex:1,
+   templates:projection.templates,reviewedRefreshTiming:projection.reviewedRefreshTiming,
+   reviewedSegmentedSource:projection.reviewedSegmentedSource},scope);
+  expect(saved).toMatchObject({status:"SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED",
+   restrictedReaderRoleVerified:true,databaseReadOnlySnapshot:true,providerCalls:0,databaseWrites:0});
+  expect(saved.selectedDayCandidateGrid.sourceCandidateDigestSha256).toBe(grid.sourceCandidateDigestSha256);
+  const zones=["Asia/Dubai","Asia/Dubai","America/Lima","America/Chicago"];
+  const review={manifestSha256:pins.expectedManifestSha256,calendarSha256:day.calendarHash,
+   configSha256:day.configHash,frameSha256:day.frameHash,providerContractSha256:H("f"),
+   reviewedReleaseSha256:H("a"),rightsReviewSha256:H("b"),
+   localFrames:(["HUB","MID_A","MID_B","REGIONAL"] as const).map((slot,i)=>({
+    slot,icao:pairAirportSet[slot].icao,ianaTimezone:zones[i],providerApiVersion:"v1",fidsProtocolVersion:"fids-v39"})),
+   chargeDayBudgets:grid.actualChargeDayUtcCounts.map(x=>({chargeDayUtc:x.day,dailyApiCeiling:1900,
+    otherCategoriesReserved:0,existingSourceReserved:0})),cycleUnitsAvailable:36740};
+  const proposal=planP6Stage8FromLateCommittedDayReadback(saved,review,scope);
+  expect(proposal).toMatchObject({status:"EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED",
+   plannedQueryDenominator:192,excludedQueryCount:64,sourceQueryCount:128,maximumCandidateGetUnits:256,
+   databaseWrites:0,providerCalls:0,phase6Go:false});
+  expect(proposal.sourcePartitionPins).toHaveLength(128);
+  expect(proposal.queries.every(q=>q.state==="PREPARED"&&q.horizon!=="T-24h"&&q.github_run_id==="00000")).toBe(true);
+  expect(()=>planP5Stage8FromCommittedDayReadback(saved as any,review)).toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+  expect(()=>planP6Stage8FromLateCommittedDayReadback(saved,review,{...scope})).toThrow("LATE_SCOPE_NOT_VERIFIED");
   expect(()=>materializeP5DynamicDaySourceGrid(input)).toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
   expect(()=>materializeP6Day1LateDynamicGrid(input,{...scope})).toThrow("LATE_SCOPE_NOT_VERIFIED");
   expect(()=>materializeP6Day1LateDynamicGrid({...input,templates:input.templates.slice(1)},scope)).toThrow("LATE_PROJECTION_DRIFT");
