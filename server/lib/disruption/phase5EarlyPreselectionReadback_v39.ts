@@ -245,3 +245,18 @@ export function inspectP6ClosedFixedPairForWashout(day:PreparedDayForReadback,ro
  return {...verifyDrawCore(day,rows,undefined,true),verifiedCalendarLeadOnly:false as const,
   historicalWashoutOnly:true as const};
 }
+
+/** Signed SOURCE envelope boundary only. The caller independently authenticates
+ * the entire packet; this proves exact incident draw shape, never T24 lead.
+ * Paid SQL separately enforces the same prospective fixed-day exception. */
+export function inspectP6Day1FixedDrawForLaterSource(day:PreparedDayForReadback,rows:PreparedDrawRow[],selectedAtUtc:string){
+ const start=dateMs(day.scheduledStartUtc,"SERVICE_START"),selected=dateMs(selectedAtUtc,"RECOVERY_SELECTED");
+ const fixed={HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"};
+ if(day.runDayIndex!==1||day.drawType!=="NEW_TEMPLATE"||start!==Date.parse("2026-11-25T00:00:00.000Z")||
+   selected<Date.parse("2026-11-24T00:00:00.000Z")||selected>=Date.parse("2026-11-25T01:40:00.000Z")||
+   !day.pairAirportSet||SLOTS.some(s=>day.pairAirportSet?.[s]?.icao!==fixed[s]))
+  refuse("DAY1_SIGNED_LATER_SOURCE_FIXED_PAIR_SCOPE");
+ const v=verifyDrawCore(day,rows,undefined,true);
+ if(v.selectedAtUtc!==selectedAtUtc)refuse("DAY1_SIGNED_LATER_SOURCE_CLOCK");
+ return {...v,verifiedCalendarLeadOnly:false as const};
+}

@@ -1,3 +1,5 @@
+import {planP6Day1LateStoredSourceDraftShards} from "../server/lib/disruption/phase6StoredSourceDraftShardPlanner_v39";
+import {admitP5ScopedFidsSource} from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 import { describe, expect, it } from "vitest";
 import {
   commitEarlyPhase5Draw,commitP6Day1LateFixedRegistration,
@@ -354,6 +356,20 @@ describe("Phase6 exact incident-only late fixed pair transaction candidate",()=>
    plannedQueryDenominator:192,excludedQueryCount:64,sourceQueryCount:128,maximumCandidateGetUnits:256,
    databaseWrites:0,providerCalls:0,phase6Go:false});
   expect(proposal.sourcePartitionPins).toHaveLength(128);
+  const drafts=planP6Day1LateStoredSourceDraftShards(saved,proposal,{
+   expectedDayProposalSha256:proposal.dayProposalSha256,expectedCandidateGridSha256:grid.sourceCandidateDigestSha256,
+   expectedManifestSha256:review.manifestSha256},scope);
+  expect(drafts.queryCount).toBe(128);
+  const packets=drafts.privateDraftShards.flatMap(s=>s.entries.map(e=>e.unsignedDraft.unsignedQueryEnvelope));
+  expect(packets.every(p=>p.plan.day1LaterRecovery?.selectedAtUtc===result.selectedAtUtc&&p.plan.githubOnlyOwnerApproved===false)).toBe(true);
+  for(const p of packets){
+   const signedPlan={...p.plan,day:{...p.plan.day,scheduledStartUtc:new Date(p.plan.day.scheduledStartUtc)},
+    independentlyApprovedSourceAndRetention:true as const,githubOnlyOwnerApproved:true as const};
+   expect(admitP5ScopedFidsSource(signedPlan,new Date(signedPlan.acquisition.scheduledRequestUtc)).selectedIcao).toBe(signedPlan.acquisition.icao);
+   expect(()=>admitP5ScopedFidsSource({...signedPlan,day1LaterRecovery:undefined},new Date(signedPlan.acquisition.scheduledRequestUtc))).toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+   expect(()=>admitP5ScopedFidsSource({...signedPlan,acquisition:{...signedPlan.acquisition,horizon:"T-24h"}},new Date(signedPlan.acquisition.scheduledRequestUtc))).toThrow("DAY1_LATER_SOURCE_ORIGINAL_TEMPLATE_MISMATCH");
+  }
+
   const h=(x:unknown)=>digest(Buffer.from(JSON.stringify(x)));
   const atomic:P6Day1LateAtomicReview={proposal,expectedProposalSha256:proposal.dayProposalSha256,
    expectedSourceCandidateDigestSha256:grid.sourceCandidateDigestSha256,

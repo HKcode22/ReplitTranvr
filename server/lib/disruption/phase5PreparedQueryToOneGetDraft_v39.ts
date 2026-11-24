@@ -8,16 +8,17 @@
  * It performs no database write, external provider call or signing.
  */
 import type {P5SourceUpcomingCandidate} from "./phase5SourceUpcomingDueQueueReadonly_v39";
-import type {P5CommittedDayReadonlyResult}
+import type {P5CommittedDayReadonlyResult,P6Day1LateReadbackResult}
  from "./phase5CommittedDayGridReadonly_v39";
-import type {Stage8DayProposalResult}
+import type {Stage8DayProposalResult,P6Day1LateProposalResult}
  from "./phase5V0079DailyPreparedQueryProposals_v39";
-import {verifyPreparedDailyDraw}
+import {verifyPreparedDailyDraw,verifyP6Day1LateFixedDraw}
  from "./phase5EarlyPreselectionReadback_v39";
 import {verifyP5F8ExactSourcePartition,
  type P5SourceSingleQueryPlan}
  from "./phase5ScopedFidsSourceBridge_v39";
 
+import {isVerifiedP6Day1LateScope,readVerifiedP6Day1Projection,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 function reject(why:string):never{
  throw Error("REFUSED_P5_PREPARED_TO_ONE_GET_DRAFT_"+why);
@@ -65,10 +66,10 @@ export interface P5UnapprovedOneGetCandidate{
   plan:P5UnapprovedOneGetPlan;
  };
 }
-export function draftP5OneGetFromActualPreparedSource(
- stage7:P5CommittedDayReadonlyResult,
- stage8:Stage8DayProposalResult,
- review:P5PreparedToGetDraftReview
+function draftOneGet(
+ stage7:P5CommittedDayReadonlyResult|P6Day1LateReadbackResult,
+ stage8:Stage8DayProposalResult|P6Day1LateProposalResult,
+ review:P5PreparedToGetDraftReview,late?:P6Day1LateScope
 ):P5UnapprovedOneGetCandidate{
  if(!stage7||!stage8||!review||
    ![review.expectedDayProposalSha256,review.expectedCandidateGridSha256,
@@ -86,12 +87,18 @@ export function draftP5OneGetFromActualPreparedSource(
     stage7.databaseReadOnlySnapshot!==true||
     stage7.databaseWrites!==0||stage7.providerCalls!==0||
     stage7.phase6Go!==false||
-    stage8.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
-    stage8.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"||
+    (late?(!isVerifiedP6Day1LateScope(late)||stage7.status!=="SAVED_DAY1_REMAINING_CANDIDATES_NOT_RELEASED"||
+     stage8.status!=="EXACT_REMAINING_DAY1_PROPOSALS_NOT_PREPARED_OR_SIGNED"||
+     stage7.remainingPreparationProjectionSha256!==late.remainingPreparationProjectionSha256||
+     stage8.remainingPreparationProjectionSha256!==late.remainingPreparationProjectionSha256||
+     late.manifestSha256!==review.expectedManifestSha256):
+     (stage7.status!=="SAVED_SOURCE_DAY_READ_ONLY_CANDIDATES_NOT_RELEASED"||
+      stage8.schema!=="v39.phase5.stage8.v0079-day-prepared-proposals.v1"||
+      stage8.status!=="EXACT_DAY_QUERY_PROPOSALS_NOT_DATABASE_PREPARED_OR_SIGNED"))||
     stage8.providerCalls!==0||stage8.databaseWrites!==0||
     stage8.phase6Go!==false)
   reject("NOT_AN_AUTHENTIC_UNRELEASED_DAY_SNAPSHOT");
- const actual=verifyPreparedDailyDraw(proof.day,proof.drawRows);
+ const actual=late?verifyP6Day1LateFixedDraw(proof.day,proof.drawRows,late):verifyPreparedDailyDraw(proof.day,proof.drawRows);
  const grid=stage7.selectedDayCandidateGrid;
  if(actual.stateHash!==proof.drawStateSha256||
     actual.stateHash!==grid?.committedDrawSha256||
@@ -158,6 +165,10 @@ export function draftP5OneGetFromActualPreparedSource(
    shape.reviewedProviderRangeEvidenceSha256
  };
  const draft:P5SourceSingleQueryPlan={
+  ...(late?{day1LaterRecovery:{schema:"v39.phase6.day1-later-source-evidence.v1" as const,incidentRunId:45293307564 as const,
+   manifestSha256:late.manifestSha256,originalDayPlanSha256:late.originalDayPlanSha256,policySha256:late.policySha256,
+   remainingPreparationProjectionSha256:late.remainingPreparationProjectionSha256,selectedAtUtc:late.observedDbUtc,
+   minimumPreparationLeadMinutes:readVerifiedP6Day1Projection(late).minimumPreparationLeadMinutes,plannedQueryDenominator:192 as const}}:{}),
   acquisition:a,
   sourcePartition,
   day:proof.day,
@@ -211,6 +222,14 @@ export function draftP5OneGetFromActualPreparedSource(
  };
 }
 
+
+export function draftP5OneGetFromActualPreparedSource(stage7:P5CommittedDayReadonlyResult,stage8:Stage8DayProposalResult,review:P5PreparedToGetDraftReview){
+ return draftOneGet(stage7,stage8,review);
+}
+export function draftP6Day1LateOneGet(stage7:P6Day1LateReadbackResult,stage8:P6Day1LateProposalResult,review:P5PreparedToGetDraftReview,scope:unknown){
+ if(!isVerifiedP6Day1LateScope(scope))return reject("LATE_SCOPE_NOT_VERIFIED");
+ return draftOneGet(stage7,stage8,review,scope);
+}
 
 /**
  * Target-neutral Stage7/8 future query draft ↔ Stage9 actual V0079 queue

@@ -4,11 +4,12 @@
  * The actual publisher must separately prove commit time and signed bytes.
  */
 import {createHash} from "node:crypto";
-import type {P5CommittedDayReadonlyResult} from "./phase5CommittedDayGridReadonly_v39";
-import type {Stage8DayProposalResult} from "./phase5V0079DailyPreparedQueryProposals_v39";
-import {draftP5OneGetFromActualPreparedSource,
+import type {P5CommittedDayReadonlyResult,P6Day1LateReadbackResult} from "./phase5CommittedDayGridReadonly_v39";
+import type {Stage8DayProposalResult,P6Day1LateProposalResult} from "./phase5V0079DailyPreparedQueryProposals_v39";
+import {draftP5OneGetFromActualPreparedSource,draftP6Day1LateOneGet,
  type P5PreparedToGetDraftReview,type P5UnapprovedOneGetCandidate}
  from "./phase5PreparedQueryToOneGetDraft_v39";
+import {isVerifiedP6Day1LateScope,type P6Day1LateScope} from "./phase6Day1LateRegistrationScope_v39.mjs";
 const minute=60_000;
 const sha=(x:unknown)=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const hold=(why:string):never=>{throw Error("HOLD_P6_SOURCE_DRAFT_SHARDS_"+why);};
@@ -24,13 +25,13 @@ type Entry={queryDigestSha256:string;plannedDispatchUtc:string;
 type Shard={shardIndex:number;earliestProposedNotBeforeUtc:string;
  hardLatestUtc:string;latestFirstQueryParentReviewUtc:string;
  entries:Entry[];alreadyTooCloseAtReadCount:number};
-export function planP6StoredSourceDraftShards(
- stage7:P5CommittedDayReadonlyResult,stage8:Stage8DayProposalResult,
- review:Omit<P5PreparedToGetDraftReview,"queryDigestSha256">
+function planShards(
+ stage7:P5CommittedDayReadonlyResult|P6Day1LateReadbackResult,stage8:Stage8DayProposalResult|P6Day1LateProposalResult,
+ review:Omit<P5PreparedToGetDraftReview,"queryDigestSha256">,late?:P6Day1LateScope
 ){
  if(!stage7||!stage8||!review||!Array.isArray(stage8.queries)||
     !Array.isArray(stage8.sourcePartitionPins)||!stage8.reviewedSegmentedSource||
-    stage8.queries.length<12||stage8.queries.length>384||
+    stage8.queries.length<(late?1:12)||stage8.queries.length>384||
     stage8.sourceQueryCount!==stage8.queries.length||
     stage8.dayProposalSha256!==review.expectedDayProposalSha256||
     sha({manifest:review.expectedManifestSha256,
@@ -48,7 +49,8 @@ export function planP6StoredSourceDraftShards(
     hardLatestUtc:q.hard_latest_dispatch_utc,
     earliestParentReviewUtc:iso(planned-105*minute),
     latestParentReviewUtc:iso(planned-15*minute),
-    unsignedDraft:draftP5OneGetFromActualPreparedSource(stage7,stage8,
+    unsignedDraft:late?draftP6Day1LateOneGet(stage7 as P6Day1LateReadbackResult,stage8 as P6Day1LateProposalResult,
+      {...review,queryDigestSha256:q.query_digest},late):draftP5OneGetFromActualPreparedSource(stage7 as P5CommittedDayReadonlyResult,stage8 as Stage8DayProposalResult,
       {...review,queryDigestSha256:q.query_digest})};
  }).sort((a,b)=>a.plannedDispatchUtc.localeCompare(b.plannedDispatchUtc)||
    a.queryDigestSha256.localeCompare(b.queryDigestSha256));
@@ -93,4 +95,12 @@ export function planP6StoredSourceDraftShards(
  return Object.defineProperty(result,"privateDraftShards",{
   value:shards,enumerable:false,writable:false,configurable:false
  }) as typeof result & {readonly privateDraftShards:readonly Shard[]};
+}
+
+export function planP6StoredSourceDraftShards(stage7:P5CommittedDayReadonlyResult,stage8:Stage8DayProposalResult,review:Omit<P5PreparedToGetDraftReview,"queryDigestSha256">){
+ return planShards(stage7,stage8,review);
+}
+export function planP6Day1LateStoredSourceDraftShards(stage7:P6Day1LateReadbackResult,stage8:P6Day1LateProposalResult,review:Omit<P5PreparedToGetDraftReview,"queryDigestSha256">,scope:unknown){
+ if(!isVerifiedP6Day1LateScope(scope))return hold("LATE_SCOPE_NOT_VERIFIED");
+ return planShards(stage7,stage8,review,scope);
 }

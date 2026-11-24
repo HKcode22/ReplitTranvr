@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { fetchFidsPopulation, type FidsCensusParams, type FidsQueryObservation, type PopulationRow } from "./fidsCensus_v3";
 import { P5_CANONICAL_IDENTITY_VERSION } from "./flightInstanceCanonical_v3";
-import { verifyPreparedDailyDraw, type PreparedDayForReadback, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
+import { verifyPreparedDailyDraw, inspectP6Day1FixedDrawForLaterSource, type PreparedDayForReadback, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
 import type { P5FidsAcquisition } from "./phase5FidsFreezeGridAdmission_v39";
 
 const HASH=/^[a-f0-9]{64}$/;
@@ -53,7 +53,17 @@ export interface P5F8SourcePartitionPin {
   reviewedProviderRangeEvidenceSha256:string;
 }
 
+export interface P6Day1LaterSourceEvidence{
+ schema:"v39.phase6.day1-later-source-evidence.v1";
+ incidentRunId:45293307564;
+ manifestSha256:string;originalDayPlanSha256:string;policySha256:string;
+ remainingPreparationProjectionSha256:string;selectedAtUtc:string;minimumPreparationLeadMinutes:number;
+ plannedQueryDenominator:192;
+}
 export interface P5SourceSingleQueryPlan {
+  /** Only emitted by the incident-specific verified Stage7/8 bridge. The
+   * exact independent query signature covers these bytes. SQL still guards GET. */
+  day1LaterRecovery?:P6Day1LaterSourceEvidence;
   acquisition:P5FidsAcquisition;
   sourcePartition:P5F8SourcePartitionPin;
   day:PreparedDayForReadback;
@@ -199,7 +209,30 @@ export function admitP5ScopedFidsSource(
      !/^[-0-9:T]{16,17}$/.test(p.localFrom)||
      !/^[-0-9:T]{16,17}$/.test(p.localTo))
     refuse("QUERY_KEY_OR_LOCAL_FRAME");
-  const proposed=verifyPreparedDailyDraw(day,p.savedEarlyDrawRows);
+  const incident=p.day1LaterRecovery;
+  let proposed;
+  if(incident!==undefined){
+   const key=/^p6\.d1\.(HUB|MID_A|MID_B|REGIONAL)\.(T-6h|T-90m)\.s1\.p1\.r([1-9]|1[0-6])$/.exec(q.queryKey);
+   const fixed={HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"};
+   const start=Date.parse("2026-11-25T00:00:00.000Z");
+   const expectedCutoff=key?start-(key[2]==="T-6h"?360:90)*60000+(Number(key[3])-1)*900000:NaN;
+   const expectedRequest=expectedCutoff-900000;
+   if(incident.schema!=="v39.phase6.day1-later-source-evidence.v1"||incident.incidentRunId!==45293307564||
+      incident.plannedQueryDenominator!==192||
+      ![incident.manifestSha256,incident.originalDayPlanSha256,incident.policySha256,incident.remainingPreparationProjectionSha256].every(validHash)||
+      !Number.isSafeInteger(incident.minimumPreparationLeadMinutes)||incident.minimumPreparationLeadMinutes<15||incident.minimumPreparationLeadMinutes>180||
+      !key||key[1]!==q.slot||key[2]!==q.horizon||q.runDayIndex!==1||q.icao!==fixed[q.slot]||
+      q.budgetDayUtc!=="2026-11-25"||q.serviceWindowStartUtc!==new Date(start).toISOString()||
+      q.serviceWindowEndUtc!==new Date(start+4*3600000).toISOString()||
+      millis(q.scheduledRequestUtc,"LATE_REQUEST")!==expectedRequest||
+      millis(q.earliestPlannedCutoffUtc,"LATE_CUTOFF")!==expectedCutoff||
+      q.physicalChargeDayUtc!==new Date(expectedRequest).toISOString().slice(0,10)||
+      q.maxResponseAndPersistSeconds!==180||
+      q.plannedAirportSelectionUtc!==incident.selectedAtUtc||
+      millis(incident.selectedAtUtc,"LATE_SELECTED")>=expectedRequest-incident.minimumPreparationLeadMinutes*60000)
+    refuse("DAY1_LATER_SOURCE_ORIGINAL_TEMPLATE_MISMATCH");
+   proposed=inspectP6Day1FixedDrawForLaterSource(day,p.savedEarlyDrawRows,incident.selectedAtUtc);
+  }else proposed=verifyPreparedDailyDraw(day,p.savedEarlyDrawRows);
   if(proposed.stateHash!==p.expectedEarlyDrawSha256)
     refuse("EARLY_DRAW_SHA_MISMATCH");
   const selected=proposed.selections.find(s=>s.slotId===q.slot);
