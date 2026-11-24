@@ -191,3 +191,23 @@ test("no correct role or distinct explicit private review grants can be guessed"
   assert.equal(q.calls.length,0);
  }
 });
+
+
+// Phase5B evidence: a controller-only release that repins the data reader
+// is not automatically compatible with an already signed old producer.
+test("Phase5B: exact original signed producer survives unchanged, blind executable repin rejects before SQL",async()=>{
+ const f=fixture(1),q=f.db(),successor="1".repeat(40);
+ const unchanged=await readP6PrivateSignedIndexCurrentAndPriorOnce({
+  client:q.client,pins:f.pins,reviewWire:f.wire,reviewerPublicKeyPem:pem
+ });
+ assert.deepEqual(unchanged.currentIndexBytes,f.raw);
+ const other=f.db();
+ await assert.rejects(readP6PrivateSignedIndexCurrentAndPriorOnce({
+  client:other.client,pins:{...f.pins,expectedReviewedCodeSha:successor},
+  reviewWire:f.wire,reviewerPublicKeyPem:pem
+ }),/HOLD_P6_SIGNED_PRIVATE_INDEX_READ_/);
+ assert.equal(other.calls.length,0);
+ // No unsigned allowlist, no mutation of original review or bytes.
+ assert.equal(f.wire.review.reviewedCodeSha,code);
+ assert.equal(h(f.raw),f.pins.expectedIndexSha256);
+});
