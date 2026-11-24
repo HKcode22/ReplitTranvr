@@ -1,3 +1,34 @@
+# CURRENT INCIDENT UPDATE — Monday November 23, 2026, approximately 7:36 PM PST
+
+Normal calendar activation F-resume at 01:00:52Z succeeded only as configuration. **Actual restart failed. Do not repeat A–F or F-resume.** Main remains c8e065d6; relay c5a8763f. Complete target history after restart through 03:34Z: 17 runs, no paid SOURCE/POST child run; direct root 45302763595 at 01:08:35Z stopped at admission (HOLD_P6_DIRECT_RECOVERY_NO_EXACT_SEPARATE_APPROVAL_OR_CONFLICTING_ROOT, zero artifacts); T24 PRE 45307333953 and later PRE 45307652365 stopped before dependencies/database. No claim of live ledger zero until fresh owner census. Relay 45319734667 at 03:28Z actually DEFER_DIRECT_PRIOR_ATTEMPT_REVIEW_NO_REPLAY; not successful dispatch. Primary retention 45320479563 success; independent private sentinel 45311573986 actual NO_OVERDUE_REFERENCES. Cron audit 45316823576 failure: obsolete 046d relay audit pin, 11 HTTP ACK-only slots plus one HOLD_CRON_MANAGER_RUN_IDENTITY at 02:49Z; actual PRIMARY run 45315135919 on c5 passed. Lease current through Dec19. Compare 046d...c5 ahead 3 behind 0, only relay.mjs/tests. Do not renew cron or change credentials for this incident.
+
+**Leading shared failure hypothesis:** P5_CD_GH_PRE_STOP must be literal 0 for all three failed gates. Direct job log masks its value but shows literal ADB_AUTO_COLLECT=0 and all competing flags blank. Cannot read secret value; do not claim root cause proven until corrected worker gates pass. F did not write that STOP. Fresh DB zero unresolved stops and owner explicit authorization required before scoped protected PRE_STOP=0; no DB STOP resolution, no new rights or budget. Actual PRE tests must pass before normal paid routes resume. Day1 late registration remains uninstalled.
+
+## Command G — run now, reconciled targeted STOP repair
+
+This helper first pauses rolling and paid SOURCE/POST parents and native POST producer (retention stays enabled); validates actual failed run identities and complete history, fresh DB and V0108 expiry census; writes only protected PRE_STOP=0; runs both existing no-provider PRE workers first-attempt and checks exact actual job/step success; attempts existing Day2 nonpaid preparation and verifies receipt; reconciles stale audit-only relay SHA only if exact old value and no environment shadow; repeats live DB/history readback; explicitly records prospective successor epoch and re-enables existing normal paid routes only if all checks pass. A failed check leaves/attempts to leave paid parents and rolling paused. No direct provider acquisition, no replay of failed runs, no new migration. Normal calendar only, future signed workers can spend original approved budget. Prepared not executed.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_SHARED_STOP_REPAIR'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=8e4ae51f217e23957676a194e4de6b1db86dcff1
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_RECONCILED_SHARED_PRE_STOP_REPAIR_AND_PROSPECTIVE_RESTART
+P6_SHARED_STOP_REPAIR
+~~~
+
+Expected P6_ACTUAL_PRE_GATES_PASS_T24=... LATER=... and P6_ACTUAL_PRE_GATES_PASS_NORMAL_ROUTES_RESUMED_NO_COLLECTION_PROOF. On HOLD paste exact output, do not replay. Day2 prep can legitimately return no eligible if outside signed window. Must observe actual signed index before Tuesday conservative 4:45 PM PST boundary; first SOURCE 7:45 PM PST. Day1 remains separate PR #965, no deployment. All previous guide retained below.
+
+---
+
 # CURRENT UPDATE — Monday November 23, 2026, 5:00:52 PM PST
 
 **F-resume COMPLETE. Do not repeat A–F or F-resume. Normal signed calendar routes and rolling relay now enabled.** Actual owner receipt P6_EXISTING_PRE_ACTOR_FIRST_ATTEMPT_VERIFIED_NO_REPLAY and P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO; fresh read-only primary neondb clock 2026-11-24T01:00:52.402Z, auth=1, COST_UPPER_BOUND=1, SOURCE=0, other REST=0, STOP=0, Day1 draw=0, Day2 draw=4. Authenticated [owner restart ledger](https://github.com/HKcode22/ReplitTranvr/issues/413#issuecomment-7118665193) independently read back. Original failed run remains preserved. New prospective activation epoch 2026-11-24T01:00:52.000Z. Final marker P6_EXISTING_NORMAL_PAID_ROUTES_AND_ROLLING_ENABLED_NOT_COLLECTION_PROOF. No direct paid GET in the command; subsequent signed workers can spend approved budget. SSL warning not fatal; do not change TLS.
