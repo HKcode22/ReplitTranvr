@@ -5,7 +5,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {execFileSync} from "node:child_process";
-import {runDirectTick,directDisposition,readDirectReceipt,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
 import {readP6DirectReadonlySnapshot} from "../scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
@@ -272,3 +272,11 @@ test("read-only snapshot retry is bounded and preserves persistent or unrelated 
   assert.equal(attempts,wanted);
  }
 });
+
+ test("admission diagnostic identifies exact stale literal controls and never echoes supplied values",()=>{
+ const env={...Object.fromEntries(flags.map(k=>[k,"1"])),GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_RUN_ID:"12345",GITHUB_SHA:sha,V39_P5_APPROVED_CODE_SHA:sha,P6_ROLLING_REQUESTED_MAIN_SHA:sha,P6_ROLLING_SESSION_CONFIRM:DIRECT_CONFIRM,P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:iso(start),P5_CD_GH_PRE_STOP:"0",ADB_AUTO_COLLECT:"0",GITHUB_TOKEN:"synthetic-test-token-no-access"};
+ assert.deepEqual(directAdmissionFailures(env,start),[]);
+ for(const k of flags)assert.deepEqual(directAdmissionFailures({...env,[k]:"0"},start),[k]);
+ assert.deepEqual(directAdmissionFailures({...env,P5_CD_GH_PRE_STOP:"1",V39_PHASE6_PROCESS_ARMED:"0",DATABASE_URL:"NEVER_PRINT_THIS_VALUE"},start),["V39_PHASE6_PROCESS_ARMED","P5_CD_GH_PRE_STOP","FORBIDDEN_DATABASE_URL"]);
+ assert.deepEqual(directAdmissionFailures({...env,P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:"invalid"},start),["P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"]);
+ });

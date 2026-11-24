@@ -177,60 +177,60 @@ jobs:
           set +x
           test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
           test "$GITHUB_REF" = refs/heads/main
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$P5_CD_GH_PRE_STOP" = 0
-          test "$P5_CD_GH_PRE_ARMED" = 1
+          test "$GITHUB_RUN_ATTEMPT" = 1 || { echo HOLD_P6_LITERAL_GATE_GITHUB_RUN_ATTEMPT >&2; exit 2; }
+          test "$P5_CD_GH_PRE_STOP" = 0 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_STOP >&2; exit 2; }
+          test "$P5_CD_GH_PRE_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_ARMED >&2; exit 2; }
           # Extra claims require independent Phase6 approval; Phase5 canary
           # always retains the previous exact single-tick capacity.
           case "${P5_CD_GH_BURST_TICKS:-1}" in
             1) ;;
             2|3|4)
-              test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
-              test "$P5_CD_GH_BURST_APPROVED" = 1
+              test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_MODE >&2; exit 2; }
+              test "$P5_CD_GH_BURST_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_BURST_APPROVED >&2; exit 2; }
               ;;
             *) echo HOLD_CD_GH_UNREVIEWED_MICROBURST_COUNT; exit 2 ;;
           esac
-          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA"
+          test -n "$P5_CD_GH_PRE_APPROVED_CODE_SHA" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_APPROVED_CODE_SHA >&2; exit 2; }
           # The runner compares reviewed baseline SHA to HEAD ancestry and
           # requires zero executable-code changes after packet commits.
-          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_SOURCE_RIGHTS_APPROVED >&2; exit 2; }
           case "$P5_CD_GH_PRE_MODE" in
             PHASE5_CANARY)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 0
-              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 0 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
               ;;
             PHASE6_APPROVED)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
-              test "$V39_PHASE5_FREEZE_SIGNED" = 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
               ;;
             *)
               echo HOLD_CD_GH_NO_EXPLICIT_VALID_PHASE5_CANARY_OR_PHASE6_MODE
               exit 2
               ;;
           esac
-          test "$ADB_AUTO_COLLECT" = 0
-          test -z "$AERODATABOX_API_KEY"
-          test -z "$AERODATABOX_WEBHOOK_SECRET"
-          test -z "$DATABASE_URL"
-          test -z "$V39_DATABASE_RUNTIME_URL"
-          test -n "$P5_V39_PRE_DATABASE_URL"
+          test "$ADB_AUTO_COLLECT" = 0 || { echo HOLD_P6_LITERAL_GATE_ADB_AUTO_COLLECT >&2; exit 2; }
+          test -z "$AERODATABOX_API_KEY" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_API_KEY >&2; exit 2; }
+          test -z "$AERODATABOX_WEBHOOK_SECRET" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_WEBHOOK_SECRET >&2; exit 2; }
+          test -z "$DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_DATABASE_URL >&2; exit 2; }
+          test -z "$V39_DATABASE_RUNTIME_URL" || { echo HOLD_P6_PRESENCE_GATE_V39_DATABASE_RUNTIME_URL >&2; exit 2; }
+          test -n "$P5_V39_PRE_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P5_V39_PRE_DATABASE_URL >&2; exit 2; }
           case "$P5_CD_GH_PRIVATE_LATER_MODE" in
             CHECKOUT)
-              test -z "$P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM"
-              test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+              test -z "$P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM >&2; exit 2; }
+              test -n "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
               [[ "$P5_CD_GH_PRE_ROSTER_PATH" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
               test -f "$P5_CD_GH_PRE_ROSTER_PATH"
-              test -z "$P6_PRIVATE_READER_DATABASE_URL"
+              test -z "$P6_PRIVATE_READER_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_READER_DATABASE_URL >&2; exit 2; }
               ;;
             PRIVATE_EXACT_SHARD)
-              test -z "$P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM"
-              test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+              test -z "$P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM >&2; exit 2; }
+              test -n "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
               test "$GITHUB_EVENT_NAME" = workflow_dispatch
-              test "$P5_CD_GH_PRIVATE_LATER_APPROVED" = 1
-              test -z "$P5_CD_GH_PRE_ROSTER_PATH"
-              test -n "$P6_PRIVATE_READER_DATABASE_URL"
+              test "$P5_CD_GH_PRIVATE_LATER_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRIVATE_LATER_APPROVED >&2; exit 2; }
+              test -z "$P5_CD_GH_PRE_ROSTER_PATH" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_PATH >&2; exit 2; }
+              test -n "$P6_PRIVATE_READER_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_READER_DATABASE_URL >&2; exit 2; }
               test "${P5_CD_GH_BURST_TICKS:-1}" = 1
               ;;
             PRIVATE_CURRENT_SCHEDULE)
@@ -239,13 +239,13 @@ jobs:
                 workflow_dispatch) test "$P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER ;;
                 *) exit 2 ;;
               esac
-              test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
-              test "$P5_CD_GH_PRIVATE_CURRENT_APPROVED" = 1
-              test "$P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED" = 1
-              test "$P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED" = 1
+              test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_MODE >&2; exit 2; }
+              test "$P5_CD_GH_PRIVATE_CURRENT_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRIVATE_CURRENT_APPROVED >&2; exit 2; }
+              test "$P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED >&2; exit 2; }
+              test "$P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED >&2; exit 2; }
               test -z "$P5_CD_GH_PRE_ROSTER_PATH$P5_CD_GH_PRE_ROSTER_SHA256"
-              test -n "$P6_PRIVATE_READER_DATABASE_URL"
-              test -n "$P6_NONPAID_DAILY_POLICY_SHA256"
+              test -n "$P6_PRIVATE_READER_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_READER_DATABASE_URL >&2; exit 2; }
+              test -n "$P6_NONPAID_DAILY_POLICY_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P6_NONPAID_DAILY_POLICY_SHA256 >&2; exit 2; }
               ;;
             *) exit 2 ;;
           esac
