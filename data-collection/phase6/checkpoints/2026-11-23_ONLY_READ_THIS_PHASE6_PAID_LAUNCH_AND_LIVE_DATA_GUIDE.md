@@ -1,3 +1,13 @@
+# Current update — Monday Nov23 4:52:58 PM PST
+
+**Command E COMPLETE; do not repeat.** Owner's live PG16 READ ONLY receipt at 00:52:48.199Z: correct primary neondb, enabled_manifest=1, typed_cost_release=1 (exact signed V0093 cost-only envelope), SOURCE attempts=0, other REST reservations=0, unresolved stops=0, Day1 draw=0, Day2 draw=4, Day2 index=0. All ten missing PRE/POST controls restored, five existing controls unchanged; marker P6_EXISTING_NATIVE_PRE_POST_CONTROLS_STAGED_RECONCILED_NO_ROUTE_NO_DISPATCH. The pg SSL future-compatibility warning is not a runtime failure; do not alter the existing TLS settings as part of this incident.
+
+**V0093 correction confirmed LIVE:** Day2 can use the existing signed cost-only cap without fictitious Day1 queries. Do not create STOPPED placeholders merely for budget parity. Preserve the full scientific denominator as missingness. No new migration required for ordinary Day2 operation. Day1's independent V0079 early-draw reservation fence still applies and its separately reviewed late-registration successor remains uninstalled.
+
+All previous guide content preserved below. Do not repeat A–E.
+
+---
+
 # Current update — Monday Nov23, after 4:49 PM PST
 
 **Read this section first; prior guide is preserved verbatim below.** A–D completed; no replay. Paid rolling remains paused. The full paid system is not autonomous for Tuesday yet.
