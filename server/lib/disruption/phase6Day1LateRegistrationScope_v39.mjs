@@ -3,7 +3,7 @@
  * This pure verifier never chooses airports, backdates or spends.
  */
 import {createHash,createPublicKey,verify} from "node:crypto";
-import {classifyP6Day1Recovery} from "./phase6Day1ProspectiveRecoveryCandidate_v39.mjs";
+import {projectP6Day1RemainingPreparation} from "./phase6Day1ProspectiveRecoveryCandidate_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/;
 const CODE=/^[a-f0-9]{40}$/;
 const hold=x=>{throw Error("HOLD_P6_DAY1_LATE_REGISTRATION_"+x)};
@@ -32,8 +32,9 @@ export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,r
  p.allowLateFixedPairRegistration!==true||p.allowPaidDispatch!==false||p.allowBackdating!==false||
  p.missingnessClass!=="HONESTLY_UNOBSERVED_NOT_BACKFILLED")hold("POLICY_SCOPE");
  const now=time(observedDbUtc),from=time(p.validFromUtc),until=time(p.validUntilUtc);
- // Strictly bounded to incident recovery before the first primary T6 window.
- if(from<time("2026-11-24T00:00:00.000Z")||until>time("2026-11-24T17:30:00.000Z")||now<from||now>=until||until<=from)hold("INCIDENT_WINDOW");
+ // Bounded to remaining Day1 acquisition windows; a missed early
+ // refresh must not suppress a still-future independently valid refresh.
+ if(from<time("2026-11-24T00:00:00.000Z")||until>time("2026-11-25T02:00:00.000Z")||now<from||now>=until||until<=from)hold("INCIDENT_WINDOW");
  const c=calendarDay;
  if(!c||c.runDayIndex!==1||c.scheduledStartUtc!=="2026-11-25T00:00:00.000Z"||c.drawType!=="NEW_TEMPLATE"||
  c.calendarHash!==pins.calendarSha256||c.configHash!==pins.configSha256||c.frameHash!==pins.frameSha256||
@@ -45,9 +46,10 @@ export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,r
  !/^[A-Z]{4}$/.test(r.icao??"")))hold("FUTURE_HISTORY");
  // Never rewind sampling state for an airport already registered for a later day.
  if(futureCommittedDraws.some(r=>Object.values(paired).includes(r.icao)))hold("FUTURE_SITE_STATE_CONFLICT");
- const classified=classifyP6Day1Recovery({dayPlanBytes,expectedDayPlanSha256:pins.originalDayPlanSha256,observedDbUtc,minimumPreparationLeadMinutes:p.minimumPreparationLeadMinutes});
- if(classified.byHorizon["T-6h"].prospectiveCandidates!==64||classified.byHorizon["T-90m"].prospectiveCandidates!==64)hold("PRIMARY_OR_UPDATE_NO_LONGER_FULLY_PROSPECTIVE");
+ const projection=projectP6Day1RemainingPreparation({dayPlanBytes,expectedDayPlanSha256:pins.originalDayPlanSha256,observedDbUtc,minimumPreparationLeadMinutes:p.minimumPreparationLeadMinutes});
+ if(projection.byHorizon["T-24h"].prospectiveCandidates!==0||projection.templates.length===0)hold("NO_ELIGIBLE_REMAINING_HORIZON");
  return Object.freeze({schema:"v39.phase6.day1-late-registration-verified-scope.v1",runDayIndex:1,observedDbUtc,policySha256:pins.policySha256,
- fixedAirports:Object.freeze({...paired}),candidateQueryCount:classified.eligible.length,excludedQueryCount:classified.missed.length,
+ fixedAirports:Object.freeze({...paired}),candidateQueryCount:projection.templates.length,excludedQueryCount:projection.excluded.length,
+ remainingPreparationProjectionSha256:projection.projectionSha256,byHorizon:projection.byHorizon,
  providerCalls:0,databaseWrites:0,authorizesPaidGet:false,requiresRestrictedAtomicRegistration:true});
 }
