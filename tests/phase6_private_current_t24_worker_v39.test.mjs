@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {loadP6CurrentT24CalendarWindows,loadP6LaterCalendarWindows,isP6CurrentPreTrigger,P6_CURRENT_T24_DISPATCH_CONFIRM} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
 import {currentT24FailureDiagnostic,runP6BoundedT24Packets,localP6T24SingletonEnv,admitP6CurrentT24Worker} from "../scripts/v39_phase6_private_current_t24_worker_v39.mjs";
 import {requireP5CdGithubCurrentPrivateT24Scope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts";
@@ -88,4 +89,19 @@ test("current T24 exact calendar parity; explicit dispatch cannot authorize enro
 test("T24 runtime diagnostic preserves bounded known reason and hides unknown exception contents",()=>{
  for(const m of ["HOLD_P6_T24_ENROLL_WRONG_RESTRICTED_TLS_URL","HOLD_P6_CURRENT_T24_STUDY_TRUST_DRIFT","REFUSED_P5_CD_GH_CODE_LINEAGE_BASELINE_NOT_ANCESTOR_OR_EXECUTABLE_DRIFT","HOLD_P7_PROTECTED_PRE_RESOLVER_DISTINCT_TLS_READER"])assert.equal(currentT24FailureDiagnostic(Error(m)),m);
  for(const m of ["postgresql://user:private@host/neondb","HOLD_P6_CURRENT_T24_FOO private-password","HOLD_P6_CURRENT_T24_"+"X".repeat(200),"unexpected SQL exception"])assert.equal(currentT24FailureDiagnostic(Error(m)),"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY");
+});
+
+test("complete synthetic protected T24 startup with the actual 31 checked-in calendar files",()=>{
+ const digest=b=>createHash("sha256").update(b).digest("hex");
+ const key=()=>{const {publicKey,privateKey}=generateKeyPairSync("ed25519");return {pem:publicKey.export({format:"pem",type:"spki"}),fp:digest(publicKey.export({format:"der",type:"spki"})),privateWire:Buffer.from(privateKey.export({format:"pem",type:"pkcs8"})).toString("base64")};};
+ const day=key(),query=key(),later=key(),custody=key();
+ const reader="phase6_private_reader_login_fixture_20261123";
+ const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:reader,reviewedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h,dayReviewerFingerprintSha256:day.fp,dayReviewerPublicKeyPem:day.pem,queryReviewerFingerprintSha256:query.fp,queryReviewerPublicKeyPem:query.pem};
+ const pins=Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:digest(readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"))}));
+ const policy=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,manifestSha256:h,calendarSha256:h,releaseSha256:h,rightsSha256:h,frameSha256:h,configSha256:h,dayPlanSha256s:pins,validFromUtc:"2026-11-23T23:45:00.000Z",validUntilUtc:"2026-12-29T04:00:00.000Z",nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",frameSha256:h,configSha256:h,laterReviewerFingerprintSha256:later.fp,laterReviewerPublicKeyPem:later.pem,maximumPrivateRetentionHours:96,validFromUtc:"2026-11-23T23:45:00.000Z",validUntilUtc:"2026-12-29T04:00:00.000Z",maximumT24ExecutionLanes:4,selectedTConfig:{verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"synthetic-test",artifactHash:h,semanticsEvidenceSha256:h}}}));
+ const complete={...env(),P6_T24_CUSTODY_ENABLED:"1",P6_T24_CUSTODY_APPROVED:"1",P5_CD_GH_E_ROUTE_FEATURES_APPROVED:"1",P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED:"1",P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64:custody.privateWire,P6_PRIVATE_PUBLISHER_DATABASE_URL:"postgresql://phase6_private_publisher_login_fixture:ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_READER_DATABASE_URL:"postgresql://"+reader+":ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),V39_P5_RELEASE_SHA256:h,P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(policy)};
+ const admitted=admitP6CurrentT24Worker(complete);
+ assert.equal(admitted.lanes,4);assert.equal(admitted.calendar.windows.length,31);
+ assert.equal(admitP6CurrentT24Worker({...complete,GITHUB_EVENT_NAME:"workflow_dispatch",P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:P6_CURRENT_T24_DISPATCH_CONFIRM}).lanes,4);
+ for(const k of ["P6_T24_CUSTODY_APPROVED","P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED","P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED","P6_NONPAID_DAILY_POLICY_SHA256","P6_PRIVATE_READER_DATABASE_URL","P5_CD_GH_PRE_ARMED"])assert.throws(()=>admitP6CurrentT24Worker({...complete,[k]:""}),undefined,k);
 });
