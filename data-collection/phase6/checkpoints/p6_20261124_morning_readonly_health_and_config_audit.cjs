@@ -10,25 +10,44 @@ const M="a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e",C="ce
 const mode=process.argv[2],check=["FULL_AUDIT","MORNING_CHECK"].includes(mode);
 if(!check||process.argv.length!==3){console.error("Use FULL_AUDIT or MORNING_CHECK");process.exit(2);}
 const now=Date.now(),out=(status,x={})=>console.log(JSON.stringify({status,...x})),issues=[],notes=[];
-const issue=(code,x={})=>{issues.push(code);out("REVIEW_REQUIRED",{code,...x});};
+const issue=(code,x={})=>{issues.push(code);const {code:detailCode,...detail}=x;out("REVIEW_REQUIRED",{code,...detail,...(detailCode?{detailCode}:{})});};
 const note=(code,x={})=>{notes.push(code);out("OBSERVATION",{code,...x});};
 const gh=(...args)=>execFileSync("gh",args,{encoding:"utf8",timeout:30000,maxBuffer:32*1024*1024,stdio:["ignore","pipe","pipe"]});
-const get=p=>JSON.parse(gh("api","--method","GET",p));
+const get=p=>{
+ try{return JSON.parse(gh("api","--method","GET",p));}
+ catch(e){const raw=String(e.stderr??"");const http=raw.match(/HTTP (\d{3})/)?.[1];const error=Error("GITHUB_GET_FAILED");error.endpoint=p.split("?")[0];error.httpStatus=http??null;throw error;}
+};
 const getAll=(endpoint,key)=>{
- const rows=[];let total=null;for(let page=1;page<=40;page++){
+ const rows=[];let total=null;const seen=new Set();
+ for(let page=1;page<=100;page++){
   const d=get(endpoint+(endpoint.includes("?")?"&":"?")+"per_page=100&page="+page);
-  if(!Number.isSafeInteger(d.total_count)||!Array.isArray(d[key])||(total!==null&&d.total_count!==total))throw Error("PAGINATION_"+key);
+  if(!Number.isSafeInteger(d.total_count)||d.total_count<0||!Array.isArray(d[key])||(total!==null&&d.total_count!==total))throw Object.assign(Error("PAGINATION_"+key.toUpperCase()),{endpoint});
   total=d.total_count;
-  if(d[key].length!==Math.min(100,Math.max(0,total-rows.length)))throw Error("PAGE_LENGTH_"+key);
-  rows.push(...d[key]);if(rows.length===total)return rows;
- }throw Error("PAGE_LIMIT_"+key);
+  if(d[key].length>100||rows.length+d[key].length>total||(!d[key].length&&rows.length<total))throw Object.assign(Error("PAGE_LENGTH_"+key.toUpperCase()),{endpoint});
+  for(const row of d[key]){const id=row.id??row.name;if(id===undefined||seen.has(id))throw Object.assign(Error("DUPLICATE_OR_MISSING_ID"),{endpoint});seen.add(id);rows.push(row);}
+  if(rows.length===total)return rows;
+ }throw Object.assign(Error("PAGE_LIMIT_"+key.toUpperCase()),{endpoint});
 };
 const robust=(f)=>{for(let i=0;i<3;i++){try{return f();}catch(e){if(i===2)throw e;}}};
 const cfg={};
+const errorMeta=e=>({detailCode:/^[A-Z_]+$/.test(e.message??"")?e.message:"API_OR_SCHEMA",endpoint:e.endpoint??null,httpStatus:e.httpStatus??null});
 const info=async(repo,env)=>{
- const base="repos/"+repo;
- const scope=env?base+"/environments/"+encodeURIComponent(env):base+"/actions";
- return {vars:robust(()=>getAll(scope+"/variables","variables")),secrets:robust(()=>getAll(scope+"/secrets","secrets"))};
+ const base="repos/"+repo,scope=env?base+"/environments/"+encodeURIComponent(env):base+"/actions";
+ const args=["-R",repo,...(env?["--env",env]:[])];
+ const out={};
+ for(const [kind,field,cli] of [["vars","variables","variable"],["secrets","secrets","secret"]]){
+  try{out[kind]=robust(()=>getAll(scope+"/"+field,field));}
+  catch(e){
+   note("CONFIG_API_READ_FALLBACK",{repo,environment:env??null,kind,...errorMeta(e)});
+   try{
+    // Standard GitHub CLI follows its own pagination and endpoint conventions.
+    const rows=JSON.parse(gh(cli,"list",...args,"--json",kind==="vars"?"name,value":"name"));
+    if(!Array.isArray(rows)||rows.some(x=>typeof x.name!=="string"||kind==="vars"&&typeof x.value!=="string")||new Set(rows.map(x=>x.name)).size!==rows.length)throw Error("CLI_LIST_SHAPE");
+    out[kind]=rows;note("CONFIG_CLI_LIST_READBACK",{repo,environment:env??null,kind,count:rows.length,apiCountNotIndependentlyVerified:true});
+   }catch(err){issue("CONFIG_SCOPE_READ_FAILED",{repo,environment:env??null,kind,...errorMeta(e),cliFallbackFailed:true});out[kind]=[];out.incomplete=true;}
+  }
+ }
+ return out;
 };
 const vmap=a=>new Map(a.vars.map(v=>[v.name,v.value]));
 const names=a=>a.map(x=>x.name).sort();
@@ -99,15 +118,16 @@ async function metadata(){
  out("LIVE_MAIN_READBACK",{target:cur,relay,expected:cur===S&&relay===LS});
  if(cur!==S||relay!==LS){issue("REVIEWED_MAIN_CHANGED");return;}
  for(const repo of [R,L]){
-  const base=await info(repo),envs=robust(()=>getAll("repos/"+repo+"/environments","environments"));
+  const base=await info(repo);let envs;try{envs=robust(()=>getAll("repos/"+repo+"/environments","environments"));}catch(e){issue("ENVIRONMENT_LIST_READ_FAILED",{repo,...errorMeta(e)});envs=[{name:repo===R?"phase6-protected-runtime":"travnr-target-forward"}];}
   cfg[repo]={base,environments:{}};
   for(const e of envs)if(mode==="FULL_AUDIT"||e.name===(repo===R?"phase6-protected-runtime":"travnr-target-forward"))cfg[repo].environments[e.name]=await info(repo,e.name);
   const es=cfg[repo].environments;
   report.configuration[repo]={repository:publicMeta(base),environments:Object.fromEntries(Object.entries(es).map(([k,v])=>[k,{...publicMeta(v),variableScopeDuplicates:names(v.vars).filter(n=>vmap(base).has(n)),variableScopeConflicts:names(v.vars).filter(n=>vmap(base).has(n)&&actual(base,n)!==actual(v,n)),secretScopeDuplicates:names(v.secrets).filter(n=>names(base.secrets).includes(n))}]))};
-  out("CONFIGURATION_METADATA_CENSUS",{repo,repositoryVariables:base.vars.length,repositorySecretNames:base.secrets.length,environments:Object.entries(es).map(([name,v])=>({name,variables:v.vars.length,secretNames:v.secrets.length})),secretValuesReadable:false});
+  out("CONFIGURATION_METADATA_CENSUS",{repo,repositoryVariables:base.vars.length,repositorySecretNames:base.secrets.length,environments:Object.entries(es).map(([name,v])=>({name,variables:v.vars.length,secretNames:v.secrets.length})),secretValuesReadable:false,scopeListComplete:!base.incomplete&&Object.values(es).every(v=>!v.incomplete)});
  }
  const rb=cfg[R].base,eb=cfg[R].environments["phase6-protected-runtime"],lb=cfg[L].base,le=cfg[L].environments["travnr-target-forward"];
  if(!eb||!le)throw Error("PROTECTED_ENV_MISSING");
+ if(rb.incomplete||eb.incomplete||lb.incomplete||le.incomplete)note("CRITICAL_SCOPE_INVENTORY_INCOMPLETE_DO_NOT_TREAT_MISSING_NAMES_AS_ABSENT");
  const required={
  P6_ROLLING_CONTROLLER_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_ENABLED:"1",
  P6_NONPAID_SOURCE_SCHEDULE_ENABLED:"true",P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"true",
@@ -119,17 +139,18 @@ async function metadata(){
  P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",P6_FULL_RETENTION_BACKSTOP_ENABLED:"true",
  P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:S,P7_EXPIRY_APPROVED_MAIN_SHA:S,P7_EXPIRY_ENABLED:"true"
  };
- for(const [k,v] of Object.entries(required))exact(rb,eb,k,v);
- for(const k of ["P5_AUTO_SOURCE_DISPATCH_ENABLED","P5_POST_AUTO_DISPATCH_ENABLED","P5_T24_AUTO_DISPATCH_ENABLED"])absentOr(rb,eb,k,["","0","false"]);
- for(const k of ["P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"])absentOr(rb,eb,k,["","0"]);
+ if(!rb.incomplete&&!eb.incomplete)for(const [k,v] of Object.entries(required))exact(rb,eb,k,v);
+ if(!rb.incomplete&&!eb.incomplete)for(const k of ["P5_AUTO_SOURCE_DISPATCH_ENABLED","P5_POST_AUTO_DISPATCH_ENABLED","P5_T24_AUTO_DISPATCH_ENABLED"])absentOr(rb,eb,k,["","0","false"]);
+ if(!rb.incomplete&&!eb.incomplete)for(const k of ["P6_ROLLING_SCHEDULED_ROOT_ENABLED","P6_ROLLING_DYNAMIC_WINDOW_SCOPE_ENABLED","P6_ROLLING_WINDOW_CUSTODY_ENABLED"])absentOr(rb,eb,k,["","0"]);
  const relayRequired={TRAVNR_RELAY_MODE:"MULTI_LANE",TRAVNR_RELAY_PRIMARY_ENABLED:"1",TRAVNR_RELAY_ROLLING_ENABLED:"1",TRAVNR_RELAY_DIRECT_TICK_APPROVED:"1",TRAVNR_RELAY_FULL_RETENTION_APPROVED:"1",TRAVNR_RELAY_ROLLING_ROUTE:"DIRECT_TICK",TRAVNR_APPROVED_TARGET_MAIN_SHA:S,TRAVNR_TARGET_FORWARD_ENV_READY:"1"};
- for(const [k,v] of Object.entries(relayRequired))exact(lb,le,k,v);
- const epoch=actual(rb,"P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"),relayEpoch=actual(lb,"TRAVNR_RELAY_ROLLING_SINCE_UTC");
+ if(!lb.incomplete&&!le.incomplete)for(const [k,v] of Object.entries(relayRequired))exact(lb,le,k,v);
+ const getEpoch=(a,repo,k)=>actual(a,k)??gh("variable","get",k,"-R",repo).trim();
+ const epoch=getEpoch(rb,R,"P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"),relayEpoch=getEpoch(lb,L,"TRAVNR_RELAY_ROLLING_SINCE_UTC");
  if(typeof epoch!=="string"||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z$/.test(epoch)||!Number.isFinite(Date.parse(epoch))||Date.parse(epoch)>Date.now()||epoch!==relayEpoch){issue("EPOCH_MISMATCH");return;}
- exact(rb,eb,"P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC",epoch);exact(lb,le,"TRAVNR_RELAY_ROLLING_SINCE_UTC",epoch);
+ if(!rb.incomplete&&!eb.incomplete)exact(rb,eb,"P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC",epoch);if(!lb.incomplete&&!le.incomplete)exact(lb,le,"TRAVNR_RELAY_ROLLING_SINCE_UTC",epoch);
  const flags=["P6_ROLLING_DIRECT_RECOVERY_APPROVED","V39_P5_APPROVED_CODE_SHA","V39_P5_QUEUE_APPROVED_CODE_SHA","P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA","V39_PHASE5_FREEZE_SIGNED","V39_PHASE5_SOURCE_RIGHTS_APPROVED","V39_P5_SEVEN_REST_BUDGET_SIGNED","V39_PHASE6_PROCESS_ARMED","V39_PHASE6_OWNER_APPROVED","P5_CD_GH_PRE_STOP","V39_P5_MANIFEST_SHA256","V39_P5_CALENDAR_HASH","V39_P5_RELEASE_SHA256","V39_P5_RIGHTS_SHA256","V39_P5_PROVIDER_CONTRACT_SHA256","P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_DAILY_POLICY_SHA256","P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED","P6_PRIVATE_SOURCE_STORED_DISPATCH_APPROVED","P6_PRIVATE_SOURCE_TRANSPORT_APPROVED","P6_PRIVATE_SOURCE_PARENT_RO_OWNER_APPROVED","V39_P5_SOURCE_QUEUE_OWNER_APPROVED","V39_P5_AUTO_SOURCE_DISPATCH_APPROVED","V39_P5_SIGNED_DAY_REGISTRY_RELEASE","V39_P5_SOURCE_DB_ROLE_REVIEWED","V39_P5_REST_UNIT_PRICE_APPROVED","V39_P5_SOURCE_DATABASE_URL","P6_PRIVATE_READER_DATABASE_URL"];
- out("CRITICAL_SECRET_NAME_CHECK",{...present(rb,eb,flags),secretValueEqualityVerified:false});
- out("RELAY_SECRET_NAME_CHECK",{...present(lb,le,["TRAVNR_TARGET_ACTIONS_TOKEN"]),secretValueEqualityVerified:false});
+ if(!rb.incomplete&&!eb.incomplete)out("CRITICAL_SECRET_NAME_CHECK",{...present(rb,eb,flags),secretValueEqualityVerified:false});
+ if(!lb.incomplete&&!le.incomplete)out("RELAY_SECRET_NAME_CHECK",{...present(lb,le,["TRAVNR_TARGET_ACTIONS_TOKEN"]),secretValueEqualityVerified:false});
  note("SECRET_VALUES_REQUIRE_ACTUAL_EFFECTIVE_RUNTIME_EVIDENCE",{notASecretValueExport:true});
  const t=workflowRuns(R,epoch),l=workflowRuns(L,epoch);report.history={epoch,target:t.map(runShort),relay:l.map(runShort)};
  const directs=t.filter(x=>x.path===directPath),rolling=l.filter(x=>x.display_title==="TRAVNR EXTERNAL CLOCK ROLLING_ROOT");
@@ -219,14 +240,14 @@ function sourceAudit(repo,sha){
  ].join("\n");
  const data=JSON.parse(execFileSync("python3",["-c",script,file],{encoding:"utf8",timeout:120000,maxBuffer:64*1024*1024,stdio:["ignore","pipe","pipe"]}));
  if(!data.workflows)throw Error("SOURCE_SCAN_EMPTY");
- const scopes=cfg[repo],installed= scopes?{vars:new Set([...(names(scopes.base.vars)),...Object.values(scopes.environments).flatMap(v=>names(v.vars))]),secrets:new Set([...(names(scopes.base.secrets)),...Object.values(scopes.environments).flatMap(v=>names(v.secrets))])}:null;
+ const scopes=cfg[repo],installed= scopes&&!scopes.base.incomplete&&Object.values(scopes.environments).every(v=>!v.incomplete)?{vars:new Set([...(names(scopes.base.vars)),...Object.values(scopes.environments).flatMap(v=>names(v.vars))]),secrets:new Set([...(names(scopes.base.secrets)),...Object.values(scopes.environments).flatMap(v=>names(v.secrets))])}:null;
  data.uninstalledLiteralReferences=installed?Object.keys(data.workflowReferences).filter(k=>{const [kind,n]=k.split(".");return !installed[kind].has(n)&&n!=="GITHUB_TOKEN";}):null;
  data.warning="Literal references across historical and active workflows; optional and retired paths included. Not a deletion list; dynamic keys and consumer semantics require review. Effective secret values not accessible.";
  out("FULL_STATIC_SOURCE_SCAN",{repo,workflows:data.workflows,sourceFiles:data.sourceFiles,workflowReferenceNames:Object.keys(data.workflowReferences).length,directRuntimeReferenceNames:Object.keys(data.runtimeDirectReferences).length,dynamicOrOversizeLocations:data.dynamicOrOversizeLocations.length,uninstalledLiteralReferenceNames:data.uninstalledLiteralReferences?.length??null});
  return data;
 }
 (async()=>{
- try{await metadata();}catch(e){issue("GITHUB_METADATA_READ_FAILED",{code:/^[A-Z_]+$/.test(e.message)?e.message:"API_OR_SCHEMA"});}
+ try{await metadata();}catch(e){issue("GITHUB_METADATA_READ_FAILED",errorMeta(e));}
  try{await db();}catch(e){issue("DB_READONLY_CENSUS_FAILED",{code:/^[A-Z0-9_]+$/.test(e.code??"")?e.code:"READ_FAILED"});}
  if(mode==="FULL_AUDIT"){
   report.staticInventory={};for(const [repo,sha] of [[R,S],[L,LS]]){try{report.staticInventory[repo]=sourceAudit(repo,sha);}catch(e){issue("STATIC_INVENTORY_INCOMPLETE",{repo,code:/^[A-Z_]+$/.test(e.message)?e.message:"READ_FAILED"});}}
