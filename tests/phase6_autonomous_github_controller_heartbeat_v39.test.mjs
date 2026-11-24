@@ -8,7 +8,7 @@ import {
  summarizeP6ControllerHeartbeat,
  admitP6HeartbeatGithubEnv,
  readP6GithubAutoControllerHeartbeat,
- reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery
+ reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery,annotateP6AlternateExecution
 } from "../server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
 import {formatP6ControllerHeartbeatHuman}
  from "../scripts/v39_phase6_github_controller_heartbeat_v39.mjs";
@@ -388,4 +388,21 @@ test("direct recovery observation preserves distinct exact terminal, carried, HO
  assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{},[{...child,id:800,created_at:"2026-11-14T01:40:00Z",conclusion:"failure"}]),T)).state,"DIRECT_RECOVERY_PRIOR_ATTEMPT_REVIEW");
  assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{created_at:"2026-11-14T01:30:00Z"}),T)).state,"DIRECT_RECOVERY_STALE");
  assert.equal((await observeP6DirectRecovery(env(),async()=>{throw Error("must stay disabled")},T)).state,"DIRECT_RECOVERY_DISABLED");
+});
+
+
+test("alternate execution annotates only covered native evidence; never suppresses actual failures or claims collection",async()=>{
+ const lane=P6_EXISTING_CONTROLLER_LANES.find(l=>l.lane==="PRE_RECOVERY");
+ const native=reviewP6OneScheduledController(lane,[run(101,{created:"2026-11-13T23:00:00Z",conclusion:"success"})],T);
+ const report={controllerStates:[native]};
+ const incidents=[{lane:"PRE_RECOVERY",reason:"SCHEDULE_MISSING_OR_STALE",runId:101,job:null},{lane:"PRE_RECOVERY",reason:"PARENT_REPORTED_HOLD_OR_MISSING_EVIDENCE",runId:101,job:"protected"}];
+ const notices={incidents,incidentCount:2};
+ const alternate={...run(102,{event:"workflow_dispatch",conclusion:"success"}),path:".github/workflows/"+lane.workflow,run_attempt:1};
+ const job={id:1000,run_id:102,head_sha:ID,run_attempt:1,name:"reviewed-existing-queue-watchdog",status:"completed",conclusion:"success",steps:[{name:"Stop before dependencies, provider or Neon session",status:"completed",conclusion:"success"},{name:"Bounded existing V***87 reaper, UNKNOWN quarantines never replay",status:"completed",conclusion:"success"}]};
+ const read=async url=>url.includes("/actions/workflows/")?{total_count:1,workflow_runs:[alternate]}:{total_count:1,jobs:[job]};
+ const active={...env(),P6_ROLLING_DIRECT_RECOVERY_ENABLED:"1"};
+ const result=await annotateP6AlternateExecution(notices,report,active,read,T,{recentOperationalTick:true});
+ assert.equal(result.alternateExecutionWarningCount,1);assert.equal(result.incidents.length,2);assert.equal(result.unresolvedIncidents.length,1);assert.equal(result.unresolvedIncidents[0].reason,"PARENT_REPORTED_HOLD_OR_MISSING_EVIDENCE");assert.equal(result.flightCollectionVerified,false);
+ const noTick=await annotateP6AlternateExecution(notices,report,active,read,T,{recentOperationalTick:false});assert.equal(noTick.unresolvedIncidents.length,2);
+ job.steps[1].conclusion="skipped";const bad=await annotateP6AlternateExecution(notices,report,active,read,T,{recentOperationalTick:true});assert.equal(bad.unresolvedIncidents.length,2);
 });

@@ -8,6 +8,7 @@
  * A conclusion of "skipped" is a deliberately gated workflow, NOT proof
  * of flight collection. GitHub clock NEVER replaces original PG16 cutoff.
  */
+import {observeRecentAlternate,exactHeartbeatWorkerStep} from "./phase6AlternateWorkerHeartbeat_v39.mjs";
 export const P6_AUTO_CONTROL_HEARTBEAT_V39=
  "v39.phase6.github-autonomous-control-plane-heartbeat.v1";
 const SHA=/^[a-f0-9]{40}$/;
@@ -363,7 +364,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    for(const [name,step] of requirements){
     const jobs=body.jobs.filter(j=>j.name===name);
     if(jobs.length!==1||jobs[0].status!=="completed"||jobs[0].conclusion!=="success"||
-       step!==null&&(!Array.isArray(jobs[0].steps)||jobs[0].steps.filter(s=>s.name===step&&s.status==="completed"&&s.conclusion==="success").length!==1)){
+       step!==null&&!exactHeartbeatWorkerStep(jobs[0],step)){
      add("EXPECTED_WORKER_SKIPPED_FAILED_OR_UNVERIFIED",name);continue;
     }
     if(lane==="SOURCE"&&Array.isArray(jobs[0].steps)&&jobs[0].steps.some(s=>
@@ -375,6 +376,31 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
  return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,
   realDueDrawOrPreparationVerified:false,flightCollectionVerified:false,
   databaseReads:0,databaseWrites:0,providerCalls:0,dispatches:0};
+}
+
+// Keep every native incident in the record. Only stale/missing or unverified
+// execution metadata can be annotated with independently verified alternate
+// execution; a recent native failure, drift, parent HOLD or missing evidence
+// stays actionable. Never infer due work or scientific collection.
+export async function annotateP6AlternateExecution(notifications,report,env,readGithub,observedAtUtc,directRecovery){
+ const eligible=new Set(["SCHEDULE_MISSING_OR_STALE","EXPECTED_WORKER_SKIPPED_FAILED_OR_UNVERIFIED"]);
+ const annotated=[];
+ if(env.P6_ROLLING_DIRECT_RECOVERY_ENABLED==="1"&&directRecovery?.recentOperationalTick===true){
+  const byLane=new Map();
+  for(const incident of notifications.incidents){
+   if(!eligible.has(incident.reason))continue;
+   const state=report.controllerStates.find(x=>x.lane===incident.lane);
+   const run=state?.mostRecentRun;
+   if(run&&run.headSha!==env.GITHUB_SHA)continue;
+   if(run?.status==="completed"&&run.conclusion==="failure"&&!state.historicalCadence.latestAgeExceedsExpected)continue;
+   if(!byLane.has(incident.lane))byLane.set(incident.lane,await observeRecentAlternate(incident.lane,readGithub,env.GITHUB_SHA,Date.parse(observedAtUtc)));
+   const evidence=byLane.get(incident.lane);
+   if(evidence.verified)annotated.push({...incident,alternateRunId:evidence.runId,reason:"NATIVE_GAP_WITH_RECENT_ALTERNATE_EXECUTION_NOT_COLLECTION_PROOF",dueWorkVerified:false,collectionVerified:false});
+  }
+ }
+ const covered=incident=>annotated.some(x=>x.lane===incident.lane&&x.runId===incident.runId&&x.job===incident.job&&eligible.has(incident.reason));
+ return {...notifications,alternateExecutionWarnings:annotated,unresolvedIncidents:notifications.incidents.filter(i=>!covered(i)),
+  alternateExecutionWarningCount:annotated.length,realDueDrawOrPreparationVerified:false,flightCollectionVerified:false};
 }
 
 export function admitP6HeartbeatGithubEnv(env){
@@ -457,7 +483,8 @@ export async function readP6GithubAutoControllerHeartbeat(
  const currentExpiryIncident=primaryFidsExpiry.scheduledApplyEnabled&&
   !["SCHEDULE_EXECUTED_EXPIRY_STEP_NOT_DELETION_PROOF","SCHEDULE_EXECUTION_PENDING"].includes(primaryFidsExpiry.state);
  if(currentExpiryIncident){activeNotifications.incidents.push({lane:"PRIMARY_FIDS_EXPIRY",reason:primaryFidsExpiry.state,runId:primaryFidsExpiry.scheduleObservation.mostRecentRun?.id??null,job:"primary-fids-expiry",backupState:primaryFidsExpiry.backup.state,backupRunId:primaryFidsExpiry.backup.runId});activeNotifications.incidentCount++;}
- return {...summary,activeNotifications,directRecovery,
+ const effectiveNotifications=await annotateP6AlternateExecution(activeNotifications,summary,env,readGithub,observedAtUtc,directRecovery);
+ return {...summary,activeNotifications:effectiveNotifications,directRecovery,
   status:primaryProblem||activeNotifications.incidentCount>0?"AUTONOMOUS_GITHUB_CONTROLLERS_NEED_ATTENTION_NO_GO":summary.status,
   primaryFidsExpiry,primaryFidsExpiryNeedsAttention:primaryProblem};
 }
