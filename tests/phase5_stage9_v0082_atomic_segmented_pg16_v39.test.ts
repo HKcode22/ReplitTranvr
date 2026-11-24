@@ -602,6 +602,29 @@ suite("Phase5 V0082 REAL atomic segmented day PG16 (no provider)",()=>{
   )).rows[0];
   expect(meta.prepared).toBe(96);
  });
+ it("exact incident SQL clock exception refuses every nonoriginal Day1 slot, horizon, manifest and timing change",async()=>{
+  if(!costMode)return;
+  const q={manifest_sha256:"a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e",
+   run_day_index:1,slot_id:"HUB",horizon:"T-6h",query_key:"p6.d1.HUB.T-6h.s1.p1.r1",airport_icao:"OMAA",
+   service_window_start_utc:"2026-11-25T00:00:00.000Z",service_window_end_utc:"2026-11-25T04:00:00.000Z",
+   planned_dispatch_utc:"2026-11-24T17:45:00.000Z",prediction_cutoff_utc:"2026-11-24T18:00:00.000Z",
+   hard_latest_dispatch_utc:"2026-11-24T17:46:00.000Z",planned_charge_utc_date:"2026-11-24",
+   api_units_per_attempt:2,max_physical_attempts:1};
+  const check=async(x:unknown,at="2026-11-24T05:00:00.000Z")=>(await admin.query(
+   "SELECT clean.p6_day1_later_source_exception_v39(jsonb_populate_record(NULL::clean.phase5_fids_allowed_query_v39,$1::jsonb),$2::timestamptz) AS ok",[JSON.stringify(x),at])).rows[0].ok;
+  expect(await check(q)).toBe(true);
+  expect(await check({...q,slot_id:"MID_A"})).toBe(false);
+  expect(await check({...q,airport_icao:"WSSS"})).toBe(false);
+  expect(await check({...q,horizon:"T-24h"})).toBe(false);
+  expect(await check({...q,run_day_index:2})).toBe(false);
+  expect(await check({...q,manifest_sha256:"0".repeat(64)})).toBe(false);
+  expect(await check({...q,planned_dispatch_utc:"2026-11-24T17:45:01.000Z"})).toBe(false);
+  expect(await check(q,"2026-11-24T17:25:00.000Z")).toBe(false);
+  expect(await check({...q,horizon:"T-90m",query_key:"p6.d1.HUB.T-90m.s1.p1.r16",
+   planned_dispatch_utc:"2026-11-25T02:00:00.000Z",prediction_cutoff_utc:"2026-11-25T02:15:00.000Z",
+   hard_latest_dispatch_utc:"2026-11-25T02:01:00.000Z",planned_charge_utc_date:"2026-11-25"})).toBe(true);
+  expect((await counts()).a).toBe(0);
+ });
  it("authentic cost-only preparation created exactly one source-only parent binding, never direct INSERT authority",async()=>{
   const r=await admin.query("SELECT early_draw_sha256,daily_api_ceiling,daily_other_reserved_units,daily_source_reserved_units FROM clean.phase5_fids_day_budget_v39 WHERE manifest_sha256=$1 AND run_day_index=1",[manifest]);
   expect(r.rowCount).toBe(1);

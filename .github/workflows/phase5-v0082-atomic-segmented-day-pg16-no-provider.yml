@@ -8,6 +8,7 @@ on:
       - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.d.mts'
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'migrations/staged/V0109__phase6_prospective_draw_parent_budget_binding_v39.sql'
+      - 'migrations/staged/V0110__phase6_exact_day1_fixed_later_source_clock_exception_v39.sql'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
@@ -36,6 +37,7 @@ on:
       - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.d.mts'
       - 'migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql'
       - 'migrations/staged/V0109__phase6_prospective_draw_parent_budget_binding_v39.sql'
+      - 'migrations/staged/V0110__phase6_exact_day1_fixed_later_source_clock_exception_v39.sql'
       - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
       - 'server/lib/disruption/phase6DelegatedDailySourceReviewProducer_v39.ts'
       - 'server/lib/disruption/phase6DurableDailySourcePreparationRuntime_v39.ts'
@@ -118,6 +120,7 @@ jobs:
           if [[ "$P6_TEST_BUDGET_RELEASE_MODE" == COST_UPPER_BOUND ]]; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0093__phase5_v0082_typed_cost_only_upper_bound_inert_v39.sql
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0109__phase6_prospective_draw_parent_budget_binding_v39.sql
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0110__phase6_exact_day1_fixed_later_source_clock_exception_v39.sql
           else
             test "$P6_TEST_BUDGET_RELEASE_MODE" = EXACT_SOURCE_GRID
           fi

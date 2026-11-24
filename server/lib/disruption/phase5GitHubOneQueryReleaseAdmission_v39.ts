@@ -81,6 +81,8 @@ export function admitP5GitHubOneQueryRelease(
     payload.plan?.independentlyApprovedSourceAndRetention!==true||
     payload.plan?.githubOnlyOwnerApproved!==true)
   hold("PHASE5_SOURCE_RIGHTS_OR_SELECTED_DRAW_NOT_SIGNED");
+ if(payload.plan?.day1LaterRecovery&&payload.plan.day1LaterRecovery.manifestSha256!==payload.manifestSha256)
+   hold("DAY1_LATER_SOURCE_MANIFEST_MISMATCH");
  const range=payload.plan?.sourcePartition;
  // A signed JSON SHA is only integrity. Range permission has separate
  // independently reviewed evidence, carried as restricted GH secrets.
