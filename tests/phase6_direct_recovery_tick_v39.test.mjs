@@ -312,40 +312,56 @@ test("only the exact route observation race is eligible for fresh GET reconcilia
  assert.equal(retryableDirectRouteHistory(plan("DUE_REVIEWED_ROUTE")),false);
 });
 
-test("post-ACK active sweep count race re-observes complete history, never replays POST",async()=>{
+test("post-ACK repository active sweep mismatch falls back to all route-specific reads without POST replay",async()=>{
  const f=fixture(),original=f.options.fetcher;
- let mismatches=0;
+ let mismatches=0;const scoped=new Set();
  f.options.fetcher=async(url,opt)=>{
   const u=new URL(url);
-  if(f.posts()>0&&mismatches<3&&opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&
-     u.searchParams.has("status")&&!u.searchParams.has("created")){
-   mismatches++;
-   return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")&&mismatches<3){
+    mismatches++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+   }
+   if(u.pathname.includes("/actions/workflows/"))scoped.add(u.pathname+":"+u.searchParams.get("status"));
   }
   return original(url,opt);
  };
  const out=await runDirectTick(f.env,f.options);
  assert.equal(mismatches,3);
+ assert.equal(scoped.size,5*P6_ROLLING_ROUTES.length);
  assert.equal(out.status,"DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF");
- assert(f.events.some(x=>x.status==="DIRECT_GET_OBSERVATION_RETRY"&&x.reason.endsWith("ACTIVE_SWEEP_COUNT")));
  assert.equal(out.verifiedTerminal,f.posts());
  assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());
 });
-test("persistent post-ACK active sweep count mismatch still quarantines, no replay",async()=>{
- const f=fixture(),original=f.options.fetcher;let mismatches=0;
+test("transient post-ACK count mismatch across both scopes re-observes complete history",async()=>{
+ const f=fixture(),original=f.options.fetcher;let repoMismatch=0,routeMismatch=0;
+ const path=P6_ROLLING_ROUTES[0].workflow;
  f.options.fetcher=async(url,opt)=>{
   const u=new URL(url);
-  if(f.posts()>0&&opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&
-     u.searchParams.has("status")&&!u.searchParams.has("created")){
-   mismatches++;
-   return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")&&repoMismatch<3){repoMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+   if(u.pathname.endsWith("/"+path+"/runs")&&routeMismatch<3){routeMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+  }
+  return original(url,opt);
+ };
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(repoMismatch,3);assert.equal(routeMismatch,3);
+ assert(f.events.some(x=>x.status==="DIRECT_GET_OBSERVATION_RETRY"&&x.reason.endsWith("ACTIVE_SWEEP_COUNT")));
+ assert.equal(out.verifiedTerminal,f.posts());assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());
+});
+test("persistent post-ACK count mismatch across both scopes still quarantines without replay",async()=>{
+ const f=fixture(),original=f.options.fetcher;let repoMismatch=0,routeMismatch=0;
+ const path=P6_ROLLING_ROUTES[0].workflow;
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")){repoMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+   if(u.pathname.endsWith("/"+path+"/runs")){routeMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
   }
   return original(url,opt);
  };
  await assert.rejects(runDirectTick(f.env,f.options),/ACTIVE_SWEEP_COUNT_NO_REPLAY/);
- assert.equal(mismatches,9);
- assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());
- assert(f.posts()>0);
+ assert.equal(repoMismatch,9);assert.equal(routeMismatch,9);
+ assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());assert(f.posts()>0);
 });
 test("observation retry never accepts limit, shape, missing ACK or unknown POST failures",()=>{
  assert(retryableDirectObservationError(new Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT")));
