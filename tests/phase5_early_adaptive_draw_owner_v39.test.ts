@@ -8,6 +8,8 @@ import {
 
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {readFileSync} from "node:fs";
+import {verifyP6Day1LateRegistrationScope,readVerifiedP6Day1Projection} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
+import {materializeP6Day1LateDynamicGrid,materializeP5DynamicDaySourceGrid,P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA} from "../server/lib/disruption/phase5DynamicDaySourceGrid_v39";
 const start="2026-11-10T14:00:00.000Z";
 const now="2026-11-09T10:00:00.000Z";
 const H=(s:string)=>s.repeat(64);
@@ -301,6 +303,33 @@ describe("Phase6 exact incident-only late fixed pair transaction candidate",()=>
   expect(m.db.updates).toHaveLength(4);expect(m.queries).toContain("COMMIT");
   await expect(commitP6Day1LateFixedRegistration(m.pool,pins,signed,role)).rejects.toThrow("LATE_DAY1_EXISTING_DRAW_NO_REPLAY");
   await expect(commitEarlyPhase5Draw(m.pool,pins)).rejects.toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+ });
+ it("materializes only the 128 still-prospective original templates from real late clock mock readback",async()=>{
+  const m=mockDb(base);
+  const result=await commitP6Day1LateFixedRegistration(m.pool,pins,signed,role);
+  const slotRegions={HUB:"MIDDLE_EAST",MID_A:"MIDDLE_EAST",MID_B:"SOUTH_AMERICA",REGIONAL:"NORTH_AMERICA"};
+  const pairAirportSet={HUB:{icao:"OMAA",region:"MIDDLE_EAST"},MID_A:{icao:"OMSJ",region:"MIDDLE_EAST"},MID_B:{icao:"SPJC",region:"SOUTH_AMERICA"},REGIONAL:{icao:"KDEC",region:"NORTH_AMERICA"}};
+  const day={runDayIndex:1,scheduledStartUtc:new Date("2026-11-25T00:00:00.000Z"),frozenDrawSeed:"early-owner-test-seed",
+   drawType:"NEW_TEMPLATE" as const,anchorIcao:"OMAA",slotRegions,pairAirportSet,calendarHash:pins.expectedCalendarHash,
+   configHash:pins.expectedConfigHash,frameHash:pins.expectedFrameHash};
+  const scope=verifyP6Day1LateRegistrationScope({...signed,observedDbUtc:result.selectedAtUtc,
+   calendarDay:{...day,scheduledStartUtc:day.scheduledStartUtc.toISOString()},futureCommittedDraws:[{runDayIndex:2,icao:"WSSS"}],
+   existingDrawRows:[],sourceAttempts:0,otherRestReservations:0,unresolvedStops:0});
+  const projection=readVerifiedP6Day1Projection(scope);
+  const input={schema:P5_DYNAMIC_DAY_SEGMENTED_MULTI_GRID_SCHEMA,
+   reviewedRefreshTiming:projection.reviewedRefreshTiming,reviewedSegmentedSource:projection.reviewedSegmentedSource,
+   reviewedCalendarSha256:day.calendarHash,reviewedConfigSha256:day.configHash,reviewedFrameSha256:day.frameHash,
+   providerContractSha256:H("f"),day,committedEarlyDrawRows:m.db.draws as any,
+   expectedCommittedEarlyDrawSha256:result.drawSha256,templates:projection.templates};
+  const grid=materializeP6Day1LateDynamicGrid(input,scope);
+  expect(grid).toMatchObject({status:"DAY1_REMAINING_SOURCE_CANDIDATES_NOT_RELEASED",
+   plannedQueryDenominator:192,excludedQueryCount:64,acquisitionCount:128,candidateFidsApiUnits:256,
+   authorizesPaidGet:false,actualFlightLevelPreCertified:false});
+  expect(grid.acquisitions.every(q=>q.horizon!=="T-24h"&&q.plannedAirportSelectionUtc===result.selectedAtUtc)).toBe(true);
+  expect(grid.remainingPreparationProjectionSha256).toBe(result.remainingPreparationProjectionSha256);
+  expect(()=>materializeP5DynamicDaySourceGrid(input)).toThrow("DRAW_TOO_LATE_FOR_T24_SOURCE");
+  expect(()=>materializeP6Day1LateDynamicGrid(input,{...scope})).toThrow("LATE_SCOPE_NOT_VERIFIED");
+  expect(()=>materializeP6Day1LateDynamicGrid({...input,templates:input.templates.slice(1)},scope)).toThrow("LATE_PROJECTION_DRIFT");
  });
  it("rolls back on wrong actor, prior paid history, future site collision and expiry before commit",async()=>{
   for(const opts of [{lateRoleWrong:true},{lateHistory:{source:1,rest:0,stops:0}},
