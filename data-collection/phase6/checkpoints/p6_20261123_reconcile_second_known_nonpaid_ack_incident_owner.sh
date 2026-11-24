@@ -132,6 +132,7 @@ gh api "repos/$R/actions/runs/$id/artifacts" | jq -e --arg n "p6-direct-terminal
 # Existing relay explicitly understands a known pre-POST HOLD and can try
 # the next prospective wake; a red/unknown attempt cannot be auto-replayed.
 echo "P6_DIRECT_DISPOSITION=$mark"
+[[ "$mark" != "Direct outcome PREFLIGHT_HOLD_NO_POST" ]] || hold NEW_DIRECT_PREFLIGHT_HOLD
 pin || hold PIN_DRIFT
 setv "$L" TRAVNR_RELAY_ROLLING_ENABLED 1 || hold RELAY_ENABLE
 phase=done
