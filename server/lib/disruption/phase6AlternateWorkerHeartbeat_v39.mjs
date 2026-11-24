@@ -14,7 +14,7 @@ export const LANES=[
 ];
 const dispositions=["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"];
 const goodStep=s=>s.status==="completed"&&s.conclusion==="success";
-const exactStep=(job,name)=>{
+export const exactHeartbeatWorkerStep=(job,name)=>{
  if(!Array.isArray(job.steps))return false;
  if(job.steps.filter(s=>s.name===name&&goodStep(s)).length===1)return true;
  // Actions masks the "00" substring in the actual V0087 step name.
@@ -37,7 +37,7 @@ export function verifyWorker(run,body,route,sha,now){
   return rejected("INCOMPLETE_JOB_IDENTITY");
  for(const [name,step,parent] of route.requirements){
   const jobs=body.jobs.filter(j=>j.name===name);
-  if(jobs.length!==1||jobs[0].conclusion!=="success"||step&&!exactStep(jobs[0],step))return rejected("REQUIRED_JOB_OR_STEP_UNVERIFIED");
+  if(jobs.length!==1||jobs[0].conclusion!=="success"||step&&!exactHeartbeatWorkerStep(jobs[0],step))return rejected("REQUIRED_JOB_OR_STEP_UNVERIFIED");
   if(parent){
    const markers=jobs[0].steps?.filter(s=>s.name.startsWith("Parent outcome "))??[];
    if(markers.length!==dispositions.length||new Set(markers.map(s=>s.name)).size!==dispositions.length||
