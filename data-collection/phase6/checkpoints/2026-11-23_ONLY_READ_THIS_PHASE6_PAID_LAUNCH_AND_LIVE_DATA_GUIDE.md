@@ -1,3 +1,32 @@
+# CURRENT UPDATE — November 23, 2026, 4:59 PM PST
+
+**Command F partial success: DO NOT REPEAT F.** Three PRE/T24 approval flags installed; protected ARM temporarily set to 0. Actual existing PRE actor-only [run 45301377341/job 138134468471](https://github.com/HKcode22/ReplitTranvr/actions/runs/45301377341/job/138134468471) SUCCESS: six named readiness steps passed, paid and follow-on steps 3/11/12/13 skipped, alternate job skipped; actual log marker P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO, actorOnly=true, productionProofIssued=false, phase6PaidGo=false. The owner's helper halted at ACTOR_STEPS_NOT_EXACT because GitHub masked the exact expected "PG16" step name as "PG***6". This is an owner receipt-checker bug, not a failed PRE actor or provider attempt. No restart epoch written and no route enabled by F after the HOLD. Preserve the successful preflight, no replay.
+
+## F-resume — run now, no repeated actor dispatch
+
+This is the remaining portion of F, with exact run ID, job ID, first-attempt, head, actor, title, job status, numbered steps and exact observed masked/unmasked alias verified, actual log marker checked, fresh DB read-only reconciliation and complete incident history checked. On success it explicitly records prospective owner restart, preserves original failed run, restores protected ARM=1 and activates existing normal-calendar paid routes and rolling relay. No direct provider GET or new migration. Future workers may spend the existing approved cap. Day1 exceptional recovery is still not deployed.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_RESUME_NORMAL_RESTART'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=8ca74b9cd84b65cc06b77909960c3a452f54de7f
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_RESUME_VERIFIED_PRE_ACTOR_NORMAL_CALENDAR_RESTART_NO_REPLAY
+P6_RESUME_NORMAL_RESTART
+~~~
+
+Expected `P6_EXISTING_PRE_ACTOR_FIRST_ATTEMPT_VERIFIED_NO_REPLAY` then `P6_EXISTING_NORMAL_PAID_ROUTES_AND_ROLLING_ENABLED_NOT_COLLECTION_PROOF`. Stop on HOLD; no blind replay. No additional timed command for Tuesday currently validated. Day2 first SOURCE Tue 7:45 PM PST. Day1 T6/T90 remain separate. All previous guide content retained below.
+
+---
+
 # CURRENT — Monday November 23, after successful 4:52 PM PST reconciliation
 
 **Command F: run now if you authorize resuming the original signed paid calendar.** Unlike Commands A–E, successful F **enables existing paid SOURCE/POST routes and the external rolling clock**, so later native/relay pulses may consume the originally authorized provider credits. It makes no direct provider call, no database mutation and no paid worker dispatch itself. It does perform one existing protected PRE actor-only workflow dispatch (no provider, no evidence issuance), a fresh live read-only database reconciliation and explicit owner incident/successor-epoch ledger comment. No existing gates are reopened. No new calendar, budget, rights, reviewer keys, legacy route or standalone missing-T24 protocol. It restores three absent literal reviewed PRE/T24 flags if needed, verifies actual PRE actor preflight and only then enables exact native modes and normal calendar routing. The original failed run is preserved. The original signed policy interval and scientific times do not move. There is **no Day1 late-draw exception installed**: do not expect Day1 T6/T90 to become operational just from F. Protect normal Day2 and later days independently using confirmed V0093 typed cost mode.
