@@ -216,7 +216,9 @@ function verifyDrawCore(
 
 /** Normal study path is unchanged, including the strict T24 lead. */
 export function verifyPreparedDailyDraw(day:PreparedDayForReadback,rows:PreparedDrawRow[]):PreparedReadback{
- return {...verifyDrawCore(day,rows),verifiedCalendarLeadOnly:true};
+ const r=verifyDrawCore(day,rows);
+ return {selections:r.selections,stateHash:r.stateHash,selectedAtUtc:r.selectedAtUtc,
+  verifiedCalendarLeadOnly:true,verifiedFlightLevelPre:false};
 }
 /** Draft incident-only readback. Not interchangeable with on-time evidence.
  * Requires the exact verified scope in memory and never asserts T24 readiness.
