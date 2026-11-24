@@ -1,0 +1,20 @@
+name: Phase6 exact workflow admission diagnostics (offline)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase6-admission-diagnostics-offline.yml'
+      - '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml'
+      - 'tests/phase6_runtime_admission_shell_exact_v39.test.mjs'
+permissions:
+  contents: read
+jobs:
+  exact-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test tests/phase6_runtime_admission_shell_exact_v39.test.mjs
