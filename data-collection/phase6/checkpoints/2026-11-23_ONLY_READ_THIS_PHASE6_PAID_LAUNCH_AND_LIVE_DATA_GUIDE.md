@@ -1,3 +1,32 @@
+# CURRENT — Monday November 23, after successful 4:52 PM PST reconciliation
+
+**Command F: run now if you authorize resuming the original signed paid calendar.** Unlike Commands A–E, successful F **enables existing paid SOURCE/POST routes and the external rolling clock**, so later native/relay pulses may consume the originally authorized provider credits. It makes no direct provider call, no database mutation and no paid worker dispatch itself. It does perform one existing protected PRE actor-only workflow dispatch (no provider, no evidence issuance), a fresh live read-only database reconciliation and explicit owner incident/successor-epoch ledger comment. No existing gates are reopened. No new calendar, budget, rights, reviewer keys, legacy route or standalone missing-T24 protocol. It restores three absent literal reviewed PRE/T24 flags if needed, verifies actual PRE actor preflight and only then enables exact native modes and normal calendar routing. The original failed run is preserved. The original signed policy interval and scientific times do not move. There is **no Day1 late-draw exception installed**: do not expect Day1 T6/T90 to become operational just from F. Protect normal Day2 and later days independently using confirmed V0093 typed cost mode.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_NORMAL_RESTART'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=82f1fc24cbcc8040e3e9c8889be485c5f5e6a818
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_PROSPECTIVE_NORMAL_CALENDAR_RESTART_AFTER_INCIDENT_NO_REPLAY
+P6_NORMAL_RESTART
+~~~
+
+Expected protected preflight marker `P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO`, actual new epoch line, and final `P6_EXISTING_NORMAL_PAID_ROUTES_AND_ROLLING_ENABLED_NOT_COLLECTION_PROOF`. If any HOLD or unexpected interruption, stop, paste sanitized output, **do not replay**. Preflight temporarily writes protected ARM=0 with routes paused, then restores prior G13 protected ARM=1 only after successful preflight and fresh zero-attempt reconciliation. If failure before rearm, protected ARM remains off; if failure during route activation, helper attempts to pause rolling/paid parents and protected ARM, not cancel any already-issued child. A successful command is configuration acknowledgment, not proof of acquisition. Exact helper [source](https://github.com/HKcode22/ReplitTranvr/blob/f710036372df589273083bb8120f933b979c9f37/data-collection/phase6/checkpoints/p6_20261123_normal_calendar_prospective_restart_owner.sh). Prepared and blob-readback verified; actual execution and all runner predicates must pass.
+
+Tuesday owner timing: F now tonight, no separate pre-scheduled owner write validated for Tuesday. Day1 T6/T90 remain blocked without separate deployment. Day2 first SOURCE Tuesday Nov24 7:45 PM PST; prepared index must be observed before conservative 4:45 PM preparation deadline. Existing nonpaid prep is autonomous and rolling provides extra pulses if F passes; GitHub schedules are not guaranteed. If no actual receipts, investigate rather than promise automatic collection. The existing launch watch observes status only.
+
+Previous content preserved exactly below; A–E complete, do not repeat.
+
+---
+
 # Current update — Monday Nov23 4:52:58 PM PST
 
 **Command E COMPLETE; do not repeat.** Owner's live PG16 READ ONLY receipt at 00:52:48.199Z: correct primary neondb, enabled_manifest=1, typed_cost_release=1 (exact signed V0093 cost-only envelope), SOURCE attempts=0, other REST reservations=0, unresolved stops=0, Day1 draw=0, Day2 draw=4, Day2 index=0. All ten missing PRE/POST controls restored, five existing controls unchanged; marker P6_EXISTING_NATIVE_PRE_POST_CONTROLS_STAGED_RECONCILED_NO_ROUTE_NO_DISPATCH. The pg SSL future-compatibility warning is not a runtime failure; do not alter the existing TLS settings as part of this incident.
