@@ -7,6 +7,7 @@ on:
       - 'data-collection/phase6/checkpoints/p6_day1_release_owner_request.json'
 permissions:
   contents: read
+  pull-requests: read
 concurrency:
   group: p6-day1-oneuse-owner-code-only-seal
   cancel-in-progress: false
@@ -79,10 +80,19 @@ jobs:
           BASE=c8e065d665ccacb6d2575070e94c5500b7583044
           HEAD_PIN=9c9cddb1aaeb04934d94af2937ee158e6d991f6c
           MAIN="$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq .object.sha)"
-          test "$TARGET" = "$MAIN"
-          gh api "repos/HKcode22/ReplitTranvr/pulls/965" | jq -e --arg sha "$TARGET" --arg head "$HEAD_PIN" '.merged==true and .head.sha==$head and .merge_commit_sha==$sha' >/dev/null
-          EXPECTED_TREE="$(gh api "repos/HKcode22/ReplitTranvr/git/commits/$HEAD_PIN" --jq .tree.sha)"
-          gh api "repos/HKcode22/ReplitTranvr/git/commits/$TARGET" | jq -e --arg t "$EXPECTED_TREE" --arg b "$BASE" --arg h "$HEAD_PIN" '.tree.sha==$t and ([.parents[].sha]==[$b,$h])' >/dev/null
+          MODE="$(jq -er '.mode' data-collection/phase6/checkpoints/p6_day1_release_owner_request.json)"
+          if test "$MODE" = preflight; then
+            test "$MAIN" = "$BASE"
+            test "$TARGET" = "$HEAD_PIN"
+            gh api "repos/HKcode22/ReplitTranvr/pulls/965" | jq -e --arg b "$BASE" --arg h "$HEAD_PIN" '.state=="open" and .base.sha==$b and .head.sha==$h and .mergeable==true' >/dev/null
+            printf '%s\n' 'P6_G8_OWNER_SEAL_TRIGGER=OWNER_READONLY_POLICY_SUCCESSOR_PREFLIGHT_NO_GO' 'P6_DAY1_SUCCESSOR_PREFLIGHT=1' >> "$GITHUB_ENV"
+          else
+            test "$MODE" = seal
+            test "$TARGET" = "$MAIN"
+            gh api "repos/HKcode22/ReplitTranvr/pulls/965" | jq -e --arg sha "$TARGET" --arg head "$HEAD_PIN" '.merged==true and .head.sha==$head and .merge_commit_sha==$sha' >/dev/null
+            EXPECTED_TREE="$(gh api "repos/HKcode22/ReplitTranvr/git/commits/$HEAD_PIN" --jq .tree.sha)"
+            gh api "repos/HKcode22/ReplitTranvr/git/commits/$TARGET" | jq -e --arg t "$EXPECTED_TREE" --arg b "$BASE" --arg h "$HEAD_PIN" '.tree.sha==$t and ([.parents[].sha]==[$b,$h])' >/dev/null
+          fi
           printf 'P6_DAY1_SUCCESSOR_TARGET_SHA=%s\n' "$TARGET" >> "$GITHUB_ENV"
           gh api repos/HKcode22/ReplitTranvr/git/blobs/34156ac65811165c0d217e7175f8643eeef55761 --jq .content | base64 --decode > "$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
           test "$(git hash-object "$RUNNER_TEMP/p6-g8-original-final-validator.cjs")" = 34156ac65811165c0d217e7175f8643eeef55761
@@ -96,6 +106,7 @@ jobs:
           export P6_G8_PINNED_VALIDATOR_PATH="$RUNNER_TEMP/p6-g8-original-final-validator.cjs"
           node data-collection/phase6/checkpoints/p6_day1_release_seal_successor.cjs
       - name: Preserve only the AEAD-encrypted owner successor for 1 day
+        if: env.P6_DAY1_SUCCESSOR_PREFLIGHT != '1'
         uses: actions/upload-artifact@v4
         with:
           name: p6-day1-owner-encrypted-code-successor-${{ github.run_id }}
