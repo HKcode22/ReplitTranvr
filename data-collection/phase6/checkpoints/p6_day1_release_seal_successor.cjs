@@ -50,6 +50,7 @@ const historicTransport={...tActual,dailyPolicySha256:hash(historicDaily)};
 const original={...v,V39_P5_POST_APPROVED_CODE_SHA:old,P6_NONPAID_DAILY_POLICY_BASE64:Buffer.from(JSON.stringify(historicDaily)).toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:hash(historicDaily),P6_NONPAID_TRANSPORT_TRUST_BASE64:Buffer.from(JSON.stringify(historicTransport)).toString("base64"),P6_NONPAID_TRANSPORT_TRUST_SHA256:hash(historicTransport)};
 console.log(JSON.stringify({status:"P6_DAY1_CORRECTED_BASELINE_RECONSTRUCTION",postPinClass,allOtherOuterPinsMatch:true,corrected59DayLaneOneVerified:true,historical31Reconstructed:hash(original)===prior,providerCalls:0,secretValuesPrinted:false}));
 need(hash(original)===prior,"HISTORICAL_31_RECONSTRUCTION_MISMATCH");
+if(e.P6_DAY1_REQUIRE_CURRENT_POST_PIN==="1")need(postPinClass==="exact-current","POST_REPOSITORY_PIN_NOT_REPAIRED");
 const b64=k=>{
  const b=v[k];need(typeof b==="string"&&/^[A-Za-z0-9+/]+={0,2}$/.test(b),"BASE64_"+k);
  const raw=Buffer.from(b,"base64");need(raw.toString("base64")===b,"CANONICAL_BASE64_"+k);
