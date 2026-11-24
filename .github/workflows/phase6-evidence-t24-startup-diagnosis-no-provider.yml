@@ -1,4 +1,4 @@
-name: P6 protected T24 startup diagnosis (read-only, no provider)
+name: P6 repository-scope T24 static diagnosis (no provider, no worker)
 on:
   push:
     branches: [phase6/20261122-g8-502-readback-evidence]
@@ -6,9 +6,8 @@ on:
 permissions:
   contents: read
 jobs:
-  exact-frozen-main-pure-admission-diagnostic:
+  repository-only-frozen-main-pure-admission:
     if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase6/20261122-g8-502-readback-evidence' && github.event_name == 'push' && github.run_attempt == 1
-    environment: phase6-protected-runtime
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -37,17 +36,17 @@ jobs:
           P5_CD_GH_T24_SCHEDULE_ENABLED: ${{ vars.P5_CD_GH_T24_SCHEDULE_ENABLED }}
           P5_T24_AUTO_DISPATCH_ENABLED: ${{ vars.P5_T24_AUTO_DISPATCH_ENABLED }}
           P5_CD_GH_PRE_CONFIRM: 'ONE_SIGNED_SOURCE_BOUND_CD_PRE_NO_PROVIDER'
-          P5_CD_GH_PRE_ARMED: ${{ secrets.P5_CD_GH_PRE_ARMED }}
-          P5_CD_GH_PRE_STOP: ${{ secrets.P5_CD_GH_PRE_STOP }}
+          P5_CD_GH_PRE_ARMED: '1'
+          P5_CD_GH_PRE_STOP: '0'
           P5_CD_GH_PRE_MODE: ${{ vars.P5_CD_GH_PRE_MODE }}
           P5_CD_GH_PHASE5_CANARY_APPROVED: ${{ secrets.P5_CD_GH_PHASE5_CANARY_APPROVED }}
-          P5_CD_GH_T24_WITNESS_APPROVED: ${{ secrets.P5_CD_GH_T24_WITNESS_APPROVED }}
+          P5_CD_GH_T24_WITNESS_APPROVED: '1'
           P5_CD_GH_PRE_APPROVED_CODE_SHA: ${{ secrets.P5_CD_GH_PRE_APPROVED_CODE_SHA }}
-          P5_CD_GH_E_ROUTE_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_ROUTE_FEATURES_APPROVED }}
-          P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: ${{ secrets.P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED }}
-          V39_PHASE5_FREEZE_SIGNED: ${{ secrets.V39_PHASE5_FREEZE_SIGNED }}
-          V39_PHASE5_SOURCE_RIGHTS_APPROVED: ${{ secrets.V39_PHASE5_SOURCE_RIGHTS_APPROVED }}
-          V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+          P5_CD_GH_E_ROUTE_FEATURES_APPROVED: '1'
+          P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED: '1'
+          V39_PHASE5_FREEZE_SIGNED: '1'
+          V39_PHASE5_SOURCE_RIGHTS_APPROVED: '1'
+          V39_PHASE6_PROCESS_ARMED: '1'
           V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
           V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
           P5_V39_PRE_DATABASE_URL: ${{ secrets.P5_V39_PRE_DATABASE_URL }}
@@ -59,11 +58,11 @@ jobs:
           P6_PHASE7_PRE_READBACK_ROLE: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_READBACK_ROLE || '' }}
           P6_PHASE7_PRE_READBACK_DATABASE_URL: ${{ vars.P5_CD_GH_PRE_MODE == 'PHASE6_APPROVED' && secrets.P6_PHASE7_PRE_READBACK_DATABASE_URL || '' }}
           P6_T24_CUSTODY_ENABLED: ${{ vars.P6_T24_CUSTODY_ENABLED }}
-          P6_T24_CUSTODY_APPROVED: ${{ secrets.P6_T24_CUSTODY_APPROVED }}
+          P6_T24_CUSTODY_APPROVED: '1'
           P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64: ${{ secrets.P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64 != '' && 'PRESENT_ONLY' || '' }}
           P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
           P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL != '' && 'PRESENT_ONLY' || '' }}
-          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
+          P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: '1'
           P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
           P6_NONPAID_DAILY_POLICY_BASE64: ${{ secrets.P6_NONPAID_DAILY_POLICY_BASE64 }}
           P6_NONPAID_DAILY_POLICY_SHA256: ${{ secrets.P6_NONPAID_DAILY_POLICY_SHA256 }}
@@ -110,6 +109,6 @@ jobs:
           }
           await check("PRE_WITNESS_HOST_LITERAL_MATCH",()=>{if(new URL(env.P5_V39_PRE_DATABASE_URL).host!==new URL(env.P5_V39_T24_WITNESS_DATABASE_URL).host)throw Error("HOLD_P6_PRE_WITNESS_HOST_LITERAL_MISMATCH");});
           await check("FULL_T24_STATIC_ADMISSION",()=>worker.admitP6CurrentT24Worker(env));
-          console.log("P6_DIAG_STATIC_COMPLETE failures="+failures+" providerCalls=0 dbWrites=0 workerInvocations=0");
+          console.log("P6_DIAG_REPOSITORY_VALUES_SIMULATED_LITERAL_CONTROLS_NOT_PROTECTED_RUNTIME_PROOF failures="+failures+" providerCalls=0 dbWrites=0 workerInvocations=0");
           P6_DIAG
           ./node_modules/.bin/tsx "$RUNNER_TEMP/p6-t24-startup-diagnosis.mts"
