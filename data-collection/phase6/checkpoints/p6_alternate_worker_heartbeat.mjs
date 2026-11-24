@@ -15,7 +15,17 @@ export const LANES=[
 ];
 const dispositions=["SAFE_PREFLIGHT_HOLD","MISSING_EVIDENCE","NO_DUE_WORK","NO_NEW_ACK","ACKNOWLEDGED_NOT_PAID_RECEIPT"];
 const goodStep=s=>s.status==="completed"&&s.conclusion==="success";
-const exactStep=(job,name)=>Array.isArray(job.steps)&&job.steps.filter(s=>s.name===name&&goodStep(s)).length===1;
+const exactStep=(job,name)=>{
+ if(!Array.isArray(job.steps))return false;
+ if(job.steps.filter(s=>s.name===name&&goodStep(s)).length===1)return true;
+ // Actions masks the "00" substring in the actual V0087 step name.
+ // Accept only the observed literal mask for this single pinned job, with
+ // its exact admission step preceding it; no generic wildcard matching.
+ if(job.name!=="reviewed-existing-queue-watchdog"||name!=="Bounded existing V0087 reaper, UNKNOWN quarantines never replay")return false;
+ const masked=job.steps.map((s,i)=>({s,i})).filter(({s})=>s.name==="Bounded existing V***87 reaper, UNKNOWN quarantines never replay"&&goodStep(s));
+ const admission=job.steps.map((s,i)=>({s,i})).filter(({s})=>s.name==="Stop before dependencies, provider or Neon session"&&goodStep(s));
+ return masked.length===1&&admission.length===1&&admission[0].i<masked[0].i;
+};
 const validId=n=>Number.isSafeInteger(n)&&n>0;
 export function verifyWorker(run,body,route,sha,now){
  const rejected=reason=>({verified:false,reason,runId:run?.id??null});
