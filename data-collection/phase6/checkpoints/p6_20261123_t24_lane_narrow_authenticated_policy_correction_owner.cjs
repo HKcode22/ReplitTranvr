@@ -114,7 +114,7 @@ need(daily.dayPlanSha256s?.length===31&&daily.delegatedDailyPacketProductionAppr
 const oldLane=daily.nativeLaterReview?.maximumT24ExecutionLanes;
 need(daily.nativeLaterReview?.approved===true&&daily.nativeLaterReview.nativeT24ReviewApproved===true&&
  daily.nativeLaterReview.independentT24WitnessProtocolReviewed===true&&
- !(Number.isSafeInteger(oldLane)&&oldLane>=1&&oldLane<=4),"ORIGINAL_INVALID_T24_LANE_FIELD");
+ oldLane===undefined,"ORIGINAL_T24_LANE_FIELD_MISSING");
 const fixed=JSON.parse(JSON.stringify(daily));
 fixed.nativeLaterReview.maximumT24ExecutionLanes=1;
 const fixedTransport={...transport,dailyPolicySha256:hash(fixed)};
