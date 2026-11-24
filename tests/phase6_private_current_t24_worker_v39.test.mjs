@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {createHash} from "node:crypto";
 import {loadP6CurrentT24CalendarWindows,loadP6LaterCalendarWindows,isP6CurrentPreTrigger,P6_CURRENT_T24_DISPATCH_CONFIRM} from "../server/lib/disruption/phase6LaterCalendarDueDays_v39.mjs";
-import {runP6BoundedT24Packets,localP6T24SingletonEnv,admitP6CurrentT24Worker} from "../scripts/v39_phase6_private_current_t24_worker_v39.mjs";
+import {currentT24FailureDiagnostic,runP6BoundedT24Packets,localP6T24SingletonEnv,admitP6CurrentT24Worker} from "../scripts/v39_phase6_private_current_t24_worker_v39.mjs";
 import {requireP5CdGithubCurrentPrivateT24Scope,requireP5CdGithubPreRelease} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts";
 const code="a".repeat(40),h="b".repeat(64);
 const env=()=>({GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",
@@ -83,4 +83,9 @@ test("current T24 exact calendar parity; explicit dispatch cannot authorize enro
  assert.deepEqual(loadP6CurrentT24CalendarWindows(manual,trust,read),loadP6CurrentT24CalendarWindows(scheduled,trust,read));
  assert.throws(()=>loadP6LaterCalendarWindows(manual,trust,read,"T24"),/EXPLICIT_SCHEDULE_SCOPE_REQUIRED/);
  assert.throws(()=>loadP6CurrentT24CalendarWindows({...manual,P6_PRIVATE_T24_RUN_DAYS:"1"},trust,read),/EXPLICIT_SCHEDULE_SCOPE_REQUIRED/);
+});
+
+test("T24 runtime diagnostic preserves bounded known reason and hides unknown exception contents",()=>{
+ for(const m of ["HOLD_P6_T24_ENROLL_WRONG_RESTRICTED_TLS_URL","HOLD_P6_CURRENT_T24_STUDY_TRUST_DRIFT","REFUSED_P5_CD_GH_CODE_LINEAGE_BASELINE_NOT_ANCESTOR_OR_EXECUTABLE_DRIFT","HOLD_P7_PROTECTED_PRE_RESOLVER_DISTINCT_TLS_READER"])assert.equal(currentT24FailureDiagnostic(Error(m)),m);
+ for(const m of ["postgresql://user:private@host/neondb","HOLD_P6_CURRENT_T24_FOO private-password","HOLD_P6_CURRENT_T24_"+"X".repeat(200),"unexpected SQL exception"])assert.equal(currentT24FailureDiagnostic(Error(m)),"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY");
 });
