@@ -1,3 +1,39 @@
+# CURRENT INCIDENT UPDATE — November 23, approximately 7:51 PM PST
+
+**G failed at second T24 admission; do not repeat G, F or prior commands.** [Run 45321496617](https://github.com/HKcode22/ReplitTranvr/actions/runs/45321496617/job/138200886569) failed at Separate STOP-default T24 current registry scheduler before npm or DB; G printed PAID_PAUSE_RECHECK_ATTEMPTED_NO_REPLAY. Actual relay 45322009431 skipped after pause; retention 45322139110 success. No paid SOURCE/POST child since restart in observed history. Changing PRE_STOP alone did not repair admission. Values in runner logs masked; cannot identify exact false literal from generic bash test. Root cause of repeated troubleshooting: prior code CI fixtures assumed correct literal settings; 31-value policy check did not check every effective native scheduler value, successful actor-only PRE test bypassed real T24 and later scheduler shell gates, name census did not prove values, previous GO verified writes but not actual controller wave. Existing names PRE_ARMED/PREPARE_ARMED were not rewritten in E because present. Direct controller and PRE both require the global paid and literal approvals; do not infer exact failing secret until runtime proof. No provider attempt from this failed job.
+
+**Engineering change:** [draft PR #966](https://github.com/HKcode22/ReplitTranvr/pull/966) contains diagnostic-only shell changes for T24/later/enrollment/watchdog and named direct-admission failures (no actual secret values), test every literal mismatch and actual workflow shell, no weakened semantics. CI pending. Main not changed because signed runtime binds exact c8. PR #965 latest six CI all passed, not deployed; not a production recovery. These are runtime failures, not evidence all CI failed.
+
+## H — reconcile known literal settings in one operation and prove real controller before rolling resume
+
+Run the helper below. It reuses G's incident evidence, fresh DB/V0108 check and existing no-provider routes; does not repeat actor-only preflight or old failed runs. Unlike G, reconciles the whole approved protected literal admission set (PRE_STOP=0, PRE_ARMED/PREPARE_ARMED=1, reviewed feature and custody approvals, global freeze/rights/budget/owner/arm and direct approval=1) after fresh zero physical attempt and zero unresolved STOP readback. No credential, policy, source bytes or signing-key changes. Existing signed calendar and budget unchanged. Verifies actual new T24/later no-provider workers, Day2 prep (no-due valid), conditional audit-only SHA fix, then explicit new prospective epoch after reconciled history. Starts ONE original direct controller on unchanged main with native normal routes enabled and rolling still paused. Only if actual terminal/known-active custody outcome and artifact are observed does it restore rolling. No blind retry, paid parent pause attempted on failure. Future signed workers can spend original approved cap; no direct provider call in owner helper.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_LITERAL_RECONCILE'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=9a90bd3ac02a690c5e2e7bba9b029143c71995d9
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP" OWNER_APPROVES_EXACT_LITERAL_CONTROL_RECONCILIATION_AND_PROVEN_NORMAL_RESTART
+P6_LITERAL_RECONCILE
+~~~
+
+Expected P6_ACTUAL_PRE_GATES_PASS_T24=... LATER=..., P6_FIRST_NEW_DIRECT_RUN=..., P6_ACTUAL_DIRECT_WAVE_VERIFIED=..., P6_ACTUAL_PRE_AND_DIRECT_WAVE_PASS_AUTONOMOUS_NORMAL_ROUTES_RESUMED. If HOLD, paste result, do not blindly retry. Day1 T24 elapsed and no valid retrospective capture. T6/T90 prospective possible only with reviewed late draw and standalone protocol successor, not installed. Day2 original timeline remains; protect independently. Day2 first T24 Tuesday 7:45 PM PST, conservative signed preparation check by 4:45 PM.
+
+## Simplification decision
+Do not reopen Gates 1–8 or add a new gate. Retain original provider cap, actual timestamps/cutoffs, signed identity and outcome provenance, retention deadlines, separate restricted roles and no uncertain paid replay. Remove redundant metadata-only readiness claims and make errors actionable. Next release design should isolate independently proven pre-dependency nonpaid admission failures to their own lane rather than poison entire controller epoch; a successful retention/early-draw/day-preparation lane must not be held merely by unrelated PRE no-side-effect admission. Existing controller planP6RollingTick blocks all due on any HOLD and direct negativeHistory blocks any route failure across epoch; change requires exact job evidence and reconciliation, not indiscriminate ignore. Do not weaken or remove global uncertainty safety for paid SOURCE/POST, unknown ACK or real retention STOP. No live main re-pin during this incident solely for diagnostic changes. User asked to simplify, not fabricate scientific evidence.
+
+All older instructions preserved verbatim below.
+
+---
+
 # CURRENT INCIDENT UPDATE — Monday November 23, 2026, approximately 7:36 PM PST
 
 Normal calendar activation F-resume at 01:00:52Z succeeded only as configuration. **Actual restart failed. Do not repeat A–F or F-resume.** Main remains c8e065d6; relay c5a8763f. Complete target history after restart through 03:34Z: 17 runs, no paid SOURCE/POST child run; direct root 45302763595 at 01:08:35Z stopped at admission (HOLD_P6_DIRECT_RECOVERY_NO_EXACT_SEPARATE_APPROVAL_OR_CONFLICTING_ROOT, zero artifacts); T24 PRE 45307333953 and later PRE 45307652365 stopped before dependencies/database. No claim of live ledger zero until fresh owner census. Relay 45319734667 at 03:28Z actually DEFER_DIRECT_PRIOR_ATTEMPT_REVIEW_NO_REPLAY; not successful dispatch. Primary retention 45320479563 success; independent private sentinel 45311573986 actual NO_OVERDUE_REFERENCES. Cron audit 45316823576 failure: obsolete 046d relay audit pin, 11 HTTP ACK-only slots plus one HOLD_CRON_MANAGER_RUN_IDENTITY at 02:49Z; actual PRIMARY run 45315135919 on c5 passed. Lease current through Dec19. Compare 046d...c5 ahead 3 behind 0, only relay.mjs/tests. Do not renew cron or change credentials for this incident.
