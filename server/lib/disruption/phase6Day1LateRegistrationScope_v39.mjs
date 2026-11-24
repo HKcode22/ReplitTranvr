@@ -9,9 +9,13 @@ const CODE=/^[a-f0-9]{40}$/;
 const hold=x=>{throw Error("HOLD_P6_DAY1_LATE_REGISTRATION_"+x)};
 const digest=b=>createHash("sha256").update(b).digest("hex");
 const slots=["HUB","MID_A","MID_B","REGIONAL"];
-const issuedScopes=new WeakSet();
+const issuedScopes=new WeakMap();
 /** Only scopes verified in this module and process may authorize the draft adapter. */
 export function isVerifiedP6Day1LateScope(scope){return !!scope&&issuedScopes.has(scope); }
+export function readVerifiedP6Day1Projection(scope){
+ if(!isVerifiedP6Day1LateScope(scope))hold("SCOPE_NOT_VERIFIED");
+ return structuredClone(issuedScopes.get(scope));
+}
 const paired={HUB:"OMAA",MID_A:"OMSJ",MID_B:"SPJC",REGIONAL:"KDEC"};
 const time=x=>{const n=Date.parse(x);if(typeof x!=="string"||!Number.isFinite(n)||new Date(n).toISOString()!==x)hold("CLOCK");return n;};
 /** Verify exact signed bytes using a reviewer identity from independent configuration.
@@ -57,5 +61,5 @@ export function verifyP6Day1LateRegistrationScope({policyBytes,signatureBase64,r
  fixedAirports:Object.freeze({...paired}),candidateQueryCount:projection.templates.length,excludedQueryCount:projection.excluded.length,
  remainingPreparationProjectionSha256:projection.projectionSha256,byHorizon:projection.byHorizon,
  providerCalls:0,databaseWrites:0,authorizesPaidGet:false,requiresRestrictedAtomicRegistration:true});
- issuedScopes.add(result);return result;
+ issuedScopes.set(result,structuredClone(projection));return result;
 }
