@@ -8,7 +8,7 @@ const fp=k=>h(k.export({format:"der",type:"spki"}));
 const pem=k=>k.export({format:"pem",type:"spki"}).toString();
 const priv=k=>Buffer.from(k.export({format:"pem",type:"pkcs8"})).toString("base64");
 const now=Date.parse("2030-01-01T00:00:00.000Z"),iso=t=>new Date(t).toISOString();
-function fixture(){
+function fixture(manifest=sha("a")){
  const q=generateKeyPairSync("ed25519"),r=generateKeyPairSync("ed25519"),d=generateKeyPairSync("ed25519");
  const files=Array.from({length:31},(_,i)=>{
   const day=i+1,first=iso(now+(i+1)*3600000);
@@ -17,7 +17,7 @@ function fixture(){
    templates:Array.from({length:12},()=>({runDayIndex:day,scheduledRequestUtc:first}))}));
  });
  const stable={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_runtime",
-  reviewedCodeSha:code,manifestSha256:sha("a"),calendarSha256:sha("b"),releaseSha256:sha("c"),rightsSha256:sha("d"),
+  reviewedCodeSha:code,manifestSha256:manifest,calendarSha256:sha("b"),releaseSha256:sha("c"),rightsSha256:sha("d"),
   dayReviewerFingerprintSha256:fp(r.publicKey),dayReviewerPublicKeyPem:pem(r.publicKey),
   queryReviewerFingerprintSha256:fp(q.publicKey),queryReviewerPublicKeyPem:pem(q.publicKey)};
  const pins={approvedCodeSha:code,manifestSha256:stable.manifestSha256,calendarSha256:stable.calendarSha256,
@@ -129,4 +129,22 @@ test("exact minimum remains eligible; a completed past index is not a missed day
  const b=selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,iso(now+60*60000+1));
  assert.equal(b.missedUnpublishedDays.length,0);
  assert.equal(b.tooLate,0);
+});
+
+test("Day1 recovery is explicit manual Day1 only, with the existing isolated draw role and exact live manifest",()=>{
+ const f=fixture("a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e");
+ const e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",P6_NONPAID_SOURCE_REQUESTED_DAY:"1",
+  P6_NONPAID_SOURCE_CONFIRM:"RECOVER_EXACT_DAY1_T6_T90_NO_PROVIDER",V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:"phase5_early_draw_prod20261115",
+  V39_P5_EARLY_DRAW_DATABASE_URL:"postgresql://phase5_early_draw_prod20261115:test-only@ep-test.us-west-2.aws.neon.tech/neondb?sslmode=require"};
+ const x=admitP6NonpaidSourceDayGithub(e);
+ assert.equal(x.mode,"day1_recovery");assert.equal(x.requestedDay,1);assert.equal(x.phase6PaidGo,false);
+ assert(!JSON.stringify(x).includes("test-only"));
+ for(const delta of [{GITHUB_EVENT_NAME:"schedule"},{P6_NONPAID_SOURCE_REQUESTED_DAY:"2"},
+  {V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:"phase5_early_draw_other20261115"},{V39_P5_EARLY_DRAW_DATABASE_URL:""},
+  {AERODATABOX_API_KEY:"no"},{V39_PHASE6_PROCESS_ARMED:"1"}])
+  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,...delta}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
+ const other=fixture();
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...other.env,GITHUB_EVENT_NAME:"workflow_dispatch",
+  P6_NONPAID_SOURCE_REQUESTED_DAY:"1",P6_NONPAID_SOURCE_CONFIRM:e.P6_NONPAID_SOURCE_CONFIRM,
+  V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:e.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE,V39_P5_EARLY_DRAW_DATABASE_URL:e.V39_P5_EARLY_DRAW_DATABASE_URL}),/EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST/);
 });

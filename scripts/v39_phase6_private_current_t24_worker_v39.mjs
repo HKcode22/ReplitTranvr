@@ -19,6 +19,13 @@ import {admitP6CommittedT24Custody,openP6CommittedT24Custody} from "./v39_phase6
 import {openPhase7ProtectedPreResolver} from "../server/lib/disruption/phase7ProtectedPreResolver_v39.ts";
 const H=/^[a-f0-9]{64}$/;
 const hold=s=>{throw Error("HOLD_P6_CURRENT_T24_"+s);};
+/** Only code-owned, bounded diagnostic tokens. Never emit arbitrary exception
+ * strings, connection info, packet bytes, stack traces or unknown SQL errors. */
+export function currentT24FailureDiagnostic(error){
+ const m=typeof error?.message==="string"?error.message:"";
+ return /^(?:HOLD_P6_(?:CURRENT_T24|T24_ENROLL|STORED_SOURCE_TRUST|PRIVATE_T24_QUEUE|LATER_CALENDAR|STORED_REVIEW|DAY_EPOCH)[A-Z0-9_]*|HOLD_P7_PROTECTED_PRE_RESOLVER_[A-Z0-9_]+|REFUSED_P5_CD_(?:GH_CODE_LINEAGE|GITHUB_PRE|T24_QUEUED)_[A-Z0-9_]+)$/.test(m)&&m.length<=160?m:"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY";
+}
+
 export function admitP6CurrentT24Worker(env){
  const base=requireP5CdGithubCurrentPrivateT24Scope(env);
  requireP5CdT24DispatchEvent(env);
@@ -157,5 +164,5 @@ if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){
   try{const r=await runP6CurrentT24Worker(process.env,commissioned.resolver);console.log(JSON.stringify(r));if(r.held)process.exitCode=2;}
   finally{await commissioned.close();}
  }
- catch{console.error("HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY");process.exitCode=2;}
+ catch(e){console.error(currentT24FailureDiagnostic(e));process.exitCode=2;}
 }

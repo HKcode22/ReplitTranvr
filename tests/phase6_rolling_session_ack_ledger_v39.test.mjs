@@ -206,3 +206,26 @@ test("missing prior ACK never becomes rollover evidence even if new history inde
  const second=await f.snapshot(),proof=await second.reviewHistoryRetirement({previousReceipt:receipt});
  assert.throws(()=>f.ledger.reviewRolloverPartition(proof),/ROLLOVER_LEDGER_NOT_RECONCILED/);
 });
+
+test("real incident regression: exact accepted run temporarily 404/503 then becomes visible; GET only, no new attempt",async()=>{
+ const f=setup();f.attempt();f.ack();let n=0;
+ const delays=[];
+ const status=await f.ledger.reconcile({token,sleep:async ms=>{delays.push(ms);f.advance(ms);},fetcher:async(u,o)=>{
+  assert.equal(o.method,"GET");assert.ok(u.endsWith("/actions/runs/"+id));n++;
+  if(n===1)return {ok:false,status:404};
+  if(n===2)return {ok:false,status:503};
+  return {ok:true,json:async()=>f.row()};
+ }});
+ assert.equal(n,3);assert.deepEqual(delays,[1000,2000]);assert.equal(status.pending.length,1);
+ assert.equal(status.unknownAttempts,0);assert.equal(f.events.filter(e=>e.status==="DISPATCH_ATTEMPT_BEFORE_ACK").length,1);
+});
+test("persistent exact ACK visibility failure remains quarantined; permission refusal is not retried",async()=>{
+ for(const status of [404,503,403,429]){
+  const f=setup();f.attempt();f.ack();let n=0;
+  await assert.rejects(f.ledger.reconcile({token,sleep:async ms=>f.advance(ms),fetcher:async(_u,o)=>{
+   assert.equal(o.method,"GET");n++;return {ok:false,status};
+  }}),new RegExp("ACK_READBACK_UNAVAILABLE_HTTP_"+status));
+  assert.equal(n,[404,503].includes(status)?4:1);
+  assert.equal(f.ledger.status().pending.length,1);assert.throws(f.attempt,/DUPLICATE_OR_UNRESOLVED/);
+ }
+});

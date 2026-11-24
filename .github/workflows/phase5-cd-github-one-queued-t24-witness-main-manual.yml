@@ -133,40 +133,40 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           case "$GITHUB_EVENT_NAME" in
             schedule)
-              test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1
+              test "$P5_CD_GH_T24_SCHEDULE_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_T24_SCHEDULE_ENABLED >&2; exit 2; }
               test "$P5_T24_AUTO_DISPATCH_ENABLED" != true
               ;;
             workflow_dispatch)
-              test "$P5_CD_GH_T24_ONE_FLIGHT_CONFIRM" = ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER
+              test "$P5_CD_GH_T24_ONE_FLIGHT_CONFIRM" = ONE_REVIEWED_SOURCE_QUEUED_T24_PRE_AND_INDEPENDENT_WITNESS_NO_PROVIDER || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_T24_ONE_FLIGHT_CONFIRM >&2; exit 2; }
               ;;
             *)
               echo HOLD_CD_T24_UNREVIEWED_EVENT
               exit 2
               ;;
           esac
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$P5_CD_GH_PRE_STOP" = 0
-          test "$P5_CD_GH_PRE_ARMED" = 1
-          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1
-          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
-          test "$ADB_AUTO_COLLECT" = 0
-          test -z "$AERODATABOX_API_KEY"
-          test -z "$AERODATABOX_WEBHOOK_SECRET"
-          test -z "$DATABASE_URL"
-          test -z "$V39_P5_SOURCE_DATABASE_URL"
-          test -n "$P5_V39_PRE_DATABASE_URL"
-          test -n "$P5_V39_T24_WITNESS_DATABASE_URL"
-          test -n "$P5_CD_GH_PRE_ROSTER_SHA256"
+          test "$GITHUB_RUN_ATTEMPT" = 1 || { echo HOLD_P6_LITERAL_GATE_GITHUB_RUN_ATTEMPT >&2; exit 2; }
+          test "$P5_CD_GH_PRE_STOP" = 0 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_STOP >&2; exit 2; }
+          test "$P5_CD_GH_PRE_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_ARMED >&2; exit 2; }
+          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_T24_WITNESS_APPROVED >&2; exit 2; }
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_SOURCE_RIGHTS_APPROVED >&2; exit 2; }
+          test "$ADB_AUTO_COLLECT" = 0 || { echo HOLD_P6_LITERAL_GATE_ADB_AUTO_COLLECT >&2; exit 2; }
+          test -z "$AERODATABOX_API_KEY" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_API_KEY >&2; exit 2; }
+          test -z "$AERODATABOX_WEBHOOK_SECRET" || { echo HOLD_P6_PRESENCE_GATE_AERODATABOX_WEBHOOK_SECRET >&2; exit 2; }
+          test -z "$DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_DATABASE_URL >&2; exit 2; }
+          test -z "$V39_P5_SOURCE_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_V39_P5_SOURCE_DATABASE_URL >&2; exit 2; }
+          test -n "$P5_V39_PRE_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P5_V39_PRE_DATABASE_URL >&2; exit 2; }
+          test -n "$P5_V39_T24_WITNESS_DATABASE_URL" || { echo HOLD_P6_PRESENCE_GATE_P5_V39_T24_WITNESS_DATABASE_URL >&2; exit 2; }
+          test -n "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
           case "$P5_CD_GH_PRE_MODE" in
             PHASE5_CANARY)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 0
-              test "$V39_PHASE5_FREEZE_SIGNED" != 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 0 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" != 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
               ;;
             PHASE6_APPROVED)
-              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1
-              test "$V39_PHASE6_PROCESS_ARMED" = 1
-              test "$V39_PHASE5_FREEZE_SIGNED" = 1
+              test "$P5_CD_GH_PHASE5_CANARY_APPROVED" != 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PHASE5_CANARY_APPROVED >&2; exit 2; }
+              test "$V39_PHASE6_PROCESS_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+              test "$V39_PHASE5_FREEZE_SIGNED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
               ;;
             *)
               echo HOLD_NO_INDEPENDENT_T24_CANARY_OR_PHASE6_GO
@@ -260,17 +260,17 @@ jobs:
             workflow_dispatch) test "$P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_T24_WITH_WITNESS_NO_PROVIDER ;;
             *) exit 2 ;;
           esac
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$P6_PRIVATE_T24_EXECUTION_ENABLED" = 1
-          test "$P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED" = 1
-          test "$P5_CD_GH_PRE_STOP" = 0
-          test "$P5_CD_GH_PRE_ARMED" = 1
-          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1
-          test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED
-          test "$V39_PHASE5_FREEZE_SIGNED" = 1
-          test "$V39_PHASE6_PROCESS_ARMED" = 1
-          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
-          test "$ADB_AUTO_COLLECT" = 0
+          test "$GITHUB_RUN_ATTEMPT" = 1 || { echo HOLD_P6_LITERAL_GATE_GITHUB_RUN_ATTEMPT >&2; exit 2; }
+          test "$P6_PRIVATE_T24_EXECUTION_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_T24_EXECUTION_ENABLED >&2; exit 2; }
+          test "$P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED >&2; exit 2; }
+          test "$P5_CD_GH_PRE_STOP" = 0 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_STOP >&2; exit 2; }
+          test "$P5_CD_GH_PRE_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_ARMED >&2; exit 2; }
+          test "$P5_CD_GH_T24_WITNESS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_T24_WITNESS_APPROVED >&2; exit 2; }
+          test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_MODE >&2; exit 2; }
+          test "$V39_PHASE5_FREEZE_SIGNED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_FREEZE_SIGNED >&2; exit 2; }
+          test "$V39_PHASE6_PROCESS_ARMED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE6_PROCESS_ARMED >&2; exit 2; }
+          test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_V39_PHASE5_SOURCE_RIGHTS_APPROVED >&2; exit 2; }
+          test "$ADB_AUTO_COLLECT" = 0 || { echo HOLD_P6_LITERAL_GATE_ADB_AUTO_COLLECT >&2; exit 2; }
           test -z "$AERODATABOX_API_KEY$DATABASE_URL$V39_P5_SOURCE_DATABASE_URL"
       - uses: actions/setup-node@v4
         with:
