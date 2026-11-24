@@ -1,3 +1,13 @@
+# UPDATE — Nov23 21:09 PST and subsequent candidate work
+
+Production normal rolling continues: direct 45330044133 and 45331194817 succeeded, with daily preparation and watchdog children successful, retention 45330734227 success. No first paid source receipt established. No live main/policy/epoch change, do not rerun A–L/resume.
+
+PR #965: TS7016 missing declaration corrected, exact revision 93b8ce67 15/15 green. 68508dd0 Stage6/7/8 mock incident integration and Day6 conservative historical washout isolation had 18/19 successful, global offline safety still running at inspection. 58a56148 adds a distinct late Stage9 adapter reusing the existing SERIALIZABLE two-ledger writer and restricted readback, only exact prospective templates and COST_UPPER_BOUND, original 192 denominator; 00d3ffb0 adds admission/rehash-tampering regression tests. Latest CI in progress; neither real late production transaction nor signed runtime deployment proved. No backfill. Full normal Stage9 group validation unchanged.
+
+Concrete remaining dependencies: (1) restricted early-draw login grants only six sampling/auth tables in existing owner script; incident candidate additionally reads SOURCE/REST/STOP history, so live role compatibility not proved; (2) actual per-draw V0079 parent budget binding for Day2 not evidenced in current receipts. B0062 staging explicitly creates zero per-draw budget rows; original Stage9 requires one matching draw digest and V0079 FK, so verify actual existing row before considering repair. Do not fabricate or insert guessed budget. (3) reuse existing durable signed review/publication/child SOURCE and standalone later PRE path; incident-specific handoff still missing, no paid activation. (4) ordinary Day6 first request Nov30 11:45 PST; historical washout fix in draft, not deployed. Day1 first remaining T6 Nov24 09:45 PST, latest all-template preparation before 09:25 PST. If not safely ready, preserve missingness and normal calendar. No unnecessary secrets, gate reopens, or provider requests.
+
+---
+
 # Nov23 20:49 PST — Day1 remaining-horizon recovery, exact existing candidate
 Normal controller 45328532136 recovered. External pulse 45328906953 actually ran at 04:48Z Nov24 and returned DEFER_RECENT_DIRECT_TICK_NOT_COLLECTION_PROOF, expected 8-minute cooldown; retention relay 45329009171 and child 45329032617 success. No evidence of first paid collection. Do not disturb normal routes.
  
