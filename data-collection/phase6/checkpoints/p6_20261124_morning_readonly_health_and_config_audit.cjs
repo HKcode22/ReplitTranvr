@@ -37,14 +37,14 @@ const report={schema:"travnr.phase6.owner-audit.v1",observedAtUtc:new Date(now).
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),"travnr-audit-"));
 function exact(a,b,k,expected){
  const repo=actual(a,k),shadow=actual(b,k),eff=shadow===undefined?repo:shadow;
- const pass=eff===expected;
+ const pass=repo===expected&&eff===expected;
  if(!pass)issue("CRITICAL_VARIABLE_MISMATCH",{name:k,repositoryPresent:repo!==undefined,environmentPresent:shadow!==undefined,expected});
  if(shadow!==undefined&&repo!==undefined&&repo!==shadow)issue("CRITICAL_VARIABLE_SCOPE_CONFLICT",{name:k});
  return pass;
 }
 function absentOr(a,b,k,allowed){
  const repo=actual(a,k),shadow=actual(b,k),eff=shadow===undefined?repo:shadow;
- if(!allowed.includes(eff??""))issue("CONFLICTING_CONTROL",{name:k,repositoryPresent:repo!==undefined,environmentPresent:shadow!==undefined});
+ if(!allowed.includes(repo??"")||!allowed.includes(eff??""))issue("CONFLICTING_CONTROL",{name:k,repositoryPresent:repo!==undefined,environmentPresent:shadow!==undefined});
  if(shadow!==undefined&&repo!==undefined&&repo!==shadow)issue("CRITICAL_VARIABLE_SCOPE_CONFLICT",{name:k});
 }
 function present(a,b,keys){
@@ -88,7 +88,8 @@ function directReceipt(row,epoch){
  const p=JSON.parse(execFileSync("unzip",["-p",zip,"p6-direct-terminal.json"],{encoding:"utf8",timeout:5000,maxBuffer:65536}));
  if(p.schema!=="v39.phase6.direct-recovery-tick.v2"||p.runId!==row.id||p.reviewedMainSha!==S||p.activationUtc!==epoch||p.unknownAttempts!==0||p.providerCalls!==0||!Array.isArray(p.pending)||!Array.isArray(p.terminalAcknowledgements)||!Array.isArray(p.pendingAcknowledgements))throw Error("DIRECT_RECEIPT_SCOPE");
  if(marker[0].name==="Direct outcome PREFLIGHT_HOLD_NO_POST")issue("CONTROLLER_PREFLIGHT_HOLD",{run:row.id,reason:/^HOLD_[A-Z0-9_]+$/.test(p.reason??"")?p.reason:"REDACTED"});
- else if(!["DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF","DIRECT_WAVE_KNOWN_ACTIVE_ACKS_CARRIED_NOT_COLLECTION_PROOF"].includes(p.status))throw Error("DIRECT_STATUS");
+ else if(marker[0].name==="Direct outcome TERMINAL_PARENT_ACKS_RECONCILED"?(p.status!=="DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF"||p.pending.length!==0):(marker[0].name!=="Direct outcome KNOWN_ACTIVE_PARENT_ACKS_CARRIED"||p.status!=="DIRECT_WAVE_KNOWN_ACTIVE_ACKS_CARRIED_NOT_COLLECTION_PROOF"||p.pending.length===0))throw Error("DIRECT_STATUS");
+ if(p.pending.length!==p.pendingAcknowledgements.length||p.verifiedTerminal!==p.terminalAcknowledgements.length||p.acknowledged!==p.terminalAcknowledgements.length+p.pendingAcknowledgements.length)throw Error("DIRECT_RECEIPT_COUNTS");
  out("DIRECT_RECEIPT_BYTE_VERIFIED",{run:row.id,marker:marker[0].name,acknowledged:p.acknowledged,verifiedTerminal:p.verifiedTerminal,pending:p.pending.length,unknownAttempts:p.unknownAttempts,providerCallsByController:p.providerCalls});
  return {run:row.id,marker:marker[0].name,pending:p.pending.length};
 }
@@ -100,7 +101,7 @@ async function metadata(){
  for(const repo of [R,L]){
   const base=await info(repo),envs=robust(()=>getAll("repos/"+repo+"/environments","environments"));
   cfg[repo]={base,environments:{}};
-  for(const e of envs)cfg[repo].environments[e.name]=await info(repo,e.name);
+  for(const e of envs)if(mode==="FULL_AUDIT"||e.name===(repo===R?"phase6-protected-runtime":"travnr-target-forward"))cfg[repo].environments[e.name]=await info(repo,e.name);
   const es=cfg[repo].environments;
   report.configuration[repo]={repository:publicMeta(base),environments:Object.fromEntries(Object.entries(es).map(([k,v])=>[k,{...publicMeta(v),variableScopeDuplicates:names(v.vars).filter(n=>vmap(base).has(n)),variableScopeConflicts:names(v.vars).filter(n=>vmap(base).has(n)&&actual(base,n)!==actual(v,n)),secretScopeDuplicates:names(v.secrets).filter(n=>names(base.secrets).includes(n))}]))};
   out("CONFIGURATION_METADATA_CENSUS",{repo,repositoryVariables:base.vars.length,repositorySecretNames:base.secrets.length,environments:Object.entries(es).map(([name,v])=>({name,variables:v.vars.length,secretNames:v.secrets.length})),secretValuesReadable:false});
@@ -114,7 +115,7 @@ async function metadata(){
  P6_PRIVATE_LATER_ENROLL_ENABLED:"1",P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED:"1",
  P6_PRIVATE_T24_ENROLL_ENABLED:"1",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",
  P6_PRIVATE_T24_EXECUTION_ENABLED:"1",P5_CD_GH_T24_SCHEDULE_ENABLED:"1",
- P5_CD_GH_PRE_SCHEDULE_ENABLED:"1",P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED:"1",
+ P5_CD_GH_PRE_SCHEDULE_ENABLED:"1",P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED:"1",P5_CD_GH_PRE_MODE:"PHASE6_APPROVED",
  P5_PRIMARY_FIDS_EXPIRY_ENABLED:"true",P5_PRIMARY_FIDS_BACKSTOP_ENABLED:"true",P6_FULL_RETENTION_BACKSTOP_ENABLED:"true",
  P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA:S,P7_EXPIRY_APPROVED_MAIN_SHA:S,P7_EXPIRY_ENABLED:"true"
  };
@@ -134,6 +135,7 @@ async function metadata(){
  const directs=t.filter(x=>x.path===directPath),rolling=l.filter(x=>x.display_title==="TRAVNR EXTERNAL CLOCK ROLLING_ROOT");
  const bad=t.filter(x=>[directPath,...routes,...childPaths].includes(x.path)&&(x.head_sha!==S||x.run_attempt!==1||(x.status==="completed"&&!["success","skipped"].includes(x.conclusion))));
  if(bad.length)issue("UNRESOLVED_WORKFLOW_HISTORY",{runs:bad.map(runShort)});
+ if(directs.some(x=>x.conclusion==="skipped"))issue("DIRECT_SKIPPED_REQUIRES_REVIEW",{ids:directs.filter(x=>x.conclusion==="skipped").map(x=>x.id)});
  const last=directs[0],good=directs.find(x=>x.status==="completed"&&x.conclusion==="success");
  const mins=x=>Math.round((Date.now()-Date.parse(x.created_at))/60000);
  out("CONTROLLER_HISTORY",{activationUtc:epoch,runCount:directs.length,completedSuccess:directs.filter(x=>x.conclusion==="success").length,latest:last?runShort(last):null,latestAgeMinutes:last?mins(last):null,rollingRelayLatest:rolling[0]?runShort(rolling[0]):null});
