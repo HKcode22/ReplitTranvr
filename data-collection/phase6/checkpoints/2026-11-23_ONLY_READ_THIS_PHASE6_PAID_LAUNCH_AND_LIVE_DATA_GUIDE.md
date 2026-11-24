@@ -2,7 +2,45 @@
 
 **UPDATED Monday November 23, 2026, 4:22 PM California PST (November 24 00:22 UTC).** Mountain House, Tracy and San José use the same clock. This dated section supersedes ALL older instructions below. Older commands are retained for audit only, NOT for execution.
 
-## CORRECTION AND NEXT OWNER COMMAND — Nov 23, after the 4:22 PM census
+## LATEST — November 23, 2026, after 4:31 PM PST: next exact owner action
+
+**Provider key restoration COMPLETE.** Owner receipt `P6_EXISTING_PROVIDER_KEY_PROTECTED_SCOPE_WRITE_ACK_NO_DISPATCH` at 00:31:34Z Nov24; existing Replit credential installed in protected environment. Do not repeat it. This is write metadata, not a real paid provider response.
+
+**Original commissioning cross-check:** [Nov22 G1–8 freeze](2026-11-22_PHASE6_GATES_1_THROUGH_8_VERIFIED_PRODUCTION_FREEZE.md) says complete code/DB/policy setup in DISARMED state. G12 31-value readback includes static code and policy strings, not the two daily runtime switches. G13 only writes four global ARM/OWNER values, G9 only changes controller/relay. [Current main daily preparation workflow](https://github.com/HKcode22/ReplitTranvr/blob/c8e065d665ccacb6d2575070e94c5500b7583044/.github/workflows/phase6-nonpaid-source-day-prepare-publish.yml) expressly requires `P6_NONPAID_SOURCE_RUNTIME_APPROVED=1` and `V39_P5_PREPARE_OWNER_APPROVED=1`; owner's live scope census showed both absent, whereas actual six policy bytes, reviewer and restricted DB secret names were present. We have not found evidence these two flags had previously been installed; underlying authority and policy exist. The original signed 31-day delegated review is reused, not recreated. Owner command below separately authorizes only existing nonpaid actor, with the real runtime still required to verify hashes, actual clock, keys, roles and draw.
+
+### Command C — RUN NOW Monday Nov23, after credential restoration
+This restores only the two named nonpaid approval flags if absent, in the protected environment; never overwrites an existing flag. It dispatches one existing exact manual nonpaid Day2 preparation with local paid ARM/OWNER=0, provider keys empty, existing signed policy/actors. It prints run ID and actual outcome, then enables only the existing nonpaid daily schedule if an accepted receipt is observed. No paid SOURCE/POST or rolling relay activation. Database writes for valid signed preparation/publication are intended. Day2 is independently preserved. If NO_ELIGIBLE, the schedule can select a future eligible day later; it is not a prepared Day2 receipt. HOLD or ambiguous dispatch = no replay. Run before Tuesday 4:45 PM PST (conservative boundary 3 hours before first Day2 SOURCE); ideally now.
+
+~~~bash
+cd ~/workspace
+bash <<'P6_DAY2_NONPAID_NOW'
+set -Eeuo pipefail
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+BLOB=a04461d5cf023ac5da092eef2ac7476ca9da0641
+TMP="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP"' EXIT
+gh api "repos/$R/git/blobs/$BLOB" --jq '.content' | base64 --decode > "$TMP"
+test "$(git hash-object "$TMP")" = "$BLOB"
+bash -n "$TMP"
+bash "$TMP"
+P6_DAY2_NONPAID_NOW
+~~~
+
+**Expected terminal marker:** `P6_NONPAID_PREPARATION_SCHEDULE_ENABLED_PAID_ROLLING_STILL_PAUSED`; paste it plus run ID and actual status. Do not paste raw logs or private values.
+
+### Exact owner timing (supersedes older tables)
+- Monday evening: Command C now. No other timed owner command currently validated. Do not repeat the earlier key restore, G13/G9 or Day2 draw.
+- Tuesday 8 AM PST: optional read-only status check below; no paid command authorized. Day1 primary T6 starts 9:45 AM PST; still requires separately reviewed prospective remaining-horizon exception. Original binding review explicitly left standalone protocol null. No backdating.
+- Tuesday 4:45 PM PST: conservative latest Day2 whole-day preparation boundary (first source 7:45 PM PST; runtime signed lead actually 15–180 min, exact value private). Day2's plan has 192 templates, service starts Wed 8 PM PST (Nov26 04Z). Check actual indexed/prepared receipt BEFORE boundary; do not manually replay failed/uncertain preparation. If no receipt, incident remains and paid rolling stays paused.
+- Wednesday onward: no standing manual paid command, no promise of autonomous operation before actual controller/paid receipt verification. There is no known safe command with a guaranteed future time to resume paid collection yet; do not schedule one blindly.
+
+The existing hourly launch watch can observe changes, but cannot approve/execute recovery on the owner's behalf.
+
+---
+
+## SUPERSEDED CORRECTION AND PREVIOUS OWNER COMMAND — Nov 23, after the 4:22 PM census
 
 The previous wording “missing approvals” was too broad. The census establishes ABSENT names in two inspected Actions scopes, not lost underlying authorization, policy or credential. G8/G12/G13/G9 historical verified scopes remain valid. Original G13 only wrote four ARM/OWNER values; original G9 only configured the controller. Neither proved all downstream runtime predicates. The original G11 helper explicitly used the existing Replit `AERODATABOX_API_KEY` environment variable for free account verification, and the protected SOURCE/POST jobs explicitly reference the Actions secret with that name. Do not create a new provider key. The November 22 runtime binding review also explicitly leaves standaloneNoT24ProtocolSha256 null: do not enable standalone later-PRE by inventing an approval/hash.
 
