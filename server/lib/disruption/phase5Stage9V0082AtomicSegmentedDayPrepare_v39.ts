@@ -488,7 +488,7 @@ async function commitStage9Internal(
        review.reviewedCategoryBudgetSha256||
      dt(release[0].frozen_at_utc)>=now)
     hold("MISSING_REAL_SAVED_REVIEWED_SEVEN_CATEGORY_FREEZE");
-  const budgets=(await client.query(
+  const readParentBudget=async()=>(await client.query(
    "SELECT manifest_sha256,run_day_index,budget_day_utc,calendar_hash,"+
    "config_hash,frame_hash,early_draw_sha256,daily_api_ceiling,"+
    "daily_other_reserved_units,daily_source_reserved_units "+
@@ -496,6 +496,19 @@ async function commitStage9Internal(
    "WHERE manifest_sha256=$1 AND run_day_index=$2",
    [review.expectedManifestSha256,x.runDayIndex]
   )).rows;
+  let budgets=await readParentBudget();
+  // Cost-only prelaunch staging cannot bind unknown future ICAOs. Bind
+  // a real on-time draw atomically with existing Stage9 rows, via a single
+  // narrow nonpaid function. Never give PREPARE direct parent-budget INSERT.
+  // A late incident must use its separately reviewed binding, not this path.
+  if(budgets.length===0&&!late&&normalizeP5TypedSourceBudgetBinding(review)?.budgetReleaseMode==="COST_UPPER_BOUND"){
+   const fn=await client.query("SELECT to_regprocedure('clean.bind_phase5_prospective_parent_source_budget_v39(text,integer,text,integer)') IS NOT NULL AS installed");
+   if(fn.rows[0]?.installed!==true)hold("PROSPECTIVE_PARENT_BUDGET_BINDER_NOT_INSTALLED");
+   const bound=await client.query("SELECT clean.bind_phase5_prospective_parent_source_budget_v39($1,$2,$3,$4) AS bound",
+    [review.expectedManifestSha256,x.runDayIndex,x.earlyDrawSha256,x.maximumCandidateGetUnits]);
+   if(bound.rowCount!==1||bound.rows[0]?.bound!==true)hold("PROSPECTIVE_PARENT_BUDGET_BIND_FAILED");
+   budgets=await readParentBudget();
+  }
   if(budgets.length!==1||
      budgets[0].calendar_hash!==review.expectedCalendarSha256||
      budgets[0].config_hash!==review.expectedConfigSha256||
