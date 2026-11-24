@@ -123,6 +123,13 @@ export function readDirectReceipt(raw,{run,sha,since,policySha256,clock,epoch,di
     disposition==="PREFLIGHT_HOLD"&&groups[0].length!==0)hold("PREDECESSOR_RECEIPT_DISPOSITION");
  return groups[1];
 }
+// A route's normal history may be fetched just before a scheduled job
+// settles and the active sweep just after. Only this exact observation race
+// is retryable, and only with a fresh complete GET snapshot.
+export function retryableDirectRouteHistory(plan){
+ const blocked=plan?.assessments?.filter(a=>a.state.startsWith("HOLD_"))??[];
+ return plan?.status==="HOLD_ROLLING_WAVE_NO_DISPATCH"&&blocked.length>0&&blocked.every(a=>a.state==="HOLD_HISTORY_CHANGED");
+}
 export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),fetcher=fetch,readPlan,emit=()=>{},readArchive=downloadDirectArchive}={}){
  const start=now(),a=admitDirectTick(env,start,readPlan),deadline=Math.min(start+7*MIN,a.calendar.until);
  const epoch=Math.max(a.since,Math.floor((start-3*60*MIN)/1000)*1000);
@@ -257,7 +264,11 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
      const snapshots=[];
      const result=await readP6RollingGithubSnapshot({sha:a.sha,epoch,token:env.GITHUB_TOKEN,now,fetcher:api,sleep,
       directRecovery:true,earlyDrawHistoryEpoch,verifySnapshot:(r,x)=>{journal.assertVisible(r,x);snapshots.push(x);},scheduleEvidenceCache:cache});
-     if(result.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CURRENT_ROUTE_HISTORY");
+     if(result.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO"){
+      emit({status:"DIRECT_ROUTE_HISTORY_HOLD_DIAGNOSTIC",attempt:i+1,blocked:result.plan.assessments.filter(x=>x.state.startsWith("HOLD_")).map(x=>({lane:x.lane,state:x.state,runId:x.runId??null}))});
+      if(i<2&&retryableDirectRouteHistory(result.plan)){await sleep(1000);continue;}
+      hold("CURRENT_ROUTE_HISTORY");
+     }
      return {result,snapshots};
     }catch(e){
      if(i===2||!["HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED","HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED"].includes(e?.message))throw e;
