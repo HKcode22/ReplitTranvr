@@ -6,7 +6,8 @@ const {createHash}=require("node:crypto");
 const e=process.env;
 const marker=JSON.parse(require("node:fs").readFileSync("data-collection/phase6/evidence/p6_day1_policy_postinstall_readback.json","utf8"));
 const main=marker.reviewedMainSha;
-const expectedStatic=marker.candidateStaticSha256;
+const historical="7dc679d27f7d9b3db7d011f1cb53a6b960513a88e5de6c720192ca8b35b01f61";
+const previous="c8e065d665ccacb6d2575070e94c5500b7583044";
 const expectedPost=marker.postPolicySha256;
 const names=[
 "V39_P5_APPROVED_CODE_SHA","P6_NONPAID_SOURCE_APPROVED_MAIN_SHA","V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA",
@@ -38,7 +39,7 @@ assert(e.GITHUB_ACTIONS==="true"&&e.GITHUB_REPOSITORY==="HKcode22/ReplitTranvr"&
 assert(names.length===31&&new Set(names).size===31,"EXACT_31_NAMES");
 const v=Object.fromEntries(names.map(k=>[k,e[k]??""]));
 assert(names.every(k=>typeof v[k]==="string"&&v[k].length>0),"MISSING_SECRET");
-assert(digest(v)===expectedStatic,"SUCCEEDED_BUNDLE_DIGEST_MISMATCH");
+assert(/^[a-f0-9]{40}$/.test(main)&&main!==previous,"SUCCESSOR_MAIN");
 assert(names.slice(0,7).every(k=>v[k]===main),"TOP_LEVEL_MAIN_BINDINGS");
 assert(e.V39_PHASE6_PROCESS_ARMED==="0"&&e.V39_PHASE6_OWNER_APPROVED==="0",
  "PAID_CONTROLS_NOT_ZERO");
@@ -75,6 +76,19 @@ assert(JSON.stringify(post)===raw.toString("utf8")&&
  post.nativePostPolicySha256===v.P6_NATIVE_POST_POLICY_SHA256&&
  post.independentBoundedSettlementApproved===true,
  "POST_NESTED_HASH_BINDING");
+assert(daily.nativeLaterReview.maximumT24ExecutionLanes===1&&daily.validUntilUtc==="2027-01-20T00:00:00.000Z"&&daily.validFromUtc==="2026-11-22T00:00:00.000Z","PRESERVE_CORRECTED_CLOCK_AND_LANE");
+const clone=o=>JSON.parse(JSON.stringify(o));
+const hist={...v};
+for(const k of names.slice(0,7))hist[k]=previous;
+const s=clone(source),d=clone(daily),g=clone(signing),t=clone(transport),n=clone(native);
+s.reviewedCodeSha=previous;d.approvedCodeSha=previous;d.nativeLaterReview.dayAppendPolicy.approvedCodeSha=previous;
+g.approvedCodeSha=previous;t.reviewedMainSha=previous;n.reviewedCodeSha=previous;
+delete d.nativeLaterReview.maximumT24ExecutionLanes;d.validUntilUtc="2027-01-31T00:00:00.000Z";
+t.dailyPolicySha256=digest(d);t.signingPolicySha256=digest(g);
+for(const [k,obj] of [[policyKeys[0],s],[policyKeys[1],d],[policyKeys[2],g],[policyKeys[3],t],[policyKeys[5],n]])hist[k]=Buffer.from(JSON.stringify(obj)).toString("base64");
+for(const k of names.slice(27))hist[k]=sha(Buffer.from(hist[k.replace(/_SHA256$/,"_BASE64")],"base64"));
+assert(digest(hist)===historical,"NON_CODE_POLICY_OR_FROZEN_BASELINE_DRIFT");
+const expectedStatic=digest(v);
 console.log(JSON.stringify({
  status:"P6_DAY1_REPOSITORY_31_CANONICAL_AND_POST_LINKS_VERIFIED_PAID_OFF",
  scope:context,mainSha:main,staticDigest:expectedStatic,
