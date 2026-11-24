@@ -1,0 +1,35 @@
+name: P6 dual-path heartbeat evidence (READ ONLY)
+on:
+  push:
+    branches: [phase6/20261122-g8-502-readback-evidence]
+    paths:
+      - '.github/workflows/phase6-independent-dual-path-heartbeat-no-provider.yml'
+      - 'data-collection/phase6/checkpoints/p6_alternate_worker_heartbeat*.mjs'
+      - 'data-collection/phase6/checkpoints/p6_alternate_worker_heartbeat_request.json'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p6-independent-dual-path-heartbeat
+  cancel-in-progress: false
+jobs:
+  exact-dual-path-observation:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Offline fail-closed alternate-worker tests
+        run: node --test data-collection/phase6/checkpoints/p6_alternate_worker_heartbeat.test.mjs
+      - name: Read actual native and alternate worker jobs without provider or DB
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DATABASE_URL: ''
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
+        run: node data-collection/phase6/checkpoints/p6_alternate_worker_heartbeat.mjs
