@@ -492,3 +492,63 @@ describe("Phase5 shape envelope vs four REAL-scope database rows, no release",()
   expect(pg.sql.at(-1)).toBe("ROLLBACK");
  });
 });
+
+describe("Phase6 actual frozen Nov25 Day1 incident does not poison ordinary Day6 washout",()=>{
+ const originalPlan=JSON.parse(readFileSync(new URL("../data-collection/phase5/planning/phase6-source-day-06.json",import.meta.url),"utf8"));
+ const {envelope,independentlyReviewedShapeEnvelopeSha256}=originalPlan.reviewedOrdinaryDayEnvelope;
+ const joinedFields=["slot_id","target_region","selected_draw_type","selected_icao","selected_draw_seed","selected_at_utc","adaptive_state_hash","probability_vector","airport_layer_design_probability"];
+ function actual(){
+  const {o}=syntheticSixthDayReadback();
+  const current=envelope.days[5],start=Date.parse(current.startUtc);
+  const cal=o.cal as typeof o.cal & {window_shape:string;active_duration_minutes:number};
+  cal.scheduled_start_utc=new Date(start);cal.date_utc=current.dateUtc;
+  const selected=fmt(start-26*3600000);
+  for(const row of o.draw)row.selected_at_utc=selected;
+  o.scope.reviewedOrdinaryDayEnvelope={envelope,independentlyReviewedShapeEnvelopeSha256};
+  o.scope.templates=originalPlan.templates;
+  o.scope.reviewedRefreshTiming=originalPlan.reviewedRefreshTiming;
+  o.scope.reviewedSegmentedSource=originalPlan.reviewedSegmentedSource;
+  o.scope.expectedEarlyDrawSha256=verifyPreparedDailyDraw({
+   runDayIndex:6,scheduledStartUtc:cal.scheduled_start_utc,frozenDrawSeed:cal.frozen_draw_seed,
+   drawType:"NEW_TEMPLATE",anchorIcao:cal.anchor_icao,slotRegions:cal.slot_regions,pairAirportSet:null,
+   calendarHash:cal.calendar_hash,configHash:cal.config_hash,frameHash:cal.frame_hash},o.draw).stateHash;
+  for(const row of o.priorJoinedRows!){
+   const day=envelope.days[Number(row.run_day_index)-1];
+   const pair=day.pairedAirportCandidates;
+   row.scheduled_start_utc=new Date(day.startUtc);row.date_utc=day.dateUtc;
+   row.window_shape=day.windowShape;row.active_duration_minutes=day.windowShape==="up-to-6h"?360:240;
+   row.selected_at_utc=fmt(Date.parse(day.startUtc)-26*3600000);
+   row.anchor_icao=pair.HUB;row.selected_icao=pair[row.slot_id];
+   row.pair_airport_set=Object.fromEntries(list.map(([slot])=>[slot,{icao:pair[slot],region:row.slot_regions[slot]}]));
+   row.probability_vector=row.slot_id==="REGIONAL"?[{icao:row.selected_icao,probability:1,drawScore:1}]:null;
+  }
+  const nullDraw={...o.priorJoinedRows![0]};
+  for(const k of joinedFields)nullDraw[k]=null;
+  const now=fmt(start-25*3600000);
+  return {o,now,nullDraw};
+ }
+ it("exactly missing closed Day1 contributes conservative planned sites, not fabricated draws or observations",async()=>{
+  const {o,now,nullDraw}=actual();
+  o.priorJoinedRows=[nullDraw,...o.priorJoinedRows!.filter(x=>x.run_day_index!==1)];
+  const result=await readCommittedP5DayCandidateGrid(fake(o,{now}).pool,o.scope);
+  expect(result.ordinaryDayEnvelopeReadback?.priorCommittedWashoutAudit).toMatchObject({
+   priorParentDaysVerified:5,priorAirportDayObservationsVerified:16,priorFixedPairMissingDays:[1]});
+  expect(result.selectedDayCandidateGrid.acquisitionCount).toBe(originalPlan.templates.length);
+ });
+ it("late four-site Day1 actual rows can contribute to historical washout, never on-time acquisition evidence",async()=>{
+  const {o,now}=actual();
+  for(const r of o.priorJoinedRows!.filter(x=>x.run_day_index===1))r.selected_at_utc="2026-11-24T04:50:00.000Z";
+  const result=await readCommittedP5DayCandidateGrid(fake(o,{now}).pool,o.scope);
+  expect(result.ordinaryDayEnvelopeReadback?.priorCommittedWashoutAudit).toMatchObject({
+   priorParentDaysVerified:5,priorAirportDayObservationsVerified:20,priorLateFixedPairDays:[1]});
+ });
+ it("still rejects one populated row, different site, and partial later history",async()=>{
+  for(const mode of ["partial1","changed1","partial2"]){
+   const {o,now,nullDraw}=actual();
+   if(mode==="partial1")o.priorJoinedRows=[o.priorJoinedRows![0],...o.priorJoinedRows!.filter(x=>x.run_day_index!==1)];
+   else if(mode==="changed1"){nullDraw.pair_airport_set={...nullDraw.pair_airport_set,HUB:{icao:"WSSS",region:nullDraw.slot_regions.HUB}};o.priorJoinedRows=[nullDraw,...o.priorJoinedRows!.filter(x=>x.run_day_index!==1)];}
+   else o.priorJoinedRows!.splice(4,1);
+   await expect(readCommittedP5DayCandidateGrid(fake(o,{now}).pool,o.scope)).rejects.toThrow();
+  }
+ });
+});
