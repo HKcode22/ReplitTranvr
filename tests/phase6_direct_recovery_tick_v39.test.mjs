@@ -5,7 +5,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {execFileSync} from "node:child_process";
-import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,downloadDirectArchive,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
 import {readP6DirectReadonlySnapshot} from "../scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
@@ -280,3 +280,22 @@ test("read-only snapshot retry is bounded and preserves persistent or unrelated 
  assert.deepEqual(directAdmissionFailures({...env,P5_CD_GH_PRE_STOP:"1",V39_PHASE6_PROCESS_ARMED:"0",DATABASE_URL:"NEVER_PRINT_THIS_VALUE"},start),["V39_PHASE6_PROCESS_ARMED","P5_CD_GH_PRE_STOP","FORBIDDEN_DATABASE_URL"]);
  assert.deepEqual(directAdmissionFailures({...env,P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:"invalid"},start),["P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"]);
  });
+
+
+test("predecessor archive transport retries only GET then returns exact unchanged bytes",async()=>{
+ const payload=Buffer.from("exact archive"),delays=[],calls=[];
+ const result=await downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async ms=>{delays.push(ms);},
+  exec:(bin,args,opt)=>{calls.push({bin,args,timeout:opt.timeout});if(calls.length<3)throw Error("transient GET failure");return payload;}});
+ assert.equal(result,payload);
+ assert.deepEqual(delays,[1000,2000]);
+ assert.equal(calls.length,3);
+ assert.ok(calls.every(c=>c.bin==="gh"&&c.args.includes("GET")&&c.args.at(-1).endsWith("/777/zip")&&c.timeout===15000));
+});
+test("exhausted archive GET still fails closed, empty body never becomes a receipt",async()=>{
+ let attempts=0;
+ await assert.rejects(downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async()=>{},exec:()=>{attempts++;throw Error("unavailable");}}),/HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_DOWNLOAD/);
+ assert.equal(attempts,3);
+ attempts=0;
+ await assert.rejects(downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async()=>{},exec:()=>{attempts++;return Buffer.alloc(0);}}),/HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_EMPTY/);
+ assert.equal(attempts,1);
+});
