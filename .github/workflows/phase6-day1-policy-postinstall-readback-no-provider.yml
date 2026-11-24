@@ -7,6 +7,7 @@ on:
       - 'data-collection/phase6/evidence/p6_day1_policy_postinstall_readback.json'
 permissions:
   contents: read
+  pull-requests: read
 concurrency:
   group: p6-day1-repo-secret-readback
   cancel-in-progress: false
@@ -69,8 +70,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_policy_postinstall_readback.cjs)" = 289edf94b2befabd923ef69b3d2f8095252a9398
-          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq '.object.sha')" = "$(jq -er .reviewedMainSha data-collection/phase6/evidence/p6_day1_policy_postinstall_readback.json)"
+          test "$(git hash-object data-collection/phase6/checkpoints/p6_day1_policy_postinstall_readback.cjs)" = f6173cc335f68f01104255b31a0dcb808f6f197f
+          TARGET="$(jq -er .reviewedMainSha data-collection/phase6/evidence/p6_day1_policy_postinstall_readback.json)"
+          test "$(gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main --jq '.object.sha')" = "$TARGET"
+          gh api repos/HKcode22/ReplitTranvr/pulls/965 | jq -e --arg t "$TARGET" '.merged==true and .merge_commit_sha==$t and .head.sha=="9c9cddb1aaeb04934d94af2937ee158e6d991f6c"' >/dev/null
+          TREE="$(gh api repos/HKcode22/ReplitTranvr/git/commits/9c9cddb1aaeb04934d94af2937ee158e6d991f6c --jq .tree.sha)"
+          gh api "repos/HKcode22/ReplitTranvr/git/commits/$TARGET" | jq -e --arg t "$TREE" '.tree.sha==$t and ([.parents[].sha]==["c8e065d665ccacb6d2575070e94c5500b7583044","9c9cddb1aaeb04934d94af2937ee158e6d991f6c"])' >/dev/null
           node --check data-collection/phase6/checkpoints/p6_day1_policy_postinstall_readback.cjs
       - name: Check 31 canonical installed policy values and both OFF switches in THIS scope
         shell: bash
