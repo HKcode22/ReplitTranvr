@@ -62,16 +62,30 @@ export function createP6SessionAckLedger({sha,epoch,deadline,now=Date.now,emit=(
   }
   return snapshot;
  }
- async function reconcile({token,fetcher=fetch}){
+ async function reconcile({token,fetcher=fetch,sleep=ms=>new Promise(r=>setTimeout(r,ms))}){
   finalHistoryChecked=false;continuationHistoryChecked=false;
   if(attempts.size)fail("UNKNOWN_ACK_NO_REPLAY");
   if(typeof token!=="string"||token.length<16||now()>=deadline)fail("READBACK_NOT_ADMITTED");
   const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
   async function read(path){
-   if(now()>=deadline-12000)fail("READBACK_DEADLINE");
-   const res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});
-   if(!res.ok)fail("ACK_READBACK_UNAVAILABLE");
-   return await res.json();
+   // An exact ACK identifies the GET target even if GitHub has not made
+   // its metadata visible yet. Retry ONLY those exact read-only GETs;
+   // preserve all attempts, IDs, rate limits and the same tick deadline.
+   // Never repeat the POST or infer success from a matching workflow title.
+   for(let i=0;i<4;i++){
+    if(now()>=deadline-12000)fail("READBACK_DEADLINE");
+    let res;
+    try{res=await fetcher(ROOT+path,{method:"GET",headers,redirect:"error",signal:AbortSignal.timeout(10000)});}
+    catch(e){
+     if(i===3||(!(e instanceof TypeError)&&!["AbortError","TimeoutError"].includes(e?.name)))throw e;
+     await sleep(1000*(2**i));continue;
+    }
+    if(res.ok)return await res.json();
+    if([404,502,503,504].includes(res.status)&&i<3){
+     await sleep(1000*(2**i));continue;
+    }
+    fail("ACK_READBACK_UNAVAILABLE"+(Number.isInteger(res.status)?"_HTTP_"+res.status:""));
+   }
   }
   for(const item of rows.values()){
    if(item.terminal)continue;

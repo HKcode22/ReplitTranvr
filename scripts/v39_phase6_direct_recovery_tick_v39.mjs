@@ -239,7 +239,7 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
   // are recoverable by fresh reconciliation. Never repeat a dispatch.
   async function observe(){
    for(let i=0;i<3;i++){
-    await journal.reconcile({token:env.GITHUB_TOKEN,fetcher:api});
+    await journal.reconcile({token:env.GITHUB_TOKEN,fetcher:api,sleep});
     try{
      const snapshots=[];
      const result=await readP6RollingGithubSnapshot({sha:a.sha,epoch,token:env.GITHUB_TOKEN,now,fetcher:api,sleep,
@@ -266,7 +266,7 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
   // custody in both normal history and the active sweep before publishing.
   const settleUntil=Math.min(now()+MIN,deadline-2*MIN);
   while(now()<settleUntil){
-   if(!(await journal.reconcile({token:env.GITHUB_TOKEN,fetcher:api})).pending.length)break;
+   if(!(await journal.reconcile({token:env.GITHUB_TOKEN,fetcher:api,sleep})).pending.length)break;
    await sleep(Math.min(15000,Math.max(1,settleUntil-now())));
   }
   const {snapshots}=await observe();
