@@ -303,7 +303,7 @@ export async function runP5ScopedFidsSource(
          opts?.strictArrivalList!==false)
         refuse("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
       return fetchFidsAirport(airport,from,to,{
-        ...opts,fetchImpl:ports.fetchImpl,
+        ...opts,onePhysicalAttemptOnly:true,fetchImpl:ports.fetchImpl,
         ...(ports.sleepImpl?{sleepImpl:ports.sleepImpl}:{}),
         budgetOwner:{
           reserve:async(category,units,attemptNumber)=>{
