@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Same-run POST review IPC, using the existing bounded local frame reader.
  * Same trusted ephemeral runner, role-scoped credentials, no raw body or
  * wire in GitHub outputs/artifacts. Not hostile-OS-user isolation. */
@@ -22,7 +23,7 @@ export function postLocalScope(e:NodeJS.ProcessEnv):Scope{
  const recovery=e.P6_PHASE7_POST_RECOVERY_CONFIRM==="RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER";
  const original=recovery?e.P6_PHASE7_ORIGINAL_POST_RUN_ID:e.GITHUB_RUN_ID;
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_RUN_ATTEMPT!=="1"||
-  e.GITHUB_SHA!==e.V39_P5_POST_APPROVED_CODE_SHA||!C.test(e.GITHUB_SHA??"")||!R.test(e.GITHUB_RUN_ID??"")||!R.test(original??"")||
+  !p6ReviewedPolicyMatchesRuntime(e,e.V39_P5_POST_APPROVED_CODE_SHA)||!C.test(e.GITHUB_SHA??"")||!R.test(e.GITHUB_RUN_ID??"")||!R.test(original??"")||
   ![e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,e.P6_PRIVATE_POST_PACKET_SHA].every(x=>H.test(x??""))||
   !/^(?:[1-9]|[12][0-9]|3[01])$/.test(e.P6_PRIVATE_POST_DAY??"")||e.ADB_AUTO_COLLECT!=="0"||e.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||
   (recovery?original===e.GITHUB_RUN_ID||!["workflow_run","workflow_dispatch"].includes(e.GITHUB_EVENT_NAME??""):

@@ -14,7 +14,8 @@ export function p6ReviewedPolicyMatchesRuntime(env,reviewed){
  return CODE.test(approved)&&head===approved&&reviewed===P6_PHASE5B_REVIEWED_POLICY_ANCHOR&&
   env.GITHUB_ACTIONS==="true"&&env.GITHUB_REPOSITORY==="HKcode22/ReplitTranvr"&&
   env.GITHUB_REF==="refs/heads/main"&&env.GITHUB_RUN_ATTEMPT==="1"&&
-  ["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME);
+  (["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME)||
+   (env.GITHUB_EVENT_NAME==="workflow_run"&&env.GITHUB_WORKFLOW_REF==="HKcode22/ReplitTranvr/.github/workflows/phase6-stored-post-recovery-no-provider.yml@refs/heads/main"&&env.P6_PHASE7_POST_RECOVERY_CONFIRM==="RECOVER_EXACT_COMMITTED_POST_NO_PROVIDER"));
 }
 export function p6ApprovedRuntimeSuccessor(env,reviewed){
  return Boolean(env?.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA)&&p6ReviewedPolicyMatchesRuntime(env,reviewed);

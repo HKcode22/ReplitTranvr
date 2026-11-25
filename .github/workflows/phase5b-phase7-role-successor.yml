@@ -1,0 +1,17 @@
+name: Phase5B Phase7 actual role executable admission
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  role-admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx --no-install vitest run tests/phase7_local_private_pre_handoff_v39.test.ts tests/phase7_post_actor_preflight_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts

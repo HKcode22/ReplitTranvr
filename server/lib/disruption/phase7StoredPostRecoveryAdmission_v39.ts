@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Independent no-GET restart admission for one previously attempted signed
  * POST. Verifies the actual retained day revision, original signed packet and
  * GitHub child identity. Never calls the paid-child admission/dispatcher.
@@ -43,7 +44,7 @@ function admitRecoveryBase(env:NodeJS.ProcessEnv,originalGithubRunId:string,mode
  if(!RUN.test(originalGithubRunId)||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
   !["workflow_dispatch","schedule","workflow_run"].includes(env.GITHUB_EVENT_NAME??"")||env.GITHUB_RUN_ATTEMPT!=="1"||
-  !C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
+  !C.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
   !RUN.test(env.GITHUB_RUN_ID??"")||(same?env.GITHUB_RUN_ID!==originalGithubRunId||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_WORKFLOW_REF!==REPO+"/"+WORKFLOW+"@refs/heads/main":env.GITHUB_RUN_ID===originalGithubRunId)||
   env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,

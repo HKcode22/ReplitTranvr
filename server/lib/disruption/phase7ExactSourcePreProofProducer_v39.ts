@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Protected no-provider PRE producer: independently reread the exact
  * V0079 source, reselect all present Stage14 inputs and authenticate the
  * separate-lane authority's signed receipt. The signer cannot invent a
@@ -35,7 +36,7 @@ function publicKey(v:string|undefined){
 }
 export function admitP7ExactSourcePreProducer(env:NodeJS.ProcessEnv,mode:"proof"|"lane"="proof"){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
-  env.GITHUB_RUN_ATTEMPT!=="1"||!C.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+  env.GITHUB_RUN_ATTEMPT!=="1"||!C.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
   (mode==="proof"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1")||env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||
   env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,
@@ -49,7 +50,7 @@ export function admitP7ExactSourcePreProducer(env:NodeJS.ProcessEnv,mode:"proof"
  const bytes=Buffer.from(raw,"base64");
  if(bytes.toString("base64")!==raw||!digest(env.P6_NONPAID_DAILY_POLICY_SHA256)||sha(bytes)!==env.P6_NONPAID_DAILY_POLICY_SHA256)hold("DAILY_POLICY");
  const d=JSON.parse(bytes.toString("utf8")),f=d?.nativePreFeatureReview;
- if(d?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||d.delegatedDailyPacketProductionApproved!==true||d.approvedCodeSha!==env.GITHUB_SHA||
+ if(d?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||d.delegatedDailyPacketProductionApproved!==true||!p6ReviewedPolicyMatchesRuntime(env,d.approvedCodeSha)||
   d.manifestSha256!==env.V39_P5_MANIFEST_SHA256||d.rightsSha256!==env.V39_P5_RIGHTS_SHA256||
   f?.approved!==true||f.rightsSha256!==d.rightsSha256||!digest(f.externalContentUseReviewSha256))hold("NATIVE_CONTENT_PURPOSE");
  let source:URL;try{source=new URL(env.V39_P5_SOURCE_DATABASE_URL??"")}catch{return hold("SOURCE_URL")}

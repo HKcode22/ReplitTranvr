@@ -19,7 +19,7 @@ import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "../server/lib/disruption/pha
 const hold=(s:string):never=>{throw Error("HOLD_P7_LOCAL_PRE_ROLE_"+s)};
 const roles=["lane","proof","publisher"] as const;
 const common=["PATH","HOME","TMPDIR","RUNNER_TEMP","RUNNER_TRACKING_ID","GITHUB_ACTIONS","GITHUB_REPOSITORY","GITHUB_REF","GITHUB_EVENT_NAME",
- "GITHUB_RUN_ATTEMPT","GITHUB_WORKFLOW_REF","GITHUB_RUN_ID","GITHUB_SHA","V39_P5_APPROVED_CODE_SHA","ADB_AUTO_COLLECT","V39_PHASE6_PROCESS_ARMED",
+ "GITHUB_RUN_ATTEMPT","GITHUB_WORKFLOW_REF","GITHUB_RUN_ID","GITHUB_SHA","P6_PHASE5B_RUNTIME_EXECUTABLE_SHA","V39_P5_APPROVED_CODE_SHA","ADB_AUTO_COLLECT","V39_PHASE6_PROCESS_ARMED",
  "P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST","P5_SOURCE_BATCH_RUN_DAY_INDEX","V39_P5_MANIFEST_SHA256","V39_P5_RIGHTS_SHA256","V39_P5_RELEASE_SHA256","V39_P5_PROVIDER_CONTRACT_SHA256",
  "P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED","P6_PHASE7_PRE_POLICY_BASE64","P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256",
  "P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256","P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64",
@@ -150,5 +150,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(mode==="stop"&&!role&&process.argv.length===3)return stop();
   if(!roles.includes(role as P7LocalPreRole)||process.argv.length!==4)return hold("MODE");
   return mode==="start"?start(role as P7LocalPreRole):mode==="serve"?serve(role as P7LocalPreRole):hold("MODE");
- }).catch(()=>{console.error("HOLD_P7_LOCAL_PRE_ROLE_REDACTED_NO_REPLAY");process.exitCode=2});
+ }).catch(err=>{const m=String(err?.message??"");console.error(/^HOLD_P7_(?:LOCAL_PRE_(?:ROLE|HANDOFF)|EXACT_PRE_PRODUCER|PRE_LANE_AUTHORITY)_[A-Z0-9_]+$/.test(m)?m:"HOLD_P7_LOCAL_PRE_ROLE_REDACTED_NO_REPLAY");process.exitCode=2});
 }

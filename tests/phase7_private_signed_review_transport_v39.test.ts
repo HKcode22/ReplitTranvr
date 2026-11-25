@@ -291,3 +291,10 @@ active("real private custody signed-review transport",()=>{
   }finally{await Promise.allSettled([reader.end(),publisher.end()])}
  },30000);
 });
+
+it("preserves exact historical signed review wire under explicitly approved current executable",()=>{
+ const f=fixtures(Date.parse("2027-01-01T00:00:00.000Z")),old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+ const e={...trust.env,GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:head,V39_P5_APPROVED_CODE_SHA:old,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head};
+ expect(verifyP7StoredWire({...trust,env:e},f.a,f.aw,f.clock).wire).toEqual(f.aw);
+ expect(()=>verifyP7StoredWire({...trust,env:{...e,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)}},f.a,f.aw,f.clock)).toThrow("PROTECTED_STUDY");
+});

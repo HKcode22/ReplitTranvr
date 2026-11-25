@@ -14,3 +14,10 @@ describe("exact main actor-only POST commissioning, no observation",()=>{
  it("separates publisher and storage from signing and source credentials",()=>{expect(()=>admitP7ActorOnlyPost({...publisher,V39_P5_SOURCE_DATABASE_URL:"fixture"},"publisher")).toThrow("SCOPE");expect(()=>admitP7ActorOnlyPost({...storage,P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64:"fixture"},"storage")).toThrow("SCOPE")});
  it("keeps actor-only job separate from paid job and provider secrets",()=>{const y=readFileSync(".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml","utf8"),s=y.slice(y.indexOf("  exact-main-post-actors-only:"),y.indexOf("  exact-signed-one-v0083-future-post:"));expect(s).toContain(P7_POST_ACTOR_CONFIRM);expect(s).toContain("inputs.post_packet_sha256 == ''");expect(s).not.toMatch(/secrets\.(AERODATABOX_API_KEY|DATABASE_URL|P5_V39_OTHER_REST_RESERVE_DATABASE_URL)/);expect(y.slice(y.indexOf("  exact-signed-one-v0083-future-post:"))).toContain("inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY'")})
 });
+
+it("POST actor admits only exact approved successor retaining old review identity",()=>{
+ const old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+ const e={...reviewer,GITHUB_SHA:head,V39_P5_POST_APPROVED_CODE_SHA:old,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head};
+ expect(()=>admitP7ActorOnlyPost(e,"reviewer")).not.toThrow();
+ for(const delta of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{GITHUB_RUN_ATTEMPT:"2"},{AERODATABOX_API_KEY:"forbidden"}])expect(()=>admitP7ActorOnlyPost({...e,...delta},"reviewer")).toThrow("SCOPE");
+});
