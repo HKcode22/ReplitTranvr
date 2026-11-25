@@ -31,3 +31,9 @@ test("SOURCE post-reservation and custody diagnostics retain exact fixed causes,
  const line=sourceDiagnosticLine("DB_PERMISSION");
  assert.deepEqual(readSafeSourceDiagnosticLines(Buffer.from(line+"\n"),"secret"),[line]);
 });
+
+test("fixed body diagnostics survive subprocess filtering without raw provider content",()=>{
+ const labels=["FIDS_BODY_UNAVAILABLE","FIDS_BODY_EMPTY","FIDS_BODY_TOO_LARGE","FIDS_BODY_READ_FAILED","FIDS_BODY_INVALID_JSON","FIDS_BODY_INVALID_OBJECT","FIDS_DEPARTURES_MISSING","FIDS_ARRIVALS_MISSING","FIDS_BODY_VALID"];
+ const lines=labels.map(sourceDiagnosticLine);
+ assert.deepEqual(readSafeSourceDiagnosticLines(lines.join("\n")+"\nP6_SOURCE_DIAG FIDS_BODY_INVALID_JSON private",null),lines);
+});

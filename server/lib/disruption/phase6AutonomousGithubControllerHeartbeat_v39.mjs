@@ -356,7 +356,10 @@ export async function observeP6IndependentDispatches(report,env,readGithub){
      Number.isFinite(Date.parse(x.created_at))&&Date.parse(x.created_at)<=now+5000&&
      now-Date.parse(x.created_at)<=c.expectedMaxGapMinutes*60000&&
      Date.parse(x.created_at)>=Date.parse(c.mostRecentRun?.createdAtUtc??"1970-01-01T00:00:00Z")).sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
+   let pending=null;
    for(const row of rows){
+    // Preserve a short bounded in-progress observation separately; never claim execution.
+    if(row.status!=="completed"&&["queued","in_progress","waiting","requested","pending"].includes(row.status)&&now-Date.parse(row.created_at)<=120000)pending??=row;
     // A queued/pending manual verification is not worker evidence.
     if(row.status!=="completed")continue;
     const j=await readGithub(ROOT+"/actions/runs/"+row.id+"/jobs?filter=latest&per_page=50");
@@ -369,6 +372,7 @@ export async function observeP6IndependentDispatches(report,env,readGithub){
       parentConclusion:row.conclusion,jobs:required.map(x=>x[0])};
     break;
    }
+   if(!out[lane]&&pending)out[lane]={state:"INDEPENDENT_WORKER_RECENT_PENDING_NOT_EXECUTION_PROOF",runId:pending.id,createdAtUtc:pending.created_at};
   }catch{out[lane]={state:"INDEPENDENT_WORKER_READ_UNAVAILABLE",runId:null};}
  }
  return out;
@@ -404,6 +408,11 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
       add("PARENT_REPORTED_HOLD_OR_MISSING_EVIDENCE");
     }
     continue;
+   }
+   if(independent?.state==="INDEPENDENT_WORKER_RECENT_PENDING_NOT_EXECUTION_PROOF"){
+    // A fresh run may be a verification-only dispatch; retain an actionable
+    // pending notice rather than silently clearing the lane or alleging a stale clock.
+    incidents.push({lane,reason:"INDEPENDENT_WORKER_PENDING_RECHECK_REQUIRED",runId:independent.runId,job:null});continue;
    }
    const run=c.mostRecentRun;
    const add=(reason,job=null)=>incidents.push({lane,reason,runId:run?.id??null,job});

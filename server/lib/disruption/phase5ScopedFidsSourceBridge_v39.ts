@@ -10,7 +10,7 @@
  * lawful long-term retention, provider outcome or Phase6 GO.
  */
 import { createHash } from "node:crypto";
-import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
+import { fetchFidsAirport, type FidsResponseDiagnostic } from "./aerodataboxLimiter_v3";
 import { fetchFidsPopulation, type FidsCensusParams, type FidsQueryObservation, type PopulationRow } from "./fidsCensus_v3";
 import { P5_CANONICAL_IDENTITY_VERSION } from "./flightInstanceCanonical_v3";
 import { verifyPreparedDailyDraw, inspectP6Day1FixedDrawForLaterSource, type PreparedDayForReadback, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
@@ -129,6 +129,7 @@ export interface P5SourcePorts {
   fetchImpl:typeof fetch;
   /** Test-only injects immediate delays; real GitHub owner uses standard pacing. */
   sleepImpl?: (ms:number)=>Promise<void>;
+  onResponseDiagnostic?: (label:FidsResponseDiagnostic)=>void;
 }
 export type P5ScopedSourceResult =
   | {status:"SOURCE_UNOBSERVED_OR_UNPERSISTED";plannedPhysicalMaximum:1;
@@ -304,6 +305,7 @@ export async function runP5ScopedFidsSource(
         refuse("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
       return fetchFidsAirport(airport,from,to,{
         ...opts,onePhysicalAttemptOnly:true,fetchImpl:ports.fetchImpl,
+        onResponseDiagnostic:ports.onResponseDiagnostic,
         ...(ports.sleepImpl?{sleepImpl:ports.sleepImpl}:{}),
         budgetOwner:{
           reserve:async(category,units,attemptNumber)=>{
