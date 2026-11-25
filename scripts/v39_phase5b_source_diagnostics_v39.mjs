@@ -25,3 +25,14 @@ export function sourceHttpDiagnosticLabel(status,ok){
  if(Number.isInteger(status)&&status>=500&&status<600)return "HTTP_SERVER_ERROR";
  return "HTTP_OTHER_STATUS";
 }
+
+const POST_STAGES=new Set(["ADMISSION","READER_CONNECT","CLOCK_AND_DAY_SELECTION","SOURCE_HINT_SCAN","PUBLISHER_CONNECT","PUBLICATION","COMPLETE"]);
+const SQLSTATE_CLASS=Object.freeze({"42501":"DB_PERMISSION","42883":"DB_OPERATOR_OR_FUNCTION_MISSING","42703":"DB_COLUMN_MISSING","42P01":"DB_RELATION_MISSING","22P02":"DB_INVALID_REPRESENTATION","57014":"DB_QUERY_CANCELED","55P03":"DB_LOCK_UNAVAILABLE","40001":"DB_SERIALIZATION","40P01":"DB_DEADLOCK","28P01":"DB_AUTHENTICATION"});
+export function postDiagnostic(stage,error){
+ if(!POST_STAGES.has(stage))throw Error("UNKNOWN_POST_DIAGNOSTIC_STAGE");
+ const code=typeof error?.code==="string"?error.code:"";
+ const category=Object.hasOwn(SQLSTATE_CLASS,code)?SQLSTATE_CLASS[code]:
+  /^08[0-9A-Z]{3}$/.test(code)?"DB_CONNECTION":
+  /^[0-9A-Z]{5}$/.test(code)?"OTHER_SQLSTATE":"UNCLASSIFIED";
+ return Object.freeze({status:"P6_POST_DIAG_NO_PROVIDER_CONTENT",stage,category});
+}
