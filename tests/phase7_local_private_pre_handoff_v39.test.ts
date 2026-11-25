@@ -3,7 +3,7 @@ import {createHash} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {callP7LocalPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,openP7LocalPrivatePreHandoff,validateP7LocalPreRequest,type P7LocalPreRole,type P7LocalPreScope} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
+import {readP7LocalPreScope,callP7LocalPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,openP7LocalPrivatePreHandoff,validateP7LocalPreRequest,type P7LocalPreRole,type P7LocalPreScope} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import type {P7Wire} from "../server/lib/disruption/phase7PrivateSignedReviewTransport_v39";
@@ -68,6 +68,20 @@ describe("actual protected role credential projection",()=>{
  const proof={...base,V39_P5_SOURCE_DATABASE_URL:source,P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64:"synthetic-proof-key",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",
   P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
  const publisher={...base,P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",P6_PRIVATE_PUBLISHER_DATABASE_URL:"synthetic-publisher-url",P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"synthetic-reader",P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN:"synthetic-publisher"};
+ it("exact approved successor survives every actual restricted role environment projection",()=>{
+  const old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+  const successor={GITHUB_SHA:head,V39_P5_APPROVED_CODE_SHA:old,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head};
+  for(const [role,env] of [["lane",lane],["proof",proof],["publisher",publisher]] as const){
+   const projected=projectP7LocalRoleEnvironment({...env,...successor},role,role==="publisher"?endpoint.toString():undefined);
+   expect(projected.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA).toBe(head);
+   expect(projected.V39_P5_APPROVED_CODE_SHA).toBe(old);
+   expect(readP7LocalPreScope(projected).codeSha).toBe(head);
+   expect(projected.GITHUB_TOKEN).toBeUndefined();
+   expect(projected.ACTIONS_RUNTIME_TOKEN).toBeUndefined();
+   for(const delta of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{GITHUB_RUN_ATTEMPT:"2"},{AERODATABOX_API_KEY:"forbidden"}])
+    expect(()=>projectP7LocalRoleEnvironment({...env,...successor,...delta},role,role==="publisher"?endpoint.toString():undefined)).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
+  }
+ });
  it("does not forward other keys, tokens, or the source password to publisher",()=>{
   const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
   expect(l.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64).toBe("synthetic-lane-key");expect(l.P6_PRIVATE_READER_DATABASE_URL).toBeUndefined();

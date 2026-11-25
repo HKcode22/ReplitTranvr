@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Same reviewed, ephemeral GitHub runner, separate role processes.
  * Exact prospective permits traverse only a mode-0600 local Unix socket,
  * never GitHub outputs/artifacts, argv, public logs or another DB source
@@ -36,7 +37,7 @@ export function readP7LocalPreScope(env:NodeJS.ProcessEnv):P7LocalPreScope{
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||
   env.GITHUB_WORKFLOW_REF!=="HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main"||
-  env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||env.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED!=="1"||
+  !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||env.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED!=="1"||
   env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL].some(Boolean))hold("PROTECTED_NO_PROVIDER_SCOPE");
  const s={codeSha:env.GITHUB_SHA??"",runId:env.GITHUB_RUN_ID??"",runDayIndex:Number(env.P5_SOURCE_BATCH_RUN_DAY_INDEX),queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST??"",manifestSha256:env.V39_P5_MANIFEST_SHA256??"",rightsSha256:env.V39_P5_RIGHTS_SHA256??"",releaseSha256:env.V39_P5_RELEASE_SHA256??"",providerContractSha256:env.V39_P5_PROVIDER_CONTRACT_SHA256??""};

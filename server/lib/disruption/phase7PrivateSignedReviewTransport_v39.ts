@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Concrete immutable signed-review transport using the existing phase6_private
  * custody, V0106 staged constraint extension. No source data fetch, no new
  * signature, no paid retry or implicit policy approval. Exact wire validity
@@ -42,7 +43,7 @@ function validateTrust(t:P7ReviewTrust){
  const e=t?.env;
  if(!e||e.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED!=="1"||
   e.ADB_AUTO_COLLECT!=="0"||e.DATABASE_URL||e.V39_DATABASE_RUNTIME_URL||e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
-  !C.test(e.GITHUB_SHA??"")||e.GITHUB_SHA!==(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA)||
+  !C.test(e.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(e,e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA)||
   ![e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256].every(digest)||
   !/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(t.expectedReaderSessionLogin)||
   !/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/.test(t.expectedPublisherSessionLogin)||
@@ -134,7 +135,7 @@ async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector
  for(let i=0;i<selectors.length;i++){
   const hits=z.rows.filter((v:any)=>v.logical_path===paths[i]),v=hits[0],s=selectors[i];
   if(hits.length!==1||v.kind!==(s.kind==="POST_RECOVERY"?"PHASE7_RECOVERY_RECEIPT":"PHASE7_SIGNED_REVIEW")||v.run_day_index!==s.runDayIndex||v.shard_index!==1||
-     v.reviewed_code_sha!==e.GITHUB_SHA||v.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
+     v.reviewed_code_sha!==(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA)||v.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
      v.review_wire_bytes!==null||!Buffer.isBuffer(v.payload_bytes)||v.payload_bytes.length>65000)hold("ROW_SCOPE");
   const w=verifyP7StoredWire(t,s,JSON.parse(v.payload_bytes.toString("utf8")),clock);
   if(w.path!==v.logical_path||!w.bytes.equals(v.payload_bytes)||w.contentSha256!==v.content_sha256||w.externalReviewSha256!==v.external_review_sha256||
@@ -143,7 +144,7 @@ async function readInTx(c:DB,t:P7ReviewTrust,selectors:readonly P7ReviewSelector
   if(s.kind==="POST_RECOVERY"){
    const f=recoveryFence(s,w),v2=fenceRows.find((v:any)=>v.logical_path===f.path);
    if(!v2||v2.kind!=="PHASE7_RECOVERY_FENCE"||v2.run_day_index!==s.runDayIndex||v2.shard_index!==1||
-    v2.reviewed_code_sha!==e.GITHUB_SHA||v2.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v2.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
+    v2.reviewed_code_sha!==(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA)||v2.manifest_sha256!==e.V39_P5_MANIFEST_SHA256||v2.rights_sha256!==e.V39_P5_RIGHTS_SHA256||
     v2.review_wire_bytes!==null||!Buffer.isBuffer(v2.payload_bytes)||!v2.payload_bytes.equals(f.bytes)||v2.content_sha256!==f.contentSha256||
     v2.external_review_sha256!==f.contentSha256||iso(v2.externally_reviewed_at_utc)!==w.reviewedAtUtc||iso(v2.retention_not_after_utc)!==f.until||
     at(iso(v2.committed_at_utc))<at(w.reviewedAtUtc)||at(iso(v2.committed_at_utc))>at(clock)||at(clock)>=at(f.until))hold("RECOVERY_FENCE_DRIFT");
@@ -181,12 +182,12 @@ export async function publishP7PrivateSignedReviewOnce(input:{client:DB;reader:D
   const f=s.kind==="POST_RECOVERY"?recoveryFence(s,w):null;
   const q=await c.query("SELECT count(*)::int AS n FROM "+TABLE+" WHERE logical_path=ANY($1::text[])",[f?[w.path,f.path]:[w.path]]);
   if(q.rowCount!==1||q.rows[0]?.n!==0)hold("ALREADY_PRESENT_READ_ONLY_RECONCILE");
-  const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,NULL)",[w.path,w.storageKind,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes]);
+  const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,NULL)",[w.path,w.storageKind,s.runDayIndex,(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA),e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes]);
   if(z.rowCount!==1)hold("INSERT_COUNT");
   // Atomic with the immutable receipt: a committed fence survives physical
   // deletion of the short-lived proof until the original read window closes.
   if(f){
-   const marker=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_RECOVERY_FENCE',$2,1,$3,$4,$5,$6,$6,$7,$8,$9,NULL)",[f.path,s.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,f.contentSha256,w.reviewedAtUtc,f.until,f.bytes]);
+   const marker=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES($1,'PHASE7_RECOVERY_FENCE',$2,1,$3,$4,$5,$6,$6,$7,$8,$9,NULL)",[f.path,s.runDayIndex,(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA),e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,f.contentSha256,w.reviewedAtUtc,f.until,f.bytes]);
    if(marker.rowCount!==1)hold("FENCE_INSERT_COUNT");
   }
   verifyP7StoredWire(t,s,wire,await readP6DayEpochRestrictedPublisherClock(c,t.expectedPublisherSessionLogin));
@@ -305,8 +306,8 @@ async function publishP7WireFromProtectedEnv(env:NodeJS.ProcessEnv,s:P7ReviewSel
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_RUN_ATTEMPT!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
   (mode==="recovery"?(env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||s.kind!=="POST_RECOVERY"):
-   mode==="post"?(env.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||s.kind!=="POST_SETTLEMENT"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA):
-   (env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+   mode==="post"?(env.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||s.kind!=="POST_SETTLEMENT"||env.V39_PHASE6_PROCESS_ARMED!=="0"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)):
+   (env.V39_PHASE6_PROCESS_ARMED!=="0"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
     (s.kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":s.kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1":true)))||typeof existing!=="boolean"||Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,
    env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,
@@ -342,7 +343,7 @@ export function openP7PostWirePublisher(env:NodeJS.ProcessEnv){
  const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
  validateTrust(trust);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
-  env.GITHUB_RUN_ATTEMPT!=="1"||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||env.V39_PHASE6_PROCESS_ARMED!=="0"||
+  env.GITHUB_RUN_ATTEMPT!=="1"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||env.V39_PHASE6_PROCESS_ARMED!=="0"||
   env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||env.P6_PHASE7_POST_RECOVERY_APPROVED!=="1"||env.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||
   env.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||Object.entries(env).some(([k,v])=>k.includes("PRIVATE_KEY")&&v)||
   [env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,env.AERODATABOX_WEBHOOK_SECRET,env.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,env.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,env.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,env.P5_V39_PRE_DATABASE_URL,env.P6_PHASE7_POST_SCOPED_DATABASE_URL].some(Boolean))hold("POST_PUBLISHER_SCOPE");
@@ -413,7 +414,7 @@ export async function publishP7PreEvidenceBatchOnce(input:{client:DB;reader:DB;t
   if(q.rowCount!==1||q.rows[0]?.n!==0)hold("ALREADY_PRESENT_READ_ONLY_RECONCILE");
   const args:unknown[]=[];
   const rows=verified.map((w,i)=>{
-   const j=args.length,ss=selectors[i];args.push(w.path,w.storageKind,ss.runDayIndex,e.GITHUB_SHA,e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes);
+   const j=args.length,ss=selectors[i];args.push(w.path,w.storageKind,ss.runDayIndex,(e.V39_P5_APPROVED_CODE_SHA||e.V39_P5_POST_APPROVED_CODE_SHA),e.V39_P5_MANIFEST_SHA256,e.V39_P5_RIGHTS_SHA256,w.contentSha256,w.externalReviewSha256,w.reviewedAtUtc,w.validUntilUtc,w.bytes);
    return "($"+(j+1)+",$"+(j+2)+",$"+(j+3)+",1,$"+(j+4)+",$"+(j+5)+",$"+(j+6)+",$"+(j+7)+",$"+(j+8)+",$"+(j+9)+",$"+(j+10)+",$"+(j+11)+",NULL)";
   });
   const z=await c.query("INSERT INTO "+TABLE+" (logical_path,kind,run_day_index,shard_index,reviewed_code_sha,manifest_sha256,rights_sha256,content_sha256,external_review_sha256,externally_reviewed_at_utc,retention_not_after_utc,payload_bytes,review_wire_bytes) VALUES "+rows.join(","),args);
@@ -431,7 +432,7 @@ function preBatchTrust(env:NodeJS.ProcessEnv,kind:"PRE_LANE_RECEIPT"|"PRE_PROOF"
  const trust:P7ReviewTrust={env,expectedReaderSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"",expectedPublisherSessionLogin:env.P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN??""};
  validateTrust(trust);
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||env.GITHUB_REF!=="refs/heads/main"||
-  env.GITHUB_RUN_ATTEMPT!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+  env.GITHUB_RUN_ATTEMPT!=="1"||env.V39_PHASE6_PROCESS_ARMED!=="0"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
   env.P6_PHASE7_PRIVATE_REVIEW_PUBLISH_APPROVED!=="1"||
   (kind==="PRE_PROOF"?env.P6_PHASE7_PRE_PROOF_ISSUER_APPROVED!=="1":kind==="PRE_LANE_RECEIPT"?env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1":true)||
   Object.entries(env).some(([k,v])=>k.startsWith("P6_PHASE7_")&&k.includes("PRIVATE_KEY")&&v)||

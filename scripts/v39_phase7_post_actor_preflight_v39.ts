@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** Actor-only exact-main POST commissioning. No observation selector, no
  * source packet, no provider, no signing/settling/publication, no DB writes.
  * Shares actual production constructors and role preflight functions. */
@@ -25,7 +26,7 @@ export function admitP7ActorOnlyPost(e:NodeJS.ProcessEnv,role:Role){
  if(!["reviewer","publisher","storage"].includes(role)||e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
  e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_WORKFLOW_REF!=="HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml@refs/heads/main"||
  e.GITHUB_EVENT_NAME!=="workflow_dispatch"||e.GITHUB_RUN_ATTEMPT!=="1"||
- !/^[a-f0-9]{40}$/.test(e.GITHUB_SHA??"")||e.GITHUB_SHA!==e.V39_P5_POST_APPROVED_CODE_SHA||
+ !/^[a-f0-9]{40}$/.test(e.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(e,e.V39_P5_POST_APPROVED_CODE_SHA)||
  e.P6_POST_ACTOR_PREFLIGHT_CONFIRM!==P7_POST_ACTOR_CONFIRM||e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||e.V39_PHASE6_OWNER_APPROVED!=="0"||
  e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||[e.AERODATABOX_API_KEY,e.RAPIDAPI_KEY,e.AERODATABOX_WEBHOOK_SECRET,e.DATABASE_URL,e.V39_DATABASE_RUNTIME_URL,
  e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P5_V39_PRE_DATABASE_URL,e.P5_V39_PREPARE_DATABASE_URL,e.P5_V39_T24_WITNESS_DATABASE_URL].some(Boolean)||

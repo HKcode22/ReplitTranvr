@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Independent POST signer: reuse the actual committed SOURCE audit and
  * existing restricted PRE-group reader. This path settles ONLY an explicitly
  * reviewed unverified-label outcome after the existing signed POST window.
@@ -36,7 +37,7 @@ type Inputs={env:NodeJS.ProcessEnv;signer:KeyObject;source:Pick<Pool,"connect">;
 export function createP7IndependentPostSettlementIssuer(d:Inputs){
  const {env:e,signer,contract,profile}=d;
  if(e.GITHUB_ACTIONS!=="true"||e.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||e.GITHUB_REF!=="refs/heads/main"||
-  e.GITHUB_RUN_ATTEMPT!=="1"||!C.test(e.GITHUB_SHA??"")||e.GITHUB_SHA!==e.V39_P5_POST_APPROVED_CODE_SHA||
+  e.GITHUB_RUN_ATTEMPT!=="1"||!C.test(e.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(e,e.V39_P5_POST_APPROVED_CODE_SHA)||
   e.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED!=="1"||e.P6_PHASE7_POST_STORAGE_APPROVED!=="1"||
   e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
   [e.AERODATABOX_API_KEY,e.RAPIDAPI_KEY,e.AERODATABOX_WEBHOOK_SECRET,e.DATABASE_URL,e.V39_DATABASE_RUNTIME_URL,e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,e.P6_PRIVATE_PUBLISHER_DATABASE_URL,e.P5_V39_PRE_DATABASE_URL,e.P5_V39_PREPARE_DATABASE_URL,e.P5_V39_T24_WITNESS_DATABASE_URL,e.P6_PRIVATE_POST_REVIEWER_KEY_BASE64,e.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,e.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,e.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64,e.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64].some(Boolean)||
@@ -53,7 +54,7 @@ export function createP7IndependentPostSettlementIssuer(d:Inputs){
   ![p.sourceParityReviewSha256,p.reconstructionReviewSha256,p.fieldReviewSha256,p.associationReviewSha256,p.continuousTargetReviewSha256].every(digest)||
   !Number.isFinite(p.minTargetMinutes)||!Number.isFinite(p.maxTargetMinutes)||p.minTargetMinutes>=p.maxTargetMinutes||at(p.validFromUtc)>=at(p.validUntilUtc)||at(p.validUntilUtc)>at(contract.researchExpiryUtc))hold("INDEPENDENT_SETTLEMENT_POLICY");
  const native=pinned(e.P6_NATIVE_POST_POLICY_BASE64,e.P6_NATIVE_POST_POLICY_SHA256);
- if(native.schema!=="v39.phase6.native-post-physical-window-policy.v1"||native.independentPostRequestGeometryApproved!==true||native.manifestSha256!==p.manifestSha256||native.rightsSha256!==p.rightsSha256||native.reviewedCodeSha!==e.GITHUB_SHA||
+ if(native.schema!=="v39.phase6.native-post-physical-window-policy.v1"||native.independentPostRequestGeometryApproved!==true||native.manifestSha256!==p.manifestSha256||native.rightsSha256!==p.rightsSha256||!p6ReviewedPolicyMatchesRuntime(e,native.reviewedCodeSha)||
   !Number.isSafeInteger(native.followupAfterPartitionEndSeconds)||native.followupAfterPartitionEndSeconds<0||
   !Number.isSafeInteger(native.dispatchWindowSeconds)||native.dispatchWindowSeconds<1||native.dispatchWindowSeconds>1800||native.followupAfterPartitionEndSeconds+native.dispatchWindowSeconds>48*3600||native.expectedApiUnitsPerGet!==2)hold("EXISTING_POST_GEOMETRY");
  const before=(clock:string)=>{const n=at(clock);if(n<at(p.validFromUtc)||n>=at(p.validUntilUtc))hold("POLICY_CLOCK");return n;};
