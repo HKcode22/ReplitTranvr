@@ -5,6 +5,7 @@
 import pg from "pg";
 import {createHash,createPrivateKey} from "node:crypto";
 import {pathToFileURL} from "node:url";
+import {postDiagnostic} from "./v39_phase5b_source_diagnostics_v39.mjs";
 import {readP6StablePostTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {readP6T24ProtectedQueueTrust,checkedP6T24TlsUrl,readP6T24RoutingClock} from "./v39_phase6_private_t24_restartable_enrollment_v39.mjs";
 import {loadP6PostWindows,selectP6PostDays} from "./v39_phase6_stored_post_child_dispatcher_v39.mjs";
@@ -96,25 +97,34 @@ export async function executeP6PostProducerTick(scan,runOne,monotonic=()=>perfor
  return {status:"BOUNDED_NATIVE_POST_PRODUCER_TICK_COMPLETE_NO_GO",attemptedWindows,attemptedQueries,verified,recovered,already,noEligible,
   deferred:deferred+scan.deferredWindowCount,missingDays:scan.missingDays,providerCalls:0,paidReservations:0,phase6PaidGo:false};
 }
-export async function runP6NativePostProducer(env){
- const c=admitP6NativePostProducer(env),reader=new pg.Client({connectionString:env.P6_PRIVATE_READER_DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:25000}),
+export async function runP6NativePostProducer(env,{emitDiagnostic=()=>{}}={}){
+ let stage="ADMISSION",c;
+ try{c=admitP6NativePostProducer(env);}
+ catch(e){emitDiagnostic(postDiagnostic(stage,e));throw e;}
+ const reader=new pg.Client({connectionString:env.P6_PRIVATE_READER_DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:25000}),
   publisher=new pg.Client({connectionString:env.P6_PRIVATE_PUBLISHER_DATABASE_URL,connectionTimeoutMillis:8000,query_timeout:35000}),
   raw=new pg.Pool({connectionString:env.V39_P5_SOURCE_DATABASE_URL,max:1,connectionTimeoutMillis:8000,query_timeout:20000});
  try{
+  stage="READER_CONNECT";
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+  stage="CLOCK_AND_DAY_SELECTION";
   const clock=await readP6T24RoutingClock(reader,c.trust),days=selectP6PostDays(c.calendar,clock).map(d=>d.day);
   if(!days.length)return {status:"NO_CURRENT_POST_OUTCOME_DAYS",providerCalls:0,phase6PaidGo:false};
   const sourcePool=makeP5Stage28DedicatedRolePool(raw,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",
    forbiddenApplicationLogin:"phase5_runtime_application_login"});
+  stage="SOURCE_HINT_SCAN";
   const scan=await scanP6CurrentPostWindowHints({readerClient:reader,sourcePool,trust:c.trust,authority:c.authority,runDayIndices:days,clock});
   if(!scan.privateWindows.length)return {status:"NO_PROSPECTIVE_NATIVE_POST_WINDOW",missingDays:scan.missingDays,
    late:scan.late,notYet:scan.notYet,alreadyIndexedHints:scan.already,crossUtc:scan.crossUtc,providerCalls:0,phase6PaidGo:false};
+  stage="PUBLISHER_CONNECT";
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
+  stage="PUBLICATION";
   return await executeP6PostProducerTick(scan,h=>runP6NativePostPublication({readerClient:reader,publisherClient:publisher,sourcePool,
    trust:c.trust,authority:c.authority,t24Trust:c.t24Trust,selector:h,githubRunId:env.GITHUB_RUN_ID}));
- }finally{await Promise.allSettled([raw.end(),reader.end(),publisher.end()]);}
+ }catch(e){emitDiagnostic(postDiagnostic(stage,e));throw e;}
+ finally{await Promise.allSettled([raw.end(),reader.end(),publisher.end()]);}
 }
 if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){
- try{console.log(JSON.stringify(await runP6NativePostProducer(process.env)));}
+ try{console.log(JSON.stringify(await runP6NativePostProducer(process.env,{emitDiagnostic:x=>console.error(JSON.stringify(x))})));}
  catch(e){const m=String(e?.message??"");console.error(/^HOLD_P6_NATIVE_POST_[A-Z0-9_]+$/.test(m)?m:"HOLD_P6_NATIVE_POST_PRODUCER_REDACTED_NO_BLIND_REPLAY");process.exitCode=2;}
 }
