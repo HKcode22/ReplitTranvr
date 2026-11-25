@@ -21,3 +21,17 @@ test("only reviewed known pre-physical failure may be reconsidered by original u
  assert.deepEqual(await filter(two,env,mock(),{}),{total_count:1,workflow_runs:[duplicate]});
  assert.deepEqual(await filter(h,env,async()=>{throw Error("READ")},{}),h);
 });
+
+test("later reviewed incident is excluded only with exact live due digest and verified first-attempt metadata",async()=>{
+ const later={...row,id:45558508190,display_title:"P5 SOURCE "+"b".repeat(64)};
+ const laterRun={...run,...later};
+ const laterJobs=jobs.map((j,i)=>({...j,run_id:later.id,id:i===0?139016280994:139016282275}));
+ const history={total_count:1,workflow_runs:[later]};
+ let reads=0;const read=async u=>{reads++;return mock(laterRun,laterJobs)(u);};
+ assert.deepEqual(await filter(history,env,read,{},new Set(["c".repeat(64)])),history);
+ assert.equal(reads,0);
+ assert.deepEqual(await filter(history,env,read,{},new Set(["b".repeat(64)])),{total_count:0,workflow_runs:[]});
+ assert.equal(reads,2);
+ const invalid= laterJobs.map((j,i)=>i===0?{...j,id:139016280995}:j);
+ assert.deepEqual(await filter(history,env,mock(laterRun,invalid),{},new Set(["b".repeat(64)])),history);
+});

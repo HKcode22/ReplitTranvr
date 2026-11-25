@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {
  P6_AUTO_CONTROL_HEARTBEAT_V39,
  P6_EXISTING_CONTROLLER_LANES,
@@ -338,6 +339,29 @@ test("armed current-main monitoring distinguishes executed step, skipped draw, m
  assert.equal(good.incidentCount,0);
  assert.equal(good.realDueDrawOrPreparationVerified,false);
  assert.equal(good.flightCollectionVerified,false);
+ const redactions={PRE:"One signed bounded lease tick — original Stage***4 and no paid provider",
+  PRE_RECOVERY:"Bounded existing V***87 reaper, UNKNOWN quarantines never replay",
+  T24:"Current signed T24 packets through original Stage***4 and independent V***8***"};
+ const mask=(lane,jobs)=>{if(redactions[lane])jobs[0].steps[0].name=redactions[lane];};
+ const masked=await reviewP6ActiveStandaloneNotifications(report,arm,readers(mask));
+ assert.equal(masked.incidentCount,0);
+ assert.equal(masked.flightCollectionVerified,false);
+ const wrong=await reviewP6ActiveStandaloneNotifications(report,arm,readers((lane,jobs)=>{
+  mask(lane,jobs);
+  if(lane==="PRE")jobs[0].steps[0].name="***";
+  if(lane==="PRE_RECOVERY")jobs[0].steps[0].conclusion="failure";
+  if(lane==="T24")jobs[0].steps.push({...jobs[0].steps[0]});
+ }));
+ assert.equal(wrong.incidentCount,3);
+ const independent=Object.fromEntries(Object.entries(jobsByLane).map(([lane,required])=>{
+  const jobs=required.map(([name,step])=>({name,status:"completed",conclusion:"success",steps:step?[{name:step,status:"completed",conclusion:"success"}]:[]}));
+  mask(lane,jobs);
+  return [lane,{state:"INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF",runId:1000,jobs}];
+ }));
+ const checked=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:independent},arm,async()=>{throw Error("unexpected read")});
+ assert.equal(checked.incidentCount,0);
+ assert.equal(checked.flightCollectionVerified,false);
+
  const bad=await reviewP6ActiveStandaloneNotifications(report,arm,readers((lane,jobs)=>{
   if(lane==="EARLY_DRAW")jobs[0].steps[0].conclusion="skipped";
   if(lane==="SOURCE")jobs[0].steps.push({name:"Parent outcome MISSING_EVIDENCE",status:"completed",conclusion:"success"});
@@ -412,4 +436,19 @@ test("new independent wake: a red mixed SOURCE/POST parent reports only the actu
  assert(x.incidents.some(i=>i.lane==="PRE"));
  assert.equal(report.controllerStates.find(x=>x.lane==="SOURCE").state,"SCHEDULE_OBSERVATION_STALE");
  assert.equal(x.flightCollectionVerified,false);
+});
+
+test("explicit actor-only preflight is disarmed even during paid production and does not reach paid step",()=>{
+ const workflow=readFileSync(new URL("../.github/workflows/phase5-one-signed-day-source-child-dispatch.yml",import.meta.url),"utf8");
+ const start=workflow.indexOf("      - name: Admission for real actor preflight ONLY (no paid capability)");
+ const end=workflow.indexOf("      - uses: actions/setup-node@v4",start);
+ assert(start>=0&&end>start);
+ const section=workflow.slice(start,end);
+ assert(section.includes("inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'"));
+ assert(section.includes("V39_PHASE6_PROCESS_ARMED: '0'"));
+ assert(section.includes("AERODATABOX_API_KEY: ''"));
+ assert(section.includes("RAPIDAPI_KEY: ''"));
+ const paid=workflow.slice(workflow.indexOf("      - name: Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child"));
+ assert(paid.startsWith("      - name: Authenticate real private PG16"));
+ assert(paid.split("\n").slice(0,3).join("\n").includes("inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'"));
 });
