@@ -112,7 +112,7 @@ async function main():Promise<void>{
   requireP5PaidGetBeforeHardLatest(
    postWaitClock.rows[0].t,due.hardLatestDispatchUtc);
   diagnostic("SIGNED_SLOT_REACHED");
-  const ports=createP5V0079ScopedDbPorts({
+  const basePorts=createP5V0079ScopedDbPorts({
    plan,
    manifestSha256:admitted.manifestSha256,
    exactQueryDigest:admitted.queryDigestSha256,
@@ -130,21 +130,22 @@ async function main():Promise<void>{
   // Both DB ledger and provider request may have cost even if this fails.
   // Do NOT retry a query after ambiguous dispatch. V0079 makes the
   // reservation irreversible and its same-query replay fail closed.
-  const outcome=await runP5ScopedFidsSource(plan,{
-   ...ports,
+  const ports={
+   ...basePorts,
    reservePhysicalBeforeGet:async arg=>{
     diagnostic("RESERVATION_STARTED");
-    const result=await ports.reservePhysicalBeforeGet(arg);
+    const result=await basePorts.reservePhysicalBeforeGet(arg);
     diagnostic("RESERVATION_CONFIRMED");
     return result;
    },
    commitOriginalAndPopulation:async arg=>{
     diagnostic("ORIGINAL_PERSIST_STARTED");
-    const result=await ports.commitOriginalAndPopulation(arg);
+    const result=await basePorts.commitOriginalAndPopulation(arg);
     diagnostic("ORIGINAL_PERSIST_CONFIRMED");
     return result;
    }
-  });
+  } satisfies typeof basePorts;
+  const outcome=await runP5ScopedFidsSource(plan,ports);
   diagnostic(outcome.status==="SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE"?"OUTCOME_TIMELY":
    outcome.status==="BOUND_SOURCE_LATE_NOT_PRE"?"OUTCOME_LATE":"OUTCOME_UNOBSERVED");
   console.log(JSON.stringify({
