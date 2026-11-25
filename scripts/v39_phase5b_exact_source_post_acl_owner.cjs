@@ -26,8 +26,8 @@ async function membership(c){
  const q=(await c.query("SELECT t.rolname target,m.rolname member,g.rolname grantor,a.admin_option,a.set_option,a.inherit_option FROM pg_auth_members a JOIN pg_roles t ON t.oid=a.roleid JOIN pg_roles m ON m.oid=a.member JOIN pg_roles g ON g.oid=a.grantor WHERE t.rolname=$1 AND m.rolname=ANY($2::text[]) ORDER BY member,grantor",[role,[owner,login]])).rows;
  return q;
 }
-async function main(){
- if(!["APPLY_EXACT_SOURCE_POST_REPAIR","VERIFY_ONLY"].includes(mode)||!process.env.DATABASE_URL)stop("EXACT_OWNER_MODE_REQUIRED");
+async function repairLane(lane){
+ stage=lane+"_START";
  const c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
  try{
   stage="CONNECT";await c.connect();
@@ -53,17 +53,17 @@ async function main(){
   const serial=seq.is_identity==="NO"&&seq.serial_default===true;
   emit("P6_SOURCE_SEQUENCE_BASELINE",{serialDefault:serial,identity:seq.is_identity==="YES",usage:initialSeq.u,update:initialSeq.upd,needsGrant:serial&&!initialSeq.u&&!initialSeq.upd});
   stage="OWNER_EXACT_SQL_PARSE";
-  for(const t of source)await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));
-  for(let i=0;i<post.length;i++)await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);
+  if(lane==="SOURCE")for(const t of source)await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));
+  if(lane==="POST")for(let i=0;i<post.length;i++)await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);
   const missing=cols.filter(x=>!before.readable.includes(x));
   const needsSeq=serial&&!initialSeq.u&&!initialSeq.upd;
   if(mode==="APPLY_EXACT_SOURCE_POST_REPAIR"){
-   stage="GRANT_POST_METADATA";if(missing.length)await c.query("GRANT SELECT ("+missing.join(",")+") ON clean.flight_snapshots TO "+role);
-   stage="GRANT_SOURCE_SERIAL";if(needsSeq)await c.query("GRANT USAGE ON SEQUENCE "+seqName+" TO "+role);
+   stage="GRANT_POST_METADATA";if(lane==="POST"&&missing.length)await c.query("GRANT SELECT ("+missing.join(",")+") ON clean.flight_snapshots TO "+role);
+   stage="GRANT_SOURCE_SERIAL";if(lane==="SOURCE"&&needsSeq)await c.query("GRANT USAGE ON SEQUENCE "+seqName+" TO "+role);
   }
   stage="GRANT_READBACK";
   const after=await access(c),afterSeq=await seqPriv();
-  if(after.readable.length!==cols.length||serial&&!afterSeq.u&&!afterSeq.upd)stop("EXACT_GRANTS_NOT_PRESENT");
+  if(lane==="POST"&&after.readable.length!==cols.length||lane==="SOURCE"&&serial&&!afterSeq.u&&!afterSeq.upd)stop("EXACT_GRANTS_NOT_PRESENT");
   // The original stage26 intentionally installs owner admin-only membership.
   // If SET is false, temporarily authorize SET inside a savepoint. This is
   // rolled back even on success before committing the narrowly scoped ACLs.
@@ -78,8 +78,8 @@ async function main(){
    const who=(await c.query("SELECT current_user=$1 correct,session_user=$2 owner",[role,owner])).rows[0];
    if(!who.correct||!who.owner)stop("SCOPED_ROLE_NOT_ENTERED");
    emit("P6_SOURCE_RESTRICTED_ROLE_ENTERED",{actualDedicatedLoginProven:false,temporaryOwnerSet:!id.can_set});
-   for(const t of source){stage=t.label;await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
-   for(let i=0;i<post.length;i++){stage="POST_EXPLAIN_"+(i+1);await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
+   if(lane==="SOURCE")for(const t of source){stage=t.label;await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
+   if(lane==="POST")for(let i=0;i<post.length;i++){stage="POST_EXPLAIN_"+(i+1);await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
   }finally{await c.query("ROLLBACK TO SAVEPOINT scoped_role_probe");await c.query("RELEASE SAVEPOINT scoped_role_probe");}
   stage="MEMBERSHIP_RESTORATION";
   if(JSON.stringify(await membership(c))!==JSON.stringify(members))stop("TEMP_ROLE_MEMBERSHIP_NOT_RESTORED");
@@ -87,8 +87,17 @@ async function main(){
   if(!restored.owner||restored.can_set!==id.can_set)stop("TEMP_ROLE_ENTRY_NOT_RESTORED");
   stage="COMMIT";
   if(mode==="VERIFY_ONLY")await c.query("ROLLBACK");else await c.query("COMMIT");
-  emit(mode==="VERIFY_ONLY"?"P6_SOURCE_POST_EXACT_ROLE_VERIFY_PASS":"P6_SOURCE_POST_EXACT_GRANTS_COMMITTED",{addedPostColumns:mode==="VERIFY_ONLY"?[]:missing,sourceSerialUsageAdded:mode!=="VERIFY_ONLY"&&needsSeq,exactSqlChecks:7,ownerMembershipUnchanged:true,tableWidePreSelect:false,preWrites:false,actualDedicatedLoginProven:false});
+  emit(mode==="VERIFY_ONLY"?"P6_SOURCE_POST_EXACT_ROLE_VERIFY_PASS":"P6_SOURCE_POST_EXACT_GRANTS_COMMITTED",{lane,addedPostColumns:mode==="VERIFY_ONLY"||lane!=="POST"?[]:missing,sourceSerialUsageAdded:mode!=="VERIFY_ONLY"&&lane==="SOURCE"&&needsSeq,exactSqlChecks:lane==="SOURCE"?4:3,ownerMembershipUnchanged:true,tableWidePreSelect:false,preWrites:false,actualDedicatedLoginProven:false});
  }catch(e){await c.query("ROLLBACK").catch(()=>{});throw e;}
  finally{await c.end().catch(()=>{});}
+}
+async function main(){
+ if(!["APPLY_EXACT_SOURCE_POST_REPAIR","VERIFY_ONLY"].includes(mode)||!process.env.DATABASE_URL)stop("EXACT_OWNER_MODE_REQUIRED");
+ // Independent transactions: a POST permission defect never rolls back an
+ // otherwise successful SOURCE repair, or vice versa.
+ for(const lane of ["SOURCE","POST"]){
+  try{await repairLane(lane);}
+  catch(e){emit("P6_SOURCE_POST_EXACT_REPAIR_HOLD",{lane,stage,reason:/^[A-Z_]+$/.test(e?.message??"")?e.message:"DB_ERROR_REDACTED",sqlstate:safe(e)});process.exitCode=2;}
+ }
 }
 main().catch(e=>{emit("P6_SOURCE_POST_EXACT_REPAIR_HOLD",{stage,reason:/^[A-Z_]+$/.test(e?.message??"")?e.message:"DB_ERROR_REDACTED",sqlstate:safe(e)});process.exitCode=2;});
