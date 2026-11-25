@@ -1,3 +1,4 @@
+import {excludeP6KnownNoPhysicalStartSubmissions} from "../server/lib/disruption/phase6KnownSourceNoPhysicalStart_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * REAL existing Phase5 10-minute SOURCE schedule: optional READ-ONLY
@@ -326,7 +327,8 @@ export async function runP6RealPrivateSourceParentReadOnly(
      deferredDueDayCount:selection.deferredDueDayCount,providerCalls:0,databaseWrites:0,
      githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
   }
-  const history=await readHistory(scan,ctx);
+  const fullHistory=await readHistory(scan,ctx);
+ const history=storedCapacityProfile?await excludeP6KnownNoPhysicalStartSubmissions(fullHistory,env,fetch,{Accept:"application/vnd.github+json",Authorization:"Bearer "+ctx.ghToken,"X-GitHub-Api-Version":"2022-11-28"}):fullHistory;
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
    expectedManifestSha256:ctx.scope.expectedManifestSha256,

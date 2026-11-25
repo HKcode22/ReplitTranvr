@@ -1,3 +1,4 @@
+import {excludeP6KnownNoPhysicalStartSubmissions} from "../server/lib/disruption/phase6KnownSourceNoPhysicalStart_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Stored-mode SOURCE dispatcher, reusing the 10min parent and existing
@@ -154,7 +155,8 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   const child=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",historyClock),fetcher,headers);
   previousIds=new Set(child.workflow_runs.map(x=>x.id));
   const submitted=new Set();active=0;
-  for(const x of child.workflow_runs){
+  const eligibleHistory=await excludeP6KnownNoPhysicalStartSubmissions(child,env,fetcher,headers);
+  for(const x of eligibleHistory.workflow_runs){
    if(!/^P5 SOURCE [a-f0-9]{64}$/.test(x.display_title))fail("UNKNOWN_SOURCE_CHILD_TITLE");
    submitted.add(x.display_title.slice("P5 SOURCE ".length));
    if(x.status!=="completed")active++;

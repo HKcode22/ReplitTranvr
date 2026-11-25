@@ -1,0 +1,23 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {excludeP6KnownNoPhysicalStartSubmissions as filter} from "../server/lib/disruption/phase6KnownSourceNoPhysicalStart_v39.mjs";
+const OLD="9fee7360cfa8a5411a7fe8229f37216197fec528",HEAD="7".repeat(40);
+const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_RUN_ATTEMPT:"1",GITHUB_EVENT_NAME:"schedule",GITHUB_SHA:HEAD,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:HEAD};
+const row={id:45532068606,display_title:"P5 SOURCE "+"a".repeat(64),status:"completed",conclusion:"failure"};
+const run={...row,head_sha:OLD,head_branch:"main",path:".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",event:"workflow_dispatch",run_attempt:1};
+const common={run_id:row.id,head_sha:OLD,run_attempt:1,status:"completed"};
+const steps=[{number:7,name:"Preflight independent PRE lane role (no provider, no DB writes)",conclusion:"failure"},{number:11,name:"Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"skipped"},{number:14,name:"Stop private PRE role processes and verify scratch cleanup",conclusion:"success"},...[8,9,10,12,13].map(number=>({number,name:"subsequent step",conclusion:"skipped"}))].map(x=>({...x,status:"completed"}));
+const jobs=[{...common,id:138929577662,name:"exact-private-source-existing-one-get-child",conclusion:"failure",steps},{...common,id:1234567,name:"exact-reviewed-source-child",conclusion:"skipped",steps:[]}];
+const mock=(r=run,j=jobs)=>async u=>({ok:true,json:async()=>u.includes("/jobs?")?{total_count:j.length,jobs:j}:r});
+const h={total_count:1,workflow_runs:[row]};
+test("only reviewed known pre-physical failure may be reconsidered by original unreserved DB queue and signed cutoff",async()=>{
+ assert.deepEqual(await filter(h,env,mock(),{}),{total_count:0,workflow_runs:[]});
+ for(const e of [{...env,GITHUB_SHA:OLD,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:OLD},{...env,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""}])assert.deepEqual(await filter(h,e,mock(),{}),h);
+ for(const r of [{...run,run_attempt:2},{...run,head_sha:HEAD},{...run,conclusion:"cancelled"}])assert.deepEqual(await filter(h,env,mock(r),{}),h);
+ const bad=jobs.map((j,i)=>i===0?{...j,steps:steps.map(s=>s.number===11?{...s,conclusion:"success"}:s)}:j);
+ assert.deepEqual(await filter(h,env,mock(run,bad),{}),h);
+ const duplicate={...row,id:9876543,status:"in_progress",conclusion:null};
+ const two={total_count:2,workflow_runs:[row,duplicate]};
+ assert.deepEqual(await filter(two,env,mock(),{}),{total_count:1,workflow_runs:[duplicate]});
+ assert.deepEqual(await filter(h,env,async()=>{throw Error("READ")},{}),h);
+});
