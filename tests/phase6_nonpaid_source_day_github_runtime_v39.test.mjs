@@ -8,7 +8,8 @@ const fp=k=>h(k.export({format:"der",type:"spki"}));
 const pem=k=>k.export({format:"pem",type:"spki"}).toString();
 const priv=k=>Buffer.from(k.export({format:"pem",type:"pkcs8"})).toString("base64");
 const now=Date.parse("2030-01-01T00:00:00.000Z"),iso=t=>new Date(t).toISOString();
-function fixture(manifest=sha("a")){
+function fixture(manifest=sha("a"),codeOverride=code){
+ const code=codeOverride;
  const q=generateKeyPairSync("ed25519"),r=generateKeyPairSync("ed25519"),d=generateKeyPairSync("ed25519");
  const files=Array.from({length:31},(_,i)=>{
   const day=i+1,first=iso(now+(i+1)*3600000);
@@ -147,4 +148,14 @@ test("Day1 recovery is explicit manual Day1 only, with the existing isolated dra
  assert.throws(()=>admitP6NonpaidSourceDayGithub({...other.env,GITHUB_EVENT_NAME:"workflow_dispatch",
   P6_NONPAID_SOURCE_REQUESTED_DAY:"1",P6_NONPAID_SOURCE_CONFIRM:e.P6_NONPAID_SOURCE_CONFIRM,
   V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:e.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE,V39_P5_EARLY_DRAW_DATABASE_URL:e.V39_P5_EARLY_DRAW_DATABASE_URL}),/EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST/);
+});
+
+test("approved executable successor preserves all 31 old linked policy digests and signer identities",()=>{
+ const old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40),f=fixture(sha("a"),old);
+ const prior=admitP6NonpaidSourceDayGithub(f.env);
+ const next=admitP6NonpaidSourceDayGithub({...f.env,GITHUB_SHA:head,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head});
+ assert.equal(next.mainSha,head);assert.equal(next.trust.reviewedCodeSha,old);
+ assert.deepEqual(next.policyBytes,prior.policyBytes);assert.deepEqual(next.signingPolicyBytes,prior.signingPolicyBytes);
+ assert.deepEqual(loadP6ReviewedDayPlans(next,f.read),loadP6ReviewedDayPlans(prior,f.read));
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,GITHUB_SHA:head}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
 });

@@ -22,6 +22,9 @@ import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
  from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 
+import {sourceDiagnosticLine,sourceHttpDiagnosticLabel,sourceDbDiagnosticLabel}
+ from "./v39_phase5b_source_diagnostics_v39.mjs";
+const diagnostic=(label:string)=>console.log(sourceDiagnosticLine(label));
 function refuse():never{throw Error("REFUSED_P5_GITHUB_SOURCE_NOT_ADMITTED");}
 async function main():Promise<void>{
  if(process.argv.length!==3||
@@ -34,6 +37,7 @@ async function main():Promise<void>{
  const bytes=readFileSync(name);
  const input=JSON.parse(bytes.toString("utf8")) as P5GitHubOneQueryReleaseEnvelope;
  const admitted=admitP5GitHubOneQueryRelease(process.env,bytes,input);
+ diagnostic("INNER_ADMITTED");
  // A JSON representation cannot encode native JS Date; validate it as
  // a strict ISO instant and rebuild only that one required field.
  const raw=input.plan?.day?.scheduledStartUtc as unknown;
@@ -74,6 +78,7 @@ async function main():Promise<void>{
   });
   const due=requireP5SignedOneGetInActualDueQueue(
    dueQueue,plan,admitted.manifestSha256,admitted.queryDigestSha256);
+  diagnostic("DUE_QUEUE_BOUND");
   // A reviewed, immutable template cannot contain the future GitHub run ID.
   // Bind the actual GITHUB_RUN_ID to PREPARED exact V0079 query in an
   // independent durable V0080 DB transaction BEFORE source reservation.
@@ -85,6 +90,7 @@ async function main():Promise<void>{
    earlyDrawSha256:plan.expectedEarlyDrawSha256,
    rightsReviewSha256:plan.reviewedProviderRightsSha256,
   });
+  diagnostic("PREARM_COMMITTED");
   // GH may allocate this job before its exact approved paid GET slot.
   // Prearm has been COMMITTED; do not consume the single physical attempt
   // until the database clock reaches the signed dispatch UTC.
@@ -105,18 +111,47 @@ async function main():Promise<void>{
    throw Error("REFUSED_P5_SOURCE_DUE_QUEUE_POST_WAIT_CLOCK_MISSING");
   requireP5PaidGetBeforeHardLatest(
    postWaitClock.rows[0].t,due.hardLatestDispatchUtc);
-  const ports=createP5V0079ScopedDbPorts({
+  diagnostic("SIGNED_SLOT_REACHED");
+  const basePorts=createP5V0079ScopedDbPorts({
    plan,
    manifestSha256:admitted.manifestSha256,
    exactQueryDigest:admitted.queryDigestSha256,
    githubRunId:admitted.githubRunId,
    scopedPool:scoped as unknown as Pool,
-   fetchImpl:fetch,
+   fetchImpl:async (...args:Parameters<typeof fetch>)=>{
+    diagnostic("HTTP_STARTED");
+    try{
+     const response=await fetch(...args);
+     diagnostic(sourceHttpDiagnosticLabel(response.status,response.ok));
+     return response;
+    }catch(e){diagnostic("HTTP_TRANSPORT_FAILED");throw e;}
+   },
   });
   // Both DB ledger and provider request may have cost even if this fails.
   // Do NOT retry a query after ambiguous dispatch. V0079 makes the
   // reservation irreversible and its same-query replay fail closed.
+  const ports={
+   ...basePorts,
+   reservePhysicalBeforeGet:async arg=>{
+    diagnostic("RESERVATION_STARTED");
+    try{
+     const result=await basePorts.reservePhysicalBeforeGet(arg);
+     diagnostic("RESERVATION_CONFIRMED");
+     return result;
+    }catch(e){diagnostic(sourceDbDiagnosticLabel(e));throw e;}
+   },
+   commitOriginalAndPopulation:async arg=>{
+    diagnostic("ORIGINAL_PERSIST_STARTED");
+    try{
+     const result=await basePorts.commitOriginalAndPopulation(arg);
+     diagnostic("ORIGINAL_PERSIST_CONFIRMED");
+     return result;
+    }catch(e){diagnostic(sourceDbDiagnosticLabel(e));throw e;}
+   }
+  } satisfies typeof basePorts;
   const outcome=await runP5ScopedFidsSource(plan,ports);
+  diagnostic(outcome.status==="SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE"?"OUTCOME_TIMELY":
+   outcome.status==="BOUND_SOURCE_LATE_NOT_PRE"?"OUTCOME_LATE":"OUTCOME_UNOBSERVED");
   console.log(JSON.stringify({
    schema:"v39.phase5.github-one-query-source-result.v1",
    codeSha:admitted.codeSha,
@@ -136,6 +171,7 @@ async function main():Promise<void>{
  }
 }
 main().catch(error=>{
+ diagnostic("INNER_FAILED");
  const msg=error instanceof Error?error.message:"";
  // Never print source bodies, usernames, API keys or SQL connection errors.
  const safe=/^(REFUSED_P5_[A-Z0-9_]+|REFUSED_PHASE5_[A-Z0-9_]+|P5_[A-Z0-9_]+)$/.test(msg)

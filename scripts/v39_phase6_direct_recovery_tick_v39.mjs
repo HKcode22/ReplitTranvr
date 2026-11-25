@@ -78,11 +78,24 @@ export function admitDirectTick(env,now,readPlan){
  if(since<calendar.from||now>=calendar.until||calendar.until-calendar.from>60*24*60*MIN)hold("POLICY_CLOCK");
  return {sha,id,since,calendar};
 }
-function downloadDirectArchive({artifactId,token}){
- try{return execFileSync("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+artifactId+"/zip"],{
-  env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},timeout:30000,
-  maxBuffer:131072,stdio:["ignore","pipe","ignore"]});}
- catch{hold("PREDECESSOR_ARCHIVE_DOWNLOAD");}
+// The artifact GET/redirect is read-only. Retry only that transport, never
+// dispatch POSTs, validation failures, or a changed digest. Three bounded
+// attempts stay inside the predecessor download headroom.
+export async function downloadDirectArchive({artifactId,token,exec=execFileSync,sleep=ms=>new Promise(r=>setTimeout(r,ms))}){
+ if(!validId(artifactId)||typeof token!=="string"||!token)hold("PREDECESSOR_ARCHIVE_ID");
+ for(let i=0;i<3;i++){
+  try{
+   const bytes=exec("gh",["api","--hostname","github.com","--method","GET","repos/"+REPO+"/actions/artifacts/"+artifactId+"/zip"],{
+    env:{PATH:process.env.PATH,HOME:process.env.HOME,GH_TOKEN:token,GH_PROMPT_DISABLED:"1"},timeout:15000,
+    maxBuffer:131072,stdio:["ignore","pipe","ignore"]});
+   if(!Buffer.isBuffer(bytes)||!bytes.length)hold("PREDECESSOR_ARCHIVE_EMPTY");
+   return bytes;
+  }catch(e){
+   if(e?.message==="HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_EMPTY")throw e;
+   if(i===2)hold("PREDECESSOR_ARCHIVE_DOWNLOAD");
+   await sleep(1000*(i+1));
+  }
+ }
 }
 export function readDirectReceipt(raw,{run,sha,since,policySha256,clock,epoch,disposition}){
  let x;try{x=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(raw));}catch{hold("PREDECESSOR_RECEIPT_JSON");}
@@ -109,6 +122,20 @@ export function readDirectReceipt(raw,{run,sha,since,policySha256,clock,epoch,di
     (disposition==="CARRIED")!==(groups[1].length>0)||
     disposition==="PREFLIGHT_HOLD"&&groups[0].length!==0)hold("PREDECESSOR_RECEIPT_DISPOSITION");
  return groups[1];
+}
+// A route's normal history may be fetched just before a scheduled job
+// settles and the active sweep just after. Only this exact observation race
+// is retryable, and only with a fresh complete GET snapshot.
+export function retryableDirectRouteHistory(plan){
+ const blocked=plan?.assessments?.filter(a=>a.state.startsWith("HOLD_"))??[];
+ return plan?.status==="HOLD_ROLLING_WAVE_NO_DISPATCH"&&blocked.length>0&&blocked.every(a=>a.state==="HOLD_HISTORY_CHANGED");
+}
+// Only read-only observation failures are eligible for complete-snapshot
+// retry. No replay of a wave, prior ACK or provider action.
+export function retryableDirectObservationError(error){
+ return ["HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED",
+  "HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED",
+  "HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT"].includes(error?.message);
 }
 export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),fetcher=fetch,readPlan,emit=()=>{},readArchive=downloadDirectArchive}={}){
  const start=now(),a=admitDirectTick(env,start,readPlan),deadline=Math.min(start+7*MIN,a.calendar.until);
@@ -156,6 +183,23 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
    x[key].length!==Math.min(cap,x.total_count))hold("HISTORY_RESPONSE_INCOMPLETE");
   return x[key];
  }
+ // The direct root has its own history reader, separate from the rolling
+ // route snapshot. A count/list race here previously bypassed that retry.
+ // Retry only the exact same GET for a structurally valid count mismatch.
+ // Persistent mismatch, malformed responses, identity failures and POST
+ // uncertainty retain the original fail-closed semantics.
+ async function getBounded(path,key,cap=100){
+  for(let i=0;i<3;i++){
+   const x=await get(path);
+   const countMismatch=Number.isSafeInteger(x?.total_count)&&x.total_count>=0&&
+    Array.isArray(x[key])&&x[key].length!==Math.min(cap,x.total_count);
+   if(countMismatch&&i<2&&requests<360&&now()+15000<deadline-12000){
+    emit({status:"DIRECT_ROOT_HISTORY_COUNT_GET_RETRY",attempt:i+1,collection:key});
+    await sleep(1000*(i+1));continue;
+   }
+   return {response:x,rows:bounded(x,key,cap)};
+  }
+ }
  async function negativeHistory(){
   // All negative conclusions since the independently approved activation,
   // not only the three-hour scheduling preview. A historical HOLD is NOT
@@ -167,30 +211,28 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
    // One complete repository-wide negative sweep per conclusion usually
    // replaces nine requests. If >100 rows, never infer absence from the first
    // page: check complete per-workflow counts for the same exact time scope.
-   const list=await get("/actions/runs?branch=main&status="+status+"&per_page=100&created="+encodeURIComponent(">="+iso(a.since)));
-   const rs=bounded(list,"workflow_runs");
+   const {response:list,rows:rs}=await getBounded("/actions/runs?branch=main&status="+status+"&per_page=100&created="+encodeURIComponent(">="+iso(a.since)),"workflow_runs");
    if(list.total_count<=100){
     if(new Set(rs.map(x=>x.id)).size!==rs.length||rs.some(x=>!validId(x.id)||typeof x.path!=="string"||
        x.head_branch!=="main"||x.status!=="completed"||x.conclusion!==status||
        !Number.isFinite(Date.parse(x.created_at))||Date.parse(x.created_at)<a.since))hold("NEGATIVE_HISTORY_IDENTITY");
     if(rs.some(x=>allowed.has(x.path)))hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");
    }else{
-    const counts=await Promise.all(targets.map(wf=>get(q(wf,status))));
-    for(const x of counts){bounded(x,"workflow_runs",1);if(x.total_count!==0)hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");}
+    const counts=await Promise.all(targets.map(wf=>getBounded(q(wf,status),"workflow_runs",1)));
+    for(const {response:x} of counts){if(x.total_count!==0)hold("PRIOR_UNSUCCESSFUL_RUN_REVIEW");}
    }
   }
-  const skip=await get(q(DIRECT_WF,"skipped"));bounded(skip,"workflow_runs",1);
+  const {response:skip}=await getBounded(q(DIRECT_WF,"skipped"),"workflow_runs",1);
   if(skip.total_count!==0)hold("PRIOR_DIRECT_GATE_SKIPPED_REVIEW");
  }
  async function selfAndPredecessor(){
   const self=await get("/actions/runs/"+a.id);
   if(!exactRoot(self)||self.id!==a.id||self.status!=="in_progress"||self.conclusion!==null)hold("ROOT_IDENTITY");
 
-  const p=await get(q(DIRECT_WF,"success"));const rows=bounded(p,"workflow_runs",1);
+  const {rows}=await getBounded(q(DIRECT_WF,"success"),"workflow_runs",1);
   if(rows.length){
    const r=rows[0];if(!exactRoot(r)||r.id===a.id||r.status!=="completed"||r.conclusion!=="success")hold("PREDECESSOR_IDENTITY");
-   const jobs=await get("/actions/runs/"+r.id+"/jobs?filter=latest&per_page=100");
-   const js=bounded(jobs,"jobs");
+   const {response:jobs,rows:js}=await getBounded("/actions/runs/"+r.id+"/jobs?filter=latest&per_page=100","jobs");
    if(jobs.total_count!==3||new Set(js.map(j=>j.id)).size!==3||
       !js.every(j=>validId(j.id)&&j.run_id===r.id&&j.head_sha===a.sha&&j.run_attempt===1&&j.status==="completed")||
       !["offline-direct-recovery","direct-readonly-verify"].every(name=>js.filter(j=>j.name===name&&j.conclusion==="skipped"&&
@@ -201,8 +243,7 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
       directDisposition(m[0].steps)===null)hold("PREDECESSOR_NOT_TERMINAL");
    const disposition=directDisposition(m[0].steps);
    async function artifact(){
-    const xs=await get("/actions/runs/"+r.id+"/artifacts?per_page=100");
-    const rows=bounded(xs,"artifacts");
+    const {response:xs,rows}=await getBounded("/actions/runs/"+r.id+"/artifacts?per_page=100","artifacts");
     if(xs.total_count!==1||rows[0]?.name!=="p6-direct-terminal-"+r.id||rows[0].expired!==false||
        !validId(rows[0].id)||!Number.isSafeInteger(rows[0].size_in_bytes)||rows[0].size_in_bytes<1||
        rows[0].size_in_bytes>65536||!/^sha256:[a-f0-9]{64}$/.test(rows[0].digest??"")||
@@ -218,8 +259,8 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
   }
   priorVerified=true;
   for(const status of states){
-   const x=await get("/actions/runs?branch=main&status="+status+"&per_page=100");
-   const rows=bounded(x,"workflow_runs");if(x.total_count>100)hold("ACTIVE_HISTORY_INCOMPLETE");
+   const {response:x,rows}=await getBounded("/actions/runs?branch=main&status="+status+"&per_page=100","workflow_runs");
+   if(x.total_count>100)hold("ACTIVE_HISTORY_INCOMPLETE");
    if(rows.some(r=>!validId(r.id)||typeof r.path!=="string"||r.head_branch!=="main"||r.status!==status))hold("ACTIVE_HISTORY_IDENTITY");
    const controllers=rows.filter(r=>[DIRECT_WF,OLD].some(wf=>r.path===".github/workflows/"+wf));
    if(status==="in_progress"&&!controllers.some(r=>r.id===a.id&&exactRoot(r)))hold("SELF_NOT_VISIBLE");
@@ -244,11 +285,16 @@ export async function runDirectTick(env,{now=Date.now,sleep=ms=>new Promise(r=>s
      const snapshots=[];
      const result=await readP6RollingGithubSnapshot({sha:a.sha,epoch,token:env.GITHUB_TOKEN,now,fetcher:api,sleep,
       directRecovery:true,earlyDrawHistoryEpoch,verifySnapshot:(r,x)=>{journal.assertVisible(r,x);snapshots.push(x);},scheduleEvidenceCache:cache});
-     if(result.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO")hold("CURRENT_ROUTE_HISTORY");
+     if(result.plan.status!=="REVIEWED_ROLLING_WAVE_PLAN_NO_GO"){
+      emit({status:"DIRECT_ROUTE_HISTORY_HOLD_DIAGNOSTIC",attempt:i+1,blocked:result.plan.assessments.filter(x=>x.state.startsWith("HOLD_")).map(x=>({lane:x.lane,state:x.state,runId:x.runId??null}))});
+      if(i<2&&retryableDirectRouteHistory(result.plan)){await sleep(1000);continue;}
+      hold("CURRENT_ROUTE_HISTORY");
+     }
      return {result,snapshots};
     }catch(e){
-     if(i===2||!["HOLD_P6_ROLLING_SESSION_ACK_TERMINAL_NOT_YET_RECONCILED","HOLD_P6_ROLLING_CONTROLLER_GITHUB_ACTIVE_SWEEP_CHANGED"].includes(e?.message))throw e;
-     await sleep(1000);
+     if(i===2||!retryableDirectObservationError(e)||requests>=360||now()+15000>=deadline-12000)throw e;
+     emit({status:"DIRECT_GET_OBSERVATION_RETRY",attempt:i+1,reason:e.message});
+     await sleep(1000*(i+1));
     }
    }
   }

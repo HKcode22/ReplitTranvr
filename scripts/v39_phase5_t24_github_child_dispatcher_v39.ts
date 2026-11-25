@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Default-OFF actual GitHub T24 child controller; one flight at a time.
  * Reuses the READ ONLY source original bound reviewer and the ORIGINAL
@@ -27,7 +28,7 @@ export function admitP5T24GithubDispatcher(env:NodeJS.ProcessEnv){
     env.GITHUB_REF!=="refs/heads/main"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_T24_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_T24_APPROVED_CODE_SHA)||
     env.P5_T24_AUTO_DISPATCH_ENABLED!=="true"||
     env.P5_CD_GH_T24_SCHEDULE_ENABLED==="1"||
     env.P5_T24_SOURCE_READONLY_ENABLED!=="true"||

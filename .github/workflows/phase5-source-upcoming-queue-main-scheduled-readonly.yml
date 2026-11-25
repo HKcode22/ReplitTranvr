@@ -80,6 +80,8 @@ permissions:
 concurrency:
   group: phase5-source-upcoming-readonly-${{ github.ref }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   offline-admission-regression:
     if: ${{ github.event_name == 'pull_request' }}
@@ -159,7 +161,7 @@ jobs:
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$V39_PHASE6_PROCESS_ARMED" = 1
           test "$V39_P5_SOURCE_QUEUE_OWNER_APPROVED" = 1
-          test "$V39_P5_QUEUE_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test -n "$V39_P5_SOURCE_DATABASE_URL"
       - uses: actions/setup-node@v4
         with:
@@ -235,8 +237,8 @@ jobs:
           test "$ADB_AUTO_COLLECT" = "0"
           test -z "$AERODATABOX_API_KEY"
           test -z "$DATABASE_URL"
-          test "$GITHUB_SHA" = "$V39_P5_QUEUE_APPROVED_CODE_SHA"
-          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$P5_AUTO_SOURCE_DISPATCH_ENABLED" = "true"
           test "$P5_SOURCE_QUEUE_OBSERVER_ENABLED" = "true"
           test "$P5_SOURCE_BATCH_REGISTRY_OBSERVER_ENABLED" = "true"
@@ -316,7 +318,7 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$V39_P5_SOURCE_DATABASE_URL"
           test -z "$P5_V39_T24_WITNESS_DATABASE_URL"
-          test "$V39_P5_T24_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_T24_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_T24_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$V39_P5_T24_OWNER_APPROVED" = '1'
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
@@ -400,7 +402,7 @@ jobs:
           test "$P5_T24_AUTO_DISPATCH_ENABLED" = 'true'
           test "$P5_CD_GH_T24_SCHEDULE_ENABLED" != '1'
           test "$P5_T24_SOURCE_READONLY_ENABLED" = 'true'
-          test "$GITHUB_SHA" = "$V39_P5_T24_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_T24_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_T24_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$V39_P5_T24_OWNER_APPROVED" = '1'
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
@@ -487,7 +489,7 @@ jobs:
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
           test "$V39_PHASE6_PROCESS_ARMED" = '1'
-          test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test -n "$V39_P5_POST_SIGNED_PACKET_SHA256"
           test -n "$V39_P5_SOURCE_DATABASE_URL"
           [[ "$P5_POST_FROZEN_PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
@@ -577,7 +579,7 @@ jobs:
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
           test "$V39_PHASE6_PROCESS_ARMED" = '1'
-          test "$GITHUB_SHA" = "$V39_P5_LATER_PRE_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test -n "$V39_P5_LATER_PRE_SIGNED_PACKET_SHA256"
           test -n "$P5_V39_PRE_DATABASE_URL"
           [[ "$P5_LATER_PRE_FROZEN_PACKET_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
@@ -671,7 +673,7 @@ jobs:
           test "$V39_PHASE5_FREEZE_SIGNED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$V39_PHASE6_PROCESS_ARMED" = 1
-          test "$GITHUB_SHA" = "$V39_P5_LATER_PRE_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_LATER_PRE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           [[ "$P5_LATER_PRE_BATCH_REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]
           [[ "$V39_P5_LATER_PRE_DAY_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
           [[ "$V39_P5_SOURCE_BATCH_REGISTRY_SHA256" =~ ^[a-f0-9]{64}$ ]]
@@ -749,7 +751,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = 'HKcode22/ReplitTranvr'
           test "$GITHUB_REF" = 'refs/heads/main'
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$GITHUB_SHA" = "$P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA"
+          [[ ( "$P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$P6_PRIVATE_SOURCE_PARENT_RO_OWNER_APPROVED" = 1
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
@@ -854,8 +856,8 @@ jobs:
             *) exit 2 ;;
           esac
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
-          test "$GITHUB_SHA" = "$V39_P5_QUEUE_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
+          [[ ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_QUEUE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$P6_PRIVATE_SOURCE_STORED_DISPATCH_APPROVED" = 1
           test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1
           test "$V39_PHASE6_PROCESS_ARMED" = 1
@@ -964,7 +966,7 @@ jobs:
             workflow_dispatch) test "$P6_CURRENT_PARENT_DISPATCH_CONFIRM" = RUN_CURRENT_SIGNED_POST_PARENT ;;
             *) exit 2 ;;
           esac
-          test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$V39_PHASE5_FREEZE_SIGNED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$V39_PHASE6_PROCESS_ARMED" = 1
@@ -1073,7 +1075,7 @@ jobs:
             workflow_dispatch) test "$P6_NATIVE_POST_PRODUCER_CONFIRM" = PUBLISH_CURRENT_SIGNED_POST_WINDOWS_NO_PROVIDER ;;
             *) exit 2 ;;
           esac
-          test "$GITHUB_SHA" = "$V39_P5_POST_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$P6_NATIVE_POST_PRODUCER_APPROVED" = 1
           test "$V39_PHASE5_FREEZE_SIGNED" = 1

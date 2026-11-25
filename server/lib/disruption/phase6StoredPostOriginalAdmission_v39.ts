@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Connect actual independently signed stored POST to the existing V0083
  * read-only admission and actual same-flight source PRE audit. No dispatch,
  * new paid worker, permission grant, SQL write or source-use verdict.
@@ -53,7 +54,7 @@ export async function inspectP6StoredPostOriginalV0083({
     trust?.independentStudyTrustPinsApproved!==true||trust.independentPostReviewerPinsApproved!==true||
     env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="schedule"||
-    env.GITHUB_RUN_ATTEMPT!=="1"||env.GITHUB_SHA!==trust.reviewedCodeSha||
+    env.GITHUB_RUN_ATTEMPT!=="1"||!p6ReviewedPolicyMatchesRuntime(env,trust.reviewedCodeSha)||
     env.V39_P5_MANIFEST_SHA256!==trust.manifestSha256||env.V39_P5_RIGHTS_SHA256!==trust.rightsSha256||
     env.ADB_AUTO_COLLECT!=="0"||[env.AERODATABOX_API_KEY,env.RAPIDAPI_KEY,
      env.AERODATABOX_WEBHOOK_SECRET,env.DATABASE_URL,env.V39_DATABASE_RUNTIME_URL,

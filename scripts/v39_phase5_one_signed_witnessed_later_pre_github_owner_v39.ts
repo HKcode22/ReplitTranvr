@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase5 ONE reviewed prospective T-6h or T-90m PRE — GitHub main manual.
  * Reuses already commissioned restricted Stage14 PRE-only writer, Stage24
@@ -49,7 +50,7 @@ export function admitP5SignedWitnessedLaterPre(
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_LATER_PRE_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_LATER_PRE_APPROVED_CODE_SHA)||
     env.P5_LATER_PRE_CONFIRM!=="ONE_SIGNED_WITNESSED_T6_OR_T90_PRE_NO_PROVIDER"||
     env.ADB_AUTO_COLLECT!=="0"||env.AERODATABOX_API_KEY||
     env.V39_P5_LATER_PRE_OWNER_APPROVED!=="1"||
@@ -68,7 +69,7 @@ export function admitP5SignedWitnessedLaterPre(
     !["v39.phase5.github-witnessed-later-pre-reviewed.v1",
       "v39.phase5.github-standalone-later-pre-asof-reviewed.v2"]
       .includes(packet.schema)||
-    packet.reviewedCodeSha!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,packet.reviewedCodeSha)||
     (packet.schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1"?
        packet.independentLaterHorizonAndT24ReviewAttested!==true:
        packet.independentlyReviewedLaterWithoutT24AsOfAttested!==true)||

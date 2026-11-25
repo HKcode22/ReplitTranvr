@@ -8,7 +8,7 @@ import {
  summarizeP6ControllerHeartbeat,
  admitP6HeartbeatGithubEnv,
  readP6GithubAutoControllerHeartbeat,
- reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery
+ reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery,observeP6IndependentDispatches
 } from "../server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
 import {formatP6ControllerHeartbeatHuman}
  from "../scripts/v39_phase6_github_controller_heartbeat_v39.mjs";
@@ -388,4 +388,28 @@ test("direct recovery observation preserves distinct exact terminal, carried, HO
  assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{},[{...child,id:800,created_at:"2026-11-14T01:40:00Z",conclusion:"failure"}]),T)).state,"DIRECT_RECOVERY_PRIOR_ATTEMPT_REVIEW");
  assert.equal((await observeP6DirectRecovery(e,reader("TERMINAL",{created_at:"2026-11-14T01:30:00Z"}),T)).state,"DIRECT_RECOVERY_STALE");
  assert.equal((await observeP6DirectRecovery(env(),async()=>{throw Error("must stay disabled")},T)).state,"DIRECT_RECOVERY_DISABLED");
+});
+
+test("new independent wake: a red mixed SOURCE/POST parent reports only the actual failed job; cron gaps remain visible",async()=>{
+ const old=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100,{conclusion:"success",created:"2026-11-13T18:00:00Z"})],T));
+ const report=summarizeP6ControllerHeartbeat(old,T);
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true",P6_ROLLING_CONTROLLER_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0"};
+ const source=old.find(x=>x.lane==="SOURCE");
+ const row={...run(900,{event:"workflow_dispatch",conclusion:"failure",created:"2026-11-14T01:59:00Z"}),path:".github/workflows/"+source.workflow,run_attempt:1};
+ const jobs=[["separately-authorized-stored-source-children","Dispatch stored SOURCE exact children","success"],
+ ["separately-authorized-current-private-post-children","Dispatch current private POST exact children","success"],
+ ["separately-authorized-native-post-producer","Review and publish bounded current POST windows with independent readback","failure"]].map(([name,step,conclusion],i)=>({id:901+i,run_id:900,head_sha:ID,run_attempt:1,name,status:"completed",conclusion,steps:[{name:step,status:"completed",conclusion}]}));
+ const obs=await observeP6IndependentDispatches(report,arm,async url=>{
+  if(url.includes("runs/900/jobs"))return {jobs};
+  if(url.includes(source.workflow))return {total_count:999,workflow_runs:[row]};
+  if(url.includes("phase5-cd-github-bounded-pre-tick"))throw Error("unavailable lane");
+  return {workflow_runs:[]};
+ });
+ assert.equal(obs.SOURCE.runId,900);
+ assert.equal(obs.PRE.state,"INDEPENDENT_WORKER_READ_UNAVAILABLE");
+ const x=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:obs},arm,async()=>{throw Error("unexpected read")});
+ assert.deepEqual(x.incidents.filter(i=>i.lane==="SOURCE").map(i=>i.job),["separately-authorized-native-post-producer"]);
+ assert(x.incidents.some(i=>i.lane==="PRE"));
+ assert.equal(report.controllerStates.find(x=>x.lane==="SOURCE").state,"SCHEDULE_OBSERVATION_STALE");
+ assert.equal(x.flightCollectionVerified,false);
 });

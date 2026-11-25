@@ -158,6 +158,35 @@ export function createP5V0079ScopedDbPorts(ctx:P5V0079SourceDbContext):P5SourceP
     refuse("WRONG_PHYSICAL_QUERY_INTENT");
    if(committed.size!==0)refuse("SAME_WORKER_DOUBLE_RESERVATION");
    await readQuery(ctx);
+   // A paid reservation is irreversible. Check the actual serial/default and
+   // restricted persistence privileges before spending; no owner query,
+   // sequence advance, mutation, or provider request is involved.
+   const ready=await pool.query(`SELECT
+     has_table_privilege(current_user,'clean.fids_query_response','INSERT') raw_insert,
+     has_table_privilege(current_user,'clean.flight_population','INSERT') population_insert,
+     has_table_privilege(current_user,'clean.phase5_fids_original_binding_v39','INSERT') binding_insert,
+     CASE WHEN a.attidentity<>'' OR d.adbin IS NULL THEN true
+       WHEN pg_get_expr(d.adbin,d.adrelid) LIKE 'nextval(%'
+       THEN COALESCE(has_sequence_privilege(current_user,pg_get_serial_sequence('clean.flight_population','id'),'USAGE'),false)
+         OR COALESCE(has_sequence_privilege(current_user,pg_get_serial_sequence('clean.flight_population','id'),'UPDATE'),false)
+       ELSE true END AS population_default_usable,
+     EXISTS(SELECT 1 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class x ON x.oid=i.indexrelid
+       WHERE i.indrelid='clean.flight_population'::regclass AND x.relname='flight_population_observation_key'
+         AND i.indisunique AND i.indisvalid AND i.indpred IS NULL) AS observation_key_ready,
+     (has_table_privilege(current_user,'clean.population_research_membership','INSERT') AND
+      has_column_privilege(current_user,'clean.population_research_membership','population_member_id','SELECT')
+      OR EXISTS (SELECT 1 FROM pg_catalog.pg_trigger tr JOIN pg_catalog.pg_proc fn ON fn.oid=tr.tgfoid
+        WHERE tr.tgrelid='clean.flight_population'::regclass AND tr.tgname='trg_flight_population_research_membership'
+        AND tr.tgenabled IN ('O','A') AND fn.oid='clean.ensure_population_research_membership()'::regprocedure
+        AND fn.prosecdef AND 'search_path=pg_catalog, pg_temp'=ANY(fn.proconfig)
+        AND NOT has_function_privilege(current_user,fn.oid,'EXECUTE'))) AS membership_trigger_ready
+     FROM pg_catalog.pg_attribute a LEFT JOIN pg_catalog.pg_attrdef d
+       ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+     WHERE a.attrelid='clean.flight_population'::regclass AND a.attname='id' AND NOT a.attisdropped`);
+   const writable=ready.rows[0];
+   if(ready.rowCount!==1||writable?.raw_insert!==true||writable.population_insert!==true||
+      writable.binding_insert!==true||writable.population_default_usable!==true||writable.observation_key_ready!==true||writable.membership_trigger_ready!==true)
+    refuse("SOURCE_PERSISTENCE_PRIVILEGES_NOT_READY_NO_RESERVATION");
    const expected=hash([
      ctx.manifestSha256,ctx.exactQueryDigest,ctx.githubRunId,"1"
    ].join("|"));

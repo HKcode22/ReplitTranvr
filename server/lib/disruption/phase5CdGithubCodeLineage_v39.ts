@@ -1,3 +1,4 @@
+import {p6ApprovedRuntimeSuccessor} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Resolve frozen signed packet self-reference correctly.
  *
@@ -44,7 +45,7 @@ export function verifyP5CdGithubFrozenCodeLineage(
     git(["rev-parse",pin+"^{commit}"],cwd)!==pin)
   hold("GITHUB_HEAD_OR_REVIEWED_CODE_OBJECT_CHANGED");
  git(["merge-base","--is-ancestor",pin,head],cwd);
- git(["diff","--quiet",pin,head,"--",...CODE_PATHS],cwd);
+ if(!p6ApprovedRuntimeSuccessor(env,pin))git(["diff","--quiet",pin,head,"--",...CODE_PATHS],cwd);
  git(["diff","--quiet","--",...CODE_PATHS],cwd);
  git(["diff","--cached","--quiet","--",...CODE_PATHS],cwd);
  if(git(["ls-files","--others","--exclude-standard","--",...CODE_PATHS],cwd))

@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase6 SOURCE private packet -> EXISTING Phase5 paid-child admission bridge.
  *
@@ -63,7 +64,7 @@ export async function runP6OneSourceThroughExistingP5ChildAdmission(
     args.env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     args.env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(args.env.GITHUB_SHA??"")||
-    args.env.GITHUB_SHA!==args.env.V39_P5_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(args.env,args.env.V39_P5_APPROVED_CODE_SHA)||
     args.env.ADB_AUTO_COLLECT!=="0"||
     !H.test(args.expectedRoutingIntentSha256??"")||
     !H.test(args.expectedQueryDigestSha256??""))

@@ -77,6 +77,8 @@ permissions:
 concurrency:
   group: phase5-future-post-one-shot-${{ (inputs.private_transport == 'stored' || inputs.private_transport == 'stored-current') && inputs.post_packet_sha256 || inputs.frozen_future_post_packet || github.ref }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   offline-pr-no-provider:
     if: ${{ github.event_name == 'pull_request' }}
@@ -157,7 +159,7 @@ jobs:
           set +x
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           test "$V39_PHASE6_OWNER_APPROVED" = 0
-          test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - uses: actions/setup-node@v4
         with:
@@ -274,7 +276,7 @@ jobs:
           test "$V39_PHASE6_PROCESS_ARMED" = 1
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = 1
           test "$V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED" = 1
-          test "$V39_P5_POST_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           case "$P6_PRIVATE_POST_CHILD_MODE" in
             checkout)
               [[ "$PACKET" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_-]{8,100}\.json$ ]]

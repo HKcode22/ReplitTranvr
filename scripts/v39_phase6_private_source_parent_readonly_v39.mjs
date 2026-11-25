@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * REAL existing Phase5 10-minute SOURCE schedule: optional READ-ONLY
  * authenticated private run-day SOURCE due-review, never a GH dispatcher.
@@ -68,7 +69,7 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME)||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA)||
     env.P6_PRIVATE_SOURCE_PARENT_RO_OWNER_APPROVED!=="1"||
     (env.GITHUB_EVENT_NAME==="schedule"?
      env.P6_PRIVATE_SOURCE_PARENT_RO_ENABLED!=="true":
@@ -146,7 +147,7 @@ export function admitP6RealPrivateSourceParentReadOnly(env){
      !Number.isSafeInteger(b.pins.expectedRunDayIndex)||
      b.pins.expectedRunDayIndex<1||b.pins.expectedRunDayIndex>31||
      usedDays.has(b.pins.expectedRunDayIndex)||
-     b.pins.expectedReviewedCodeSha!==env.GITHUB_SHA||
+     !p6ReviewedPolicyMatchesRuntime(env,b.pins.expectedReviewedCodeSha)||
      b.pins.expectedManifestSha256!==env.V39_P5_MANIFEST_SHA256||
      b.pins.expectedReleaseSha256!==env.V39_P5_RELEASE_SHA256||
      b.pins.expectedRightsSha256!==env.V39_P5_RIGHTS_SHA256||
@@ -329,7 +330,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
    expectedManifestSha256:ctx.scope.expectedManifestSha256,
-   expectedMainSha:ctx.mainSha,storedCapacityProfile
+   expectedMainSha:ctx.trust?.reviewedCodeSha??ctx.mainSha,storedCapacityProfile
   });
   if(planned.redactedSummary.providerCalls!==0||
      planned.redactedSummary.databaseWrites!==0||

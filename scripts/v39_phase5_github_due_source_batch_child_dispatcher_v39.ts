@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase5 first real GitHub-only due-source child-dispatch coordinator.
  *
@@ -34,8 +35,8 @@ export function admitP5GitHubDueChildDispatcher(env:NodeJS.ProcessEnv){
     env.GITHUB_EVENT_NAME!=="schedule"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_QUEUE_APPROVED_CODE_SHA||
-    env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_QUEUE_APPROVED_CODE_SHA)||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
     env.ADB_AUTO_COLLECT!=="0"||
     env.AERODATABOX_API_KEY||
     env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||

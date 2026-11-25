@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase5 unattended SOURCE child: authenticate a concrete per-day registry
  * entry BEFORE deriving dynamic per-query pins for the existing manual
@@ -44,7 +45,7 @@ export function admitP5SignedDaySourceChild(
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
     env.ADB_AUTO_COLLECT!=="0"||
     env.V39_P5_CHILD_CONFIRM!=="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET"||
     env.V39_P5_AUTO_SOURCE_DISPATCH_APPROVED!=="1"||

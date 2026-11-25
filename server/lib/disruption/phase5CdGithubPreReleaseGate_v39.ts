@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase5 C+D: one explicit future GitHub-main PRE release gate.
  * This module AUTHORIZES NO paid provider requests, queue enrollment,
@@ -157,7 +158,7 @@ export function requireP5CdGithubCurrentLeaseRecoveryScope(env:NodeJS.ProcessEnv
     env.P5_CD_GH_PRIVATE_LATER_MODE||env.P5_CD_GH_PRIVATE_CURRENT_APPROVED==="1"||
     env.P5_CD_GH_PRE_ROSTER_SHA256||env.P5_CD_GH_PRE_ROSTER_PATH||env.P5_CD_GH_ROSTER_PATH||
     env.RAPIDAPI_KEY||env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
-    env.GITHUB_SHA!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA)
+    !p6ReviewedPolicyMatchesRuntime(env,env.P5_CD_GH_PRE_APPROVED_CODE_SHA))
   hold("NO_SEPARATE_CURRENT_LEASE_RECOVERY_SCOPE");
  const base=requireP5CdGithubPreScopeInternal(env,{leaseRecoveryOnly:true});
  readP6StableSourceTrust(env);

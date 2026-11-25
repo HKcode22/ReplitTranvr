@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Default OFF Phase5 future POST GH dispatcher.
  * True SOURCE-role prior PRE readback (>=1 of 3), signed V0083 frame,
@@ -39,7 +40,7 @@ export function admitP5FuturePostGithubParent(env:NodeJS.ProcessEnv){
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
     !GH.test(env.GITHUB_RUN_ID??"")||
-    env.V39_P5_POST_APPROVED_CODE_SHA!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
     env.P5_POST_AUTO_DISPATCH_ENABLED!=="true"||
     env.ADB_AUTO_COLLECT!=="0"||
     env.AERODATABOX_API_KEY||
@@ -74,7 +75,7 @@ export function admitP5FuturePostGithubParent(env:NodeJS.ProcessEnv){
  const pins:P5FuturePostSignedPins={
   frozenPacketPath:env.P5_POST_FROZEN_PACKET_FILE!,
   expectedPacketSha256:env.V39_P5_POST_SIGNED_PACKET_SHA256!,
-  approvedCodeSha:env.GITHUB_SHA!,
+  approvedCodeSha:env.V39_P5_POST_APPROVED_CODE_SHA!,
   currentGithubRunId:env.GITHUB_RUN_ID!,
   manifestSha256:env.V39_P5_MANIFEST_SHA256!,
   sourceRightsSha256:env.V39_P5_RIGHTS_SHA256!,

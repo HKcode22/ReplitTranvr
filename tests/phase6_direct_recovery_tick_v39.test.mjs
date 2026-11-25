@@ -5,7 +5,7 @@ import {mkdtempSync,writeFileSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {execFileSync} from "node:child_process";
-import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
+import {directAdmissionFailures,runDirectTick,directDisposition,readDirectReceipt,downloadDirectArchive,retryableDirectRouteHistory,retryableDirectObservationError,DIRECT_WF,DIRECT_TITLE,DIRECT_CONFIRM} from "../scripts/v39_phase6_direct_recovery_tick_v39.mjs";
 import {readP6DirectReadonlySnapshot} from "../scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs";
 import {P6_ROLLING_ROUTES,assessP6RollingRoute} from "../server/lib/disruption/phase6RollingGithubController_v39.mjs";
 const sha="a".repeat(40),hash="b".repeat(64),start=Date.parse("2030-01-02T00:00:00.000Z"),MIN=60000,H=60*MIN;
@@ -280,3 +280,123 @@ test("read-only snapshot retry is bounded and preserves persistent or unrelated 
  assert.deepEqual(directAdmissionFailures({...env,P5_CD_GH_PRE_STOP:"1",V39_PHASE6_PROCESS_ARMED:"0",DATABASE_URL:"NEVER_PRINT_THIS_VALUE"},start),["V39_PHASE6_PROCESS_ARMED","P5_CD_GH_PRE_STOP","FORBIDDEN_DATABASE_URL"]);
  assert.deepEqual(directAdmissionFailures({...env,P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC:"invalid"},start),["P6_ROLLING_DIRECT_RECOVERY_SINCE_UTC"]);
  });
+
+
+test("predecessor archive transport retries only GET then returns exact unchanged bytes",async()=>{
+ const payload=Buffer.from("exact archive"),delays=[],calls=[];
+ const result=await downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async ms=>{delays.push(ms);},
+  exec:(bin,args,opt)=>{calls.push({bin,args,timeout:opt.timeout});if(calls.length<3)throw Error("transient GET failure");return payload;}});
+ assert.equal(result,payload);
+ assert.deepEqual(delays,[1000,2000]);
+ assert.equal(calls.length,3);
+ assert.ok(calls.every(c=>c.bin==="gh"&&c.args.includes("GET")&&c.args.at(-1).endsWith("/777/zip")&&c.timeout===15000));
+});
+test("exhausted archive GET still fails closed, empty body never becomes a receipt",async()=>{
+ let attempts=0;
+ await assert.rejects(downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async()=>{},exec:()=>{attempts++;throw Error("unavailable");}}),/HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_DOWNLOAD/);
+ assert.equal(attempts,3);
+ attempts=0;
+ await assert.rejects(downloadDirectArchive({artifactId:777,token:"synthetic",sleep:async()=>{},exec:()=>{attempts++;return Buffer.alloc(0);}}),/HOLD_P6_DIRECT_RECOVERY_PREDECESSOR_ARCHIVE_EMPTY/);
+ assert.equal(attempts,1);
+});
+
+
+test("only the exact route observation race is eligible for fresh GET reconciliation",()=>{
+ const plan=(...states)=>({status:"HOLD_ROLLING_WAVE_NO_DISPATCH",assessments:states.map(state=>({state}))});
+ assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED","ACTIVE_NO_OVERLAP")),true);
+ assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED","HOLD_HISTORY_CHANGED")),true);
+ for(const state of ["HOLD_UNSUCCESSFUL_OR_DRIFTED_ATTEMPT","HOLD_GATED_OR_FAILED_REQUIRED_JOB","HOLD_INERT_REQUIRED_STEP","HOLD_MISSING_JOB_EVIDENCE","HOLD_MISSING_PARENT_OUTCOME"]){
+  assert.equal(retryableDirectRouteHistory(plan(state)),false);
+  assert.equal(retryableDirectRouteHistory(plan("HOLD_HISTORY_CHANGED",state)),false);
+ }
+ assert.equal(retryableDirectRouteHistory(plan("DUE_REVIEWED_ROUTE")),false);
+});
+
+test("post-ACK repository active sweep mismatch falls back to all route-specific reads without POST replay",async()=>{
+ const f=fixture(),original=f.options.fetcher;
+ let mismatches=0;const scoped=new Set();
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")&&mismatches<3){
+    mismatches++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+   }
+   if(u.pathname.includes("/actions/workflows/"))scoped.add(u.pathname+":"+u.searchParams.get("status"));
+  }
+  return original(url,opt);
+ };
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(mismatches,3);
+ assert.equal(scoped.size,5*P6_ROLLING_ROUTES.length);
+ assert.equal(out.status,"DIRECT_WAVE_TERMINAL_NOT_COLLECTION_PROOF");
+ assert.equal(out.verifiedTerminal,f.posts());
+ assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());
+});
+test("transient post-ACK count mismatch across both scopes re-observes complete history",async()=>{
+ const f=fixture(),original=f.options.fetcher;let repoMismatch=0,routeMismatch=0;
+ const path=P6_ROLLING_ROUTES[0].workflow;
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")&&repoMismatch<3){repoMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+   if(u.pathname.endsWith("/"+path+"/runs")&&routeMismatch<3){routeMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+  }
+  return original(url,opt);
+ };
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(repoMismatch,3);assert.equal(routeMismatch,3);
+ assert(f.events.some(x=>x.status==="DIRECT_GET_OBSERVATION_RETRY"&&x.reason.endsWith("ACTIVE_SWEEP_COUNT")));
+ assert.equal(out.verifiedTerminal,f.posts());assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());
+});
+test("persistent post-ACK count mismatch across both scopes still quarantines without replay",async()=>{
+ const f=fixture(),original=f.options.fetcher;let repoMismatch=0,routeMismatch=0;
+ const path=P6_ROLLING_ROUTES[0].workflow;
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(f.posts()>0&&opt.method==="GET"&&u.searchParams.has("status")&&!u.searchParams.has("created")){
+   if(u.pathname.endsWith("/actions/runs")){repoMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+   if(u.pathname.endsWith("/"+path+"/runs")){routeMismatch++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};}
+  }
+  return original(url,opt);
+ };
+ await assert.rejects(runDirectTick(f.env,f.options),/ACTIVE_SWEEP_COUNT_NO_REPLAY/);
+ assert.equal(repoMismatch,9);assert.equal(routeMismatch,9);
+ assert.equal(new Set(f.runs.map(r=>r.path)).size,f.posts());assert(f.posts()>0);
+});
+test("observation retry never accepts limit, shape, missing ACK or unknown POST failures",()=>{
+ assert(retryableDirectObservationError(new Error("HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT")));
+ for(const s of ["HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_LIMIT",
+  "HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_SHAPE",
+  "HOLD_P6_ROLLING_SESSION_ACK_LOST","HOLD_P6_DIRECT_RECOVERY_API_BOUND","HOLD_P6_DIRECT_RECOVERY_UNKNOWN_POST"]){
+  assert.equal(retryableDirectObservationError(new Error(s)),false);
+ }
+});
+
+test("direct root retries exact count mismatch before POST and never accepts partial history",async()=>{
+ for(const persistent of [false,true]){
+  const f=fixture(),original=f.options.fetcher;let n=0;
+  f.options.fetcher=async(url,opt)=>{
+   const u=new URL(url);
+   if(opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&!u.searchParams.has("created")&&u.searchParams.get("status")==="in_progress"&&f.posts()===0&&(persistent||n===0)){
+    n++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+   }
+   return original(url,opt);
+  };
+  const out=await runDirectTick(f.env,f.options);
+  if(persistent){assert.equal(n,3);assert.equal(f.posts(),0);assert.equal(out.status,"DIRECT_PREFLIGHT_HOLD_NO_POST");}
+  else{assert.equal(n,1);assert(f.posts()>0);assert.equal(out.verifiedTerminal,f.posts());}
+  assert(f.events.some(e=>e.status==="DIRECT_ROOT_HISTORY_COUNT_GET_RETRY"));
+ }
+});
+test("malformed direct root history is not a count retry and cannot dispatch",async()=>{
+ const f=fixture(),original=f.options.fetcher;let n=0;
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&!u.searchParams.has("created")&&u.searchParams.get("status")==="in_progress"){
+   n++;return {ok:true,status:200,json:async()=>({total_count:"1",workflow_runs:[]})};
+  }
+  return original(url,opt);
+ };
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(n,1);assert.equal(f.posts(),0);assert.equal(out.status,"DIRECT_PREFLIGHT_HOLD_NO_POST");
+});

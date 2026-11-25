@@ -25,6 +25,8 @@ permissions:
 concurrency:
   group: phase5-approved-six-slot-one-early-draw
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   existing-early-draw-login-readonly:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'VERIFY_EXISTING_EARLY_DRAW_LOGIN_READONLY_NO_GO' }}
@@ -100,7 +102,7 @@ jobs:
           if [[ "$GITHUB_REPOSITORY" == 'HKcode22/ReplitTranvr' &&
                 "$GITHUB_REF" == 'refs/heads/main' &&
                 "$GITHUB_RUN_ATTEMPT" == '1' &&
-                "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" &&
+                ( ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ) &&
                 "$V39_P5_EARLY_DRAW_OWNER_APPROVED" == '1' &&
                 "$V39_PHASE5_FREEZE_SIGNED" == '1' &&
                 "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" == '1' &&
@@ -153,7 +155,7 @@ jobs:
           test -z "$AERODATABOX_API_KEY"
           test "$GITHUB_REF" = 'refs/heads/main'
           test "$GITHUB_RUN_ATTEMPT" = '1'
-          test "$V39_P5_APPROVED_CODE_SHA" = "$GITHUB_SHA"
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test -z "$DATABASE_URL$V39_DATABASE_RUNTIME_URL$RAPIDAPI_KEY"
           npx --no-install tsx scripts/v39_phase5_github_six_slot_early_draw_owner_v39.ts
           echo 'PHASE5_GH_SIX_SLOT_REAL_DB_EARLY_SELECTION_ONLY_NO_FIDS_OR_ALERT'

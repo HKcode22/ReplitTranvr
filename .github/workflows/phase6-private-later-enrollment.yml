@@ -30,6 +30,8 @@ permissions:
 concurrency:
   group: phase6-private-later-enroll-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   offline:
     if: ${{ github.event_name == 'pull_request' }}

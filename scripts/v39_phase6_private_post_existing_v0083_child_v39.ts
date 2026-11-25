@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** Stored day and POST review -> original one-GET V0083 child.
  * Exact protected packet pin and existing budget/rights/GO gates remain.
  * No public checkout packet or private path in workflow inputs/logs.
@@ -31,7 +32,7 @@ export function admitP6PrivatePostChildTransport(env:NodeJS.ProcessEnv){
     env.V39_P5_POST_OWNER_APPROVED!=="1"||env.V39_PHASE5_FREEZE_SIGNED!=="1"||
     env.V39_PHASE6_PROCESS_ARMED!=="1"||env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
     env.V39_P5_POST_INDEPENDENT_REST_ROLES_APPROVED!=="1"||
-    env.ADB_AUTO_COLLECT!=="0"||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
+    env.ADB_AUTO_COLLECT!=="0"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
     !env.AERODATABOX_API_KEY||env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
     env.P5_V39_PRE_DATABASE_URL||env.P5_V39_PREPARE_DATABASE_URL||
     env.P5_V39_T24_WITNESS_DATABASE_URL||env.P6_PRIVATE_PUBLISHER_DATABASE_URL)

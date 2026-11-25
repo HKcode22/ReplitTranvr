@@ -331,13 +331,28 @@ export async function readP6RollingGithubSnapshot({sha,epoch,token,now=()=>Date.
  // One bounded repo-wide active sweep, rather than five status queries
  // for each individual lane. All statuses must be accounted for.
  const activeById=new Map();
- for(const status of ACTIVE){
-  const list=await get("/actions/runs?branch=main&status="+status+"&per_page=100","workflow_runs");
-  for(const row of list){
-   if(!P6_ROLLING_ROUTES.some(r=>row.path===".github/workflows/"+r.workflow))continue;
-   const checked=exactRun(row);
-   if(checked.status!==status||activeById.has(checked.id))hold("GITHUB_ACTIVE_SWEEP_CHANGED");
-   activeById.set(checked.id,row);
+ function addActive(row,status,route){
+  if(route&&row.path!==".github/workflows/"+route.workflow)hold("GITHUB_SESSION_HISTORY_DRIFT");
+  if(!P6_ROLLING_ROUTES.some(r=>row.path===".github/workflows/"+r.workflow))return;
+  const checked=exactRun(row);
+  if(checked.status!==status||activeById.has(checked.id))hold("GITHUB_ACTIVE_SWEEP_CHANGED");
+  activeById.set(checked.id,row);
+ }
+ try{
+  for(const status of ACTIVE){
+   const list=await get("/actions/runs?branch=main&status="+status+"&per_page=100","workflow_runs");
+   for(const row of list)addActive(row,status);
+  }
+ }catch(e){
+  // Repo-wide active results include unrelated workflows. If their count
+  // cannot be reconciled, discard the entire partial sweep and obtain
+  // independently complete active histories for EVERY approved route.
+  // Never infer emptiness, accept partial pages, or retry any POST.
+  if(!directRecovery||e?.message!=="HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT")throw e;
+  activeById.clear();
+  for(const status of ACTIVE){
+   const lists=await Promise.all(P6_ROLLING_ROUTES.map(route=>get("/actions/workflows/"+route.workflow+"/runs?branch=main&status="+status+"&per_page=100","workflow_runs")));
+   for(let i=0;i<lists.length;i++)for(const row of lists[i])addActive(row,status,P6_ROLLING_ROUTES[i]);
   }
  }
  const activeFor=route=>[...activeById.values()].filter(x=>x.path===".github/workflows/"+route.workflow);

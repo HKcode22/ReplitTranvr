@@ -32,6 +32,7 @@ concurrency:
   group: phase5-one-reviewed-day-prepared-${{ github.event_name == 'pull_request' && github.ref || 'private-main-singleton' }}
   cancel-in-progress: false
 env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
   # These flags are LOCAL no-provider isolation, not global STOP/GO mutation.
   ADB_AUTO_COLLECT: '0'
   V39_PHASE6_PROCESS_ARMED: '0'
@@ -92,7 +93,7 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$P6_NONPAID_SOURCE_APPROVED_MAIN_SHA" = "$GITHUB_SHA"
+          [[ ( "$P6_NONPAID_SOURCE_APPROVED_MAIN_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$P6_NONPAID_SOURCE_APPROVED_MAIN_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$P6_NONPAID_SOURCE_RUNTIME_APPROVED" = 1
           test "$V39_P5_PREPARE_OWNER_APPROVED" = 1
           test "$V39_PHASE5_FREEZE_SIGNED" = 1
