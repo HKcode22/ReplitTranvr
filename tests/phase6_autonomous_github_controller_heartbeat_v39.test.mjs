@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {
  P6_AUTO_CONTROL_HEARTBEAT_V39,
  P6_EXISTING_CONTROLLER_LANES,
@@ -435,4 +436,19 @@ test("new independent wake: a red mixed SOURCE/POST parent reports only the actu
  assert(x.incidents.some(i=>i.lane==="PRE"));
  assert.equal(report.controllerStates.find(x=>x.lane==="SOURCE").state,"SCHEDULE_OBSERVATION_STALE");
  assert.equal(x.flightCollectionVerified,false);
+});
+
+test("explicit actor-only preflight is disarmed even during paid production and does not reach paid step",()=>{
+ const workflow=readFileSync(new URL("../.github/workflows/phase5-one-signed-day-source-child-dispatch.yml",import.meta.url),"utf8");
+ const start=workflow.indexOf("      - name: Admission for real actor preflight ONLY (no paid capability)");
+ const end=workflow.indexOf("      - uses: actions/setup-node@v4",start);
+ assert(start>=0&&end>start);
+ const section=workflow.slice(start,end);
+ assert(section.includes("inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'"));
+ assert(section.includes("V39_PHASE6_PROCESS_ARMED: '0'"));
+ assert(section.includes("AERODATABOX_API_KEY: ''"));
+ assert(section.includes("RAPIDAPI_KEY: ''"));
+ const paid=workflow.slice(workflow.indexOf("      - name: Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child"));
+ assert(paid.startsWith("      - name: Authenticate real private PG16"));
+ assert(paid.split("\n").slice(0,3).join("\n").includes("inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'"));
 });
