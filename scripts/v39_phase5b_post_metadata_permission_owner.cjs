@@ -18,8 +18,10 @@ async function matrix(c){
 }
 async function check(c){
  await c.query("SET LOCAL ROLE "+role);
- try{for(let i=0;i<queries.length;i++)await c.query("EXPLAIN (COSTS OFF) "+queries[i],args[i]);}
- finally{await c.query("RESET ROLE");}
+ // If EXPLAIN fails the outer transaction rolls back; do not RESET in an
+ // aborted transaction and hide the original SQLSTATE.
+ for(let i=0;i<queries.length;i++)await c.query("EXPLAIN (COSTS OFF) "+queries[i],args[i]);
+ await c.query("RESET ROLE");
 }
 async function main(){
  if(!mode||!process.env.DATABASE_URL)throw Error("EXACT_OWNER_MODE_REQUIRED");
