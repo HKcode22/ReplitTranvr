@@ -22,7 +22,7 @@ import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
  from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 
-import {sourceDiagnosticLine,sourceHttpDiagnosticLabel}
+import {sourceDiagnosticLine,sourceHttpDiagnosticLabel,sourceDbDiagnosticLabel}
  from "./v39_phase5b_source_diagnostics_v39.mjs";
 const diagnostic=(label:string)=>console.log(sourceDiagnosticLine(label));
 function refuse():never{throw Error("REFUSED_P5_GITHUB_SOURCE_NOT_ADMITTED");}
@@ -134,15 +134,19 @@ async function main():Promise<void>{
    ...basePorts,
    reservePhysicalBeforeGet:async arg=>{
     diagnostic("RESERVATION_STARTED");
-    const result=await basePorts.reservePhysicalBeforeGet(arg);
-    diagnostic("RESERVATION_CONFIRMED");
-    return result;
+    try{
+     const result=await basePorts.reservePhysicalBeforeGet(arg);
+     diagnostic("RESERVATION_CONFIRMED");
+     return result;
+    }catch(e){diagnostic(sourceDbDiagnosticLabel(e));throw e;}
    },
    commitOriginalAndPopulation:async arg=>{
     diagnostic("ORIGINAL_PERSIST_STARTED");
-    const result=await basePorts.commitOriginalAndPopulation(arg);
-    diagnostic("ORIGINAL_PERSIST_CONFIRMED");
-    return result;
+    try{
+     const result=await basePorts.commitOriginalAndPopulation(arg);
+     diagnostic("ORIGINAL_PERSIST_CONFIRMED");
+     return result;
+    }catch(e){diagnostic(sourceDbDiagnosticLabel(e));throw e;}
    }
   } satisfies typeof basePorts;
   const outcome=await runP5ScopedFidsSource(plan,ports);
