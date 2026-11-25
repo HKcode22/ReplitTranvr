@@ -375,6 +375,14 @@ export async function observeP6IndependentDispatches(report,env,readGithub){
 }
 /** Alert only on current evidence, not old schedule gaps or deliberate STOP.
  * A successful job is not proof of a due draw or any flight collection. */
+// Accept only exact numeric redactions actually observed in GitHub job metadata.
+const P6_REDACTED_STEP_ALIASES=Object.freeze({
+ "One signed bounded lease tick — original Stage14 and no paid provider":"One signed bounded lease tick — original Stage***4 and no paid provider",
+ "Bounded existing V0087 reaper, UNKNOWN quarantines never replay":"Bounded existing V***87 reaper, UNKNOWN quarantines never replay",
+ "Current signed T24 packets through original Stage14 and independent V0081":"Current signed T24 packets through original Stage***4 and independent V***8***"
+});
+const p6ExpectedStepName=(actual,expected)=>actual===expected||
+ (Object.hasOwn(P6_REDACTED_STEP_ALIASES,expected)&&actual===P6_REDACTED_STEP_ALIASES[expected]);
 export async function reviewP6ActiveStandaloneNotifications(report,env,readGithub){
  const expected=env.P6_HEARTBEAT_COLLECTION_EXPECTED;
  if(![undefined,"","false","true"].includes(expected))fail("INVALID_NOTIFICATION_EXPECTATION");
@@ -389,7 +397,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
      const job=independent.jobs.find(x=>x.name===name);
      const add=reason=>incidents.push({lane,reason,runId:independent.runId,job:name});
      if(!job||job.status!=="completed"||job.conclusion!=="success"||
-       step!==null&&(!Array.isArray(job.steps)||job.steps.filter(s=>s.name===step&&s.status==="completed"&&s.conclusion==="success").length!==1)){
+       step!==null&&(!Array.isArray(job.steps)||job.steps.filter(s=>p6ExpectedStepName(s.name,step)&&s.status==="completed"&&s.conclusion==="success").length!==1)){
       add("INDEPENDENT_WORKER_FAILED_SKIPPED_OR_UNVERIFIED");continue;
      }
      if(lane==="SOURCE"&&job.steps?.some(s=>["Parent outcome SAFE_PREFLIGHT_HOLD","Parent outcome MISSING_EVIDENCE"].includes(s.name)&&s.status==="completed"&&s.conclusion==="success"))
@@ -414,7 +422,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    for(const [name,step] of requirements){
     const jobs=body.jobs.filter(j=>j.name===name);
     if(jobs.length!==1||jobs[0].status!=="completed"||jobs[0].conclusion!=="success"||
-       step!==null&&(!Array.isArray(jobs[0].steps)||jobs[0].steps.filter(s=>s.name===step&&s.status==="completed"&&s.conclusion==="success").length!==1)){
+       step!==null&&(!Array.isArray(jobs[0].steps)||jobs[0].steps.filter(s=>p6ExpectedStepName(s.name,step)&&s.status==="completed"&&s.conclusion==="success").length!==1)){
      add("EXPECTED_WORKER_SKIPPED_FAILED_OR_UNVERIFIED",name);continue;
     }
     if(lane==="SOURCE"&&Array.isArray(jobs[0].steps)&&jobs[0].steps.some(s=>
