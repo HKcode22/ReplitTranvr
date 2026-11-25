@@ -371,3 +371,32 @@ test("observation retry never accepts limit, shape, missing ACK or unknown POST 
   assert.equal(retryableDirectObservationError(new Error(s)),false);
  }
 });
+
+test("direct root retries exact count mismatch before POST and never accepts partial history",async()=>{
+ for(const persistent of [false,true]){
+  const f=fixture(),original=f.options.fetcher;let n=0;
+  f.options.fetcher=async(url,opt)=>{
+   const u=new URL(url);
+   if(opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&!u.searchParams.has("created")&&u.searchParams.get("status")==="in_progress"&&f.posts()===0&&(persistent||n===0)){
+    n++;return {ok:true,status:200,json:async()=>({total_count:1,workflow_runs:[]})};
+   }
+   return original(url,opt);
+  };
+  const out=await runDirectTick(f.env,f.options);
+  if(persistent){assert.equal(n,3);assert.equal(f.posts(),0);assert.equal(out.status,"DIRECT_PREFLIGHT_HOLD_NO_POST");}
+  else{assert.equal(n,1);assert(f.posts()>0);assert.equal(out.verifiedTerminal,f.posts());}
+  assert(f.events.some(e=>e.status==="DIRECT_ROOT_HISTORY_COUNT_GET_RETRY"));
+ }
+});
+test("malformed direct root history is not a count retry and cannot dispatch",async()=>{
+ const f=fixture(),original=f.options.fetcher;let n=0;
+ f.options.fetcher=async(url,opt)=>{
+  const u=new URL(url);
+  if(opt.method==="GET"&&u.pathname.endsWith("/actions/runs")&&!u.searchParams.has("created")&&u.searchParams.get("status")==="in_progress"){
+   n++;return {ok:true,status:200,json:async()=>({total_count:"1",workflow_runs:[]})};
+  }
+  return original(url,opt);
+ };
+ const out=await runDirectTick(f.env,f.options);
+ assert.equal(n,1);assert.equal(f.posts(),0);assert.equal(out.status,"DIRECT_PREFLIGHT_HOLD_NO_POST");
+});
