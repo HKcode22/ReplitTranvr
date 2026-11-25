@@ -338,6 +338,29 @@ test("armed current-main monitoring distinguishes executed step, skipped draw, m
  assert.equal(good.incidentCount,0);
  assert.equal(good.realDueDrawOrPreparationVerified,false);
  assert.equal(good.flightCollectionVerified,false);
+ const redactions={PRE:"One signed bounded lease tick — original Stage***4 and no paid provider",
+  PRE_RECOVERY:"Bounded existing V***87 reaper, UNKNOWN quarantines never replay",
+  T24:"Current signed T24 packets through original Stage***4 and independent V***8***"};
+ const mask=(lane,jobs)=>{if(redactions[lane])jobs[0].steps[0].name=redactions[lane];};
+ const masked=await reviewP6ActiveStandaloneNotifications(report,arm,readers(mask));
+ assert.equal(masked.incidentCount,0);
+ assert.equal(masked.flightCollectionVerified,false);
+ const wrong=await reviewP6ActiveStandaloneNotifications(report,arm,readers((lane,jobs)=>{
+  mask(lane,jobs);
+  if(lane==="PRE")jobs[0].steps[0].name="***";
+  if(lane==="PRE_RECOVERY")jobs[0].steps[0].conclusion="failure";
+  if(lane==="T24")jobs[0].steps.push({...jobs[0].steps[0]});
+ }));
+ assert.equal(wrong.incidentCount,3);
+ const independent=Object.fromEntries(Object.entries(jobsByLane).map(([lane,required])=>{
+  const jobs=required.map(([name,step])=>({name,status:"completed",conclusion:"success",steps:step?[{name:step,status:"completed",conclusion:"success"}]:[]}));
+  mask(lane,jobs);
+  return [lane,{state:"INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF",runId:1000,jobs}];
+ }));
+ const checked=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:independent},arm,async()=>{throw Error("unexpected read")});
+ assert.equal(checked.incidentCount,0);
+ assert.equal(checked.flightCollectionVerified,false);
+
  const bad=await reviewP6ActiveStandaloneNotifications(report,arm,readers((lane,jobs)=>{
   if(lane==="EARLY_DRAW")jobs[0].steps[0].conclusion="skipped";
   if(lane==="SOURCE")jobs[0].steps.push({name:"Parent outcome MISSING_EVIDENCE",status:"completed",conclusion:"success"});
