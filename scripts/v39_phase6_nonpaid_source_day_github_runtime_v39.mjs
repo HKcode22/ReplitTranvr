@@ -297,7 +297,7 @@ export async function runP6NonpaidSourceDayGithub(env){
    lateScope=await registerOrReadDay1(ctx,plan);
    selection={selected:plan,eligibleDayCount:1,missingDraw:0,tooLate:0,alreadyIndexed:0,missedUnpublishedDays:[],atRiskMissingDrawDays:[],pastIncompleteGenesisDays:[]};
   }else selection=selectP6NonpaidSourceDay(ctx,plans,c.calendar,i.rows,i.now);
-  const base={schema:"v39.phase6.github-nonpaid-source-day-runtime.v1",mainSha:ctx.mainSha,
+  const base={schema:"v39.phase6.github-nonpaid-source-day-runtime.v1",mainSha:ctx.mainSha,reviewedPolicySha:ctx.trust.reviewedCodeSha,
    eligibleDayCount:selection.eligibleDayCount,missingDrawDayCount:selection.missingDraw,
    tooLateDayCount:selection.tooLate,alreadyIndexedMetadataDayCount:selection.alreadyIndexed,
    preparationDeadlineEvidence:{schema:"v39.phase6.preparation-deadline-metadata.v1",
