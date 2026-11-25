@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Stable approved study trust is distinct from every changing signed wire.
  * GH secret is constant for reviewed code/manifest/calendar/rights/release
@@ -29,7 +30,7 @@ export function readP6StableSourceTrust(env){
  if(!t||Array.isArray(t)||Object.keys(t).sort().join("|")!==fields.slice().sort().join("|")||
     t.independentStudyTrustPinsApproved!==true||
     !LOGIN.test(t.expectedReaderSessionLogin??"")||
-    !CODE.test(t.reviewedCodeSha??"")||t.reviewedCodeSha!==env.GITHUB_SHA||
+    !CODE.test(t.reviewedCodeSha??"")||!p6ReviewedPolicyMatchesRuntime(env,t.reviewedCodeSha)||
     t.manifestSha256!==env.V39_P5_MANIFEST_SHA256||
     t.releaseSha256!==env.V39_P5_RELEASE_SHA256||
     t.rightsSha256!==env.V39_P5_RIGHTS_SHA256||

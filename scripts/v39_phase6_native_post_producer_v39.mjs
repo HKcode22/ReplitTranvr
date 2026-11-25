@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** STOP-default nonpaid producer. Existing private roles and actual PRE
  * source metadata, existing separate POST/day keys, no provider or GH
  * dispatch credentials. The existing POST parent/child alone dispatch/spend.
@@ -27,7 +28,7 @@ export function isP6NativePostProducerTrigger(env){
 export function admitP6NativePostProducer(env,read){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!isP6NativePostProducerTrigger(env)||env.GITHUB_RUN_ATTEMPT!=="1"||
-    !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
+    !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
     !/^[0-9]{5,25}$/.test(env.GITHUB_RUN_ID??"")||
     env.P6_NATIVE_POST_PRODUCER_ENABLED!=="1"||env.P6_NATIVE_POST_PRODUCER_APPROVED!=="1"||
     env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||

@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Pure release/admission guard for one GitHub-only Phase5 FIDS request.
  * No network, DB, provider call or scheduler. Explicit release must exist.
@@ -58,7 +59,7 @@ export function admitP5GitHubOneQueryRelease(
     env.V39_P5_REST_UNIT_PRICE_APPROVED!=="2")
   hold("GITHUB_RELEASE_FLAGS_OR_RUN_ID");
  const approved=env.V39_P5_APPROVED_CODE_SHA;
- if(!CODE.test(approved??"")||approved!==env.GITHUB_SHA)
+ if(!CODE.test(approved??"")||!p6ReviewedPolicyMatchesRuntime(env,approved))
   hold("CODE_COMMIT_NOT_APPROVED");
  if(!payload||payload.schema!=="v39.phase5.github-source-one-query-template.v2"||
     ![payload.manifestSha256,payload.queryDigestSha256].every(x=>SHA.test(x)))
@@ -129,7 +130,7 @@ export function admitP5GitHubOneQueryRelease(
  }
  return {
   schema:"v39.phase5.github-source-admitted.v2",
-  codeSha:approved!,githubRunId:env.GITHUB_RUN_ID!,
+  codeSha:env.GITHUB_SHA!,githubRunId:env.GITHUB_RUN_ID!,
   manifestSha256:payload.manifestSha256,
   queryDigestSha256:payload.queryDigestSha256,
   runDayIndex:q.runDayIndex,slot:q.slot,horizon:q.horizon,

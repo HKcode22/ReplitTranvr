@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * GitHub schedule -> signed 31-parent-day -> ONE due 4-airport draw.
  * Reuses prior six-slot GitHub clock/canary and the existing installed DB
@@ -122,7 +123,7 @@ export function parseP5GitHubApprovedEarlyDrawContext(env:Env){
     env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
-    env.GITHUB_RUN_ATTEMPT!=="1"||env.V39_P5_APPROVED_CODE_SHA!==env.GITHUB_SHA||
+    env.GITHUB_RUN_ATTEMPT!=="1"||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
     !["schedule","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??"")||
     (env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
      env.P5_EARLY_DRAW_MANUAL_CONFIRM!==

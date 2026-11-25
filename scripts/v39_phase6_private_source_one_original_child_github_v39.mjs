@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Phase 5 EXIT P0 — real private DAY-EPOCH index + V0095 SOURCE_QUERY_PACKET
  * delivered into the ORIGINAL Phase5 one-FIDS-GET child IN THE SAME
@@ -96,7 +97,7 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_APPROVED_CODE_SHA)||
     env.P6_PRIVATE_SOURCE_TRANSPORT_APPROVED!=="1"||
     env.P6_PRIVATE_SOURCE_CHILD_RUNTIME_CONFIRM!==ENTRY_CONFIRM||
     env.V39_P5_CHILD_CONFIRM!==CONFIRM||
@@ -182,7 +183,7 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
       Number(env.P5_SOURCE_BATCH_RUN_DAY_INDEX)||
     indexWire.review?.runDayIndex!==indexPins.expectedRunDayIndex||
     indexWire.review?.indexRevision!==indexPins.expectedIndexRevision||
-    indexPins.expectedReviewedCodeSha!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,indexPins.expectedReviewedCodeSha)||
     indexPins.expectedManifestSha256!==env.V39_P5_MANIFEST_SHA256||
     indexPins.expectedReleaseSha256!==env.V39_P5_RELEASE_SHA256||
     indexPins.expectedRightsSha256!==env.V39_P5_RIGHTS_SHA256||
@@ -212,7 +213,7 @@ export function admitP6PrivateSourceExistingChildRuntime(env){
     packetPins.expectedKind!=="SOURCE_QUERY_PACKET"||
     packetPins.expectedLogicalPath!==
      env.P6_PRIVATE_SOURCE_EXPECTED_QUERY_PATH||
-    packetPins.expectedReviewedMainSha!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,packetPins.expectedReviewedMainSha)||
     packetPins.expectedManifestSha256!==env.V39_P5_MANIFEST_SHA256||
     packetPins.expectedRightsSha256!==env.V39_P5_RIGHTS_SHA256||
     !SHA.test(packetPins.expectedContentSha256??"")||

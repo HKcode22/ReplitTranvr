@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** NONPAID follow-on to the same actual stored SOURCE child. The existing
  * transport return is not proof of HTTP or COMMIT. Re-authenticate original
  * signed route and current revision, query through existing source-role
@@ -34,7 +35,7 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
  if(!["committed","actor-preflight"].includes(mode)||(mode==="actor-preflight"&&!actorOnly))hold("EXACT_PREFLIGHT_MODE");
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_RUN_ATTEMPT!=="1"||
-    !CODE.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA||
+    !CODE.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_ACTUAL_NATIVE_REVIEW_APPROVED_CODE_SHA)||
     env.V39_P5_ACTUAL_NATIVE_REVIEW_OWNER_APPROVED!=="1"||
     (!actorOnly&&env.P6_STORED_SOURCE_NATIVE_AUDIT_ENABLED!=="1")||env.P6_PRIVATE_SOURCE_TRANSPORT_INPUT!=="stored"||
     (!actorOnly&&env.V39_P5_CHILD_CONFIRM!=="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET")||
@@ -67,7 +68,7 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
   p=JSON.parse(b.toString("utf8"));
  }catch{hold("INVALID_EXACT_POLICY_BYTES");}
  if(p?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||
-    p.delegatedDailyPacketProductionApproved!==true||p.approvedCodeSha!==env.GITHUB_SHA||
+    p.delegatedDailyPacketProductionApproved!==true||!p6ReviewedPolicyMatchesRuntime(env,p.approvedCodeSha)||
     !["manifestSha256","calendarSha256","rightsSha256","releaseSha256"].every(k=>p[k]===trust[k])||
     !SHA.test(p.providerContractSha256??"")||p.providerContractSha256!==env.V39_P5_PROVIDER_CONTRACT_SHA256||
     !Array.isArray(p.dayPlanSha256s)||p.dayPlanSha256s.length!==31||

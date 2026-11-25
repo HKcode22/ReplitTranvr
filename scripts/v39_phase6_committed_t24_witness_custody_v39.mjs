@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** Existing queued T24 executor's optional in-memory follow-on. Retain
  * the exact Stage17 receipt, not reconstructed clocks. Independent custody
  * policy and key authenticate preservation only, not native/scientific
@@ -38,7 +39,7 @@ export function admitP6CommittedT24Custody(env,pre,witness){
     env.ADB_AUTO_COLLECT!=="0"||env.AERODATABOX_API_KEY||env.RAPIDAPI_KEY||env.AERODATABOX_WEBHOOK_SECRET||
     env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||env.P5_V39_PREPARE_DATABASE_URL||env.V39_P5_SOURCE_DATABASE_URL||
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
-    env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||env.P5_CD_GH_PRE_APPROVED_CODE_SHA!==env.GITHUB_SHA)
+    env.P5_CD_GH_T24_WITNESS_APPROVED!=="1"||!p6ReviewedPolicyMatchesRuntime(env,env.P5_CD_GH_PRE_APPROVED_CODE_SHA))
   hold("NOT_APPROVED_NONPAID_T24_CUSTODY");
  verifyP5T24PreWitnessCrossReview(pre,witness);
  const t=readP6StableSourceTrust(env),b=decode(env.P6_NONPAID_DAILY_POLICY_BASE64,35000);

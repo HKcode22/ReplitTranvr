@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Optional GitHub source-queue OBSERVER, never the paid dispatcher.
  * Uses the pre-existing exact SOURCE login/NOLOGIN-group checks;
@@ -30,7 +31,7 @@ export function admitP5GitHubSourceQueueObserver(env:NodeJS.ProcessEnv){
       "READ_ONLY_PREPARED_SOURCE_QUEUE_NO_PROVIDER")||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_QUEUE_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_QUEUE_APPROVED_CODE_SHA)||
     env.ADB_AUTO_COLLECT!=="0"||
     env.AERODATABOX_API_KEY||
     env.V39_P5_SOURCE_QUEUE_OWNER_APPROVED!=="1"||

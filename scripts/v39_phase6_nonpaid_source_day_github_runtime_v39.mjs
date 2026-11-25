@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * STOP-default, one-day protected GitHub SOURCE preparation/publication
  * entrypoint. No paid provider or child dispatch; existing Stage28 PREPARE
@@ -62,7 +63,7 @@ const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||
-    env.GITHUB_RUN_ATTEMPT!=="1"||!CODE.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.P6_NONPAID_SOURCE_APPROVED_MAIN_SHA||
+    env.GITHUB_RUN_ATTEMPT!=="1"||!CODE.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.P6_NONPAID_SOURCE_APPROVED_MAIN_SHA)||
     env.P6_NONPAID_SOURCE_RUNTIME_APPROVED!=="1"||env.V39_P5_PREPARE_OWNER_APPROVED!=="1"||
     env.V39_PHASE5_FREEZE_SIGNED!=="1"||env.V39_PHASE5_SOURCE_RIGHTS_APPROVED!=="1"||
     env.ADB_AUTO_COLLECT!=="0"||env.V39_PHASE6_PROCESS_ARMED!=="0"||env.V39_PHASE6_OWNER_APPROVED!=="0"||
@@ -86,7 +87,7 @@ export function admitP6NonpaidSourceDayGithub(env){
  if(p?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||
     q?.schema!=="v39.phase6.delegated-source-review-policy.v1"||
     p.delegatedDailyPacketProductionApproved!==true||q.delegatedAutomatedSourceSigningApproved!==true||
-    p.approvedCodeSha!==env.GITHUB_SHA||q.approvedCodeSha!==env.GITHUB_SHA||
+    p.approvedCodeSha!==trust.reviewedCodeSha||q.approvedCodeSha!==trust.reviewedCodeSha||
     p.expectedPrepareRole!==P5_STAGE28_GROUPS.prepare||q.expectedPrepareRole!==P5_STAGE28_GROUPS.prepare||
     !budget||!sameP5TypedSourceBudgetBinding(p,q)||
     !["manifestSha256","calendarSha256","releaseSha256","rightsSha256"].every(k=>p[k]===trust[k]&&q[k]===trust[k])||
@@ -100,7 +101,7 @@ export function admitP6NonpaidSourceDayGithub(env){
     utc(p.validUntilUtc)<=utc(p.validFromUtc)||utc(q.validUntilUtc)<=utc(q.validFromUtc)||
     reviewed?.schema!=="v39.phase6.approved-nonpaid-source-transport-trust.v1"||
     reviewed.independentTransportAndSigningScopeApproved!==true||
-    reviewed.reviewedMainSha!==env.GITHUB_SHA||reviewed.dailyPolicySha256!==env.P6_NONPAID_DAILY_POLICY_SHA256||
+    reviewed.reviewedMainSha!==trust.reviewedCodeSha||reviewed.dailyPolicySha256!==env.P6_NONPAID_DAILY_POLICY_SHA256||
     reviewed.signingPolicySha256!==env.P6_NONPAID_SIGNING_POLICY_SHA256||
     reviewed.expectedReaderSessionLogin!==trust.expectedReaderSessionLogin||
     !/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/.test(reviewed.expectedPublisherSessionLogin??"")||
@@ -235,7 +236,7 @@ async function registerOrReadDay1(ctx,plan){
  const p=ctx.p,lead=Math.max(20,ctx.reviewed.minimumPreparationLeadMinutes);
  const policy={schema:"v39.phase6.day1-late-registration-policy.v1",runDayIndex:1,incidentRunId:45293307564,
   originalDayPlanSha256:plan.sha256,manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,configSha256:p.configSha256,
-  frameSha256:p.frameSha256,reviewedCodeSha:ctx.mainSha,reviewerFingerprintSha256:ctx.reviewed.dailyReviewerFingerprintSha256,
+  frameSha256:p.frameSha256,reviewedCodeSha:ctx.trust.reviewedCodeSha,reviewerFingerprintSha256:ctx.reviewed.dailyReviewerFingerprintSha256,
   allowLateFixedPairRegistration:true,allowPaidDispatch:false,allowBackdating:false,missingnessClass:"HONESTLY_UNOBSERVED_NOT_BACKFILLED",
   validFromUtc:"2026-11-24T00:00:00.000Z",validUntilUtc:"2026-11-25T02:00:00.000Z",minimumPreparationLeadMinutes:lead};
  const policyBytes=Buffer.from(JSON.stringify(policy)),signed={policyBytes,signatureBase64:sign(null,policyBytes,ctx.dailyKey).toString("base64"),
@@ -308,7 +309,7 @@ export async function runP6NonpaidSourceDayGithub(env){
   if(!selection.selected)return Object.freeze({...base,status:"NO_ELIGIBLE_UNPUBLISHED_FUTURE_DAY_NO_WRITE"});
   const plan=selection.selected,p=ctx.p;
   const dailyTrust={independentDailyReviewerTrustApproved:true,runDayIndex:plan.runDayIndex,
-   reviewedCodeSha:ctx.mainSha,manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,
+   reviewedCodeSha:ctx.trust.reviewedCodeSha,manifestSha256:p.manifestSha256,calendarSha256:p.calendarSha256,
    configSha256:p.configSha256,frameSha256:p.frameSha256,releaseSha256:p.releaseSha256,rightsSha256:p.rightsSha256,
    providerContractSha256:p.providerContractSha256,policySha256:ctx.dailyPolicySha,dayPlanSha256:plan.sha256,
    ...normalizeP5TypedSourceBudgetBinding(p),reviewedCategoryBudgetSha256:p.reviewedCategoryBudgetSha256,
@@ -321,7 +322,7 @@ export async function runP6NonpaidSourceDayGithub(env){
    expectedReaderSessionLogin:ctx.trust.expectedReaderSessionLogin,expectedPublisherSessionLogin:ctx.reviewed.expectedPublisherSessionLogin};
   const prep=await runP6DurableDailySourcePreparation({producer:{readPool:restricted,
    policyBytes:ctx.policyBytes,dayPlanBytes:plan.bytes,lateScope,pins:{independent31DayDelegationPolicyApproved:true,
-    expectedPolicySha256:ctx.dailyPolicySha,expectedReviewedMainSha:ctx.mainSha,expectedRunDayIndex:plan.runDayIndex,
+    expectedPolicySha256:ctx.dailyPolicySha,expectedReviewedMainSha:ctx.trust.reviewedCodeSha,expectedRunDayIndex:plan.runDayIndex,
     noProviderCredentialsInReviewer:true,existingPaidDispatchApproved:false}},
    preparePool:restricted,readerClient:reader,publisherClient:publisher,dailyReviewerKey:ctx.dailyKey,
    trust:dailyTrust,scope:{...common,independentlyApprovedDurableDailyPrepareRuntime:true}});

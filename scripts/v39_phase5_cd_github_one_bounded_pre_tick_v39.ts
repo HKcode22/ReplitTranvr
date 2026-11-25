@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * ONE short GitHub-only C+D PRE controller tick. Disabled by default.
  * Reuse existing Stage30 PRE_LOGIN, Stage28 SET-only adapter,
@@ -49,7 +50,7 @@ export function admitP5PrivateLaterWorker(env:NodeJS.ProcessEnv){
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     (env.P5_CD_GH_PRE_ROSTER_PATH||env.P5_CD_GH_ROSTER_PATH)||
     (env.P5_CD_GH_BURST_TICKS||"1")!=="1"||
-    env.GITHUB_SHA!==gate.approvedCodeSha||env.RAPIDAPI_KEY)
+    !p6ReviewedPolicyMatchesRuntime(env,gate.approvedCodeSha)||env.RAPIDAPI_KEY)
   fail("PRIVATE_EXACT_SHARD_RELEASE_REQUIRED");
  const number=(v:string|undefined,max:number)=>{
   if(!/^[1-9][0-9]{0,5}$/.test(v??"")||Number(v)>max)

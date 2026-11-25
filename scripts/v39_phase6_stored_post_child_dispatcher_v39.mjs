@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** STOP-default parent. Reads genuine signed POST packets and actual same-flight PRE.
  * Existing ten-minute schedule; no provider key, SQL mutation, reviewer/reserve
  * credentials, new POST signature, or approval. Existing V0083 child alone spends.
@@ -43,7 +44,7 @@ export function admitP6StoredPostParent(env){
  if(env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!(env.GITHUB_EVENT_NAME==="schedule"? !env.P6_CURRENT_PARENT_DISPATCH_CONFIRM:
      env.GITHUB_EVENT_NAME==="workflow_dispatch"&&env.P6_CURRENT_PARENT_DISPATCH_CONFIRM==="RUN_CURRENT_SIGNED_POST_PARENT")||env.GITHUB_RUN_ATTEMPT!=="1"||
-    !CODE.test(env.GITHUB_SHA??"")||env.GITHUB_SHA!==env.V39_P5_POST_APPROVED_CODE_SHA||
+    !CODE.test(env.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
     !/^[0-9]{5,20}$/.test(env.GITHUB_RUN_ID??"")||!Number.isSafeInteger(Number(env.GITHUB_RUN_ID))||
     env.P6_PRIVATE_POST_PARENT_ENABLED!=="true"||env.P5_POST_AUTO_DISPATCH_ENABLED==="true"||
     env.ADB_AUTO_COLLECT!=="0"||env.NODE_TLS_REJECT_UNAUTHORIZED==="0"||
@@ -210,7 +211,7 @@ async function verifyCandidate(env,trust,route,day){
  }finally{await c.end();}
  const local=deriveP6PostOriginalLocalEnv(env,ctx,raw,packet);
  const p=admitP5FuturePostFrozenForReadOnly(raw,packet,{frozenPacketPath:route.signedFrozenPath,expectedPacketSha256:selector.packetSha256,
-  approvedCodeSha:env.GITHUB_SHA,currentGithubRunId:env.GITHUB_RUN_ID,manifestSha256:trust.manifestSha256,sourceRightsSha256:trust.rightsSha256,
+  approvedCodeSha:trust.reviewedCodeSha,currentGithubRunId:env.GITHUB_RUN_ID,manifestSha256:trust.manifestSha256,sourceRightsSha256:trust.rightsSha256,
   categoryBudgetSha256:env.V39_P5_POST_CATEGORY_BUDGET_SHA256,providerContractSha256:env.V39_P5_POST_PROVIDER_CONTRACT_SHA256,
   requestSha256:local.V39_P5_POST_REVIEWED_REQUEST_SHA256,requestContextSha256:local.V39_P5_POST_CONTEXT_SHA256,
   frameSha256:env.V39_P5_FRAME_HASH,providerPriceSha256:env.V39_P5_POST_PRICE_SHA256});

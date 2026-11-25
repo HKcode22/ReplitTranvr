@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
 /** Ephemeral same-process authority for an actually authenticated private
  * current-day shard. No GitHub input or env setter can mint a roster pin.
  * The original protected study trust and current retained Ed25519 day index
@@ -27,7 +28,7 @@ export function assertP6CurrentPrivatePreMode(env){
     env.P5_CD_GH_PRIVATE_INDEX_SHA||env.P5_CD_GH_PRIVATE_REGISTRY_SHA||
     env.P5_CD_GH_PRIVATE_LATER_APPROVED==="1"||
     env.P6_PRIVATE_PUBLISHER_DATABASE_URL||env.RAPIDAPI_KEY||
-    env.GITHUB_SHA!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA)
+    !p6ReviewedPolicyMatchesRuntime(env,env.P5_CD_GH_PRE_APPROVED_CODE_SHA))
   fail("SCHEDULED_PRIVATE_MODE_ONLY_NO_LEGACY_PIN");
  const trust=readP6StableSourceTrust(env);
  if(!env.P6_PRIVATE_READER_DATABASE_URL)fail("MISSING_RESTRICTED_READER");
