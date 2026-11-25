@@ -262,6 +262,10 @@ jobs:
       - name: Admission for real actor preflight ONLY (no paid capability)
         if: ${{ inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' }}
         shell: bash
+        env:
+          V39_PHASE6_PROCESS_ARMED: '0'
+          AERODATABOX_API_KEY: ''
+          RAPIDAPI_KEY: ''
         run: |
           set -Eeuo pipefail
           set +x
