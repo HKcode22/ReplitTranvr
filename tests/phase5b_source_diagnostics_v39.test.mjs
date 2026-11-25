@@ -10,7 +10,7 @@ test("only fixed complete diagnostic lines are returned, never arbitrary capture
  assert.deepEqual(readSafeSourceDiagnosticLines(null,{}),[]);
 });
 test("HTTP diagnostic labels distinguish auth, rate, client, server, OK and other without body or URL",()=>{
- for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_OK"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[302,false,"HTTP_OTHER_STATUS"]])
+ for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_NO_CONTENT"],[205,true,"HTTP_RESET_CONTENT"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[302,false,"HTTP_OTHER_STATUS"]])
   assert.equal(sourceHttpDiagnosticLabel(code,ok),label);
 });
 
@@ -33,7 +33,7 @@ test("SOURCE post-reservation and custody diagnostics retain exact fixed causes,
 });
 
 test("fixed body diagnostics survive subprocess filtering without raw provider content",()=>{
- const labels=["FIDS_BODY_UNAVAILABLE","FIDS_BODY_EMPTY","FIDS_BODY_TOO_LARGE","FIDS_BODY_READ_FAILED","FIDS_BODY_INVALID_JSON","FIDS_BODY_INVALID_OBJECT","FIDS_DEPARTURES_MISSING","FIDS_ARRIVALS_MISSING","FIDS_BODY_VALID"];
+ const labels=["HTTP_NO_CONTENT","HTTP_RESET_CONTENT","FIDS_BODY_UNAVAILABLE","FIDS_BODY_EMPTY","FIDS_BODY_TOO_LARGE","FIDS_BODY_READ_FAILED","FIDS_BODY_INVALID_JSON","FIDS_BODY_INVALID_OBJECT","FIDS_DEPARTURES_MISSING","FIDS_ARRIVALS_MISSING","FIDS_BODY_VALID"];
  const lines=labels.map(sourceDiagnosticLine);
  assert.deepEqual(readSafeSourceDiagnosticLines(lines.join("\n")+"\nP6_SOURCE_DIAG FIDS_BODY_INVALID_JSON private",null),lines);
 });
