@@ -1,3 +1,4 @@
+import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
@@ -18,7 +19,8 @@ const EXPIRE="2026-11-15T02:00:00.000Z";
 const sha="a".repeat(64),cal="b".repeat(64),
  rights="c".repeat(64),release="d".repeat(64),
  evidence="e".repeat(64),code="f".repeat(40);
-function fixture(revision=2){
+function fixture(revision=2,codeOverride=code){
+ const code=codeOverride;
  const first={
   schema:"v39.phase5.phase6-append-only-day-shard-index.v1",
   manifestSha256:sha,calendarSha256:cal,reviewedCodeSha:code,
@@ -190,4 +192,16 @@ test("no correct role or distinct explicit private review grants can be guessed"
   }),/HOLD_P6_SIGNED_PRIVATE_INDEX_READ_/);
   assert.equal(q.calls.length,0);
  }
+});
+
+test("actual approved successor retains original signed index bytes and old producer review identity",async()=>{
+ const old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40),f=fixture(2,old);
+ const t={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:f.pins.expectedReaderSessionLogin,reviewedCodeSha:old,manifestSha256:sha,calendarSha256:cal,releaseSha256:release,rightsSha256:rights,dayReviewerFingerprintSha256:fp,dayReviewerPublicKeyPem:pem,queryReviewerFingerprintSha256:fp,queryReviewerPublicKeyPem:pem};
+ const env={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:head,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head,P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(t)).toString("base64"),V39_P5_MANIFEST_SHA256:sha,V39_P5_RELEASE_SHA256:release,V39_P5_RIGHTS_SHA256:rights};
+ const trusted=readP6StableSourceTrust(env),q=f.db();
+ assert.equal(trusted.reviewedCodeSha,old);
+ const out=await readP6PrivateSignedIndexCurrentAndPriorOnce({client:q.client,pins:{...f.pins,expectedReviewedCodeSha:trusted.reviewedCodeSha},reviewWire:f.wire,reviewerPublicKeyPem:pem});
+ assert.deepEqual(out.currentIndexBytes,f.raw);assert.deepEqual(out.previousIndexBytes,f.raw1);
+ for(const delta of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{GITHUB_REF:"refs/heads/other"},{GITHUB_RUN_ATTEMPT:"2"},{V39_P5_RIGHTS_SHA256:"0".repeat(64)}])assert.throws(()=>readP6StableSourceTrust({...env,...delta}),/HOLD_P6_STORED_SOURCE_TRUST_/);
+ await assert.rejects(readP6PrivateSignedIndexCurrentAndPriorOnce({client:f.db().client,pins:{...f.pins,expectedReviewedCodeSha:head},reviewWire:f.wire,reviewerPublicKeyPem:pem}),/HOLD_P6_SIGNED_PRIVATE_INDEX_READ_/);
 });

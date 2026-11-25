@@ -336,12 +336,21 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
    expect(fetches).toBe(3);
    expect((await pool.query("SELECT count(*)::int n FROM clean.phase5_fids_physical_attempt_v39")).rows[0].n).toBe(3);
    await pool.query("GRANT USAGE ON SEQUENCE clean.flight_population_id_seq TO p5b_v0078_ci_source");
+   // Actual B0062 invoker trigger is another persistence dependency. Do not
+   // grant direct membership fabrication rights. Harden only the exact trigger.
+   await expect(runP5ScopedFidsSource(plan4,make(plan4,query4,restricted))).rejects.toThrow("SOURCE_PERSISTENCE_PRIVILEGES_NOT_READY_NO_RESERVATION");
+   expect(fetches).toBe(3);
+   await pool.query("ALTER FUNCTION clean.ensure_population_research_membership() SECURITY DEFINER");
+   await pool.query("ALTER FUNCTION clean.ensure_population_research_membership() SET search_path TO pg_catalog, pg_temp");
+   await pool.query("REVOKE EXECUTE ON FUNCTION clean.ensure_population_research_membership() FROM PUBLIC");
+   expect((await restricted.query("SELECT has_table_privilege(current_user,'clean.population_research_membership','INSERT') ins,has_function_privilege(current_user,'clean.ensure_population_research_membership()','EXECUTE') exec")).rows[0]).toMatchObject({ins:false,exec:false});
    const fourth=await runP5ScopedFidsSource(plan4,make(plan4,query4,restricted));
    expect(fourth.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
    expect(fetches).toBe(4);
   }finally{await restricted.end();}
   const rows=(await pool.query("SELECT p.canonical_flight_instance_id,p.codeshare_resolution_status FROM clean.flight_population p JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id) WHERE b.query_digest=$1",[query4])).rows;
   expect(rows).toHaveLength(3);
+  expect((await pool.query("SELECT count(*)::int n FROM clean.population_research_membership m JOIN clean.flight_population p USING(population_member_id) JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id) WHERE b.query_digest=$1",[query4])).rows[0].n).toBe(3);
   expect(rows.every(x=>/^leg:p5v1:/.test(x.canonical_flight_instance_id)&&x.codeshare_resolution_status!=="phase5_legacy_observation_key_ambiguous")).toBe(true);
   expect((await pool.query("SELECT count(*)::int n FROM clean.phase5_fids_original_binding_v39")).rows[0].n).toBe(4);
   await expect(runP5ScopedFidsSource(plan4,make(plan4,query4))).rejects.toThrow("P5_PHYSICAL_QUERY_NOT_ACTIVE_OR_ALREADY_RESERVED");

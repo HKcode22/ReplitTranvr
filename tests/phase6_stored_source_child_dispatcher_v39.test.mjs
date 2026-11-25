@@ -202,3 +202,15 @@ test("core lanes retain their original intervals without top-of-hour or mutual s
  }
  assert.equal(minuteOwners.size,54);
 });
+
+test("approved new executable can dispatch unchanged historical study policy, but wrong runtime/rights cannot",async()=>{
+ const f=fixture(),old="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+ for(const key of ["V39_P5_APPROVED_CODE_SHA","V39_P5_QUEUE_APPROVED_CODE_SHA","P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA"])f.env[key]=old;
+ f.env.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64=Buffer.from(JSON.stringify({...trust,reviewedCodeSha:old})).toString("base64");
+ f.env.GITHUB_SHA=head;f.env.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA=head;
+ assert.doesNotThrow(()=>admitP6StoredSourceDispatcher(f.env));
+ const m=f.mock();const out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl});
+ assert.equal(out.acknowledgedGithubChildCount,4);assert.deepEqual(m.posts.map(x=>x.inputs),f.inputs);
+ for(const bad of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{V39_P5_APPROVED_CODE_SHA:"9".repeat(40)},{V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},{GITHUB_RUN_ATTEMPT:"2"}])
+  assert.throws(()=>admitP6StoredSourceDispatcher({...f.env,...bad}),/NO_EXACT_INDEPENDENT/);
+});
