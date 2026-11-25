@@ -47,6 +47,11 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   lines.push("","**Direct external recovery (separate observation):** "+heartbeat.directRecovery.state,
    "Native schedule gaps remain visible; a controller marker is not an actual SOURCE/PRE/POST receipt.");
  }
+ const independent=Object.entries(heartbeat.independentDispatchObservations??{});
+ if(independent.length){
+  lines.push("","**Independent wake worker execution (not collection proof):**");
+  for(const [lane,x] of independent)lines.push("- "+lane+": "+x.state+(x.runId?" — [run "+x.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+x.runId+")":""));
+ }
  if(heartbeat.activeNotifications?.incidentCount){
   lines.push("","**Current operational incident — review required:**");
   for(const i of heartbeat.activeNotifications.incidents)lines.push("- "+i.lane+": "+i.reason+(i.runId?" — [run "+i.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.runId+")":""));
@@ -88,6 +93,7 @@ async function main(){
    primaryFidsExpiryNeedsAttention:report.primaryFidsExpiryNeedsAttention,
    activeNotifications:report.activeNotifications,
    directRecovery:report.directRecovery,
+   independentDispatchObservations:Object.fromEntries(Object.entries(report.independentDispatchObservations??{}).map(([lane,x])=>[lane,{state:x.state,runId:x.runId,parentConclusion:x.parentConclusion}])),
    controllerProblemCount:report.controllerProblemCount,
    controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,
