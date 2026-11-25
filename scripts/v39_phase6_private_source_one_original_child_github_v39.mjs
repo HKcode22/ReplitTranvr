@@ -24,6 +24,7 @@ import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
  from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
+import {readSafeSourceDiagnosticLines} from "./v39_phase5b_source_diagnostics_v39.mjs";
 import {
  hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly
 } from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
@@ -378,6 +379,9 @@ export async function runP6OnePrivateSourceOriginalGHChild(
     maxBuffer:10*1024*1024,timeout:145*60000,
     env:isolatedP6OriginalOneGetChildEnv(admittedEnv)
    });
+   // Only literal fixed diagnostics can leave the captured child streams.
+   // Do not expose raw stderr/stdout, original payloads, hashes or errors.
+   for(const line of readSafeSourceDiagnosticLines(child.stdout,child.stderr))console.log(line);
    if(child.error||child.signal||child.status!==0)
     fail("ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
   });
