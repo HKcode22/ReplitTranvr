@@ -53,10 +53,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: node --test tests/phase6_direct_recovery_tick_v39.test.mjs
-      - name: Actual hosted route and scheduling metadata probe NO POST
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/v39_phase6_direct_recovery_readonly_probe_v39.mjs
+      # Hosted history is live operational evidence, not deterministic CI.
+      # The separate exact main-only direct-readonly-verify job below still
+      # preserves its real failure semantics when explicitly requested.
   direct-readonly-verify:
     if: >-
       github.repository == 'HKcode22/ReplitTranvr' &&
