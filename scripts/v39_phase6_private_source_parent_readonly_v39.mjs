@@ -328,7 +328,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
      githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
   }
   const fullHistory=await readHistory(scan,ctx);
- const history=storedCapacityProfile?await excludeP6KnownNoPhysicalStartSubmissions(fullHistory,env,fetch,{Accept:"application/vnd.github+json",Authorization:"Bearer "+ctx.ghToken,"X-GitHub-Api-Version":"2022-11-28"}):fullHistory;
+ const history=storedCapacityProfile?await excludeP6KnownNoPhysicalStartSubmissions(fullHistory,env,fetch,{Accept:"application/vnd.github+json",Authorization:"Bearer "+ctx.ghToken,"X-GitHub-Api-Version":"2022-11-28"},new Set(scan.candidates.filter(x=>selection?.dayIndices.includes(x.runDayIndex)&&x.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").map(x=>x.queryDigestSha256))):fullHistory;
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
    expectedManifestSha256:ctx.scope.expectedManifestSha256,
