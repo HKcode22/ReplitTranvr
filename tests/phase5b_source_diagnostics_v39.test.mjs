@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
 test("only fixed complete diagnostic lines are returned, never arbitrary captured data",()=>{
  const ok=sourceDiagnosticLine("RESERVATION_CONFIRMED");
  const no=sourceDiagnosticLine("HTTP_AUTH_REJECTED");
@@ -21,4 +21,13 @@ test("native POST error reporting reveals only fixed stages and SQL categories",
   assert(!JSON.stringify(out).includes("secret"));
  }
  assert.throws(()=>postDiagnostic("private-secret",{}),/UNKNOWN_POST_DIAGNOSTIC_STAGE/);
+});
+
+test("SOURCE post-reservation and custody diagnostics retain exact fixed causes, never raw errors",()=>{
+ assert.equal(sourceDbDiagnosticLabel({message:"REFUSED_PHASE5_V0079_SCOPED_DB_PHYSICAL_POSTCOMMIT_READBACK_FAILED_NO_DISPATCH"}),"SOURCE_RESERVATION_READBACK_FAILED");
+ assert.equal(sourceDbDiagnosticLabel({code:"42501",message:"secret DB username"}),"DB_PERMISSION");
+ assert.equal(sourceDbDiagnosticLabel({message:"FIDS_BOUND_NORMALIZATION_INCOMPLETE_ROLLBACK"}),"SOURCE_NORMALIZATION_INCOMPLETE");
+ assert.equal(sourceDbDiagnosticLabel({message:"untrusted raw SQL / provider body"}),"UNCLASSIFIED");
+ const line=sourceDiagnosticLine("DB_PERMISSION");
+ assert.deepEqual(readSafeSourceDiagnosticLines(Buffer.from(line+"\n"),"secret"),[line]);
 });
