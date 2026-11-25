@@ -65,12 +65,31 @@ export async function prearmP5V0080ActualGitHubRun(
  * Never dispatch early, backdate a GET or silently lose the one-time prearm.
  * Poll the actual database clock rather than assuming GH runner time.
  */
+/** Prospective, deterministic, outcome-blind within-window pacing. Rotates
+ * the four strata each quarter hour so no stratum always receives the later
+ * position. It does not rewrite a signed timestamp or authorize another GET.
+ * If the independently signed hard-latest window is narrower than the full
+ * stagger, preserve the original schedule rather than force a new hold. */
+export function p5SourcePacingTargetUtc(slot:string,plannedUtc:string,hardLatestUtc:string,cutoffUtc:string,maxResponseAndPersistSeconds:number):string{
+ const rank=["HUB","MID_A","MID_B","REGIONAL"].indexOf(slot);
+ const stamp=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+ if(rank<0||![plannedUtc,hardLatestUtc,cutoffUtc].every(x=>stamp.test(x))||
+    !Number.isSafeInteger(maxResponseAndPersistSeconds)||maxResponseAndPersistSeconds<1||maxResponseAndPersistSeconds>3600)
+  hold("PACING_INVALID_SIGNED_SCOPE");
+ const planned=Date.parse(plannedUtc),hard=Date.parse(hardLatestUtc),cutoff=Date.parse(cutoffUtc);
+ if(![planned,hard,cutoff].every(Number.isFinite)||!(planned<hard&&hard<cutoff))hold("PACING_INVALID_WINDOW");
+ const rotation=((Math.floor(planned/900000)%4)+4)%4;
+ const offset=((rank-rotation+4)%4)*20000;
+ const room=Math.min(hard-planned-1000,cutoff-planned-maxResponseAndPersistSeconds*1000);
+ return new Date(planned+(room>=60000?offset:0)).toISOString();
+}
 export async function waitForP5ScheduledPhysicalDispatch(
  plannedUtc:string,
  cutoffUtc:string,
  maxResponseAndPersistSeconds:number,
  readDbClock:()=>Promise<Date>,
  sleep:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+ notBeforeUtc?:string,
 ):Promise<void>{
  const stamp=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
  if(!stamp.test(plannedUtc)||!stamp.test(cutoffUtc)||
@@ -80,6 +99,9 @@ export async function waitForP5ScheduledPhysicalDispatch(
  const planned=Date.parse(plannedUtc),cutoff=Date.parse(cutoffUtc);
  if(!Number.isFinite(planned)||!Number.isFinite(cutoff)||cutoff<=planned)
   hold("INVALID_PROSPECTIVE_REQUEST_TIME");
+ const target=notBeforeUtc===undefined?planned:Date.parse(notBeforeUtc);
+ if(notBeforeUtc!==undefined&&(!stamp.test(notBeforeUtc)||!Number.isFinite(target)||target<planned||target-planned>60000||
+    target+maxResponseAndPersistSeconds*1000>cutoff))hold("PACING_TARGET_OUTSIDE_SIGNED_WINDOW");
  const maxWaitMs=2*60*60_000;
  let lastClock=-Infinity;
  for(let poll=0;poll<=1500;poll++){
@@ -92,8 +114,8 @@ export async function waitForP5ScheduledPhysicalDispatch(
   if(now>planned+15*60_000||
      now+maxResponseAndPersistSeconds*1000>cutoff)
    hold("MISSED_PROSPECTIVE_DISPATCH_OR_FLIGHT_CUTOFF");
-  if(now>=planned)return;
-  if(planned-now>maxWaitMs)
+  if(now>=target)return;
+  if(target-now>maxWaitMs)
    hold("GITHUB_JOB_STARTED_TOO_EARLY");
   // Early prearm can hold many simultaneous workers for up to 90 minutes.
   // The restricted clock adapter establishes and destroys a role-checked
@@ -101,7 +123,7 @@ export async function waitForP5ScheduledPhysicalDispatch(
   // target; retain the existing five-second cadence for the final 2 minutes.
   // Never sleep across that boundary or the planned timestamp. Every
   // wakeup still needs an actual DB clock and the original cutoff checks.
-  const left=planned-now;
+  const left=target-now;
   await sleep(left>120_000?Math.min(60_000,left-120_000):Math.min(5_000,left));
  }
  hold("SCHEDULE_POLL_LIMIT_HOLD");
