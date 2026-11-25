@@ -67,6 +67,15 @@ describe("outcome-blind four-slot provider burst mitigation",()=>{
   }
   for(const x of positions)expect(x.sort((a,b)=>a-b)).toEqual([0,20000,40000,60000]);
  });
+ it("reproduces the measured Day2/Day3 60s hard window, 900s cutoff and 180s response allowance",()=>{
+  const positions=slots.map(()=>[] as number[]);
+  for(let n=0;n<4;n++){
+   const t=base+n*900000;
+   const row=slots.map((s,i)=>{const offset=Date.parse(p5SourcePacingTargetUtc(s,iso(t),iso(t+60000),iso(t+900000),180))-t;positions[i].push(offset);return offset;});
+   expect(row.sort((a,b)=>a-b)).toEqual([0,18000,36000,54000]);
+  }
+  for(const x of positions)expect(x.sort((a,b)=>a-b)).toEqual([0,18000,36000,54000]);
+ });
  it("fits shorter balanced slots within the hard latest and response margin",()=>{
   const positions=slots.map(()=>[] as number[]);
   for(let n=0;n<4;n++){
