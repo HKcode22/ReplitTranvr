@@ -1,0 +1,23 @@
+name: Phase5B source diagnostics offline tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/v39_phase5b_source_diagnostics_v39.mjs'
+      - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
+      - 'scripts/v39_phase6_private_source_one_original_child_github_v39.mjs'
+      - 'tests/phase5b_source_diagnostics_v39.test.mjs'
+      - '.github/workflows/phase5b-source-diagnostics-offline.yml'
+permissions:
+  contents: read
+jobs:
+  fixed-metadata-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs
