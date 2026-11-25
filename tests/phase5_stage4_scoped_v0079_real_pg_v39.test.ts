@@ -151,9 +151,9 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
     plan.acquisition.earliestPlannedCutoffUtc,utcChargeDay]);
  });
  afterAll(async()=>{if(pool)await pool.end();});
- const make=(p:P5SourceSingleQueryPlan=plan,digest=query)=>createP5V0079ScopedDbPorts({
+ const make=(p:P5SourceSingleQueryPlan=plan,digest=query,dbPool:Pool=pool)=>createP5V0079ScopedDbPorts({
   plan:p,manifestSha256:manifest,exactQueryDigest:digest,
-  githubRunId:gitRun,scopedPool:pool,fetchImpl:fakeFetch,
+  githubRunId:gitRun,scopedPool:dbPool,fetchImpl:fakeFetch,
  });
  it("rejects signed first partition if actual PostgreSQL frozen treatment shape differs",async()=>{
   // A four-hour GET is a valid partition of either a 4h parent or the
@@ -322,9 +322,24 @@ run("Phase5 real V0079 source adapter + fake HTTP, disposable B0062 PG16 only",(
    SELECT $1,manifest_sha256,run_day_index,$2,slot_id,horizon,airport_icao,early_draw_sha256,reviewed_release_sha256,rights_review_sha256,provider_contract_sha256,github_run_id,
     service_window_start_utc,service_window_end_utc,from_local,to_local,airport_iana_timezone,provider_api_version,fids_protocol_version,planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,prediction_cutoff_utc,state
    FROM clean.phase5_fids_allowed_query_v39 WHERE query_digest=$3`,[query4,plan4.acquisition.queryKey,H("8")]);
-  const fourth=await runP5ScopedFidsSource(plan4,make(plan4,query4));
-  expect(fourth.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
-  expect(fetches).toBe(4);
+  // Reproduce production omission using a genuinely restricted disposable
+  // PG login (not the migration superuser). It must reject before reservation.
+  await pool.query("CREATE ROLE p5b_v0078_ci_source LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD 'disposable-ci-fixture'");
+  await pool.query("GRANT USAGE ON SCHEMA clean TO p5b_v0078_ci_source");
+  await pool.query("GRANT SELECT ON clean.phase5_fids_cycle_budget_v39,clean.phase5_fids_day_budget_v39,clean.phase5_fids_utc_charge_budget_v39,clean.phase5_fids_allowed_query_v39,clean.phase5_fids_physical_attempt_v39,clean.phase5_fids_original_binding_v39,clean.adb_phase6_calendar_day,clean.fids_query_response,clean.flight_population TO p5b_v0078_ci_source");
+  await pool.query("GRANT INSERT ON clean.fids_query_response,clean.flight_population,clean.phase5_fids_original_binding_v39 TO p5b_v0078_ci_source");
+  await pool.query("GRANT EXECUTE ON FUNCTION clean.reserve_phase5_fids_physical_get_v39(text,text,text,text,text,text) TO p5b_v0078_ci_source");
+  const restricted=new Pool({connectionString:"postgresql://p5b_v0078_ci_source:disposable-ci-fixture@localhost:5432/v39_ci?sslmode=disable",max:2});
+  try{
+   expect((await restricted.query("SELECT current_user AS role,has_sequence_privilege(current_user,pg_get_serial_sequence('clean.flight_population','id'),'USAGE') AS seq")).rows[0]).toMatchObject({role:"p5b_v0078_ci_source",seq:false});
+   await expect(runP5ScopedFidsSource(plan4,make(plan4,query4,restricted))).rejects.toThrow("SOURCE_PERSISTENCE_PRIVILEGES_NOT_READY_NO_RESERVATION");
+   expect(fetches).toBe(3);
+   expect((await pool.query("SELECT count(*)::int n FROM clean.phase5_fids_physical_attempt_v39")).rows[0].n).toBe(3);
+   await pool.query("GRANT USAGE ON SEQUENCE clean.flight_population_id_seq TO p5b_v0078_ci_source");
+   const fourth=await runP5ScopedFidsSource(plan4,make(plan4,query4,restricted));
+   expect(fourth.status).toBe("SOURCE_ORIGINAL_BOUND_TIMELY_NOT_FLIGHT_PRE");
+   expect(fetches).toBe(4);
+  }finally{await restricted.end();}
   const rows=(await pool.query("SELECT p.canonical_flight_instance_id,p.codeshare_resolution_status FROM clean.flight_population p JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id) WHERE b.query_digest=$1",[query4])).rows;
   expect(rows).toHaveLength(3);
   expect(rows.every(x=>/^leg:p5v1:/.test(x.canonical_flight_instance_id)&&x.codeshare_resolution_status!=="phase5_legacy_observation_key_ambiguous")).toBe(true);
