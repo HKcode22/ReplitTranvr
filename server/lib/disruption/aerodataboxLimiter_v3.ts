@@ -751,7 +751,11 @@ export interface FidsFetchOptions {
   signal?: AbortSignal;
   /** One pre-reserved V0083 POST physical GET. Never run any HTTP retry. */
   onePhysicalAttemptOnly?: boolean;
+  /** Optional fixed metadata only; never provider content or request identity. */
+  onResponseDiagnostic?: (label: FidsResponseDiagnostic) => void;
 }
+
+export type FidsResponseDiagnostic = "BODY_UNAVAILABLE" | "BODY_EMPTY" | "BODY_TOO_LARGE" | "BODY_READ_FAILED" | "BODY_INVALID_JSON" | "BODY_INVALID_OBJECT" | "DEPARTURES_MISSING" | "ARRIVALS_MISSING" | "BODY_VALID";
 
 export async function fetchFidsAirport(
   icao: string,
@@ -807,15 +811,16 @@ export async function fetchFidsAirport(
         // Read exactly the response-body bytes delivered to Node fetch (after
         // transparent HTTP decompression). Never call these HTTP wire bytes.
         // A finite cap protects memory and prohibits unbounded raw custody.
+        const diag = (label: FidsResponseDiagnostic) => opts?.onResponseDiagnostic?.(label);
         const maximumBytes = 4 * 1024 * 1024;
         const reportedLength = resp.headers.get("content-length");
         if (reportedLength !== null &&
             (!/^\d+$/.test(reportedLength) || Number(reportedLength) > maximumBytes))
-          throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+          { diag("BODY_TOO_LARGE"); throw new Error("FIDS_DECODED_BODY_SIZE_HOLD"); }
         // Stream the response with a hard *incremental* decoded-byte limit;
         // arrayBuffer() followed by a size check would be unbounded if the
         // provider omitted Content-Length or transparently compressed data.
-        if (!resp.body) throw new Error("FIDS_DECODED_BODY_UNAVAILABLE_HOLD");
+        if (!resp.body) { diag("BODY_UNAVAILABLE"); throw new Error("FIDS_DECODED_BODY_UNAVAILABLE_HOLD"); }
         const reader = resp.body.getReader();
         const chunks: Buffer[] = [];
         let byteCount = 0;
@@ -826,20 +831,29 @@ export async function fetchFidsAirport(
             byteCount += part.value.byteLength;
             if (byteCount > maximumBytes) {
               await reader.cancel().catch(() => undefined);
-              throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+              diag("BODY_TOO_LARGE"); throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
             }
             chunks.push(Buffer.from(part.value));
           }
+        } catch (error) {
+          if (!(error instanceof Error && error.message === "FIDS_DECODED_BODY_SIZE_HOLD")) diag("BODY_READ_FAILED");
+          throw error;
         } finally {
           reader.releaseLock();
         }
         const body = Buffer.concat(chunks, byteCount);
-        const raw: any = JSON.parse(body.toString("utf8"));
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
-        if (opts?.strictDepartureList && !Array.isArray(raw.departures))
-          throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
-        if (opts?.strictArrivalList && !Array.isArray(raw.arrivals))
-          throw new Error("FIDS_ARRIVALS_ARRAY_UNAVAILABLE");
+        if (!body.length) { diag("BODY_EMPTY"); throw new Error("FIDS_DECODED_BODY_UNAVAILABLE_HOLD"); }
+        let raw: any;
+        try { raw = JSON.parse(body.toString("utf8")); }
+        catch { diag("BODY_INVALID_JSON"); throw new Error("FIDS_DECODED_BODY_JSON_INVALID_HOLD"); }
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) { diag("BODY_INVALID_OBJECT"); throw new Error("FIDS response schema invalid"); }
+        if (opts?.strictDepartureList && !Array.isArray(raw.departures)) {
+          diag("DEPARTURES_MISSING"); throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
+        }
+        if (opts?.strictArrivalList && !Array.isArray(raw.arrivals)) {
+          diag("ARRIVALS_MISSING"); throw new Error("FIDS_ARRIVALS_ARRAY_UNAVAILABLE");
+        }
+        diag("BODY_VALID");
         const result: FidsAirportResult = {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],

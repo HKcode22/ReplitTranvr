@@ -452,3 +452,14 @@ test("explicit actor-only preflight is disarmed even during paid production and 
  assert(paid.startsWith("      - name: Authenticate real private PG16"));
  assert(paid.split("\n").slice(0,3).join("\n").includes("inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'"));
 });
+
+test("fresh independent pending is identified but never treated as execution or collection",async()=>{
+ const old=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100,{conclusion:"success",created:"2026-11-13T18:00:00Z"})],T));
+ const report=summarizeP6ControllerHeartbeat(old,T),source=old.find(x=>x.lane==="SOURCE");
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true",P6_ROLLING_CONTROLLER_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0"};
+ const row={...run(909,{event:"workflow_dispatch",created:"2026-11-14T01:59:00Z"}),status:"in_progress",conclusion:null,path:".github/workflows/"+source.workflow,run_attempt:1};
+ const obs=await observeP6IndependentDispatches(report,arm,async url=>({workflow_runs:url.includes(source.workflow)?[row]:[]}));
+ assert.equal(obs.SOURCE.state,"INDEPENDENT_WORKER_RECENT_PENDING_NOT_EXECUTION_PROOF");
+ const x=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:obs},arm,async()=>{throw Error("unexpected read")});
+ assert.equal(x.incidents.find(i=>i.lane==="SOURCE").reason,"INDEPENDENT_WORKER_PENDING_RECHECK_REQUIRED");assert.equal(x.flightCollectionVerified,false);
+});

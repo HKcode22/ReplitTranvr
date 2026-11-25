@@ -132,6 +132,7 @@ async function main():Promise<void>{
   // reservation irreversible and its same-query replay fail closed.
   const ports={
    ...basePorts,
+   onResponseDiagnostic:(label:string)=>diagnostic("FIDS_"+label),
    reservePhysicalBeforeGet:async arg=>{
     diagnostic("RESERVATION_STARTED");
     try{

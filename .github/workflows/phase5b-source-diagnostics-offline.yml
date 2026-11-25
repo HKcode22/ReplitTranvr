@@ -6,13 +6,16 @@ on:
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - 'scripts/v39_phase6_private_source_one_original_child_github_v39.mjs'
       - 'tests/phase5b_source_diagnostics_v39.test.mjs'
+      - 'tests/phase5b_fids_response_diagnostics_v39.test.ts'
+      - 'server/lib/disruption/aerodataboxLimiter_v3.ts'
+      - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
       - '.github/workflows/phase5b-source-diagnostics-offline.yml'
 permissions:
   contents: read
 jobs:
   fixed-metadata-only:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,3 +24,5 @@ jobs:
         with:
           node-version: '20'
       - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs
+      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npx vitest run tests/phase5b_fids_response_diagnostics_v39.test.ts
