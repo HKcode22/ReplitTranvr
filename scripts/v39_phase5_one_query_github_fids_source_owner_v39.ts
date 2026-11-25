@@ -16,7 +16,7 @@ import {auditP5UpcomingSourceQueue,
  from "../server/lib/disruption/phase5SourceUpcomingDueQueueReadonly_v39";
 import {createP5V0079ScopedDbPorts}
  from "../server/lib/disruption/phase5V0079ScopedDbPorts_v39";
-import {prearmP5V0080ActualGitHubRun,waitForP5ScheduledPhysicalDispatch}
+import {prearmP5V0080ActualGitHubRun,waitForP5ScheduledPhysicalDispatch,p5SourcePacingTargetUtc}
  from "../server/lib/disruption/phase5V0080GitHubPrearm_v39";
 import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
@@ -94,6 +94,8 @@ async function main():Promise<void>{
   // GH may allocate this job before its exact approved paid GET slot.
   // Prearm has been COMMITTED; do not consume the single physical attempt
   // until the database clock reaches the signed dispatch UTC.
+  const pacingTarget=p5SourcePacingTargetUtc(plan.acquisition.slot,plan.acquisition.scheduledRequestUtc,due.hardLatestDispatchUtc,plan.acquisition.earliestPlannedCutoffUtc,plan.acquisition.maxResponseAndPersistSeconds);
+  diagnostic(pacingTarget===plan.acquisition.scheduledRequestUtc?"PACING_BASE_SLOT":"PACING_ROTATED_SLOT");
   await waitForP5ScheduledPhysicalDispatch(
    plan.acquisition.scheduledRequestUtc,
    plan.acquisition.earliestPlannedCutoffUtc,
@@ -102,7 +104,7 @@ async function main():Promise<void>{
     const r=await scoped.query("SELECT clock_timestamp() AS t");
     if(r.rowCount!==1)throw Error("REFUSED_P5_V0080_PREARM_DB_CLOCK_MISSING");
     return new Date(r.rows[0].t);
-   },
+   },undefined,pacingTarget,
   );
   // The time of admission is not the time of physical GET. A runner that
   // reaches the signed hard deadline after waiting must not reserve or pay.
