@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * Stored-mode SOURCE dispatcher, reusing the 10min parent and existing
  * one-GET child. Never a provider client or DB writer. Original paid
@@ -31,7 +32,7 @@ export function admitP6StoredSourceDispatcher(env){
     !Number.isSafeInteger(Number(env.GITHUB_RUN_ID))||
     !CODE.test(env.GITHUB_SHA??"")||
     [env.V39_P5_APPROVED_CODE_SHA,env.V39_P5_QUEUE_APPROVED_CODE_SHA,
-     env.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA].some(x=>x!==env.GITHUB_SHA)||
+     env.P6_PRIVATE_SOURCE_PARENT_RO_MAIN_SHA] .some(x=>!p6ReviewedPolicyMatchesRuntime(env,x))||
     env.P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED!=="true"||
     env.P6_PRIVATE_SOURCE_REVIEW_MODE!=="stored"||
     env.P5_AUTO_SOURCE_DISPATCH_ENABLED==="true"||

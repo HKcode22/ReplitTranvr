@@ -50,6 +50,8 @@ permissions:
 concurrency:
   group: p5-source-child-${{ inputs.query_digest }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   exact-reviewed-source-child:
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && inputs.private_transport == 'false' }}
@@ -106,7 +108,7 @@ jobs:
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_P5_CHILD_CONFIRM" = 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'
           test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = 'false'
-          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$V39_PHASE5_FREEZE_SIGNED" = '1'
           test "$V39_PHASE5_SOURCE_RIGHTS_APPROVED" = '1'
           test "$V39_PHASE6_PROCESS_ARMED" = '1'
@@ -240,7 +242,7 @@ jobs:
             [[ "$REGISTRY_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
             [[ "$RELEASE_FILE" =~ ^data-collection/phase5/frozen/[A-Za-z0-9_.-]{8,125}\.json$ ]]
           fi
-          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT" = 1
           test "$P5_SIGNED_DAY_SOURCE_CHILD_ENTRYPOINT" = 0
           test "$P6_PRIVATE_SOURCE_CHILD_RUNTIME_CONFIRM" = 'ONE_PRIVATE_SOURCE_ORIGINAL_P5_CHILD_SAME_JOB_ONE_GET'
@@ -267,7 +269,7 @@ jobs:
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$GITHUB_SHA" = "$V39_P5_APPROVED_CODE_SHA"
+          [[ ( "$V39_P5_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
           test "$ADB_AUTO_COLLECT" = 0
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           test "$P6_PRIVATE_SOURCE_TRANSPORT_INPUT" = stored

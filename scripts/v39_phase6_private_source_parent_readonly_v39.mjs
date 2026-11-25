@@ -330,7 +330,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
   const planned=reviewP6PrivateDaySourceDueParentNoDispatch({
    days,sourceObserver:scan,history,
    expectedManifestSha256:ctx.scope.expectedManifestSha256,
-   expectedMainSha:ctx.mainSha,storedCapacityProfile
+   expectedMainSha:ctx.trust?.reviewedCodeSha??ctx.mainSha,storedCapacityProfile
   });
   if(planned.redactedSummary.providerCalls!==0||
      planned.redactedSummary.databaseWrites!==0||

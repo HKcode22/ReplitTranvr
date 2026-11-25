@@ -68,6 +68,8 @@ concurrency:
   # PR/offline test runs must never queue ahead of live main PRE ticks.
   group: phase5-cd-bounded-pre-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   test-offline-release-and-bound-tick:
     if: ${{ github.event_name == 'pull_request' }}

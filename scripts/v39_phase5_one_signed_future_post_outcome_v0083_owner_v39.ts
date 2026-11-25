@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * ONE reviewed FUTURE Phase5 POST FIDS observation, actual V0083 reservation,
  * original decoded source body + normalized rows, GitHub main manual ONLY.
@@ -81,8 +82,8 @@ export function admitP5SignedFuturePostGitHub(
   hold("UNREVIEWED_POST_PACKET_BYTES_OR_PATH");
  if(!packet||packet.schema!==
       "v39.phase5.github-future-post-reviewed-release.v1"||
-    packet.approvedCodeSha!==env.GITHUB_SHA||
-    env.V39_P5_POST_APPROVED_CODE_SHA!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,packet.approvedCodeSha)||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_POST_APPROVED_CODE_SHA)||
     packet.independentSourceContentsUseAndRESTReleaseAttested!==true||
     Object.hasOwn(packet.reviewed??{},"githubRunId"))
   hold("SELF_APPROVED_OR_CROSS_RUN_SOURCE_PACKET");

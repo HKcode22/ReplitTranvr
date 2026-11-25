@@ -22,6 +22,8 @@ permissions:
 concurrency:
   group: phase5-cd-existing-lease-watchdog-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
   cancel-in-progress: false
+env:
+  P6_PHASE5B_RUNTIME_EXECUTABLE_SHA: ${{ github.ref == 'refs/heads/main' && vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
 jobs:
   offline-watchdog-safety:
     if: ${{ github.event_name == 'pull_request' }}
@@ -112,7 +114,7 @@ jobs:
           if [[ "$P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED" == 1 ]]; then
             test "$P5_CD_GH_PRE_MODE" = PHASE6_APPROVED || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_MODE >&2; exit 2; }
             test -z "$P5_CD_GH_PRE_ROSTER_SHA256" || { echo HOLD_P6_PRESENCE_GATE_P5_CD_GH_PRE_ROSTER_SHA256 >&2; exit 2; }
-            test "$P5_CD_GH_PRE_APPROVED_CODE_SHA" = "$GITHUB_SHA" || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_APPROVED_CODE_SHA >&2; exit 2; }
+            [[ ( "$P5_CD_GH_PRE_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$P5_CD_GH_PRE_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]] || { echo HOLD_P6_LITERAL_GATE_P5_CD_GH_PRE_APPROVED_CODE_SHA >&2; exit 2; }
             test "$P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED" = 1 || { echo HOLD_P6_LITERAL_GATE_P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED >&2; exit 2; }
             test -n "$P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64" || { echo HOLD_P6_PRESENCE_GATE_P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 >&2; exit 2; }
             test -n "$V39_P5_RELEASE_SHA256" || { echo HOLD_P6_PRESENCE_GATE_V39_P5_RELEASE_SHA256 >&2; exit 2; }

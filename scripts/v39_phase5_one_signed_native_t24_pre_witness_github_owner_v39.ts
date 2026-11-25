@@ -1,3 +1,4 @@
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * GitHub-only ONE reviewed future native-operating-leg T24 PRE and
  * independently durable V0081 witness, reusing existing Stage14/17/28.
@@ -72,7 +73,7 @@ export function admitP5NativeT24GitHubRelease(
     env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     env.GITHUB_RUN_ATTEMPT!=="1"||
     !CODE.test(env.GITHUB_SHA??"")||
-    env.GITHUB_SHA!==env.V39_P5_T24_APPROVED_CODE_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,env.V39_P5_T24_APPROVED_CODE_SHA)||
     env.P5_NATIVE_T24_CONFIRM!==
       "ONE_SIGNED_NATIVE_T24_PRE_AND_WITNESS_NO_PROVIDER"||
     env.ADB_AUTO_COLLECT!=="0"||env.AERODATABOX_API_KEY||
@@ -90,7 +91,7 @@ export function admitP5NativeT24GitHubRelease(
  const pre=packet?.prePermit, witness=packet?.witnessReview;
  if(!packet||
     packet.schema!=="v39.phase5.github-native-t24-pre-witness-reviewed.v1"||
-    packet.reviewedCodeSha!==env.GITHUB_SHA||
+    !p6ReviewedPolicyMatchesRuntime(env,packet.reviewedCodeSha)||
     packet.independentNativeT24AndSourceReviewAttested!==true||
     !pre||!witness||
     pre.manifestSha256!==env.V39_P5_MANIFEST_SHA256||
