@@ -953,6 +953,21 @@ export async function persistFidsObservation(
     let inserted = 0;
     const scopedProspective=beforeCommit!==undefined&&query.queryDirection==="Departure"&&
       (query.rawPayload as {phase5PopulationIdentityVersion?:unknown}|null)?.phase5PopulationIdentityVersion===P5_CANONICAL_IDENTITY_VERSION;
+    // V0078 intentionally dropped the B0062 global unique constraint and
+    // replaced it with a partial NON-FIDS index. Preserve the old fallback
+    // only on the earlier schema; on V0078 use the original-observation key.
+    // Never recreate the dropped constraint or retry an HTTP acquisition.
+    let legacyGlobalKey=false;
+    if(scopedProspective){
+      const catalog=await client.query(`SELECT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_constraint
+        WHERE conrelid='clean.flight_population'::regclass
+          AND conname='flight_population_key' AND contype='u'
+      ) AS legacy_global_key`);
+      if(catalog.rows.length!==1||typeof catalog.rows[0]?.legacy_global_key!=="boolean")
+        throw Error("FIDS_BOUND_POPULATION_SCHEMA_UNVERIFIED_ROLLBACK");
+      legacyGlobalKey=catalog.rows[0].legacy_global_key;
+    }
     const replacements=new Map<number,PopulationRow>();
     const insertMember=(r:PopulationRow,legacyKeyOnly:boolean)=>client.query(
         `INSERT INTO clean.flight_population
@@ -975,8 +990,8 @@ export async function persistFidsObservation(
          r.providerApiVersion,r.fidsProtocolVersion,r.openapiSha256],
       );
     for(const [index,r] of rows.entries()){
-      let result=await insertMember(r,scopedProspective);
-      if(scopedProspective&&result.rowCount===0){
+      let result=await insertMember(r,scopedProspective&&legacyGlobalKey);
+      if(scopedProspective&&legacyGlobalKey&&result.rowCount===0){
         // Only the exact B0062 legacy airport/cutoff/flight/carrier/record
         // constraint can reach this fallback. Do not replay HTTP, read another
         // original, modify prior evidence, or claim either identity is proven.
