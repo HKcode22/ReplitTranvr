@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
 test("only fixed complete diagnostic lines are returned, never arbitrary captured data",()=>{
  const ok=sourceDiagnosticLine("RESERVATION_CONFIRMED");
  const no=sourceDiagnosticLine("HTTP_AUTH_REJECTED");
@@ -12,4 +12,13 @@ test("only fixed complete diagnostic lines are returned, never arbitrary capture
 test("HTTP diagnostic labels distinguish auth, rate, client, server, OK and other without body or URL",()=>{
  for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_OK"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[302,false,"HTTP_OTHER_STATUS"]])
   assert.equal(sourceHttpDiagnosticLabel(code,ok),label);
+});
+
+test("native POST error reporting reveals only fixed stages and SQL categories",()=>{
+ for(const [code,category] of [["42501","DB_PERMISSION"],["42883","DB_OPERATOR_OR_FUNCTION_MISSING"],["42703","DB_COLUMN_MISSING"],["08006","DB_CONNECTION"],["57014","DB_QUERY_CANCELED"],["23505","OTHER_SQLSTATE"],["private-secret","UNCLASSIFIED"]]){
+  const out=postDiagnostic("SOURCE_HINT_SCAN",{code,message:"secret DSN raw payload"});
+  assert.deepEqual(out,{status:"P6_POST_DIAG_NO_PROVIDER_CONTENT",stage:"SOURCE_HINT_SCAN",category});
+  assert(!JSON.stringify(out).includes("secret"));
+ }
+ assert.throws(()=>postDiagnostic("private-secret",{}),/UNKNOWN_POST_DIAGNOSTIC_STAGE/);
 });
