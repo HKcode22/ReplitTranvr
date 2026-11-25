@@ -52,8 +52,16 @@ async function repairLane(lane){
   const initialSeq=await seqPriv();
   const serial=seq.is_identity==="NO"&&seq.serial_default===true;
   emit("P6_SOURCE_SEQUENCE_BASELINE",{serialDefault:serial,identity:seq.is_identity==="YES",usage:initialSeq.u,update:initialSeq.upd,needsGrant:serial&&!initialSeq.u&&!initialSeq.upd});
-  stage="OWNER_EXACT_SQL_PARSE";
-  if(lane==="SOURCE")for(const t of source)await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));
+  stage="POPULATION_CONSTRAINT_CATALOG";
+  const key=(await c.query(`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='clean.flight_population'::regclass AND conname='flight_population_key' AND contype='u') AS legacy,
+     EXISTS(SELECT 1 FROM pg_index i JOIN pg_class x ON x.oid=i.indexrelid WHERE i.indrelid='clean.flight_population'::regclass AND x.relname='flight_population_observation_key' AND i.indisunique AND i.indisvalid AND i.indpred IS NULL) AS observation,
+     EXISTS(SELECT 1 FROM pg_index i JOIN pg_class x ON x.oid=i.indexrelid WHERE i.indrelid='clean.flight_population'::regclass AND x.relname='flight_population_legacy_nonfids_key_v39' AND i.indisunique AND i.indisvalid AND i.indpred IS NOT NULL) AS nonfids`)).rows[0];
+  if(!key.observation||!key.legacy&&!key.nonfids)stop("UNREVIEWED_POPULATION_UNIQUENESS_SCHEMA");
+  emit("P6_SOURCE_POPULATION_SCHEMA",{legacyGlobalConstraint:key.legacy,observationUniqueIndex:key.observation,nonFidsPartialUniqueIndex:key.nonfids,currentMainLegacySqlCompatible:key.legacy});
+  // On V0078 the legacy named constraint is deliberately absent. Verify
+  // the successor SQL, not the intentionally invalid legacy statement.
+  const sourceCases=source.filter(t=>t.label!=="POPULATION_LEGACY_CONFLICT_INSERT"||key.legacy);
+  if(lane==="SOURCE")for(const t of sourceCases){stage="OWNER_"+t.label;await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));}
   if(lane==="POST")for(let i=0;i<post.length;i++)await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);
   const missing=cols.filter(x=>!before.readable.includes(x));
   const needsSeq=serial&&!initialSeq.u&&!initialSeq.upd;
@@ -78,7 +86,7 @@ async function repairLane(lane){
    const who=(await c.query("SELECT current_user=$1 correct,session_user=$2 owner",[role,owner])).rows[0];
    if(!who.correct||!who.owner)stop("SCOPED_ROLE_NOT_ENTERED");
    emit("P6_SOURCE_RESTRICTED_ROLE_ENTERED",{actualDedicatedLoginProven:false,temporaryOwnerSet:!id.can_set});
-   if(lane==="SOURCE")for(const t of source){stage=t.label;await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
+   if(lane==="SOURCE")for(const t of sourceCases){stage=t.label;await c.query("EXPLAIN (COSTS OFF) "+t.sql,Array(t.n).fill(null));emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
    if(lane==="POST")for(let i=0;i<post.length;i++){stage="POST_EXPLAIN_"+(i+1);await c.query("EXPLAIN (COSTS OFF) "+post[i],args[i]);emit("P6_EXACT_ROLE_SQL_PASS",{stage});}
   }finally{await c.query("ROLLBACK TO SAVEPOINT scoped_role_probe");await c.query("RELEASE SAVEPOINT scoped_role_probe");}
   stage="MEMBERSHIP_RESTORATION";
@@ -87,7 +95,7 @@ async function repairLane(lane){
   if(!restored.owner||restored.can_set!==id.can_set)stop("TEMP_ROLE_ENTRY_NOT_RESTORED");
   stage="COMMIT";
   if(mode==="VERIFY_ONLY")await c.query("ROLLBACK");else await c.query("COMMIT");
-  emit(mode==="VERIFY_ONLY"?"P6_SOURCE_POST_EXACT_ROLE_VERIFY_PASS":"P6_SOURCE_POST_EXACT_GRANTS_COMMITTED",{lane,addedPostColumns:mode==="VERIFY_ONLY"||lane!=="POST"?[]:missing,sourceSerialUsageAdded:mode!=="VERIFY_ONLY"&&lane==="SOURCE"&&needsSeq,exactSqlChecks:lane==="SOURCE"?4:3,ownerMembershipUnchanged:true,tableWidePreSelect:false,preWrites:false,actualDedicatedLoginProven:false});
+  emit(mode==="VERIFY_ONLY"?"P6_SOURCE_POST_EXACT_ROLE_VERIFY_PASS":"P6_SOURCE_POST_EXACT_GRANTS_COMMITTED",{lane,addedPostColumns:mode==="VERIFY_ONLY"||lane!=="POST"?[]:missing,sourceSerialUsageAdded:mode!=="VERIFY_ONLY"&&lane==="SOURCE"&&needsSeq,exactSqlChecks:lane==="SOURCE"?sourceCases.length:3,legacyGlobalConstraint:key.legacy,currentMainLegacySqlCompatible:key.legacy,ownerMembershipUnchanged:true,tableWidePreSelect:false,preWrites:false,actualDedicatedLoginProven:false});
  }catch(e){await c.query("ROLLBACK").catch(()=>{});throw e;}
  finally{await c.end().catch(()=>{});}
 }
