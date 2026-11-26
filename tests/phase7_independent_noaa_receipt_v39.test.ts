@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,enrichP7NativeFeatureReviewWithNoaa,verifyP7NoaaExactPreLaneEvidence,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
+import {verifyP7IndependentPublicNoaaArtifact,mergeP7VerifiedNoaaIntoBoundPreBundle,enrichP7NativeFeatureReviewWithNoaa,verifyP7NoaaExactPreLaneEvidence,readP7WeatherOnlyForPresentPermit,type P7PublicNoaaArtifactReceipt} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39";
 const sha=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex");
 const now="2026-11-25T00:00:00.000Z",t="2026-11-25T06:15:00.000Z",scope={flightInstanceId:"leg:fixture:001",originIcao:"WSSS",destinationIcao:"YSSY",selectedNativeTUtc:t,ownCutoffUtc:"2026-11-25T00:15:00.000Z",observedDbClockUtc:now};
 const key=generateKeyPairSync("ed25519"),env={P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(key.publicKey.export({format:"pem",type:"spki"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:sha(key.publicKey.export({format:"der",type:"spki"})),P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:sha("synthetic policy"),V39_P5_MANIFEST_SHA256:sha("synthetic manifest"),V39_P5_RIGHTS_SHA256:sha("synthetic rights")};
@@ -69,4 +69,20 @@ it("recomputes the exact present weather fields from signed source bytes for the
  expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,artifacts:[t0]})).toThrow("EXACT_SOURCE_OBSERVATION_NOT_REPRODUCED");
  expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,env:{...args.env,P6_PHASE7_NOAA_SOURCE_PURPOSE_SHA256:sha("other purpose")}})).toThrow("WEATHER_LANE_PURPOSE_OR_ARTIFACT_SET");
  expect(()=>verifyP7NoaaExactPreLaneEvidence({...args,scope:{...scoped,destinationIcao:"OMAA"}})).toThrow("EXACT_WEATHER_LANE_SCOPE");
+});
+
+it("never reads an optional weather archive for a FIDS-only permit, but preserves required proof for present weather",async()=>{
+ let calls=0;
+ const port={readExactReviewedWeatherArtifacts:async()=>{calls++;throw Error("archive unreachable")}};
+ const p={reviewedSupplementalFeatureBundle:bundle()} as any;
+ expect(await readP7WeatherOnlyForPresentPermit(p,port)).toEqual([]);
+ expect(await readP7WeatherOnlyForPresentPermit(p)).toEqual([]);
+ expect(calls).toBe(0);
+ const present={...p,reviewedSupplementalFeatureBundle:{...bundle(),observations:[...bundle().observations,{field:"origin_metar_wind_kt",value:10}]}};
+ await expect(readP7WeatherOnlyForPresentPermit(present)).rejects.toThrow("PRESENT_WEATHER_READER_REQUIRED");
+ await expect(readP7WeatherOnlyForPresentPermit(present,port)).rejects.toThrow("archive unreachable");
+ expect(calls).toBe(1);
+ const missing={...present,reviewedSupplementalFeatureBundle:{...bundle(),observations:[{field:"origin_metar_wind_kt",value:null}]}};
+ expect(await readP7WeatherOnlyForPresentPermit(missing,port)).toEqual([]);
+ expect(calls).toBe(1);
 });

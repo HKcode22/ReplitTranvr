@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
       - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
+      - 'migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'
       - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
       - 'scripts/v39_phase6_v0100_owner_schema_once_v39.mjs'
       - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
@@ -21,6 +22,7 @@ jobs:
       V39_P5_CD_V0089_GUARD_CI: '1'
       V39_P5_CD_V0091_REGISTRATION_CI: '1'
       V39_P6_V0100_RESTARTABLE_CI: '1'
+      V39_P5B_CONDITIONAL_QUEUE_CI: '1'
       V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
       V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
       V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE: '0'
@@ -143,6 +145,9 @@ jobs:
           JS
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
           echo P5_V0091_REAL_NON_SUPERUSER_OWNER_INSTALLER_ONCE_AND_REPEAT_HOLD_PASS
+          # Isolated superuser applies the staged exact function successor;
+          # no production install or grant. Existing owner/ACL preserved.
+          psql 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable' -X -v ON_ERROR_STOP=1 -f 'migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
         shell: bash
         run: |

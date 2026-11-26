@@ -264,15 +264,18 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
   expect(calls).toEqual(["SET ROLE phase6_private_frozen_reader_v39","CLOSED"]);
  });
  it("does not replay or leak private SQL/provider exception after failed reader or child",async()=>{
-  const f=fixture(),events:string[]=[];
+  const f=fixture(),events:string[]=[],diagnostics:unknown[]=[];
   await expect(runP6OnePrivateSourceOriginalGHChild(f.env,{
+   onDiagnostic:(x:unknown)=>diagnostics.push(x),
    openRestrictedReader:async()=>({
     async query(){events.push("SQL");},
     async end(){events.push("CLOSE");}
    }),
-   hydrateIndex:async()=>{throw Error("PRIVATE_BYTES_SECRET");}
+   hydrateIndex:async()=>{throw Object.assign(Error("PRIVATE_BYTES_SECRET"),{code:"42501"});}
   })).rejects.toThrow("AUTHENTICATED_PRIVATE_SOURCE_AND_INDEX_READER_HOLD_REDACTED");
   expect(events).toEqual(["SQL","CLOSE"]);
+  expect(diagnostics).toEqual([{status:"P6_SOURCE_CHILD_FAILURE_DIAG_NO_PROVIDER_CONTENT",stage:"SIGNED_DAY_VERIFY",category:"DB_PERMISSION"}]);
+  expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE_BYTES_SECRET");
   const g=fixture();
   await expect(runP6OnePrivateSourceOriginalGHChild(g.env,{
    openRestrictedReader:async()=>({
@@ -280,8 +283,11 @@ describe("Phase5 exit: real SOURCE private PG16 into original paid child only af
    }),
    hydrateIndex:async()=>authenticatedDayRoute(),
    readSourceQuery:async()=>({privateLogicalPath:PACK}),
+   onDiagnostic:(x:unknown)=>diagnostics.push(x),
    runExistingAdmission:async()=>{throw Error("original paid unknown COMMIT");}
   })).rejects.toThrow("ORIGINAL_PHASE5_PAID_GATES_OR_EPHEMERAL_CLEANUP_HOLD_NO_RETRY");
+  expect(diagnostics.at(-1)).toEqual({status:"P6_SOURCE_CHILD_FAILURE_DIAG_NO_PROVIDER_CONTENT",stage:"ORIGINAL_ADMISSION",category:"UNCLASSIFIED"});
+  expect(JSON.stringify(diagnostics)).not.toContain("unknown COMMIT");
  });
 });
 

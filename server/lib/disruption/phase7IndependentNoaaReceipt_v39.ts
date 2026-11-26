@@ -109,6 +109,20 @@ export function mergeP7VerifiedNoaaIntoBoundPreBundle(bundle:P5EReviewedSuppleme
  * A missing optional source stays missing; malformed or mismatched signed
  * evidence never becomes a prediction. The original matched flight count
  * is unchanged. No provider fetch, private packet write or signature here. */
+/** Optional weather must not become a dependency of a signed permit that
+ * contains no weather. A malformed or present observation still goes through
+ * the original independent proof checks. */
+export async function readP7WeatherOnlyForPresentPermit(
+ p:Readonly<P5Stage14SingleFlightPrePermit>,
+ port?:{readExactReviewedWeatherArtifacts(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<readonly P7SignedPublicNoaaArtifact[]>}
+){
+ const observations=p.reviewedSupplementalFeatureBundle?.observations;
+ const fields=new Set(["origin_metar_visibility_m","origin_metar_wind_kt","origin_taf_flight_category","destination_taf_flight_category"]);
+ const present=Array.isArray(observations)&&observations.some(o=>fields.has(o.field)&&o.value!==null&&o.value!==undefined);
+ if(!present)return [];
+ if(!port)return HOLD("PRESENT_WEATHER_READER_REQUIRED");
+ return port.readExactReviewedWeatherArtifacts(p);
+}
 export async function enrichP7NativeFeatureReviewWithNoaa(input:{
  env:NodeJS.ProcessEnv;handoff:any;featureReview:any;
  port:{readReviewedWeatherArtifacts:(scope:Readonly<{airports:readonly string[];observedDbClockUtc:string}>)=>Promise<readonly P7SignedPublicNoaaArtifact[]>};

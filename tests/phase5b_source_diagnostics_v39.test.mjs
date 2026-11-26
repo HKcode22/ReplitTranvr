@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel,sourceChildFailureDiagnostic} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
 test("only fixed complete diagnostic lines are returned, never arbitrary captured data",()=>{
  const ok=sourceDiagnosticLine("RESERVATION_CONFIRMED");
  const no=sourceDiagnosticLine("HTTP_AUTH_REJECTED");
@@ -36,4 +36,14 @@ test("fixed body diagnostics survive subprocess filtering without raw provider c
  const labels=["HTTP_NO_CONTENT","HTTP_RESET_CONTENT","FIDS_BODY_UNAVAILABLE","FIDS_BODY_EMPTY","FIDS_BODY_TOO_LARGE","FIDS_BODY_READ_FAILED","FIDS_BODY_INVALID_JSON","FIDS_BODY_INVALID_OBJECT","FIDS_DEPARTURES_MISSING","FIDS_ARRIVALS_MISSING","FIDS_BODY_VALID"];
  const lines=labels.map(sourceDiagnosticLine);
  assert.deepEqual(readSafeSourceDiagnosticLines(lines.join("\n")+"\nP6_SOURCE_DIAG FIDS_BODY_INVALID_JSON private",null),lines);
+});
+
+test("T024 fixed outer SOURCE stages preserve SQL category without leaking any error content",()=>{
+ for(const stage of ["ADMISSION","READER_CONNECT","READER_ROLE","SIGNED_DAY_READ","SIGNED_DAY_VERIFY","SIGNED_ROUTE_BIND","SIGNED_QUERY_READ","SIGNED_QUERY_VERIFY","READER_CLOSE","ROUTE_BINDING","ORIGINAL_ADMISSION","ORIGINAL_SUBPROCESS","EPHEMERAL_CLEANUP"]){
+  const d=sourceChildFailureDiagnostic(stage,{code:"42501",message:"private SQL / credentials"});
+  assert.deepEqual(d,{status:"P6_SOURCE_CHILD_FAILURE_DIAG_NO_PROVIDER_CONTENT",stage,category:"DB_PERMISSION"});
+  assert(!JSON.stringify(d).includes("private SQL"));
+ }
+ assert.equal(sourceChildFailureDiagnostic("ORIGINAL_SUBPROCESS",{message:"private raw exception"}).category,"UNCLASSIFIED");
+ assert.throws(()=>sourceChildFailureDiagnostic("private secret",{}),/UNKNOWN_SOURCE_CHILD_DIAGNOSTIC_STAGE/);
 });

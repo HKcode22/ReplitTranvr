@@ -2,6 +2,9 @@ name: Phase5B source diagnostics offline tests
 on:
   pull_request:
     paths:
+      - 'data-collection/phase6/RECOVERY_REGISTER.md'
+      - 'AGENTS.md'
+      - 'tests/phase5b_recovery_register_v39.test.mjs'
       - 'scripts/v39_phase5b_source_diagnostics_v39.mjs'
       - 'scripts/v39_phase5_one_query_github_fids_source_owner_v39.ts'
       - 'scripts/v39_phase6_private_source_one_original_child_github_v39.mjs'
@@ -9,14 +12,42 @@ on:
       - 'tests/phase5b_fids_response_diagnostics_v39.test.ts'
       - 'tests/phase5_no_provider_prearm_clock_v39.test.ts'
       - 'server/lib/disruption/phase5ConditionalFidsServiceRecovery_v39.ts'
+      - 'server/lib/disruption/phase5ConditionalServiceIdentity_v39.ts'
+      - 'tests/phase5_prospective_fids_identity_custody_v39.test.ts'
       - 'tests/phase5_conditional_fids_service_recovery_v39.test.ts'
       - 'server/lib/disruption/phase5ConditionalBoundSourceReview_v39.ts'
+      - 'server/lib/disruption/phase5ConditionalPrePermitPreparation_v39.ts'
+      - 'server/lib/disruption/phase5ConditionalPreQueuePacket_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubBoundedPreTick_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubPreReleaseGate_v39.ts'
+      - 'server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39.ts'
+      - 'server/lib/disruption/phase5AmendmentEFidsOriginalFeatureCompiler_v39.ts'
+      - 'tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts'
       - 'tests/phase5_conditional_bound_source_review_v39.test.ts'
+      - 'server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts'
+      - 'tests/phase5_conditional_signed_schedule_pair_v39.test.ts'
       - 'server/lib/disruption/phase5V0080GitHubPrearm_v39.ts'
       - 'scripts/v39_phase5b_full_retention_baseline_owner.sh'
       - 'scripts/v39_phase5b_full_recovery_owner.sh'
+      - 'scripts/v39_phase5b_coordinated_recovery_cutover_owner.sh'
+      - 'scripts/v39_phase5b_post_cutover_pin_readonly.sh'
+      - 'scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs'
+      - 'server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs'
+      - 'tests/phase6_stored_source_native_candidate_audit_v39.test.ts'
+      - 'server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts'
+      - 'scripts/v39_phase7_local_pre_evidence_roles_v39.ts'
+      - 'scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs'
+      - 'tests/phase7_local_private_pre_handoff_v39.test.ts'
+      - 'tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs'
       - 'server/lib/disruption/aerodataboxLimiter_v3.ts'
       - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
+      - 'server/lib/disruption/phase6ReviewedPreparedSourceShardSigner_v39.ts'
+      - 'tests/phase5b_conditional_source_signer_scope_v39.test.ts'
+      - 'server/lib/disruption/fidsCensus_v3.ts'
+      - 'server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39.ts'
+      - 'tests/phase5_scoped_fids_source_bridge_v39.test.ts'
+      - 'tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts'
+      - '.github/workflows/phase5-one-signed-day-source-child-dispatch.yml'
       - '.github/workflows/phase5b-source-diagnostics-offline.yml'
 permissions:
   contents: read
@@ -31,7 +62,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs
+      - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: npx vitest run tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts
-      - run: bash -n scripts/v39_phase5b_full_retention_baseline_owner.sh && bash -n scripts/v39_phase5b_full_recovery_owner.sh
+      - run: npm run check
+      - run: npx vitest run tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_conditional_signed_schedule_pair_v39.test.ts tests/phase5_scoped_fids_source_bridge_v39.test.ts tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts tests/phase5b_conditional_source_signer_scope_v39.test.ts tests/phase5_prospective_fids_identity_custody_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts
+      - run: npx --no-install tsx --test tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs
+      - run: bash -n scripts/v39_phase5b_full_retention_baseline_owner.sh && bash -n scripts/v39_phase5b_full_recovery_owner.sh && bash -n scripts/v39_phase5b_post_cutover_pin_readonly.sh && bash -n scripts/v39_phase5b_coordinated_recovery_cutover_owner.sh

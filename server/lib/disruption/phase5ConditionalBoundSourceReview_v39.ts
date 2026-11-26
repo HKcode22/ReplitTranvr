@@ -4,14 +4,20 @@
  * this reader does not authenticate a signature merely from a digest.
  */
 import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
-import {P5_STAGE14_BOUND_SOURCE_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
+import {buildP5EAlreadyMatchedMovementSupplement} from "./phase5AmendmentEFidsOriginalFeatureCompiler_v39";
+import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
+import {P5_STAGE14_BOUND_SOURCE_SQL,verifyP5Stage14SourceBindingForIndependentRead,type P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_E_BATCH_ORIGINAL_SQL,P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
-import type {P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
+import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,type P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
 type ReviewScope={
  source:P5ActualSourceCandidateScope;protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
  frozenStudyStartUtc:string;policyEffectiveUtc:string;minimumReviewLeadSeconds:number;
  expectedPopulationQueryId:string;expectedResponseSha256:string;expectedDecodedBodySha256:string;
  expectedLocalFrom:string;expectedLocalTo:string;
+ expectedServiceWindowStartUtc?:string;expectedServiceWindowEndUtc?:string;
+ /** From the exact protected review of this conditional protocol, never
+  * inferred from a SOURCE packet, native feature policy, or rights hash. */
+ externalContentUseReviewSha256?:string;
 };
 const SHA=/^[a-f0-9]{64}$/;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -22,6 +28,7 @@ const stamp=(x:unknown)=>{
  return new Date(n).toISOString();
 };
 const ms=(x:unknown)=>Date.parse(stamp(x));
+const maybeMs=(x:unknown)=>x instanceof Date?x.getTime():typeof x==="string"?Date.parse(x):NaN;
 export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readonly Record<string,unknown>[],originals:readonly Record<string,unknown>[],clock:Date|string){
  const q=s?.source;
  if(!q||s.ownerProspectiveSeparateTierApproved!==true||![q.manifestSha256,q.queryDigestSha256,q.reviewedReleaseSha256,q.rightsReviewSha256,q.providerContractSha256,q.earlyDrawSha256,s.protocolSha256,s.expectedResponseSha256,s.expectedDecodedBodySha256].every(x=>SHA.test(x??""))||
@@ -42,6 +49,8 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
  p?.fidsRequestContract?.openapiSha256!==q.providerContractSha256||p?.fidsRequestContract?.fromLocal!==s.expectedLocalFrom||
  p?.fidsRequestContract?.toLocal!==s.expectedLocalTo)hold("ORIGINAL_BINDING");
  const n=ms(clock),res=ms(o.reserved_at),ret=ms(o.fids_retrieval_utc),persist=ms(o.raw_persisted_at_utc),avail=ms(o.source_available),bound=ms(o.bound_at_utc),exp=ms(o.source_expires_at_utc);
+ if((s.expectedServiceWindowStartUtc!==undefined&&ms(o.service_window_start_utc)!==ms(s.expectedServiceWindowStartUtc))||
+    (s.expectedServiceWindowEndUtc!==undefined&&ms(o.service_window_end_utc)!==ms(s.expectedServiceWindowEndUtc)))hold("SIGNED_SOURCE_WINDOW_DRIFT");
  if(ms(q.plannedRequestUtc)>res||res>ret||ret>persist||persist>avail||avail>bound||bound>n||n>=exp||
  exp>avail+23*3600000||ms(r.raw_persisted_at_utc)!==persist||ms(r.source_expires_at_utc)!==exp)hold("SOURCE_CLOCK");
  // Bound-at (not merely retrieval/available-at) is the earliest possible
@@ -50,21 +59,127 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
   protocolSha256:s.protocolSha256,ownerProspectiveSeparateTierApproved:true,
   manifestSha256:q.manifestSha256,runDayIndex:q.runDayIndex,sourceResponseSha256:s.expectedResponseSha256,sourceQueryId:s.expectedPopulationQueryId,
   airportIcao:q.airportIcao,frozenStudyStartUtc:s.frozenStudyStartUtc,policyEffectiveUtc:s.policyEffectiveUtc,
-  plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
+  plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),originalSourceAvailableUtc:stamp(o.source_available),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
   serviceWindowStartUtc:stamp(o.service_window_start_utc),serviceWindowEndUtc:stamp(o.service_window_end_utc),horizon:q.horizon,
   maximumStalenessSeconds:q.maxPopulationStalenessSeconds,minimumReviewLeadSeconds:s.minimumReviewLeadSeconds
  });
 }
+/** Existing Stage14 writer accepts exactly these G5A fields. This
+ * does not fabricate a signed permit or an issued PRE. */
+export function matchP5ConditionalStage14Members(
+ s:ReviewScope,report:ReturnType<typeof prepareP5BoundConditionalServiceReview>,
+ members:readonly Record<string,unknown>[],expectedCount:number,dbClock:string,originalSourceAvailableUtc?:string){
+ const observed=ms(dbClock),originalAvailable=originalSourceAvailableUtc===undefined?null:ms(originalSourceAvailableUtc);
+ if(originalAvailable!==null&&originalAvailable>observed)hold("MEMBER_SOURCE_CLOCK");
+ if(!Number.isSafeInteger(expectedCount)||expectedCount<0||expectedCount>2500||members.length!==expectedCount)hold("MEMBER_COUNT");
+ const by=new Map<string,Record<string,unknown>[]>(),memberIds=new Set<string>();
+ for(const m of members){
+  if(m.population_query_id!==s.expectedPopulationQueryId||m.response_hash!==s.expectedResponseSha256||m.provider_content_expired_at_utc!==null||
+   typeof m.population_member_id!=="string"||!m.population_member_id)hold("MEMBER_CUSTODY");
+  const memberId=String(m.population_member_id);
+  if(memberIds.has(memberId))hold("DUPLICATE_POPULATION_MEMBER_ID");
+  memberIds.add(memberId);
+  const key=String(m.analytic_identity_id??"");
+  by.set(key,[...(by.get(key)??[]),m]);
+ }
+ const matched=[];
+ let missingOrAmbiguous=0;
+ for(const candidate of report.privateCandidates){
+  const id=candidate.stage14ConditionalFlightInstanceId;
+  if(id===null){missingOrAmbiguous++;continue;}
+  const rows=by.get(id)??[];
+  if(rows.length!==1){missingOrAmbiguous++;continue;}
+  const m=rows[0],scheduled=maybeMs(m.dep_scheduled_utc),available=maybeMs(m.available_at);
+  if(m.canonical_flight_instance_id!==id||m.source_airport_icao!==s.source.airportIcao||
+    m.dep_airport_icao!==s.source.airportIcao||m.arr_airport_icao!==candidate.destinationIcao||
+    m.flight_number!==candidate.operatorFlightNumber||m.scope_classification!=="unknown"||
+    m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
+    m.source_type!=="fids"||m.population_role!=="requested_airport_primary"||m.query_direction!=="Departure"||
+    !Number.isFinite(scheduled)||!Number.isFinite(available)||scheduled!==ms(candidate.selectedReportedDepartureUtc)||
+    (originalAvailable!==null&&available<originalAvailable)||available>observed||available>ms(candidate.ownCutoffUtc)||
+    ms(candidate.ownCutoffUtc)-observed<=s.minimumReviewLeadSeconds*1000){
+   missingOrAmbiguous++;continue;
+  }
+  matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
+   expectedSourcePopulationQueryId:s.expectedPopulationQueryId,expectedSourceResponseSha256:s.expectedResponseSha256,
+   identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,reviewedProtocolAmendmentSha256:s.protocolSha256,
+   requireProspectiveConditionalSourceMarker:true as const,
+   reviewedStableServiceKeySha256:id.slice("leg:g5a:".length),expectedOperatorFlightNumber:candidate.operatorFlightNumber,
+   expectedDestinationIcao:candidate.destinationIcao,selectedTNativeUtc:candidate.selectedReportedDepartureUtc,
+   predictionCutoffUtc:candidate.ownCutoffUtc,sourceMemberAvailableUtc:new Date(available).toISOString(),
+   observedDbClockUtc:new Date(observed).toISOString(),sourceBodySha256:s.expectedDecodedBodySha256,
+   queryDigestSha256:s.source.queryDigestSha256,expectedGithubSourceRunId:s.source.expectedSourceGithubRunId,
+   manifestSha256:s.source.manifestSha256,runDayIndex:s.source.runDayIndex,horizon:s.source.horizon,airportIcao:s.source.airportIcao}));
+ }
+ const summary={stage14MatchedMembershipCount:matched.length,missingOrAmbiguous,actualPreIssued:false,providerCalls:0,databaseWrites:0};
+ return Object.freeze(Object.defineProperty(summary,"privateReviewProposals",{value:Object.freeze(matched),enumerable:false})) as typeof summary&{readonly privateReviewProposals:readonly (typeof matched)[number][]};
+}
 export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool,s:ReviewScope){
+ return readBound(pool,s,false);
+}
+/** Runtime-only entry: the caller has verified signed SOURCE packet bytes and
+ * an actual committed-query audit. Derive decoded-body digest from the exact
+ * existing immutable binding, not from the body to be verified. */
+export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string}){
+ if(!s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc))hold("SIGNED_SOURCE_WINDOW_REQUIRED");
+ return readBound(pool,s,true);
+}
+export type P5SignedConditionalFeatureReadScope=Omit<ReviewScope,"expectedDecodedBodySha256"|"externalContentUseReviewSha256">&{
+ expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string;externalContentUseReviewSha256:string;
+};
+type P5ConditionalPermitReadback={flightInstanceId:string;bundle:ReturnType<typeof buildP5EAlreadyMatchedMovementSupplement>["bundle"];
+ normalizedMember:Readonly<Record<string,unknown>>;observedDbClockUtc:string;sourceExpiresAtUtc:string};
+/** Offline/staged proof-reader seam. Caller must independently authenticate
+ * the separate prospective SOURCE/feature policy and the exact signed
+ * query packet; permit hashes or metadata alone are not that authority.
+ * No new role, publisher, signing capability or retention release. */
+export async function readP5ExactConditionalPermitPage(pool:P5EReadOnlyPgPool,s:P5SignedConditionalFeatureReadScope,permits:readonly P5Stage14SingleFlightPrePermit[]){
+ const q=s?.source;
+ if(!q||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.externalContentUseReviewSha256??"")||
+   !s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||
+   ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc)||s.minimumReviewLeadSeconds<900||
+   !Array.isArray(permits)||permits.length<1||permits.length>96)hold("EXACT_CONDITIONAL_PERMIT_PAGE_SCOPE");
+ const ids=new Set<string>();
+ for(const p of permits){
+  if(!p||p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.requireProspectiveConditionalSourceMarker!==true||
+    p.externalConditionalScheduleSourceAndUseReviewed!==true||p.externalNativeTPhysicalLegAndSourceUseReviewed!==undefined||
+    p.reviewedProtocolAmendmentSha256!==s.protocolSha256||!SHA.test(p.reviewedStableServiceKeySha256??"")||
+    p.flightInstanceId!=="leg:g5a:"+p.reviewedStableServiceKeySha256||ids.has(p.flightInstanceId)||
+    p.manifestSha256!==q.manifestSha256||p.queryDigestSha256!==q.queryDigestSha256||
+    p.expectedSourcePopulationQueryId!==s.expectedPopulationQueryId||p.expectedSourceResponseSha256!==s.expectedResponseSha256||
+    p.expectedReviewedSourceRightsSha256!==q.rightsReviewSha256||p.expectedProviderContractSha256!==q.providerContractSha256||
+    p.expectedReviewedReleaseSha256!==q.reviewedReleaseSha256||p.expectedEarlyDrawSha256!==q.earlyDrawSha256||
+    p.expectedGithubSourceRunId!==q.expectedSourceGithubRunId||p.runDayIndex!==q.runDayIndex||p.slot!==q.slot||
+    p.horizon!==q.horizon||p.airportIcao!==q.airportIcao||p.maxPopulationStalenessSeconds!==q.maxPopulationStalenessSeconds||
+    p.reviewedSupplementalFeatureBundle?.externalSourceAndContentsReviewReceiptSha256!==s.externalContentUseReviewSha256)
+   hold("EXACT_CONDITIONAL_PERMIT_PAGE_BINDING");
+  ids.add(p.flightInstanceId);
+ }
+ return readBound(pool,s,true,permits);
+}
+async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean,
+ permits?:readonly P5Stage14SingleFlightPrePermit[]){
+ if(input.externalContentUseReviewSha256!==undefined&&(!signed||!SHA.test(input.externalContentUseReviewSha256)))hold("CONDITIONAL_FEATURE_REVIEW_SCOPE");
  const c=await pool.connect();let began=false;
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
   await c.query("SET LOCAL statement_timeout='15s'");
-  const g=(await c.query("SELECT session_user::text AS login,current_user::text AS actor,current_setting('transaction_read_only') AS ro,NOT pg_is_in_recovery() AS primary")).rows;
-  if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
-  const q=s.source,params=[q.manifestSha256,q.queryDigestSha256];
-  const rows=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,params)).rows;
+  await c.query("SET LOCAL lock_timeout='2000ms'");
+  const g=(await c.query("SELECT session_user::text AS login,current_user::text AS actor,current_database() AS db,current_setting('server_version_num')::integer AS version,current_setting('transaction_read_only') AS ro,NOT pg_is_in_recovery() AS primary")).rows;
+  // The commissioned Stage28 pool authenticates the dedicated login, then
+  // SET ROLEs to the existing restricted SOURCE group, not to the login.
+  if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_STAGE28_GROUPS.source||
+    g[0].db!=="neondb"||Number(g[0].version)<160000||Number(g[0].version)>=170000||!Number.isFinite(Number(g[0].version))||
+    g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
+  const q=input.source,params=[q.manifestSha256,q.queryDigestSha256];
+  const boundSql=signed?P5_STAGE14_BOUND_SOURCE_SQL.replace("b.normalized_members_count,b.bound_at_utc,","b.normalized_members_count,b.bound_at_utc,b.decoded_original_body_sha256,"):P5_STAGE14_BOUND_SOURCE_SQL;
+  if(signed&&boundSql===P5_STAGE14_BOUND_SOURCE_SQL)hold("BINDING_QUERY_CONTRACT");
+  const rows=(await c.query(boundSql,params)).rows;
   const o=rows[0];
+  const bodyHash=signed?o?.decoded_original_body_sha256:input.expectedDecodedBodySha256;
+  if(typeof bodyHash!=="string"||!SHA.test(bodyHash)||
+    (signed&&o?.conditional_source_protocol_sha256!==input.protocolSha256))return hold("SIGNED_SOURCE_MARKER_OR_BODY_BINDING");
+  const s:ReviewScope={...input,expectedDecodedBodySha256:bodyHash};
   if(rows.length!==1||!o||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.protocolSha256??"")||
     !q.plannedRequestUtc||ms(s.policyEffectiveUtc)>ms(q.plannedRequestUtc)||o.manifest_sha256!==q.manifestSha256||
     Number(o.run_day_index)!==q.runDayIndex||o.slot_id!==q.slot||o.horizon!==q.horizon||o.airport_icao!==q.airportIcao||
@@ -73,14 +188,90 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
     o.provider_contract_sha256!==q.providerContractSha256||o.early_draw_sha256!==q.earlyDrawSha256||o.original_current!==true||
     o.population_query_id!==s.expectedPopulationQueryId||o.original_response_hash!==s.expectedResponseSha256||o.fids_response_hash!==s.expectedResponseSha256||
     ms(o.source_expires_at_utc)<=ms((await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at)+30000)hold("ORIGINAL_SCOPE_OR_EXPIRY");
+  if(signed&&(ms(o.service_window_start_utc)!==ms(s.expectedServiceWindowStartUtc)||ms(o.service_window_end_utc)!==ms(s.expectedServiceWindowEndUtc)))hold("SIGNED_SOURCE_WINDOW_DRIFT");
   // Existing reader SQL plus a fresh retention fence before retrieving raw.
   const sql=P5_E_BATCH_ORIGINAL_SQL.replace("AND r.raw_payload IS NOT NULL","AND b.source_expires_at_utc>clock_timestamp()+interval '30 seconds' AND r.raw_payload IS NOT NULL");
   if(sql===P5_E_BATCH_ORIGINAL_SQL)hold("QUERY_CONTRACT");
   const originals=(await c.query(sql,[...params,s.expectedPopulationQueryId])).rows;
+  if(signed){
+   const raw=originals[0]?.raw_payload as Record<string,any>|undefined;
+   const marker=raw?.fidsRequestContract?.phase5ConditionalService;
+   if(originals.length!==1||marker?.protocolSha256!==s.protocolSha256||marker?.cohortStartUtc!==s.frozenStudyStartUtc)
+    hold("SIGNED_ORIGINAL_COHORT_MARKER_DRIFT");
+  }
   const z=(await c.query("SELECT clock_timestamp() AS at")).rows;
   if(z.length!==1)hold("CLOCK");
-  const report=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));
+  prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));
+  const members=(await c.query(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,[s.expectedPopulationQueryId])).rows;
+  const fresh=(await c.query("SELECT clock_timestamp() AS at")).rows;
+  if(fresh.length!==1||ms(fresh[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_MEMBER_CLOCK");
+  // Reprepare at actual fresh clock: member reading cannot steal PRE lead.
+  const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at));
+  const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at),stamp(o.source_available));
+  // F027/C002: reuse the existing feature dictionary, but only from the
+  // actual decoded original index independently matched to its stored G5A
+  // member. No native claim, new field, network request, or permanent copy.
+  const featureDrafts=[];
+  if(s.externalContentUseReviewSha256){
+   const p=originals[0].raw_payload as Record<string,any>;
+   const byId=new Map(finalReport.privateCandidates.map(x=>[x.stage14ConditionalFlightInstanceId,x]));
+   const selectedIds=permits?new Set(permits.map(x=>x.flightInstanceId)):null;
+   for(const m of memberReview.privateReviewProposals){
+    if(selectedIds&&!selectedIds.has(m.flightInstanceId))continue;
+    const candidate=byId.get(m.flightInstanceId);
+    if(!candidate||!Number.isSafeInteger(candidate.sourceIndex)||candidate.sourceIndex<0||candidate.sourceIndex>=p.departures.length)return hold("CONDITIONAL_FEATURE_MATCH_DRIFT");
+    const compiled=buildP5EAlreadyMatchedMovementSupplement({flightInstanceId:m.flightInstanceId,populationQueryId:m.expectedSourcePopulationQueryId,
+     expectedBoundV0079ResponseHash:m.expectedSourceResponseSha256,externallyReviewedSourceAndContentsSha256:s.externalContentUseReviewSha256},
+     p.departures[candidate.sourceIndex],stamp(p.fetchedAtUtc),m.sourceMemberAvailableUtc);
+    featureDrafts.push(Object.freeze({flightInstanceId:m.flightInstanceId,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,
+     reviewedProtocolSha256:s.protocolSha256,compiled,physicalGateOutCertified:false as const,sourceBodyAndCanonicalEnvelopeIntegrityVerified:true as const}));
+   }
+  }
+  // Feature extraction also consumes time; do not return late drafts.
+  const end=featureDrafts.length?(await c.query("SELECT clock_timestamp() AS at")).rows:fresh;
+  if(end.length!==1||ms(end[0].at)<ms(fresh[0].at)||ms(end[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_FEATURE_CLOCK");
+  // F033: candidate summaries, member proposals and feature drafts must
+  // describe the same final database clock. The earlier authenticated raw
+  // match remains valid; time can only remove candidates, never add any.
+  const endClock=stamp(end[0].at),endMs=ms(endClock);
+  const liveCandidates=finalReport.privateCandidates.filter(x=>ms(x.ownCutoffUtc)-endMs>s.minimumReviewLeadSeconds*1000);
+  const dropped=finalReport.privateCandidates.length-liveCandidates.length;
+  const liveReport=Object.freeze(Object.defineProperty({...finalReport,
+   counts:{...finalReport.counts,conditionalCandidates:liveCandidates.length,lateOrStale:finalReport.counts.lateOrStale+dropped}},
+   "privateCandidates",{value:Object.freeze(liveCandidates),enumerable:false})) as typeof finalReport;
+  const liveMemberReview=endClock===stamp(fresh[0].at)?memberReview:
+   matchP5ConditionalStage14Members(s,liveReport,members,Number(o.normalized_members_count),endClock,stamp(o.source_available));
+  const liveIds=new Set(liveMemberReview.privateReviewProposals.map(m=>m.flightInstanceId));
+  const liveDrafts=featureDrafts.filter(x=>liveIds.has(x.flightInstanceId));
+  let privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null=null;
+  if(permits){
+   const byDraft=new Map(liveDrafts.map(x=>[x.flightInstanceId,x]));
+   const byProposal=new Map(liveMemberReview.privateReviewProposals.map(x=>[x.flightInstanceId,x]));
+   const byMember=new Map(members.map(x=>[String(x.population_member_id),x]));
+   privatePermitReadbacks=Object.freeze(permits.map(p=>{
+    const proposal=byProposal.get(p.flightInstanceId),draft=byDraft.get(p.flightInstanceId);
+    if(!proposal||!draft||proposal.expectedOperatorFlightNumber!==p.expectedOperatorFlightNumber||
+     proposal.expectedDestinationIcao!==p.expectedDestinationIcao||proposal.selectedTNativeUtc!==p.selectedTNativeUtc)
+     return hold("EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE");
+    const member=byMember.get(proposal.populationMemberId);
+    if(!member)return hold("EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE");
+    const v=verifyP5Stage14SourceBindingForIndependentRead(p,o,[member],new Date(endMs));
+    if(v.cutoffUtc!==proposal.predictionCutoffUtc||ms(v.sourceExpiresAtUtc)!==ms(o.source_expires_at_utc))
+     return hold("EXACT_CONDITIONAL_PERMIT_CLOCK_DRIFT");
+    return Object.freeze({flightInstanceId:p.flightInstanceId,bundle:draft.compiled.bundle,
+     normalizedMember:Object.freeze({...member}),observedDbClockUtc:endClock,sourceExpiresAtUtc:v.sourceExpiresAtUtc});
+   }));
+  }
   await c.query("COMMIT");began=false;
-  return report;
+  const out={report:liveReport,memberReview:liveMemberReview,observedDbClockUtc:endClock,
+   conditionalFeatureReview:{status:s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
+    featureDraftCount:liveDrafts.length,lateDraftCount:featureDrafts.length-liveDrafts.length,
+    evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),
+    missingFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.missingFidsFields.length,0),actualPreIssued:false,providerCalls:0,databaseWrites:0}};
+  return Object.freeze(Object.defineProperties(out,{privateFeatureDrafts:{value:Object.freeze(liveDrafts),enumerable:false},
+   privatePermitReadbacks:{value:privatePermitReadbacks,enumerable:false},
+   privateSourceBoundAtUtc:{value:stamp(o.bound_at_utc),enumerable:false}})) as typeof out&{
+   readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][];readonly privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null;
+   readonly privateSourceBoundAtUtc:string};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }

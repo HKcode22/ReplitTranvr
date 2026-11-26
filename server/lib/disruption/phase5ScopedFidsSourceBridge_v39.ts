@@ -64,6 +64,9 @@ export interface P5SourceSingleQueryPlan {
   /** Only emitted by the incident-specific verified Stage7/8 bridge. The
    * exact independent query signature covers these bytes. SQL still guards GET. */
   day1LaterRecovery?:P6Day1LaterSourceEvidence;
+  /** Prospective, independently adopted conditional G5A service protocol.
+   * Existing signed template bytes without this field are unchanged. */
+  conditionalService?:{protocolSha256:string;cohortStartUtc:string;effectiveUtc:string;reviewedConditionalServiceScope:true};
   acquisition:P5FidsAcquisition;
   sourcePartition:P5F8SourcePartitionPin;
   day:PreparedDayForReadback;
@@ -193,6 +196,13 @@ export function admitP5ScopedFidsSource(
 ): {selectedIcao:string;earliestPlannedCutoffMs:number;currentDbMs:number;
   restCategory:"fids_base"|"fids_split"} {
   const q=p.acquisition,day=p.day;
+  if(p.conditionalService!==undefined){
+   const s=p.conditionalService;
+   if(!s||s.reviewedConditionalServiceScope!==true||!validHash(s.protocolSha256)||
+      millis(s.cohortStartUtc,"CONDITIONAL_COHORT")!==day.scheduledStartUtc.getTime()||
+      millis(s.effectiveUtc,"CONDITIONAL_EFFECTIVE")>millis(q.scheduledRequestUtc,"CONDITIONAL_PLANNED"))
+     refuse("UNREVIEWED_CONDITIONAL_SERVICE_SCOPE");
+  }
   if(p.independentlyApprovedSourceAndRetention!==true||
      p.githubOnlyOwnerApproved!==true||
      ![p.reviewedReleaseSha256,p.reviewedProviderRightsSha256,
@@ -292,6 +302,10 @@ export async function runP5ScopedFidsSource(
     cutoffUtc:new Date(q.earliestPlannedCutoffUtc),
     restCategory:first.restCategory,
     phase5ProspectiveIdentityV39:P5_CANONICAL_IDENTITY_VERSION,
+    ...(p.conditionalService?{phase5ConditionalService:{
+      protocolSha256:p.conditionalService.protocolSha256,
+      cohortStartUtc:p.conditionalService.cohortStartUtc
+    }}:{}),
     providerApiVersion:p.providerApiVersion,
     fidsProtocolVersion:p.fidsProtocolVersion,
     openapiSha256:p.openapiSha256,
@@ -414,6 +428,7 @@ export function phase5SourceQueryDigest(p:P5SourceSingleQueryPlan):string{
   runDay:p.acquisition.runDayIndex,queryKey:p.acquisition.queryKey,
   icao:p.acquisition.icao,horizon:p.acquisition.horizon,
   draw:p.expectedEarlyDrawSha256,release:p.reviewedReleaseSha256,
+  ...(p.conditionalService?{conditionalService:p.conditionalService}:{}),
   provider:p.openapiSha256,
  })).digest("hex");
 }

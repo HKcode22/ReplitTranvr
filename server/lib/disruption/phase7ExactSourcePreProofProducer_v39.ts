@@ -12,7 +12,7 @@ import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS} from "./phase5Stage28D
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39";
 import {createPhase7IndependentPreProofPort,type Phase7AuthenticatedLaneReceipt} from "./phase7IndependentPreProofIssuer_v39";
-import {readP7ExactSelectedFeatures,readP7ExactSelectedFeaturesPage,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
+import {readP7ExactSelectedFeatures,readP7ReviewedTierSelectedFeatures,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback,type P7ConditionalProofScopePort} from "./phase7IndependentPreSourceReader_v39";
 import {verifyP7NoaaExactPreLaneEvidence,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -107,7 +107,7 @@ export function reconcileP7ActualSourceLaneReceipt(input:{env:NodeJS.ProcessEnv;
  }else if(receipt.fields.some(x=>weatherNames.has(x.field)))hold("FALSE_WEATHER_PRESENCE");
  return {selectedFeatures:s.privateSelectedFeatures,wire:a.wire};
 }
-export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSigningKey:KeyObject,archive:P7IndependentLaneArchivePort){
+export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSigningKey:KeyObject,archive:P7IndependentLaneArchivePort,conditionalScope?:P7ConditionalProofScopePort){
  const a=admitP7ExactSourcePreProducer(env);
  if(typeof archive?.readExactSignedLaneReceipt!=="function")hold("ACTUAL_INDEPENDENT_ARCHIVE");
  const underlying=new Pool({connectionString:a.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_exact_source_pre_proof_issuer",options:"-c default_transaction_read_only=on"});
@@ -120,7 +120,7 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
      // Authority archive first, then real source read, not the reverse:
      // a fresh DB clock bounds the separately signed review as of now.
      const receipt=await archive.readExactSignedLaneReceipt(p);
-     const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
+     const actual=await readP7ReviewedTierSelectedFeatures(pool,p,a.externalContentUseReviewSha256,conditionalScope);
      return reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual,archive:receipt});
     },
     async readExactLaneEvidencePage(permits){
@@ -133,7 +133,7 @@ export function openP7ExactSourcePreProofProducer(env:NodeJS.ProcessEnv,proofSig
       receipts=m;
      }
      if(!(receipts instanceof Map)||receipts.size!==keys.length||keys.some(k=>!receipts.has(k)))hold("EXACT_INDEPENDENT_RECEIPT_PAGE");
-     const actual=await readP7ExactSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256);
+     const actual=await readP7ReviewedTierSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256,conditionalScope);
      return new Map(permits.map((p,i)=>[keys[i],reconcileP7ActualSourceLaneReceipt({env,permit:p,dispositions:a.policy.dispositions,source:actual[i],archive:receipts.get(keys[i])!})]));
     },
     readDatabaseClockUtc:()=>readP7RestrictedSourceClock(pool)

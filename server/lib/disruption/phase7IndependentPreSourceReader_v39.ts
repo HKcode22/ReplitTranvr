@@ -6,6 +6,7 @@
  */
 import {compileP5EOneBoundOriginalReadonly,compileP5EBoundOriginalBatchReadonly,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {selectP5EStage14BoundRouteFeatures} from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
+import {readP5ExactConditionalPermitPage,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import {selectP5EReviewedSupplementalFeatures,type P5EReviewedSupplementalBundle} from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {phase7SelectedFeatureDigest} from "./phase7SignedPreFieldProof_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
@@ -86,4 +87,40 @@ export async function readP7ExactSelectedFeaturesPage(pool:P5EReadOnlyPgPool,per
   actualSourceReadbacks.add(x);return x;
  });
  return Object.freeze(out);
+}
+
+/** Explicit separate conditional proof read, staged only. Both independent
+ * authorities must authenticate the same prospective conditional policy and
+ * signed SOURCE scope outside this function. Never route a conditional
+ * permit into the native compiler or infer policy from a permit. No key,
+ * Packet B release, producer publication or physical-leg claim is made. */
+export async function readP7ExactConditionalSelectedFeaturesPage(pool:P5EReadOnlyPgPool,permits:readonly P5Stage14SingleFlightPrePermit[],scope:P5SignedConditionalFeatureReadScope){
+ const a=await readP5ExactConditionalPermitPage(pool,scope,permits),reads=a.privatePermitReadbacks;
+ if(a.conditionalFeatureReview.providerCalls!==0||a.conditionalFeatureReview.databaseWrites!==0||
+    !reads||reads.length!==permits.length||Object.getOwnPropertyDescriptor(a,"privatePermitReadbacks")?.enumerable!==false)
+  return hold("EXACT_CONDITIONAL_PAGE_SOURCE_READBACK");
+ return Object.freeze(reads.map((v,i)=>{
+  const p=permits[i];
+  if(v.flightInstanceId!==p.flightInstanceId)return hold("EXACT_CONDITIONAL_PAGE_ORDER");
+  const x=recomputeP7ExactSelectedFeatures(p,v.bundle,v,scope.externalContentUseReviewSha256);
+  actualSourceReadbacks.add(x);return x;
+ }));
+}
+
+/** Separate scope port: each authority must independently authenticate the
+ * exact signed SOURCE query and the protected conditional feature purpose.
+ * No mixed page, native fallback or inference of authority from a permit. */
+export type P7ConditionalProofScopePort={readExactSignedConditionalScope(p:Readonly<P5Stage14SingleFlightPrePermit>):Promise<P5SignedConditionalFeatureReadScope>};
+export async function readP7ReviewedTierSelectedFeaturesPage(pool:P5EReadOnlyPgPool,permits:readonly P5Stage14SingleFlightPrePermit[],nativeDigest:string,conditional?:P7ConditionalProofScopePort){
+ if(!Array.isArray(permits)||permits.length<1||permits.length>96)return hold("PAGE_SCOPE");
+ const first=permits[0].identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE";
+ if(permits.some(p=>(p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE")!==first))return hold("MIXED_IDENTITY_TIERS");
+ if(!first)return readP7ExactSelectedFeaturesPage(pool,permits,nativeDigest);
+ if(typeof conditional?.readExactSignedConditionalScope!=="function")return hold("INDEPENDENT_CONDITIONAL_SCOPE_REQUIRED");
+ const scope=await conditional.readExactSignedConditionalScope(permits[0]);
+ return readP7ExactConditionalSelectedFeaturesPage(pool,permits,scope);
+}
+export async function readP7ReviewedTierSelectedFeatures(pool:P5EReadOnlyPgPool,p:Readonly<P5Stage14SingleFlightPrePermit>,nativeDigest:string,conditional?:P7ConditionalProofScopePort){
+ if(p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE")return readP7ExactSelectedFeatures(pool,p,nativeDigest);
+ return (await readP7ReviewedTierSelectedFeaturesPage(pool,[p],nativeDigest,conditional))[0];
 }

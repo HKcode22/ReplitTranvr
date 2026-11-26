@@ -11,7 +11,7 @@ import {pathToFileURL} from "node:url";
 import {admitP6PostcommitNativeAudit,runP6PostcommitNativeAudit} from "./v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
 import {readP6PendingLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts";
 import {pageP5UnsignedNativePreReviewDossier} from "../server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts";
-import {signP6DelegatedNativeLaterReviewPage} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {signP6DelegatedNativeLaterReviewPage,readP6ConditionalSourceInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {resolveP7PublicationProofs} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
 import {enrichP7NativeFeatureReviewWithNoaa} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39.ts";
 import {runP6DelegatedReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts";
@@ -200,6 +200,20 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
  const pre=new pg.Pool({connectionString:x.preUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,
   application_name:"p6_native_later_pre_evidence"});
  try{
+  // Audit the actual immutable SOURCE first. Empty candidate sets need
+  // neither an authenticated publication connection nor a contended lock.
+  // All genuine publication still reauthenticates current signed registries.
+  const actual=await runP6PostcommitNativeAudit(x.auditEnv);
+  const handoff=actual.privateUnsignedPreReview;
+  let features=actual.privateNativeFeatureReview;
+  if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
+  const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
+   candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
+   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false,
+   ...(actual.conditionalSourceReview?{conditionalSourceReview:actual.conditionalSourceReview}:{}),
+   nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
+  if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
+   return {...report,sourceAuditOnly:true};
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
   // Session-scoped lock on the direct connection, not a transaction-pooler
   // connection. Serialize concurrent SOURCE follow-ons per study/day,
@@ -208,16 +222,7 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
   await publisher.query("SET lock_timeout='20s'");
   await publisher.query("SELECT pg_advisory_lock(('x'||$1)::bit(64)::bigint)",[lockId]);
   await publisher.query("RESET lock_timeout");
-  const actual=await runP6PostcommitNativeAudit(x.auditEnv);
-  const handoff=actual.privateUnsignedPreReview;
-  let features=actual.privateNativeFeatureReview;
-  if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
-  const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
-   candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
-   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false,
-   nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
-  if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
-   return {...report,sourceAuditOnly:true};
+
   // Reuse genuine independently archived public weather if its reader is
   // commissioned. Optional absent observations remain explicit missingness;
   // an invalid signed source is not downgraded to missing.
@@ -305,7 +310,17 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const env=process.env;
   if(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64||env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64)hold("NATIVE_PUBLISHER_HAS_INDEPENDENT_KEY");
   const local=p7LocalPreSocketPaths(env,false),stored=openP7StoredPreProofPort(env);
-  const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits)});
+  const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits),
+   readConditionalInstructionProof:async permit=>{
+    const auditEnv={...env};for(const k of ports)delete auditEnv[k];
+    const c=admitP6PostcommitNativeAudit(auditEnv);
+    if(c.expectedSourceRunId!==permit.expectedGithubSourceRunId)hold("CONDITIONAL_SOURCE_RUN_DRIFT");
+    const client=new pg.Client({connectionString:c.readerUrl,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p6_conditional_instruction_reader"});
+    try{await client.connect();await client.query("SET ROLE phase6_private_frozen_reader_v39");
+     const a=await readP6ConditionalSourceInstructionProof({readerClient:client,trust:c.trust,selector:c.selector,policy:c.policy,permit});
+     return a.privateProof;
+    }finally{await client.end()}
+   }});
   if(process.argv.length===3&&process.argv[2]==="--preflight")console.log(JSON.stringify(await preflightP6NativeLaterRuntime(env)));
   else if(process.argv.length===2)console.log(JSON.stringify(await runP6NativeLaterRuntime(env,port)));
   else hold("EXACT_MODE");

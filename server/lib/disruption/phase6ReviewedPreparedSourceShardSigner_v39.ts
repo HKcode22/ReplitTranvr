@@ -48,6 +48,10 @@ type Policy=P5TypedSourceBudgetBinding&{
  maximumReviewRetentionHours:number;maxQueriesPerDay:number;
  queryReviewerFingerprintSha256:string;registryReviewerFingerprintSha256:string;
  delegatedAutomatedSourceSigningApproved:true;
+ /** Optional separately adopted conditional protocol in the exact protected
+  * study signing policy, never inferred from an old SOURCE success. */
+ conditionalServicePolicy?:{schema:"v39.phase5.conditional-source-signing-policy.v1";protocolSha256:string;
+  effectiveUtc:string;firstEligibleRunDayIndex:number;reviewedConditionalServiceScope:true};
 };
 type Pins={
  independentExactPolicyAndDailyReviewApproved:true;
@@ -72,6 +76,31 @@ function keyInfo(key:KeyObject,fp:string){
    hold("SIGNER_KEY_NOT_APPROVED_BY_POLICY");
   return pub.export({format:"pem",type:"spki"}).toString();
  }catch{return hold("SIGNER_KEY_NOT_APPROVED_BY_POLICY");}
+}
+/** Preserve old template bytes if the independently pinned policy has not
+ * adopted a conditional tier. Start at a future complete parent-day only.
+ * No changed physical query key, budget, airport, source clock or signature
+ * recovery semantics. The existing signer authenticates the resulting bytes. */
+export function selectP6ProspectiveConditionalSourceScope(
+ policy:Pick<Policy,"conditionalServicePolicy"|"validFromUtc"|"validUntilUtc">,
+ plan:{day:{runDayIndex:number;scheduledStartUtc:Date|string};acquisition:{runDayIndex:number;scheduledRequestUtc:string}},
+ reviewedAtUtc:string
+){
+ const p=policy.conditionalServicePolicy;
+ if(p===undefined)return undefined;
+ if(!p||p.schema!=="v39.phase5.conditional-source-signing-policy.v1"||
+    p.reviewedConditionalServiceScope!==true||!SHA.test(p.protocolSha256??"")||
+    !Number.isSafeInteger(p.firstEligibleRunDayIndex)||p.firstEligibleRunDayIndex<1||p.firstEligibleRunDayIndex>31||
+    Object.keys(p).sort().join(",")!==["effectiveUtc","firstEligibleRunDayIndex","protocolSha256","reviewedConditionalServiceScope","schema"].sort().join(","))
+   hold("CONDITIONAL_POLICY_SHAPE");
+ const effective=utc(p.effectiveUtc),reviewed=utc(reviewedAtUtc),planned=utc(plan.acquisition.scheduledRequestUtc);
+ if(effective<utc(policy.validFromUtc)||effective>=utc(policy.validUntilUtc)||
+    plan.day.runDayIndex!==plan.acquisition.runDayIndex)hold("CONDITIONAL_POLICY_CLOCK_OR_DAY");
+ if(plan.day.runDayIndex<p.firstEligibleRunDayIndex)return undefined;
+ if(reviewed<effective||effective>planned||reviewed>=planned)hold("CONDITIONAL_SCOPE_NOT_PROSPECTIVE");
+ const start=plan.day.scheduledStartUtc instanceof Date?plan.day.scheduledStartUtc.toISOString():plan.day.scheduledStartUtc;
+ if(utc(start)%60000!==0||planned>=utc(start))hold("CONDITIONAL_COHORT_CLOCK");
+ return {protocolSha256:p.protocolSha256,cohortStartUtc:start,effectiveUtc:p.effectiveUtc,reviewedConditionalServiceScope:true as const};
 }
 export async function signP6ReviewedPreparedSourceDay({
  readPool,policyBytes,dailyPreparePacketBytes,pins,queryKey,registryKey,lateScope
@@ -168,8 +197,11 @@ export async function signP6ReviewedPreparedSourceDay({
     hold("DRAFT_NOT_UNSIGNED_OR_QUERY_DRIFT");
    // The existing two positive booleans are materialized ONLY after
    // independently approved policy/day bytes and actual DB readback.
+   if(unsigned.plan.conditionalService!==undefined)hold("UNSIGNED_DRAFT_CANNOT_SELF_SELECT_CONDITIONAL_SCOPE");
+   const conditional=selectP6ProspectiveConditionalSourceScope(p,unsigned.plan,reviewedAtUtc);
    const bytes=Buffer.from(JSON.stringify({...unsigned,plan:{...unsigned.plan,
-    independentlyApprovedSourceAndRetention:true,githubOnlyOwnerApproved:true}}),"utf8");
+    independentlyApprovedSourceAndRetention:true,githubOnlyOwnerApproved:true,
+    ...(conditional?{conditionalService:conditional}:{})}}),"utf8");
    if(bytes.length>200000)hold("SOURCE_PACKET_OVERSIZE");
    const logicalPath="data-collection/phase5/frozen/sourceq_d"+
     day.runDayIndex+"_"+e.queryDigestSha256+".json";

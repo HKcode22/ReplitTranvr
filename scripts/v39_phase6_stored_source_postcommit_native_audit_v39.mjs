@@ -13,7 +13,7 @@ import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSour
 import {sameP6NeonDatabaseEndpoint} from "../server/lib/disruption/phase6SameNeonEndpoint_v39.ts";
 import {readP6StoredPrivateReviewOnce} from "../server/lib/disruption/phase6StoredPrivateReviewReadOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "../server/lib/disruption/phase6DayEpochFullRegistryReadOnce_v39.mjs";
-import {selectP6CommittedNativeSourceQuery,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {selectP6CommittedNativeSourceQuery,selectP6CurrentCommittedSourceSelector,auditP6StoredCommittedNativeSource,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39.ts";
 import {compileP5EBoundOriginalBatchReadonly} from "../server/lib/disruption/phase5AmendmentEOriginalFidsReadonlyCompiler_v39.ts";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/,GH=/^[0-9]{5,25}$/;
@@ -86,6 +86,13 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
   hold("STALENESS_NOT_BOUND_TO_APPROVED_DAY");
  // Reuse the one protected daily review policy; a SOURCE acquisition
  // approval alone is not a new ML feature-derivation authorization.
+ const conditionalPreFeatureReview=p.conditionalPreFeatureReview;
+ if(conditionalPreFeatureReview!==undefined&&(!conditionalPreFeatureReview||
+    conditionalPreFeatureReview.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||
+    conditionalPreFeatureReview.approved!==true||conditionalPreFeatureReview.rightsSha256!==trust.rightsSha256||
+    !SHA.test(conditionalPreFeatureReview.protocolSha256??"")||!SHA.test(conditionalPreFeatureReview.externalContentUseReviewSha256??"")||
+    Object.keys(conditionalPreFeatureReview).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(",")))
+  hold("CONDITIONAL_FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  const featureReview=p.nativePreFeatureReview;
  if(featureReview!==undefined&&(!featureReview||featureReview.approved!==true||
     !SHA.test(featureReview.externalContentUseReviewSha256??"")||
@@ -97,31 +104,15 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
   selector:{runDayIndex:day,indexRevision:Number(env.P6_PRIVATE_DAY_INDEX_REVISION),
    indexSha256:env.P6_PRIVATE_DAY_INDEX_SHA256,queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST},
   policy:{independentNativeCandidateReadOnlyApproved:true,existingPaidDispatchApproved:false,
-   noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:maxAge,providerContractSha256:p.providerContractSha256}};
+   noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:maxAge,providerContractSha256:p.providerContractSha256,
+   ...(conditionalPreFeatureReview?{conditionalPreFeatureReview:Object.freeze({...conditionalPreFeatureReview})}:{})}};
 }
 /** A newer current revision may have added PRE/POST entries. Do not accept
  * removal/replacement of the exact original signed query. Original and
  * current index wires are authenticated and both exact packet identities
  * must match; no guessed query or replay. */
-export async function selectP6CurrentPostcommitAuditSelector({readerClient,trust,selector}){
- const original=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
-  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
- const current=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
-  selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
- const now={...selector,indexRevision:current.pins.expectedIndexRevision,indexSha256:current.pins.expectedIndexSha256};
- if(now.indexRevision<selector.indexRevision||(now.indexRevision===selector.indexRevision&&now.indexSha256!==selector.indexSha256))
-  hold("REVISION_ROLLBACK");
- if(now.indexSha256===selector.indexSha256)return selector;
- const load=(review,requireCurrentRevisionForPlanning)=>hydrateP6DayEpochFullRegistriesReadOnly({
-  client:readerClient,pins:review.pins,wire:review.wire,publicKeyPem:review.publicKeyPem,
-  scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning}});
- const previous=selectP6CommittedNativeSourceQuery(await load(original,false),selector,trust);
- const latest=selectP6CommittedNativeSourceQuery(await load(current,true),now,trust);
- if(previous.entry.filePath!==latest.entry.filePath||previous.entry.fileSha256!==latest.entry.fileSha256||
-    previous.entry.shardIndex!==latest.entry.shardIndex||previous.q.filePath!==latest.q.filePath||
-    previous.q.expectedPacketSha256!==latest.q.expectedPacketSha256)
-  hold("ORIGINAL_SIGNED_QUERY_CHANGED");
- return now;
+export async function selectP6CurrentPostcommitAuditSelector(input){
+ return selectP6CurrentCommittedSourceSelector(input);
 }
 export function redactP6PostcommitNativeAudit(a,c){
  if(a?.status!=="ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW"||
@@ -134,6 +125,7 @@ export function redactP6PostcommitNativeAudit(a,c){
   runDayIndex:a.runDayIndex,horizon:a.horizon,candidateAuditSha256:a.candidateAuditSha256,
   observedMemberCount:a.observedMemberCount,candidateCount:a.candidateCount,censoredCount:a.censoredCount,
   classifications:a.classifications,sourceTimingDiagnostics:a.sourceTimingDiagnostics,observedDbClockUtc:a.actualDbClockUtc,
+  ...(a.conditionalSourceReview?{conditionalSourceReview:a.conditionalSourceReview}:{}),
   ...(a.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:a.retainedCrossOriginalIdentityReview}:{}),
   providerCalls:0,databaseWrites:0,providerContentsPrinted:false,signedPrePacketsIssued:0,phase6PaidGo:false};
 }
@@ -174,7 +166,9 @@ export async function runP6PostcommitNativeAudit(env){
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   const pool=makeP5Stage28DedicatedRolePool(source,{group:"source",reviewedDedicatedLogin:srcLogin,
    forbiddenApplicationLogin:"phase5_runtime_application_login"});
-  const selector=await selectP6CurrentPostcommitAuditSelector({readerClient:reader,trust:c.trust,selector:c.selector});
+  // Keep the original immutable admitted child as the anchor; the actual
+  // audit and pending read each authenticate a coherent latest snapshot.
+  const selector=c.selector;
   const a=await auditP6StoredCommittedNativeSource({readerClient:reader,sourcePool:pool,trust:c.trust,selector,policy:c.policy});
   const report=redactP6PostcommitNativeAudit(a,c);
   const pending=a.horizon==="T-24h"?null:await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
@@ -188,7 +182,7 @@ export async function runP6PostcommitNativeAudit(env){
    independentReviewStillRequired:true}}:{})};
   // Existing CLI prints only the aggregate. A subsequent authorized
   // in-process reviewer may consume the exact private handoff.
-  return Object.freeze(Object.defineProperties(result,{privateUnsignedPreReview:{value:review,enumerable:false},
+  return Object.freeze(Object.defineProperties(result,{privateConditionalSourceReview:{value:a.privateConditionalSourceReview,enumerable:false},privateUnsignedPreReview:{value:review,enumerable:false},
    privateNativeFeatureReview:{value:features,enumerable:false}}));
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }

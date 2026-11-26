@@ -16,6 +16,7 @@ import {waitP5CdGithubSignedDueWindow} from "../server/lib/disruption/phase5CdGi
 import {runP5CdGithubStage14Microburst} from "../server/lib/disruption/phase5CdGithubBoundedStage14Microburst_v39";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 
+import {classifyP6CurrentPreFailure} from "../server/lib/disruption/phase6CurrentPreFailureDiagnostic_v39.mjs";
 import {openPhase7ProtectedPreResolver} from "../server/lib/disruption/phase7ProtectedPreResolver_v39";
 const hold=(s:string):never=>{throw Error("REFUSED_P5_CD_GH_CURRENT_PRE_"+s);};
 export function admitP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
@@ -47,8 +48,10 @@ function verifiedPackets(p:Projection,env:NodeJS.ProcessEnv){
  const raw=p.privateRosterBytes as Buffer;
  return verifyP5CdFrozenRoster(raw,JSON.parse(raw.toString("utf8")) as P5CdFrozenRoster,p.privateEntries,requireP5CdGithubPreRelease(env));
 }
-export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7PreResolver?:P5CdPhase7PreResolver){
+export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7PreResolver?:P5CdPhase7PreResolver,observeStage:(stage:string)=>void=()=>{}){
+ observeStage("CODE_LINEAGE");
  verifyP5CdGithubFrozenCodeLineage(env);
+ observeStage("RELEASE_ADMISSION");
  const ctx=admitP6CurrentPrivateLaterPre(env);
  if(typeof phase7PreResolver!=="function")hold("P7_INDEPENDENT_PER_PACKET_PRESERVATION_NOT_COMMISSIONED");
  async function read<T>(work:(c:Client)=>Promise<T>){
@@ -58,6 +61,7 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
   try{await c.query("SET ROLE phase6_private_frozen_reader_v39");return await work(c);}
   finally{await c.end();}
  }
+ observeStage("READ_DUE_ROSTERS");
  const planned=await read(async c=>{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   let now:string;
@@ -74,6 +78,7 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
  // V0092 exact packet SHA + horizon constraints remain authoritative.
  // Extra cross-day check prevents duplicate signed flight-horizon claims
  // from being processed concurrently in this process.
+ observeStage("ROSTER_IDENTITY_CHECK");
  const seen=new Set<string>();
  for(const p of planned.rosters){
   for(const row of p.privateEntries){
@@ -85,6 +90,7 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
  }
  if(!planned.rosters.length)return {status:"NO_DUE_CURRENT_PRIVATE_LATER_SHARDS",claimed:0,verified:0,
   providerCalls:0,phase6PaidGo:false,deferredDays:planned.deferredDays,deferredShards:planned.deferredShards};
+ observeStage("WORKER_POOL_SETUP");
  const base=new Pool({connectionString:env.P5_V39_PRE_DATABASE_URL,max:8,connectionTimeoutMillis:8000,
   idleTimeoutMillis:2000,statement_timeout:15000,application_name:"phase6_bounded_current_later_pre"});
  let stopped=false;
@@ -92,6 +98,7 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
  const pre=makeP5Stage28DedicatedRolePool(base,{group:"pre",reviewedDedicatedLogin:"phase5_p30_pre_login_20261107",
   forbiddenApplicationLogin:"phase5_runtime_application_login"});
  try{
+  observeStage("SIGNED_WORKER_EXECUTION");
   const result=await Promise.allSettled(planned.rosters.map(async(p,i)=>{
    let s=selector(p);
    const originalDigest=p.derivedCompatibilityRosterSha256;
@@ -140,14 +147,19 @@ export async function runP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv,phase7Pr
    lanes:planned.rosters.length,claimed,verified,held,skipped,incompleteLanes,
    aggregateCountsMayExcludeUnknownCommits:incompleteLanes>0,phase6PaidGoGrantedByWorker:false,deferredDays:planned.deferredDays,
    deferredShards:planned.deferredShards,providerCalls:0,phase6PaidGo:false};
- }finally{await base.end();}
+ }finally{
+  // Keep the original failure stage if a worker throws; cleanup must not
+  // replace the evidence of a previous possible side effect.
+  await base.end();
+ }
 }
 if(process.env.P6_PRIVATE_CURRENT_PRE_EXECUTE==="1"){
+ let stage="PROOF_RESOLVER_OPEN",workCompleted=false;
  try{
   const commissioned=openPhase7ProtectedPreResolver(process.env);
-  try{const r=await runP6CurrentPrivateLaterPre(process.env,commissioned.resolver);console.log(JSON.stringify(r));
+  try{const r=await runP6CurrentPrivateLaterPre(process.env,commissioned.resolver,s=>{stage=s;});console.log(JSON.stringify(r));workCompleted=true;
    if(r.status==="HOLD_CURRENT_PRIVATE_LATER_PRE_NO_REPLAY")process.exitCode=2;}
-  finally{await commissioned.close();}
+  finally{if(workCompleted)stage="PROOF_RESOLVER_CLOSE";await commissioned.close();}
  }
- catch(e){console.error("HOLD_P6_CURRENT_PRIVATE_LATER_PRE_REDACTED_NO_REPLAY");process.exitCode=2;}
+ catch(e){console.error(JSON.stringify(classifyP6CurrentPreFailure(stage,e)));process.exitCode=2;}
 }

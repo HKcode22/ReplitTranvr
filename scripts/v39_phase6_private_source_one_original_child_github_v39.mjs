@@ -25,7 +25,7 @@ import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
  from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
-import {readSafeSourceDiagnosticLines} from "./v39_phase5b_source_diagnostics_v39.mjs";
+import {readSafeSourceDiagnosticLines,sourceChildFailureDiagnostic} from "./v39_phase5b_source_diagnostics_v39.mjs";
 import {
  hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly
 } from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
@@ -267,7 +267,12 @@ export function isolatedP6OriginalOneGetChildEnv(parentEnv){
 export async function runP6OnePrivateSourceOriginalGHChild(
  env,options={}
 ){
- let gate=admitP6PrivateSourceExistingChildRuntime(env);
+ let stage="ADMISSION";
+ // The callback receives only closed-schema operational metadata. Logging
+ // cannot relax admission, cause a retry, or replace the original error.
+ const report=error=>{try{options.onDiagnostic?.(sourceChildFailureDiagnostic(stage,error));}catch{}};
+ let gate;
+ try{gate=admitP6PrivateSourceExistingChildRuntime(env);}catch(error){report(error);throw error;}
  let admittedEnv=env;
  const open=options.openRestrictedReader??(async url=>{
   const c=new pg.Client({
@@ -284,20 +289,20 @@ export async function runP6OnePrivateSourceOriginalGHChild(
  const scopeStored={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
  let c,index,packet;
  try{
-  c=await open(gate.url);
-  await c.query("SET ROLE phase6_private_frozen_reader_v39");
+  stage="READER_CONNECT";c=await open(gate.url);
+  stage="READER_ROLE";await c.query("SET ROLE phase6_private_frozen_reader_v39");
   if(gate.stored){
-   const exact=await readStored({client:c,trust:gate.trust,scope:scopeStored,
+   stage="SIGNED_DAY_READ";const exact=await readStored({client:c,trust:gate.trust,scope:scopeStored,
     selector:{kind:"EXACT_DAY",runDayIndex:gate.runDayIndex,
      indexRevision:gate.indexRevision,indexSha256:gate.indexSha256}});
    if(exact.pins.expectedIndexRevision!==gate.indexRevision||
       exact.pins.expectedIndexSha256!==gate.indexSha256||
       exact.pins.expectedRunDayIndex!==gate.runDayIndex)
     fail("EXACT_STORED_DAY_SELECTOR_DRIFT");
-   index=await hydrate({client:c,pins:exact.pins,wire:exact.wire,
+   stage="SIGNED_DAY_VERIFY";index=await hydrate({client:c,pins:exact.pins,wire:exact.wire,
     publicKeyPem:exact.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,
      existingPaidDispatchApproved:false}});
-   const routes=index.privateRoutingCandidates?.filter(x=>x.lane==="SOURCE"&&
+   stage="SIGNED_ROUTE_BIND";const routes=index.privateRoutingCandidates?.filter(x=>x.lane==="SOURCE"&&
     x.runDayIndex===gate.runDayIndex&&x.routingIntentSha256===gate.routingIntentSha256);
    if(routes?.length!==1)fail("NO_EXACT_STORED_SIGNED_SOURCE_ROUTE");
    const route=routes[0];
@@ -319,7 +324,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
       !SHA.test(hits[0].expectedPacketSha256??""))
     fail("NO_EXACT_STORED_SOURCE_QUERY");
    const entry=hits[0];
-   const q=await readStored({client:c,trust:gate.trust,scope:scopeStored,
+   stage="SIGNED_QUERY_READ";const q=await readStored({client:c,trust:gate.trust,scope:scopeStored,
     selector:{kind:"SOURCE_QUERY",runDayIndex:gate.runDayIndex,
      shardIndex:route.shardIndex,logicalPath:entry.filePath,
      contentSha256:entry.expectedPacketSha256}});
@@ -328,29 +333,30 @@ export async function runP6OnePrivateSourceOriginalGHChild(
       q.pins.expectedRunDayIndex!==gate.runDayIndex||
       q.pins.expectedShardIndex!==route.shardIndex)
     fail("EXACT_STORED_QUERY_SELECTOR_DRIFT");
-   packet=await read(c,q.pins,q.wire,q.publicKeyPem);
+   stage="SIGNED_QUERY_VERIFY";packet=await read(c,q.pins,q.wire,q.publicKeyPem);
    gate={...gate,indexPins:exact.pins,expectedRegistryPath:route.signedFrozenPath,
     expectedQueryPath:entry.filePath};
    // Local child-process-only pin, obtained from verified signed index bytes.
    // Never change a shared GitHub secret, repository setting or process.env.
    admittedEnv={...env,V39_P5_SOURCE_BATCH_REGISTRY_SHA256:route.signedFrozenSha256};
   }else{
-   index=await hydrate({
+   stage="SIGNED_DAY_VERIFY";index=await hydrate({
     client:c,pins:gate.indexPins,wire:gate.indexWire,
     publicKeyPem:gate.indexPem,
     scope:{privateDayRegistryReadOnlyApproved:true,
      existingPaidDispatchApproved:false}
    });
-   packet=await read(c,gate.packetPins,gate.packetWire,gate.packetPem);
+   stage="SIGNED_QUERY_VERIFY";packet=await read(c,gate.packetPins,gate.packetWire,gate.packetPem);
   }
- }catch{
-  fail("AUTHENTICATED_PRIVATE_SOURCE_AND_INDEX_READER_HOLD_REDACTED");
+ }catch(error){
+  report(error);fail("AUTHENTICATED_PRIVATE_SOURCE_AND_INDEX_READER_HOLD_REDACTED");
  }finally{
   if(c)try{await c.end();}
-   catch{fail("PRIVATE_READER_CLOSE_FAILED_STOP");}
+   catch(error){stage="READER_CLOSE";report(error);fail("PRIVATE_READER_CLOSE_FAILED_STOP");}
  }
  // The GH inputs are untrusted until bound to the real Ed25519-reviewed
  // single-day index, original semantic route and authenticated query bytes.
+ stage="ROUTE_BINDING";
  if(index?.redactedSummary?.status!==
        "ED25519_DAY_EPOCH_ORIGINAL_SOURCE_PRE_POST_SEMANTICS_PASS_NO_GO"||
     index.redactedSummary.reviewedEd25519SourceWasOriginalDayBytes!==true||
@@ -366,8 +372,9 @@ export async function runP6OnePrivateSourceOriginalGHChild(
       x?.routingIntentSha256===gate.routingIntentSha256&&
       x?.signedFrozenPath===gate.expectedRegistryPath&&
       x?.signedFrozenSha256===admittedEnv.V39_P5_SOURCE_BATCH_REGISTRY_SHA256).length!==1||
-    packet.privateLogicalPath!==gate.expectedQueryPath)
-  fail("UNBOUND_PRIVATE_ROUTE_REGISTRY_OR_QUERY_PATH");
+    packet.privateLogicalPath!==gate.expectedQueryPath){
+  report(undefined);fail("UNBOUND_PRIVATE_ROUTE_REGISTRY_OR_QUERY_PATH");
+ }
 
  const runOriginal=options.runPreviouslyAdmittedExistingChild??
   (async(paths)=>{
@@ -390,16 +397,19 @@ export async function runP6OnePrivateSourceOriginalGHChild(
   runP6OneSourceThroughExistingP5ChildAdmission;
  let out;
  try{
+  stage="ORIGINAL_ADMISSION";
   out=await admission({
    indexHandoff:index,
    sourcePacketReceipt:packet,
    expectedRoutingIntentSha256:gate.routingIntentSha256,
    expectedQueryDigestSha256:gate.queryDigestSha256,
    env:admittedEnv,repoRoot:resolve(process.cwd()),
-   runPreviouslyAdmittedExistingChild:runOriginal
+   runPreviouslyAdmittedExistingChild:async(paths)=>{
+    stage="ORIGINAL_SUBPROCESS";await runOriginal(paths);stage="EPHEMERAL_CLEANUP";
+   }
   });
- }catch{
-  fail("ORIGINAL_PHASE5_PAID_GATES_OR_EPHEMERAL_CLEANUP_HOLD_NO_RETRY");
+ }catch(error){
+  report(error);fail("ORIGINAL_PHASE5_PAID_GATES_OR_EPHEMERAL_CLEANUP_HOLD_NO_RETRY");
  }
  return Object.freeze({
   schema:P6_REAL_PRIVATE_SOURCE_ONE_ORIGINAL_CHILD_SCHEMA,
@@ -416,7 +426,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
  });
 }
 if(process.env.P6_PRIVATE_SOURCE_CHILD_RUNTIME_ENTRYPOINT==="1"){
- runP6OnePrivateSourceOriginalGHChild(process.env).then(out=>{
+ runP6OnePrivateSourceOriginalGHChild(process.env,{onDiagnostic:x=>console.error(JSON.stringify(x))}).then(out=>{
   console.log(JSON.stringify(out));
  }).catch(()=>{
   console.error("HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_NO_RETRY_NO_GO_REDACTED");

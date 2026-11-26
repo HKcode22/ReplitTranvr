@@ -5,12 +5,14 @@
  */
 import {createHash,createPublicKey,sign} from "node:crypto";
 import {readP6StoredPrivateReviewOnce} from "./phase6StoredPrivateReviewReadOnce_v39.mjs";
-import {readP6PrivateSourcePostOnce} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
+import {readP6PrivateSourcePostOnce,verifyP6ExternalSourcePostReview} from "./phase6PrivateSourcePostReadOnce_v39.mjs";
+import {verifyP6DayEpochExternalReview,validateP6DayEpochIndexBytes} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 import {hydrateP6DayEpochFullRegistriesReadOnly} from "./phase6DayEpochFullRegistryReadOnce_v39.mjs";
 import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOriginalSemanticHandoff_v39.mjs";
 import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39.ts";
 import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
+import {readP5SignedConditionalServiceReview} from "./phase5ConditionalBoundSourceReview_v39.ts";
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
 import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning} from "./phase5IndependentLaterPrePacketCompletion_v39.ts";
@@ -82,7 +84,14 @@ export function deriveP6CommittedNativeQueryScope(receipt,selected,selector,trus
     receipt.privateLogicalPath!==selected.q.filePath||!Buffer.isBuffer(receipt.privateBytes)||
     hash(receipt.privateBytes)!==s.contentSha256)
   fail("UNVERIFIED_SOURCE_QUERY_RECEIPT_OR_POLICY");
- const packet=JSON.parse(receipt.privateBytes.toString("utf8")),p=packet.plan,a=p?.acquisition;
+ return deriveP6VerifiedQueryBytes(receipt.privateBytes,selector,trust,policy);
+}
+function deriveP6VerifiedQueryBytes(bytes,selector,trust,policy){
+ if(!checkSelector(selector)||policy?.independentNativeCandidateReadOnlyApproved!==true||
+    !Number.isSafeInteger(policy.maximumPopulationStalenessSeconds)||policy.maximumPopulationStalenessSeconds<1||
+    policy.maximumPopulationStalenessSeconds>86400||!SHA.test(policy.providerContractSha256??""))
+  fail("UNVERIFIED_SOURCE_QUERY_RECEIPT_OR_POLICY");
+ const packet=JSON.parse(bytes.toString("utf8")),p=packet.plan,a=p?.acquisition;
  if(packet.schema!=="v39.phase5.github-source-one-query-template.v2"||
     packet.manifestSha256!==trust.manifestSha256||packet.queryDigestSha256!==selector.queryDigestSha256||
     Object.hasOwn(packet,"githubRunId")||Object.hasOwn(packet,"approvedCodeSha")||
@@ -96,26 +105,233 @@ export function deriveP6CommittedNativeQueryScope(receipt,selected,selector,trus
     !iso(p.day?.scheduledStartUtc))
   fail("SIGNED_QUERY_SCOPE_OR_CONTRACT_DRIFT");
  verifyP5F8ExactSourcePartition({...p,day:{...p.day,scheduledStartUtc:new Date(p.day.scheduledStartUtc)}});
+ // A conditional scope is accepted only from the verified exact signed
+ // packet. No inferred marker, retroactive policy or modified native path.
+ const conditional=p.conditionalService;
+ if(conditional!==undefined&&(!conditional||conditional.reviewedConditionalServiceScope!==true||
+   !SHA.test(conditional.protocolSha256??"")||!iso(conditional.effectiveUtc)||
+   !iso(a.scheduledRequestUtc)||conditional.effectiveUtc>a.scheduledRequestUtc||
+   conditional.cohortStartUtc!==p.day.scheduledStartUtc||
+   Object.keys(conditional).sort().join(",")!==["cohortStartUtc","effectiveUtc","protocolSha256","reviewedConditionalServiceScope"].sort().join(",")||
+   typeof p.localFrom!=="string"||!p.localFrom||typeof p.localTo!=="string"||!p.localTo))
+  fail("SIGNED_CONDITIONAL_SCOPE_DRIFT");
  return Object.freeze({manifestSha256:trust.manifestSha256,queryDigestSha256:selector.queryDigestSha256,
   reviewedReleaseSha256:trust.releaseSha256,rightsReviewSha256:trust.rightsSha256,
   providerContractSha256:p.openapiSha256,earlyDrawSha256:p.expectedEarlyDrawSha256,
   runDayIndex:a.runDayIndex,slot:a.slot,horizon:a.horizon,airportIcao:a.icao,
   maxPopulationStalenessSeconds:policy.maximumPopulationStalenessSeconds,
   expectedServiceWindowStartUtc:a.serviceWindowStartUtc,expectedServiceWindowEndUtc:a.serviceWindowEndUtc,
-  ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{})});
+  ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{}),
+  ...(conditional?{conditionalServiceScope:Object.freeze({...conditional,localFrom:p.localFrom,localTo:p.localTo})}:{})});
 }
+/** Resolve the separate feature purpose from a verified exact signed SOURCE
+ * query and protected policy, never from a permit or the native feature digest.
+ * The original SOURCE reader independently checks the actual population/run/hash. */
+export function deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit){
+ return bindP6ConditionalProofScope(deriveP6CommittedNativeQueryScope(receipt,selected,selector,trust,policy),trust,policy,permit);
+}
+function bindP6ConditionalProofScope(q,trust,policy,permit){
+ const m=q.conditionalServiceScope,f=policy?.conditionalPreFeatureReview;
+ if(!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    Object.keys(f).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(",")||
+    f.protocolSha256!==m.protocolSha256||f.rightsSha256!==trust.rightsSha256||!SHA.test(f.externalContentUseReviewSha256??"")||
+    !permit||permit.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||permit.requireProspectiveConditionalSourceMarker!==true||
+    permit.externalConditionalScheduleSourceAndUseReviewed!==true||permit.externalNativeTPhysicalLegAndSourceUseReviewed!==undefined||
+    permit.reviewedProtocolAmendmentSha256!==m.protocolSha256||permit.manifestSha256!==q.manifestSha256||
+    permit.queryDigestSha256!==q.queryDigestSha256||permit.runDayIndex!==q.runDayIndex||permit.slot!==q.slot||permit.horizon!==q.horizon||
+    permit.airportIcao!==q.airportIcao||permit.expectedReviewedSourceRightsSha256!==q.rightsReviewSha256||
+    permit.expectedReviewedReleaseSha256!==q.reviewedReleaseSha256||permit.expectedProviderContractSha256!==q.providerContractSha256||
+    permit.expectedEarlyDrawSha256!==q.earlyDrawSha256||permit.maxPopulationStalenessSeconds!==q.maxPopulationStalenessSeconds||
+    !/^[0-9]{5,25}$/.test(permit.expectedGithubSourceRunId??"")||!SHA.test(permit.expectedSourceResponseSha256??"")||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(permit.expectedSourcePopulationQueryId??"")||
+    permit.reviewedSupplementalFeatureBundle?.externalSourceAndContentsReviewReceiptSha256!==f.externalContentUseReviewSha256)
+  fail("EXACT_CONDITIONAL_PROOF_SCOPE");
+ return Object.freeze({source:Object.freeze({...q,expectedSourceGithubRunId:permit.expectedGithubSourceRunId}),
+  protocolSha256:m.protocolSha256,ownerProspectiveSeparateTierApproved:true,
+  frozenStudyStartUtc:m.cohortStartUtc,policyEffectiveUtc:m.effectiveUtc,minimumReviewLeadSeconds:900,
+  expectedPopulationQueryId:permit.expectedSourcePopulationQueryId,expectedResponseSha256:permit.expectedSourceResponseSha256,
+  expectedLocalFrom:m.localFrom,expectedLocalTo:m.localTo,expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,
+  expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,externalContentUseReviewSha256:f.externalContentUseReviewSha256});
+}
+/** Minimal signed SOURCE instruction proof for the existing ephemeral
+ * same-runner roles. No original response body or normalized flight content,
+ * DB credential, private key, new signature or durable storage. The day
+ * index pins all SOURCE registries, so include every SOURCE registry (not
+ * PRE/POST payloads) to enforce query uniqueness across shards. */
+const exact=(x,ks)=>x&&typeof x==="object"&&!Array.isArray(x)&&Object.keys(x).sort().join("|")===ks.slice().sort().join("|");
+const PROOF_SCHEMA="v39.phase6.conditional-source-instruction-proof.v1";
+function proofBytes(x,max){
+ if(typeof x!=="string"||!x||x.length>Math.ceil(max/3)*4||!/^[A-Za-z0-9+/]+={0,2}$/.test(x))fail("CONDITIONAL_PROOF_BYTES");
+ const b=Buffer.from(x,"base64");
+ if(b.length>max||b.toString("base64")!==x)fail("CONDITIONAL_PROOF_BYTES");
+ return b;
+}
+export function verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,observedDbClockUtc,expectedSourceRunId}){
+ if(!exact(proof,["schema","dayWire","indexBase64","sourceRegistries","queryWire","queryBase64"])||proof.schema!==PROOF_SCHEMA||
+    !checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
+    trust.dayReviewerFingerprintSha256===trust.queryReviewerFingerprintSha256||
+    policy?.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true||
+    !iso(observedDbClockUtc)||!/^\d{5,25}$/.test(expectedSourceRunId??"")||
+    permit?.expectedGithubSourceRunId!==expectedSourceRunId||
+    !Array.isArray(proof.sourceRegistries)||proof.sourceRegistries.length<1||proof.sourceRegistries.length>1024||
+    Buffer.byteLength(JSON.stringify(proof))>4*1024*1024)
+  fail("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
+ const now=Date.parse(observedDbClockUtc),day=proof.dayWire?.review;
+ const d=verifyP6DayEpochExternalReview({wire:proof.dayWire,publicKeyPem:trust.dayReviewerPublicKeyPem,pins:{
+  independentExternalReviewerSignaturePinsApproved:true,expectedRunDayIndex:selector.runDayIndex,
+  expectedIndexRevision:selector.indexRevision,expectedIndexSha256:selector.indexSha256,
+  expectedPreviousIndexSha256:day?.previousIndexSha256,expectedReviewedCodeSha:trust.reviewedCodeSha,
+  expectedManifestSha256:trust.manifestSha256,expectedCalendarSha256:trust.calendarSha256,
+  expectedReleaseSha256:trust.releaseSha256,expectedRightsSha256:trust.rightsSha256,
+  expectedExternalReviewEvidenceSha256:day?.externalReviewEvidenceSha256,
+  expectedReviewerPublicKeyFingerprintSha256:trust.dayReviewerFingerprintSha256}});
+ const live=x=>x.reviewedAtMs<=now&&now<x.validUntilMs&&now<x.retentionNotAfterMs;
+ if(!live(d))fail("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
+ const raw=proofBytes(proof.indexBase64,1048576);
+ if(hash(raw)!==selector.indexSha256)fail("CONDITIONAL_INSTRUCTION_INDEX_HASH");
+ const index=validateP6DayEpochIndexBytes(raw,d.review);
+ const entries=index.entries.filter(e=>e.lane==="SOURCE");
+ if(entries.length!==proof.sourceRegistries.length)fail("CONDITIONAL_INSTRUCTION_REGISTRY_DENOMINATOR");
+ const matches=[];
+ for(let i=0;i<entries.length;i++){
+  const e=entries[i],r=proof.sourceRegistries[i];
+  if(!exact(r,["path","bytesBase64"])||r.path!==e.filePath||!REG.test(r.path))fail("CONDITIONAL_INSTRUCTION_REGISTRY_PATH");
+  const bytes=proofBytes(r.bytesBase64,1048576);
+  if(hash(bytes)!==e.fileSha256)fail("CONDITIONAL_INSTRUCTION_REGISTRY_HASH");
+  const registry=JSON.parse(bytes.toString("utf8"));
+  if(registry?.schema!=="v39.phase5.signed-per-day-source-batch-readonly.v1"||registry.manifestSha256!==trust.manifestSha256||
+     registry.runDayIndex!==selector.runDayIndex||!Array.isArray(registry.entries)||registry.entries.length<1||registry.entries.length>96)
+    fail("SIGNED_SOURCE_REGISTRY_IDENTITY_DRIFT");
+  for(const q of registry.entries){
+   if(!QUERY.test(q?.filePath??"")||!SHA.test(q.expectedPacketSha256??"")||!SHA.test(q.expectedQueryDigestSha256??""))
+    fail("INVALID_SIGNED_SOURCE_QUERY_ENTRY");
+   if(q.expectedQueryDigestSha256===selector.queryDigestSha256)matches.push({entry:e,q});
+  }
+ }
+ if(matches.length!==1)fail("SOURCE_QUERY_NOT_UNIQUE_IN_SIGNED_DAY");
+ const {entry,q}=matches[0],rev=proof.queryWire?.review;
+ const verified=verifyP6ExternalSourcePostReview(proof.queryWire,trust.queryReviewerPublicKeyPem,{
+  independentExternalReviewerSignaturePinsApproved:true,expectedKind:"SOURCE_QUERY_PACKET",
+  expectedLogicalPath:q.filePath,expectedReviewedMainSha:trust.reviewedCodeSha,expectedManifestSha256:trust.manifestSha256,
+  expectedRightsSha256:trust.rightsSha256,expectedContentSha256:q.expectedPacketSha256,
+  expectedExternalReviewEvidenceSha256:rev?.externalReviewEvidenceSha256,
+  expectedReviewerPublicKeyFingerprintSha256:trust.queryReviewerFingerprintSha256,
+  expectedRunDayIndex:selector.runDayIndex,expectedShardIndex:entry.shardIndex});
+ if(!live(verified))fail("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
+ const bytes=proofBytes(proof.queryBase64,200000);
+ if(hash(bytes)!==q.expectedPacketSha256)fail("CONDITIONAL_INSTRUCTION_QUERY_HASH");
+ return bindP6ConditionalProofScope(deriveP6VerifiedQueryBytes(bytes,selector,trust,policy),trust,policy,permit);
+}
+/** Capture exact originally admitted signed instructions using existing
+ * restricted reader. An append may advance the day head but the immutable
+ * child revision remains a valid proof of its own SOURCE. The separately
+ * authenticated current continuity check is still required before issuance. */
+export async function readP6ConditionalSourceInstructionProof({readerClient,trust,selector,policy,permit}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
+    policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
+    policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
+    permit?.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+    permit.runDayIndex!==selector.runDayIndex||permit.queryDigestSha256!==selector.queryDigestSha256)
+  fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+ await selectP6CurrentCommittedSourceSelector({readerClient,trust,selector});
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
+ const index=await hydrateP6DayEpochFullRegistriesReadOnly({client:readerClient,pins:review.pins,wire:review.wire,
+  publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
+   requireCurrentRevisionForPlanning:false}});
+ const selected=selectP6CommittedNativeSourceQuery(index,selector,trust);
+ const signed=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
+   logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
+ const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
+ deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
+ const proof={schema:PROOF_SCHEMA,dayWire:review.wire,indexBase64:index.privateCurrentIndexBytes.toString("base64"),
+  sourceRegistries:index.privateParsedIndex.entries.filter(e=>e.lane==="SOURCE").map(e=>({path:e.filePath,bytesBase64:index.getFrozen(e.filePath).toString("base64")})),
+  queryWire:signed.wire,queryBase64:receipt.privateBytes.toString("base64")};
+ verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,
+  observedDbClockUtc:receipt.redactedSummary.observedDatabaseClockUtc});
+ return Object.freeze(Object.defineProperty({status:"CONDITIONAL_SIGNED_SOURCE_INSTRUCTIONS_PRIVATE_NO_GO",providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  "privateProof",{value:Object.freeze(proof),enumerable:false}));
+}
+/** Shared exact SOURCE identity continuity check for concurrent append-only
+ * PRE/POST registry publication. Neither an advanced revision nor an ACK
+ * changes the original signed query, shard or bytes. */
+export function assertP6SameCommittedSourceAcrossRevisions(previous,latest,selector,currentSelector,trust){
+ if(!checkSelector(selector)||!checkSelector(currentSelector)||
+    currentSelector.runDayIndex!==selector.runDayIndex||currentSelector.queryDigestSha256!==selector.queryDigestSha256||
+    currentSelector.indexRevision<selector.indexRevision||
+    (currentSelector.indexRevision===selector.indexRevision&&currentSelector.indexSha256!==selector.indexSha256))
+  fail("REVISION_ROLLBACK");
+ const a=selectP6CommittedNativeSourceQuery(previous,selector,trust),b=selectP6CommittedNativeSourceQuery(latest,currentSelector,trust);
+ if(a.entry.filePath!==b.entry.filePath||a.entry.fileSha256!==b.entry.fileSha256||
+    a.entry.shardIndex!==b.entry.shardIndex||a.q.filePath!==b.q.filePath||
+    a.q.expectedPacketSha256!==b.q.expectedPacketSha256)
+  fail("ORIGINAL_SIGNED_QUERY_CHANGED");
+ return b;
+}
+/** Resolve one coherent authenticated current day snapshot. A concurrent
+ * append may advance CURRENT_DAY between the signed review read and the
+ * REPEATABLE READ hydration. Only that explicit stale-revision refusal is
+ * eligible for a bounded READ-ONLY retry; never retry a SOURCE GET, signature,
+ * publication, ambiguous commit, expiry, role or integrity error. The
+ * immutable original child selector is the anchor on every attempt. */
+const STALE_CURRENT="HOLD_P6_DAY_EPOCH_FULL_REGISTRY_STALE_OR_MISSING_DAY_REVISION_FOR_PLANNING";
+export async function readP6CurrentCommittedSourceSnapshot({readerClient,trust,selector},
+ ports={read:readP6StoredPrivateReviewOnce,hydrate:hydrateP6DayEpochFullRegistriesReadOnly}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true)fail("UNAUTHENTICATED_EXACT_DAY_REGISTRY");
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const load=(review,requireCurrentRevisionForPlanning)=>ports.hydrate({
+  client:readerClient,pins:review.pins,wire:review.wire,publicKeyPem:review.publicKeyPem,
+  scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning}});
+ const original=await ports.read({client:readerClient,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
+ const previous=await load(original,false);
+ for(let attempt=1;attempt<=3;attempt++){
+  const current=await ports.read({client:readerClient,trust,scope,
+   selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
+  const now={...selector,indexRevision:current.pins.expectedIndexRevision,indexSha256:current.pins.expectedIndexSha256};
+  if(!checkSelector(now)||now.indexRevision<selector.indexRevision||
+     (now.indexRevision===selector.indexRevision&&now.indexSha256!==selector.indexSha256))fail("REVISION_ROLLBACK");
+  let latest;
+  try{latest=await load(current,true);}catch(e){
+   if(e?.message!==STALE_CURRENT||attempt===3)throw e;
+   continue;
+  }
+  const selected=assertP6SameCommittedSourceAcrossRevisions(previous,latest,selector,now,trust);
+  return Object.freeze({selector:Object.freeze(now),index:latest,selected});
+ }
+ fail("CURRENT_SOURCE_SNAPSHOT_UNAVAILABLE");
+}
+export async function selectP6CurrentCommittedSourceSelector(input){
+ return (await readP6CurrentCommittedSourceSnapshot(input)).selector;
+}
+export async function readP6ConditionalProofScopeFromStoredSource({readerClient,trust,selector,policy,permit}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
+    policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
+    policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
+    permit?.runDayIndex!==selector.runDayIndex||permit?.queryDigestSha256!==selector.queryDigestSha256)
+  fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+ const current=await readP6CurrentCommittedSourceSnapshot({readerClient,trust,selector});
+ selector=current.selector;
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const selected=current.selected;
+ const signed=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
+   logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
+ const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
+ return deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
+}
+
 export async function auditP6StoredCommittedNativeSource({readerClient,sourcePool,trust,selector,policy}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||
     policy.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true)
   fail("NO_EXPLICIT_NONPAID_COMMITTED_QUERY_SCOPE");
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
- const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
-  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
- const index=await hydrateP6DayEpochFullRegistriesReadOnly({client:readerClient,pins:review.pins,wire:review.wire,
-  publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
-   requireCurrentRevisionForPlanning:true}});
- const selected=selectP6CommittedNativeSourceQuery(index,selector,trust);
+ const current=await readP6CurrentCommittedSourceSnapshot({readerClient,trust,selector});
+ selector=current.selector;
+ const {index,selected}=current;
  const signed=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
   selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
    logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
@@ -126,14 +342,29 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
  if(!Number.isFinite(now)||!Number.isFinite(read)||now<read||now-read>120000||
     typeof audit.sourceGithubRunId!=="string"||!/^[0-9]{5,25}$/.test(audit.sourceGithubRunId))
   fail("ACTUAL_SOURCE_AUDIT_CLOCK_OR_RUN_DRIFT");
+ const conditional=auditedScope.conditionalServiceScope;
+ const featurePolicy=policy.conditionalPreFeatureReview;
+ if(conditional&&featurePolicy&&featurePolicy.protocolSha256!==conditional.protocolSha256)fail("CONDITIONAL_FEATURE_PROTOCOL_DRIFT");
+ const conditionalReview=conditional?await readP5SignedConditionalServiceReview(sourcePool,{
+  source:{...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId},
+  protocolSha256:conditional.protocolSha256,ownerProspectiveSeparateTierApproved:true,
+  frozenStudyStartUtc:conditional.cohortStartUtc,policyEffectiveUtc:conditional.effectiveUtc,
+  minimumReviewLeadSeconds:900,expectedPopulationQueryId:audit.sourcePopulationQueryId,
+  expectedResponseSha256:audit.sourceResponseSha256,expectedLocalFrom:conditional.localFrom,
+  expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
+  expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc,
+  ...(featurePolicy?{externalContentUseReviewSha256:featurePolicy.externalContentUseReviewSha256}:{})}):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
   candidateCount:audit.candidateCount,censoredCount:audit.censoredCount,classifications:audit.classifications,
   sourceTimingDiagnostics:audit.sourceTimingDiagnostics,
   ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
+  ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,
+    counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
+    observedDbClockUtc:conditionalReview.observedDbClockUtc,featureReview:conditionalReview.conditionalFeatureReview,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
- Object.defineProperties(out,{privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
+ Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},
@@ -223,16 +454,7 @@ export async function readP6PendingNativeLaterReview({readerClient,trust,a,selec
     policy?.independentNativeCandidateReadOnlyApproved!==true||
     policy.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true)
   fail("NO_EXPLICIT_NONPAID_PENDING_REVIEW_SCOPE");
- const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,
-  scope:{privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false},
-  selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
- const current={...selector,indexRevision:review.pins.expectedIndexRevision,indexSha256:review.pins.expectedIndexSha256};
- if(current.indexRevision<selector.indexRevision||
-    (current.indexRevision===selector.indexRevision&&current.indexSha256!==selector.indexSha256))
-  fail("PENDING_REVIEW_REVISION_ROLLBACK");
- const index=await hydrateP6DayEpochFullRegistriesReadOnly({client:readerClient,pins:review.pins,wire:review.wire,
-  publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
-  requireCurrentRevisionForPlanning:true}});
+ const {selector:current,index}=await readP6CurrentCommittedSourceSnapshot({readerClient,trust,selector});
  return selectP6PendingNativeLaterReview(a,index,current,trust);
 }
 

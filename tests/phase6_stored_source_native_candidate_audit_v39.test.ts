@@ -1,6 +1,6 @@
-import {createHash,generateKeyPairSync,createPublicKey} from "node:crypto";
+import {createHash,generateKeyPairSync,createPublicKey,sign} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,readP6CurrentCommittedSourceSnapshot,verifyP6ConditionalSourceInstructionProof,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -44,6 +44,24 @@ describe("signed committed SOURCE candidate handoff",()=>{
   expect(s.airportIcao).toBe("WSSS");expect(s.horizon).toBe("T-6h");
   expect(s.expectedServiceWindowEndUtc).toBe("2027-02-10T12:00:00.000Z");
   expect("expectedSourceGithubRunId" in s).toBe(false);
+ });
+ it("derives the prospective conditional scope only from exact verified SOURCE packet bytes",()=>{
+  const f=fixture(),selected=selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust);
+  const packet=JSON.parse(f.receipt.privateBytes.toString("utf8"));
+  const plan=packet.plan;
+  plan.acquisition.scheduledRequestUtc="2027-02-10T04:00:00.000Z";
+  plan.localFrom="2027-02-10T19:00";plan.localTo="2027-02-10T20:00";
+  const marker={reviewedConditionalServiceScope:true,protocolSha256:H("9"),effectiveUtc:"2027-02-09T00:00:00.000Z",cohortStartUtc:plan.day.scheduledStartUtc};
+  const derive=(conditional:any)=>{
+   const bytes=Buffer.from(JSON.stringify({...packet,plan:{...plan,conditionalService:conditional}}));
+   const digest=h(bytes),receipt:any={redactedSummary:{...f.receipt.redactedSummary,contentSha256:digest}};
+   Object.defineProperties(receipt,{privateBytes:{value:bytes},privateLogicalPath:{value:f.receipt.privateLogicalPath}});
+   return deriveP6CommittedNativeQueryScope(receipt,{...selected,q:{...selected.q,expectedPacketSha256:digest}},f.selector,f.trust,f.policy);
+  };
+  expect(derive(marker).conditionalServiceScope).toMatchObject({...marker,localFrom:plan.localFrom,localTo:plan.localTo});
+  expect(derive(undefined).conditionalServiceScope).toBeUndefined();
+  for(const patch of [{effectiveUtc:"2027-02-10T05:00:00.000Z"},{cohortStartUtc:"2027-02-11T11:00:00.000Z"},{reviewedConditionalServiceScope:false},{protocolSha256:"bad"},{extra:true}])
+   expect(()=>derive({...marker,...patch})).toThrow(/SIGNED_CONDITIONAL_SCOPE_DRIFT/);
  });
  it("rejects cross-study, absent digest, tampered packet or unapproved policy",()=>{
   const f=fixture();
@@ -414,5 +432,134 @@ describe("private publication with independently signed test proof wires",()=>{
    await expect(resolveP7PublicationProofs({preview,env,port:{readExactPermitProofs:async()=>new Map()},readClock:async()=>"2027-02-10T04:43:00.000Z"})).rejects.toThrow("EXACT_PROOF_SET_MISSING");
    await expect(resolveP7PublicationProofs({preview,env,port,readClock:async()=>"2027-02-10T05:04:00.000Z"})).rejects.toThrow("STALE_OR_LATE_PROOF");
   }
+ });
+});
+
+describe("T028 independent conditional proof signed-source scope",()=>{
+ it("binds verified query bytes, separate content purpose and permit; refuses native promotion, drift or missing approval",()=>{
+  const f=fixture(),s=selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust);
+  const p=JSON.parse(f.receipt.privateBytes.toString("utf8"));
+  p.plan.acquisition.scheduledRequestUtc="2027-02-10T04:00:00.000Z";
+  p.plan.localFrom="2027-02-10T19:00";p.plan.localTo="2027-02-10T20:00";
+  p.plan.conditionalService={reviewedConditionalServiceScope:true,protocolSha256:H("9"),effectiveUtc:"2027-02-09T00:00:00.000Z",cohortStartUtc:p.plan.day.scheduledStartUtc};
+  const bytes=Buffer.from(JSON.stringify(p)),digest=h(bytes),receipt:any={redactedSummary:{...f.receipt.redactedSummary,contentSha256:digest}};
+  Object.defineProperties(receipt,{privateBytes:{value:bytes},privateLogicalPath:{value:f.receipt.privateLogicalPath}});
+  const selected={...s,q:{...s.q,expectedPacketSha256:digest}};
+  const policy={...f.policy,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,protocolSha256:H("9"),rightsSha256:f.trust.rightsSha256,externalContentUseReviewSha256:H("8")}};
+  const permit={identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",requireProspectiveConditionalSourceMarker:true,externalConditionalScheduleSourceAndUseReviewed:true,reviewedProtocolAmendmentSha256:H("9"),
+   manifestSha256:f.trust.manifestSha256,queryDigestSha256:f.selector.queryDigestSha256,runDayIndex:1,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",expectedReviewedSourceRightsSha256:f.trust.rightsSha256,expectedReviewedReleaseSha256:f.trust.releaseSha256,expectedProviderContractSha256:H("f"),expectedEarlyDrawSha256:H("1"),maxPopulationStalenessSeconds:3600,expectedGithubSourceRunId:"123456",expectedSourceResponseSha256:H("3"),expectedSourcePopulationQueryId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reviewedSupplementalFeatureBundle:{externalSourceAndContentsReviewReceiptSha256:H("8")}};
+  const run=(v:any=permit,pol:any=policy)=>deriveP6ConditionalProofReadScope(receipt,selected,f.selector,f.trust,pol,v);
+  expect(run()).toMatchObject({protocolSha256:H("9"),externalContentUseReviewSha256:H("8"),minimumReviewLeadSeconds:900,expectedLocalFrom:p.plan.localFrom,source:{expectedSourceGithubRunId:"123456",plannedRequestUtc:p.plan.acquisition.scheduledRequestUtc}});
+  for(const patch of [{identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"},{externalNativeTPhysicalLegAndSourceUseReviewed:true},{queryDigestSha256:H("0")},{expectedEarlyDrawSha256:H("0")},{reviewedSupplementalFeatureBundle:{externalSourceAndContentsReviewReceiptSha256:H("0")}}])expect(()=>run({...permit,...patch})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+  expect(()=>run(permit,f.policy)).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+  expect(()=>run(permit,{...policy,conditionalPreFeatureReview:{...policy.conditionalPreFeatureReview,extra:true}})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+ });
+ it("missing separate scope stops before reading private storage",async()=>{
+  const f=fixture();let calls=0;
+  await expect(readP6ConditionalProofScopeFromStoredSource({readerClient:{query:async()=>{calls++;}},trust:f.trust,selector:f.selector,policy:f.policy,permit:{}})).rejects.toThrow("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+  expect(calls).toBe(0);
+ });
+});
+
+describe("F038 conditional proof current signed SOURCE revision continuity",()=>{
+ it("accepts an advanced append-only revision with exact unchanged SOURCE, rejects rollback and changed bytes",()=>{
+  const f=fixture(),old=f.index.privateParsedIndex.entries[0],registry=f.index.getFrozen(old.filePath);
+  const make=(change=false)=>{
+   const bytes=change?Buffer.from(JSON.stringify({...JSON.parse(registry.toString()),entries:[{...JSON.parse(registry.toString()).entries[0],expectedPacketSha256:H("8")}]})):registry;
+   const parsed={...f.index.privateParsedIndex,revision:2,previousIndexSha256:f.selector.indexSha256,entries:[{...old,fileSha256:h(bytes)}]};
+   const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexRevision:2,indexSha256:h(raw)};
+   const index:any={redactedSummary:{...f.index.redactedSummary,indexRevision:2,indexSha256:h(raw)}};
+   Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},getFrozen:{value:()=>bytes}});
+   return {index,selector};
+  };
+  const current=make(),changed=make(true);
+  expect(assertP6SameCommittedSourceAcrossRevisions(f.index,current.index,f.selector,current.selector,f.trust).q.expectedPacketSha256).toBe(h(f.receipt.privateBytes));
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(current.index,f.index,current.selector,f.selector,f.trust)).toThrow("REVISION_ROLLBACK");
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(f.index,changed.index,f.selector,changed.selector,f.trust)).toThrow("ORIGINAL_SIGNED_QUERY_CHANGED");
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(f.index,current.index,f.selector,{...current.selector,indexRevision:1},f.trust)).toThrow("REVISION_ROLLBACK");
+ });
+});
+
+import {p6DayEpochReviewPreimage,P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE} from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
+import {signedP6PrivateSourcePostReviewBytes,P6_SOURCE_POST_REVIEW_SCHEMA,P6_SOURCE_POST_REVIEW_AUDIENCE} from "../server/lib/disruption/phase6PrivateSourcePostReadOnce_v39.mjs";
+describe("T033 exact signed SOURCE instruction transport (no raw or reader credentials)",()=>{
+ function setup(){
+  const f=fixture(),p=JSON.parse(f.receipt.privateBytes.toString());
+  p.plan.acquisition.scheduledRequestUtc="2027-02-10T04:00:00.000Z";
+  p.plan.localFrom="2027-02-10T19:00";p.plan.localTo="2027-02-10T20:00";
+  p.plan.conditionalService={reviewedConditionalServiceScope:true,protocolSha256:H("9"),effectiveUtc:"2027-02-09T00:00:00.000Z",cohortStartUtc:p.plan.day.scheduledStartUtc};
+  const bytes=Buffer.from(JSON.stringify(p)),old=f.index.privateParsedIndex.entries[0],path=f.receipt.privateLogicalPath;
+  const reg=Buffer.from(JSON.stringify({schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:f.trust.manifestSha256,runDayIndex:1,entries:[{filePath:path,expectedPacketSha256:h(bytes),expectedQueryDigestSha256:f.selector.queryDigestSha256}]}));
+  const idx={...f.index.privateParsedIndex,previousIndexSha256:null,entries:[{...old,fileSha256:h(reg),publishedAtUtc:"2027-02-10T03:55:00.000Z",reviewEvidenceSha256:H("5"),sourceRegistryFilePath:null,sourceRegistrySha256:null}]};
+  const raw=Buffer.from(JSON.stringify(idx)),selector={...f.selector,indexSha256:h(raw)};
+  const dk=generateKeyPairSync("ed25519"),qk=generateKeyPairSync("ed25519"),fp=(k:any)=>h(k.publicKey.export({type:"spki",format:"der"}));
+  const trust={...f.trust,dayReviewerFingerprintSha256:fp(dk),dayReviewerPublicKeyPem:dk.publicKey.export({type:"spki",format:"pem"}),
+   queryReviewerFingerprintSha256:fp(qk),queryReviewerPublicKeyPem:qk.publicKey.export({type:"spki",format:"pem"})};
+  const times={reviewedAtUtc:"2027-02-10T03:56:00.000Z",validUntilUtc:"2027-02-10T08:00:00.000Z",retentionNotAfterUtc:"2027-02-11T03:56:00.000Z"};
+  const day={schema:P6_DAY_EPOCH_REVIEW_SCHEMA,audience:P6_DAY_EPOCH_REVIEW_AUDIENCE,runDayIndex:1,indexRevision:1,indexSha256:h(raw),previousIndexSha256:null,
+   reviewedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,calendarSha256:trust.calendarSha256,releaseSha256:trust.releaseSha256,rightsSha256:trust.rightsSha256,externalReviewEvidenceSha256:H("5"),...times,reviewerPublicKeyFingerprintSha256:fp(dk)};
+  const query={schema:P6_SOURCE_POST_REVIEW_SCHEMA,audience:P6_SOURCE_POST_REVIEW_AUDIENCE,kind:"SOURCE_QUERY_PACKET",logicalPath:path,contentSha256:h(bytes),reviewedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,runDayIndex:1,shardIndex:1,externalReviewEvidenceSha256:H("6"),...times,reviewerPublicKeyFingerprintSha256:fp(qk)};
+  const proof={schema:"v39.phase6.conditional-source-instruction-proof.v1",dayWire:{review:day,signatureBase64:sign(null,p6DayEpochReviewPreimage(day),dk.privateKey).toString("base64")},indexBase64:raw.toString("base64"),sourceRegistries:[{path:old.filePath,bytesBase64:reg.toString("base64")}],queryWire:{review:query,signatureBase64:sign(null,signedP6PrivateSourcePostReviewBytes(query),qk.privateKey).toString("base64")},queryBase64:bytes.toString("base64")};
+  const policy={...f.policy,existingPaidDispatchApproved:false,noProviderCredentialsInAudit:true,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,protocolSha256:H("9"),rightsSha256:trust.rightsSha256,externalContentUseReviewSha256:H("8")}};
+  const permit={identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",requireProspectiveConditionalSourceMarker:true,externalConditionalScheduleSourceAndUseReviewed:true,reviewedProtocolAmendmentSha256:H("9"),manifestSha256:trust.manifestSha256,queryDigestSha256:selector.queryDigestSha256,runDayIndex:1,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",expectedReviewedSourceRightsSha256:trust.rightsSha256,expectedReviewedReleaseSha256:trust.releaseSha256,expectedProviderContractSha256:H("f"),expectedEarlyDrawSha256:H("1"),maxPopulationStalenessSeconds:3600,expectedGithubSourceRunId:"123456",expectedSourceResponseSha256:H("3"),expectedSourcePopulationQueryId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reviewedSupplementalFeatureBundle:{externalSourceAndContentsReviewReceiptSha256:H("8")}};
+  return {proof,args:{trust,selector,policy,permit,observedDbClockUtc:"2027-02-10T04:40:00.000Z",expectedSourceRunId:"123456"}};
+ }
+ it("independently authenticates the exact day and SOURCE signatures, registry and query, at DB clock",()=>{
+  const {proof,args}=setup();
+  expect(verifyP6ConditionalSourceInstructionProof(proof,args)).toMatchObject({protocolSha256:H("9"),externalContentUseReviewSha256:H("8"),source:{expectedSourceGithubRunId:"123456",plannedRequestUtc:"2027-02-10T04:00:00.000Z"}});
+ });
+ it("refuses byte drift, omitted registry, bad signatures, wrong run and expired review",()=>{
+  const {proof,args}=setup(),run=(v:any=proof,a:any=args)=>verifyP6ConditionalSourceInstructionProof(v,a);
+  expect(()=>run({...proof,queryBase64:Buffer.from("tampered").toString("base64")})).toThrow("CONDITIONAL_INSTRUCTION_QUERY_HASH");
+  expect(()=>run({...proof,indexBase64:Buffer.from("tampered").toString("base64")})).toThrow("CONDITIONAL_INSTRUCTION_INDEX_HASH");
+  expect(()=>run({...proof,sourceRegistries:[]})).toThrow("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
+  expect(()=>run({...proof,sourceRegistries:[{...proof.sourceRegistries[0],bytesBase64:Buffer.from("tampered").toString("base64")}]})).toThrow("CONDITIONAL_INSTRUCTION_REGISTRY_HASH");
+  expect(()=>run({...proof,queryWire:{...proof.queryWire,signatureBase64:Buffer.alloc(64).toString("base64")}})).toThrow("SIGNATURE_BAD");
+  expect(()=>run(proof,{...args,observedDbClockUtc:"2027-02-10T08:00:00.000Z"})).toThrow("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
+  expect(()=>run(proof,{...args,expectedSourceRunId:"654321"})).toThrow("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
+  expect(()=>run(proof,{...args,permit:{...args.permit,externalNativeTPhysicalLegAndSourceUseReviewed:true}})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+ });
+});
+
+describe("T037 concurrent append while authenticating current SOURCE snapshot",()=>{
+ const stale="HOLD_P6_DAY_EPOCH_FULL_REGISTRY_STALE_OR_MISSING_DAY_REVISION_FOR_PLANNING";
+ function setup(){
+  const f=fixture(),old=f.index.privateParsedIndex.entries[0],reg=f.index.getFrozen(old.filePath);
+  const make=(revision:number,changed=false)=>{
+   const b=changed?Buffer.from(JSON.stringify({...JSON.parse(reg.toString()),entries:[{...JSON.parse(reg.toString()).entries[0],expectedPacketSha256:H("8")}]})):reg;
+   const parsed={...f.index.privateParsedIndex,revision,previousIndexSha256:f.selector.indexSha256,entries:[{...old,fileSha256:h(b)}]};
+   const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexRevision:revision,indexSha256:h(raw)};
+   const index:any={redactedSummary:{...f.index.redactedSummary,indexRevision:revision,indexSha256:h(raw)}};
+   Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},getFrozen:{value:()=>b}});
+   return {index,selector};
+  };
+  const second=make(2),third=make(3),changed=make(3,true);
+  const state={originalReads:0,currentReads:0,planningHydrations:0};
+  const run=(errors:string[],last=third)=>readP6CurrentCommittedSourceSnapshot({readerClient:{},trust:f.trust,selector:f.selector},{
+   read:async (arg:any)=>{
+    const isOriginal=arg.selector.kind==="EXACT_DAY";
+    const value=isOriginal?{index:f.index,selector:f.selector}:++state.currentReads===1?second:last;
+    if(isOriginal){state.originalReads++;expect(arg.selector.indexSha256).toBe(f.selector.indexSha256)}
+    return {pins:{expectedIndexRevision:value.selector.indexRevision,expectedIndexSha256:value.selector.indexSha256},wire:value.index};
+   },
+   hydrate:async(arg:any)=>{
+    if(arg.scope.requireCurrentRevisionForPlanning){const n=state.planningHydrations++;if(errors[n])throw Error(errors[n]);}
+    return arg.wire;
+   }
+  } as any);
+  return {f,second,third,changed,state,run};
+ }
+ it("retries only explicit current-revision race, keeps immutable original anchor and checks unchanged query",async()=>{
+  const x=setup(),r=await x.run([stale]);
+  expect(r.selector).toEqual(x.third.selector);
+  expect(r.selected.q.expectedPacketSha256).toBe(h(x.f.receipt.privateBytes));
+  expect(x.state).toEqual({originalReads:1,currentReads:2,planningHydrations:2});
+ });
+ it("never retries integrity or expired-source errors; three stale reads are the strict bound",async()=>{
+  for(const e of ["HOLD_P6_DAY_EPOCH_FULL_REGISTRY_REGISTRY_SHA_DAY_KIND_RIGHTS_OR_RETENTION_DRIFT","HOLD_P6_DAY_EPOCH_FULL_REGISTRY_DAY_INDEX_EXPIRED_BETWEEN_READS"]){
+   const x=setup();await expect(x.run([e])).rejects.toThrow(e);expect(x.state.currentReads).toBe(1);
+  }
+  const x=setup();await expect(x.run([stale,stale,stale])).rejects.toThrow(stale);expect(x.state.currentReads).toBe(3);
+  const y=setup();await expect(y.run([stale],y.changed)).rejects.toThrow("ORIGINAL_SIGNED_QUERY_CHANGED");
  });
 });

@@ -17,7 +17,7 @@ import {persistP5V0079SingleBoundFlightPre,
 import {persistP5T24SeparateTransactionWitness,
  type P5Stage17T24WitnessPermit}
  from "../server/lib/disruption/phase5T24IndependentPostCommitWitness_v39";
-import {persistP5ReviewedT24PreAndIndependentWitness,
+import {persistP5ReviewedT24PreAndIndependentWitness,verifyP5T24PreWitnessCrossReview,draftP5UnsignedStage24ReceiptFromCommittedChain,
  type P5IndependentT24WitnessReview}
  from "../server/lib/disruption/phase5T24PreIndependentWitnessChain_v39";
 
@@ -31,6 +31,7 @@ const WITNESS_LOGIN=STAGE29?"phase5_stage29_witness_ci":WITNESS_ROLE;
 const WITNESS_URL="postgresql://"+WITNESS_LOGIN+
  ":ci-only@localhost:5432/neondb?sslmode=disable";
 const STAGE17=process.env.V39_P5_STAGE17_REAL_PG16==="1";
+const CONDITIONAL_WITNESS=process.env.V39_P5B_CONDITIONAL_WITNESS_REAL_PG16==="1";
 const witnessIt=STAGE17?it:it.skip;
 const RW_URL="postgresql://"+PRE_LOGIN+":ci-only@localhost:5432/neondb?sslmode=disable";
 const active=process.env.V39_P5_STAGE14_REAL_PG16==="1"?describe:describe.skip;
@@ -54,6 +55,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.V39_P5_STAGE14_REAL_PG16!=="1"||
     (STAGE29&&process.env.V39_P5_STAGE17_REAL_PG16!=="1")||
+    (CONDITIONAL_WITNESS&&(!STAGE17||QUEUED_T24))||
     process.env.DATABASE_URL!==URL||
     process.env.AERODATABOX_API_KEY||
     process.env.V39_PHASE6_PROCESS_ARMED!=="0")
@@ -122,6 +124,10 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
     [reservation,query,manifest,new Date(now-48*3600_000),
       dispatch.toISOString().slice(0,10)]);
   const original={
+    ...(CONDITIONAL_WITNESS?{
+     phase5PopulationIdentityVersion:"P5_CANONICAL_SHA256_V1",
+     fidsRequestContract:{schema:"v39.fids-request-frame.application-intent.v1",endpointKind:"airport_local_fids",airportIcao:"WSSS",direction:"Departure",withLeg:true,withCargo:false,withPrivate:false,withCancelled:true,withCodeshared:true,withLocation:false,openapiSha256:contract,phase5ConditionalService:{protocolSha256:h("5"),cohortStartUtc:iso(Math.floor(serviceStart.getTime()/60000)*60000)}}
+    }:{}),
     originalDecodedEntityBodyPreserved:true,
     originalHttpWireBytesPreserved:false,
     originalDecodedEntityBodyEvidence:{
@@ -454,9 +460,33 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   )).rows[0].n).toBe(1);
  });
 
- (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE",async()=>{
-  await expect(persistP5V0079SingleBoundFlightPre(writer,permit))
+ (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE, including a proposed different cutoff",async()=>{
+  // Observe the real PG query without changing an existing snapshot or
+  // the independent committed witness. The guard must search all cutoffs
+  // for the exact stable flight/horizon, not only the proposed cutoff.
+  let inspected=0;
+  const observed:Pick<Pool,"connect">={connect:(async()=>{
+   const client=await writer.connect();
+   const query=client.query.bind(client);
+   const release=client.release.bind(client);
+   client.query=((sql:any,params?:any[])=>{
+    if(typeof sql==="string"&&sql.startsWith("SELECT id FROM clean.flight_snapshots WHERE flight_instance_id=$1")&&sql.includes("prediction_state='PRE_DEPARTURE'")){
+     inspected++;
+     expect(sql).not.toContain("prediction_cutoff_utc=");
+     expect(params).toEqual([permit.flightInstanceId,permit.horizon]);
+    }
+    return query(sql,params);
+   }) as typeof client.query;
+   client.release=((...args:Parameters<typeof client.release>)=>{
+    client.query=query as typeof client.query;
+    client.release=release;
+    return release(...args);
+   }) as typeof client.release;
+   return client;
+  }) as Pool["connect"]};
+  await expect(persistP5V0079SingleBoundFlightPre(observed,permit))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
+  expect(inspected).toBe(1);
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
  });
@@ -491,6 +521,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
    externalConditionalScheduleSourceAndUseReviewed:true,
    reviewedProtocolAmendmentSha256:h("5"),
    reviewedStableServiceKeySha256:h("7"),
+   ...(CONDITIONAL_WITNESS?{requireProspectiveConditionalSourceMarker:true as const}:{}),
    expectedOperatorFlightNumber:"CI200",
    expectedDestinationIcao:"OMAA",
   };
@@ -527,6 +558,21 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   expect(rows[1].population_query_id).toBe(qid);
   expect(rows[1].fids_response_hash).toBe(response);
   expect(rows[1].prediction_state).toBe("PRE_DEPARTURE");
+  if(CONDITIONAL_WITNESS){
+   const review:P5IndependentT24WitnessReview={flightInstanceId:conditional.flightInstanceId,sourcePopulationQueryId:qid,
+    expectedSourceResponseSha256:response,expectedSourceQueryDigestSha256:query,expectedFrameSha256:conditional.reviewedFrameSha256,
+    expectedConfigSha256:conditional.reviewedConfigSha256,selectedTNativeUtc:conditional.selectedTNativeUtc,expectedT24CutoffUtc:result.cutoffUtc,
+    expectedSelectedTVersion:conditional.selectedTConfig.milestone+":"+conditional.selectedTConfig.version+":"+conditional.selectedTConfig.artifactHash,
+    expectedWitnessOnlyRole:WITNESS_ROLE,reviewedConditionalProtocolSha256:h("5")};
+   verifyP5T24PreWitnessCrossReview(conditional,review);
+   await expect(persistP5T24SeparateTransactionWitness(witnessWriter,{...review,expectedSnapshotId:result.committedSnapshotId,reviewedConditionalProtocolSha256:h("9")})).rejects.toThrow("CONDITIONAL_WITNESS_SOURCE_PROTOCOL_MISMATCH");
+   const witnessed=await persistP5T24SeparateTransactionWitness(witnessWriter,{...review,expectedSnapshotId:result.committedSnapshotId});
+   expect(witnessed.witnessCommittedAndReadBackBeforeOwnCutoff).toBe(true);
+   const receipt=draftP5UnsignedStage24ReceiptFromCommittedChain(conditional,review,result,witnessed);
+   expect(receipt.receipt.flightInstanceId).toBe(conditional.flightInstanceId);
+   expect(receipt.reviewedByIndependentAuthority).toBe(false);
+   expect((await admin.query("SELECT count(*)::int AS n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[conditional.flightInstanceId])).rows[0].n).toBe(1);
+  }
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
  });

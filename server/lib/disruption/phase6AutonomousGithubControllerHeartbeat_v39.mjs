@@ -387,10 +387,23 @@ const P6_REDACTED_STEP_ALIASES=Object.freeze({
 });
 const p6ExpectedStepName=(actual,expected)=>actual===expected||
  (Object.hasOwn(P6_REDACTED_STEP_ALIASES,expected)&&actual===P6_REDACTED_STEP_ALIASES[expected]);
+// Job-level GitHub admission uses these repository variables before the
+// protected environment is assigned. Only explicit false plus actual
+// skipped metadata is an intentional pause; failed/missing jobs still alert.
+const P6_PAUSABLE_SOURCE_JOBS=Object.freeze({
+ "separately-authorized-stored-source-children":"P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED",
+ "separately-authorized-current-private-post-children":"P6_PRIVATE_POST_PARENT_ENABLED"
+});
 export async function reviewP6ActiveStandaloneNotifications(report,env,readGithub){
  const expected=env.P6_HEARTBEAT_COLLECTION_EXPECTED;
  if(![undefined,"","false","true"].includes(expected))fail("INVALID_NOTIFICATION_EXPECTATION");
- const incidents=[];
+ const incidents=[],intentionalPauses=[];
+ const paused=(lane,job,runId)=>{
+  const key=P6_PAUSABLE_SOURCE_JOBS[job?.name];
+  if(lane!=="SOURCE"||!key||env[key]!=="false"||job.status!=="completed"||job.conclusion!=="skipped")return false;
+  intentionalPauses.push({lane,job:job.name,runId,reason:"EXPLICIT_PAID_ROUTE_PAUSE_NOT_COLLECTION"});
+  return true;
+ };
  if(expected==="true"){
   for(const [lane,requirements] of Object.entries(P6_EXPECTED_ACTIVE_JOBS)){
    const c=report.controllerStates.find(x=>x.lane===lane);
@@ -399,6 +412,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    if(independent?.state==="INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF"){
     for(const [name,step] of requirements){
      const job=independent.jobs.find(x=>x.name===name);
+     if(paused(lane,job,independent.runId))continue;
      const add=reason=>incidents.push({lane,reason,runId:independent.runId,job:name});
      if(!job||job.status!=="completed"||job.conclusion!=="success"||
        step!==null&&(!Array.isArray(job.steps)||job.steps.filter(s=>p6ExpectedStepName(s.name,step)&&s.status==="completed"&&s.conclusion==="success").length!==1)){
@@ -430,6 +444,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    }
    for(const [name,step] of requirements){
     const jobs=body.jobs.filter(j=>j.name===name);
+    if(jobs.length===1&&paused(lane,jobs[0],run.id))continue;
     if(jobs.length!==1||jobs[0].status!=="completed"||jobs[0].conclusion!=="success"||
        step!==null&&(!Array.isArray(jobs[0].steps)||jobs[0].steps.filter(s=>p6ExpectedStepName(s.name,step)&&s.status==="completed"&&s.conclusion==="success").length!==1)){
      add("EXPECTED_WORKER_SKIPPED_FAILED_OR_UNVERIFIED",name);continue;
@@ -440,7 +455,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    }
   }
  }
- return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,
+ return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,intentionalPauses,
   realDueDrawOrPreparationVerified:false,flightCollectionVerified:false,
   databaseReads:0,databaseWrites:0,providerCalls:0,dispatches:0};
 }

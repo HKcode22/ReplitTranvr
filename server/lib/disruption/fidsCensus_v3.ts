@@ -12,6 +12,7 @@ import type { Pool, PoolClient } from "pg";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
+import {inspectP5ConditionalRoute,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id,p5ExplicitProviderUtcInstant} from "./phase5ConditionalServiceIdentity_v39";
 import {
   canonicalFlightInstanceId,
   phase5ProspectiveCanonicalFlightIdV39,
@@ -42,6 +43,9 @@ export interface FidsCensusParams {
    * This is not a claim of stable provider ID or cross-original retime linkage.
    */
   phase5ProspectiveIdentityV39?: typeof P5_CANONICAL_IDENTITY_VERSION;
+  /** Separate, prospective G5A-compatible conditional service scope. Only
+   * supplied by a separately adopted signed SOURCE plan; never physical. */
+  phase5ConditionalService?:{protocolSha256:string;cohortStartUtc:string};
   /** Only prospective G5A: stable provider operating identity under retimes. */
   g5aObservedScheduleProtocol?: boolean;
   /**
@@ -82,6 +86,19 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
      params.g5aObservedScheduleProtocol===true||
      params.direction!=="Departure"))
     throw Error("P5_POST_V0083_RESERVATION_FRAME_INVALID_HOLD");
+ const conditional=params.phase5ConditionalService;
+ if(conditional!==undefined&&
+    (!conditional||!usesP5ProspectiveIdentity(params)||params.direction!=="Departure"||
+     !/^[a-f0-9]{64}$/.test(conditional.protocolSha256??"")||
+     typeof conditional.cohortStartUtc!=="string"||
+     !Number.isFinite(Date.parse(conditional.cohortStartUtc))||
+     new Date(conditional.cohortStartUtc).toISOString()!==conditional.cohortStartUtc||
+     Date.parse(conditional.cohortStartUtc)%60000!==0||
+     Date.parse(conditional.cohortStartUtc)>params.serviceWindowStartUtc.getTime()||
+     params.serviceWindowEndUtc.getTime()>Date.parse(conditional.cohortStartUtc)+6*3600000||
+     params.withCancelled!==true||params.withCodeshared!==true||
+     params.withCargo!==false||params.withPrivate!==false))
+   throw Error("P5_CONDITIONAL_SERVICE_FRAME_INVALID_HOLD");
  const direction=params.direction??"Both";
  if(!["Departure","Arrival","Both"].includes(direction)||
     typeof params.withCancelled!=="boolean"||
@@ -115,6 +132,7 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
   providerApiVersion:params.providerApiVersion,
   fidsProtocolVersion:params.fidsProtocolVersion,
   openapiSha256:params.openapiSha256,
+  ...(conditional?{phase5ConditionalService:{...conditional}}:{}),
   ...(params.phase5PostReservationSha256?
     {phase5PostReservationSha256:params.phase5PostReservationSha256}:{}),
   ...(params.g5aCompositeIdentityStudyStartUtc?
@@ -491,6 +509,7 @@ function normalizeFidsRecord(input: {
        params.direction==="Departure");
     const foreignOrigin=movement==="departure"&&!!explicitDepIcao&&
       explicitDepIcao!==normalizeIcao(params.airportIcao);
+    const conditionalRoute=params.phase5ConditionalService?inspectP5ConditionalRoute(f,params.airportIcao):null;
     if(g5a&&isOperator&&sourceId&&requestedOrigin&&!foreignOrigin){
       const stable=createHash("sha256").update(JSON.stringify({
         protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
@@ -515,6 +534,17 @@ function normalizeFidsRecord(input: {
         origin:depIcao,destination:arrIcao
       }));
       canonical="leg:g5a:"+stable;
+      analyticIdentityId=canonical;
+      identityStatus="g5a_conditional_operator_composite_no_native_id";
+    }else if(!g5a&&params.phase5ConditionalService&&isOperator&&p5ConditionalProviderIdAbsent(f)&&
+      conditionalRoute?.status==="ok"&&p5ExplicitProviderUtcInstant(f?.departure?.scheduledTime?.utc)===selectedMs&&
+      requestedOrigin&&!foreignOrigin&&movement==="departure"&&
+      f?.isCargo!==true&&f?.isPrivate!==true&&f?.isGeneralAviation!==true&&f?.isCharter!==true&&
+      classifyScope(f??{})==="unknown"){
+      // Same G5A conditional key and marker already supported by Stage14.
+      // Anchor to the exact signed parent-day start, not the entire month
+      // or mutable scheduled departure. Keep native identity lane unchanged.
+      canonical=p5ConditionalStage14Id(conditionalRoute.route,params.phase5ConditionalService.cohortStartUtc);
       analyticIdentityId=canonical;
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&isOperator&&!departureAirportFromContext&&
@@ -715,9 +745,16 @@ export async function fetchFidsPopulation(
   for(const r of preDedup){
     const k=compositeKey(r);counts.set(k,(counts.get(k)??0)+1);
   }
+  // Exactly the same positive-operator ambiguity rule as the independent
+  // conditional reader, including out-of-window / missing-schedule rows.
+  // A positively identified marketing record is not another operator.
+  // Do not change the historical G5A composite count semantics.
+  const rawConditionalCounts=params.phase5ConditionalService?p5ConditionalPositiveServiceCounts(fids.departures,params.airportIcao):null;
   const normalized=preDedup.map((r,index):NormalizedFidsRecord=>{
-    if(r.row.codeshareResolutionStatus!=="g5a_conditional_operator_composite_no_native_id"||
-       (counts.get(compositeKey(r))??0)===1)return r;
+    if(r.row.codeshareResolutionStatus!=="g5a_conditional_operator_composite_no_native_id")return r;
+    const n=parseFlightNumber(r.row.flightNumber),origin=r.row.depAirportIcao,destination=r.row.arrAirportIcao;
+    const count=rawConditionalCounts?(n&&origin&&destination?rawConditionalCounts.get(p5ConditionalServiceRouteKey({carrier:n.carrier,number:n.number,origin,destination}))??0:0):(counts.get(compositeKey(r))??0);
+    if(count===1)return r;
     return {resolvedCanonical:null,row:{
       ...r.row,canonicalFlightInstanceId:null,
       codeshareResolutionStatus:"g5a_composite_duplicate_ambiguous",

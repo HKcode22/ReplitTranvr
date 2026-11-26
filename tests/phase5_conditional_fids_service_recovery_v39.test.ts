@@ -38,6 +38,13 @@ describe("prospective conditional service recovery, separate from physical nativ
   const r=prepare(original([flight(),{...flight(),departure:{scheduledTime:{utc:stamp("11:10")}}}]),scope);
   expect(r.counts.ambiguousComposite).toBe(2);expect(r.privateCandidates).toHaveLength(0);
  });
+ it("does not select a positive operator when a second same-service appearance is outside the window or has no schedule",()=>{
+  for(const departure of [{scheduledTime:{utc:stamp("16:00")}},{scheduledTime:{}}]){
+   const r=prepare(original([flight(),{...flight(),departure}]),scope);
+   expect(r.counts.ambiguousComposite).toBe(1);
+   expect(r.privateCandidates).toHaveLength(0);
+  }
+ });
  it("separates identical daily services by signed cohort day, not by revised schedule",()=>{
   const first=prepare(original([flight()]),scope).privateCandidates[0];
   const revised=prepare(original([{...flight(),departure:{scheduledTime:{utc:stamp("12:15")}}}]),{...scope,maximumStalenessSeconds:7200}).privateCandidates[0];
@@ -56,9 +63,38 @@ describe("prospective conditional service recovery, separate from physical nativ
   expect(()=>prepare(original([flight()]),{...scope,policyEffectiveUtc:stamp("05:01")})).toThrow(/RETROSPECTIVE/);
   expect(()=>prepare(original([flight()]),{...scope,sourceExpiresUtc:stamp("05:02")})).toThrow(/CLOCK/);
  });
+ it("uses original availability rather than a later binding to measure staleness",()=>{
+  const bound={...scope,sourceAvailableUtc:stamp("05:10"),dbObservedUtc:stamp("05:11"),maximumStalenessSeconds:55*60};
+  expect(prepare(original([flight()]),bound).counts.conditionalCandidates).toBe(1);
+  const real={...bound,originalSourceAvailableUtc:stamp("05:02")};
+  expect(prepare(original([flight()]),real).counts.lateOrStale).toBe(1);
+  expect(()=>prepare(original([flight()]),{...real,originalSourceAvailableUtc:stamp("05:12")})).toThrow(/ORIGINAL_AVAILABLE_CLOCK/);
+ });
  it("rejects mutated body or separate approval absent",()=>{
   const x=original([flight()]);(x as any).departures[0].number="CHANGED";
   expect(()=>prepare(x,scope)).toThrow(/INTEGRITY/);
   expect(()=>prepare(original([flight()]),{...scope,ownerProspectiveSeparateTierApproved:false as any})).toThrow(/SCOPE/);
  });
+});
+
+it("matches conditional normalization of case/whitespace, marketing context and rejects malformed nonempty IDs",()=>{
+ const mark=(rows:any[])=>{
+  const x=original(rows) as any,{canonicalEnvelopeSha256,canonicalEnvelopeHashSchema,...bare}=x;
+  return addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
+ };
+ const row={...flight(),number:"sq 0078",departure:{airport:{icao:" wsss "},scheduledTime:{utc:stamp("12:00")}},arrival:{airport:{icao:" yssy "}}};
+ const x=prepare(mark([row,{...row,codeshareStatus:"IsCodeshared"}]),scope);
+ expect(x.privateCandidates[0]).toMatchObject({stage14ConditionalFlightInstanceId:expect.stringMatching(/^leg:g5a:/),originEvidence:"EXPLICIT_REPORTED_ORIGIN",operatorFlightNumber:"SQ78"});
+ expect(prepare(mark([row,{...row,departure:{airport:{icao:"WSSS"},scheduledTime:{utc:stamp("16:00")}}}]),scope).privateCandidates).toHaveLength(0);
+ expect(prepare(mark([{...row,id:123}]),scope).privateCandidates[0].stage14ConditionalFlightInstanceId).toBeNull();
+ expect(prepare(mark([{...row,departure:{airport:{icao:" "},scheduledTime:{utc:stamp("12:00")}}}]),scope).counts.contraryOrigin).toBe(1);
+});
+
+it("F031: conditional schedule requires explicit UTC; equivalent provider precision does not change the instant",()=>{
+ const f=flight();
+ const change=(utc:string)=>({...f,departure:{scheduledTime:{utc}}});
+ expect(prepare(original([change("2035-11-25 12:00Z")]),scope).privateCandidates[0].selectedReportedDepartureUtc).toBe(stamp("12:00"));
+ expect(prepare(original([change("2035-11-25T12:00:00+00:00")]),scope).counts.conditionalCandidates).toBe(1);
+ expect(prepare(original([change("2035-11-25T12:00:00")]),scope).counts.missingServiceFields).toBe(1);
+ expect(prepare(original([change("2035-02-30T12:00:00Z")]),scope).counts.missingServiceFields).toBe(1);
 });

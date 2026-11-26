@@ -52,6 +52,10 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   lines.push("","**Independent wake worker execution (not collection proof):**");
   for(const [lane,x] of independent)lines.push("- "+lane+": "+x.state+(x.runId?" — [run "+x.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+x.runId+")":""));
  }
+ if(heartbeat.activeNotifications?.intentionalPauses?.length){
+  lines.push("","**Explicitly paused paid routes — collection not running:**");
+  for(const i of heartbeat.activeNotifications.intentionalPauses)lines.push("- "+i.job+": "+i.reason);
+ }
  if(heartbeat.activeNotifications?.incidentCount){
   lines.push("","**Current operational incident — review required:**");
   for(const i of heartbeat.activeNotifications.incidents)lines.push("- "+i.lane+": "+i.reason+(i.runId?" — [run "+i.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+i.runId+")":""));

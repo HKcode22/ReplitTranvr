@@ -16,15 +16,50 @@ async function main(){
   const a=await c.query("SELECT DISTINCT manifest_sha256 FROM clean.adb_phase6_authorization WHERE enabled AND revoked_at_utc IS NULL");
   if(a.rowCount!==1||!/^[a-f0-9]{64}$/.test(a.rows[0].manifest_sha256))throw Error("NO_EXACT_ACTIVE_MANIFEST");
   const m=a.rows[0].manifest_sha256;
+  stage="THREE_DAY_QUERY_DENOMINATOR";
+  const days=await c.query(`
+    SELECT q.run_day_index,q.horizon,count(*)::int prepared_queries,
+      count(a.reservation_sha256)::int reservations,
+      COALESCE(sum(a.charged_reserved_units),0)::bigint reserved_units,
+      count(b.population_query_id)::int original_bindings,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND (r.population_query_id IS NULL OR (r.raw_expired_at_utc IS NULL AND r.response_hash IS DISTINCT FROM b.response_hash) OR (r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NOT NULL)))::int binding_response_mismatch,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND r.response_hash=b.response_hash AND r.available_at<=q.prediction_cutoff_utc)::int original_available_by_planned_cutoff,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND b.bound_at_utc<=q.prediction_cutoff_utc)::int original_bound_by_planned_cutoff,
+      count(*) FILTER (WHERE a.reservation_sha256 IS NOT NULL AND b.population_query_id IS NULL)::int reserved_without_binding,
+      count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.hard_latest_dispatch_utc<transaction_timestamp())::int elapsed_unreserved,
+      count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.planned_dispatch_utc<=transaction_timestamp() AND q.hard_latest_dispatch_utc>=transaction_timestamp())::int open_unreserved,
+      count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.planned_dispatch_utc>transaction_timestamp())::int future_unreserved,
+      count(*) FILTER (WHERE r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NULL)::int expired_response_metadata,
+      count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp() AND r.response_hash=b.response_hash)::int live_bound_metadata
+    FROM clean.phase5_fids_allowed_query_v39 q
+    LEFT JOIN clean.phase5_fids_physical_attempt_v39 a ON a.manifest_sha256=q.manifest_sha256 AND a.query_digest=q.query_digest
+    LEFT JOIN clean.phase5_fids_original_binding_v39 b ON b.manifest_sha256=q.manifest_sha256 AND b.query_digest=q.query_digest AND b.reservation_sha256=a.reservation_sha256
+    LEFT JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id
+    WHERE q.manifest_sha256=$1 AND q.run_day_index IN (1,2,3)
+    GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  console.log(JSON.stringify({status:"P6_THREE_DAY_SOURCE_DENOMINATOR_READONLY",at:g.at,rows:days.rows,
+    designQueriesPerDayHorizon:64,expiredResponseHashNullIsExpectedV0107:true,availabilityOfExpiredOriginalNotReconstructed:true,missingPreparedRowsAreNotProviderFailures:true,
+    reservationsAreNotHttpOrBillingProof:true,providerCalls:0,productionWrites:0}));
+  stage="ALL_BOUND_PRE_METADATA";
+  const allPre=await c.query(`
+    SELECT q.run_day_index,q.horizon,count(s.id)::bigint source_linked_pre_rows,
+      count(s.id) FILTER (WHERE s.created_at<=s.prediction_cutoff_utc)::bigint cutoff_safe_created_rows
+    FROM clean.phase5_fids_allowed_query_v39 q
+    JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest)
+    LEFT JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id::text AND s.fids_response_hash=b.response_hash AND s.horizon=q.horizon AND s.prediction_state='PRE_DEPARTURE'
+    WHERE q.manifest_sha256=$1 AND q.run_day_index IN (1,2,3)
+    GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  console.log(JSON.stringify({status:"P6_THREE_DAY_SOURCE_LINKED_PRE_METADATA_READONLY",at:g.at,rows:allPre.rows,
+   includesExpiredOriginalMetadata:true,createdAtIsNotCommitProof:true,providerCalls:0,productionWrites:0}));
   stage="SCHEMA_TYPES";
   const types=await c.query(`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema='clean' AND ((table_name IN ('flight_snapshots','flight_population','fids_query_response','phase5_fids_original_binding_v39') AND column_name='population_query_id') OR (table_name='flight_snapshots' AND column_name IN ('fids_response_hash','horizon','created_at','prediction_cutoff_utc'))) ORDER BY table_name,column_name`);
   console.log(JSON.stringify({status:"P6_PRE_FUNNEL_SCHEMA_METADATA",rows:types.rows}));
   stage="SOURCE_CUSTODY";
-  const custody=await c.query(`SELECT q.run_day_index,q.horizon,q.slot_id,count(*)::int bound_originals,sum(b.normalized_members_count)::bigint normalized_member_observations,count(*) FILTER (WHERE r.available_at<=q.prediction_cutoff_utc)::int timely_originals,count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp())::int live_originals,min(b.source_expires_at_utc) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp()) earliest_live_expiry_utc FROM clean.phase5_fids_allowed_query_v39 q JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest) JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash WHERE q.manifest_sha256=$1 AND q.run_day_index IN (2,3) GROUP BY 1,2,3 ORDER BY 1,2,3`,[m]);
+  const custody=await c.query(`SELECT q.run_day_index,q.horizon,q.slot_id,count(*)::int bound_originals,sum(b.normalized_members_count)::bigint normalized_member_observations,count(*) FILTER (WHERE r.available_at<=q.prediction_cutoff_utc)::int timely_originals,count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp())::int live_originals,min(b.source_expires_at_utc) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp()) earliest_live_expiry_utc FROM clean.phase5_fids_allowed_query_v39 q JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest) JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash WHERE q.manifest_sha256=$1 AND q.run_day_index IN (1,2,3) GROUP BY 1,2,3 ORDER BY 1,2,3`,[m]);
   console.log(JSON.stringify({status:"P6_BOUND_SOURCE_SALVAGE_CUSTODY_READONLY",at:g.at,rows:custody.rows,memberObservationsNotDistinctFlights:true,trainingEligibilityCertified:false,providerCalls:0,productionWrites:0}));
   stage="PRIVATE_PRE_POST_AND_QUEUE_CUSTODY";
-  const packets=await c.query(`SELECT run_day_index,kind,count(*)::int packets,count(*) FILTER (WHERE retention_not_after_utc>transaction_timestamp())::int within_retention FROM phase6_private.frozen_native_packet_v39 WHERE manifest_sha256=$1 AND run_day_index IN (2,3) GROUP BY 1,2 ORDER BY 1,2`,[m]);
-  const tasks=await c.query(`SELECT t.horizon,t.state,count(*)::int tasks,count(*) FILTER (WHERE t.verified_snapshot_id IS NOT NULL)::int tasks_with_snapshot_ref,count(*) FILTER (WHERE t.state='VERIFIED_ON_TIME' AND s.id IS NOT NULL AND s.created_at<=s.prediction_cutoff_utc AND s.prediction_state='PRE_DEPARTURE')::int linked_cutoff_safe_verified FROM clean.phase5_cd_pre_task_v39 t LEFT JOIN clean.flight_snapshots s ON s.id=t.verified_snapshot_id AND s.population_query_id=t.source_population_query_id AND s.fids_response_hash=t.source_response_sha256 AND s.horizon=t.horizon AND s.flight_instance_id=t.flight_instance_id WHERE t.manifest_sha256=$1 GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  const packets=await c.query(`SELECT run_day_index,kind,count(*)::int packets,count(*) FILTER (WHERE retention_not_after_utc>transaction_timestamp())::int within_retention FROM phase6_private.frozen_native_packet_v39 WHERE manifest_sha256=$1 AND run_day_index IN (1,2,3) GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  const tasks=await c.query(`SELECT t.horizon,t.state,count(*)::int tasks,count(*) FILTER (WHERE t.verified_snapshot_id IS NOT NULL)::int tasks_with_snapshot_ref,count(*) FILTER (WHERE t.state='VERIFIED_ON_TIME' AND s.id IS NOT NULL AND s.created_at<=s.prediction_cutoff_utc AND s.prediction_state='PRE_DEPARTURE')::int linked_cutoff_safe_verified FROM clean.phase5_cd_pre_task_v39 t LEFT JOIN clean.flight_snapshots s ON s.id=t.verified_snapshot_id AND s.population_query_id=t.source_population_query_id::text AND s.fids_response_hash=t.source_response_sha256 AND s.horizon=t.horizon AND s.flight_instance_id=t.flight_instance_id WHERE t.manifest_sha256=$1 GROUP BY 1,2 ORDER BY 1,2`,[m]);
   console.log(JSON.stringify({status:"P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY",at:g.at,packets:packets.rows,tasks:tasks.rows,packetCountIsNotFlightCount:true,trainingEligibilityCertified:false,providerCalls:0,productionWrites:0}));
   stage="PRE_FUNNEL";
   const report=await c.query(`
@@ -35,7 +70,7 @@ async function main(){
     FROM clean.phase5_fids_allowed_query_v39 q
     JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest)
     JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash
-    WHERE q.manifest_sha256=$1 AND q.run_day_index IN (2,3)
+    WHERE q.manifest_sha256=$1 AND q.run_day_index IN (1,2,3)
     AND q.horizon IN ('T-24h','T-6h','T-90m')
     AND r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp()
   ), member AS (

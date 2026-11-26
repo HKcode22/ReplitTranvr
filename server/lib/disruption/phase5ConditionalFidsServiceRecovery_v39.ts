@@ -5,6 +5,7 @@
 import {createHash} from "node:crypto";
 import {verifyStoredDecodedFidsBodyV39} from "./phase4Gate5DecodedFidsReadback_v39";
 import {verifyCanonicalFidsEnvelopeV39} from "./fidsEnvelopeCanonical_v39";
+import {inspectP5ConditionalRoute,p5ConditionalPositiveOperator,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id,p5ExplicitProviderUtcInstant} from "./phase5ConditionalServiceIdentity_v39";
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const hash=/^[a-f0-9]{64}$/;
 const iso=(x:unknown):number=>typeof x==="string"&&Number.isFinite(Date.parse(x))?Date.parse(x):NaN;
@@ -15,12 +16,16 @@ type Scope={protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
  runDayIndex:number;
  airportIcao:string;frozenStudyStartUtc:string;policyEffectiveUtc:string;
  plannedSourceUtc:string;sourceAvailableUtc:string;sourceExpiresUtc:string;dbObservedUtc:string;
+ /** Original available-at clock, distinct from later binding eligibility.
+  * Stage14 measures staleness from original availability, not binding. */
+ originalSourceAvailableUtc?:string;
  serviceWindowStartUtc:string;serviceWindowEndUtc:string;horizon:"T-24h"|"T-6h"|"T-90m";
  maximumStalenessSeconds:number;minimumReviewLeadSeconds:number};
 type Candidate={serviceKey:string;sourceIndex:number;selectedReportedDepartureUtc:string;ownCutoffUtc:string;
  originEvidence:"EXPLICIT_REPORTED_ORIGIN"|"REQUESTED_DEPARTURE_CONTEXT_ONLY";commercialScope:"EXPLICIT_CORE_FLAGS"|"QUERY_FILTERED_SCOPE_UNKNOWN";
  providerNativeIdPresent:boolean;sourceResponseSha256:string;sourceQueryId:string;
- operatorFlightNumber:string;originIcao:string;destinationIcao:string;runDayIndex:number};
+ operatorFlightNumber:string;originIcao:string;destinationIcao:string;runDayIndex:number;
+ stage14ConditionalFlightInstanceId:string|null};
 export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Scope){
  if(!s||s.ownerProspectiveSeparateTierApproved!==true||![s.protocolSha256,s.manifestSha256,s.sourceResponseSha256].every(x=>hash.test(x??""))||
   !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.sourceQueryId??"")||!ICAO.test(s.airportIcao??"")||
@@ -29,6 +34,8 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
   !Number.isSafeInteger(s.minimumReviewLeadSeconds)||s.minimumReviewLeadSeconds<120||s.minimumReviewLeadSeconds>3600)fail("SEPARATE_PROSPECTIVE_SCOPE");
  const [frame,effective,planned,available,expires,now,start,end]=[s.frozenStudyStartUtc,s.policyEffectiveUtc,s.plannedSourceUtc,s.sourceAvailableUtc,s.sourceExpiresUtc,s.dbObservedUtc,s.serviceWindowStartUtc,s.serviceWindowEndUtc].map(iso);
  if(![frame,effective,planned,available,expires,now,start,end].every(Number.isFinite)||effective>planned||planned>available||available>now||now>=expires||start>=end||frame>start)fail("CLOCK_OR_RETROSPECTIVE_SCOPE");
+ const originalAvailable=s.originalSourceAvailableUtc===undefined?available:iso(s.originalSourceAvailableUtc);
+ if(!Number.isFinite(originalAvailable)||originalAvailable<planned||originalAvailable>available)fail("ORIGINAL_AVAILABLE_CLOCK");
  if(verifyCanonicalFidsEnvelopeV39(payload)!=="verified"||verifyStoredDecodedFidsBodyV39({payload,persisted_response_hash:s.sourceResponseSha256})!=="verified")fail("ORIGINAL_INTEGRITY");
  const p=payload as Record<string,any>,q=p.fidsRequestContract;
  if(q?.schema!=="v39.fids-request-frame.application-intent.v1"||q.direction!=="Departure"||q.airportIcao!==s.airportIcao||
@@ -39,32 +46,40 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
  if(!Array.isArray(p.departures)||p.departures.length>2500||!Number.isFinite(iso(p.fetchedAtUtc))||iso(p.fetchedAtUtc)>available)fail("ORIGINAL_SCOPE_OR_CAP");
  const offset=s.horizon==="T-24h"?86400000:s.horizon==="T-6h"?21600000:5400000;
  const counts={notPositiveOperator:0,knownExcluded:0,missingServiceFields:0,contraryOrigin:0,outsideWindow:0,ambiguousComposite:0,ambiguousProviderId:0,lateOrStale:0,conditionalCandidates:0};
- const provisional:{candidate:Candidate;providerId:string|null;timely:boolean}[]=[];
- const rawIdFrequency=new Map<string,number>();
- for(const f of p.departures){if(typeof f?.id==="string"&&f.id.trim())rawIdFrequency.set(f.id.trim(),(rawIdFrequency.get(f.id.trim())??0)+1);}
+ const provisional:{candidate:Candidate;providerId:string|null;routeKey:string;timely:boolean}[]=[];
+ const rawIdFrequency=new Map<string,number>(),rawPositiveServiceFrequency=p5ConditionalPositiveServiceCounts(p.departures,s.airportIcao);
+ const composite=(r:{carrier:string;number:string;destination:string})=>"leg:p5conditional:v2:"+sha(JSON.stringify([s.manifestSha256,s.protocolSha256,s.frozenStudyStartUtc,s.runDayIndex,r.carrier,r.number,s.airportIcao,r.destination]));
+ for(const f of p.departures)if(typeof f?.id==="string"&&f.id.trim())rawIdFrequency.set(f.id.trim(),(rawIdFrequency.get(f.id.trim())??0)+1);
  for(const [i,f] of p.departures.entries()){
-  if(f?.codeshareStatus!=="IsOperator"&&f?.codeshareStatus!==1){counts.notPositiveOperator++;continue;}
+  if(!p5ConditionalPositiveOperator(f)){counts.notPositiveOperator++;continue;}
   if(f.isCargo===true||f.isPrivate===true||f.isGeneralAviation===true||f.isCharter===true){counts.knownExcluded++;continue;}
-  const number=typeof f.number==="string"?f.number.trim().toUpperCase().match(/^([A-Z0-9]{2})[ \t]*([0-9]{1,4})$/):null;
-  const origin=f.departure?.airport?.icao,dest=f.arrival?.airport?.icao,selected=iso(f.departure?.scheduledTime?.utc);
-  if(origin!==undefined&&origin!==null&&origin!==""&&origin!==s.airportIcao){counts.contraryOrigin++;continue;}
-  if(!number||!ICAO.test(dest??"")||dest===s.airportIcao||!Number.isFinite(selected)){counts.missingServiceFields++;continue;}
+  const x=inspectP5ConditionalRoute(f,s.airportIcao),selected=p5ExplicitProviderUtcInstant(f.departure?.scheduledTime?.utc);
+  if(x.status!=="ok"){counts[x.status]++;continue;}
+  if(!Number.isFinite(selected)){counts.missingServiceFields++;continue;}
+  const route=x.route,dest=route.destination;
   if(selected<start||selected>=end){counts.outsideWindow++;continue;}
   // Stable only within the frozen service frame; no revised time or provider ID in the key.
-  const serviceKey="leg:p5conditional:v2:"+sha(JSON.stringify([s.manifestSha256,s.protocolSha256,s.frozenStudyStartUtc,s.runDayIndex,number[1],number[2].replace(/^0+/,"")||"0",s.airportIcao,dest]));
+  const serviceKey=composite(route);
   const providerId=typeof f.id==="string"&&f.id.trim()?f.id.trim():null,cutoff=selected-offset;
-  provisional.push({providerId,timely:available<=cutoff&&cutoff-now>s.minimumReviewLeadSeconds*1000&&cutoff<expires&&cutoff-available<=s.maximumStalenessSeconds*1000,
+  provisional.push({providerId,routeKey:p5ConditionalServiceRouteKey(route),timely:available<=cutoff&&cutoff-now>s.minimumReviewLeadSeconds*1000&&cutoff<expires&&cutoff-originalAvailable<=s.maximumStalenessSeconds*1000,
    candidate:{serviceKey,sourceIndex:i,selectedReportedDepartureUtc:new Date(selected).toISOString(),ownCutoffUtc:new Date(cutoff).toISOString(),
-    originEvidence:origin===s.airportIcao?"EXPLICIT_REPORTED_ORIGIN":"REQUESTED_DEPARTURE_CONTEXT_ONLY",
+    originEvidence:route.originFromRequest?"REQUESTED_DEPARTURE_CONTEXT_ONLY":"EXPLICIT_REPORTED_ORIGIN",
     commercialScope:f.isCargo===false&&f.isPrivate===false&&f.isCharter===false?"EXPLICIT_CORE_FLAGS":"QUERY_FILTERED_SCOPE_UNKNOWN",
     providerNativeIdPresent:providerId!==null,sourceResponseSha256:s.sourceResponseSha256,sourceQueryId:s.sourceQueryId,
-    operatorFlightNumber:number[1]+(number[2].replace(/^0+/,"")||"0"),originIcao:s.airportIcao,destinationIcao:dest,runDayIndex:s.runDayIndex}});
+    operatorFlightNumber:route.carrier+route.number,originIcao:s.airportIcao,destinationIcao:dest,runDayIndex:s.runDayIndex,
+    // Existing Stage14 conditional key; only valid on a prospectively marked
+    // original. This is a proposed match, not proof of DB member custody.
+    stage14ConditionalFlightInstanceId:p5ConditionalProviderIdAbsent(f)&&
+      !(f.isCargo===false&&f.isPrivate===false&&f.isCharter===false)&&
+      q.phase5ConditionalService?.protocolSha256===s.protocolSha256&&
+      q.phase5ConditionalService?.cohortStartUtc===s.frozenStudyStartUtc?
+      p5ConditionalStage14Id(route,s.frozenStudyStartUtc):null}});
  }
  const freq=new Map<string,number>();
  for(const {candidate} of provisional)freq.set(candidate.serviceKey,(freq.get(candidate.serviceKey)??0)+1);
  const candidates:Candidate[]=[];
- for(const {candidate,providerId,timely} of provisional){
-  if(freq.get(candidate.serviceKey)!==1){counts.ambiguousComposite++;continue;}
+ for(const {candidate,providerId,routeKey,timely} of provisional){
+  if(freq.get(candidate.serviceKey)!==1||rawPositiveServiceFrequency.get(routeKey)!==1){counts.ambiguousComposite++;continue;}
   if(providerId!==null&&rawIdFrequency.get(providerId)!==1){counts.ambiguousProviderId++;continue;}
   if(!timely){counts.lateOrStale++;continue;}
   candidates.push(Object.freeze(candidate));counts.conditionalCandidates++;
