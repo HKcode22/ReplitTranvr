@@ -228,15 +228,15 @@ export function verifyP6ConditionalSourceInstructionProof(proof,x){
 /** Permit-review ingress has no permit yet. Only immutable SOURCE anchor
  * references cross the socket; the independent role rereads the actual
  * bound original and determines the member evidence itself. */
-export function verifyP6ConditionalT24ReviewInstructionProof(proof,x){
+function verifyConditionalReviewInstructionProof(proof,x,allowedHorizons){
  const q=verifiedConditionalInstructionQuery(proof,x),m=q.conditionalServiceScope,f=x.policy?.conditionalPreFeatureReview,a=x.anchor;
  if(!exact(a,["sourceGithubRunId","populationQueryId","responseSha256"])||
     a.sourceGithubRunId!==x.expectedSourceRunId||!SHA.test(a.responseSha256??"")||
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(a.populationQueryId??"")||
-    q.horizon!=="T-24h"||!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    !allowedHorizons.includes(q.horizon)||!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
     !exact(f,["schema","approved","protocolSha256","rightsSha256","externalContentUseReviewSha256"])||
     f.protocolSha256!==m.protocolSha256||f.rightsSha256!==x.trust.rightsSha256||!SHA.test(f.externalContentUseReviewSha256??""))
-  fail("EXACT_CONDITIONAL_T24_REVIEW_INSTRUCTION_SCOPE");
+  fail(allowedHorizons.length===1?"EXACT_CONDITIONAL_T24_REVIEW_INSTRUCTION_SCOPE":"EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
  return Object.freeze({source:Object.freeze({...q,expectedSourceGithubRunId:a.sourceGithubRunId}),
   protocolSha256:m.protocolSha256,ownerProspectiveSeparateTierApproved:true,frozenStudyStartUtc:m.cohortStartUtc,
   policyEffectiveUtc:m.effectiveUtc,minimumReviewLeadSeconds:900,expectedPopulationQueryId:a.populationQueryId,
@@ -244,11 +244,18 @@ export function verifyP6ConditionalT24ReviewInstructionProof(proof,x){
   expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,
   externalContentUseReviewSha256:f.externalContentUseReviewSha256});
 }
+export function verifyP6ConditionalT24ReviewInstructionProof(proof,x){return verifyConditionalReviewInstructionProof(proof,x,["T-24h"]);}
+export function verifyP6ConditionalLaterReviewInstructionProof(proof,x){
+ if(!["T-6h","T-90m"].includes(x.expectedHorizon))fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ const scope=verifyConditionalReviewInstructionProof(proof,x,["T-6h","T-90m"]);
+ if(scope.source.horizon!==x.expectedHorizon)fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ return scope;
+}
 /** Capture exact originally admitted signed instructions using existing
  * restricted reader. An append may advance the day head but the immutable
  * child revision remains a valid proof of its own SOURCE. The separately
  * authenticated current continuity check is still required before issuance. */
-async function readConditionalInstructionProof({readerClient,trust,selector,policy,permit,anchor,expectedSourceRunId}){
+async function readConditionalInstructionProof({readerClient,trust,selector,policy,permit,anchor,expectedSourceRunId,expectedLaterHorizon}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
     policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
@@ -273,13 +280,18 @@ async function readConditionalInstructionProof({readerClient,trust,selector,poli
   sourceRegistries:index.privateParsedIndex.entries.filter(e=>e.lane==="SOURCE").map(e=>({path:e.filePath,bytesBase64:index.getFrozen(e.filePath).toString("base64")})),
   queryWire:signed.wire,queryBase64:receipt.privateBytes.toString("base64")};
  const at=receipt.redactedSummary.observedDatabaseClockUtc;
- if(anchor)verifyP6ConditionalT24ReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at});
+ if(anchor&&expectedLaterHorizon!==undefined)verifyP6ConditionalLaterReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at,expectedHorizon:expectedLaterHorizon});
+ else if(anchor)verifyP6ConditionalT24ReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at});
  else verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,observedDbClockUtc:at});
  return Object.freeze(Object.defineProperty({status:"CONDITIONAL_SIGNED_SOURCE_INSTRUCTIONS_PRIVATE_NO_GO",providerCalls:0,databaseWrites:0,phase6PaidGo:false},
   "privateProof",{value:Object.freeze(proof),enumerable:false}));
 }
 export async function readP6ConditionalSourceInstructionProof(x){return readConditionalInstructionProof(x);}
-export async function readP6ConditionalT24ReviewInstructionProof(x){return readConditionalInstructionProof(x);}
+export async function readP6ConditionalT24ReviewInstructionProof(x){return readConditionalInstructionProof({...x,expectedLaterHorizon:undefined});}
+export async function readP6ConditionalLaterReviewInstructionProof(x){
+ if(!x.anchor||!["T-6h","T-90m"].includes(x.expectedLaterHorizon))fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ return readConditionalInstructionProof(x);
+}
 /** Shared exact SOURCE identity continuity check for concurrent append-only
  * PRE/POST registry publication. Neither an advanced revision nor an ACK
  * changes the original signed query, shard or bytes. */

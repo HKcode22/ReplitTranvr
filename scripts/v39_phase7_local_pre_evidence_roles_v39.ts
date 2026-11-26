@@ -135,6 +135,7 @@ async function serve(role:P7LocalPreRole){
   if(role==="lane"){
    const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]),undefined,conditionalScope);clean=a.close;readClock=a.preflight;await a.preflight();
    handler=async q=>{
+    if(q.op==="issue_conditional_later_review")hold("CONDITIONAL_LATER_RESTRICTED_READ_ROLE_NOT_COMMISSIONED");
     if(q.op==="issue_conditional_t24_review"){
      const x=readP7ConditionalInstructionRolePolicy(e),request=q.conditionalT24Review!;
      const scope=verifyP6ConditionalT24ReviewInstructionProof(q.conditionalSourceProof,{...x,anchor:request.anchor,observedDbClockUtc:await readClock()});

@@ -1,6 +1,6 @@
 import {createHash,generateKeyPairSync,createPublicKey,sign} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,readP6CurrentCommittedSourceSnapshot,verifyP6ConditionalSourceInstructionProof,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,readP6CurrentCommittedSourceSnapshot,verifyP6ConditionalSourceInstructionProof,verifyP6ConditionalT24ReviewInstructionProof,verifyP6ConditionalLaterReviewInstructionProof,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -507,6 +507,15 @@ describe("T033 exact signed SOURCE instruction transport (no raw or reader crede
  it("independently authenticates the exact day and SOURCE signatures, registry and query, at DB clock",()=>{
   const {proof,args}=setup();
   expect(verifyP6ConditionalSourceInstructionProof(proof,args)).toMatchObject({protocolSha256:H("9"),externalContentUseReviewSha256:H("8"),source:{expectedSourceGithubRunId:"123456",plannedRequestUtc:"2027-02-10T04:00:00.000Z"}});
+ });
+ it("T063 separately authenticates later signed SOURCE before any permit exists; wrong horizon and T24 ingress reject",()=>{
+  const {proof,args}=setup(),anchor={sourceGithubRunId:args.expectedSourceRunId,populationQueryId:args.permit.expectedSourcePopulationQueryId,responseSha256:args.permit.expectedSourceResponseSha256};
+  const input={...args,anchor,expectedHorizon:"T-6h"};
+  expect(verifyP6ConditionalLaterReviewInstructionProof(proof,input)).toMatchObject({source:{horizon:"T-6h",expectedSourceGithubRunId:args.expectedSourceRunId},expectedResponseSha256:anchor.responseSha256});
+  expect(()=>verifyP6ConditionalLaterReviewInstructionProof(proof,{...input,expectedHorizon:"T-90m"})).toThrow("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+  expect(()=>verifyP6ConditionalLaterReviewInstructionProof(proof,{...input,expectedHorizon:"T-24h"})).toThrow("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+  expect(()=>verifyP6ConditionalT24ReviewInstructionProof(proof,input)).toThrow("EXACT_CONDITIONAL_T24_REVIEW_INSTRUCTION_SCOPE");
+  expect(()=>verifyP6ConditionalLaterReviewInstructionProof(proof,{...input,anchor:{...anchor,sourceGithubRunId:"999999"}})).toThrow("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
  });
  it("refuses byte drift, omitted registry, bad signatures, wrong run and expired review",()=>{
   const {proof,args}=setup(),run=(v:any=proof,a:any=args)=>verifyP6ConditionalSourceInstructionProof(v,a);

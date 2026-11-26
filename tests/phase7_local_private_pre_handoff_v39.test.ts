@@ -175,3 +175,29 @@ it("T049 real local conditional T24 review transport accepts exact anchor and me
   expect(called).toBe(1);
  }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+it("T064 separate later review socket accepts exact subset or explicit no-review, rejects replay and wrong horizon",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p7lr-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+ const ids=["leg:g5a:"+h("a"),"leg:g5a:"+h("b"),"leg:g5a:"+h("c"),"leg:g5a:"+h("d")];
+ const request={anchor:{sourceGithubRunId:scope.runId,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",responseSha256:h("response")},flightInstanceIds:ids.slice(0,2),horizon:"T-6h" as const};
+ const proof={schema:"synthetic later instruction"},review={page:{schema:"v39.phase5.conditional-pre-external-review-page.v1" as const,reviewedCodeSha:scope.codeSha,
+  manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("contents"),
+  queryDigestSha256:scope.queryDigestSha256,populationQueryId:request.anchor.populationQueryId,responseSha256:request.anchor.responseSha256,
+  runDayIndex:scope.runDayIndex,horizon:"T-6h",sourceGithubRunId:scope.runId,reviews:[{flightInstanceId:ids[0],reviewArtifactBase64:"fixture",reviewArtifactSha256:h("artifact")}]},signatureBase64:Buffer.alloc(64,1).toString("base64")};
+ let called=0;
+ const server=await listenP7LocalPreRole({path:paths.lane,role:"lane",scope,maxLifetimeMs:30000,handler:async q=>{
+  called++;expect(q.op).toBe("issue_conditional_later_review");expect(q.conditionalSourceProof).toEqual(proof);
+  return {wires:[],committedCount:0,conditionalLaterReviewWire:called===1?review:called===2?null:{...review,page:{...review.page,horizon:"T-90m",reviews:[{...review.page.reviews[0],flightInstanceId:ids[3]}]}}};
+ }});
+ try{
+  const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async()=>new Map(),readConditionalLaterReviewInstructionProof:async()=>proof});
+  const q=makeP7LocalPreRequest(scope,"issue_conditional_later_review",[],[],proof,undefined,request);
+  expect(()=>validateP7LocalPreRequest(q,scope,"proof")).toThrow("ROLE_OPERATION");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_later_review",[],[],proof,undefined,{...request,horizon:"T-24h" as any})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(await port.readConditionalLaterReview(request)).toEqual(review);
+  await expect(port.readConditionalLaterReview(request)).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(await port.readConditionalLaterReview({...request,flightInstanceIds:[ids[2]]})).toBeNull();
+  await expect(port.readConditionalLaterReview({...request,flightInstanceIds:[ids[3]]})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(called).toBe(3);
+ }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+});

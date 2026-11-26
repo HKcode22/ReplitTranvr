@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) Nov26 10:58 PST latest actual rolling wake SOURCE/POST paid jobs skipped; do not infer additional missed query count without current owner census. 19:47:58Z owner census: Day3 T24 64 elapsed, T6/T90 128 prospective, 52 historical bindings, 92 reservations, zero PRE tasks, zero unresolved stops; owner enabled SOURCE only. 19:58:19Z I059 actual owner audit confirms 512 prepared, 292 elapsed unreserved, 128 future, 52 timely binding, no PRE; Day4 no prepared rows yet (first signed plan request Nov27 11:45Z, draw already selected). | I008, I012, I013, I014, I016, I043, I045, I057, I059, I060, I062 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067, I068 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -146,6 +146,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I067 | Staged; exact CI required | Bind conditional later custody key, policy, retention, validity and reader login to existing protected delegation before any SQL, including absence path; verify actual Ed25519 public key fingerprint even when no receipt exists. | F027 |
 
+| I068 | Staged; exact CI required | Separate later signed SOURCE instruction scope and same-run lane socket operation with exact horizon and anchor, explicit no-review or selected subset, replay refusal; live handler remains explicitly disarmed pending separately reviewed restricted read access. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -247,6 +249,10 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T061 | New regression; exact CI pending | Actual code path fixture with exact separate Ed25519 policy signs eligible absent-T24 standalone only under separately pinned protocol, verifies resulting permit; rejects partial, absent delegation, mismatched pin and witnessed-only policy. Actual production wiring and positive DB path remain open. | F027 | I066 | C001, C002, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 | T062 | New regression; exact CI pending | Exact protected custody permits genuine read; substituted digest, fingerprint, retention, validity, reader role or matching wrong public key rejected before SOURCE SQL. | F027 | I067 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+
+| T063 | New regression; exact CI pending | Real fixture day/query signatures authenticate later scope prior to permit; T24, cross-horizon, wrong anchor refused. | F027 | I068 | C001, C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
+
+| T064 | New regression; exact CI pending | Real local Unix socket accepts later subset/null only on lane, exact response horizon, no duplicate member or replay; wrong role and horizon refused. | F027 | I068 | C001, C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -364,3 +370,8 @@ Exact f33304b0 passed 23/23 including full 45893317369 and focused 45893317531. 
 ## Nov26 continuation — I067/T062 conditional later custody binding
 
 I066 exact 9ab19602 at inspection 22/23 green; full offline 45894889753 pending. Bind the existing protected T24 custody policy/key/retention/clock and existing reader-login pin before any later evidence read, including absent receipt classification. Synthetic Ed25519 trust regression rejects drift before SQL. No live actor permission projection, policy changes, provider calls, DB writes, production deployment or standalone approval. No new F ID.
+
+
+## Nov26 continuation — I068/T063/T064 conditional later instruction and socket transport
+
+Reuse existing immutable SOURCE proof and private same-run socket with distinct T24 versus later operations. Later response may be explicit no-review or exact requested subset, never fabricated T24 or cross-horizon. Actual lane handler explicitly refuses uncommissioned later operation; existing lane currently has SOURCE-only DB capability, and the existing T24/PRE evidence reader requires restricted PRE and private reader sessions. Do not pass write-role credentials into signer or invent a grant. Existing T24/native behavior preserved; no paid workflow, production deployment or live persistence. CI required.

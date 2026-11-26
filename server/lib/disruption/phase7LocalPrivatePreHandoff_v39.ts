@@ -20,16 +20,17 @@ const sha=(x:unknown):x is string=>typeof x==="string"&&H.test(x);
 const key=hashPhase7DurableCandidate;
 const MAX_FRAME=24*1024*1024,MAX_PAGE=96,MAX_REQUESTS=128,MAX_CONDITIONAL_PROOF=4*1024*1024;
 export type P7LocalPreRole="lane"|"proof"|"publisher";
-export type P7LocalPreOp="ready"|"stop"|"issue_lane"|"issue_proof"|"publish_lane"|"publish_proof"|"issue_conditional_t24_review";
+export type P7LocalPreOp="ready"|"stop"|"issue_lane"|"issue_proof"|"publish_lane"|"publish_proof"|"issue_conditional_t24_review"|"issue_conditional_later_review";
 export type P7LocalPreScope={codeSha:string;runId:string;runDayIndex:number;queryDigestSha256:string;manifestSha256:string;rightsSha256:string;releaseSha256:string;providerContractSha256:string};
 type WireRow={permitSha256:string;wire:P7Wire};
 export type P7ConditionalT24ReviewRequest={anchor:{sourceGithubRunId:string;populationQueryId:string;responseSha256:string};flightInstanceIds:string[]};
-export type P7LocalPreRequest={schema:"v39.phase7.local-pre-handoff-request.v1";scope:P7LocalPreScope;op:P7LocalPreOp;permits:P5Stage14SingleFlightPrePermit[];wires:WireRow[];conditionalSourceProof?:unknown;conditionalT24Review?:P7ConditionalT24ReviewRequest;requestSha256:string};
-type OK={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:true;wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire};
+export type P7ConditionalLaterReviewRequest=P7ConditionalT24ReviewRequest&{horizon:"T-6h"|"T-90m"};
+export type P7LocalPreRequest={schema:"v39.phase7.local-pre-handoff-request.v1";scope:P7LocalPreScope;op:P7LocalPreOp;permits:P5Stage14SingleFlightPrePermit[];wires:WireRow[];conditionalSourceProof?:unknown;conditionalT24Review?:P7ConditionalT24ReviewRequest;conditionalLaterReview?:P7ConditionalLaterReviewRequest;requestSha256:string};
+type OK={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:true;wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
 type Bad={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:false};
 type Response=OK|Bad;
-type Payload={wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire};
-const ops:Record<P7LocalPreRole,readonly P7LocalPreOp[]>={lane:["issue_lane","issue_conditional_t24_review"],proof:["issue_proof"],publisher:["publish_lane","publish_proof"]};
+type Payload={wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
+const ops:Record<P7LocalPreRole,readonly P7LocalPreOp[]>={lane:["issue_lane","issue_conditional_t24_review","issue_conditional_later_review"],proof:["issue_proof"],publisher:["publish_lane","publish_proof"]};
 function scopeValid(s:P7LocalPreScope){
  if(!exact(s,["codeSha","runId","runDayIndex","queryDigestSha256","manifestSha256","rightsSha256","releaseSha256","providerContractSha256"])||
   !C.test(s.codeSha)||!GH.test(s.runId)||!Number.isSafeInteger(s.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||
@@ -71,8 +72,8 @@ function isConditionalPage(permits:readonly P5Stage14SingleFlightPrePermit[]){
  if(n!==0&&n!==permits.length)hold("MIXED_IDENTITY_TIERS");
  return n>0;
 }
-export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:readonly P5Stage14SingleFlightPrePermit[]=[],wires:readonly WireRow[]=[],conditionalSourceProof?:unknown,conditionalT24Review?:P7ConditionalT24ReviewRequest):P7LocalPreRequest{
- const body={schema:"v39.phase7.local-pre-handoff-request.v1" as const,scope:s,op,permits:[...permits],wires:[...wires],...(conditionalSourceProof===undefined?{}:{conditionalSourceProof}),...(conditionalT24Review===undefined?{}:{conditionalT24Review})};
+export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:readonly P5Stage14SingleFlightPrePermit[]=[],wires:readonly WireRow[]=[],conditionalSourceProof?:unknown,conditionalT24Review?:P7ConditionalT24ReviewRequest,conditionalLaterReview?:P7ConditionalLaterReviewRequest):P7LocalPreRequest{
+ const body={schema:"v39.phase7.local-pre-handoff-request.v1" as const,scope:s,op,permits:[...permits],wires:[...wires],...(conditionalSourceProof===undefined?{}:{conditionalSourceProof}),...(conditionalT24Review===undefined?{}:{conditionalT24Review}),...(conditionalLaterReview===undefined?{}:{conditionalLaterReview})};
  const req={...body,requestSha256:key(body)};
  const transported=JSON.parse(frame(req).toString("utf8"));
  // JSON must not silently omit undefined fields or change the canonical
@@ -84,17 +85,18 @@ export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:
 export function validateP7LocalPreRequest(input:unknown,s:P7LocalPreScope,role?:P7LocalPreRole):asserts input is P7LocalPreRequest{
  scopeValid(s);
  const q=input as P7LocalPreRequest;
- const proofPresent=!!q&&Object.hasOwn(q,"conditionalSourceProof"),reviewPresent=!!q&&Object.hasOwn(q,"conditionalT24Review");
- if(!exact(q,["schema","scope","op","permits","wires","requestSha256",...(proofPresent?["conditionalSourceProof"]:[]),...(reviewPresent?["conditionalT24Review"]:[])])||q.schema!=="v39.phase7.local-pre-handoff-request.v1"||
+ const proofPresent=!!q&&Object.hasOwn(q,"conditionalSourceProof"),reviewPresent=!!q&&Object.hasOwn(q,"conditionalT24Review"),laterPresent=!!q&&Object.hasOwn(q,"conditionalLaterReview");
+ if(!exact(q,["schema","scope","op","permits","wires","requestSha256",...(proofPresent?["conditionalSourceProof"]:[]),...(reviewPresent?["conditionalT24Review"]:[]),...(laterPresent?["conditionalLaterReview"]:[])])||q.schema!=="v39.phase7.local-pre-handoff-request.v1"||
   key(q.scope)!==key(s)||!sha(q.requestSha256)||!Array.isArray(q.permits)||!Array.isArray(q.wires))hold("REQUEST_SCOPE");
  const {requestSha256,...body}=q;if(key(body)!==requestSha256)hold("REQUEST_DIGEST");
  if(q.op==="ready"||q.op==="stop"){
-  if(q.permits.length!==0||q.wires.length!==0||proofPresent||reviewPresent)hold("CONTROL_SCOPE");return;
+  if(q.permits.length!==0||q.wires.length!==0||proofPresent||reviewPresent||laterPresent)hold("CONTROL_SCOPE");return;
  }
- if(!["issue_lane","issue_proof","publish_lane","publish_proof","issue_conditional_t24_review"].includes(q.op)||(role&&!ops[role].includes(q.op)))hold("ROLE_OPERATION");
- if(q.op==="issue_conditional_t24_review"){
-  const v=q.conditionalT24Review,a=v?.anchor,ids=v?.flightInstanceIds;
-  if(!reviewPresent||!proofPresent||q.permits.length||q.wires.length||!exact(v,["anchor","flightInstanceIds"])||
+ if(!["issue_lane","issue_proof","publish_lane","publish_proof","issue_conditional_t24_review","issue_conditional_later_review"].includes(q.op)||(role&&!ops[role].includes(q.op)))hold("ROLE_OPERATION");
+ if(q.op==="issue_conditional_t24_review"||q.op==="issue_conditional_later_review"){
+  const later=q.op==="issue_conditional_later_review",v=later?q.conditionalLaterReview:q.conditionalT24Review,a=v?.anchor,ids=v?.flightInstanceIds;
+  if(reviewPresent===later||laterPresent!==later||!proofPresent||q.permits.length||q.wires.length||!exact(v,["anchor","flightInstanceIds",...(later?["horizon"]:[])])||
+   (later&&!["T-6h","T-90m"].includes(q.conditionalLaterReview!.horizon))||
    !exact(a,["sourceGithubRunId","populationQueryId","responseSha256"])||a?.sourceGithubRunId!==s.runId||
    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(a.populationQueryId)||!sha(a.responseSha256)||
    !Array.isArray(ids)||ids.length<1||ids.length>MAX_PAGE||new Set(ids).size!==ids.length||
@@ -103,7 +105,7 @@ export function validateP7LocalPreRequest(input:unknown,s:P7LocalPreScope,role?:
    Buffer.byteLength(JSON.stringify(q.conditionalSourceProof))>MAX_CONDITIONAL_PROOF)hold("CONDITIONAL_REVIEW_REQUEST_SCOPE");
   return;
  }
- if(reviewPresent)hold("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+ if(reviewPresent||laterPresent)hold("CONDITIONAL_REVIEW_REQUEST_SCOPE");
  const ks=permitKeys(q.permits,s),conditional=isConditionalPage(q.permits);
  if(proofPresent!==(conditional&&q.op.startsWith("issue"))||proofPresent&&(!q.conditionalSourceProof||typeof q.conditionalSourceProof!=="object"||Array.isArray(q.conditionalSourceProof)||Buffer.byteLength(JSON.stringify(q.conditionalSourceProof))>MAX_CONDITIONAL_PROOF))hold("CONDITIONAL_INSTRUCTION_SCOPE");
  if(q.op.startsWith("publish"))checkWires(q.wires,ks);else if(q.wires.length)hold("SIGNER_NO_CALLER_WIRE");
@@ -111,7 +113,7 @@ export function validateP7LocalPreRequest(input:unknown,s:P7LocalPreScope,role?:
 function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
  const x=raw as Response;
  if(!x||x.schema!=="v39.phase7.local-pre-handoff-response.v1"||x.requestSha256!==q.requestSha256||x.ok!==true||
-  !exact(x,["schema","requestSha256","ok","wires","committedCount",...(q.op==="issue_conditional_t24_review"?["conditionalReviewWire"]:[])]))return hold("REMOTE_HOLD_NO_REPLAY");
+  !exact(x,["schema","requestSha256","ok","wires","committedCount",...(q.op==="issue_conditional_t24_review"?["conditionalReviewWire"]:q.op==="issue_conditional_later_review"?["conditionalLaterReviewWire"]:[])]))return hold("REMOTE_HOLD_NO_REPLAY");
  if(q.op==="issue_conditional_t24_review"){
   const w=x.conditionalReviewWire,v=q.conditionalT24Review;
   if(!w||!v||!exact(w,["page","signatureBase64"])||!(/^[A-Za-z0-9+/]{86}==$/).test(w.signatureBase64)||
@@ -122,6 +124,16 @@ function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
    !Array.isArray(w.page.reviews)||w.page.reviews.length!==v.flightInstanceIds.length||
    w.page.reviews.some((r,i)=>r.flightInstanceId!==v.flightInstanceIds[i])||
    x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length)hold("CONDITIONAL_REVIEW_RESPONSE_SCOPE");
+ }else if(q.op==="issue_conditional_later_review"){
+  const v=q.conditionalLaterReview,w=x.conditionalLaterReviewWire;
+  if(!v||x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length||w===undefined)hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
+  if(w!==null&&(!exact(w,["page","signatureBase64"])||!(/^[A-Za-z0-9+/]{86}==$/).test(w.signatureBase64)||
+   !w.page||w.page.schema!=="v39.phase5.conditional-pre-external-review-page.v1"||w.page.horizon!==v!.horizon||
+   w.page.sourceGithubRunId!==v!.anchor.sourceGithubRunId||w.page.populationQueryId!==v!.anchor.populationQueryId||w.page.responseSha256!==v!.anchor.responseSha256||
+   w.page.queryDigestSha256!==q.scope.queryDigestSha256||w.page.runDayIndex!==q.scope.runDayIndex||w.page.manifestSha256!==q.scope.manifestSha256||w.page.rightsSha256!==q.scope.rightsSha256||
+   !Array.isArray(w.page.reviews)||w.page.reviews.length<1||w.page.reviews.length>v!.flightInstanceIds.length||
+   new Set(w.page.reviews.map(r=>r.flightInstanceId)).size!==w.page.reviews.length||
+   w.page.reviews.some(r=>!v!.flightInstanceIds.includes(r.flightInstanceId))))hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
  }else if(q.op.startsWith("issue")){
   checkWires(x.wires,permitKeys(q.permits,q.scope));if(x.committedCount!==0)hold("ISSUER_WROTE");
  }else if(q.op.startsWith("publish")){
@@ -170,8 +182,9 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
     let payload:Payload={wires:[],committedCount:0};
     if(req.op!=="ready"&&req.op!=="stop"){
      if(seen.size>=MAX_REQUESTS||seen.has(req.requestSha256))hold("DUPLICATE_OR_MAX_REQUESTS_NO_REPLAY");
-     if(req.op==="issue_conditional_t24_review"){
-      const keys=req.conditionalT24Review!.flightInstanceIds.map(id=>req!.op+":"+id);
+     if(req.op==="issue_conditional_t24_review"||req.op==="issue_conditional_later_review"){
+      const ids=req.op==="issue_conditional_later_review"?req.conditionalLaterReview!.flightInstanceIds:req.conditionalT24Review!.flightInstanceIds;
+      const keys=ids.map(id=>req!.op+":"+id);
       if(keys.some(k=>seenConditionalPermits.has(k)))hold("DUPLICATE_CONDITIONAL_PERMIT_NO_REPLAY");
       for(const k of keys)seenConditionalPermits.add(k);
      }else if(isConditionalPage(req.permits)){
@@ -226,7 +239,7 @@ export function p7LocalPreSocketPaths(env:NodeJS.ProcessEnv,create:boolean){
  if(Object.values(roles).some(p=>Buffer.byteLength(p)>100))hold("SOCKET_PATH_BOUND");
  return {scope,dir,roles};
 }
-export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:Record<P7LocalPreRole,string>;readStored:(p:readonly P5Stage14SingleFlightPrePermit[])=>Promise<Map<string,P7Wire>>;readConditionalInstructionProof?:(p:Readonly<P5Stage14SingleFlightPrePermit>)=>Promise<unknown>;readConditionalT24ReviewInstructionProof?:(a:P7ConditionalT24ReviewRequest["anchor"])=>Promise<unknown>;call?:typeof callP7LocalPreRole}){
+export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:Record<P7LocalPreRole,string>;readStored:(p:readonly P5Stage14SingleFlightPrePermit[])=>Promise<Map<string,P7Wire>>;readConditionalInstructionProof?:(p:Readonly<P5Stage14SingleFlightPrePermit>)=>Promise<unknown>;readConditionalT24ReviewInstructionProof?:(a:P7ConditionalT24ReviewRequest["anchor"])=>Promise<unknown>;readConditionalLaterReviewInstructionProof?:(request:P7ConditionalLaterReviewRequest)=>Promise<unknown>;call?:typeof callP7LocalPreRole}){
  const {scope,paths,readStored}=input,call=input.call??callP7LocalPreRole;
  scopeValid(scope);
  return {async readConditionalT24Review(request:P7ConditionalT24ReviewRequest){
@@ -235,6 +248,12 @@ export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:
   const q=makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,request);
   const got=await call(paths.lane,q);
   return validateResponse(got,q).conditionalReviewWire!;
+ },async readConditionalLaterReview(request:P7ConditionalLaterReviewRequest){
+  if(!input.readConditionalLaterReviewInstructionProof)return hold("CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+  const proof=await input.readConditionalLaterReviewInstructionProof(request);
+  const q=makeP7LocalPreRequest(scope,"issue_conditional_later_review",[],[],proof,undefined,request);
+  const got=await call(paths.lane,q);
+  return validateResponse(got,q).conditionalLaterReviewWire!;
  },async readExactPermitProofs(permits:readonly P5Stage14SingleFlightPrePermit[]){
   const ks=permitKeys(permits,scope);
   // All four operations block on the exact immutable original preview.
