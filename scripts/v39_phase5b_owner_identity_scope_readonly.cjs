@@ -18,20 +18,35 @@ async function main(){
   stage="NORMALIZED_IDENTITY";
   const norm=await c.query(`
    SELECT q.run_day_index,q.horizon,q.slot_id,p.scope_classification,p.codeshare_resolution_status,
-    count(*)::bigint observations,count(*) FILTER(WHERE p.canonical_flight_instance_id IS NOT NULL)::bigint canonical_present,
-    count(*) FILTER(WHERE p.dep_scheduled_utc IS NOT NULL)::bigint scheduled_present,
+    count(*)::bigint observations,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash)::bigint exact_response_members,
+    count(*) FILTER(WHERE p.response_hash IS DISTINCT FROM b.response_hash)::bigint response_mismatch_members,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.canonical_flight_instance_id IS NOT NULL)::bigint canonical_present,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.dep_scheduled_utc IS NOT NULL)::bigint scheduled_present,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.source_airport_icao=q.airport_icao)::bigint requested_source_airport_members,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.dep_airport_icao=q.airport_icao)::bigint explicit_departure_airport_members,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.scope_classification='confirmed_core')::bigint confirmed_core_members,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.codeshare_resolution_status='confirmed_operating_leg')::bigint confirmed_operator_members,
+    count(*) FILTER(WHERE p.response_hash=b.response_hash AND p.canonical_flight_instance_id IS NOT NULL
+      AND p.canonical_flight_instance_id=p.analytic_identity_id AND p.source_airport_icao=q.airport_icao
+      AND p.dep_airport_icao=q.airport_icao AND p.population_role='requested_airport_primary'
+      AND p.scope_classification='confirmed_core' AND p.codeshare_resolution_status='confirmed_operating_leg'
+      AND p.source_type='fids' AND p.query_direction='Departure' AND p.provider_content_expired_at_utc IS NULL
+      AND p.population_member_id IS NOT NULL AND length(p.population_member_id::text)>0)::bigint joint_native_shape_before_duplicate_and_clock_screen,
     count(*) FILTER(WHERE p.canonical_flight_instance_id=p.analytic_identity_id AND p.population_role='requested_airport_primary'
       AND p.dep_airport_icao=q.airport_icao AND p.query_direction='Departure'
       AND p.source_type='fids' AND p.response_hash=b.response_hash AND p.provider_content_expired_at_utc IS NULL)::bigint other_native_conditions
    FROM clean.phase5_fids_allowed_query_v39 q JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest)
+   JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash
    JOIN clean.flight_population p ON p.population_query_id=b.population_query_id
    WHERE q.manifest_sha256=$1 AND q.run_day_index IN (2,3) AND b.source_expires_at_utc>transaction_timestamp()
+     AND r.raw_expired_at_utc IS NULL
    GROUP BY 1,2,3,4,5 ORDER BY 1,2,3,4,5`,[m]);
   // Never print arbitrary database strings, even in the grouped status fields.
   const scopes=new Set(["confirmed_core","unknown","auxiliary"]);
   const codes=new Set(["confirmed_operating_leg","resolved_marketing","ambiguous_codeshare","context_departure_origin_unverified","foreign_departure_origin_unverified","ambiguous_distinct_leg","phase5_duplicate_identity_ambiguous","phase5_duplicate_provider_record_ambiguous","phase5_legacy_observation_key_ambiguous","g5a_conditional_operator_composite_no_native_id"]);
   const rows=norm.rows.map(x=>({...x,scope_classification:scopes.has(x.scope_classification)?x.scope_classification:"OTHER_OR_NULL",codeshare_resolution_status:codes.has(x.codeshare_resolution_status)?x.codeshare_resolution_status:"OTHER_OR_NULL"}));
-  console.log(JSON.stringify({status:"P6_NORMALIZED_IDENTITY_SCOPE_COUNTS_READONLY",at:who.at,rows,providerCalls:0,productionWrites:0}));
+  console.log(JSON.stringify({status:"P6_NORMALIZED_IDENTITY_SCOPE_COUNTS_READONLY",at:who.at,rows,jointNativeShapeIsNotEligibility:true,providerCalls:0,productionWrites:0}));
   stage="ORIGINAL_FIELD_PRESENCE";
   const raw=await c.query(`
    WITH originals AS MATERIALIZED (
@@ -64,6 +79,10 @@ async function main(){
     count(*) FILTER (WHERE f->'isPrivate'='false'::jsonb)::bigint private_false,
     count(*) FILTER (WHERE f->'isCharter'='false'::jsonb)::bigint charter_false,
     count(*) FILTER (WHERE explicit_core)::bigint explicit_core,
+    count(*) FILTER (WHERE operator_tag AND service_fields)::bigint operator_with_service_fields,
+    count(*) FILTER (WHERE operator_tag AND service_fields AND NOT COALESCE(explicit_origin,false))::bigint operator_with_service_fields_missing_origin,
+    count(*) FILTER (WHERE operator_tag AND service_fields AND NOT COALESCE(native_id,false))::bigint operator_with_service_fields_missing_native_id,
+    count(*) FILTER (WHERE operator_tag AND service_fields AND NOT COALESCE(explicit_core,false))::bigint operator_with_service_fields_missing_explicit_core,
     count(*) FILTER (WHERE operator_tag AND matching_origin AND native_id AND explicit_core AND service_fields)::bigint strict_field_upper_bound,
     count(*) FILTER (WHERE operator_tag AND (NOT explicit_origin OR matching_origin) AND service_fields AND NOT COALESCE(known_excluded,false))::bigint conditional_service_field_upper_bound
    FROM classified GROUP BY 1,2,3 ORDER BY 1,2,3`,[m]);
