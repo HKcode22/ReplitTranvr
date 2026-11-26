@@ -48,10 +48,12 @@ jq -e '[.statusCheckRollup[]|select(.status=="COMPLETED" and .conclusion=="SUCCE
 jq -e 'all(.statusCheckRollup[];.status=="COMPLETED" and (.conclusion=="SUCCESS" or .conclusion=="SKIPPED" or .conclusion=="NEUTRAL"))' <<<"$p" >/dev/null || hold OTHER_CHECK_NOT_GREEN
 stage=NO_ACTIVE_SOURCE_OR_POST
 quiet(){
- local wf q
- for wf in phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml phase5-upcoming-approved-source-queue-readonly.yml;do
-  q="$(gh api "repos/$R/actions/workflows/$wf/runs?branch=main&per_page=100")"
-  jq -e 'all(.workflow_runs[];.status=="completed")' <<<"$q" >/dev/null || hold ACTIVE_SOURCE_POST_OR_PARENT_DO_NOT_INTERRUPT
+ local wf q state
+ for wf in phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml phase5-source-upcoming-queue-main-scheduled-readonly.yml;do
+  for state in queued in_progress waiting requested pending;do
+   q="$(gh api "repos/$R/actions/workflows/$wf/runs?branch=main&status=$state&per_page=1")"
+   jq -e '.total_count==0 and (.workflow_runs|length)==0' <<<"$q" >/dev/null || hold ACTIVE_SOURCE_POST_OR_PARENT_DO_NOT_INTERRUPT
+  done
  done
 }
 quiet
