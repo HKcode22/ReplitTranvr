@@ -41,7 +41,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
 | F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 | 
-| F032 | Corrected; additional crosswalk regression staged | Register crosswalk parser failure 45800099500 and T038 invalid test-path metadata 45810213223 corrected; exact 454349c9 46/46. No production SOURCE fault. Recurrence 45880797152 missing reciprocal F026/I057 link repaired in d39097d2; focused 45880957835 and full exact 20/20 passed. | I027, I063 |
+| F032 | Corrected; additional crosswalk regression staged | Register crosswalk parser failure 45800099500 and T038 invalid test-path metadata 45810213223 corrected; exact 454349c9 46/46. No production SOURCE fault. Recurrence 45880797152 missing reciprocal F026/I057 link repaired in d39097d2; focused 45880957835 and full exact 20/20 passed. | I027, I063, I065 |
 | F033 | Code finding; correction staged | Conditional feature review pruned late drafts at the final database clock but still returned earlier candidate/member proposals. A future signer could see a stale proposal after required lead was lost. Not established as a historical live cause. | I028 |
 
 | F034 | Open monitoring distinction | Managed cron audit failed with pending or unresolved wake evidence; HTTP ACK not execution proof. Relay runs 45709316609, 45573403453, 45562024566, 45424056708. Later audit pass is not proof every wake executed. | I032, I062 |
@@ -140,6 +140,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I064 | Staged; exact CI required | Project existing independent lane public verifier fingerprint and public key into both protected nonpaid native/conditional readiness and publication steps. No private signer key, provider access, authorization or paid step change. | F027 |
 
+| I065 | Staged; exact CI required | Enforce per-scenario per-failure linkage, not merely aggregate coverage; remove unrelated F026 from T021 without changing actual F026 regressions. | F032 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -182,7 +184,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T018 | Focused CI passed on 5936e6d; signer still open | Independent conditional exact original reread and drift rejection for omitted/changed FIDS values | F027, F030, F031 | I024, I025, I026, I029 | C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase7_signed_pre_field_proof_v39.test.ts |
 | T019 | Existing isolated test; actual label source unresolved | Conditional schedule revision and physical gate-out are distinct; unknown not zero | F029 | I005 | C003, C004 | tests/phase5_conditional_signed_schedule_pair_v39.test.ts; tests/phase7_continuous_gate_out_target_v39.test.ts |
 | T020 | Exact #976 46/46 passed | Register consecutive IDs, duplicate section, reciprocal references and crosswalk ignored | F032 | I027 | C009 | tests/phase5b_recovery_register_v39.test.mjs |
-| T021 | Existing partial coverage; full production chain required | Packet A expiry and Packet B approved field parity; no permanent raw link or unapproved field | F027, F026 | I025, I029 | C002, C008 | tests/phase7_canonical_field_parity_v39.test.ts; tests/phase7_derived_release_writer_v39.test.ts; tests/phase7_purpose_bound_reference_identifier_v39.test.ts |
+| T021 | Existing partial coverage; full production chain required | Packet A expiry and Packet B approved field parity; no permanent raw link or unapproved field | F027 | I025, I029 | C002, C008 | tests/phase7_canonical_field_parity_v39.test.ts; tests/phase7_derived_release_writer_v39.test.ts; tests/phase7_purpose_bound_reference_identifier_v39.test.ts |
 | T022 | Open end-to-end acceptance | Positive signed conditional SOURCE→independent proof→queue→committed PRE→lawful distinct POST; no historical backfill | F005, F018, F027, F029 | I005, I014, I016, I029 | C001, C002, C003, C004, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase5_conditional_signed_schedule_pair_v39.test.ts |
 | T023 | Open scientific acceptance | Fixed 20/5/6 split; per-day/horizon denominator and missingness, no leakage | F026, F005, F029 | I005, I059 | C008 | tests/phase7_final_group_assembly_v39.test.ts; tests/phase7_paired_derived_release_candidate_v39.test.ts |
 | T024 | New tests committed; CI pending | Outer SOURCE stage category on reader and admission failure; no raw errors or replay | F003, F017 | I030 | C006, C009 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase6_private_source_one_original_child_github_v39.test.ts |
@@ -235,6 +237,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T058 | New regression; exact CI pending | Reject a T mapped to unrelated implementation, untested I, or F with no matching implementation-tested scenario. Existing historical aliases remain immutable. | F032 | I063 | C008, C009 | tests/phase5b_recovery_register_v39.test.mjs |
 
 | T059 | New regression; exact CI pending | Inspect actual workflow step projection for both nonpaid consumers, reject missing public verifier or private signer credentials in consumers and verifier or publisher credentials in the paid step; existing T051 verifies key identity and signed scope. | F027 | I064 | C001, C002, C006 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
+
+| T060 | New regression; exact CI pending | Reject a test claiming an additional F when none of its linked I implementations address that F, even when the F is covered by another T. | F032 | I065 | C008, C009 | tests/phase5b_recovery_register_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -339,3 +343,6 @@ Owner dispatched current main f4fe806d run 45892180597, actual job 140157259756 
 ## Nov26 12:43 PST — I064/T059 protected workflow projection
 
 F027 existing checkpoint identified pending conditional public verifier projection. Exact #977 source inspection confirms both actual nonpaid consumers omit the lane public fingerprint/key already supplied to independent actors. Project only the two existing public values; verify actual workflow text and preserve paid admission and private key separation. No production policy commissioning, provider request, migration or PRE persistence claimed. Exact CI pending.
+
+
+I065/T060: audited every T against each listed F; only T021 claimed unrelated F026 via I025/I029. Corrected the mapping and made the validator enforce each per-T F relationship. This is traceability, not a claim of all failure repairs or live PRE persistence.

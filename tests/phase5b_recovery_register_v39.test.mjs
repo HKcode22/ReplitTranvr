@@ -30,6 +30,7 @@ function validateRegister(rows){
  const tests=rows.filter(r=>r[0].startsWith("T")),matchedF=new Set(),matchedI=new Set();
  for(const row of tests){
   const failures=refs(row[3]);
+  for(const f of failures)assert.ok(refs(row[4]).some(id=>refs(by.get(id)[3]).includes(f)),row[0]+" unrelated failure "+f);
   for(const id of refs(row[4])){
    const intersection=refs(by.get(id)[3]).filter(f=>failures.includes(f));
    assert.ok(intersection.length,row[0]+" unrelated implementation "+id);
@@ -79,4 +80,12 @@ test("T058 every failure and implementation has a corresponding actual regressio
  assert.throws(()=>validateRegister(parseRegister(wrong)),/unrelated implementation I002/);
  const untested=minimal.replace("F001 | Open | example | I001","F001 | Open | example | I001, I002").replace("## Completion components","| I002 | Partial | other | F001 |\n## Completion components");
  assert.throws(()=>validateRegister(parseRegister(untested)),/implementation without matching regression I002/);
+});
+
+test("T060 each named failure in a multi-failure T must match its own implementation",()=>{
+ const two=minimal.replace("## Implementations","| F002 | Open | other | I002 |\n## Implementations").replace("## Completion components","| I002 | Partial | other | F002 |\n## Completion components");
+ const both=two.replace("## Regression crosswalk","| T002 | Open | actual second regression | F002 | I002 | C001 | tests/example.test.mjs |\n## Regression crosswalk");
+ validateRegister(parseRegister(both));
+ const mislabeled=both.replace("F001 | I001 | C001 | tests/example","F001, F002 | I001 | C001 | tests/example");
+ assert.throws(()=>validateRegister(parseRegister(mislabeled)),/T001 unrelated failure F002/);
 });
