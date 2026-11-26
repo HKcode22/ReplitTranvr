@@ -488,3 +488,39 @@ test("explicitly paused paid SOURCE/POST skips are reported separately, not as w
  assert.equal(failed.incidents.filter(i=>i.lane==="SOURCE").length,1);
  assert.equal(failed.intentionalPauses.length,1);
 });
+
+test("F041/T044: exact prior-main EARLY_DRAW execution permits bounded handover notice, never current execution proof",async()=>{
+ const at="2026-11-26T12:12:52.000Z",previous="a".repeat(40);
+ const assessments=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[
+  {...run(i+100,{conclusion:"success",created:"2026-11-26T00:22:42Z"}),head_sha:previous}],at));
+ const report=summarizeP6ControllerHeartbeat(assessments,at),early=assessments.find(x=>x.lane==="EARLY_DRAW");
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true",P6_ROLLING_CONTROLLER_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0"};
+ const row={...run(900,{event:"workflow_dispatch",conclusion:"success",created:"2026-11-26T08:38:48Z"}),head_sha:previous,
+  path:".github/workflows/"+early.workflow,run_attempt:1};
+ const job={id:901,run_id:900,head_sha:previous,run_attempt:1,name:"gated-exact-early-parent",status:"completed",conclusion:"success",completed_at:"2026-11-26T08:39:14Z",
+  steps:[{name:"Select max ONE genuinely due future parent under actual DB clock and existing serializable owner",status:"completed",conclusion:"success"}]};
+ const commit={sha:ID,committer:{date:"2026-11-26T11:40:12Z"},parents:[{sha:previous}]};
+ const reader=(rows=[row],head=commit,j=job)=>async url=>{
+  if(url.includes("/git/commits/"))return head;
+  if(url.includes("/runs/900/jobs"))return {total_count:1,jobs:[j]};
+  if(url.includes(early.workflow))return {workflow_runs:rows};
+  return {workflow_runs:[]};
+ };
+ const obs=await observeP6IndependentDispatches(report,arm,reader());
+ assert.equal(obs.EARLY_DRAW.state,"PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT");
+ assert.equal(obs.EARLY_DRAW.recheckByUtc,"2026-11-26T12:42:00.000Z");
+ assert.equal(obs.EARLY_DRAW.currentExecutableVerified,false);
+ const x=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:obs},arm,async()=>{throw Error("unavailable")});
+ assert.equal(x.incidents.filter(i=>i.lane==="EARLY_DRAW").length,0);
+ assert.equal(x.handoverPending.length,1);assert.equal(x.realDueDrawOrPreparationVerified,false);assert.equal(x.flightCollectionVerified,false);
+ for(const read of [reader([row],{...commit,parents:[{sha:"c".repeat(40)}]}),reader([row],commit,{...job,conclusion:"failure"}),
+  reader([row],commit,{...job,steps:[]}),reader([row,{...row,id:902,head_sha:ID,status:"completed",conclusion:"failure",created_at:"2026-11-26T12:10:00Z"}])]){
+  const o=await observeP6IndependentDispatches(report,arm,read);
+  assert.notEqual(o.EARLY_DRAW?.state,"PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT");
+ }
+ const late={...report,observedAtGithubRunnerUtc:"2026-11-26T12:42:00.000Z"};
+ const expired=await observeP6IndependentDispatches(late,arm,reader());
+ assert.notEqual(expired.EARLY_DRAW?.state,"PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT");
+ const oldNotice=await reviewP6ActiveStandaloneNotifications({...late,independentDispatchObservations:obs},arm,async()=>{throw Error("unavailable")});
+ assert(oldNotice.incidents.some(i=>i.lane==="EARLY_DRAW"));assert.equal(oldNotice.handoverPending.length,0);
+});

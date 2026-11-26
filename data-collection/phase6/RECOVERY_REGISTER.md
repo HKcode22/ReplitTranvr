@@ -55,6 +55,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F039 | Code-discovered signed-object parity risk; staged | Existing signed later registry validated separate caller-provided parsed objects instead of comparing to authenticated bytes. A changed shard or source entry must never inherit original digest. | I044 |
 
 | F040 | Observed repeated safe operational hold; bounded wait staged | Owner relay cutover held ACTIVE_RELAY_NO_CANCEL then ACTIVE_PARENT_OR_CHILD_NO_CANCEL after target retention verified. Periodic nonpaid parent runs can overlap; no cancellation or paid failure inferred. Failed active/variable metadata reads must never become quiet/absent. | I045 |
+| F041 | Observed exact-executable handover monitoring defect; repair staged | Main heartbeat 45817522392 red at 12:12Z for stale EARLY_DRAW shortly after 11:40Z cutover. Six actual first-parent early-draw jobs at 04/08 UTC succeeded with NO_DUE_FUTURE_DRAW_AT_DB_CLOCK; current-main draw not yet observed. Primary backstop executed. Distinct from missing draw, paid loss or retention failure. | I049 |
 
 ## Implementations
 
@@ -121,6 +122,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I046 | Staged; exact CI required | Bounded conditional prepared-permit page adapter for existing independent proof port; explicit count-only conditional draft status distinct from native audit; no actual producer signature or publication. | F027 |
 | I047 | Staged; exact CI required | Complete exact conditional proof page and assemble unsigned later registry from genuine proof-attached packets under explicit scope; native signature path unchanged. | F027 |
 | I048 | Staged; exact CI required | External conditional reviewer signs exact private registry and separately protected conditional scope in distinct signature domain; existing append reader propagates exact scope, delegated day policy separately pins it. | F027 |
+| I049 | Staged; exact CI required | Bounded first-parent early-draw handover requires actual successful prior worker step, exact commit ancestry, no current-main run and existing slot deadline; retain prior/current distinction, no draw or paid authorization. | F041 |
 
 ## Completion components (not gates)
 
@@ -134,9 +136,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F016, F017 | I012, I013 |
 | C007 | Partial | Target and relay paused cutover verified, production scientific path and safe paid resume open. | F026 | I008, I011, I023 |
 | C008 | Open | Missingness, representativeness, no leakage and 31-day split audit | F005, F026, F029 | I018, I020 |
-| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024 | I006, I019, I021, I022 |
+| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F041 | I006, I019, I021, I022, I049 |
 
-| C010 | Partial; deployed and primary pulse verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. | F034, F035, F036, F037 | I032, I035, I036 |
+| C010 | Partial; deployed and primary pulse verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. | F034, F035, F036, F037, F041 | I032, I035, I036, I049 |
 
 ## Regression tests
 
@@ -200,6 +202,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T041 | New regression; exact CI pending | Actual prepared permit page is private, bounded and same SOURCE; duplicate/empty/oversized/forged pages rejected; conditional draft diagnostics separate from native no-op. | F027 | I046 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 | T042 | New regression; exact CI pending | Real prepared conditional page, exact proof set, unsigned registry and existing consumer; reject forged packet, wrong policy, duplicate, and source drift; independent registry signature still required. | F027 | I047 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 | T043 | New regression; exact CI pending | Actual prepared proof-attached conditional shard with fixture Ed25519 distinct-domain signature; wrong scope, native wire, expiration and signature substitution rejected. | F027 | I048 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T044 | New regression; exact CI pending | Prior successful worker and exact first-parent cutover with next-slot deadline produce explicit handover notice; current failure, expired grace, wrong ancestry and missing step still alert; no collection proof. | F041 | I049 | C009, C010 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -243,3 +246,7 @@ Prior f7735c72 exact CI 14/15 successful at census, full safety still in progres
 ## Nov26 continuation — I048/T043
 
 I047/T042 focused run 45817548711 passed; exact 047c2843 at last census 11/16 passed, five running, zero failed. External conditional signer verifier and append scope propagation staged without minting a new production key or authorizing a live signer. Existing native domain remains unchanged. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_EXTERNAL_SIGNATURE_SCOPE.md).
+
+## Nov26 continuation — actual heartbeat F041
+
+Run 45817522392 job 139900985225 exited 2; early draw stale schedule and current-main primary cron absent, but independent full retention step 45816293783 executed. Actual prior early-draw run IDs 45754384565, 45755433957, 45756517078, 45782100546, 45783476405, 45784923538 each executed exact protected worker and reported NO_DUE_FUTURE_DRAW_AT_DB_CLOCK, selectedDays 4, nextDueRunDayIndex 5, zero writes/provider calls. First parent 1ce885f1 of f4fe806d, merge at 11:40:12Z, observer at 12:12:52Z, before first current-main relay early slot completed. No confirmed missed due draw. I049/T044 bounded explicit handover, not a green current-main execution claim. Prior 90c93fd8 exact I048 17/18 successful at audit, full safety pending, no new PR failure at census. See [checkpoint](checkpoints/2026-11-26_PHASE5B_EARLY_DRAW_HANDOVER_HEARTBEAT_REPAIR.md).

@@ -336,6 +336,41 @@ const P6_EXPECTED_ACTIVE_JOBS=Object.freeze({
  PRE_ENROLLMENT:[["enroll-current-signed-day",null],["enroll-current-signed-t24-day",null]],
  T24:[["current-private-native-t24","Current signed T24 packets through original Stage14 and independent V0081"]]
 });
+/** Six-slot EARLY_DRAW handover: a verified first-parent execution is
+ * historical evidence only. Wait no longer than the first existing relay
+ * slot after a cutover (10..40 minutes of each four-hour UTC block + two
+ * minutes observation allowance), and never beyond the old cadence limit.
+ * Any current-main run, even failed/skipped, prevents this classification.
+ * No clock, draw, authorization, retention or provider operation is changed. */
+async function observeEarlyDrawHandover(c,history,env,readGithub,now){
+ if(c.lane!=="EARLY_DRAW"||c.mostRecentRun?.headSha===env.GITHUB_SHA||
+    history.some(x=>x?.head_sha===env.GITHUB_SHA))return null;
+ const prior=history.find(x=>Number.isSafeInteger(x?.id)&&x.id>0&&SHA.test(x.head_sha??"")&&
+  x.head_sha!==env.GITHUB_SHA&&x.head_branch==="main"&&x.event==="workflow_dispatch"&&x.run_attempt===1&&
+  x.path===".github/workflows/"+c.workflow&&x.status==="completed"&&x.conclusion==="success"&&
+  Number.isFinite(Date.parse(x.created_at))&&Date.parse(x.created_at)<=now&&
+  now-Date.parse(x.created_at)<=c.expectedMaxGapMinutes*60000);
+ if(!prior)return null;
+ const commit=await readGithub(ROOT+"/git/commits/"+env.GITHUB_SHA);
+ const cutover=Date.parse(commit?.committer?.date),created=Date.parse(prior.created_at);
+ if(commit?.sha!==env.GITHUB_SHA||!Array.isArray(commit.parents)||commit.parents.length<1||
+  commit.parents[0]?.sha!==prior.head_sha||!Number.isFinite(cutover)||created>=cutover||cutover>now)return null;
+ const block=4*3600000,base=Math.floor(cutover/block)*block;
+ const firstSlot=base+(cutover>=base+40*60000?block:0);
+ const until=Math.min(firstSlot+42*60000,created+c.expectedMaxGapMinutes*60000);
+ if(now>=until)return null;
+ const j=await readGithub(ROOT+"/actions/runs/"+prior.id+"/jobs?filter=latest&per_page=50");
+ if(!Array.isArray(j?.jobs)||j.jobs.length>50||!Number.isSafeInteger(j.total_count)||j.total_count!==j.jobs.length)return null;
+ const [name,step]=P6_EXPECTED_ACTIVE_JOBS.EARLY_DRAW[0];
+ const workers=j.jobs.filter(x=>x.name===name&&x.run_id===prior.id&&x.head_sha===prior.head_sha&&x.run_attempt===1&&
+  Number.isSafeInteger(x.id)&&x.id>0&&x.status==="completed"&&x.conclusion==="success"&&
+  Number.isFinite(Date.parse(x.completed_at))&&Date.parse(x.completed_at)<=cutover&&Date.parse(x.completed_at)>=created);
+ if(workers.length!==1||!Array.isArray(workers[0].steps)||
+  workers[0].steps.filter(s=>p6ExpectedStepName(s.name,step)&&s.status==="completed"&&s.conclusion==="success").length!==1)return null;
+ return {state:"PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT",runId:prior.id,jobId:workers[0].id,
+  previousHeadSha:prior.head_sha,createdAtUtc:prior.created_at,cutoverUtc:new Date(cutover).toISOString(),
+  recheckByUtc:new Date(until).toISOString(),currentExecutableVerified:false,flightCollectionVerified:false};
+}
 /** Inspect actual independent wake worker jobs, not a relay ACK or native
  * schedule alone. Bounded recent reads, no historic count equality, and a
  * local observation failure must not hide other lanes. Preserve native gaps.
@@ -373,6 +408,10 @@ export async function observeP6IndependentDispatches(report,env,readGithub){
     break;
    }
    if(!out[lane]&&pending)out[lane]={state:"INDEPENDENT_WORKER_RECENT_PENDING_NOT_EXECUTION_PROOF",runId:pending.id,createdAtUtc:pending.created_at};
+   if(!out[lane]&&lane==="EARLY_DRAW"){
+    const prior=await observeEarlyDrawHandover(c,h.workflow_runs,env,readGithub,now);
+    if(prior)out[lane]=prior;
+   }
   }catch{out[lane]={state:"INDEPENDENT_WORKER_READ_UNAVAILABLE",runId:null};}
  }
  return out;
@@ -397,7 +436,7 @@ const P6_PAUSABLE_SOURCE_JOBS=Object.freeze({
 export async function reviewP6ActiveStandaloneNotifications(report,env,readGithub){
  const expected=env.P6_HEARTBEAT_COLLECTION_EXPECTED;
  if(![undefined,"","false","true"].includes(expected))fail("INVALID_NOTIFICATION_EXPECTATION");
- const incidents=[],intentionalPauses=[];
+ const incidents=[],intentionalPauses=[],handoverPending=[];
  const paused=(lane,job,runId)=>{
   const key=P6_PAUSABLE_SOURCE_JOBS[job?.name];
   if(lane!=="SOURCE"||!key||env[key]!=="false"||job.status!=="completed"||job.conclusion!=="skipped")return false;
@@ -409,6 +448,13 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    const c=report.controllerStates.find(x=>x.lane===lane);
    if(!c)fail("MISSING_NOTIFICATION_LANE");
    const independent=report.independentDispatchObservations?.[lane];
+   if(lane==="EARLY_DRAW"&&independent?.state==="PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT"&&
+      independent.currentExecutableVerified===false&&independent.flightCollectionVerified===false&&
+      Number.isFinite(Date.parse(independent.recheckByUtc))&&Date.parse(report.observedAtGithubRunnerUtc)<Date.parse(independent.recheckByUtc)){
+    handoverPending.push({lane,reason:"PREVIOUS_MAIN_EXECUTED_CURRENT_MAIN_AWAITING_BOUNDED_SLOT",
+     priorRunId:independent.runId,recheckByUtc:independent.recheckByUtc,currentExecutableVerified:false});
+    continue;
+   }
    if(independent?.state==="INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF"){
     for(const [name,step] of requirements){
      const job=independent.jobs.find(x=>x.name===name);
@@ -455,7 +501,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    }
   }
  }
- return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,intentionalPauses,
+ return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,intentionalPauses,handoverPending,
   realDueDrawOrPreparationVerified:false,flightCollectionVerified:false,
   databaseReads:0,databaseWrites:0,providerCalls:0,dispatches:0};
 }
