@@ -11,7 +11,7 @@ import {pathToFileURL} from "node:url";
 import {admitP6PostcommitNativeAudit,runP6PostcommitNativeAudit} from "./v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
 import {readP6PendingLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts";
 import {pageP5UnsignedNativePreReviewDossier} from "../server/lib/disruption/phase5SourceBoundUnsignedPreDossier_v39.ts";
-import {signP6DelegatedNativeLaterReviewPage} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {signP6DelegatedNativeLaterReviewPage,readP6ConditionalSourceInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {resolveP7PublicationProofs} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
 import {enrichP7NativeFeatureReviewWithNoaa} from "../server/lib/disruption/phase7IndependentNoaaReceipt_v39.ts";
 import {runP6DelegatedReviewedLaterAppend} from "../server/lib/disruption/phase6ReviewedLaterShardAppendRuntime_v39.ts";
@@ -310,7 +310,17 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const env=process.env;
   if(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64||env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||env.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64)hold("NATIVE_PUBLISHER_HAS_INDEPENDENT_KEY");
   const local=p7LocalPreSocketPaths(env,false),stored=openP7StoredPreProofPort(env);
-  const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits)});
+  const port=openP7LocalPrivatePreHandoff({scope:local.scope,paths:local.roles,readStored:permits=>stored.readExactPermitProofs(permits),
+   readConditionalInstructionProof:async permit=>{
+    const auditEnv={...env};for(const k of ports)delete auditEnv[k];
+    const c=admitP6PostcommitNativeAudit(auditEnv);
+    if(c.expectedSourceRunId!==permit.expectedGithubSourceRunId)hold("CONDITIONAL_SOURCE_RUN_DRIFT");
+    const client=new pg.Client({connectionString:c.readerUrl,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p6_conditional_instruction_reader"});
+    try{await client.connect();await client.query("SET ROLE phase6_private_frozen_reader_v39");
+     const a=await readP6ConditionalSourceInstructionProof({readerClient:client,trust:c.trust,selector:c.selector,policy:c.policy,permit});
+     return a.privateProof;
+    }finally{await client.end()}
+   }});
   if(process.argv.length===3&&process.argv[2]==="--preflight")console.log(JSON.stringify(await preflightP6NativeLaterRuntime(env)));
   else if(process.argv.length===2)console.log(JSON.stringify(await runP6NativeLaterRuntime(env,port)));
   else hold("EXACT_MODE");

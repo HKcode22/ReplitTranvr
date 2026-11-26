@@ -94,3 +94,35 @@ describe("actual protected role credential projection",()=>{
   expect(()=>projectP7LocalRoleEnvironment({...proof,AERODATABOX_API_KEY:"not allowed"},"proof")).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
  });
 });
+
+describe("T034 conditional instructions private role transport",()=>{
+ const p={...permit(1),identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE"} as P5Stage14SingleFlightPrePermit;
+ const proof={schema:"fixture-only transport",opaque:"signed instruction bytes"};
+ it("requires proof only on separate conditional issue operations; refuses mixed pages and publisher/control proof",()=>{
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[p])).toThrow("CONDITIONAL_INSTRUCTION_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[p,permit(2)],[],proof)).toThrow("MIXED_IDENTITY_TIERS");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_lane",[permit(2)],[],proof)).toThrow("CONDITIONAL_INSTRUCTION_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"publish_lane",[p],wires([p],"lane"),proof)).toThrow("CONDITIONAL_INSTRUCTION_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"ready",[],[],proof)).toThrow("CONTROL_SCOPE");
+  const q=makeP7LocalPreRequest(scope,"issue_lane",[p],[],proof);
+  expect(()=>validateP7LocalPreRequest({...q,conditionalSourceProof:{...proof,opaque:"changed"}},scope,"lane")).toThrow("REQUEST_DIGEST");
+ });
+ it("same exact instructions are passed to both independent signers, never the publisher",async()=>{
+  const steps:string[]=[],seen:unknown[]=[];let fetched=0;
+  const port=openP7LocalPrivatePreHandoff({scope,paths:{lane:"l",proof:"p",publisher:"w"},
+   readConditionalInstructionProof:async()=>{fetched++;return proof},
+   call:async(_path,q)=>{steps.push(q.op);seen.push(q.conditionalSourceProof);
+    return {schema:"v39.phase7.local-pre-handoff-response.v1" as const,requestSha256:q.requestSha256,ok:true as const,wires:q.op.startsWith("issue")?wires(q.permits,q.op==="issue_lane"?"lane":"proof"):[],committedCount:q.op.startsWith("publish")?q.permits.length:0};},
+   readStored:async ps=>new Map(wires([...ps],"proof").map(x=>[x.permitSha256,x.wire]))});
+  expect((await port.readExactPermitProofs([p])).size).toBe(1);expect(fetched).toBe(1);
+  expect(steps).toEqual(["issue_lane","publish_lane","issue_proof","publish_proof"]);
+  expect(seen).toEqual([proof,undefined,proof,undefined]);
+ });
+ it("refuses changed conditional proof replay for the same permit on an actual Unix socket",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"p7-cond-")),path=join(dir,"lane.sock");let calls=0;
+  const server=await listenP7LocalPreRole({path,role:"lane",scope,maxLifetimeMs:30000,handler:async q=>{calls++;return {wires:wires(q.permits,"lane"),committedCount:0}}});
+  try{await callP7LocalPreRole(path,makeP7LocalPreRequest(scope,"issue_lane",[p],[],proof));
+   await expect(callP7LocalPreRole(path,makeP7LocalPreRequest(scope,"issue_lane",[p],[],{...proof,opaque:"different"}))).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");expect(calls).toBe(1);
+  }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+ });
+});

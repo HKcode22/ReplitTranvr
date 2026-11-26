@@ -4,7 +4,12 @@
  * exact original preview remains in the native process. Shared OS/runner
  * trust is explicit, not security isolation against a compromised runner.
  */
-import {createPrivateKey} from "node:crypto";
+import {createPrivateKey,createHash} from "node:crypto";
+import {AsyncLocalStorage} from "node:async_hooks";
+import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
+import {verifyP6ConditionalSourceInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
+import type {P7ConditionalProofScopePort} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
 import {execFileSync} from "node:child_process";
 import {lstatSync,realpathSync,readFileSync,writeFileSync,unlinkSync,rmdirSync} from "node:fs";
 import {join} from "node:path";
@@ -26,6 +31,7 @@ const common=["PATH","HOME","TMPDIR","RUNNER_TEMP","RUNNER_TRACKING_ID","GITHUB_
  "P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64",
  "P6_PHASE7_POST_OUTCOME_REVIEWER_FINGERPRINT_SHA256","P6_PHASE7_PRE_PROOF_ISSUER_APPROVED","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED"];
 const daily=["P6_NONPAID_DAILY_POLICY_BASE64","P6_NONPAID_DAILY_POLICY_SHA256"];
+const instructionPins=["P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED","P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64","P6_PRIVATE_DAY_INDEX_REVISION","P6_PRIVATE_DAY_INDEX_SHA256","P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256"];
 const reader=["P6_PRIVATE_READER_DATABASE_URL","P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED","P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN","P6_PHASE7_PRIVATE_REVIEW_PUBLISHER_LOGIN"];
 const laneKey="P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64",proofKey="P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64";
 const roleOnly:Record<P7LocalPreRole,readonly string[]>={
@@ -52,7 +58,7 @@ export function projectP7LocalRoleEnvironment(e:NodeJS.ProcessEnv,role:P7LocalPr
   [e.P5_V39_PRE_DATABASE_URL,e.P5_V39_PREPARE_DATABASE_URL,e.P5_V39_T24_WITNESS_DATABASE_URL,e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,e.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,e.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,e.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64].some(Boolean)||
   (role!=="lane"&&!!e[laneKey])||(role!=="proof"&&!!e[proofKey])||(role!=="publisher"&&!!e.P6_PRIVATE_PUBLISHER_DATABASE_URL)||(role==="lane"&&!!e.P6_PRIVATE_READER_DATABASE_URL))hold("CROSS_ROLE_LAUNCH_CREDENTIALS");
  const out:NodeJS.ProcessEnv={};
- for(const name of [...common,...roleOnly[role]])if(e[name]!==undefined)out[name]=e[name];
+ for(const name of [...common,...roleOnly[role],...(role==="publisher"?[]:instructionPins)])if(e[name]!==undefined)out[name]=e[name];
  if(role==="publisher"){
   // The publisher never receives a live SOURCE password, even in its
   // launch step. Endpoint-only pointer was made by the lane step after
@@ -88,24 +94,56 @@ async function start(role:P7LocalPreRole){
  await launchP7DetachedPreRole({scriptPath:fileURLToPath(import.meta.url),role,path:paths[role],scope,env,cwd:process.cwd()});
  console.log(JSON.stringify({status:"P7_LOCAL_PRE_ROLE_READY_NO_PROVIDER",role,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false}));
 }
+/** No new database permission: each signer authenticates the same signed
+ * instructions at its own restricted SOURCE clock, using only stable public
+ * reviewer pins and the protected day-plan/purpose already present in the job. */
+export function readP7ConditionalInstructionRolePolicy(e:NodeJS.ProcessEnv,read=readFileSync){
+ const local=readP7LocalPreScope(e),trust=readP6StableSourceTrust(e);
+ const H=/^[a-f0-9]{64}$/,sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+ const revision=Number(e.P6_PRIVATE_DAY_INDEX_REVISION),indexSha256=e.P6_PRIVATE_DAY_INDEX_SHA256??"";
+ const raw=e.P6_NONPAID_DAILY_POLICY_BASE64??"",bytes=Buffer.from(raw,"base64");
+ if(!/^[1-9][0-9]{0,3}$/.test(e.P6_PRIVATE_DAY_INDEX_REVISION??"")||revision>1024||!H.test(indexSha256)||
+    raw.length<100||raw.length>46668||bytes.toString("base64")!==raw||!H.test(e.P6_NONPAID_DAILY_POLICY_SHA256??"")||sha(bytes)!==e.P6_NONPAID_DAILY_POLICY_SHA256)hold("CONDITIONAL_INSTRUCTION_POLICY");
+ const d=JSON.parse(bytes.toString("utf8")),f=d?.conditionalPreFeatureReview;
+ if(d?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||d.delegatedDailyPacketProductionApproved!==true||
+    !p6ReviewedPolicyMatchesRuntime(e,d.approvedCodeSha)||!["manifestSha256","calendarSha256","rightsSha256","releaseSha256"].every(k=>d[k]===(trust as Record<string,unknown>)[k])||
+    d.providerContractSha256!==local.providerContractSha256||!Array.isArray(d.dayPlanSha256s)||d.dayPlanSha256s.length!==31||
+    d.dayPlanSha256s.some((x:any,i:number)=>x?.runDayIndex!==i+1||!H.test(x.sha256??""))||new Set(d.dayPlanSha256s.map((x:any)=>x.sha256)).size!==31||
+    !f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||f.rightsSha256!==trust.rightsSha256||
+    !H.test(f.protocolSha256??"")||f.protocolSha256!==e.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256||!H.test(f.externalContentUseReviewSha256??"")||
+    Object.keys(f).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(","))
+  hold("CONDITIONAL_INSTRUCTION_POLICY");
+ const plan=read("data-collection/phase5/planning/phase6-source-day-"+String(local.runDayIndex).padStart(2,"0")+".json");
+ if(!Buffer.isBuffer(plan)||plan.length>500000||sha(plan)!==d.dayPlanSha256s[local.runDayIndex-1].sha256)hold("CONDITIONAL_INSTRUCTION_DAY_PLAN");
+ const parsed=JSON.parse(plan.toString("utf8")),max=parsed?.reviewedRefreshTiming?.maxPopulationStalenessSeconds;
+ if(parsed?.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||parsed.runDayIndex!==local.runDayIndex||!Number.isSafeInteger(max)||max<1||max>86400)hold("CONDITIONAL_INSTRUCTION_DAY_PLAN");
+ return {trust,selector:{runDayIndex:local.runDayIndex,indexRevision:revision,indexSha256,queryDigestSha256:local.queryDigestSha256},
+  policy:{independentNativeCandidateReadOnlyApproved:true,existingPaidDispatchApproved:false,noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:max,providerContractSha256:local.providerContractSha256,conditionalPreFeatureReview:f},expectedSourceRunId:local.runId};
+}
 async function serve(role:P7LocalPreRole){
  process.umask(0o077);
  const e=process.env,paths=p7LocalPreSocketPaths(e,false);
  let clean:()=>Promise<unknown>=async()=>{};
  let handler:Parameters<typeof listenP7LocalPreRole>[0]["handler"];
+ const instructionContext=new AsyncLocalStorage<unknown>();
+ let readClock:()=>Promise<string>=async()=>hold("CONDITIONAL_SOURCE_CLOCK");
+ const conditionalScope:P7ConditionalProofScopePort={async readExactSignedConditionalScope(p){
+  const proof=instructionContext.getStore();if(!proof)hold("CONDITIONAL_INSTRUCTION_SCOPE");
+  return verifyP6ConditionalSourceInstructionProof(proof,{...readP7ConditionalInstructionRolePolicy(e),permit:p,observedDbClockUtc:await readClock()});
+ }};
  try{
   if(role==="lane"){
-   const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]));clean=a.close;await a.preflight();
+   const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]),undefined,conditionalScope);clean=a.close;readClock=a.preflight;await a.preflight();
    handler=async q=>{
-    const issued=await a.issueExactLaneReceiptPage(q.permits);
+    const issued=await instructionContext.run(q.conditionalSourceProof,()=>a.issueExactLaneReceiptPage(q.permits));
     if(issued.length!==q.permits.length)hold("EXACT_LANE_PAGE");
     return {wires:q.permits.map((permit,i)=>({permitSha256:hashPhase7DurableCandidate(permit),wire:issued[i].privateWire})),committedCount:0};
    };
   }else if(role==="proof"){
    const archive=openP7StoredPreLaneArchivePort(e);await archive.inspect();
-   const a=openP7ExactSourcePreProofProducer(e,key(e[proofKey]),archive);clean=a.close;await a.preflight();
+   const a=openP7ExactSourcePreProofProducer(e,key(e[proofKey]),archive,conditionalScope);clean=a.close;readClock=a.preflight;await a.preflight();
    handler=async q=>{
-    const m=await a.port.readExactPermitProofs(q.permits);
+    const m=await instructionContext.run(q.conditionalSourceProof,()=>a.port.readExactPermitProofs(q.permits));
     return {wires:q.permits.map(p=>{const permitSha256=hashPhase7DurableCandidate(p),wire=m.get(permitSha256);if(!wire)return hold("EXACT_PROOF_SET");return {permitSha256,wire};}),committedCount:0};
    };
   }else{

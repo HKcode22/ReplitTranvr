@@ -17,12 +17,12 @@ const hold=(s:string):never=>{throw Error("HOLD_P7_LOCAL_PRE_HANDOFF_"+s);};
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const sha=(x:unknown):x is string=>typeof x==="string"&&H.test(x);
 const key=hashPhase7DurableCandidate;
-const MAX_FRAME=24*1024*1024,MAX_PAGE=96,MAX_REQUESTS=128;
+const MAX_FRAME=24*1024*1024,MAX_PAGE=96,MAX_REQUESTS=128,MAX_CONDITIONAL_PROOF=4*1024*1024;
 export type P7LocalPreRole="lane"|"proof"|"publisher";
 export type P7LocalPreOp="ready"|"stop"|"issue_lane"|"issue_proof"|"publish_lane"|"publish_proof";
 export type P7LocalPreScope={codeSha:string;runId:string;runDayIndex:number;queryDigestSha256:string;manifestSha256:string;rightsSha256:string;releaseSha256:string;providerContractSha256:string};
 type WireRow={permitSha256:string;wire:P7Wire};
-export type P7LocalPreRequest={schema:"v39.phase7.local-pre-handoff-request.v1";scope:P7LocalPreScope;op:P7LocalPreOp;permits:P5Stage14SingleFlightPrePermit[];wires:WireRow[];requestSha256:string};
+export type P7LocalPreRequest={schema:"v39.phase7.local-pre-handoff-request.v1";scope:P7LocalPreScope;op:P7LocalPreOp;permits:P5Stage14SingleFlightPrePermit[];wires:WireRow[];conditionalSourceProof?:unknown;requestSha256:string};
 type OK={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:true;wires:WireRow[];committedCount:number};
 type Bad={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:false};
 type Response=OK|Bad;
@@ -64,8 +64,13 @@ function checkWires(rows:readonly WireRow[],keys:string[]){
   !exact(r.wire,["payloadBase64","signatureBase64"])||typeof r.wire.payloadBase64!=="string"||r.wire.payloadBase64.length<4||r.wire.payloadBase64.length>27000||
   typeof r.wire.signatureBase64!=="string"||!(/^[A-Za-z0-9+/]{86}==$/).test(r.wire.signatureBase64)))hold("EXACT_WIRE_SET");
 }
-export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:readonly P5Stage14SingleFlightPrePermit[]=[],wires:readonly WireRow[]=[]):P7LocalPreRequest{
- const body={schema:"v39.phase7.local-pre-handoff-request.v1" as const,scope:s,op,permits:[...permits],wires:[...wires]};
+function isConditionalPage(permits:readonly P5Stage14SingleFlightPrePermit[]){
+ const n=permits.filter(p=>p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE").length;
+ if(n!==0&&n!==permits.length)hold("MIXED_IDENTITY_TIERS");
+ return n>0;
+}
+export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:readonly P5Stage14SingleFlightPrePermit[]=[],wires:readonly WireRow[]=[],conditionalSourceProof?:unknown):P7LocalPreRequest{
+ const body={schema:"v39.phase7.local-pre-handoff-request.v1" as const,scope:s,op,permits:[...permits],wires:[...wires],...(conditionalSourceProof===undefined?{}:{conditionalSourceProof})};
  const req={...body,requestSha256:key(body)};
  const transported=JSON.parse(frame(req).toString("utf8"));
  // JSON must not silently omit undefined fields or change the canonical
@@ -77,14 +82,16 @@ export function makeP7LocalPreRequest(s:P7LocalPreScope,op:P7LocalPreOp,permits:
 export function validateP7LocalPreRequest(input:unknown,s:P7LocalPreScope,role?:P7LocalPreRole):asserts input is P7LocalPreRequest{
  scopeValid(s);
  const q=input as P7LocalPreRequest;
- if(!exact(q,["schema","scope","op","permits","wires","requestSha256"])||q.schema!=="v39.phase7.local-pre-handoff-request.v1"||
+ const proofPresent=!!q&&Object.hasOwn(q,"conditionalSourceProof");
+ if(!exact(q,["schema","scope","op","permits","wires","requestSha256",...(proofPresent?["conditionalSourceProof"]:[])])||q.schema!=="v39.phase7.local-pre-handoff-request.v1"||
   key(q.scope)!==key(s)||!sha(q.requestSha256)||!Array.isArray(q.permits)||!Array.isArray(q.wires))hold("REQUEST_SCOPE");
  const {requestSha256,...body}=q;if(key(body)!==requestSha256)hold("REQUEST_DIGEST");
  if(q.op==="ready"||q.op==="stop"){
-  if(q.permits.length!==0||q.wires.length!==0)hold("CONTROL_SCOPE");return;
+  if(q.permits.length!==0||q.wires.length!==0||proofPresent)hold("CONTROL_SCOPE");return;
  }
  if(!["issue_lane","issue_proof","publish_lane","publish_proof"].includes(q.op)||(role&&!ops[role].includes(q.op)))hold("ROLE_OPERATION");
- const ks=permitKeys(q.permits,s);
+ const ks=permitKeys(q.permits,s),conditional=isConditionalPage(q.permits);
+ if(proofPresent!==(conditional&&q.op.startsWith("issue"))||proofPresent&&(!q.conditionalSourceProof||typeof q.conditionalSourceProof!=="object"||Array.isArray(q.conditionalSourceProof)||Buffer.byteLength(JSON.stringify(q.conditionalSourceProof))>MAX_CONDITIONAL_PROOF))hold("CONDITIONAL_INSTRUCTION_SCOPE");
  if(q.op.startsWith("publish"))checkWires(q.wires,ks);else if(q.wires.length)hold("SIGNER_NO_CALLER_WIRE");
 }
 function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
@@ -126,7 +133,7 @@ export async function callP7LocalPreRole(path:string,q:P7LocalPreRequest,timeout
 export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRole;scope:P7LocalPreScope;handler:(q:P7LocalPreRequest)=>Promise<Payload>;onFatal?:()=>void;maxLifetimeMs?:number}){
  const {path,role,scope,handler}=input;scopeValid(scope);
  if(!Object.hasOwn(ops,role)||typeof handler!=="function")hold("ROLE");
- const seen=new Set<string>();let busy=false,closed=false;const sockets=new Set<Socket>();
+ const seen=new Set<string>(),seenConditionalPermits=new Set<string>();let busy=false,closed=false;const sockets=new Set<Socket>();
  let resolveClosed!:()=>void;const closedPromise=new Promise<void>(resolve=>{resolveClosed=resolve});
 
  const server=createServer({allowHalfOpen:true},socket=>{
@@ -139,6 +146,11 @@ export async function listenP7LocalPreRole(input:{path:string;role:P7LocalPreRol
     let payload:Payload={wires:[],committedCount:0};
     if(req.op!=="ready"&&req.op!=="stop"){
      if(seen.size>=MAX_REQUESTS||seen.has(req.requestSha256))hold("DUPLICATE_OR_MAX_REQUESTS_NO_REPLAY");
+     if(isConditionalPage(req.permits)){
+      const keys=req.permits.map(p=>req!.op+":"+key(p));
+      if(keys.some(k=>seenConditionalPermits.has(k)))hold("DUPLICATE_CONDITIONAL_PERMIT_NO_REPLAY");
+      for(const k of keys)seenConditionalPermits.add(k);
+     }
      seen.add(req.requestSha256);
      // The caller has a 240s bound. A timed-out publisher is an ambiguous
      // outcome: terminate this endpoint, never accept another request.
@@ -186,7 +198,7 @@ export function p7LocalPreSocketPaths(env:NodeJS.ProcessEnv,create:boolean){
  if(Object.values(roles).some(p=>Buffer.byteLength(p)>100))hold("SOCKET_PATH_BOUND");
  return {scope,dir,roles};
 }
-export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:Record<P7LocalPreRole,string>;readStored:(p:readonly P5Stage14SingleFlightPrePermit[])=>Promise<Map<string,P7Wire>>;call?:typeof callP7LocalPreRole}){
+export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:Record<P7LocalPreRole,string>;readStored:(p:readonly P5Stage14SingleFlightPrePermit[])=>Promise<Map<string,P7Wire>>;readConditionalInstructionProof?:(p:Readonly<P5Stage14SingleFlightPrePermit>)=>Promise<unknown>;call?:typeof callP7LocalPreRole}){
  const {scope,paths,readStored}=input,call=input.call??callP7LocalPreRole;
  scopeValid(scope);
  return {async readExactPermitProofs(permits:readonly P5Stage14SingleFlightPrePermit[]){
@@ -194,9 +206,12 @@ export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:
   // All four operations block on the exact immutable original preview.
   // Any failure or unknown commit stops the sequence and the native
   // publisher; it must never regenerate the preview or replay SOURCE.
-  const issueLane=await call(paths.lane,makeP7LocalPreRequest(scope,"issue_lane",permits));
+  const conditional=isConditionalPage(permits);
+  if(conditional&&!input.readConditionalInstructionProof)hold("CONDITIONAL_INSTRUCTION_SCOPE");
+  const proof=conditional?await input.readConditionalInstructionProof!(permits[0]):undefined;
+  const issueLane=await call(paths.lane,makeP7LocalPreRequest(scope,"issue_lane",permits,[],proof));
   await call(paths.publisher,makeP7LocalPreRequest(scope,"publish_lane",permits,issueLane.wires));
-  const issueProof=await call(paths.proof,makeP7LocalPreRequest(scope,"issue_proof",permits));
+  const issueProof=await call(paths.proof,makeP7LocalPreRequest(scope,"issue_proof",permits,[],proof));
   await call(paths.publisher,makeP7LocalPreRequest(scope,"publish_proof",permits,issueProof.wires));
   const stored=await readStored(permits);
   if(!(stored instanceof Map)||stored.size!==ks.length||ks.some((k,i)=>JSON.stringify(stored.get(k))!==JSON.stringify(issueProof.wires[i].wire)))hold("FINAL_INDEPENDENT_READBACK_DRIFT");
