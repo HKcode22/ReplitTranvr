@@ -27,7 +27,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F015 | Production observed | Nov25 cutover lacked exact-main full two-job retention baseline. [Checkpoint](checkpoints/2026-11-25_0007_PST_PHASE5B_CUSTODY_PAIR_AND_RATE_LIMIT_REPAIR.md) | I011 |
 | F016 | Mitigated unproven | Nov24–25 HTTP 429 concurrent SOURCE waves, pacing fallback. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I012 |
 | F017 | Open | Nov24–25 HTTP_OK then FIDS_BODY_UNAVAILABLE, older 204/205 masked; exact old transport causes unknown. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I013, I030 |
-| F018 | Partial; actual owner install refused V0112 | Nov26 21:47Z actual V0112 SQLSTATE 42501 after V0111 uncommitted, entire transaction rollback reported. CI had installed V0112 as superuser, unlike real V0091/V0100 NOLOGIN owner path; I079 reuses existing scoped commissioning. Native-only signer/normalizer/witness/registration and standalone GitHub admission wrappers reject existing conditional tier. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I014, I015, I016, I034, I079 |
+| F018 | Partial; actual owner install refused V0112 | Nov26 21:47Z actual V0112 SQLSTATE 42501 after V0111 uncommitted, entire transaction rollback reported. CI had installed V0112 as superuser, unlike real V0091/V0100 NOLOGIN owner path; I079 reuses existing scoped commissioning. Native-only signer/normalizer/witness/registration and standalone GitHub admission wrappers reject existing conditional tier. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I014, I015, I016, I034, I079, I080 |
 | F019 | Tested branch | Conditional reader staleness measured from binding rather than availability; signed window/member clock mismatch. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/0731789d16675d012d42cd68ba8c49d3c898bf23) | I017 |
 | F020 | Tested branch | Stage14 cutoff-specific duplicate check admitted possible retimed second PRE. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/23b02b489db71d331efe1f8b9da95c67f4c1fd07) | I018 |
 | F021 | Open cause, diagnostic tested | Later PRE generic redacted failure 45762925573, subsequent no-due success not proof of resolution. [Checkpoint](checkpoints/2026-11-26_0129_PST_PHASE5B_THREE_DAY_AUDIT_AND_REPAIR.md) | I019 |
@@ -168,7 +168,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I078 | Real PG16 passed 45899065182; full exact CI pending | T071 actual positive publication/readback/roster reached; correct negative assertions to exact intentionally redacted SQL hydration refusal and verify valid read after refusals, immutable row/index counts unchanged. | F027 |
 
-| I079 | Staged; exact non-superuser CI required | V0112 owner commissioning uses existing V0100 transaction-local SET/CREATE procedure and verifies removal; test actual non-superuser rollback, commit, repeat rejection and subsequent original queue/Stage14 path. | F018 |
+| I079 | Real non-superuser PG16 passed 45900656433; full exact CI pending | V0112 owner commissioning uses existing V0100 transaction-local SET/CREATE procedure and verifies removal; test actual non-superuser rollback, commit, repeat rejection and subsequent original queue/Stage14 path. | F018 |
+
+| I080 | Staged; exact CI required | V0111/V0113 owner-parity CI uses existing schema/base/function ownership and non-superuser actor, combined rollback and commit plus restricted witness reader; AGENTS production parity and adopted science continuity. | F018 |
 
 ## Completion components (not gates)
 
@@ -178,7 +180,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C002 | Partial | Conditional features and independent T24 issuer/proof integration CI passed; conditional later proof/registry path tested in T070/T071 and witnessed-only synthetic T072; lawful actual Packet B custody and production issue remain open. | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029, I031, I033, I053, I054, I055, I058, I066, I070, I072, I073, I074, I075, I076, I078 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
-| C005 | Open | Owner install rolled back at V0112 SQLSTATE 42501; I079/T073 correct non-superuser path, V0111/V0112/V0113 production install outstanding; actual disposable PG16 T067, T070, T071 passed, actual production task unproven | F018 | I015, I016, I071, I074, I075, I078, I079 |
+| C005 | Open | Owner install rolled back at V0112 SQLSTATE 42501; I079/T073 real non-superuser passed; I080/T074 owner parity for V0111/V0113 pending, V0111/V0112/V0113 production install outstanding; actual disposable PG16 T067, T070, T071 passed, actual production task unproven | F018 | I015, I016, I071, I074, I075, I078, I079, I080 |
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F016, F017 | I012, I013 |
 | C007 | SOURCE routing resumed; collection verification open | Owner exact pins and budget/STOP audit passed 19:47:58Z, SOURCE switch enabled, first actual stored parent 45886377755 NO_DUE_WORK; POST remains paused. Do not treat routing as paid capture. | F026 | I008, I011, I023, I057 |
 | C008 | Partial; actual owner coverage readback passed | I059/T054 verified 31 days, 512 prepared queries, 92 reservations, 52 timely bindings, 292 elapsed unreserved, 128 future, zero linked PRE; leakage not assessable. I060 explicit empty status staged. Labels, feature completeness, actual split collision evaluation remain open. | F005, F026, F029 | I018, I020, I059, I060 |
@@ -292,7 +294,9 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T072 | Focused suite passed 45898703448; full exact CI pending | Exact independent signed custody + matching conditional T24 metadata -> signed later review and existing permit verifier with no standalone protocol; witness mismatch and denied ACL refuse. Synthetic SQL fixture, not actual production persistence. | F027 | I076 | C001, C002, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
-| T073 | New real non-superuser PG16 regression; CI pending | V0112 exact migration under existing NOLOGIN registration-owner commissioning, rollback and postcommit no SET/CREATE, duplicate installer refuses, original V0091/V0100 restricted queue tests continue. | F018 | I079 | C005 | .github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml |
+| T073 | Real non-superuser PG16 passed 45900656433 job 140185324695 | V0112 exact migration under existing NOLOGIN registration-owner commissioning, rollback and postcommit no SET/CREATE, duplicate installer refuses, original V0091/V0100 restricted queue tests continue. | F018 | I079 | C005 | .github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml |
+
+| T074 | New actual owner-parity PG16 regression; exact CI pending | V0111 and V0113 in one outer transaction under non-superuser owner, rollback leaves predecessor and no views; commit produces exact witness successor and restricted metadata only, existing actual Stage14/witness/read tests continue. | F018 | I080 | C005 | .github/workflows/phase5b-conditional-t24-witness-pg16.yml |
 
 ## Scientific and retention authorities
 
@@ -475,3 +479,8 @@ Exact runtime/test revision f1070a04b8ff81aa9da537a9f7d1b406e41b4f30: real PG16 
 ## Nov26 continuation — owner V0112 refusal and exact non-superuser correction
 
 Owner actual install 21:47:17Z passed exact pins, 31 CI, blob checks, upcoming 01:45Z SOURCE gap, V0111 uncommitted, then V0112 SQLSTATE 42501; no COMMIT attempted, rollback reported. Prior exact V0112 CI applied using disposable postgres superuser, but V0091 registration is protected NOLOGIN owner and V0100 explicitly commissions via bounded temporary SET/CREATE with postflight revocation. I079 reuses that same existing transactional pattern, preserves exact function ownership/ACL and restricted PREPARE-only EXECUTE, and T073 moves actual migration to non-superuser schema owner with rollback/repeat/no-lasting-grant checks. No paid action or new scientific scope, no production install yet. Exact CI required before retry; confirm all three migrations absent independently, never blindly replay.
+
+
+## Nov26 continuation — T073 verified and I080 owner parity audit
+
+Exact cfab7cd1 job 140185324695 run 45900656433 emitted T073_V0112_REAL_NON_SUPERUSER_COMMIT_ROLLBACK_REPEAT_NO_LASTING_GRANT_PASS at 21:49:44Z, both T070 later persistence markers and 9/9 tests. Exact 30/31 success at inspection; full offline pending. Audit found V0111/V0113 test setup still superuser, although actual V0111 executed uncommitted. I080 changes disposable setup to production-equivalent non-superuser schema/base/witness function owner, tests atomic rollback and commit of both reviewed unchanged SQL files then existing restricted consumer tests. AGENTS records owner reaffirmed Packet A/B, E, C+D, expiry, immutable identifiers and production-role parity. No production change. Owner retry waits exact test acceptance; do not rerun superseded V0112 blob.
