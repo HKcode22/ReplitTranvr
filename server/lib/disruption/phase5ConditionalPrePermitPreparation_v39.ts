@@ -5,6 +5,9 @@
  * Legacy Stage14 field names are retained for compatible execution, but
  * the evidence is explicitly conditional service / reported schedule only. */
 import {createHash} from "node:crypto";
+import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39";
+import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
+import {P5_CONDITIONAL_T24_PACKET,P5_CONDITIONAL_WITNESSED_LATER_PACKET,P5_CONDITIONAL_STANDALONE_PACKET} from "./phase5ConditionalPreQueuePacket_v39";
 import {readP5SignedConditionalServiceReview,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import type {P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {preflightP5Stage14ReviewedPermitV39,type P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -42,6 +45,8 @@ type Review={
 type Pins={expectedReviewArtifactSha256:string;expectedReviewedCodeSha:string;expectedConditionalProtocolSha256:string;
  expectedExternalContentUseReviewSha256:string;expectedT24ReceiptSha256?:string;separatelyApprovedStandaloneProtocolSha256?:string};
 type ReviewInput={flightInstanceId:string;reviewBytes:Buffer;pins:Pins};
+const preparedBindings=new WeakMap<object,{code:string;artifact:string;permitHash:string;witnessHash:string}>();
+const previews=new WeakSet<object>();
 function parseIndependentReview(scope:P5SignedConditionalFeatureReadScope,flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
  if(!pins||![pins.expectedReviewArtifactSha256,pins.expectedConditionalProtocolSha256,pins.expectedExternalContentUseReviewSha256].every(x=>H.test(x??""))||
   !C.test(pins.expectedReviewedCodeSha??"")||!Buffer.isBuffer(reviewBytes)||reviewBytes.length<100||reviewBytes.length>200000||
@@ -119,9 +124,11 @@ function constructFromBound(scope:P5SignedConditionalFeatureReadScope,read:Bound
  if(preflightP5Stage14ReviewedPermitV39(pre,pins.separatelyApprovedStandaloneProtocolSha256)!==p.selectedTNativeUtc)return hold("STAGE14_PREFLIGHT");
  const summary={status:"CONDITIONAL_STAGE14_PERMIT_PREPARED_NOT_SIGNED",identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",nativeOperatingLegCertified:false,
   physicalGateOutCertified:false,signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
- return Object.freeze(Object.defineProperties(summary,{privatePermit:{value:Object.freeze(pre),enumerable:false},
+ const out=Object.freeze(Object.defineProperties(summary,{privatePermit:{value:Object.freeze(pre),enumerable:false},
   privateWitnessReview:{value:witnessReview?Object.freeze(witnessReview):null,enumerable:false}})) as typeof summary&{
   readonly privatePermit:Readonly<P5Stage14SingleFlightPrePermit>;readonly privateWitnessReview:Readonly<P5IndependentT24WitnessReview>|null};
+ preparedBindings.set(out,{code:r.reviewedCodeSha,artifact:pins.expectedReviewArtifactSha256,permitHash:hash(JSON.stringify(pre)),witnessHash:hash(JSON.stringify(witnessReview))});
+ return out;
 }
 
 /** C+D page: validate every external artifact and unique flight before SQL,
@@ -148,4 +155,28 @@ export async function prepareP5ConditionalPrePermitPageForIndependentSigning(poo
 export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
  flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
  return (await prepareP5ConditionalPrePermitPageForIndependentSigning(pool,scope,[{flightInstanceId,reviewBytes,pins}])).privatePrepared[0];
+}
+
+/** Produce the exact private packet for the independent Phase7 proof preview.
+ * No new signature, registry publication or native-identity attestation. */
+export function buildP5ConditionalPrePacketPreview(prepared:ReturnType<typeof constructFromBound>){
+ const pin=preparedBindings.get(prepared),p=prepared.privatePermit,w=prepared.privateWitnessReview;
+ if(!pin||hash(JSON.stringify(p))!==pin.permitHash||hash(JSON.stringify(w))!==pin.witnessHash)return hold("ACTUAL_PREPARED_PERMIT_REQUIRED");
+ const schema=p.horizon==="T-24h"?P5_CONDITIONAL_T24_PACKET:p.reviewedT24WitnessReceipt?P5_CONDITIONAL_WITNESSED_LATER_PACKET:P5_CONDITIONAL_STANDALONE_PACKET;
+ const packet={schema,reviewedCodeSha:pin.code,reviewArtifactSha256:pin.artifact,independentlyReviewedConditionalScheduleServiceAndSourceAttested:true as const,
+  reviewedConditionalProtocolSha256:p.reviewedProtocolAmendmentSha256!,prePermit:structuredClone(p) as P5Stage14SingleFlightPrePermit,...(w?{witnessReview:structuredClone(w)}:{})};
+ const packetBytes=Buffer.from(JSON.stringify(packet),"utf8");
+ if(packetBytes.length>200000)return hold("PACKET_BOUND");
+ const out=Object.freeze(Object.defineProperties({status:"CONDITIONAL_PRE_PACKET_PREVIEW_NO_SIGNATURE",packetSha256:hash(packetBytes),providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  {packet:{value:packet,enumerable:false},packetBytes:{value:packetBytes,enumerable:false}})) as {status:string;packetSha256:string;providerCalls:number;databaseWrites:number;phase6PaidGo:boolean;readonly packet:typeof packet;readonly packetBytes:Buffer};
+ previews.add(out);return out;
+}
+/** Existing independent field-proof verification is reused before the
+ * separately authenticated registry signer can sign the packet digest. */
+export function attachP5ConditionalPreFieldProof(preview:ReturnType<typeof buildP5ConditionalPrePacketPreview>,
+ env:NodeJS.ProcessEnv,policySha256:string,dispositions:readonly Phase7CanonicalFieldDisposition[],wire:unknown){
+ if(!previews.has(preview))return hold("ACTUAL_CONDITIONAL_PACKET_PREVIEW");
+ const out=attachPhase7SignedProofBeforeRoster(preview,env,policySha256,dispositions,wire);
+ return Object.freeze(Object.defineProperties({...out,status:"CONDITIONAL_PRE_PACKET_AWAIT_INDEPENDENT_REGISTRY_SIGNATURE"},
+  {packet:{value:out.packet,enumerable:false},packetBytes:{value:out.packetBytes,enumerable:false}}));
 }

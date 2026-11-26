@@ -6,6 +6,7 @@
  * and provenance/rights roster before touching the queue.
  */
 import {createHash} from "node:crypto";
+import {isP5ConditionalQueuePacketSchema,verifyP5ConditionalQueuePacket,assertP5ConditionalQueuePermitScope} from "./phase5ConditionalPreQueuePacket_v39";
 import {decideP5LaterPreEvidencePath} from "./phase5StandaloneLaterPreWithoutT24Decision_v39";
 import type {Pool} from "pg";
 import {
@@ -96,6 +97,10 @@ export function verifyP5CdFrozenRoster(
   }
   const pre=packet?.prePermit as P5Stage14SingleFlightPrePermit|undefined;
   const schema=packet?.schema;
+  if(isP5ConditionalQueuePacketSchema(schema)){
+   const verified=verifyP5ConditionalQueuePacket(packet,gate,acceptedHorizon);
+   packets.set(expected.packetSha256,{packetSha256:expected.packetSha256,...verified});continue;
+  }
   const t24=schema==="v39.phase5.github-native-t24-pre-witness-reviewed.v1";
   const later=schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1";
   const fallback=schema==="v39.phase5.github-standalone-later-pre-asof-reviewed.v2";
@@ -175,6 +180,7 @@ export type P5CdPhase7PreResolver=(packet:Readonly<P5CdVerifiedTaskPacket>)=>Pro
  packetSha256:string;integration:Phase7PreIntegration;
 }>;
 export async function resolveP5CdPhase7Pre(env:NodeJS.ProcessEnv,release:P5CdGithubPreRelease,packet:P5CdVerifiedTaskPacket,resolver?:P5CdPhase7PreResolver){
+ assertP5ConditionalQueuePermitScope(packet.permit,release,packet.phase7FieldProof);
  if(release.releaseMode==="PHASE5_CANARY"){
   if(resolver)hold("PHASE5_CANARY_CANNOT_USE_PHASE6_PRESERVATION_RESOLVER");
   return undefined;
@@ -295,6 +301,7 @@ export async function runP5CdGithubPreTick(
   let phase7:Phase7PreIntegration|undefined;
   try{
    permit=bindP5CdTaskToFrozenPermit(task,deps.packets);
+   assertP5ConditionalQueuePermitScope(permit,liveRelease,deps.packets.get(task.packetSha256)?.phase7FieldProof);
    if(liveRelease.releaseMode==="PHASE6_APPROVED")
     phase7=requirePhase7GhPreIntegration(env,permit,preservation.get(task.packetSha256));
    // A source packet with extra features must not be marked WRITE_STARTED

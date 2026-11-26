@@ -1,4 +1,6 @@
 import {p6ReviewedPolicyMatchesRuntime} from "./phase6ReviewedRuntimeCode_v39.mjs";
+import {createHash} from "node:crypto";
+import type {P5ConditionalQueueScope} from "./phase5ConditionalPreQueuePacket_v39";
 /**
  * Phase5 C+D: one explicit future GitHub-main PRE release gate.
  * This module AUTHORIZES NO paid provider requests, queue enrollment,
@@ -28,12 +30,33 @@ export function readP5CdStandaloneLaterProtocol(env:NodeJS.ProcessEnv):string|un
   hold("INVALID_SEPARATE_STANDALONE_LATER_APPROVAL");
  return digest;
 }
+/** Derive the separate conditional scope from the existing protected daily
+ * review and prospective SOURCE marker. Never from the packet or a bare
+ * marker alone. Absent scope preserves native-only admission. */
+export function readP5CdConditionalPreScope(env:NodeJS.ProcessEnv):P5ConditionalQueueScope|undefined{
+ const marker=env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256,raw=env.P6_NONPAID_DAILY_POLICY_BASE64,digest=env.P6_NONPAID_DAILY_POLICY_SHA256;
+ if(!marker||!raw||!digest)return undefined;
+ if(!SHA256.test(marker)||raw.length>46668||!SHA256.test(digest))hold("INVALID_CONDITIONAL_POLICY_PIN");
+ const bytes=Buffer.from(raw,"base64");
+ if(bytes.toString("base64")!==raw||createHash("sha256").update(bytes).digest("hex")!==digest)hold("INVALID_CONDITIONAL_POLICY_PIN");
+ let p:any;try{p=JSON.parse(bytes.toString("utf8"));}catch{return hold("INVALID_CONDITIONAL_POLICY_PIN");}
+ const f=p?.conditionalPreFeatureReview;if(f===undefined)return undefined;
+ if(p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
+  p.approvedCodeSha!==env.P5_CD_GH_PRE_APPROVED_CODE_SHA||p.manifestSha256!==env.V39_P5_MANIFEST_SHA256||
+  p.rightsSha256!==env.V39_P5_RIGHTS_SHA256||p.releaseSha256!==env.V39_P5_RELEASE_SHA256||
+  f?.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||f.rightsSha256!==p.rightsSha256||
+  f.protocolSha256!==marker||!SHA256.test(f.externalContentUseReviewSha256??"")||
+  Object.keys(f).sort().join("|")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join("|"))
+  hold("INVALID_CONDITIONAL_POLICY_PIN");
+ return Object.freeze({protocolSha256:marker,externalContentUseReviewSha256:f.externalContentUseReviewSha256});
+}
 export interface P5CdGithubPreRelease{
  schema:"v39.phase5.cd-gh-pre-explicit-release.v1";
  releaseMode:"PHASE5_CANARY"|"PHASE6_APPROVED";
  approvedCodeSha:string;
  rosterSha256:string;
  independentlyApprovedStandaloneProtocolSha256?:string;
+ conditionalPreScope?:P5ConditionalQueueScope;
  rightsSha256:string;
  manifestSha256:string;
  stop:false;
@@ -116,10 +139,11 @@ function requireP5CdGithubPreScopeInternal(
     !url.hostname||
     ["localhost","127.0.0.1","::1"].includes(url.hostname))
   hold("NOT_REAL_EXISTING_RESTRICTED_PRE_LOGIN");
- const standalone=readP5CdStandaloneLaterProtocol(env);
+ const standalone=readP5CdStandaloneLaterProtocol(env),conditional=phase6?readP5CdConditionalPreScope(env):undefined;
  return{
   schema:"v39.phase5.cd-gh-pre-explicit-release.v1",
   ...(standalone?{independentlyApprovedStandaloneProtocolSha256:standalone}:{}),
+  ...(conditional?{conditionalPreScope:conditional}:{}),
   releaseMode:canary?"PHASE5_CANARY":"PHASE6_APPROVED",
   approvedCodeSha:env.P5_CD_GH_PRE_APPROVED_CODE_SHA!,
   rightsSha256:env.V39_P5_RIGHTS_SHA256!,

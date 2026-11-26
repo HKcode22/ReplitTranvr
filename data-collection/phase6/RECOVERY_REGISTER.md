@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
-| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040 |
+| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -105,6 +105,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I040 | Implemented staged; CI pending | Bounded 96-member conditional permit preparation page validates every independent review before SQL and reads actual SOURCE original/member population once, reuses existing Stage14 preflight; rejects duplicates/absent member and no signing. | F027 |
 
+| I041 | Implemented staged; exact CI pending | Distinct conditional T24/witnessed later/standalone later packet envelopes from actual prepared permit, existing independent Phase7 proof attachment, exact C+D roster and worker-side protected scope validation. Existing private registry signing/consumer routing not yet fully connected. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -170,6 +172,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T034 | New regression; exact CI pending | Conditional IPC requires exact proof, refuses mixed pages, publisher/control leakage, changed digest or same-permit changed-proof replay; both independent signers receive same proof | F027 | I039 | C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 
 | T035 | New regression; exact CI pending | Conditional permit page validates inputs before SQL, one actual original read, no duplicate permit or partial signing, missing member held | F027 | I040 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+
+| T036 | New regression; exact CI pending | Actual prepared conditional permit -> real fixture Ed25519 independent proof -> immutable packet -> existing roster; reject native promotion, missing policy, invalid signature or synthetic preview | F027 | I041 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 

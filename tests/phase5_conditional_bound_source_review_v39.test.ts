@@ -2,7 +2,12 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {generateKeyPairSync,sign} from "node:crypto";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {verifyP5ConditionalQueuePacket} from "../server/lib/disruption/phase5ConditionalPreQueuePacket_v39";
+import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+import {readP5CdConditionalPreScope} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
@@ -193,6 +198,35 @@ describe("source-bound conditional service preparation",()=>{
   expect(missingPage.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
   expect(built.privatePermit.externalNativeTPhysicalLegAndSourceUseReviewed).toBeUndefined();
   expect(built.privateWitnessReview).toBeNull();
+  // T036 actual prepared conditional permit -> independent signed proof ->
+  // exact private packet bytes -> existing C+D roster consumer. Synthetic
+  // signer is fixture only; no production registry signature or SQL claim.
+  const preview=buildP5ConditionalPrePacketPreview(built),keys=generateKeyPairSync("ed25519");
+  const hd=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),policySha=hd("policy"),env={
+   P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policySha,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:hd(keys.publicKey.export({type:"spki",format:"der"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+  const meta=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:p.manifestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,policySha256:policySha,permitSha256:hashPhase7DurableCandidate(preview.packet.prePermit),issuedAtUtc:t("05:04"),validUntilUtc:t("06:00"),fields:[]}));
+  const wire={payloadBase64:meta.toString("base64"),signatureBase64:sign(null,meta,keys.privateKey).toString("base64")};
+  const packet=attachP5ConditionalPreFieldProof(preview,env,policySha,[],wire);
+  expect(packet.packetSha256).toBe(hd(packet.packetBytes));
+  expect(JSON.stringify(packet)).not.toMatch(/SQ78|payloadBase64|privatePermit/);
+  const release={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:review.reviewedCodeSha,
+   rosterSha256:"",rightsSha256:p.expectedReviewedSourceRightsSha256,manifestSha256:p.manifestSha256,stop:false as const,providerCalls:0 as const,scientificFreezeEstablishedByThisFunction:false as const,
+   conditionalPreScope:{protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:h("8")},independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const path="data-collection/phase5/frozen/conditional_ci_packet.json",roster:P5CdFrozenRoster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:release.approvedCodeSha,manifestSha256:release.manifestSha256,rightsSha256:release.rightsSha256,entries:[{filePath:path,packetSha256:packet.packetSha256}]};
+  const rosterBytes=Buffer.from(JSON.stringify(roster)),gate={...release,rosterSha256:hd(rosterBytes)},files=[{filePath:path,packetSha256:packet.packetSha256,bytes:packet.packetBytes}];
+  expect(verifyP5CdFrozenRoster(rosterBytes,roster,files,gate).get(packet.packetSha256)?.permit).toEqual(built.privatePermit);
+  expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,releaseMode:"PHASE5_CANARY"})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>verifyP5ConditionalQueuePacket({...packet.packet,phase7FieldProof:wire,independentLaterHorizonAndT24ReviewAttested:true},gate,"LATER_ONLY")).toThrow("PACKET_SCHEMA_OR_HORIZON");
+  expect(()=>verifyP5ConditionalQueuePacket({...packet.packet,phase7FieldProof:wire,prePermit:{...packet.packet.prePermit,externalNativeTPhysicalLegAndSourceUseReviewed:true}},gate,"LATER_ONLY")).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>buildP5ConditionalPrePacketPreview({...built} as typeof built)).toThrow("ACTUAL_PREPARED_PERMIT_REQUIRED");
+  expect(()=>attachP5ConditionalPreFieldProof(preview,env,policySha,[],{...wire,signatureBase64:Buffer.alloc(64).toString("base64")})).toThrow("SIGNATURE");
+  const daily={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:gate.approvedCodeSha,manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:gate.rightsSha256,protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:h("8")}};
+  const dailyBytes=Buffer.from(JSON.stringify(daily)),policyEnv={P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:scope.protocolSha256,P6_NONPAID_DAILY_POLICY_BASE64:dailyBytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:hd(dailyBytes),P5_CD_GH_PRE_APPROVED_CODE_SHA:gate.approvedCodeSha,V39_P5_MANIFEST_SHA256:gate.manifestSha256,V39_P5_RIGHTS_SHA256:gate.rightsSha256,V39_P5_RELEASE_SHA256:p.expectedReviewedReleaseSha256};
+  expect(readP5CdConditionalPreScope(policyEnv)).toEqual(gate.conditionalPreScope);
+  expect(readP5CdConditionalPreScope({...policyEnv,P6_NONPAID_DAILY_POLICY_SHA256:""})).toBeUndefined();
+  expect(()=>readP5CdConditionalPreScope({...policyEnv,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("0")})).toThrow("INVALID_CONDITIONAL_POLICY_PIN");
   expect(JSON.stringify(built)).not.toMatch(/SQ78|privatePermit|SIA/);
   await expect(preparePermit({...review,nativeOperatingLegCertified:true})).rejects.toThrow(/EXACT_CONDITIONAL_REVIEW/);
   await expect(preparePermit({...review,reviewedMemberEvidenceSha256:h("0")})).rejects.toThrow(/MEMBER_REVIEW_OR_PROSPECTIVE_CLOCK/);
