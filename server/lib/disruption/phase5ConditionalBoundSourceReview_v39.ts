@@ -4,6 +4,7 @@
  * this reader does not authenticate a signature merely from a digest.
  */
 import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
+import {buildP5EAlreadyMatchedMovementSupplement} from "./phase5AmendmentEFidsOriginalFeatureCompiler_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE14_BOUND_SOURCE_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_E_BATCH_ORIGINAL_SQL,P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
@@ -14,6 +15,9 @@ type ReviewScope={
  expectedPopulationQueryId:string;expectedResponseSha256:string;expectedDecodedBodySha256:string;
  expectedLocalFrom:string;expectedLocalTo:string;
  expectedServiceWindowStartUtc?:string;expectedServiceWindowEndUtc?:string;
+ /** From the exact protected review of this conditional protocol, never
+  * inferred from a SOURCE packet, native feature policy, or rights hash. */
+ externalContentUseReviewSha256?:string;
 };
 const SHA=/^[a-f0-9]{64}$/;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -120,6 +124,7 @@ export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPoo
  return readBound(pool,s,true);
 }
 async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean){
+ if(input.externalContentUseReviewSha256!==undefined&&(!signed||!SHA.test(input.externalContentUseReviewSha256)))hold("CONDITIONAL_FEATURE_REVIEW_SCOPE");
  const c=await pool.connect();let began=false;
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
@@ -168,7 +173,36 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   // Reprepare at actual fresh clock: member reading cannot steal PRE lead.
   const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at));
   const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at),stamp(o.source_available));
+  // F027/C002: reuse the existing feature dictionary, but only from the
+  // actual decoded original index independently matched to its stored G5A
+  // member. No native claim, new field, network request, or permanent copy.
+  const featureDrafts=[];
+  if(s.externalContentUseReviewSha256){
+   const p=originals[0].raw_payload as Record<string,any>;
+   const byId=new Map(finalReport.privateCandidates.map(x=>[x.stage14ConditionalFlightInstanceId,x]));
+   for(const m of memberReview.privateReviewProposals){
+    const candidate=byId.get(m.flightInstanceId);
+    if(!candidate||!Number.isSafeInteger(candidate.sourceIndex)||candidate.sourceIndex<0||candidate.sourceIndex>=p.departures.length)hold("CONDITIONAL_FEATURE_MATCH_DRIFT");
+    const compiled=buildP5EAlreadyMatchedMovementSupplement({flightInstanceId:m.flightInstanceId,populationQueryId:m.expectedSourcePopulationQueryId,
+     expectedBoundV0079ResponseHash:m.expectedSourceResponseSha256,externallyReviewedSourceAndContentsSha256:s.externalContentUseReviewSha256},
+     p.departures[candidate.sourceIndex],stamp(p.fetchedAtUtc),m.sourceMemberAvailableUtc);
+    featureDrafts.push(Object.freeze({flightInstanceId:m.flightInstanceId,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,
+     reviewedProtocolSha256:s.protocolSha256,compiled,physicalGateOutCertified:false as const,sourceBodyAndCanonicalEnvelopeIntegrityVerified:true as const}));
+   }
+  }
+  // Feature extraction also consumes time; do not return late drafts.
+  const end=(await c.query("SELECT clock_timestamp() AS at")).rows;
+  if(end.length!==1||ms(end[0].at)<ms(fresh[0].at)||ms(end[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_FEATURE_CLOCK");
+  const liveDrafts=featureDrafts.filter(x=>{
+   const m=memberReview.privateReviewProposals.find(m=>m.flightInstanceId===x.flightInstanceId)!;
+   return ms(m.predictionCutoffUtc)-ms(end[0].at)>s.minimumReviewLeadSeconds*1000;
+  });
   await c.query("COMMIT");began=false;
-  return Object.freeze({report:finalReport,memberReview,observedDbClockUtc:stamp(fresh[0].at)});
+  const out={report:finalReport,memberReview,observedDbClockUtc:stamp(end[0].at),
+   conditionalFeatureReview:{status:s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
+    featureDraftCount:liveDrafts.length,lateDraftCount:featureDrafts.length-liveDrafts.length,
+    evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),
+    missingFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.missingFidsFields.length,0),actualPreIssued:false,providerCalls:0,databaseWrites:0}};
+  return Object.freeze(Object.defineProperty(out,"privateFeatureDrafts",{value:Object.freeze(liveDrafts),enumerable:false})) as typeof out&{readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][]};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }

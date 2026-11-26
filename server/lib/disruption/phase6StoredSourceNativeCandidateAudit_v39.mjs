@@ -139,6 +139,8 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
     typeof audit.sourceGithubRunId!=="string"||!/^[0-9]{5,25}$/.test(audit.sourceGithubRunId))
   fail("ACTUAL_SOURCE_AUDIT_CLOCK_OR_RUN_DRIFT");
  const conditional=auditedScope.conditionalServiceScope;
+ const featurePolicy=policy.conditionalPreFeatureReview;
+ if(conditional&&featurePolicy&&featurePolicy.protocolSha256!==conditional.protocolSha256)fail("CONDITIONAL_FEATURE_PROTOCOL_DRIFT");
  const conditionalReview=conditional?await readP5SignedConditionalServiceReview(sourcePool,{
   source:{...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId},
   protocolSha256:conditional.protocolSha256,ownerProspectiveSeparateTierApproved:true,
@@ -146,7 +148,8 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   minimumReviewLeadSeconds:900,expectedPopulationQueryId:audit.sourcePopulationQueryId,
   expectedResponseSha256:audit.sourceResponseSha256,expectedLocalFrom:conditional.localFrom,
   expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
-  expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc}):null;
+  expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc,
+  ...(featurePolicy?{externalContentUseReviewSha256:featurePolicy.externalContentUseReviewSha256}:{})}):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
@@ -155,7 +158,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
   ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,
     counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
-    observedDbClockUtc:conditionalReview.observedDbClockUtc,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
+    observedDbClockUtc:conditionalReview.observedDbClockUtc,featureReview:conditionalReview.conditionalFeatureReview,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
  Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},

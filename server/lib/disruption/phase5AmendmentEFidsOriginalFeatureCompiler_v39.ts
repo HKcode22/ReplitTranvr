@@ -109,6 +109,69 @@ function verifyP5EOriginalForBatch(input:P5EOriginalFidsCompilerInput):P5EVerifi
   expectedDecodedOriginalBodySha256:input.expectedDecodedOriginalBodySha256,
   originIcao:input.normalizedOriginIcao,retrieved,byProviderId};
 }
+/** Build the unchanged four FIDS feature drafts from a movement whose
+ * original/body/member identity was already checked by the caller. This
+ * helper grants neither native identity nor content rights nor issuance. */
+export function buildP5EAlreadyMatchedMovementSupplement(input:Pick<P5EOriginalFidsCompilerInput,
+ "flightInstanceId"|"populationQueryId"|"expectedBoundV0079ResponseHash"|"externallyReviewedSourceAndContentsSha256">,
+ movement:unknown,retrievedUtc:string,availableUtc:string){
+ const retrieved=stamp(retrievedUtc),available=stamp(availableUtc);
+ if(retrieved>available||!SHA.test(input.expectedBoundV0079ResponseHash??"")||
+    !SHA.test(input.externallyReviewedSourceAndContentsSha256??"")||!input.flightInstanceId||!input.populationQueryId)
+  hold("UNBOUND_MATCHED_MOVEMENT_DRAFT");
+ const values:Record<(typeof FIELDS)[number],unknown>={
+  operating_carrier:deep(movement,"airline","icao"),
+  scheduled_arrival_utc:deep(movement,"arrival","scheduledTime","utc"),
+  provider_revised_departure_utc:deep(movement,"departure","revisedTime","utc"),
+  reported_pre_departure_status:deep(movement,"status")
+ };
+ const observations:P5EReviewedSupplementalObservation[]=[];
+ const missing:string[]=[];
+ for(const field of FIELDS){
+  const value=values[field];
+  let acceptable=false;
+  if(field==="scheduled_arrival_utc"||
+     field==="provider_revised_departure_utc"){
+   acceptable=typeof value==="string"&&UTC.test(value)&&
+    Number.isFinite(Date.parse(value))&&
+    new Date(Date.parse(value)).toISOString()===value;
+  }else if(field==="operating_carrier"){
+   acceptable=typeof value==="string"&&
+    /^[A-Z0-9]{2,3}$/.test(value);
+  }else{
+   acceptable=typeof value==="string"&&
+    value.length>0&&value.length<=80&&
+    /^[A-Za-z0-9_: .-]+$/.test(value);
+  }
+  if(!acceptable){
+   missing.push(field);
+   continue;
+  }
+  observations.push({
+   flightInstanceId:input.flightInstanceId,field,
+   value:value as string,source:"AERODATABOX_FIDS",
+   sourceRecordId:input.expectedBoundV0079ResponseHash,
+   // This is the system fetch observation, NOT an actual runway event.
+   observedAtUtc:new Date(retrieved).toISOString(),
+   availableAtUtc:new Date(available).toISOString(),
+   rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"
+  });
+ }
+ const bundle:P5EReviewedSupplementalBundle={
+  schema:"v39.phase5.e-signed-source-supplement.v1",
+  flightInstanceId:input.flightInstanceId,
+  populationQueryId:input.populationQueryId,
+  originalResponseSha256:input.expectedBoundV0079ResponseHash,
+  fields:[...FIELDS],
+  observations,
+  observationsSha256:createHash("sha256")
+   .update(JSON.stringify(observations)).digest("hex"),
+  externalSourceAndContentsReviewReceiptSha256:
+   input.externallyReviewedSourceAndContentsSha256
+ };
+ return {bundle,evidencedFidsFields:observations.length,missingFidsFields:missing};
+}
+
 function compileP5EFromVerifiedOriginal(
  input:P5EOriginalFidsCompilerInput,verified:P5EVerifiedOriginal
 ):{
@@ -165,60 +228,11 @@ function compileP5EFromVerifiedOriginal(
     destination!==input.normalizedDestinationIcao||
     stamp(deep(movement,"departure","scheduledTime","utc"))!==selected)
   hold("ORIGINAL_ROUTE_OR_NATIVE_T_DRIFT");
- const values:Record<(typeof FIELDS)[number],unknown>={
-  operating_carrier:deep(movement,"airline","icao"),
-  scheduled_arrival_utc:deep(movement,"arrival","scheduledTime","utc"),
-  provider_revised_departure_utc:deep(movement,"departure","revisedTime","utc"),
-  reported_pre_departure_status:deep(movement,"status")
- };
- const observations:P5EReviewedSupplementalObservation[]=[];
- const missing:string[]=[];
- for(const field of FIELDS){
-  const value=values[field];
-  let acceptable=false;
-  if(field==="scheduled_arrival_utc"||
-     field==="provider_revised_departure_utc"){
-   acceptable=typeof value==="string"&&UTC.test(value)&&
-    Number.isFinite(Date.parse(value))&&
-    new Date(Date.parse(value)).toISOString()===value;
-  }else if(field==="operating_carrier"){
-   acceptable=typeof value==="string"&&
-    /^[A-Z0-9]{2,3}$/.test(value);
-  }else{
-   acceptable=typeof value==="string"&&
-    value.length>0&&value.length<=80&&
-    /^[A-Za-z0-9_: .-]+$/.test(value);
-  }
-  if(!acceptable){
-   missing.push(field);
-   continue;
-  }
-  observations.push({
-   flightInstanceId:input.flightInstanceId,field,
-   value:value as string,source:"AERODATABOX_FIDS",
-   sourceRecordId:input.expectedBoundV0079ResponseHash,
-   // This is the system fetch observation, NOT an actual runway event.
-   observedAtUtc:new Date(retrieved).toISOString(),
-   availableAtUtc:new Date(available).toISOString(),
-   rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW"
-  });
- }
- const bundle:P5EReviewedSupplementalBundle={
-  schema:"v39.phase5.e-signed-source-supplement.v1",
-  flightInstanceId:input.flightInstanceId,
-  populationQueryId:input.populationQueryId,
-  originalResponseSha256:input.expectedBoundV0079ResponseHash,
-  fields:[...FIELDS],
-  observations,
-  observationsSha256:createHash("sha256")
-   .update(JSON.stringify(observations)).digest("hex"),
-  externalSourceAndContentsReviewReceiptSha256:
-   input.externallyReviewedSourceAndContentsSha256
- };
+ const {bundle,evidencedFidsFields,missingFidsFields}=buildP5EAlreadyMatchedMovementSupplement(input,movement,new Date(retrieved).toISOString(),new Date(available).toISOString());
  return{
   schema:"v39.phase5.e-original-fids-packet-compiler.v1",
-  bundle,evidencedFidsFields:observations.length,
-  missingFidsFields:missing,
+  bundle,evidencedFidsFields,
+  missingFidsFields,
   sourceBodyAndCanonicalEnvelopeIntegrityVerified:true,
   sameOriginalNativeOperatingLegBoundOnly:true,
   sourceRightsIndependentlyCertifiedByThisFunction:false,

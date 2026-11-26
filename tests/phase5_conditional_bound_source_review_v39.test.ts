@@ -4,7 +4,7 @@ import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnve
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
 function fixture(){
- const departures=[{number:"SQ78",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:t("12:00")}},arrival:{airport:{icao:"YSSY"}}}];
+ const departures=[{number:"SQ78",codeshareStatus:"IsOperator",isCargo:false,airline:{icao:"SIA"},status:"Scheduled",departure:{scheduledTime:{utc:t("12:00")},revisedTime:{utc:t("12:15")}},arrival:{airport:{icao:"YSSY"},scheduledTime:{utc:t("20:00")}}}];
  const bytes=Buffer.from(JSON.stringify({departures,arrivals:[]}));
  const body=createHash("sha256").update(bytes).digest("hex");
  const id="c23e4567-e89b-42d3-a456-426614174013";
@@ -91,14 +91,14 @@ describe("source-bound conditional service preparation",()=>{
   const raw=r.raw_payload as any;
   const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
   const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
-  const make=(marker:string,body:string,original=marked)=>{
+  const make=(marker:string,body:string,original=marked,members:Record<string,unknown>[]=[])=>{
    const queries:string[]=[];
    const pool={connect:async()=>({release(){},query:async(sql:string)=>{
     queries.push(sql);
     if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
-    if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:0,conditional_source_protocol_sha256:marker,decoded_original_body_sha256:body}]};
+    if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:members.length,conditional_source_protocol_sha256:marker,decoded_original_body_sha256:body}]};
     if(sql.includes("SELECT r.raw_payload"))return {rows:[{...r,raw_payload:original}]};
-    if(sql.includes("FROM clean.flight_population"))return {rows:[]};
+    if(sql.includes("FROM clean.flight_population"))return {rows:members};
     if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
     return {rows:[]};
    }})};
@@ -110,6 +110,20 @@ describe("source-bound conditional service preparation",()=>{
   await expect(readSigned(window.pool,{...input,expectedServiceWindowEndUtc:t("14:00")})).rejects.toThrow(/SIGNED_SOURCE_WINDOW_DRIFT/);
   expect(window.queries.some(x=>x.includes("SELECT r.raw_payload"))).toBe(false);
   expect(good.queries.at(-1)).toBe("COMMIT");
+  const id=prepare(scope,[o],[{...r,raw_payload:marked}],t("05:04")).privateCandidates[0].stage14ConditionalFlightInstanceId!;
+  const m={population_query_id:scope.expectedPopulationQueryId,response_hash:scope.expectedResponseSha256,provider_content_expired_at_utc:null,population_member_id:"member-1",analytic_identity_id:id,canonical_flight_instance_id:id,source_airport_icao:"WSSS",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",flight_number:"SQ78",scope_classification:"unknown",codeshare_resolution_status:"g5a_conditional_operator_composite_no_native_id",source_type:"fids",population_role:"requested_airport_primary",query_direction:"Departure",dep_scheduled_utc:t("12:00"),available_at:t("05:02")};
+  const actual=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const noFeature=await readSigned(actual.pool,input);
+  expect(noFeature.conditionalFeatureReview.featureDraftCount).toBe(0);
+  const withFeature=await readSigned(actual.pool,{...input,externalContentUseReviewSha256:h("8")});
+  expect(withFeature.conditionalFeatureReview).toMatchObject({featureDraftCount:1,evidencedFidsFields:4,missingFidsFields:0,actualPreIssued:false});
+  const draft=withFeature.privateFeatureDrafts[0];
+  expect(draft.identityEvidenceTier).toBe("CONDITIONAL_QUERY_FILTERED_SERVICE");
+  expect(draft.physicalGateOutCertified).toBe(false);
+  expect(draft.compiled.bundle.observations.map(x=>[x.field,x.value])).toEqual([["operating_carrier","SIA"],["scheduled_arrival_utc",t("20:00")],["provider_revised_departure_utc",t("12:15")],["reported_pre_departure_status","Scheduled"]]);
+  expect(draft.compiled.bundle.externalSourceAndContentsReviewReceiptSha256).toBe(h("8"));
+  expect(JSON.stringify(withFeature)).not.toMatch(/SIA|SQ78|Scheduled|privateFeatureDrafts/);
+  await expect(readSigned(actual.pool,{...input,externalContentUseReviewSha256:"bad"})).rejects.toThrow(/CONDITIONAL_FEATURE_REVIEW_SCOPE/);
   for(const [marker,body] of [[h("9"),expectedDecodedBodySha256],[scope.protocolSha256,"bad"]]){
    const rejected=make(marker,body);
    await expect(readSigned(rejected.pool,input)).rejects.toThrow(/SIGNED_SOURCE_MARKER_OR_BODY_BINDING/);

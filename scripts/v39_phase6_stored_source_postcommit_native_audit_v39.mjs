@@ -86,6 +86,13 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
   hold("STALENESS_NOT_BOUND_TO_APPROVED_DAY");
  // Reuse the one protected daily review policy; a SOURCE acquisition
  // approval alone is not a new ML feature-derivation authorization.
+ const conditionalPreFeatureReview=p.conditionalPreFeatureReview;
+ if(conditionalPreFeatureReview!==undefined&&(!conditionalPreFeatureReview||
+    conditionalPreFeatureReview.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||
+    conditionalPreFeatureReview.approved!==true||conditionalPreFeatureReview.rightsSha256!==trust.rightsSha256||
+    !SHA.test(conditionalPreFeatureReview.protocolSha256??"")||!SHA.test(conditionalPreFeatureReview.externalContentUseReviewSha256??"")||
+    Object.keys(conditionalPreFeatureReview).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(",")))
+  hold("CONDITIONAL_FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  const featureReview=p.nativePreFeatureReview;
  if(featureReview!==undefined&&(!featureReview||featureReview.approved!==true||
     !SHA.test(featureReview.externalContentUseReviewSha256??"")||
@@ -97,7 +104,8 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
   selector:{runDayIndex:day,indexRevision:Number(env.P6_PRIVATE_DAY_INDEX_REVISION),
    indexSha256:env.P6_PRIVATE_DAY_INDEX_SHA256,queryDigestSha256:env.P5_SOURCE_CHILD_EXPECTED_QUERY_DIGEST},
   policy:{independentNativeCandidateReadOnlyApproved:true,existingPaidDispatchApproved:false,
-   noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:maxAge,providerContractSha256:p.providerContractSha256}};
+   noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:maxAge,providerContractSha256:p.providerContractSha256,
+   ...(conditionalPreFeatureReview?{conditionalPreFeatureReview:Object.freeze({...conditionalPreFeatureReview})}:{})}};
 }
 /** A newer current revision may have added PRE/POST entries. Do not accept
  * removal/replacement of the exact original signed query. Original and
