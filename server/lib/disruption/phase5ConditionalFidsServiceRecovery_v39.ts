@@ -20,7 +20,8 @@ type Scope={protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
 type Candidate={serviceKey:string;sourceIndex:number;selectedReportedDepartureUtc:string;ownCutoffUtc:string;
  originEvidence:"EXPLICIT_REPORTED_ORIGIN"|"REQUESTED_DEPARTURE_CONTEXT_ONLY";commercialScope:"EXPLICIT_CORE_FLAGS"|"QUERY_FILTERED_SCOPE_UNKNOWN";
  providerNativeIdPresent:boolean;sourceResponseSha256:string;sourceQueryId:string;
- operatorFlightNumber:string;originIcao:string;destinationIcao:string;runDayIndex:number};
+ operatorFlightNumber:string;originIcao:string;destinationIcao:string;runDayIndex:number;
+ stage14ConditionalFlightInstanceId:string|null};
 export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Scope){
  if(!s||s.ownerProspectiveSeparateTierApproved!==true||![s.protocolSha256,s.manifestSha256,s.sourceResponseSha256].every(x=>hash.test(x??""))||
   !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.sourceQueryId??"")||!ICAO.test(s.airportIcao??"")||
@@ -58,7 +59,14 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
     originEvidence:origin===s.airportIcao?"EXPLICIT_REPORTED_ORIGIN":"REQUESTED_DEPARTURE_CONTEXT_ONLY",
     commercialScope:f.isCargo===false&&f.isPrivate===false&&f.isCharter===false?"EXPLICIT_CORE_FLAGS":"QUERY_FILTERED_SCOPE_UNKNOWN",
     providerNativeIdPresent:providerId!==null,sourceResponseSha256:s.sourceResponseSha256,sourceQueryId:s.sourceQueryId,
-    operatorFlightNumber:number[1]+(number[2].replace(/^0+/,"")||"0"),originIcao:s.airportIcao,destinationIcao:dest,runDayIndex:s.runDayIndex}});
+    operatorFlightNumber:number[1]+(number[2].replace(/^0+/,"")||"0"),originIcao:s.airportIcao,destinationIcao:dest,runDayIndex:s.runDayIndex,
+    // Existing Stage14 conditional key; only valid on a prospectively marked
+    // original. This is a proposed match, not proof of DB member custody.
+    stage14ConditionalFlightInstanceId:providerId===null&&
+      !(f.isCargo===false&&f.isPrivate===false&&f.isCharter===false)&&
+      q.phase5ConditionalService?.protocolSha256===s.protocolSha256&&
+      q.phase5ConditionalService?.cohortStartUtc===s.frozenStudyStartUtc?
+      "leg:g5a:"+sha(JSON.stringify({protocol:"G5A_CONDITIONAL_IDLESS_OPERATOR_V2",frozenStudyStartUtc:s.frozenStudyStartUtc,carrier:number[1],flightNumber:number[2].replace(/^0+/,"")||"0",origin:s.airportIcao,destination:dest})):null}});
  }
  const freq=new Map<string,number>();
  for(const {candidate} of provisional)freq.set(candidate.serviceKey,(freq.get(candidate.serviceKey)??0)+1);
