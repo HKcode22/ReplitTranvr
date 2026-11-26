@@ -51,6 +51,30 @@ function endpoint(raw,login,source,direct){
     (direct&&u.hostname.split(".")[0].endsWith("-pooler")))hold("RESTRICTED_TLS_ENDPOINT_OR_LOGIN_DRIFT");
  return raw;
 }
+/** The conditional publisher must have its separately pinned public
+ * reviewer identity before SOURCE. Uncommissioned native-only policy
+ * keeps the original behavior; never defer a known missing pin until
+ * after a paid acquisition. */
+export function admitP6ConditionalT24Reviewer(env,p,t){
+ const scope=deriveP6ConditionalT24Scope(p),d=p.conditionalT24PermitReview,v=p.nativeLaterReview;
+ if(!scope){if(d!==undefined)hold("CONDITIONAL_T24_DELEGATION_WITHOUT_REGISTRY_SCOPE");return null;}
+ const fp=env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFp=env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
+  encoded=env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64??"";
+ const forbidden=[v.laterReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256,proofFp];
+ if(!H.test(fp??"")||forbidden.some(k=>!H.test(k??""))||new Set([...forbidden,fp]).size!==5||
+  !encoded||encoded.length>5500||!d||Object.keys(d).sort().join("|")!==["schema","approved","protocolSha256","externalContentUseReviewSha256","reviewerFingerprintSha256","reportedScheduleSemanticsSha256","validFromUtc","validUntilUtc"].sort().join("|")||
+  d.schema!=="v39.phase5.conditional-t24-permit-review-delegation.v1"||d.approved!==true||d.protocolSha256!==scope.protocolSha256||
+  d.externalContentUseReviewSha256!==scope.externalContentUseReviewSha256||d.reviewerFingerprintSha256!==fp||
+  v.nativeT24ReviewApproved!==true||v.independentT24WitnessProtocolReviewed!==true||v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107"||
+  !H.test(d.reportedScheduleSemanticsSha256??"")||d.reportedScheduleSemanticsSha256!==v.selectedTConfig?.semanticsEvidenceSha256||
+  !iso(d.validFromUtc)||!iso(d.validUntilUtc)||d.validFromUtc>=d.validUntilUtc||d.validFromUtc<v.validFromUtc||d.validUntilUtc>v.validUntilUtc)
+  hold("CONDITIONAL_T24_REVIEWER_NOT_READY");
+ const b=Buffer.from(encoded,"base64");
+ if(b.toString("base64")!==encoded||!b.toString("utf8").startsWith("-----BEGIN PUBLIC KEY-----"))hold("CONDITIONAL_T24_REVIEWER_KEY_DRIFT");
+ try{const k=createPublicKey(b);if(k.asymmetricKeyType!=="ed25519"||hash(k.export({type:"spki",format:"der"}))!==fp)hold("CONDITIONAL_T24_REVIEWER_KEY_DRIFT");}
+ catch{hold("CONDITIONAL_T24_REVIEWER_KEY_DRIFT");}
+ return Object.freeze({scope,fp,publicKeyPem:b.toString("utf8"),validFromUtc:d.validFromUtc,validUntilUtc:d.validUntilUtc});
+}
 /** Existing exact source audit checks retained. The extra ROLE/key
  * credentials are limited to this follow-on step, never passed to the
  * original audit's admission or the paid SOURCE child. */
@@ -94,8 +118,8 @@ export function admitP6NativeLaterRuntime(env,read,mode="committed"){
  const preUrl=endpoint(env.P5_V39_PRE_DATABASE_URL,preLogin,source,false);
  const laterReviewerKey=key(env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,v.laterReviewerFingerprintSha256);
  const dayReviewerKey=key(env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,t.dayReviewerFingerprintSha256);
- const dayPolicyBytes=Buffer.from(JSON.stringify(day));
- return {auditEnv,c,v,custody,policyBytes,publisherUrl,preUrl,
+ const dayPolicyBytes=Buffer.from(JSON.stringify(day)),conditionalT24Reviewer=admitP6ConditionalT24Reviewer(env,p,t);
+ return {auditEnv,c,v,custody,policyBytes,publisherUrl,preUrl,conditionalT24Reviewer,
   authority:{trust:t,policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,
    independentDelegatedNativeReviewApproved:true,noProviderCredentialsInReviewer:true,laterReviewerKey},
   appendApproval:{policyBytes:dayPolicyBytes,expectedPolicySha256:hash(dayPolicyBytes),dayReviewerKey,
@@ -153,6 +177,7 @@ export async function preflightP6NativeLaterRuntime(env){
   for(const p of [x.v,x.v.dayAppendPolicy,{validFromUtc:x.custody.policyValidFromUtc,validUntilUtc:x.custody.policyValidUntilUtc}]){
    if(Date.parse(clock)>=Date.parse(p.validUntilUtc)||(!actorOnly&&Date.parse(clock)<Date.parse(p.validFromUtc)))hold("NATIVE_POLICY_CLOCK");
   }
+  if(x.conditionalT24Reviewer&&(clock>=x.conditionalT24Reviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalT24Reviewer.validFromUtc)))hold("CONDITIONAL_T24_REVIEWER_CLOCK");
   checkPhase7PrePolicyStructure(policy,clock);
   checkPhase7NativePrePolicySupport(policy);
   const reader=await opened.preflight();
@@ -242,7 +267,7 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
    ...(actual.conditionalSourceReview?{conditionalSourceReview:actual.conditionalSourceReview}:{}),
    nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
   const nativeNeeded=Boolean(handoff.reviewEntryCount&&features?.matchedCount&&(handoff.horizon!=="T-24h"||v.nativeT24ReviewApproved===true));
-  const policy=JSON.parse(x.policyBytes.toString("utf8")),conditionalT24Scope=deriveP6ConditionalT24Scope(policy);
+  const conditionalT24Scope=x.conditionalT24Reviewer?.scope;
   const conditionalNeeded=Boolean(handoff.horizon==="T-24h"&&conditionalT24Scope&&actual.privateConditionalSourceReview?.privateFeatureDrafts.length);
   if(!nativeNeeded&&!conditionalNeeded)return {...report,sourceAuditOnly:true};
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
@@ -274,13 +299,8 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
     maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,
     t24ReviewerPublicKeyPem:createPublicKey(x.authority.laterReviewerKey).export({type:"spki",format:"pem"}),...(conditionalT24Scope?{conditionalT24Scope}:{})};
    if(conditionalNeeded){
-    const scope=actual.privateConditionalSourceScope,fp=env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256;
-    const encoded=env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64??"",keyBytes=Buffer.from(encoded,"base64");
-    if(!H.test(fp??"")||forbidden.includes(fp)||keyBytes.toString("base64")!==encoded||
-      !keyBytes.toString("utf8").startsWith("-----BEGIN PUBLIC KEY-----")||
-      typeof phase7ProofPort.readConditionalT24Review!=="function"||!scope)hold("CONDITIONAL_T24_ISSUER_NOT_COMMISSIONED");
-    const key=createPublicKey(keyBytes);
-    if(key.asymmetricKeyType!=="ed25519"||hash(key.export({type:"spki",format:"der"}))!==fp)hold("CONDITIONAL_T24_REVIEWER_KEY_DRIFT");
+    const scope=actual.privateConditionalSourceScope,{fp,publicKeyPem}=x.conditionalT24Reviewer;
+    if(typeof phase7ProofPort.readConditionalT24Review!=="function"||!scope)hold("CONDITIONAL_T24_ISSUER_NOT_COMMISSIONED");
     readP5ConditionalT24ReviewDelegation(x.policyBytes,x.authority.expectedPolicySha256,scope,t.reviewedCodeSha,fp);
     const raw=new pg.Pool({connectionString:x.c.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p6_conditional_t24_exact_review_read"});
     const pool=makeP5Stage28DedicatedRolePool(raw,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",forbiddenApplicationLogin:"phase5_runtime_application_login"});
@@ -295,7 +315,7 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
       report.nativeReadback.conditionalRegistryPublicationAttempted=true;
       const reviewWire=await phase7ProofPort.readConditionalT24Review({anchor,flightInstanceIds:ids});
       const attached=await resolveP7ConditionalPublicationPage({pool,scope,requestedFlightIds:ids,reviewWire,
-       reviewAuthority:{expectedReviewerFingerprintSha256:fp,reviewerPublicKeyPem:keyBytes.toString("utf8"),expectedReviewedCodeSha:t.reviewedCodeSha,forbiddenSignerFingerprints:forbidden},
+       reviewAuthority:{expectedReviewerFingerprintSha256:fp,reviewerPublicKeyPem:publicKeyPem,expectedReviewedCodeSha:t.reviewedCodeSha,forbiddenSignerFingerprints:forbidden},
        env,port:phase7ProofPort,readClock:async()=>new Date((await reader.query("SELECT clock_timestamp() AS at")).rows[0].at).toISOString(),forbiddenSignerFingerprints:forbidden});
       const fresh=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});
       const unsigned=buildP6ConditionalT24RegistryProposal({trust,current:fresh,sourceRegistryPath:handoff.privateSourceRegistryPath,

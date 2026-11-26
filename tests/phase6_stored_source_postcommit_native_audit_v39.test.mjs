@@ -68,7 +68,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -176,4 +176,21 @@ test("T050 selects still-live unindexed conditional T24 independently of native 
  assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,{...current,privateExistingFlightIds:new Set([ids[0],ids[2]])}),[]);
  assert.throws(()=>selectP6ConditionalT24ReviewPage(actual,{...current,runDayIndex:3}),/CONDITIONAL_T24_PAGE_SCOPE/);
  assert.throws(()=>selectP6ConditionalT24ReviewPage({...actual,privateConditionalSourceReview:{...actual.privateConditionalSourceReview,privateFeatureDrafts:[{flightInstanceId:ids[0]},{flightInstanceId:ids[0]}]}},current),/CONDITIONAL_T24_PAGE_SCOPE/);
+});
+
+test("T051 pre-SOURCE conditional T24 readiness requires an explicit distinct public verifier and scoped delegation",()=>{
+ const f=runtimeFixture(),native=admitP6NativeLaterRuntime(f.withPolicy(),()=>plan),t=native.c.trust;
+ assert.equal(admitP6ConditionalT24Reviewer({},f.p,t),null);
+ const key=generateKeyPairSync("ed25519"),fp=sha(key.publicKey.export({type:"spki",format:"der"})),proof=sha(Buffer.from("synthetic separate proof"));
+ const scope={protocolSha256:sha(Buffer.from("protocol")),externalContentUseReviewSha256:sha(Buffer.from("conditional content"))};
+ const p={...f.p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:t.rightsSha256,...scope},
+  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",approved:true,...scope,reviewerFingerprintSha256:fp,
+   reportedScheduleSemanticsSha256:hash,validFromUtc:f.p.nativeLaterReview.validFromUtc,validUntilUtc:f.p.nativeLaterReview.validUntilUtc},
+  nativeLaterReview:{...f.p.nativeLaterReview,conditionalT24Scope:scope,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
+   reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",selectedTConfig:{...f.p.nativeLaterReview.selectedTConfig,semanticsEvidenceSha256:hash}}};
+ const e={P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:Buffer.from(key.publicKey.export({type:"spki",format:"pem"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:proof};
+ assert.deepEqual(admitP6ConditionalT24Reviewer(e,p,t).scope,scope);
+ assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:""},p,t),/NOT_READY/);
+ assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:fp},p,t),/NOT_READY/);
+ assert.throws(()=>admitP6ConditionalT24Reviewer(e,{...p,conditionalT24PermitReview:undefined},t),/NOT_READY/);
 });

@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -129,6 +129,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I053 | Exact 9dcdec5a CI passed; production pending | Independent restricted SOURCE lane conditional T24 permit-review issuer under explicit prospective protected delegation; exact signed page, no native claim or later missingness assumption. | F027 |
 | I054 | Staged; exact CI required | Existing protected Unix lane socket issues bounded conditional T24 signed review page from authenticated SOURCE instructions and actual restricted reread; distinct request from permit proof, exact member replay fence. | F027 |
 | I055 | Staged; exact CI required | Protected actual SOURCE T24 follow-on now consumes independent review and proof ports, fresh signed registry scope, separate delegated signature and existing atomic publish/readback even if native count is zero; source expiry bounds conditional custody. | F027 |
+| I056 | Staged guard; workflow projection outstanding | Validate distinct conditional public reviewer and explicit prospective delegation in the pre-SOURCE readiness and actual publisher admission; missing pin fails before acquisition. | F027 |
 
 ## Completion components (not gates)
 
@@ -215,6 +216,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T048 | Exact 9dcdec5a CI passed; production pending | Independently reread prospectively marked T24 original, sign exact artifact and consume into conditional permit/witness, absent delegation and signer alias refused before SQL. | F027 | I053 | C001, C002, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 | T049 | New regression; exact CI pending | Real local socket transports exact T24 anchor/member set, only lane accepts, duplicate/cross-run/changed-proof replay rejected. Fixture transport, no live production signer. | F027 | I054 | C001, C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 | T050 | New regression; exact CI pending | Conditional T24 bounded selection excludes indexed, too-late and outside-window members, refuses duplicate or wrong-day scope. Actual restricted DB path remains required. | F027 | I055 | C001, C002, C005 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
+| T051 | New regression; exact CI pending | Conditional readiness verifies public key and scoped policy; missing key, alias and missing delegation hold; native-only unchanged. | F027 | I056 | C001, C002, C006 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -286,3 +288,7 @@ Exact 9dcdec5a 20/20 green, full offline 45819757530 and focused diagnostics 458
 ## Nov26 continuation — I055/T050
 
 Connect actual SOURCE T24 conditional runtime to I054 protected lane review, I051 proof resolver, I052 registry publisher and independent readback, including native-zero path. Conditional custody expires no later than fresh exact SOURCE expiry. Native unchanged unless separate conditional policy commissioned. No actual production publication or owner policy change. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_T24_RUNTIME_PUBLICATION.md).
+
+## Nov26 continuation — I056/T051
+
+I054 focused diagnostics 45825169246 and actual-role admission 45825168694 passed; 19/20 workflows successful, full 45825169421 pending. I055 diagnostics 45825389420 passed. Actual SOURCE workflow inspection showed the existing lane public verification pins absent from both pre-SOURCE publisher readiness and postcommit publication. I056 validates those pins before paid acquisition if separately commissioned. Workflow projection change was not applied; it remains an explicit release blocker and the guard must hold until it is reviewed. No protected configuration was changed. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_T24_PUBLIC_VERIFIER_PREFLIGHT.md).
