@@ -50,7 +50,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F036 | Implemented staged; exact relay CI pending | Four ROLLING_ROOT cancellations (45727773405, 45717616827, 45713496477, 45709128629), empty job lists; no runner execution or paid call proven. Concurrency replacement is plausible, not proven cause. | I035 |
 | F037 | Code-discovered deadline risk; implemented staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. | I036 |
 
-| F038 | Code-discovered concurrency risk; staged | Conditional independent proof resolver used the original child index as current, although another valid PRE/POST append can advance it. Never substitute a changed SOURCE or roll back. | I037 |
+| F038 | Code-discovered concurrency risk; staged | Conditional independent proof resolver used the original child index as current, although another valid PRE/POST append can advance it. Never substitute a changed SOURCE or roll back. | I037, I042 |
 
 ## Implementations
 
@@ -106,6 +106,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I040 | Implemented staged; CI pending | Bounded 96-member conditional permit preparation page validates every independent review before SQL and reads actual SOURCE original/member population once, reuses existing Stage14 preflight; rejects duplicates/absent member and no signing. | F027 |
 
 | I041 | Implemented staged; exact CI pending | Distinct conditional T24/witnessed later/standalone later packet envelopes from actual prepared permit, existing independent Phase7 proof attachment, exact C+D roster and worker-side protected scope validation. Existing private registry signing/consumer routing not yet fully connected. | F027 |
+
+| I042 | Implemented staged; exact CI pending | Current SOURCE snapshot resolves signed revision and hydrates in a bounded read-only retry only on explicit concurrent append race, always anchored to immutable child. Native audit/pending and conditional proof use same snapshot. | F038 |
 
 ## Completion components (not gates)
 
@@ -174,6 +176,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T035 | New regression; exact CI pending | Conditional permit page validates inputs before SQL, one actual original read, no duplicate permit or partial signing, missing member held | F027 | I040 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 | T036 | New regression; exact CI pending | Actual prepared conditional permit -> real fixture Ed25519 independent proof -> immutable packet -> existing roster; reject native promotion, missing policy, invalid signature or synthetic preview | F027 | I041 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+
+| T037 | New regression; exact CI pending | Concurrent append after CURRENT_DAY read retries only stale current revision up to three times; original anchor preserved, changed query/expiry/integrity errors never retried | F038 | I042 | C002, C009 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
 ## Scientific and retention authorities
 

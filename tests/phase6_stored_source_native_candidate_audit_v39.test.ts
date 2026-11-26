@@ -1,6 +1,6 @@
 import {createHash,generateKeyPairSync,createPublicKey,sign} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,verifyP6ConditionalSourceInstructionProof,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,readP6CurrentCommittedSourceSnapshot,verifyP6ConditionalSourceInstructionProof,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -518,5 +518,48 @@ describe("T033 exact signed SOURCE instruction transport (no raw or reader crede
   expect(()=>run(proof,{...args,observedDbClockUtc:"2027-02-10T08:00:00.000Z"})).toThrow("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
   expect(()=>run(proof,{...args,expectedSourceRunId:"654321"})).toThrow("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
   expect(()=>run(proof,{...args,permit:{...args.permit,externalNativeTPhysicalLegAndSourceUseReviewed:true}})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+ });
+});
+
+describe("T037 concurrent append while authenticating current SOURCE snapshot",()=>{
+ const stale="HOLD_P6_DAY_EPOCH_FULL_REGISTRY_STALE_OR_MISSING_DAY_REVISION_FOR_PLANNING";
+ function setup(){
+  const f=fixture(),old=f.index.privateParsedIndex.entries[0],reg=f.index.getFrozen(old.filePath);
+  const make=(revision:number,changed=false)=>{
+   const b=changed?Buffer.from(JSON.stringify({...JSON.parse(reg.toString()),entries:[{...JSON.parse(reg.toString()).entries[0],expectedPacketSha256:H("8")}]})):reg;
+   const parsed={...f.index.privateParsedIndex,revision,previousIndexSha256:f.selector.indexSha256,entries:[{...old,fileSha256:h(b)}]};
+   const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexRevision:revision,indexSha256:h(raw)};
+   const index:any={redactedSummary:{...f.index.redactedSummary,indexRevision:revision,indexSha256:h(raw)}};
+   Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},getFrozen:{value:()=>b}});
+   return {index,selector};
+  };
+  const second=make(2),third=make(3),changed=make(3,true);
+  const state={originalReads:0,currentReads:0,planningHydrations:0};
+  const run=(errors:string[],last=third)=>readP6CurrentCommittedSourceSnapshot({readerClient:{},trust:f.trust,selector:f.selector},{
+   read:async (arg:any)=>{
+    const isOriginal=arg.selector.kind==="EXACT_DAY";
+    const value=isOriginal?{index:f.index,selector:f.selector}:++state.currentReads===1?second:last;
+    if(isOriginal){state.originalReads++;expect(arg.selector.indexSha256).toBe(f.selector.indexSha256)}
+    return {pins:{expectedIndexRevision:value.selector.indexRevision,expectedIndexSha256:value.selector.indexSha256},wire:value.index};
+   },
+   hydrate:async(arg:any)=>{
+    if(arg.scope.requireCurrentRevisionForPlanning){const n=state.planningHydrations++;if(errors[n])throw Error(errors[n]);}
+    return arg.wire;
+   }
+  } as any);
+  return {f,second,third,changed,state,run};
+ }
+ it("retries only explicit current-revision race, keeps immutable original anchor and checks unchanged query",async()=>{
+  const x=setup(),r=await x.run([stale]);
+  expect(r.selector).toEqual(x.third.selector);
+  expect(r.selected.q.expectedPacketSha256).toBe(h(x.f.receipt.privateBytes));
+  expect(x.state).toEqual({originalReads:1,currentReads:2,planningHydrations:2});
+ });
+ it("never retries integrity or expired-source errors; three stale reads are the strict bound",async()=>{
+  for(const e of ["HOLD_P6_DAY_EPOCH_FULL_REGISTRY_REGISTRY_SHA_DAY_KIND_RIGHTS_OR_RETENTION_DRIFT","HOLD_P6_DAY_EPOCH_FULL_REGISTRY_DAY_INDEX_EXPIRED_BETWEEN_READS"]){
+   const x=setup();await expect(x.run([e])).rejects.toThrow(e);expect(x.state.currentReads).toBe(1);
+  }
+  const x=setup();await expect(x.run([stale,stale,stale])).rejects.toThrow(stale);expect(x.state.currentReads).toBe(3);
+  const y=setup();await expect(y.run([stale],y.changed)).rejects.toThrow("ORIGINAL_SIGNED_QUERY_CHANGED");
  });
 });

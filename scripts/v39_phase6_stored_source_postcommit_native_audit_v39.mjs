@@ -166,7 +166,9 @@ export async function runP6PostcommitNativeAudit(env){
   await reader.connect();await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   const pool=makeP5Stage28DedicatedRolePool(source,{group:"source",reviewedDedicatedLogin:srcLogin,
    forbiddenApplicationLogin:"phase5_runtime_application_login"});
-  const selector=await selectP6CurrentPostcommitAuditSelector({readerClient:reader,trust:c.trust,selector:c.selector});
+  // Keep the original immutable admitted child as the anchor; the actual
+  // audit and pending read each authenticate a coherent latest snapshot.
+  const selector=c.selector;
   const a=await auditP6StoredCommittedNativeSource({readerClient:reader,sourcePool:pool,trust:c.trust,selector,policy:c.policy});
   const report=redactP6PostcommitNativeAudit(a,c);
   const pending=a.horizon==="T-24h"?null:await readP6PendingNativeLaterReview({readerClient:reader,trust:c.trust,a,selector,policy:c.policy});
