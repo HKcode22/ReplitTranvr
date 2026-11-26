@@ -37,3 +37,16 @@ describe("separate prospective signed schedule-revision pairing",()=>{
   expect(()=>pair(f.trust,pre,{...post,bodyBase64:f.wire({...f.post,scheduledDepartureUtc:t("13:00")},f.b.privateKey).bodyBase64},t("14:01"))).toThrow(/SIGNATURE/);
  });
 });
+describe("T075 conditional service comparison stays distinct from physical labels",()=>{
+ it.each([["12:00",0,0],["11:44",-16,1],["12:14",14,0]] as const)("observed %s revision is not a physical delay", (scheduled,minutes,binary)=>{
+  const f=fixture(),p={...f.post,scheduledDepartureUtc:t(scheduled)};
+  const out=pair(f.trust,f.wire(f.pre,f.a.privateKey),f.wire(p,f.b.privateKey),t("14:01"));
+  expect(out.privateCandidate).toMatchObject({scheduledRevisionMinutes:minutes,primaryBinaryOutcome:binary,physicalDepartureDelayLabel:false});
+  expect(out.physicalGateOutCertified).toBe(false);
+  expect(out.trainingPublicationAuthorized).toBe(false);
+ });
+ it("no distinct POST receipt cannot become a zero schedule revision",()=>{
+  const f=fixture(),pre=f.wire(f.pre,f.a.privateKey);
+  expect(()=>pair(f.trust,pre,f.wire({...f.post,sourceResponseSha256:f.pre.sourceResponseSha256},f.b.privateKey),t("14:01"))).toThrow(/PAIR_BINDING/);
+ });
+});

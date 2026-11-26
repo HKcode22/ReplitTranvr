@@ -66,3 +66,6 @@ Read [the permanent recovery register](data-collection/phase6/RECOVERY_REGISTER.
 
 
 **Nov26 14:54 PST continuity:** Actual 45907191466 primary expiry independently read back two committed original clears; not backup/PITR deletion or a paid receipt. SOURCE 45907093218 and both private enrollment jobs no-due. I062/T057 extends redacted no-due diagnostics. Keep existing #977, no repeated migration or route toggles; Day3 T6 earliest prearm 00:15Z Nov27 (16:15 PST Nov26), first planned 01:45Z. Verify due-time evidence separately.
+
+
+**Amendment E candidate parity:** Never treat the frozen PRE original or scheduled gate-out evidence digest as the later independent actual observation. I081/T075 on #977 aligns candidate evaluation with the distinct-observation Packet B target rule; an observed zero requires real distinct evidence, missing stays null. Conditional schedule revision remains separately scoped and cannot certify physical gate-out or authorize training. F029/C003/C004 remain open until actual source and lawful pairing verified.
