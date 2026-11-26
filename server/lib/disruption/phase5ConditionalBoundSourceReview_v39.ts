@@ -88,6 +88,7 @@ export function matchP5ConditionalStage14Members(
   matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
    expectedSourcePopulationQueryId:s.expectedPopulationQueryId,expectedSourceResponseSha256:s.expectedResponseSha256,
    identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,reviewedProtocolAmendmentSha256:s.protocolSha256,
+   requireProspectiveConditionalSourceMarker:true as const,
    reviewedStableServiceKeySha256:id.slice("leg:g5a:".length),expectedOperatorFlightNumber:candidate.operatorFlightNumber,
    expectedDestinationIcao:candidate.destinationIcao,selectedTNativeUtc:candidate.selectedReportedDepartureUtc,
    predictionCutoffUtc:candidate.ownCutoffUtc}));
