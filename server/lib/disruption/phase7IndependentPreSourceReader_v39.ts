@@ -6,6 +6,7 @@
  */
 import {compileP5EOneBoundOriginalReadonly,compileP5EBoundOriginalBatchReadonly,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {selectP5EStage14BoundRouteFeatures} from "./phase5AmendmentEStage14BoundRouteFeatures_v39";
+import {readP5ExactConditionalPermitPage,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import {selectP5EReviewedSupplementalFeatures,type P5EReviewedSupplementalBundle} from "./phase5AmendmentESignedSupplementalFeatures_v39";
 import {phase7SelectedFeatureDigest} from "./phase7SignedPreFieldProof_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
@@ -86,4 +87,22 @@ export async function readP7ExactSelectedFeaturesPage(pool:P5EReadOnlyPgPool,per
   actualSourceReadbacks.add(x);return x;
  });
  return Object.freeze(out);
+}
+
+/** Explicit separate conditional proof read, staged only. Both independent
+ * authorities must authenticate the same prospective conditional policy and
+ * signed SOURCE scope outside this function. Never route a conditional
+ * permit into the native compiler or infer policy from a permit. No key,
+ * Packet B release, producer publication or physical-leg claim is made. */
+export async function readP7ExactConditionalSelectedFeaturesPage(pool:P5EReadOnlyPgPool,permits:readonly P5Stage14SingleFlightPrePermit[],scope:P5SignedConditionalFeatureReadScope){
+ const a=await readP5ExactConditionalPermitPage(pool,scope,permits),reads=a.privatePermitReadbacks;
+ if(a.conditionalFeatureReview.providerCalls!==0||a.conditionalFeatureReview.databaseWrites!==0||
+    !reads||reads.length!==permits.length||Object.getOwnPropertyDescriptor(a,"privatePermitReadbacks")?.enumerable!==false)
+  return hold("EXACT_CONDITIONAL_PAGE_SOURCE_READBACK");
+ return Object.freeze(reads.map((v,i)=>{
+  const p=permits[i];
+  if(v.flightInstanceId!==p.flightInstanceId)return hold("EXACT_CONDITIONAL_PAGE_ORDER");
+  const x=recomputeP7ExactSelectedFeatures(p,v.bundle,v,scope.externalContentUseReviewSha256);
+  actualSourceReadbacks.add(x);return x;
+ }));
 }

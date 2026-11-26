@@ -1,6 +1,8 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
+import {readP7ExactConditionalSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
+import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
 function fixture(){
@@ -143,6 +145,38 @@ describe("source-bound conditional service preparation",()=>{
   expect(updated.memberReview.privateReviewProposals[0].observedDbClockUtc).toBe(t("05:44"));
   expect(updated.privateFeatureDrafts).toHaveLength(1);
   expect(JSON.stringify(withFeature)).not.toMatch(/SIA|SQ78|Scheduled|privateFeatureDrafts/);
+  // Exact independent conditional readback uses the same original and actual
+  // restricted reader, not a publisher's self-declared feature values.
+  const p={manifestSha256:scope.source.manifestSha256,queryDigestSha256:scope.source.queryDigestSha256,
+   expectedSourcePopulationQueryId:scope.expectedPopulationQueryId,expectedSourceResponseSha256:scope.expectedResponseSha256,
+   runDayIndex:2,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",flightInstanceId:id,expectedGithubSourceRunId:"123456",
+   expectedReviewedReleaseSha256:scope.source.reviewedReleaseSha256,expectedReviewedSourceRightsSha256:scope.source.rightsReviewSha256,
+   expectedProviderContractSha256:scope.source.providerContractSha256,expectedEarlyDrawSha256:scope.source.earlyDrawSha256,
+   selectedTNativeUtc:t("12:00"),maxPopulationStalenessSeconds:3600,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",
+   requireProspectiveConditionalSourceMarker:true,externalConditionalScheduleSourceAndUseReviewed:true,
+   reviewedProtocolAmendmentSha256:scope.protocolSha256,reviewedStableServiceKeySha256:id.slice(8),
+   expectedOperatorFlightNumber:"SQ78",expectedDestinationIcao:"YSSY",reviewedSupplementalFeatureBundle:draft.compiled.bundle
+  } as P5Stage14SingleFlightPrePermit;
+  const proofScope={...input,externalContentUseReviewSha256:h("8")};
+  const proofRead=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const selected=await readP7ExactConditionalSelectedFeaturesPage(proofRead.pool,[p],proofScope);
+  expect(selected).toHaveLength(1);
+  expect(()=>requireP7ActualSourceReadback(selected[0])).not.toThrow();
+  expect(selected[0].privateSelectedFeatures.filter(x=>x.value!==null&&x.value!==undefined).map(x=>x.featureName))
+   .toEqual(expect.arrayContaining(["origin_icao","destination_icao","operating_carrier","scheduled_arrival_utc","provider_revised_departure_utc","reported_pre_departure_status"]));
+  expect(JSON.stringify(selected)).not.toMatch(/SIA|SQ78|Scheduled|privateSelectedFeatures/);
+  expect(proofRead.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  for(const patch of [{identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"},{reviewedProtocolAmendmentSha256:h("9")},{queryDigestSha256:h("9")},{requireProspectiveConditionalSourceMarker:undefined}]){
+   const rejected=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+   await expect(readP7ExactConditionalSelectedFeaturesPage(rejected.pool,[{...p,...patch} as P5Stage14SingleFlightPrePermit],proofScope)).rejects.toThrow(/EXACT_CONDITIONAL_PERMIT_PAGE_BINDING/);
+   expect(rejected.queries).toHaveLength(0);
+  }
+  const changed=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  await expect(readP7ExactConditionalSelectedFeaturesPage(changed.pool,[{...p,expectedDestinationIcao:"OMAA"}],proofScope)).rejects.toThrow(/EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE/);
+  const lateProof=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m],[t("05:04"),t("05:04"),t("05:04"),t("05:45")]);
+  await expect(readP7ExactConditionalSelectedFeaturesPage(lateProof.pool,[p],proofScope)).rejects.toThrow(/EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE/);
+  const omitted={...draft.compiled.bundle,observations:[],observationsSha256:createHash("sha256").update("[]").digest("hex")};
+  await expect(readP7ExactConditionalSelectedFeaturesPage(make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]).pool,[{...p,reviewedSupplementalFeatureBundle:omitted}],proofScope)).rejects.toThrow(/FIDS_FEATURE_DRIFT/);
   await expect(readSigned(actual.pool,{...input,externalContentUseReviewSha256:"bad"})).rejects.toThrow(/CONDITIONAL_FEATURE_REVIEW_SCOPE/);
   for(const [marker,body] of [[h("9"),expectedDecodedBodySha256],[scope.protocolSha256,"bad"]]){
    const rejected=make(marker,body);

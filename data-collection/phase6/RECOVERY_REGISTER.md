@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
-| F027 | Open | Native-only feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025 |
+| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -76,13 +76,14 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 | 
 | I027 | Implemented; exact CI pending | Scope primary identifier parsing to three canonical sections; reject duplicates, malformed rows, wrong family and missing sections; regress repeated crosswalk IDs. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/4d00959c389dfd08fafc0bf2050525ed75c34837) | F032 |
 | I028 | Implemented; CI pending | Reconcile private candidate report, member proposals and draft counts to final database clock; reject stale direct member match, preserve cutoff and source custody, add positive and exact-boundary regression. | F033 |
+| I029 | Implemented; CI pending | Explicit separately scoped independent conditional exact permit-page read, using existing authentic marked-source reader, Stage14 checks and Phase7 feature drift recomputation; test wrong scope, omitted features, late and positive paths. Not wired to active signer or deployed. | F027 |
 
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
 | C001 | Open | Prospective conditional signed PRE issuance and private producer-consumer admission | F005, F018, F027 | I005, I014, I016 |
-| C002 | Partial | Conditional feature drafts and explicit UTC parity implemented; independent Packet A proof and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028 |
+| C002 | Partial | Conditional feature drafts, UTC parity and separate exact independent readback staged; authenticated authority/issuer integration and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |

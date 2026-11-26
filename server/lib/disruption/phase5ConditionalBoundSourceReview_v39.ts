@@ -6,7 +6,7 @@
 import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
 import {buildP5EAlreadyMatchedMovementSupplement} from "./phase5AmendmentEFidsOriginalFeatureCompiler_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
-import {P5_STAGE14_BOUND_SOURCE_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
+import {P5_STAGE14_BOUND_SOURCE_SQL,verifyP5Stage14SourceBindingForIndependentRead,type P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_E_BATCH_ORIGINAL_SQL,P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,type P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
 type ReviewScope={
@@ -124,7 +124,41 @@ export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPoo
  if(!s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc))hold("SIGNED_SOURCE_WINDOW_REQUIRED");
  return readBound(pool,s,true);
 }
-async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean){
+export type P5SignedConditionalFeatureReadScope=Omit<ReviewScope,"expectedDecodedBodySha256"|"externalContentUseReviewSha256">&{
+ expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string;externalContentUseReviewSha256:string;
+};
+type P5ConditionalPermitReadback={flightInstanceId:string;bundle:ReturnType<typeof buildP5EAlreadyMatchedMovementSupplement>["bundle"];
+ normalizedMember:Readonly<Record<string,unknown>>;observedDbClockUtc:string;sourceExpiresAtUtc:string};
+/** Offline/staged proof-reader seam. Caller must independently authenticate
+ * the separate prospective SOURCE/feature policy and the exact signed
+ * query packet; permit hashes or metadata alone are not that authority.
+ * No new role, publisher, signing capability or retention release. */
+export async function readP5ExactConditionalPermitPage(pool:P5EReadOnlyPgPool,s:P5SignedConditionalFeatureReadScope,permits:readonly P5Stage14SingleFlightPrePermit[]){
+ const q=s?.source;
+ if(!q||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.externalContentUseReviewSha256??"")||
+   !s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||
+   ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc)||s.minimumReviewLeadSeconds<900||
+   !Array.isArray(permits)||permits.length<1||permits.length>96)hold("EXACT_CONDITIONAL_PERMIT_PAGE_SCOPE");
+ const ids=new Set<string>();
+ for(const p of permits){
+  if(!p||p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.requireProspectiveConditionalSourceMarker!==true||
+    p.externalConditionalScheduleSourceAndUseReviewed!==true||p.externalNativeTPhysicalLegAndSourceUseReviewed!==undefined||
+    p.reviewedProtocolAmendmentSha256!==s.protocolSha256||!SHA.test(p.reviewedStableServiceKeySha256??"")||
+    p.flightInstanceId!=="leg:g5a:"+p.reviewedStableServiceKeySha256||ids.has(p.flightInstanceId)||
+    p.manifestSha256!==q.manifestSha256||p.queryDigestSha256!==q.queryDigestSha256||
+    p.expectedSourcePopulationQueryId!==s.expectedPopulationQueryId||p.expectedSourceResponseSha256!==s.expectedResponseSha256||
+    p.expectedReviewedSourceRightsSha256!==q.rightsReviewSha256||p.expectedProviderContractSha256!==q.providerContractSha256||
+    p.expectedReviewedReleaseSha256!==q.reviewedReleaseSha256||p.expectedEarlyDrawSha256!==q.earlyDrawSha256||
+    p.expectedGithubSourceRunId!==q.expectedSourceGithubRunId||p.runDayIndex!==q.runDayIndex||p.slot!==q.slot||
+    p.horizon!==q.horizon||p.airportIcao!==q.airportIcao||p.maxPopulationStalenessSeconds!==q.maxPopulationStalenessSeconds||
+    p.reviewedSupplementalFeatureBundle?.externalSourceAndContentsReviewReceiptSha256!==s.externalContentUseReviewSha256)
+   hold("EXACT_CONDITIONAL_PERMIT_PAGE_BINDING");
+  ids.add(p.flightInstanceId);
+ }
+ return readBound(pool,s,true,permits);
+}
+async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean,
+ permits?:readonly P5Stage14SingleFlightPrePermit[]){
  if(input.externalContentUseReviewSha256!==undefined&&(!signed||!SHA.test(input.externalContentUseReviewSha256)))hold("CONDITIONAL_FEATURE_REVIEW_SCOPE");
  const c=await pool.connect();let began=false;
  try{
@@ -181,7 +215,9 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   if(s.externalContentUseReviewSha256){
    const p=originals[0].raw_payload as Record<string,any>;
    const byId=new Map(finalReport.privateCandidates.map(x=>[x.stage14ConditionalFlightInstanceId,x]));
+   const selectedIds=permits?new Set(permits.map(x=>x.flightInstanceId)):null;
    for(const m of memberReview.privateReviewProposals){
+    if(selectedIds&&!selectedIds.has(m.flightInstanceId))continue;
     const candidate=byId.get(m.flightInstanceId);
     if(!candidate||!Number.isSafeInteger(candidate.sourceIndex)||candidate.sourceIndex<0||candidate.sourceIndex>=p.departures.length)return hold("CONDITIONAL_FEATURE_MATCH_DRIFT");
     const compiled=buildP5EAlreadyMatchedMovementSupplement({flightInstanceId:m.flightInstanceId,populationQueryId:m.expectedSourcePopulationQueryId,
@@ -207,12 +243,33 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
    matchP5ConditionalStage14Members(s,liveReport,members,Number(o.normalized_members_count),endClock,stamp(o.source_available));
   const liveIds=new Set(liveMemberReview.privateReviewProposals.map(m=>m.flightInstanceId));
   const liveDrafts=featureDrafts.filter(x=>liveIds.has(x.flightInstanceId));
+  let privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null=null;
+  if(permits){
+   const byDraft=new Map(liveDrafts.map(x=>[x.flightInstanceId,x]));
+   const byProposal=new Map(liveMemberReview.privateReviewProposals.map(x=>[x.flightInstanceId,x]));
+   const byMember=new Map(members.map(x=>[String(x.population_member_id),x]));
+   privatePermitReadbacks=Object.freeze(permits.map(p=>{
+    const proposal=byProposal.get(p.flightInstanceId),draft=byDraft.get(p.flightInstanceId);
+    if(!proposal||!draft||proposal.expectedOperatorFlightNumber!==p.expectedOperatorFlightNumber||
+     proposal.expectedDestinationIcao!==p.expectedDestinationIcao||proposal.selectedTNativeUtc!==p.selectedTNativeUtc)
+     return hold("EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE");
+    const member=byMember.get(proposal.populationMemberId);
+    if(!member)return hold("EXACT_CONDITIONAL_PERMIT_MEMBER_NO_LONGER_ELIGIBLE");
+    const v=verifyP5Stage14SourceBindingForIndependentRead(p,o,[member],new Date(endMs));
+    if(v.cutoffUtc!==proposal.predictionCutoffUtc||ms(v.sourceExpiresAtUtc)!==ms(o.source_expires_at_utc))
+     return hold("EXACT_CONDITIONAL_PERMIT_CLOCK_DRIFT");
+    return Object.freeze({flightInstanceId:p.flightInstanceId,bundle:draft.compiled.bundle,
+     normalizedMember:Object.freeze({...member}),observedDbClockUtc:endClock,sourceExpiresAtUtc:v.sourceExpiresAtUtc});
+   }));
+  }
   await c.query("COMMIT");began=false;
   const out={report:liveReport,memberReview:liveMemberReview,observedDbClockUtc:endClock,
    conditionalFeatureReview:{status:s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
     featureDraftCount:liveDrafts.length,lateDraftCount:featureDrafts.length-liveDrafts.length,
     evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),
     missingFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.missingFidsFields.length,0),actualPreIssued:false,providerCalls:0,databaseWrites:0}};
-  return Object.freeze(Object.defineProperty(out,"privateFeatureDrafts",{value:Object.freeze(liveDrafts),enumerable:false})) as typeof out&{readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][]};
+  return Object.freeze(Object.defineProperties(out,{privateFeatureDrafts:{value:Object.freeze(liveDrafts),enumerable:false},
+   privatePermitReadbacks:{value:privatePermitReadbacks,enumerable:false}})) as typeof out&{
+   readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][];readonly privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
