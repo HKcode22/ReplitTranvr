@@ -1,3 +1,5 @@
+import {resolveP7ConditionalPublicationPage} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
+import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistryPins} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
 import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 import {createHash} from "node:crypto";
@@ -255,6 +257,38 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map())).toThrow("EXACT_CONDITIONAL_PROOF_SET");
   expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map([...proofs,["extra",wire]]))).toThrow("EXACT_CONDITIONAL_PROOF_SET");
   expect(()=>completeP5ConditionalPreProofPage({...proofPage},env,policySha,[],proofs)).toThrow("ACTUAL_CONDITIONAL_PROOF_PAGE_REQUIRED");
+  // T046: actual shared policy/proof resolver. The empty-disposition
+  // policy is a synthetic wire/clock fixture, not production field approval.
+  const contract={sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2036-01-01T00:00:00.000Z"},profile={mappingExpiryHours:24},dispositions:Phase7CanonicalFieldDisposition[]=[];
+  const staticReview={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:p.manifestSha256,
+   rightsSha256:p.expectedReviewedSourceRightsSha256,contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),
+   dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:contract.researchExpiryUtc,
+   approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const staticSha=hashPhase7DurableCandidate(staticReview);
+  const protectedEnv={...env,V39_P5_MANIFEST_SHA256:p.manifestSha256,V39_P5_RIGHTS_SHA256:p.expectedReviewedSourceRightsSha256,
+   P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:staticSha,
+   P6_PHASE7_PRE_POLICY_BASE64:Buffer.from(JSON.stringify({contract,profile,dispositions,review:staticReview,reviewSha256:staticSha})).toString("base64")};
+  const sharedWire=(permit:P5Stage14SingleFlightPrePermit)=>{
+   const raw=Buffer.from(JSON.stringify({...JSON.parse(meta.toString("utf8")),policySha256:staticSha,permitSha256:hashPhase7DurableCandidate(permit)}));
+   return {payloadBase64:raw.toString("base64"),signatureBase64:sign(null,raw,keys.privateKey).toString("base64")};
+  };
+  let portCalls=0;
+  const sharedPort={readExactPermitProofs:async(permits:readonly P5Stage14SingleFlightPrePermit[])=>{
+   portCalls++;return new Map(permits.map(x=>[hashPhase7DurableCandidate(x),sharedWire(x)]));
+  }};
+  const sharedDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const sharedArgs={pool:sharedDb.pool,scope:proofScope,requestedFlightIds:[id],reviewWire:reviewWire(),reviewAuthority:permitAuthority,
+   env:protectedEnv,port:sharedPort,readClock:async()=>t("05:05"),forbiddenSignerFingerprints:[h("e")]};
+  const shared=await resolveP7ConditionalPublicationPage(sharedArgs);
+  expect(shared.privateAttachedPackets[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(shared.packetCount).toBe(1);expect(portCalls).toBe(1);
+  expect(JSON.stringify(shared)).not.toMatch(/SQ78|privateAttachedPackets|payloadBase64/);
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,readClock:async()=>t("05:45")})).rejects.toThrow("STALE_OR_LATE_PROOF");
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,port:{readExactPermitProofs:async()=>new Map()}})).rejects.toThrow("EXACT_PROOF_SET_MISSING");
+  const aliasDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,pool:aliasDb.pool,
+   forbiddenSignerFingerprints:[permitAuthority.expectedReviewerFingerprintSha256]})).rejects.toThrow("CONDITIONAL_PROTECTED_SCOPE_OR_SIGNER_ALIAS");
+  expect(aliasDb.queries).toHaveLength(0);
   const packet=attachedPage.privateAttachedPackets[0];
   expect(packet.packetSha256).toBe(hd(packet.packetBytes));
   expect(JSON.stringify(packet)).not.toMatch(/SQ78|payloadBase64|privatePermit/);

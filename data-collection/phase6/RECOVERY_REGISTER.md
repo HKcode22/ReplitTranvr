@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -124,6 +124,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I048 | Staged; exact CI required | External conditional reviewer signs exact private registry and separately protected conditional scope in distinct signature domain; existing append reader propagates exact scope, delegated day policy separately pins it. | F027 |
 | I049 | Focused heartbeat CI passed; full exact CI pending | Bounded first-parent early-draw handover requires actual successful prior worker step, exact commit ancestry, no current-main run and existing slot deadline; retain prior/current distinction, no draw or paid authorization. | F041 |
 | I050 | Staged; exact CI required | Authenticated independent signed review artifact page binds exact source, study, code, protocol, member set and optional separately pinned standalone protocol before SQL; existing fresh restricted reread and Stage14 preflight reused. | F027 |
+| I051 | Staged; exact CI required | Compose authenticated conditional permit ingress with original protected Phase7 proof port, real clock check, distinct signers and exact proof attachment; no unsigned fallback. | F027 |
 
 ## Completion components (not gates)
 
@@ -205,6 +206,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T043 | New regression; exact CI pending | Actual prepared proof-attached conditional shard with fixture Ed25519 distinct-domain signature; wrong scope, native wire, expiration and signature substitution rejected. | F027 | I048 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 | T044 | Focused 45818163362 passed; full exact CI pending | Prior successful worker and exact first-parent cutover with next-slot deadline produce explicit handover notice; current failure, expired grace, wrong ancestry and missing step still alert; no collection proof. | F041 | I049 | C009, C010 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs |
 | T045 | New regression; exact CI pending | Exact independent Ed25519 artifact page reaches real prepared member; wrong signature, alias, cross-query, altered artifact, standalone scope and duplicate fail before SQL. | F027 | I050 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T046 | New regression; exact CI pending | Signed review page through shared protected proof resolver and genuine packet attachment; missing proof, cutoff and signer alias rejected; synthetic policy fixture only. | F027 | I051 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -256,3 +258,7 @@ Run 45817522392 job 139900985225 exited 2; early draw stale schedule and current
 ## Nov26 continuation — current early worker and signed permit artifact transport
 
 Exact 5554f655 18/19 successful, full safety 45818163156 still running; heartbeat regression 45818163362 passed. Real relay 45818402059 acknowledged current-main EARLY_DRAW 45818445640; actual job 139904142414 completed with NO_DUE_FUTURE_DRAW_AT_DB_CLOCK at 12:19Z, selectedDays 4, nextDueRunDayIndex 5, no missed indices, zero provider calls/writes. F041 current execution gap reconciled; no proof of an actual due draw, paid collection or permanent code deployment. I050/T045 staged authenticated review transport; existing protected reviewer/permit issuer still needs actual integration and deployment. See [checkpoint](checkpoints/2026-11-26_PHASE5B_SIGNED_CONDITIONAL_PERMIT_REVIEW_PAGE.md).
+
+## Nov26 continuation — I051/T046
+
+Shared protected Phase7 proof resolver conditional entrypoint connects signed review-page ingress, actual restricted reread, exact independent proof port and fresh clock, then genuine packet attachment. Native invocation unchanged; no production authority commissioned. Exact CI required; see [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_SHARED_PROOF_RESOLVER.md).

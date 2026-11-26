@@ -1,0 +1,3 @@
+# Nov26 — conditional signed permit to existing shared proof resolver
+
+F027/I051/T046. Compose I050 authenticated review page with I046/I047 preparation and existing Phase7 independent proof port, protected policy and real clock. Distinct review and proof signer fingerprints required. Manifest/rights bound before SQL; missing proof, stale or late clock, alias or invalid review cannot yield attached packets. Synthetic policy fixture tests wire/clock logic only, not production sixteen-field approval. Native workflow unchanged. No live conditional registry or issuer, production migration, provider call, replay, or paid authorization. Exact CI required; previous 68a6d67d latest 15/19 passed, four running. Current main/relay unchanged. No owner command yet.
