@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
@@ -158,6 +159,30 @@ describe("source-bound conditional service preparation",()=>{
    expectedOperatorFlightNumber:"SQ78",expectedDestinationIcao:"YSSY",reviewedSupplementalFeatureBundle:draft.compiled.bundle
   } as P5Stage14SingleFlightPrePermit;
   const proofScope={...input,externalContentUseReviewSha256:h("8")};
+  // T029: actual restricted source reread + separate reviewed bytes construct
+  // the existing Stage14 permit, not an invented native identity or T24.
+  const review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:"a".repeat(40),
+   reviewedProtocolSha256:scope.protocolSha256,reviewedMemberEvidenceSha256:digestP5ConditionalPermitEvidence(withFeature.memberReview.privateReviewProposals[0],draft,withFeature.privateSourceBoundAtUtc),
+   reviewedAtUtc:t("05:04"),reviewedFrameSha256:h("4"),reviewedConfigSha256:h("5"),reviewedConditionalServiceEvidenceSha256:h("6"),
+   reviewedReportedScheduleEvidenceSha256:h("7"),reviewedRunAndRetentionEvidenceSha256:h("8"),frozenBuilderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+   selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("a"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")},
+   reviewedConditionalScheduleSourceAndUse:true,nativeOperatingLegCertified:false,
+   reviewedStandaloneLaterNoT24:{schema:"v39.phase5.standalone-later-asof-no-t24.v1",reviewedProtocolSha256:h("b"),reviewedOriginalResponseSha256:scope.expectedResponseSha256,
+    reviewedNativeTSemanticsSha256:h("7"),missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",independentLaterAsOfAndMissingnessReviewAttested:true}};
+  const preparePermit=async(v:unknown=review,patch:Record<string,unknown>={},clocks:string[]=[])=>{
+   const bytes=Buffer.from(JSON.stringify(v)),pins={expectedReviewArtifactSha256:createHash("sha256").update(bytes).digest("hex"),expectedReviewedCodeSha:"a".repeat(40),expectedConditionalProtocolSha256:scope.protocolSha256,expectedExternalContentUseReviewSha256:h("8"),separatelyApprovedStandaloneProtocolSha256:h("b"),...patch};
+   return prepareP5ConditionalPrePermitForIndependentSigning(make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m],clocks).pool,proofScope,id,bytes,pins);
+  };
+  const built=await preparePermit();
+  expect(built.privatePermit).toMatchObject(p);
+  expect(built.privatePermit.externalNativeTPhysicalLegAndSourceUseReviewed).toBeUndefined();
+  expect(built.privateWitnessReview).toBeNull();
+  expect(JSON.stringify(built)).not.toMatch(/SQ78|privatePermit|SIA/);
+  await expect(preparePermit({...review,nativeOperatingLegCertified:true})).rejects.toThrow(/EXACT_CONDITIONAL_REVIEW/);
+  await expect(preparePermit({...review,reviewedMemberEvidenceSha256:h("0")})).rejects.toThrow(/MEMBER_REVIEW_OR_PROSPECTIVE_CLOCK/);
+  await expect(preparePermit(review,{expectedReviewArtifactSha256:h("0")})).rejects.toThrow(/INDEPENDENT_REVIEW_PINS/);
+  await expect(preparePermit(review,{},[t("05:04"),t("05:04"),t("05:04"),t("05:45")])).rejects.toThrow(/CURRENT_ELIGIBLE_MEMBER_REQUIRED/);
+  await expect(preparePermit(review,{separatelyApprovedStandaloneProtocolSha256:h("c")})).rejects.toThrow(/MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW/);
   const proofRead=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
   const selected=await readP7ExactConditionalSelectedFeaturesPage(proofRead.pool,[p],proofScope);
   expect(selected).toHaveLength(1);

@@ -14,7 +14,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F002 | Historical repaired | Nov4 idle PG 57P01 and prearm cancellation. [Checkpoint](../phase4/2026-11-04_G5A_T24_CANCELLED_RUN_HEARTBEAT_RECOVERY.md) | I002 |
 | F003 | Historical loss | Nov4 and Nov24 reservations without bound originals, generic failure; HTTP/billing not proved by reservation. [Checkpoint](../phase4/2026-11-04_G5A_ZERO_SOURCE_T24_INCIDENT_AND_BUDGET_PROTECTION.md) | I003, I009, I010, I013, I030 |
 | F004 | Historical repaired | Nov4 expired foreign cohort blocked PREPARED owner; empty DB tests missed this. [Checkpoint](../phase4/2026-11-04_G5A_PREARM_FOREIGN_COHORT_ROOT_CAUSE_AND_BOUNDARY_REPAIR.md) | I004 |
-| F005 | Open recurring | Nov5 and Nov25–26 native ID/explicit origin/scope evidence missing, zero native PRE. Synthetic provider IDs hid failure. [Nov5](../phase4/2026-11-05_G5A_IDLESS_OPERATOR_CRITICAL_SCIENCE_FIX_NEXT_COHORT.md), [Nov26](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I005, I014, I015, I016 |
+| F005 | Open recurring | Nov5 and Nov25–26 native ID/explicit origin/scope evidence missing, zero native PRE. Synthetic provider IDs hid failure. [Nov5](../phase4/2026-11-05_G5A_IDLESS_OPERATOR_CRITICAL_SCIENCE_FIX_NEXT_COHORT.md), [Nov26](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I005, I014, I015, I016, I034 |
 | F006 | Historical repaired | Nov12 unreachable T24 scheduling branch. [Checkpoint](../phase5/2026-11-12_T24_SCHEDULE_UNREACHABLE_BRANCH_AND_EXCLUSIVE_AUTOMATION_REPAIR.md) | I001 |
 | F007 | Mitigated | Nov15–24 best-effort cron and ACK/history visibility; direct root incomplete read 45429790971. [Checkpoint](checkpoints/2026-11-24_1625_PST_PHASE5B_OPERATIONAL_INCIDENT_AUDIT.md) | I006, I007 |
 | F008 | Mitigated | Nov15 rolling failure receipt custody and generic root diagnostics. [Checkpoint](../phase5/2026-11-15_ROLLING_FAILURE_CUSTODY_AND_RECEIPT_RETENTION.md) | I006 |
@@ -27,7 +27,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F015 | Production observed | Nov25 cutover lacked exact-main full two-job retention baseline. [Checkpoint](checkpoints/2026-11-25_0007_PST_PHASE5B_CUSTODY_PAIR_AND_RATE_LIMIT_REPAIR.md) | I011 |
 | F016 | Mitigated unproven | Nov24–25 HTTP 429 concurrent SOURCE waves, pacing fallback. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I012 |
 | F017 | Open | Nov24–25 HTTP_OK then FIDS_BODY_UNAVAILABLE, older 204/205 masked; exact old transport causes unknown. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I013, I030 |
-| F018 | Partial branch repair | Native-only signer/normalizer/witness/registration reject existing conditional tier. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I014, I015, I016 |
+| F018 | Partial branch repair | Native-only signer/normalizer/witness/registration and standalone GitHub admission wrappers reject existing conditional tier. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I014, I015, I016, I034 |
 | F019 | Tested branch | Conditional reader staleness measured from binding rather than availability; signed window/member clock mismatch. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/0731789d16675d012d42cd68ba8c49d3c898bf23) | I017 |
 | F020 | Tested branch | Stage14 cutoff-specific duplicate check admitted possible retimed second PRE. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/23b02b489db71d331efe1f8b9da95c67f4c1fd07) | I018 |
 | F021 | Open cause, diagnostic tested | Later PRE generic redacted failure 45762925573, subsequent no-due success not proof of resolution. [Checkpoint](checkpoints/2026-11-26_0129_PST_PHASE5B_THREE_DAY_AUDIT_AND_REPAIR.md) | I019 |
@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
-| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033 |
+| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -87,11 +87,13 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I033 | Implemented staged; CI pending | Exact signed SOURCE query/index resolver authenticates existing stored registry and prospective conditional feature purpose; rejects cross-tier, policy and permit drift, supplies independent proof scope. Actual protected role transport not yet commissioned. | F027 |
 
+| I034 | Implemented staged; CI pending | Construct exact conditional Stage14 permit from independently pinned review artifact and fresh authenticated original/member/draft; preserve separate T24 witness or honest standalone later path; no native claim or production signing. | F005, F018, F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
-| C001 | Open | Prospective conditional signed PRE issuance and private producer-consumer admission | F005, F018, F027 | I005, I014, I016 |
+| C001 | Partial | Conditional permit preparation implemented; prospective signed issuance and private producer-consumer admission still open | F005, F018, F027 | I005, I014, I016, I034 |
 | C002 | Partial | Conditional feature drafts, UTC parity and separate exact independent readback staged; authenticated authority/issuer integration and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029, I031, I033 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
@@ -139,6 +141,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T027 | Existing main regression; separate relay fixture exact CI pending | Unknown active-state reads defer only own lane; no duplicate child or replay; exact executable pin | F035 | I032 | C010 | tests/phase6_rolling_github_controller_v39.test.mjs; tests/phase6_rolling_child_custody_v39.test.mjs |
 
 | T028 | New regression; CI pending | Exact signed query and independent conditional content purpose bind to permit; refuse native promotion, changed query/early draw, unapproved purpose or extra policy keys before original read | F027 | I033 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
+
+| T029 | New regression; CI pending | Exact conditional Stage14 permit creation from live original/member and external artifact pin; reject fake native attestation, changed evidence, cutoff miss, incorrect standalone T24 protocol | F005, F018, F027 | I034 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 

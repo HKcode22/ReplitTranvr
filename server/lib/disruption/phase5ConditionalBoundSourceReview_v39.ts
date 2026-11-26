@@ -269,7 +269,9 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
     evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),
     missingFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.missingFidsFields.length,0),actualPreIssued:false,providerCalls:0,databaseWrites:0}};
   return Object.freeze(Object.defineProperties(out,{privateFeatureDrafts:{value:Object.freeze(liveDrafts),enumerable:false},
-   privatePermitReadbacks:{value:privatePermitReadbacks,enumerable:false}})) as typeof out&{
-   readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][];readonly privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null};
+   privatePermitReadbacks:{value:privatePermitReadbacks,enumerable:false},
+   privateSourceBoundAtUtc:{value:stamp(o.bound_at_utc),enumerable:false}})) as typeof out&{
+   readonly privateFeatureDrafts:readonly (typeof featureDrafts)[number][];readonly privatePermitReadbacks:readonly P5ConditionalPermitReadback[]|null;
+   readonly privateSourceBoundAtUtc:string};
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
