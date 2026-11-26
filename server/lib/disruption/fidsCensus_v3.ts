@@ -87,7 +87,7 @@ export function buildFidsRequestContractV39(params:FidsCensusParams){
     throw Error("P5_POST_V0083_RESERVATION_FRAME_INVALID_HOLD");
  const conditional=params.phase5ConditionalService;
  if(conditional!==undefined&&
-    (!usesP5ProspectiveIdentity(params)||params.direction!=="Departure"||
+    (!conditional||!usesP5ProspectiveIdentity(params)||params.direction!=="Departure"||
      !/^[a-f0-9]{64}$/.test(conditional.protocolSha256??"")||
      typeof conditional.cohortStartUtc!=="string"||
      !Number.isFinite(Date.parse(conditional.cohortStartUtc))||
@@ -536,6 +536,7 @@ function normalizeFidsRecord(input: {
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&params.phase5ConditionalService&&isOperator&&!sourceId&&
       requestedOrigin&&!foreignOrigin&&movement==="departure"&&depIcao!==arrIcao&&
+      (f?.departure?.airport?.icao===undefined||f?.departure?.airport?.icao===null||f?.departure?.airport?.icao===""||explicitDepIcao!==null)&&
       f?.isCargo!==true&&f?.isPrivate!==true&&f?.isGeneralAviation!==true&&f?.isCharter!==true&&
       classifyScope(f??{})==="unknown"){
       // Same G5A conditional key and marker already supported by Stage14.
