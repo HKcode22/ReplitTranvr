@@ -29,7 +29,10 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
  if(verifyCanonicalFidsEnvelopeV39(payload)!=="verified"||verifyStoredDecodedFidsBodyV39({payload,persisted_response_hash:s.sourceResponseSha256})!=="verified")fail("ORIGINAL_INTEGRITY");
  const p=payload as Record<string,any>,q=p.fidsRequestContract;
  if(q?.schema!=="v39.fids-request-frame.application-intent.v1"||q.direction!=="Departure"||q.airportIcao!==s.airportIcao||
-  q.withLeg!==true||q.withCargo!==false||q.withPrivate!==false||q.withCodeshared!==false)fail("EXACT_FILTERED_REQUEST");
+  q.endpointKind!=="airport_local_fids"||q.withLeg!==true||q.withCargo!==false||q.withPrivate!==false||
+  q.withCancelled!==true||q.withCodeshared!==true||q.withLocation!==false)fail("EXACT_FILTERED_REQUEST");
+ // Phase5ScopedFidsSourceBridge deliberately requests codeshares. Positive
+ // operator evidence below is mandatory; request filters never prove scope.
  if(!Array.isArray(p.departures)||p.departures.length>2500||!Number.isFinite(iso(p.fetchedAtUtc))||iso(p.fetchedAtUtc)>available)fail("ORIGINAL_SCOPE_OR_CAP");
  const offset=s.horizon==="T-24h"?86400000:s.horizon==="T-6h"?21600000:5400000;
  const counts={notPositiveOperator:0,knownExcluded:0,missingServiceFields:0,contraryOrigin:0,outsideWindow:0,ambiguousComposite:0,ambiguousProviderId:0,lateOrStale:0,conditionalCandidates:0};
