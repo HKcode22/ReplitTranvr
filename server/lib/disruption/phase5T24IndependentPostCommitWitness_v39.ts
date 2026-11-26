@@ -41,6 +41,8 @@ export interface P5Stage17T24WitnessPermit{
  selectedTNativeUtc:string;expectedT24CutoffUtc:string;
  expectedSelectedTVersion:string;
  expectedWitnessOnlyRole:string;
+ /** Separately reviewed conditional source protocol, never physical. */
+ reviewedConditionalProtocolSha256?:string;
 }
 export interface P5Stage17WitnessResult{
  schema:"v39.phase5.stage17.separate-transaction-t24-pre-commit-witness.v1";
@@ -88,6 +90,9 @@ function validPermit(p:P5Stage17T24WitnessPermit){
   typeof p.expectedSelectedTVersion!=="string"||
   p.expectedSelectedTVersion.length<10||p.expectedSelectedTVersion.length>500)
   HOLD("INVALID_SIGNED_T24_WITNESS_SCOPE");
+ if(p.reviewedConditionalProtocolSha256!==undefined&&
+    (!SHA.test(p.reviewedConditionalProtocolSha256)||!/^leg:g5a:[a-f0-9]{64}$/.test(p.flightInstanceId)))
+  HOLD("CONDITIONAL_WITNESS_PROTOCOL_OR_ID_INVALID");
  const native=validateUTC(p.selectedTNativeUtc,"NATIVE_T_UTC_INVALID");
  const cutoff=validateUTC(p.expectedT24CutoffUtc,"CUTOFF_UTC_INVALID");
  if(native.getTime()-cutoff.getTime()!==86_400_000)
@@ -155,6 +160,16 @@ export async function persistP5T24SeparateTransactionWitness(
    [p.expectedSnapshotId])).rows;
   if(original.length!==1)HOLD("ABSENT_ALREADY_COMMITTED_T24_PRE");
   exactSnapshot(original[0],p,cutoff);
+  if(p.reviewedConditionalProtocolSha256!==undefined){
+   const marked=(await c.query(
+    "SELECT r.raw_payload#>>'{fidsRequestContract,phase5ConditionalService,protocolSha256}' AS protocol "+
+    "FROM clean.fids_query_response r JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id=r.population_query_id "+
+    "AND b.response_hash=r.response_hash WHERE r.population_query_id=$1::uuid AND r.response_hash=$2 AND b.query_digest=$3 "+
+    "AND r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>clock_timestamp() LIMIT 2",
+    [p.sourcePopulationQueryId,p.expectedSourceResponseSha256,p.expectedSourceQueryDigestSha256])).rows;
+   if(marked.length!==1||marked[0].protocol!==p.reviewedConditionalProtocolSha256)
+    HOLD("CONDITIONAL_WITNESS_SOURCE_PROTOCOL_MISMATCH");
+  }
   const duplicate=(await c.query(
    "SELECT snapshot_id::text AS id FROM clean.phase5_t24_postcommit_witness_v39"+
    " WHERE flight_instance_id=$1 OR snapshot_id=$2::bigint LIMIT 2",
