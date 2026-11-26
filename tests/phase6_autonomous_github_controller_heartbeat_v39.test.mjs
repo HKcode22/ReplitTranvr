@@ -9,7 +9,7 @@ import {
  summarizeP6ControllerHeartbeat,
  admitP6HeartbeatGithubEnv,
  readP6GithubAutoControllerHeartbeat,
- reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery,observeP6IndependentDispatches
+ reviewP6ActiveStandaloneNotifications,observeP6DirectRecovery,observeP6IndependentDispatches,summarizeP6PaidRouteConfiguration
 } from "../server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
 import {formatP6ControllerHeartbeatHuman}
  from "../scripts/v39_phase6_github_controller_heartbeat_v39.mjs";
@@ -523,4 +523,24 @@ test("F041/T044: exact prior-main EARLY_DRAW execution permits bounded handover 
  assert.notEqual(expired.EARLY_DRAW?.state,"PREVIOUS_MAIN_EARLY_DRAW_EXECUTED_AWAIT_CURRENT_SLOT");
  const oldNotice=await reviewP6ActiveStandaloneNotifications({...late,independentDispatchObservations:obs},arm,async()=>{throw Error("unavailable")});
  assert(oldNotice.incidents.some(i=>i.lane==="EARLY_DRAW"));assert.equal(oldNotice.handoverPending.length,0);
+});
+
+test("T052 paid route configuration remains explicit when arm is off or unknown, without inventing execution evidence",async()=>{
+ const base={...env(),P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"false",P6_PRIVATE_POST_PARENT_ENABLED:"false"};
+ for(const expected of ["true","false",undefined]){
+  const config=summarizeP6PaidRouteConfiguration({...base,P6_HEARTBEAT_COLLECTION_EXPECTED:expected});
+  assert.equal(config.status,"BOTH_PAID_PARENTS_EXPLICITLY_PAUSED");
+  assert.equal(config.collectionVerified,false);
+  assert.equal(config.routes.every(x=>x.configuration==="EXPLICITLY_PAUSED"&&!x.collectionVerified),true);
+ }
+ const absent=summarizeP6PaidRouteConfiguration({...base,P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:undefined});
+ assert.equal(absent.status,"PAID_PARENT_CONFIGURATION_INCOMPLETE");
+ const one=summarizeP6PaidRouteConfiguration({...base,P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"true"});
+ assert.equal(one.status,"ONE_PAID_PARENT_EXPLICITLY_PAUSED");
+ const both={...base,P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"true",P6_PRIVATE_POST_PARENT_ENABLED:"true"};
+ assert.equal(summarizeP6PaidRouteConfiguration(both).status,"PAID_PARENTS_ENABLED_ARM_NOT_CONFIRMED");
+ assert.equal(summarizeP6PaidRouteConfiguration({...both,P6_HEARTBEAT_COLLECTION_EXPECTED:"true"}).status,"PAID_PARENTS_ENABLED_COLLECTION_NOT_PROVED");
+ const report=await reviewP6ActiveStandaloneNotifications({}, {...base,P6_HEARTBEAT_COLLECTION_EXPECTED:"false"},async()=>{throw Error("MUST_NOT_READ");});
+ assert.equal(report.paidRouteConfiguration.status,"BOTH_PAID_PARENTS_EXPLICITLY_PAUSED");
+ assert.equal(report.flightCollectionVerified,false);
 });

@@ -56,6 +56,12 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   lines.push("","**Bounded deployment handover — current-main early-draw execution NOT verified:**");
   for(const i of heartbeat.activeNotifications.handoverPending)lines.push("- "+i.lane+": prior execution "+i.priorRunId+"; recheck by "+i.recheckByUtc);
  }
+ const paid=heartbeat.activeNotifications?.paidRouteConfiguration;
+ if(paid){
+  lines.push("","**Paid route configuration (not acquisition evidence):** "+paid.status,
+   "Protected arm expected: "+(paid.armExpectationKnown?String(paid.collectionExpected):"unknown"));
+  for(const r of paid.routes)lines.push("- "+r.job+": "+r.configuration);
+ }
  if(heartbeat.activeNotifications?.intentionalPauses?.length){
   lines.push("","**Explicitly paused paid routes — collection not running:**");
   for(const i of heartbeat.activeNotifications.intentionalPauses)lines.push("- "+i.job+": "+i.reason);

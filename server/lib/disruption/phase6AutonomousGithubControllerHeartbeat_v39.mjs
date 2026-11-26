@@ -433,6 +433,21 @@ const P6_PAUSABLE_SOURCE_JOBS=Object.freeze({
  "separately-authorized-stored-source-children":"P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED",
  "separately-authorized-current-private-post-children":"P6_PRIVATE_POST_PARENT_ENABLED"
 });
+/** Configuration visibility is independent of the protected arm and
+ * independent of worker success. Never interpret an absent variable as
+ * a confirmed pause or an enabled route as a paid receipt. */
+export function summarizeP6PaidRouteConfiguration(env){
+ const expected=env.P6_HEARTBEAT_COLLECTION_EXPECTED;
+ const routes=Object.entries(P6_PAUSABLE_SOURCE_JOBS).map(([job,key])=>{
+  const raw=env[key],configuration=raw==="false"?"EXPLICITLY_PAUSED":raw==="true"?"ENABLED_NOT_COLLECTION_PROOF":"UNKNOWN_NOT_COLLECTION_PROOF";
+  return {job,configuration,collectionVerified:false};
+ });
+ const status=routes.every(x=>x.configuration==="EXPLICITLY_PAUSED")?"BOTH_PAID_PARENTS_EXPLICITLY_PAUSED":
+  routes.some(x=>x.configuration==="UNKNOWN_NOT_COLLECTION_PROOF")?"PAID_PARENT_CONFIGURATION_INCOMPLETE":
+  routes.some(x=>x.configuration==="EXPLICITLY_PAUSED")?"ONE_PAID_PARENT_EXPLICITLY_PAUSED":
+  expected!=="true"?"PAID_PARENTS_ENABLED_ARM_NOT_CONFIRMED":"PAID_PARENTS_ENABLED_COLLECTION_NOT_PROVED";
+ return {status,collectionExpected:expected==="true",armExpectationKnown:expected==="true"||expected==="false",routes,collectionVerified:false};
+}
 export async function reviewP6ActiveStandaloneNotifications(report,env,readGithub){
  const expected=env.P6_HEARTBEAT_COLLECTION_EXPECTED;
  if(![undefined,"","false","true"].includes(expected))fail("INVALID_NOTIFICATION_EXPECTATION");
@@ -501,7 +516,7 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    }
   }
  }
- return {collectionExpected:expected==="true",incidents,incidentCount:incidents.length,intentionalPauses,handoverPending,
+ return {collectionExpected:expected==="true",paidRouteConfiguration:summarizeP6PaidRouteConfiguration(env),incidents,incidentCount:incidents.length,intentionalPauses,handoverPending,
   realDueDrawOrPreparationVerified:false,flightCollectionVerified:false,
   databaseReads:0,databaseWrites:0,providerCalls:0,dispatches:0};
 }
