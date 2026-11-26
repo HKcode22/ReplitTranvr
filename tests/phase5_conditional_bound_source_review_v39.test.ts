@@ -1,0 +1,42 @@
+import {createHash} from "node:crypto";
+import {describe,it,expect} from "vitest";
+import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
+import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
+const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
+function fixture(){
+ const departures=[{number:"SQ78",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:t("12:00")}},arrival:{airport:{icao:"YSSY"}}}];
+ const bytes=Buffer.from(JSON.stringify({departures,arrivals:[]}));
+ const body=createHash("sha256").update(bytes).digest("hex");
+ const id="c23e4567-e89b-42d3-a456-426614174013";
+ const p=addCanonicalFidsEnvelopeHashV39({fidsRequestContract:{schema:"v39.fids-request-frame.application-intent.v1",endpointKind:"airport_local_fids",direction:"Departure",airportIcao:"WSSS",fromLocal:"2035-11-25T19:00",toLocal:"2035-11-25T20:00",withLeg:true,withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,withLocation:false,openapiSha256:h("e")},payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",originalHttpWireBytesPreserved:false,originalDecodedEntityBodyPreserved:true,originalDecodedEntityBodyEvidence:{schema:"v39.fids-fetch-decoded-source-body.v1",representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",bodySha256:body,bodyLengthBytes:bytes.length,bodyBase64:bytes.toString("base64")},departures,arrivals:[],fetchedAtUtc:t("05:01")});
+ const scope={source:{manifestSha256:h("a"),queryDigestSha256:h("b"),reviewedReleaseSha256:h("c"),rightsReviewSha256:h("d"),providerContractSha256:h("e"),earlyDrawSha256:h("f"),runDayIndex:2,slot:"HUB",horizon:"T-6h" as const,airportIcao:"WSSS",expectedSourceGithubRunId:"123456",maxPopulationStalenessSeconds:3600,plannedRequestUtc:t("05:00")},protocolSha256:h("1"),ownerProspectiveSeparateTierApproved:true as const,frozenStudyStartUtc:t("00:00"),policyEffectiveUtc:t("04:00"),minimumReviewLeadSeconds:900,expectedPopulationQueryId:id,expectedResponseSha256:h("2"),expectedDecodedBodySha256:body,expectedLocalFrom:"2035-11-25T19:00",expectedLocalTo:"2035-11-25T20:00"};
+ const o={manifest_sha256:h("a"),run_day_index:2,slot_id:"HUB",horizon:"T-6h",airport_icao:"WSSS",fids_airport_icao:"WSSS",github_run_id:"123456",attempt_run_id:"123456",state:"ACTIVE",early_draw_sha256:h("f"),reviewed_release_sha256:h("c"),rights_review_sha256:h("d"),provider_contract_sha256:h("e"),bound_rights:h("d"),population_query_id:id,original_response_hash:h("2"),fids_response_hash:h("2"),original_current:true,reserved_at:t("05:00"),fids_retrieval_utc:t("05:01"),raw_persisted_at_utc:t("05:02"),source_available:t("05:02"),bound_at_utc:t("05:03"),source_expires_at_utc:t("23:00"),service_window_start_utc:t("11:00"),service_window_end_utc:t("15:00")};
+ const r={raw_payload:p,stored_response_hash:h("2"),raw_expired_at_utc:null,raw_persisted_at_utc:t("05:02"),decoded_original_body_sha256:body,binding_rights:h("d"),source_expires_at_utc:t("23:00"),population_query_id:id};
+ return {scope,o,r};
+}
+describe("source-bound conditional service preparation",()=>{
+ it("extracts prospective positive operator review candidate from exact original, without a native or publication claim",()=>{
+  const {scope,o,r}=fixture(),x=prepare(scope,[o],[r],t("05:04"));
+  expect(x.counts.conditionalCandidates).toBe(1);
+  expect(x.privateCandidates[0].runDayIndex).toBe(2);
+  expect(x.trainingOrPrePublicationAuthorized).toBe(false);
+  expect(JSON.stringify(x)).not.toContain("SQ78");
+ });
+ it("rejects wrong response, body, rights, day, request scope, and late binding",()=>{
+  const {scope,o,r}=fixture();
+  expect(()=>prepare(scope,[{...o,original_response_hash:h("9")}],[r],t("05:04"))).toThrow(/ORIGINAL_BINDING/);
+  expect(()=>prepare(scope,[o],[{...r,decoded_original_body_sha256:h("9")}],t("05:04"))).toThrow(/ORIGINAL_BINDING/);
+  expect(()=>prepare(scope,[o],[{...r,binding_rights:h("9")}],t("05:04"))).toThrow(/ORIGINAL_BINDING/);
+  expect(()=>prepare(scope,[{...o,run_day_index:3}],[r],t("05:04"))).toThrow(/ORIGINAL_BINDING/);
+  expect(()=>prepare({...scope,expectedLocalTo:"wrong"},[o],[r],t("05:04"))).toThrow(/ORIGINAL_BINDING/);
+  expect(()=>prepare(scope,[{...o,bound_at_utc:t("05:10")}],[r],t("05:04"))).toThrow(/SOURCE_CLOCK/);
+  expect(()=>prepare({...scope,policyEffectiveUtc:t("05:01")},[o],[r],t("05:04"))).toThrow(/RETROSPECTIVE/);
+ });
+ it("fails before any original body read if source role is wrong",async()=>{
+  const {scope}=fixture(),queries:string[]=[];
+  const pool={connect:async()=>({release(){},query:async(sql:string)=>{queries.push(sql);return {rows:sql.startsWith("SELECT session_user")?[{login:"wrong",actor:"wrong",ro:"on",primary:true}]:[]};}})};
+  await expect(read(pool,scope)).rejects.toThrow(/ROLE/);
+  expect(queries.some(x=>x.includes("raw_payload"))).toBe(false);
+  expect(queries.at(-1)).toBe("ROLLBACK");
+ });
+});
