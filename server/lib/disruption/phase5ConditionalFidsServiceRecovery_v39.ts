@@ -12,16 +12,19 @@ const ICAO=/^[A-Z]{4}$/;
 const fail=(s:string):never=>{throw Error("HOLD_P5_CONDITIONAL_SERVICE_"+s);};
 type Scope={protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
  manifestSha256:string;sourceResponseSha256:string;sourceQueryId:string;
+ runDayIndex:number;
  airportIcao:string;frozenStudyStartUtc:string;policyEffectiveUtc:string;
  plannedSourceUtc:string;sourceAvailableUtc:string;sourceExpiresUtc:string;dbObservedUtc:string;
  serviceWindowStartUtc:string;serviceWindowEndUtc:string;horizon:"T-24h"|"T-6h"|"T-90m";
  maximumStalenessSeconds:number;minimumReviewLeadSeconds:number};
 type Candidate={serviceKey:string;sourceIndex:number;selectedReportedDepartureUtc:string;ownCutoffUtc:string;
  originEvidence:"EXPLICIT_REPORTED_ORIGIN"|"REQUESTED_DEPARTURE_CONTEXT_ONLY";commercialScope:"EXPLICIT_CORE_FLAGS"|"QUERY_FILTERED_SCOPE_UNKNOWN";
- providerNativeIdPresent:boolean;sourceResponseSha256:string;sourceQueryId:string};
+ providerNativeIdPresent:boolean;sourceResponseSha256:string;sourceQueryId:string;
+ operatorFlightNumber:string;originIcao:string;destinationIcao:string;runDayIndex:number};
 export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Scope){
  if(!s||s.ownerProspectiveSeparateTierApproved!==true||![s.protocolSha256,s.manifestSha256,s.sourceResponseSha256].every(x=>hash.test(x??""))||
   !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.sourceQueryId??"")||!ICAO.test(s.airportIcao??"")||
+  !Number.isSafeInteger(s.runDayIndex)||s.runDayIndex<1||s.runDayIndex>31||
   !["T-24h","T-6h","T-90m"].includes(s.horizon)||!Number.isSafeInteger(s.maximumStalenessSeconds)||s.maximumStalenessSeconds<1||s.maximumStalenessSeconds>86400||
   !Number.isSafeInteger(s.minimumReviewLeadSeconds)||s.minimumReviewLeadSeconds<120||s.minimumReviewLeadSeconds>3600)fail("SEPARATE_PROSPECTIVE_SCOPE");
  const [frame,effective,planned,available,expires,now,start,end]=[s.frozenStudyStartUtc,s.policyEffectiveUtc,s.plannedSourceUtc,s.sourceAvailableUtc,s.sourceExpiresUtc,s.dbObservedUtc,s.serviceWindowStartUtc,s.serviceWindowEndUtc].map(iso);
@@ -45,16 +48,17 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
   const number=typeof f.number==="string"?f.number.trim().toUpperCase().match(/^([A-Z0-9]{2})[ \t]*([0-9]{1,4})$/):null;
   const origin=f.departure?.airport?.icao,dest=f.arrival?.airport?.icao,selected=iso(f.departure?.scheduledTime?.utc);
   if(origin!==undefined&&origin!==null&&origin!==""&&origin!==s.airportIcao){counts.contraryOrigin++;continue;}
-  if(!number||!ICAO.test(dest??"")||!Number.isFinite(selected)){counts.missingServiceFields++;continue;}
+  if(!number||!ICAO.test(dest??"")||dest===s.airportIcao||!Number.isFinite(selected)){counts.missingServiceFields++;continue;}
   if(selected<start||selected>=end){counts.outsideWindow++;continue;}
   // Stable only within the frozen service frame; no revised time or provider ID in the key.
-  const serviceKey="leg:p5conditional:v1:"+sha(JSON.stringify([s.manifestSha256,s.protocolSha256,s.frozenStudyStartUtc,number[1],number[2].replace(/^0+/,"")||"0",s.airportIcao,dest]));
+  const serviceKey="leg:p5conditional:v2:"+sha(JSON.stringify([s.manifestSha256,s.protocolSha256,s.frozenStudyStartUtc,s.runDayIndex,number[1],number[2].replace(/^0+/,"")||"0",s.airportIcao,dest]));
   const providerId=typeof f.id==="string"&&f.id.trim()?f.id.trim():null,cutoff=selected-offset;
   provisional.push({providerId,timely:available<=cutoff&&cutoff-now>s.minimumReviewLeadSeconds*1000&&cutoff<expires&&cutoff-available<=s.maximumStalenessSeconds*1000,
    candidate:{serviceKey,sourceIndex:i,selectedReportedDepartureUtc:new Date(selected).toISOString(),ownCutoffUtc:new Date(cutoff).toISOString(),
     originEvidence:origin===s.airportIcao?"EXPLICIT_REPORTED_ORIGIN":"REQUESTED_DEPARTURE_CONTEXT_ONLY",
     commercialScope:f.isCargo===false&&f.isPrivate===false&&f.isCharter===false?"EXPLICIT_CORE_FLAGS":"QUERY_FILTERED_SCOPE_UNKNOWN",
-    providerNativeIdPresent:providerId!==null,sourceResponseSha256:s.sourceResponseSha256,sourceQueryId:s.sourceQueryId}});
+    providerNativeIdPresent:providerId!==null,sourceResponseSha256:s.sourceResponseSha256,sourceQueryId:s.sourceQueryId,
+    operatorFlightNumber:number[1]+(number[2].replace(/^0+/,"")||"0"),originIcao:s.airportIcao,destinationIcao:dest,runDayIndex:s.runDayIndex}});
  }
  const freq=new Map<string,number>();
  for(const {candidate} of provisional)freq.set(candidate.serviceKey,(freq.get(candidate.serviceKey)??0)+1);
