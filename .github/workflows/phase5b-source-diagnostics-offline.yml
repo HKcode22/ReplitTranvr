@@ -14,6 +14,7 @@ on:
       - 'tests/phase5_conditional_bound_source_review_v39.test.ts'
       - 'server/lib/disruption/phase5V0080GitHubPrearm_v39.ts'
       - 'scripts/v39_phase5b_full_retention_baseline_owner.sh'
+      - 'scripts/v39_phase5b_full_recovery_owner.sh'
       - 'server/lib/disruption/aerodataboxLimiter_v3.ts'
       - 'server/lib/disruption/phase5ScopedFidsSourceBridge_v39.ts'
       - '.github/workflows/phase5b-source-diagnostics-offline.yml'
@@ -33,4 +34,4 @@ jobs:
       - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npx vitest run tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts
-      - run: bash -n scripts/v39_phase5b_full_retention_baseline_owner.sh
+      - run: bash -n scripts/v39_phase5b_full_retention_baseline_owner.sh && bash -n scripts/v39_phase5b_full_recovery_owner.sh
