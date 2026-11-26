@@ -3,7 +3,7 @@ import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {prepareP5ConditionalFidsServiceRecoveryV39 as prepare} from "../server/lib/disruption/phase5ConditionalFidsServiceRecovery_v39";
 const stamp=(h:string)=>"2035-11-25T"+h+":00.000Z",sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
-const scope={protocolSha256:"a".repeat(64),ownerProspectiveSeparateTierApproved:true as const,manifestSha256:"b".repeat(64),sourceResponseSha256:"c".repeat(64),sourceQueryId:"c23e4567-e89b-42d3-a456-426614174013",airportIcao:"WSSS",frozenStudyStartUtc:stamp("00:00"),policyEffectiveUtc:stamp("04:00"),plannedSourceUtc:stamp("05:00"),sourceAvailableUtc:stamp("05:02"),sourceExpiresUtc:stamp("23:00"),dbObservedUtc:stamp("05:03"),serviceWindowStartUtc:stamp("11:00"),serviceWindowEndUtc:stamp("15:00"),horizon:"T-6h" as const,maximumStalenessSeconds:3600,minimumReviewLeadSeconds:900};
+const scope={protocolSha256:"a".repeat(64),ownerProspectiveSeparateTierApproved:true as const,runDayIndex:2,manifestSha256:"b".repeat(64),sourceResponseSha256:"c".repeat(64),sourceQueryId:"c23e4567-e89b-42d3-a456-426614174013",airportIcao:"WSSS",frozenStudyStartUtc:stamp("00:00"),policyEffectiveUtc:stamp("04:00"),plannedSourceUtc:stamp("05:00"),sourceAvailableUtc:stamp("05:02"),sourceExpiresUtc:stamp("23:00"),dbObservedUtc:stamp("05:03"),serviceWindowStartUtc:stamp("11:00"),serviceWindowEndUtc:stamp("15:00"),horizon:"T-6h" as const,maximumStalenessSeconds:3600,minimumReviewLeadSeconds:900};
 const flight=()=>({number:"SQ 0078",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:stamp("12:00")}},arrival:{airport:{icao:"YSSY"}}});
 function original(departures:any[]){
  const bytes=Buffer.from(JSON.stringify({departures,arrivals:[]}));
@@ -37,6 +37,15 @@ describe("prospective conditional service recovery, separate from physical nativ
  it("does not choose among duplicate service observations, even when one is late",()=>{
   const r=prepare(original([flight(),{...flight(),departure:{scheduledTime:{utc:stamp("11:10")}}}]),scope);
   expect(r.counts.ambiguousComposite).toBe(2);expect(r.privateCandidates).toHaveLength(0);
+ });
+ it("separates identical daily services by signed cohort day, not by revised schedule",()=>{
+  const first=prepare(original([flight()]),scope).privateCandidates[0];
+  const revised=prepare(original([{...flight(),departure:{scheduledTime:{utc:stamp("12:15")}}}]),{...scope,maximumStalenessSeconds:7200}).privateCandidates[0];
+  const other=prepare(original([flight()]),{...scope,runDayIndex:3}).privateCandidates[0];
+  expect(first.serviceKey).toBe(revised.serviceKey);
+  expect(first.serviceKey).not.toBe(other.serviceKey);
+  expect(first.operatorFlightNumber).toBe("SQ78");
+  expect(()=>prepare(original([flight()]),{...scope,runDayIndex:0})).toThrow(/SCOPE/);
  });
  it("rejects duplicate provider IDs even on otherwise distinct services",()=>{
   const r=prepare(original([{...flight(),id:"same"},{...flight(),number:"SQ 0080",id:"same"}]),scope);
