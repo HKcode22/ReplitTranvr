@@ -1,3 +1,4 @@
+import {signP6DelegatedConditionalLaterRegistry} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {readP6ConditionalLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 import {deriveP6ConditionalT24Scope,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
@@ -430,6 +431,34 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>check(wireFor({...externalReview,conditionalPreScope:{...conditionalPreScope,protocolSha256:h("0")}}))).toThrow();
   expect(()=>check(wireFor({...externalReview,conditionalPreScope:undefined}))).toThrow();
   expect(()=>check(signed,reviewerPins,t("06:00"))).toThrow("REVIEW_SIGNATURE_PREMATURE_EXPIRED_OR_REPLAYED");
+  // T066: actual shared proof resolver output -> delegated conditional
+  // shard signature -> existing external verifier. No live publication.
+  const signingTrust={independentStudyTrustPinsApproved:true,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   calendarSha256:h("a"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f")};
+  const signingPolicy={...laterPolicy,calendarSha256:signingTrust.calendarSha256,
+   conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,reviewerFingerprintSha256:permitAuthority.expectedReviewerFingerprintSha256},
+   nativeLaterReview:{...laterPolicy.nativeLaterReview,privatePublicationApproved:true,maximumPrivateRetentionHours:24,
+    laterReviewerFingerprintSha256:reviewerFp,dayAppendPolicy:{...laterPolicy.nativeLaterReview.dayAppendPolicy,
+     calendarSha256:signingTrust.calendarSha256,laterReviewerFingerprintSha256:reviewerFp}}};
+  const signingScope={expectedSourceRegistrySha256:hd(srcBytes),sourceRegistryFilePath:reg.sourceDayRegistryFilePath,
+   expectedSourceReviewEvidenceSha256:h("5"),proposedLaterRegistryFilePath:rp.registryFilePath,shardIndex:1,
+   observedDbClockUtc:t("05:05"),reviewValidUntilUtc:t("07:00"),retentionNotAfterUtc:t("08:00")};
+  const issueRegistry=(policy:unknown=signingPolicy,patch:Record<string,unknown>={},actualPage:unknown=shared)=>{
+   const bytes=Buffer.from(JSON.stringify(policy));
+   return signP6DelegatedConditionalLaterRegistry({page:actualPage,sourceRegistryBytes:srcBytes,sourceRegistry:src,
+    authority:{trust:signingTrust,policyBytes:bytes,expectedPolicySha256:hd(bytes),independentDelegatedNativeReviewApproved:true,
+     noProviderCredentialsInReviewer:true,laterReviewerKey:reviewer.privateKey},scope:{...signingScope,...patch}});
+  };
+  const issuedRegistry=issueRegistry();
+  expect(issuedRegistry).toMatchObject({signatureIssued:true,reviewedCount:1,databaseWrites:0,providerCalls:0});
+  expect(JSON.stringify(issuedRegistry)).not.toContain(id);
+  expect(verifyP5ExternalEd25519ReviewOfLaterShard(issuedRegistry.privatePlan,issuedRegistry.privateWire,
+   issuedRegistry.privateReviewerPublicKeyPem,issuedRegistry.privateReviewerPins,t("05:05"))).toMatchObject({signatureCryptographicallyVerified:true});
+  expect(()=>issueRegistry(signingPolicy,{}, {...shared})).toThrow("ACTUAL_RESOLVED_CONDITIONAL_PAGE_REQUIRED");
+  expect(()=>issueRegistry(signingPolicy,{retentionNotAfterUtc:"2035-11-26T00:00:00.000Z"})).toThrow("CLOCK_OR_RETENTION");
+  expect(()=>issueRegistry(signingPolicy,{observedDbClockUtc:t("05:46")})).toThrow("MEMBER_SCOPE_OR_LEAD");
+  expect(()=>issueRegistry({...signingPolicy,nativeLaterReview:{...signingPolicy.nativeLaterReview,dayAppendPolicy:{...signingPolicy.nativeLaterReview.dayAppendPolicy,conditionalLaterPreScope:undefined}}})).toThrow("POLICY_SCOPE");
   const {conditionalPreScope:_scope,...legacyReview}=externalReview;
   expect(()=>check({...signed,signatureBase64:wireFor(legacyReview).signatureBase64})).toThrow("EXTERNAL_REVIEW_SIGNATURE_INVALID");
   // T047 synthetic T24 signed transport/witness metadata, not a real PRE.

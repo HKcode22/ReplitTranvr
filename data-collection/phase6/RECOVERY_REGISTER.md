@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. Recurrence exact 88188823: four workflows 45895855329/45895855211/45895855254/45895855318 failed the same TS18048 optional response wire type narrowing; no production fault. | I023, I026, I069 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) Nov26 10:58 PST latest actual rolling wake SOURCE/POST paid jobs skipped; do not infer additional missed query count without current owner census. 19:47:58Z owner census: Day3 T24 64 elapsed, T6/T90 128 prospective, 52 historical bindings, 92 reservations, zero PRE tasks, zero unresolved stops; owner enabled SOURCE only. 19:58:19Z I059 actual owner audit confirms 512 prepared, 292 elapsed unreserved, 128 future, 52 timely binding, no PRE; Day4 no prepared rows yet (first signed plan request Nov27 11:45Z, draw already selected). | I008, I012, I013, I014, I016, I043, I045, I057, I059, I060, I062 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067, I068 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067, I068, I070 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -150,6 +150,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I069 | Staged; exact CI required | Explicit return on absent later response wire and missing request scope so TypeScript narrows correctly; distinguish missing field from explicit null no-review, retain strict runtime rejection. | F025 |
 
+| I070 | Staged; exact CI required | Delegate conditional later registry signature from actual module-bound proof-resolved page, exact SOURCE bytes and existing policy with five distinct reviewer identities and source-expiry cap; reuse external verifier. No live publish wiring. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -257,6 +259,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T064 | New regression; exact CI pending | Real local Unix socket accepts later subset/null only on lane, exact response horizon, no duplicate member or replay; wrong role and horizon refused. | F027 | I068 | C001, C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 
 | T065 | New regression; exact CI pending | Full TypeScript check plus real local socket later response with undefined/missing wire rejects while explicit null succeeds; no permissive optional chaining or cast bypass. | F025 | I069 | C001, C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
+
+| T066 | New regression; exact CI pending | Actual restricted source fixture -> authenticated permit and shared independent proof -> conditional registry issuer -> existing external verifier; reject copied page, expired/late scope or absent conditional policy. | F027 | I070 | C001, C002, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -384,3 +388,8 @@ Reuse existing immutable SOURCE proof and private same-run socket with distinct 
 ## Nov26 continuation — I069/T065 exact CI shared-cause repair
 
 Exact 88188823 four CI failures all share TS18048 in later response validator, not four incidents or PG permission regression. Explicit return on undefined wire and missing request scope retains strict behavior and fixes narrowing; expanded real socket test for missing versus explicit null. Existing F025 recurrence, no new F. I066 exact 23/23 passed. Operational #978 unchanged 11/11. No production switch, migration, paid request or deployment.
+
+
+## Nov26 continuation — I070/T066 conditional later registry issuer
+
+Use existing proof-resolved page, opaque module binding and conditional packet assembler to issue an exact policy-scoped Ed25519 shard signature under five distinct reviewer pins, bounded source expiry and prospective cutoff. Verify immediately with existing external reviewer verifier; live runtime and publication remain open, no rights or paid authorization changes. T066 uses existing synthetic source/proof fixture. I069 exact CI running. No production data, provider or deployment.

@@ -4,6 +4,7 @@ import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39.ts
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39.ts";
 import {verifyPhase7SignedPreFieldProof} from "./phase7SignedPreFieldProof_v39.ts";
 import {prepareP5ConditionalPrePermitPageFromSignedReviews,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage} from "./phase5ConditionalPrePermitPreparation_v39.ts";
+const conditionalResolvedPages=new WeakMap();
 const hold=s=>{throw Error("HOLD_P7_PRE_PROOF_PUBLICATION_"+s);};
 export async function resolveP7PublicationProofs({preview,env,port,readClock,forbiddenSignerFingerprints=[]}){
  const list=preview?.privateCompletedPackets;
@@ -48,5 +49,19 @@ export async function resolveP7ConditionalPublicationPage({pool,scope,requestedF
  const proofs=await resolveP7PublicationProofs({preview,env:protectedEnv,port,readClock,
   forbiddenSignerFingerprints:[...forbiddenSignerFingerprints,authority.expectedReviewerFingerprintSha256]});
  const done=completeP5ConditionalPreProofPage(preview,protectedEnv,policy.reviewSha256,policy.dispositions,proofs.phase7IndependentProofsByPermitSha256);
- return Object.freeze(Object.defineProperties({...done},{privateAttachedPackets:{value:done.privateAttachedPackets,enumerable:false},privateSourceExpiresAtUtc:{value:prepared.privateSourceExpiresAtUtc,enumerable:false}}));
+ const result=Object.freeze(Object.defineProperties({...done},{privateAttachedPackets:{value:done.privateAttachedPackets,enumerable:false},privateSourceExpiresAtUtc:{value:prepared.privateSourceExpiresAtUtc,enumerable:false}}));
+ conditionalResolvedPages.set(result,Object.freeze({reviewerFingerprintSha256:authority.expectedReviewerFingerprintSha256,
+  proofReviewerFingerprintSha256:proofFp,reviewedCodeSha:authority.expectedReviewedCodeSha,
+  source:structuredClone(scope.source),protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:scope.externalContentUseReviewSha256,
+  populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,
+  sourceExpiresAtUtc:prepared.privateSourceExpiresAtUtc,observedDbClockUtc:undefined,
+  ...(authority.independentlyApprovedStandaloneProtocolSha256===undefined?{}:{standaloneProtocolSha256:authority.independentlyApprovedStandaloneProtocolSha256})}));
+ return result;
+}
+
+/** Module-local provenance for the exact proof-resolved page, not a caller declaration. */
+export function readP7ResolvedConditionalPageBinding(page){
+ const binding=conditionalResolvedPages.get(page);
+ if(!binding||page.privateSourceExpiresAtUtc!==binding.sourceExpiresAtUtc)hold("ACTUAL_RESOLVED_CONDITIONAL_PAGE_REQUIRED");
+ return structuredClone(binding);
 }
