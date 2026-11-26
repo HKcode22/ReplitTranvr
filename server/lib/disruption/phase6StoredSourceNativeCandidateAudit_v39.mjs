@@ -11,6 +11,7 @@ import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOrigi
 import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39.ts";
 import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
+import {readP5SignedConditionalServiceReview} from "./phase5ConditionalBoundSourceReview_v39.ts";
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
 import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning} from "./phase5IndependentLaterPrePacketCompletion_v39.ts";
@@ -96,13 +97,24 @@ export function deriveP6CommittedNativeQueryScope(receipt,selected,selector,trus
     !iso(p.day?.scheduledStartUtc))
   fail("SIGNED_QUERY_SCOPE_OR_CONTRACT_DRIFT");
  verifyP5F8ExactSourcePartition({...p,day:{...p.day,scheduledStartUtc:new Date(p.day.scheduledStartUtc)}});
+ // A conditional scope is accepted only from the verified exact signed
+ // packet. No inferred marker, retroactive policy or modified native path.
+ const conditional=p.conditionalService;
+ if(conditional!==undefined&&(!conditional||conditional.reviewedConditionalServiceScope!==true||
+   !SHA.test(conditional.protocolSha256??"")||!iso(conditional.effectiveUtc)||
+   !iso(a.scheduledRequestUtc)||conditional.effectiveUtc>a.scheduledRequestUtc||
+   conditional.cohortStartUtc!==p.day.scheduledStartUtc||
+   Object.keys(conditional).sort().join(",")!==["cohortStartUtc","effectiveUtc","protocolSha256","reviewedConditionalServiceScope"].sort().join(",")||
+   typeof p.localFrom!=="string"||!p.localFrom||typeof p.localTo!=="string"||!p.localTo))
+  fail("SIGNED_CONDITIONAL_SCOPE_DRIFT");
  return Object.freeze({manifestSha256:trust.manifestSha256,queryDigestSha256:selector.queryDigestSha256,
   reviewedReleaseSha256:trust.releaseSha256,rightsReviewSha256:trust.rightsSha256,
   providerContractSha256:p.openapiSha256,earlyDrawSha256:p.expectedEarlyDrawSha256,
   runDayIndex:a.runDayIndex,slot:a.slot,horizon:a.horizon,airportIcao:a.icao,
   maxPopulationStalenessSeconds:policy.maximumPopulationStalenessSeconds,
   expectedServiceWindowStartUtc:a.serviceWindowStartUtc,expectedServiceWindowEndUtc:a.serviceWindowEndUtc,
-  ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{})});
+  ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{}),
+  ...(conditional?{conditionalServiceScope:Object.freeze({...conditional,localFrom:p.localFrom,localTo:p.localTo})}:{})});
 }
 export async function auditP6StoredCommittedNativeSource({readerClient,sourcePool,trust,selector,policy}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
@@ -126,14 +138,25 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
  if(!Number.isFinite(now)||!Number.isFinite(read)||now<read||now-read>120000||
     typeof audit.sourceGithubRunId!=="string"||!/^[0-9]{5,25}$/.test(audit.sourceGithubRunId))
   fail("ACTUAL_SOURCE_AUDIT_CLOCK_OR_RUN_DRIFT");
+ const conditional=auditedScope.conditionalServiceScope;
+ const conditionalReview=conditional?await readP5SignedConditionalServiceReview(sourcePool,{
+  source:{...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId},
+  protocolSha256:conditional.protocolSha256,ownerProspectiveSeparateTierApproved:true,
+  frozenStudyStartUtc:conditional.cohortStartUtc,policyEffectiveUtc:conditional.effectiveUtc,
+  minimumReviewLeadSeconds:900,expectedPopulationQueryId:audit.sourcePopulationQueryId,
+  expectedResponseSha256:audit.sourceResponseSha256,expectedLocalFrom:conditional.localFrom,
+  expectedLocalTo:conditional.localTo}):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
   candidateCount:audit.candidateCount,censoredCount:audit.censoredCount,classifications:audit.classifications,
   sourceTimingDiagnostics:audit.sourceTimingDiagnostics,
   ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
+  ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,
+    counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
+    actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
- Object.defineProperties(out,{privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
+ Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},

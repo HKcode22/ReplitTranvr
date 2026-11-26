@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
-import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
+import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
 function fixture(){
  const departures=[{number:"SQ78",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:t("12:00")}},arrival:{airport:{icao:"YSSY"}}}];
@@ -78,6 +78,37 @@ describe("source-bound conditional service preparation",()=>{
    expect(rejected.queries.some(x=>x.includes("raw_payload"))).toBe(false);
    expect(rejected.queries.at(-1)).toBe("ROLLBACK");
   }
+ });
+ it("runtime signed read binds the actual stored digest and requires the prospective source marker before raw read",async()=>{
+  const {scope,o,r}=fixture();
+  const {expectedDecodedBodySha256,...input}=scope;
+  const raw=r.raw_payload as any;
+  const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
+  const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
+  const make=(marker:string,body:string)=>{
+   const queries:string[]=[];
+   const pool={connect:async()=>({release(){},query:async(sql:string)=>{
+    queries.push(sql);
+    if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
+    if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:0,conditional_source_protocol_sha256:marker,decoded_original_body_sha256:body}]};
+    if(sql.includes("SELECT r.raw_payload"))return {rows:[{...r,raw_payload:marked}]};
+    if(sql.includes("FROM clean.flight_population"))return {rows:[]};
+    if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
+    return {rows:[]};
+   }})};
+   return {pool,queries};
+  };
+  const good=make(scope.protocolSha256,expectedDecodedBodySha256);
+  expect((await readSigned(good.pool,input)).report.counts.conditionalCandidates).toBe(1);
+  expect(good.queries.at(-1)).toBe("COMMIT");
+  for(const [marker,body] of [[h("9"),expectedDecodedBodySha256],[scope.protocolSha256,"bad"]]){
+   const rejected=make(marker,body);
+   await expect(readSigned(rejected.pool,input)).rejects.toThrow(/SIGNED_SOURCE_MARKER_OR_BODY_BINDING/);
+   expect(rejected.queries.some(x=>x.includes("SELECT r.raw_payload"))).toBe(false);
+  }
+  const wrongBody=make(scope.protocolSha256,h("9"));
+  await expect(readSigned(wrongBody.pool,input)).rejects.toThrow(/ORIGINAL_BINDING/);
+  expect(wrongBody.queries.at(-1)).toBe("ROLLBACK");
  });
  it("fails before any original body read if source role is wrong",async()=>{
   const {scope}=fixture(),queries:string[]=[];

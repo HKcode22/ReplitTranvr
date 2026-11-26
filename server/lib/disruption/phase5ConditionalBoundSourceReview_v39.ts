@@ -98,6 +98,15 @@ export function matchP5ConditionalStage14Members(
  return Object.freeze(Object.defineProperty(summary,"privateReviewProposals",{value:Object.freeze(matched),enumerable:false})) as typeof summary&{readonly privateReviewProposals:readonly (typeof matched)[number][]};
 }
 export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool,s:ReviewScope){
+ return readBound(pool,s,false);
+}
+/** Runtime-only entry: the caller has verified signed SOURCE packet bytes and
+ * an actual committed-query audit. Derive decoded-body digest from the exact
+ * existing immutable binding, not from the body to be verified. */
+export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">){
+ return readBound(pool,s,true);
+}
+async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean){
  const c=await pool.connect();let began=false;
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
@@ -109,9 +118,15 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
   if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_STAGE28_GROUPS.source||
     g[0].db!=="neondb"||Number(g[0].version)<160000||Number(g[0].version)>=170000||!Number.isFinite(Number(g[0].version))||
     g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
-  const q=s.source,params=[q.manifestSha256,q.queryDigestSha256];
-  const rows=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,params)).rows;
+  const q=input.source,params=[q.manifestSha256,q.queryDigestSha256];
+  const boundSql=signed?P5_STAGE14_BOUND_SOURCE_SQL.replace("b.normalized_members_count,b.bound_at_utc,","b.normalized_members_count,b.bound_at_utc,b.decoded_original_body_sha256,"):P5_STAGE14_BOUND_SOURCE_SQL;
+  if(signed&&boundSql===P5_STAGE14_BOUND_SOURCE_SQL)hold("BINDING_QUERY_CONTRACT");
+  const rows=(await c.query(boundSql,params)).rows;
   const o=rows[0];
+  const bodyHash=signed?o?.decoded_original_body_sha256:input.expectedDecodedBodySha256;
+  if(typeof bodyHash!=="string"||!SHA.test(bodyHash)||
+    (signed&&o?.conditional_source_protocol_sha256!==input.protocolSha256))hold("SIGNED_SOURCE_MARKER_OR_BODY_BINDING");
+  const s:ReviewScope={...input,expectedDecodedBodySha256:bodyHash};
   if(rows.length!==1||!o||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.protocolSha256??"")||
     !q.plannedRequestUtc||ms(s.policyEffectiveUtc)>ms(q.plannedRequestUtc)||o.manifest_sha256!==q.manifestSha256||
     Number(o.run_day_index)!==q.runDayIndex||o.slot_id!==q.slot||o.horizon!==q.horizon||o.airport_icao!==q.airportIcao||

@@ -45,6 +45,24 @@ describe("signed committed SOURCE candidate handoff",()=>{
   expect(s.expectedServiceWindowEndUtc).toBe("2027-02-10T12:00:00.000Z");
   expect("expectedSourceGithubRunId" in s).toBe(false);
  });
+ it("derives the prospective conditional scope only from exact verified SOURCE packet bytes",()=>{
+  const f=fixture(),selected=selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust);
+  const packet=JSON.parse(f.receipt.privateBytes.toString("utf8"));
+  const plan=packet.plan;
+  plan.acquisition.scheduledRequestUtc="2027-02-10T04:00:00.000Z";
+  plan.localFrom="2027-02-10T19:00";plan.localTo="2027-02-10T20:00";
+  const marker={reviewedConditionalServiceScope:true,protocolSha256:H("9"),effectiveUtc:"2027-02-09T00:00:00.000Z",cohortStartUtc:plan.day.scheduledStartUtc};
+  const derive=(conditional:any)=>{
+   const bytes=Buffer.from(JSON.stringify({...packet,plan:{...plan,conditionalService:conditional}}));
+   const digest=h(bytes),receipt:any={redactedSummary:{...f.receipt.redactedSummary,contentSha256:digest}};
+   Object.defineProperties(receipt,{privateBytes:{value:bytes},privateLogicalPath:{value:f.receipt.privateLogicalPath}});
+   return deriveP6CommittedNativeQueryScope(receipt,{...selected,q:{...selected.q,expectedPacketSha256:digest}},f.selector,f.trust,f.policy);
+  };
+  expect(derive(marker).conditionalServiceScope).toMatchObject({...marker,localFrom:plan.localFrom,localTo:plan.localTo});
+  expect(derive(undefined).conditionalServiceScope).toBeUndefined();
+  for(const patch of [{effectiveUtc:"2027-02-10T05:00:00.000Z"},{cohortStartUtc:"2027-02-11T11:00:00.000Z"},{reviewedConditionalServiceScope:false},{protocolSha256:"bad"},{extra:true}])
+   expect(()=>derive({...marker,...patch})).toThrow(/SIGNED_CONDITIONAL_SCOPE_DRIFT/);
+ });
  it("rejects cross-study, absent digest, tampered packet or unapproved policy",()=>{
   const f=fixture();
   expect(()=>selectP6CommittedNativeSourceQuery(f.index,{...f.selector,queryDigestSha256:H("9")},f.trust)).toThrow("SOURCE_QUERY_NOT_UNIQUE");

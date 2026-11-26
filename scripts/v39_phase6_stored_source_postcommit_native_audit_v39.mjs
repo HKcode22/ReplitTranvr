@@ -134,6 +134,7 @@ export function redactP6PostcommitNativeAudit(a,c){
   runDayIndex:a.runDayIndex,horizon:a.horizon,candidateAuditSha256:a.candidateAuditSha256,
   observedMemberCount:a.observedMemberCount,candidateCount:a.candidateCount,censoredCount:a.censoredCount,
   classifications:a.classifications,sourceTimingDiagnostics:a.sourceTimingDiagnostics,observedDbClockUtc:a.actualDbClockUtc,
+  ...(a.conditionalSourceReview?{conditionalSourceReview:a.conditionalSourceReview}:{}),
   ...(a.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:a.retainedCrossOriginalIdentityReview}:{}),
   providerCalls:0,databaseWrites:0,providerContentsPrinted:false,signedPrePacketsIssued:0,phase6PaidGo:false};
 }
@@ -188,7 +189,7 @@ export async function runP6PostcommitNativeAudit(env){
    independentReviewStillRequired:true}}:{})};
   // Existing CLI prints only the aggregate. A subsequent authorized
   // in-process reviewer may consume the exact private handoff.
-  return Object.freeze(Object.defineProperties(result,{privateUnsignedPreReview:{value:review,enumerable:false},
+  return Object.freeze(Object.defineProperties(result,{privateConditionalSourceReview:{value:a.privateConditionalSourceReview,enumerable:false},privateUnsignedPreReview:{value:review,enumerable:false},
    privateNativeFeatureReview:{value:features,enumerable:false}}));
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }
