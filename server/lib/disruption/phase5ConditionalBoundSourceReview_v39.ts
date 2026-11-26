@@ -96,7 +96,8 @@ export function matchP5ConditionalStage14Members(
     m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
     m.source_type!=="fids"||m.population_role!=="requested_airport_primary"||m.query_direction!=="Departure"||
     !Number.isFinite(scheduled)||!Number.isFinite(available)||scheduled!==ms(candidate.selectedReportedDepartureUtc)||
-    (originalAvailable!==null&&available<originalAvailable)||available>observed||available>ms(candidate.ownCutoffUtc)){
+    (originalAvailable!==null&&available<originalAvailable)||available>observed||available>ms(candidate.ownCutoffUtc)||
+    ms(candidate.ownCutoffUtc)-observed<=s.minimumReviewLeadSeconds*1000){
    missingOrAmbiguous++;continue;
   }
   matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
@@ -193,13 +194,21 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   // Feature extraction also consumes time; do not return late drafts.
   const end=featureDrafts.length?(await c.query("SELECT clock_timestamp() AS at")).rows:fresh;
   if(end.length!==1||ms(end[0].at)<ms(fresh[0].at)||ms(end[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_FEATURE_CLOCK");
-  const proposalById=new Map(memberReview.privateReviewProposals.map(m=>[m.flightInstanceId,m]));
-  const liveDrafts=featureDrafts.filter(x=>{
-   const m=proposalById.get(x.flightInstanceId)!;
-   return ms(m.predictionCutoffUtc)-ms(end[0].at)>s.minimumReviewLeadSeconds*1000;
-  });
+  // F033: candidate summaries, member proposals and feature drafts must
+  // describe the same final database clock. The earlier authenticated raw
+  // match remains valid; time can only remove candidates, never add any.
+  const endClock=stamp(end[0].at),endMs=ms(endClock);
+  const liveCandidates=finalReport.privateCandidates.filter(x=>ms(x.ownCutoffUtc)-endMs>s.minimumReviewLeadSeconds*1000);
+  const dropped=finalReport.privateCandidates.length-liveCandidates.length;
+  const liveReport=Object.freeze(Object.defineProperty({...finalReport,
+   counts:{...finalReport.counts,conditionalCandidates:liveCandidates.length,lateOrStale:finalReport.counts.lateOrStale+dropped}},
+   "privateCandidates",{value:Object.freeze(liveCandidates),enumerable:false})) as typeof finalReport;
+  const liveMemberReview=endClock===stamp(fresh[0].at)?memberReview:
+   matchP5ConditionalStage14Members(s,liveReport,members,Number(o.normalized_members_count),endClock,stamp(o.source_available));
+  const liveIds=new Set(liveMemberReview.privateReviewProposals.map(m=>m.flightInstanceId));
+  const liveDrafts=featureDrafts.filter(x=>liveIds.has(x.flightInstanceId));
   await c.query("COMMIT");began=false;
-  const out={report:finalReport,memberReview,observedDbClockUtc:stamp(end[0].at),
+  const out={report:liveReport,memberReview:liveMemberReview,observedDbClockUtc:endClock,
    conditionalFeatureReview:{status:s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
     featureDraftCount:liveDrafts.length,lateDraftCount:featureDrafts.length-liveDrafts.length,
     evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),

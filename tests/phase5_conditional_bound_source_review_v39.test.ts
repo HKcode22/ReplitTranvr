@@ -33,6 +33,8 @@ describe("source-bound conditional service preparation",()=>{
   const m={population_query_id:scope.expectedPopulationQueryId,response_hash:scope.expectedResponseSha256,provider_content_expired_at_utc:null,population_member_id:"member-1",analytic_identity_id:id,canonical_flight_instance_id:id,source_airport_icao:"WSSS",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",flight_number:"SQ78",scope_classification:"unknown",codeshare_resolution_status:"g5a_conditional_operator_composite_no_native_id",source_type:"fids",population_role:"requested_airport_primary",query_direction:"Departure",dep_scheduled_utc:t("12:00"),available_at:t("05:02")};
   const x=match(scope,report,[m],1,t("05:04"));
   expect(x.stage14MatchedMembershipCount).toBe(1);
+  // A previously valid report may no longer meet the required lead.
+  expect(match(scope,report,[m],1,t("05:45")).stage14MatchedMembershipCount).toBe(0);
   expect(x.privateReviewProposals[0]).toMatchObject({flightInstanceId:id,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",reviewedStableServiceKeySha256:id.slice(8)});
   expect(x.actualPreIssued).toBe(false);
   expect(x.privateReviewProposals[0]).toMatchObject({sourceMemberAvailableUtc:t("05:02"),observedDbClockUtc:t("05:04"),
@@ -91,15 +93,15 @@ describe("source-bound conditional service preparation",()=>{
   const raw=r.raw_payload as any;
   const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
   const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
-  const make=(marker:string,body:string,original=marked,members:Record<string,unknown>[]=[])=>{
-   const queries:string[]=[];
+  const make=(marker:string,body:string,original=marked,members:Record<string,unknown>[]=[],clocks:string[]=[])=>{
+   const queries:string[]=[];let clockIndex=0;
    const pool={connect:async()=>({release(){},query:async(sql:string)=>{
     queries.push(sql);
     if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
     if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:members.length,conditional_source_protocol_sha256:marker,decoded_original_body_sha256:body}]};
     if(sql.includes("SELECT r.raw_payload"))return {rows:[{...r,raw_payload:original}]};
     if(sql.includes("FROM clean.flight_population"))return {rows:members};
-    if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
+    if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:clocks[clockIndex++]??t("05:04")}]};
     return {rows:[]};
    }})};
    return {pool,queries};
@@ -122,6 +124,24 @@ describe("source-bound conditional service preparation",()=>{
   expect(draft.physicalGateOutCertified).toBe(false);
   expect(draft.compiled.bundle.observations.map(x=>[x.field,x.value])).toEqual([["operating_carrier","SIA"],["scheduled_arrival_utc",t("20:00")],["provider_revised_departure_utc",t("12:15")],["reported_pre_departure_status","Scheduled"]]);
   expect(draft.compiled.bundle.externalSourceAndContentsReviewReceiptSha256).toBe(h("8"));
+  // F033: the final clock arrives after the minimum review lead was lost.
+  // No stale private proposal or candidate can survive just because the
+  // earlier source/member read completed before the boundary.
+  const late=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m],
+   [t("05:04"),t("05:04"),t("05:04"),t("05:45")]);
+  const expiredLead=await readSigned(late.pool,{...input,externalContentUseReviewSha256:h("8")});
+  expect(expiredLead.observedDbClockUtc).toBe(t("05:45"));
+  expect(expiredLead.report.counts).toMatchObject({conditionalCandidates:0,lateOrStale:1});
+  expect(expiredLead.report.privateCandidates).toHaveLength(0);
+  expect(expiredLead.memberReview.stage14MatchedMembershipCount).toBe(0);
+  expect(expiredLead.memberReview.privateReviewProposals).toHaveLength(0);
+  expect(expiredLead.conditionalFeatureReview).toMatchObject({featureDraftCount:0,lateDraftCount:1,actualPreIssued:false});
+  expect(expiredLead.privateFeatureDrafts).toHaveLength(0);
+  const stillLive=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m],
+   [t("05:04"),t("05:04"),t("05:04"),t("05:44")]);
+  const updated=await readSigned(stillLive.pool,{...input,externalContentUseReviewSha256:h("8")});
+  expect(updated.memberReview.privateReviewProposals[0].observedDbClockUtc).toBe(t("05:44"));
+  expect(updated.privateFeatureDrafts).toHaveLength(1);
   expect(JSON.stringify(withFeature)).not.toMatch(/SIA|SQ78|Scheduled|privateFeatureDrafts/);
   await expect(readSigned(actual.pool,{...input,externalContentUseReviewSha256:"bad"})).rejects.toThrow(/CONDITIONAL_FEATURE_REVIEW_SCOPE/);
   for(const [marker,body] of [[h("9"),expectedDecodedBodySha256],[scope.protocolSha256,"bad"]]){

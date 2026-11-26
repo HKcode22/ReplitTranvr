@@ -42,6 +42,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
 | F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 | 
 | F032 | Code correction committed; CI pending | Recovery-register parser wrongly reads a single-ID regression-crosswalk row as a duplicate primary F025, causing two test failures and skipping downstream diagnostics. [Job](https://github.com/HKcode22/ReplitTranvr/actions/runs/45800099500/job/139840779912) | I027 |
+| F033 | Code finding; correction staged | Conditional feature review pruned late drafts at the final database clock but still returned earlier candidate/member proposals. A future signer could see a stale proposal after required lead was lost. Not established as a historical live cause. | I028 |
 
 ## Implementations
 
@@ -74,13 +75,14 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I025 | Implemented, CI pending | Shared existing four-field FIDS feature draft from authenticated marked conditional raw member, exact protected content-use/protocol, private output and fresh cutoff; no signed issuance | F027 |
 | I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 | 
 | I027 | Implemented; exact CI pending | Scope primary identifier parsing to three canonical sections; reject duplicates, malformed rows, wrong family and missing sections; regress repeated crosswalk IDs. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/4d00959c389dfd08fafc0bf2050525ed75c34837) | F032 |
+| I028 | Implemented; CI pending | Reconcile private candidate report, member proposals and draft counts to final database clock; reject stale direct member match, preserve cutoff and source custody, add positive and exact-boundary regression. | F033 |
 
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
 | C001 | Open | Prospective conditional signed PRE issuance and private producer-consumer admission | F005, F018, F027 | I005, I014, I016 |
-| C002 | Partial | Conditional feature drafts and explicit UTC parity implemented; independent Packet A proof and lawful Packet B preservation still incomplete | F027, F030, F031 | I014, I024, I025, I026 |
+| C002 | Partial | Conditional feature drafts and explicit UTC parity implemented; independent Packet A proof and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |
