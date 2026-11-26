@@ -89,3 +89,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov26 15:33 PST paid audit:** First exact new-main autonomous wake 45911127179 and six workers passed; SOURCE no due with fresh queue, not paid receipt. I086/T080 adds bounded GitHub actual child evidence audit, distinguishes timely/late original vs HTTP OK unbound, 429, actor-only, skipped, unknown and later overall failure. Never count ACK/green/reservation as billed or saved PRE. Read [paid audit checkpoint](data-collection/phase6/checkpoints/2026-11-26_1533_PST_PAID_SOURCE_CHILD_AUDIT.md). Keep SOURCE active and POST disabled; no fresh deploy during prearm without safe exact review.
+
+
+**Nov26 15:40 PST paid audit fidelity:** Actual historical REST step metadata masks PG16 as PG***6; accept ONLY these two exact step names. I087/T081 scopes markers to paid step clock, no shell echoes/outside-step evidence; separate follow-on PRE status, never commit proof. I085/T079 and I086/T080 exact focused 0bfd3193 passed; final successor CI required. Read [checkpoint](data-collection/phase6/checkpoints/2026-11-26_1540_PST_PAID_AUDIT_REAL_METADATA_AND_ACTOR_PREFLIGHT.md). Do not pause SOURCE or enable POST solely from preflight.

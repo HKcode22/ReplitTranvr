@@ -71,7 +71,7 @@ test("T080 paid child evidence requires exact job/step and complete actual diagn
  const run={id:123,head_sha:"a".repeat(40),event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
  const paid="Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child",actor="Admission for real actor preflight ONLY (no paid capability)";
  const job={name:"exact-private-source-existing-one-get-child",run_id:123,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",
-  steps:[{name:actor,conclusion:"skipped"},{name:paid,conclusion:"success"}]};
+  steps:[{name:actor,conclusion:"skipped"},{name:paid,conclusion:"success",started_at:"2026-11-25T06:39:58Z",completed_at:"2026-11-25T07:00:02Z"}]};
  const log=(...d)=>d.map(x=>"2026-11-25T07:00:02.9278707Z P6_SOURCE_DIAG "+x).join("\n");
  const complete=log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_OK","ORIGINAL_PERSIST_CONFIRMED","OUTCOME_TIMELY");
  const result=classifyP6PaidChildReceipt(run,[job],complete);
@@ -86,4 +86,32 @@ test("T080 paid child evidence requires exact job/step and complete actual diagn
  assert.equal(classifyP6PaidChildReceipt(run,[{...job,head_sha:"b".repeat(40)}],complete).status,"JOB_IDENTITY_UNVERIFIED");
  assert.deepEqual(readSafeTimestampedSourceDiagnostics('2026-11-25T07:00:02Z echo "P6_SOURCE_DIAG HTTP_OK"\n'+log("HTTP_OK extra-private")+'\n'+log("HTTP_OK")),["HTTP_OK"]);
  assert.doesNotMatch(JSON.stringify(result),/private|postgres:\/\//);
+});
+
+test("T081 real GitHub masked step name and second-precision interval retain timely SOURCE while independently labeling failed PRE",()=>{
+ const run={id:45562205543,head_sha:"b4c6c283e506747c3d662aa61c969f57b26cd4d4",event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const paid={name:"Authenticate real private PG***6 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"success",number:11,started_at:"2026-11-25T06:39:58Z",completed_at:"2026-11-25T07:00:02Z"};
+ const actor={name:"Admission for real actor preflight ONLY (no paid capability)",conclusion:"skipped",number:4};
+ const pre={name:"Review and publish later PRE using existing private registry (NONPAID, separately approved)",conclusion:"failure",number:12};
+ const job={name:"exact-private-source-existing-one-get-child",run_id:run.id,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",steps:[actor,paid,pre]};
+ // Actual historical SOURCE markers and timestamps; follow-on failure is a
+ // synthetic combination, not an assertion that this historical PRE failed.
+ const log=[
+ "2026-11-25T06:39:57.999Z P6_SOURCE_DIAG HTTP_RATE_LIMIT",
+ "2026-11-25T07:00:02.9278707Z P6_SOURCE_DIAG PREARM_COMMITTED",
+ "2026-11-25T07:00:02.9283201Z P6_SOURCE_DIAG RESERVATION_CONFIRMED",
+ "2026-11-25T07:00:02.9284739Z P6_SOURCE_DIAG HTTP_OK",
+ "2026-11-25T07:00:02.9286870Z P6_SOURCE_DIAG ORIGINAL_PERSIST_CONFIRMED",
+ "2026-11-25T07:00:02.9287789Z P6_SOURCE_DIAG OUTCOME_TIMELY",
+ "2026-11-25T07:00:03.000Z P6_SOURCE_DIAG OUTCOME_LATE"
+ ].join("\n");
+ const result=classifyP6PaidChildReceipt(run,[job],log);
+ assert.equal(result.status,"TIMELY_ORIGINAL_REPORTED_BY_CHILD");
+ assert.equal(result.followOnPre,"STEP_FAILED_OR_INTERRUPTED");
+ assert.equal(result.actualPreCommitVerified,false);
+ assert.ok(!result.diagnostics.includes("HTTP_RATE_LIMIT")&&!result.diagnostics.includes("OUTCOME_LATE"));
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,{...paid,name:paid.name.replace("PG***6","PG***")},pre]}],log).status,"STEP_SCOPE_UNVERIFIED");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,{...paid,started_at:null},pre]}],log).status,"PAID_STEP_CLOCK_UNVERIFIED");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,{...pre,conclusion:"success"}]}],log).followOnPre,"STEP_SUCCEEDED_NOT_COMMIT_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,pre,pre]}],log).status,"STEP_SCOPE_UNVERIFIED");
 });

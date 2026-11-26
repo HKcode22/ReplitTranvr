@@ -73,14 +73,37 @@ export function readSafeTimestampedSourceDiagnostics(log){
  return readSafeSourceDiagnosticLines(lines.join("\n"),null).map(x=>x.slice(PREFIX.length));
 }
 const EXACT_PAID_STEP="Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child";
+// Exact alternate spelling was observed in actual GitHub job metadata
+// 45562205543: GitHub's secret masking can redact a substring of PG16.
+const MASKED_PAID_STEP="Authenticate real private PG***6 signed index and query, then ORIGINAL one-physical-GET child";
+export const isP6PaidSourceStep=x=>x?.name===EXACT_PAID_STEP||x?.name===MASKED_PAID_STEP;
 const ACTOR_ONLY_STEP="Admission for real actor preflight ONLY (no paid capability)";
+const PRE_FOLLOWON_STEP="Review and publish later PRE using existing private registry (NONPAID, separately approved)";
+const JOB_FAILURES=new Set(["failure","cancelled","timed_out"]);
+function stepLogWindow(step){
+ const clock=x=>typeof x==="string"&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(x)?Date.parse(x):NaN;
+ const start=clock(step.started_at),end=clock(step.completed_at);
+ // GitHub step metadata has second precision; log events have fractions.
+ if(!Number.isFinite(start)||!Number.isFinite(end)||end<start)return null;
+ return {start,endExclusive:end+1000};
+}
+function paidStepDiagnostics(log,step){
+ const win=stepLogWindow(step);
+ if(!win||typeof log!=="string"||log.length>10*1024*1024)return [];
+ const lines=log.split(/\r?\n/).filter(line=>{
+  const ts=line.slice(0,line.indexOf(" ")),time=Date.parse(ts);
+  return Number.isFinite(time)&&time>=win.start&&time<win.endExclusive;
+ });
+ return readSafeTimestampedSourceDiagnostics(lines.join("\n"));
+}
 const JOB_NAME="exact-private-source-existing-one-get-child";
 const HTTP_LABELS=new Set([...LABELS].filter(x=>x.startsWith("HTTP_")&&x!=="HTTP_STARTED"));
 /** One exact private child, not parent ACK, billing or PRE. An overall red
  * job may still have committed a timely original before follow-on failure. */
 export function classifyP6PaidChildReceipt(run,jobs,log){
+ let followOnPre="NOT_ASSESSED";
  const out=(status,diagnostics=[])=>Object.freeze({runId:Number.isSafeInteger(run?.id)&&run.id>0?run.id:null,status,
-  diagnostics,providerBillingVerified:false,independentDbReadbackVerified:false,actualPreCommitVerified:false,trainingEligibilityCertified:false});
+  diagnostics,followOnPre,providerBillingVerified:false,independentDbReadbackVerified:false,actualPreCommitVerified:false,trainingEligibilityCertified:false});
  if(!Number.isSafeInteger(run?.id)||run.id<=0||!/^[a-f0-9]{40}$/.test(run.head_sha??"")||run.event!=="workflow_dispatch"||run.head_branch!=="main"||
   run.run_attempt!==1||!Array.isArray(jobs))return out("RUN_IDENTITY_UNVERIFIED");
  if(run.status!=="completed")return out("RUN_NOT_TERMINAL");
@@ -88,12 +111,19 @@ export function classifyP6PaidChildReceipt(run,jobs,log){
  if(found.length!==1||jobs.some(j=>j.name!==JOB_NAME&&j.conclusion!=="skipped"))return out("JOB_SCOPE_UNVERIFIED");
  const j=found[0];
  if(j.run_id!==run.id||j.head_sha!==run.head_sha||j.run_attempt!==1||j.status!=="completed"||!Array.isArray(j.steps))return out("JOB_IDENTITY_UNVERIFIED");
- const paid=j.steps.filter(x=>x.name===EXACT_PAID_STEP),actor=j.steps.filter(x=>x.name===ACTOR_ONLY_STEP);
+ const paid=j.steps.filter(isP6PaidSourceStep),actor=j.steps.filter(x=>x.name===ACTOR_ONLY_STEP),pre=j.steps.filter(x=>x.name===PRE_FOLLOWON_STEP);
+ if(pre.length>1)return out("STEP_SCOPE_UNVERIFIED");
  if(paid.length!==1||actor.length!==1)return out("STEP_SCOPE_UNVERIFIED");
  if(paid[0].conclusion==="skipped"&&actor[0].conclusion==="success")return out("NONPAID_ACTOR_PREFLIGHT_NO_COLLECTION");
  if(paid[0].conclusion==="skipped")return out("PAID_STEP_SKIPPED_NO_COLLECTION_PROOF");
  if(!["success","failure","cancelled","timed_out"].includes(paid[0].conclusion)||actor[0].conclusion!=="skipped")return out("STEP_SCOPE_UNVERIFIED");
- const d=readSafeTimestampedSourceDiagnostics(log),has=x=>d.includes(x),http=d.filter(x=>HTTP_LABELS.has(x)),outcomes=d.filter(x=>["OUTCOME_TIMELY","OUTCOME_LATE","OUTCOME_UNOBSERVED"].includes(x));
+ if(!stepLogWindow(paid[0]))return out("PAID_STEP_CLOCK_UNVERIFIED");
+ if(pre.length===1){
+  if(pre[0].conclusion==="success")followOnPre="STEP_SUCCEEDED_NOT_COMMIT_PROOF";
+  else if(JOB_FAILURES.has(pre[0].conclusion))followOnPre="STEP_FAILED_OR_INTERRUPTED";
+  else if(pre[0].conclusion==="skipped")followOnPre="STEP_SKIPPED";
+ }
+ const d=paidStepDiagnostics(log,paid[0]),has=x=>d.includes(x),http=d.filter(x=>HTTP_LABELS.has(x)),outcomes=d.filter(x=>["OUTCOME_TIMELY","OUTCOME_LATE","OUTCOME_UNOBSERVED"].includes(x));
  if(!d.length)return out("PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC");
  if(http.length>1||outcomes.length>1||
   has("ORIGINAL_PERSIST_CONFIRMED")&&(!has("HTTP_OK")||!has("RESERVATION_CONFIRMED")||has("OUTCOME_UNOBSERVED"))||

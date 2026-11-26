@@ -2,7 +2,7 @@
  * dispatch, retries or raw log output. Uses existing authenticated gh.
  * Exact current main; one bounded page, at most 24 actual child logs. */
 import {execFileSync} from "node:child_process";
-import {classifyP6PaidChildReceipt} from "./v39_phase5b_source_diagnostics_v39.mjs";
+import {classifyP6PaidChildReceipt,isP6PaidSourceStep} from "./v39_phase5b_source_diagnostics_v39.mjs";
 const R="HKcode22/ReplitTranvr",WF="phase5-one-signed-day-source-child-dispatch.yml";
 const H=/^[a-f0-9]{40}$/,int=x=>Number.isSafeInteger(x)&&x>0;
 const gh=(...a)=>execFileSync("gh",a,{encoding:"utf8",timeout:30000,maxBuffer:10*1024*1024,stdio:["ignore","pipe","pipe"]});
@@ -27,7 +27,7 @@ try{
    if(!Number.isSafeInteger(j.total_count)||j.total_count<1||j.total_count>20||j.jobs?.length!==j.total_count)fail();
    jobs=j.jobs;
    const job=jobs.find(x=>x.name==="exact-private-source-existing-one-get-child");
-   if(int(job?.id)&&job.steps?.some(x=>x.name==="Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child"&&x.conclusion!=="skipped")){
+   if(int(job?.id)&&job.steps?.some(x=>isP6PaidSourceStep(x)&&x.conclusion!=="skipped")){
     try{log=gh("api","repos/"+R+"/actions/jobs/"+job.id+"/logs");}catch{/* unknown log, no replay */}
    }
   }catch{/* unverified metadata, no collection claim */}
