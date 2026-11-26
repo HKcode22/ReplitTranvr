@@ -97,3 +97,23 @@ test("T076 fails closed on protected route, retention approval, conditional acti
  assert.equal(unavailable.status,5,unavailable.stderr+unavailable.stdout);
  assert.doesNotMatch(unavailable.stdout+unavailable.stderr,/PASS_SOURCE_ONLY_NO_WRITES|parse error|UNEXPECTED_GH/);
 });
+
+const sourceCutover=readFileSync(new URL("../scripts/v39_phase5b_source_only_successor_owner.sh",import.meta.url),"utf8");
+const sourceGuards=sourceCutover.split("# BEGIN SOURCE ONLY TESTED GUARDS\n")[1].split("# END SOURCE ONLY TESTED GUARDS")[0];
+function runSourceGuards(body){
+ return spawnSync("bash",["-c","set -Eeuo pipefail\nR=target\nL=relay\nhold(){ echo HOLD_\"$1\";exit 2; }\n"+sourceGuards+"\n"+body],{encoding:"utf8",timeout:10000});
+}
+test("T078 exact SOURCE-only cutover gap rejects open, short, missing and malformed evidence",()=>{
+ const base={status:"SIGNED_CALENDAR_PREPARED_QUERY_AND_SPLIT_COUNTS_READONLY",calendarDays:31,providerCalls:0,databaseWrites:0,observedAtUtc:"2026-11-26T23:04:07.489Z",
+ cells:[{status:"PREPARED_DENOMINATOR_OBSERVED",open_unreserved:0,future_unreserved:64,next_planned_utc:"2026-11-27T01:45:00.000Z"}]};
+ const call=x=>runSourceGuards("gap_ok '"+JSON.stringify(x)+"' && echo GAP_PASS");
+ assert.equal(call(base).status,0,call(base).stderr);
+ for(const cells of [[{...base.cells[0],open_unreserved:1}],[{...base.cells[0],next_planned_utc:"2026-11-27T00:45:00.000Z"}],[{...base.cells[0],next_planned_utc:null}],[]]){
+  const x=call({...base,cells});assert.notEqual(x.status,0);assert.doesNotMatch(x.stdout,/GAP_PASS/);
+ }
+});
+test("T078 all-main quiet guard distinguishes active and metadata failures",()=>{
+ for(const [fixture,expected] of [['{"total_count":0}',0],['{"total_count":1}',4],['{"total_count":null}',3],['bad json',3]]){
+  const x=runSourceGuards("gh(){ echo '"+fixture+"'; }\nall_main_quiet");assert.equal(x.status,expected,x.stderr);
+ }
+});

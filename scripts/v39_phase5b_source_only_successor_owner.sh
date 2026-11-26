@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# Exact owner decision for a code-only successor while SOURCE is already enabled.
+# No route/approval/secret changes, no migrations, no paid dispatch, no replay.
+# The only workflow dispatch permitted is the existing due-only retention baseline.
+set -Eeuo pipefail
+shopt -s inherit_errexit
+set +x
+umask 077
+R=HKcode22/ReplitTranvr
+L=HKcode22/TravnrClockRelay
+OLD=f4fe806dbda9695f181aee3b16d7285c42e44f93
+ROLD=9188891698958e03d6fc4bf964266f560c36a6d0
+RH=6c6cbd36e9838ad519ba2c8403c0e2e12ed51f7f
+H="${2:-}"
+ENV=phase6-protected-runtime
+stage=ADMISSION
+hold(){ echo "HOLD_SOURCE_ONLY_CUTOVER stage=$stage reason=$1" >&2;exit 2; }
+trap 'echo "SOURCE_ONLY_CUTOVER_INTERRUPTED stage=$stage; inspect actual main and pins; never blindly replay" >&2' ERR
+[[ "${1:-}" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR && "$H" =~ ^[a-f0-9]{40}$ ]] || hold EXACT_MODE
+[[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
+main(){ gh api "repos/$1/git/ref/heads/main" --jq .object.sha; }
+tree(){ gh api "repos/$1/git/commits/$2" --jq .tree.sha; }
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+vars(){ local repo="$1" env="$2" endpoint; if [[ "$env" == repo ]];then endpoint="repos/$repo/actions/variables";else endpoint="repos/$repo/environments/$env/variables";fi
+ gh api --paginate "$endpoint?per_page=100" --jq '.variables[]|{name,value}' | jq -s '.'
+}
+value(){ jq -er --arg k "$2" '[.[]|select(.name==$k)|.value]|if length==0 then "__ABSENT__" elif length==1 then .[0] else error("duplicate variable") end' <<<"$1"; }
+v(){ gh variable get "$2" -R "$1"; }
+effective(){
+ local a j
+ j="$(vars "$1" "$3")" || return 3
+ a="$(value "$j" "$2")" || return 3
+ if [[ "$a" == __ABSENT__ ]];then v "$1" "$2";else printf '%s\n' "$a";fi
+}
+guard(){ local repo="$1" key="$2" expected="$3";shift 3
+ [[ "$(v "$repo" "$key")" == "$expected" ]] || hold "REPO_$key"
+ local e;for e in "$@";do [[ "$(effective "$repo" "$key" "$e")" == "$expected" ]] || hold "ENV_$key";done
+}
+pr(){ gh pr view "$2" -R "$1" --json headRefOid,baseRefOid,state,mergeCommit,isDraft,mergeable,statusCheckRollup; }
+statecheck(){
+ local repo="$1" num="$2" old="$3" head="$4" j state now
+ j="$(pr "$repo" "$num")";state="$(jq -r .state <<<"$j")";now="$(main "$repo")"
+ [[ "$(jq -r .headRefOid <<<"$j")" == "$head" ]] || hold PR_HEAD_DRIFT
+ if [[ "$state" == OPEN ]];then
+  [[ "$now" == "$old" && "$(jq -r .baseRefOid <<<"$j")" == "$old" ]] || hold BASE_DRIFT
+ elif [[ "$state" == MERGED ]];then
+  [[ "$now" == "$(jq -r .mergeCommit.oid <<<"$j")" && "$(tree "$repo" "$now")" == "$(tree "$repo" "$head")" ]] || hold MERGED_TREE_DRIFT
+ else hold PR_STATE;fi
+ printf '%s\n' "$state"
+}
+ci(){
+ local repo="$1" head="$2" minimum="$3" j
+ j="$(gh api "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100")"
+ jq -e --arg h "$head" --argjson n "$minimum" '.total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=$n and all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1)' <<<"$j" >/dev/null || hold EXACT_CI_NOT_ALL_GREEN
+ if [[ "$repo" == "$R" ]];then
+  jq -e '([.workflow_runs[].name] as $n | ["V3.9 Offline Safety","Phase5B source diagnostics offline tests","Phase5B conditional T24 existing witness path real PG16 (NO paid)","Phase5 V0091 genuine-source-to-V0087 scoped enrollment PG16 (NO PROVIDER)","Phase5B exact executable successor compatibility","Phase5B Phase7 actual role executable admission"] | all(. as $x|$n|index($x)!=null))' <<<"$j" >/dev/null || hold MANDATORY_CI_MISSING
+ fi
+ echo "EXACT_CI_PASS repo=$repo head=$head count=$(jq -r .total_count <<<"$j")"
+}
+merge_exact(){
+ local repo="$1" num="$2" old="$3" head="$4" j
+ [[ "$(statecheck "$repo" "$num" "$old" "$head")" == OPEN ]] || return 0
+ j="$(pr "$repo" "$num")"
+ jq -e '.mergeable=="MERGEABLE" and (.statusCheckRollup|length)>0 and all(.statusCheckRollup[];.status=="COMPLETED" and (.conclusion=="SUCCESS" or .conclusion=="SKIPPED" or .conclusion=="NEUTRAL"))' <<<"$j" >/dev/null || hold CHECK_ROLLUP
+ if [[ "$(jq -r .isDraft <<<"$j")" == true ]];then gh pr ready "$num" -R "$repo";fi
+ if [[ "$(gh api "repos/$repo" --jq .allow_merge_commit)" == true ]];then gh pr merge "$num" -R "$repo" --merge --match-head-commit "$head"
+ elif [[ "$(gh api "repos/$repo" --jq .allow_squash_merge)" == true ]];then gh pr merge "$num" -R "$repo" --squash --match-head-commit "$head"
+ else hold NO_REVIEWED_MERGE_METHOD;fi
+ [[ "$(statecheck "$repo" "$num" "$old" "$head")" == MERGED ]] || hold MERGE_NOT_PROVEN
+}
+pin(){
+ local repo="$1" key="$2" old="$3" new="$4";shift 4
+ local x e
+ x="$(v "$repo" "$key")";[[ "$x" == "$old" || "$x" == "$new" ]] || hold UNEXPECTED_REPO_PIN
+ if [[ "$x" != "$new" ]];then gh variable set "$key" -R "$repo" --body "$new";fi
+ for e in "$@";do
+  local j
+  j="$(vars "$repo" "$e")" || hold VARIABLE_LIST_UNVERIFIED
+  x="$(value "$j" "$key")" || hold VARIABLE_VALUE_UNVERIFIED
+  if [[ "$x" == __ABSENT__ ]];then continue;fi
+  [[ "$x" == "$old" || "$x" == "$new" ]] || hold UNEXPECTED_ENV_PIN
+  if [[ "$x" != "$new" ]];then gh variable set "$key" -R "$repo" --env "$e" --body "$new";fi
+ done
+ guard "$repo" "$key" "$new" "$@"
+}
+
+# BEGIN SOURCE ONLY TESTED GUARDS
+# Database time, not runner wall clock, determines the prospective no-cutover gap.
+# 90-minute stored prearm + 40-minute deployment reserve. Open due work is fatal.
+gap_ok(){
+ local j="$1"
+ jq -e '
+ .status=="SIGNED_CALENDAR_PREPARED_QUERY_AND_SPLIT_COUNTS_READONLY" and
+ .calendarDays==31 and .providerCalls==0 and .databaseWrites==0 and
+ (.observedAtUtc|type=="string") and
+ ([.cells[]|select(.status=="PREPARED_DENOMINATOR_OBSERVED")]|length)>0 and
+ ([.cells[]|select(.open_unreserved!=null)|.open_unreserved]|add)==0 and
+ ([.cells[]|select(.future_unreserved!=null)|.future_unreserved]|add)>0 and
+ ([.cells[]|select(.future_unreserved!=null and .future_unreserved>0)|.next_planned_utc] as $t |
+   ($t|length)>0 and all($t[];type=="string") and
+   (($t|min|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601)-(.observedAtUtc|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601))>=7800)
+ ' <<<"$j" >/dev/null
+}
+all_main_quiet(){
+ local repo state q n
+ for repo in "$R" "$L";do
+  for state in queued in_progress waiting requested pending;do
+   q="$(gh api "repos/$repo/actions/runs?branch=main&status=$state&per_page=1")" || return 3
+   n="$(jq -er '.total_count|select(type=="number" and .>=0 and .==floor)' <<<"$q")" || return 3
+   [[ "$n" == 0 ]] || return 4
+  done
+ done
+}
+wait_all_quiet(){
+ local i rc
+ for ((i=1;i<=12;i++));do
+  if all_main_quiet;then return 0;else rc=$?;fi
+  [[ "$rc" == 4 ]] || hold ACTIVE_STATUS_UNVERIFIED
+  [[ "$i" != 12 ]] || hold ACTIVE_NO_CANCEL
+  sleep 10
+ done
+}
+# END SOURCE ONLY TESTED GUARDS
+blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
+stage=EXACT_CI
+ci "$R" "$H" 31
+ci "$L" "$RH" 1
+# The relay patch modifies only relay.mjs and relay.test.mjs; its exact PR
+# triggers the external-clock offline tests, not unrelated admin workflows.
+[[ "$(statecheck "$R" 977 "$OLD" "$H")" == OPEN && "$(statecheck "$L" 31 "$ROLD" "$RH")" == OPEN ]] || hold NO_BLIND_REPLAY
+blob 3ee5830338e6e121befdb6d324e9c61311dc28ea "$TMP/pins.sh"
+blob 018a350036ebe0f2b326e322b586d4ef9b343dd1 "$TMP/census.mjs"
+blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
+blob 8df852a34c08ba91a6b3a0441b2718579901a5ca "$TMP/retention.sh"
+bash -n "$TMP/pins.sh";bash -n "$TMP/retention.sh";node --check "$TMP/census.mjs";node --check "$TMP/funnel.cjs"
+stage=EXACT_SOURCE_ONLY_OWNER_READBACK
+bash "$TMP/pins.sh" "$OLD" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
+grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold OLD_PIN_READBACK
+# No raw originals, no writes; check actual STOP and any existing queue tasks.
+node "$TMP/funnel.cjs" > "$TMP/funnel"
+jq -es '([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")]|length)==1 and ([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")][0].unresolvedStops==0) and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")]|length)==1 and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")][0].tasks|length)==0' "$TMP/funnel" >/dev/null || hold STOP_OR_EXISTING_PRE_TASKS
+stage=PREMERGE_RETENTION
+bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
+stage=QUIET_AND_GAP
+wait_all_quiet
+node "$TMP/census.mjs" > "$TMP/census"
+gap_ok "$(cat "$TMP/census")" || hold NO_SAFE_PROSPECTIVE_GAP
+# Also require clock freshness to prevent stale census reuse after the quiet wait.
+observed="$(jq -r .observedAtUtc "$TMP/census")"
+[[ "$(date -u +%s)" -ge "$(date -u -d "$observed" +%s)" && "$(( $(date -u +%s)-$(date -u -d "$observed" +%s) ))" -le 60 ]] || hold CENSUS_CLOCK
+all_main_quiet || hold ACTIVE_NO_CANCEL
+stage=TARGET_MERGE
+merge_exact "$R" 977 "$OLD" "$H"
+NEW="$(main "$R")"
+stage=TARGET_RUNTIME_AND_RETENTION_PINS
+pin "$R" P6_PHASE5B_RUNTIME_EXECUTABLE_SHA "$OLD" "$NEW" "$ENV"
+pin "$R" P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$OLD" "$NEW" "$ENV"
+pin "$R" P7_EXPIRY_APPROVED_MAIN_SHA "$OLD" "$NEW" "$ENV"
+pin "$L" TRAVNR_APPROVED_TARGET_MAIN_SHA "$OLD" "$NEW" travnr-target-forward travnr-cron-audit travnr-cron-management travnr-cron-lease-renewal
+bash "$TMP/pins.sh" "$NEW" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
+grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold NEW_TARGET_PIN_READBACK
+stage=NEW_TARGET_RETENTION
+bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$NEW"
+echo "SOURCE_ONLY_TARGET_DEPLOYED_AND_RETENTION_BASELINE main=$NEW"
+# Do not unwind the successfully deployed target if the separate relay quiet
+# window disappears. Report the exact stage and do not repeat target merge.
+stage=RELAY_MERGE
+wait_all_quiet
+node "$TMP/census.mjs" > "$TMP/census"
+gap_ok "$(cat "$TMP/census")" || hold RELAY_NO_SAFE_PROSPECTIVE_GAP
+all_main_quiet || hold ACTIVE_NO_CANCEL
+merge_exact "$L" 31 "$ROLD" "$RH"
+RNEW="$(main "$L")"
+stage=RELAY_EXECUTABLE_PIN
+pin "$L" P6_RELAY_APPROVED_EXECUTABLE_SHA "$ROLD" "$RNEW" travnr-target-forward travnr-cron-audit
+stage=FINAL_READBACK
+bash "$TMP/pins.sh" "$NEW" "$RNEW" SOURCE_ONLY > "$TMP/pin-output"
+grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold FINAL_PIN_READBACK
+echo "SOURCE_ONLY_COORDINATED_CODE_DEPLOYED target=$NEW relay=$RNEW"
+echo "NO_PAID_DISPATCH_NO_ROUTE_CHANGE_NO_POLICY_REWRITE_NO_MIGRATION; verify actual independent pulse and paid child separately"

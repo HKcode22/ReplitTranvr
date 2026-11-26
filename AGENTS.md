@@ -75,3 +75,6 @@ Read [the permanent recovery register](data-collection/phase6/RECOVERY_REGISTER.
 
 
 **T076 fixture fidelity:** Never export mock API JSON under names assigned by the actual shell script (e.g. RELAY). Use isolated MOCK_* names and require the intended negative marker and exit code, not any arbitrary failure. Nov26 exact 6be1b51a focused run 45908378513 failed 16/17 at the positive readback test due to this fixture collision. No production failure inferred. The owner command held before reads; do not bypass exact CI or rerun the superseded command.
+
+
+**Nov26 15:09 PST owner acceptance and successor:** Actual 23:04Z SOURCE_ONLY readback and exact T076 focused CI passed; do not repeat old census as a prerequisite except fresh cutover guard. I083 relay #31 6c6cbd36 65/65, observed pre-POST self identity defer at 23:04Z, historic field unknown. I084 new SOURCE-only owner cutover preserves SOURCE true, POST false, existing retention and signed policy anchors; exact current-head full CI and owner decision, fresh zero STOP/tasks, no open query and 130-minute lead, quiet main, target/relay pin readback and existing due-only retention baseline. Never use old paused #976/#30 procedure. If interrupted after target merge do not blindly rerun, reconcile actual pins and stage. No conditional authority inferred.
