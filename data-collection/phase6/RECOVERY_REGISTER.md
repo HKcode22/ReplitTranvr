@@ -34,8 +34,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F022 | Tested branch | Audit incorrectly classified eight expired original hashes as mismatches. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I020 |
 | F023 | Tested branch | Idle native follow-on acquired publisher lock before zero candidate check. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I021 |
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
-| F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. | I023, I026 |
-| F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043 |
+| F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
+| F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
 | F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
@@ -53,6 +53,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F038 | Code repair merged; actual live acceptance open | Immutable original selector and coherent current snapshot; exact 454349c9 46/46. Never substitute changed SOURCE or roll back. | I037, I042 |
 
 | F039 | Code-discovered signed-object parity risk; staged | Existing signed later registry validated separate caller-provided parsed objects instead of comparing to authenticated bytes. A changed shard or source entry must never inherit original digest. | I044 |
+
+| F040 | Observed repeated safe operational hold; bounded wait staged | Owner relay cutover held ACTIVE_RELAY_NO_CANCEL then ACTIVE_PARENT_OR_CHILD_NO_CANCEL after target retention verified. Periodic nonpaid parent runs can overlap; no cancellation or paid failure inferred. Failed active/variable metadata reads must never become quiet/absent. | I045 |
 
 ## Implementations
 
@@ -114,6 +116,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I043 | Target merged/repinned; relay held safely | Owner exact #976 and relay #30 CI 46/46 and 4/4. Target main f4fe806d, retention 45812762727 both jobs success; ACTIVE_RELAY_NO_CANCEL before relay merge. Idempotent owner procedure can resume on quiet interval; no paid resume. | F026 |
 
 | I044 | Implemented #977; exact CI pending | Conditional later registry and private C+D hydration/projection accept only explicit protected prospective scope and mandatory proof metadata; compare parsed registry/source objects against authenticated bytes; legacy direct writer remains native-only. | F027, F039 |
+
+| I045 | Staged #977; CI required | Bounded read-only quiet wait for already merged target relay cutover; explicit malformed/API failure handling, preserve all existing pause/retention/active checks and no cancel/replay. | F026, F040 |
 
 ## Completion components (not gates)
 
@@ -188,6 +192,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T038 | Target partial cutover proven; relay owner completion pending | Exact #976 and relay #30 green; target new main and retention both verified, active relay safe stop before merge. | F026 | I043 | C007, C010 | .github/workflows/phase5b-source-diagnostics-offline.yml |
 
 | T039 | New regression; exact CI pending | Conditional actual prepared packet into exact signed later registry; absent or wrong protected scope refuses. Parsed SOURCE/later objects must match original authenticated bytes; legacy native direct owner remains separate. | F027, F039 | I044 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase5_signed_later_pre_day_registry_v39.test.ts |
+
+| T040 | New regression; exact CI pending | Quiet wait retries only known active-run state, stops on unknown/malformed status and bounded persistent activity; checks target plus relay and never cancels or dispatches. | F026, F040 | I045 | C007, C010 | tests/phase5b_cutover_quiet_v39.test.mjs; .github/workflows/phase5b-source-diagnostics-offline.yml |
 
 ## Scientific and retention authorities
 

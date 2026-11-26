@@ -3,6 +3,7 @@
 # authority, migration, paid resume, replay, cancellation, or policy rewrite.
 # Owner shell is required for protected variable writes; do not use Agent.
 set -Eeuo pipefail
+shopt -s inherit_errexit
 set +x
 umask 077
 R=HKcode22/ReplitTranvr
@@ -28,7 +29,12 @@ vars(){ local repo="$1" env="$2" endpoint; if [[ "$env" == repo ]];then endpoint
 }
 value(){ jq -er --arg k "$2" '[.[]|select(.name==$k)|.value]|if length==0 then "__ABSENT__" elif length==1 then .[0] else error("duplicate variable") end' <<<"$1"; }
 v(){ gh variable get "$2" -R "$1"; }
-effective(){ local a; a="$(value "$(vars "$1" "$3")" "$2")";if [[ "$a" == __ABSENT__ ]];then v "$1" "$2";else printf '%s\n' "$a";fi; }
+effective(){
+ local a j
+ j="$(vars "$1" "$3")" || return 3
+ a="$(value "$j" "$2")" || return 3
+ if [[ "$a" == __ABSENT__ ]];then v "$1" "$2";else printf '%s\n' "$a";fi
+}
 guard(){ local repo="$1" key="$2" expected="$3";shift 3
  [[ "$(v "$repo" "$key")" == "$expected" ]] || hold "REPO_$key"
  local e;for e in "$@";do [[ "$(effective "$repo" "$key" "$e")" == "$expected" ]] || hold "ENV_$key";done
@@ -36,7 +42,7 @@ guard(){ local repo="$1" key="$2" expected="$3";shift 3
 paused(){
  for k in P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED P6_PRIVATE_POST_PARENT_ENABLED;do guard "$R" "$k" false "$ENV";done
  local j e k
- for e in repo "$ENV";do j="$(vars "$R" "$e")";for k in P5_AUTO_SOURCE_DISPATCH_ENABLED P5_POST_AUTO_DISPATCH_ENABLED;do
+ for e in repo "$ENV";do j="$(vars "$R" "$e")" || hold VARIABLE_LIST_UNVERIFIED;for k in P5_AUTO_SOURCE_DISPATCH_ENABLED P5_POST_AUTO_DISPATCH_ENABLED;do
   [[ "$(value "$j" "$k")" == false || "$(value "$j" "$k")" == __ABSENT__ ]] || hold LEGACY_ROUTE_ACTIVE
  done;done
 }
@@ -65,21 +71,57 @@ ci(){
  fi
  echo "EXACT_CI_PASS repo=$repo head=$head count=$(jq -r .total_count <<<"$j")"
 }
+# BEGIN TESTED QUIET FUNCTIONS
+# All status reads must be successful and well-shaped. A transport error is
+# never zero active runs. Fixed paths/counts only; do not log API responses.
 active(){
- local repo="$1" wf="$2" k q total=0
+ local repo="$1" wf="$2" k q n total=0
  for k in queued in_progress waiting requested pending;do
-  q="$(gh api "repos/$repo/actions/workflows/$wf/runs?branch=main&status=$k&per_page=1")"
-  total=$((total+$(jq -er .total_count <<<"$q")))
+  q="$(gh api "repos/$repo/actions/workflows/$wf/runs?branch=main&status=$k&per_page=1")" || return 3
+  n="$(jq -er '.total_count | select(type=="number" and .>=0 and .==floor)' <<<"$q")" || return 3
+  [[ "$n" =~ ^[0-9]+$ ]] || return 3
+  total=$((total+n))
  done
  printf '%s\n' "$total"
 }
-# New paid parent admission is already paused. Never cancel active work.
-drain(){
- local wf
+# A known active run is the only retryable outcome. No merge, dispatch,
+# cancellation, variable change, or database operation occurs in this loop.
+scan_quiet(){
+ local includeRelay="$1" wf n
  for wf in phase5-source-upcoming-queue-main-scheduled-readonly.yml phase6-rolling-controller-bounded-session.yml phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml;do
-  [[ "$(active "$R" "$wf")" == 0 ]] || hold ACTIVE_PARENT_OR_CHILD_NO_CANCEL
+  n="$(active "$R" "$wf")" || return 3
+  if [[ "$n" != 0 ]];then
+   echo "P5B_QUIET_WAIT target_workflow=$wf active=$n" >&2
+   return 4
+  fi
  done
+ if [[ "$includeRelay" == relay ]];then
+  n="$(active "$L" external-clock.yml)" || return 3
+  if [[ "$n" != 0 ]];then
+   echo "P5B_QUIET_WAIT relay_workflow=external-clock.yml active=$n" >&2
+   return 4
+  fi
+ fi
+ return 0
 }
+wait_quiet(){
+ local includeRelay="$1" tries="$2" delay="$3" i rc
+ for ((i=1;i<=tries;i++));do
+  if scan_quiet "$includeRelay";then return 0;else rc=$?;fi
+  [[ "$rc" == 4 ]] || hold ACTIVE_STATUS_UNVERIFIED
+  [[ "$i" != "$tries" ]] || hold QUIET_WINDOW_NOT_OBSERVED_NO_CANCEL
+  sleep "$delay"
+ done
+ hold QUIET_WINDOW_NOT_OBSERVED_NO_CANCEL
+}
+# Preserve original strict no-active semantics before a fresh target merge.
+drain(){
+ local rc
+ if scan_quiet target;then return 0;else rc=$?;fi
+ [[ "$rc" == 4 ]] || hold ACTIVE_STATUS_UNVERIFIED
+ hold ACTIVE_PARENT_OR_CHILD_NO_CANCEL
+}
+# END TESTED QUIET FUNCTIONS
 merge_exact(){
  local repo="$1" num="$2" old="$3" head="$4" j
  [[ "$(statecheck "$repo" "$num" "$old" "$head")" == OPEN ]] || return 0
@@ -97,7 +139,9 @@ pin(){
  x="$(v "$repo" "$key")";[[ "$x" == "$old" || "$x" == "$new" ]] || hold UNEXPECTED_REPO_PIN
  if [[ "$x" != "$new" ]];then gh variable set "$key" -R "$repo" --body "$new";fi
  for e in "$@";do
-  x="$(value "$(vars "$repo" "$e")" "$key")"
+  local j
+  j="$(vars "$repo" "$e")" || hold VARIABLE_LIST_UNVERIFIED
+  x="$(value "$j" "$key")" || hold VARIABLE_VALUE_UNVERIFIED
   if [[ "$x" == __ABSENT__ ]];then continue;fi
   [[ "$x" == "$old" || "$x" == "$new" ]] || hold UNEXPECTED_ENV_PIN
   if [[ "$x" != "$new" ]];then gh variable set "$key" -R "$repo" --env "$e" --body "$new";fi
@@ -110,7 +154,8 @@ ci "$R" "$H" 46
 ci "$L" "$RH" 4
 ts="$(statecheck "$R" 976 "$OLD" "$H")"
 ls="$(statecheck "$L" 30 "$ROLD" "$RH")"
-paused;retention;drain
+paused;retention
+if [[ "$ts" == OPEN ]];then drain;else wait_quiet target 12 15;fi
 guard "$L" TRAVNR_RELAY_ROLLING_ENABLED 1 travnr-target-forward travnr-cron-audit
 guard "$L" TRAVNR_RELAY_ROLLING_ROUTE INDEPENDENT_WAKE travnr-target-forward
 gh api "repos/$R/git/blobs/$B" --jq .content | base64 --decode > "$TMP/baseline.sh"
@@ -138,18 +183,24 @@ pin "$L" TRAVNR_APPROVED_TARGET_MAIN_SHA "$OLD" "$NEW" travnr-target-forward tra
 stage=NEW_MAIN_RETENTION
 bash "$TMP/baseline.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$NEW"
 stage=RELAY_MERGE_AND_PIN
-paused;retention;drain
+paused;retention
 if [[ "$ls" == OPEN ]];then
  guard "$L" P6_RELAY_APPROVED_EXECUTABLE_SHA "$ROLD" travnr-target-forward travnr-cron-audit
- # Preserve active primary/wake; do not cancel or race any in-flight relay job.
- [[ "$(active "$L" external-clock.yml)" == 0 ]] || hold ACTIVE_RELAY_NO_CANCEL
+ # Target is already exactly merged and retention verified. Wait on read-only
+ # status before the relay merge; do not repeat the lengthy target cutover.
+ wait_quiet relay 12 15
+ paused;retention
+ guard "$L" P6_RELAY_APPROVED_EXECUTABLE_SHA "$ROLD" travnr-target-forward travnr-cron-audit
+ # Last status check is immediately before merge; if another scheduled run
+ # arrives during variable readback, wait again under the same bounds.
+ wait_quiet relay 12 15
  merge_exact "$L" 30 "$ROLD" "$RH"
 fi
 RNEW="$(main "$L")"
 [[ "$(statecheck "$L" 30 "$ROLD" "$RH")" == MERGED ]] || hold RELAY_NOT_MERGED
 pin "$L" P6_RELAY_APPROVED_EXECUTABLE_SHA "$ROLD" "$RNEW" travnr-target-forward travnr-cron-audit
 stage=FINAL_READBACK
-paused;retention;drain
+paused;retention;wait_quiet target 12 15
 [[ "$(main "$R")" == "$NEW" && "$(main "$L")" == "$RNEW" ]] || hold FINAL_MAIN_DRIFT
 guard "$L" TRAVNR_APPROVED_TARGET_MAIN_SHA "$NEW" travnr-target-forward travnr-cron-audit travnr-cron-management travnr-cron-lease-renewal
 guard "$L" TRAVNR_RELAY_ROLLING_ENABLED 1 travnr-target-forward travnr-cron-audit
