@@ -88,6 +88,11 @@ function sourceFromIndex(index,t,registry){
 export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,observedDbClockUtc,files}){
  const pub=trustCheck(t),r=wire?.review,reg=parse(registryBytes,250000),now=utc(observedDbClockUtc);
  const conditional=reg.schema===conditionalSchema;
+ // Metadata-only registry enumeration must enforce the identity tier
+ // before it can exclude/route a member, even without packet hydration.
+ const conditionalId=id=>typeof id==="string"&&/^leg:g5a:[a-f0-9]{64}$/.test(id);
+ if(conditional&&!keys(reg,["schema","runDayIndex","shardIndex","reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","sourceRegistryPath","sourceRegistrySha256","sourceReviewEvidenceSha256","conditionalT24Scope","sourceExpiresAtUtc","entries"])||
+    !conditional&&Object.hasOwn(reg,"sourceExpiresAtUtc"))hold("REGISTRY_TIER_FIELDS");
  if(conditional?(!t.conditionalT24Scope||!sameP5ConditionalLaterReviewerScope(t.conditionalT24Scope,reg.conditionalT24Scope)||
     !sameP5ConditionalLaterReviewerScope(t.conditionalT24Scope,r?.conditionalT24Scope)||Object.keys(t.conditionalT24Scope).length!==2):
     (Object.hasOwn(reg,"conditionalT24Scope")||Object.hasOwn(r??{},"conditionalT24Scope")))
@@ -118,6 +123,7 @@ export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,obs
  for(const e of reg.entries){
   if(!keys(e,["filePath","packetSha256","flightInstanceId","queryDigestSha256","selectedTNativeUtc","cutoffUtc"])||
      !PACK.test(e.filePath??"")||!H.test(e.packetSha256??"")||!ID.test(e.flightInstanceId??"")||
+     (conditional?!conditionalId(e.flightInstanceId):e.flightInstanceId.startsWith("leg:g5a:"))||
      !source.has(e.queryDigestSha256)||seen.has(e.flightInstanceId)||paths.has(e.filePath)||digests.has(e.packetSha256)||
      utc(e.selectedTNativeUtc)-utc(e.cutoffUtc)!==86400000||utc(e.cutoffUtc)<=reviewAt+900000||utc(e.cutoffUtc)>=valid)
    hold("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");

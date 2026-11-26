@@ -418,6 +418,26 @@ describe("source-bound conditional service preparation",()=>{
   const t24Wire={review:t24Review,signatureBase64:sign(null,p6T24RegistryReviewPreimage(t24Review),reviewer.privateKey).toString("base64")};
   const t24Files=[{filePath:t24Path,packetSha256:t24Digest,bytes:t24Bytes}],t24Args={trust:t24Trust,index,registryBytes:t24RegBytes,wire:t24Wire,observedDbClockUtc:t("05:05"),files:t24Files};
   expect(verifyP6T24PrivateRegistry(t24Args).reg).toEqual(t24Reg);
+  // T056: even the metadata-only read must reject a freshly signed
+  // wrong-tier identity or schema fields; packet hydration is not needed.
+  const metadata=(registry:Record<string,unknown>,reviewPatch:Record<string,unknown>={})=>{
+   const registryBytes=Buffer.from(JSON.stringify(registry)),registrySha256=hd(registryBytes);
+   const review={...t24Review,...reviewPatch,registrySha256,logicalPath:"data-collection/phase5/frozen/t24r_"+registrySha256+".json"};
+   return verifyP6T24PrivateRegistry({...t24Args,registryBytes,files:undefined,
+    wire:{review,signatureBase64:sign(null,p6T24RegistryReviewPreimage(review),reviewer.privateKey).toString("base64")}});
+  };
+  expect(metadata(t24Reg).reg).toEqual(t24Reg);
+  expect(()=>metadata({...t24Reg,entries:[{...t24Reg.entries[0],flightInstanceId:"leg:p5v1:"+h("7")}]})).toThrow("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");
+  expect(()=>metadata({...t24Reg,unknownField:true})).toThrow("REGISTRY_TIER_FIELDS");
+  expect(()=>metadata({...t24Reg,sourceExpiresAtUtc:t("07:30")})).toThrow("REGISTRY_SIGNATURE_EXPIRED_OR_FUTURE");
+  const {conditionalT24Scope:unusedScope,sourceExpiresAtUtc:unusedExpiry,...nativeFields}=t24Reg;
+  const nativeReview={...t24Review,schema:"v39.phase6.native-t24-registry-ed25519.v1",audience:"HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY_ONLY"} as Record<string,unknown>;
+  delete nativeReview.conditionalT24Scope;
+  const nativeReg={...nativeFields,schema:"v39.phase6.native-t24-private-registry.v1"};
+  const nativeBytes=Buffer.from(JSON.stringify(nativeReg)),nativeSha=hd(nativeBytes);
+  const nativeWireReview={...nativeReview,registrySha256:nativeSha,logicalPath:"data-collection/phase5/frozen/t24r_"+nativeSha+".json"};
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,registryBytes:nativeBytes,files:undefined,
+   wire:{review:nativeWireReview,signatureBase64:sign(null,p6T24RegistryReviewPreimage(nativeWireReview),reviewer.privateKey).toString("base64")}})).toThrow("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");
   expect(()=>verifyP6T24PrivateRegistry({...t24Args,trust:{...t24Trust,conditionalT24Scope:undefined}})).toThrow("CONDITIONAL_T24_SCOPE");
   expect(()=>verifyP6T24PrivateRegistry({...t24Args,wire:{...t24Wire,signatureBase64:sign(null,p6T24RegistryReviewPreimage({...t24Review,schema:"v39.phase6.native-t24-registry-ed25519.v1"}),reviewer.privateKey).toString("base64")}})).toThrow("REGISTRY_SIGNATURE_INVALID");
   const gotT24=Object.defineProperties({status:"EXACT_PRIVATE_CONDITIONAL_T24_PACKETS_READONLY_NO_GO",registrySha256:t24RegSha,
