@@ -68,7 +68,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -138,4 +138,20 @@ test("separate disarmed readiness admission never accepts the actor confirmation
  assert.throws(()=>admitP6NativeLaterRuntime(e,()=>plan));
  assert.throws(()=>admitP6NativeLaterRuntime({...e,AERODATABOX_API_KEY:"no"},()=>plan,"actor-preflight"));
  assert.throws(()=>admitP6NativeLaterRuntime(f.withPolicy(),()=>plan,"actor-preflight"));
+});
+
+test("same-child later PRE reports count-only funnel and lead sensitivity even when no packet is produced",()=>{
+ const a={observedMemberCount:10,candidateCount:0,censoredCount:10,
+  classifications:{CENSORED_NO_PROSPECTIVE_PRE_LEAD:10,privateIdentity:"SECRET"},
+  sourceTimingDiagnostics:{timingOnlyCountsByReviewLeadSeconds:[{leadSeconds:900,eligible:0},{leadSeconds:600,eligible:7},{leadSeconds:300,eligible:10}]},
+  privateAuditBytes:"SECRET"};
+ const x=p6NativeLaterReadbackDiagnostics(a,{reviewEntryCount:0,horizon:"T-6h"},null,true);
+ assert.equal(x.sourceAuditOnlyReason,"NO_ELIGIBLE_NATIVE_CANDIDATES");
+ assert.equal(x.classifications.CENSORED_NO_PROSPECTIVE_PRE_LEAD,10);
+ assert.deepEqual(x.timingSensitivityOnly.map(y=>y.eligible),[0,7,10]);
+ assert.equal(x.policyChanged,false);
+ assert(!JSON.stringify(x).includes("SECRET"));
+ assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:0,candidateCount:0},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_OBSERVED_MEMBERS");
+ assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_PENDING_REVIEW_ENTRIES");
+ assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:2},{matchedCount:0},true).sourceAuditOnlyReason,"NO_MATCHED_NATIVE_FEATURES");
 });

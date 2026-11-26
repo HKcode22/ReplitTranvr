@@ -67,8 +67,28 @@ describe("outcome-blind four-slot provider burst mitigation",()=>{
   }
   for(const x of positions)expect(x.sort((a,b)=>a-b)).toEqual([0,20000,40000,60000]);
  });
- it("does not change a tight signed window and refuses invalid scope",()=>{
-  for(const s of slots)expect(p5SourcePacingTargetUtc(s,iso(base),iso(base+30000),iso(base+240000),180)).toBe(iso(base));
+ it("reproduces the measured Day2/Day3 60s hard window, 900s cutoff and 180s response allowance",()=>{
+  const positions=slots.map(()=>[] as number[]);
+  for(let n=0;n<4;n++){
+   const t=base+n*900000;
+   const row=slots.map((s,i)=>{const offset=Date.parse(p5SourcePacingTargetUtc(s,iso(t),iso(t+60000),iso(t+900000),180))-t;positions[i].push(offset);return offset;});
+   expect(row.sort((a,b)=>a-b)).toEqual([0,18000,36000,54000]);
+  }
+  for(const x of positions)expect(x.sort((a,b)=>a-b)).toEqual([0,18000,36000,54000]);
+ });
+ it("fits shorter balanced slots within the hard latest and response margin",()=>{
+  const positions=slots.map(()=>[] as number[]);
+  for(let n=0;n<4;n++){
+   const t=base+n*900000;
+   const row=slots.map((s,i)=>{const offset=Date.parse(p5SourcePacingTargetUtc(s,iso(t),iso(t+30000),iso(t+240000),180))-t;positions[i].push(offset);return offset;});
+   expect(row.sort((a,b)=>a-b)).toEqual([0,8000,16000,24000]);
+  }
+  for(const x of positions)expect(x.sort((a,b)=>a-b)).toEqual([0,8000,16000,24000]);
+  const limited=slots.map(s=>Date.parse(p5SourcePacingTargetUtc(s,iso(base),iso(base+120000),iso(base+210000),180))-base);
+  expect(limited.sort((a,b)=>a-b)).toEqual([0,8000,16000,24000]);
+ });
+ it("does not change a window with insufficient signed slack and refuses invalid scope",()=>{
+  for(const s of slots){expect(p5SourcePacingTargetUtc(s,iso(base),iso(base+13000),iso(base+240000),180)).toBe(iso(base));expect(p5SourcePacingTargetUtc(s,iso(base),iso(base+30000),iso(base+185000),180)).toBe(iso(base));}
   expect(()=>p5SourcePacingTargetUtc("bad",iso(base),iso(base+720000),iso(base+900000),180)).toThrow(/PACING_INVALID_SIGNED_SCOPE/);
  });
  it("waits on DB clock before reservation but original cutoff remains authoritative",async()=>{

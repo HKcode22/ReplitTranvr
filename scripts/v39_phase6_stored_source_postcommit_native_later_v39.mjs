@@ -160,6 +160,36 @@ export async function preflightP6NativeLaterRuntime(env){
   return {status:"P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO",actorOnly,observedDbClockUtc:clock,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false};
  }finally{await Promise.allSettled([underlying.end(),opened?.close()])}
 }
+/** Allowlisted count-only diagnostics from the existing same-child audit.
+ * Never expose raw flight records, identities, signatures, query paths or errors.
+ * No admission, lead-time, signer or publication policy is changed. */
+export function p6NativeLaterReadbackDiagnostics(actual,handoff,features,t24Approved){
+ const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
+ const counts={};
+ for(const k of ["CENSORED_AMBIGUOUS_SOURCE_IDENTITY","CENSORED_NONNATIVE_OR_UNCONFIRMED_OPERATING_MEMBER",
+ "CENSORED_MEMBER_NOT_AVAILABLE_BY_ACTUAL_DB_CLOCK","CENSORED_MISSING_NATIVE_T","CENSORED_SOURCE_TOO_STALE_OR_EXPIRED",
+ "CENSORED_SOURCE_ARRIVED_AFTER_OWN_CUTOFF","CENSORED_NO_PROSPECTIVE_PRE_LEAD","CENSORED_OUTSIDE_APPROVED_SOURCE_WINDOW"])
+  counts[k]=count(actual?.classifications?.[k]);
+ const pending={};
+ for(const k of ["originalEligibleCount","alreadyIndexed","changedNativeT","tooLate","notYetWithinShardWindow","pendingCount"])
+  pending[k]=count(actual?.pendingLaterReview?.[k]);
+ const sensitivity=[900,600,300].map(leadSeconds=>{
+  const a=actual?.sourceTimingDiagnostics?.timingOnlyCountsByReviewLeadSeconds;
+  const hit=Array.isArray(a)?a.filter(x=>x?.leadSeconds===leadSeconds):[];
+  return {leadSeconds,eligible:hit.length===1?count(hit[0].eligible):null};
+ });
+ const observed=count(actual?.observedMemberCount),native=count(actual?.candidateCount),
+  review=count(handoff?.reviewEntryCount),matched=count(features?.matchedCount);
+ const reason=review===0?(observed===0?"NO_OBSERVED_MEMBERS":native===0?"NO_ELIGIBLE_NATIVE_CANDIDATES":"NO_PENDING_REVIEW_ENTRIES"):
+  matched===0?"NO_MATCHED_NATIVE_FEATURES":
+  !features?"NO_FEATURE_REVIEW_RESULT":
+  handoff?.horizon==="T-24h"&&t24Approved!==true?"T24_REVIEW_NOT_APPROVED":null;
+ return {observedMemberCount:observed,eligibleNativeCandidateCount:native,
+  censoredMemberCount:count(actual?.censoredCount),reviewEntryCount:review,matchedFeatureCount:matched,
+  unsupportedNativeIdentityCount:count(features?.unsupportedNativeIdentityCount),
+  classifications:counts,pendingLaterReview:pending,timingSensitivityOnly:sensitivity,
+  sourceAuditOnlyReason:reason,policyChanged:false};
+}
 export async function runP6NativeLaterRuntime(env,phase7ProofPort){
  if(typeof phase7ProofPort?.readExactPermitProofs!=="function")hold("INDEPENDENT_PRE_PROOF_PORT_NOT_COMMISSIONED");
  const x=admitP6NativeLaterRuntime(env),t=x.c.trust,v=x.v;
@@ -184,7 +214,8 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
   if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
   const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
    candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
-   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false};
+   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false,
+   nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
   if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
    return {...report,sourceAuditOnly:true};
   // Reuse genuine independently archived public weather if its reader is

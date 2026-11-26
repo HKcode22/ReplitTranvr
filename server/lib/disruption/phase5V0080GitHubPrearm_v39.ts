@@ -68,8 +68,9 @@ export async function prearmP5V0080ActualGitHubRun(
 /** Prospective, deterministic, outcome-blind within-window pacing. Rotates
  * the four strata each quarter hour so no stratum always receives the later
  * position. It does not rewrite a signed timestamp or authorize another GET.
- * If the independently signed hard-latest window is narrower than the full
- * stagger, preserve the original schedule rather than force a new hold. */
+ * Fit a balanced stagger into the actual available signed slack, reserving
+ * five seconds for clock/reservation overhead. If less than three seconds per
+ * interval fit, keep base dispatch. This is not a cross-worker rate limiter. */
 export function p5SourcePacingTargetUtc(slot:string,plannedUtc:string,hardLatestUtc:string,cutoffUtc:string,maxResponseAndPersistSeconds:number):string{
  const rank=["HUB","MID_A","MID_B","REGIONAL"].indexOf(slot);
  const stamp=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
@@ -79,9 +80,10 @@ export function p5SourcePacingTargetUtc(slot:string,plannedUtc:string,hardLatest
  const planned=Date.parse(plannedUtc),hard=Date.parse(hardLatestUtc),cutoff=Date.parse(cutoffUtc);
  if(![planned,hard,cutoff].every(Number.isFinite)||!(planned<hard&&hard<cutoff))hold("PACING_INVALID_WINDOW");
  const rotation=((Math.floor(planned/900000)%4)+4)%4;
- const offset=((rank-rotation+4)%4)*20000;
- const room=Math.min(hard-planned-1000,cutoff-planned-maxResponseAndPersistSeconds*1000);
- return new Date(planned+(room>=60000?offset:0)).toISOString();
+ const room=Math.min(hard-planned,cutoff-planned-maxResponseAndPersistSeconds*1000)-5000;
+ const spacing=Math.min(20000,Math.floor(room/3000)*1000);
+ const offset=spacing>=3000?((rank-rotation+4)%4)*spacing:0;
+ return new Date(planned+offset).toISOString();
 }
 export async function waitForP5ScheduledPhysicalDispatch(
  plannedUtc:string,
