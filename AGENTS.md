@@ -72,3 +72,6 @@ Read [the permanent recovery register](data-collection/phase6/RECOVERY_REGISTER.
 
 
 **SOURCE-only cutover readback:** The old PAUSED-only pin script must not lead to pausing an already enabled SOURCE route. I082/T076 adds read-only SOURCE_ONLY mode and effective retention/rolling approval override checks, requires new conditional metadata transport disabled pending separate commissioning, and withholds unexpected variable values. Review exact CI before relying on this successor; metadata readback is not a deployment or policy commissioning. Keep POST disabled and retention/relay enabled.
+
+
+**T076 fixture fidelity:** Never export mock API JSON under names assigned by the actual shell script (e.g. RELAY). Use isolated MOCK_* names and require the intended negative marker and exit code, not any arbitrary failure. Nov26 exact 6be1b51a focused run 45908378513 failed 16/17 at the positive readback test due to this fixture collision. No production failure inferred. The owner command held before reads; do not bypass exact CI or rerun the superseded command.

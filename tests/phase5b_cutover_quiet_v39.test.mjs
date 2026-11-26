@@ -62,19 +62,19 @@ function runReadback({mode="SOURCE_ONLY",source="true",targetEnv={},relayEnv={},
   case "$1:$2" in
    api:user) echo HKcode22;;
    api:--paginate) case "$3" in
-    *ReplitTranvr/environments/*) [[ "$FAIL_ENV" == 0 ]] || return 5; jq -c '.[]' <<<"$TARGET_ENV";;
-    *TravnrClockRelay/environments/*) jq -c '.[]' <<<"$RELAY_ENV";;
-    *ReplitTranvr/actions/variables*) jq -c '.[]' <<<"$TARGET";;
-    *TravnrClockRelay/actions/variables*) jq -c '.[]' <<<"$RELAY";;
+    *ReplitTranvr/environments/*) [[ "$MOCK_FAIL_ENV" == 0 ]] || return 5; jq -c '.[]' <<<"$MOCK_TARGET_ENV";;
+    *TravnrClockRelay/environments/*) jq -c '.[]' <<<"$MOCK_RELAY_ENV";;
+    *ReplitTranvr/actions/variables*) jq -c '.[]' <<<"$MOCK_TARGET";;
+    *TravnrClockRelay/actions/variables*) jq -c '.[]' <<<"$MOCK_RELAY";;
     *) return 9;; esac;;
-   api:repos/HKcode22/ReplitTranvr/git/ref/heads/main) echo "$MAIN";;
-   api:repos/HKcode22/TravnrClockRelay/git/ref/heads/main) echo "$RELAY_MAIN";;
+   api:repos/HKcode22/ReplitTranvr/git/ref/heads/main) echo "$MOCK_MAIN";;
+   api:repos/HKcode22/TravnrClockRelay/git/ref/heads/main) echo "$MOCK_RELAY_MAIN";;
    run:list) echo '[]';;
    *) echo UNEXPECTED_GH >&2; return 9;; esac
  }
  export -f gh
- bash "$SCRIPT" "$MAIN" "$RELAY_MAIN" "$MODE"`;
- return spawnSync("bash",["-c",mock],{encoding:"utf8",timeout:20000,env:{...process.env,MAIN:m,RELAY_MAIN:r,SCRIPT:decodeURIComponent(readbackPath.pathname),MODE:mode,TARGET:vars(target),RELAY:vars(relay),TARGET_ENV:vars(targetEnv),RELAY_ENV:vars(relayEnv),FAIL_ENV:failEnv?"1":"0"}});
+ bash "$MOCK_SCRIPT" "$MOCK_MAIN" "$MOCK_RELAY_MAIN" "$MOCK_MODE"`;
+ return spawnSync("bash",["-c",mock],{encoding:"utf8",timeout:20000,env:{...process.env,MOCK_MAIN:m,MOCK_RELAY_MAIN:r,MOCK_SCRIPT:decodeURIComponent(readbackPath.pathname),MOCK_MODE:mode,MOCK_TARGET:vars(target),MOCK_RELAY:vars(relay),MOCK_TARGET_ENV:vars(targetEnv),MOCK_RELAY_ENV:vars(relayEnv),MOCK_FAIL_ENV:failEnv?"1":"0"}});
 }
 test("T076 SOURCE_ONLY owner readback preserves existing enablement and retention; PAUSED remains supported",()=>{
  for(const cfg of [{},{mode:"PAUSED",source:"false"}]){
@@ -83,11 +83,17 @@ test("T076 SOURCE_ONLY owner readback preserves existing enablement and retentio
  }
 });
 test("T076 fails closed on protected route, retention approval, conditional activation or unknown metadata",()=>{
- for(const cfg of [{targetEnv:{P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"false"}},
-  {targetEnv:{P7_EXPIRY_APPROVAL:"DO_NOT_PRINT_UNEXPECTED_VALUE"}},
-  {targetEnv:{P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"}},
-  {relayEnv:{TRAVNR_APPROVED_TARGET_MAIN_SHA:"c".repeat(40)}},{failEnv:true}]){
-  const x=runReadback(cfg);assert.notEqual(x.status,0,x.stdout);
-  assert.doesNotMatch(x.stdout,/PASS_SOURCE_ONLY_NO_WRITES|DO_NOT_PRINT_UNEXPECTED_VALUE/);
+ for(const [cfg,marker] of [
+  [{targetEnv:{P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"false"}},/MISMATCH protected-runtime\/P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED/],
+  [{targetEnv:{P7_EXPIRY_APPROVAL:"DO_NOT_PRINT_UNEXPECTED_VALUE"}},/MISMATCH protected-runtime\/P7_EXPIRY_APPROVAL/],
+  [{targetEnv:{P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"}},/HOLD_CONDITIONAL_METADATA_REQUIRES_SEPARATE_REVIEW/],
+  [{relayEnv:{TRAVNR_APPROVED_TARGET_MAIN_SHA:"c".repeat(40)}},/MISMATCH travnr-target-forward\/TRAVNR_APPROVED_TARGET_MAIN_SHA/]]){
+  const x=runReadback(cfg);assert.equal(x.status,2,x.stderr+x.stdout);
+  assert.match(x.stdout,marker);
+  assert.match(x.stdout,/HOLD_POST_CUTOVER_VARIABLE_MISMATCH/);
+  assert.doesNotMatch(x.stdout+x.stderr,/PASS_SOURCE_ONLY_NO_WRITES|DO_NOT_PRINT_UNEXPECTED_VALUE|parse error|UNEXPECTED_GH/);
  }
+ const unavailable=runReadback({failEnv:true});
+ assert.equal(unavailable.status,5,unavailable.stderr+unavailable.stdout);
+ assert.doesNotMatch(unavailable.stdout+unavailable.stderr,/PASS_SOURCE_ONLY_NO_WRITES|parse error|UNEXPECTED_GH/);
 });
