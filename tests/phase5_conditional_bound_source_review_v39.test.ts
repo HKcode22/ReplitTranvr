@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
@@ -175,6 +175,22 @@ describe("source-bound conditional service preparation",()=>{
   };
   const built=await preparePermit();
   expect(built.privatePermit).toMatchObject(p);
+  // T035: one bounded C+D page uses one actual original read, validates
+  // independent artifacts before SQL and never signs or duplicates a permit.
+  const pageInput={flightInstanceId:id,reviewBytes:Buffer.from(JSON.stringify(review)),pins:{expectedReviewArtifactSha256:createHash("sha256").update(JSON.stringify(review)).digest("hex"),expectedReviewedCodeSha:"a".repeat(40),expectedConditionalProtocolSha256:scope.protocolSha256,expectedExternalContentUseReviewSha256:h("8"),separatelyApprovedStandaloneProtocolSha256:h("b")}};
+  const pageDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const page=await prepareP5ConditionalPrePermitPageForIndependentSigning(pageDb.pool,proofScope,[pageInput]);
+  expect(page).toMatchObject({preparedCount:1,originalBodyReadCount:1,signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0});
+  expect(page.privatePrepared[0].privatePermit).toEqual(built.privatePermit);
+  expect(pageDb.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  expect(JSON.stringify(page)).not.toMatch(/SQ78|privatePrepared|SIA/);
+  const badPage=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  await expect(prepareP5ConditionalPrePermitPageForIndependentSigning(badPage.pool,proofScope,[pageInput,pageInput])).rejects.toThrow("EXACT_PAGE_SCOPE");
+  await expect(prepareP5ConditionalPrePermitPageForIndependentSigning(badPage.pool,proofScope,[pageInput,{...pageInput,flightInstanceId:"leg:g5a:"+h("9"),pins:{...pageInput.pins,expectedReviewArtifactSha256:h("0")}}])).rejects.toThrow("INDEPENDENT_REVIEW_PINS");
+  expect(badPage.queries).toHaveLength(0);
+  const missingPage=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  await expect(prepareP5ConditionalPrePermitPageForIndependentSigning(missingPage.pool,proofScope,[pageInput,{...pageInput,flightInstanceId:"leg:g5a:"+h("9")}])).rejects.toThrow("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
+  expect(missingPage.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
   expect(built.privatePermit.externalNativeTPhysicalLegAndSourceUseReviewed).toBeUndefined();
   expect(built.privateWitnessReview).toBeNull();
   expect(JSON.stringify(built)).not.toMatch(/SQ78|privatePermit|SIA/);

@@ -41,8 +41,8 @@ type Review={
 };
 type Pins={expectedReviewArtifactSha256:string;expectedReviewedCodeSha:string;expectedConditionalProtocolSha256:string;
  expectedExternalContentUseReviewSha256:string;expectedT24ReceiptSha256?:string;separatelyApprovedStandaloneProtocolSha256?:string};
-export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
- flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
+type ReviewInput={flightInstanceId:string;reviewBytes:Buffer;pins:Pins};
+function parseIndependentReview(scope:P5SignedConditionalFeatureReadScope,flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
  if(!pins||![pins.expectedReviewArtifactSha256,pins.expectedConditionalProtocolSha256,pins.expectedExternalContentUseReviewSha256].every(x=>H.test(x??""))||
   !C.test(pins.expectedReviewedCodeSha??"")||!Buffer.isBuffer(reviewBytes)||reviewBytes.length<100||reviewBytes.length>200000||
   hash(reviewBytes)!==pins.expectedReviewArtifactSha256||scope?.protocolSha256!==pins.expectedConditionalProtocolSha256||
@@ -56,12 +56,13 @@ export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5
   ![r.reviewedMemberEvidenceSha256,r.reviewedFrameSha256,r.reviewedConfigSha256,r.reviewedConditionalServiceEvidenceSha256,r.reviewedReportedScheduleEvidenceSha256,r.reviewedRunAndRetentionEvidenceSha256,r.frozenBuilderSha256].every(x=>H.test(x??""))||
   Object.keys(r).some(k=>!keys.includes(k)&&k!=="reviewedT24WitnessReceipt"&&k!=="reviewedStandaloneLaterNoT24")||keys.some(k=>!Object.hasOwn(r,k)))
   return hold("EXACT_CONDITIONAL_REVIEW");
- const at=time(r.reviewedAtUtc),frozen=time(r.builderFrozenAtUtc);
- const q=scope.source;
- const read=await readP5SignedConditionalServiceReview(pool,scope);
- const proposals=read.memberReview.privateReviewProposals.filter(p=>p.flightInstanceId===flightInstanceId),drafts=read.privateFeatureDrafts.filter(d=>d.flightInstanceId===flightInstanceId);
- if(proposals.length!==1||drafts.length!==1||read.conditionalFeatureReview.actualPreIssued!==false)return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
- const p=proposals[0],d=drafts[0],cutoff=time(p.predictionCutoffUtc),now=time(read.observedDbClockUtc);
+ time(r.reviewedAtUtc);time(r.builderFrozenAtUtc);
+ return r;
+}
+function constructFromBound(scope:P5SignedConditionalFeatureReadScope,read:Bound,p:Proposal|undefined,d:Draft|undefined,r:Review,pins:Pins){
+ const at=time(r.reviewedAtUtc),frozen=time(r.builderFrozenAtUtc),q=scope.source;
+ if(!p||!d||read.conditionalFeatureReview.actualPreIssued!==false)return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
+ const cutoff=time(p.predictionCutoffUtc),now=time(read.observedDbClockUtc);
  if(digestP5ConditionalPermitEvidence(p,d,read.privateSourceBoundAtUtc)!==r.reviewedMemberEvidenceSha256||
   at<time(read.privateSourceBoundAtUtc)||at<time(p.sourceMemberAvailableUtc)||at>now||frozen>at||
   cutoff-now<=scope.minimumReviewLeadSeconds*1000||p.horizon!==q.horizon||p.manifestSha256!==q.manifestSha256)
@@ -121,4 +122,30 @@ export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5
  return Object.freeze(Object.defineProperties(summary,{privatePermit:{value:Object.freeze(pre),enumerable:false},
   privateWitnessReview:{value:witnessReview?Object.freeze(witnessReview):null,enumerable:false}})) as typeof summary&{
   readonly privatePermit:Readonly<P5Stage14SingleFlightPrePermit>;readonly privateWitnessReview:Readonly<P5IndependentT24WitnessReview>|null};
+}
+
+/** C+D page: validate every external artifact and unique flight before SQL,
+ * then read the actual original and member population once. No first-match
+ * behavior, no caller-supplied source readback, no extra paid acquisition.
+ * A failed member rejects this page before any signing/publication; callers
+ * must preserve honest censoring and may not synthesize replacement permits. */
+export async function prepareP5ConditionalPrePermitPageForIndependentSigning(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,inputs:readonly ReviewInput[]){
+ if(!Array.isArray(inputs)||inputs.length<1||inputs.length>96||new Set(inputs.map(x=>x?.flightInstanceId)).size!==inputs.length)
+  return hold("EXACT_PAGE_SCOPE");
+ const parsed=inputs.map(x=>parseIndependentReview(scope,x.flightInstanceId,x.reviewBytes,x.pins));
+ const read=await readP5SignedConditionalServiceReview(pool,scope);
+ const proposals=new Map(read.memberReview.privateReviewProposals.map(p=>[p.flightInstanceId,p]));
+ const drafts=new Map(read.privateFeatureDrafts.map(d=>[d.flightInstanceId,d]));
+ if(proposals.size!==read.memberReview.privateReviewProposals.length||drafts.size!==read.privateFeatureDrafts.length)
+  return hold("AMBIGUOUS_PAGE_SOURCE");
+ const prepared=inputs.map((x,i)=>constructFromBound(scope,read,proposals.get(x.flightInstanceId),drafts.get(x.flightInstanceId),parsed[i],x.pins));
+ const summary={status:"CONDITIONAL_STAGE14_PERMIT_PAGE_PREPARED_NOT_SIGNED",preparedCount:prepared.length,originalBodyReadCount:1,
+  identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",nativeOperatingLegCertified:false,physicalGateOutCertified:false,
+  signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(summary,"privatePrepared",{value:Object.freeze(prepared),enumerable:false})) as typeof summary&{
+  readonly privatePrepared:readonly ReturnType<typeof constructFromBound>[]};
+}
+export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
+ flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
+ return (await prepareP5ConditionalPrePermitPageForIndependentSigning(pool,scope,[{flightInstanceId,reviewBytes,pins}])).privatePrepared[0];
 }
