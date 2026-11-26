@@ -35,7 +35,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F023 | Tested branch | Idle native follow-on acquired publisher lock before zero candidate check. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I021 |
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
-| F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
+| F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043 |
 | F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
@@ -109,6 +109,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I042 | Implemented staged; exact CI pending | Current SOURCE snapshot resolves signed revision and hydrates in a bounded read-only retry only on explicit concurrent append race, always anchored to immutable child. Native audit/pending and conditional proof use same snapshot. | F038 |
 
+| I043 | Staged owner procedure; exact CI and owner execution pending | Coordinated exact target #976 and relay #30 paused-only cutover, complete CI and drain, read protected variable metadata, preserve full retention and immutable study anchor, no paid resume or migration. | F026 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -178,6 +180,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T036 | New regression; exact CI pending | Actual prepared conditional permit -> real fixture Ed25519 independent proof -> immutable packet -> existing roster; reject native promotion, missing policy, invalid signature or synthetic preview | F027 | I041 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 | T037 | New regression; exact CI pending | Concurrent append after CURRENT_DAY read retries only stale current revision up to three times; original anchor preserved, changed query/expiry/integrity errors never retried | F038 | I042 | C002, C009 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
+
+| T038 | New syntax check; owner actual execution pending | Guarded dual repository exact head/base/tree/CI, paused and drained acquisition, effective environment pins and full-retention readback. No automatic paid resume | F026 | I043 | C007, C010 | scripts/v39_phase5b_coordinated_recovery_cutover_owner.sh; .github/workflows/phase5b-source-diagnostics-offline.yml |
 
 ## Scientific and retention authorities
 
