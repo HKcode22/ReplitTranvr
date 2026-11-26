@@ -69,3 +69,6 @@ Read [the permanent recovery register](data-collection/phase6/RECOVERY_REGISTER.
 
 
 **Amendment E candidate parity:** Never treat the frozen PRE original or scheduled gate-out evidence digest as the later independent actual observation. I081/T075 on #977 aligns candidate evaluation with the distinct-observation Packet B target rule; an observed zero requires real distinct evidence, missing stays null. Conditional schedule revision remains separately scoped and cannot certify physical gate-out or authorize training. F029/C003/C004 remain open until actual source and lawful pairing verified.
+
+
+**SOURCE-only cutover readback:** The old PAUSED-only pin script must not lead to pausing an already enabled SOURCE route. I082/T076 adds read-only SOURCE_ONLY mode and effective retention/rolling approval override checks, requires new conditional metadata transport disabled pending separate commissioning, and withholds unexpected variable values. Review exact CI before relying on this successor; metadata readback is not a deployment or policy commissioning. Keep POST disabled and retention/relay enabled.
