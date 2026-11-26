@@ -5,7 +5,7 @@
  */
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {measureP5FirstCycleScheduleRevision,type P5ScheduleHorizon} from "./phase5ProspectiveProviderScheduleRevisionPrimary_v39";
-const H=/^[a-f0-9]{64}$/,K=/^leg:p5conditional:v2:[a-f0-9]{64}$/,U=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const H=/^[a-f0-9]{64}$/,K=/^leg:g5a:[a-f0-9]{64}$/,U=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(x:string):never=>{throw Error("HOLD_P5_CONDITIONAL_PAIR_"+x);};
 const sha=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex");
 function clock(x:unknown){if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)return fail("CLOCK");return Date.parse(x);}
@@ -43,7 +43,7 @@ export function measureP5ConditionalSignedSchedulePair(trust:Trust,preWire:Wire,
  const oa=clock(post.sourceAvailableUtc),orr=clock(post.reviewedAtUtc),oe=clock(post.sourceExpiresUtc),op=clock(post.sourcePlannedUtc);
  if(effective>pp||pp>pa||pa>pr||pr>pi||pi>cutoff||pi>=pe||pe>pa+23*3600000||
  op<T||op>oa||oa<=cutoff||oa>W||orr<oa||orr<W||orr>now||now>=pe||now>=oe||oe>oa+23*3600000||clock(pre.scheduledDepartureUtc)!==T)fail("PROSPECTIVE_OR_RETENTION");
- const key=pre.serviceKey.slice("leg:p5conditional:v2:".length);
+ const key=pre.serviceKey.slice("leg:g5a:".length);
  const observations=[pre,post].map(x=>({originalSha256:x.sourceResponseSha256,sourceQueryId:x.sourceQueryId,availableAtUtc:x.sourceAvailableUtc,technicalExpiryAtUtc:x.sourceExpiresUtc,scheduledDepartureUtc:x.scheduledDepartureUtc,reviewedStableServiceKeySha256:key,reviewerScope:"QUERY_FILTERED_SCOPE_UNVERIFIED" as const,matchingServiceCount:1,nativeOperatingFlightId:null,operatorFlightNumber:x.operatorFlightNumber,originIcao:x.originIcao,destinationIcao:x.destinationIcao,inRequestedDepartureQuery:true}));
  const candidate=measureP5FirstCycleScheduleRevision({reviewedManifestSha256:p.manifestSha256,firstObservedNativeScheduledDepartureUtc:pre.firstScheduledDepartureUtc,horizon:pre.horizon,assessmentWatermarkUtc:new Date(W).toISOString(),reviewedStableServiceKeySha256:key,evidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",nativeOperatingFlightId:null,operatorFlightNumber:pre.operatorFlightNumber,originIcao:pre.originIcao,destinationIcao:pre.destinationIcao,observations});
  const summary={status:candidate.status,endpoint:p.endpoint,conditionalTierOnly:true,physicalGateOutCertified:false,trainingPublicationAuthorized:false,providerCalls:0,databaseWrites:0};
