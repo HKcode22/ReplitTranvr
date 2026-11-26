@@ -77,6 +77,7 @@ jobs:
           set -Eeuo pipefail
           npx --no-install tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
