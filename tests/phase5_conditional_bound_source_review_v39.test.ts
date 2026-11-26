@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
-import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
+import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
 function fixture(){
  const departures=[{number:"SQ78",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:t("12:00")}},arrival:{airport:{icao:"YSSY"}}}];
@@ -21,6 +21,25 @@ describe("source-bound conditional service preparation",()=>{
   expect(x.privateCandidates[0].runDayIndex).toBe(2);
   expect(x.trainingOrPrePublicationAuthorized).toBe(false);
   expect(JSON.stringify(x)).not.toContain("SQ78");
+ });
+ it("matches only exact prospectively marked G5A normalized membership, not old provisional rows",()=>{
+  const {scope,o,r}=fixture();
+  const raw=r.raw_payload as any;
+  const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
+  const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
+  const report=prepare(scope,[o],[{...r,raw_payload:marked}],t("05:04"));
+  const id=report.privateCandidates[0].stage14ConditionalFlightInstanceId!;
+  expect(id).toMatch(/^leg:g5a:[a-f0-9]{64}$/);
+  const m={population_query_id:scope.expectedPopulationQueryId,response_hash:scope.expectedResponseSha256,provider_content_expired_at_utc:null,population_member_id:"member-1",analytic_identity_id:id,canonical_flight_instance_id:id,source_airport_icao:"WSSS",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",flight_number:"SQ78",scope_classification:"unknown",codeshare_resolution_status:"g5a_conditional_operator_composite_no_native_id",source_type:"fids",population_role:"requested_airport_primary",query_direction:"Departure",dep_scheduled_utc:t("12:00"),available_at:t("05:02")};
+  const x=match(scope,report,[m],1,t("05:04"));
+  expect(x.stage14MatchedMembershipCount).toBe(1);
+  expect(x.privateReviewProposals[0]).toMatchObject({flightInstanceId:id,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",reviewedStableServiceKeySha256:id.slice(8)});
+  expect(x.actualPreIssued).toBe(false);
+  expect(JSON.stringify(x)).not.toContain(id);
+  expect(match(scope,report,[{...m,canonical_flight_instance_id:null}],1,t("05:04")).stage14MatchedMembershipCount).toBe(0);
+  expect(match(scope,prepare(scope,[o],[r],t("05:04")),[m],1,t("05:04")).stage14MatchedMembershipCount).toBe(0);
+  expect(()=>match(scope,report,[m],2,t("05:04"))).toThrow(/MEMBER_COUNT/);
+  expect(()=>match(scope,report,[{...m,response_hash:h("9")}],1,t("05:04"))).toThrow(/MEMBER_CUSTODY/);
  });
  it("rejects wrong response, body, rights, day, request scope, and late binding",()=>{
   const {scope,o,r}=fixture();
