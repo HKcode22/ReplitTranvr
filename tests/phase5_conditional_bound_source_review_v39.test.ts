@@ -1,3 +1,5 @@
+import {digestP5Stage24ReviewedReceipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
+import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
 import {signP6DelegatedConditionalLaterRegistry} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {readP6ConditionalLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 import {deriveP6ConditionalT24Scope,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
@@ -230,13 +232,13 @@ describe("source-bound conditional service preparation",()=>{
      manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
      laterReviewerFingerprintSha256:h("c"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
      conditionalLaterPreScope:{...conditionalScope,independentlyApprovedStandaloneProtocolSha256:h("b")}}}};
-  const issueLater=(policy:unknown,partial=false,actualCustody=exactCustody,sourcePool=actual.pool)=>{
+  const issueLater=(policy:unknown,partial=false,actualCustody=exactCustody,sourcePool=actual.pool,metadataPool=preRead(partial),metadataEnabled=false)=>{
    const bytes=Buffer.from(JSON.stringify(policy)),sha=laterHash(bytes);
-   return issueP5ConditionalLaterSignedReviewPage(sourcePool,preRead(partial),proofScope,[id],actualCustody,{policyBytes:bytes,expectedPolicySha256:sha,
+   return issueP5ConditionalLaterSignedReviewPage(sourcePool,metadataPool,proofScope,[id],actualCustody,{policyBytes:bytes,expectedPolicySha256:sha,
     expectedReviewedCodeSha:laterCode,expectedReviewerFingerprintSha256:laterFp,forbiddenSignerFingerprints:[h("c"),h("d"),h("f")],signer:laterKeys.privateKey,
     env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:laterFp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
      V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256,
-     P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:custody.scope.expectedSessionLogin}});
+     P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:custody.scope.expectedSessionLogin,...(metadataEnabled?{P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"}:{})}});
   };
   const issued=await issueLater(laterPolicy);
   expect(issued).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
@@ -249,6 +251,56 @@ describe("source-bound conditional service preparation",()=>{
   const witnessedOnly={...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:null},
    nativeLaterReview:{...laterPolicy.nativeLaterReview,conditionalLaterDayAppendPolicy:{...laterPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,conditionalLaterPreScope:conditionalScope}}};
   expect((await issueLater(witnessedOnly)).privateWire).toBeNull();
+  // T072: witnessed-only policy; synthetic signed custody and matching
+  // narrow metadata read, not a production observation or standalone GO.
+  const witnessNative=t("12:00"),witnessCutoff=Date.parse(witnessNative)-86400000,
+   before=(ms:number)=>new Date(witnessCutoff-ms).toISOString();
+  const fields={schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1" as const,snapshotId:"17",
+   flightInstanceId:id,selectedTNativeUtc:witnessNative,frozenT24CutoffUtc:before(0),
+   expectedSelectedTVersion:witnessPolicy.expectedSelectedTVersion,t24OriginalFidsSha256:h("1"),t24SourceQueryDigestSha256:h("2"),
+   t24FrameSha256:h("4"),t24ConfigSha256:h("5"),witnessDbObservedAtUtc:before(20000),stage17PostCommitReadbackAtUtc:before(10000)};
+  const witnessReceipt={...fields,receiptSha256:digestP5Stage24ReviewedReceipt(fields)};
+  const packetBytes=Buffer.from(JSON.stringify({schema:"v39.phase6.private-t24-witness-candidate.v1",runDayIndex:2,
+   manifestSha256:scope.source.manifestSha256,candidate:{schema:"v39.phase5.unsigned-t24-stage24-handoff.v1",
+    status:"DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW",receipt:witnessReceipt,
+    reviewedByIndependentAuthority:false,mayLaunchLaterPreAutomatically:false,providerCalls:0}}));
+  const custodyReview={schema:P6_T24_CUSTODY_SCHEMA,audience:"HKcode22/ReplitTranvr:PHASE6_T24_WITNESS_CUSTODY_ONLY",
+   logicalPath:p6T24WitnessCustodyPath({...exactCustody.trust,flightInstanceId:id}),runDayIndex:2,
+   packetSha256:laterHash(packetBytes),receiptSha256:witnessReceipt.receiptSha256,reviewedCodeSha:laterCode,
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   policySha256:protectedCustody.policySha256,reviewedAtUtc:t("04:00"),validUntilUtc:t("08:00"),retentionNotAfterUtc:t("08:00"),
+   reviewerPublicKeyFingerprintSha256:protectedCustody.reviewerFingerprintSha256};
+  const custodyWire={review:custodyReview,signatureBase64:sign(null,p6T24WitnessCustodyPreimage(custodyReview),custodyKeys.privateKey).toString("base64")};
+  const wireBytes=Buffer.from(JSON.stringify(custodyWire)),custodyRow={kind:"T24_WITNESS_RECEIPT_CANDIDATE",logical_path:custodyReview.logicalPath,
+   run_day_index:2,shard_index:1,content_sha256:custodyReview.packetSha256,reviewed_code_sha:laterCode,
+   manifest_sha256:custodyReview.manifestSha256,rights_sha256:custodyReview.rightsSha256,external_review_sha256:laterHash(wireBytes),
+   externally_reviewed_at_utc:custodyReview.reviewedAtUtc,retention_not_after_utc:custodyReview.retentionNotAfterUtc,committed_at_utc:t("04:01"),
+   payload_bytes:packetBytes,review_wire_bytes:wireBytes};
+  const signedCustody={...exactCustody,readerClient:{query:async(sql:string)=>{
+   if(sql.includes("logical_path=ANY"))return {rowCount:1,rows:[custodyRow]};
+   return exactCustody.readerClient.query(sql);
+  }}};
+  const narrow=(patch:Record<string,unknown>={},acl=true)=>({connect:async()=>({release(){},query:async(sql:string)=>{
+   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:custody.scope.expectedSessionLogin,
+    ro:"on",replica:false,version:160010,now:t("05:04"),snap_read:acl,witness_read:acl,snap_write:false,witness_write:false,base_access:false,
+    login_enabled:true,login_super:false,login_admin:false,login_bypass:false,group_login:false,group_super:false,group_bypass:false}]};
+   if(sql.includes("SELECT flight_instance_id"))return {rowCount:1,rows:[{flight_instance_id:id,snapshot_id:"17"}]};
+   if(sql.includes("SELECT")&&sql.includes("witness"))return {rowCount:1,rows:[{snapshot_id:"17",joined_snapshot_id:"17",flight_instance_id:id,
+    selected_t_version:witnessReceipt.expectedSelectedTVersion,fids_response_hash:witnessReceipt.t24OriginalFidsSha256,source_query_digest:witnessReceipt.t24SourceQueryDigestSha256,
+    frame_hash:witnessReceipt.t24FrameSha256,config_hash:witnessReceipt.t24ConfigSha256,source_t24_population_query_id:scope.expectedPopulationQueryId,
+    snapshot_prediction_state:"PRE_DEPARTURE",snapshot_horizon:"T-24h",selected_t_native_utc:witnessNative,t24_cutoff_utc:witnessReceipt.frozenT24CutoffUtc,
+    post_pre_commit_db_observed_at_utc:witnessReceipt.witnessDbObservedAtUtc,...patch}]};
+   return {rowCount:0,rows:[]};
+  }})}) as any;
+  const witnessed=await issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow(),true);
+  expect(witnessed).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
+  const verifiedWitness=await prepareP5ConditionalPrePermitPageFromSignedReviews(actual.pool,proofScope,[id],witnessed.privateWire!,{
+   expectedReviewerFingerprintSha256:laterFp,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString(),expectedReviewedCodeSha:laterCode,forbiddenSignerFingerprints:[h("c")]});
+  expect(verifiedWitness.privatePrepared[0].privatePermit.reviewedT24WitnessReceipt).toEqual(witnessReceipt);
+  expect(verifiedWitness.privatePrepared[0].privatePermit.reviewedStandaloneLaterNoT24).toBeUndefined();
+  expect((await issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow({fids_response_hash:h("0")}),true)).privateWire).toBeNull();
+  await expect(issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow({},false),true)).rejects.toThrow(/CONDITIONAL_METADATA_ROLE_OR_ACL/);
+
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:undefined})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:h("a")}})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
   // T062 rejects trust substitution before SOURCE, custody or PRE SQL.
