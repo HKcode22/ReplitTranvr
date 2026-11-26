@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
-| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034 |
+| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034, I038 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -99,6 +99,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I037 | Implemented staged; exact CI pending | Reuse current signed revision resolution for both native audit and conditional proof; authenticate original and current, compare exact SOURCE registry, shard, query path and bytes. | F038 |
 
+| I038 | Implemented staged; exact CI pending | Minimal independently verifiable signed SOURCE instruction proof for separate PRE role processes: authentic day index, all SOURCE registry instructions and exact signed query; no raw flight response, private key or reader credential in transport. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -158,6 +160,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T031 | New relay regression; exact CI pending | Slow first route does not serialize paired independent lane; cap two route groups; deadline during active reads prevents POST and no retry | F037 | I036 | C010 | https://github.com/HKcode22/TravnrClockRelay/blob/b2dec744491d5438a8041adc38f74d9fcc9f3b64/isolated/independent-wake.test.mjs |
 
 | T032 | New regression; exact CI pending | Advanced append with unchanged SOURCE is accepted; rollback, changed packet, same-revision digest drift fail closed | F038 | I037 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
+
+| T033 | New regression; exact CI pending | Real Ed25519 fixture keys authenticate exact signed day and query; reject byte drift, omitted registry, invalid signature, expired proof, wrong run and native promotion | F027 | I038 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
 ## Scientific and retention authorities
 
