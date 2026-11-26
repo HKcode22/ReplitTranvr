@@ -463,3 +463,28 @@ test("fresh independent pending is identified but never treated as execution or 
  const x=await reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:obs},arm,async()=>{throw Error("unexpected read")});
  assert.equal(x.incidents.find(i=>i.lane==="SOURCE").reason,"INDEPENDENT_WORKER_PENDING_RECHECK_REQUIRED");assert.equal(x.flightCollectionVerified,false);
 });
+
+test("explicitly paused paid SOURCE/POST skips are reported separately, not as worker errors; failures still alert",async()=>{
+ const old=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100,{conclusion:"success",created:"2026-11-13T18:00:00Z"})],T));
+ const report=summarizeP6ControllerHeartbeat(old,T);
+ const sourceJobs=[
+  {name:"separately-authorized-stored-source-children",status:"completed",conclusion:"skipped",steps:[]},
+  {name:"separately-authorized-current-private-post-children",status:"completed",conclusion:"skipped",steps:[]},
+  {name:"separately-authorized-native-post-producer",status:"completed",conclusion:"success",steps:[{name:"Review and publish bounded current POST windows with independent readback",status:"completed",conclusion:"success"}]}
+ ];
+ const r={...report,independentDispatchObservations:{SOURCE:{state:"INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF",runId:900,jobs:sourceJobs}}};
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true",P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"false",P6_PRIVATE_POST_PARENT_ENABLED:"false"};
+ const read=async()=>{throw Error("unavailable")};
+ const paused=await reviewP6ActiveStandaloneNotifications(r,arm,read);
+ assert.equal(paused.incidents.filter(i=>i.lane==="SOURCE").length,0);
+ assert.equal(paused.intentionalPauses.length,2);
+ assert.equal(paused.flightCollectionVerified,false);
+ assert(paused.incidents.some(i=>i.lane==="EARLY_DRAW"));
+ const enabled=await reviewP6ActiveStandaloneNotifications(r,{...arm,P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED:"true"},read);
+ assert.equal(enabled.incidents.filter(i=>i.lane==="SOURCE").length,1);
+ assert.equal(enabled.intentionalPauses.length,1);
+ sourceJobs[0].conclusion="failure";
+ const failed=await reviewP6ActiveStandaloneNotifications(r,arm,read);
+ assert.equal(failed.incidents.filter(i=>i.lane==="SOURCE").length,1);
+ assert.equal(failed.intentionalPauses.length,1);
+});
