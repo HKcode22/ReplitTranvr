@@ -460,9 +460,33 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
   )).rows[0].n).toBe(1);
  });
 
- (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE",async()=>{
-  await expect(persistP5V0079SingleBoundFlightPre(writer,permit))
+ (QUEUED_T24?it.skip:it)("refuses to relabel or duplicate an existing PRE, including a proposed different cutoff",async()=>{
+  // Observe the real PG query without changing an existing snapshot or
+  // the independent committed witness. The guard must search all cutoffs
+  // for the exact stable flight/horizon, not only the proposed cutoff.
+  let inspected=0;
+  const observed:Pick<Pool,"connect">={connect:(async()=>{
+   const client=await writer.connect();
+   const query=client.query.bind(client);
+   const release=client.release.bind(client);
+   client.query=((sql:any,params?:any[])=>{
+    if(typeof sql==="string"&&sql.startsWith("SELECT id FROM clean.flight_snapshots WHERE flight_instance_id=$1")&&sql.includes("prediction_state='PRE_DEPARTURE'")){
+     inspected++;
+     expect(sql).not.toContain("prediction_cutoff_utc=");
+     expect(params).toEqual([permit.flightInstanceId,permit.horizon]);
+    }
+    return query(sql,params);
+   }) as typeof client.query;
+   client.release=((...args:Parameters<typeof client.release>)=>{
+    client.query=query as typeof client.query;
+    client.release=release;
+    return release(...args);
+   }) as typeof client.release;
+   return client;
+  }) as Pool["connect"]};
+  await expect(persistP5V0079SingleBoundFlightPre(observed,permit))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
+  expect(inspected).toBe(1);
   const q=await admin.query("SELECT count(*)::integer AS n FROM clean.flight_snapshots");
   expect(q.rows[0].n).toBe(1);
  });

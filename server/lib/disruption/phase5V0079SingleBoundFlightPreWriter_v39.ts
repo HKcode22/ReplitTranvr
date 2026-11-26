@@ -727,11 +727,13 @@ export async function persistP5V0079SingleBoundFlightPre(
   });
   if(built.status!=="snapshot")
     throw Error("REFUSED_P5_STAGE14_PRE_PRE_BUILDER_SOURCE_ELIGIBILITY_BLOCKED");
+  // Check the immutable flight/horizon, not the proposed cutoff. The
+  // legacy table conflict key includes cutoff and would otherwise admit
+  // a second PRE on a retime of the same stable identity.
   const already=(await c.query(
     "SELECT id FROM clean.flight_snapshots WHERE flight_instance_id=$1"+
-    " AND horizon=$2 AND prediction_cutoff_utc=$3"+
-    " AND prediction_state='PRE_DEPARTURE'",
-    [p.flightInstanceId,p.horizon,cutoff])).rows;
+    " AND horizon=$2 AND prediction_state='PRE_DEPARTURE' LIMIT 2",
+    [p.flightInstanceId,p.horizon])).rows;
   if(already.length!==0)hold("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");
   due(cutoff,dbTime((await c.query("SELECT clock_timestamp() AS at"))
     .rows[0]?.at,"DB_BEFORE_INSERT"));
