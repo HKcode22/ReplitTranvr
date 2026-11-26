@@ -116,6 +116,52 @@ export function deriveP6CommittedNativeQueryScope(receipt,selected,selector,trus
   ...(iso(a.scheduledRequestUtc)?{plannedRequestUtc:a.scheduledRequestUtc}:{}),
   ...(conditional?{conditionalServiceScope:Object.freeze({...conditional,localFrom:p.localFrom,localTo:p.localTo})}:{})});
 }
+/** Resolve the separate feature purpose from a verified exact signed SOURCE
+ * query and protected policy, never from a permit or the native feature digest.
+ * The original SOURCE reader independently checks the actual population/run/hash. */
+export function deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit){
+ const q=deriveP6CommittedNativeQueryScope(receipt,selected,selector,trust,policy),m=q.conditionalServiceScope,f=policy?.conditionalPreFeatureReview;
+ if(!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    Object.keys(f).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(",")||
+    f.protocolSha256!==m.protocolSha256||f.rightsSha256!==trust.rightsSha256||!SHA.test(f.externalContentUseReviewSha256??"")||
+    !permit||permit.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||permit.requireProspectiveConditionalSourceMarker!==true||
+    permit.externalConditionalScheduleSourceAndUseReviewed!==true||permit.externalNativeTPhysicalLegAndSourceUseReviewed!==undefined||
+    permit.reviewedProtocolAmendmentSha256!==m.protocolSha256||permit.manifestSha256!==q.manifestSha256||
+    permit.queryDigestSha256!==q.queryDigestSha256||permit.runDayIndex!==q.runDayIndex||permit.slot!==q.slot||permit.horizon!==q.horizon||
+    permit.airportIcao!==q.airportIcao||permit.expectedReviewedSourceRightsSha256!==q.rightsReviewSha256||
+    permit.expectedReviewedReleaseSha256!==q.reviewedReleaseSha256||permit.expectedProviderContractSha256!==q.providerContractSha256||
+    permit.expectedEarlyDrawSha256!==q.earlyDrawSha256||permit.maxPopulationStalenessSeconds!==q.maxPopulationStalenessSeconds||
+    !/^[0-9]{5,25}$/.test(permit.expectedGithubSourceRunId??"")||!SHA.test(permit.expectedSourceResponseSha256??"")||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(permit.expectedSourcePopulationQueryId??"")||
+    permit.reviewedSupplementalFeatureBundle?.externalSourceAndContentsReviewReceiptSha256!==f.externalContentUseReviewSha256)
+  fail("EXACT_CONDITIONAL_PROOF_SCOPE");
+ return Object.freeze({source:Object.freeze({...q,expectedSourceGithubRunId:permit.expectedGithubSourceRunId}),
+  protocolSha256:m.protocolSha256,ownerProspectiveSeparateTierApproved:true,
+  frozenStudyStartUtc:m.cohortStartUtc,policyEffectiveUtc:m.effectiveUtc,minimumReviewLeadSeconds:900,
+  expectedPopulationQueryId:permit.expectedSourcePopulationQueryId,expectedResponseSha256:permit.expectedSourceResponseSha256,
+  expectedLocalFrom:m.localFrom,expectedLocalTo:m.localTo,expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,
+  expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,externalContentUseReviewSha256:f.externalContentUseReviewSha256});
+}
+export async function readP6ConditionalProofScopeFromStoredSource({readerClient,trust,selector,policy,permit}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
+    policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
+    policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
+    permit?.runDayIndex!==selector.runDayIndex||permit?.queryDigestSha256!==selector.queryDigestSha256)
+  fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
+ const index=await hydrateP6DayEpochFullRegistriesReadOnly({client:readerClient,pins:review.pins,wire:review.wire,
+  publicKeyPem:review.publicKeyPem,scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,
+   requireCurrentRevisionForPlanning:true}});
+ const selected=selectP6CommittedNativeSourceQuery(index,selector,trust);
+ const signed=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
+   logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
+ const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
+ return deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
+}
+
 export async function auditP6StoredCommittedNativeSource({readerClient,sourcePool,trust,selector,policy}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||

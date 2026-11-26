@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
-| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031 |
+| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -85,12 +85,14 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I031 | Implemented staged; CI pending | Both independent PRE roles use explicit identity-tier routing with a separately authenticated conditional scope port; absent scope or mixed tiers fails before SOURCE reads; no production wiring or signer grant. | F027 |
 | I032 | Historical correction observed; exact runtime review pending | Relay active-read/acknowledgement/pin fixtures and managed pair clock audit evidence; preserve pending versus executed distinction, no changes to relay main. | F034, F035 |
 
+| I033 | Implemented staged; CI pending | Exact signed SOURCE query/index resolver authenticates existing stored registry and prospective conditional feature purpose; rejects cross-tier, policy and permit drift, supplies independent proof scope. Actual protected role transport not yet commissioned. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
 | C001 | Open | Prospective conditional signed PRE issuance and private producer-consumer admission | F005, F018, F027 | I005, I014, I016 |
-| C002 | Partial | Conditional feature drafts, UTC parity and separate exact independent readback staged; authenticated authority/issuer integration and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029, I031 |
+| C002 | Partial | Conditional feature drafts, UTC parity and separate exact independent readback staged; authenticated authority/issuer integration and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029, I031, I033 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |
@@ -135,6 +137,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T025 | New regression; exact CI pending | Both PRE authority callers route explicit separate identity tiers, reject absent authenticated scope or mixed page before DB access | F027 | I031 | C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 | T026 | Existing main regression; separate relay readback pending | Cron ACK is not execution; pending, unresolved, stale or canceled wake cannot become collection proof | F034 | I032 | C010 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs; tests/phase6_direct_recovery_tick_v39.test.mjs |
 | T027 | Existing main regression; separate relay fixture exact CI pending | Unknown active-state reads defer only own lane; no duplicate child or replay; exact executable pin | F035 | I032 | C010 | tests/phase6_rolling_github_controller_v39.test.mjs; tests/phase6_rolling_child_custody_v39.test.mjs |
+
+| T028 | New regression; CI pending | Exact signed query and independent conditional content purpose bind to permit; refuse native promotion, changed query/early draw, unapproved purpose or extra policy keys before original read | F027 | I033 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
 ## Scientific and retention authorities
 

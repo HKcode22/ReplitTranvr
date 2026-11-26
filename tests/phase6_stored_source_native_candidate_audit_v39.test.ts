@@ -1,6 +1,6 @@
 import {createHash,generateKeyPairSync,createPublicKey} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -432,5 +432,31 @@ describe("private publication with independently signed test proof wires",()=>{
    await expect(resolveP7PublicationProofs({preview,env,port:{readExactPermitProofs:async()=>new Map()},readClock:async()=>"2027-02-10T04:43:00.000Z"})).rejects.toThrow("EXACT_PROOF_SET_MISSING");
    await expect(resolveP7PublicationProofs({preview,env,port,readClock:async()=>"2027-02-10T05:04:00.000Z"})).rejects.toThrow("STALE_OR_LATE_PROOF");
   }
+ });
+});
+
+describe("T028 independent conditional proof signed-source scope",()=>{
+ it("binds verified query bytes, separate content purpose and permit; refuses native promotion, drift or missing approval",()=>{
+  const f=fixture(),s=selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust);
+  const p=JSON.parse(f.receipt.privateBytes.toString("utf8"));
+  p.plan.acquisition.scheduledRequestUtc="2027-02-10T04:00:00.000Z";
+  p.plan.localFrom="2027-02-10T19:00";p.plan.localTo="2027-02-10T20:00";
+  p.plan.conditionalService={reviewedConditionalServiceScope:true,protocolSha256:H("9"),effectiveUtc:"2027-02-09T00:00:00.000Z",cohortStartUtc:p.plan.day.scheduledStartUtc};
+  const bytes=Buffer.from(JSON.stringify(p)),digest=h(bytes),receipt:any={redactedSummary:{...f.receipt.redactedSummary,contentSha256:digest}};
+  Object.defineProperties(receipt,{privateBytes:{value:bytes},privateLogicalPath:{value:f.receipt.privateLogicalPath}});
+  const selected={...s,q:{...s.q,expectedPacketSha256:digest}};
+  const policy={...f.policy,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,protocolSha256:H("9"),rightsSha256:f.trust.rightsSha256,externalContentUseReviewSha256:H("8")}};
+  const permit={identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",requireProspectiveConditionalSourceMarker:true,externalConditionalScheduleSourceAndUseReviewed:true,reviewedProtocolAmendmentSha256:H("9"),
+   manifestSha256:f.trust.manifestSha256,queryDigestSha256:f.selector.queryDigestSha256,runDayIndex:1,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",expectedReviewedSourceRightsSha256:f.trust.rightsSha256,expectedReviewedReleaseSha256:f.trust.releaseSha256,expectedProviderContractSha256:H("f"),expectedEarlyDrawSha256:H("1"),maxPopulationStalenessSeconds:3600,expectedGithubSourceRunId:"123456",expectedSourceResponseSha256:H("3"),expectedSourcePopulationQueryId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reviewedSupplementalFeatureBundle:{externalSourceAndContentsReviewReceiptSha256:H("8")}};
+  const run=(v:any=permit,pol:any=policy)=>deriveP6ConditionalProofReadScope(receipt,selected,f.selector,f.trust,pol,v);
+  expect(run()).toMatchObject({protocolSha256:H("9"),externalContentUseReviewSha256:H("8"),minimumReviewLeadSeconds:900,expectedLocalFrom:p.plan.localFrom,source:{expectedSourceGithubRunId:"123456",plannedRequestUtc:p.plan.acquisition.scheduledRequestUtc}});
+  for(const patch of [{identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"},{externalNativeTPhysicalLegAndSourceUseReviewed:true},{queryDigestSha256:H("0")},{expectedEarlyDrawSha256:H("0")},{reviewedSupplementalFeatureBundle:{externalSourceAndContentsReviewReceiptSha256:H("0")}}])expect(()=>run({...permit,...patch})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+  expect(()=>run(permit,f.policy)).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+  expect(()=>run(permit,{...policy,conditionalPreFeatureReview:{...policy.conditionalPreFeatureReview,extra:true}})).toThrow("EXACT_CONDITIONAL_PROOF_SCOPE");
+ });
+ it("missing separate scope stops before reading private storage",async()=>{
+  const f=fixture();let calls=0;
+  await expect(readP6ConditionalProofScopeFromStoredSource({readerClient:{query:async()=>{calls++;}},trust:f.trust,selector:f.selector,policy:f.policy,permit:{}})).rejects.toThrow("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+  expect(calls).toBe(0);
  });
 });
