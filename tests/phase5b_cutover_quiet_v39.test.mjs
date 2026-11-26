@@ -117,3 +117,11 @@ test("T078 all-main quiet guard distinguishes active and metadata failures",()=>
   const x=runSourceGuards("gh(){ echo '"+fixture+"'; }\nall_main_quiet");assert.equal(x.status,expected,x.stderr);
  }
 });
+
+test("T078 independent relay stage skips unrelated target push CI but still drains operational and retention lanes",()=>{
+ const x=runSourceGuards(`gh(){ if [[ "$2" == target/actions/runs* || "$2" == repos/target/actions/runs* ]];then echo '{"total_count":1}';else echo '{"total_count":0}';fi; }
+ relay_stage_quiet
+ echo PASS`);assert.equal(x.status,0,x.stderr);assert.match(x.stdout,/PASS/);
+ const y=runSourceGuards(`gh(){ if [[ "$2" == *phase5-primary-fids-expiry-no-provider.yml* ]];then echo '{"total_count":1}';else echo '{"total_count":0}';fi; }
+ relay_stage_quiet`);assert.equal(y.status,4,y.stderr);
+});

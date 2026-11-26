@@ -102,20 +102,33 @@ gap_ok(){
    (($t|min|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601)-(.observedAtUtc|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601))>=7800)
  ' <<<"$j" >/dev/null
 }
+quiet_endpoint(){
+ local endpoint="$1" state q n
+ for state in queued in_progress waiting requested pending;do
+  q="$(gh api "repos/$endpoint?branch=main&status=$state&per_page=1")" || return 3
+  n="$(jq -er '.total_count|select(type=="number" and .>=0 and .==floor)' <<<"$q")" || return 3
+  [[ "$n" == 0 ]] || return 4
+ done
+}
 all_main_quiet(){
- local repo state q n
- for repo in "$R" "$L";do
-  for state in queued in_progress waiting requested pending;do
-   q="$(gh api "repos/$repo/actions/runs?branch=main&status=$state&per_page=1")" || return 3
-   n="$(jq -er '.total_count|select(type=="number" and .>=0 and .==floor)' <<<"$q")" || return 3
-   [[ "$n" == 0 ]] || return 4
-  done
+ quiet_endpoint "$R/actions/runs" || return "$?"
+ quiet_endpoint "$L/actions/runs"
+}
+# A target-main push CI triggered by our merge is offline and must not
+# block the independent relay cutover. Still drain every prior operational
+# parent/child/retention lane (same scope as the earlier tested procedure).
+relay_stage_quiet(){
+ local wf
+ quiet_endpoint "$L/actions/runs" || return "$?"
+ for wf in phase5-source-upcoming-queue-main-scheduled-readonly.yml phase6-rolling-controller-bounded-session.yml phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml phase5-primary-fids-expiry-no-provider.yml;do
+  quiet_endpoint "$R/actions/workflows/$wf/runs" || return "$?"
  done
 }
 wait_all_quiet(){
- local i rc
+ local fn="${1:-all_main_quiet}" i rc
+ [[ "$fn" == all_main_quiet || "$fn" == relay_stage_quiet ]] || hold INVALID_QUIET_SCOPE
  for ((i=1;i<=12;i++));do
-  if all_main_quiet;then return 0;else rc=$?;fi
+  if "$fn";then return 0;else rc=$?;fi
   [[ "$rc" == 4 ]] || hold ACTIVE_STATUS_UNVERIFIED
   [[ "$i" != 12 ]] || hold ACTIVE_NO_CANCEL
   sleep 10
@@ -166,10 +179,10 @@ echo "SOURCE_ONLY_TARGET_DEPLOYED_AND_RETENTION_BASELINE main=$NEW"
 # Do not unwind the successfully deployed target if the separate relay quiet
 # window disappears. Report the exact stage and do not repeat target merge.
 stage=RELAY_MERGE
-wait_all_quiet
+wait_all_quiet relay_stage_quiet
 node "$TMP/census.mjs" > "$TMP/census"
 gap_ok "$(cat "$TMP/census")" || hold RELAY_NO_SAFE_PROSPECTIVE_GAP
-all_main_quiet || hold ACTIVE_NO_CANCEL
+relay_stage_quiet || hold ACTIVE_NO_CANCEL
 merge_exact "$L" 31 "$ROLD" "$RH"
 RNEW="$(main "$L")"
 stage=RELAY_EXECUTABLE_PIN
