@@ -104,6 +104,16 @@ export async function proveNoPriorUncertainStoredDispatch({history,currentRunId,
 const summary=(status,more={})=>Object.freeze({schema:"v39.phase6.stored-source-dispatch-controller.v1",
  status,...more,providerCallsByParent:0,databaseWritesByParent:0,
  paidGetsCertifiedByParent:0,independentPaidChildAdmissionStillRequired:true});
+// No-op metadata is not full signed-calendar or collection evidence.
+function redactedQueueObservation(pl,now){
+ const count=pl.observedActualSourceQueueQueries,utc=pl.observedSourceDatabaseClockUtc;
+ const t=typeof utc==="string"?Date.parse(utc):NaN;
+ const canonical=Number.isFinite(t)&&new Date(t).toISOString()===utc;
+ return {observedActualSourceQueueQueries:Number.isSafeInteger(count)&&count>=0&&count<=700?count:null,
+  observedSourceDatabaseClockUtc:canonical?utc:null,
+  queueObservationFresh:canonical&&Math.abs(now()-t)<=120000,
+  maxLeadMinutes:CAP.maxLeadMinutes,fullSignedCalendarCoverageVerified:false};
+}
 export async function runP6StoredSourceDispatcher(env,options={}){
  admitP6StoredSourceDispatcher(env);
  const underlying=options.fetchImpl??fetch;
@@ -125,11 +135,11 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   if(pl?.providerCalls!==0||pl.databaseWrites!==0||pl.githubDispatches!==0||pl.paidPhase6Go!==false)
    fail("OBSERVATION_NOT_READ_ONLY");
   if(pl.status==="NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH")
-   return summary("NO_DUE_SOURCE_NO_DISPATCH",{acknowledgedGithubChildCount:0});
+   return summary("NO_DUE_SOURCE_NO_DISPATCH",{acknowledgedGithubChildCount:0,...redactedQueueObservation(pl,now)});
   if(pl.status==="SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH")
    return summary("SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",{
     acknowledgedGithubChildCount:0,unavailableSelectedDayCount:pl.unavailableSelectedDayCount,
-    unavailableSelectedDueQueryCount:pl.unavailableSelectedDueQueryCount});
+    unavailableSelectedDueQueryCount:pl.unavailableSelectedDueQueryCount,...redactedQueueObservation(pl,now)});
   stage="SIGNED_PROPOSAL_VALIDATION";
   const desc=Object.getOwnPropertyDescriptor(pl,"privateStoredChildInputProposals");
   if(pl.status!=="SIGNED_PRIVATE_DAY_SOURCE_AND_ACTUAL_DB_DUE_REVIEW_ONLY_NO_DISPATCH"||
