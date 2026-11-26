@@ -211,25 +211,31 @@ describe("source-bound conditional service preparation",()=>{
   const laterKeys=generateKeyPairSync("ed25519"),laterHash=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex");
   const laterFp=laterHash(laterKeys.publicKey.export({format:"der",type:"spki"})),laterCode="a".repeat(40);
   const conditionalScope={protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:h("8")};
+  const custodyKeys=generateKeyPairSync("ed25519"),custodyPem=custodyKeys.publicKey.export({format:"pem",type:"spki"}).toString();
+  const protectedCustody={independentT24CustodyTrustApproved:true as const,policySha256:witnessPolicy.policySha256,
+   reviewerFingerprintSha256:laterHash(custodyKeys.publicKey.export({format:"der",type:"spki"})),reviewerPublicKeyPem:custodyPem,
+   maximumRetentionHours:witnessPolicy.maximumRetentionHours,policyValidFromUtc:witnessPolicy.policyValidFromUtc,policyValidUntilUtc:witnessPolicy.policyValidUntilUtc};
+  const exactCustody={...custody,trust:{...custody.trust,...protectedCustody}};
   const laterPolicy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:laterCode,
    manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
    providerContractSha256:scope.source.providerContractSha256,frameSha256:h("4"),configSha256:h("5"),
    conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.source.rightsReviewSha256,...conditionalScope},
    conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",approved:true,...conditionalScope,reviewerFingerprintSha256:laterFp,
     reportedScheduleSemanticsSha256:h("7"),validFromUtc:t("04:00"),validUntilUtc:t("23:00"),standaloneNoT24ProtocolSha256:h("b")},
-   nativeLaterReview:{approved:true,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+   nativeLaterReview:{approved:true,t24Custody:protectedCustody,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
     runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
     selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("e"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")},
     dayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:laterCode,
      manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
      laterReviewerFingerprintSha256:h("c"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
      conditionalLaterPreScope:{...conditionalScope,independentlyApprovedStandaloneProtocolSha256:h("b")}}}};
-  const issueLater=(policy:unknown,partial=false)=>{
+  const issueLater=(policy:unknown,partial=false,actualCustody=exactCustody,sourcePool=actual.pool)=>{
    const bytes=Buffer.from(JSON.stringify(policy)),sha=laterHash(bytes);
-   return issueP5ConditionalLaterSignedReviewPage(actual.pool,preRead(partial),proofScope,[id],custody,{policyBytes:bytes,expectedPolicySha256:sha,
+   return issueP5ConditionalLaterSignedReviewPage(sourcePool,preRead(partial),proofScope,[id],actualCustody,{policyBytes:bytes,expectedPolicySha256:sha,
     expectedReviewedCodeSha:laterCode,expectedReviewerFingerprintSha256:laterFp,forbiddenSignerFingerprints:[h("c"),h("d"),h("f")],signer:laterKeys.privateKey,
     env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:laterFp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
-     V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256}});
+     V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256,
+     P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:custody.scope.expectedSessionLogin}});
   };
   const issued=await issueLater(laterPolicy);
   expect(issued).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
@@ -244,6 +250,15 @@ describe("source-bound conditional service preparation",()=>{
   expect((await issueLater(witnessedOnly)).privateWire).toBeNull();
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:undefined})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:h("a")}})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
+  // T062 rejects trust substitution before SOURCE, custody or PRE SQL.
+  const noRead=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  for(const patch of [{policySha256:h("0")},{reviewerFingerprintSha256:h("0")},{maximumRetentionHours:168},{policyValidUntilUtc:t("22:00")}])
+   await expect(issueLater(laterPolicy,false,{...exactCustody,trust:{...exactCustody.trust,...patch}},noRead.pool)).rejects.toThrow(/CUSTODY_POLICY_DRIFT/);
+  await expect(issueLater(laterPolicy,false,{...exactCustody,scope:{...exactCustody.scope,expectedSessionLogin:"phase6_private_reader_login_wrong_role"}},noRead.pool)).rejects.toThrow(/CUSTODY_POLICY_DRIFT/);
+  const wrongKey={...protectedCustody,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString()};
+  await expect(issueLater({...laterPolicy,nativeLaterReview:{...laterPolicy.nativeLaterReview,t24Custody:wrongKey}},false,
+   {...exactCustody,trust:{...exactCustody.trust,...wrongKey}},noRead.pool)).rejects.toThrow(/CUSTODY_KEY_DRIFT/);
+  expect(noRead.queries).toHaveLength(0);
   // These are synthetic restricted-role/SQL fixtures, not live evidence.
 
   // T029: actual restricted source reread + separate reviewed bytes construct

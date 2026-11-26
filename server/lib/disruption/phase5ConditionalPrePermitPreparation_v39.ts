@@ -453,6 +453,23 @@ export async function issueP5ConditionalLaterSignedReviewPage(
    time(d.validUntilUtc)>Math.min(time(v.validUntilUtc),time(day.validUntilUtc))||
    time(d.validFromUtc)>time(q.plannedRequestUtc)||time(v.builderFrozenAtUtc)>time(q.plannedRequestUtc))
   return hold("EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED");
+ // Bind custody authority even for an absent receipt: a caller-selected
+ // alternate archive key/retention window cannot certify missingness.
+ const ct=v.t24Custody,actualTrust=custody?.trust,readerLogin=input.env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN;
+ if(!ct||ct.independentT24CustodyTrustApproved!==true||!actualTrust||
+   !H.test(ct.policySha256??"")||!H.test(ct.reviewerFingerprintSha256??"")||
+   !Number.isSafeInteger(ct.maximumRetentionHours)||ct.maximumRetentionHours<1||ct.maximumRetentionHours>168||
+   time(ct.policyValidFromUtc)>=time(ct.policyValidUntilUtc)||
+   !/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(readerLogin??"")||
+   custody.scope?.expectedSessionLogin!==readerLogin||
+   !["independentT24CustodyTrustApproved","policySha256","reviewerFingerprintSha256","reviewerPublicKeyPem",
+     "maximumRetentionHours","policyValidFromUtc","policyValidUntilUtc"].every(k=>actualTrust[k as keyof typeof actualTrust]===ct[k]))
+  return hold("CONDITIONAL_LATER_CUSTODY_POLICY_DRIFT");
+ try{
+  const pub=createPublicKey(ct.reviewerPublicKeyPem);
+  if(pub.asymmetricKeyType!=="ed25519"||hash(pub.export({format:"der",type:"spki"}))!==ct.reviewerFingerprintSha256)
+   return hold("CONDITIONAL_LATER_CUSTODY_KEY_DRIFT");
+ }catch{return hold("CONDITIONAL_LATER_CUSTODY_KEY_DRIFT");}
  const evidence=await readP6ConditionalLaterT24EvidencePage(pool,prePool,scope,requestedFlightIds,{
   independentConditionalLaterEvidenceReadApproved:true,existingPaidDispatchApproved:false,expectedReviewedCodeSha:p.approvedCodeSha,
   expectedProtocolSha256:d.protocolSha256,expectedContentUseReviewSha256:d.externalContentUseReviewSha256,
