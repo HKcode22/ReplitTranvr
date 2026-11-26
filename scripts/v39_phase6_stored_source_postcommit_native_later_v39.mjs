@@ -200,6 +200,23 @@ export function planP6NativeLaterAppendScope(handoff,current,policy,pageIndex){
 /** Existing native admission and actual writer/readback role checks,
  * before acquiring a paid original. Only this readiness path accepts the
  * disarmed actor-only confirmation. No future signed index is invented. */
+/** Count/enum-only receipt for already admitted policy and completed actor
+ * checks. Disabled or future scope is never reported as live readiness.
+ * Does not export policy bytes, signer pins, digests, DSNs or flight IDs. */
+export function p6PreflightConditionalReadiness(x,clock){
+ if(!iso(clock))hold("PREFLIGHT_CLOCK");
+ const state=r=>!r?"NOT_ADMITTED":clock<r.validFromUtc?"NOT_YET_EFFECTIVE":clock>=r.validUntilUtc?"EXPIRED":"CURRENT_POLICY_ADMITTED";
+ const later=x.conditionalLaterReviewer,scope=x.c?.policy?.conditionalPreFeatureReview;
+ return Object.freeze({
+  conditionalFeatureReview:scope?"APPROVED_POLICY_PRESENT":"NOT_CONFIGURED",
+  conditionalT24:state(x.conditionalT24Reviewer),
+  conditionalLater:state(later),
+  conditionalLaterMetadataTransport:later?"ADMITTED":"DISABLED",
+  standaloneNoT24:later?.scope?.independentlyApprovedStandaloneProtocolSha256?"SEPARATE_POLICY_ADMITTED":later?"WITNESS_REQUIRED":"NOT_ADMITTED",
+  actualConditionalSourceReadVerified:false,actualConditionalPermitIssued:false,
+  actualConditionalPreCommitVerified:false,trainingEligibilityCertified:false
+ });
+}
 export async function preflightP6NativeLaterRuntime(env){
  const actorOnly=env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";
  const x=admitP6NativeLaterRuntime(env,undefined,actorOnly?"actor-preflight":"committed");
@@ -221,7 +238,7 @@ export async function preflightP6NativeLaterRuntime(env){
   const reader=await opened.preflight();
   if(reader.ready!==true)hold("PRE_FRAGMENT_READER");
   for(const path of Object.values(local.roles))await callP7LocalPreRole(path,makeP7LocalPreRequest(local.scope,"ready"),5000);
-  return {status:"P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO",actorOnly,observedDbClockUtc:clock,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false};
+  return {status:"P7_NATIVE_PRE_CONFIGURATION_AND_RESTRICTED_WRITER_READER_READY_NO_GO",actorOnly,observedDbClockUtc:clock,conditionalReadiness:p6PreflightConditionalReadiness(x,clock),providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false};
  }finally{await Promise.allSettled([underlying.end(),opened?.close()])}
 }
 /** Allowlisted count-only diagnostics from the existing same-child audit.

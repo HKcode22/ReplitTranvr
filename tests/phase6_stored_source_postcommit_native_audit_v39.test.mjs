@@ -69,7 +69,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer,selectP6ConditionalLaterPage,planP6ConditionalLaterAppendScope,admitP6ConditionalLaterReviewer} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer,selectP6ConditionalLaterPage,planP6ConditionalLaterAppendScope,admitP6ConditionalLaterReviewer,p6PreflightConditionalReadiness} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -249,4 +249,21 @@ test("T069 conditional later uses separate day policy and exact current member d
  assert.equal(planned.scope.shardIndex,4);assert.equal(planned.scope.retentionNotAfterUtc,"2026-11-22T09:00:00.000Z");
  assert.equal(planP6ConditionalLaterAppendScope(handoff,scope,current,{...x,conditionalLaterReviewer:reviewer},1,"2026-11-22T06:00:00.000Z"),null);
  assert.throws(()=>planP6ConditionalLaterAppendScope({...handoff,privateSourceRegistryBytes:Buffer.from("changed")},scope,current,{...x,conditionalLaterReviewer:reviewer},1,"2026-11-22T09:00:00.000Z"),/SOURCE_REGISTRY_DRIFT/);
+});
+
+test("T079 preflight distinguishes native-only, future, current witnessed-only and expired conditional policy, never claims actual PRE",()=>{
+ const now="2026-11-26T23:30:00.000Z",v={validFromUtc:"2026-11-26T23:00:00.000Z",validUntilUtc:"2026-11-27T04:00:00.000Z",scope:{protocolSha256:"PRIVATE_NOT_PRINTED"}};
+ const n=p6PreflightConditionalReadiness({c:{policy:{}}},now);
+ assert.equal(n.conditionalFeatureReview,"NOT_CONFIGURED");
+ assert.equal(n.conditionalLater,"NOT_ADMITTED");assert.equal(n.conditionalLaterMetadataTransport,"DISABLED");
+ const x={c:{policy:{conditionalPreFeatureReview:{}}},conditionalT24Reviewer:{...v,validFromUtc:"2026-11-27T00:00:00.000Z"},conditionalLaterReviewer:v};
+ const result=p6PreflightConditionalReadiness(x,now);
+ assert.equal(result.conditionalFeatureReview,"APPROVED_POLICY_PRESENT");
+ assert.equal(result.conditionalT24,"NOT_YET_EFFECTIVE");assert.equal(result.conditionalLater,"CURRENT_POLICY_ADMITTED");
+ assert.equal(result.standaloneNoT24,"WITNESS_REQUIRED");assert.equal(result.conditionalLaterMetadataTransport,"ADMITTED");
+ for(const k of ["actualConditionalSourceReadVerified","actualConditionalPermitIssued","actualConditionalPreCommitVerified","trainingEligibilityCertified"])assert.equal(result[k],false);
+ assert.doesNotMatch(JSON.stringify(result),/PRIVATE_NOT_PRINTED/);
+ assert.equal(p6PreflightConditionalReadiness({...x,conditionalLaterReviewer:{...v,scope:{independentlyApprovedStandaloneProtocolSha256:"PRIVATE_NOT_PRINTED"}}},now).standaloneNoT24,"SEPARATE_POLICY_ADMITTED");
+ assert.equal(p6PreflightConditionalReadiness(x,v.validUntilUtc).conditionalLater,"EXPIRED");
+ assert.throws(()=>p6PreflightConditionalReadiness(x,"bad"),/PREFLIGHT_CLOCK/);
 });
