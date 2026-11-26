@@ -181,7 +181,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T033 | New regression; exact CI pending | Real Ed25519 fixture keys authenticate exact signed day and query; reject byte drift, omitted registry, invalid signature, expired proof, wrong run and native promotion | F027 | I038 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
-| T034 | New regression; exact CI pending | Conditional IPC requires exact proof, refuses mixed pages, publisher/control leakage, changed digest or same-permit changed-proof replay; both independent signers receive same proof | F027 | I039 | C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
+| T034 | New regression; exact CI pending | Conditional IPC requires exact proof, refuses mixed pages, publisher/control leakage, changed digest or same-permit changed-proof replay; both independent signers receive same proof; real protected role projection plus synthetic Ed25519 stable trust and exact day-plan policy, wrong digest/marker rejected | F027 | I039 | C002 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 
 | T035 | New regression; exact CI pending | Conditional permit page validates inputs before SQL, one actual original read, no duplicate permit or partial signing, missing member held | F027 | I040 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 

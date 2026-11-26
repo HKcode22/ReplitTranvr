@@ -9,11 +9,11 @@ function run(body){
  return spawnSync("bash",["-c",script],{encoding:"utf8",timeout:5000});
 }
 test("T040 active target or relay waits rather than cancelling or merging",()=>{
- const x=run(`i=0
- scan_quiet(){ i=$((i+1)); if [[ "$i" == 1 ]];then return 4;fi; }
+ const x=run(`scans=0
+ scan_quiet(){ scans=$((scans+1)); if [[ "$scans" == 1 ]];then return 4;fi; return 0; }
  sleep(){ :; }
  wait_quiet relay 3 0
- test "$i" == 2
+ test "$scans" == 2
  echo PASSED`);
  assert.equal(x.status,0,x.stderr);assert.match(x.stdout,/PASSED/);
  const y=run(`active(){ if [[ "$1" == relay ]];then echo 1;else echo 0;fi; }

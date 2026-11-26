@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -55,7 +55,7 @@ describe("private same-runner PRE handoff transport",()=>{
  });
 });
 
-import {projectP7LocalRoleEnvironment} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
+import {projectP7LocalRoleEnvironment,readP7ConditionalInstructionRolePolicy} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
 describe("actual protected role credential projection",()=>{
  const base:NodeJS.ProcessEnv={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",
   GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main",GITHUB_SHA:scope.codeSha,V39_P5_APPROVED_CODE_SHA:scope.codeSha,
@@ -81,6 +81,29 @@ describe("actual protected role credential projection",()=>{
    for(const delta of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{GITHUB_RUN_ATTEMPT:"2"},{AERODATABOX_API_KEY:"forbidden"}])
     expect(()=>projectP7LocalRoleEnvironment({...env,...successor,...delta},role,role==="publisher"?endpoint.toString():undefined)).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
   }
+ });
+ it("T034 exact protected conditional role policy survives successor projection and authenticates the pinned day plan",()=>{
+  const stable="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+  const dk=generateKeyPairSync("ed25519").publicKey,qk=generateKeyPairSync("ed25519").publicKey;
+  const fingerprint=(k:typeof dk)=>createHash("sha256").update(k.export({format:"der",type:"spki"})).digest("hex");
+  const plan=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex:scope.runDayIndex,reviewedRefreshTiming:{maxPopulationStalenessSeconds:3600}}));
+  const planHash=createHash("sha256").update(plan).digest("hex"),calendar=h("calendar"),protocol=h("protocol"),review=h("conditional review");
+  const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_fixture",reviewedCodeSha:stable,manifestSha256:scope.manifestSha256,calendarSha256:calendar,releaseSha256:scope.releaseSha256,rightsSha256:scope.rightsSha256,dayReviewerFingerprintSha256:fingerprint(dk),dayReviewerPublicKeyPem:dk.export({format:"pem",type:"spki"}).toString(),queryReviewerFingerprintSha256:fingerprint(qk),queryReviewerPublicKeyPem:qk.export({format:"pem",type:"spki"}).toString()};
+  const daily={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:stable,manifestSha256:scope.manifestSha256,calendarSha256:calendar,releaseSha256:scope.releaseSha256,rightsSha256:scope.rightsSha256,providerContractSha256:scope.providerContractSha256,dayPlanSha256s:Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:i+1===scope.runDayIndex?planHash:h("day "+(i+1))})),conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.rightsSha256,protocolSha256:protocol,externalContentUseReviewSha256:review}};
+  const bytes=Buffer.from(JSON.stringify(daily)),pins={GITHUB_SHA:head,V39_P5_APPROVED_CODE_SHA:stable,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head,P6_NONPAID_DAILY_POLICY_BASE64:bytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:createHash("sha256").update(bytes).digest("hex"),P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),P6_PRIVATE_DAY_INDEX_REVISION:"3",P6_PRIVATE_DAY_INDEX_SHA256:h("index"),P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:protocol};
+  const read=((path:unknown)=>{expect(path).toBe("data-collection/phase5/planning/phase6-source-day-02.json");return plan;}) as typeof import("node:fs").readFileSync;
+  for(const [role,env] of [["lane",lane],["proof",proof]] as const){
+   const projected=projectP7LocalRoleEnvironment({...env,...pins},role);
+   const got=readP7ConditionalInstructionRolePolicy(projected,read);
+   expect(got).toMatchObject({expectedSourceRunId:scope.runId,selector:{runDayIndex:2,indexRevision:3,indexSha256:h("index"),queryDigestSha256:scope.queryDigestSha256},policy:{maximumPopulationStalenessSeconds:3600,conditionalPreFeatureReview:daily.conditionalPreFeatureReview}});
+   expect(got.trust.reviewedCodeSha).toBe(stable);
+   for(const bad of [{P6_PRIVATE_DAY_INDEX_REVISION:"0"},{P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("different protocol")},{P6_NONPAID_DAILY_POLICY_SHA256:h("wrong daily")}]){
+    expect(()=>readP7ConditionalInstructionRolePolicy({...projected,...bad},read)).toThrow("CONDITIONAL_INSTRUCTION_POLICY");
+   }
+   expect(()=>readP7ConditionalInstructionRolePolicy(projected,(()=>Buffer.from("{}")) as typeof import("node:fs").readFileSync)).toThrow("CONDITIONAL_INSTRUCTION_DAY_PLAN");
+  }
+  const pub=projectP7LocalRoleEnvironment({...publisher,...pins},"publisher",endpoint.toString());
+  expect(pub.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64).toBeUndefined();expect(pub.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256).toBeUndefined();
  });
  it("does not forward other keys, tokens, or the source password to publisher",()=>{
   const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
