@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
-import {readP7ExactConditionalSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
+import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {prepareP5BoundConditionalServiceReview as prepare,readP5BoundConditionalServiceReview as read,readP5SignedConditionalServiceReview as readSigned,matchP5ConditionalStage14Members as match} from "../server/lib/disruption/phase5ConditionalBoundSourceReview_v39";
 const h=(c:string)=>c.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
@@ -197,4 +197,13 @@ describe("source-bound conditional service preparation",()=>{
   expect(queries.some(x=>x.includes("raw_payload"))).toBe(false);
   expect(queries.at(-1)).toBe("ROLLBACK");
  });
+});
+it("T025 independent conditional authority routing refuses absent scope and mixed tiers before DB read",async()=>{
+ let calls=0;const pool={connect:async()=>{calls++;throw Error("unexpected DB");}};
+ const p={identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE"} as P5Stage14SingleFlightPrePermit;
+ const n={identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG"} as P5Stage14SingleFlightPrePermit;
+ await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[p],h("8"))).rejects.toThrow("INDEPENDENT_CONDITIONAL_SCOPE_REQUIRED");
+ await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[p,n],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
+ await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[n,p],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
+ expect(calls).toBe(0);
 });
