@@ -1,3 +1,4 @@
+import {readP6ConditionalLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 import {deriveP6ConditionalT24Scope,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
 import {resolveP7ConditionalPublicationPage} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
@@ -173,6 +174,31 @@ describe("source-bound conditional service preparation",()=>{
    expectedOperatorFlightNumber:"SQ78",expectedDestinationIcao:"YSSY",reviewedSupplementalFeatureBundle:draft.compiled.bundle
   } as P5Stage14SingleFlightPrePermit;
   const proofScope={...input,externalContentUseReviewSha256:h("8")};
+  // T053: conditional later uses the same actual PRE/witness lookup and
+  // independent private custody read, without manufacturing a native dossier.
+  const witnessPolicy={independentT24CustodyTrustApproved:true as const,runDayIndex:2,reviewedCodeSha:"a".repeat(40),
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   policySha256:h("7"),reviewerFingerprintSha256:h("6"),reviewerPublicKeyPem:"synthetic unused on absent receipt",
+   expectedFrameSha256:h("4"),expectedConfigSha256:h("5"),expectedSelectedTVersion:"departure.scheduledTime.utc:v1:"+h("e"),
+   maximumRetentionHours:24,policyValidFromUtc:t("00:00"),policyValidUntilUtc:t("23:00")};
+  const custody={trust:witnessPolicy,scope:{privateT24CustodyApproved:true as const,existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const,expectedSessionLogin:"phase6_private_reader_login_ci"},
+   readerClient:{query:async(sql:string)=>{
+    if(sql.includes("clock_timestamp()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:"phase6_private_reader_login_ci",ro:"on",replica:false,version:160010,at:t("05:04"),now:t("05:04"),db_clock_utc:t("05:04")}]};
+    return {rowCount:0,rows:[]};
+   }}};
+  const preRead=(partial=false)=>({connect:async()=>({release(){},query:async(sql:string)=>{
+   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase5_fids_pre_prod_20261107",login:"phase5_p30_pre_login_20261107",ro:"on",replica:false,version:160010,now:t("05:04")}]};
+   if(sql.includes("SELECT flight_instance_id,id::text")&&partial)return {rowCount:1,rows:[{flight_instance_id:id,snapshot_id:"1"}]};
+   return {rowCount:0,rows:[]};
+  }})}) as any;
+  const laterScope={independentConditionalLaterEvidenceReadApproved:true as const,existingPaidDispatchApproved:false as const,
+   expectedReviewedCodeSha:"a".repeat(40),expectedProtocolSha256:scope.protocolSha256,expectedContentUseReviewSha256:h("8"),
+   expectedFrameSha256:h("4"),expectedConfigSha256:h("5"),expectedSelectedTVersion:witnessPolicy.expectedSelectedTVersion};
+  // Exact scope rejection must occur before any custody or PRE read.
+  await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id,id],laterScope,custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
+  await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id],{...laterScope,expectedProtocolSha256:h("9")},custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
+  // The independent read fixture below is intentionally isolated from real production.
+
   // T029: actual restricted source reread + separate reviewed bytes construct
   // the existing Stage14 permit, not an invented native identity or T24.
   const review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:"a".repeat(40),
