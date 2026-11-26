@@ -181,13 +181,13 @@ describe("source-bound conditional service preparation",()=>{
    policySha256:h("7"),reviewerFingerprintSha256:h("6"),reviewerPublicKeyPem:"synthetic unused on absent receipt",
    expectedFrameSha256:h("4"),expectedConfigSha256:h("5"),expectedSelectedTVersion:"departure.scheduledTime.utc:v1:"+h("e"),
    maximumRetentionHours:24,policyValidFromUtc:t("00:00"),policyValidUntilUtc:t("23:00")};
-  const custody={trust:witnessPolicy,scope:{privateT24CustodyApproved:true as const,existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const,expectedSessionLogin:"phase6_private_reader_login_ci"},
+  const custody={trust:witnessPolicy,scope:{privateT24CustodyApproved:true as const,existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const,expectedSessionLogin:"phase6_private_reader_login_ci_later"},
    readerClient:{query:async(sql:string)=>{
-    if(sql.includes("clock_timestamp()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:"phase6_private_reader_login_ci",ro:"on",replica:false,version:160010,at:t("05:04"),now:t("05:04"),db_clock_utc:t("05:04")}]};
+    if(sql.includes("clock_timestamp()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:"phase6_private_reader_login_ci_later",ro:"on",replica:false,version:160010,db_now:t("05:04"),index_select:true,index_insert:false,index_update:false,index_delete:false,packet_select:true,packet_insert:false,packet_update:false,packet_delete:false,login_enabled:true,login_superuser:false,login_createrole:false,login_bypassrls:false,group_login:false,group_superuser:false,group_bypassrls:false}]};
     return {rowCount:0,rows:[]};
    }}};
   const preRead=(partial=false)=>({connect:async()=>({release(){},query:async(sql:string)=>{
-   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase5_fids_pre_prod_20261107",login:"phase5_p30_pre_login_20261107",ro:"on",replica:false,version:160010,now:t("05:04")}]};
+   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase5_fids_pre_writer_prod_20261107",login:"phase5_p30_pre_login_20261107",ro:"on",replica:false,version:160010,now:t("05:04")}]};
    if(sql.includes("SELECT flight_instance_id,id::text")&&partial)return {rowCount:1,rows:[{flight_instance_id:id,snapshot_id:"1"}]};
    return {rowCount:0,rows:[]};
   }})}) as any;
@@ -197,7 +197,15 @@ describe("source-bound conditional service preparation",()=>{
   // Exact scope rejection must occur before any custody or PRE read.
   await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id,id],laterScope,custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
   await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id],{...laterScope,expectedProtocolSha256:h("9")},custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
-  // The independent read fixture below is intentionally isolated from real production.
+  const absent=await readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id],laterScope,custody);
+  expect(absent.privateDecisions[0].status).toBe("T24_ABSENT_AFTER_CUTOFF_SEPARATE_MISSINGNESS_REVIEW_REQUIRED");
+  expect(absent.standaloneLaterAuthorized).toBe(false);
+  expect(absent.privateCustodyAbsentCount).toBe(1);
+  expect(JSON.stringify(absent)).not.toContain(id);
+  const partial=await readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(true),proofScope,[id],laterScope,custody);
+  expect(partial.privateDecisions[0].status).toBe("T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY");
+  expect(partial.standaloneLaterAuthorized).toBe(false);
+  // These are synthetic restricted-role/SQL fixtures, not live evidence.
 
   // T029: actual restricted source reread + separate reviewed bytes construct
   // the existing Stage14 permit, not an invented native identity or T24.

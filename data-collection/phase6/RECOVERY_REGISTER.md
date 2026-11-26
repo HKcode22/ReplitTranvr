@@ -220,7 +220,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T050 | Exact 55ade358 CI passed; production pending | Conditional T24 bounded selection excludes indexed, too-late and outside-window members, refuses duplicate or wrong-day scope. Actual restricted DB path remains required. | F027 | I055 | C001, C002, C005 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 | T051 | Exact 55ade358 CI passed; production pending | Conditional readiness verifies public key and scoped policy; missing key, alias and missing delegation hold; native-only unchanged. | F027 | I056 | C001, C002, C006 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 | T052 | Exact d39097d2 CI passed; deployment pending | Paused, enabled, mixed and absent paid parent config visible even when protected arm false or unknown; no execution proof inferred. | F041, F026 | I057 | C007, C009, C010 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs |
-| T053 | New regression; exact CI pending | Conditional later evidence entrypoint rejects duplicate or wrong protocol scope before custody/PRE read; actual positive restricted path remains open. | F027 | I058 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T053 | New regression; exact CI pending | Conditional later evidence entrypoint rejects duplicate or wrong protocol before SQL; synthetic full restricted custody and PRE read distinguishes absent vs partial and never approves standalone; actual production positive path remains open. | F027 | I058 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
