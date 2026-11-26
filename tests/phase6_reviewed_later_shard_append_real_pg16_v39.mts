@@ -1,6 +1,6 @@
 import {readP6PrivateLaterQueueRoster} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
-import {verifyPhase7SignedPreFieldProof} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
+import {assertPhase7PreProofMetadataShape,verifyPhase7SignedPreFieldProof} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
 import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {Client} from "pg";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
@@ -29,6 +29,9 @@ import {P6_DAY_EPOCH_REVIEW_SCHEMA,P6_DAY_EPOCH_REVIEW_AUDIENCE,
  from "../server/lib/disruption/phase6DayEpochSignedIndexOnce_v39.mjs";
 const H=(s:string)=>s.repeat(64);
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
+// Actual synthetic SHA-256 values for all Phase7 proof-bound study pins.
+const studyManifest=sha(Buffer.from("CI private day append manifest"));
+const studyRights=sha(Buffer.from("CI private day append rights"));
 const code="e".repeat(40);
 const table="phase6_private.frozen_native_packet_v39";
 const sourcePath="data-collection/phase5/frozen/source_day_append_ci0017.json";
@@ -47,13 +50,13 @@ function reviewedShard(suffix:string,shardIndex=1){
   prePermit:{
    flightInstanceId:"ci:native:leg:"+suffix,runDayIndex:17,
    horizon:"T-6h",selectedTNativeUtc:native,
-   manifestSha256:H("1"),queryDigestSha256:H("2"),
+   manifestSha256:studyManifest,queryDigestSha256:H("2"),
    expectedSourceResponseSha256:H("a"),
    expectedSourcePopulationQueryId:"a23e4567-e89b-42d3-a456-426614174000",
    expectedGithubSourceRunId:"42899999999",
    expectedProviderContractSha256:H("5"),expectedEarlyDrawSha256:H("6"),
    expectedReviewedReleaseSha256:H("3"),
-   expectedReviewedSourceRightsSha256:H("4"),
+   expectedReviewedSourceRightsSha256:studyRights,
    identityEvidenceTier:"PROVIDER_NATIVE_OPERATING_LEG",
    externalNativeTPhysicalLegAndSourceUseReviewed:true,
    reviewedT24WitnessReceipt:{receiptSha256:H("3")}
@@ -61,7 +64,7 @@ function reviewedShard(suffix:string,shardIndex=1){
  }));
  const registry:P5SignedLaterPreDayRegistry={
   schema:"v39.phase5.signed-later-pre-day-registry.v1",
-  manifestSha256:H("1"),reviewedCodeSha:code,
+  manifestSha256:studyManifest,reviewedCodeSha:code,
   sourceDayRegistrySha256:sha(sourceRaw),
   sourceDayRegistryFilePath:sourcePath,runDayIndex:17,shardIndex,
   entries:[{
@@ -100,15 +103,15 @@ function reviewedShard(suffix:string,shardIndex=1){
   expectedReviewerPublicKeyFingerprintSha256:fingerprint,
   expectedApprovedMainCodeSha:code,
   expectedReviewedReleaseSha256:H("3"),
-  expectedReviewedRightsSha256:H("4"),
+  expectedReviewedRightsSha256:studyRights,
   expectedIndependentReviewerEvidenceDigestSha256:H("9")
  };
  const review:P5Ed25519ExternalLaterShardReview={
   schema:"v39.phase5.external-ed25519-later-shard-review.v1",
   audience:"HKcode22/ReplitTranvr:PHASE6_LATER_PRE_REVIEW_ONLY",
   reviewerPublicKeyFingerprintSha256:fingerprint,
-  reviewedMainCodeSha:code,reviewedManifestSha256:H("1"),
-  reviewedReleaseSha256:H("3"),reviewedRightsSha256:H("4"),
+  reviewedMainCodeSha:code,reviewedManifestSha256:studyManifest,
+  reviewedReleaseSha256:H("3"),reviewedRightsSha256:studyRights,
   sourceDayRegistrySha256:sha(sourceRaw),
   sourceDayRegistryFilePath:sourcePath,
   proposedRegistrySha256:sha(registryBytes),
@@ -138,10 +141,10 @@ function reviewedShard(suffix:string,shardIndex=1){
 // actual cryptographic proof. No physical-leg or production approval.
 function conditionalShard(){
  const f=reviewedShard("conditional017",3),native=format(clock+7*3600_000),stable=H("c"),protocol=H("d"),content=H("e"),standalone=H("f");
- const p:P5Stage14SingleFlightPrePermit={manifestSha256:H("1"),queryDigestSha256:H("2"),
+ const p:P5Stage14SingleFlightPrePermit={manifestSha256:studyManifest,queryDigestSha256:H("2"),
   expectedSourcePopulationQueryId:"a23e4567-e89b-42d3-a456-426614174000",expectedSourceResponseSha256:H("a"),
   runDayIndex:17,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",flightInstanceId:"leg:g5a:"+stable,
-  expectedGithubSourceRunId:"42899999999",expectedReviewedReleaseSha256:H("3"),expectedReviewedSourceRightsSha256:H("4"),
+  expectedGithubSourceRunId:"42899999999",expectedReviewedReleaseSha256:H("3"),expectedReviewedSourceRightsSha256:studyRights,
   expectedProviderContractSha256:H("5"),expectedEarlyDrawSha256:H("6"),reviewedFrameSha256:H("7"),reviewedConfigSha256:H("8"),
   independentlyReviewedOperatingLegEvidenceSha256:H("9"),independentlyReviewedNativeTEvidenceSha256:H("b"),
   independentlyReviewedRunAndRetentionEvidenceSha256:H("9"),frozenBuilderSha256:H("a"),builderFrozenAtUtc:format(clock-3600000),
@@ -156,6 +159,7 @@ function conditionalShard(){
  const proof=generateKeyPairSync("ed25519"),policy=sha(Buffer.from("CI conditional preservation policy")),proofRaw=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:p.manifestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,policySha256:policy,permitSha256:hashPhase7DurableCandidate(p),issuedAtUtc:format(clock-60000),validUntilUtc:format(clock+3600000),fields:[]}));
  const proofWire={payloadBase64:proofRaw.toString("base64"),signatureBase64:sign(null,proofRaw,proof.privateKey).toString("base64")};
  const proofEnv={P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:sha(proof.publicKey.export({type:"spki",format:"der"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(proof.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+ assertPhase7PreProofMetadataShape(JSON.parse(proofRaw.toString("utf8")));
  verifyPhase7SignedPreFieldProof(proofEnv,p,policy,[],proofWire);
  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase5.github-conditional-standalone-later-pre-asof-reviewed.v1",reviewedCodeSha:code,
   reviewArtifactSha256:H("a"),independentlyReviewedConditionalScheduleServiceAndSourceAttested:true,reviewedConditionalProtocolSha256:protocol,prePermit:p,phase7FieldProof:proofWire}));
@@ -183,7 +187,7 @@ publisher=new Client({connectionString:"postgresql://"+publisherLogin+":ci-only-
 const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519");
 const publicPem=dayKey.publicKey.export({format:"pem",type:"spki"}).toString();
 const fp=sha(dayKey.publicKey.export({format:"der",type:"spki"}));
-const calendar=H("7"),manifest=H("1"),release=H("3"),rights=H("4"),dayEvidence=H("6");
+const calendar=H("7"),manifest=studyManifest,release=H("3"),rights=studyRights,dayEvidence=H("6");
 const trust={independentStudyTrustPinsApproved:true as const,expectedReaderSessionLogin:readerLogin,
  reviewedCodeSha:code,manifestSha256:manifest,calendarSha256:calendar,releaseSha256:release,rightsSha256:rights,
  dayReviewerFingerprintSha256:fp,dayReviewerPublicKeyPem:publicPem,
