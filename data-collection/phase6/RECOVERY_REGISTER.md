@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -120,6 +120,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I045 | Staged #977; CI required | Bounded read-only quiet wait for already merged target relay cutover; explicit malformed/API failure handling, preserve all existing pause/retention/active checks and no cancel/replay. | F026, F040 |
 | I046 | Staged; exact CI required | Bounded conditional prepared-permit page adapter for existing independent proof port; explicit count-only conditional draft status distinct from native audit; no actual producer signature or publication. | F027 |
 | I047 | Staged; exact CI required | Complete exact conditional proof page and assemble unsigned later registry from genuine proof-attached packets under explicit scope; native signature path unchanged. | F027 |
+| I048 | Staged; exact CI required | External conditional reviewer signs exact private registry and separately protected conditional scope in distinct signature domain; existing append reader propagates exact scope, delegated day policy separately pins it. | F027 |
 
 ## Completion components (not gates)
 
@@ -198,6 +199,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T040 | Exact prior #977 14/14 passed; owner cutover succeeded | Quiet wait retries only known active-run state, stops on unknown/malformed status and bounded persistent activity; checks target plus relay and never cancels or dispatches. | F026, F040 | I045 | C007, C010 | tests/phase5b_cutover_quiet_v39.test.mjs; .github/workflows/phase5b-source-diagnostics-offline.yml |
 | T041 | New regression; exact CI pending | Actual prepared permit page is private, bounded and same SOURCE; duplicate/empty/oversized/forged pages rejected; conditional draft diagnostics separate from native no-op. | F027 | I046 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 | T042 | New regression; exact CI pending | Real prepared conditional page, exact proof set, unsigned registry and existing consumer; reject forged packet, wrong policy, duplicate, and source drift; independent registry signature still required. | F027 | I047 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T043 | New regression; exact CI pending | Actual prepared proof-attached conditional shard with fixture Ed25519 distinct-domain signature; wrong scope, native wire, expiration and signature substitution rejected. | F027 | I048 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -237,3 +239,7 @@ Owner output confirms relay #30 merged and pinned to 9188891698958e03d6fc4bf9642
 ## Nov26 continuation — I047/T042
 
 Prior f7735c72 exact CI 14/15 successful at census, full safety still in progress, no newer failed target workflow returned after 12:08Z. Independent rolling wake 45816860550 succeeded; six target nonpaid/STOP-default children completed on f4fe806d. New producer-side unsigned proposal is not an independent signed registry, production release, or new approval. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_UNSIGNED_REGISTRY_PRODUCER.md).
+
+## Nov26 continuation — I048/T043
+
+I047/T042 focused run 45817548711 passed; exact 047c2843 at last census 11/16 passed, five running, zero failed. External conditional signer verifier and append scope propagation staged without minting a new production key or authorizing a live signer. Existing native domain remains unchanged. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_EXTERNAL_SIGNATURE_SCOPE.md).

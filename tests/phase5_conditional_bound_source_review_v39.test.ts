@@ -7,6 +7,7 @@ import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFea
 import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ExternalLaterShardReview,type P5Ed25519ReviewWireEnvelope} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
 import {proposeP5ConditionalLaterPacketsAsUnsignedDayShard} from "../server/lib/disruption/phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39";
 import {verifyP5ConditionalQueuePacket} from "../server/lib/disruption/phase5ConditionalPreQueuePacket_v39";
 import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
@@ -256,6 +257,31 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,{...proposalScope,conditionalPreScope:{...proposalScope.conditionalPreScope,protocolSha256:h("0")}},[proposalFile])).toThrow();
   expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[{...proposalFile,completed:{...packet}}])).toThrow("ACTUAL_PROOF_ATTACHED_PACKET_REQUIRED");
   expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,{...src,runDayIndex:3},proposalScope,[proposalFile])).toThrow("SOURCE_REGISTRY_SCOPE_OR_EXACT_BYTES_CHANGED");
+  // T043: a distinct conditional reviewer scope is signed along with exact
+  // source/registry/packet manifest; native reviewer wires cannot authorize it.
+  const reviewer=generateKeyPairSync("ed25519"),reviewerPem=reviewer.publicKey.export({type:"spki",format:"pem"}).toString(),
+   reviewerFp=hd(reviewer.publicKey.export({type:"spki",format:"der"}));
+  const conditionalPreScope={...proposalScope.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const reviewerPins={expectedReviewerPublicKeyFingerprintSha256:reviewerFp,expectedApprovedMainCodeSha:gate.approvedCodeSha,
+   expectedReviewedReleaseSha256:p.expectedReviewedReleaseSha256,expectedReviewedRightsSha256:gate.rightsSha256,
+   expectedIndependentReviewerEvidenceDigestSha256:hd("conditional reviewer fixture"),conditionalPreScope};
+  const externalReview:P5Ed25519ExternalLaterShardReview={schema:"v39.phase5.external-ed25519-later-shard-review.v1",
+   audience:"HKcode22/ReplitTranvr:PHASE6_LATER_PRE_REVIEW_ONLY",reviewerPublicKeyFingerprintSha256:reviewerFp,
+   reviewedMainCodeSha:gate.approvedCodeSha,reviewedManifestSha256:gate.manifestSha256,reviewedReleaseSha256:p.expectedReviewedReleaseSha256,
+   reviewedRightsSha256:gate.rightsSha256,sourceDayRegistrySha256:plan.sourceRegistrySha256,sourceDayRegistryFilePath:reg.sourceDayRegistryFilePath,
+   proposedRegistrySha256:plan.proposedRegistrySha256,proposedRegistryFilePath:plan.proposedRegistryFilePath,
+   packetFileManifestSha256:digestP5LaterShardPrivatePacketFileManifest(plan),runDayIndex:p.runDayIndex,shardIndex:1,
+   reviewedAtUtc:t("05:04"),validUntilUtc:t("05:59"),independentReviewerEvidenceDigestSha256:reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,conditionalPreScope};
+  const wireFor=(review:P5Ed25519ExternalLaterShardReview):P5Ed25519ReviewWireEnvelope=>({schema:"v39.phase5.external-ed25519-later-shard-envelope.v1",
+   review,signatureBase64:sign(null,signedP5ExternalLaterReviewBytes(review),reviewer.privateKey).toString("base64")});
+  const signed=wireFor(externalReview),check=(w=signed,pins=reviewerPins,clock=t("05:05"))=>verifyP5ExternalEd25519ReviewOfLaterShard(plan,w,reviewerPem,pins,clock);
+  expect(check()).toMatchObject({signatureCryptographicallyVerified:true,privatePacketOrRegistryFilesPublished:0,phase6PaidGoGranted:false});
+  expect(()=>verifyP5ExternalEd25519ReviewOfLaterShard(plan,signed,reviewerPem,{...reviewerPins,conditionalPreScope:undefined},t("05:05"))).toThrow();
+  expect(()=>check(wireFor({...externalReview,conditionalPreScope:{...conditionalPreScope,protocolSha256:h("0")}}))).toThrow();
+  expect(()=>check(wireFor({...externalReview,conditionalPreScope:undefined}))).toThrow();
+  expect(()=>check(signed,reviewerPins,t("06:00"))).toThrow("REVIEW_SIGNATURE_PREMATURE_EXPIRED_OR_REPLAYED");
+  const {conditionalPreScope:_scope,...legacyReview}=externalReview;
+  expect(()=>check({...signed,signatureBase64:wireFor(legacyReview).signatureBase64})).toThrow("EXTERNAL_REVIEW_SIGNATURE_INVALID");
   const readReg=(pins=rp,r=reg,s=src)=>verifyP5SignedLaterPreDayRegistry(regBytes,r,srcBytes,s,pins,()=>packet.packetBytes);
   expect(readReg().entries[0].packet.prePermit).toEqual(built.privatePermit);
   expect(()=>readReg({...rp,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");

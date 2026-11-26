@@ -18,11 +18,22 @@ import type {P5UnsignedLaterRegistryReviewPlan}
 import type {P5SignedWitnessedLaterPrePacket}
  from "../../../scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39";
 
+import {verifyP5ConditionalQueuePacket,isP5ConditionalQueuePacketSchema,type P5ConditionalQueueScope} from "./phase5ConditionalPreQueuePacket_v39";
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const DOMAIN="HKcode22/ReplitTranvr:PHASE6_NATIVE_LATER_PRE_SHARD_EXTERNAL_REVIEW:v1\n";
 const AUDIENCE="HKcode22/ReplitTranvr:PHASE6_LATER_PRE_REVIEW_ONLY";
+const CONDITIONAL_DOMAIN="HKcode22/ReplitTranvr:PHASE6_CONDITIONAL_LATER_PRE_SHARD_EXTERNAL_REVIEW:v1\n";
+export type P5ConditionalLaterReviewerScope=P5ConditionalQueueScope&{independentlyApprovedStandaloneProtocolSha256?:string};
+export function sameP5ConditionalLaterReviewerScope(a:unknown,b:unknown):boolean{
+ if(!a||!b||typeof a!=="object"||typeof b!=="object"||Array.isArray(a)||Array.isArray(b))return false;
+ const x=a as P5ConditionalLaterReviewerScope,y=b as P5ConditionalLaterReviewerScope;
+ const fields=["protocolSha256","externalContentUseReviewSha256"];
+ if(x.independentlyApprovedStandaloneProtocolSha256!==undefined)fields.push("independentlyApprovedStandaloneProtocolSha256");
+ return Object.keys(x).sort().join("|")===fields.sort().join("|")&&Object.keys(y).sort().join("|")===fields.join("|")&&
+  fields.every(k=>SHA.test(x[k as keyof P5ConditionalLaterReviewerScope]??"")&&x[k as keyof P5ConditionalLaterReviewerScope]===y[k as keyof P5ConditionalLaterReviewerScope]);
+}
 const SOURCE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_.-]{8,125}\.json$/;
 const FILE=/^data-collection\/phase5\/frozen\/[A-Za-z0-9_-]{8,100}\.json$/;
 const D=86_400_000;
@@ -69,6 +80,8 @@ export interface P5Ed25519ExternalLaterShardReview {
  validUntilUtc:string;
  /** External evidence reference only; this does not check Contents rights. */
  independentReviewerEvidenceDigestSha256:string;
+ /** Present only for a separately authorized conditional service shard. */
+ conditionalPreScope?:P5ConditionalLaterReviewerScope;
 }
 export interface P5Ed25519ReviewWireEnvelope{
  schema:"v39.phase5.external-ed25519-later-shard-envelope.v1";
@@ -81,13 +94,15 @@ export interface P5ExternalLaterReviewSignerPins{
  expectedReviewedReleaseSha256:string;
  expectedReviewedRightsSha256:string;
  expectedIndependentReviewerEvidenceDigestSha256:string;
+ /** Independently protected scope, never inferred from the candidate. */
+ conditionalPreScope?:P5ConditionalLaterReviewerScope;
 }
 export function signedP5ExternalLaterReviewBytes(
  review:P5Ed25519ExternalLaterShardReview
 ):Buffer{
  // An exportable, deterministic signing preimage for an INDEPENDENT
  // signer. No sign() or private-key operation is used by this module.
- return Buffer.concat([Buffer.from(DOMAIN,"utf8"),utf(review)]);
+ return Buffer.concat([Buffer.from(review.conditionalPreScope===undefined?DOMAIN:CONDITIONAL_DOMAIN,"utf8"),utf(review)]);
 }
 export interface P5VerifiedEd25519ExternalLaterReviewReceipt{
  schema:"v39.phase5.external-ed25519-later-shard-verified.v1";
@@ -185,6 +200,9 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
     !reviewerPublicKeyPem.includes("-----BEGIN PUBLIC KEY-----")||
     reviewerPublicKeyPem.includes("PRIVATE KEY"))
   fail("MISSING_INDEPENDENT_PINNED_PUBLIC_KEY_OR_RIGHTS");
+ const conditional=pins.conditionalPreScope;
+ if(conditional!==undefined&&!sameP5ConditionalLaterReviewerScope(conditional,conditional))
+  fail("EXACT_CONDITIONAL_REVIEW_SCOPE_REQUIRED");
  // An external signature must cover packet bytes that actually agree with
  // the outer independently pinned review and frozen registry fields.
  // This is a second guard; the original native-flight completion and V0091
@@ -213,14 +231,21 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
      !SHA.test(p.expectedProviderContractSha256??"")||
      !SHA.test(p.expectedEarlyDrawSha256??"")||
      !/^[0-9]{5,25}$/.test(p.expectedGithubSourceRunId??"")||
-     p.externalNativeTPhysicalLegAndSourceUseReviewed!==true||
-     p.identityEvidenceTier!=="PROVIDER_NATIVE_OPERATING_LEG"||
+
      (e.expectedT24ReceiptSha256!==undefined?
       p.reviewedT24WitnessReceipt?.receiptSha256!==
        e.expectedT24ReceiptSha256:
       p.reviewedT24WitnessReceipt!==undefined||
        p.reviewedStandaloneLaterNoT24?.missingT24Class!==
         "HONEST_T24_UNOBSERVED_NOT_BACKFILLED"))
+   fail("REVIEWED_PACKET_NONJSON_OR_RIGHTS_MISMATCH");
+  if(conditional!==undefined){
+   if(!isP5ConditionalQueuePacketSchema(pkt.schema))fail("CONDITIONAL_REVIEW_CANNOT_SIGN_NATIVE_PACKET");
+   verifyP5ConditionalQueuePacket(pkt,{releaseMode:"PHASE6_APPROVED",approvedCodeSha:pins.expectedApprovedMainCodeSha,
+    manifestSha256:plan.registryProposal.manifestSha256,rightsSha256:pins.expectedReviewedRightsSha256,
+    conditionalPreScope:conditional,independentlyApprovedStandaloneProtocolSha256:conditional.independentlyApprovedStandaloneProtocolSha256},"LATER_ONLY");
+  }else if(isP5ConditionalQueuePacketSchema(pkt.schema)||p.externalNativeTPhysicalLegAndSourceUseReviewed!==true||
+    p.identityEvidenceTier!=="PROVIDER_NATIVE_OPERATING_LEG")
    fail("REVIEWED_PACKET_NONJSON_OR_RIGHTS_MISMATCH");
  }
  let key:ReturnType<typeof createPublicKey>;
@@ -236,7 +261,8 @@ export function verifyP5ExternalEd25519ReviewOfLaterShard(
       "v39.phase5.external-ed25519-later-shard-envelope.v1"||
     review.schema!=="v39.phase5.external-ed25519-later-shard-review.v1"||
     review.audience!==AUDIENCE||
-    Object.keys(review).length!==17||
+    Object.keys(review).length!==(conditional===undefined?17:18)||
+    (conditional===undefined?Object.hasOwn(review,"conditionalPreScope"):!sameP5ConditionalLaterReviewerScope(review.conditionalPreScope,conditional))||
     review.reviewerPublicKeyFingerprintSha256!==fingerprint||
     review.reviewedMainCodeSha!==pins.expectedApprovedMainCodeSha||
     review.reviewedMainCodeSha!==plan.registryProposal.reviewedCodeSha||
