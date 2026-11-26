@@ -89,3 +89,12 @@ it("matches conditional normalization of case/whitespace, marketing context and 
  expect(prepare(mark([{...row,id:123}]),scope).privateCandidates[0].stage14ConditionalFlightInstanceId).toBeNull();
  expect(prepare(mark([{...row,departure:{airport:{icao:" "},scheduledTime:{utc:stamp("12:00")}}}]),scope).counts.contraryOrigin).toBe(1);
 });
+
+it("F031: conditional schedule requires explicit UTC; equivalent provider precision does not change the instant",()=>{
+ const f=flight();
+ const change=(utc:string)=>({...f,departure:{scheduledTime:{utc}}});
+ expect(prepare(original([change("2035-11-25 12:00Z")]),scope).privateCandidates[0].selectedReportedDepartureUtc).toBe(stamp("12:00"));
+ expect(prepare(original([change("2035-11-25T12:00:00+00:00")]),scope).counts.conditionalCandidates).toBe(1);
+ expect(prepare(original([change("2035-11-25T12:00:00")]),scope).counts.missingServiceFields).toBe(1);
+ expect(prepare(original([change("2035-02-30T12:00:00Z")]),scope).counts.missingServiceFields).toBe(1);
+});

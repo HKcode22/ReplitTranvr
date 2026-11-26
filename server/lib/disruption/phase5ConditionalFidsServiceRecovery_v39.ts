@@ -5,7 +5,7 @@
 import {createHash} from "node:crypto";
 import {verifyStoredDecodedFidsBodyV39} from "./phase4Gate5DecodedFidsReadback_v39";
 import {verifyCanonicalFidsEnvelopeV39} from "./fidsEnvelopeCanonical_v39";
-import {inspectP5ConditionalRoute,p5ConditionalPositiveOperator,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id} from "./phase5ConditionalServiceIdentity_v39";
+import {inspectP5ConditionalRoute,p5ConditionalPositiveOperator,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id,p5ExplicitProviderUtcInstant} from "./phase5ConditionalServiceIdentity_v39";
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const hash=/^[a-f0-9]{64}$/;
 const iso=(x:unknown):number=>typeof x==="string"&&Number.isFinite(Date.parse(x))?Date.parse(x):NaN;
@@ -53,7 +53,7 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
  for(const [i,f] of p.departures.entries()){
   if(!p5ConditionalPositiveOperator(f)){counts.notPositiveOperator++;continue;}
   if(f.isCargo===true||f.isPrivate===true||f.isGeneralAviation===true||f.isCharter===true){counts.knownExcluded++;continue;}
-  const x=inspectP5ConditionalRoute(f,s.airportIcao),selected=iso(f.departure?.scheduledTime?.utc);
+  const x=inspectP5ConditionalRoute(f,s.airportIcao),selected=p5ExplicitProviderUtcInstant(f.departure?.scheduledTime?.utc);
   if(x.status!=="ok"){counts[x.status]++;continue;}
   if(!Number.isFinite(selected)){counts.missingServiceFields++;continue;}
   const route=x.route,dest=route.destination;

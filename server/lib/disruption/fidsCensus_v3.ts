@@ -12,7 +12,7 @@ import type { Pool, PoolClient } from "pg";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
-import {inspectP5ConditionalRoute,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id} from "./phase5ConditionalServiceIdentity_v39";
+import {inspectP5ConditionalRoute,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id,p5ExplicitProviderUtcInstant} from "./phase5ConditionalServiceIdentity_v39";
 import {
   canonicalFlightInstanceId,
   phase5ProspectiveCanonicalFlightIdV39,
@@ -537,7 +537,8 @@ function normalizeFidsRecord(input: {
       analyticIdentityId=canonical;
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&params.phase5ConditionalService&&isOperator&&p5ConditionalProviderIdAbsent(f)&&
-      conditionalRoute?.status==="ok"&&requestedOrigin&&!foreignOrigin&&movement==="departure"&&
+      conditionalRoute?.status==="ok"&&p5ExplicitProviderUtcInstant(f?.departure?.scheduledTime?.utc)===selectedMs&&
+      requestedOrigin&&!foreignOrigin&&movement==="departure"&&
       f?.isCargo!==true&&f?.isPrivate!==true&&f?.isGeneralAviation!==true&&f?.isCharter!==true&&
       classifyScope(f??{})==="unknown"){
       // Same G5A conditional key and marker already supported by Stage14.

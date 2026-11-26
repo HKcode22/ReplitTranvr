@@ -32,3 +32,13 @@ export function p5ConditionalPositiveServiceCounts(departures:readonly unknown[]
 export function p5ConditionalStage14Id(r:Pick<Route,"carrier"|"number"|"origin"|"destination">,cohortStartUtc:string){
  return "leg:g5a:"+createHash("sha256").update(JSON.stringify({protocol:"G5A_CONDITIONAL_IDLESS_OPERATOR_V2",frozenStudyStartUtc:cohortStartUtc,carrier:r.carrier,flightNumber:r.number,origin:r.origin,destination:r.destination})).digest("hex");
 }
+
+/** Explicit UTC provider field only; no local-zone assumption or rollover. */
+export function p5ExplicitProviderUtcInstant(value:unknown):number{
+ if(typeof value!=="string")return NaN;
+ const m=value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z|\+00:00|\+0000)$/);
+ if(!m)return NaN;
+ const iso=m[1]+"T"+m[2]+":"+(m[3]??"00")+"."+(m[4]??"").padEnd(3,"0")+"Z";
+ const n=Date.parse(iso);
+ return Number.isFinite(n)&&new Date(n).toISOString()===iso?n:NaN;
+}

@@ -32,12 +32,13 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F022 | Tested branch | Audit incorrectly classified eight expired original hashes as mismatches. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I020 |
 | F023 | Tested branch | Idle native follow-on acquired publisher lock before zero candidate check. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I021 |
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
-| F025 | Superseded CI failure | TS2322 and V0112 whitespace exact predecessor errors; new exact head 42/42. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023 |
+| F025 | CI recurrence, successor pending | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; verify successor. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
 | F027 | Open | Native-only feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
-| F030 | Code finding, not live cause | Conditional raw/normalized matcher differences on duplicate marketing aliases and malformed origin/casing; verify parity before release. [Existing implementation](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I024 |
+| F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
+| F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 |
 
 ## Implementations
 
@@ -66,15 +67,16 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I021 | Tested branch | Audit before publisher lock | F023 |
 | I022 | Tested branch | Skip weather read for absent weather; present proof retained | F024 |
 | I023 | Tested branch | Exact-head CI coverage, compile/SQL fixes | F025, F028 |
-| I024 | Implemented, CI pending | Shared conditional route/key/positive-operator ambiguity between normalizer and raw review; real normalizer and reader regressions | F030 |
+| I024 | Focused tested | Shared conditional route/key/positive-operator ambiguity between normalizer and raw review; real normalizer and reader regressions; run 45799119831 passed | F030 |
 | I025 | Implemented, CI pending | Shared existing four-field FIDS feature draft from authenticated marked conditional raw member, exact protected content-use/protocol, private output and fresh cutoff; no signed issuance | F027 |
+| I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 |
 
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
 | C001 | Open | Prospective conditional signed PRE issuance and private producer-consumer admission | F005, F018, F027 | I005, I014, I016 |
-| C002 | Partial | Conditional feature drafts implemented; independent Packet A proof and lawful Packet B preservation still incomplete | F027, F030 | I014, I024, I025 |
+| C002 | Partial | Conditional feature drafts and explicit UTC parity implemented; independent Packet A proof and lawful Packet B preservation still incomplete | F027, F030, F031 | I014, I024, I025, I026 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |
@@ -94,3 +96,12 @@ Original calendar/draw, approved 36,740 launch units, daily 1,900 cap, protected
 ## Evidence baseline and regression strategy
 
 Owner 01:52 PST: 92 reservations, 184 reserved units (not billing), 52 bindings (44 live T6, 8 prior timely T24 now expired), 4,044 live normalized observations, zero native candidates/tasks/PRE rows. Day1 16 reserved zero bound; Day2 T6 44/64, T90 paused; Day3 then 32 T24 elapsed, 32 future. No full training cohort. F005 was known Nov5 and partial Nov9 repair did not reach the full Phase6 producer. Known testing gaps: synthetic IDs, empty/admin fixtures, EXPLAIN without trigger execution, green no-op/dispatch versus real output. Regression must exercise historical failure shapes, real-contract id-less and nullable fixtures, actual restricted roles and triggers, dirty/expired state, complete signed producer/consumer/commit chain, optional failures, real DB cutoff and independent retention. Record current exact head and real logs before closure; avoid unnecessary owner commands. Read existing PostgreSQL via Replit and restricted GitHub secrets, not a connected Neon project.
+
+## Regression crosswalk (2026-11-26 02:15 PST)
+
+| Failure family | Required regression and evidence | Production acceptance |
+| --- | --- | --- |
+| F005, F018, F027 | Nov 5 real ID-less WSSS shape; Nov 9 conditional service semantics; V0111 witness and V0112 queue registration on PostgreSQL 16; raw/normalized parity and private FIDS feature draft | Actual prospective signed conditional receipt, independent feature proof, enrollment, and lawful outcome; do not relabel as native |
+| F025 | TypeScript check, full offline suite and real PostgreSQL migrations at exact head; no relying on superseded green SHA | Exact tested release and owner-protected installation/readback |
+| F030, F031 | Duplicate positive operators (including outside service window), marketing aliases, malformed identifiers, explicit UTC precision and invalid dates | Same source member selected consistently without hindsight; no fabricated timestamps |
+| F026 and collection gaps | Per-day signed denominators, bound originals, eligible observations, PRE/POST counts, missingness and fixed chronological split | Retain only lawful cutoff-safe observations; no backfill or claim of unbiased coverage |

@@ -19,6 +19,7 @@ import {
  type P5EReviewedSupplementalBundle,
  type P5EReviewedSupplementalObservation
 } from "./phase5AmendmentESignedSupplementalFeatures_v39";
+import {p5ExplicitProviderUtcInstant} from "./phase5ConditionalServiceIdentity_v39";
 const SHA=/^[0-9a-f]{64}$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const ICAO=/^[A-Z0-9]{4}$/;
@@ -128,13 +129,13 @@ export function buildP5EAlreadyMatchedMovementSupplement(input:Pick<P5EOriginalF
  const observations:P5EReviewedSupplementalObservation[]=[];
  const missing:string[]=[];
  for(const field of FIELDS){
-  const value=values[field];
+  let value=values[field];
   let acceptable=false;
   if(field==="scheduled_arrival_utc"||
      field==="provider_revised_departure_utc"){
-   acceptable=typeof value==="string"&&UTC.test(value)&&
-    Number.isFinite(Date.parse(value))&&
-    new Date(Date.parse(value)).toISOString()===value;
+   const instant=p5ExplicitProviderUtcInstant(value);
+   acceptable=Number.isFinite(instant);
+   if(acceptable)value=new Date(instant).toISOString();
   }else if(field==="operating_carrier"){
    acceptable=typeof value==="string"&&
     /^[A-Z0-9]{2,3}$/.test(value);
@@ -226,7 +227,7 @@ function compileP5EFromVerifiedOriginal(
  const destination=deep(movement,"arrival","airport","icao");
  if(origin!==input.normalizedOriginIcao||
     destination!==input.normalizedDestinationIcao||
-    stamp(deep(movement,"departure","scheduledTime","utc"))!==selected)
+    p5ExplicitProviderUtcInstant(deep(movement,"departure","scheduledTime","utc"))!==selected)
   hold("ORIGINAL_ROUTE_OR_NATIVE_T_DRIFT");
  const {bundle,evidencedFidsFields,missingFidsFields}=buildP5EAlreadyMatchedMovementSupplement(input,movement,new Date(retrieved).toISOString(),new Date(available).toISOString());
  return{

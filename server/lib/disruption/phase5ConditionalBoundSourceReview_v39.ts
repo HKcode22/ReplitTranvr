@@ -182,7 +182,7 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
    const byId=new Map(finalReport.privateCandidates.map(x=>[x.stage14ConditionalFlightInstanceId,x]));
    for(const m of memberReview.privateReviewProposals){
     const candidate=byId.get(m.flightInstanceId);
-    if(!candidate||!Number.isSafeInteger(candidate.sourceIndex)||candidate.sourceIndex<0||candidate.sourceIndex>=p.departures.length)hold("CONDITIONAL_FEATURE_MATCH_DRIFT");
+    if(!candidate||!Number.isSafeInteger(candidate.sourceIndex)||candidate.sourceIndex<0||candidate.sourceIndex>=p.departures.length)return hold("CONDITIONAL_FEATURE_MATCH_DRIFT");
     const compiled=buildP5EAlreadyMatchedMovementSupplement({flightInstanceId:m.flightInstanceId,populationQueryId:m.expectedSourcePopulationQueryId,
      expectedBoundV0079ResponseHash:m.expectedSourceResponseSha256,externallyReviewedSourceAndContentsSha256:s.externalContentUseReviewSha256},
      p.departures[candidate.sourceIndex],stamp(p.fetchedAtUtc),m.sourceMemberAvailableUtc);
@@ -191,10 +191,11 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
    }
   }
   // Feature extraction also consumes time; do not return late drafts.
-  const end=(await c.query("SELECT clock_timestamp() AS at")).rows;
+  const end=featureDrafts.length?(await c.query("SELECT clock_timestamp() AS at")).rows:fresh;
   if(end.length!==1||ms(end[0].at)<ms(fresh[0].at)||ms(end[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_FEATURE_CLOCK");
+  const proposalById=new Map(memberReview.privateReviewProposals.map(m=>[m.flightInstanceId,m]));
   const liveDrafts=featureDrafts.filter(x=>{
-   const m=memberReview.privateReviewProposals.find(m=>m.flightInstanceId===x.flightInstanceId)!;
+   const m=proposalById.get(x.flightInstanceId)!;
    return ms(m.predictionCutoffUtc)-ms(end[0].at)>s.minimumReviewLeadSeconds*1000;
   });
   await c.query("COMMIT");began=false;

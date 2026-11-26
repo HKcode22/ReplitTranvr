@@ -179,3 +179,13 @@ describe("one verified FIDS original, many native candidate feature packets",()=
   expect(()=>compileP5AmendmentEFidsOriginalFeatureBatchV39([a,b])).toThrow("ORIGINAL_DECODED_BODY_OR_ENVELOPE_INTEGRITY_UNVERIFIED");
  });
 });
+
+it("F031: normalizes explicitly UTC provider times without treating unzoned or invalid dates as evidence",()=>{
+ const f=flight();
+ const x=compile(input([{...f,departure:{...f.departure,scheduledTime:{utc:"2035-11-25 12:00Z"},revisedTime:{utc:"2035-11-25T12:19:00+00:00"}},arrival:{...f.arrival,scheduledTime:{utc:"2035-11-25T20:25Z"}}}]));
+ expect(x.bundle.observations.map(o=>o.value)).toEqual(["SIA","2035-11-25T20:25:00.000Z","2035-11-25T12:19:00.000Z","Expected"]);
+ const unzoned={...f,departure:{...f.departure,scheduledTime:{utc:"2035-11-25T12:00:00"}}};
+ expect(()=>compile(input([unzoned]))).toThrow("ORIGINAL_ROUTE_OR_NATIVE_T_DRIFT");
+ const invalid={...f,departure:{...f.departure,revisedTime:{utc:"2035-02-30T12:19:00Z"}},arrival:{...f.arrival,scheduledTime:{utc:"2035-11-25T20:25:00"}}};
+ expect(compile(input([invalid])).missingFidsFields).toEqual(["scheduled_arrival_utc","provider_revised_departure_utc"]);
+});
